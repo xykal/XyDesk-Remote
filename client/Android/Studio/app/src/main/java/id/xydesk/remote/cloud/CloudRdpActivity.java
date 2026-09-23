@@ -17,6 +17,8 @@ import androidx.appcompat.app.AppCompatActivity;
 
 import com.freerdp.freerdpcore.presentation.SessionActivity;
 
+import id.xydesk.remote.R;
+
 import org.json.JSONObject;
 
 import java.io.ByteArrayInputStream;
@@ -260,12 +262,6 @@ public class CloudRdpActivity extends AppCompatActivity
 			{
 				return run;
 			}
-			main.post(() -> {
-				if (progress.isindeterminate())
-				{
-					progress.setIndeterminate(true);
-				}
-			});
 			Thread.sleep(10000);
 		}
 		throw new Exception("Timeout menunggu workflow selesai (25 menit)");

@@ -150,7 +150,7 @@ public class GitHubClient
 		return json(rawSend("PUT", path, body));
 	}
 
-	private byte[] rawGet(String path, String accept) throws IOException
+	private byte[] rawGet(String path, String accept) throws ApiError, IOException
 	{
 		return send("GET", path, accept, null);
 	}
@@ -201,7 +201,7 @@ public class GitHubClient
 		return c;
 	}
 
-	private byte[] readAll(HttpURLConnection c) throws IOException
+	private byte[] readAll(HttpURLConnection c) throws ApiError, IOException
 	{
 		int code = c.getResponseCode();
 		InputStream is = (code >= 400) ? c.getErrorStream() : c.getInputStream();
