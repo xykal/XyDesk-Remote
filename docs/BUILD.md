@@ -10,13 +10,13 @@
 | AGP | 9.2.1 | dideklarasikan di `build.gradle` |
 | Android NDK | **29.0.13113456** | wajib versi persis (di-set `release.properties`) |
 | CMake (SDK) | **4.1.2** | dipasang via SDK Manager |
-| compileSdk | 37 | `platforms;android-37` + `build-tools;37.0.0` |
+| compileSdk | 36 (stabil; 37 masih beta di repo Google) | `platforms;android-36` + `build-tools;37.0.0` |
 
 ## Build lokal (Android Studio)
 
 1. **File → Open** → pilih folder `client/Android/Studio`.
 2. Tunggu Gradle sync. Pastikan di **SDK Manager**:
-   - SDK Platform: Android 37
+   - SDK Platform: Android 36
    - SDK Tools: NDK (Side by side) **29.0.13113456**, CMake **4.1.2**
 3. `Build → Make Project` (atau klik Run).
 4. **Build pertama lama (10–40 menit, butuh internet):** CMake superbuild
@@ -53,7 +53,7 @@ Semua knob ada di `client/Android/Studio/release.properties`:
 | `SPLIT_ENABLED` | `false` | `true` = APK per-ABI (plus universal) |
 | `VERSION_NAME` / `VERSION_CODE` | `0.1.0-m0` / `1` | bump tiap milestone |
 | `CMAKE_ARGUMENTS` | semua codec `ON` | matikan `WITH_FFMPEG/OH264/OPUS/...` untuk build jauh lebih cepat (mode uji) |
-| `COMPILE_API` / `TARGET_API` / `MIN_API` | 37/37/29 | tingkat API |
+| `COMPILE_API` / `TARGET_API` / `MIN_API` | 36/36/29 | tingkat API |
 
 ## M0 — smoke test
 
