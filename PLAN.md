@@ -1,6 +1,6 @@
 # XyDesk Remote — Arsitektur & Roadmap
 > App Android remote desktop (klien RDP) untuk Windows, dengan sistem HUD multi-panel yang bisa dikustomisasi.
-> Status: **M0 — CI BUILD GREEN ✅ + APK PERTAMA TER-GENERATE** — repo `xykalnotkel/xydesk-remote` — 2026-09-23
+> Status: **v0.2.0 — repo PUBLIC, split per-ABI, R8 + signing resmi + GitHub Release, fitur Cloud RDP (GitHub+Tailscale) v1** — 2026-09-23
 > Nama kerja: `XyDesk Remote` (package: `id.xydesk.remote`)
 
 ---
@@ -280,3 +280,66 @@ Setelah smoke test M0 lulus (APK dari CI):
 2. `features-sessions`: favorites Room + UI Compose pengganti form M0
 3. `features-security`: credential vault Keystore + policy background
 4. Deteksi "Windows Home / RDP off" dengan pesan jelas
+
+---
+
+## 12. M6 — Cloud RDP "Create RDP from GitHub" (v1 di-ship bersama v0.2.0)
+
+**Konsep:** user di app cuma **login GitHub + isi nama** → sisanya otomatis:
+nama jadi nama **repo GitHub (private)** → app push template setup →
+workflow di repo menyiapkan **VM Windows self-hosted runner** (label
+`xydesk-win`): RDP on, join **Tailscale**, user + password **acak** →
+app poll run → download artifact `rdp-credentials` → cek konektivitas
+→ **connect otomatis** (via tailnet, tidak ada port-forward).
+
+### Arsitektur v1
+```
+HP (XyDesk Remote)                       Repo GitHub (per user)
+┌────────────────────┐   device flow    ┌──────────────────────────┐
+│ CloudRdpActivity   │ ───────────────► │ repo '<nama>' (private)  │
+│  login GitHub      │   (scope: repo)  │  .github/workflows/      │
+│  create repo       │ ◄─────────────── │    rdp-vm.yml           │
+│  push template     │   poll run +     │  setup/setup-windows.ps1│
+│  poll + download   │   artifact zip   └───────────┬──────────────┘
+└─────────┬──────────┘                              │ self-hosted
+          │ TCP check + SessionActivity             ▼
+          ▼                        ┌──────────────────────────────┐
+   RDP via Tailscale ◄─────────────│ VM 'xydesk-win' (Windows)    │
+   (host: xxx.ts.net:3389)         │ Tailscale + RDP + user xydesk│
+                                   └──────────────────────────────┘
+```
+
+### Komponen (sudah ada di kode)
+- `cloud/GitHubDeviceAuth.java` — device flow (tanpa client secret di device)
+- `cloud/GitHubClient.java` — repo/contents/actions/artifacts API (HttpURLConnection, tanpa dependensi)
+- `cloud/CloudRdpActivity.java` — UI + orkestrasi pipeline
+- `assets/xydesk-cloud/rdp-vm.yml` + `setup-windows.ps1` — template yang di-push ke repo user
+
+### Keamanan v1
+- Password RDP acak 18 karakter, dihasilkan di VM, mengalir VM→artifact→app (tidak pernah di device sebagai teks permanen)
+- Repo user **private**; token device flow scope `repo`
+- Auth key Tailscale diset di **environment runner** (bukan di repo, bukan di HP)
+- Koneksi RDP selalu TLS + dalam tailnet (tidak ada exposure port ke internet)
+
+### Open items (butus keputusan lo)
+1. **OAuth App GitHub** harus dibuat manual di UI (POST /applications sudah mati) —
+   enable **Device Flow**, salin client_id ke `GitHubDeviceAuth.CLIENT_ID`
+2. **Provisioning VM**: v1 pakai **self-hosted runner yang lo own** (label `xydesk-win`).
+   Kalau mau "benar-benar create VM dari nol" (cloud provider), tentukan provider-nya
+   (Cloudflare VPS / Hetzner / Oracle / Azure...) → kita bikin adapter provisioner +
+   auth key-nya disimpan sebagai GitHub user secret (RSA-OAEP) di tahap berikutnya
+3. Multi-VM / pool, hibernate/stop, dan billing info → v2
+
+## 13. Rilis & Distribution (v0.2.0)
+
+- **Split per-ABI** (tanpa universal): `armeabi-v7a`, `arm64-v8a`, `x86_64`
+- **Signing resmi**: keystore RSA-4096 (100 tahun) — digenerate sekali di CI
+  (job `generate-keystore`), disimpan sebagai secret `RELEASE_KEY_BASE64`
+  + salinan JKS di tempat aman milik lo (workspace: `xydesk-remote-release.jks`)
+- **GitHub Release**: push tag `v*` → build release (R8) → GitHub Release
+  dengan 3 APK per-ABI sebagai asset
+- **R8**: aktif di release (`MINIFY_ENABLED=true`), keep rules terdokumentasi
+  di `app/proguard-rules.txt` (native hanya menyentuh `LibFreeRDP` — verified
+  dari source). Rollback cepat: `MINIFY_ENABLED=false`
+- **Repo public** untuk kontribusi/sponsor/collab (secret tidak ada di repo —
+  sudah di-scan sebelum dipublikasi)

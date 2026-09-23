@@ -1,0 +1,104 @@
+<?xml version="1.0" encoding="utf-8"?>
+<ScrollView xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:fillViewport="true">
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="vertical"
+        android:padding="24dp">
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="Cloud RDP (GitHub)"
+            android:textSize="24sp"
+            android:textStyle="bold" />
+
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="4dp"
+            android:text="Login GitHub → isi nama → repo + setup RDP otomatis (self-hosted runner Windows) → connect otomatis via Tailscale."
+            android:textSize="12sp"
+            android:alpha="0.7" />
+
+        <View
+            android:layout_width="match_parent"
+            android:layout_height="1dp"
+            android:layout_marginTop="16dp"
+            android:layout_marginBottom="8dp"
+            android:alpha="0.25"
+            android:background="?android:attr/listDivider" />
+
+        <Button
+            android:id="@+id/btn_cloud_login"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="Login dengan GitHub" />
+
+        <TextView
+            android:id="@+id/txt_login_status"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="6dp"
+            android:text="Belum login"
+            android:textSize="12sp" />
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="14dp"
+            android:text="Nama (akan jadi nama repo GitHub)"
+            android:textStyle="bold" />
+        <EditText
+            android:id="@+id/input_repo_name"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:hint="misal: desk-gaming-01"
+            android:inputType="textNoSuggestions"
+            android:singleLine="true" />
+
+        <Button
+            android:id="@+id/btn_cloud_create"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="14dp"
+            android:text="Create &amp; Setup (otomatis)" />
+
+        <ProgressBar
+            android:id="@+id/cloud_progress"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="10dp"
+            android:indeterminate="true"
+            android:visibility="gone" />
+
+        <TextView
+            android:id="@+id/txt_cloud_status"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="10dp"
+            android:fontFamily="monospace"
+            android:textSize="12sp"
+            android:text="" />
+
+        <View
+            android:layout_width="match_parent"
+            android:layout_height="1dp"
+            android:layout_marginTop="16dp"
+            android:layout_marginBottom="8dp"
+            android:alpha="0.25"
+            android:background="?android:attr/listDivider" />
+
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:textSize="11sp"
+            android:alpha="0.65"
+            android:text="Prasyarat:\n• OAuth App GitHub dengan Device Flow (lihat dialog saat tombol Login ditekan)\n• 1+ VM Windows self-hosted runner GitHub dengan label 'xydesk-win', env XYDESK_TAILSCALE_AUTH_KEY ter-set, Tailscale terpasang\n• Tailscale di HP login ke tailnet yang sama dengan VM\n\nKredensial RDP (password acak) dihasilkan skrip setup di VM dan dibaca app dari artifact workflow — tidak pernah disimpan di HP." />
+
+    </LinearLayout>
+</ScrollView>

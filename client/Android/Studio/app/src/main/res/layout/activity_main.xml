@@ -110,6 +110,13 @@
             android:layout_marginTop="20dp"
             android:text="Hubungkan" />
 
+        <Button
+            android:id="@+id/btn_cloud"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="8dp"
+            android:text="Create Cloud RDP (GitHub + Tailscale)" />
+
         <TextView
             android:layout_width="match_parent"
             android:layout_height="wrap_content"

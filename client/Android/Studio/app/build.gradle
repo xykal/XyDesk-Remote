@@ -37,7 +37,10 @@ android {
 
     buildTypes {
         release {
-            minifyEnabled false
+            // R8 aktif (minifyEnabled) + keep rules di proguard-rules.txt.
+            // Rollback cepat: set MINIFY_ENABLED=false di release.properties.
+            minifyEnabled rootProject.ext.minifyEnabled
+            shrinkResources false
             signingConfig signingConfigs.release
             proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.txt'
         }

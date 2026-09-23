@@ -1,0 +1,29 @@
+name: XyDesk RDP Setup
+
+# Dipush otomatis oleh app XyDesk Remote (fitur Cloud RDP) saat user
+# "Create & Setup". Menyiapkan self-hosted Windows runner:
+#   - RDP on + firewall
+#   - join Tailscale (auth key dari env runner: XYDESK_TAILSCALE_AUTH_KEY)
+#   - user 'xydesk' dengan password acak
+#   - publish kredensial sebagai artifact 'rdp-credentials' (dibaca app)
+#
+# Label runner: 'xydesk-win' (self-hosted, Windows, Tailscale terpasang).
+on:
+  push:
+    branches: [main]
+
+jobs:
+  setup:
+    runs-on: [xydesk-win]
+    steps:
+      - name: Run setup
+        shell: pwsh
+        run: |
+          $env:XYDESK_REPO_NAME = "${{ github.event.repository.name }}"
+          powershell -NoProfile -ExecutionPolicy Bypass -File setup/setup-windows.ps1
+      - name: Upload RDP credentials
+        if: success()
+        uses: actions/upload-artifact@v4
+        with:
+          name: rdp-credentials
+          path: C:\ProgramData\xydesk\rdp-credentials.json

@@ -1,35 +1,81 @@
 name: Build APK
 
-# Builds the XyDesk Remote APK from the Gradle project at
-# client/Android/Studio. The FreeRDP superbuild (OpenSSL, FFmpeg,
-# OpenH264, Opus, FreeRDP core) runs inside the CMake step — first
-# build on a clean runner takes ~45-75 minutes; re-runs are faster
-# thanks to the NDK/CMake cache below.
+# XyDesk Remote — CI/CD
+#  - push ke main        -> build DEBUG per-ABI (armeabi-v7a, arm64-v8a, x86_64)
+#  - tag v* / manual     -> build RELEASE (R8 + signing resmi, per-ABI) + GitHub Release
+#  - manual (dispatch)   -> generate-keystore (sekali saja, buat rilis pertama)
+#
+# Keystore release: JALANKAN JOB 'generate-keystore' SEKALI, unduh artifact
+# 'xydesk-release-keystore', lalu set secret repo:
+#   RELEASE_KEY_BASE64  = base64(release.jks)
+#   RELEASE_KEY_ALIAS   = dari keystore-creds.env
+#   RELEASE_KEY_PASSWORD / RELEASE_STORE_PASSWORD = dari keystore-creds.env
+# Simpan salinan release.jks di tempat AMAN (bukan di repo) — kalau bocor,
+# rantai update app rusak dan harus rotasi (ganti applicationId/keystore).
 
 on:
   push:
     branches: [ main ]
+    tags: [ 'v*' ]
   workflow_dispatch:
+    inputs:
+      job:
+        description: "Job manual"
+        type: choice
+        options: [ debug, release, generate-keystore ]
+        default: debug
 
 env:
   GRADLE_PROJECT_DIR: client/Android/Studio
 
 jobs:
-  build:
-    name: Assemble debug APK (arm64-v8a + x86_64)
+  # ------------------------------------------------------------------
+  # SEKALI SAJA: generate release keystore di runner (JDK penuh)
+  # ------------------------------------------------------------------
+  generate-keystore:
+    if: ${{ github.event_name == 'workflow_dispatch' && inputs.job == 'generate-keystore' }}
     runs-on: ubuntu-latest
-    timeout-minutes: 300
-
     steps:
-      - name: Checkout
-        uses: actions/checkout@v5
-
-      - name: Setup JDK 21
-        uses: actions/setup-java@v5
+      - uses: actions/setup-java@v5
         with:
           distribution: temurin
           java-version: "21"
+      - name: Generate release keystore (RSA 4096, 100 tahun)
+        run: |
+          set -eux
+          PASS=$(openssl rand -hex 16)
+          keytool -genkeypair -v \
+            -keystore release.jks -storetype JKS \
+            -alias xydesk-remote -keyalg RSA -keysize 4096 -validity 36500 \
+            -storepass "$PASS" -keypass "$PASS" \
+            -dname "CN=XyVerse, OU=XyDesk, O=XyVerse, C=ID"
+          {
+            echo "RELEASE_KEY_ALIAS=xydesk-remote"
+            echo "RELEASE_KEY_PASSWORD=$PASS"
+            echo "RELEASE_STORE_PASSWORD=$PASS"
+          } > keystore-creds.env
+          keytool -list -keystore release.jks -storepass "$PASS"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: xydesk-release-keystore
+          path: |
+            release.jks
+            keystore-creds.env
 
+  # ------------------------------------------------------------------
+  # DEBUG per-ABI (tiap push ke main)
+  # ------------------------------------------------------------------
+  build-debug:
+    if: ${{ github.event_name == 'push' && !startsWith(github.ref, 'refs/tags/') || (github.event_name == 'workflow_dispatch' && inputs.job == 'debug') }}
+    name: Debug per-ABI (armv7 + arm64 + x86_64)
+    runs-on: ubuntu-latest
+    timeout-minutes: 360
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: "21"
       - name: Cache Android SDK (NDK & CMake)
         uses: actions/cache@v5
         with:
@@ -37,11 +83,9 @@ jobs:
             $HOME/android-sdk/ndk/29.0.13113456
             $HOME/android-sdk/cmake/4.1.2
           key: android-ndk-29.0.13113456-cmake-4.1.2
-
       - name: Install Android SDK (cmdline-tools + components)
         run: |
           set -eux
-          # ubuntu-latest no longer ships the Android SDK — install it
           export ANDROID_HOME="$HOME/android-sdk"
           mkdir -p "$ANDROID_HOME/cmdline-tools"
           wget -q https://dl.google.com/android/repository/commandlinetools-linux-11076708_latest.zip -O /tmp/clt.zip
@@ -52,29 +96,102 @@ jobs:
             "platform-tools" "platforms;android-37.2" "build-tools;37.0.0" \
             "cmake;4.1.2" "ndk;29.0.13113456"
           echo "ANDROID_HOME=$ANDROID_HOME" >> "$GITHUB_ENV"
-          # runner juga punya ANDROID_SDK_ROOT bawaan (SDK lama di /usr/local/lib) —
-          # samakan path-nya agar AGP tidak gagal karena "multiple SDK paths"
+          # runner punya ANDROID_SDK_ROOT bawaan — samakan agar AGP tidak gagal
           echo "ANDROID_SDK_ROOT=$ANDROID_HOME" >> "$GITHUB_ENV"
-
-      - name: Host dependencies (pkg-config + nasm needed by FreeRDP superbuild)
+      - name: Host dependencies (pkg-config + nasm)
         run: |
           sudo apt-get update -qq
           # pkg-config: disyaratkan ExternalFreeRDP.cmake
           # nasm: OpenH264 mem-compile cpuid.asm untuk target x86/x86_64
           sudo apt-get install -y -qq pkg-config nasm
-
-      - name: Gradle assembleDebug
+      - name: Gradle assembleDebug (per ABI)
         working-directory: client/Android/Studio
         run: ./gradlew --stacktrace --no-daemon assembleDebug
-
       - name: List build outputs
         working-directory: client/Android/Studio
-        run: |
-          echo "== APKs =="
-          find app/build/outputs -name "*.apk" -exec ls -lh {} \;
-
-      - name: Upload APK
+        run: find app/build/outputs -name "*.apk" -exec ls -lh {} \;
+      - name: Upload debug APKs (per ABI)
         uses: actions/upload-artifact@v4
         with:
-          name: xydesk-remote-debug
-          path: client/Android/Studio/app/build/outputs/apk/**/*.apk
+          name: xydesk-remote-debug-per-abi
+          path: client/Android/Studio/app/build/outputs/apk/debug/*.apk
+
+  # ------------------------------------------------------------------
+  # RELEASE per-ABI (R8 + signing resmi) + GitHub Release
+  # Trigger: tag v* (otomatis) atau manual 'release'
+  # ------------------------------------------------------------------
+  build-release:
+    if: ${{ startsWith(github.ref, 'refs/tags/v') || (github.event_name == 'workflow_dispatch' && inputs.job == 'release') }}
+    name: Release per-ABI (R8 + signed) + GitHub Release
+    runs-on: ubuntu-latest
+    timeout-minutes: 400
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: "21"
+      - name: Cache Android SDK (NDK & CMake)
+        uses: actions/cache@v5
+        with:
+          path: |
+            $HOME/android-sdk/ndk/29.0.13113456
+            $HOME/android-sdk/cmake/4.1.2
+          key: android-ndk-29.0.13113456-cmake-4.1.2
+      - name: Install Android SDK (cmdline-tools + components)
+        run: |
+          set -eux
+          export ANDROID_HOME="$HOME/android-sdk"
+          mkdir -p "$ANDROID_HOME/cmdline-tools"
+          wget -q https://dl.google.com/android/repository/commandlinetools-linux-11076708_latest.zip -O /tmp/clt.zip
+          unzip -q /tmp/clt.zip -d "$ANDROID_HOME/cmdline-tools"
+          mv "$ANDROID_HOME/cmdline-tools/cmdline-tools" "$ANDROID_HOME/cmdline-tools/latest"
+          yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --licenses > /dev/null
+          "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" \
+            "platform-tools" "platforms;android-37.2" "build-tools;37.0.0" \
+            "cmake;4.1.2" "ndk;29.0.13113456"
+          echo "ANDROID_HOME=$ANDROID_HOME" >> "$GITHUB_ENV"
+          echo "ANDROID_SDK_ROOT=$ANDROID_HOME" >> "$GITHUB_ENV"
+      - name: Host dependencies (pkg-config + nasm)
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq pkg-config nasm
+      - name: Restore release keystore dari secret
+        env:
+          RELEASE_KEY_BASE64: ${{ secrets.RELEASE_KEY_BASE64 }}
+        run: |
+          if [ -z "$RELEASE_KEY_BASE64" ]; then
+            echo "::error::Secret RELEASE_KEY_BASE64 belum diset. Jalankan job 'generate-keystore' (Actions tab) lalu set secret sesuai README."
+            exit 1
+          fi
+          echo "$RELEASE_KEY_BASE64" | base64 -d > "$GITHUB_WORKSPACE/release.keystore"
+          ls -lh "$GITHUB_WORKSPACE/release.keystore"
+      - name: Gradle assembleRelease (R8 + signed, per ABI)
+        working-directory: client/Android/Studio
+        env:
+          RELEASE_KEY_ALIAS: ${{ secrets.RELEASE_KEY_ALIAS }}
+          RELEASE_KEY_PASSWORD: ${{ secrets.RELEASE_KEY_PASSWORD }}
+          RELEASE_STORE_PASSWORD: ${{ secrets.RELEASE_STORE_PASSWORD }}
+        run: |
+          ./gradlew --stacktrace --no-daemon assembleRelease \
+            -PRELEASE_STORE_FILE="$GITHUB_WORKSPACE/release.keystore" \
+            -PRELEASE_KEY_ALIAS="$RELEASE_KEY_ALIAS" \
+            -PRELEASE_KEY_PASSWORD="$RELEASE_KEY_PASSWORD" \
+            -PRELEASE_STORE_PASSWORD="$RELEASE_STORE_PASSWORD"
+      - name: Verifikasi signature (apksigner)
+        working-directory: client/Android/Studio
+        run: |
+          "$ANDROID_HOME/build-tools/37.0.0/apksigner" verify --print-certs app/build/outputs/apk/release/*.apk | head -25
+      - name: Buat GitHub Release (tag v*)
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: client/Android/Studio/app/build/outputs/apk/release/*.apk
+          generate_release_notes: true
+      - name: Upload release APKs (artifact cadangan)
+        uses: actions/upload-artifact@v4
+        with:
+          name: xydesk-remote-release-per-abi
+          path: client/Android/Studio/app/build/outputs/apk/release/*.apk

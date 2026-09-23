@@ -49,6 +49,10 @@ public class MainActivity extends AppCompatActivity
 
 		Button connectButton = findViewById(R.id.btn_connect);
 		connectButton.setOnClickListener(this::onConnectClicked);
+
+		Button cloudButton = findViewById(R.id.btn_cloud);
+		cloudButton.setOnClickListener(v ->
+		    startActivity(new Intent(this, id.xydesk.remote.cloud.CloudRdpActivity.class)));
 	}
 
 	private void onConnectClicked(View v)

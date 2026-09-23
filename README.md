@@ -1,53 +1,68 @@
 # XyDesk Remote
 
-App Android remote desktop untuk **Windows (RDP)** dengan sistem **HUD multi-panel** yang bisa dikustomisasi — diluar fitur standar Microsoft Remote Desktop.
+App Android remote desktop untuk **Windows (RDP)** dengan:
+- Form koneksi ala MS Remote Desktop (IP + port + user + password)
+- **Cloud RDP**: create RDP dari GitHub langsung di app (login GitHub → isi nama → repo + setup otomatis → connect otomatis via **Tailscale**)
+- (M2+) HUD multi-panel yang bisa dikustomisasi
 
-> Status: **Milestone M0** (scaffold + first frame). Rincian: [PLAN.md](PLAN.md)
-
-## Apa ini
-
-- Klien RDP native berbasis **FreeRDP 3.32.0** (Apache-2.0) — sama dengan yang dipakai klien RDP Android populer lainnya, tapi UI & fitur XyDesk dibangun dari nol.
-- Form koneksi ala MS Remote Desktop: **host/IP + port + username + password (+ domain)**, NLA/TLS.
-- Roadmap: HUD multi-panel (Stats, Controls, Pointer, Keyboard, File Transfer, Audio, Quick Actions, Diagnostics), transfer file, session recording, gateway, H.264 hardware decode, multi-monitor.
+> Repo ini **public** untuk kontribusi, sponsor, collab, dan diskusi (issues/PR).
+> Lisensi tree FreeRDP: Apache-2.0. Kode XyDesk: © XyVerse (lihat `XYDESK-REMOTE-NOTICE.md`).
 
 ## Struktur repo
 
-Repo ini sengaja mempertahankan **layout tree FreeRDP** di root, karena CMake superbuild (`client/Android/Studio/freeRDPCore/src/main/cpp/CMakeLists.txt`) me-resolve sumber FreeRDP dengan path relatif 7 level ke atas dari folder `cpp`. Perubahan XyDesk terhadap tree FreeRDP **sangat terbatas**:
+Repo mempertahankan **layout tree FreeRDP** di root (kebutuhan path relatif CMake superbuild). Perubahan XyDesk terbatas:
 
 ```
 <root>                        = tree FreeRDP 3.32.0 (vendored, pin via git)
-├── .github/workflows/        ← CI build APK (XyDesk)
+├── .github/workflows/        ← CI/CD: debug per-ABI, release (R8+signed), keystore
 ├── client/Android/Studio/
-│   ├── build.gradle          ← diedit: tanpa plugin androidgitversion
-│   ├── settings.gradle       ← diedit: ':freeRDPCore' + ':app'
-│   ├── release.properties    ← baru: konfigurasi build
-│   ├── freeRDPCore/          ← inti FreeRDP Android (native + JNI), TANPA perubahan
-│   └── app/                  ← modul APP XYDESK (UI koneksi M0, HUD menyusul)
+│   ├── build.gradle          ← diedit minimal
+│   ├── settings.gradle       ← ':freeRDPCore' + ':app'
+│   ├── release.properties    ← knob build (ABI, minify, versi)
+│   ├── freeRDPCore/          ← inti FreeRDP Android (native + JNI), tanpa perubahan
+│   └── app/                  ← APP XYDESK: form koneksi + Cloud RDP (GitHub)
 ├── docs/BUILD.md             ← panduan build lokal & CI
-├── PLAN.md                   ← arsitektur + roadmap (M0–M5)
+├── PLAN.md                   ← arsitektur + roadmap (M0–M6)
 ├── XYDESK-REMOTE-NOTICE.md   ← atribusi & daftar perubahan terhadap FreeRDP
-└── FreeRDP-README.md         ← README asli FreeRDP (arsip referensi)
+└── FreeRDP-README.md         ← README asli FreeRDP (arsip)
 ```
 
 ## Build
 
-### Via GitHub Actions (disarankan untuk M0)
-Push ke `main` (atau jalankan manual dari tab **Actions**) → workflow `Build APK` → artifact `xydesk-remote-debug` berisi `app-debug.apk` (arm64-v8a + x86_64).
+### CI (GitHub Actions) — otomatis
+| Pemicu | Yang terjadi |
+|---|---|
+| Push ke `main` | Build **DEBUG per-ABI** (armeabi-v7a, arm64-v8a, x86_64) → artifact `xydesk-remote-debug-per-abi` |
+| Tag `v*` (misal `v0.2.0`) | Build **RELEASE per-ABI** (R8 + signing resmi) → **GitHub Release** dengan 3 APK |
+| Manual (Actions tab) | `release` (tanpa tag) atau `generate-keystore` (sekali saja) |
+
+Durasi: ±25–40 menit/run (superbuild OpenSSL/FFmpeg/OpenH264/Opus + FreeRDP core per ABI).
 
 ### Lokal
-Lihat [docs/BUILD.md](docs/BUILD.md). Singkatnya: Android Studio + NDK `29.0.13113456` + CMake `4.1.2`, import folder `client/Android/Studio`, build. Build pertama 10–40 menit (superbuild mengompil OpenSSL/FFmpeg/OpenH264/Opus + FreeRDP core).
+Lihat `docs/BUILD.md`. Ringkas: Android Studio → import `client/Android/Studio` → NDK `29.0.13113456` + CMake `4.1.2` + platform `android-37.2`.
 
-### Menguji M0
-1. Siapkan Windows 10/11 **Pro/Enterprise** atau Server dengan RDP + NLA aktif (Windows Home tidak bisa jadi target RDP).
-2. Pasang `app-debug.apk` di HP (arm64).
-3. Isi form: IP host, username, password → **Hubungkan**.
-4. Layar Windows tampil; pastikan mouse/jari bisa bergerak dan bisa mengetik di Notepad.
+### Sign release (sekali saja)
+1. Tab **Actions** → *Build APK* → Run workflow → input **generate-keystore**
+2. Unduh artifact `xydesk-release-keystore`
+3. Set secret repo (Settings → Secrets and variables → Actions):
+   - `RELEASE_KEY_BASE64` = isi `release.jks` di-base64
+   - `RELEASE_KEY_ALIAS`, `RELEASE_KEY_PASSWORD`, `RELEASE_STORE_PASSWORD` = isi `keystore-creds.env`
+4. **Simpan `release.jks` di tempat aman** (bukan di repo!). Ini identitas signing app — kalau bocor, update app di Play/dimana pun akan ditolak.
 
-## Keamanan
-- Tidak ada secret/token apa pun di repo ini. Konfigurasi build hanya via `release.properties` (bukan kredensial).
-- Signing release dilakukan di M5 dengan keystore di CI secrets.
-- Kredensial RDP di device: disimpan terenkripsi (Keystore) mulai M1 — di M0 password hanya ada di memori proses selama sesi.
+## Cloud RDP (GitHub + Tailscale)
 
-## Lisensi
-- Tree FreeRDP (termasuk winpr, channels, dll): **Apache-2.0** — lihat `LICENSE`.
-- Kode XyDesk di `client/Android/Studio/app` + dokumen: © XyVerse (lihat `XYDESK-REMOTE-NOTICE.md`).
+Di app: **Create Cloud RDP (GitHub + Tailscale)** → login GitHub (device flow, tanpa secret) → isi nama → **Create & Setup**. Yang terjadi otomatis:
+1. Repo GitHub private bernama sesuai input dibuat
+2. Template workflow + skrip setup di-push ke repo
+3. Workflow menjalankan setup di self-hosted Windows runner (label `xydesk-win`): RDP on, join Tailscale, user+password acak
+4. App menunggu run selesai → download artifact `rdp-credentials` → cek koneksi → **connect otomatis**
+
+**Prasyarat sekali-setup:**
+- OAuth App GitHub (nama `XyDesk Remote`, **Device Flow** di-enable) → salin **client_id** ke `client/Android/Studio/app/src/main/java/id/xydesk/remote/cloud/GitHubDeviceAuth.java` (`CLIENT_ID`). Client secret tidak perlu.
+- VM Windows self-hosted runner dengan label **`xydesk-win`**, env **`XYDESK_TAILSCALE_AUTH_KEY`** (pre-auth key Tailscale), Tailscale terpasang
+- Tailscale di HP login ke tailnet yang sama
+
+## Menghubungi / Kontribusi
+- Issues & PR: terbuka (bug, fitur, docs)
+- Roadmap & arsitektur: `PLAN.md`
+- Sponsor/collab: hubungi via issues
