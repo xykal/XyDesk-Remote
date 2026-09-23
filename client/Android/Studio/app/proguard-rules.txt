@@ -1,0 +1,1 @@
+# XyDesk Remote — app module ProGuard/R8 rules (added as needed per milestone)

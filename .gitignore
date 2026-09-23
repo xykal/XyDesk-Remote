@@ -1,0 +1,27 @@
+**/CMakeCache.txt
+**/CMakeFiles
+build
+checker
+abi-checker
+
+# --- XyDesk Remote: Android / Gradle ---
+client/Android/Studio/.gradle/
+client/Android/Studio/build/
+client/Android/Studio/local.properties
+client/Android/Studio/.idea/
+client/Android/Studio/app/build/
+client/Android/Studio/app/.cxx/
+client/Android/Studio/freeRDPCore/build/
+client/Android/Studio/freeRDPCore/.cxx/
+client/Android/Studio/freeRDPCore/src/main/jniLibs/
+client/Android/Studio/freeRDPCore/src/main/cpp/external/
+.gradle/
+.idea/
+.externalNativeBuild/
+.cxx/
+captures/
+*.apk
+*.aab
+*.keystore
+*.jks
+release-local.properties
