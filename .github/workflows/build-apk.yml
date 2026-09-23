@@ -52,6 +52,9 @@ jobs:
             "platform-tools" "platforms;android-36" "build-tools;37.0.0" \
             "cmake;4.1.2" "ndk;29.0.13113456"
           echo "ANDROID_HOME=$ANDROID_HOME" >> "$GITHUB_ENV"
+          # runner juga punya ANDROID_SDK_ROOT bawaan (SDK lama di /usr/local/lib) —
+          # samakan path-nya agar AGP tidak gagal karena "multiple SDK paths"
+          echo "ANDROID_SDK_ROOT=$ANDROID_HOME" >> "$GITHUB_ENV"
 
       - name: Host dependencies (pkg-config needed by FreeRDP superbuild)
         run: |
