@@ -1,6 +1,6 @@
 # XyDesk Remote — Arsitektur & Roadmap
 > App Android remote desktop (klien RDP) untuk Windows, dengan sistem HUD multi-panel yang bisa dikustomisasi.
-> Status: **M0 SCAFFOLDED** — repo `xykalnotkel/xydesk-remote` + CI GitHub Actions aktif — 2026-09-23
+> Status: **M0 — CI BUILD GREEN ✅ + APK PERTAMA TER-GENERATE** — repo `xykalnotkel/xydesk-remote` — 2026-09-23
 > Nama kerja: `XyDesk Remote` (package: `id.xydesk.remote`)
 
 ---
@@ -14,7 +14,8 @@
 | Modul `:freeRDPCore` (native + JNI, Apache-2.0) | ✅ tanpa perubahan |
 | Modul `:app` — form koneksi XyDesk (host/IP, port, user, pass, domain) | ✅ |
 | Koneksi via URI `rdp://user@host:port/?p=...&domain=...` → SessionActivity core | ✅ |
-| CI `Build APK` (JDK 21, NDK 29, CMake 4.1.2, arm64-v8a + x86_64) | ✅ workflow terpasang |
+| CI `Build APK` (JDK 21, NDK 29, CMake 4.1.2, arm64-v8a + x86_64) | ✅ **GREEN** (commit 23ddccb, ±25 menit/run) |
+| APK pertama `app-debug.apk` (universal arm64 + x86_64) | ✅ ter-generate di artifact Actions |
 | `release.properties` (knob build) + docs BUILD.md + NOTICE | ✅ |
 
 **Keputusan layout M0:** CMake superbuild FreeRDP me-resolve source tree lewat path
