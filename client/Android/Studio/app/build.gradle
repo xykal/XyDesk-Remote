@@ -53,4 +53,8 @@ android {
 
 dependencies {
     implementation project(':freeRDPCore')
+    // freeRDPCore memakai 'implementation' (tidak transitif) — app module
+    // butuh appcompat sendiri untuk AppCompatActivity (versi sama dengan core)
+    implementation 'androidx.appcompat:appcompat:1.7.1'
+    implementation 'androidx.core:core:1.19.0'
 }
