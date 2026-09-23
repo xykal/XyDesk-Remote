@@ -85,12 +85,20 @@ public class MainActivity extends AppCompatActivity
 		String domain = domainInput.getText().toString().trim();
 
 		Uri.Builder builder = new Uri.Builder().scheme("rdp");
+
+		// authority = [user@]host[:port]
+		// NOTE: di API 37 method host()/port()/userInfo()/encodedUserInfo()
+		// dihapus dari Uri.Builder — encodedAuthority() tetap ada (API 1+).
+		String authority = host;
+		if (port != DEFAULT_PORT)
+		{
+			authority = host + ":" + port;
+		}
 		if (!user.isEmpty())
 		{
-			builder.encodedUserInfo(user);
+			authority = user + "@" + authority;
 		}
-		builder.host(host);
-		builder.port(port == DEFAULT_PORT ? -1 : port);
+		builder.encodedAuthority(authority);
 
 		if (!pass.isEmpty())
 		{
