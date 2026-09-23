@@ -1,6 +1,7 @@
 package id.xydesk.remote.cloud;
 
 import org.json.JSONObject;
+import org.json.JSONException;
 
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
@@ -46,7 +47,7 @@ public class GitHubDeviceAuth
 	}
 
 	/** Langkah 1: minta device code. (blocking — jalankan di thread latar) */
-	public static DeviceCode requestCode() throws IOException
+	public static DeviceCode requestCode() throws IOException, org.json.JSONException
 	{
 		String resp = postForm("https://github.com/login/device/code",
 		                       "client_id=" + enc(CLIENT_ID) + "&scope=repo");
@@ -61,7 +62,7 @@ public class GitHubDeviceAuth
 	}
 
 	/** Langkah 2: poll hingga user authorize di browser. BLOCKING — thread latar. */
-	public static String pollForToken(DeviceCode dc) throws IOException
+	public static String pollForToken(DeviceCode dc) throws IOException, org.json.JSONException
 	{
 		long deadline = System.currentTimeMillis() + dc.expiresIn * 1000L;
 		int interval = Math.max(1, dc.interval);
@@ -93,7 +94,7 @@ public class GitHubDeviceAuth
 		throw new IOException("Timeout — silakan login lagi");
 	}
 
-	private static String enc(String s) throws IOException
+	private static String enc(String s) throws IOException, org.json.JSONException
 	{
 		return java.net.URLEncoder.encode(s, "UTF-8");
 	}
@@ -104,7 +105,7 @@ public class GitHubDeviceAuth
 		catch (InterruptedException e) { Thread.currentThread().interrupt(); }
 	}
 
-	private static String postForm(String urlStr, String formBody) throws IOException
+	private static String postForm(String urlStr, String formBody) throws IOException, org.json.JSONException
 	{
 		HttpURLConnection c = (HttpURLConnection) new URL(urlStr).openConnection();
 		c.setRequestMethod("POST");
@@ -119,7 +120,7 @@ public class GitHubDeviceAuth
 		return read(c);
 	}
 
-	private static String read(HttpURLConnection c) throws IOException
+	private static String read(HttpURLConnection c) throws IOException, org.json.JSONException
 	{
 		int code = c.getResponseCode();
 		InputStream is = (code >= 400) ? c.getErrorStream() : c.getInputStream();

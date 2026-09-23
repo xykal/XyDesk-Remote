@@ -37,3 +37,10 @@ milestone M0.
 Kode di `client/Android/Studio/app/` dan dokumen XyDesk (`README.md`,
 `PLAN.md`, `docs/BUILD.md`, file ini) adalah © XyVerse.
 Lisensi distribusi akan ditetapkan saat milestone M5.
+
+## Perubahan tambahan (v0.2.1)
+- `client/Android/Studio/freeRDPCore/src/main/cpp/CMakeLists.txt`: ditambah
+  "header ordering guard" — dependensi file-level eksplisit pada
+  `freerdp/config.h` (header generated) agar ninja tidak mengompilasi
+  `freerdp-android` sebelum install step superbuild FreeRDP selesai
+  (mengatasi kegagalan build RelWithDebInfo).

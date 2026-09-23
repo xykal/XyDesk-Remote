@@ -3,6 +3,7 @@ package id.xydesk.remote.cloud;
 import android.util.Base64;
 
 import org.json.JSONArray;
+import org.json.JSONException;
 import org.json.JSONObject;
 
 import java.io.ByteArrayOutputStream;
@@ -41,7 +42,7 @@ public class GitHubClient
 		this.token = token;
 	}
 
-	public String login() throws ApiError, IOException
+	public String login() throws ApiError, IOException, org.json.JSONException
 	{
 		if (login == null)
 		{
@@ -50,7 +51,7 @@ public class GitHubClient
 		return login;
 	}
 
-	public void createRepo(String name, String description) throws ApiError, IOException
+	public void createRepo(String name, String description) throws ApiError, IOException, org.json.JSONException
 	{
 		JSONObject body = new JSONObject();
 		body.put("name", name);
@@ -60,7 +61,7 @@ public class GitHubClient
 		apiPost("/user/repos", body);
 	}
 
-	public boolean repoExists(String name) throws IOException
+	public boolean repoExists(String name) throws ApiError, IOException, org.json.JSONException
 	{
 		HttpURLConnection c = open("GET", "/repos/" + login() + "/" + name, null);
 		int code = c.getResponseCode();
@@ -70,7 +71,7 @@ public class GitHubClient
 
 	/** Push file ke repo (contents API). */
 	public void pushFile(String repo, String path, String content, String message)
-			throws ApiError, IOException
+			throws ApiError, IOException, org.json.JSONException
 	{
 		JSONObject body = new JSONObject();
 		body.put("message", message);
@@ -81,7 +82,7 @@ public class GitHubClient
 	}
 
 	/** Run workflow paling baru (per nama workflow). */
-	public JSONObject latestRun(String repo, String workflowName) throws ApiError, IOException
+	public JSONObject latestRun(String repo, String workflowName) throws ApiError, IOException, org.json.JSONException
 	{
 		JSONObject page = apiGet("/repos/" + login() + "/" + repo
 		                        + "/actions/runs?per_page=10&branch=main");
@@ -99,13 +100,13 @@ public class GitHubClient
 		return null;
 	}
 
-	public JSONObject getRun(String repo, String runId) throws ApiError, IOException
+	public JSONObject getRun(String repo, String runId) throws ApiError, IOException, org.json.JSONException
 	{
 		return apiGet("/repos/" + login() + "/" + repo + "/actions/runs/" + runId);
 	}
 
 	public JSONObject findArtifact(String repo, String runId, String artifactName)
-			throws ApiError, IOException
+			throws ApiError, IOException, org.json.JSONException
 	{
 		JSONObject page = apiGet("/repos/" + login() + "/" + repo
 		                        + "/actions/runs/" + runId + "/artifacts");
@@ -123,7 +124,7 @@ public class GitHubClient
 	}
 
 	public byte[] downloadArtifactZip(String repo, String runId, long artifactId)
-			throws ApiError, IOException
+			throws ApiError, IOException, org.json.JSONException
 	{
 		return rawGet("/repos/" + login() + "/" + repo + "/actions/runs/" + runId
 		              + "/artifacts/" + artifactId + "/zip",
@@ -134,17 +135,17 @@ public class GitHubClient
 	// HTTP low-level
 	// ------------------------------------------------------------------
 
-	private JSONObject apiGet(String path) throws ApiError, IOException
+	private JSONObject apiGet(String path) throws ApiError, IOException, org.json.JSONException
 	{
 		return json(rawGet(path, "application/json"));
 	}
 
-	private JSONObject apiPost(String path, JSONObject body) throws ApiError, IOException
+	private JSONObject apiPost(String path, JSONObject body) throws ApiError, IOException, org.json.JSONException
 	{
 		return json(rawSend("POST", path, body));
 	}
 
-	private JSONObject apiPut(String path, JSONObject body) throws ApiError, IOException
+	private JSONObject apiPut(String path, JSONObject body) throws ApiError, IOException, org.json.JSONException
 	{
 		return json(rawSend("PUT", path, body));
 	}
@@ -155,7 +156,7 @@ public class GitHubClient
 	}
 
 	private byte[] rawSend(String method, String path, JSONObject body)
-			throws ApiError, IOException
+			throws ApiError, IOException, org.json.JSONException
 	{
 		return send(method, path, "application/json", body);
 	}
@@ -169,7 +170,7 @@ public class GitHubClient
 		return readAll(c);
 	}
 
-	private JSONObject json(byte[] data) throws ApiError, IOException
+	private JSONObject json(byte[] data) throws ApiError, IOException, org.json.JSONException
 	{
 		String s = new String(data, StandardCharsets.UTF_8);
 		try

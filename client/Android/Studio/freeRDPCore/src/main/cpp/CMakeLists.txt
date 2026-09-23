@@ -68,6 +68,29 @@ add_library(${MODULE_NAME} SHARED ${${MODULE_PREFIX}_SRCS})
 
 add_dependencies(${MODULE_NAME} copyLibs)
 
+# --- XyDesk: header ordering guard -------------------------------------------
+# 'freerdp/config.h' adalah header yang DI-GENERATE dan baru ter-install
+# setelah install step dari ExternalProject 'freerdp' (superbuild) selesai.
+# Pada varian RelWithDebInfo, ninja dapat mulai mengompilasi freerdp-android
+# sebelum install step itu (dependensi phony via copyLibs tidak cukup),
+# sehingga muncul "fatal error: freerdp/config.h file not found".
+# Solusi: dependensi file-level eksplisit pada header yang di-generate.
+# (Patched by XyDesk — lihat XYDESK-REMOTE-NOTICE.md)
+set(FREERDP_GEN_CONFIG_HEADER
+    "${DEPS_INSTALL_DIR}/${CMAKE_INSTALL_INCLUDEDIR}/freerdp3/freerdp/config.h")
+add_custom_command(
+  OUTPUT "${FREERDP_GEN_CONFIG_HEADER}"
+  COMMAND ${CMAKE_COMMAND} -E echo "freerdp superbuild headers installed"
+  DEPENDS freerdp
+  COMMENT "Ensuring FreeRDP superbuild install has completed"
+)
+foreach(_xy_src IN LISTS ${MODULE_PREFIX}_SRCS)
+  if(_xy_src MATCHES "\\.c$")
+    set_property(SOURCE "${CMAKE_CURRENT_SOURCE_DIR}/${_xy_src}"
+                 APPEND PROPERTY OBJECT_DEPENDS "${FREERDP_GEN_CONFIG_HEADER}")
+  endif()
+endforeach()
+
 find_library(log-lib log)
 find_library(dl-lib dl)
 find_library(jnigraphics-lib jnigraphics)
