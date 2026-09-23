@@ -34,8 +34,8 @@ ext {
         RELEASE_STORE_PASSWORD=releaseProperties.get('RELEASE_STORE_PASSWORD', 'android')
     }
 
-    compileApi = releaseProperties.get('COMPILE_API', 36).toInteger()
-    targetApi = releaseProperties.get('TARGET_API', 36).toInteger()
+    compileApi = releaseProperties.get('COMPILE_API', 37).toInteger()
+    targetApi = releaseProperties.get('TARGET_API', 37).toInteger()
     minApi = releaseProperties.get('MIN_API', 29).toInteger()
     toolsVersion = releaseProperties.get('TOOLS_VERSION', '37.0.0')
     universal = releaseProperties.get('BUILD_UNIVERSAL', true).toBoolean()

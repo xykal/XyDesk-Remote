@@ -49,7 +49,7 @@ jobs:
           mv "$ANDROID_HOME/cmdline-tools/cmdline-tools" "$ANDROID_HOME/cmdline-tools/latest"
           yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --licenses > /dev/null
           "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" \
-            "platform-tools" "platforms;android-36" "build-tools;37.0.0" \
+            "platform-tools" "platforms;android-37.2" "build-tools;37.0.0" \
             "cmake;4.1.2" "ndk;29.0.13113456"
           echo "ANDROID_HOME=$ANDROID_HOME" >> "$GITHUB_ENV"
           # runner juga punya ANDROID_SDK_ROOT bawaan (SDK lama di /usr/local/lib) —

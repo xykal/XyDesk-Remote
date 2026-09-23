@@ -59,7 +59,7 @@ Fitur yang melampaui Microsoft Remote Desktop for Android:
 |---|---|---|
 | Bahasa UI | **Kotlin 2.x** (mulai M1; M0 = Java minimal untuk menjaga build pertama tetap hijau) | Native, kontrol penuh ke SurfaceView/hardware |
 | UI toolkit | **Jetpack Compose (Material 3)** (mulai M1) | HUD custom jauh lebih mudah dari View system |
-| minSdk / targetSdk | **29 / 36** | compileSdk 36 = stabil terbaru di repo Google (37 masih beta) |
+| minSdk / targetSdk | **29 / 37** | compileSdk 37 via platform stabil `android-37.2` (diwajibkankan androidx.core 1.19) |
 | Native | **FreeRDP 3.32.0 via CMake superbuild** (vendored) | Dependensi (OpenSSL, FFmpeg, OpenH264, Opus, dll) di-fetch & build otomatis |
 | NDK / CMake | **NDK 29.0.13113456 / CMake 4.1.2** | Persyaratan build Android resmi FreeRDP |
 | AGP / Gradle | **9.2.1 / 9.6.1** | versi yang dipakai upstream FreeRDP |
