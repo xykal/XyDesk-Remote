@@ -162,7 +162,7 @@ public class GitHubClient
 	}
 
 	private byte[] send(String method, String path, String accept, JSONObject body)
-			throws IOException
+			throws ApiError, IOException
 	{
 		HttpURLConnection c = open(method, path, body);
 		c.setRequestProperty("Accept", accept);
