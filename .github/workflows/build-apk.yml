@@ -22,26 +22,36 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: Setup JDK 21
-        uses: actions/setup-java@v4
+        uses: actions/setup-java@v5
         with:
           distribution: temurin
           java-version: "21"
 
-      - name: Cache NDK & CMake
-        uses: actions/cache@v4
+      - name: Cache Android SDK (NDK & CMake)
+        uses: actions/cache@v5
         with:
           path: |
-            $ANDROID_HOME/ndk/29.0.13113456
-            $ANDROID_HOME/cmake/4.1.2
+            $HOME/android-sdk/ndk/29.0.13113456
+            $HOME/android-sdk/cmake/4.1.2
           key: android-ndk-29.0.13113456-cmake-4.1.2
 
-      - name: Install Android SDK components
+      - name: Install Android SDK (cmdline-tools + components)
         run: |
-          yes | sdkmanager --licenses > /dev/null
-          sdkmanager "platform-tools" "platforms;android-37" "build-tools;37.0.0" "cmake;4.1.2" "ndk;29.0.13113456"
+          set -eux
+          # ubuntu-latest no longer ships the Android SDK — install it
+          export ANDROID_HOME="$HOME/android-sdk"
+          mkdir -p "$ANDROID_HOME/cmdline-tools"
+          wget -q https://dl.google.com/android/repository/commandlinetools-linux-11076708_latest.zip -O /tmp/clt.zip
+          unzip -q /tmp/clt.zip -d "$ANDROID_HOME/cmdline-tools"
+          mv "$ANDROID_HOME/cmdline-tools/cmdline-tools" "$ANDROID_HOME/cmdline-tools/latest"
+          yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --licenses > /dev/null
+          "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" \
+            "platform-tools" "platforms;android-37" "build-tools;37.0.0" \
+            "cmake;4.1.2" "ndk;29.0.13113456"
+          echo "ANDROID_HOME=$ANDROID_HOME" >> "$GITHUB_ENV"
 
       - name: Host dependencies (pkg-config needed by FreeRDP superbuild)
         run: |
