@@ -56,10 +56,12 @@ jobs:
           # samakan path-nya agar AGP tidak gagal karena "multiple SDK paths"
           echo "ANDROID_SDK_ROOT=$ANDROID_HOME" >> "$GITHUB_ENV"
 
-      - name: Host dependencies (pkg-config needed by FreeRDP superbuild)
+      - name: Host dependencies (pkg-config + nasm needed by FreeRDP superbuild)
         run: |
           sudo apt-get update -qq
-          sudo apt-get install -y -qq pkg-config
+          # pkg-config: disyaratkan ExternalFreeRDP.cmake
+          # nasm: OpenH264 mem-compile cpuid.asm untuk target x86/x86_64
+          sudo apt-get install -y -qq pkg-config nasm
 
       - name: Gradle assembleDebug
         working-directory: client/Android/Studio
