@@ -1,6 +1,6 @@
 # XyDesk Remote — NOTICE
 
-Repo `xykalnotkel/xydesk-remote` mengandung **tree sumber FreeRDP versi 3.32.0**
+Repo `xykal/XyDesk-Remote` mengandung **tree sumber FreeRDP versi 3.32.0**
 (vendored, pin via git) sebagai fondasi klien RDP Android-nya, sesuai lisensi
 Apache License 2.0 (lihat `LICENSE`).
 

@@ -9,7 +9,7 @@
 
 | Item | Status |
 |---|---|
-| Repo GitHub `xykalnotkel/xydesk-remote` (private) | ✅ dibuat |
+| Repo GitHub `xykal/XyDesk-Remote` (private) | ✅ dibuat |
 | Tree FreeRDP **3.32.0** vendored di root (pin via git) | ✅ |
 | Modul `:freeRDPCore` (native + JNI, Apache-2.0) | ✅ tanpa perubahan |
 | Modul `:app` — form koneksi XyDesk (host/IP, port, user, pass, domain) | ✅ |

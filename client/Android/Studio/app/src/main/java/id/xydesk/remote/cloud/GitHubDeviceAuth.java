@@ -20,7 +20,7 @@ import java.nio.charset.StandardCharsets;
  * PERSIYATAN SATU-KALI (sebelum fitur ini bisa dipakai):
  *   1. GitHub -> Settings -> Developer settings -> OAuth Apps -> New OAuth App
  *      - Application name: XyDesk Remote
- *      - Homepage URL: https://github.com/xykalnotkel/xydesk-remote
+ *      - Homepage URL: https://github.com/xykal/XyDesk-Remote
  *      - Authorization callback URL: https://localhost (tidak dipakai device flow)
  *   2. AKTIFKAN "Device Flow" di setting OAuth App tersebut (PENTING).
  *   3. Salin Client ID ke konstanta CLIENT_ID di bawah.
