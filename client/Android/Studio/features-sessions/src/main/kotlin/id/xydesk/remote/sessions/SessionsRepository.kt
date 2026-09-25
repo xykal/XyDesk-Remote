@@ -36,8 +36,9 @@ class SessionsRepository(context: Context) {
     /** Simpan/update favorite. [rememberPassword] false = hapus dari vault. */
     suspend fun save(profile: ConnectionProfile, rememberPassword: Boolean) {
         val existing = dao.byId(profile.id)
-        if (rememberPassword && !profile.password.isNullOrEmpty()) {
-            vault.put(profile.id, profile.password)
+        val pass = profile.password // local val: smart cast lintas modul tidak diizinkan
+        if (rememberPassword && !pass.isNullOrEmpty()) {
+            vault.put(profile.id, pass)
         } else {
             vault.remove(profile.id)
         }
