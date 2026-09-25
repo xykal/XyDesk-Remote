@@ -1,0 +1,385 @@
+package id.xydesk.remote.core
+
+import android.content.Context
+import android.util.Log
+import com.freerdp.freerdpcore.application.GlobalApp
+import com.freerdp.freerdpcore.application.SessionState as CoreSession
+import com.freerdp.freerdpcore.services.LibFreeRDP
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
+import java.util.concurrent.CountDownLatch
+import java.util.concurrent.ExecutorService
+import java.util.concurrent.Executors
+import java.util.concurrent.TimeUnit
+
+/**
+ * M1 — SessionManager: satu pintu untuk seluruh lifecycle sesi RDP XyDesk.
+ *
+ * Membungkus inti FreeRDP ([GlobalApp], [LibFreeRDP]) dengan:
+ *  - state machine eksplisit ([SessionState] via [state])
+ *  - callback prompt (sertifikat, credential) dengan safe-default
+ *    (tanpa [Listener] = ditolak — aman default, PLAN §5.2)
+ *  - input forwarding (cursor/key/unicode/clipboard) untuk HUD (M2)
+ *
+ * Thread:
+ *  - [state] thread-safe (StateFlow) — baca dari mana saja,
+ *    subscribe di main (UI/Compose).
+ *  - Prompt ([Listener.onCertificatePrompt], [Listener.onCredentialsPrompt])
+ *    dipanggil di thread RDP native dan BLOCKING sampai `reply(...)`
+ *    dipanggil (semantik sama dengan dialog upstream `SessionDialogs`).
+ *    UI memanggil `reply` dari thread mana pun.
+ *  - `connect()` block terjadi di worker internal, bukan di caller.
+ */
+class SessionManager(context: Context) {
+
+    interface Listener {
+        fun onStateChanged(state: SessionState) {}
+
+        /**
+         * Sertifikat TLS server perlu persetujuan. Blok sampai [reply] dipanggil.
+         * Default (tanpa implikasi): DENY.
+         */
+        fun onCertificatePrompt(info: CertificateInfo, reply: (Int) -> Unit) {}
+
+        /**
+         * Server minta credential (NLA/CredSSP). Blok sampai [reply] dipanggil.
+         * [username]/[domain] berisi prefill dari profil.
+         */
+        fun onCredentialsPrompt(
+            username: String?,
+            domain: String?,
+            reply: (username: String?, domain: String?, password: String?) -> Unit,
+        ) {}
+
+        /** Clipboard teks dari remote (dipanggil di thread RDP — post ke main). */
+        fun onRemoteClipboardText(text: String) {}
+    }
+
+    private val appContext = context.applicationContext
+    private val worker: ExecutorService =
+        Executors.newSingleThreadExecutor { r -> Thread(r, "xydesk-rdp") }
+
+    private val _state = MutableStateFlow(SessionState.Idle)
+    val state: StateFlow<SessionState> = _state.asStateFlow()
+
+    @Volatile private var core: CoreSession? = null
+    @Volatile private var listener: Listener? = null
+    @Volatile private var released = false
+
+    /** Versi FreeRDP native (untuk about/diagnostics). */
+    fun freeRdpVersion(): String = LibFreeRDP.getVersion()
+
+    fun setListener(listener: Listener?) {
+        this.listener = listener
+    }
+
+    /** Instance native sesi aktif, 0L jika tidak ada. */
+    fun instance(): Long = core?.getInstance() ?: 0L
+
+    // ------------------------------------------------------------------
+    // Lifecycle
+    // ------------------------------------------------------------------
+
+    /**
+     * Mulai koneksi (idempotent: dipanggil saat sudah Connecting/Connected
+     * = diabaikan dengan log).
+     */
+    fun connect(profile: ConnectionProfile) {
+        if (released) return
+        val cur = _state.value
+        if (cur is SessionState.Connected || cur is SessionState.Connecting ||
+            cur is SessionState.Authenticating
+        ) {
+            Log.w(TAG, "connect() diabaikan, state=$cur")
+            return
+        }
+        val uri = RdpUri.build(profile)
+        val session = GlobalApp.createSession(uri, appContext)
+        val inst = session.getInstance()
+        session.setUIEventListener(uiListenerFor(inst))
+        GlobalApp.registerSessionListener(inst, coreListenerFor(inst))
+        core = session
+        transition(SessionState.Connecting)
+        worker.execute {
+            try {
+                session.connect(appContext) // blocking — thread worker
+            } catch (t: Throwable) {
+                Log.w(TAG, "connect() exception", t)
+                if (isCurrent(inst)) {
+                    transition(SessionState.Error("connect_exception", t.message ?: "exception"))
+                }
+            }
+        }
+    }
+
+    /** Batalkan koneksi yang sedang berjalan (tanpa menunggu timeout server). */
+    fun cancelConnection() {
+        val inst = core?.getInstance() ?: return
+        if (!LibFreeRDP.cancelConnection(inst)) {
+            Log.w(TAG, "cancelConnection() gagal (state mungkin sudah terminal)")
+        }
+        // Jaga-jaga: kalau event failure tidak datang, jangan stuck di Connecting
+        mainHandler.postDelayed({
+            val s = _state.value
+            if (isCurrent(inst) && (s is SessionState.Connecting || s is SessionState.Authenticating)) {
+                transition(SessionState.Error("cancelled", "Koneksi dibatalkan"))
+            }
+        }, CANCEL_FALLBACK_MS)
+    }
+
+    /** Ajaikan disconnect normal (dari sisi kita). */
+    fun disconnect() {
+        val inst = core?.getInstance() ?: return
+        transition(SessionState.Disconnecting)
+        if (!LibFreeRDP.disconnect(inst)) {
+            // native menolak — anggap sudah putus
+            if (isCurrent(inst)) transition(SessionState.Disconnected)
+        }
+    }
+
+    /**
+     * Lepas sesi + resource. Panggil saat Activity selesai (onDestroy).
+     * Sesudah ini [SessionManager] tidak bisa dipakai lagi.
+     */
+    fun release() {
+        if (released) return
+        released = true
+        val inst = core?.getInstance()
+        if (inst != 0L) {
+            GlobalApp.unregisterSessionListener(inst)
+            try {
+                LibFreeRDP.disconnect(inst)
+            } catch (t: Throwable) {
+                Log.w(TAG, "disconnect on release gagal", t)
+            }
+            GlobalApp.freeSession(inst)
+        }
+        core = null
+        worker.shutdown()
+        if (_state.value is SessionState.Connected || _state.value is SessionState.Connecting ||
+            _state.value is SessionState.Authenticating || _state.value is SessionState.Disconnecting
+        ) {
+            transition(SessionState.Idle)
+        }
+    }
+
+    // ------------------------------------------------------------------
+    // Input forwarding (dipakai HUD M2; pass-through tipis ke native)
+    // ------------------------------------------------------------------
+
+    fun sendCursorEvent(x: Int, y: Int, flags: Int): Boolean {
+        val inst = core?.getInstance() ?: return false
+        return LibFreeRDP.sendCursorEvent(inst, x, y, flags)
+    }
+
+    fun sendKeyEvent(keycode: Int, down: Boolean): Boolean {
+        val inst = core?.getInstance() ?: return false
+        return LibFreeRDP.sendKeyEvent(inst, keycode, down)
+    }
+
+    fun sendUnicodeKeyEvent(code: Int, down: Boolean): Boolean {
+        val inst = core?.getInstance() ?: return false
+        return LibFreeRDP.sendUnicodeKeyEvent(inst, code, down)
+    }
+
+    /** Ketik string sebagai unicode key events (satu char = down+up). */
+    fun sendText(text: String) {
+        val inst = core?.getInstance() ?: return
+        for (ch in text) {
+            LibFreeRDP.sendUnicodeKeyEvent(inst, ch.code, true)
+            LibFreeRDP.sendUnicodeKeyEvent(inst, ch.code, false)
+        }
+    }
+
+    fun sendClipboardData(data: String): Boolean {
+        val inst = core?.getInstance() ?: return false
+        return LibFreeRDP.sendClipboardData(inst, data)
+    }
+
+    // ------------------------------------------------------------------
+    // Internal
+    // ------------------------------------------------------------------
+
+    private fun transition(s: SessionState) {
+        val prev = _state.value
+        _state.value = s
+        if (prev != s) {
+            Log.v(TAG, "state: $prev -> $s")
+            listener?.onStateChanged(s)
+        }
+    }
+
+    private fun isCurrent(inst: Long): Boolean = core?.getInstance() == inst
+
+    private fun coreListenerFor(inst: Long): GlobalApp.SessionEventListener =
+        object : GlobalApp.SessionEventListener {
+            // Callback sudah di-dispatch ke main thread oleh GlobalApp
+            override fun onConnectionSuccess() {
+                if (isCurrent(inst)) transition(SessionState.Connected)
+            }
+
+            override fun onConnectionFailure() {
+                if (!isCurrent(inst)) return
+                val msg = LibFreeRDP.getLastErrorString() ?: "connection failed"
+                transition(SessionState.Error("connect_failed", msg))
+            }
+
+            override fun onDisconnected() {
+                if (!isCurrent(inst)) return
+                transition(SessionState.Disconnected)
+            }
+        }
+
+    /**
+     * Implementasi UIEventListener inti. Semua event yang belum punya
+     * penanganan XyDesk (M1.1) = no-op + log; prompt = safe-default.
+     */
+    private fun uiListenerFor(inst: Long): LibFreeRDP.UIEventListener =
+        object : LibFreeRDP.UIEventListener {
+
+            override fun OnSettingsChanged(width: Int, height: Int, bpp: Int) {
+                Log.v(TAG, "settings ${width}x${height} @${bpp}bpp")
+            }
+
+            override fun OnAuthenticate(
+                username: StringBuilder,
+                domain: StringBuilder,
+                password: StringBuilder,
+            ): Boolean {
+                val l = listener
+                if (l == null) {
+                    Log.w(TAG, "NLA prompt tanpa listener — tolak (safe default)")
+                    return false
+                }
+                if (!isCurrent(inst)) return false
+                transition(SessionState.Authenticating)
+                val latch = CountDownLatch(1)
+                var ok = false
+                l.onCredentialsPrompt(
+                    username.toString(),
+                    domain.toString(),
+                ) { u, d, p ->
+                    if (u != null) {
+                        username.setLength(0); username.append(u)
+                    }
+                    if (d != null) {
+                        domain.setLength(0); domain.append(d)
+                    }
+                    if (p != null) {
+                        password.setLength(0); password.append(p)
+                    }
+                    ok = true
+                    latch.countDown()
+                }
+                latch.await(PROMPT_TIMEOUT_SEC, TimeUnit.SECONDS)
+                return ok
+            }
+
+            override fun OnGatewayAuthenticate(
+                username: StringBuilder,
+                domain: StringBuilder,
+                password: StringBuilder,
+            ): Boolean = OnAuthenticate(username, domain, password)
+
+            override fun OnVerifiyCertificateEx(
+                host: String,
+                port: Long,
+                commonName: String,
+                subject: String,
+                issuer: String,
+                fingerprint: String,
+                flags: Long,
+            ): Int = certificatePrompt(
+                CertificateInfo(host, port.toInt(), commonName, subject, issuer, fingerprint, flags)
+            )
+
+            override fun OnVerifyChangedCertificateEx(
+                host: String,
+                port: Long,
+                commonName: String,
+                subject: String,
+                issuer: String,
+                fingerprint: String,
+                oldSubject: String,
+                oldIssuer: String,
+                oldFingerprint: String,
+                flags: Long,
+            ): Int {
+                // M1.1: same prompt; FLAG_CHANGED sudah di-set inti.
+                // TODO(M1.2): tampilkan old-fingerprint di dialog trust.
+                return certificatePrompt(
+                    CertificateInfo(host, port.toInt(), commonName, subject, issuer,
+                                    fingerprint, flags)
+                )
+            }
+
+            override fun OnExperimentalFeature(feature: Int): Boolean = true
+
+            override fun OnGraphicsUpdate(x: Int, y: Int, width: Int, height: Int) {
+                // render pipeline masih lewat jalur core (M0); HUD M2 baca via native
+            }
+
+            override fun OnGraphicsResize(width: Int, height: Int, bpp: Int) {
+                Log.v(TAG, "resize ${width}x${height} @${bpp}bpp")
+            }
+
+            override fun OnRemoteClipboardChanged(data: String) {
+                listener?.onRemoteClipboardText(data)
+            }
+
+            override fun OnRemoteClipboardImageChanged(data: ByteArray?) {
+                // M3: file/image clipboard
+            }
+
+            override fun OnPointerSet(
+                pixels: IntArray?,
+                width: Int,
+                height: Int,
+                hotX: Int,
+                hotY: Int,
+            ) {
+                // M2: panel Pointer
+            }
+
+            override fun OnPointerSetNull() {}
+            override fun OnPointerSetDefault() {}
+
+            override fun OnRailWindowUpdate(windowId: Long, width: Int, height: Int, pixels: IntArray?) {}
+            override fun OnRailWindowMove(
+                windowId: Long,
+                x: Int,
+                y: Int,
+                w: Int,
+                h: Int,
+            ) {}
+            override fun OnRailWindowHide(windowId: Long) {}
+            override fun OnRailWindowDestroy(windowId: Long) {}
+            override fun OnRailSessionEnd() {}
+            override fun OnRailMonitoredDesktop(windowIds: LongArray?, activeWindowId: Long) {}
+        }
+
+    /** Prompt sertifikat — blocking (thread RDP), safe default = DENY. */
+    private fun certificatePrompt(info: CertificateInfo): Int {
+        val l = listener
+        if (l == null) {
+            Log.w(TAG, "cert prompt untuk ${info.host}:${info.port} tanpa listener — DENY")
+            return CertificateInfo.VERIFY_DENY
+        }
+        val latch = CountDownLatch(1)
+        var result = CertificateInfo.VERIFY_DENY
+        l.onCertificatePrompt(info) {
+            result = it
+            latch.countDown()
+        }
+        latch.await(PROMPT_TIMEOUT_SEC, TimeUnit.SECONDS)
+        return result
+    }
+
+    companion object {
+        private const val TAG = "XyDeskSession"
+        private const val PROMPT_TIMEOUT_SEC = 120L
+        private const val CANCEL_FALLBACK_MS = 5_000L
+        private val mainHandler = android.os.Handler(android.os.Looper.getMainLooper())
+    }
+}

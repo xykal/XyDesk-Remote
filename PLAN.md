@@ -273,13 +273,29 @@ Kontrol HUD ──► SessionManager ──► LibFreeRDP (args/input) ──►
 
 ---
 
-## 11. Next Step (M0 → M1)
+## 11. Progress M1
 
-Setelah smoke test M0 lulus (APK dari CI):
-1. Rakit modul `core-rdp` (Kotlin): `SessionManager` + state machine + `TelemetryFlow`
-2. `features-sessions`: favorites Room + UI Compose pengganti form M0
-3. `features-security`: credential vault Keystore + policy background
-4. Deteksi "Windows Home / RDP off" dengan pesan jelas
+### M1.1 — Lapis data & sesi (SELESAI, tanpa UI)
+| Item | Modul | Status |
+|---|---|---|
+| `SessionManager` + state machine `SessionState` (Flow) | `:core-rdp` (Kotlin) | ✅ |
+| Prompt sertifikat & NLA (safe-default: DENY/tolak tanpa listener) | `:core-rdp` | ✅ |
+| Input forwarding (cursor/key/unicode/clipboard) untuk HUD M2 | `:core-rdp` | ✅ |
+| `CredentialVault` — AES-256-GCM, key di Android Keystore (non-exportable) | `:features-security` | ✅ |
+| Favorites Room (`favorites` table) + `SessionsRepository` (metadata+vault → `ConnectionProfile` siap-connect) | `:features-sessions` | ✅ |
+| Gradle: KGP 2.2.21 + KSP 2.2.21-2.0.5 (pair match), Room 2.8.5, coroutines 1.11.0 | root + modul | ✅ |
+
+Catatan M1.1: modul baru dikompilasi CI (digantung di `:app`) tapi **belum
+dipakai UI** — wiring UI di M1.2.
+
+### M1.2 — UI Compose (BERIKUTNYA)
+1. UI Compose (Material 3): list favorites + form koneksi + screen sesi
+   pengganti form M0 (XML/Java `MainActivity`)
+2. `SessionManager` jadi satu pintu sesi; dialog trust sertifikat
+   (fingerprint SHA-256) + prompt NLA
+3. Credential vault integration: "remember password" → vault
+4. Policy background (auto-disconnect) + deteksi "Windows Home / RDP off"
+5. `TelemetryFlow` (sampler 500ms) — prasyarat HUD M2
 
 ---
 
@@ -333,7 +349,8 @@ HP (XyDesk Remote)                       Repo GitHub (per user)
 
 ### Open items (butus keputusan lo)
 1. **OAuth App GitHub** harus dibuat manual di UI (POST /applications sudah mati) —
-   enable **Device Flow**, salin client_id ke `GitHubDeviceAuth.CLIENT_ID`
+   enable **Device Flow**, salin client_id ke `GitHubDeviceAuth.CLIENT_ID`.
+   **Panduan lengkap langkah demi langkah: `docs/OAUTH-APP-SETUP.md`**
 2. **Provisioning VM**: v1 pakai **self-hosted runner yang lo own** (label `xydesk-win`).
    Kalau mau "benar-benar create VM dari nol" (cloud provider), tentukan provider-nya
    (Cloudflare VPS / Hetzner / Oracle / Azure...) → kita bikin adapter provisioner +

@@ -60,4 +60,9 @@ dependencies {
     // butuh appcompat sendiri untuk AppCompatActivity (versi sama dengan core)
     implementation 'androidx.appcompat:appcompat:1.7.1'
     implementation 'androidx.core:core:1.19.0'
+
+    // M1 — modul Kotlin (UI Compose menyusul di M1.2)
+    implementation project(':core-rdp')
+    implementation project(':features-security')
+    implementation project(':features-sessions')
 }

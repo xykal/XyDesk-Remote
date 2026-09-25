@@ -1,2 +1,6 @@
 include ':freeRDPCore'
 include ':app'
+// M1 — modul Kotlin XyDesk
+include ':core-rdp'
+include ':features-security'
+include ':features-sessions'
