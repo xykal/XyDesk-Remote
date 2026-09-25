@@ -25,6 +25,14 @@ on:
         options: [ debug, release, generate-keystore ]
         default: debug
 
+# GITHUB_TOKEN default hanya read — softprops/action-gh-release butuh
+# 'contents: write' untuk membuat GitHub Release (403 "Resource not
+# accessible by integration" tanpa ini); actions:write untuk
+# upload-artifact/cache.
+permissions:
+  contents: write
+  actions: write
+
 env:
   GRADLE_PROJECT_DIR: client/Android/Studio
 
