@@ -33,8 +33,11 @@ jobs:
         shell: pwsh
         env:
           XYDESK_PHASE: ${{ inputs.phase }}
+        # WAJIB pwsh (PowerShell 7): skrip memakai API kriptografi PEM .NET
+        # Core (ImportFromPem/ExportPkcs8PrivateKeyPem) yang TIDAK ada di
+        # Windows PowerShell 5.1 (executable 'powershell').
         run: |
-          powershell -NoProfile -ExecutionPolicy Bypass -File setup/setup-windows.ps1
+          pwsh -NoProfile -ExecutionPolicy Bypass -File setup/setup-windows.ps1
       - name: Upload host public key (phase prepare)
         if: inputs.phase == 'prepare'
         uses: actions/upload-artifact@v4

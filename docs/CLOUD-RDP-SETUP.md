@@ -16,7 +16,7 @@ HP user (XyDesk Remote)                    Akun GitHub USER (milik user sendiri)
 │  isi nama repo     │  (izin ke akun      │ (app publik, device flow)│
 │  + user RDP        │   user sendiri)     └──────────────────────────┘
 │  create repo       │
-│  push template     │  contents API       Repo '<nama>' (private, di akun user)
+│  push template     │  contents API       Repo '<nama>' (PUBLIC, di akun user)
 │  poll + download   │ ◄─────────────────  .github/workflows/rdp-vm.yml
 └────────┬───────────┘   artifact ter-     setup/setup-windows.ps1
          │                 enskripsi       setup/pubkey.pem + config.json
@@ -31,7 +31,8 @@ Poin penting:
 - **Workflow & Actions jalan di akun GitHub masing-masing user** — bukan di akun
   developer. App cuma menyediakan kode workflow lengkap (bundel di APK) dan
   mengorkestrasi lewat API atas izin user (device flow OAuth).
-- **Repo dibuat otomatis di akun user** (default private) begitu user menekan
+- **Repo dibuat otomatis di akun user** (PUBLIC — aturan proyek: tanpa repo
+  private) begitu user menekan
   *Create & Setup*. Kalau repo sudah ada, dipakai yang existing.
 - **Host RDP = mesin milik user** yang didaftarkan sebagai **self-hosted
   runner** dengan label `xydesk-win`. JANGAN pakai GitHub-hosted runner
@@ -69,7 +70,7 @@ Poin penting:
 
 1. App → **Cloud RDP** → **Login GitHub** (authorize di browser, akun user).
 2. Isi form:
-   - **nama repo** (mis. `desk-gaming-01`) — jadi repo private di akun user
+   - **nama repo** (mis. `desk-gaming-01`) — jadi repo PUBLIC di akun user
    - **nama user RDP** (opsional, default `xydesk`)
    - **password RDP** (opsional) — kalau diisi wajib **kuat**: min 12
      karakter, campur huruf besar/kecil + angka + simbol (`!@#$%^&*._-`),
@@ -78,20 +79,29 @@ Poin penting:
    - **Tailscale auth key** (opsional) — pre-auth key dari
      `tailscale.com/admin/keys`. Kosongkan = pakai env runner
      `XYDESK_TAILSCALE_AUTH_KEY`
-3. **Create & Setup** — app otomatis: create repo private di akun user →
+3. **Create & Setup** — app otomatis: create repo PUBLIC di akun user →
    generate kunci sekali-pakai → push template + pubkey → trigger
-   `workflow_dispatch` (password & key Tailscale di-**mask** otomatis, tidak
-   masuk log) → tunggu workflow → download kredensial ter-enskripsi → dekripsi
+   `workflow_dispatch` fase `prepare` → app enkripsi rahasia ke kunci host
+   (`secrets.enc`) → dispatch fase `setup` → tunggu workflow → download kredensial ter-enskripsi → dekripsi
    di app → cek `host:3389` → **connect RDP otomatis** lewat Tailscale.
 
 ## Keamanan
 
 - Password RDP: pilihan user (wajib kuat) atau auto-generate 18 karakter;
   **di-reset tiap setup** (re-run aman).
+- **Rahasia tidak pernah lewat input workflow** (di repo public input workflow
+  kebaca publik). Alur dua fase: fase `prepare` host generate kunci RSA (sekali
+  per mesin) + upload public key; app enkripsi `{user,pass,tskey}` (RSA-OAEP)
+  ke kunci host itu jadi `setup/secrets.enc`; fase `setup` host dekripsi,
+  setup, lalu kredensial di-enskripsi balik ke `setup/pubkey.pem` (kunci
+  sekali-pakai app) jadi `rdp-credentials.enc`. Input workflow cuma `phase`.
+- Kunci host persist di `C:\ProgramData\xydesk\hostkey.pem` di VM; kalau VM
+  di-reset, hapus folder itu lalu ulangi Create & Setup dari app.
 - Kredensial balik ke app **E2E ter-enskripsi** (RSA-OAEP, kunci sekali-pakai)
   — plaintext tidak pernah menyentuh disk host maupun artifact.
-- Password & Tailscale key terkirim lewat input workflow di **repo private
-  milik user sendiri** dan di-mask di log. Alternatif paling privat: set
+- Password & Tailscale key dikirim sebagai **ciphertext** (`secrets.enc`) ke
+  repo user — aman walau repo public, hanya host dengan kunci privat-nya yang
+  bisa dekripsi. Alternatif paling privat untuk Tailscale key: set
   `XYDESK_TAILSCALE_AUTH_KEY` langsung di env runner, kosongkan di app.
 - RDP **tidak diekspos ke internet** — semua lewat tailnet.
 - Token device flow scope `repo` (perlu untuk create repo + Actions di akun

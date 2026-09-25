@@ -152,7 +152,7 @@
             android:layout_height="wrap_content"
             android:textSize="11sp"
             android:alpha="0.65"
-            android:text="Cara kerja:\n• Login pakai akun GitHub KAMU — repo PUBLIC dibuat di akun kamu, workflow jalan di akun kamu, mesin RDP = host milik kamu (self-hosted runner 'xydesk-win').\n• Rahasia (password RDP & Tailscale key) di-enskripsi ke kunci host sebelum dikirim — TIDAK lewat input workflow, aman walau repo public.\n• Kredensial balik ke app juga ter-enskripsi end-to-end — tidak pernah disimpan di HP.\n\nPrasyarat (sekali saja per mesin):\n• Host Windows (Pro/Enterprise/Server) terdaftar sbg self-hosted runner GitHub label 'xydesk-win' + Tailscale terpasang. JANGAN pakai runner GitHub-hosted (windows-latest) sbg mesin RDP — melanggar ketentuan Actions & bikin akun kena suspend\n• Tailscale di HP login ke tailnet yang sama" />
+            android:text="Cara kerja:\n• Login pakai akun GitHub KAMU — repo PUBLIC dibuat di akun kamu, workflow jalan di akun kamu, mesin RDP = host milik kamu (self-hosted runner 'xydesk-win').\n• Rahasia (password RDP &amp; Tailscale key) di-enskripsi ke kunci host sebelum dikirim — TIDAK lewat input workflow, aman walau repo public.\n• Kredensial balik ke app juga ter-enskripsi end-to-end — tidak pernah disimpan di HP.\n\nPrasyarat (sekali saja per mesin):\n• Host Windows (Pro/Enterprise/Server) terdaftar sbg self-hosted runner GitHub label 'xydesk-win' + Tailscale terpasang. JANGAN pakai runner GitHub-hosted (windows-latest) sbg mesin RDP — melanggar ketentuan Actions &amp; bikin akun kena suspend\n• Tailscale di HP login ke tailnet yang sama" />
 
     </LinearLayout>
 </ScrollView>

@@ -1,6 +1,6 @@
 # XyDesk Remote — Arsitektur & Roadmap
 > App Android remote desktop (klien RDP) untuk Windows, dengan sistem HUD multi-panel yang bisa dikustomisasi.
-> Status: **v0.2.0 — repo PUBLIC, split per-ABI, R8 + signing resmi + GitHub Release, fitur Cloud RDP (GitHub+Tailscale) v1** — 2026-09-23
+> Status: **v0.2.3 — Cloud RDP dua-fase (public-safe): rahasia via ciphertext, bukan input workflow** — 2026-09-25
 > Nama kerja: `XyDesk Remote` (package: `id.xydesk.remote`)
 
 ---
@@ -9,7 +9,7 @@
 
 | Item | Status |
 |---|---|
-| Repo GitHub `xykal/XyDesk-Remote` (private) | ✅ dibuat |
+| Repo GitHub `xykal/XyDesk-Remote` (public) | ✅ dibuat (awal private, dipublikasi v0.2.0) |
 | Tree FreeRDP **3.32.0** vendored di root (pin via git) | ✅ |
 | Modul `:freeRDPCore` (native + JNI, Apache-2.0) | ✅ tanpa perubahan |
 | Modul `:app` — form koneksi XyDesk (host/IP, port, user, pass, domain) | ✅ |
@@ -286,7 +286,7 @@ Setelah smoke test M0 lulus (APK dari CI):
 ## 12. M6 — Cloud RDP "Create RDP from GitHub" (v1 di-ship bersama v0.2.0)
 
 **Konsep:** user di app cuma **login GitHub + isi nama** → sisanya otomatis:
-nama jadi nama **repo GitHub (private)** → app push template setup →
+nama jadi nama **repo GitHub (public — aturan proyek: tanpa repo private)** → app push template setup →
 workflow di repo menyiapkan **VM Windows self-hosted runner** (label
 `xydesk-win`): RDP on, join **Tailscale**, user + password **acak** →
 app poll run → download artifact `rdp-credentials` → cek konektivitas
@@ -296,7 +296,7 @@ app poll run → download artifact `rdp-credentials` → cek konektivitas
 ```
 HP (XyDesk Remote)                       Repo GitHub (per user)
 ┌────────────────────┐   device flow    ┌──────────────────────────┐
-│ CloudRdpActivity   │ ───────────────► │ repo '<nama>' (private)  │
+│ CloudRdpActivity   │ ───────────────► │ repo '<nama>' (public)   │
 │  login GitHub      │   (scope: repo)  │  .github/workflows/      │
 │  create repo       │ ◄─────────────── │    rdp-vm.yml           │
 │  push template     │   poll run +     │  setup/setup-windows.ps1│
@@ -315,11 +315,21 @@ HP (XyDesk Remote)                       Repo GitHub (per user)
 - `cloud/CloudRdpActivity.java` — UI + orkestrasi pipeline
 - `assets/xydesk-cloud/rdp-vm.yml` + `setup-windows.ps1` — template yang di-push ke repo user
 
-### Keamanan v1
-- Password RDP acak 18 karakter, dihasilkan di VM, mengalir VM→artifact→app (tidak pernah di device sebagai teks permanen)
-- Repo user **private**; token device flow scope `repo`
-- Auth key Tailscale diset di **environment runner** (bukan di repo, bukan di HP)
+### Keamanan (dua-fase, public-safe)
+- Repo user **public**; token device flow scope `repo`
+- **Rahasia tidak lewat input workflow** (di repo public input workflow kebaca
+  publik). Fase `prepare`: host generate kunci RSA (persist di
+  `C:\ProgramData\xydesk\hostkey.pem`) + upload public key; app enkripsi
+  `{user,pass,tskey}` (RSA-OAEP-SHA1) → `setup/secrets.enc`.
+  Fase `setup`: host dekripsi, setup, kredensial di-enskripsi balik ke
+  `setup/pubkey.pem` (kunci sekali-pakai app) → `rdp-credentials.enc`.
+- Password RDP: pilihan user (wajib kuat) atau auto-generate 18 karakter di VM;
+  **di-reset tiap setup** (re-run aman); mengalir VM→artifact→app
+- Auth key Tailscale: via ciphertext (secrets.enc) atau env runner
+  `XYDESK_TAILSCALE_AUTH_KEY` — tidak pernah di repo sebagai plaintext
 - Koneksi RDP selalu TLS + dalam tailnet (tidak ada exposure port ke internet)
+- **Skrip host WAJIB jalan di pwsh 7** (API PEM .NET Core tidak ada di Windows
+  PowerShell 5.1) — workflow memanggil `pwsh`, bukan `powershell`
 
 ### Open items (butus keputusan lo)
 1. **OAuth App GitHub** harus dibuat manual di UI (POST /applications sudah mati) —

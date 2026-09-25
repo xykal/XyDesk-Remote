@@ -1,5 +1,7 @@
-#Requires -Version 5.1
-# XyDesk Remote - RDP VM setup (dipanggil workflow rdp-vm.yml, shell pwsh)
+#Requires -Version 7.0
+# XyDesk Remote - RDP VM setup (dipanggil workflow rdp-vm.yml — WAJIB pwsh 7,
+# BUKAN Windows PowerShell 5.1: memakai API PEM .NET Core ImportFromPem/
+# ExportPkcs8PrivateKeyPem yang tidak ada di 5.1)
 #
 # Dua fase (dipilih app via env XYDESK_PHASE):
 #   prepare : generate pasangan kunci RSA host (sekali per mesin) di
@@ -63,10 +65,17 @@ Ensure-HostKey
 $rsaHost = [System.Security.Cryptography.RSA]::Create()
 $rsaHost.ImportFromPem((Get-Content $privPath -Raw))
 $pad = [System.Security.Cryptography.RSAEncryptionPadding]::OaepSHA1
-$blobs = Get-Content 'setup\secrets.enc' -Raw | ConvertFrom-Json
-$user    = [Text.Encoding]::UTF8.GetString($rsaHost.Decrypt([Convert]::FromBase64String($blobs.u), $pad))
-$pass    = [Text.Encoding]::UTF8.GetString($rsaHost.Decrypt([Convert]::FromBase64String($blobs.p), $pad))
-$tskey   = [Text.Encoding]::UTF8.GetString($rsaHost.Decrypt([Convert]::FromBase64String($blobs.t), $pad))
+try {
+    $blobs = Get-Content 'setup\secrets.enc' -Raw | ConvertFrom-Json
+    $user    = [Text.Encoding]::UTF8.GetString($rsaHost.Decrypt([Convert]::FromBase64String($blobs.u), $pad))
+    $pass    = [Text.Encoding]::UTF8.GetString($rsaHost.Decrypt([Convert]::FromBase64String($blobs.p), $pad))
+    $tskey   = [Text.Encoding]::UTF8.GetString($rsaHost.Decrypt([Convert]::FromBase64String($blobs.t), $pad))
+} catch {
+    throw ('Dekripsi setup\secrets.enc GAGAL: kunci host di VM tidak cocok dengan file ' +
+           '(VM di-reset/reinstall tanpa hapus repo, atau secrets.enc dari run lama). ' +
+           'Solusi: hapus C:\ProgramData\xydesk\hostkey.pem + host-pubkey.pem di VM, ' +
+           'lalu ulangi "Create & Setup" dari app (fase prepare akan generate kunci host baru).')
+}
 
 # 0b) Mask nilai sensitif biar tidak bocor di log Actions
 if ($pass)  { Write-Host "::add-mask::$pass" }
@@ -78,23 +87,47 @@ Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server' 
 Enable-NetFirewallRule -DisplayGroup 'Remote Desktop' -ErrorAction SilentlyContinue
 
 # 2) Tailscale — install bila perlu, join tailnet
-if (-not (Get-Command tailscale -ErrorAction SilentlyContinue)) {
+# Cari executable: PATH dulu (bisa belum refresh setelah install di run ini),
+# lalu path default installer Windows.
+$tsExe = $null
+$cmd = Get-Command tailscale -ErrorAction SilentlyContinue
+if ($cmd) { $tsExe = $cmd.Source }
+if (-not $tsExe) {
+    foreach ($p in @("$env:ProgramFiles(x86)\Tailscale\tailscale.exe",
+                     "$env:ProgramFiles\Tailscale\tailscale.exe")) {
+        if (Test-Path $p) { $tsExe = $p; break }
+    }
+}
+if (-not $tsExe) {
     Write-Host '[xydesk] installing tailscale...'
     Invoke-WebRequest 'https://downloads.tailscale.com/windows/tailscale-setup-latest.exe' `
         -OutFile "$env:TEMP\ts-setup.exe"
     Start-Process "$env:TEMP\ts-setup.exe" -ArgumentList '/quiet','/install' -Wait
-    Start-Sleep -Seconds 10
+    Start-Sleep -Seconds 15
+    $tsExe = "$env:ProgramFiles(x86)\Tailscale\tailscale.exe"
+    if (-not (Test-Path $tsExe)) {
+        throw "Tailscale di-install tapi $tsExe tidak ditemukan — cek log installer."
+    }
 }
+Write-Host "[xydesk] using tailscale: $tsExe"
 $authKey = $tskey
 if (-not $authKey) { $authKey = $env:XYDESK_TAILSCALE_AUTH_KEY }
 if (-not $authKey) {
     throw 'Tailscale auth key belum ada — isi "Tailscale auth key" di app saat Create & Setup, atau set env XYDESK_TAILSCALE_AUTH_KEY di runner.'
 }
-tailscale up --authkey=$authKey --hostname="$env:COMPUTERNAME" --reset 2>$null
-Start-Sleep -Seconds 5
-$dnsName = (tailscale status --json | ConvertFrom-Json).Self.DNSName
+& $tsExe up --authkey=$authKey --hostname="$env:COMPUTERNAME" --reset
+if ($LASTEXITCODE -ne 0) { throw "tailscale up gagal (exit $LASTEXITCODE) — cek auth key & koneksi." }
+# Tunggu sampai Online (maks 60 detik)
+$dnsName = $null
+for ($i = 0; $i -lt 12; $i++) {
+    Start-Sleep -Seconds 5
+    $st = (& $tsExe status --json) | Out-String
+    $stj = $st | ConvertFrom-Json
+    if ($stj.Self.Online) { $dnsName = $stj.Self.DNSName; break }
+    Write-Host "[xydesk] menunggu tailscale online... ($($stj.Self.Online))"
+}
 if (-not $dnsName) {
-    throw 'Tailscale DNS name tidak tersedia (cek status tailscale di VM)'
+    throw 'Tailscale belum Online setelah 60 detik (cek status tailscale di VM)'
 }
 
 # 3) User RDP — nama & password dari app (ter-enskripsi), fallback aman.
@@ -126,12 +159,17 @@ net localgroup administrators $user /add 2>$null | Out-Null
 #    kompatibel decrypt di Android) — plaintext TIDAK pernah menyentuh disk
 $tmpJson = Join-Path $env:TEMP 'xydesk-creds.json'
 $encFile = Join-Path $dir 'rdp-credentials.enc'
-[IO.File]::WriteAllText($tmpJson, ([pscustomobject]@{
+$jsonStr = [pscustomobject]@{
     host     = $dnsName
     port     = 3389
     user     = $user
     password = $pass
-} | ConvertTo-Json))
+} | ConvertTo-Json -Compress
+# RSA-2048 + OAEP-SHA1 memuat maks 190 byte
+if ([Text.Encoding]::UTF8.GetByteCount($jsonStr) -gt 180) {
+    throw "JSON kredensial terlalu besar untuk RSA-OAEP (nama tailnet/user/password terlalu panjang). Coba nama user/password lebih pendek."
+}
+[IO.File]::WriteAllText($tmpJson, $jsonStr)
 $rsaApp = [System.Security.Cryptography.RSA]::Create()
 $rsaApp.ImportFromPem((Get-Content 'setup\pubkey.pem' -Raw))
 $enc = $rsaApp.Encrypt([IO.File]::ReadAllBytes($tmpJson), $pad)
