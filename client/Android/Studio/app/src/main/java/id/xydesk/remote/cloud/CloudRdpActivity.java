@@ -5,6 +5,7 @@ import android.net.Uri;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.Looper;
+import android.util.Base64;
 import android.util.Log;
 import android.view.View;
 import android.widget.Button;
@@ -27,26 +28,44 @@ import java.io.InputStream;
 import java.net.InetSocketAddress;
 import java.net.Socket;
 import java.nio.charset.StandardCharsets;
+import java.security.KeyPair;
+import java.security.KeyPairGenerator;
+import java.security.PrivateKey;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipInputStream;
 
+import javax.crypto.Cipher;
+
 /**
- * CLOUD RDP (v1) — "create RDP from GitHub, langsung dari APK".
+ * CLOUD RDP (v1.3, multi-tenant) — "create RDP from GitHub, langsung dari APK".
  *
- * Flow:
- *   1. Login GitHub (device flow — user authorize di browser).
- *   2. User masukkan NAMA -> nama repo GitHub (private) dibuat otomatis.
- *   3. App push template setup (workflow + skrip Windows) ke repo itu.
- *   4. Workflow di repo menjalankan setup di self-hosted Windows runner
- *      (label 'xydesk-win'): RDP on, join Tailscale, user + password acak.
- *   5. App poll status run; saat sukses, app download artifact
- *      'rdp-credentials' (host ts.net + user + password).
+ * Alur:
+ *   1. Login GitHub — user authorize akun GitHub MILIK MEREKA SENDIRI
+ *      (device flow). Workflow jalan di akun user, bukan akun developer.
+ *   2. User isi: nama repo, nama user RDP (opsional), password RDP (opsional,
+ *      wajib kuat — kosong = auto-generate), Tailscale auth key (opsional).
+ *   3. App auto-create repo (private) di akun user — kalau sudah ada, pakai
+ *      yang existing. Lalu app generate kunci RSA sekali-pakai dan push
+ *      template lengkap (workflow + skrip Windows + pubkey.pem).
+ *   4. App trigger workflow_dispatch (input sensitif di-mask di log).
+ *      Workflow di akun user menjalankan setup di self-hosted Windows runner
+ *      milik user (label 'xydesk-win'): RDP on, join Tailscale, user + password,
+ *      kredensial di-enskripsi (RSA-OAEP) dengan pubkey.pem.
+ *   5. App poll run; download artifact 'rdp-credentials'; DEKRYPT di app.
  *   6. App cek konektivitas (host:3389) lalu OTOMATIS connect RDP.
+ *
+ * Untuk RDP yang SUDAH ADA (IP + port + user + pass), pakai form Connect di
+ * layar utama — tidak butuh GitHub sama sekali.
+ *
+ * Host RDP = mesin MILIK USER (self-hosted runner). Jangan pernah pakai
+ * GitHub-hosted runner (windows-latest) sebagai RDP host: melanggar ketentuan
+ * pemakaian Actions dan bikin akun GitHub user kena suspend.
+ * Detail setup: docs/CLOUD-RDP-SETUP.md
  *
  * Prasyarat (lihat teks hint di UI):
  *   - OAuth App GitHub dengan Device Flow (isi CLIENT_ID di GitHubDeviceAuth)
- *   - Minimal 1 Windows VM self-hosted runner dengan label 'xydesk-win',
- *     env XYDESK_TAILSCALE_AUTH_KEY ter-set, Tailscale terpasang
+ *   - Minimal 1 Windows self-hosted runner dengan label 'xydesk-win',
+ *     Tailscale terpasang (auth key via input app atau env runner)
  *   - Tailscale app di HP, login ke tailnet yang sama
  */
 public class CloudRdpActivity extends AppCompatActivity
@@ -58,6 +77,9 @@ public class CloudRdpActivity extends AppCompatActivity
 	private Button btnLogin;
 	private Button btnCreate;
 	private EditText nameInput;
+	private EditText userInput;
+	private EditText passInput;
+	private EditText tsKeyInput;
 	private TextView loginStatus;
 	private TextView statusView;
 	private ProgressBar progress;
@@ -73,6 +95,9 @@ public class CloudRdpActivity extends AppCompatActivity
 		btnLogin = findViewById(R.id.btn_cloud_login);
 		btnCreate = findViewById(R.id.btn_cloud_create);
 		nameInput = findViewById(R.id.input_repo_name);
+		userInput = findViewById(R.id.input_rdp_user);
+		passInput = findViewById(R.id.input_rdp_pass);
+		tsKeyInput = findViewById(R.id.input_ts_key);
 		loginStatus = findViewById(R.id.txt_login_status);
 		statusView = findViewById(R.id.txt_cloud_status);
 		progress = findViewById(R.id.cloud_progress);
@@ -82,7 +107,7 @@ public class CloudRdpActivity extends AppCompatActivity
 	}
 
 	// ------------------------------------------------------------------
-	// 1) LOGIN
+	// 1) LOGIN (akun GitHub milik user sendiri)
 	// ------------------------------------------------------------------
 
 	private void doLogin()
@@ -91,12 +116,14 @@ public class CloudRdpActivity extends AppCompatActivity
 		{
 			AlertDialog.Builder b = new AlertDialog.Builder(this);
 			b.setTitle("OAuth App belum di-set");
-			b.setMessage("Fitur Cloud RDP butuh 1 OAuth App GitHub (sekali saja):\n\n"
+			b.setMessage("Fitur Cloud RDP butuh 1 OAuth App GitHub (sekali saja, "
+			           + "dibuat developer):\n\n"
 			           + "1. GitHub → Settings → Developer settings → OAuth Apps → New OAuth App\n"
 			           + "2. Nama: XyDesk Remote, callback: https://localhost\n"
 			           + "3. AKTIFKAN 'Device Flow'\n"
 			           + "4. Salin Client ID ke GitHubDeviceAuth.CLIENT_ID\n\n"
-			           + "Lalu build ulang. (Client secret TIDAK perlu.)");
+			           + "Lalu build ulang. (Client secret TIDAK perlu.) User cukup "
+			           + "login akun GitHub mereka masing-masing.");
 			b.setPositiveButton("Oke", null);
 			b.show();
 			return;
@@ -120,7 +147,7 @@ public class CloudRdpActivity extends AppCompatActivity
 				final String who = gh.login();
 				main.post(() -> {
 					loginStatus.setText("Terhubung: @" + who);
-					status("Login GitHub OK. Isi nama, lalu Create & Setup.");
+					status("Login GitHub OK. Isi form, lalu Create & Setup.");
 					setBusy(false, null);
 				});
 			}
@@ -149,18 +176,69 @@ public class CloudRdpActivity extends AppCompatActivity
 		                                   .replace(' ', '-');
 		if (name.isEmpty() || !name.matches("[a-z0-9][a-z0-9_-]{0,38}"))
 		{
-			status("Nama tidak valid (huruf kecil, angka, -, _; maks 39).");
+			status("Nama repo tidak valid (huruf kecil, angka, -, _; maks 39).");
 			return;
 		}
-		setBusy(true, "Membuat repo...");
-		new Thread(() -> runPipeline(name)).start();
+		String u = userInput.getText().toString().trim();
+		if (u.isEmpty())
+		{
+			u = "xydesk";
+		}
+		if (!u.matches("[A-Za-z][A-Za-z0-9._-]{0,19}"))
+		{
+			status("Nama user RDP tidak valid (huruf/angka/._-; maks 20, mulai huruf).");
+			return;
+		}
+		if (u.equalsIgnoreCase("Administrator") || u.equalsIgnoreCase("Guest")
+		    || u.equalsIgnoreCase("DefaultAccount") || u.equalsIgnoreCase("krbtgt")
+		    || u.equalsIgnoreCase("WDAGUtilityAccount"))
+		{
+			status("Nama user '" + u + "' dipakai Windows — pilih nama lain.");
+			return;
+		}
+		final String rdpUser = u;
+
+		final String rdpPass = passInput.getText().toString();
+		if (!rdpPass.isEmpty())
+		{
+			if (!rdpPass.matches("[A-Za-z0-9!@#$%^&*._-]{12,64}"))
+			{
+				status("Password: min 12 karakter, boleh huruf/angka/!@#$%^&*._- (tanpa spasi/kutip).");
+				return;
+			}
+			int cls = 0;
+			if (rdpPass.matches(".*[a-z].*")) cls++;
+			if (rdpPass.matches(".*[A-Z].*")) cls++;
+			if (rdpPass.matches(".*[0-9].*")) cls++;
+			if (rdpPass.matches(".*[!@#$%^&*._-].*")) cls++;
+			if (cls < 3)
+			{
+				status("Password kurang kuat — campur minimal 3 dari: huruf kecil, huruf besar, angka, simbol.");
+				return;
+			}
+			if (rdpPass.toLowerCase().contains(rdpUser.toLowerCase()))
+			{
+				status("Password jangan mengandung nama user.");
+				return;
+			}
+		}
+
+		final String tsKey = tsKeyInput.getText().toString().trim();
+		if (!tsKey.isEmpty() && !tsKey.startsWith("tskey-"))
+		{
+			status("Key Tailscale biasanya diawali 'tskey-' (cek tailscale.com/admin/keys).");
+			return;
+		}
+
+		setBusy(true, "Menyiapkan...");
+		new Thread(() -> runPipeline(name, rdpUser, rdpPass, tsKey)).start();
 	}
 
-	private void runPipeline(String repoName)
+	private void runPipeline(String repoName, String rdpUser, String rdpPass, String tsKey)
 	{
 		try
 		{
-			status("1/5 Cek/buat repo " + repoName + "...");
+			status("1/5 Siapkan repo " + repoName + " di akun GitHub kamu...");
 			if (gh.repoExists(repoName))
 			{
 				status("Repo sudah ada — pakai yang existing.");
@@ -168,9 +246,27 @@ public class CloudRdpActivity extends AppCompatActivity
 			else
 			{
 				gh.createRepo(repoName, "XyDesk Remote — cloud RDP (setup otomatis)");
+				status("Repo private '" + repoName + "' dibuat di akun @" + gh.login() + ".");
+			}
+			status("Ambil baseline run...");
+			String prevRunId = null;
+			JSONObject prev = gh.latestRun(repoName, WORKFLOW_NAME);
+			if (prev != null)
+			{
+				prevRunId = String.valueOf(prev.getLong("id"));
 			}
 
-			status("2/5 Push template setup ke repo...");
+			status("2/5 Generate kunci sekali-pakai + push template setup...");
+			KeyPairGenerator kpg = KeyPairGenerator.getInstance("RSA");
+			kpg.initialize(2048);
+			KeyPair kp = kpg.generateKeyPair();
+			PrivateKey priv = kp.getPrivate();
+			String pubPem = "-----BEGIN PUBLIC KEY-----\n"
+			                + Base64.encodeToString(kp.getPublic().getEncoded(),
+			                                       Base64.DEFAULT)
+			                + "-----END PUBLIC KEY-----\n";
+			gh.pushFile(repoName, "setup/pubkey.pem", pubPem,
+			            "xydesk: add one-time credential pubkey");
 			gh.pushFile(repoName, ".github/workflows/rdp-vm.yml",
 			            asset("xydesk-cloud/rdp-vm.yml"),
 			            "xydesk: add RDP setup workflow");
@@ -178,8 +274,13 @@ public class CloudRdpActivity extends AppCompatActivity
 			            asset("xydesk-cloud/setup-windows.ps1"),
 			            "xydesk: add Windows setup script");
 
-			status("3/5 Tunggu workflow '" + WORKFLOW_NAME + "' mulai & jalan...");
-			String runId = waitForRun(repoName);
+			status("3/5 Trigger workflow '" + WORKFLOW_NAME + "'...");
+			JSONObject inputs = new JSONObject();
+			inputs.put("rdpuser", rdpUser);
+			inputs.put("rdppass", rdpPass == null ? "" : rdpPass);
+			inputs.put("tskey", tsKey == null ? "" : tsKey);
+			gh.dispatchWorkflow(repoName, "rdp-vm.yml", "main", inputs);
+			String runId = waitForRun(repoName, prevRunId);
 			status("Run #" + runId + " — menunggu selesai (bisa beberapa menit)...");
 
 			JSONObject run = waitForCompletion(repoName, runId);
@@ -191,7 +292,7 @@ public class CloudRdpActivity extends AppCompatActivity
 				                    + " — kemungkinan label runner 'xydesk-win' belum ada.");
 			}
 
-			status("4/5 Download kredensial RDP...");
+			status("4/5 Download kredensial RDP (ter-enskripsi)...");
 			JSONObject art = gh.findArtifact(repoName, runId, ARTIFACT_NAME);
 			if (art == null)
 			{
@@ -199,10 +300,20 @@ public class CloudRdpActivity extends AppCompatActivity
 				                    + runId);
 			}
 			byte[] zip = gh.downloadArtifactZip(repoName, runId, art.getLong("id"));
-			byte[] creds = unzipEntry(zip, "rdp-credentials.json");
+			byte[] creds = unzipEntry(zip, "rdp-credentials.enc");
+			if (creds != null)
+			{
+				Cipher dec = Cipher.getInstance("RSA/ECB/OAEPWithSHA-1AndMGF1Padding");
+				dec.init(Cipher.DECRYPT_MODE, priv);
+				creds = dec.doFinal(creds);
+			}
+			else
+			{
+				creds = unzipEntry(zip, "rdp-credentials.json");
+			}
 			if (creds == null)
 			{
-				throw new Exception("rdp-credentials.json tidak ada di zip artifact");
+				throw new Exception("rdp-credentials(.enc/.json) tidak ada di zip artifact");
 			}
 			JSONObject c = new JSONObject(new String(creds, StandardCharsets.UTF_8));
 			String host = c.getString("host");
@@ -215,7 +326,7 @@ public class CloudRdpActivity extends AppCompatActivity
 			{
 				throw new Exception(host + ":" + port + " belum terjangkau. "
 				                   + "Pastikan Tailscale di HP login ke tailnet yang "
-				                   + "sama dengan VM, lalu coba lagi.");
+				                   + "sama dengan host, lalu coba lagi.");
 			}
 
 			main.post(() -> {
@@ -236,7 +347,7 @@ public class CloudRdpActivity extends AppCompatActivity
 		}
 	}
 
-	private String waitForRun(String repoName) throws Exception
+	private String waitForRun(String repoName, String skipRunId) throws Exception
 	{
 		long deadline = System.currentTimeMillis() + 3 * 60 * 1000L;
 		while (System.currentTimeMillis() < deadline)
@@ -244,11 +355,15 @@ public class CloudRdpActivity extends AppCompatActivity
 			JSONObject run = gh.latestRun(repoName, WORKFLOW_NAME);
 			if (run != null)
 			{
-				return String.valueOf(run.getLong("id"));
+				String id = String.valueOf(run.getLong("id"));
+				if (!id.equals(skipRunId))
+				{
+					return id;
+				}
 			}
 			Thread.sleep(5000);
 		}
-		throw new Exception("Workflow belum mulai dalam 3 menit (cek nama workflow & branch main)");
+		throw new Exception("Workflow baru belum mulai dalam 3 menit (cek workflow & branch main)");
 	}
 
 	private JSONObject waitForCompletion(String repoName, String runId) throws Exception

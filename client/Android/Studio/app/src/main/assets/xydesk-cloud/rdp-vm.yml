@@ -1,16 +1,30 @@
 name: XyDesk RDP Setup
 
-# Dipush otomatis oleh app XyDesk Remote (fitur Cloud RDP) saat user
-# "Create & Setup". Menyiapkan self-hosted Windows runner:
+# Dipush + di-trigger otomatis oleh app XyDesk Remote (fitur Cloud RDP).
+# Menyiapkan self-hosted Windows runner milik USER (bukan akun developer):
 #   - RDP on + firewall
-#   - join Tailscale (auth key dari env runner: XYDESK_TAILSCALE_AUTH_KEY)
-#   - user 'xydesk' dengan password acak
-#   - publish kredensial sebagai artifact 'rdp-credentials' (dibaca app)
+#   - join Tailscale (key dari input app, fallback env runner)
+#   - user RDP + password (input app / auto-generate kuat)
+#   - publish kredensial ter-enskripsi (pubkey.pem dari app) sbg artifact
 #
-# Label runner: 'xydesk-win' (self-hosted, Windows, Tailscale terpasang).
+# Label runner: 'xydesk-win' (self-hosted, Windows, milik user sendiri).
+# JANGAN ganti ke windows-latest (GitHub-hosted) — melanggar ketentuan
+# pemakaian Actions dan bikin akun GitHub kena suspend.
 on:
-  push:
-    branches: [main]
+  workflow_dispatch:
+    inputs:
+      rdpuser:
+        description: 'Nama user RDP (default: xydesk)'
+        required: false
+        default: 'xydesk'
+      rdppass:
+        description: 'Password RDP (kosongkan = auto-generate kuat)'
+        required: false
+        default: ''
+      tskey:
+        description: 'Tailscale auth key (kosongkan = pakai env runner XYDESK_TAILSCALE_AUTH_KEY)'
+        required: false
+        default: ''
 
 jobs:
   setup:
@@ -18,12 +32,15 @@ jobs:
     steps:
       - name: Run setup
         shell: pwsh
+        env:
+          XYDESK_RDP_USER: ${{ inputs.rdpuser }}
+          XYDESK_RDP_PASS: ${{ inputs.rdppass }}
+          XYDESK_TSKEY: ${{ inputs.tskey }}
         run: |
-          $env:XYDESK_REPO_NAME = "${{ github.event.repository.name }}"
           powershell -NoProfile -ExecutionPolicy Bypass -File setup/setup-windows.ps1
-      - name: Upload RDP credentials
+      - name: Upload RDP credentials (ter-enskripsi)
         if: success()
         uses: actions/upload-artifact@v4
         with:
           name: rdp-credentials
-          path: C:\ProgramData\xydesk\rdp-credentials.json
+          path: C:\ProgramData\xydesk\rdp-credentials.enc

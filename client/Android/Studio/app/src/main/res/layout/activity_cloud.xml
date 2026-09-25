@@ -21,7 +21,7 @@
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:layout_marginTop="4dp"
-            android:text="Login GitHub → isi nama → repo + setup RDP otomatis (self-hosted runner Windows) → connect otomatis via Tailscale."
+            android:text="Bebas: punya RDP sendiri? Pakai menu Connect (IP + user + pass). Belum punya? Login akun GitHub KAMU, isi form di bawah, app bikin repo otomatis di akun kamu + jalanin script RDP via Tailscale. Tidak ada yg numpang di akun developer."
             android:textSize="12sp"
             android:alpha="0.7" />
 
@@ -51,7 +51,7 @@
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:layout_marginTop="14dp"
-            android:text="Nama (akan jadi nama repo GitHub)"
+            android:text="Nama (akan jadi nama repo GitHub kamu)"
             android:textStyle="bold" />
         <EditText
             android:id="@+id/input_repo_name"
@@ -60,6 +60,60 @@
             android:hint="misal: desk-gaming-01"
             android:inputType="textNoSuggestions"
             android:singleLine="true" />
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="10dp"
+            android:text="Nama user RDP (opsional)"
+            android:textStyle="bold" />
+        <EditText
+            android:id="@+id/input_rdp_user"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:hint="default: xydesk"
+            android:inputType="text"
+            android:singleLine="true" />
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="10dp"
+            android:text="Password RDP (opsional — WAJIB KUAT)"
+            android:textStyle="bold" />
+        <EditText
+            android:id="@+id/input_rdp_pass"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:hint="kosongkan = auto-generate"
+            android:inputType="textPassword"
+            android:singleLine="true" />
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="Min 12 karakter, campur huruf besar/kecil + angka + simbol (!@#$%^&amp;*._-). Tanpa spasi/kutip. Jangan mengandung nama user."
+            android:textSize="10sp"
+            android:alpha="0.6" />
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="10dp"
+            android:text="Tailscale auth key (opsional)"
+            android:textStyle="bold" />
+        <EditText
+            android:id="@+id/input_ts_key"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:hint="tskey-auth-... (kosongkan = pakai key di runner)"
+            android:inputType="textPassword"
+            android:singleLine="true" />
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="Pre-auth key dari Tailscale admin console (tailscale.com/admin/keys). Di-mask otomatis, tidak masuk log."
+            android:textSize="10sp"
+            android:alpha="0.6" />
 
         <Button
             android:id="@+id/btn_cloud_create"
@@ -98,7 +152,7 @@
             android:layout_height="wrap_content"
             android:textSize="11sp"
             android:alpha="0.65"
-            android:text="Prasyarat:\n• OAuth App GitHub dengan Device Flow (lihat dialog saat tombol Login ditekan)\n• 1+ VM Windows self-hosted runner GitHub dengan label 'xydesk-win', env XYDESK_TAILSCALE_AUTH_KEY ter-set, Tailscale terpasang\n• Tailscale di HP login ke tailnet yang sama dengan VM\n\nKredensial RDP (password acak) dihasilkan skrip setup di VM dan dibaca app dari artifact workflow — tidak pernah disimpan di HP." />
+            android:text="Cara kerja:\n• Login pakai akun GitHub KAMU — repo dibuat di akun kamu (private), workflow jalan di akun kamu, mesin RDP = host milik kamu (self-hosted runner 'xydesk-win').\n• Kredensial diacak/diisi user, di-enskripsi end-to-end, dibaca app dari artifact — tidak pernah disimpan di HP.\n\nPrasyarat (sekali saja per mesin):\n• Host Windows (Pro/Enterprise/Server) terdaftar sbg self-hosted runner GitHub label 'xydesk-win' + Tailscale terpasang. JANGAN pakai runner GitHub-hosted (windows-latest) sbg mesin RDP — melanggar ketentuan Actions & bikin akun kena suspend\n• Tailscale di HP login ke tailnet yang sama" />
 
     </LinearLayout>
 </ScrollView>

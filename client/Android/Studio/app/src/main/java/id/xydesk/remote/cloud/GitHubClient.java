@@ -77,8 +77,43 @@ public class GitHubClient
 		body.put("message", message);
 		body.put("content",
 		         Base64.encodeToString(content.getBytes(StandardCharsets.UTF_8),
-			                          Base64.NO_WRAP));
+		                          Base64.NO_WRAP));
+		String sha = fileSha(repo, path);
+		if (sha != null)
+		{
+			body.put("sha", sha);
+		}
 		apiPut("/repos/" + login() + "/" + repo + "/contents/" + path, body);
+	}
+
+	/** SHA file existing di repo (null kalau belum ada) — wajib untuk update via contents API. */
+	private String fileSha(String repo, String path) throws ApiError, IOException, org.json.JSONException
+	{
+		try
+		{
+			JSONObject f = apiGet("/repos/" + login() + "/" + repo + "/contents/" + path);
+			String sha = f.optString("sha", null);
+			return (sha == null || sha.isEmpty()) ? null : sha;
+		}
+		catch (ApiError e)
+		{
+			if (e.code == 404) return null;
+			throw e;
+		}
+	}
+
+	/** Trigger workflow_dispatch (app -> run setup di akun user sendiri). */
+	public void dispatchWorkflow(String repo, String workflowFile, String ref, JSONObject inputs)
+		throws ApiError, IOException, org.json.JSONException
+	{
+		JSONObject body = new JSONObject();
+		body.put("ref", ref);
+		if (inputs != null)
+		{
+			body.put("inputs", inputs);
+		}
+		send("POST", "/repos/" + login() + "/" + repo + "/actions/workflows/"
+		     + workflowFile + "/dispatches", "application/json", body);
 	}
 
 	/** Run workflow paling baru (per nama workflow). */
