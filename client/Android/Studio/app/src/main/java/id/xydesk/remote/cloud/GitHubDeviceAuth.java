@@ -30,7 +30,7 @@ import java.nio.charset.StandardCharsets;
 public class GitHubDeviceAuth
 {
 	/** ISI client_id OAuth App di sini. */
-	public static final String CLIENT_ID = "GANTI_DENGAN_CLIENT_ID";
+	public static final String CLIENT_ID = "Ov23lihy9fEoqhqxEBvr";
 
 	public static boolean isConfigured()
 	{
