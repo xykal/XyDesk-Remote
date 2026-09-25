@@ -23,6 +23,8 @@ data class ConnectionProfile(
     val id: String
         get() = "$host:$port"
 
-    require(host.isNotBlank()) { "host wajib diisi" }
-    require(port in 1..65535) { "port invalid: $port" }
+    init {
+        require(host.isNotBlank()) { "host wajib diisi" }
+        require(port in 1..65535) { "port invalid: $port" }
+    }
 }

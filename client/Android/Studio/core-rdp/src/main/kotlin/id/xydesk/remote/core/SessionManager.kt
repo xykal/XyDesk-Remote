@@ -60,7 +60,7 @@ class SessionManager(context: Context) {
     private val worker: ExecutorService =
         Executors.newSingleThreadExecutor { r -> Thread(r, "xydesk-rdp") }
 
-    private val _state = MutableStateFlow(SessionState.Idle)
+    private val _state = MutableStateFlow<SessionState>(SessionState.Idle)
     val state: StateFlow<SessionState> = _state.asStateFlow()
 
     @Volatile private var core: CoreSession? = null
@@ -146,7 +146,8 @@ class SessionManager(context: Context) {
         if (released) return
         released = true
         val inst = core?.getInstance()
-        if (inst != 0L) {
+        core = null
+        if (inst != null && inst != 0L) {
             GlobalApp.unregisterSessionListener(inst)
             try {
                 LibFreeRDP.disconnect(inst)
@@ -155,7 +156,6 @@ class SessionManager(context: Context) {
             }
             GlobalApp.freeSession(inst)
         }
-        core = null
         worker.shutdown()
         if (_state.value is SessionState.Connected || _state.value is SessionState.Connecting ||
             _state.value is SessionState.Authenticating || _state.value is SessionState.Disconnecting
