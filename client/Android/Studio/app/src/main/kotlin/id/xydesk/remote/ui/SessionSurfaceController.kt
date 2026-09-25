@@ -1,6 +1,10 @@
 package id.xydesk.remote.ui
 
 import android.app.Activity
+import android.net.Uri
+import androidx.core.content.FileProvider
+import java.io.File
+import java.io.FileOutputStream
 import android.content.Context
 import android.graphics.Bitmap
 import android.graphics.Color
@@ -174,6 +178,32 @@ class SessionSurfaceController(private val activity: Activity) : GraphicsSink {
 
     fun toggleKeyboard() {
         inputManager?.toggleKeyboard()
+    }
+
+    /** Terapkan zoom tersimpan (dipanggil setelah bind, main thread). */
+    fun applyZoom(zoom: Float) {
+        sessionView?.setZoom(zoom)
+    }
+
+    /**
+     * M2.5 — screenshot surface: copy bitmap -> PNG di
+     * `getExternalFilesDir/screenshots/` -> content URI (FileProvider)
+     * untuk dibagikan. Return null kalau belum ada frame.
+     */
+    fun captureScreenshot(activity: Activity): Uri? {
+        val src = bitmap ?: return null
+        val shot = src.copy(Bitmap.Config.ARGB_8888, false)
+        return try {
+            val dir = File(activity.getExternalFilesDir(null), "screenshots")
+            if (!dir.exists()) dir.mkdirs()
+            val f = File(dir, "xydesk-${System.currentTimeMillis()}.png")
+            FileOutputStream(f).use { out ->
+                shot.compress(Bitmap.CompressFormat.PNG, 100, out)
+            }
+            FileProvider.getUriForFile(activity, "${activity.packageName}.files", f)
+        } finally {
+            shot.recycle()
+        }
     }
 
     fun release() {

@@ -5,6 +5,7 @@ import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
 import android.content.Intent
+import android.net.Uri
 import android.view.WindowManager
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
@@ -60,7 +61,11 @@ import id.xydesk.remote.core.SessionState
 import id.xydesk.remote.core.TelemetrySample
 import kotlin.math.roundToInt
 
-private data class CertPrompt(val info: CertificateInfo, val reply: (Int) -> Unit)
+private data class CertPrompt(
+    val info: CertificateInfo,
+    val oldFingerprint: String?,
+    val reply: (Int) -> Unit,
+)
 private data class NlaPrompt(
     val user: String?,
     val domain: String?,
@@ -86,11 +91,13 @@ fun XyDeskSessionScreen(
     val context = LocalContext.current
     val state by manager.state.collectAsState(initial = SessionState.Idle)
     val telemetry by manager.telemetry.collectAsState(initial = TelemetrySample.EMPTY)
+    val prefs = remember { ConnectionPrefs(context) }
+    val trustStore = remember { CertificateTrustStore(context) }
     var certPrompt by remember { mutableStateOf<CertPrompt?>(null) }
     var nlaPrompt by remember { mutableStateOf<NlaPrompt?>(null) }
-    var showPanel by remember { mutableStateOf(false) }
+    var showPanel by remember { mutableStateOf(prefs.isPanelShown(profile.id)) }
     var confirmDisconnect by remember { mutableStateOf(false) }
-    var zoom by remember { mutableStateOf(1f) }
+    var zoom by remember { mutableStateOf(prefs.getZoom(profile.id)) }
     var bound by remember { mutableStateOf(false) }
     val freeRdpVersion = remember { manager.freeRdpVersion() }
 
@@ -98,7 +105,13 @@ fun XyDeskSessionScreen(
     LaunchedEffect(Unit) {
         manager.setListener(object : SessionManager.Listener {
             override fun onCertificatePrompt(info: CertificateInfo, reply: (Int) -> Unit) {
-                certPrompt = CertPrompt(info, reply)
+                val stored = trustStore.fingerprint(info.host, info.port)
+                if (stored != null && stored == info.fingerprint) {
+                    // fingerprint sudah pernah dipercaya pengguna — auto-approve
+                    reply(CertificateInfo.VERIFY_ACCEPT)
+                    return
+                }
+                certPrompt = CertPrompt(info, stored, reply)
             }
 
             override fun onCredentialsPrompt(
@@ -117,7 +130,10 @@ fun XyDeskSessionScreen(
     }
 
     LaunchedEffect(Unit) {
-        controller.onZoomChanged = { zoom = it }
+        controller.onZoomChanged = { z ->
+            zoom = z
+            prefs.setZoom(profile.id, z)
+        }
         // catch-up bila surface sudah terbentuk sebelum view tree siap
         controller.setInstance(manager.instance())
     }
@@ -127,6 +143,7 @@ fun XyDeskSessionScreen(
         if (state is SessionState.Connected && !bound) {
             bound = true
             controller.bind(manager.instance())
+            controller.applyZoom(zoom)
         }
     }
 
@@ -199,7 +216,10 @@ fun XyDeskSessionScreen(
                     style = MaterialTheme.typography.labelSmall,
                 )
             }
-            IconButton(onClick = { showPanel = !showPanel }) {
+            IconButton(onClick = {
+                showPanel = !showPanel
+                prefs.setPanelShown(profile.id, showPanel)
+            }) {
                 Icon(Icons.Default.MoreVert, contentDescription = "Panel")
             }
         }
@@ -211,6 +231,16 @@ fun XyDeskSessionScreen(
                 freeRdpVersion = freeRdpVersion,
                 controller = controller,
                 onDisconnect = { manager.disconnect() },
+                onScreenshot = {
+                    val act = context as? Activity ?: return@SessionSidePanel
+                    val uri: Uri = controller.captureScreenshot(act) ?: return@SessionSidePanel
+                    val send = Intent(Intent.ACTION_SEND).apply {
+                        type = "image/png"
+                        putExtra(Intent.EXTRA_STREAM, uri)
+                        addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                    }
+                    act.startActivity(Intent.createChooser(send, "Bagikan screenshot"))
+                },
             )
         }
 
@@ -237,10 +267,19 @@ fun XyDeskSessionScreen(
     // dialog: prioritas cert > NLA > error > konfirmasi disconnect
     val active = certPrompt != null || nlaPrompt != null
     certPrompt?.let { p ->
-        CertificateDialog(info = p.info) { code ->
-            p.reply(code)
-            certPrompt = null
-        }
+        CertificateDialog(
+            info = p.info,
+            oldFingerprint = p.oldFingerprint,
+            onReply = { code ->
+                p.reply(code)
+                certPrompt = null
+            },
+            onTrustRemember = {
+                trustStore.trust(p.info.host, p.info.port, p.info.fingerprint)
+                p.reply(CertificateInfo.VERIFY_ACCEPT)
+                certPrompt = null
+            },
+        )
     }
     if (!active) nlaPrompt?.let { p ->
         NlaDialog(p) { u, d, pw ->
@@ -302,6 +341,7 @@ private fun BoxScope.SessionSidePanel(
     freeRdpVersion: String,
     controller: SessionSurfaceController,
     onDisconnect: () -> Unit,
+    onScreenshot: () -> Unit,
 ) {
     Column(
         modifier = Modifier
@@ -336,6 +376,10 @@ private fun BoxScope.SessionSidePanel(
             onClick = { controller.toggleKeyboard() },
             modifier = Modifier.fillMaxWidth(),
         ) { Text("Keyboard") }
+        OutlinedButton(
+            onClick = onScreenshot,
+            modifier = Modifier.fillMaxWidth(),
+        ) { Text("Screenshot") }
         Spacer(Modifier.height(8.dp))
         Button(
             onClick = onDisconnect,
@@ -392,7 +436,12 @@ private fun DisconnectedOverlay(onReconnect: () -> Unit, onExit: () -> Unit) {
 }
 
 @Composable
-private fun CertificateDialog(info: CertificateInfo, onReply: (Int) -> Unit) {
+private fun CertificateDialog(
+    info: CertificateInfo,
+    oldFingerprint: String?,
+    onReply: (Int) -> Unit,
+    onTrustRemember: () -> Unit,
+) {
     AlertDialog(
         // tidak bisa di-dismiss dengan back/tap luar — harus pilih
         onDismissRequest = {},
@@ -417,10 +466,23 @@ private fun CertificateDialog(info: CertificateInfo, onReply: (Int) -> Unit) {
                 }
                 if (info.isChanged) {
                     Text(
-                        "PERINGATAN: sertifikat berbeda dari yang pernah tersimpan — " +
+                        "PERINGATAN: inti mendeteksi sertifikat berubah — " +
                             "mungkin salah server atau MITM.",
                         color = MaterialTheme.colorScheme.error,
                         style = MaterialTheme.typography.bodySmall,
+                    )
+                }
+                if (oldFingerprint != null && oldFingerprint != info.fingerprint) {
+                    Text(
+                        "PERINGATAN: sertifikat BERUBAH dari yang pernah Anda percaya.",
+                        color = MaterialTheme.colorScheme.error,
+                        style = MaterialTheme.typography.bodySmall,
+                    )
+                    Spacer(Modifier.height(4.dp))
+                    Text(
+                        "Tersimpan : $oldFingerprint",
+                        style = MaterialTheme.typography.bodySmall,
+                        fontFamily = FontFamily.Monospace,
                     )
                 }
                 Spacer(Modifier.height(8.dp))
@@ -436,8 +498,11 @@ private fun CertificateDialog(info: CertificateInfo, onReply: (Int) -> Unit) {
             }
         },
         confirmButton = {
-            TextButton(onClick = { onReply(CertificateInfo.VERIFY_ACCEPT) }) {
-                Text("Percaya (accept)")
+            Column {
+                TextButton(onClick = onTrustRemember) { Text("Percaya & ingat") }
+                TextButton(onClick = { onReply(CertificateInfo.VERIFY_ACCEPT) }) {
+                    Text("Percaya (sekali)")
+                }
             }
         },
         dismissButton = {

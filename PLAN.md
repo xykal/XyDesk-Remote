@@ -330,9 +330,19 @@ dipakai UI** — wiring UI di M1.2.
 - Clipboard 2 arah (teks): remote→local via listener, local→remote via
   PrimaryClipChangedListener (hanya saat Connected)
 
-### M2 tersisa (lanjutan)
-- Layout per-koneksi diingat (prefs), panel Pointer/Keyboard visual
-  (M3: file transfer dsb. tetap sesuai roadmap)
+### M2.5 — polish sesi (SELESAI)
+- Zoom & panel **diingat per koneksi** (ConnectionPrefs, SharedPreferences
+  per `host:port`)
+- **Screenshot** dari panel HUD: surface → PNG (external files dir) →
+  share via FileProvider + ACTION_SEND
+- **"Percaya & ingat" sertifikat** (CertificateTrustStore): fingerprint
+  SHA-256 per host:port; auto-approve kalau fingerprint sama; dialog
+  warning kuat + tampilkan fingerprint lama vs baru kalau berubah
+  (MITM guard; tanpa fingerprint tersimpan = selalu tanya)
+
+### M2/M3 tersisa (lanjutan)
+- Panel Pointer/Keyboard visual, file transfer (RDPDR), clipboard file,
+  audio 2 arah, session recording, import .rdp/QR — sesuai roadmap
 
 ---
 

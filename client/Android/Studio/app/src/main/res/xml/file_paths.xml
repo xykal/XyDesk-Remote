@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- M2.5: lokasi screenshot untuk FileProvider (ACTION_SEND) -->
+<paths>
+    <external-files-path
+        name="screenshots"
+        path="screenshots/" />
+</paths>

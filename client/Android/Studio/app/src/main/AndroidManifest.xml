@@ -53,6 +53,17 @@
             android:theme="@style/Theme.Main"
             android:configChanges="orientation|keyboardHidden|screenSize|smallestScreenSize|density|screenLayout" />
 
+        <!-- M2.5: FileProvider buat share screenshot -->
+        <provider
+            android:name="androidx.core.content.FileProvider"
+            android:authorities="${applicationId}.files"
+            android:exported="false"
+            android:grantUriPermissions="true">
+            <meta-data
+                android:name="android.support.FILE_PROVIDER_PATHS"
+                android:resource="@xml/file_paths" />
+        </provider>
+
     </application>
 
 </manifest>
