@@ -130,7 +130,8 @@ Fitur yang melampaui Microsoft Remote Desktop for Android:
 - input: `sendCursorEvent`, `sendKeyEvent`, `sendUnicodeKeyEvent`
 - graphics: `updateGraphics(inst, Bitmap, x, y, w, h)` (frame dari native → Java)
 - clipboard: `sendClipboardData`, `sendClipboardImageData`
-- query: `getVersion`, `getLastErrorString`, `hasH264`, `hasCameraRedirection`
+- query: `getVersion`, `hasH264Support`, `hasCameraRedirectionSupport`
+  (⚠️ `freerdp_get_last_error_string` ter-deklarasikan native PRIVATE di LibFreeRDP tanpa wrapper publik — TIDAK bisa dipanggil dari Java/Kotlin; jangan depend. Ditangkap saat M1.1)
 - event listener (GlobalApp): `OnConnectionSuccess/Failure`, `OnDisconnecting/Disconnected`, `OnPreConnect`
 
 **M1:** di atas API ini dibungkus `SessionManager` Kotlin (state machine + Flow) — bukan ganti native-nya.

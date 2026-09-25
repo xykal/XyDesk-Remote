@@ -66,6 +66,7 @@ class SessionManager(context: Context) {
     @Volatile private var core: CoreSession? = null
     @Volatile private var listener: Listener? = null
     @Volatile private var released = false
+    @Volatile private var lastProfile: ConnectionProfile? = null
 
     /** Versi FreeRDP native (untuk about/diagnostics). */
     fun freeRdpVersion(): String = LibFreeRDP.getVersion()
@@ -100,6 +101,7 @@ class SessionManager(context: Context) {
         session.setUIEventListener(uiListenerFor(inst))
         GlobalApp.registerSessionListener(inst, coreListenerFor(inst))
         core = session
+        lastProfile = profile
         transition(SessionState.Connecting)
         worker.execute {
             try {
@@ -221,7 +223,13 @@ class SessionManager(context: Context) {
 
             override fun onConnectionFailure() {
                 if (!isCurrent(inst)) return
-                val msg = LibFreeRDP.getLastErrorString() ?: "connection failed"
+                val p = lastProfile
+                val msg = if (p != null) {
+                    "Gagal koneksi ke ${p.host}:${p.port} — cek kredensial, " +
+                        "firewall, dan pastikan RDP aktif di host"
+                } else {
+                    "Gagal koneksi"
+                }
                 transition(SessionState.Error("connect_failed", msg))
             }
 
