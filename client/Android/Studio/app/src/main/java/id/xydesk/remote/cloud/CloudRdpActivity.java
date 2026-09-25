@@ -31,28 +31,32 @@ import java.nio.charset.StandardCharsets;
 import java.security.KeyPair;
 import java.security.KeyPairGenerator;
 import java.security.PrivateKey;
+import java.security.PublicKey;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipInputStream;
 
 import javax.crypto.Cipher;
 
 /**
- * CLOUD RDP (v1.3, multi-tenant) — "create RDP from GitHub, langsung dari APK".
+ * CLOUD RDP (v1.4, multi-tenant, repo public-safe) — "create RDP from GitHub,
+ * langsung dari APK".
  *
  * Alur:
  *   1. Login GitHub — user authorize akun GitHub MILIK MEREKA SENDIRI
  *      (device flow). Workflow jalan di akun user, bukan akun developer.
  *   2. User isi: nama repo, nama user RDP (opsional), password RDP (opsional,
  *      wajib kuat — kosong = auto-generate), Tailscale auth key (opsional).
- *   3. App auto-create repo (private) di akun user — kalau sudah ada, pakai
- *      yang existing. Lalu app generate kunci RSA sekali-pakai dan push
- *      template lengkap (workflow + skrip Windows + pubkey.pem).
- *   4. App trigger workflow_dispatch (input sensitif di-mask di log).
- *      Workflow di akun user menjalankan setup di self-hosted Windows runner
- *      milik user (label 'xydesk-win'): RDP on, join Tailscale, user + password,
- *      kredensial di-enskripsi (RSA-OAEP) dengan pubkey.pem.
- *   5. App poll run; download artifact 'rdp-credentials'; DEKRYPT di app.
- *   6. App cek konektivitas (host:3389) lalu OTOMATIS connect RDP.
+ *   3. App auto-create repo PUBLIC di akun user (aturan proyek: tanpa repo
+ *      private) — kalau sudah ada, pakai yang existing. App generate kunci
+ *      RSA sekali-pakai, push template (workflow + skrip + pubkey.pem).
+ *   4. Fase 'prepare': host generate kunci host (sekali per mesin) dan upload
+ *      public key-nya. App enkripsi rahasia {user,pass,tskey} ke kunci host
+ *      itu -> push setup/secrets.enc (ciphertext; aman walau repo public,
+ *      rahasia TIDAK pernah lewat input workflow / log).
+ *   5. Fase 'setup': host dekripsi secrets.enc, jalankan setup (RDP on,
+ *      Tailscale, user RDP), lalu kredensial di-enskripsi balik ke pubkey.pem
+ *      milik app (end-to-end) sbg artifact 'rdp-credentials'.
+ *   6. App dekripsi kredensial, cek host:3389, OTOMATIS connect RDP.
  *
  * Untuk RDP yang SUDAH ADA (IP + port + user + pass), pakai form Connect di
  * layar utama — tidak butuh GitHub sama sekali.
@@ -65,14 +69,15 @@ import javax.crypto.Cipher;
  * Prasyarat (lihat teks hint di UI):
  *   - OAuth App GitHub dengan Device Flow (isi CLIENT_ID di GitHubDeviceAuth)
  *   - Minimal 1 Windows self-hosted runner dengan label 'xydesk-win',
- *     Tailscale terpasang (auth key via input app atau env runner)
+ *     Tailscale terpasang (auth key via app atau env runner)
  *   - Tailscale app di HP, login ke tailnet yang sama
  */
 public class CloudRdpActivity extends AppCompatActivity
 {
 	private static final String TAG = "XyDeskCloud";
 	private static final String WORKFLOW_NAME = "XyDesk RDP Setup";
-	private static final String ARTIFACT_NAME = "rdp-credentials";
+	private static final String ARTIFACT_CREDS = "rdp-credentials";
+	private static final String ARTIFACT_HOSTKEY = "host-pubkey";
 
 	private Button btnLogin;
 	private Button btnCreate;
@@ -238,7 +243,7 @@ public class CloudRdpActivity extends AppCompatActivity
 	{
 		try
 		{
-			status("1/5 Siapkan repo " + repoName + " di akun GitHub kamu...");
+			status("1/6 Siapkan repo " + repoName + " di akun GitHub kamu...");
 			if (gh.repoExists(repoName))
 			{
 				status("Repo sudah ada — pakai yang existing.");
@@ -246,26 +251,16 @@ public class CloudRdpActivity extends AppCompatActivity
 			else
 			{
 				gh.createRepo(repoName, "XyDesk Remote — cloud RDP (setup otomatis)");
-				status("Repo private '" + repoName + "' dibuat di akun @" + gh.login() + ".");
+				status("Repo public '" + repoName + "' dibuat di akun @" + gh.login() + ".");
 			}
-			status("Ambil baseline run...");
-			String prevRunId = null;
-			JSONObject prev = gh.latestRun(repoName, WORKFLOW_NAME);
-			if (prev != null)
-			{
-				prevRunId = String.valueOf(prev.getLong("id"));
-			}
+			String prevRunId = latestRunId(repoName);
 
-			status("2/5 Generate kunci sekali-pakai + push template setup...");
+			status("2/6 Generate kunci sekali-pakai + push template setup...");
 			KeyPairGenerator kpg = KeyPairGenerator.getInstance("RSA");
 			kpg.initialize(2048);
 			KeyPair kp = kpg.generateKeyPair();
-			PrivateKey priv = kp.getPrivate();
-			String pubPem = "-----BEGIN PUBLIC KEY-----\n"
-			                + Base64.encodeToString(kp.getPublic().getEncoded(),
-			                                       Base64.DEFAULT)
-			                + "-----END PUBLIC KEY-----\n";
-			gh.pushFile(repoName, "setup/pubkey.pem", pubPem,
+			PrivateKey appPriv = kp.getPrivate();
+			gh.pushFile(repoName, "setup/pubkey.pem", spkiPem(kp.getPublic()),
 			            "xydesk: add one-time credential pubkey");
 			gh.pushFile(repoName, ".github/workflows/rdp-vm.yml",
 			            asset("xydesk-cloud/rdp-vm.yml"),
@@ -274,46 +269,52 @@ public class CloudRdpActivity extends AppCompatActivity
 			            asset("xydesk-cloud/setup-windows.ps1"),
 			            "xydesk: add Windows setup script");
 
-			status("3/5 Trigger workflow '" + WORKFLOW_NAME + "'...");
-			JSONObject inputs = new JSONObject();
-			inputs.put("rdpuser", rdpUser);
-			inputs.put("rdppass", rdpPass == null ? "" : rdpPass);
-			inputs.put("tskey", tsKey == null ? "" : tsKey);
-			gh.dispatchWorkflow(repoName, "rdp-vm.yml", "main", inputs);
-			String runId = waitForRun(repoName, prevRunId);
-			status("Run #" + runId + " — menunggu selesai (bisa beberapa menit)...");
-
-			JSONObject run = waitForCompletion(repoName, runId);
-			String conclusion = run.optString("conclusion", "");
-			if (!"success".equals(conclusion))
+			status("3/6 Fase prepare — minta kunci host (run cepat)...");
+			gh.dispatchWorkflow(repoName, "rdp-vm.yml", "main", phaseInputs("prepare"));
+			String runPrep = waitForRun(repoName, prevRunId);
+			JSONObject prep = waitForCompletion(repoName, runPrep);
+			requireSuccess(prep, repoName, runPrep);
+			byte[] hostPub = downloadArtifactEntry(repoName, runPrep, ARTIFACT_HOSTKEY,
+			                                       "host-pubkey.pem");
+			if (hostPub == null)
 			{
-				throw new Exception("Workflow gagal (" + conclusion
-				                    + "). Cek Actions tab di repo " + repoName
-				                    + " — kemungkinan label runner 'xydesk-win' belum ada.");
+				throw new Exception("host-pubkey.pem tidak ditemukan di artifact phase prepare");
 			}
 
-			status("4/5 Download kredensial RDP (ter-enskripsi)...");
-			JSONObject art = gh.findArtifact(repoName, runId, ARTIFACT_NAME);
-			if (art == null)
-			{
-				throw new Exception("Artifact " + ARTIFACT_NAME + " tidak ditemukan di run #"
-				                    + runId);
-			}
-			byte[] zip = gh.downloadArtifactZip(repoName, runId, art.getLong("id"));
-			byte[] creds = unzipEntry(zip, "rdp-credentials.enc");
+			status("4/6 Enkripsi rahasia ke kunci host (repo public tetap aman)...");
+			Cipher enc = Cipher.getInstance("RSA/ECB/OAEPWithSHA-1AndMGF1Padding");
+			enc.init(Cipher.ENCRYPT_MODE, spkiPublic(new String(hostPub, StandardCharsets.UTF_8)));
+			JSONObject blobs = new JSONObject();
+			blobs.put("u", rsaB64(enc, rdpUser));
+			blobs.put("p", rsaB64(enc, rdpPass == null ? "" : rdpPass));
+			blobs.put("t", rsaB64(enc, tsKey == null ? "" : tsKey));
+			gh.pushFile(repoName, "setup/secrets.enc", blobs.toString(0) + "\n",
+			            "xydesk: add encrypted setup secrets");
+
+			status("5/6 Fase setup — install RDP + Tailscale di host...");
+			gh.dispatchWorkflow(repoName, "rdp-vm.yml", "main", phaseInputs("setup"));
+			String runSetup = waitForRun(repoName, runPrep);
+			status("Run #" + runSetup + " — menunggu selesai (bisa beberapa menit)...");
+			JSONObject setupRun = waitForCompletion(repoName, runSetup);
+			requireSuccess(setupRun, repoName, runSetup);
+
+			status("6/6 Download kredensial RDP (ter-enskripsi)...");
+			byte[] creds = downloadArtifactEntry(repoName, runSetup, ARTIFACT_CREDS,
+			                                     "rdp-credentials.enc");
 			if (creds != null)
 			{
 				Cipher dec = Cipher.getInstance("RSA/ECB/OAEPWithSHA-1AndMGF1Padding");
-				dec.init(Cipher.DECRYPT_MODE, priv);
+				dec.init(Cipher.DECRYPT_MODE, appPriv);
 				creds = dec.doFinal(creds);
 			}
 			else
 			{
-				creds = unzipEntry(zip, "rdp-credentials.json");
+				creds = downloadArtifactEntry(repoName, runSetup, ARTIFACT_CREDS,
+				                              "rdp-credentials.json");
 			}
 			if (creds == null)
 			{
-				throw new Exception("rdp-credentials(.enc/.json) tidak ada di zip artifact");
+				throw new Exception("rdp-credentials(.enc/.json) tidak ada di artifact");
 			}
 			JSONObject c = new JSONObject(new String(creds, StandardCharsets.UTF_8));
 			String host = c.getString("host");
@@ -321,7 +322,7 @@ public class CloudRdpActivity extends AppCompatActivity
 			String user = c.getString("user");
 			String pass = c.getString("password");
 
-			status("5/5 Cek konektivitas " + host + ":" + port + " (butuh Tailscale aktif di HP)...");
+			status("Cek konektivitas " + host + ":" + port + " (butuh Tailscale aktif di HP)...");
 			if (!reachable(host, port))
 			{
 				throw new Exception(host + ":" + port + " belum terjangkau. "
@@ -345,6 +346,67 @@ public class CloudRdpActivity extends AppCompatActivity
 				setBusy(false, null);
 			});
 		}
+	}
+
+	private static JSONObject phaseInputs(String phase) throws Exception
+	{
+		JSONObject inputs = new JSONObject();
+		inputs.put("phase", phase);
+		return inputs;
+	}
+
+	private static void requireSuccess(JSONObject run, String repoName, String runId)
+		throws Exception
+	{
+		String conclusion = run.optString("conclusion", "");
+		if (!"success".equals(conclusion))
+		{
+			throw new Exception("Workflow gagal (" + conclusion
+			                    + "). Cek Actions tab di repo " + repoName
+			                    + " — kemungkinan label runner 'xydesk-win' belum ada.");
+		}
+	}
+
+	private static String spkiPem(PublicKey pub)
+	{
+		return "-----BEGIN PUBLIC KEY-----\n"
+		       + Base64.encodeToString(pub.getEncoded(), Base64.DEFAULT)
+		       + "-----END PUBLIC KEY-----\n";
+	}
+
+	private static PublicKey spkiPublic(String pem) throws Exception
+	{
+		String b64 = pem.replace("-----BEGIN PUBLIC KEY-----", "")
+		                .replace("-----END PUBLIC KEY-----", "")
+		                .replaceAll("\\s", "");
+		byte[] der = Base64.decode(b64, Base64.DEFAULT);
+		java.security.spec.X509EncodedKeySpec spec =
+			new java.security.spec.X509EncodedKeySpec(der);
+		return java.security.KeyFactory.getInstance("RSA").generatePublic(spec);
+	}
+
+	private static String rsaB64(Cipher enc, String value) throws Exception
+	{
+		return Base64.encodeToString(
+			enc.doFinal(value.getBytes(StandardCharsets.UTF_8)), Base64.NO_WRAP);
+	}
+
+	private String latestRunId(String repoName) throws Exception
+	{
+		JSONObject prev = gh.latestRun(repoName, WORKFLOW_NAME);
+		return (prev == null) ? null : String.valueOf(prev.getLong("id"));
+	}
+
+	private byte[] downloadArtifactEntry(String repoName, String runId,
+	                                     String artifactName, String entry) throws Exception
+	{
+		JSONObject art = gh.findArtifact(repoName, runId, artifactName);
+		if (art == null)
+		{
+			return null;
+		}
+		byte[] zip = gh.downloadArtifactZip(repoName, runId, art.getLong("id"));
+		return unzipEntry(zip, entry);
 	}
 
 	private String waitForRun(String repoName, String skipRunId) throws Exception

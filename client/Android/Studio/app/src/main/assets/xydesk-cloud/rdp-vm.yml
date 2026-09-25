@@ -2,10 +2,17 @@ name: XyDesk RDP Setup
 
 # Dipush + di-trigger otomatis oleh app XyDesk Remote (fitur Cloud RDP).
 # Menyiapkan self-hosted Windows runner milik USER (bukan akun developer):
-#   - RDP on + firewall
-#   - join Tailscale (key dari input app, fallback env runner)
-#   - user RDP + password (input app / auto-generate kuat)
-#   - publish kredensial ter-enskripsi (pubkey.pem dari app) sbg artifact
+#
+#   fase 'prepare' : generate pasangan kunci host (sekali per mesin),
+#                    upload public key sbg artifact 'host-pubkey'.
+#                    App lalu enkripsi rahasia (user/pass/tskey) ke kunci itu.
+#   fase 'setup'   : dekripsi setup/secrets.enc dgn kunci privat host,
+#                    RDP on + firewall, join Tailscale, buat user RDP,
+#                    publish kredensial ter-enskripsi (pubkey.pem dr app)
+#                    sbg artifact 'rdp-credentials'.
+#
+# Repo bisa PUBLIC aman: rahasia TIDAK pernah lewat input workflow / log —
+# hanya ciphertext di setup/secrets.dec. Input workflow cuma 'phase'.
 #
 # Label runner: 'xydesk-win' (self-hosted, Windows, milik user sendiri).
 # JANGAN ganti ke windows-latest (GitHub-hosted) — melanggar ketentuan
@@ -13,33 +20,29 @@ name: XyDesk RDP Setup
 on:
   workflow_dispatch:
     inputs:
-      rdpuser:
-        description: 'Nama user RDP (default: xydesk)'
-        required: false
-        default: 'xydesk'
-      rdppass:
-        description: 'Password RDP (kosongkan = auto-generate kuat)'
-        required: false
-        default: ''
-      tskey:
-        description: 'Tailscale auth key (kosongkan = pakai env runner XYDESK_TAILSCALE_AUTH_KEY)'
-        required: false
-        default: ''
+      phase:
+        description: 'prepare (generate kunci host) atau setup (install RDP)'
+        required: true
+        default: 'setup'
 
 jobs:
   setup:
     runs-on: [xydesk-win]
     steps:
-      - name: Run setup
+      - name: Run setup script
         shell: pwsh
         env:
-          XYDESK_RDP_USER: ${{ inputs.rdpuser }}
-          XYDESK_RDP_PASS: ${{ inputs.rdppass }}
-          XYDESK_TSKEY: ${{ inputs.tskey }}
+          XYDESK_PHASE: ${{ inputs.phase }}
         run: |
           powershell -NoProfile -ExecutionPolicy Bypass -File setup/setup-windows.ps1
-      - name: Upload RDP credentials (ter-enskripsi)
-        if: success()
+      - name: Upload host public key (phase prepare)
+        if: inputs.phase == 'prepare'
+        uses: actions/upload-artifact@v4
+        with:
+          name: host-pubkey
+          path: C:\ProgramData\xydesk\host-pubkey.pem
+      - name: Upload RDP credentials (phase setup, ter-enskripsi)
+        if: inputs.phase == 'setup'
         uses: actions/upload-artifact@v4
         with:
           name: rdp-credentials

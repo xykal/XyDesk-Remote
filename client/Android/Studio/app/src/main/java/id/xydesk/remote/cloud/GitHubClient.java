@@ -56,7 +56,7 @@ public class GitHubClient
 		JSONObject body = new JSONObject();
 		body.put("name", name);
 		body.put("description", description);
-		body.put("private", true);
+		body.put("private", false);
 		body.put("auto_init", false);
 		apiPost("/user/repos", body);
 	}

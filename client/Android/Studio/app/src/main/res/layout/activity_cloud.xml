@@ -21,7 +21,7 @@
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:layout_marginTop="4dp"
-            android:text="Bebas: punya RDP sendiri? Pakai menu Connect (IP + user + pass). Belum punya? Login akun GitHub KAMU, isi form di bawah, app bikin repo otomatis di akun kamu + jalanin script RDP via Tailscale. Tidak ada yg numpang di akun developer."
+            android:text="Bebas: punya RDP sendiri? Pakai menu Connect (IP + user + pass). Belum punya? Login akun GitHub KAMU, isi form di bawah, app bikin repo PUBLIC otomatis di akun kamu + jalanin script RDP via Tailscale. Tidak ada yg numpang di akun developer."
             android:textSize="12sp"
             android:alpha="0.7" />
 
@@ -152,7 +152,7 @@
             android:layout_height="wrap_content"
             android:textSize="11sp"
             android:alpha="0.65"
-            android:text="Cara kerja:\n• Login pakai akun GitHub KAMU — repo dibuat di akun kamu (private), workflow jalan di akun kamu, mesin RDP = host milik kamu (self-hosted runner 'xydesk-win').\n• Kredensial diacak/diisi user, di-enskripsi end-to-end, dibaca app dari artifact — tidak pernah disimpan di HP.\n\nPrasyarat (sekali saja per mesin):\n• Host Windows (Pro/Enterprise/Server) terdaftar sbg self-hosted runner GitHub label 'xydesk-win' + Tailscale terpasang. JANGAN pakai runner GitHub-hosted (windows-latest) sbg mesin RDP — melanggar ketentuan Actions & bikin akun kena suspend\n• Tailscale di HP login ke tailnet yang sama" />
+            android:text="Cara kerja:\n• Login pakai akun GitHub KAMU — repo PUBLIC dibuat di akun kamu, workflow jalan di akun kamu, mesin RDP = host milik kamu (self-hosted runner 'xydesk-win').\n• Rahasia (password RDP & Tailscale key) di-enskripsi ke kunci host sebelum dikirim — TIDAK lewat input workflow, aman walau repo public.\n• Kredensial balik ke app juga ter-enskripsi end-to-end — tidak pernah disimpan di HP.\n\nPrasyarat (sekali saja per mesin):\n• Host Windows (Pro/Enterprise/Server) terdaftar sbg self-hosted runner GitHub label 'xydesk-win' + Tailscale terpasang. JANGAN pakai runner GitHub-hosted (windows-latest) sbg mesin RDP — melanggar ketentuan Actions & bikin akun kena suspend\n• Tailscale di HP login ke tailnet yang sama" />
 
     </LinearLayout>
 </ScrollView>
