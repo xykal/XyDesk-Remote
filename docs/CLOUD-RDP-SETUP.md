@@ -117,3 +117,44 @@ Poin penting:
 | `host:3389` tidak terjangkau | Tailscale di HP belum login / beda tailnet |
 | Windows Home | Tidak bisa jadi RDP host — pakai Pro/Enterprise/Edu/Server |
 | User tidak punya mesin Windows | Pakai **mode Manual RDP** ke VPS/RDP mana aja, atau sewa VPS Windows buat jadi host |
+
+## Smoke test end-to-end (setelah pasang APK v0.2.4+)
+
+Checklist sekali jalan, urutan penting:
+
+### A. Prasyarat (host Windows)
+- [ ] Host Windows 10/11 Pro/Server dengan RDP bisa diaktifkan
+- [ ] **pwsh 7 terpasang + di PATH** (wajib — skrip pakai API PEM .NET Core;
+      `pwsh --version` harus jalan)
+- [ ] Tailscale terpasang di host (atau biarkan skrip install)
+- [ ] Pre-auth key Tailscale dibuat di `tailscale.com/admin/keys` (multi-use)
+- [ ] Self-hosted runner GitHub label **`xydesk-win`** aktif di akun GitHub
+      user (Settings → Actions → Runners)
+- [ ] (opsional) env runner `XYDESK_TAILSCALE_AUTH_KEY` diset
+
+### B. Prasyarat (HP)
+- [ ] APK terpasang, fitur Cloud RDP → Login GitHub sukses (perlu OAuth App
+      + Device Flow + `CLIENT_ID` di kode, lihat `OAUTH-APP-SETUP.md`)
+- [ ] Tailscale di HP login ke **tailnet yang sama** dengan host
+
+### C. Jalankan
+- [ ] Isi form: nama repo (mis. `xydesk-smoke-01`), user RDP `xydesk`,
+      password kosongkan (auto-generate), Tailscale key diisi
+- [ ] Tekan **Create & Setup** — pantau status di app:
+      1. repo public dibuat
+      2. fase prepare selesai (artifact `host-pubkey`)
+      3. fase setup berjalan (di Actions tab repo user: log `pwsh`, RDP on,
+         `tailscale up`, user dibuat, `rdp-credentials.enc` ter-upload)
+      4. app download + dekripsi kredensial
+      5. cek `host:3389` OK
+- [ ] Sesi RDP terbuka otomatis — layar Windows tampil
+- [ ] Klik-klik mouse + ketik di Notepad berfungsi
+
+### D. Re-run (idempotency)
+- [ ] Tekan **Create & Setup** lagi dengan repo sama → harus sukses;
+      password RDP berubah (cek via koneksi kedua), koneksi lama putus
+
+### E. Keamanan (verifikasi cepat)
+- [ ] Repo user: file `setup/secrets.enc` = JSON base64 (bukan plaintext)
+- [ ] Log Actions: tidak ada password/key Tailscale (sudah di-mask)
+- [ ] Artifact `rdp-credentials` = binary ciphertext (bukan JSON readable)
