@@ -67,6 +67,14 @@ set(${MODULE_PREFIX}_SRCS
 add_library(${MODULE_NAME} SHARED ${${MODULE_PREFIX}_SRCS})
 
 add_dependencies(${MODULE_NAME} copyLibs)
+# XyDesk: dependensi TARGET-level ke ExternalProject 'freerdp'.
+# copyLibs TIDAK depend ke freerdp (custom target tanpa deps) — tanpa baris
+# ini, ninja boleh mulai compile android_*.c sebelum install step superbuild
+# selesai, dan 'freerdp/config.h' (header di-generate) belum ada:
+#   fatal error: 'freerdp/config.h' file not found
+# Terlihat di CI RelWithDebInfo (release); race yang sama latent di Debug.
+# Guard file-level di bawah tetap dipertahankan sebagai backstop.
+add_dependencies(${MODULE_NAME} freerdp)
 
 # --- XyDesk: header ordering guard -------------------------------------------
 # 'freerdp/config.h' adalah header yang DI-GENERATE dan baru ter-install
