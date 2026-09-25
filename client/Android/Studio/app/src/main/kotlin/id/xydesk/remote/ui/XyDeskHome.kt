@@ -20,7 +20,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
-import androidx.compose.material.icons.filled.CloudUpload
+import androidx.compose.material.icons.filled.Send
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
@@ -124,7 +124,7 @@ fun XyDeskHome(
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
                         OutlinedButton(onClick = onOpenCloudRdp) {
-                            Icon(Icons.Default.CloudUpload, contentDescription = null)
+                            Icon(Icons.Default.Send, contentDescription = null)
                             Spacer(Modifier.width(8.dp))
                             Text("Cloud RDP (GitHub)")
                         }
