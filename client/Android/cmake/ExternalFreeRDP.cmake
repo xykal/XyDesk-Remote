@@ -9,6 +9,15 @@ set(FREERDP_PREFIX_PATH
 string(REPLACE ";" "|" FREERDP_PREFIX_PATH "${FREERDP_PREFIX_PATH}")
 
 set(FREERDP_EXTRA_CMAKE_ARGS
+    # Versi FreeRDP HARUS dari source vendored (default 3.32.0 di
+    # cmake/GetProjectVersion.cmake), BUKAN dari tag git luar.
+    # Jika OFF dilewatkan, saat CI build dari tag rilis (mis. v0.2.4,
+    # HEAD persis di tag) 'git describe --exact-match' mengembalikan
+    # v0.2.4 -> ter-parse sebagai versi FreeRDP 0.2.4 -> MAJOR=0 ->
+    # header ter-install ke include/freerdp0 + libwinpr0.so, padahal
+    # client meng-include include/freerdp3:
+    #   fatal error: 'freerdp/config.h' file not found
+    -DUSE_VERSION_FROM_GIT_TAG:BOOL=OFF
     -DWITHOUT_WINPR_3x_DEPRECATED:BOOL=ON
     -DWITHOUT_FREERDP_3x_DEPRECATED:BOOL=ON
     -DWITH_CLIENT_SDL:BOOL=OFF
