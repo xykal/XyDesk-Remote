@@ -70,7 +70,7 @@ fun XyDeskHome(
     val context = LocalContext.current
     val repo = remember { SessionsRepository(context.applicationContext) }
     val favoritesFlow = remember { repo.favorites() }
-    val favorites by favoritesFlow.collectAsState(initialValue = emptyList())
+    val favorites by favoritesFlow.collectAsState(initial = emptyList())
     val scope = rememberCoroutineScope()
     var showForm by remember { mutableStateOf(false) }
 
