@@ -11,6 +11,8 @@ buildscript {
        // M1: Kotlin + KSP (kunci pair: KSP harus match versi Kotlin)
        classpath 'org.jetbrains.kotlin:kotlin-gradle-plugin:2.2.21'
        classpath 'com.google.devtools.ksp:symbol-processing-gradle-plugin:2.2.21-2.0.5'
+       // M1.2: Compose compiler (versi = versi Kotlin)
+       classpath 'org.jetbrains.kotlin.plugin.compose:org.jetbrains.kotlin.plugin.compose.gradle.plugin:2.2.21'
     }
 }
 

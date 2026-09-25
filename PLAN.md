@@ -289,14 +289,26 @@ Kontrol HUD ──► SessionManager ──► LibFreeRDP (args/input) ──►
 Catatan M1.1: modul baru dikompilasi CI (digantung di `:app`) tapi **belum
 dipakai UI** — wiring UI di M1.2.
 
-### M1.2 — UI Compose (BERIKUTNYA)
-1. UI Compose (Material 3): list favorites + form koneksi + screen sesi
-   pengganti form M0 (XML/Java `MainActivity`)
-2. `SessionManager` jadi satu pintu sesi; dialog trust sertifikat
-   (fingerprint SHA-256) + prompt NLA
-3. Credential vault integration: "remember password" → vault
-4. Policy background (auto-disconnect) + deteksi "Windows Home / RDP off"
-5. `TelemetryFlow` (sampler 500ms) — prasyarat HUD M2
+### M1.2a — UI Compose home (SELESAI)
+- `XyDeskHomeActivity` (Compose Material 3) jadi launcher; `MainActivity`
+  (M0) tetap sebagai fallback "Form klasik"
+- List favorites (`SessionsRepository.favorites()` via Flow) + hapus
+- Form koneksi (host/port/user/pass/domain/label) + "ingat password"
+  (→ `CredentialVault`, AES-GCM di Keystore)
+- Connect = core `SessionActivity` + URI `rdp://` (jalur render teruji M0)
+- Pintu ke Cloud RDP (GitHub)
+- Compose: BOM 2026.05.01 + plugin compose 2.2.21 (match KGP)
+- OAuth App Device Flow sudah aktif + `CLIENT_ID` tertanam (login GitHub
+  dari HP tinggal jalan)
+
+### M1.2b — tersisa (dipindah sebagian ke M2)
+1. ~~UI Compose~~ → selesai (M1.2a)
+2. Session surface XyDesk native (ganti SessionActivity) + dialog trust
+   sertifikat (fingerprint SHA-256) + prompt NLA via `SessionManager`
+   Listener — **dipindah ke M2** (render + input surface + HUD harus
+   barengan agar `SessionManager` benar-benar jadi satu pintu)
+3. Policy background (auto-disconnect) + deteksi "Windows Home / RDP off"
+4. `TelemetryFlow` (sampler 500ms) — prasyarat HUD M2
 
 ---
 

@@ -1,4 +1,6 @@
 apply plugin: 'com.android.application'
+apply plugin: 'kotlin-android'
+apply plugin: 'org.jetbrains.kotlin.plugin.compose'
 
 android {
     namespace 'id.xydesk.remote'
@@ -52,6 +54,12 @@ android {
         sourceCompatibility JavaVersion.VERSION_11
         targetCompatibility JavaVersion.VERSION_11
     }
+    kotlinOptions {
+        jvmTarget = '11'
+    }
+    buildFeatures {
+        compose true
+    }
 }
 
 dependencies {
@@ -61,8 +69,16 @@ dependencies {
     implementation 'androidx.appcompat:appcompat:1.7.1'
     implementation 'androidx.core:core:1.19.0'
 
-    // M1 — modul Kotlin (UI Compose menyusul di M1.2)
+    // M1 — modul Kotlin (core sesi, vault, favorites)
     implementation project(':core-rdp')
     implementation project(':features-security')
     implementation project(':features-sessions')
+
+    // M1.2 — Jetpack Compose (Material 3)
+    implementation platform('androidx.compose:compose-bom:2026.05.01')
+    implementation 'androidx.compose.ui:ui'
+    implementation 'androidx.compose.material3:material3'
+    implementation 'androidx.compose.ui:ui-tooling-preview'
+    debugImplementation 'androidx.compose.ui:ui-tooling'
+    implementation 'androidx.activity:activity-compose:1.13.0'
 }

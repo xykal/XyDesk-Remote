@@ -13,6 +13,19 @@
         android:label="@string/app_name"
         android:resizeableActivity="true">
 
+        <!-- M1.2: home Compose (launcher) — favorit + form koneksi + Cloud RDP -->
+        <activity
+            android:name="id.xydesk.remote.ui.XyDeskHomeActivity"
+            android:exported="true"
+            android:label="@string/app_name"
+            android:theme="@style/Theme.XyDeskHome"
+            android:configChanges="orientation|keyboardHidden|screenSize|smallestScreenSize|density|screenLayout">
+            <intent-filter android:label="@string/app_name">
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity>
+
         <!-- Cloud RDP (GitHub) — login, create repo, auto-setup, auto-connect -->
         <activity
             android:name="id.xydesk.remote.cloud.CloudRdpActivity"
@@ -21,20 +34,15 @@
             android:theme="@style/Theme.Main"
             android:configChanges="orientation|keyboardHidden|screenSize|smallestScreenSize|density|screenLayout" />
 
-        <!-- M0: connection screen (XyDesk UI). The RDP session itself is
-             rendered by com.freerdp.freerdpcore.presentation.SessionActivity
-             until M1/M2 replace it with the native XyDesk session surface. -->
+        <!-- M0: connection screen (fallback "Form klasik" dari home Compose).
+             Render sesi RDP = com.freerdp.freerdpcore.presentation.SessionActivity
+             (XyDesk session surface menyusul di M2). -->
         <activity
-            android:exported="true"
+            android:exported="false"
             android:name="id.xydesk.remote.MainActivity"
             android:label="@string/app_name"
             android:theme="@style/Theme.Main"
-            android:configChanges="orientation|keyboardHidden|screenSize|smallestScreenSize|density|screenLayout">
-            <intent-filter android:label="@string/app_name">
-                <action android:name="android.intent.action.MAIN" />
-                <category android:name="android.intent.category.LAUNCHER" />
-            </intent-filter>
-        </activity>
+            android:configChanges="orientation|keyboardHidden|screenSize|smallestScreenSize|density|screenLayout" />
 
     </application>
 
