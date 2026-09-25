@@ -5,13 +5,19 @@ import android.util.Log
 import com.freerdp.freerdpcore.application.GlobalApp
 import com.freerdp.freerdpcore.application.SessionState as CoreSession
 import com.freerdp.freerdpcore.services.LibFreeRDP
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.flow
+import java.net.InetSocketAddress
+import java.net.Socket
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.ExecutorService
 import java.util.concurrent.Executors
 import java.util.concurrent.TimeUnit
+import java.util.concurrent.atomic.AtomicInteger
 
 /**
  * M1 — SessionManager: satu pintu untuk seluruh lifecycle sesi RDP XyDesk.
@@ -21,6 +27,10 @@ import java.util.concurrent.TimeUnit
  *  - callback prompt (sertifikat, credential) dengan safe-default
  *    (tanpa [Listener] = ditolak — aman default, PLAN §5.2)
  *  - input forwarding (cursor/key/unicode/clipboard) untuk HUD (M2)
+ *  - [GraphicsSink]: event grafik/pointer diteruskan ke surface XyDesk (M2)
+ *  - [telemetry]: sampel 500ms untuk panel Stats HUD (M2)
+ *  - pre-flight TCP sebelum connect (M1.2b): kegagalan cepat dengan
+ *    diagnosa "unreachable" (RDP off / Windows Home / firewall)
  *
  * Thread:
  *  - [state] thread-safe (StateFlow) — baca dari mana saja,
@@ -38,7 +48,7 @@ class SessionManager(context: Context) {
 
         /**
          * Sertifikat TLS server perlu persetujuan. Blok sampai [reply] dipanggil.
-         * Default (tanpa implikasi): DENY.
+         * Default (tanpa listener / timeout): DENY.
          */
         fun onCertificatePrompt(info: CertificateInfo, reply: (Int) -> Unit) {}
 
@@ -65,8 +75,13 @@ class SessionManager(context: Context) {
 
     @Volatile private var core: CoreSession? = null
     @Volatile private var listener: Listener? = null
+    @Volatile private var sink: GraphicsSink? = null
     @Volatile private var released = false
     @Volatile private var lastProfile: ConnectionProfile? = null
+
+    // Telemetry (M2)
+    private val frameCounter = AtomicInteger(0)
+    @Volatile private var resolution = intArrayOf(0, 0)
 
     /** Versi FreeRDP native (untuk about/diagnostics). */
     fun freeRdpVersion(): String = LibFreeRDP.getVersion()
@@ -75,8 +90,31 @@ class SessionManager(context: Context) {
         this.listener = listener
     }
 
+    /** Sink grafik — wajib di-set SEBELUM [connect] agar tidak ada frame yang hilang. */
+    fun setGraphicsSink(sink: GraphicsSink?) {
+        this.sink = sink
+    }
+
     /** Instance native sesi aktif, 0L jika tidak ada. */
     fun instance(): Long = core?.getInstance() ?: 0L
+
+    // ------------------------------------------------------------------
+    // Telemetry (M2)
+    // ------------------------------------------------------------------
+
+    /**
+     * Sampel telemetri tiap [TELEMETRY_INTERVAL_MS] — dikoleksi oleh UI
+     * (collectAsState) selama composition hidup. `fps` = update grafik
+     * per detik (window 500ms, diekstrapolasi 2x).
+     */
+    val telemetry: Flow<TelemetrySample> = flow {
+        while (true) {
+            val frames = frameCounter.getAndSet(0)
+            val r = resolution
+            emit(TelemetrySample(state.value, r[0], r[1], frames * 2))
+            delay(TELEMETRY_INTERVAL_MS)
+        }
+    }
 
     // ------------------------------------------------------------------
     // Lifecycle
@@ -85,6 +123,10 @@ class SessionManager(context: Context) {
     /**
      * Mulai koneksi (idempotent: dipanggil saat sudah Connecting/Connected
      * = diabaikan dengan log).
+     *
+     * Pre-flight: probe TCP ke [ConnectionProfile.host]:port. Gagal probe
+     * = Error("unreachable") tanpa menyentuh native (diagnosa cepat:
+     * RDP off / Windows Home / firewall / host salah).
      */
     fun connect(profile: ConnectionProfile) {
         if (released) return
@@ -104,6 +146,19 @@ class SessionManager(context: Context) {
         lastProfile = profile
         transition(SessionState.Connecting)
         worker.execute {
+            val reachable = tcpReachable(profile.host, profile.port, TCP_PROBE_TIMEOUT_MS)
+            if (!isCurrent(inst)) return@execute
+            if (!reachable) {
+                transition(
+                    SessionState.Error(
+                        ERROR_UNREACHABLE,
+                        "Tidak bisa menghubungi ${profile.host}:${profile.port}. Kemungkinan: " +
+                            "RDP nonaktif, firewall memblokir, nama host salah, atau target " +
+                            "Windows Home (tidak punya server RDP). Coba Cloud RDP.",
+                    )
+                )
+                return@execute
+            }
             try {
                 session.connect(appContext) // blocking — thread worker
             } catch (t: Throwable) {
@@ -149,6 +204,8 @@ class SessionManager(context: Context) {
         released = true
         val inst = core?.getInstance()
         core = null
+        sink = null
+        listener = null
         if (inst != null && inst != 0L) {
             GlobalApp.unregisterSessionListener(inst)
             try {
@@ -214,6 +271,16 @@ class SessionManager(context: Context) {
 
     private fun isCurrent(inst: Long): Boolean = core?.getInstance() == inst
 
+    /** Probe TCP sederhana (juga gagal saat DNS/resolver gagal). */
+    private fun tcpReachable(host: String, port: Int, timeoutMs: Long): Boolean = try {
+        Socket().use { s ->
+            s.connect(InetSocketAddress(host, port), timeoutMs.toInt())
+        }
+        true
+    } catch (t: Throwable) {
+        false
+    }
+
     private fun coreListenerFor(inst: Long): GlobalApp.SessionEventListener =
         object : GlobalApp.SessionEventListener {
             // Callback sudah di-dispatch ke main thread oleh GlobalApp
@@ -240,13 +307,14 @@ class SessionManager(context: Context) {
         }
 
     /**
-     * Implementasi UIEventListener inti. Semua event yang belum punya
-     * penanganan XyDesk (M1.1) = no-op + log; prompt = safe-default.
+     * Implementasi UIEventListener inti. Event grafik/pointer diteruskan
+     * ke [sink] (surface XyDesk, M2); prompt = safe-default.
      */
     private fun uiListenerFor(inst: Long): LibFreeRDP.UIEventListener =
         object : LibFreeRDP.UIEventListener {
 
             override fun OnSettingsChanged(width: Int, height: Int, bpp: Int) {
+                resolution = intArrayOf(width, height)
                 Log.v(TAG, "settings ${width}x${height} @${bpp}bpp")
             }
 
@@ -277,7 +345,8 @@ class SessionManager(context: Context) {
                     if (p != null) {
                         password.setLength(0); password.append(p)
                     }
-                    ok = true
+                    // reply tanpa satu pun nilai = user batal -> tolak
+                    ok = (u != null || d != null || p != null)
                     latch.countDown()
                 }
                 latch.await(PROMPT_TIMEOUT_SEC, TimeUnit.SECONDS)
@@ -314,8 +383,8 @@ class SessionManager(context: Context) {
                 oldFingerprint: String,
                 flags: Long,
             ): Int {
-                // M1.1: same prompt; FLAG_CHANGED sudah di-set inti.
-                // TODO(M1.2): tampilkan old-fingerprint di dialog trust.
+                // same prompt; FLAG_CHANGED sudah di-set inti — UI menampilkan
+                // warning "sertifikat berubah" + fingerprint lama vs baru.
                 return certificatePrompt(
                     CertificateInfo(host, port.toInt(), commonName, subject, issuer,
                                     fingerprint, flags)
@@ -325,11 +394,13 @@ class SessionManager(context: Context) {
             override fun OnExperimentalFeature(feature: Int): Boolean = true
 
             override fun OnGraphicsUpdate(x: Int, y: Int, width: Int, height: Int) {
-                // render pipeline masih lewat jalur core (M0); HUD M2 baca via native
+                frameCounter.incrementAndGet()
+                sink?.onGraphicsUpdate(x, y, width, height)
             }
 
             override fun OnGraphicsResize(width: Int, height: Int, bpp: Int) {
-                Log.v(TAG, "resize ${width}x${height} @${bpp}bpp")
+                resolution = intArrayOf(width, height)
+                sink?.onGraphicsResize(width, height, bpp)
             }
 
             override fun OnRemoteClipboardChanged(data: String) {
@@ -347,11 +418,16 @@ class SessionManager(context: Context) {
                 hotX: Int,
                 hotY: Int,
             ) {
-                // M2: panel Pointer
+                sink?.onPointerSet(pixels, width, height, hotX, hotY)
             }
 
-            override fun OnPointerSetNull() {}
-            override fun OnPointerSetDefault() {}
+            override fun OnPointerSetNull() {
+                sink?.onPointerSetNull()
+            }
+
+            override fun OnPointerSetDefault() {
+                sink?.onPointerSetDefault()
+            }
 
             override fun OnRailWindowUpdate(windowId: Long, width: Int, height: Int, pixels: IntArray?) {}
             override fun OnRailWindowMove(
@@ -388,6 +464,12 @@ class SessionManager(context: Context) {
         private const val TAG = "XyDeskSession"
         private const val PROMPT_TIMEOUT_SEC = 120L
         private const val CANCEL_FALLBACK_MS = 5_000L
+        private const val TCP_PROBE_TIMEOUT_MS = 2_500L
+        private const val TELEMETRY_INTERVAL_MS = 500L
+
+        /** Code [SessionState.Error] untuk probe TCP gagal (host tak terjangkau). */
+        const val ERROR_UNREACHABLE = "unreachable"
+
         private val mainHandler = android.os.Handler(android.os.Looper.getMainLooper())
     }
 }

@@ -34,9 +34,18 @@
             android:theme="@style/Theme.Main"
             android:configChanges="orientation|keyboardHidden|screenSize|smallestScreenSize|density|screenLayout" />
 
+        <!-- M2: layar sesi XyDesk (surface Compose + HUD). Dijalankan
+             dari home XyDesk (connectIntent); bukan launcher. -->
+        <activity
+            android:name="id.xydesk.remote.ui.XyDeskSessionActivity"
+            android:exported="false"
+            android:label="Sesi RDP"
+            android:theme="@style/Theme.XyDeskHome"
+            android:configChanges="orientation|keyboardHidden|screenSize|smallestScreenSize|density|screenLayout" />
+
         <!-- M0: connection screen (fallback "Form klasik" dari home Compose).
              Render sesi RDP = com.freerdp.freerdpcore.presentation.SessionActivity
-             (XyDesk session surface menyusul di M2). -->
+             (masih dipakai jalur form klasik M0). -->
         <activity
             android:exported="false"
             android:name="id.xydesk.remote.MainActivity"

@@ -50,17 +50,16 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
-import com.freerdp.freerdpcore.presentation.SessionActivity
 import id.xydesk.remote.core.ConnectionProfile
-import id.xydesk.remote.core.RdpUri
 import id.xydesk.remote.sessions.SessionsRepository
 import kotlinx.coroutines.launch
 
 /**
  * M1.2 — layar home: favorit + form koneksi + pintu Cloud RDP.
  *
- * Data: [SessionsRepository] (Room + CredentialVault). Connect = launch
- * core SessionActivity dengan URI `rdp://` (jalur render teruji M0).
+ * Data: [SessionsRepository] (Room + CredentialVault). Connect = layar
+ * sesi XyDesk M2 (Compose + HUD); core SessionActivity M0 tetap
+ * tersedia lewat "Form klasik".
  */
 @Composable
 fun XyDeskHome(
@@ -76,9 +75,8 @@ fun XyDeskHome(
 
     fun connectTo(profile: ConnectionProfile) {
         scope.launch { repo.touch(profile) }
-        // M1.2a: render masih core SessionActivity; M2 = XyDesk session surface
-        val uri = RdpUri.build(profile)
-        context.startActivity(Intent(context, SessionActivity::class.java).setData(uri))
+        // M2: jalur sesi XyDesk (surface + HUD Compose)
+        context.startActivity(XyDeskSessionActivity.connectIntent(profile))
     }
 
     Scaffold(

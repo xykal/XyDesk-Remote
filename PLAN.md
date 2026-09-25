@@ -242,7 +242,7 @@ Kontrol HUD ──► SessionManager ──► LibFreeRDP (args/input) ──►
 |---|---|---|---|
 | **M0 — Fondasi & First Frame** | Repo + CI + scaffold + form koneksi + jalur RDP via core | ✅ scaffold & CI siap; **TERUS**: APK terpasang di HP, koneksi ke Windows VM, layar tampil, mouse gerak, ngetik di Notepad | 1–2 minggu |
 | **M1 — Core dipakai harian** | Modul `core-rdp` + `features-*`, Kotlin/Compose UI koneksi & favorites, credential vault (Keystore), resolusi/DPI, clipboard teks, policy background, deteksi Windows Home | Sesi 1 jam tanpa crash; reconnect sesuai policy; ganti DPI/resolusi tanpa putus | 2–3 minggu |
-| **M2 — HUD v1 (pembeda utama)** | Session surface XyDesk (ganti SessionActivity) + HUD Host + panel Stats/Controls/Pointer/Keyboard | Pakai HUD 10 menit tanpa buka settings; layout per koneksi diingat; Stats realtime akurat | 2 minggu |
+| **M2 — HUD v1 (pembeda utama)** | ✅ v1: Session surface XyDesk (Compose) + HUD top bar + panel Stats/Controls + dialog cert/NLA + policy background + deteksi Windows Home. Sisa: layout per koneksi, panel Pointer/Keyboard visual | Pakai HUD 10 menit tanpa buka settings; Stats realtime akurat | (v1 selesai) |
 | **M3 — Produktivitas** | File transfer (RDPDR), clipboard file, audio 2 arah, screenshot, session recording, import .rdp/QR, cert trust manager UI, RDP Gateway | Kirim file 100 MB via mapped drive; record sesi 5 menit; mic 2 arah | 2–3 minggu |
 | **M4 — Power & Polish** | Hardware decode (AVC4204) + SurfaceView, multi-monitor, panel Diagnostics/Recording, RDPECAM (opsional), tema, tuning | 4K@60 flagship; 1080p@60 mid-range; H264 aktif otomatis | 2–4 minggu |
 | **M5 — Ship** | Release signing (CI secrets), CI polish, crash reporting, branding XyDesk + credit XyVerse, distribusi internal | Build release dari CI tanpa langkah manual; lulus smoke test M1–M4 di 3 device | 1 minggu |
@@ -301,14 +301,38 @@ dipakai UI** — wiring UI di M1.2.
 - OAuth App Device Flow sudah aktif + `CLIENT_ID` tertanam (login GitHub
   dari HP tinggal jalan)
 
-### M1.2b — tersisa (dipindah sebagian ke M2)
+### M1.2b — SELESAI
 1. ~~UI Compose~~ → selesai (M1.2a)
-2. Session surface XyDesk native (ganti SessionActivity) + dialog trust
-   sertifikat (fingerprint SHA-256) + prompt NLA via `SessionManager`
-   Listener — **dipindah ke M2** (render + input surface + HUD harus
-   barengan agar `SessionManager` benar-benar jadi satu pintu)
-3. Policy background (auto-disconnect) + deteksi "Windows Home / RDP off"
-4. `TelemetryFlow` (sampler 500ms) — prasyarat HUD M2
+2. ~~Session surface + dialog trust + NLA~~ → selesai (M2 v1, di bawah)
+3. Policy background (auto-disconnect 15s saat app di-background)
+   + deteksi "Windows Home / RDP off" (pre-flight TCP 2.5s →
+   `Error("unreachable")` + hint + pintu Cloud RDP)
+4. `SessionManager.telemetry` (sampler 500ms) → panel Stats HUD
+
+### M2 v1 — HUD + session surface XyDesk (SELESAI)
+- `XyDeskSessionActivity` (Compose) + `SessionSurfaceController`:
+  menjamu view inti (SessionView/TouchPointerView/ExtendedKeyboardView/
+  ScrollView2D, wiring input identik M0) via `AndroidView`
+- Render pipeline XyDesk: `GraphicsSink` (thread RDP) →
+  `LibFreeRDP.updateGraphics` + `SessionView` invalidation — semantik
+  identik jalur M0; `SessionActivity` M0 tetap sebagai "Form klasik"
+- Dialog Compose: trust sertifikat (fingerprint SHA-256, timeout=tolak,
+  warning changed/mismatch) + prompt NLA + error (hint Windows Home)
+  + konfirmasi disconnect
+- HUD: top bar (judul + stats ringkas) + panel samping (Stats realtime:
+  status/resolusi/aktivitas gambar/zoom/versi FreeRDP; Kontrol: zoom,
+  touch pointer, keyboard, disconnect)
+- **BUG FIX keamanan M1.1**: konstanta `VERIFY_ACCEPT/VERIFY_DENY`
+  tadinya TEBALIK (kontrak inti: 1=accept, 0=deny) — "percaya"
+  sebelumnya malah menolak & sebaliknya
+- Back semantics: prompt wajib dijawab; Connected=konfirmasi;
+  Connecting=batalkan; panel=sembunyikan
+- Clipboard 2 arah (teks): remote→local via listener, local→remote via
+  PrimaryClipChangedListener (hanya saat Connected)
+
+### M2 tersisa (lanjutan)
+- Layout per-koneksi diingat (prefs), panel Pointer/Keyboard visual
+  (M3: file transfer dsb. tetap sesuai roadmap)
 
 ---
 

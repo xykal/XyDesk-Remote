@@ -4,8 +4,8 @@ package id.xydesk.remote.core
  * Info sertifikat yang diminta inti FreeRDP saat handshake TLS
  * (`OnVerifiyCertificateEx` — typo-nya memang dari upstream).
  *
- * UI (M1.2) menampilkan dialog trust dengan [fingerprint] SHA-256;
- * policy default XyDesk = verifikasi penuh (PLAN §5.2).
+ * UI menampilkan dialog trust dengan [fingerprint] SHA-256;
+ * policy default XyDesk = selalu tanya (PLAN §5.2).
  */
 data class CertificateInfo(
     val host: String,
@@ -22,9 +22,11 @@ data class CertificateInfo(
     val isRedirect: Boolean get() = (flags and FLAG_REDIRECT) != 0L
 
     companion object {
-        // Hasil reply ke SessionManager:
-        const val VERIFY_ACCEPT = 0
-        const val VERIFY_DENY = 1
+        // Kontrak inti (SessionDialogs.showVerifyDialog -> native
+        // android_verify_certificate_ex): 1 = diterima, 0 = DITOLAK.
+        // (BUG M1.1: konstanta ini tadinya terbalik — diperbaiki di M2.)
+        const val VERIFY_ACCEPT = 1
+        const val VERIFY_DENY = 0
 
         // Flags dari inti (subset yang relevan untuk UI):
         const val FLAG_LEGACY = 0x02L
