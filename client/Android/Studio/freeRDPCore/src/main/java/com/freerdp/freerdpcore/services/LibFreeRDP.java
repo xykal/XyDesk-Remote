@@ -32,6 +32,7 @@ public class LibFreeRDP
 {
 	private static final String TAG = "LibFreeRDP";
 	private static EventListener listener;
+	private static volatile java.util.function.Consumer<String> nativeCallbackErrorSink;
 	private static boolean mHasH264 = false;
 	private static boolean mHasCameraRedirection = false;
 
@@ -179,6 +180,30 @@ public class LibFreeRDP
 	public static void setEventListener(EventListener l)
 	{
 		listener = l;
+	}
+
+	/** Install app-owned durable logging for native-to-Java callback failures. */
+	public static void setNativeCallbackErrorSink(java.util.function.Consumer<String> sink)
+	{
+		nativeCallbackErrorSink = sink;
+	}
+
+	/** Called from android_jni_callback.c after a Java exception is cleared. */
+	private static void OnNativeCallbackException(String message)
+	{
+		Log.e(TAG, message);
+		java.util.function.Consumer<String> sink = nativeCallbackErrorSink;
+		if (sink != null)
+		{
+			try
+			{
+				sink.accept(message);
+			}
+			catch (RuntimeException e)
+			{
+				Log.e(TAG, "native callback error sink failed", e);
+			}
+		}
 	}
 
 	public static long newInstance(Context context)

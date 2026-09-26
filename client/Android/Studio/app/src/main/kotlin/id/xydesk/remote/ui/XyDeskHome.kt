@@ -22,6 +22,8 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
@@ -52,6 +54,7 @@ import androidx.compose.material3.ModalDrawerSheet
 import androidx.compose.material3.ModalNavigationDrawer
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.CenterAlignedTopAppBar
@@ -68,6 +71,9 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Alignment
+import androidx.compose.ui.window.DialogProperties
+import androidx.compose.ui.window.Dialog
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
@@ -102,7 +108,6 @@ private enum class XySection { KONEKSI, CLOUD, PENGATURAN, KEAMANAN, TENTANG }
 @Composable
 fun XyDeskHome(
     onOpenCloudRdp: () -> Unit,
-    onOpenClassicForm: () -> Unit,
     onExit: () -> Unit,
 ) {
     val context = LocalContext.current
@@ -166,9 +171,10 @@ fun XyDeskHome(
                     horizontalArrangement = Arrangement.spacedBy(12.dp),
                 ) {
                     Image(
-                        painter = painterResource(R.drawable.xy_logo_img),
+                        painter = painterResource(R.drawable.xydesk_app_mark),
                         contentDescription = "XyDesk",
-                        modifier = Modifier.size(44.dp),
+                        modifier = Modifier.size(44.dp).clip(MaterialTheme.shapes.medium)
+                            .background(Color(0xFF171521)).padding(4.dp),
                     )
                     Column {
                         XyWordmark(fontSize = 22.sp)
@@ -193,7 +199,7 @@ fun XyDeskHome(
                     section = XySection.PENGATURAN
                     scope.launch { drawerState.close() }
                 }
-                XyMenuItem(Icons.Default.Lock, "Keamanan", section == XySection.KEAMANAN) {
+                XyMenuItem(Icons.Default.Lock, "Diagnostik & Keamanan", section == XySection.KEAMANAN) {
                     section = XySection.KEAMANAN
                     scope.launch { drawerState.close() }
                 }
@@ -217,6 +223,7 @@ fun XyDeskHome(
         when (section) {
             XySection.KONEKSI -> {
                 Scaffold(
+                    containerColor = MaterialTheme.colorScheme.background,
                     topBar = {
                         XyTopBar(onMenu = onMenu, title = "Koneksi")
                     },
@@ -260,55 +267,59 @@ fun XyDeskHome(
                             )
                         }
                     }
-                    if (favorites.isEmpty()) {
-            Box(
-                modifier = Modifier.fillMaxSize().padding(padding),
-                contentAlignment = Alignment.Center,
-            ) {
-                Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                    Text("Belum ada favorit", style = MaterialTheme.typography.titleMedium)
-                    Spacer(Modifier.height(8.dp))
-                    Text(
-                        "Tekan + untuk koneksi baru, atau\nCloud RDP buat mesin dari GitHub",
-                        style = MaterialTheme.typography.bodyMedium,
-                    )
-                }
-            }
-        } else {
-            LazyColumn(
-                modifier = Modifier.fillMaxSize().padding(padding),
-                contentPadding = PaddingValues(12.dp),
-            ) {
-                items(favorites, key = { it.id }) { profile ->
-                    FavoriteRow(
-                        profile = profile,
-                        onConnect = { connectTo(profile) },
-                        onDelete = { scope.launch { repo.remove(profile.id) } },
-                    )
-                }
-                item {
-                    Row(
-                        modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
-                        horizontalArrangement = Arrangement.spacedBy(12.dp),
-                        verticalAlignment = Alignment.CenterVertically,
+                    LazyColumn(
+                        modifier = Modifier.fillMaxSize().padding(padding),
+                        contentPadding = PaddingValues(horizontal = 16.dp, vertical = 12.dp),
+                        verticalArrangement = Arrangement.spacedBy(8.dp),
                     ) {
-                        OutlinedButton(onClick = onOpenCloudRdp) {
-                            Icon(Icons.Default.Send, contentDescription = null)
-                            Spacer(Modifier.width(8.dp))
-                            Text("Cloud RDP (GitHub)")
+                        item {
+                            XyHomeHero(
+                                onAddConnection = { showForm = true },
+                                onCloudSetup = onOpenCloudRdp,
+                            )
                         }
-                        TextButton(onClick = onOpenClassicForm) {
-                            Text("Form klasik (M0)")
+                        if (favorites.isEmpty()) {
+                            item {
+                                XyCard(modifier = Modifier.fillMaxWidth()) {
+                                    Text("Belum ada PC tersimpan", style = MaterialTheme.typography.titleMedium)
+                                    Spacer(Modifier.height(4.dp))
+                                    Text(
+                                        "Tambahkan PC Windows atau hubungkan perangkat cloud untuk mulai.",
+                                        style = MaterialTheme.typography.bodyMedium,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    )
+                                }
+                            }
+                        } else {
+                            item { XySectionTitle("PC Tersimpan", Modifier.padding(top = 8.dp)) }
+                            items(favorites, key = { it.id }) { profile ->
+                                FavoriteRow(
+                                    profile = profile,
+                                    onConnect = { connectTo(profile) },
+                                    onDelete = { scope.launch { repo.remove(profile.id) } },
+                                )
+                            }
+                        }
+                        item {
+                            Row(
+                                modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
+                                horizontalArrangement = Arrangement.spacedBy(12.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                            ) {
+                                OutlinedButton(onClick = onOpenCloudRdp) {
+                                    Icon(Icons.Default.Send, contentDescription = null)
+                                    Spacer(Modifier.width(8.dp))
+                                    Text("PC Cloud")
+                                }
+                                TextButton(onClick = onOpenClassicForm) { Text("Koneksi klasik") }
+                            }
                         }
                     }
-                }
-            }
-        }
         }
             }
 
             XySection.CLOUD -> SectionWithTopBar(onMenu, "Cloud RDP") {
-                XyCloudSection(onOpenCloudRdp, onOpenClassicForm)
+                XyCloudSection(onOpenCloudRdp)
             }
 
             XySection.PENGATURAN -> SectionWithTopBar(onMenu, "Pengaturan") {
@@ -391,44 +402,90 @@ fun XyDeskHome(
         )
     }
     if (showForm) {
-        AlertDialog(
+        Dialog(
             onDismissRequest = { showForm = false },
-            title = { Text("Koneksi baru") },
-            text = {
-                ConnectFormFields(
-                    onSaved = { profile, rememberPassword ->
-                        // Persist before launching the session. Previously save() ran
-                        // concurrently with navigation; a Keystore/Room failure could
-                        // escape the composition coroutine and terminate the app.
-                        scope.launch {
-                            showForm = false
-                            val saved = runCatching {
-                                repo.save(profile, rememberPassword)
-                            }
-                            if (saved.isFailure) {
-                                Toast.makeText(
-                                    context,
-                                    "Profil tidak tersimpan: ${saved.exceptionOrNull()?.message ?: "kesalahan penyimpanan"}",
-                                    Toast.LENGTH_LONG,
-                                ).show()
-                            }
-                            runCatching { connectTo(profile) }
-                                .onFailure { error ->
+            properties = DialogProperties(usePlatformDefaultWidth = false),
+        ) {
+            androidx.compose.material3.Surface(
+                modifier = Modifier.fillMaxWidth(0.94f).heightIn(max = 700.dp),
+                shape = RoundedCornerShape(24.dp),
+                color = MaterialTheme.colorScheme.surface,
+                tonalElevation = 4.dp,
+            ) {
+                Column(Modifier.fillMaxWidth().padding(20.dp)) {
+                    Text("Tambahkan PC", style = MaterialTheme.typography.headlineSmall)
+                    Spacer(Modifier.height(4.dp))
+                    Text(
+                        "Masukkan alamat PC Windows dan kredensial RDP.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                    Spacer(Modifier.height(12.dp))
+                    ConnectFormFields(
+                        modifier = Modifier.weight(1f),
+                        onSaved = { profile, rememberPassword ->
+                            scope.launch {
+                                showForm = false
+                                val saved = runCatching { repo.save(profile, rememberPassword) }
+                                if (saved.isFailure) {
                                     Toast.makeText(
                                         context,
-                                        "Gagal membuka sesi: ${error.message ?: error.javaClass.simpleName}",
+                                        "Profil tidak tersimpan: ${saved.exceptionOrNull()?.message ?: "kesalahan penyimpanan"}",
                                         Toast.LENGTH_LONG,
                                     ).show()
                                 }
-                        }
-                    },
+                                runCatching { connectTo(profile) }
+                                    .onFailure { error ->
+                                        Toast.makeText(
+                                            context,
+                                            "Gagal membuka sesi: ${error.message ?: error.javaClass.simpleName}",
+                                            Toast.LENGTH_LONG,
+                                        ).show()
+                                    }
+                            }
+                        },
+                    )
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.End,
+                    ) {
+                        TextButton(onClick = { showForm = false }) { Text("Batal") }
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun XyHomeHero(
+    onAddConnection: () -> Unit,
+    onCloudSetup: () -> Unit,
+) {
+    XyCard(modifier = Modifier.fillMaxWidth()) {
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+            Image(
+                painter = painterResource(R.drawable.xydesk_app_mark),
+                contentDescription = null,
+                modifier = Modifier.size(52.dp)
+                    .clip(MaterialTheme.shapes.medium)
+                    .background(androidx.compose.ui.graphics.Color(0xFF171521))
+                    .padding(5.dp),
+            )
+            Column {
+                Text("Remote Desktop", style = MaterialTheme.typography.headlineSmall)
+                Text(
+                    "Semua PC Anda dalam satu ruang kerja aman",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
-            },
-            confirmButton = {}, // tombol aksi ada di dalam form
-            dismissButton = {
-                TextButton(onClick = { showForm = false }) { Text("Batal") }
-            },
-        )
+            }
+        }
+        Spacer(Modifier.height(16.dp))
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            id.xydesk.remote.ui.components.XyBrandButton("Tambah PC", onAddConnection)
+            id.xydesk.remote.ui.components.XyGhostButton("PC Cloud", onCloudSetup)
+        }
     }
 }
 
@@ -472,6 +529,7 @@ private fun FavoriteRow(
  */
 @Composable
 private fun ConnectFormFields(
+    modifier: Modifier = Modifier,
     onSaved: (profile: ConnectionProfile, rememberPassword: Boolean) -> Unit,
 ) {
     var host by remember { mutableStateOf("") }
@@ -483,7 +541,7 @@ private fun ConnectFormFields(
     var rememberPass by remember { mutableStateOf(true) }
     var error by remember { mutableStateOf<String?>(null) }
 
-    Column {
+    Column(modifier.fillMaxWidth().verticalScroll(rememberScrollState())) {
         OutlinedTextField(
             value = host,
             onValueChange = { host = it },
@@ -595,9 +653,10 @@ private fun XyTopBar(onMenu: () -> Unit, title: String) {
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
             ) {
                 Image(
-                    painter = painterResource(R.drawable.xy_logo_img),
+                    painter = painterResource(R.drawable.xydesk_app_mark),
                     contentDescription = null,
-                    modifier = Modifier.size(22.dp),
+                    modifier = Modifier.size(32.dp).clip(MaterialTheme.shapes.medium)
+                        .background(Color(0xFF171521)).padding(3.dp),
                 )
                 Text(title, style = MaterialTheme.typography.titleLarge)
             }
@@ -614,7 +673,6 @@ private fun XyTopBar(onMenu: () -> Unit, title: String) {
 @Composable
 private fun XyCloudSection(
     onOpenCloudRdp: () -> Unit,
-    onOpenClassicForm: () -> Unit,
 ) {
     Column(
         modifier = Modifier
@@ -633,10 +691,7 @@ private fun XyCloudSection(
                 OutlinedButton(onClick = onOpenCloudRdp) {
                     Icon(Icons.Default.Send, contentDescription = null)
                     Spacer(Modifier.width(8.dp))
-                    Text("Cloud RDP (GitHub)")
-                }
-                TextButton(onClick = onOpenClassicForm) {
-                    Text("Form klasik (M0)")
+                    Text("Buat PC Cloud")
                 }
             }
         }
@@ -650,7 +705,7 @@ private fun SectionWithTopBar(
     title: String,
     content: @Composable () -> Unit,
 ) {
-    Column(Modifier.fillMaxSize()) {
+    Column(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)) {
         XyTopBar(onMenu = onMenu, title = title)
         Box(Modifier.weight(1f).fillMaxWidth()) { content() }
     }

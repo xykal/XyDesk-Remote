@@ -191,7 +191,7 @@ class SessionManager(context: Context) {
                     ConnectionLog.add("CM: worker: session.connect kembali — connect thread jalan")
                 }
             } catch (t: Throwable) {
-                ConnectionLog.add("CM: worker: session.connect EXCEPTION: ${t.javaClass.name}: ${t.message}")
+                ConnectionLog.addThrowable("CM: worker: session.connect EXCEPTION", t)
                 Log.w(TAG, "connect() exception", t)
                 if (isCurrent(inst)) {
                     transition(SessionState.Error("connect_exception", t.message ?: "exception"))

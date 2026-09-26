@@ -24,6 +24,67 @@ static jobject jLibFreeRDPObject;
 
 static const char* jLibFreeRDPPath = JAVA_LIBFREERDP_CLASS;
 
+static void report_callback_problem(JNIEnv* env, jclass clazz, const char* callback,
+                                   const char* reason)
+{
+	if (!env || !clazz)
+		return;
+	char message[256] = { 0 };
+	(void)snprintf(message, sizeof(message), "FreeRDP JNI callback %s: %s", callback,
+	               reason ? reason : "Java exception");
+	WLog_ERR(TAG, "%s", message);
+	jmethodID method = (*env)->GetStaticMethodID(env, clazz, "OnNativeCallbackException",
+	                                             "(Ljava/lang/String;)V");
+	if (!method)
+	{
+		if ((*env)->ExceptionCheck(env))
+			(*env)->ExceptionClear(env);
+			return;
+	}
+	jstring text = (*env)->NewStringUTF(env, message);
+	if (text)
+	{
+		(*env)->CallStaticVoidMethod(env, clazz, method, text);
+		(*env)->DeleteLocalRef(env, text);
+	}
+	if ((*env)->ExceptionCheck(env))
+		(*env)->ExceptionClear(env);
+}
+
+static void log_and_clear_exception(JNIEnv* env, jclass clazz, const char* callback)
+{
+	if (!env || !(*env)->ExceptionCheck(env))
+		return;
+	jthrowable error = (*env)->ExceptionOccurred(env);
+	(*env)->ExceptionDescribe(env);
+	(*env)->ExceptionClear(env);
+	char detail[384] = "Java exception (stack in logcat)";
+	if (error)
+	{
+		jclass errorClass = (*env)->GetObjectClass(env, error);
+		jmethodID toString = errorClass ? (*env)->GetMethodID(env, errorClass, "toString",
+		                                                      "()Ljava/lang/String;") : nullptr;
+		jstring text = toString ? (jstring)(*env)->CallObjectMethod(env, error, toString) : nullptr;
+		if (text)
+		{
+			const char* chars = (*env)->GetStringUTFChars(env, text, nullptr);
+			if (chars)
+			{
+				(void)snprintf(detail, sizeof(detail), "%s", chars);
+				(*env)->ReleaseStringUTFChars(env, text, chars);
+			}
+			(*env)->DeleteLocalRef(env, text);
+		}
+		if ((*env)->ExceptionCheck(env))
+			(*env)->ExceptionClear(env);
+		if (errorClass)
+			(*env)->DeleteLocalRef(env, errorClass);
+		(*env)->DeleteLocalRef(env, error);
+	}
+	WLog_ERR(TAG, "Java exception while invoking callback %s: %s", callback, detail);
+	report_callback_problem(env, clazz, callback, detail);
+}
+
 static void jni_load_class(JNIEnv* env, const char* path, jobject* objptr)
 {
 	jclass class;
@@ -97,31 +158,29 @@ void jni_detach_thread()
 static void java_callback_void(jobject obj, const char* callback, const char* signature,
                                va_list args)
 {
-	jclass jObjClass;
-	jmethodID jCallback;
 	jboolean attached;
-	JNIEnv* env;
-	WLog_DBG(TAG, "java_callback: %s (%s)", callback, signature);
+	JNIEnv* env = nullptr;
+	jclass clazz = nullptr;
+	jmethodID method = nullptr;
+	if (!obj || !jVM)
+		return;
 	attached = jni_attach_thread(&env);
-	jObjClass = (*env)->GetObjectClass(env, obj);
-
-	if (!jObjClass)
+	if (!env)
+		return;
+	clazz = (*env)->GetObjectClass(env, obj);
+	if (clazz)
+		method = (*env)->GetStaticMethodID(env, clazz, callback, signature);
+	if (!method)
 	{
-		WLog_ERR(TAG, "android_java_callback: failed to get class reference");
+		log_and_clear_exception(env, clazz, callback);
+		report_callback_problem(env, clazz, callback, "static Java method was not found");
 		goto finish;
 	}
-
-	jCallback = (*env)->GetStaticMethodID(env, jObjClass, callback, signature);
-
-	if (!jCallback)
-	{
-		WLog_ERR(TAG, "android_java_callback: failed to get method id");
-		goto finish;
-	}
-
-	(*env)->CallStaticVoidMethodV(env, jObjClass, jCallback, args);
+	(*env)->CallStaticVoidMethodV(env, clazz, method, args);
+	log_and_clear_exception(env, clazz, callback);
 finish:
-
+	if (clazz)
+		(*env)->DeleteLocalRef(env, clazz);
 	if (attached == JNI_TRUE)
 		jni_detach_thread();
 }
@@ -130,72 +189,76 @@ finish:
 static jboolean java_callback_bool(jobject obj, const char* callback, const char* signature,
                                    va_list args)
 {
-	jclass jObjClass;
-	jmethodID jCallback;
 	jboolean attached;
-	jboolean res = JNI_FALSE;
-	JNIEnv* env;
-	WLog_DBG(TAG, "java_callback: %s (%s)", callback, signature);
+	jboolean result = JNI_FALSE;
+	JNIEnv* env = nullptr;
+	jclass clazz = nullptr;
+	jmethodID method = nullptr;
+	if (!obj || !jVM)
+		return JNI_FALSE;
 	attached = jni_attach_thread(&env);
-	jObjClass = (*env)->GetObjectClass(env, obj);
-
-	if (!jObjClass)
+	if (!env)
+		return JNI_FALSE;
+	clazz = (*env)->GetObjectClass(env, obj);
+	if (clazz)
+		method = (*env)->GetStaticMethodID(env, clazz, callback, signature);
+	if (!method)
 	{
-		WLog_ERR(TAG, "android_java_callback: failed to get class reference");
+		log_and_clear_exception(env, clazz, callback);
+		report_callback_problem(env, clazz, callback, "static Java method was not found");
 		goto finish;
 	}
-
-	jCallback = (*env)->GetStaticMethodID(env, jObjClass, callback, signature);
-
-	if (!jCallback)
+	result = (*env)->CallStaticBooleanMethodV(env, clazz, method, args);
+	if ((*env)->ExceptionCheck(env))
 	{
-		WLog_ERR(TAG, "android_java_callback: failed to get method id");
-		goto finish;
+		log_and_clear_exception(env, clazz, callback);
+		report_callback_problem(env, clazz, callback, "Java callback threw; returning false");
+		result = JNI_FALSE;
 	}
-
-	res = (*env)->CallStaticBooleanMethodV(env, jObjClass, jCallback, args);
 finish:
-
+	if (clazz)
+		(*env)->DeleteLocalRef(env, clazz);
 	if (attached == JNI_TRUE)
 		jni_detach_thread();
-
-	return res;
+	return result;
 }
 
 /* callback with int result */
 static jint java_callback_int(jobject obj, const char* callback, const char* signature,
                               va_list args)
 {
-	jclass jObjClass;
-	jmethodID jCallback;
 	jboolean attached;
-	jint res = -1;
-	JNIEnv* env;
-	WLog_DBG(TAG, "java_callback: %s (%s)", callback, signature);
+	jint result = -1;
+	JNIEnv* env = nullptr;
+	jclass clazz = nullptr;
+	jmethodID method = nullptr;
+	if (!obj || !jVM)
+		return -1;
 	attached = jni_attach_thread(&env);
-	jObjClass = (*env)->GetObjectClass(env, obj);
-
-	if (!jObjClass)
+	if (!env)
+		return -1;
+	clazz = (*env)->GetObjectClass(env, obj);
+	if (clazz)
+		method = (*env)->GetStaticMethodID(env, clazz, callback, signature);
+	if (!method)
 	{
-		WLog_ERR(TAG, "android_java_callback: failed to get class reference");
+		log_and_clear_exception(env, clazz, callback);
+		report_callback_problem(env, clazz, callback, "static Java method was not found");
 		goto finish;
 	}
-
-	jCallback = (*env)->GetStaticMethodID(env, jObjClass, callback, signature);
-
-	if (!jCallback)
+	result = (*env)->CallStaticIntMethodV(env, clazz, method, args);
+	if ((*env)->ExceptionCheck(env))
 	{
-		WLog_ERR(TAG, "android_java_callback: failed to get method id");
-		goto finish;
+		log_and_clear_exception(env, clazz, callback);
+		report_callback_problem(env, clazz, callback, "Java callback threw; returning deny");
+		result = -1;
 	}
-
-	res = (*env)->CallStaticIntMethodV(env, jObjClass, jCallback, args);
 finish:
-
+	if (clazz)
+		(*env)->DeleteLocalRef(env, clazz);
 	if (attached == JNI_TRUE)
 		jni_detach_thread();
-
-	return res;
+	return result;
 }
 
 /* callback to freerdp class */

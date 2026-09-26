@@ -30,7 +30,6 @@ import androidx.compose.ui.unit.TextUnit
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import id.xydesk.remote.ui.theme.XyDisplay
-import id.xydesk.remote.ui.theme.XyViolet
 
 /** Tombol brand XyDesk: violet penuh, radius besar. */
 @Composable
@@ -46,8 +45,8 @@ fun XyBrandButton(
         enabled = enabled,
         shape = MaterialTheme.shapes.medium,
         colors = ButtonDefaults.buttonColors(
-            containerColor = XyViolet,
-            contentColor = Color.White,
+            containerColor = MaterialTheme.colorScheme.primary,
+            contentColor = MaterialTheme.colorScheme.onPrimary,
         ),
     ) {
         Text(

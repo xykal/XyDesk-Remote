@@ -19,54 +19,63 @@ import id.xydesk.remote.R
 // XyDesk Design System — brand violet (properti XyVerse)
 // =============================================================
 
-val XyViolet = Color(0xFF7C3AED)
-val XyVioletBright = Color(0xFFA78BFA)
-val XyVioletDeep = Color(0xFF5B21B6)
-val XyFuchsia = Color(0xFFF0ABFC)
-val XyInk = Color(0xFF0E0B16)
-val XyInkSurface = Color(0xFF171226)
-val XyInkCard = Color(0xFF1F1833)
-val XyLine = Color(0xFF2E2447)
+val XyViolet = Color(0xFF6957D8)
+val XyVioletBright = Color(0xFFB7AAFF)
+val XyVioletDeep = Color(0xFF5747C7)
+val XyFuchsia = Color(0xFFB7AAFF)
+val XyInk = Color(0xFF111217)
+val XyInkSurface = Color(0xFF191A20)
+val XyInkCard = Color(0xFF23252D)
+val XyLine = Color(0xFF353741)
 
 val DarkScheme = darkColorScheme(
     primary = XyVioletBright,
-    onPrimary = Color(0xFF1E1233),
-    primaryContainer = Color(0xFF3B2A66),
-    onPrimaryContainer = Color(0xFFEBE4FF),
-    secondary = XyFuchsia,
-    onSecondary = Color(0xFF330A4D),
-    secondaryContainer = Color(0xFF4A2160),
-    tertiary = Color(0xFF93C5FD),
-    onTertiary = Color(0xFF0A2A55),
+    onPrimary = Color(0xFF21194A),
+    primaryContainer = Color(0xFF302950),
+    onPrimaryContainer = Color(0xFFE9E5FF),
+    secondary = Color(0xFFB7AAFF),
+    onSecondary = Color(0xFF241A51),
+    secondaryContainer = Color(0xFF302950),
+    onSecondaryContainer = Color(0xFFE9E5FF),
+    tertiary = Color(0xFF91C5FF),
+    onTertiary = Color(0xFF102A43),
     background = XyInk,
-    onBackground = Color(0xFFEFEBFB),
+    onBackground = Color(0xFFF1F1F6),
     surface = XyInkSurface,
-    onSurface = Color(0xFFEFEBFB),
+    onSurface = Color(0xFFF1F1F6),
     surfaceVariant = XyInkCard,
-    onSurfaceVariant = Color(0xFFCFC6E4),
+    onSurfaceVariant = Color(0xFFC3C5D0),
     outline = XyLine,
-    error = Color(0xFFFF8A80),
-    onError = Color(0xFF3D0000),
+    outlineVariant = Color(0xFF41434E),
+    error = Color(0xFFFFB4AB),
+    onError = Color(0xFF690005),
+    errorContainer = Color(0xFF93000A),
+    onErrorContainer = Color(0xFFFFDAD6),
 )
 
 val LightScheme = lightColorScheme(
     primary = XyVioletDeep,
     onPrimary = Color.White,
-    primaryContainer = Color(0xFFEDE9FE),
-    onPrimaryContainer = Color(0xFF2E1065),
-    secondary = Color(0xFFA21CAF),
+    primaryContainer = Color(0xFFEAE7FF),
+    onPrimaryContainer = Color(0xFF21194A),
+    secondary = XyVioletDeep,
     onSecondary = Color.White,
-    secondaryContainer = Color(0xFFFBEBFA),
-    tertiary = Color(0xFF1D4ED8),
-    background = Color(0xFFF8F6FF),
-    onBackground = Color(0xFF1E1930),
+    secondaryContainer = Color(0xFFEAE7FF),
+    onSecondaryContainer = Color(0xFF21194A),
+    tertiary = Color(0xFF245D9B),
+    onTertiary = Color.White,
+    background = Color(0xFFF4F5F8),
+    onBackground = Color(0xFF191A20),
     surface = Color(0xFFFFFFFF),
-    onSurface = Color(0xFF1E1930),
-    surfaceVariant = Color(0xFFF1EDFB),
-    onSurfaceVariant = Color(0xFF4C4462),
-    outline = Color(0xFFD8D0EA),
+    onSurface = Color(0xFF191A20),
+    surfaceVariant = Color(0xFFEBEDF2),
+    onSurfaceVariant = Color(0xFF555864),
+    outline = Color(0xFFD4D6DF),
+    outlineVariant = Color(0xFFE2E4EA),
     error = Color(0xFFB3261E),
     onError = Color.White,
+    errorContainer = Color(0xFFF9DEDC),
+    onErrorContainer = Color(0xFF410E0B),
 )
 
 // Space Grotesk = display, Inter = body (variable fonts, OFL).

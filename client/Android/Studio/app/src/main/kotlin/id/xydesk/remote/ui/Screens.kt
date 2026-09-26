@@ -1,6 +1,12 @@
 package id.xydesk.remote.ui
 
+import android.content.Intent
+import android.widget.Toast
+
 import android.app.Activity
+import androidx.compose.foundation.background
+import androidx.compose.ui.draw.clip
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -32,8 +38,10 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.unit.dp
 import id.xydesk.remote.ui.components.XyCard
+import id.xydesk.remote.ui.components.XyBrandButton
 import id.xydesk.remote.ui.components.XyGhostButton
 import id.xydesk.remote.ui.components.XySectionTitle
+import id.xydesk.remote.core.ConnectionLog
 
 /**
  * M3-UI — layar Pengaturan (tema + kebijakan sesi).
@@ -48,6 +56,7 @@ fun XySettingsScreen(
     Column(
         modifier = Modifier
             .fillMaxSize()
+            .background(MaterialTheme.colorScheme.background)
             .verticalScroll(rememberScrollState())
             .padding(20.dp),
     ) {
@@ -103,9 +112,11 @@ fun XySecurityScreen(
     val context = androidx.compose.ui.platform.LocalContext.current
     val store = remember { CertificateTrustStore(context) }
     var entries by remember { mutableStateOf(store.entries()) }
+    var diagnosticsText by remember { mutableStateOf<String?>(null) }
     Column(
         modifier = Modifier
             .fillMaxSize()
+            .background(MaterialTheme.colorScheme.background)
             .verticalScroll(rememberScrollState())
             .padding(20.dp),
     ) {
@@ -156,6 +167,68 @@ fun XySecurityScreen(
             )
         }
         Spacer(Modifier.height(24.dp))
+        XySectionTitle("Diagnostik")
+        XyCard {
+            Text("Log koneksi dan error disimpan di:", style = MaterialTheme.typography.bodyMedium)
+            Spacer(Modifier.height(6.dp))
+            SelectionContainer {
+                Text(
+                    "Koneksi: ${ConnectionLog.path()}\nCrash/JNI: ${id.xydesk.remote.security.CrashLog.path(context)}",
+                    style = MaterialTheme.typography.bodySmall,
+                    fontFamily = FontFamily.Monospace,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+            Text(
+                "Android/media/id.xydesk.remote/log/ — salinan privat juga disimpan di dalam data aplikasi.",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            Spacer(Modifier.height(12.dp))
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                XyBrandButton("Lihat log", onClick = {
+                    val crash = id.xydesk.remote.security.CrashLog.last(context).orEmpty()
+                    diagnosticsText = buildString {
+                        append("=== LOG KONEKSI ===\n")
+                        append(ConnectionLog.readAll(context))
+                        append("\n=== LOG CRASH/JNI ===\n")
+                        append(crash.ifBlank { "Belum ada crash JVM tercatat." })
+                    }.takeLast(24_000)
+                })
+                XyGhostButton("Bagikan", onClick = {
+                    val body = buildString {
+                        append("=== LOG KONEKSI ===\n")
+                        append(ConnectionLog.readAll(context))
+                        append("\n=== LOG CRASH/JNI ===\n")
+                        append(id.xydesk.remote.security.CrashLog.last(context).orEmpty())
+                    }.takeLast(24_000)
+                    runCatching {
+                        val send = Intent(Intent.ACTION_SEND).apply {
+                            type = "text/plain"
+                            putExtra(Intent.EXTRA_SUBJECT, "XyDesk Remote diagnostics")
+                            putExtra(Intent.EXTRA_TEXT, body)
+                        }
+                        context.startActivity(Intent.createChooser(send, "Bagikan log XyDesk"))
+                    }.onFailure {
+                        Toast.makeText(context, "Tidak bisa membuka menu berbagi", Toast.LENGTH_LONG).show()
+                    }
+                })
+            }
+            diagnosticsText?.let { text ->
+                Spacer(Modifier.height(12.dp))
+                HorizontalDivider()
+                Spacer(Modifier.height(8.dp))
+                SelectionContainer {
+                    Text(
+                        text,
+                        style = MaterialTheme.typography.bodySmall,
+                        fontFamily = FontFamily.Monospace,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+            }
+        }
+        Spacer(Modifier.height(24.dp))
         XySectionTitle("Penandatanganan")
         XyCard {
             Text(
@@ -193,11 +266,22 @@ fun XyAboutScreen() {
     Column(
         modifier = Modifier
             .fillMaxSize()
+            .background(MaterialTheme.colorScheme.background)
             .verticalScroll(rememberScrollState())
             .padding(20.dp),
     ) {
         XyCard {
-            Text("XyDesk Remote", style = MaterialTheme.typography.headlineSmall)
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                androidx.compose.foundation.Image(
+                    painter = androidx.compose.ui.res.painterResource(id.xydesk.remote.R.drawable.xydesk_app_mark),
+                    contentDescription = "XyDesk Remote",
+                    modifier = Modifier.size(56.dp)
+                        .clip(MaterialTheme.shapes.medium)
+                        .background(androidx.compose.ui.graphics.Color(0xFF171521))
+                        .padding(5.dp),
+                )
+                Text("XyDesk Remote", style = MaterialTheme.typography.headlineSmall)
+            }
             Spacer(Modifier.height(4.dp))
             Text(
                 "versi $versionName • FreeRDP $freeRdpVersion",

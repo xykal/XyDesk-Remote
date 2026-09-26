@@ -31,7 +31,7 @@
             android:name="id.xydesk.remote.cloud.CloudRdpActivity"
             android:exported="false"
             android:label="Cloud RDP (GitHub)"
-            android:theme="@style/Theme.Main"
+            android:theme="@style/Theme.XyDeskHome"
             android:configChanges="orientation|keyboardHidden|screenSize|smallestScreenSize|density|screenLayout" />
 
         <!-- M2: layar sesi XyDesk (surface Compose + HUD). Dijalankan
@@ -41,16 +41,6 @@
             android:exported="false"
             android:label="Sesi RDP"
             android:theme="@style/Theme.XyDeskHome"
-            android:configChanges="orientation|keyboardHidden|screenSize|smallestScreenSize|density|screenLayout" />
-
-        <!-- M0: connection screen (fallback "Form klasik" dari home Compose).
-             Render sesi RDP = com.freerdp.freerdpcore.presentation.SessionActivity
-             (masih dipakai jalur form klasik M0). -->
-        <activity
-            android:exported="false"
-            android:name="id.xydesk.remote.MainActivity"
-            android:label="@string/app_name"
-            android:theme="@style/Theme.Main"
             android:configChanges="orientation|keyboardHidden|screenSize|smallestScreenSize|density|screenLayout" />
 
         <!-- M2.5: FileProvider buat share screenshot -->

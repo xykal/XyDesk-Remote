@@ -70,9 +70,9 @@ class XyDeskSessionActivity : ComponentActivity() {
             manager.setGraphicsSink(controller)
             ConnectionLog.add("SES: manager+controller ok, sink set")
         } catch (t: Throwable) {
-            ConnectionLog.add("SES: FAIL inisialisasi: ${t.javaClass.name}: ${t.message}")
+            ConnectionLog.addThrowable("SES: FAIL inisialisasi", t)
             Log.e(TAG, "gagal inisialisasi sesi", t)
-            CrashLog.note(this, "inisialisasi sesi gagal: ${t.javaClass.name}: ${t.message}")
+            CrashLog.note(this, "inisialisasi sesi gagal: ${t.stackTraceToString().take(12_000)}")
             Toast.makeText(this, "Gagal menyiapkan sesi: ${t.message}", Toast.LENGTH_LONG).show()
             finish()
             return
@@ -140,9 +140,9 @@ class XyDeskSessionActivity : ComponentActivity() {
             manager.connect(profile)
             ConnectionLog.add("SES: manager.connect kembali (worker jalan async)")
         } catch (t: Throwable) {
-            ConnectionLog.add("SES: connect() JVM-exception: ${t.javaClass.name}: ${t.message}")
+            ConnectionLog.addThrowable("SES: connect() JVM-exception", t)
             Log.e(TAG, "connect() gagal", t)
-            CrashLog.note(this, "connect() gagal: ${t.javaClass.name}: ${t.message}")
+            CrashLog.note(this, "connect() gagal: ${t.stackTraceToString().take(12_000)}")
         }
     }
 

@@ -6,24 +6,23 @@ import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
 
-/**
- * Diagnosa crash untuk pengguna: exception tak tertangkap ditulis ke
- * file (survives process death). Layar home menampilkan banner "terjadi
- * error" + tombol lihat log kalau file ada.
- * Dipasang di XyApp.onCreate.
- */
+/** Persist JVM crashes and handled fatal errors to an easy-to-find media folder. */
 object CrashLog {
     private const val FILE_NAME = "xydesk-crash.log"
+    @Volatile private var targets: List<File> = emptyList()
 
     fun install(context: Context) {
         val appCtx = context.applicationContext
+        val internal = File(appCtx.filesDir, FILE_NAME)
+        val external = appCtx.externalMediaDirs.firstOrNull()?.let { File(File(it, "log"), FILE_NAME) }
+            ?.takeIf { target -> runCatching {
+                target.parentFile?.let { it.isDirectory || it.mkdirs() } == true
+                target.parentFile?.canWrite() == true
+            }.getOrDefault(false) }
+        targets = if (external != null) listOf(external, internal) else listOf(internal)
         val default = Thread.getDefaultUncaughtExceptionHandler()
         Thread.setDefaultUncaughtExceptionHandler { t, e ->
-            try {
-                write(appCtx, t, e)
-            } catch (_: Throwable) {
-            }
-            // teruskan ke handler default (tombol "App terhenti" tetap muncul)
+            try { write(appCtx, t, e) } catch (_: Throwable) { }
             default?.uncaughtException(t, e)
         }
     }
@@ -31,28 +30,54 @@ object CrashLog {
     private fun write(ctx: Context, t: Thread, e: Throwable) {
         val sw = java.io.StringWriter()
         e.printStackTrace(java.io.PrintWriter(sw))
-        val ts = SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.US).format(Date())
-        val line = "=== $ts  thread=${t.name} ===\n${sw.toString()}\n"
-        val f = File(ctx.filesDir, FILE_NAME)
-        val old = if (f.exists()) f.readText() else ""
-        f.writeText((line + old).take(64 * 1024))
+        val ts = SimpleDateFormat("yyyy-MM-dd HH:mm:ss.SSS", Locale.US).format(Date())
+        append("=== $ts  thread=${t.name} ===\n${sw}\n")
+        if (targets.isEmpty()) appendTo(File(ctx.filesDir, FILE_NAME), "=== $ts ===\n${sw}\n")
     }
 
-    /** Catat insiden (tanpa proses mati) ke log yang sama. */
+    /** Record a recoverable JNI/startup error, including its stack trace. */
     fun note(context: Context, msg: String) {
-        val ts = SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.US).format(Date())
-        val f = File(context.filesDir, FILE_NAME)
-        val old = if (f.exists()) f.readText() else ""
-        f.writeText("=== $ts  insiden: $msg ===\n$old".take(64 * 1024))
+        val ts = SimpleDateFormat("yyyy-MM-dd HH:mm:ss.SSS", Locale.US).format(Date())
+        val body = "=== $ts  insiden: $msg ===\n"
+        if (targets.isEmpty()) targets = listOf(File(context.applicationContext.filesDir, FILE_NAME))
+        append(body)
     }
 
-    /** Isi log terakhir; null jika tidak ada crash tercatat. */
     fun last(context: Context): String? {
-        val f = File(context.filesDir, FILE_NAME)
-        return if (f.exists()) f.readText() else null
+        val candidates = targets.ifEmpty {
+            listOf(File(context.applicationContext.filesDir, FILE_NAME),
+                context.externalMediaDirs.firstOrNull()?.let { File(File(it, "log"), FILE_NAME) }
+                    ?: File(context.filesDir, FILE_NAME))
+        }
+        return candidates.firstNotNullOfOrNull { file ->
+            runCatching { if (file.exists()) file.readText() else null }.getOrNull()
+        }
     }
+
+    fun path(context: Context): String = targets.firstOrNull()?.absolutePath
+        ?: File(context.applicationContext.filesDir, FILE_NAME).absolutePath
 
     fun clear(context: Context) {
-        File(context.filesDir, FILE_NAME).delete()
+        val candidates = targets.ifEmpty {
+            listOf(File(context.applicationContext.filesDir, FILE_NAME),
+                context.externalMediaDirs.firstOrNull()?.let { File(File(it, "log"), FILE_NAME) }
+                    ?: File(context.filesDir, FILE_NAME))
+        }
+        candidates.distinct().forEach { runCatching { it.delete() } }
+    }
+
+    private fun append(text: String) {
+        targets.forEach { appendTo(it, text) }
+    }
+
+    private fun appendTo(file: File, text: String) {
+        runCatching {
+            file.parentFile?.mkdirs()
+            if (file.exists() && file.length() > 64 * 1024) {
+                val tail = file.readText().takeLast(32 * 1024)
+                file.writeText(tail)
+            }
+            file.appendText(text)
+        }
     }
 }

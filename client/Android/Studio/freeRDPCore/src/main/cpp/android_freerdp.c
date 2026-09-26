@@ -322,6 +322,18 @@ static BOOL android_Pointer_Set(rdpContext* context, rdpPointer* pointer)
 	(*env)->CallStaticVoidMethod(env, gJavaActivityClass, gOnPointerSetMethod,
 	                             (jlong)context->instance, pixels, (jint)pointer->width,
 	                             (jint)pointer->height, (jint)pointer->xPos, (jint)pointer->yPos);
+	if ((*env)->ExceptionCheck(env))
+	{
+		WLog_ERR(TAG, "Java callback OnPointerSet threw; recording JNI diagnostic");
+		(*env)->ExceptionDescribe(env);
+		(*env)->ExceptionClear(env);
+		jstring error = (*env)->NewStringUTF(env, "Native callback OnPointerSet threw; details in logcat");
+		if (error)
+		{
+			freerdp_callback("OnNativeCallbackException", "(Ljava/lang/String;)V", error);
+			(*env)->DeleteLocalRef(env, error);
+		}
+	}
 	(*env)->DeleteLocalRef(env, pixels);
 done:
 	if (attached)
@@ -1288,6 +1300,15 @@ jint JNI_OnLoad(JavaVM* vm, void* reserved)
 	gJavaActivityClass = (*env)->NewGlobalRef(env, activityClass);
 	gOnPointerSetMethod =
 	    (*env)->GetStaticMethodID(env, gJavaActivityClass, "OnPointerSet", "(J[IIIII)V");
+	if (!gOnPointerSetMethod)
+	{
+		WLog_ERR(TAG, "JNI callback OnPointerSet not found; clearing lookup exception");
+		if ((*env)->ExceptionCheck(env))
+		{
+			(*env)->ExceptionDescribe(env);
+			(*env)->ExceptionClear(env);
+		}
+	}
 	gOnRailWindowUpdateMethod =
 	    (*env)->GetStaticMethodID(env, gJavaActivityClass, "OnRailWindowUpdate", "(JJII[I)V");
 	if (!gOnRailWindowUpdateMethod)

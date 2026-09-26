@@ -6,7 +6,6 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import android.content.res.Configuration
 import id.xydesk.remote.ui.theme.XyDeskTheme
-import id.xydesk.remote.MainActivity
 import id.xydesk.remote.cloud.CloudRdpActivity
 
 /**
@@ -37,9 +36,6 @@ class XyDeskHomeActivity : ComponentActivity() {
                 XyDeskHome(
                     onOpenCloudRdp = {
                         startActivity(Intent(this, CloudRdpActivity::class.java))
-                    },
-                    onOpenClassicForm = {
-                        startActivity(Intent(this, MainActivity::class.java))
                     },
                     onExit = { finish() },
                 )

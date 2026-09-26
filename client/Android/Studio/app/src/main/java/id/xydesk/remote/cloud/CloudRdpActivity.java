@@ -7,18 +7,12 @@ import android.os.Handler;
 import android.os.Looper;
 import android.util.Base64;
 import android.util.Log;
-import android.view.View;
-import android.widget.Button;
-import android.widget.EditText;
-import android.widget.ProgressBar;
-import android.widget.TextView;
 
-import androidx.appcompat.app.AlertDialog;
 import androidx.appcompat.app.AppCompatActivity;
 
-import com.freerdp.freerdpcore.presentation.SessionActivity;
+import id.xydesk.remote.core.ConnectionProfile;
+import id.xydesk.remote.ui.XyDeskSessionActivity;
 
-import id.xydesk.remote.R;
 
 import org.json.JSONObject;
 
@@ -79,15 +73,7 @@ public class CloudRdpActivity extends AppCompatActivity
 	private static final String ARTIFACT_CREDS = "rdp-credentials";
 	private static final String ARTIFACT_HOSTKEY = "host-pubkey";
 
-	private Button btnLogin;
-	private Button btnCreate;
-	private EditText nameInput;
-	private EditText userInput;
-	private EditText passInput;
-	private EditText tsKeyInput;
-	private TextView loginStatus;
-	private TextView statusView;
-	private ProgressBar progress;
+	private CloudRdpComposeView cloudUi;
 
 	private final Handler main = new Handler(Looper.getMainLooper());
 	private GitHubClient gh;
@@ -95,20 +81,21 @@ public class CloudRdpActivity extends AppCompatActivity
 	@Override protected void onCreate(Bundle savedInstanceState)
 	{
 		super.onCreate(savedInstanceState);
-		setContentView(R.layout.activity_cloud);
+		cloudUi = new CloudRdpComposeView(this);
+		cloudUi.setListener(new CloudRdpComposeView.Listener()
+		{
+			@Override public void onLoginRequested()
+			{
+				doLogin();
+			}
 
-		btnLogin = findViewById(R.id.btn_cloud_login);
-		btnCreate = findViewById(R.id.btn_cloud_create);
-		nameInput = findViewById(R.id.input_repo_name);
-		userInput = findViewById(R.id.input_rdp_user);
-		passInput = findViewById(R.id.input_rdp_pass);
-		tsKeyInput = findViewById(R.id.input_ts_key);
-		loginStatus = findViewById(R.id.txt_login_status);
-		statusView = findViewById(R.id.txt_cloud_status);
-		progress = findViewById(R.id.cloud_progress);
-
-		btnLogin.setOnClickListener(v -> doLogin());
-		btnCreate.setOnClickListener(v -> doCreate());
+			@Override public void onCreateRequested(String repo, String user, String password,
+			                                       String tailscaleKey)
+			{
+				doCreate(repo, user, password, tailscaleKey);
+			}
+		});
+		setContentView(cloudUi);
 	}
 
 	// ------------------------------------------------------------------
@@ -119,18 +106,7 @@ public class CloudRdpActivity extends AppCompatActivity
 	{
 		if (!GitHubDeviceAuth.isConfigured())
 		{
-			AlertDialog.Builder b = new AlertDialog.Builder(this);
-			b.setTitle("OAuth App belum di-set");
-			b.setMessage("Fitur Cloud RDP butuh 1 OAuth App GitHub (sekali saja, "
-			           + "dibuat developer):\n\n"
-			           + "1. GitHub → Settings → Developer settings → OAuth Apps → New OAuth App\n"
-			           + "2. Nama: XyDesk Remote, callback: https://localhost\n"
-			           + "3. AKTIFKAN 'Device Flow'\n"
-			           + "4. Salin Client ID ke GitHubDeviceAuth.CLIENT_ID\n\n"
-			           + "Lalu build ulang. (Client secret TIDAK perlu.) User cukup "
-			           + "login akun GitHub mereka masing-masing.");
-			b.setPositiveButton("Oke", null);
-			b.show();
+			status("Cloud RDP belum dikonfigurasi developer. Tambahkan GitHub OAuth Client ID dengan Device Flow, lalu build ulang.");
 			return;
 		}
 		setBusy(true, "Meminta device code...");
@@ -151,7 +127,7 @@ public class CloudRdpActivity extends AppCompatActivity
 				gh = new GitHubClient(token);
 				final String who = gh.login();
 				main.post(() -> {
-					loginStatus.setText("Terhubung: @" + who);
+					cloudUi.setLoginMessage("Terhubung: @" + who);
 					status("Login GitHub OK. Isi form, lalu Create & Setup.");
 					setBusy(false, null);
 				});
@@ -170,21 +146,20 @@ public class CloudRdpActivity extends AppCompatActivity
 	// 2) CREATE + SETUP + CONNECT
 	// ------------------------------------------------------------------
 
-	private void doCreate()
+	private void doCreate(String rawName, String rawUser, String rdpPass, String tsKey)
 	{
 		if (gh == null)
 		{
 			status("Login GitHub dulu ya.");
 			return;
 		}
-		final String name = nameInput.getText().toString().trim().toLowerCase()
-		                                   .replace(' ', '-');
+		final String name = rawName.trim().toLowerCase().replace(' ', '-');
 		if (name.isEmpty() || !name.matches("[a-z0-9][a-z0-9_-]{0,38}"))
 		{
 			status("Nama repo tidak valid (huruf kecil, angka, -, _; maks 39).");
 			return;
 		}
-		String u = userInput.getText().toString().trim();
+		String u = rawUser.trim();
 		if (u.isEmpty())
 		{
 			u = "xydesk";
@@ -203,7 +178,6 @@ public class CloudRdpActivity extends AppCompatActivity
 		}
 		final String rdpUser = u;
 
-		final String rdpPass = passInput.getText().toString();
 		if (!rdpPass.isEmpty())
 		{
 			if (!rdpPass.matches("[A-Za-z0-9!@#$%^&*._-]{12,64}"))
@@ -228,15 +202,15 @@ public class CloudRdpActivity extends AppCompatActivity
 			}
 		}
 
-		final String tsKey = tsKeyInput.getText().toString().trim();
-		if (!tsKey.isEmpty() && !tsKey.startsWith("tskey-"))
+		final String tailKey = tsKey.trim();
+		if (!tailKey.isEmpty() && !tailKey.startsWith("tskey-"))
 		{
 			status("Key Tailscale biasanya diawali 'tskey-' (cek tailscale.com/admin/keys).");
 			return;
 		}
 
 		setBusy(true, "Menyiapkan...");
-		new Thread(() -> runPipeline(name, rdpUser, rdpPass, tsKey)).start();
+		new Thread(() -> runPipeline(name, rdpUser, rdpPass, tailKey)).start();
 	}
 
 	private void runPipeline(String repoName, String rdpUser, String rdpPass, String tsKey)
@@ -332,8 +306,8 @@ public class CloudRdpActivity extends AppCompatActivity
 
 			main.post(() -> {
 				status("SIAP — connect otomatis ke " + host);
-				Intent i = new Intent(this, SessionActivity.class);
-				i.setData(buildRdpUri(host, port, user, pass));
+				ConnectionProfile profile = new ConnectionProfile(host, port, user, pass, null, null);
+				Intent i = XyDeskSessionActivity.Companion.connectIntent(profile);
 				startActivity(i);
 				setBusy(false, null);
 			});
@@ -448,26 +422,6 @@ public class CloudRdpActivity extends AppCompatActivity
 	// helpers
 	// ------------------------------------------------------------------
 
-	private Uri buildRdpUri(String host, int port, String user, String pass)
-	{
-		Uri.Builder b = new Uri.Builder().scheme("rdp");
-		String authority = host;
-		if (port != 3389)
-		{
-			authority = host + ":" + port;
-		}
-		if (user != null && !user.isEmpty())
-		{
-			authority = user + "@" + authority;
-		}
-		b.encodedAuthority(authority);
-		if (pass != null && !pass.isEmpty())
-		{
-			b.appendQueryParameter("p", pass);
-		}
-		return b.build();
-	}
-
 	private boolean reachable(String host, int port)
 	{
 		try (Socket s = new Socket())
@@ -521,17 +475,17 @@ public class CloudRdpActivity extends AppCompatActivity
 
 	private void status(String s)
 	{
-		statusView.setText(s);
+		main.post(() -> {
+			if (cloudUi != null)
+				cloudUi.setStatusMessage(s);
+		});
 	}
 
 	private void setBusy(boolean busy, String label)
 	{
-		progress.setVisibility(busy ? View.VISIBLE : View.GONE);
-		btnLogin.setEnabled(!busy);
-		btnCreate.setEnabled(!busy);
+		if (cloudUi != null)
+			cloudUi.setBusy(busy);
 		if (label != null)
-		{
 			status(label);
-		}
 	}
 }
