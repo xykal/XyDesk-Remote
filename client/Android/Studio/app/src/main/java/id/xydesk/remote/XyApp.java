@@ -14,6 +14,6 @@ public class XyApp extends com.freerdp.freerdpcore.application.GlobalApp
 	@Override public void onCreate()
 	{
 		super.onCreate();
-		id.xydesk.remote.security.CrashLog.install(this);
+		id.xydesk.remote.security.CrashLog.INSTANCE.install(this);
 	}
 }
