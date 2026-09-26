@@ -311,7 +311,6 @@ fun XyDeskHome(
                                     Spacer(Modifier.width(8.dp))
                                     Text("PC Cloud")
                                 }
-                                TextButton(onClick = onOpenClassicForm) { Text("Koneksi klasik") }
                             }
                         }
                     }
