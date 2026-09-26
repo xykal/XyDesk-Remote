@@ -183,7 +183,10 @@ public class LibFreeRDP
 
 	public static long newInstance(Context context)
 	{
-		return freerdp_new(context);
+		long instance = freerdp_new(context);
+		if (instance == 0L)
+			throw new IllegalStateException("FreeRDP gagal membuat session native.");
+		return instance;
 	}
 
 	public static void freeInstance(long inst)
@@ -211,14 +214,42 @@ public class LibFreeRDP
 
 	public static boolean connect(long inst)
 	{
+		// Mark as active before starting the native worker. freeInstance() must
+		// wait for its terminal callback even while the handshake is in progress;
+		// otherwise it can free rdpContext while android_thread_func uses it.
 		synchronized (mInstanceState)
 		{
 			if (mInstanceState.get(inst, false))
 			{
 				throw new RuntimeException("instance already connected");
 			}
+			mInstanceState.put(inst, true);
 		}
-		return freerdp_connect(inst);
+
+		boolean started;
+		try
+		{
+			started = freerdp_connect(inst);
+		}
+		catch (RuntimeException | Error e)
+		{
+			synchronized (mInstanceState)
+			{
+				mInstanceState.remove(inst);
+				mInstanceState.notifyAll();
+			}
+			throw e;
+		}
+
+		if (!started)
+		{
+			synchronized (mInstanceState)
+			{
+				mInstanceState.remove(inst);
+				mInstanceState.notifyAll();
+			}
+		}
+		return started;
 	}
 
 	public static boolean disconnect(long inst)

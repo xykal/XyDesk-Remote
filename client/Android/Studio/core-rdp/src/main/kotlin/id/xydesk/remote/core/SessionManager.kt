@@ -70,6 +70,8 @@ class SessionManager(context: Context) {
     private val appContext = context.applicationContext
     private val worker: ExecutorService =
         Executors.newSingleThreadExecutor { r -> Thread(r, "xydesk-rdp") }
+    /** Serializes native connect-start against release/free of the same instance. */
+    private val lifecycleLock = Any()
 
     private val _state = MutableStateFlow<SessionState>(SessionState.Idle)
     val state: StateFlow<SessionState> = _state.asStateFlow()
@@ -136,27 +138,32 @@ class SessionManager(context: Context) {
      * RDP off / Windows Home / firewall / host salah).
      */
     fun connect(profile: ConnectionProfile) {
-        if (released) return
-        val cur = _state.value
-        if (cur is SessionState.Connected || cur is SessionState.Connecting ||
-            cur is SessionState.Authenticating
-        ) {
-            Log.w(TAG, "connect() diabaikan, state=$cur")
-            return
+        val session = synchronized(lifecycleLock) {
+            if (released) return
+            val cur = _state.value
+            if (cur is SessionState.Connected || cur is SessionState.Connecting ||
+                cur is SessionState.Authenticating
+            ) {
+                Log.w(TAG, "connect() diabaikan, state=$cur")
+                return
+            }
+            val uri = RdpUri.build(profile)
+            // Never log the RDP URI: its query may contain the plaintext password.
+            ConnectionLog.add("CM: native createSession mulai (${profile.host}:${profile.port})")
+            val created = GlobalApp.createSession(uri, appContext)
+            val inst = created.getInstance()
+            ConnectionLog.add("CM: createSession ok inst=$inst")
+            created.setUIEventListener(uiListenerFor(inst))
+            GlobalApp.registerSessionListener(inst, coreListenerFor(inst))
+            core = created
+            lastProfile = profile
+            transition(SessionState.Connecting)
+            setStage(Stage.PROBE)
+            startWatchdog(inst)
+            logConnectStart(profile)
+            created
         }
-        val uri = RdpUri.build(profile)
-        ConnectionLog.add("CM: native createSession mulai (uri=$uri)")
-        val session = GlobalApp.createSession(uri, appContext)
         val inst = session.getInstance()
-        ConnectionLog.add("CM: createSession ok inst=$inst")
-        session.setUIEventListener(uiListenerFor(inst))
-        GlobalApp.registerSessionListener(inst, coreListenerFor(inst))
-        core = session
-        lastProfile = profile
-        transition(SessionState.Connecting)
-        setStage(Stage.PROBE)
-        startWatchdog(inst)
-        logConnectStart(profile)
         worker.execute {
             val reachable = tcpReachable(profile.host, profile.port, TCP_PROBE_TIMEOUT_MS)
             if (!isCurrent(inst)) return@execute
@@ -175,11 +182,14 @@ class SessionManager(context: Context) {
                 )
                 return@execute
             }
-            if (isCurrent(inst)) setStage(Stage.HANDSHAKE)
             try {
-                ConnectionLog.add("CM: worker: session.connect mulai (native parse args + spawn connect thread)")
-                session.connect(appContext) // blocking — thread worker
-                ConnectionLog.add("CM: worker: session.connect kembali — connect thread jalan")
+                synchronized(lifecycleLock) {
+                    if (!isCurrent(inst) || released) return@execute
+                    setStage(Stage.HANDSHAKE)
+                    ConnectionLog.add("CM: worker: session.connect mulai (native parse args + spawn connect thread)")
+                    session.connect(appContext) // native worker starts before lock is released
+                    ConnectionLog.add("CM: worker: session.connect kembali — connect thread jalan")
+                }
             } catch (t: Throwable) {
                 ConnectionLog.add("CM: worker: session.connect EXCEPTION: ${t.javaClass.name}: ${t.message}")
                 Log.w(TAG, "connect() exception", t)
@@ -222,23 +232,27 @@ class SessionManager(context: Context) {
      * Sesudah ini [SessionManager] tidak bisa dipakai lagi.
      */
     fun release() {
-        if (released) return
-        released = true
-        stopWatchdog()
-        val inst = core?.getInstance()
-        core = null
-        sink = null
-        listener = null
-        if (inst != null && inst != 0L) {
-            GlobalApp.unregisterSessionListener(inst)
-            try {
-                LibFreeRDP.disconnect(inst)
-            } catch (t: Throwable) {
-                Log.w(TAG, "disconnect on release gagal", t)
+        synchronized(lifecycleLock) {
+            if (released) return
+            released = true
+            stopWatchdog()
+            val inst = core?.getInstance()
+            core = null
+            sink = null
+            listener = null
+            if (inst != null && inst != 0L) {
+                GlobalApp.unregisterSessionListener(inst)
+                try {
+                    LibFreeRDP.disconnect(inst)
+                } catch (t: Throwable) {
+                    Log.w(TAG, "disconnect on release gagal", t)
+                }
+                // Free only after any in-flight session.connect() call has
+                // crossed the same lock and registered the native worker.
+                GlobalApp.freeSession(inst)
             }
-            GlobalApp.freeSession(inst)
+            worker.shutdownNow()
         }
-        worker.shutdown()
         if (_state.value is SessionState.Connected || _state.value is SessionState.Connecting ||
             _state.value is SessionState.Authenticating || _state.value is SessionState.Disconnecting
         ) {

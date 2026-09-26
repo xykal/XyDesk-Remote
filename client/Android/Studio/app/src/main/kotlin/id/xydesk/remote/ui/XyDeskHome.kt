@@ -397,9 +397,30 @@ fun XyDeskHome(
             text = {
                 ConnectFormFields(
                     onSaved = { profile, rememberPassword ->
-                        showForm = false
-                        scope.launch { repo.save(profile, rememberPassword) }
-                        connectTo(profile)
+                        // Persist before launching the session. Previously save() ran
+                        // concurrently with navigation; a Keystore/Room failure could
+                        // escape the composition coroutine and terminate the app.
+                        scope.launch {
+                            showForm = false
+                            val saved = runCatching {
+                                repo.save(profile, rememberPassword)
+                            }
+                            if (saved.isFailure) {
+                                Toast.makeText(
+                                    context,
+                                    "Profil tidak tersimpan: ${saved.exceptionOrNull()?.message ?: "kesalahan penyimpanan"}",
+                                    Toast.LENGTH_LONG,
+                                ).show()
+                            }
+                            runCatching { connectTo(profile) }
+                                .onFailure { error ->
+                                    Toast.makeText(
+                                        context,
+                                        "Gagal membuka sesi: ${error.message ?: error.javaClass.simpleName}",
+                                        Toast.LENGTH_LONG,
+                                    ).show()
+                                }
+                        }
                     },
                 )
             },

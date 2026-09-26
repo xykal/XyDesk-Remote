@@ -878,7 +878,7 @@ Java_com_freerdp_freerdpcore_services_LibFreeRDP_freerdp_1parse_1arguments(JNIEn
 	freerdp* inst = (freerdp*)instance;
 	int count;
 	char** argv;
-	DWORD status;
+	DWORD status = ERROR_BAD_ARGUMENTS;
 
 	if (!inst || !inst->context)
 		return JNI_FALSE;
@@ -887,19 +887,32 @@ Java_com_freerdp_freerdpcore_services_LibFreeRDP_freerdp_1parse_1arguments(JNIEn
 	argv = calloc(count, sizeof(char*));
 
 	if (!argv)
-		return JNI_TRUE;
+		return JNI_FALSE;
 
 	for (int i = 0; i < count; i++)
 	{
 		jstring str = (jstring)(*env)->GetObjectArrayElement(env, arguments, i);
-		const char* raw = (*env)->GetStringUTFChars(env, str, 0);
+		if (!str)
+			goto cleanup;
+
+		const char* raw = (*env)->GetStringUTFChars(env, str, nullptr);
+		if (!raw)
+		{
+			(*env)->DeleteLocalRef(env, str);
+			goto cleanup;
+		}
+
 		argv[i] = _strdup(raw);
 		(*env)->ReleaseStringUTFChars(env, str, raw);
+		(*env)->DeleteLocalRef(env, str);
+		if (!argv[i])
+			goto cleanup;
 	}
 
 	status =
 	    freerdp_client_settings_parse_command_line(inst->context->settings, count, argv, FALSE);
 
+cleanup:
 	for (int i = 0; i < count; i++)
 		free(argv[i]);
 

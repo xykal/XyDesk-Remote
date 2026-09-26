@@ -114,7 +114,8 @@ public class MainActivity extends AppCompatActivity
 		}
 
 		Uri uri = builder.build();
-		Log.i(TAG, "connect -> " + uri);
+		// URI may contain the plaintext password in its query parameters.
+		Log.i(TAG, "connect -> " + host + ":" + port);
 
 		Intent intent = new Intent(this, SessionActivity.class);
 		intent.setData(uri);

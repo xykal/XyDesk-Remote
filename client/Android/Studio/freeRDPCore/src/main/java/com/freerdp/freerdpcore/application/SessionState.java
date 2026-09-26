@@ -68,15 +68,21 @@ public class SessionState implements Parcelable
 
 	public void connect(Context context)
 	{
+		boolean parsed;
 		if (bookmark != null)
 		{
-			LibFreeRDP.setConnectionInfo(context, instance, bookmark);
+			parsed = LibFreeRDP.setConnectionInfo(context, instance, bookmark);
 		}
 		else
 		{
-			LibFreeRDP.setConnectionInfo(context, instance, openUri);
+			parsed = LibFreeRDP.setConnectionInfo(context, instance, openUri);
 		}
-		LibFreeRDP.connect(instance);
+
+		if (!parsed)
+			throw new IllegalArgumentException("FreeRDP menolak argumen koneksi; periksa host, port, dan opsi.");
+
+		if (!LibFreeRDP.connect(instance))
+			throw new IllegalStateException("Thread koneksi FreeRDP gagal dimulai.");
 	}
 
 	public long getInstance()
