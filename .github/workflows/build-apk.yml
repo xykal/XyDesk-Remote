@@ -52,6 +52,7 @@ jobs:
         run: |
           set -eux
           PASS=$(openssl rand -hex 16)
+          echo "::add-mask::$PASS"
           keytool -genkeypair -v \
             -keystore release.jks -storetype JKS \
             -alias xydesk-remote -keyalg RSA -keysize 4096 -validity 36500 \
@@ -62,6 +63,7 @@ jobs:
             echo "RELEASE_KEY_PASSWORD=$PASS"
             echo "RELEASE_STORE_PASSWORD=$PASS"
           } > keystore-creds.env
+          set +x
           keytool -list -keystore release.jks -storepass "$PASS"
       - uses: actions/upload-artifact@v4
         with:

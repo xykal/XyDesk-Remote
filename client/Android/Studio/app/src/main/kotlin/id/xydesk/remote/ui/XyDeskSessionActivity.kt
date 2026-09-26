@@ -7,17 +7,20 @@ import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
 import android.util.Log
+import android.widget.Toast
+import id.xydesk.remote.security.CrashLog
 import android.view.WindowManager
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.OnBackPressedCallback
-import androidx.compose.material3.MaterialTheme
+import android.content.res.Configuration
 import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.WindowInsetsControllerCompat
 import id.xydesk.remote.core.ConnectionProfile
 import id.xydesk.remote.core.SessionManager
 import id.xydesk.remote.core.SessionState
+import id.xydesk.remote.ui.theme.XyDeskTheme
 
 /**
  * M2 — activity sesi XyDesk (Compose): surface RDP + HUD.
@@ -44,6 +47,7 @@ class XyDeskSessionActivity : ComponentActivity() {
      * ditangani (dialog ditutup, panel disembunyikan, konfirmasi, dll).
      */
     var backHandler: (() -> Boolean)? = null
+    var appPrefs: AppPrefs? = null
 
     private val bgHandler = Handler(Looper.getMainLooper())
     private val bgDisconnect = Runnable {
@@ -57,10 +61,18 @@ class XyDeskSessionActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
-        manager = SessionManager(applicationContext)
-        controller = SessionSurfaceController(this)
-        // sink WAJIB sebelum connect — event grafik pertama tidak boleh hilang
-        manager.setGraphicsSink(controller)
+        try {
+            manager = SessionManager(applicationContext)
+            controller = SessionSurfaceController(this)
+            // sink WAJIB sebelum connect — event grafik pertama tidak boleh hilang
+            manager.setGraphicsSink(controller)
+        } catch (t: Throwable) {
+            Log.e(TAG, "gagal inisialisasi sesi", t)
+            CrashLog.note(this, "inisialisasi sesi gagal: ${t.javaClass.name}: ${t.message}")
+            Toast.makeText(this, "Gagal menyiapkan sesi: ${t.message}", Toast.LENGTH_LONG).show()
+            finish()
+            return
+        }
 
         val profile = profileFromIntent(getIntent())
         if (profile == null) {
@@ -87,8 +99,17 @@ class XyDeskSessionActivity : ComponentActivity() {
         clipListener = listener
         cm.addPrimaryClipChangedListener(listener)
 
+        val prefs = AppPrefs(this)
+        this.appPrefs = prefs
         setContent {
-            MaterialTheme {
+            val systemDark = (getResources().configuration.uiMode and
+                Configuration.UI_MODE_NIGHT_MASK) == Configuration.UI_MODE_NIGHT_YES
+            val dark = when (prefs.themeMode) {
+                1 -> true
+                2 -> false
+                else -> systemDark
+            }
+            XyDeskTheme(dark = dark) {
                 XyDeskSessionScreen(
                     profile = profile,
                     manager = manager,
@@ -108,7 +129,12 @@ class XyDeskSessionActivity : ComponentActivity() {
             }
         )
 
-        manager.connect(profile)
+        try {
+            manager.connect(profile)
+        } catch (t: Throwable) {
+            Log.e(TAG, "connect() gagal", t)
+            CrashLog.note(this, "connect() gagal: ${t.javaClass.name}: ${t.message}")
+        }
     }
 
     override fun onStart() {
@@ -119,7 +145,9 @@ class XyDeskSessionActivity : ComponentActivity() {
 
     override fun onStop() {
         super.onStop()
-        if (manager.state.value is SessionState.Connected) {
+        if (manager.state.value is SessionState.Connected &&
+            appPrefs?.autoDisconnect != false
+        ) {
             bgHandler.postDelayed(bgDisconnect, BACKGROUND_DISCONNECT_DELAY_MS)
         }
     }

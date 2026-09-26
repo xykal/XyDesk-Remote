@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- XyDesk mark: tile violet + X dua-ton + titik aksen -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="48dp" android:height="48dp"
+    android:viewportWidth="108" android:viewportHeight="108">
+    <path
+        android:pathData="M26,8 h56 a18,18 0 0 1 18,18 v56 a18,18 0 0 1 -18,18 h-56 a18,18 0 0 1 -18,-18 v-56 a18,18 0 0 1 18,-18 z"
+        android:fillColor="#7C3AED"/>
+    <path
+        android:pathData="M36,30 L46,30 L78,62 L78,78 L68,78 L36,46 z"
+        android:fillColor="#FFFFFF"/>
+    <path
+        android:pathData="M72,30 L62,30 L30,62 L30,78 L40,78 L72,46 z"
+        android:fillColor="#E9D5FF"/>
+    <path
+        android:pathData="M54,47 a7,7 0 1 0 0.01,0 z"
+        android:fillColor="#F0ABFC"/>
+</vector>

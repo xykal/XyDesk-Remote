@@ -2,8 +2,15 @@
 
 package id.xydesk.remote.ui
 
-import android.content.Context
+import android.app.Activity
 import android.content.Intent
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.ui.draw.clip
+import androidx.compose.foundation.background
+import androidx.compose.ui.text.font.FontFamily
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -20,23 +27,33 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
-import androidx.compose.material.icons.filled.Send
 import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.Info
+import androidx.compose.material.icons.filled.List
+import androidx.compose.material.icons.filled.Lock
+import androidx.compose.material.icons.filled.Menu
+import androidx.compose.material.icons.filled.Send
+import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.Checkbox
+import androidx.compose.material3.DrawerValue
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.ModalDrawerSheet
+import androidx.compose.material3.ModalNavigationDrawer
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
-import androidx.compose.material3.TopAppBar
+import androidx.compose.material3.CenterAlignedTopAppBar
+import androidx.compose.material3.rememberDrawerState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -44,14 +61,26 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
+import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
+import id.xydesk.remote.R
 import id.xydesk.remote.core.ConnectionProfile
 import id.xydesk.remote.sessions.SessionsRepository
+import id.xydesk.remote.security.CrashLog
+import id.xydesk.remote.ui.components.XyCard
+import id.xydesk.remote.ui.components.XySectionTitle
+import id.xydesk.remote.ui.components.XyWordmark
+import id.xydesk.remote.ui.components.XyMenuItem
 import kotlinx.coroutines.launch
 
 /**
@@ -60,6 +89,12 @@ import kotlinx.coroutines.launch
  * Data: [SessionsRepository] (Room + CredentialVault). Connect = layar
  * sesi XyDesk M2 (Compose + HUD); core SessionActivity M0 tetap
  * tersedia lewat "Form klasik".
+ */
+private enum class XySection { KONEKSI, CLOUD, PENGATURAN, KEAMANAN, TENTANG }
+
+/**
+ * M3-UI — shell XyDesk: drawer brand + seksi (Koneksi, Cloud,
+ * Pengaturan, Keamanan, Tentang). Desain system XyDesk (violet).
  */
 @Composable
 fun XyDeskHome(
@@ -71,7 +106,14 @@ fun XyDeskHome(
     val favoritesFlow = remember { repo.favorites() }
     val favorites by favoritesFlow.collectAsState(initial = emptyList())
     val scope = rememberCoroutineScope()
+    val prefs = remember { AppPrefs(context) }
+    val drawerState = rememberDrawerState(DrawerValue.Closed)
+    var section by remember { mutableStateOf(XySection.KONEKSI) }
     var showForm by remember { mutableStateOf(false) }
+    var crashLog by remember { mutableStateOf(CrashLog.last(context.applicationContext)) }
+    var showCrashDialog by remember { mutableStateOf(false) }
+    var themeMode by remember { mutableStateOf(prefs.themeMode) }
+    var autoDisc by remember { mutableStateOf(prefs.autoDisconnect) }
 
     fun connectTo(profile: ConnectionProfile) {
         scope.launch { repo.touch(profile) }
@@ -79,17 +121,97 @@ fun XyDeskHome(
         context.startActivity(XyDeskSessionActivity.connectIntent(profile))
     }
 
-    Scaffold(
-        topBar = {
-            TopAppBar(title = { Text("XyDesk Remote") })
-        },
-        floatingActionButton = {
-            FloatingActionButton(onClick = { showForm = true }) {
-                Icon(Icons.Default.Add, contentDescription = "Koneksi baru")
+    ModalNavigationDrawer(
+        drawerState = drawerState,
+        gesturesEnabled = drawerState.isOpen,
+        drawerContent = {
+            ModalDrawerSheet(modifier = Modifier.fillMaxHeight()) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 20.dp, vertical = 16.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(12.dp),
+                ) {
+                    Image(
+                        painter = painterResource(R.drawable.xy_logo_img),
+                        contentDescription = "XyDesk",
+                        modifier = Modifier.size(44.dp),
+                    )
+                    Column {
+                        XyWordmark(fontSize = 22.sp)
+                        Text(
+                            "XyVerse • Remote Desktop",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                }
+                HorizontalDivider(modifier = Modifier.padding(horizontal = 12.dp))
+                Spacer(Modifier.height(8.dp))
+                XyMenuItem(Icons.Default.List, "Koneksi", section == XySection.KONEKSI) {
+                    section = XySection.KONEKSI
+                    scope.launch { drawerState.close() }
+                }
+                XyMenuItem(Icons.Default.Send, "Cloud RDP", section == XySection.CLOUD) {
+                    section = XySection.CLOUD
+                    scope.launch { drawerState.close() }
+                }
+                XyMenuItem(Icons.Default.Settings, "Pengaturan", section == XySection.PENGATURAN) {
+                    section = XySection.PENGATURAN
+                    scope.launch { drawerState.close() }
+                }
+                XyMenuItem(Icons.Default.Lock, "Keamanan", section == XySection.KEAMANAN) {
+                    section = XySection.KEAMANAN
+                    scope.launch { drawerState.close() }
+                }
+                XyMenuItem(Icons.Default.Info, "Tentang", section == XySection.TENTANG) {
+                    section = XySection.TENTANG
+                    scope.launch { drawerState.close() }
+                }
+                Spacer(Modifier.weight(1f))
+                Text(
+                    "XyDesk Remote • v${runCatching {
+                            context.packageManager
+                                .getPackageInfo(context.packageName, 0).versionName
+                        }.getOrDefault("?")}",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(20.dp),
+                )
             }
         },
-    ) { padding ->
-        if (favorites.isEmpty()) {
+    ) {
+        when (section) {
+            XySection.KONEKSI -> {
+                Scaffold(
+                    topBar = {
+                        XyTopBar(onMenu = { scope.launch { drawerState.open() } }, title = "Koneksi")
+                    },
+                    floatingActionButton = {
+                        FloatingActionButton(onClick = { showForm = true }) {
+                            Icon(Icons.Default.Add, contentDescription = "Koneksi baru")
+                        }
+                    },
+                ) { padding ->
+                    crashLog?.let { log ->
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(horizontal = 12.dp, vertical = 6.dp)
+                                .clip(MaterialTheme.shapes.medium)
+                                .background(MaterialTheme.colorScheme.errorContainer)
+                                .clickable { showCrashDialog = true }
+                                .padding(12.dp),
+                        ) {
+                            Text(
+                                "Terjadi error sebelumnya — ketuk untuk lihat log",
+                                style = MaterialTheme.typography.labelMedium,
+                                color = MaterialTheme.colorScheme.onErrorContainer,
+                            )
+                        }
+                    }
+                    if (favorites.isEmpty()) {
             Box(
                 modifier = Modifier.fillMaxSize().padding(padding),
                 contentAlignment = Alignment.Center,
@@ -133,8 +255,55 @@ fun XyDeskHome(
                 }
             }
         }
+        }
+            }
+
+            XySection.CLOUD -> XyCloudSection(onOpenCloudRdp, onOpenClassicForm)
+
+            XySection.PENGATURAN -> XySettingsScreen(
+                themeMode = themeMode,
+                onThemeMode = { v ->
+                    themeMode = v
+                    prefs.themeMode = v
+                    (context as? Activity)?.recreate()
+                },
+                autoDisconnect = autoDisc,
+                onAutoDisconnect = { v ->
+                    autoDisc = v
+                    prefs.autoDisconnect = v
+                },
+            )
+
+            XySection.KEAMANAN -> XySecurityScreen({})
+
+            XySection.TENTANG -> XyAboutScreen()
+        }
     }
 
+    if (showCrashDialog) {
+        AlertDialog(
+            onDismissRequest = { showCrashDialog = false },
+            title = { Text("Log error terakhir") },
+            text = {
+                Column(Modifier.verticalScroll(rememberScrollState())) {
+                    crashLog.orEmpty().lineSequence().forEach { ln ->
+                        Text(ln, style = MaterialTheme.typography.bodySmall,
+                            fontFamily = FontFamily.Monospace)
+                    }
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    CrashLog.clear(context.applicationContext)
+                    crashLog = null
+                    showCrashDialog = false
+                }) { Text("Hapus log") }
+            },
+            dismissButton = {
+                TextButton(onClick = { showCrashDialog = false }) { Text("Tutup") }
+            },
+        )
+    }
     if (showForm) {
         AlertDialog(
             onDismissRequest = { showForm = false },
@@ -304,6 +473,65 @@ private fun ConnectFormFields(
                     onSaved(profile, rememberPass)
                 },
             ) { Text("Simpan & Connect") }
+        }
+    }
+}
+
+/** Top bar brand XyDesk (bukan bawaan Material). */
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun XyTopBar(onMenu: () -> Unit, title: String) {
+    CenterAlignedTopAppBar(
+        title = {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                Image(
+                    painter = painterResource(R.drawable.xy_logo_img),
+                    contentDescription = null,
+                    modifier = Modifier.size(22.dp),
+                )
+                Text(title, style = MaterialTheme.typography.titleLarge)
+            }
+        },
+        navigationIcon = {
+            IconButton(onClick = onMenu) {
+                Icon(Icons.Default.Menu, contentDescription = "Menu")
+            }
+        },
+    )
+}
+
+/** Seksi Cloud RDP: kartu pintu ke Cloud RDP + form klasik. */
+@Composable
+private fun XyCloudSection(
+    onOpenCloudRdp: () -> Unit,
+    onOpenClassicForm: () -> Unit,
+) {
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .padding(20.dp),
+    ) {
+        XySectionTitle("Mesin cloud (GitHub)")
+        XyCard {
+            Text(
+                "Buat dan jalankan Windows dari repo GitHub Anda, lalu " +
+                    "langsung connect lewat XyDesk.",
+                style = MaterialTheme.typography.bodyMedium,
+            )
+            Spacer(Modifier.height(12.dp))
+            Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                OutlinedButton(onClick = onOpenCloudRdp) {
+                    Icon(Icons.Default.Send, contentDescription = null)
+                    Spacer(Modifier.width(8.dp))
+                    Text("Cloud RDP (GitHub)")
+                }
+                TextButton(onClick = onOpenClassicForm) {
+                    Text("Form klasik (M0)")
+                }
+            }
         }
     }
 }

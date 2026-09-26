@@ -18,6 +18,7 @@ import java.util.concurrent.ExecutorService
 import java.util.concurrent.Executors
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicInteger
+import java.util.concurrent.CopyOnWriteArrayList
 
 /**
  * M1 — SessionManager: satu pintu untuk seluruh lifecycle sesi RDP XyDesk.
@@ -72,6 +73,12 @@ class SessionManager(context: Context) {
 
     private val _state = MutableStateFlow<SessionState>(SessionState.Idle)
     val state: StateFlow<SessionState> = _state.asStateFlow()
+
+    /** Tahap koneksi (di-update dari worker + event listener; baca di UI). */
+    private val _stage = MutableStateFlow(Stage.IDLE)
+    val stage: StateFlow<Stage> = _stage.asStateFlow()
+
+    private var watchdogToken = 0
 
     @Volatile private var core: CoreSession? = null
     @Volatile private var listener: Listener? = null
@@ -145,9 +152,16 @@ class SessionManager(context: Context) {
         core = session
         lastProfile = profile
         transition(SessionState.Connecting)
+        setStage(Stage.PROBE)
+        startWatchdog(inst)
+        logConnectStart(profile)
         worker.execute {
             val reachable = tcpReachable(profile.host, profile.port, TCP_PROBE_TIMEOUT_MS)
             if (!isCurrent(inst)) return@execute
+            ConnectionLog.add(
+                if (reachable) "TCP ${profile.host}:${profile.port} OK"
+                else "TCP ${profile.host}:${profile.port} GAGAL"
+            )
             if (!reachable) {
                 transition(
                     SessionState.Error(
@@ -159,6 +173,7 @@ class SessionManager(context: Context) {
                 )
                 return@execute
             }
+            if (isCurrent(inst)) setStage(Stage.HANDSHAKE)
             try {
                 session.connect(appContext) // blocking — thread worker
             } catch (t: Throwable) {
@@ -172,6 +187,7 @@ class SessionManager(context: Context) {
 
     /** Batalkan koneksi yang sedang berjalan (tanpa menunggu timeout server). */
     fun cancelConnection() {
+        stopWatchdog()
         val inst = core?.getInstance() ?: return
         if (!LibFreeRDP.cancelConnection(inst)) {
             Log.w(TAG, "cancelConnection() gagal (state mungkin sudah terminal)")
@@ -187,6 +203,7 @@ class SessionManager(context: Context) {
 
     /** Ajaikan disconnect normal (dari sisi kita). */
     fun disconnect() {
+        stopWatchdog()
         val inst = core?.getInstance() ?: return
         transition(SessionState.Disconnecting)
         if (!LibFreeRDP.disconnect(inst)) {
@@ -202,6 +219,7 @@ class SessionManager(context: Context) {
     fun release() {
         if (released) return
         released = true
+        stopWatchdog()
         val inst = core?.getInstance()
         core = null
         sink = null
@@ -260,11 +278,47 @@ class SessionManager(context: Context) {
     // Internal
     // ------------------------------------------------------------------
 
+    private fun setStage(st: Stage) {
+        if (_stage.value != st) {
+            _stage.value = st
+            ConnectionLog.add("stage -> $st")
+        }
+    }
+
+    private fun startWatchdog(inst: Long) {
+        val token = ++watchdogToken
+        mainHandler.postDelayed({
+            if (token != watchdogToken) return@postDelayed
+            val s = _state.value
+            if (isCurrent(inst) && (s is SessionState.Connecting || s is SessionState.Authenticating)) {
+                stopWatchdog()
+                ConnectionLog.add("WATCHDOG: koneksi menggantung >${CONNECT_WATCHDOG_MS}ms")
+                transition(
+                    SessionState.Error(
+                        "connect_timeout",
+                        "Koneksi menggantung lebih dari ${CONNECT_WATCHDOG_MS / 1000} detik. " +
+                            "Kemungkinan: firewall memblokir setelah TCP, server lambat, atau " +
+                            "NLA/TLS tidak selesai. Tekan Detail untuk log.",
+                    )
+                )
+            }
+        }, CONNECT_WATCHDOG_MS)
+    }
+
+    private fun stopWatchdog() {
+        watchdogToken++
+    }
+
+    private fun logConnectStart(p: ConnectionProfile) {
+        ConnectionLog.add("connect mulai -> ${p.host}:${p.port} user=${p.username ?: "(kosong)"}")
+    }
+
     private fun transition(s: SessionState) {
         val prev = _state.value
         _state.value = s
         if (prev != s) {
             Log.v(TAG, "state: $prev -> $s")
+            ConnectionLog.add("state: $prev -> $s${(s as? SessionState.Error)?.let { " [${it.code}] ${it.message}" } ?: ""}")
             listener?.onStateChanged(s)
         }
     }
@@ -285,11 +339,17 @@ class SessionManager(context: Context) {
         object : GlobalApp.SessionEventListener {
             // Callback sudah di-dispatch ke main thread oleh GlobalApp
             override fun onConnectionSuccess() {
-                if (isCurrent(inst)) transition(SessionState.Connected)
+                if (!isCurrent(inst)) return
+                stopWatchdog()
+                setStage(Stage.READY)
+                ConnectionLog.add("koneksi SUKSES")
+                transition(SessionState.Connected)
             }
 
             override fun onConnectionFailure() {
                 if (!isCurrent(inst)) return
+                stopWatchdog()
+                ConnectionLog.add("koneksi GAGAL (event native)")
                 val p = lastProfile
                 val msg = if (p != null) {
                     "Gagal koneksi ke ${p.host}:${p.port} — cek kredensial, " +
@@ -302,6 +362,9 @@ class SessionManager(context: Context) {
 
             override fun onDisconnected() {
                 if (!isCurrent(inst)) return
+                stopWatchdog()
+                setStage(Stage.IDLE)
+                ConnectionLog.add("disconnect (event native)")
                 transition(SessionState.Disconnected)
             }
         }
@@ -329,6 +392,8 @@ class SessionManager(context: Context) {
                     return false
                 }
                 if (!isCurrent(inst)) return false
+                setStage(Stage.AUTH)
+                ConnectionLog.add("prompt NLA/credential (${username.toString()})")
                 transition(SessionState.Authenticating)
                 val latch = CountDownLatch(1)
                 var ok = false
@@ -445,6 +510,7 @@ class SessionManager(context: Context) {
 
     /** Prompt sertifikat — blocking (thread RDP), safe default = DENY. */
     private fun certificatePrompt(info: CertificateInfo): Int {
+        ConnectionLog.add("prompt sertifikat ${info.host}:${info.port} fp=${info.fingerprint.take(32)}… flags=${info.flags}")
         val l = listener
         if (l == null) {
             Log.w(TAG, "cert prompt untuk ${info.host}:${info.port} tanpa listener — DENY")
@@ -460,12 +526,16 @@ class SessionManager(context: Context) {
         return result
     }
 
+    /** Tahap koneksi — untuk progres UI + diagnosa. */
+    enum class Stage { IDLE, PROBE, HANDSHAKE, AUTH, READY }
+
     companion object {
         private const val TAG = "XyDeskSession"
         private const val PROMPT_TIMEOUT_SEC = 120L
         private const val CANCEL_FALLBACK_MS = 5_000L
         private const val TCP_PROBE_TIMEOUT_MS = 2_500L
         private const val TELEMETRY_INTERVAL_MS = 500L
+        private const val CONNECT_WATCHDOG_MS = 30_000L
 
         /** Code [SessionState.Error] untuk probe TCP gagal (host tak terjangkau). */
         const val ERROR_UNREACHABLE = "unreachable"

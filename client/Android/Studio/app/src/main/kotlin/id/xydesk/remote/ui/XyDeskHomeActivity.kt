@@ -4,7 +4,8 @@ import android.content.Intent
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
-import androidx.compose.material3.MaterialTheme
+import android.content.res.Configuration
+import id.xydesk.remote.ui.theme.XyDeskTheme
 import id.xydesk.remote.MainActivity
 import id.xydesk.remote.cloud.CloudRdpActivity
 
@@ -24,7 +25,15 @@ class XyDeskHomeActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContent {
-            MaterialTheme {
+            val prefs = AppPrefs(this)
+            val systemDark = (getResources().configuration.uiMode and
+                Configuration.UI_MODE_NIGHT_MASK) == Configuration.UI_MODE_NIGHT_YES
+            val dark = when (prefs.themeMode) {
+                1 -> true
+                2 -> false
+                else -> systemDark
+            }
+            XyDeskTheme(dark = dark) {
                 XyDeskHome(
                     onOpenCloudRdp = {
                         startActivity(Intent(this, CloudRdpActivity::class.java))

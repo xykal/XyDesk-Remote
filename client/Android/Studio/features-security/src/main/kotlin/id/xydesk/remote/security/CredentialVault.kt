@@ -32,8 +32,12 @@ class CredentialVault(context: Context) {
     private val prefs: SharedPreferences =
         context.applicationContext.getSharedPreferences(PREFS_FILE, Context.MODE_PRIVATE)
 
-    /** Simpan/replace [plaintext] untuk [id] (biasanya `host:port`). */
-    fun put(id: String, plaintext: String) {
+    /**
+     * Simpan/replace [plaintext] untuk [id] (biasanya `host:port`).
+     * @return true jika tersimpan; false jika keystore gagal (password
+     *         tetap dipakai untuk connect sesi ini, hanya tidak diingat).
+     */
+    fun put(id: String, plaintext: String): Boolean = try {
         val key = masterKey()
         val cipher = Cipher.getInstance(TRANSFORMATION)
         cipher.init(Cipher.ENCRYPT_MODE, key)
@@ -41,6 +45,10 @@ class CredentialVault(context: Context) {
         val ct = cipher.doFinal(plaintext.toByteArray(Charsets.UTF_8))
         val blob = iv + ct
         prefs.edit().putString(id, Base64.encodeToString(blob, Base64.NO_WRAP)).apply()
+        true
+    } catch (e: Exception) {
+        android.util.Log.w(TAG, "gagal simpan ke vault (keystore?): ${e.javaClass.simpleName}: ${e.message}")
+        false
     }
 
     /** Ambil plaintext untuk [id]; null jika tidak ada atau tak bisa didekripsi. */
@@ -90,6 +98,7 @@ class CredentialVault(context: Context) {
     }
 
     companion object {
+        private const val TAG = "CredentialVault"
         private const val ANDROID_KEYSTORE = "AndroidKeyStore"
         private const val MASTER_ALIAS = "xydesk_cred_vault_v1"
         private const val PREFS_FILE = "xydesk_credential_vault"

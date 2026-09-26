@@ -29,6 +29,21 @@ class CertificateTrustStore(context: Context) {
         sp.edit().remove(key(host, port)).apply()
     }
 
+    /** Semua entri yang pernah dipercaya: (host:port) -> fingerprint. */
+    fun entries(): List<Pair<String, String>> {
+        val prefix = "fp."
+        return sp.all.entries
+            .filter { it.key.startsWith(prefix) }
+            .map { it.key.removePrefix(prefix) to (it.value as String) }
+            .sortedBy { it.first }
+    }
+
+    fun clear() {
+        val e = sp.edit()
+        sp.all.keys.filter { it.startsWith("fp.") }.forEach { e.remove(it) }
+        e.apply()
+    }
+
     companion object {
         private const val NAME = "xydesk.certtrust"
         private fun key(host: String, port: Int) = "fp.$host:$port"

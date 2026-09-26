@@ -39,6 +39,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import kotlinx.coroutines.delay
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -55,6 +56,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import id.xydesk.remote.cloud.CloudRdpActivity
 import id.xydesk.remote.core.CertificateInfo
+import id.xydesk.remote.core.ConnectionLog
 import id.xydesk.remote.core.ConnectionProfile
 import id.xydesk.remote.core.SessionManager
 import id.xydesk.remote.core.SessionState
@@ -90,7 +92,9 @@ fun XyDeskSessionScreen(
 ) {
     val context = LocalContext.current
     val state by manager.state.collectAsState(initial = SessionState.Idle)
+    val stage by manager.stage.collectAsState(initial = SessionManager.Stage.IDLE)
     val telemetry by manager.telemetry.collectAsState(initial = TelemetrySample.EMPTY)
+    var showLog by remember { mutableStateOf(false) }
     val prefs = remember { ConnectionPrefs(context) }
     val trustStore = remember { CertificateTrustStore(context) }
     var certPrompt by remember { mutableStateOf<CertPrompt?>(null) }
@@ -246,6 +250,7 @@ fun XyDeskSessionScreen(
 
         if (state is SessionState.Connecting || state is SessionState.Authenticating) {
             ConnectingOverlay(
+                stage = stage,
                 isAuthenticating = state is SessionState.Authenticating,
                 onCancel = { manager.cancelConnection() },
             )
@@ -308,11 +313,31 @@ fun XyDeskSessionScreen(
                 TextButton(onClick = { onExit() }) { Text("Tutup") }
             },
             dismissButton = {
-                if (e.code == SessionManager.ERROR_UNREACHABLE) {
-                    TextButton(onClick = {
-                        context.startActivity(Intent(context, CloudRdpActivity::class.java))
-                    }) { Text("Cloud RDP") }
+                Column {
+                    TextButton(onClick = { showLog = true }) { Text("Detail") }
+                    if (e.code == SessionManager.ERROR_UNREACHABLE) {
+                        TextButton(onClick = {
+                            context.startActivity(Intent(context, CloudRdpActivity::class.java))
+                        }) { Text("Cloud RDP") }
+                    }
                 }
+            },
+        )
+    }
+    if (!active && err != null && showLog) {
+        AlertDialog(
+            onDismissRequest = { showLog = false },
+            title = { Text("Log koneksi") },
+            text = {
+                Column(Modifier.verticalScroll(rememberScrollState())) {
+                    ConnectionLog.last(60).forEach { line ->
+                        Text(line, style = MaterialTheme.typography.bodySmall,
+                            fontFamily = FontFamily.Monospace)
+                    }
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = { showLog = false }) { Text("Tutup") }
             },
         )
     }
@@ -404,7 +429,18 @@ private fun StatRow(label: String, value: String) {
 }
 
 @Composable
-private fun ConnectingOverlay(isAuthenticating: Boolean, onCancel: () -> Unit) {
+private fun ConnectingOverlay(
+    stage: SessionManager.Stage,
+    isAuthenticating: Boolean,
+    onCancel: () -> Unit,
+) {
+    var elapsed by remember { mutableStateOf(0) }
+    LaunchedEffect(Unit) {
+        while (true) {
+            delay(1000)
+            elapsed++
+        }
+    }
     Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
         Column(
             horizontalAlignment = Alignment.CenterHorizontally,
@@ -413,14 +449,35 @@ private fun ConnectingOverlay(isAuthenticating: Boolean, onCancel: () -> Unit) {
             CircularProgressIndicator()
             Spacer(Modifier.height(16.dp))
             Text(
-                if (isAuthenticating) "Menunggu autentikasi (NLA)…" else "Menghubungkan…",
+                stageLabel(stage, isAuthenticating),
                 style = MaterialTheme.typography.titleMedium,
+            )
+            Spacer(Modifier.height(4.dp))
+            Text(
+                "${stageDetail(stage)}  •  ${elapsed}s",
+                style = MaterialTheme.typography.bodySmall,
             )
             Spacer(Modifier.height(12.dp))
             TextButton(onClick = onCancel) { Text("Batalkan") }
         }
     }
 }
+
+private fun stageLabel(stage: SessionManager.Stage, isAuthenticating: Boolean): String =
+    when {
+        isAuthenticating -> "Menunggu autentikasi (NLA)…"
+        stage == SessionManager.Stage.AUTH -> "Menunggu autentikasi…"
+        stage == SessionManager.Stage.PROBE -> "Mengecek jaringan…"
+        else -> "Menghubungkan ke RDP…"
+    }
+
+private fun stageDetail(stage: SessionManager.Stage): String =
+    when (stage) {
+        SessionManager.Stage.PROBE -> "TCP probe"
+        SessionManager.Stage.HANDSHAKE -> "TLS / negosiasi"
+        SessionManager.Stage.AUTH -> "credential"
+        else -> "menyiapkan"
+    }
 
 @Composable
 private fun DisconnectedOverlay(onReconnect: () -> Unit, onExit: () -> Unit) {

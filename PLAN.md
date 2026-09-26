@@ -340,6 +340,24 @@ dipakai UI** — wiring UI di M1.2.
   warning kuat + tampilkan fingerprint lama vs baru kalau berubah
   (MITM guard; tanpa fingerprint tersimpan = selalu tanya)
 
+### M2.6 — brand XyDesk + diagnosa crash (SELESAI)
+- **Design system custom** "XyDesk" (properti XyVerse, bukan muka bawaan):
+  palet violet (gelap #0E0B16 / terang), tipografi Space Grotesk + Inter
+  (variable fonts OFL), bentuk sudut 12-28dp, komponen brand
+  (XyCard/XyBrandButton/XyGhostButton/XySectionTitle/XyStatusChip/XyMenuItem/XyWordmark)
+- **App shell dengan drawer**: Koneksi, Cloud RDP, Pengaturan, Keamanan,
+  Tentang (jawab keluhan "gadis sidebar")
+- **Pengaturan**: tema (ikut sistem/gelap/terang), auto-disconnect toggle
+- **Keamanan**: daftar sertifikat "Percaya & ingat" + lupakan per-host/semua
+  + fingerprint signing
+- **Logo & ikon custom** (dipilih pengguna) — adaptive icon + header drawer
+- **Diagnosa crash**: CrashLog (uncaught exception -> file -> banner di home
+  + dialog log), vault.put() non-fatal (keystore gagal = password tetap
+  dipakai, hanya tidak diingat), guard inisialisasi sesi
+- **Keamanan release**: keystore dirotasi (password lama bocor di log CI
+  publik via set -x) — keystore baru + masking ::add-mask::; v0.2.8+
+  ditandatangani keystore baru (uninstall versi lama dulu!)
+
 ### M2/M3 tersisa (lanjutan)
 - Panel Pointer/Keyboard visual, file transfer (RDPDR), clipboard file,
   audio 2 arah, session recording, import .rdp/QR — sesuai roadmap
