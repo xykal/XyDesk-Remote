@@ -47,6 +47,8 @@ Pada form Compose, `repo.save()` dijalankan dalam coroutine sementara `connectTo
 2. Menghapus password dari URI yang ditulis ke log.
 3. Mengunci event queue native lintas thread serta membersihkan event tersisa.
 4. Menyinkronkan start native connect dengan release, menandai sesi aktif sejak sebelum thread native dimulai, dan menolak parse/start failure.
+5. Menyimpan log ke `Android/media/id.xydesk.remote/log/xydesk-boot.log` (fallback ke internal app storage bila media directory tidak tersedia).
+6. Build release per-ABI memakai GitHub Actions secrets signing yang sudah terkonfigurasi; file APK rilis dipublikasikan satu-satu sebagai asset GitHub Release, tanpa artifact ZIP release.
 
 ## Langkah sebelum menyebut fix valid
 

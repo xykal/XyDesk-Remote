@@ -21,9 +21,17 @@ object ConnectionLog {
     private val fmt = SimpleDateFormat("HH:mm:ss.SSS", Locale.US)
     @Volatile private var file: File? = null
 
-    /** Wajib dipanggil sekali (Application/Activity) agar log ke file. */
+    /**
+     * Wajib dipanggil sekali (Application/Activity) agar log ke file.
+     * Simpan di Android/media/<package>/log agar pemilik perangkat bisa
+     * mengambil log lewat file manager tanpa storage permission legacy.
+     */
     fun init(context: android.content.Context) {
-        file = File(context.applicationContext.filesDir, FILE_NAME)
+        val app = context.applicationContext
+        val mediaDir = app.externalMediaDirs.firstOrNull()?.let { File(it, "log") }
+        val externalLog = mediaDir?.takeIf { (it.isDirectory || it.mkdirs()) && it.canWrite() }
+            ?.let { File(it, FILE_NAME) }
+        file = externalLog ?: File(app.filesDir, FILE_NAME)
     }
 
     @Synchronized

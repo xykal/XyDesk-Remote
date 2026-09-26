@@ -190,18 +190,21 @@ jobs:
             -PRELEASE_KEY_ALIAS="$RELEASE_KEY_ALIAS" \
             -PRELEASE_KEY_PASSWORD="$RELEASE_KEY_PASSWORD" \
             -PRELEASE_STORE_PASSWORD="$RELEASE_STORE_PASSWORD"
-      - name: Verifikasi signature (apksigner)
+      - name: Verifikasi signature setiap ABI (apksigner)
         working-directory: client/Android/Studio
         run: |
-          "$ANDROID_HOME/build-tools/37.0.0/apksigner" verify --print-certs app/build/outputs/apk/release/*.apk | head -25
+          set -euo pipefail
+          found=0
+          for apk in app/build/outputs/apk/release/*.apk; do
+            [ -f "$apk" ] || continue
+            found=1
+            echo "Verifying $apk"
+            "$ANDROID_HOME/build-tools/37.0.0/apksigner" verify --print-certs "$apk"
+          done
+          [ "$found" -eq 1 ] || { echo "Tidak ada APK release"; exit 1; }
       - name: Buat GitHub Release (tag v*)
         if: startsWith(github.ref, 'refs/tags/v')
         uses: softprops/action-gh-release@v2
         with:
           files: client/Android/Studio/app/build/outputs/apk/release/*.apk
           generate_release_notes: true
-      - name: Upload release APKs (artifact cadangan)
-        uses: actions/upload-artifact@v4
-        with:
-          name: xydesk-remote-release-per-abi
-          path: client/Android/Studio/app/build/outputs/apk/release/*.apk
