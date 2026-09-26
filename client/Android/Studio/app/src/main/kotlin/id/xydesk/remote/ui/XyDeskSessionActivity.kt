@@ -17,6 +17,7 @@ import android.content.res.Configuration
 import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.WindowInsetsControllerCompat
+import id.xydesk.remote.core.ConnectionLog
 import id.xydesk.remote.core.ConnectionProfile
 import id.xydesk.remote.core.SessionManager
 import id.xydesk.remote.core.SessionState
@@ -62,11 +63,14 @@ class XyDeskSessionActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
 
         try {
+            ConnectionLog.add("SES: activity created")
             manager = SessionManager(applicationContext)
             controller = SessionSurfaceController(this)
             // sink WAJIB sebelum connect — event grafik pertama tidak boleh hilang
             manager.setGraphicsSink(controller)
+            ConnectionLog.add("SES: manager+controller ok, sink set")
         } catch (t: Throwable) {
+            ConnectionLog.add("SES: FAIL inisialisasi: ${t.javaClass.name}: ${t.message}")
             Log.e(TAG, "gagal inisialisasi sesi", t)
             CrashLog.note(this, "inisialisasi sesi gagal: ${t.javaClass.name}: ${t.message}")
             Toast.makeText(this, "Gagal menyiapkan sesi: ${t.message}", Toast.LENGTH_LONG).show()
@@ -76,10 +80,12 @@ class XyDeskSessionActivity : ComponentActivity() {
 
         val profile = profileFromIntent(getIntent())
         if (profile == null) {
+            ConnectionLog.add("SES: intent tanpa profil valid — keluar")
             Log.w(TAG, "intent tanpa profil valid — keluar")
             finish()
             return
         }
+        ConnectionLog.add("SES: profil ok -> ${profile.host}:${profile.port}")
 
         hideSystemBars()
 
@@ -129,9 +135,12 @@ class XyDeskSessionActivity : ComponentActivity() {
             }
         )
 
+        ConnectionLog.add("SES: memanggil manager.connect (native createSession + parse args)")
         try {
             manager.connect(profile)
+            ConnectionLog.add("SES: manager.connect kembali (worker jalan async)")
         } catch (t: Throwable) {
+            ConnectionLog.add("SES: connect() JVM-exception: ${t.javaClass.name}: ${t.message}")
             Log.e(TAG, "connect() gagal", t)
             CrashLog.note(this, "connect() gagal: ${t.javaClass.name}: ${t.message}")
         }

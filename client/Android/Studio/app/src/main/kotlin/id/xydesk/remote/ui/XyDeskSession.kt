@@ -103,7 +103,17 @@ fun XyDeskSessionScreen(
     var confirmDisconnect by remember { mutableStateOf(false) }
     var zoom by remember { mutableStateOf(prefs.getZoom(profile.id)) }
     var bound by remember { mutableStateOf(false) }
-    val freeRdpVersion = remember { manager.freeRdpVersion() }
+    val freeRdpVersion = remember {
+        ConnectionLog.add("SES: native freeRdpVersion mulai (load .so)")
+        val v = try {
+            manager.freeRdpVersion()
+        } catch (t: Throwable) {
+            ConnectionLog.add("SES: freeRdpVersion GAGAL: ${t.javaClass.name}: ${t.message}")
+            "?"
+        }
+        ConnectionLog.add("SES: freeRdpVersion ok: $v")
+        v
+    }
 
     // Listener: prompt dipanggil (blocking) di thread RDP -> state -> dialog
     LaunchedEffect(Unit) {

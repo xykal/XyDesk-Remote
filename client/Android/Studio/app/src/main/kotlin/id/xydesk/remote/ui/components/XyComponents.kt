@@ -44,7 +44,7 @@ fun XyBrandButton(
         onClick = onClick,
         modifier = modifier,
         enabled = enabled,
-        shape = MaterialTheme.shapes.extraLarge,
+        shape = MaterialTheme.shapes.medium,
         colors = ButtonDefaults.buttonColors(
             containerColor = XyViolet,
             contentColor = Color.White,
@@ -69,7 +69,7 @@ fun XyGhostButton(
     OutlinedButton(
         onClick = onClick,
         modifier = modifier,
-        shape = MaterialTheme.shapes.extraLarge,
+        shape = MaterialTheme.shapes.medium,
     ) { Text(text) }
 }
 

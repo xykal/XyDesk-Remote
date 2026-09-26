@@ -41,6 +41,7 @@ class XyDeskHomeActivity : ComponentActivity() {
                     onOpenClassicForm = {
                         startActivity(Intent(this, MainActivity::class.java))
                     },
+                    onExit = { finish() },
                 )
             }
         }

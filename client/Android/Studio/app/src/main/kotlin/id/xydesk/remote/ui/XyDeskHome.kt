@@ -10,6 +10,8 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.ui.draw.clip
 import androidx.compose.foundation.background
 import androidx.compose.ui.text.font.FontFamily
+import android.widget.Toast
+import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -76,6 +78,7 @@ import androidx.compose.ui.unit.sp
 import id.xydesk.remote.R
 import id.xydesk.remote.core.ConnectionProfile
 import id.xydesk.remote.sessions.SessionsRepository
+import id.xydesk.remote.core.ConnectionLog
 import id.xydesk.remote.security.CrashLog
 import id.xydesk.remote.ui.components.XyCard
 import id.xydesk.remote.ui.components.XySectionTitle
@@ -100,6 +103,7 @@ private enum class XySection { KONEKSI, CLOUD, PENGATURAN, KEAMANAN, TENTANG }
 fun XyDeskHome(
     onOpenCloudRdp: () -> Unit,
     onOpenClassicForm: () -> Unit,
+    onExit: () -> Unit,
 ) {
     val context = LocalContext.current
     val repo = remember { SessionsRepository(context.applicationContext) }
@@ -112,6 +116,34 @@ fun XyDeskHome(
     var showForm by remember { mutableStateOf(false) }
     var crashLog by remember { mutableStateOf(CrashLog.last(context.applicationContext)) }
     var showCrashDialog by remember { mutableStateOf(false) }
+    val bootTail = remember { ConnectionLog.tailFromFile(context.applicationContext, 14) }
+    val bootSuspect = bootTail.isNotEmpty() && bootTail.last().let { last ->
+        !last.contains("session.connect kembali") &&
+            !last.contains("-> Connected") &&
+            !last.contains("-> Disconnected") &&
+            !last.contains("intent tanpa profil")
+    }
+    var showBootDialog by remember { mutableStateOf(false) }
+    var backArmedAt by remember { mutableStateOf(0L) }
+    val onMenu: () -> Unit = { scope.launch { drawerState.open() } }
+
+    // Back: drawer kebuka -> tutup; seksi lain -> Koneksi;
+    // Koneksi: 2x tekan dalam 2 detik baru keluar
+    BackHandler {
+        if (drawerState.isOpen || drawerState.targetValue == DrawerValue.Open) {
+            scope.launch { drawerState.close() }
+        } else if (section != XySection.KONEKSI) {
+            section = XySection.KONEKSI
+        } else {
+            val now = System.currentTimeMillis()
+            if (now - backArmedAt < 2_000L) {
+                onExit()
+            } else {
+                backArmedAt = now
+                Toast.makeText(context, "Tekan sekali lagi untuk keluar", Toast.LENGTH_SHORT).show()
+            }
+        }
+    }
     var themeMode by remember { mutableStateOf(prefs.themeMode) }
     var autoDisc by remember { mutableStateOf(prefs.autoDisconnect) }
 
@@ -186,7 +218,7 @@ fun XyDeskHome(
             XySection.KONEKSI -> {
                 Scaffold(
                     topBar = {
-                        XyTopBar(onMenu = { scope.launch { drawerState.open() } }, title = "Koneksi")
+                        XyTopBar(onMenu = onMenu, title = "Koneksi")
                     },
                     floatingActionButton = {
                         FloatingActionButton(onClick = { showForm = true }) {
@@ -208,6 +240,23 @@ fun XyDeskHome(
                                 "Terjadi error sebelumnya — ketuk untuk lihat log",
                                 style = MaterialTheme.typography.labelMedium,
                                 color = MaterialTheme.colorScheme.onErrorContainer,
+                            )
+                        }
+                    }
+                    if (bootSuspect) {
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(horizontal = 12.dp, vertical = 6.dp)
+                                .clip(MaterialTheme.shapes.medium)
+                                .background(MaterialTheme.colorScheme.secondaryContainer)
+                                .clickable { showBootDialog = true }
+                                .padding(12.dp),
+                        ) {
+                            Text(
+                                "Sesi terakhir terhenti di tengah jalan — ketuk untuk lihat log boot",
+                                style = MaterialTheme.typography.labelMedium,
+                                color = MaterialTheme.colorScheme.onSecondaryContainer,
                             )
                         }
                     }
@@ -258,9 +307,12 @@ fun XyDeskHome(
         }
             }
 
-            XySection.CLOUD -> XyCloudSection(onOpenCloudRdp, onOpenClassicForm)
+            XySection.CLOUD -> SectionWithTopBar(onMenu, "Cloud RDP") {
+                XyCloudSection(onOpenCloudRdp, onOpenClassicForm)
+            }
 
-            XySection.PENGATURAN -> XySettingsScreen(
+            XySection.PENGATURAN -> SectionWithTopBar(onMenu, "Pengaturan") {
+                XySettingsScreen(
                 themeMode = themeMode,
                 onThemeMode = { v ->
                     themeMode = v
@@ -273,13 +325,47 @@ fun XyDeskHome(
                     prefs.autoDisconnect = v
                 },
             )
+            }
 
-            XySection.KEAMANAN -> XySecurityScreen({})
+            XySection.KEAMANAN -> SectionWithTopBar(onMenu, "Keamanan") {
+                XySecurityScreen({})
+            }
 
-            XySection.TENTANG -> XyAboutScreen()
+            XySection.TENTANG -> SectionWithTopBar(onMenu, "Tentang") {
+                XyAboutScreen()
+            }
         }
     }
 
+    if (showBootDialog) {
+        AlertDialog(
+            onDismissRequest = { showBootDialog = false },
+            title = { Text("Log boot sesi terakhir") },
+            text = {
+                Column(Modifier.verticalScroll(rememberScrollState())) {
+                    bootTail.forEach { ln ->
+                        Text(ln, style = MaterialTheme.typography.bodySmall,
+                            fontFamily = FontFamily.Monospace)
+                    }
+                    Text(
+                        "\nKalau ini muncul setelah crash: screenshot dialog ini " +
+                            "kirim ke developer. Baris TERAKHIR = langkah yang " +
+                            "sedang jalan saat app mati.",
+                        style = MaterialTheme.typography.bodySmall,
+                    )
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    ConnectionLog.clear(context.applicationContext)
+                    showBootDialog = false
+                }) { Text("Hapus log") }
+            },
+            dismissButton = {
+                TextButton(onClick = { showBootDialog = false }) { Text("Tutup") }
+            },
+        )
+    }
     if (showCrashDialog) {
         AlertDialog(
             onDismissRequest = { showCrashDialog = false },
@@ -533,5 +619,18 @@ private fun XyCloudSection(
                 }
             }
         }
+    }
+}
+
+/** Pembungkus seksi: top bar brand (hamburger + judul) + konten. */
+@Composable
+private fun SectionWithTopBar(
+    onMenu: () -> Unit,
+    title: String,
+    content: @Composable () -> Unit,
+) {
+    Column(Modifier.fillMaxSize()) {
+        XyTopBar(onMenu = onMenu, title = title)
+        Box(Modifier.weight(1f).fillMaxWidth()) { content() }
     }
 }

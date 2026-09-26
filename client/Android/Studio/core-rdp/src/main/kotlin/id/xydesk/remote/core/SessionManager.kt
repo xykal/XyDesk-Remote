@@ -145,8 +145,10 @@ class SessionManager(context: Context) {
             return
         }
         val uri = RdpUri.build(profile)
+        ConnectionLog.add("CM: native createSession mulai (uri=$uri)")
         val session = GlobalApp.createSession(uri, appContext)
         val inst = session.getInstance()
+        ConnectionLog.add("CM: createSession ok inst=$inst")
         session.setUIEventListener(uiListenerFor(inst))
         GlobalApp.registerSessionListener(inst, coreListenerFor(inst))
         core = session
@@ -175,8 +177,11 @@ class SessionManager(context: Context) {
             }
             if (isCurrent(inst)) setStage(Stage.HANDSHAKE)
             try {
+                ConnectionLog.add("CM: worker: session.connect mulai (native parse args + spawn connect thread)")
                 session.connect(appContext) // blocking — thread worker
+                ConnectionLog.add("CM: worker: session.connect kembali — connect thread jalan")
             } catch (t: Throwable) {
+                ConnectionLog.add("CM: worker: session.connect EXCEPTION: ${t.javaClass.name}: ${t.message}")
                 Log.w(TAG, "connect() exception", t)
                 if (isCurrent(inst)) {
                     transition(SessionState.Error("connect_exception", t.message ?: "exception"))
