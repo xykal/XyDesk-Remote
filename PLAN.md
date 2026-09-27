@@ -389,3 +389,31 @@ Penggantinya: app klien RDP murni. Host/port + kredensial diisi user sendiri
 (VPS/VM/PC dengan RDP aktif, boleh lewat tailnet). Kalau nanti butuh
 provisioning, jalurnya lewat provider (Cloudflare/Hetzner/Oracle/Azure) dengan
 adapter di service XyVerse sendiri, bukan GitHub Actions.
+
+---
+
+## 13. M7 - ronde 3 (v0.5)
+
+Sudah terkirim di v0.5.0:
+
+- Tombol HUD model baru (`ui/HudKey.kt`, `ui/SessionKeyLayer.kt`): satu tombol
+  satu aksi, bulat penuh, geser/ukur/atur aksi per tombol, katalog lengkap,
+  penyimpanan JSON per perangkat, mode atur posisi.
+- Toolbar `123`/`ABC` menempel di atas IME + auto-hide mengikuti keyboard HP.
+- Panel sesi dua sisi (kanan: input/pointer/tombol/keyboard, kiri: layar/sesi).
+- Storage HP -> drive remote lewat path yang bisa dibaca app + izin opsional
+  "semua file".
+- Tentang + "Dukung saya" (Saweria/GitHub Sponsors/bintang) + bahasa ID/EN
+  (`ui/Lang.kt`, `LangPrefs`).
+- Preview kartu perangkat pakai art app sendiri (`DevicePreviewArt`).
+- Log native winpr ke `freerdp-native.log` (diagnosa tanpa ADB).
+- Kanal audio diperiksa di biner: rdpsnd-client static + audin-client dynamic
+  + subsistem opensles playback & capture sudah ikut; pin channel di
+  `client/Android/cmake/ExternalFreeRDP.cmake`.
+
+Berikutnya:
+
+- Terjemahan English untuk sisa teks teknis panjang (tabel `XyText` sudah ada).
+- Job CI "feedback cepat" (compile Kotlin release tanpa superbuild native).
+- Pangkas beban mati APK (lib yang tak dipakai).
+- Verifikasi lapangan: audio bisu? kirim `freerdp-native.log` dari dialog log.

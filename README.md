@@ -59,6 +59,49 @@ pemakaian Actions (compute harus terkait build/test/deploy repo yang
 bersangkutan). App sekarang murni klien RDP: daftar perangkat, profil
 kredensial lokal, HUD sesi.
 
+## Catatan rilis v0.5
+
+Ronde ini seluruhnya soal input dan kontrol:
+
+- **Tombol HUD satu-per-satu.** Tiap tombol berdiri sendiri, bulat penuh,
+  bisa digeser, ukurannya 32..96 dp, dan aksinya diatur per tombol (sekali
+  klik / tahan / toggle). Klik kiri, klik kanan, klik tengah, scroll naik,
+  scroll turun, dan ganti mode input dipisah total dengan ikon sendiri-sendiri.
+  Ada katalog lengkap: modifier, kombinasi siap pakai (Ctrl+C, Ctrl+Shift+Esc,
+  Alt+Tab, Win+R, ...), F1..F12, numpad, huruf, simbol, panah. Ada mode
+  "atur posisi" (screen mapping) untuk menggeser tombol bebas.
+- **Toolbar di atas keyboard HP.** Chip paling ujung `123` membuka board
+  lengkap bawaan app; `ABC` mengembalikan keyboard HP. Keyboard HP di-hide,
+  toolbar dan board ikut hilang (tinggi IME dibaca live dari window insets).
+- **Storage HP jadi drive remote.** `/drive:sdcard` memakai path yang
+  benar-benar bisa dibaca app di Android modern; layar perangkat punya tombol
+  izin "semua file" kalau user mau seluruh isi storage terlihat.
+- **Tentang + Dukung saya.** Saweria (kallsptra), GitHub Sponsors, dan bintang
+  repo; bahasa app Indonesia/English bisa diganti langsung dari Tentang.
+- **Log native ke file.** winpr menulis `freerdp-native.log` sehingga masalah
+  audio/mikrofon/clipboard/drive bisa dikirim tanpa ADB.
+- Preview kartu perangkat memakai art app sendiri (bukan wallpaper RDP/OS).
+
+Detail teknis: `docs/HUD-BUTTONS.md` (EN) dan `docs/HUD-BUTTONS.id.md` (ID).
+
+## English summary (v0.5)
+
+- Free-floating, fully round HUD buttons: one button = one action, draggable,
+  32..96 dp, per-button action (tap / hold / toggle). Left, right, middle,
+  scroll up, scroll down, and input-mode switch are separate buttons with
+  distinct icons; a full catalogue covers modifiers, ready combos, F1..F12,
+  numpad, letters, symbols, arrows, plus a screen-mapping mode.
+- Toolbar pinned above the phone keyboard: the rightmost chip `123` opens the
+  built-in board, `ABC` goes back to the phone keyboard; hiding the phone
+  keyboard hides the toolbar and board automatically.
+- Phone storage is redirected as a remote drive using a path the app can
+  actually read on modern Android, with an optional "all files" grant.
+- About page with a "Support me" section (Saweria, GitHub Sponsors, repo
+  stars) and an in-app Indonesian/English language switch.
+- Native FreeRDP logs are written to `freerdp-native.log` so audio,
+  microphone, clipboard, and drive issues can be diagnosed without ADB.
+- Device cards use the app's own procedural preview art, not an RDP wallpaper.
+
 ## Menghubungi / Kontribusi
 - Issues & PR: terbuka (bug, fitur, docs)
 - Roadmap & arsitektur: `PLAN.md`
