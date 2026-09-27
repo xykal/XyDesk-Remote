@@ -63,18 +63,19 @@ data class RdpOptions(
         sp.apply()
     }
 
-    fun clear(context: Context, deviceId: String) {
-        val editor = context.applicationContext
-            .getSharedPreferences(FILE, Context.MODE_PRIVATE).edit()
-        listOf(
-            "audio", "mic", "clipboard", "drive", "camera", "udp",
-            "netauto", "h264", "ghost", "gport", "guser", "gpass", "gdomain",
-        ).forEach { editor.remove("$deviceId.$it") }
-        editor.apply()
-    }
-
     companion object {
         private const val FILE = "xydesk.rdp.options"
+
+        /** Bersihkan semua opsi milik satu perangkat (dipakai saat device dihapus). */
+        fun clear(context: Context, deviceId: String) {
+            val editor = context.applicationContext
+                .getSharedPreferences(FILE, Context.MODE_PRIVATE).edit()
+            listOf(
+                "audio", "mic", "clipboard", "drive", "camera", "udp",
+                "netauto", "h264", "ghost", "gport", "guser", "gpass", "gdomain",
+            ).forEach { editor.remove("$deviceId.$it") }
+            editor.apply()
+        }
 
         fun of(context: Context, deviceId: String): RdpOptions {
             val sp = context.applicationContext

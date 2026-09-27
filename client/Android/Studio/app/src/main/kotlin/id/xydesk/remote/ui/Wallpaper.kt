@@ -33,9 +33,9 @@ enum class XyWall(val label: String) {
 fun XyWall.forDevice(label: String?): XyWall {
     val l = label?.lowercase().orEmpty()
     return when {
-        l.contains("mac") || l.contains("osx") || l.contains("macbook") -> MACOS
-        l.contains("win 10") || l.contains("win10") || l.contains("windows 10") -> WIN10
-        l.contains("win") || l.contains("11") -> WIN11
+        l.contains("mac") || l.contains("osx") || l.contains("macbook") -> XyWall.MACOS
+        l.contains("win 10") || l.contains("win10") || l.contains("windows 10") -> XyWall.WIN10
+        l.contains("win") || l.contains("11") -> XyWall.WIN11
         else -> this
     }
 }
