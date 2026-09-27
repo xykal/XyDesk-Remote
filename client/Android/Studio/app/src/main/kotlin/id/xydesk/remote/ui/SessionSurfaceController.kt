@@ -166,11 +166,16 @@ class SessionSurfaceController(private val activity: Activity) : GraphicsSink {
         ViewCompat.setOnApplyWindowInsetsListener(root) { _, insets ->
             val imeBottom = insets.getInsets(WindowInsetsCompat.Type.ime()).bottom
             val nav = insets.getInsets(WindowInsetsCompat.Type.navigationBars())
+            // Layar sesi menyembunyikan system bar, jadi navigationBars() bisa 0
+            // sementara handle gestur tetap ada — pakai yang lebih besar supaya
+            // baris tombol keyboard tidak menempel/terpotong di tepi bawah.
+            val gestures = insets.getInsets(WindowInsetsCompat.Type.systemGestures()).bottom
+            val bottomInset = maxOf(nav.bottom, gestures)
             inputManager?.onImeVisibilityChanged(imeBottom > 0)
             // IME sudah termasuk area nav bar: jangan padding dua kali
-            kb.setInsets(nav.left, nav.right, if (imeBottom > 0) 0 else nav.bottom)
+            kb.setInsets(nav.left, nav.right, if (imeBottom > 0) 0 else bottomInset)
             val kbdVisible = kb.visibility == View.VISIBLE
-            scroller.setPadding(nav.left, 0, nav.right, if (kbdVisible) 0 else nav.bottom)
+            scroller.setPadding(nav.left, 0, nav.right, if (kbdVisible) 0 else bottomInset)
             val lp = kb.layoutParams as? ViewGroup.MarginLayoutParams
             if (lp != null && lp.bottomMargin != imeBottom) {
                 lp.bottomMargin = imeBottom
