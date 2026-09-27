@@ -2,7 +2,7 @@
 
 App Android remote desktop untuk **Windows (RDP)** dengan:
 - Form koneksi ala MS Remote Desktop (IP + port + user + password)
-- **Cloud RDP**: create RDP dari GitHub langsung di app (login GitHub → isi nama → repo + setup otomatis → connect otomatis via **Tailscale**)
+- Koneksi host apa pun yang RDP-nya aktif (VM, VPS, PC rumah, tailnet) — tanpa akun pihak ketiga
 - (M2+) HUD multi-panel yang bisa dikustomisasi
 
 > Repo ini **public** untuk kontribusi, sponsor, collab, dan diskusi (issues/PR).
@@ -20,7 +20,7 @@ Repo mempertahankan **layout tree FreeRDP** di root (kebutuhan path relatif CMak
 │   ├── settings.gradle       ← ':freeRDPCore' + ':app'
 │   ├── release.properties    ← knob build (ABI, minify, versi)
 │   ├── freeRDPCore/          ← inti FreeRDP Android (native + JNI), tanpa perubahan
-│   └── app/                  ← APP XYDESK: form koneksi + Cloud RDP (GitHub)
+│   └── app/                  ← APP XYDESK: home + form koneksi + sesi HUD (Compose)
 ├── docs/BUILD.md             ← panduan build lokal & CI
 ├── PLAN.md                   ← arsitektur + roadmap (M0–M6)
 ├── XYDESK-REMOTE-NOTICE.md   ← atribusi & daftar perubahan terhadap FreeRDP
@@ -49,18 +49,15 @@ Lihat `docs/BUILD.md`. Ringkas: Android Studio → import `client/Android/Studio
    - `RELEASE_KEY_ALIAS`, `RELEASE_KEY_PASSWORD`, `RELEASE_STORE_PASSWORD` = isi `keystore-creds.env`
 4. **Simpan `release.jks` di tempat aman** (bukan di repo!). Ini identitas signing app — kalau bocor, update app di Play/dimana pun akan ditolak.
 
-## Cloud RDP (GitHub + Tailscale)
+## Catatan rilis v0.3
 
-Di app: **Create Cloud RDP (GitHub + Tailscale)** → login GitHub (device flow, tanpa secret) → isi nama → **Create & Setup**. Yang terjadi otomatis:
-1. Repo GitHub private bernama sesuai input dibuat
-2. Template workflow + skrip setup di-push ke repo
-3. Workflow menjalankan setup di self-hosted Windows runner (label `xydesk-win`): RDP on, join Tailscale, user+password acak
-4. App menunggu run selesai → download artifact `rdp-credentials` → cek koneksi → **connect otomatis**
-
-**Prasyarat sekali-setup:**
-- OAuth App GitHub (nama `XyDesk Remote`, **Device Flow** di-enable) → salin **client_id** ke `client/Android/Studio/app/src/main/java/id/xydesk/remote/cloud/GitHubDeviceAuth.java` (`CLIENT_ID`). Client secret tidak perlu.
-- VM Windows self-hosted runner dengan label **`xydesk-win`**, env **`XYDESK_TAILSCALE_AUTH_KEY`** (pre-auth key Tailscale), Tailscale terpasang
-- Tailscale di HP login ke tailnet yang sama
+Fitur **Cloud RDP (create mesin lewat GitHub Actions)** dihapus dari app.
+Alasannya teknis dan bukan soal selera: alur itu memakai GitHub Actions +
+self-hosted runner sebagai control plane provisioning infrastruktur, memaksa
+repo berisi kredensial host dibuat public, dan itu melanggar ketentuan
+pemakaian Actions (compute harus terkait build/test/deploy repo yang
+bersangkutan). App sekarang murni klien RDP: daftar perangkat, profil
+kredensial lokal, HUD sesi.
 
 ## Menghubungi / Kontribusi
 - Issues & PR: terbuka (bug, fitur, docs)

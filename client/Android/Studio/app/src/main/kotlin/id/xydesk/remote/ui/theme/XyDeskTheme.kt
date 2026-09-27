@@ -16,62 +16,70 @@ import androidx.compose.ui.unit.sp
 import id.xydesk.remote.R
 
 // =============================================================
-// XyDesk Design System — deep slate + calm teal, tuned for long remote sessions
+// XyDesk design tokens.
+//
+// Aturan: netral, kontras tinggi, hairlines, tanpa glow / gradient
+// dekoratif. Warna hanya dipakai untuk status, bukan hiasan. Radius
+// kecil (6-14dp) untuk panel; kontrol utama pakai bentuk pil penuh.
 // =============================================================
 
-val XyViolet = Color(0xFF0B8E7E)
-val XyVioletBright = Color(0xFF69E3CB)
-val XyVioletDeep = Color(0xFF08796D)
-val XyFuchsia = Color(0xFF91EBD7)
-val XyInk = Color(0xFF0B1217)
-val XyInkSurface = Color(0xFF121D24)
-val XyInkCard = Color(0xFF1B2932)
-val XyLine = Color(0xFF334650)
+val XyBg = Color(0xFF07080A)
+val XySurface = Color(0xFF0E1013)
+val XySurfaceAlt = Color(0xFF15181C)
+val XyLine = Color(0xFF22262C)
+val XyLineStrong = Color(0xFF343A42)
+val XyText = Color(0xFFECF0F3)
+val XyTextDim = Color(0xFF9AA2AA)
+val XyTextFaint = Color(0xFF69717A)
+val XyAccent = Color(0xFFF1F4F6)
+val XyAccentInk = Color(0xFF0A0B0D)
+val XyOk = Color(0xFF57C08B)
+val XyWarn = Color(0xFFD7A54E)
+val XyDanger = Color(0xFFE0706F)
 
 val DarkScheme = darkColorScheme(
-    primary = XyVioletBright,
-    onPrimary = Color(0xFF052B27),
-    primaryContainer = Color(0xFF16443E),
-    onPrimaryContainer = Color(0xFFD7FFF4),
-    secondary = Color(0xFF91BDF2),
-    onSecondary = Color(0xFF112B43),
-    secondaryContainer = Color(0xFF263D55),
-    onSecondaryContainer = Color(0xFFDCEBFF),
-    tertiary = Color(0xFFE6B86A),
-    onTertiary = Color(0xFF372500),
-    background = XyInk,
-    onBackground = Color(0xFFEAF1F4),
-    surface = XyInkSurface,
-    onSurface = Color(0xFFEAF1F4),
-    surfaceVariant = XyInkCard,
-    onSurfaceVariant = Color(0xFFB7C7CE),
+    primary = XyAccent,
+    onPrimary = XyAccentInk,
+    primaryContainer = XySurfaceAlt,
+    onPrimaryContainer = XyText,
+    secondary = XyTextDim,
+    onSecondary = XyAccentInk,
+    secondaryContainer = XySurfaceAlt,
+    onSecondaryContainer = XyText,
+    tertiary = XyOk,
+    background = XyBg,
+    onBackground = XyText,
+    surface = XySurface,
+    onSurface = XyText,
+    surfaceVariant = XySurfaceAlt,
+    onSurfaceVariant = XyTextDim,
     outline = XyLine,
-    outlineVariant = Color(0xFF40545E),
-    error = Color(0xFFFFB4AB),
-    onError = Color(0xFF690005),
-    errorContainer = Color(0xFF93000A),
-    onErrorContainer = Color(0xFFFFDAD6),
+    outlineVariant = XyLineStrong,
+    error = XyDanger,
+    onError = XyAccentInk,
+    errorContainer = Color(0xFF3A1D1D),
+    onErrorContainer = Color(0xFFFFDAD8),
+    scrim = Color(0xCC000000),
 )
 
 val LightScheme = lightColorScheme(
-    primary = XyVioletDeep,
-    onPrimary = Color.White,
-    primaryContainer = Color(0xFFD4F4EB),
-    onPrimaryContainer = Color(0xFF073A33),
-    secondary = XyVioletDeep,
-    onSecondary = Color.White,
-    secondaryContainer = Color(0xFFDCEAFF),
-    onSecondaryContainer = Color(0xFF152E48),
-    tertiary = Color(0xFF8B5B08),
-    onTertiary = Color.White,
-    background = Color(0xFFF2F6F6),
-    onBackground = Color(0xFF172126),
+    primary = Color(0xFF14171B),
+    onPrimary = Color(0xFFF7F9FA),
+    primaryContainer = Color(0xFFE7EAEE),
+    onPrimaryContainer = Color(0xFF14171B),
+    secondary = Color(0xFF5B636B),
+    onSecondary = Color(0xFFF7F9FA),
+    secondaryContainer = Color(0xFFE9ECEF),
+    onSecondaryContainer = Color(0xFF14171B),
+    tertiary = Color(0xFF1F7A55),
+    background = Color(0xFFF5F6F8),
+    onBackground = Color(0xFF14171B),
     surface = Color(0xFFFFFFFF),
-    onSurface = Color(0xFF172126),
-    surfaceVariant = Color(0xFFE7EFF0),
-    onSurfaceVariant = Color(0xFF52646A),
-    outline = Color(0xFFC8D7D9),
-    outlineVariant = Color(0xFFDCE6E7),
+    onSurface = Color(0xFF14171B),
+    surfaceVariant = Color(0xFFEFF1F4),
+    onSurfaceVariant = Color(0xFF5B636B),
+    outline = Color(0xFFDDE1E6),
+    outlineVariant = Color(0xFFC6CCD3),
     error = Color(0xFFB3261E),
     onError = Color.White,
     errorContainer = Color(0xFFF9DEDC),
@@ -91,11 +99,14 @@ val XyBody = FontFamily(
     Font(R.font.inter, FontWeight.Bold),
 )
 
+/** Panel: radius kecil. Kontrol: [XyPill]. */
+val XyPill = RoundedCornerShape(50)
+
 val XyShapes = Shapes(
-    small = RoundedCornerShape(10.dp),
-    medium = RoundedCornerShape(12.dp),
+    small = RoundedCornerShape(6.dp),
+    medium = RoundedCornerShape(10.dp),
     large = RoundedCornerShape(14.dp),
-    extraLarge = RoundedCornerShape(16.dp),
+    extraLarge = RoundedCornerShape(18.dp),
 )
 
 @Composable
@@ -108,43 +119,39 @@ fun XyDeskTheme(
         shapes = XyShapes,
         typography = MaterialTheme.typography.copy(
             displaySmall = TextStyle(
-                fontFamily = XyDisplay, fontSize = 28.sp,
-                fontWeight = FontWeight.SemiBold, letterSpacing = (-0.5).sp,
-            ),
-            displayMedium = TextStyle(
-                fontFamily = XyDisplay, fontSize = 32.sp,
-                fontWeight = FontWeight.Bold, letterSpacing = (-0.5).sp,
+                fontFamily = XyDisplay, fontSize = 26.sp,
+                fontWeight = FontWeight.SemiBold, letterSpacing = (-0.6).sp,
             ),
             headlineMedium = TextStyle(
-                fontFamily = XyDisplay, fontSize = 24.sp,
-                fontWeight = FontWeight.SemiBold, letterSpacing = (-0.3).sp,
+                fontFamily = XyDisplay, fontSize = 22.sp,
+                fontWeight = FontWeight.SemiBold, letterSpacing = (-0.4).sp,
             ),
             headlineSmall = TextStyle(
-                fontFamily = XyDisplay, fontSize = 20.sp, fontWeight = FontWeight.SemiBold,
-            ),
-            titleLarge = TextStyle(
                 fontFamily = XyDisplay, fontSize = 19.sp, fontWeight = FontWeight.SemiBold,
             ),
+            titleLarge = TextStyle(
+                fontFamily = XyDisplay, fontSize = 18.sp, fontWeight = FontWeight.SemiBold,
+            ),
             titleMedium = TextStyle(
-                fontFamily = XyDisplay, fontSize = 17.sp, fontWeight = FontWeight.SemiBold,
+                fontFamily = XyDisplay, fontSize = 16.sp, fontWeight = FontWeight.SemiBold,
             ),
             titleSmall = TextStyle(
-                fontFamily = XyBody, fontSize = 15.sp, fontWeight = FontWeight.SemiBold,
+                fontFamily = XyBody, fontSize = 14.sp, fontWeight = FontWeight.SemiBold,
             ),
-            bodyLarge = TextStyle(fontFamily = XyBody, fontSize = 16.sp, lineHeight = 22.sp),
+            bodyLarge = TextStyle(fontFamily = XyBody, fontSize = 15.5.sp, lineHeight = 22.sp),
             bodyMedium = TextStyle(fontFamily = XyBody, fontSize = 14.sp, lineHeight = 20.sp),
             bodySmall = TextStyle(fontFamily = XyBody, fontSize = 12.5.sp, lineHeight = 17.sp),
             labelLarge = TextStyle(
-                fontFamily = XyDisplay, fontSize = 14.sp,
+                fontFamily = XyDisplay, fontSize = 13.5.sp,
                 fontWeight = FontWeight.SemiBold, letterSpacing = 0.2.sp,
             ),
             labelMedium = TextStyle(
-                fontFamily = XyBody, fontSize = 12.5.sp,
-                fontWeight = FontWeight.Medium, letterSpacing = 0.2.sp,
+                fontFamily = XyBody, fontSize = 12.sp,
+                fontWeight = FontWeight.Medium, letterSpacing = 0.3.sp,
             ),
             labelSmall = TextStyle(
-                fontFamily = XyBody, fontSize = 11.sp,
-                fontWeight = FontWeight.Medium, letterSpacing = 0.4.sp,
+                fontFamily = XyBody, fontSize = 10.5.sp,
+                fontWeight = FontWeight.Medium, letterSpacing = 0.6.sp,
             ),
         ),
         content = content,

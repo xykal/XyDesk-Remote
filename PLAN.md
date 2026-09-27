@@ -1,6 +1,6 @@
 # XyDesk Remote — Arsitektur & Roadmap
 > App Android remote desktop (klien RDP) untuk Windows, dengan sistem HUD multi-panel yang bisa dikustomisasi.
-> Status: **v0.2.3 — Cloud RDP dua-fase (public-safe): rahasia via ciphertext, bukan input workflow** — 2026-09-25
+> Status: **v0.3 — Cloud RDP dihapus; app jadi klien RDP murni + UI sesi (trackpad/pointer/mouse custom)** — 2026-09-27
 > Nama kerja: `XyDesk Remote` (package: `id.xydesk.remote`)
 
 ---
@@ -296,7 +296,7 @@ dipakai UI** — wiring UI di M1.2.
 - Form koneksi (host/port/user/pass/domain/label) + "ingat password"
   (→ `CredentialVault`, AES-GCM di Keystore)
 - Connect = core `SessionActivity` + URI `rdp://` (jalur render teruji M0)
-- Pintu ke Cloud RDP (GitHub)
+- Pintu ke perangkat baru (layar sendiri, bukan popup)
 - Compose: BOM 2026.05.01 + plugin compose 2.2.21 (match KGP)
 - OAuth App Device Flow sudah aktif + `CLIENT_ID` tertanam (login GitHub
   dari HP tinggal jalan)
@@ -306,7 +306,7 @@ dipakai UI** — wiring UI di M1.2.
 2. ~~Session surface + dialog trust + NLA~~ → selesai (M2 v1, di bawah)
 3. Policy background (auto-disconnect 15s saat app di-background)
    + deteksi "Windows Home / RDP off" (pre-flight TCP 2.5s →
-   `Error("unreachable")` + hint + pintu Cloud RDP)
+   `Error("unreachable")` + hint)
 4. `SessionManager.telemetry` (sampler 500ms) → panel Stats HUD
 
 ### M2 v1 — HUD + session surface XyDesk (SELESAI)
@@ -345,7 +345,7 @@ dipakai UI** — wiring UI di M1.2.
   palet violet (gelap #0E0B16 / terang), tipografi Space Grotesk + Inter
   (variable fonts OFL), bentuk sudut 12-28dp, komponen brand
   (XyCard/XyBrandButton/XyGhostButton/XySectionTitle/XyStatusChip/XyMenuItem/XyWordmark)
-- **App shell dengan drawer**: Koneksi, Cloud RDP, Pengaturan, Keamanan,
+- **App shell dengan drawer**: Perangkat, Tampilan, Kredensial, Umum, Keamanan,
   Tentang (jawab keluhan "gadis sidebar")
 - **Pengaturan**: tema (ikut sistem/gelap/terang), auto-disconnect toggle
 - **Keamanan**: daftar sertifikat "Percaya & ingat" + lupakan per-host/semua
@@ -364,74 +364,28 @@ dipakai UI** — wiring UI di M1.2.
 
 ---
 
-## 12. M6 — Cloud RDP "Create RDP from GitHub" (v1 di-ship bersama v0.2.0)
+## 12. M6 - Cloud RDP (DIHAPUS di v0.3)
 
-**Konsep:** user di app cuma **login GitHub + isi nama** → sisanya otomatis:
-nama jadi nama **repo GitHub (public — aturan proyek: tanpa repo private)** → app push template setup →
-workflow di repo menyiapkan **VM Windows self-hosted runner** (label
-`xydesk-win`): RDP on, join **Tailscale**, user + password **acak** →
-app poll run → download artifact `rdp-credentials` → cek konektivitas
-→ **connect otomatis** (via tailnet, tidak ada port-forward).
+Seksi ini catatan keputusan, bukan roadmap.
 
-### Arsitektur v1
-```
-HP (XyDesk Remote)                       Repo GitHub (per user)
-┌────────────────────┐   device flow    ┌──────────────────────────┐
-│ CloudRdpActivity   │ ───────────────► │ repo '<nama>' (public)   │
-│  login GitHub      │   (scope: repo)  │  .github/workflows/      │
-│  create repo       │ ◄─────────────── │    rdp-vm.yml           │
-│  push template     │   poll run +     │  setup/setup-windows.ps1│
-│  poll + download   │   artifact zip   └───────────┬──────────────┘
-└─────────┬──────────┘                              │ self-hosted
-          │ TCP check + SessionActivity             ▼
-          ▼                        ┌──────────────────────────────┐
-   RDP via Tailscale ◄─────────────│ VM 'xydesk-win' (Windows)    │
-   (host: xxx.ts.net:3389)         │ Tailscale + RDP + user xydesk│
-                                   └──────────────────────────────┘
-```
+Fitur "create RDP dari GitHub" pernah dikirim di v0.2.x: user login GitHub di
+app, app membuat repo (dipaksa **public**), push workflow + skrip setup, lalu
+workflow di akun user menyiapkan host Windows sebagai RDP target lewat
+self-hosted runner + Tailscale.
 
-### Komponen (sudah ada di kode)
-- `cloud/GitHubDeviceAuth.java` — device flow (tanpa client secret di device)
-- `cloud/GitHubClient.java` — repo/contents/actions/artifacts API (HttpURLConnection, tanpa dependensi)
-- `cloud/CloudRdpActivity.java` — UI + orkestrasi pipeline
-- `assets/xydesk-cloud/rdp-vm.yml` + `setup-windows.ps1` — template yang di-push ke repo user
+Kenapa dihapus:
 
-### Keamanan (dua-fase, public-safe)
-- Repo user **public**; token device flow scope `repo`
-- **Rahasia tidak lewat input workflow** (di repo public input workflow kebaca
-  publik). Fase `prepare`: host generate kunci RSA (persist di
-  `C:\ProgramData\xydesk\hostkey.pem`) + upload public key; app enkripsi
-  `{user,pass,tskey}` (RSA-OAEP-SHA1) → `setup/secrets.enc`.
-  Fase `setup`: host dekripsi, setup, kredensial di-enskripsi balik ke
-  `setup/pubkey.pem` (kunci sekali-pakai app) → `rdp-credentials.enc`.
-- Password RDP: pilihan user (wajib kuat) atau auto-generate 18 karakter di VM;
-  **di-reset tiap setup** (re-run aman); mengalir VM→artifact→app
-- Auth key Tailscale: via ciphertext (secrets.enc) atau env runner
-  `XYDESK_TAILSCALE_AUTH_KEY` — tidak pernah di repo sebagai plaintext
-- Koneksi RDP selalu TLS + dalam tailnet (tidak ada exposure port ke internet)
-- **Skrip host WAJIB jalan di pwsh 7** (API PEM .NET Core tidak ada di Windows
-  PowerShell 5.1) — workflow memanggil `pwsh`, bukan `powershell`
+1. **Melanggar ketentuan pemakaian GitHub Actions.** Runner hanya boleh dipakai
+   untuk aktivitas yang terkait produksi/testing/deploy/publikasi software repo
+   yang bersangkutan. Provisioning mesin RDP bukan salah satunya. Pola ini yang
+   memicu flag/pembatasan akun - bukan jenis token yang dipakai.
+2. **Memaksa repo public** untuk repo berisi infrastruktur pribadi user (log
+   Actions, nama tailnet, konfigurasi runner). Repo private jalan normal dengan
+   Actions; tidak ada aturan platform yang melarangnya.
+3. **Risiko kredensial** ganda: token OAuth scope `repo` di app (bisa baca dan
+   tulis SEMUA repo user) dan artifact berisi kredensial host.
 
-### Open items (butus keputusan lo)
-1. **OAuth App GitHub** harus dibuat manual di UI (POST /applications sudah mati) —
-   enable **Device Flow**, salin client_id ke `GitHubDeviceAuth.CLIENT_ID`.
-   **Panduan lengkap langkah demi langkah: `docs/OAUTH-APP-SETUP.md`**
-2. **Provisioning VM**: v1 pakai **self-hosted runner yang lo own** (label `xydesk-win`).
-   Kalau mau "benar-benar create VM dari nol" (cloud provider), tentukan provider-nya
-   (Cloudflare VPS / Hetzner / Oracle / Azure...) → kita bikin adapter provisioner +
-   auth key-nya disimpan sebagai GitHub user secret (RSA-OAEP) di tahap berikutnya
-3. Multi-VM / pool, hibernate/stop, dan billing info → v2
-
-## 13. Rilis & Distribution (v0.2.0)
-
-- **Split per-ABI** (tanpa universal): `armeabi-v7a`, `arm64-v8a`, `x86_64`
-- **Signing resmi**: keystore RSA-4096 (100 tahun) — digenerate sekali di CI
-  (job `generate-keystore`), disimpan sebagai secret `RELEASE_KEY_BASE64`
-  + salinan JKS di tempat aman milik lo (workspace: `xydesk-remote-release.jks`)
-- **GitHub Release**: push tag `v*` → build release (R8) → GitHub Release
-  dengan 3 APK per-ABI sebagai asset
-- **R8**: aktif di release (`MINIFY_ENABLED=true`), keep rules terdokumentasi
-  di `app/proguard-rules.txt` (native hanya menyentuh `LibFreeRDP` — verified
-  dari source). Rollback cepat: `MINIFY_ENABLED=false`
-- **Repo public** untuk kontribusi/sponsor/collab (secret tidak ada di repo —
-  sudah di-scan sebelum dipublikasi)
+Penggantinya: app klien RDP murni. Host/port + kredensial diisi user sendiri
+(VPS/VM/PC dengan RDP aktif, boleh lewat tailnet). Kalau nanti butuh
+provisioning, jalurnya lewat provider (Cloudflare/Hetzner/Oracle/Azure) dengan
+adapter di service XyVerse sendiri, bukan GitHub Actions.

@@ -3,6 +3,8 @@ package id.xydesk.remote.ui
 import android.app.Activity
 import android.net.Uri
 import androidx.core.content.FileProvider
+import androidx.core.view.ViewCompat
+import androidx.core.view.WindowInsetsCompat
 import java.io.File
 import java.io.FileOutputStream
 import android.content.Context
@@ -14,8 +16,10 @@ import android.os.Handler
 import android.os.Looper
 import android.view.ScaleGestureDetector
 import android.view.View
+import android.view.ViewGroup
 import android.widget.FrameLayout
 import android.widget.RelativeLayout
+import androidx.compose.ui.geometry.Offset
 import com.freerdp.freerdpcore.application.GlobalApp
 import com.freerdp.freerdpcore.presentation.ExtendedKeyboardView
 import com.freerdp.freerdpcore.presentation.ScrollView2D
@@ -135,6 +139,9 @@ class SessionSurfaceController(private val activity: Activity) : GraphicsSink {
         inputManager = im
         viewReady = true
 
+        installInsetsHandling(root, scroller, kb)
+        root.requestApplyInsets()
+
         // Catch-up: kalau resize sudah terjadi sebelum view tree siap
         // (jarang — connect native butuh >100ms, factory jalan <100ms),
         // ambil surface yang sudah ada sekarang.
@@ -142,6 +149,35 @@ class SessionSurfaceController(private val activity: Activity) : GraphicsSink {
 
         root.post { sv.requestFocus() }
         return root
+    }
+
+    /**
+     * Insets: keyboard extended harus NAIK di atas IME (bottom margin =
+     * tinggi IME), bukan tenggelam di belakangnya. Ini jalur yang sama
+     * dipakai SessionActivity inti; sebelumnya controller ini tidak
+     * handle sama sekali sehingga baris tombol fungsi keyboard tertutup
+     * keyboard sistem.
+     */
+    private fun installInsetsHandling(
+        root: RelativeLayout,
+        scroller: ScrollView2D,
+        kb: ExtendedKeyboardView,
+    ) {
+        ViewCompat.setOnApplyWindowInsetsListener(root) { _, insets ->
+            val imeBottom = insets.getInsets(WindowInsetsCompat.Type.ime()).bottom
+            val nav = insets.getInsets(WindowInsetsCompat.Type.navigationBars())
+            inputManager?.onImeVisibilityChanged(imeBottom > 0)
+            // IME sudah termasuk area nav bar: jangan padding dua kali
+            kb.setInsets(nav.left, nav.right, if (imeBottom > 0) 0 else nav.bottom)
+            val kbdVisible = kb.visibility == View.VISIBLE
+            scroller.setPadding(nav.left, 0, nav.right, if (kbdVisible) 0 else nav.bottom)
+            val lp = kb.layoutParams as? ViewGroup.MarginLayoutParams
+            if (lp != null && lp.bottomMargin != imeBottom) {
+                lp.bottomMargin = imeBottom
+                kb.layoutParams = lp
+            }
+            WindowInsetsCompat.CONSUMED
+        }
     }
 
     /** Dipanggil saat state = Connected. */
@@ -189,6 +225,34 @@ class SessionSurfaceController(private val activity: Activity) : GraphicsSink {
 
     fun toggleKeyboard() {
         inputManager?.toggleKeyboard()
+    }
+
+    /** Sinkronkan visibilitas keyboard (idempotent). */
+    fun setKeyboardVisible(shown: Boolean) {
+        uiHandler.post {
+            val kb = keyboard ?: return@post
+            val visible = kb.visibility == View.VISIBLE
+            if (shown != visible) {
+                inputManager?.toggleKeyboard()
+                rootView?.requestApplyInsets()
+            }
+        }
+    }
+
+    fun isKeyboardVisible(): Boolean = keyboard?.visibility == View.VISIBLE
+
+    /**
+     * Konversi koordinat desktop remote -> koordinat layar (px), dipakai
+     * lapisan Compose untuk menggambar pointer sendiri. Return null kalau
+     * surface belum siap.
+     */
+    fun remoteToScreen(x: Float, y: Float): Offset? {
+        val sv = sessionView ?: return null
+        val zoom = sv.getZoom().takeIf { it > 0.01f } ?: return null
+        val container = if (scrollView?.childCount ?: 0 > 0) scrollView!!.getChildAt(0) else sv
+        val screenX = x * zoom - (scrollView?.scrollX ?: 0) + container.left
+        val screenY = y * zoom - (scrollView?.scrollY ?: 0) + container.top
+        return Offset(screenX, screenY)
     }
 
     /** Terapkan zoom tersimpan (dipanggil setelah bind, main thread). */

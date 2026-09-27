@@ -130,7 +130,13 @@ class SessionManager(context: Context) {
     // ------------------------------------------------------------------
 
     private fun sessionUri(profile: ConnectionProfile): android.net.Uri {
-        val base = RdpUri.build(profile)
+        val options = RdpOptions.of(appContext, profile.id)
+        ConnectionLog.add(
+            "CM: opsi sesi audio=${options.audioMode.name} mic=${options.microphone} " +
+                "clip=${options.clipboard} drive=${options.localDrive} udp=${options.udpTransport} " +
+                "h264=${options.h264} gateway=${options.gateway?.id ?: "-"}"
+        )
+        val base = RdpUri.build(profile, options)
         val prefs = appContext.getSharedPreferences("xydesk.remote.display", Context.MODE_PRIVATE)
         val key = "${profile.id}.resolution"
         if (!prefs.contains(key)) return base
