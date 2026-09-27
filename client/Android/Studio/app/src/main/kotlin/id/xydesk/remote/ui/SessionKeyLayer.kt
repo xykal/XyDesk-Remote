@@ -60,9 +60,9 @@ import kotlin.math.roundToInt
 enum class HudPhase { DOWN, UP, TAP }
 
 private val HudBorder = Color(0xD9FFFFFF)
-private val HudBorderDim = Color(0x59FFFFFF)
+private val HudBorderDim = Color(0x7AFFFFFF)
 private val HudInk = Color(0xFFEFF3F6)
-private val HudMuted = Color(0xFF9AA4AD)
+private val HudMuted = Color(0xFFC3CBD3)
 
 /**
  * Layer tombol HUD: tiap tombol bulat penuh, satu aksi, bisa digeser bebas,

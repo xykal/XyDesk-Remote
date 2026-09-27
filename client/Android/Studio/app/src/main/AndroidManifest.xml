@@ -7,6 +7,13 @@
          library manifest (INTERNET, RECORD_AUDIO, CAMERA, ...) and merged
          into this app automatically. -->
 
+    <!-- Sesi remote adalah pekerjaan yang sedang dilihat user: dijalankan
+         sebagai foreground service supaya Android tidak mematikan proses
+         begitu app dipindah ke latar. Tipe specialUse dipakai karena kasus
+         ini tidak masuk kategori foreground bawaan. -->
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_SPECIAL_USE" />
+
     <application
         android:name="id.xydesk.remote.XyApp"
         android:icon="@mipmap/ic_launcher"
@@ -15,6 +22,15 @@
         android:dataExtractionRules="@xml/data_extraction_rules"
         android:fullBackupContent="false"
         android:resizeableActivity="true">
+
+        <service
+            android:name="id.xydesk.remote.XySessionService"
+            android:exported="false"
+            android:foregroundServiceType="specialUse">
+            <property
+                android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
+                android:value="remote desktop session" />
+        </service>
 
         <!-- Launcher: home Compose (daftar perangkat + koneksi) -->
         <activity

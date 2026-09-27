@@ -50,7 +50,11 @@ import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.zIndex
+import android.content.ClipboardManager
+import android.content.Context
+import android.widget.Toast
 import id.xydesk.remote.ui.components.XyField
+import id.xydesk.remote.ui.components.XyOverlay
 import id.xydesk.remote.ui.components.XyIcons
 import id.xydesk.remote.ui.components.XyPillButton
 import id.xydesk.remote.ui.components.XySegmented
@@ -64,11 +68,11 @@ import kotlin.math.roundToInt
  * skemanya harus tetap gelap walaupun app dipakai dalam mode terang.
  */
 private val HudBorder = Color(0xD9FFFFFF)
-private val HudBorderDim = Color(0x59FFFFFF)
+private val HudBorderDim = Color(0x7AFFFFFF)
 private val HudInk = Color(0xFFEFF3F6)
-private val HudMuted = Color(0xFFB7C0C8)
+private val HudMuted = Color(0xFFC9D1D8)
 private val HudPanelBg = Color(0xF20B0D10)
-private val HudPanelEdge = Color(0x24FFFFFF)
+private val HudPanelEdge = Color(0x33FFFFFF)
 
 private enum class PanelSide { RIGHT, LEFT }
 
@@ -116,6 +120,8 @@ fun SessionControls(
     onRotationChange: (String) -> Unit,
     onResolutionChange: (String) -> Unit,
     onToggleTrackpad: () -> Unit,
+    onSendText: (String) -> Unit,
+    coreInfo: List<String> = emptyList(),
 ) {
     val context = LocalContext.current
     val prefs = remember { SessionPrefs(context) }
@@ -132,6 +138,15 @@ fun SessionControls(
     var resolution by remember { mutableStateOf(DisplayPrefs.resolution(context, deviceId)) }
     var rotation by remember { mutableStateOf(DisplayPrefs.rotation(context, deviceId)) }
     var custom by remember { mutableStateOf("") }
+    var textOpen by remember { mutableStateOf(false) }
+    var textValue by remember { mutableStateOf("") }
+
+    fun clipboardText(): String {
+        val cm = context.getSystemService(Context.CLIPBOARD_SERVICE) as? ClipboardManager
+        val clip = cm?.primaryClip ?: return ""
+        if (clip.itemCount == 0) return ""
+        return clip.getItemAt(0).coerceToText(context).toString()
+    }
 
     fun haptic() {
         if (haptics) {
@@ -195,6 +210,55 @@ fun SessionControls(
         if (mappingMode) {
             Box(Modifier.align(Alignment.TopCenter).padding(top = 8.dp)) {
                 HudMappingBanner(onDone = { onMappingModeChange(false) })
+            }
+        }
+
+        if (textOpen) {
+            XyOverlay(title = "Kirim teks", onDismiss = { textOpen = false }) {
+                Text(
+                    "Teks dikirim sebagai unicode ke jendela remote yang sedang fokus.",
+                    color = HudMuted,
+                    fontSize = 10.5.sp,
+                )
+                XyField(
+                    value = textValue,
+                    onValueChange = { textValue = it },
+                    label = "Teks",
+                    hint = "mis. password, alamat URL",
+                    imeAction = androidx.compose.ui.text.input.ImeAction.Send,
+                )
+                val paste = clipboardText()
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    XyPillButton(
+                        "Tempel",
+                        {
+                            textValue = paste
+                            if (paste.isEmpty()) {
+                                Toast.makeText(context, "Clipboard kosong", Toast.LENGTH_SHORT).show()
+                            }
+                        },
+                        primary = false,
+                        compact = true,
+                        modifier = Modifier.weight(1f),
+                    )
+                    XyPillButton(
+                        "Kirim",
+                        {
+                            val t = textValue
+                            if (t.isNotEmpty()) onSendText(t)
+                            textOpen = false
+                        },
+                        compact = true,
+                        modifier = Modifier.weight(1f),
+                    )
+                }
+                XyPillButton(
+                    "Selesai",
+                    { textOpen = false },
+                    primary = false,
+                    compact = true,
+                    modifier = Modifier.fillMaxWidth(),
+                )
             }
         }
 
@@ -588,6 +652,15 @@ private fun SessionPanel(
                             modifier = Modifier.fillMaxWidth(),
                         )
                     }
+                    // Jalur untuk teks yang tidak enak diketik lewat pemetaan
+                    // tombol: tempel dari clipboard HP lalu kirim sebagai unicode.
+                    XyPillButton(
+                        "Kirim teks ke remote",
+                        { textValue = ""; textOpen = true },
+                        primary = false,
+                        compact = true,
+                        modifier = Modifier.fillMaxWidth(),
+                    )
                 }
 
                 PanelSection("Pointer") {
@@ -752,6 +825,28 @@ private fun SessionPanel(
                         compact = true,
                         modifier = Modifier.fillMaxWidth(),
                     )
+                    if (coreInfo.isNotEmpty()) {
+                        coreInfo.forEach { line ->
+                            Text(line, color = HudMuted, fontSize = 10.5.sp)
+                        }
+                        XyPillButton(
+                            "Salin info teknis",
+                            {
+                                val cm = context.getSystemService(Context.CLIPBOARD_SERVICE)
+                                    as? ClipboardManager
+                                cm?.setPrimaryClip(
+                                    android.content.ClipData.newPlainText(
+                                        "XyDesk Remote",
+                                        coreInfo.joinToString("\n"),
+                                    )
+                                )
+                                Toast.makeText(context, "Info tersalin", Toast.LENGTH_SHORT).show()
+                            },
+                            primary = false,
+                            compact = true,
+                            modifier = Modifier.fillMaxWidth(),
+                        )
+                    }
                 }
                 PanelSection("Tips") {
                     PanelHint(

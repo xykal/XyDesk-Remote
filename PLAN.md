@@ -417,3 +417,27 @@ Berikutnya:
 - Job CI "feedback cepat" (compile Kotlin release tanpa superbuild native).
 - Pangkas beban mati APK (lib yang tak dipakai).
 - Verifikasi lapangan: audio bisu? kirim `freerdp-native.log` dari dialog log.
+
+## 14. M8 - ronde 4 (v0.5.1)
+
+Sudah dikode:
+
+- Drag tombol HUD diperbaiki (akumulator gerak per gesture + `rememberUpdatedState`)
+  dan tahan-lama membuka editor tombol di mode mana pun
+  (`ui/SessionKeyLayer.kt`).
+- Baris atas keyboard: hanya saat IME tampil dan tombol keyboard HUD aktif;
+  tombol "buka keyboard" jadi tombol HUD biasa (`HudKind.KEYBOARD`).
+- Wallpaper Windows 11 asli untuk preview kartu home
+  (`res/drawable-nodpi/xy_win11_wall.jpg`).
+- Pointer mengikuti bentuk kursor server: `RemoteCursor` +
+  `onRemoteCursor` (core -> controller -> Compose).
+- Foreground service `XySessionService` (tipe `specialUse`) supaya sesi tidak
+  diputus Android saat app ke latar, lengkap dengan notifikasi
+  "Buka"/"Putuskan".
+- "Kirim teks ke remote" + "Salin info teknis" (versi inti RDP).
+
+Berikutnya:
+
+- Audit "fungsi yang belum ada" lanjutan (mis. pengaturan kamera saat sesi).
+- Verifikasi lapangan hasil ronde 4 di HP + log native untuk audio.
+- Pangkas beban mati APK (lib yang tak dipakai).

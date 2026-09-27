@@ -3,6 +3,7 @@ package id.xydesk.remote.ui
 import android.os.Build
 import androidx.compose.ui.Alignment
 import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.padding
@@ -11,6 +12,8 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.blur
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
@@ -19,13 +22,15 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import id.xydesk.remote.R
 
 /**
  * Wallpaper desktop untuk preview perangkat + latar layar koneksi.
  *
- * Digambar prosedural (Canvas) — bukan aset biner. Alasan: bobot APK nol,
- * tidak ada masalah lisensi gambar, dan hasilnya tetap ikut tema app.
- * Motifnya cuma pengingat jenis OS perangkat, bukan replika wallpaper asli.
+ * Windows 11 memakai foto asli (drawable-nodpi/xy_win11_wall.jpg) supaya
+ * preview perangkat Windows terasa seperti desktop yang benar-benar dilihat
+ * user. Sisanya digambar prosedural (Canvas): bobot APK nol dan tidak ada
+ * urusan lisensi gambar.
  */
 enum class XyWall(val label: String) {
     WIN11("Windows 11"),
@@ -58,44 +63,28 @@ fun XyWallpaper(
         Modifier
     }
     Box(modifier.fillMaxSize().then(blurModifier)) {
+        if (wall == XyWall.WIN11) {
+            Image(
+                painter = painterResource(R.drawable.xy_win11_wall),
+                contentDescription = null,
+                contentScale = ContentScale.Crop,
+                modifier = Modifier.fillMaxSize(),
+            )
+        }
         Canvas(Modifier.fillMaxSize()) {
             val w = size.width
             val h = size.height
             when (wall) {
                 XyWall.WIN11 -> {
+                    // Fotonya digambar di luar Canvas (lihat Image di bawah) —
+                    // di sini hanya penajam kontras supaya teks tetap terbaca
+                    // di atas area terang wallpaper.
                     drawRect(
-                        Brush.linearGradient(
-                            colors = listOf(Color(0xFF0B2038), Color(0xFF071427), Color(0xFF040C18)),
-                            start = Offset(0f, 0f),
-                            end = Offset(w, h),
+                        Brush.verticalGradient(
+                            colors = listOf(
+                                Color(0x59000000), Color(0x26000000), Color(0x8C000000),
+                            ),
                         )
-                    )
-                    drawOval(
-                        Brush.radialGradient(
-                            colors = listOf(Color(0xFF2C6FB5), Color(0x000E2A46)),
-                            center = Offset(w * 0.5f, h * 0.46f),
-                            radius = h * 0.68f,
-                        ),
-                        topLeft = Offset(w * 0.06f, h * 0.02f),
-                        size = Size(w * 0.88f, h * 0.88f),
-                    )
-                    drawOval(
-                        Brush.radialGradient(
-                            colors = listOf(Color(0xFF7C5BD6), Color(0x00000000)),
-                            center = Offset(w * 0.74f, h * 0.30f),
-                            radius = h * 0.42f,
-                        ),
-                        topLeft = Offset(w * 0.24f, h * 0.02f),
-                        size = Size(w * 0.8f, h * 0.7f),
-                    )
-                    drawOval(
-                        Brush.radialGradient(
-                            colors = listOf(Color(0xFF38C6D9), Color(0x00000000)),
-                            center = Offset(w * 0.26f, h * 0.74f),
-                            radius = h * 0.4f,
-                        ),
-                        topLeft = Offset(-w * 0.2f, h * 0.34f),
-                        size = Size(w * 0.9f, h * 0.8f),
                     )
                 }
 
@@ -215,16 +204,41 @@ fun DevicePreviewArt(
     val hairShift = ((h ushr 17) and 0x7fffffff) % 4
 
     Box(
-        modifier
-            .fillMaxSize()
-            .background(
-                Brush.linearGradient(
-                    colors = listOf(Color(0xFF15191E), Color(0xFF0C0F12), Color(0xFF070909)),
-                    start = Offset(0f, 0f),
-                    end = Offset(720f, 420f),
-                ),
-            ),
+        modifier.fillMaxSize(),
     ) {
+        if (os == XyWall.WIN11) {
+            // Preview perangkat Windows 11 memakai wallpaper aslinya, lalu
+            // ditutup scrim gelap: kartu tetap bagian UI app, bukan pameran foto.
+            Image(
+                painter = painterResource(R.drawable.xy_win11_wall),
+                contentDescription = null,
+                contentScale = ContentScale.Crop,
+                modifier = Modifier.fillMaxSize(),
+            )
+            Box(
+                Modifier
+                    .fillMaxSize()
+                    .background(
+                        Brush.verticalGradient(
+                            listOf(Color(0x4D000000), Color(0x40000000), Color(0x99000000)),
+                        )
+                    ),
+            )
+        } else {
+            Box(
+                Modifier
+                    .fillMaxSize()
+                    .background(
+                        Brush.linearGradient(
+                            colors = listOf(Color(0xFF15191E), Color(0xFF0C0F12), Color(0xFF070909)),
+                            start = Offset(0f, 0f),
+                            end = Offset(720f, 420f),
+                        ),
+                    ),
+            )
+        }
+        // Garis rambut lebih tipis di atas foto supaya tidak terlihat kotor.
+        val artAlpha = if (os == XyWall.WIN11) 0.42f else 1f
         Canvas(Modifier.fillMaxSize()) {
             val w = size.width
             val hh = size.height
@@ -234,13 +248,13 @@ fun DevicePreviewArt(
             // Cincin besar: pusat di sudut terpilih per nama perangkat.
             val radius = hh * (1.05f + (hairShift * 0.06f))
             drawCircle(
-                color = Color(0xFF3A5468).copy(alpha = 0.55f),
+                color = Color(0xFF3A5468).copy(alpha = 0.55f * artAlpha),
                 radius = radius,
                 center = Offset(ox, oy),
                 style = Stroke(width = 1.6f),
             )
             drawCircle(
-                color = Color(0xFF26313A),
+                color = Color(0xFF26313A).copy(alpha = artAlpha),
                 radius = radius * 0.78f,
                 center = Offset(ox, oy),
                 style = Stroke(width = 1.2f),
@@ -254,7 +268,7 @@ fun DevicePreviewArt(
             for (i in 0..3) {
                 val off = (i + 1) * w * 0.19f
                 drawLine(
-                    color = Color(0xFF2A333B),
+                    color = Color(0xFF2A333B).copy(alpha = artAlpha),
                     start = Offset(-w * 0.2f + off * dx, -hh * 0.2f + off * dy),
                     end = Offset(w * 1.2f * dx + off * dx, hh * 1.2f * dy + off * dy),
                     strokeWidth = 1f,

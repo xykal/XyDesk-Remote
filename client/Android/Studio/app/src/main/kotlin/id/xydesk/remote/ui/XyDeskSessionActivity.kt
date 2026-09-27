@@ -21,6 +21,9 @@ import androidx.core.content.ContextCompat
 import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.WindowInsetsControllerCompat
+import android.os.Build
+import id.xydesk.remote.XySessionBridge
+import id.xydesk.remote.XySessionService
 import id.xydesk.remote.core.ConnectionLog
 import id.xydesk.remote.core.ConnectionProfile
 import id.xydesk.remote.core.RdpOptions
@@ -154,20 +157,36 @@ class XyDeskSessionActivity : ComponentActivity() {
         super.onStart()
         // balik dari background sebelum timer jalan = cancel auto-disconnect
         bgHandler.removeCallbacks(bgDisconnect)
+        // Notifikasi punya tombol "Putuskan" — sambungkan ke sesi yang hidup.
+        XySessionBridge.onStopRequested = {
+            runOnUiThread {
+                if (manager.state.value is SessionState.Connected) manager.disconnect()
+                XySessionService.stop(this)
+            }
+        }
     }
 
     override fun onStop() {
         super.onStop()
-        if (manager.state.value is SessionState.Connected &&
-            appPrefs?.autoDisconnect != false
-        ) {
-            bgHandler.postDelayed(bgDisconnect, BACKGROUND_DISCONNECT_DELAY_MS)
+        if (manager.state.value !is SessionState.Connected) return
+        when {
+            // Default: sesi dibiarkan hidup di latar lewat foreground service.
+            appPrefs?.keepAlive != false -> {
+                Log.i(TAG, "keep-alive: sesi jalan di latar (foreground service)")
+                XySessionService.start(this, null, ping = true)
+            }
+
+            appPrefs?.autoDisconnect != false -> {
+                bgHandler.postDelayed(bgDisconnect, BACKGROUND_DISCONNECT_DELAY_MS)
+            }
         }
     }
 
     override fun onDestroy() {
         super.onDestroy()
         bgHandler.removeCallbacks(bgDisconnect)
+        XySessionBridge.onStopRequested = null
+        XySessionService.stop(this)
         val cm = getSystemService(CLIPBOARD_SERVICE) as ClipboardManager
         clipListener?.let { cm.removePrimaryClipChangedListener(it) }
         clipListener = null
@@ -200,6 +219,9 @@ class XyDeskSessionActivity : ComponentActivity() {
         val wanted = buildList {
             if (options.camera) add(Manifest.permission.CAMERA)
             if (options.microphone) add(Manifest.permission.RECORD_AUDIO)
+            // Notifikasi sesi (foreground service). Tanpa izin ini service tetap
+            // jalan, tapi notifikasinya tidak terlihat user.
+            if (Build.VERSION.SDK_INT >= 33) add(Manifest.permission.POST_NOTIFICATIONS)
         }.filter {
             ContextCompat.checkSelfPermission(this, it) != PackageManager.PERMISSION_GRANTED
         }

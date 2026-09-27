@@ -84,6 +84,46 @@ Ronde ini seluruhnya soal input dan kontrol:
 
 Detail teknis: `docs/HUD-BUTTONS.md` (EN) dan `docs/HUD-BUTTONS.id.md` (ID).
 
+## Catatan rilis v0.5.1
+
+Ronde 4 — perbaikan dari pemakaian nyata di HP:
+
+- Tombol HUD bisa digeser lagi di mode atur posisi (gerak diakumulasi per
+  gesture, bukan selisih antar-event), dan tahan-lama membuka editor tombol di
+  mode mana pun.
+- Baris tombol di atas keyboard hanya muncul saat keyboard benar-benar tampil
+  dan saat tombol keyboard HUD aktif; tombol "buka keyboard" dipindah jadi
+  tombol HUD biasa (`Keyboard`).
+- Preview kartu Windows 11 memakai wallpaper aslinya
+  (`drawable-nodpi/xy_win11_wall.jpg`), bukan art prosedural.
+- Pointer memakai bentuk kursor dari server (panah, penunjuk, I-beam) lewat
+  `RemoteCursor`; jatuh ke panah bawaan kalau server tidak mengirim kursor.
+- Sesi tetap jalan saat app ditinggal ke latar: foreground service
+  `XySessionService` + notifikasi dengan aksi "Buka" dan "Putuskan"; perilaku
+  ini bisa dimatikan di setelan app.
+- Fitur baru: "Kirim teks ke remote" (termasuk tempel dari clipboard HP) dan
+  "Salin info teknis" (versi inti RDP) untuk laporan bug.
+- Kontras teks dan garis dinaikkan di panel, keyboard layar, dan ikon HUD.
+
+## English summary (v0.5.1)
+
+Round 4, driven by real phone usage:
+
+- HUD buttons drag again in arrange mode (gesture accumulates movement instead
+  of reading stale coordinates), and long-press opens the key editor in any
+  mode.
+- The key row above the system keyboard only shows while that keyboard is
+  actually visible, gated by the HUD keyboard button.
+- Windows 11 device cards use the real wallpaper asset instead of procedural
+  art.
+- The pointer now uses the server-side cursor shape (arrow, hand, I-beam) via
+  `RemoteCursor`, falling back to the built-in arrow.
+- Sessions keep running in the background through a foreground service with
+  "Open" / "Disconnect" notification actions (toggleable in settings).
+- New: send arbitrary text to the remote (including paste from the phone
+  clipboard) and copy technical info for bug reports.
+- Higher contrast for panel text, on-screen keyboard, and HUD icons.
+
 ## English summary (v0.5)
 
 - Free-floating, fully round HUD buttons: one button = one action, draggable,

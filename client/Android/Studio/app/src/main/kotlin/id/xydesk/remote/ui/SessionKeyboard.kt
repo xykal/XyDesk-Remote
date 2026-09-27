@@ -164,7 +164,7 @@ fun SessionKeyboard(
                 .width((322 * scale).dp)
                 .clip(RoundedCornerShape(14.dp))
                 .background(Color(0xF00B0D10))
-                .border(1.dp, Color(0x33FFFFFF), RoundedCornerShape(14.dp))
+                .border(1.dp, Color(0x52FFFFFF), RoundedCornerShape(14.dp))
                 .padding(6.dp),
             verticalArrangement = Arrangement.spacedBy(4.dp * scale),
         ) {
@@ -177,7 +177,7 @@ fun SessionKeyboard(
                 Box(
                     Modifier
                         .clip(RoundedCornerShape(50))
-                        .border(1.dp, Color(0x33FFFFFF), RoundedCornerShape(50))
+                        .border(1.dp, Color(0x52FFFFFF), RoundedCornerShape(50))
                         .pointerInput(Unit) {
                             detectDragGestures { change, drag ->
                                 change.consume()
@@ -192,7 +192,7 @@ fun SessionKeyboard(
                         "GESER",
                         fontSize = 8.sp,
                         letterSpacing = 1.1.sp,
-                        color = Color(0xFFB9C2CA),
+                        color = Color(0xFFD2D9DF),
                         fontWeight = FontWeight.SemiBold,
                     )
                 }
@@ -235,7 +235,7 @@ fun SessionKeyboard(
                     Modifier
                         .size((34f * scale).dp)
                         .clip(CircleShape)
-                        .border(1.2.dp, Color(0x59FFFFFF), CircleShape)
+                        .border(1.2.dp, Color(0x7AFFFFFF), CircleShape)
                         .clickable {
                             tap()
                             onHide()
@@ -469,7 +469,7 @@ private fun ComboPage(scale: Float, onCombo: (List<Int>) -> Unit) {
                             .weight(1f)
                             .height((34f * scale).dp)
                             .clip(RoundedCornerShape((7 * scale).dp))
-                            .border(1.dp, Color(0x59FFFFFF), RoundedCornerShape((7 * scale).dp))
+                            .border(1.dp, Color(0x7AFFFFFF), RoundedCornerShape((7 * scale).dp))
                             .clickable { onCombo(combo.codes) },
                         contentAlignment = Alignment.Center,
                     ) {
@@ -511,7 +511,7 @@ private fun KeyRow(
                     .clip(RoundedCornerShape((7 * scale).dp))
                     .border(
                         1.dp,
-                        if (active) Color(0xFFEFF3F6) else Color(0x59FFFFFF),
+                        if (active) Color(0xFFEFF3F6) else Color(0x7AFFFFFF),
                         RoundedCornerShape((7 * scale).dp),
                     )
                     .pointerInput(key.code, sticky) {
@@ -546,7 +546,7 @@ private fun TabChip(label: String, active: Boolean, scale: Float, onClick: () ->
     Box(
         Modifier
             .clip(RoundedCornerShape(50))
-            .border(1.dp, if (active) Color(0xFFEFF3F6) else Color(0x33FFFFFF), RoundedCornerShape(50))
+            .border(1.dp, if (active) Color(0xFFEFF3F6) else Color(0x52FFFFFF), RoundedCornerShape(50))
             .clickable(onClick = onClick)
             .padding(horizontal = 7.dp, vertical = 4.dp),
     ) {
@@ -565,13 +565,13 @@ private fun ChromeChip(label: String, scale: Float, onClick: () -> Unit) {
     Box(
         Modifier
             .clip(RoundedCornerShape(50))
-            .border(1.dp, Color(0x33FFFFFF), RoundedCornerShape(50))
+            .border(1.dp, Color(0x52FFFFFF), RoundedCornerShape(50))
             .clickable(onClick = onClick)
             .padding(horizontal = 8.dp, vertical = 4.dp),
     ) {
         Text(
             label,
-            color = Color(0xFFB9C2CA),
+            color = Color(0xFFD2D9DF),
             fontSize = (10f * scale).sp,
             fontWeight = FontWeight.SemiBold,
         )

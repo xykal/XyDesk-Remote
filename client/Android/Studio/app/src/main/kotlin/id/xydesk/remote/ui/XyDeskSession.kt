@@ -61,6 +61,7 @@ import androidx.compose.ui.viewinterop.AndroidView
 import androidx.compose.ui.zIndex
 import com.freerdp.freerdpcore.utils.Mouse
 import id.xydesk.remote.core.CertificateInfo
+import id.xydesk.remote.XySessionService
 import id.xydesk.remote.core.ConnectionLog
 import id.xydesk.remote.core.ConnectionProfile
 import id.xydesk.remote.core.SessionManager
@@ -138,10 +139,23 @@ fun XyDeskSessionScreen(
         mutableStateOf(prefs.overlayShown(profile.id) || prefs.keyboardAutoOpen)
     }
     var keyboardScale by remember { mutableFloatStateOf(prefs.keyboardScale) }
-    var hudKeys by remember(profile.id) { mutableStateOf(prefs.hudKeys(profile.id)) }
+    var hudKeys by remember(profile.id) {
+        // Layout lama (sebelum ronde 4) menandai SEMUA tombol sebagai baris
+        // atas; kalau tidak dimigrasi, tombol terapung user hilang dari layar.
+        mutableStateOf(HudKey.migrate(prefs.hudKeys(profile.id)))
+    }
     var mappingMode by remember { mutableStateOf(false) }
     var imeHeightPx by remember { mutableIntStateOf(0) }
     var remoteCursor by remember { mutableStateOf<RemoteCursor?>(null) }
+    // Info teknis untuk laporan bug: versi FreeRDP + ringkasan build JNI.
+    val coreInfo = remember {
+        runCatching {
+            listOf(
+                "Inti RDP ${manager.freeRdpVersion()}",
+                manager.buildInfo().lineSequence().firstOrNull()?.take(120).orEmpty(),
+            ).filter { it.isNotBlank() }
+        }.getOrDefault(emptyList())
+    }
     val latchedKeys = remember(profile.id) { mutableStateMapOf<String, Boolean>() }
 
     fun setHudKeys(list: List<HudKey>) {
@@ -206,6 +220,17 @@ fun XyDeskSessionScreen(
             prefs.setZoom(profile.id, z)
         }
         controller.setInstance(manager.instance())
+    }
+
+    // Foreground service: sesi tetap hidup saat app ditinggal ke latar, dan
+    // notifikasinya memberi jalan pulang + tombol putus.
+    LaunchedEffect(state) {
+        val label = profile.label ?: "${profile.host}:${profile.port}"
+        if (state is SessionState.Connected) {
+            XySessionService.start(context, label)
+        } else if (state is SessionState.Disconnected) {
+            XySessionService.stop(context)
+        }
     }
 
     LaunchedEffect(state) {
@@ -512,6 +537,10 @@ fun XyDeskSessionScreen(
                     prefs.inputMode = next
                     if (next == InputMode.DIRECT) controller.setKeyboardVisible(keyboardShown)
                 },
+                // Teks bebas (unicode) — untuk password/URL/karakter yang
+                // tidak ada di pemetaan tombol HUD.
+                onSendText = { manager.sendText(it) },
+                coreInfo = coreInfo,
             )
 
             // Keyboard layar lengkap: QWERTY + F1-F12 + numpad + simbol +
