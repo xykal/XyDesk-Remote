@@ -141,6 +141,7 @@ fun XyDeskSessionScreen(
     var hudKeys by remember(profile.id) { mutableStateOf(prefs.hudKeys(profile.id)) }
     var mappingMode by remember { mutableStateOf(false) }
     var imeHeightPx by remember { mutableIntStateOf(0) }
+    var remoteCursor by remember { mutableStateOf<RemoteCursor?>(null) }
     val latchedKeys = remember(profile.id) { mutableStateMapOf<String, Boolean>() }
 
     fun setHudKeys(list: List<HudKey>) {
@@ -195,6 +196,8 @@ fun XyDeskSessionScreen(
         // Toolbar HUD menempel di atas keyboard HP: tinggi IME datang dari
         // controller, jadi toolbar otomatis ikut hilang saat keyboard ditutup.
         controller.onImeChanged = { px -> imeHeightPx = px }
+        // Bentuk kursor dari server (panah/tangan/I-beam/...) dipakai apa adanya.
+        controller.onRemoteCursor = { cursor -> remoteCursor = cursor }
     }
 
     LaunchedEffect(Unit) {
@@ -315,6 +318,13 @@ fun XyDeskSessionScreen(
             HudKind.MOUSE_MIDDLE -> sendButton(XyMouseButton.MIDDLE, down)
             HudKind.SCROLL_UP -> if (down) sendScroll(1)
             HudKind.SCROLL_DOWN -> if (down) sendScroll(-1)
+            HudKind.KEYBOARD -> if (down) {
+                val next = !keyboardShown
+                keyboardShown = next
+                prefs.setKeyboardShown(profile.id, next)
+                controller.setKeyboardVisible(next)
+            }
+
             HudKind.INPUT_SWITCH -> if (down) {
                 val next = if (InputMode.entries[inputMode] == InputMode.TRACKPAD) {
                     InputMode.DIRECT
@@ -402,6 +412,8 @@ fun XyDeskSessionScreen(
                 zoomPercent = (zoom * 100).roundToInt(),
                 pointerScreen = pointerScreen,
                 pointerVisible = pointerVisible && InputMode.entries[inputMode] == InputMode.TRACKPAD,
+                remoteCursor = remoteCursor,
+                zoom = zoom,
                 inputMode = InputMode.entries[inputMode],
                 onInputModeChange = { mode ->
                     inputMode = mode.ordinal
@@ -516,9 +528,25 @@ fun XyDeskSessionScreen(
                             keyboardScale = it
                             prefs.keyboardScale = it
                         },
-                        onClose = {
+                        // Baris atas keyboard = tombol HUD milik user; kalau
+                        // kosong board tetap jalan seperti biasa.
+                        aux = hudKeys.filter { it.inToolbar },
+                        onAuxPhase = { key, phase -> handleHudPhase(key, phase) },
+                        onHide = {
+                            // Tutup keyboard sepenuhnya (balik ke desktop).
                             overlayShown = false
                             prefs.setOverlayShown(profile.id, false)
+                            keyboardShown = false
+                            prefs.setKeyboardShown(profile.id, false)
+                            controller.setKeyboardVisible(false)
+                        },
+                        onClose = {
+                            // ABC = balik ke keyboard HP.
+                            overlayShown = false
+                            prefs.setOverlayShown(profile.id, false)
+                            keyboardShown = true
+                            prefs.setKeyboardShown(profile.id, true)
+                            controller.setKeyboardVisible(true)
                         },
                     )
                 }

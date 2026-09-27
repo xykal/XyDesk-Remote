@@ -43,6 +43,9 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.runtime.rememberUpdatedState
+import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -63,7 +66,7 @@ import kotlin.math.roundToInt
 private val HudBorder = Color(0xD9FFFFFF)
 private val HudBorderDim = Color(0x59FFFFFF)
 private val HudInk = Color(0xFFEFF3F6)
-private val HudMuted = Color(0xFF9AA4AD)
+private val HudMuted = Color(0xFFB7C0C8)
 private val HudPanelBg = Color(0xF20B0D10)
 private val HudPanelEdge = Color(0x24FFFFFF)
 
@@ -88,6 +91,8 @@ fun SessionControls(
     zoomPercent: Int,
     pointerScreen: Offset,
     pointerVisible: Boolean,
+    remoteCursor: RemoteCursor? = null,
+    zoom: Float = 1f,
     inputMode: InputMode,
     onInputModeChange: (InputMode) -> Unit,
     keyboardShown: Boolean,
@@ -117,6 +122,7 @@ fun SessionControls(
     val view = LocalView.current
     var rightOpen by remember { mutableStateOf(false) }
     var leftOpen by remember { mutableStateOf(false) }
+    var pickerAux by remember { mutableStateOf(false) }
     var pickerOpen by remember { mutableStateOf(false) }
     var editing by remember { mutableStateOf<HudKey?>(null) }
     var pointerSize by remember { mutableFloatStateOf(prefs.pointerSize) }
@@ -155,17 +161,26 @@ fun SessionControls(
             x = (0.60f + 0.08f * (slot % 3)).coerceIn(0f, 1f),
             y = (0.30f + 0.10f * (slot % 5)).coerceIn(0f, 1f),
             size = 48f,
+            // Tombol baru masuk ke kelompok yang sedang dibuka: terapung
+            // (bisa digeser bebas) atau baris atas keyboard kustom.
+            inToolbar = pickerAux,
         )
         onKeysChange(keys + key)
     }
 
     Box(Modifier.fillMaxSize().zIndex(10f)) {
         if (pointerVisible) {
-            XyPointer(position = pointerScreen, sizeDp = pointerSize, style = pointerStyle)
+            XyPointer(
+                position = pointerScreen,
+                sizeDp = pointerSize,
+                style = pointerStyle,
+                remote = remoteCursor,
+                zoom = zoom,
+            )
         }
 
         HudKeyLayer(
-            keys = keys,
+            keys = keys.filter { !it.inToolbar },
             mappingMode = mappingMode,
             onMove = { id, x, y ->
                 onKeysChange(keys.map { if (it.id == id) it.copy(x = x, y = y) else it })
@@ -246,7 +261,7 @@ fun SessionControls(
                 pointerSize = pointerSize,
                 onPointerSize = { pointerSize = it; prefs.pointerSize = it },
                 keys = keys,
-                onAddKey = { pickerOpen = true },
+                onAddKey = { aux -> pickerAux = aux; pickerOpen = true },
                 onEditKey = { editing = it },
                 onDeleteKey = { onKeysChange(keys.filterNot { k -> k.id == it.id }) },
                 mappingMode = mappingMode,
@@ -263,32 +278,12 @@ fun SessionControls(
             )
         }
 
-        // ---- toolbar di atas keyboard HP; hanya saat IME tampil ----
-        if (imeHeightPx > 0 && !mappingMode) {
-            Box(
-                Modifier
-                    .align(Alignment.BottomCenter)
-                    .offset { IntOffset(0, -imeHeightPx) }
-                    .zIndex(20f),
-            ) {
-                HudKeyToolbar(
-                    keys = keys,
-                    boardOpen = overlayShown,
-                    onPhase = { key, phase -> haptic(); onPhase(key, phase) },
-                    onToggleBoard = { onOverlayShownChange(!overlayShown) },
-                    onOpenPanel = { rightOpen = true },
-                    chips = {
-                        HudMiniChip(XyIcons.Sliders) { rightOpen = true }
-                        HudMiniChip(XyIcons.Cursor) {
-                            onPointerVisibilityChange(!pointerVisible)
-                        }
-                    },
-                )
-            }
-        }
-
-        // ---- tombol keyboard (buka keyboard HP / board), pojok bawah ----
-        if (!keyboardShown && !overlayShown && !mappingMode) {
+        // ---- tombol keyboard cadangan, pojok bawah ----
+        // Cuma dipakai kalau user belum punya tombol HUD "Buka keyboard".
+        // Tombol HUD bisa digeser; tombol cadangan ini menempel di layar dan
+        // dulu menutupi taskbar remote, jadi sekarang jadi opsi terakhir.
+        val hasKeyboardKey = keys.any { it.kind == HudKind.KEYBOARD }
+        if (!hasKeyboardKey && !keyboardShown && !overlayShown && !mappingMode) {
             val alignment =
                 if (prefs.keyboardCorner == Corner.RIGHT) Alignment.BottomEnd else Alignment.BottomStart
             Box(Modifier.align(alignment).padding(16.dp).zIndex(20f)) {
@@ -392,9 +387,43 @@ private fun PanelHandle(
     }
 }
 
-/** Pointer tunggal: titik atau panah, ukuran bebas, outline kontras. */
+/**
+ * Pointer tunggal.
+ *
+ * Urutan prioritas:
+ *  1. Bentuk kursor yang DIKIRIM SERVER (panah, tangan, I-beam, resize, ...)
+ *     — digambar apa adanya, jadi bentuknya berubah selayaknya pointer desktop.
+ *  2. Kalau server tidak mengirim apa-apa: panah/titik bawaan app.
+ */
 @Composable
-private fun XyPointer(position: Offset, sizeDp: Float, style: PointerStyle) {
+private fun XyPointer(
+    position: Offset,
+    sizeDp: Float,
+    style: PointerStyle,
+    remote: RemoteCursor?,
+    zoom: Float,
+) {
+    val remoteBitmap = remote?.bitmap
+    if (remote != null && remote.visible && remoteBitmap != null) {
+        val image = remember(remoteBitmap) { remoteBitmap.asImageBitmap() }
+        val scale = zoom.coerceIn(0.35f, 3f)
+        Canvas(Modifier.fillMaxSize().zIndex(11f)) {
+            val w = (remoteBitmap.width * scale).roundToInt().coerceAtLeast(1)
+            val h = (remoteBitmap.height * scale).roundToInt().coerceAtLeast(1)
+            drawImage(
+                image = image,
+                srcOffset = IntOffset.Zero,
+                srcSize = IntSize(remoteBitmap.width, remoteBitmap.height),
+                dstOffset = IntOffset(
+                    (position.x - remote.hotX * scale).roundToInt(),
+                    (position.y - remote.hotY * scale).roundToInt(),
+                ),
+                dstSize = IntSize(w, h),
+            )
+        }
+        return
+    }
+
     val sizePx = with(androidx.compose.ui.platform.LocalDensity.current) { sizeDp.dp.toPx() }
     Box(
         Modifier
@@ -488,7 +517,7 @@ private fun SessionPanel(
     pointerSize: Float = 22f,
     onPointerSize: (Float) -> Unit = {},
     keys: List<HudKey> = emptyList(),
-    onAddKey: () -> Unit = {},
+    onAddKey: (Boolean) -> Unit = {},
     onEditKey: (HudKey) -> Unit = {},
     onDeleteKey: (HudKey) -> Unit = {},
     mappingMode: Boolean = false,
@@ -579,73 +608,59 @@ private fun SessionPanel(
 
                 PanelSection("Tombol (${keys.size})") {
                     PanelHint(
-                        "Tiap tombol bulat penuh, satu aksi, bisa digeser di layar " +
-                            "dan diatur ukuran/aksinya.",
+                        "Terapung: bulat penuh, digeser bebas di layar. Baris atas: " +
+                            "nempel di atas keyboard kustom, tidak menutupi taskbar.",
                     )
-                    HudLayoutPreview(keys)
+                    HudLayoutPreview(keys.filter { !it.inToolbar })
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         XyPillButton(
-                            "Tambah tombol",
-                            onAddKey,
+                            "Tambah terapung",
+                            { onAddKey(false) },
                             compact = true,
                             modifier = Modifier.weight(1f),
                         )
                         XyPillButton(
-                            if (mappingMode) "Selesai atur" else "Atur posisi",
-                            { onMappingModeChange(!mappingMode) },
+                            "Tambah baris atas",
+                            { onAddKey(true) },
                             primary = false,
                             compact = true,
                             modifier = Modifier.weight(1f),
                         )
                     }
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        XyPillButton(
+                            if (mappingMode) "Selesai atur" else "Atur posisi",
+                            { onMappingModeChange(!mappingMode) },
+                            primary = mappingMode,
+                            compact = true,
+                            modifier = Modifier.weight(1f),
+                        )
+                        XyPillButton(
+                            "Kembalikan bawaan",
+                            onResetCluster,
+                            primary = false,
+                            compact = true,
+                            modifier = Modifier.weight(1f),
+                        )
+                    }
+                    val floating = keys.filter { !it.inToolbar }
+                    val aux = keys.filter { it.inToolbar }
                     Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                        keys.forEach { key ->
-                            Row(
-                                Modifier
-                                    .fillMaxWidth()
-                                    .clip(PanelRowShape())
-                                    .clickable { onEditKey(key) }
-                                    .padding(horizontal = 8.dp, vertical = 7.dp),
-                                verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.spacedBy(8.dp),
-                            ) {
-                                Text(
-                                    key.label,
-                                    color = HudInk,
-                                    fontSize = 11.sp,
-                                    modifier = Modifier.weight(1f),
-                                )
-                                Text(
-                                    "${key.action.title} · ${key.size.toInt()} dp" +
-                                        if (key.inToolbar) " · toolbar" else "",
-                                    color = HudMuted,
-                                    fontSize = 9.5.sp,
-                                )
-                                Box(
-                                    Modifier
-                                        .size(24.dp)
-                                        .clip(CircleShape)
-                                        .border(1.dp, HudBorderDim, CircleShape)
-                                        .clickable { onDeleteKey(key) },
-                                    contentAlignment = Alignment.Center,
-                                ) {
-                                    Icon(
-                                        XyIcons.Close,
-                                        contentDescription = "Hapus tombol",
-                                        tint = HudMuted,
-                                        modifier = Modifier.size(12.dp),
-                                    )
-                                }
-                            }
+                        KeyListHeader("Terapung (${floating.size})")
+                        if (floating.isEmpty()) {
+                            PanelHint("Belum ada tombol terapung.")
+                        }
+                        floating.forEach { key ->
+                            KeyRow(key, onEditKey, onDeleteKey)
+                        }
+                        KeyListHeader("Baris atas keyboard (${aux.size})")
+                        if (aux.isEmpty()) {
+                            PanelHint("Belum ada tombol baris atas.")
+                        }
+                        aux.forEach { key ->
+                            KeyRow(key, onEditKey, onDeleteKey)
                         }
                     }
-                    XyPillButton(
-                        "Kembalikan tombol bawaan",
-                        onResetCluster,
-                        primary = false,
-                        compact = true,
-                    )
-                    XyToggleRow("Getaran", null, haptics, onHaptics)
                 }
 
                 PanelSection("Keyboard") {
@@ -776,11 +791,66 @@ private fun PanelSection(title: String, content: @Composable () -> Unit) {
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
         Text(
             title.uppercase(),
-            color = Color(0xFF7E8790),
+            color = Color(0xFFAAB3BB),
             fontSize = 10.sp,
             letterSpacing = 1.3.sp,
             fontWeight = FontWeight.SemiBold,
         )
         content()
+    }
+}
+
+@Composable
+private fun KeyListHeader(text: String) {
+    Text(
+        text,
+        color = HudMuted,
+        fontSize = 9.5.sp,
+        fontWeight = FontWeight.SemiBold,
+        modifier = Modifier.padding(top = 2.dp),
+    )
+}
+
+@Composable
+private fun KeyRow(
+    key: HudKey,
+    onEditKey: (HudKey) -> Unit,
+    onDeleteKey: (HudKey) -> Unit,
+) {
+    Row(
+        Modifier
+            .fillMaxWidth()
+            .clip(XyPill)
+            .clickable { onEditKey(key) }
+            .padding(horizontal = 8.dp, vertical = 7.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        Text(
+            key.label,
+            color = HudInk,
+            fontSize = 11.sp,
+            modifier = Modifier.weight(1f),
+        )
+        Text(
+            "${key.action.title} · ${key.size.toInt()} dp",
+            color = HudMuted,
+            fontSize = 9.5.sp,
+        )
+        Box(
+            Modifier
+                .size(24.dp)
+                .clip(CircleShape)
+                .border(1.dp, HudBorderDim, CircleShape)
+                .clickable { onDeleteKey(key) },
+            contentAlignment = Alignment.Center,
+        ) {
+            Icon(
+                XyIcons.Close,
+                contentDescription = "Hapus tombol",
+                tint = HudMuted,
+                modifier = Modifier.size(12.dp),
+            )
+        }
     }
 }

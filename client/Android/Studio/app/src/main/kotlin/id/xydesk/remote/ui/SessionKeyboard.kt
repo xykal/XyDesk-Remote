@@ -1,6 +1,12 @@
 package id.xydesk.remote.ui
 
 import android.view.KeyEvent
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.layout.size
+import androidx.compose.material3.Icon
+import id.xydesk.remote.ui.components.XyIcons
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -106,6 +112,11 @@ fun SessionKeyboard(
     onCombo: (codes: List<Int>) -> Unit,
     onScaleChange: (Float) -> Unit,
     onClose: () -> Unit,
+    /** Baris atas milik user (tombol HUD yang ditandai `inToolbar`). */
+    aux: List<HudKey> = emptyList(),
+    onAuxPhase: (HudKey, HudPhase) -> Unit = { _, _ -> },
+    /** Tutup board tanpa mengubah keyboard HP. */
+    onHide: () -> Unit = onClose,
 ) {
     val view = LocalView.current
     val prefs = remember { SessionPrefs(view.context) }
@@ -196,6 +207,48 @@ fun SessionKeyboard(
                 ChromeChip("+", scale) { onScaleChange((scale + 0.1f).coerceIn(0.7f, 1.6f)) }
                 // ABC = balik ke keyboard HP (board ini ditutup, IME dimunculkan).
                 ChromeChip("ABC", scale) { onClose() }
+            }
+
+            // ---- baris atas milik user: tombol HUD yang ditandai "baris
+            // atas". Cuma hidup selama board terbuka, jadi tidak pernah
+            // menutupi desktop/taskbar remote. Ujung kanan = tutup board.
+            Row(
+                Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(4.dp * scale),
+            ) {
+                Row(
+                    Modifier
+                        .weight(1f)
+                        .horizontalScroll(rememberScrollState()),
+                    horizontalArrangement = Arrangement.spacedBy(4.dp * scale),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    aux.forEach { key ->
+                        HudAuxChip(key = key, sizeDp = 34f * scale) { phase ->
+                            tap()
+                            onAuxPhase(key, phase)
+                        }
+                    }
+                }
+                Box(
+                    Modifier
+                        .size((34f * scale).dp)
+                        .clip(CircleShape)
+                        .border(1.2.dp, Color(0x59FFFFFF), CircleShape)
+                        .clickable {
+                            tap()
+                            onHide()
+                        },
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Icon(
+                        XyIcons.ChevronDown,
+                        contentDescription = "Tutup keyboard",
+                        tint = Color(0xFFEFF3F6),
+                        modifier = Modifier.size((17 * scale).dp),
+                    )
+                }
             }
 
             when (page) {

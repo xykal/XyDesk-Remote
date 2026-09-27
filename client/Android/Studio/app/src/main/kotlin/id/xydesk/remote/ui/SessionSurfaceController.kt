@@ -46,6 +46,21 @@ import id.xydesk.remote.core.GraphicsSink
  * Dipanggil dari thread RDP (sink) — semua modifikasi View di-post ke
  * main thread. View tree dibangun dari main thread (AndroidView factory).
  */
+/**
+ * Kursor yang dikirim server RDP.
+ *
+ * Server mengirim bitmap kursor SUNGGUHAN (panah, tangan, I-beam, resize,
+ * dsb) lewat pointer update; kita cuma menggambarnya, jadi bentuknya sama
+ * seperti di desktop remote. [visible] = false artinya server minta kursor
+ * disembunyikan (mis. saat mengetik).
+ */
+data class RemoteCursor(
+    val bitmap: android.graphics.Bitmap?,
+    val hotX: Int,
+    val hotY: Int,
+    val visible: Boolean,
+)
+
 class SessionSurfaceController(private val activity: Activity) : GraphicsSink {
 
     private val uiHandler = Handler(Looper.getMainLooper())
@@ -68,6 +83,8 @@ class SessionSurfaceController(private val activity: Activity) : GraphicsSink {
      * keyboard HP ditutup.
      */
     var onImeChanged: ((Int) -> Unit)? = null
+    /** Bentuk kursor dari server untuk digambar Compose (null = panah bawaan). */
+    var onRemoteCursor: ((RemoteCursor) -> Unit)? = null
     @Volatile private var bitmap: Bitmap? = null
     @Volatile private var viewReady = false
 
@@ -391,6 +408,14 @@ class SessionSurfaceController(private val activity: Activity) : GraphicsSink {
         uiHandler.post {
             sessionView?.setRemoteCursor(pixels, width, height, hotX, hotY)
             touchPointerView?.setRemoteCursor(pixels, width, height, hotX, hotY)
+            if (pixels != null && width > 0 && height > 0) {
+                val bmp = runCatching {
+                    android.graphics.Bitmap.createBitmap(
+                        pixels, width, height, android.graphics.Bitmap.Config.ARGB_8888,
+                    )
+                }.getOrNull()
+                if (bmp != null) onRemoteCursor?.invoke(RemoteCursor(bmp, hotX, hotY, true))
+            }
         }
     }
 
@@ -398,11 +423,15 @@ class SessionSurfaceController(private val activity: Activity) : GraphicsSink {
         uiHandler.post {
             sessionView?.setRemoteCursor(null, 0, 0, 0, 0)
             touchPointerView?.setRemoteCursor(null, 0, 0, 0, 0)
+            onRemoteCursor?.invoke(RemoteCursor(null, 0, 0, false))
         }
     }
 
     override fun onPointerSetDefault() {
-        uiHandler.post { sessionView?.setDefaultCursor() }
+        uiHandler.post {
+            sessionView?.setDefaultCursor()
+            onRemoteCursor?.invoke(RemoteCursor(null, 0, 0, true))
+        }
     }
 
     // ------------------------------------------------------------------

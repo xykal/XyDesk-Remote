@@ -30,6 +30,7 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -119,13 +120,9 @@ fun HudKeyLayer(
             HudKeyButton(
                 key = key,
                 mappingMode = mappingMode,
-                onMove = { dx, dy ->
-                    onMove(
-                        key.id,
-                        (key.x + dx / maxX).coerceIn(0f, 1f),
-                        (key.y + dy / maxY).coerceIn(0f, 1f),
-                    )
-                },
+                maxX = maxX,
+                maxY = maxY,
+                onDrag = { x, y -> onMove(key.id, x, y) },
                 onPhase = { phase -> onPhase(key, phase) },
                 onEdit = { onEdit(key) },
                 modifier = Modifier
@@ -142,13 +139,22 @@ fun HudKeyLayer(
 private fun HudKeyButton(
     key: HudKey,
     mappingMode: Boolean,
-    onMove: (Float, Float) -> Unit,
+    maxX: Float,
+    maxY: Float,
+    onDrag: (Float, Float) -> Unit,
     onPhase: (HudPhase) -> Unit,
     onEdit: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     var latched by remember(key.id) { mutableStateOf(false) }
     var pressed by remember(key.id) { mutableStateOf(false) }
+
+    // BUG LAMA: blok pointerInput tidak pernah restart saat posisi berubah,
+    // jadi lambda lama terus memakai key.x/key.y versi awal dan tiap event
+    // cuma menggeser beberapa piksel (praktis "tidak bisa digeser").
+    // Sekarang posisi selama geser diakumulasi lokal di sini.
+    val latest = rememberUpdatedState(key)
+    val dragPos = remember(key.id) { mutableStateOf<Offset?>(null) }
 
     val ring = when {
         latched -> Color(0xFFFFFFFF)
@@ -180,9 +186,8 @@ private fun HudKeyButton(
                     var dragged = false
                     var longPressed = false
                     val holdActive = key.action == HudAction.HOLD
-                    if (holdActive) onPhase(HudPhase.DOWN)
-
                     val longPressTimeout = viewConfiguration.longPressTimeoutMillis
+                    if (holdActive) onPhase(HudPhase.DOWN)
 
                     while (true) {
                         val event = awaitPointerEvent()
@@ -196,14 +201,22 @@ private fun HudKeyButton(
                         travelled += delta.getDistance()
                         if (travelled > 8f) {
                             dragged = true
-                            if (holdActive && !mappingMode) {
-                                // geser sambil tahan (mis. drag di remote)
-                            } else {
-                                onMove(delta.x, delta.y)
-                                change.consume()
+                            // Geser = pindahkan tombol (mode normal maupun mode
+                            // atur posisi). Tombol ber-aksi "tahan" tetap
+                            // dipakai untuk drag di remote, bukan dipindah.
+                            if (!holdActive) {
+                                val base = dragPos.value
+                                    ?: Offset(latest.value.x, latest.value.y)
+                                val nx = (base.x + delta.x / maxX).coerceIn(0f, 1f)
+                                val ny = (base.y + delta.y / maxY).coerceIn(0f, 1f)
+                                dragPos.value = Offset(nx, ny)
+                                onDrag(nx, ny)
                             }
+                            change.consume()
                         } else if (event.changes.all { it.uptimeMillis - down.uptimeMillis > longPressTimeout }) {
-                            if (mappingMode && !longPressed) {
+                            // Tahan di tombol non-"tahan" = buka editor, di mode
+                            // mana pun (bukan cuma saat atur posisi).
+                            if (!holdActive && !longPressed && !dragged) {
                                 longPressed = true
                                 onEdit()
                             }
@@ -211,22 +224,20 @@ private fun HudKeyButton(
                     }
 
                     pressed = false
+                    dragPos.value = null
                     if (holdActive) onPhase(HudPhase.UP)
 
-                    when {
-                        // Di mode atur posisi tombol TIDAK mengirim apa pun ke
-                        // remote: tap/geser cuma mengatur letak, jadi tidak ada
-                        // aksi nyasar (mis. kombinasi sensitif) saat menata.
-                        mappingMode -> Unit
-                        longPressed -> Unit
-                        dragged && !holdActive -> Unit
-                        key.action == HudAction.HOLD -> Unit
-                        key.action == HudAction.TOGGLE -> {
+                    if (mappingMode) return@awaitEachGesture
+                    if (longPressed) return@awaitEachGesture
+                    if (dragged) return@awaitEachGesture
+                    when (key.action) {
+                        HudAction.HOLD -> Unit
+                        HudAction.TOGGLE -> {
                             latched = !latched
                             onPhase(HudPhase.TAP)
                         }
 
-                        else -> onPhase(HudPhase.TAP)
+                        HudAction.TAP -> onPhase(HudPhase.TAP)
                     }
                 }
             },
@@ -238,7 +249,7 @@ private fun HudKeyButton(
 
 /** Isi tombol: ikon untuk aksi mouse/scroll/mode, teks untuk tombol keyboard. */
 @Composable
-private fun HudKeyGlyph(key: HudKey, tint: Color) {
+private fun HudKeyGlyph(key: HudKey, tint: Color, boxDp: Float = key.size) {
     val icon: ImageVector? = when (key.kind) {
         HudKind.MOUSE_LEFT -> XyIcons.ClickLeft
         HudKind.MOUSE_RIGHT -> XyIcons.ClickRight
@@ -246,6 +257,7 @@ private fun HudKeyGlyph(key: HudKey, tint: Color) {
         HudKind.SCROLL_UP -> XyIcons.ScrollUp
         HudKind.SCROLL_DOWN -> XyIcons.ScrollDown
         HudKind.INPUT_SWITCH -> XyIcons.Swap
+        HudKind.KEYBOARD -> XyIcons.Keyboard
         else -> null
     }
     if (icon != null) {
@@ -253,14 +265,14 @@ private fun HudKeyGlyph(key: HudKey, tint: Color) {
             icon,
             contentDescription = key.label,
             tint = tint,
-            modifier = Modifier.size((key.size * 0.46f).dp),
+            modifier = Modifier.size((boxDp * 0.46f).dp),
         )
         return
     }
     Text(
         text = key.label,
         color = tint,
-        fontSize = (key.size * 0.28f).sp,
+        fontSize = (boxDp * 0.30f).sp,
         fontWeight = FontWeight.Medium,
         maxLines = 1,
         textAlign = TextAlign.Center,
@@ -268,69 +280,16 @@ private fun HudKeyGlyph(key: HudKey, tint: Color) {
 }
 
 /**
- * Toolbar yang menempel di atas keyboard HP. Isinya tombol yang ditandai
- * "tampil di toolbar" (horizontal, bisa di-scroll) plus chip paling ujung:
- * `123` untuk membuka board lengkap, `ABC` untuk balik ke keyboard HP.
+ * Chip aksi di baris atas keyboard kustom.
+ *
+ * Dipakai board keyboard (SessionKeyboard) sebagai baris tombol milik user:
+ * satu chip = satu aksi, sesuai urutan daftar `inToolbar`.
  */
 @Composable
-fun HudKeyToolbar(
-    keys: List<HudKey>,
-    boardOpen: Boolean,
-    onPhase: (HudKey, HudPhase) -> Unit,
-    onToggleBoard: () -> Unit,
-    onOpenPanel: () -> Unit,
-    chips: @Composable () -> Unit = {},
-) {
-    val row = keys.filter { it.inToolbar }
-    Row(
-        Modifier
-            .padding(horizontal = 8.dp, vertical = 4.dp)
-            .clip(XyPill)
-            .background(Color(0xCC0B0D10))
-            .border(1.dp, HudBorderDim, XyPill)
-            .padding(horizontal = 6.dp, vertical = 4.dp),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(6.dp),
-    ) {
-        Row(
-            Modifier
-                .weight(1f, fill = false)
-                .horizontalScroll(rememberScrollState()),
-            horizontalArrangement = Arrangement.spacedBy(6.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            chips()
-            row.forEach { key ->
-                ToolbarChip(
-                    key = key,
-                    onPhase = { phase -> onPhase(key, phase) },
-                )
-            }
-        }
-        // Paling ujung: 123 / ABC.
-        Box(
-            Modifier
-                .clip(XyPill)
-                .border(1.2.dp, HudBorder, XyPill)
-                .clickable(onClick = onToggleBoard)
-                .padding(horizontal = 12.dp, vertical = 7.dp),
-        ) {
-            Text(
-                if (boardOpen) "ABC" else "123",
-                color = HudInk,
-                fontSize = 12.sp,
-                fontWeight = FontWeight.SemiBold,
-            )
-        }
-    }
-}
-
-@Composable
-private fun ToolbarChip(key: HudKey, onPhase: (HudPhase) -> Unit) {
-    val size = 40f
+fun HudAuxChip(key: HudKey, sizeDp: Float, onPhase: (HudPhase) -> Unit) {
     Box(
         Modifier
-            .size(size.dp)
+            .size(sizeDp.dp)
             .clip(CircleShape)
             .border(1.2.dp, HudBorderDim, CircleShape)
             .pointerInput(key.id, key.action) {
@@ -351,7 +310,7 @@ private fun ToolbarChip(key: HudKey, onPhase: (HudPhase) -> Unit) {
             },
         contentAlignment = Alignment.Center,
     ) {
-        HudKeyGlyph(key, HudInk)
+        HudKeyGlyph(key, HudInk, sizeDp)
     }
 }
 
@@ -522,14 +481,14 @@ fun HudKeyEditor(
             }
             Text(
                 "Posisi: ${(key.x * 100).toInt()}% , ${(key.y * 100).toInt()}%  ·  " +
-                    "geser tombolnya langsung untuk memindah",
+                    "geser tombolnya langsung untuk memindah (tombol terapung)",
                 color = HudMuted,
                 fontSize = 10.sp,
             )
             XySegmented(
-                options = listOf("Di toolbar", "Hanya di layar"),
-                selectedIndex = if (key.inToolbar) 0 else 1,
-                onSelect = { onChange(key.copy(inToolbar = it == 0)) },
+                options = listOf("Terapung di layar", "Baris atas keyboard"),
+                selectedIndex = if (key.inToolbar) 1 else 0,
+                onSelect = { onChange(key.copy(inToolbar = it == 1)) },
                 modifier = Modifier.fillMaxWidth(),
             )
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {

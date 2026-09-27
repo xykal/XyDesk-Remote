@@ -27,6 +27,7 @@ enum class HudKind(val title: String) {
     SCROLL_UP("Scroll naik"),
     SCROLL_DOWN("Scroll turun"),
     INPUT_SWITCH("Ganti mode input"),
+    KEYBOARD("Buka keyboard"),
     KEY("Tombol keyboard"),
     COMBO("Kombinasi"),
 }
@@ -106,22 +107,55 @@ data class HudKey(
          * kanan layar; user bebas geser/ubah/ tambah.
          */
         fun defaults(): List<HudKey> = listOf(
-            HudKey("kiri", HudKind.MOUSE_LEFT, "Kiri", x = 0.84f, y = 0.40f),
-            HudKey("kanan", HudKind.MOUSE_RIGHT, "Kanan", x = 0.84f, y = 0.52f),
-            HudKey("tengah", HudKind.MOUSE_MIDDLE, "Tengah", x = 0.84f, y = 0.64f),
+            // Tombol mengambang: bisa digeser bebas di atas layar remote.
+            HudKey("kiri", HudKind.MOUSE_LEFT, "Kiri", x = 0.84f, y = 0.40f, inToolbar = false),
+            HudKey("kanan", HudKind.MOUSE_RIGHT, "Kanan", x = 0.84f, y = 0.52f, inToolbar = false),
+            HudKey("tengah", HudKind.MOUSE_MIDDLE, "Tengah", x = 0.84f, y = 0.64f, inToolbar = false),
             HudKey(
                 "naik", HudKind.SCROLL_UP, "Naik",
-                action = HudAction.HOLD, x = 0.72f, y = 0.40f,
+                action = HudAction.HOLD, x = 0.72f, y = 0.40f, inToolbar = false,
             ),
             HudKey(
                 "turun", HudKind.SCROLL_DOWN, "Turun",
-                action = HudAction.HOLD, x = 0.72f, y = 0.52f,
+                action = HudAction.HOLD, x = 0.72f, y = 0.52f, inToolbar = false,
             ),
             HudKey(
                 "switch", HudKind.INPUT_SWITCH, "Mode",
-                x = 0.72f, y = 0.64f,
+                x = 0.72f, y = 0.64f, inToolbar = false,
             ),
+            // Pengganti tombol "Buka keyboard" yang dulu nempel di pojok bawah
+            // dan menutupi taskbar remote: sekarang tombol biasa, bisa digeser.
+            HudKey(
+                "keyboard", HudKind.KEYBOARD, "Keyboard",
+                x = 0.84f, y = 0.76f, inToolbar = false,
+            ),
+            // Baris atas keyboard kustom: cuma tampil saat board terbuka, jadi
+            // tidak pernah menutupi desktop/taskbar.
+            HudKey("aux_esc", HudKind.KEY, "Esc", keyCode = KeyEvent.KEYCODE_ESCAPE),
+            HudKey("aux_tab", HudKind.KEY, "Tab", keyCode = KeyEvent.KEYCODE_TAB),
+            HudKey("aux_enter", HudKind.KEY, "Ent", keyCode = KeyEvent.KEYCODE_ENTER),
+            HudKey("aux_del", HudKind.KEY, "\u232b", keyCode = KeyEvent.KEYCODE_DEL),
+            HudKey("aux_ctrl", HudKind.KEY, "Ctrl", keyCode = KeyEvent.KEYCODE_CTRL_LEFT),
+            HudKey("aux_alt", HudKind.KEY, "Alt", keyCode = KeyEvent.KEYCODE_ALT_LEFT),
+            HudKey("aux_win", HudKind.KEY, "Win", keyCode = KeyEvent.KEYCODE_META_LEFT),
+            HudKey("aux_left", HudKind.KEY, "\u25c0", keyCode = KeyEvent.KEYCODE_DPAD_LEFT),
+            HudKey("aux_up", HudKind.KEY, "\u25b2", keyCode = KeyEvent.KEYCODE_DPAD_UP),
+            HudKey("aux_down", HudKind.KEY, "\u25bc", keyCode = KeyEvent.KEYCODE_DPAD_DOWN),
+            HudKey("aux_right", HudKind.KEY, "\u25b6", keyCode = KeyEvent.KEYCODE_DPAD_RIGHT),
         )
+
+        /**
+         * Daftar lama tersimpan sebagai satu campuran (semua `inToolbar = true`).
+         * Baris atas keyboard baru saja dipisah, jadi tombol lamanya
+         * dikembalikan sebagai tombol terapung supaya layout user tidak
+         * berubah diam-diam saat update.
+         */
+        fun migrate(list: List<HudKey>): List<HudKey> =
+            if (list.isNotEmpty() && list.all { it.inToolbar }) {
+                list.map { it.copy(inToolbar = false) }
+            } else {
+                list
+            }
     }
 }
 
@@ -160,6 +194,8 @@ object HudKeyCatalog {
         HudKeyOption("Aksi", "Scroll naik", HudKind.SCROLL_UP),
         HudKeyOption("Aksi", "Scroll turun", HudKind.SCROLL_DOWN),
         HudKeyOption("Aksi", "Ganti mode input", HudKind.INPUT_SWITCH),
+        HudKeyOption("Aksi", "Buka keyboard", HudKind.KEYBOARD),
+        HudKeyOption("Aksi", "Klik kiri (tahan = drag)", HudKind.MOUSE_LEFT),
     )
 
     val modifiers = listOf(
