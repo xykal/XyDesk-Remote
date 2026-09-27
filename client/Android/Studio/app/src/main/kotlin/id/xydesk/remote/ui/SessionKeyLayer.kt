@@ -205,6 +205,10 @@ private fun HudKeyButton(
                     if (holdActive) onPhase(HudPhase.UP)
 
                     when {
+                        // Di mode atur posisi tombol TIDAK mengirim apa pun ke
+                        // remote: tap/geser cuma mengatur letak, jadi tidak ada
+                        // aksi nyasar (mis. kombinasi sensitif) saat menata.
+                        mappingMode -> Unit
                         longPressed -> Unit
                         dragged && !holdActive -> Unit
                         key.action == HudAction.HOLD -> Unit
