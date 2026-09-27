@@ -25,13 +25,16 @@ on:
         options: [ debug, release, generate-keystore ]
         default: debug
 
-# GITHUB_TOKEN default hanya read — softprops/action-gh-release butuh
-# 'contents: write' untuk membuat GitHub Release (403 "Resource not
-# accessible by integration" tanpa ini); actions:write untuk
-# upload-artifact/cache.
+# Satu run per ref pada satu waktu: push beruntun ke main (atau re-tag)
+# membatalkan run lama, bukan menumpuk runner 20-30 menit.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+# Default paling sempit: cuma baca. Yang butuh nulis (bikin GitHub Release)
+# menaikkan sendiri di level job — bukan di level workflow.
 permissions:
-  contents: write
-  actions: write
+  contents: read
 
 env:
   GRADLE_PROJECT_DIR: client/Android/Studio
@@ -80,20 +83,34 @@ jobs:
     name: Debug per-ABI (armv7 + arm64 + x86_64)
     runs-on: ubuntu-latest
     timeout-minutes: 360
+    permissions:
+      contents: read
     steps:
       - uses: actions/checkout@v5
+      - name: Lewati kalau commit ini sudah punya tag rilis
+        id: tagcheck
+        if: github.event_name == 'push'
+        run: |
+          set -euo pipefail
+          if git ls-remote --tags origin | awk -v s="$GITHUB_SHA" '$1 == s { found = 1 } END { exit !found }'; then
+            echo "tagged=true" >> "$GITHUB_OUTPUT"
+            echo "::notice::$GITHUB_SHA sudah bertag — run rilis di sha ini yang dipakai, debug dilewati."
+          fi
       - uses: actions/setup-java@v5
         with:
           distribution: temurin
           java-version: "21"
+        if: steps.tagcheck.outputs.tagged != 'true'
       - name: Cache Android SDK (NDK & CMake)
         uses: actions/cache@v5
+        if: steps.tagcheck.outputs.tagged != 'true'
         with:
           path: |
             $HOME/android-sdk/ndk/29.0.13113456
             $HOME/android-sdk/cmake/4.1.2
           key: android-ndk-29.0.13113456-cmake-4.1.2
       - name: Install Android SDK (cmdline-tools + components)
+        if: steps.tagcheck.outputs.tagged != 'true'
         run: |
           set -eux
           export ANDROID_HOME="$HOME/android-sdk"
@@ -109,18 +126,26 @@ jobs:
           # runner punya ANDROID_SDK_ROOT bawaan — samakan agar AGP tidak gagal
           echo "ANDROID_SDK_ROOT=$ANDROID_HOME" >> "$GITHUB_ENV"
       - name: Host dependencies (pkg-config + nasm)
+        if: steps.tagcheck.outputs.tagged != 'true'
         run: |
           sudo apt-get update -qq
           # pkg-config: disyaratkan ExternalFreeRDP.cmake
           # nasm: OpenH264 mem-compile cpuid.asm untuk target x86/x86_64
           sudo apt-get install -y -qq pkg-config nasm
+      - name: Unit test JVM (core-rdp)
+        if: steps.tagcheck.outputs.tagged != 'true'
+        working-directory: client/Android/Studio
+        run: ./gradlew --stacktrace --no-daemon :core-rdp:testDebugUnitTest
       - name: Gradle assembleDebug (per ABI)
+        if: steps.tagcheck.outputs.tagged != 'true'
         working-directory: client/Android/Studio
         run: ./gradlew --stacktrace --no-daemon assembleDebug
       - name: List build outputs
+        if: steps.tagcheck.outputs.tagged != 'true'
         working-directory: client/Android/Studio
         run: find app/build/outputs -name "*.apk" -exec ls -lh {} \;
       - name: Upload debug APKs (per ABI)
+        if: steps.tagcheck.outputs.tagged != 'true'
         uses: actions/upload-artifact@v4
         with:
           name: xydesk-remote-debug-per-abi
@@ -135,6 +160,9 @@ jobs:
     name: Release per-ABI (R8 + signed) + GitHub Release
     runs-on: ubuntu-latest
     timeout-minutes: 400
+    # Satu-satunya job yang butuh nulis: bikin GitHub Release.
+    permissions:
+      contents: write
     steps:
       - uses: actions/checkout@v5
         with:

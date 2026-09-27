@@ -3,7 +3,6 @@ package id.xydesk.remote.ui
 import android.content.ClipboardManager
 import android.content.Context
 import android.content.Intent
-import android.graphics.Color
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
@@ -174,9 +173,10 @@ class XyDeskSessionActivity : ComponentActivity() {
 
     /** Immersive: bar transparan, hide sistem bar (swipe untuk transient). */
     private fun hideSystemBars() {
+        // Bar transparan tidak lagi di-set lewat window.statusBarColor /
+        // navigationBarColor (no-op dan deprecated sejak API 35); cukup
+        // edge-to-edge + hide() di bawah.
         WindowCompat.setDecorFitsSystemWindows(window, false)
-        window.statusBarColor = Color.TRANSPARENT
-        window.navigationBarColor = Color.TRANSPARENT
         val controller = WindowCompat.getInsetsController(window, window.decorView)
         controller.systemBarsBehavior =
             WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE

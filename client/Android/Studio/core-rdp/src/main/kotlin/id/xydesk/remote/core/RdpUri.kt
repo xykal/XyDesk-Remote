@@ -12,42 +12,67 @@ import android.net.Uri
  *  - `key=value`         -> `/key:value`
  *
  * Contoh: `rdp://user@10.0.0.5:3390/?p=pass&domain=CORP&clipboard=%2b`
+ *
+ * Bagian pemetaan ([authority], [gatewayArg], [queryParams]) sengaja murni
+ * (tanpa `android.net.Uri`) supaya bisa dites unit di JVM — lihat
+ * `src/test/kotlin/.../RdpUriTest.kt`. [build] hanya merangkainya jadi Uri.
  */
 object RdpUri {
 
-    fun build(profile: ConnectionProfile, options: RdpOptions = RdpOptions()): Uri {
+    /** `[user@]host[:port]`; port default 3389 tidak ditulis. */
+    fun authority(profile: ConnectionProfile): String {
         var authority = profile.host
         if (profile.port != 3389) authority = "${profile.host}:${profile.port}"
         if (!profile.username.isNullOrBlank()) authority = "${profile.username}@$authority"
+        return authority
+    }
 
-        val b = Uri.Builder().scheme("rdp").encodedAuthority(authority)
-        if (!profile.password.isNullOrBlank()) b.appendQueryParameter("p", profile.password)
-        if (!profile.domain.isNullOrBlank()) b.appendQueryParameter("domain", profile.domain)
+    /** Argumen gateway FreeRDP: `g:host[:port][,u:user][,d:domain][,p:pass]`. */
+    fun gatewayArg(g: XyGateway): String = buildString {
+        append("g:").append(g.host)
+        if (g.port != 443) append(':').append(g.port)
+        g.username?.takeIf { it.isNotBlank() }?.let { append(",u:").append(it) }
+        g.domain?.takeIf { it.isNotBlank() }?.let { append(",d:").append(it) }
+        g.password?.takeIf { it.isNotBlank() }?.let { append(",p:").append(it) }
+    }
+
+    /**
+     * Semua query param, urutannya tetap (menentukan argumen CLI di inti):
+     * p, domain, audio-mode, sound, microphone, clipboard, drive, dvc,
+     * multitransport, network, gfx, gateway.
+     *
+     * Catatan: `sound` dikirim dengan nilai kosong — inti menerjemahkan
+     * param bernilai kosong jadi argumen tanpa nilai (`/sound`).
+     */
+    fun queryParams(
+        profile: ConnectionProfile,
+        options: RdpOptions = RdpOptions(),
+    ): List<Pair<String, String>> {
+        val out = ArrayList<Pair<String, String>>(12)
+        if (!profile.password.isNullOrBlank()) out += "p" to profile.password!!
+        if (!profile.domain.isNullOrBlank()) out += "domain" to profile.domain!!
 
         // Audio: /audio-mode:0|1|2, ditambah /sound saat diputar di perangkat.
-        b.appendQueryParameter("audio-mode", options.audioMode.wire.toString())
-        if (options.audioMode == XyAudioMode.DEVICE) b.appendQueryParameter("sound", "")
-        if (options.microphone) b.appendQueryParameter("microphone", "")
+        out += "audio-mode" to options.audioMode.wire.toString()
+        if (options.audioMode == XyAudioMode.DEVICE) out += "sound" to ""
+        if (options.microphone) out += "microphone" to ""
 
-        b.appendQueryParameter("clipboard", if (options.clipboard) "+" else "-")
-        if (options.localDrive) b.appendQueryParameter("drive", "sdcard")
-        if (options.camera) b.appendQueryParameter("dvc", "rdpecam")
+        out += "clipboard" to if (options.clipboard) "+" else "-"
+        if (options.localDrive) out += "drive" to "sdcard"
+        if (options.camera) out += "dvc" to "rdpecam"
 
         // Hanya dikirim saat aktif: "+multitransport" menyalakan RDP-UDP (FEC).
-        if (options.udpTransport) b.appendQueryParameter("multitransport", "+")
-        if (options.networkAutoDetect) b.appendQueryParameter("network", "auto")
-        if (options.h264) b.appendQueryParameter("gfx", "AVC444")
+        if (options.udpTransport) out += "multitransport" to "+"
+        if (options.networkAutoDetect) out += "network" to "auto"
+        if (options.h264) out += "gfx" to "AVC444"
 
-        options.gateway?.let { g ->
-            val value = buildString {
-                append("g:").append(g.host)
-                if (g.port != 443) append(':').append(g.port)
-                g.username?.takeIf { it.isNotBlank() }?.let { append(",u:").append(it) }
-                g.domain?.takeIf { it.isNotBlank() }?.let { append(",d:").append(it) }
-                g.password?.takeIf { it.isNotBlank() }?.let { append(",p:").append(it) }
-            }
-            b.appendQueryParameter("gateway", value)
-        }
+        options.gateway?.let { out += "gateway" to gatewayArg(it) }
+        return out
+    }
+
+    fun build(profile: ConnectionProfile, options: RdpOptions = RdpOptions()): Uri {
+        val b = Uri.Builder().scheme("rdp").encodedAuthority(authority(profile))
+        queryParams(profile, options).forEach { (key, value) -> b.appendQueryParameter(key, value) }
         return b.build()
     }
 
