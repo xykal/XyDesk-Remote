@@ -159,7 +159,7 @@ fun SessionControls(
                         IntOffset((clusterX * maxX).roundToInt(), (clusterY * maxY).roundToInt())
                     }
                     .zIndex(11f),
-                verticalArrangement = Arrangement.spacedBy(btn * 0.22f),
+                verticalArrangement = Arrangement.spacedBy((btn * 0.22f).dp),
                 horizontalAlignment = Alignment.CenterHorizontally,
             ) {
                 HudChip(hudSize, onDrag = { dx, dy ->

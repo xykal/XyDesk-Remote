@@ -107,8 +107,8 @@ fun SessionKeyboard(
     onScaleChange: (Float) -> Unit,
     onClose: () -> Unit,
 ) {
-    val prefs = remember { SessionPrefs(LocalView.current.context) }
     val view = LocalView.current
+    val prefs = remember { SessionPrefs(view.context) }
     var page by remember { mutableStateOf(KeyPage.ABC) }
     var posX by remember { mutableStateOf(prefs.overlayX(deviceId)) }
     var posY by remember { mutableStateOf(prefs.overlayY(deviceId)) }
@@ -290,10 +290,12 @@ private fun QwertyPage(
 
 @Composable
 private fun FnPage(scale: Float, onKey: (XyKey) -> Unit) {
-    val rows = listOf(
-        (1..12).chunked(6).map { group ->
-            group.map { n -> XyKey("F$n", KeyEvent.KEYCODE_F1 + (n - 1)) }
-        },
+    // F1-F12 dibagi dua baris, lalu digabung dengan baris navigasi.
+    // Semua baris bertipe List<XyKey> supaya KeyRow bisa membacanya.
+    val fnRows: List<List<XyKey>> = (1..12).chunked(6).map { group ->
+        group.map { n -> XyKey("F$n", KeyEvent.KEYCODE_F1 + (n - 1)) }
+    }
+    val rows = fnRows + listOf(
         listOf(
             XyKey("Ins", KeyEvent.KEYCODE_INSERT),
             XyKey("Home", KeyEvent.KEYCODE_MOVE_HOME),
@@ -305,14 +307,14 @@ private fun FnPage(scale: Float, onKey: (XyKey) -> Unit) {
         listOf(
             XyKey("PrtSc", KeyEvent.KEYCODE_SYSRQ),
             XyKey("Menu", KeyEvent.KEYCODE_MENU),
-            XyKey("◀", KeyEvent.KEYCODE_DPAD_LEFT),
-            XyKey("▲", KeyEvent.KEYCODE_DPAD_UP),
-            XyKey("▼", KeyEvent.KEYCODE_DPAD_DOWN),
-            XyKey("▶", KeyEvent.KEYCODE_DPAD_RIGHT),
+            XyKey("\u25c0", KeyEvent.KEYCODE_DPAD_LEFT),
+            XyKey("\u25b2", KeyEvent.KEYCODE_DPAD_UP),
+            XyKey("\u25bc", KeyEvent.KEYCODE_DPAD_DOWN),
+            XyKey("\u25b6", KeyEvent.KEYCODE_DPAD_RIGHT),
         ),
     )
     Column(verticalArrangement = Arrangement.spacedBy(4.dp * scale)) {
-        rows.forEach { row -> KeyRow(scale, row, emptySet(), false, onKey) {} }
+        rows.forEach { row -> KeyRow(scale, row, emptySet(), onKey) {} }
     }
 }
 
