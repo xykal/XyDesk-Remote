@@ -129,6 +129,24 @@ class SessionManager(context: Context) {
     // Lifecycle
     // ------------------------------------------------------------------
 
+    private fun sessionUri(profile: ConnectionProfile): android.net.Uri {
+        val base = RdpUri.build(profile)
+        val prefs = appContext.getSharedPreferences("xydesk.remote.display", Context.MODE_PRIVATE)
+        val key = "${profile.id}.resolution"
+        if (!prefs.contains(key)) return base
+        val resolution = prefs.getString(key, "automatic") ?: "automatic"
+        if (resolution == "automatic") return base
+        val parts = resolution.split('x')
+        val width = parts.getOrNull(0)?.toIntOrNull()
+        val height = parts.getOrNull(1)?.toIntOrNull()
+        if (width == null || height == null || width !in 640..8192 || height !in 480..8192) {
+            ConnectionLog.add("CM: invalid remote resolution preset; fallback automatic")
+            return base
+        }
+        ConnectionLog.add("CM: remote resolution preset=$resolution")
+        return base.buildUpon().appendQueryParameter("size", resolution).build()
+    }
+
     /**
      * Mulai koneksi (idempotent: dipanggil saat sudah Connecting/Connected
      * = diabaikan dengan log).
@@ -147,7 +165,7 @@ class SessionManager(context: Context) {
                 Log.w(TAG, "connect() diabaikan, state=$cur")
                 return
             }
-            val uri = RdpUri.build(profile)
+            val uri = sessionUri(profile)
             // Never log the RDP URI: its query may contain the plaintext password.
             ConnectionLog.add("CM: native createSession mulai (${profile.host}:${profile.port})")
             val created = GlobalApp.createSession(uri, appContext)

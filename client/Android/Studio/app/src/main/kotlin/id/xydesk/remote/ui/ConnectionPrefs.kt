@@ -13,6 +13,8 @@ class ConnectionPrefs(context: Context) {
 
     fun getZoom(id: String): Float = sp.getFloat("$id.zoom", 1f)
 
+    fun hasZoom(id: String): Boolean = sp.contains("$id.zoom")
+
     fun setZoom(id: String, zoom: Float) {
         sp.edit().putFloat("$id.zoom", zoom).apply()
     }

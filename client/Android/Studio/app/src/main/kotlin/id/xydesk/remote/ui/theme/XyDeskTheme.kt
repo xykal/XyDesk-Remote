@@ -16,37 +16,37 @@ import androidx.compose.ui.unit.sp
 import id.xydesk.remote.R
 
 // =============================================================
-// XyDesk Design System — brand violet (properti XyVerse)
+// XyDesk Design System — deep slate + calm teal, tuned for long remote sessions
 // =============================================================
 
-val XyViolet = Color(0xFF6957D8)
-val XyVioletBright = Color(0xFFB7AAFF)
-val XyVioletDeep = Color(0xFF5747C7)
-val XyFuchsia = Color(0xFFB7AAFF)
-val XyInk = Color(0xFF111217)
-val XyInkSurface = Color(0xFF191A20)
-val XyInkCard = Color(0xFF23252D)
-val XyLine = Color(0xFF353741)
+val XyViolet = Color(0xFF0B8E7E)
+val XyVioletBright = Color(0xFF69E3CB)
+val XyVioletDeep = Color(0xFF08796D)
+val XyFuchsia = Color(0xFF91EBD7)
+val XyInk = Color(0xFF0B1217)
+val XyInkSurface = Color(0xFF121D24)
+val XyInkCard = Color(0xFF1B2932)
+val XyLine = Color(0xFF334650)
 
 val DarkScheme = darkColorScheme(
     primary = XyVioletBright,
-    onPrimary = Color(0xFF21194A),
-    primaryContainer = Color(0xFF302950),
-    onPrimaryContainer = Color(0xFFE9E5FF),
-    secondary = Color(0xFFB7AAFF),
-    onSecondary = Color(0xFF241A51),
-    secondaryContainer = Color(0xFF302950),
-    onSecondaryContainer = Color(0xFFE9E5FF),
-    tertiary = Color(0xFF91C5FF),
-    onTertiary = Color(0xFF102A43),
+    onPrimary = Color(0xFF052B27),
+    primaryContainer = Color(0xFF16443E),
+    onPrimaryContainer = Color(0xFFD7FFF4),
+    secondary = Color(0xFF91BDF2),
+    onSecondary = Color(0xFF112B43),
+    secondaryContainer = Color(0xFF263D55),
+    onSecondaryContainer = Color(0xFFDCEBFF),
+    tertiary = Color(0xFFE6B86A),
+    onTertiary = Color(0xFF372500),
     background = XyInk,
-    onBackground = Color(0xFFF1F1F6),
+    onBackground = Color(0xFFEAF1F4),
     surface = XyInkSurface,
-    onSurface = Color(0xFFF1F1F6),
+    onSurface = Color(0xFFEAF1F4),
     surfaceVariant = XyInkCard,
-    onSurfaceVariant = Color(0xFFC3C5D0),
+    onSurfaceVariant = Color(0xFFB7C7CE),
     outline = XyLine,
-    outlineVariant = Color(0xFF41434E),
+    outlineVariant = Color(0xFF40545E),
     error = Color(0xFFFFB4AB),
     onError = Color(0xFF690005),
     errorContainer = Color(0xFF93000A),
@@ -56,22 +56,22 @@ val DarkScheme = darkColorScheme(
 val LightScheme = lightColorScheme(
     primary = XyVioletDeep,
     onPrimary = Color.White,
-    primaryContainer = Color(0xFFEAE7FF),
-    onPrimaryContainer = Color(0xFF21194A),
+    primaryContainer = Color(0xFFD4F4EB),
+    onPrimaryContainer = Color(0xFF073A33),
     secondary = XyVioletDeep,
     onSecondary = Color.White,
-    secondaryContainer = Color(0xFFEAE7FF),
-    onSecondaryContainer = Color(0xFF21194A),
-    tertiary = Color(0xFF245D9B),
+    secondaryContainer = Color(0xFFDCEAFF),
+    onSecondaryContainer = Color(0xFF152E48),
+    tertiary = Color(0xFF8B5B08),
     onTertiary = Color.White,
-    background = Color(0xFFF4F5F8),
-    onBackground = Color(0xFF191A20),
+    background = Color(0xFFF2F6F6),
+    onBackground = Color(0xFF172126),
     surface = Color(0xFFFFFFFF),
-    onSurface = Color(0xFF191A20),
-    surfaceVariant = Color(0xFFEBEDF2),
-    onSurfaceVariant = Color(0xFF555864),
-    outline = Color(0xFFD4D6DF),
-    outlineVariant = Color(0xFFE2E4EA),
+    onSurface = Color(0xFF172126),
+    surfaceVariant = Color(0xFFE7EFF0),
+    onSurfaceVariant = Color(0xFF52646A),
+    outline = Color(0xFFC8D7D9),
+    outlineVariant = Color(0xFFDCE6E7),
     error = Color(0xFFB3261E),
     onError = Color.White,
     errorContainer = Color(0xFFF9DEDC),

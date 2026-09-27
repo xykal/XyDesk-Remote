@@ -10,30 +10,24 @@ import android.view.WindowManager
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.BoxScope
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Close
-import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
-import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -77,8 +71,8 @@ private data class NlaPrompt(
 /**
  * M2 — layar sesi XyDesk: surface RDP (view inti via [AndroidView]) + HUD.
  *
- * - Top bar: judul host, stats ringkas (fps/resolusi/zoom), tombol panel
- * - Panel samping: Stats realtime + kontrol (zoom, touch pointer, keyboard, disconnect)
+ * - Live desktop fills the canvas; a compact closable HUD overlays the session
+ * - Each HUD control floats independently and can be moved, resized, and hidden
  * - Dialog: trust sertifikat (safe default: timeout = tolak), NLA, error
  *   (dengan hint Windows Home + pintu Cloud RDP), konfirmasi disconnect
  * - Back: prompt wajib dijawab; Connected = konfirmasi; Connecting = batalkan
@@ -100,6 +94,7 @@ fun XyDeskSessionScreen(
     var certPrompt by remember { mutableStateOf<CertPrompt?>(null) }
     var nlaPrompt by remember { mutableStateOf<NlaPrompt?>(null) }
     var showPanel by remember { mutableStateOf(prefs.isPanelShown(profile.id)) }
+    var applyingResolution by remember { mutableStateOf(false) }
     var confirmDisconnect by remember { mutableStateOf(false) }
     var zoom by remember { mutableStateOf(prefs.getZoom(profile.id)) }
     var bound by remember { mutableStateOf(false) }
@@ -157,7 +152,16 @@ fun XyDeskSessionScreen(
         if (state is SessionState.Connected && !bound) {
             bound = true
             controller.bind(manager.instance())
-            controller.applyZoom(zoom)
+            if (prefs.hasZoom(profile.id)) controller.applyZoom(zoom)
+            else controller.fitToScreen()
+        }
+    }
+
+    LaunchedEffect(state, applyingResolution) {
+        if (applyingResolution && state is SessionState.Disconnected) {
+            applyingResolution = false
+            bound = false
+            manager.connect(profile)
         }
     }
 
@@ -191,6 +195,7 @@ fun XyDeskSessionScreen(
                 }
                 showPanel -> {
                     showPanel = false
+                    prefs.setPanelShown(profile.id, false)
                     true
                 }
                 else -> false
@@ -205,49 +210,30 @@ fun XyDeskSessionScreen(
             modifier = Modifier.fillMaxSize(),
         )
 
-        // top bar HUD
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.85f))
-                .padding(horizontal = 4.dp, vertical = 2.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            IconButton(onClick = onExit) {
-                Icon(Icons.Default.Close, contentDescription = "Tutup")
-            }
-            Text(
-                text = profile.label ?: "${profile.host}:${profile.port}",
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-                modifier = Modifier.weight(1f).padding(start = 4.dp),
-                style = MaterialTheme.typography.titleSmall,
-            )
-            if (state is SessionState.Connected) {
-                Text(
-                    text = "${telemetry.fps} upd/s · ${telemetry.width}\u00d7${telemetry.height}" +
-                        " · ${(zoom * 100f).roundToInt()}%",
-                    style = MaterialTheme.typography.labelSmall,
-                )
-            }
-            IconButton(onClick = {
-                showPanel = !showPanel
-                prefs.setPanelShown(profile.id, showPanel)
-            }) {
-                Icon(Icons.Default.MoreVert, contentDescription = "Panel")
-            }
-        }
-
-        if (showPanel && state is SessionState.Connected) {
-            SessionSidePanel(
-                telemetry = telemetry,
+        if (state is SessionState.Connected) {
+            SessionHud(
+                profileId = profile.id,
+                open = showPanel,
+                onOpenChange = { shown ->
+                    showPanel = shown
+                    prefs.setPanelShown(profile.id, shown)
+                },
+                hostLabel = profile.label ?: "${profile.host}:${profile.port}",
+                statusText = "TERHUBUNG · ${telemetry.width}×${telemetry.height}",
                 zoom = zoom,
-                freeRdpVersion = freeRdpVersion,
-                controller = controller,
-                onDisconnect = { manager.disconnect() },
+                onTogglePointer = { controller.toggleTouchPointer() },
+                onToggleKeyboard = { controller.toggleKeyboard() },
+                onZoomIn = { controller.zoomIn() },
+                onZoomOut = { controller.zoomOut() },
+                onZoomActual = { controller.applyZoom(1f) },
+                onFit = { controller.fitToScreen() },
+                onResolutionSelected = {
+                    applyingResolution = true
+                    manager.disconnect()
+                },
                 onScreenshot = {
-                    val act = context as? Activity ?: return@SessionSidePanel
-                    val uri: Uri = controller.captureScreenshot(act) ?: return@SessionSidePanel
+                    val act = context as? Activity ?: return@SessionHud
+                    val uri: Uri = controller.captureScreenshot(act) ?: return@SessionHud
                     val send = Intent(Intent.ACTION_SEND).apply {
                         type = "image/png"
                         putExtra(Intent.EXTRA_STREAM, uri)
@@ -255,6 +241,7 @@ fun XyDeskSessionScreen(
                     }
                     act.startActivity(Intent.createChooser(send, "Bagikan screenshot"))
                 },
+                onDisconnect = { confirmDisconnect = true },
             )
         }
 
@@ -266,7 +253,14 @@ fun XyDeskSessionScreen(
             )
         }
 
-        if (state is SessionState.Disconnected) {
+        if (state is SessionState.Disconnected && applyingResolution) {
+            Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                Text("Menerapkan resolusi dan menyambungkan ulang…",
+                    style = MaterialTheme.typography.titleMedium)
+            }
+        }
+
+        if (state is SessionState.Disconnected && !applyingResolution) {
             DisconnectedOverlay(
                 onReconnect = {
                     bound = false
@@ -323,9 +317,14 @@ fun XyDeskSessionScreen(
                 TextButton(onClick = { onExit() }) { Text("Tutup") }
             },
             dismissButton = {
-                Column {
-                    TextButton(onClick = { showLog = true }) { Text("Detail") }
-                    if (e.code == SessionManager.ERROR_UNREACHABLE) {
+                    Column {
+                        TextButton(onClick = { showLog = true }) { Text("Detail") }
+                        TextButton(onClick = {
+                            context.getSharedPreferences("xydesk.remote.display", Context.MODE_PRIVATE)
+                                .edit().remove("${profile.id}.resolution").apply()
+                            manager.connect(profile)
+                        }) { Text("Reset resolusi & coba lagi") }
+                        if (e.code == SessionManager.ERROR_UNREACHABLE) {
                         TextButton(onClick = {
                             context.startActivity(Intent(context, CloudRdpActivity::class.java))
                         }) { Text("Cloud RDP") }
@@ -366,75 +365,6 @@ fun XyDeskSessionScreen(
                 TextButton(onClick = { confirmDisconnect = false }) { Text("Batal") }
             },
         )
-    }
-}
-
-@Composable
-private fun BoxScope.SessionSidePanel(
-    telemetry: TelemetrySample,
-    zoom: Float,
-    freeRdpVersion: String,
-    controller: SessionSurfaceController,
-    onDisconnect: () -> Unit,
-    onScreenshot: () -> Unit,
-) {
-    Column(
-        modifier = Modifier
-            .align(Alignment.TopEnd)
-            .fillMaxHeight()
-            .width(212.dp)
-            .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.92f))
-            .verticalScroll(rememberScrollState())
-            .padding(12.dp),
-        verticalArrangement = Arrangement.spacedBy(6.dp),
-    ) {
-        Text("STATS", style = MaterialTheme.typography.labelLarge)
-        StatRow("Status", telemetry.state::class.simpleName ?: "-")
-        StatRow(
-            "Resolusi",
-            if (telemetry.width > 0) "${telemetry.width}\u00d7${telemetry.height}" else "-",
-        )
-        StatRow("Aktivitas gambar", "${telemetry.fps}/s")
-        StatRow("Zoom", "${(zoom * 100f).roundToInt()}%")
-        StatRow("FreeRDP", freeRdpVersion)
-        Spacer(Modifier.height(10.dp))
-        Text("KONTROL", style = MaterialTheme.typography.labelLarge)
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            OutlinedButton(onClick = { controller.zoomIn() }) { Text("Zoom +") }
-            OutlinedButton(onClick = { controller.zoomOut() }) { Text("Zoom -") }
-        }
-        OutlinedButton(
-            onClick = { controller.toggleTouchPointer() },
-            modifier = Modifier.fillMaxWidth(),
-        ) { Text("Touch pointer") }
-        OutlinedButton(
-            onClick = { controller.toggleKeyboard() },
-            modifier = Modifier.fillMaxWidth(),
-        ) { Text("Keyboard") }
-        OutlinedButton(
-            onClick = onScreenshot,
-            modifier = Modifier.fillMaxWidth(),
-        ) { Text("Screenshot") }
-        Spacer(Modifier.height(8.dp))
-        Button(
-            onClick = onDisconnect,
-            modifier = Modifier.fillMaxWidth(),
-            colors = ButtonDefaults.buttonColors(
-                containerColor = MaterialTheme.colorScheme.error
-            ),
-        ) { Text("Disconnect") }
-    }
-}
-
-@Composable
-private fun StatRow(label: String, value: String) {
-    Row(modifier = Modifier.fillMaxWidth()) {
-        Text(
-            label,
-            style = MaterialTheme.typography.bodySmall,
-            modifier = Modifier.weight(1f),
-        )
-        Text(value, style = MaterialTheme.typography.bodySmall)
     }
 }
 

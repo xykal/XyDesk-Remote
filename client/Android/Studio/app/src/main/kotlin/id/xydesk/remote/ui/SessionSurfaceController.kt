@@ -172,6 +172,17 @@ class SessionSurfaceController(private val activity: Activity) : GraphicsSink {
 
     fun zoomOut(): Boolean = sessionView?.zoomOut(ZOOM_STEP) ?: false
 
+    /** Scale the full remote desktop into the current device viewport. */
+    fun fitToScreen() {
+        val view = sessionView ?: return
+        val frame = bitmap ?: return
+        val width = (scrollView?.width ?: rootView?.width ?: 0).toFloat()
+        val height = (scrollView?.height ?: rootView?.height ?: 0).toFloat()
+        if (width <= 0f || height <= 0f || frame.width <= 0 || frame.height <= 0) return
+        val factor = minOf(width / frame.width, height / frame.height)
+        view.setZoom(factor.coerceIn(SessionView.MIN_SCALE_FACTOR, SessionView.MAX_SCALE_FACTOR))
+    }
+
     fun toggleTouchPointer() {
         inputManager?.toggleTouchPointer()
     }
