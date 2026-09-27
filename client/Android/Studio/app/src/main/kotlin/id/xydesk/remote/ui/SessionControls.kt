@@ -185,10 +185,10 @@ fun SessionControls(
 
         // ---- handle panel kiri & kanan ----
         if (!leftOpen) {
-            PanelHandle(Alignment.CenterStart, checksLeft = true) { leftOpen = true }
+            PanelHandle(checksLeft = true, onClick = { leftOpen = true }, modifier = Modifier.align(Alignment.CenterStart))
         }
         if (!rightOpen) {
-            PanelHandle(Alignment.CenterEnd, checksLeft = false) { rightOpen = true }
+            PanelHandle(checksLeft = false, onClick = { rightOpen = true }, modifier = Modifier.align(Alignment.CenterEnd))
         }
 
         if (leftOpen) {
@@ -364,10 +364,13 @@ private fun HudRoundButton(
 }
 
 @Composable
-private fun PanelHandle(alignment: Alignment, checksLeft: Boolean, onClick: () -> Unit) {
+private fun PanelHandle(
+    checksLeft: Boolean,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
     Box(
-        Modifier
-            .align(alignment)
+        modifier
             .clickable(onClick = onClick)
             .padding(vertical = 24.dp, horizontal = 5.dp)
             .zIndex(20f),

@@ -319,12 +319,12 @@ object XyIcons {
     /** Hati (dukung lewat Saweria). */
     val Heart: ImageVector = xyIcon("XyHeart") {
         moveTo(12f, 20f)
-        cubicTo(4.5f, 15f, 3f, 11.6f, 3f, 9.2f)
-        cubicTo(3f, 6.4f, 5.2f, 4.5f, 7.7f, 4.5f)
-        cubicTo(9.6f, 4.5f, 11.2f, 5.7f, 12f, 7.4f)
-        cubicTo(12.8f, 5.7f, 14.4f, 4.5f, 16.3f, 4.5f)
-        cubicTo(18.8f, 4.5f, 21f, 6.4f, 21f, 9.2f)
-        cubicTo(21f, 11.6f, 19.5f, 15f, 12f, 20f)
+        curveTo(4.5f, 15f, 3f, 11.6f, 3f, 9.2f)
+        curveTo(3f, 6.4f, 5.2f, 4.5f, 7.7f, 4.5f)
+        curveTo(9.6f, 4.5f, 11.2f, 5.7f, 12f, 7.4f)
+        curveTo(12.8f, 5.7f, 14.4f, 4.5f, 16.3f, 4.5f)
+        curveTo(18.8f, 4.5f, 21f, 6.4f, 21f, 9.2f)
+        curveTo(21f, 11.6f, 19.5f, 15f, 12f, 20f)
         close()
     }
 
@@ -337,12 +337,12 @@ object XyIcons {
             moveTo(3.5f, 14.6f); lineTo(7.6f, 13.4f)
             moveTo(20.5f, 14.6f); lineTo(16.4f, 13.4f)
             moveTo(12f, 12.6f)
-            cubicTo(9.2f, 10.6f, 8.6f, 9.2f, 8.6f, 8f)
-            cubicTo(8.6f, 6.6f, 9.6f, 5.7f, 10.8f, 5.7f)
-            cubicTo(11.5f, 5.7f, 12f, 6.2f, 12f, 6.8f)
-            cubicTo(12f, 6.2f, 12.5f, 5.7f, 13.2f, 5.7f)
-            cubicTo(14.4f, 5.7f, 15.4f, 6.6f, 15.4f, 8f)
-            cubicTo(15.4f, 9.2f, 14.8f, 10.6f, 12f, 12.6f)
+            curveTo(9.2f, 10.6f, 8.6f, 9.2f, 8.6f, 8f)
+            curveTo(8.6f, 6.6f, 9.6f, 5.7f, 10.8f, 5.7f)
+            curveTo(11.5f, 5.7f, 12f, 6.2f, 12f, 6.8f)
+            curveTo(12f, 6.2f, 12.5f, 5.7f, 13.2f, 5.7f)
+            curveTo(14.4f, 5.7f, 15.4f, 6.6f, 15.4f, 8f)
+            curveTo(15.4f, 9.2f, 14.8f, 10.6f, 12f, 12.6f)
             close()
         },
         solid = {

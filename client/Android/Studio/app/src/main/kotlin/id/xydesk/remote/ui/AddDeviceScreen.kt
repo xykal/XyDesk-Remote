@@ -500,3 +500,61 @@ fun AddDeviceScreen(
         }
     }
 }
+
+/**
+ * Status akses storage untuk redirect drive.
+ *
+ * Android 11+ hanya mengizinkan app membaca folder miliknya sendiri; kalau
+ * user mau seluruh isi /storage/emulated/0, izin "semua file" harus diminta
+ * lewat halaman Setelan (tidak bisa lewat dialog runtime biasa).
+ */
+@Composable
+private fun StorageAccessRow() {
+    val context = LocalContext.current
+    var granted by remember { mutableStateOf(LibFreeRDP.hasAllFilesAccess()) }
+    val path = remember(granted) { LibFreeRDP.appDrivePath(context) }
+    Column(
+        Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 14.dp, vertical = 4.dp),
+    ) {
+        Text(
+            if (granted) {
+                "Akses penuh: seluruh isi HP terbaca remote"
+            } else {
+                "Akses terbatas: hanya folder app yang terbaca remote"
+            },
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        Spacer(Modifier.height(4.dp))
+        Text(
+            "Path: $path",
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        if (!granted) {
+            Spacer(Modifier.height(8.dp))
+            XyPillButton(
+                text = "Beri akses semua file",
+                onClick = {
+                    val intent = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+                        Intent(
+                            Settings.ACTION_MANAGE_APP_ALL_FILES_ACCESS_PERMISSION,
+                            Uri.parse("package:${context.packageName}"),
+                        )
+                    } else {
+                        Intent(
+                            Settings.ACTION_APPLICATION_DETAILS_SETTINGS,
+                            Uri.parse("package:${context.packageName}"),
+                        )
+                    }
+                    runCatching { context.startActivity(intent) }
+                    granted = LibFreeRDP.hasAllFilesAccess()
+                },
+                primary = false,
+                compact = true,
+            )
+        }
+    }
+}

@@ -125,6 +125,12 @@ data class HudKey(
     }
 }
 
+/**
+ * Tombol mouse yang bisa dikirim HUD. Dulu dideklarasikan di SessionControls
+ * lama; sekarang di model HUD karena HUD yang memakainya.
+ */
+enum class XyMouseButton { LEFT, RIGHT, MIDDLE }
+
 /** Satu pilihan di daftar "tambah tombol". */
 data class HudKeyOption(
     val group: String,

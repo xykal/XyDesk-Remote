@@ -86,18 +86,27 @@ fun HudKeyLayer(
         if (mappingMode) {
             Canvas(Modifier.fillMaxSize()) {
                 val step = 48.dp.toPx()
-                val stroke = Stroke(
-                    width = 1f,
-                    pathEffect = PathEffect.dashPathEffect(floatArrayOf(6f, 10f), 0f),
-                )
+                val dash = PathEffect.dashPathEffect(floatArrayOf(6f, 10f), 0f)
                 var x = step
                 while (x < size.width) {
-                    drawLine(Color(0x22FFFFFF), Offset(x, 0f), Offset(x, size.height), 1f, stroke)
+                    drawLine(
+                        color = Color(0x22FFFFFF),
+                        start = Offset(x, 0f),
+                        end = Offset(x, size.height),
+                        strokeWidth = 1f,
+                        pathEffect = dash,
+                    )
                     x += step
                 }
                 var y = step
                 while (y < size.height) {
-                    drawLine(Color(0x22FFFFFF), Offset(0f, y), Offset(size.width, y), 1f, stroke)
+                    drawLine(
+                        color = Color(0x22FFFFFF),
+                        start = Offset(0f, y),
+                        end = Offset(size.width, y),
+                        strokeWidth = 1f,
+                        pathEffect = dash,
+                    )
                     y += step
                 }
             }
@@ -183,7 +192,7 @@ private fun HudKeyButton(
                             change.consume()
                             break
                         }
-                        val delta = change.positionChange()
+                        val delta = change.position - change.previousPosition
                         travelled += delta.getDistance()
                         if (travelled > 8f) {
                             dragged = true
