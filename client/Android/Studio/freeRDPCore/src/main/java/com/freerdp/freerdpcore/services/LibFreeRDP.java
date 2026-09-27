@@ -903,6 +903,40 @@ public class LibFreeRDP
 		return freerdp_get_version();
 	}
 
+	public static String getBuildConfig()
+	{
+		return freerdp_get_build_config();
+	}
+
+	/**
+	 * Ringkasan fitur penting dari build config native (OPENSLES, FFMPEG, dst).
+	 * Dipakai layar diagnostik app: menjawab "kanal audio/mic ada atau tidak"
+	 * tanpa harus menebak dari kode.
+	 */
+	public static String getFeatureSummary()
+	{
+		String cfg = freerdp_get_build_config();
+		if (cfg == null)
+			return "-";
+		StringBuilder sb = new StringBuilder();
+		String[] keys = { "WITH_OPENSLES", "WITH_FFMPEG", "WITH_OPENH264", "WITH_OPUS",
+			"CHANNEL_RDPSND_CLIENT", "CHANNEL_AUDIN_CLIENT", "CHANNEL_CLIPRDR_CLIENT",
+			"CHANNEL_RDPECAM_CLIENT", "CHANNEL_DISP_CLIENT" };
+		for (String key : keys)
+		{
+			int idx = cfg.indexOf(key + "=");
+			if (idx < 0)
+				continue;
+			String rest = cfg.substring(idx + key.length() + 1);
+			int end = rest.indexOf(' ');
+			String value = end < 0 ? rest : rest.substring(0, end);
+			if (sb.length() > 0)
+				sb.append(" · ");
+			sb.append(key).append('=').append(value);
+		}
+		return sb.length() == 0 ? "-" : sb.toString();
+	}
+
 	public interface EventListener
 	{
 		void OnPreConnect(long instance);

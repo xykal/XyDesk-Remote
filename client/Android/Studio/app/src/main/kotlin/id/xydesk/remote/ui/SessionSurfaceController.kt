@@ -171,11 +171,16 @@ class SessionSurfaceController(private val activity: Activity) : GraphicsSink {
             // baris tombol keyboard tidak menempel/terpotong di tepi bawah.
             val gestures = insets.getInsets(WindowInsetsCompat.Type.systemGestures()).bottom
             val bottomInset = maxOf(nav.bottom, gestures)
+            val kbdVisible = kb.visibility == View.VISIBLE
             inputManager?.onImeVisibilityChanged(imeBottom > 0)
             // IME sudah termasuk area nav bar: jangan padding dua kali
             kb.setInsets(nav.left, nav.right, if (imeBottom > 0) 0 else bottomInset)
-            val kbdVisible = kb.visibility == View.VISIBLE
-            scroller.setPadding(nav.left, 0, nav.right, if (kbdVisible) 0 else bottomInset)
+            // PENTING: scroll view TIDAK diberi padding bawah saat keyboard
+            // extended tersembunyi. Dulu di sini bottomInset selalu dipasang,
+            // dan karena layar sesi immersive itu berarti ada strip gelap di
+            // tepi bawah yang menutupi taskbar remote. Padding bawah hanya
+            // perlu ketika keyboard extended benar-benar tampil.
+            scroller.setPadding(nav.left, 0, nav.right, 0)
             val lp = kb.layoutParams as? ViewGroup.MarginLayoutParams
             if (lp != null && lp.bottomMargin != imeBottom) {
                 lp.bottomMargin = imeBottom
@@ -230,6 +235,27 @@ class SessionSurfaceController(private val activity: Activity) : GraphicsSink {
 
     fun toggleKeyboard() {
         inputManager?.toggleKeyboard()
+    }
+
+    /**
+     * Kirim keycode Android (KeyEvent.KEYCODE_*) lewat input manager inti.
+     * Pencocokan ke scancode RDP dilakukan KeyboardMapper, jadi overlay
+     * keyboard XyDesk tidak perlu tahu tabel scancode.
+     */
+    fun sendVirtualKey(keyCode: Int, down: Boolean) {
+        uiHandler.post { inputManager?.processVirtualKey(keyCode, down) }
+    }
+
+    /** Tekan beberapa tombol sekaligus (mis. Ctrl+Alt+Del) lalu lepas terbalik. */
+    fun sendCombo(keyCodes: List<Int>) {
+        if (keyCodes.isEmpty()) return
+        keyCodes.forEach { sendVirtualKey(it, true) }
+        keyCodes.reversed().forEach { sendVirtualKey(it, false) }
+    }
+
+    /** Kirim karakter unicode (dipakai kalau server tidak paham scancode-nya). */
+    fun sendUnicode(ch: Int) {
+        uiHandler.post { inputManager?.processUnicodeKey(ch) }
     }
 
     /** Sinkronkan visibilitas keyboard (idempotent). */

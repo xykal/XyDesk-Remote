@@ -115,6 +115,20 @@ class RdpUriTest {
     }
 
     @Test
+    fun resolusiDinamisIkutTerkirim() {
+        assertTrue(
+            "kanal DISP butuh /dynamic-resolution",
+            params(simple()).containsKey("dynamic-resolution"),
+        )
+    }
+
+    @Test
+    fun resolusiDinamisBisaDimatikan() {
+        val p = params(simple(), RdpOptions(dynamicResolution = false))
+        assertFalse(p.containsKey("dynamic-resolution"))
+    }
+
+    @Test
     fun transportMatiTidakKirimMultitransport() {
         val p = params(simple(), RdpOptions(udpTransport = false, networkAutoDetect = false, h264 = false))
         assertFalse(p.containsKey("multitransport"))

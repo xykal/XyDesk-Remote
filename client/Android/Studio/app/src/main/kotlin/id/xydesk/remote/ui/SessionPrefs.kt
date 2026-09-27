@@ -81,6 +81,25 @@ class SessionPrefs(context: Context) {
         get() = input.getBoolean(KEY_BTN_SWITCH, true)
         set(v) = input.edit().putBoolean(KEY_BTN_SWITCH, v).apply()
 
+    /**
+     * Diameter tombol kontrol HUD (dp). Default 56; pengguna bisa geser ke
+     * 40..80. Semua tombol kontrol HUD bulat penuh (radius = setengah
+     * diameter), jadi satu angka ini menentukan radius efektifnya juga.
+     */
+    var hudButtonSize: Float
+        get() = input.getFloat(KEY_HUD_SIZE, 56f).coerceIn(40f, 80f)
+        set(v) = input.edit().putFloat(KEY_HUD_SIZE, v.coerceIn(40f, 80f)).apply()
+
+    /** Skala keyboard overlay (pengali ukuran tombol). */
+    var keyboardScale: Float
+        get() = input.getFloat(KEY_KB_SCALE, 1f).coerceIn(0.7f, 1.6f)
+        set(v) = input.edit().putFloat(KEY_KB_SCALE, v.coerceIn(0.7f, 1.6f)).apply()
+
+    /** Keyboard overlay tampil otomatis saat sesi terhubung. */
+    var keyboardAutoOpen: Boolean
+        get() = input.getBoolean(KEY_KB_AUTO, false)
+        set(v) = input.edit().putBoolean(KEY_KB_AUTO, v).apply()
+
     // ---- per perangkat ----
 
     fun zoom(id: String): Float = device.getFloat("$id.zoom", 1f)
@@ -113,6 +132,25 @@ class SessionPrefs(context: Context) {
             .apply()
     }
 
+    /** Keyboard overlay tampil (terpisah dari keyboard sistem/IME). */
+    fun overlayShown(id: String): Boolean = device.getBoolean("$id.overlay", false)
+
+    fun setOverlayShown(id: String, shown: Boolean) {
+        device.edit().putBoolean("$id.overlay", shown).apply()
+    }
+
+    /** Posisi keyboard overlay, ternormalisasi 0..1 dari kiri-atas. */
+    fun overlayX(id: String): Float = device.getFloat("$id.overlay.x", 0.06f).coerceIn(0f, 1f)
+
+    fun overlayY(id: String): Float = device.getFloat("$id.overlay.y", 0.62f).coerceIn(0f, 1f)
+
+    fun setOverlayPos(id: String, x: Float, y: Float) {
+        device.edit()
+            .putFloat("$id.overlay.x", x.coerceIn(0f, 1f))
+            .putFloat("$id.overlay.y", y.coerceIn(0f, 1f))
+            .apply()
+    }
+
     companion object {
         private const val INPUT_FILE = "xydesk.input"
         private const val DEVICE_FILE = "xydesk.session"
@@ -129,6 +167,9 @@ class SessionPrefs(context: Context) {
         private const val KEY_BTN_MIDDLE = "btn_middle"
         private const val KEY_BTN_SCROLL = "btn_scroll"
         private const val KEY_BTN_SWITCH = "btn_switch"
+        private const val KEY_HUD_SIZE = "hud_size"
+        private const val KEY_KB_SCALE = "kb_scale"
+        private const val KEY_KB_AUTO = "kb_auto"
     }
 }
 
@@ -141,16 +182,46 @@ object DisplayPrefs {
 
     const val AUTOMATIC = "automatic"
 
+    /**
+     * Pilihan resolusi remote. "Otomatis" = ikut ukuran layar HP (fit).
+     * Ukuran lain dikirim ke server sebagai `/size:WxH`; server yang
+     * mendukung dynamic resolution langsung menyesuaikan desktop-nya.
+     */
     val resolutions = listOf(
         AUTOMATIC to "Otomatis",
+        "1024x768" to "1024 x 768",
         "1280x720" to "1280 x 720",
+        "1280x800" to "1280 x 800",
         "1366x768" to "1366 x 768",
+        "1440x900" to "1440 x 900",
         "1600x900" to "1600 x 900",
+        "1680x1050" to "1680 x 1050",
         "1920x1080" to "1920 x 1080",
+        "1920x1200" to "1920 x 1200",
         "2560x1440" to "2560 x 1440",
+        "2560x1600" to "2560 x 1600",
+        "3840x2160" to "3840 x 2160",
+    )
+
+    /** Resolusi portrait (layar diputar). */
+    val portraitResolutions = listOf(
+        "720x1280" to "720 x 1280",
+        "1080x1920" to "1080 x 1920",
+        "1200x1920" to "1200 x 1920",
+        "1440x2560" to "1440 x 2560",
     )
 
     val rotations = listOf("Auto", "Portrait", "Landscape")
+
+    /** Validasi "WxH" manual (batas sama dengan SessionManager). */
+    fun parseCustom(value: String): String? {
+        val parts = value.trim().lowercase().split('x')
+        if (parts.size != 2) return null
+        val w = parts[0].trim().toIntOrNull() ?: return null
+        val h = parts[1].trim().toIntOrNull() ?: return null
+        if (w !in 640..8192 || h !in 480..8192) return null
+        return "${w}x$h"
+    }
 
     private fun sp(context: Context) =
         context.applicationContext.getSharedPreferences(FILE, Context.MODE_PRIVATE)

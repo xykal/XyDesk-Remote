@@ -81,6 +81,7 @@ class SessionManager(context: Context) {
     val stage: StateFlow<Stage> = _stage.asStateFlow()
 
     private var watchdogToken = 0
+    private var buildInfoLogged = false
 
     @Volatile private var core: CoreSession? = null
     @Volatile private var listener: Listener? = null
@@ -161,6 +162,9 @@ class SessionManager(context: Context) {
      * = Error("unreachable") tanpa menyentuh native (diagnosa cepat:
      * RDP off / Windows Home / firewall / host salah).
      */
+    /** Info build inti (versi + kanal penting) untuk layar diagnostik. */
+    fun buildInfo(): String = coreBuildInfo()
+
     fun connect(profile: ConnectionProfile) {
         val session = synchronized(lifecycleLock) {
             if (released) return
@@ -317,6 +321,21 @@ class SessionManager(context: Context) {
         return LibFreeRDP.sendClipboardData(inst, data)
     }
 
+    /**
+     * Ubah ukuran desktop remote TANPA reconnect lewat kanal DISP
+     * (`/dynamic-resolution`). Balikan false = server/kanal belum siap,
+     * pemanggil boleh jatuh ke jalur reconnect.
+     */
+    fun resizeRemote(width: Int, height: Int): Boolean {
+        if (_state.value !is SessionState.Connected) return false
+        val inst = core?.getInstance() ?: return false
+        val w = width.coerceIn(640, 8192)
+        val h = height.coerceIn(480, 8192)
+        val ok = runCatching { LibFreeRDP.sendMonitorLayout(inst, w, h) }.getOrDefault(false)
+        ConnectionLog.add("CM: resizeRemote ${w}x$h -> ${if (ok) "dikirim (DISP)" else "ditolak"}")
+        return ok
+    }
+
     // ------------------------------------------------------------------
     // Internal
     // ------------------------------------------------------------------
@@ -353,6 +372,10 @@ class SessionManager(context: Context) {
     }
 
     private fun logConnectStart(p: ConnectionProfile) {
+        if (!buildInfoLogged) {
+            buildInfoLogged = true
+            ConnectionLog.add("BUILD: ${buildInfo()}")
+        }
         ConnectionLog.add("connect mulai -> ${p.host}:${p.port} user=${p.username ?: "(kosong)"}")
     }
 
@@ -586,3 +609,13 @@ class SessionManager(context: Context) {
         private val mainHandler = android.os.Handler(android.os.Looper.getMainLooper())
     }
 }
+
+/**
+ * Info build inti FreeRDP yang benar-benar terpasang di APK ini: versi +
+ * daftar kanal/fitur penting. Dipakai layar diagnostik supaya pertanyaan
+ * "audio/mic/clipboard ada di build ini atau tidak" bisa dijawab dari HP,
+ * bukan dari tebakan.
+ */
+fun coreBuildInfo(): String = runCatching {
+    "FreeRDP ${LibFreeRDP.getVersion()} | ${LibFreeRDP.getFeatureSummary()}"
+}.getOrDefault("FreeRDP (info build tidak terbaca)")

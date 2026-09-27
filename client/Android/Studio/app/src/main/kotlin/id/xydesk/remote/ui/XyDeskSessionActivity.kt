@@ -14,11 +14,16 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.OnBackPressedCallback
 import android.content.res.Configuration
+import android.Manifest
+import android.content.pm.PackageManager
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.core.content.ContextCompat
 import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.WindowInsetsControllerCompat
 import id.xydesk.remote.core.ConnectionLog
 import id.xydesk.remote.core.ConnectionProfile
+import id.xydesk.remote.core.RdpOptions
 import id.xydesk.remote.core.SessionManager
 import id.xydesk.remote.core.SessionState
 import id.xydesk.remote.ui.theme.XyDeskTheme
@@ -107,15 +112,14 @@ class XyDeskSessionActivity : ComponentActivity() {
 
         val prefs = AppPrefs(this)
         this.appPrefs = prefs
+        requestRuntimePermissions(profile)
         setContent {
-            val systemDark = (getResources().configuration.uiMode and
-                Configuration.UI_MODE_NIGHT_MASK) == Configuration.UI_MODE_NIGHT_YES
-            val dark = when (prefs.themeMode) {
-                1 -> true
-                2 -> false
-                else -> systemDark
-            }
-            XyDeskTheme(dark = dark) {
+            // Layar sesi SELALU gelap, apa pun mode tema app. Alasannya dua:
+            // (1) HUD berada di atas gambar remote, jadi kontrasnya tidak boleh
+            //     bergantung tema sistem; (2) dulu di mode terang panel HUD
+            //     memakai komponen skema terang di atas panel gelap — teks jadi
+            //     tidak terbaca ("ketabrak").
+            XyDeskTheme(dark = true) {
                 XyDeskSessionScreen(
                     profile = profile,
                     manager = manager,
@@ -182,6 +186,31 @@ class XyDeskSessionActivity : ComponentActivity() {
             WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
         controller.hide(WindowInsetsCompat.Type.systemBars())
     }
+
+    /**
+     * Izin runtime yang benar-benar dipakai build ini: KAMERA (channel rdpecam
+     * aktif di superbuild). Mikrofon TIDAK diminta karena jalur audin belum
+     * ada di core (lihat catatan di AddDeviceScreen) — meminta izin untuk
+     * fitur yang tidak jalan cuma bikin user curiga.
+     */
+    private fun requestRuntimePermissions(profile: ConnectionProfile) {
+        val options = runCatching { RdpOptions.of(this, profile.id) }.getOrNull()
+            ?: return
+        val wanted = buildList {
+            if (options.camera) add(Manifest.permission.CAMERA)
+            if (options.microphone) add(Manifest.permission.RECORD_AUDIO)
+        }.filter {
+            ContextCompat.checkSelfPermission(this, it) != PackageManager.PERMISSION_GRANTED
+        }
+        if (wanted.isEmpty()) return
+        ConnectionLog.add("SES: minta izin runtime ${wanted.joinToString()}")
+        permissionLauncher.launch(wanted.toTypedArray())
+    }
+
+    private val permissionLauncher =
+        registerForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) { result ->
+            ConnectionLog.add("SES: hasil izin ${result.entries.joinToString { "${it.key}=${it.value}" }}")
+        }
 
     private fun profileFromIntent(intent: Intent): ConnectionProfile? {
         val host = intent.getStringExtra(EXTRA_HOST) ?: return null

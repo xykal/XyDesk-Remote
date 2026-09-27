@@ -6,6 +6,9 @@ import android.app.Activity
 import android.content.Context
 import android.widget.Toast
 import androidx.activity.compose.BackHandler
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Color
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -240,6 +243,7 @@ fun XyDeskHome(onExit: () -> Unit) {
                                 Toast.makeText(context, "Kredensial & perangkat dihapus", Toast.LENGTH_SHORT).show()
                             }
                         },
+                        onShowLog = { showBoot = true },
                     )
                 }
 
@@ -359,26 +363,46 @@ private fun DeviceCard(
     onEdit: () -> Unit,
     onDelete: () -> Unit,
 ) {
+    // Motif wallpaper mengikuti nama perangkat (Windows 11 / 10 / macOS).
     val wall = XyWall.WIN11.forDevice(profile.label ?: profile.host)
+    val shape = MaterialTheme.shapes.large
     Column(
         Modifier
             .fillMaxWidth()
-            .clip(MaterialTheme.shapes.large)
+            .clip(shape)
             .background(MaterialTheme.colorScheme.surface)
-            .border(1.dp, MaterialTheme.colorScheme.outline, MaterialTheme.shapes.large)
+            .border(1.dp, MaterialTheme.colorScheme.outline, shape)
             .clickable(onClick = onConnect),
     ) {
-        Box(Modifier.fillMaxWidth().height(104.dp)) {
-            XyWallpaper(wall, dim = 0.18f)
+        // Preview desktop penuh (bukan banner gepeng): wallpaper mengisi
+        // seluruh kotak membulat, ditutup scrim gelap di bawah supaya teks
+        // tetap terbaca, plus strip taskbar tipis sebagai penanda OS.
+        Box(
+            Modifier
+                .fillMaxWidth()
+                .height(172.dp)
+                .clip(shape),
+        ) {
+            XyWallpaper(wall, dim = 0.12f)
+            Box(
+                Modifier
+                    .fillMaxSize()
+                    .background(
+                        Brush.verticalGradient(
+                            0.45f to Color.Transparent,
+                            1f to Color.Black.copy(alpha = 0.62f),
+                        ),
+                    ),
+            )
             Column(
                 Modifier
                     .align(Alignment.BottomStart)
-                    .padding(14.dp),
+                    .padding(start = 14.dp, end = 14.dp, bottom = 40.dp),
             ) {
                 Text(
                     profile.label ?: profile.host,
                     style = MaterialTheme.typography.titleMedium,
-                    color = androidx.compose.ui.graphics.Color.White,
+                    color = Color.White,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
                 )
@@ -388,11 +412,12 @@ private fun DeviceCard(
                         if (!profile.username.isNullOrBlank()) append("  ·  ").append(profile.username)
                     },
                     style = MaterialTheme.typography.bodySmall,
-                    color = androidx.compose.ui.graphics.Color.White.copy(alpha = 0.78f),
+                    color = Color.White.copy(alpha = 0.82f),
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
                 )
             }
+            DesktopTaskbar(Modifier.align(Alignment.BottomCenter))
         }
         Row(
             Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 10.dp),
@@ -404,6 +429,37 @@ private fun DeviceCard(
             XyIconPill(XyIcons.Gear, onEdit, size = 40.dp, contentDescription = "Ubah")
             XyIconPill(XyIcons.Trash, onDelete, size = 40.dp, contentDescription = "Hapus")
         }
+    }
+}
+
+/** Strip taskbar tipis di dasar preview supaya terbaca sebagai desktop. */
+@Composable
+private fun DesktopTaskbar(modifier: Modifier = Modifier) {
+    Row(
+        modifier
+            .fillMaxWidth()
+            .height(28.dp)
+            .background(Color.Black.copy(alpha = 0.34f))
+            .padding(horizontal = 12.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(7.dp),
+    ) {
+        Box(Modifier.size(9.dp).clip(RoundedCornerShape(2.dp)).background(Color.White.copy(alpha = 0.85f)))
+        repeat(3) {
+            Box(
+                Modifier
+                    .size(9.dp)
+                    .clip(RoundedCornerShape(2.dp))
+                    .background(Color.White.copy(alpha = 0.45f)),
+            )
+        }
+        Spacer(Modifier.weight(1f))
+        Box(
+            Modifier
+                .size(width = 18.dp, height = 5.dp)
+                .clip(RoundedCornerShape(50))
+                .background(Color.White.copy(alpha = 0.35f)),
+        )
     }
 }
 

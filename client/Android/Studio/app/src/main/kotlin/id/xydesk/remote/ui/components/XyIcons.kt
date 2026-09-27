@@ -45,6 +45,29 @@ private fun xySolid(name: String, block: PathBuilder.() -> Unit): ImageVector =
         path(fill = SolidColor(Color.White), pathBuilder = block)
     }.build()
 
+private fun xyTwoPath(
+    name: String,
+    outline: PathBuilder.() -> Unit,
+    solid: PathBuilder.() -> Unit,
+): ImageVector =
+    ImageVector.Builder(
+        name = name,
+        defaultWidth = 24.dp,
+        defaultHeight = 24.dp,
+        viewportWidth = 24f,
+        viewportHeight = 24f,
+    ).apply {
+        path(
+            fill = null,
+            stroke = SolidColor(Color.White),
+            strokeLineWidth = 1.7f,
+            strokeLineCap = StrokeCap.Round,
+            strokeLineJoin = StrokeJoin.Round,
+            pathBuilder = outline,
+        )
+        path(fill = SolidColor(Color.White), pathBuilder = solid)
+    }.build()
+
 object XyIcons {
 
     /** Monitor: perangkat remote. */
@@ -95,6 +118,31 @@ object XyIcons {
         moveTo(4f, 9f); lineTo(18f, 9f); moveTo(15f, 6f); lineTo(18f, 9f); lineTo(15f, 12f)
         moveTo(20f, 15f); lineTo(6f, 15f); moveTo(9f, 12f); lineTo(6f, 15f); lineTo(9f, 18f)
     }
+
+    /** Mouse dengan tombol kanan ditandai: aksi klik kanan. */
+    val ClickRight: ImageVector = xyTwoPath(
+        name = "XyClickRight",
+        outline = {
+            moveTo(8f, 3.5f); lineTo(16f, 3.5f); lineTo(16f, 20.5f); lineTo(8f, 20.5f); close()
+            moveTo(8f, 9.5f); lineTo(16f, 9.5f)
+            moveTo(12f, 3.5f); lineTo(12f, 9.5f)
+        },
+        solid = {
+            moveTo(13.6f, 5f); lineTo(15f, 5f); lineTo(15f, 8.2f); lineTo(13.6f, 8.2f); close()
+        },
+    )
+
+    /** Roda mouse ditekan: aksi klik tengah. */
+    val ClickMiddle: ImageVector = xyTwoPath(
+        name = "XyClickMiddle",
+        outline = {
+            moveTo(9f, 3.5f); lineTo(15f, 3.5f); lineTo(15f, 20.5f); lineTo(9f, 20.5f); close()
+            moveTo(12f, 3.5f); lineTo(12f, 8f)
+        },
+        solid = {
+            moveTo(11.2f, 9.6f); lineTo(12.8f, 9.6f); lineTo(12.8f, 13.4f); lineTo(11.2f, 13.4f); close()
+        },
+    )
 
     val Shot: ImageVector = xyIcon("XyShot") {
         moveTo(3f, 7.5f); lineTo(8f, 7.5f); lineTo(9.5f, 5f); lineTo(14.5f, 5f)

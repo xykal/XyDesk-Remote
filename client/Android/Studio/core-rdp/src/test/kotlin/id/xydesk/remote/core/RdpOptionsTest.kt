@@ -57,6 +57,7 @@ class RdpOptionsTest {
         assertTrue(o.udpTransport)
         assertTrue(o.networkAutoDetect)
         assertTrue(o.h264)
+        assertTrue("resolusi dinamis (kanal DISP) nyala untuk user baru", o.dynamicResolution)
         assertEquals(false, o.microphone)
         assertEquals(false, o.localDrive)
         assertEquals(false, o.camera)

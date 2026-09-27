@@ -1,6 +1,7 @@
 package id.xydesk.remote.ui
 
 import android.view.HapticFeedbackConstants
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -19,27 +20,29 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Icon
 import androidx.compose.material3.Slider
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
-import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalView
@@ -49,6 +52,7 @@ import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.zIndex
+import id.xydesk.remote.ui.components.XyField
 import id.xydesk.remote.ui.components.XyIcons
 import id.xydesk.remote.ui.components.XyPillButton
 import id.xydesk.remote.ui.components.XySegmented
@@ -58,25 +62,36 @@ import kotlin.math.roundToInt
 
 enum class XyMouseButton { LEFT, RIGHT, MIDDLE }
 
-private val ClusterBg = Color(0xD912161A)
-private val ClusterLine = Color(0x33FFFFFF)
+/**
+ * Warna HUD sesi. Sengaja konstanta eksplisit, BUKAN MaterialTheme: HUD
+ * selalu berada di atas gambar remote (gelap/terang apa pun isinya), jadi
+ * skemanya harus tetap gelap walaupun app dipakai dalam mode terang.
+ */
+private val HudBorder = Color(0xD9FFFFFF)
+private val HudBorderDim = Color(0x59FFFFFF)
+private val HudInk = Color(0xFFEFF3F6)
+private val HudShadow = Color(0x66000000)
+private val HudPanelBg = Color(0xF20B0D10)
 
 /**
  * Kontrol sesi XyDesk.
  *
- * Prinsip yang dipegang di sini:
- *  - Layar sesi bersih: tidak ada bar atas berisi IP/host. Yang tersisa cuma
- *    handle kecil di tepi kanan untuk membuka panel pengaturan.
- *  - Pointer (satu) terpisah total dari tombol mouse. Ukuran pointer bisa
- *    dikecilkan/dibesarkan; cluster tombol bisa dipindah dan di-skala.
- *  - Tombol keyboard selalu di pojok bawah (kanan/kiri) supaya tidak
- *    bertumpuk dengan baris tombol fungsi keyboard.
+ * Aturan bentuk (permintaan produk):
+ *  - Tombol kontrol HUD: bulat penuh, HANYA border + ikon di dalamnya,
+ *    tanpa isian warna, dengan shadow hitam tipis supaya tetap terlihat
+ *    saat remote menampilkan halaman putih.
+ *  - Tiap aksi berdiri sendiri: klik kiri / kanan / tengah, scroll naik,
+ *    scroll turun, ganti mode input. Tidak ada tombol gabungan.
+ *  - Ukuran tombol + posisi bebas diatur; nilainya disimpan per perangkat.
+ *  - Panel pengaturan lebih ramping dari sebelumnya dan memakai skema gelap
+ *    yang sama dengan HUD (teks tidak lagi tenggelam di latar panel).
  */
 @Composable
 fun SessionControls(
     deviceId: String,
     hostLabel: String,
     statusText: String,
+    remoteSize: String,
     zoomPercent: Int,
     pointerScreen: Offset,
     pointerVisible: Boolean,
@@ -84,6 +99,8 @@ fun SessionControls(
     onInputModeChange: (InputMode) -> Unit,
     keyboardShown: Boolean,
     onKeyboardShownChange: (Boolean) -> Unit,
+    overlayShown: Boolean,
+    onOverlayShownChange: (Boolean) -> Unit,
     onZoomIn: () -> Unit,
     onZoomOut: () -> Unit,
     onFit: () -> Unit,
@@ -104,7 +121,8 @@ fun SessionControls(
     var panelOpen by remember { mutableStateOf(false) }
     var pointerSize by remember { mutableFloatStateOf(prefs.pointerSize) }
     var pointerStyle by remember { mutableStateOf(prefs.pointerStyle) }
-    var clusterScale by remember { mutableFloatStateOf(prefs.clusterScale) }
+    var hudSize by remember { mutableFloatStateOf(prefs.hudButtonSize) }
+    var keyboardScale by remember { mutableFloatStateOf(prefs.keyboardScale) }
     var haptics by remember { mutableStateOf(prefs.haptics) }
     var showLeft by remember { mutableStateOf(prefs.showLeft) }
     var showRight by remember { mutableStateOf(prefs.showRight) }
@@ -121,163 +139,133 @@ fun SessionControls(
     }
 
     Box(Modifier.fillMaxSize().zIndex(10f)) {
-        // ---- pointer tunggal, posisinya mengikuti kursor remote ----
+        // ---- pointer tunggal, terpisah total dari tombol mouse ----
         if (pointerVisible) {
-            XyPointer(
-                position = pointerScreen,
-                sizeDp = pointerSize,
-                style = pointerStyle,
-            )
+            XyPointer(position = pointerScreen, sizeDp = pointerSize, style = pointerStyle)
         }
 
-        // ---- cluster tombol mouse (bisa dipindah + di-skala) ----
+        // ---- deretan tombol kontrol, tiap tombol berdiri sendiri ----
         BoxWithConstraints(Modifier.fillMaxSize()) {
             val widthPx = constraints.maxWidth.toFloat()
             val heightPx = constraints.maxHeight.toFloat()
-            val clusterWidth = 150f * clusterScale
-            val clusterHeight = 190f * clusterScale
-            val maxX = (widthPx - clusterWidth * 3f).coerceAtLeast(1f)
-            val maxY = (heightPx - clusterHeight * 3f).coerceAtLeast(1f)
+            val btn = hudSize
+            val columnHeight = btn * 6.6f
+            val maxX = (widthPx - btn * 1.6f).coerceAtLeast(1f)
+            val maxY = (heightPx - columnHeight).coerceAtLeast(1f)
+
             Column(
                 modifier = Modifier
                     .offset {
-                        IntOffset(
-                            (clusterX * maxX).roundToInt(),
-                            (clusterY * maxY).roundToInt(),
-                        )
+                        IntOffset((clusterX * maxX).roundToInt(), (clusterY * maxY).roundToInt())
                     }
                     .zIndex(11f),
-                verticalArrangement = Arrangement.spacedBy(6.dp * clusterScale),
-                horizontalAlignment = Alignment.End,
+                verticalArrangement = Arrangement.spacedBy(btn * 0.22f),
+                horizontalAlignment = Alignment.CenterHorizontally,
             ) {
-                // grip: seret untuk pindah posisi
-                Box(
-                    modifier = Modifier
-                        .clip(XyPill)
-                        .background(ClusterBg)
-                        .border(1.dp, ClusterLine, XyPill)
-                        .pointerInput(Unit) {
-                            detectDragGestures { change, drag ->
-                                change.consume()
-                                clusterX = (clusterX + drag.x / maxX).coerceIn(0f, 1f)
-                                clusterY = (clusterY + drag.y / maxY).coerceIn(0f, 1f)
-                                prefs.setCluster(deviceId, clusterX, clusterY)
-                            }
-                        }
-                        .padding(horizontal = 14.dp, vertical = 7.dp),
-                ) {
-                    Text(
-                        "GESER",
-                        fontSize = 9.sp,
-                        letterSpacing = 1.2.sp,
-                        color = Color(0xFFB9C2CA),
-                        fontWeight = FontWeight.SemiBold,
-                    )
-                }
+                HudChip(hudSize, onDrag = { dx, dy ->
+                    clusterX = (clusterX + dx / maxX).coerceIn(0f, 1f)
+                    clusterY = (clusterY + dy / maxY).coerceIn(0f, 1f)
+                    prefs.setCluster(deviceId, clusterX, clusterY)
+                })
+
                 if (showScroll) {
-                    ClusterButton("SCROLL", XyIcons.ScrollUp, clusterScale) {
-                        tap(); onScroll(1)
-                    }
-                    ClusterButton("SCROLL", XyIcons.ScrollDown, clusterScale) {
-                        tap(); onScroll(-1)
-                    }
+                    HudButton("Scroll naik", XyIcons.ScrollUp, hudSize) { tap(); onScroll(1) }
+                    HudButton("Scroll turun", XyIcons.ScrollDown, hudSize) { tap(); onScroll(-1) }
                 }
-                Row(horizontalArrangement = Arrangement.spacedBy(6.dp * clusterScale)) {
-                    if (showLeft) {
-                        ClusterButton("L", null, clusterScale, onPress = { down ->
-                            tap(); onMouse(XyMouseButton.LEFT, down)
-                        })
-                    }
-                    if (showRight) {
-                        ClusterButton("R", null, clusterScale, onPress = { down ->
-                            tap(); onMouse(XyMouseButton.RIGHT, down)
-                        })
-                    }
-                    if (showMiddle) {
-                        ClusterButton("M", null, clusterScale, onPress = { down ->
-                            tap(); onMouse(XyMouseButton.MIDDLE, down)
-                        })
-                    }
+                if (showLeft) {
+                    HudButton("Klik kiri", XyIcons.Cursor, hudSize, onPress = { down ->
+                        tap(); onMouse(XyMouseButton.LEFT, down)
+                    })
+                }
+                if (showRight) {
+                    HudButton("Klik kanan", XyIcons.ClickRight, hudSize, onPress = { down ->
+                        tap(); onMouse(XyMouseButton.RIGHT, down)
+                    })
+                }
+                if (showMiddle) {
+                    HudButton("Klik tengah", XyIcons.ClickMiddle, hudSize, onPress = { down ->
+                        tap(); onMouse(XyMouseButton.MIDDLE, down)
+                    })
                 }
                 if (showSwitch) {
-                    ClusterButton(
-                        if (inputMode == InputMode.TRACKPAD) "TRACKPAD" else "SENTUH",
-                        XyIcons.Swap,
-                        clusterScale,
-                    ) {
-                        tap()
-                        onToggleTrackpad()
-                    }
+                    HudButton(
+                        label = if (inputMode == InputMode.TRACKPAD) "Mode: trackpad" else "Mode: sentuh",
+                        icon = XyIcons.Swap,
+                        size = hudSize,
+                        active = inputMode == InputMode.DIRECT,
+                    ) { tap(); onToggleTrackpad() }
                 }
             }
         }
 
-        // ---- tombol keyboard, pojok bawah ----
-        val keyboardAlignment = if (prefs.keyboardCorner == Corner.RIGHT) Alignment.BottomEnd
-        else Alignment.BottomStart
+        // ---- tombol keyboard overlay, pojok bawah ----
+        val keyboardAlignment =
+            if (prefs.keyboardCorner == Corner.RIGHT) Alignment.BottomEnd else Alignment.BottomStart
         Box(
-            Modifier
-                .align(keyboardAlignment)
-                .padding(18.dp)
-                .zIndex(12f),
+            Modifier.align(keyboardAlignment).padding(16.dp).zIndex(12f),
         ) {
-            KeyboardButton(active = keyboardShown) {
-                tap()
-                onKeyboardShownChange(!keyboardShown)
-            }
+            HudButton(
+                label = "Keyboard",
+                icon = XyIcons.Keyboard,
+                size = maxOf(hudSize, 52f),
+                active = overlayShown,
+                onPress = null,
+                onClick = {
+                    tap()
+                    onOverlayShownChange(!overlayShown)
+                },
+            )
         }
 
-        // ---- handle panel (panah kecil di tepi kanan) ----
+        // ---- handle panel: panah kecil di tepi kanan ----
         if (!panelOpen) {
             Box(
                 Modifier
                     .align(Alignment.CenterEnd)
-                    .offset(x = 2.dp)
-                    .clip(XyPill)
-                    .background(ClusterBg)
-                    .border(1.dp, ClusterLine, XyPill)
                     .clickable { panelOpen = true }
-                    .padding(vertical = 18.dp, horizontal = 6.dp)
+                    .padding(vertical = 20.dp, horizontal = 5.dp)
                     .zIndex(12f),
             ) {
-                androidx.compose.material3.Icon(
-                    XyIcons.ChevronLeft,
-                    contentDescription = "Buka panel sesi",
-                    tint = Color(0xFFD7DEE4),
-                    modifier = Modifier.size(18.dp),
-                )
+                Box(
+                    Modifier
+                        .clip(RoundedCornerShape(50))
+                        .background(HudShadow)
+                        .border(1.dp, HudBorderDim, RoundedCornerShape(50))
+                        .padding(vertical = 16.dp, horizontal = 7.dp),
+                ) {
+                    Icon(
+                        XyIcons.ChevronLeft,
+                        contentDescription = "Buka panel sesi",
+                        tint = HudInk,
+                        modifier = Modifier.size(17.dp),
+                    )
+                }
             }
         }
 
         if (panelOpen) {
             SessionPanel(
+                deviceId = deviceId,
                 hostLabel = hostLabel,
                 statusText = statusText,
+                remoteSize = remoteSize,
                 zoomPercent = zoomPercent,
                 inputMode = inputMode,
                 onInputModeChange = onInputModeChange,
                 pointerVisible = pointerVisible,
                 onPointerVisibilityChange = onPointerVisibilityChange,
                 pointerStyle = pointerStyle,
-                onPointerStyle = {
-                    pointerStyle = it
-                    prefs.pointerStyle = it
-                },
+                onPointerStyle = { pointerStyle = it; prefs.pointerStyle = it },
                 pointerSize = pointerSize,
-                onPointerSize = {
-                    pointerSize = it
-                    prefs.pointerSize = it
-                },
-                clusterScale = clusterScale,
-                onClusterScale = {
-                    clusterScale = it
-                    prefs.clusterScale = it
-                },
+                onPointerSize = { pointerSize = it; prefs.pointerSize = it },
+                hudSize = hudSize,
+                onHudSize = { hudSize = it; prefs.hudButtonSize = it },
+                keyboardScale = keyboardScale,
+                onKeyboardScale = { keyboardScale = it; prefs.keyboardScale = it },
+                overlayShown = overlayShown,
+                onOverlayShownChange = onOverlayShownChange,
                 haptics = haptics,
-                onHaptics = {
-                    haptics = it
-                    prefs.haptics = it
-                },
+                onHaptics = { haptics = it; prefs.haptics = it },
                 showLeft = showLeft,
                 onShowLeft = { showLeft = it; prefs.showLeft = it },
                 showRight = showRight,
@@ -307,41 +295,30 @@ fun SessionControls(
                 onZoomActual = onZoomActual,
                 onScreenshot = onScreenshot,
                 onDisconnect = onDisconnect,
+                keyboardShown = keyboardShown,
+                onSystemKeyboard = { onKeyboardShownChange(!keyboardShown) },
                 onClose = { panelOpen = false },
             )
         }
     }
 }
 
-@Composable
-private fun KeyboardButton(active: Boolean, onClick: () -> Unit) {
-    Box(
-        Modifier
-            .size(54.dp)
-            .clip(CircleShape)
-            .background(if (active) Color(0xFFEFF3F6) else ClusterBg)
-            .border(1.dp, if (active) Color.Transparent else ClusterLine, CircleShape)
-            .clickable(onClick = onClick),
-        contentAlignment = Alignment.Center,
-    ) {
-        androidx.compose.material3.Icon(
-            XyIcons.Keyboard,
-            contentDescription = "Keyboard",
-            tint = if (active) Color(0xFF0A0C0E) else Color(0xFFE7EDF2),
-            modifier = Modifier.size(24.dp),
-        )
-    }
-}
+// ---------------------------------------------------------------- tombol HUD
 
+/**
+ * Tombol kontrol: bulat penuh, hanya border + ikon, tanpa isian warna.
+ * Shadow hitam tipis di bawahnya supaya tetap terbaca di atas area terang.
+ */
 @Composable
-private fun ClusterButton(
+private fun HudButton(
     label: String,
-    icon: androidx.compose.ui.graphics.vector.ImageVector?,
-    scale: Float,
+    icon: ImageVector,
+    size: Float,
+    active: Boolean = false,
     onPress: ((Boolean) -> Unit)? = null,
-    onTap: (() -> Unit)? = null,
+    onClick: (() -> Unit)? = null,
 ) {
-    val size = (56f * scale).dp
+    val shape = CircleShape
     val pressModifier = if (onPress != null) {
         Modifier.pointerInput(Unit) {
             detectTapGestures(
@@ -353,31 +330,49 @@ private fun ClusterButton(
             )
         }
     } else {
-        Modifier.clickable { onTap?.invoke() }
+        Modifier.clickable { onClick?.invoke() }
     }
     Box(
         Modifier
-            .size(size)
-            .clip(MaterialTheme.shapes.medium)
-            .background(ClusterBg)
-            .border(1.dp, ClusterLine, MaterialTheme.shapes.medium)
+            .size(size.dp)
+            .shadow(
+                elevation = 8.dp,
+                shape = shape,
+                clip = false,
+                ambientColor = Color.Black,
+                spotColor = Color.Black,
+            )
+            .clip(shape)
+            .border(1.4.dp, if (active) HudInk else HudBorder, shape)
             .then(pressModifier),
         contentAlignment = Alignment.Center,
     ) {
-        if (icon != null) {
-            androidx.compose.material3.Icon(
-                icon,
-                contentDescription = label,
-                tint = Color(0xFFE7EDF2),
-                modifier = Modifier.size(size * 0.42f),
-            )
-        } else {
-            Text(
-                label,
-                color = Color(0xFFE7EDF2),
-                fontSize = (15f * scale).sp,
-                fontWeight = FontWeight.Bold,
-            )
+        Icon(
+            icon,
+            contentDescription = label,
+            tint = HudInk,
+            modifier = Modifier.size((size * 0.44f).dp),
+        )
+    }
+}
+
+/** Grip geser untuk memindahkan deretan tombol. */
+@Composable
+private fun HudChip(size: Float, onDrag: (Float, Float) -> Unit) {
+    Box(
+        Modifier
+            .height((size * 0.42f).dp)
+            .clip(XyPill)
+            .background(Color(0x4D000000))
+            .border(1.dp, HudBorderDim, XyPill)
+            .pointerInput(Unit) { detectDragGestures { change, drag -> change.consume(); onDrag(drag.x, drag.y) } }
+            .padding(horizontal = (size * 0.22f).dp),
+        contentAlignment = Alignment.Center,
+    ) {
+        Row(horizontalArrangement = Arrangement.spacedBy(3.dp)) {
+            repeat(3) {
+                Box(Modifier.size(2.dp).clip(CircleShape).background(HudInk.copy(alpha = 0.7f)))
+            }
         }
     }
 }
@@ -397,7 +392,7 @@ private fun XyPointer(position: Offset, sizeDp: Float, style: PointerStyle) {
             .size(sizeDp.dp)
             .zIndex(11f),
     ) {
-        androidx.compose.foundation.Canvas(Modifier.fillMaxSize()) {
+        Canvas(Modifier.fillMaxSize()) {
             val w = size.width
             val h = size.height
             when (style) {
@@ -441,10 +436,14 @@ private fun XyPointer(position: Offset, sizeDp: Float, style: PointerStyle) {
     }
 }
 
+// ---------------------------------------------------------------- panel
+
 @Composable
 private fun SessionPanel(
+    deviceId: String,
     hostLabel: String,
     statusText: String,
+    remoteSize: String,
     zoomPercent: Int,
     inputMode: InputMode,
     onInputModeChange: (InputMode) -> Unit,
@@ -454,8 +453,12 @@ private fun SessionPanel(
     onPointerStyle: (PointerStyle) -> Unit,
     pointerSize: Float,
     onPointerSize: (Float) -> Unit,
-    clusterScale: Float,
-    onClusterScale: (Float) -> Unit,
+    hudSize: Float,
+    onHudSize: (Float) -> Unit,
+    keyboardScale: Float,
+    onKeyboardScale: (Float) -> Unit,
+    overlayShown: Boolean,
+    onOverlayShownChange: (Boolean) -> Unit,
     haptics: Boolean,
     onHaptics: (Boolean) -> Unit,
     showLeft: Boolean,
@@ -479,12 +482,17 @@ private fun SessionPanel(
     onZoomActual: () -> Unit,
     onScreenshot: () -> Unit,
     onDisconnect: () -> Unit,
+    keyboardShown: Boolean,
+    onSystemKeyboard: () -> Unit,
     onClose: () -> Unit,
 ) {
+    val context = LocalContext.current
+    var custom by remember { mutableStateOf("") }
+
     Box(
         Modifier
             .fillMaxSize()
-            .background(Color.Black.copy(alpha = 0.55f))
+            .background(Color.Black.copy(alpha = 0.5f))
             .clickable(onClick = onClose)
             .zIndex(20f),
         contentAlignment = Alignment.CenterEnd,
@@ -492,38 +500,28 @@ private fun SessionPanel(
         Column(
             Modifier
                 .fillMaxHeight()
-                .fillMaxWidth(0.86f)
-                .background(Color(0xF20B0D10))
-                .border(1.dp, ClusterLine)
+                .widthIn(max = 340.dp)
+                .fillMaxWidth(0.78f)
+                .background(HudPanelBg)
+                .border(1.dp, HudBorderDim)
                 .clickable { }
                 .verticalScroll(rememberScrollState())
-                .padding(18.dp),
+                .padding(14.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Column(Modifier.weight(1f)) {
                     Text(
                         hostLabel,
-                        color = Color(0xFFF2F6F9),
-                        style = MaterialTheme.typography.titleMedium,
+                        color = HudInk,
+                        fontSize = 15.sp,
+                        fontWeight = FontWeight.SemiBold,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis,
                     )
-                    Text(
-                        "$statusText  ·  ${zoomPercent}%",
-                        color = Color(0xFF9AA4AD),
-                        fontSize = 11.sp,
-                    )
+                    Text("$statusText  ·  ${zoomPercent}%", color = Color(0xFF9AA4AD), fontSize = 10.5.sp)
                 }
-                Box(
-                    Modifier
-                        .clip(XyPill)
-                        .border(1.dp, ClusterLine, XyPill)
-                        .clickable(onClick = onClose)
-                        .padding(horizontal = 14.dp, vertical = 8.dp),
-                ) {
-                    Text("Tutup", color = Color(0xFFE7EDF2), fontSize = 11.sp)
-                }
+                PanelChip("Tutup", onClose)
             }
 
             PanelSection("Input") {
@@ -533,11 +531,7 @@ private fun SessionPanel(
                     onSelect = { onInputModeChange(InputMode.entries[it]) },
                     modifier = Modifier.fillMaxWidth(),
                 )
-                Text(
-                    InputMode.entries[inputMode.ordinal].detail,
-                    color = Color(0xFF9AA4AD),
-                    fontSize = 11.sp,
-                )
+                PanelHint(InputMode.entries[inputMode.ordinal].detail)
             }
 
             PanelSection("Pointer") {
@@ -552,31 +546,41 @@ private fun SessionPanel(
                     onSelect = { onPointerStyle(PointerStyle.entries[it]) },
                     modifier = Modifier.fillMaxWidth(),
                 )
-                Text("Ukuran: ${pointerSize.toInt()} dp", color = Color(0xFF9AA4AD), fontSize = 11.sp)
-                Slider(
-                    value = pointerSize,
-                    onValueChange = onPointerSize,
-                    valueRange = 10f..52f,
-                )
+                PanelHint("Ukuran: ${pointerSize.toInt()} dp")
+                Slider(value = pointerSize, onValueChange = onPointerSize, valueRange = 10f..52f)
             }
 
-            PanelSection("Tombol mouse") {
-                Text("Ukuran cluster: ${(clusterScale * 100).toInt()}%", color = Color(0xFF9AA4AD), fontSize = 11.sp)
-                Slider(
-                    value = clusterScale,
-                    onValueChange = onClusterScale,
-                    valueRange = 0.7f..1.8f,
-                )
-                XyToggleRow("Tombol kiri", null, showLeft, onShowLeft)
-                XyToggleRow("Tombol kanan", null, showRight, onShowRight)
-                XyToggleRow("Tombol tengah", null, showMiddle, onShowMiddle)
-                XyToggleRow("Scroll atas/bawah", null, showScroll, onShowScroll)
+            PanelSection("Tombol kontrol") {
+                PanelHint("Ukuran tombol: ${hudSize.toInt()} dp (radius mengikuti, bulat penuh)")
+                Slider(value = hudSize, onValueChange = onHudSize, valueRange = 40f..80f)
+                XyToggleRow("Klik kiri", null, showLeft, onShowLeft)
+                XyToggleRow("Klik kanan", null, showRight, onShowRight)
+                XyToggleRow("Klik tengah", null, showMiddle, onShowMiddle)
+                XyToggleRow("Scroll naik/turun", null, showScroll, onShowScroll)
                 XyToggleRow("Ganti mode input", null, showSwitch, onShowSwitch)
                 XyToggleRow("Getaran", null, haptics, onHaptics)
-                XyPillButton("Pulihkan posisi cluster", onResetCluster, primary = false, compact = true)
+                XyPillButton("Pulihkan posisi", onResetCluster, primary = false, compact = true)
+            }
+
+            PanelSection("Keyboard") {
+                XyToggleRow(
+                    title = "Keyboard layar",
+                    subtitle = "QWERTY + F1-F12 + numpad + kombinasi",
+                    checked = overlayShown,
+                    onCheckedChange = onOverlayShownChange,
+                )
+                PanelHint("Skala keyboard: ${(keyboardScale * 100).toInt()}%")
+                Slider(value = keyboardScale, onValueChange = onKeyboardScale, valueRange = 0.7f..1.6f)
+                XyPillButton(
+                    text = if (keyboardShown) "Sembunyikan keyboard sistem" else "Keyboard sistem (IME)",
+                    onClick = onSystemKeyboard,
+                    primary = false,
+                    compact = true,
+                )
             }
 
             PanelSection("Layar") {
+                PanelHint("Ukuran remote saat ini: $remoteSize")
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     XyPillButton("Fit", onFit, primary = false, compact = true, modifier = Modifier.weight(1f))
                     XyPillButton("100%", onZoomActual, primary = false, compact = true, modifier = Modifier.weight(1f))
@@ -585,9 +589,9 @@ private fun SessionPanel(
                     XyPillButton("Perkecil", onZoomOut, primary = false, compact = true, modifier = Modifier.weight(1f))
                     XyPillButton("Perbesar", onZoomIn, primary = false, compact = true, modifier = Modifier.weight(1f))
                 }
-                Text("Resolusi remote", color = Color(0xFF9AA4AD), fontSize = 11.sp)
+                PanelHint("Resolusi remote")
                 Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                    DisplayPrefs.resolutions.chunked(2).forEach { row ->
+                    DisplayPrefs.resolutions.chunked(3).forEach { row ->
                         Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                             row.forEach { (value, title) ->
                                 XyPillButton(
@@ -598,31 +602,76 @@ private fun SessionPanel(
                                     modifier = Modifier.weight(1f),
                                 )
                             }
-                            if (row.size == 1) Spacer(Modifier.weight(1f))
+                            repeat(3 - row.size) { Spacer(Modifier.weight(1f)) }
                         }
                     }
                 }
-                Text(
-                    "Ganti resolusi = sesi putus lalu sambung ulang dengan ukuran baru.",
-                    color = Color(0xFF9AA4AD),
-                    fontSize = 10.sp,
-                )
-                Spacer(Modifier.height(2.dp))
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    XyField(
+                        value = custom,
+                        onValueChange = { custom = it },
+                        label = "Kustom (mis. 2160x1350)",
+                        modifier = Modifier.weight(1f),
+                    )
+                    XyPillButton(
+                        text = "Pasang",
+                        onClick = {
+                            DisplayPrefs.parseCustom(custom)?.let { onResolution(it) }
+                        },
+                        primary = false,
+                        compact = true,
+                    )
+                }
                 XySegmented(
                     options = DisplayPrefs.rotations,
                     selectedIndex = DisplayPrefs.rotations.indexOf(rotation).coerceAtLeast(0),
                     onSelect = { onRotation(DisplayPrefs.rotations[it]) },
                     modifier = Modifier.fillMaxWidth(),
                 )
+                PanelHint(
+                    "Resolusi dikirim ke server saat menyambung (/size + dynamic " +
+                        "resolution). Kalau layar remote tidak berubah, server-nya " +
+                        "yang menolak ukuran itu.",
+                )
             }
 
             PanelSection("Sesi") {
-                XyPillButton("Ambil screenshot", onScreenshot, primary = false, compact = true, modifier = Modifier.fillMaxWidth())
-                XyPillButton("Putuskan sesi", onDisconnect, primary = false, compact = true, modifier = Modifier.fillMaxWidth())
+                XyPillButton(
+                    "Ambil screenshot",
+                    onScreenshot,
+                    primary = false,
+                    compact = true,
+                    modifier = Modifier.fillMaxWidth(),
+                )
+                XyPillButton(
+                    "Putuskan sesi",
+                    onDisconnect,
+                    primary = false,
+                    compact = true,
+                    modifier = Modifier.fillMaxWidth(),
+                )
             }
-            Spacer(Modifier.height(24.dp))
+            Spacer(Modifier.height(20.dp))
         }
     }
+}
+
+@Composable
+private fun PanelChip(label: String, onClick: () -> Unit) {
+    Box(
+        Modifier
+            .clip(XyPill)
+            .border(1.dp, HudBorderDim, XyPill)
+            .clickable(onClick = onClick)
+            .padding(horizontal = 12.dp, vertical = 7.dp),
+    ) {
+        Text(label, color = HudInk, fontSize = 11.sp)
+    }
+}
+
+@Composable
+private fun PanelHint(text: String) {
+    Text(text, color = Color(0xFF9AA4AD), fontSize = 10.5.sp)
 }
 
 @Composable

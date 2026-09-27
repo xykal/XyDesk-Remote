@@ -46,6 +46,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
@@ -92,6 +93,19 @@ private data class NlaPrompt(
  * di tepi kanan). Selama connecting, layar menampilkan wallpaper perangkat
  * yang diburamkan + langkah koneksi, bukan layar hitam kosong.
  */
+/**
+ * Pecah preset resolusi "1920x1080" jadi pasangan lebar/tinggi.
+ * Balikan null kalau bukan format itu atau di luar batas yang masuk akal.
+ */
+private fun parseSize(preset: String): Pair<Int, Int>? {
+    val parts = preset.split('x')
+    if (parts.size != 2) return null
+    val w = parts[0].toIntOrNull() ?: return null
+    val h = parts[1].toIntOrNull() ?: return null
+    if (w !in 640..8192 || h !in 480..8192) return null
+    return w to h
+}
+
 @Composable
 fun XyDeskSessionScreen(
     profile: ConnectionProfile,
@@ -117,6 +131,10 @@ fun XyDeskSessionScreen(
     var inputMode by remember { mutableIntStateOf(prefs.inputMode.ordinal) }
     var pointerVisible by remember { mutableStateOf(true) }
     var keyboardShown by remember(profile.id) { mutableStateOf(prefs.keyboardShown(profile.id)) }
+    var overlayShown by remember(profile.id) {
+        mutableStateOf(prefs.overlayShown(profile.id) || prefs.keyboardAutoOpen)
+    }
+    var keyboardScale by remember { mutableFloatStateOf(prefs.keyboardScale) }
     var cursorX by remember { mutableFloatStateOf(0f) }
     var cursorY by remember { mutableFloatStateOf(0f) }
     var cursorInit by remember { mutableStateOf(false) }
@@ -181,6 +199,18 @@ fun XyDeskSessionScreen(
                     if (dpi != 1f) controller.applyZoom(dpi) else controller.fitToScreen()
                 }
             }
+        }
+    }
+
+    val configuration = LocalConfiguration.current
+    LaunchedEffect(state, configuration.screenWidthDp, configuration.screenHeightDp) {
+        if (state is SessionState.Connected && !applyingResolution &&
+            DisplayPrefs.resolution(context, profile.id) == DisplayPrefs.AUTOMATIC
+        ) {
+            val view = (context as? Activity)?.window?.decorView
+            val w = view?.width ?: 0
+            val h = view?.height ?: 0
+            if (w > 0 && h > 0) manager.resizeRemote(w, h)
         }
     }
 
@@ -297,7 +327,8 @@ fun XyDeskSessionScreen(
             SessionControls(
                 deviceId = profile.id,
                 hostLabel = profile.label ?: "${profile.host}:${profile.port}",
-                statusText = "Terhubung · ${telemetry.width}x${telemetry.height}",
+                statusText = "Terhubung",
+                remoteSize = if (telemetry.width > 0) "${telemetry.width} x ${telemetry.height}" else "menunggu server",
                 zoomPercent = (zoom * 100).roundToInt(),
                 pointerScreen = pointerScreen,
                 pointerVisible = pointerVisible && InputMode.entries[inputMode] == InputMode.TRACKPAD,
@@ -312,6 +343,11 @@ fun XyDeskSessionScreen(
                     keyboardShown = shown
                     prefs.setKeyboardShown(profile.id, shown)
                     controller.setKeyboardVisible(shown)
+                },
+                overlayShown = overlayShown,
+                onOverlayShownChange = { shown ->
+                    overlayShown = shown
+                    prefs.setOverlayShown(profile.id, shown)
                 },
                 onZoomIn = { controller.zoomIn() },
                 onZoomOut = { controller.zoomOut() },
@@ -338,10 +374,37 @@ fun XyDeskSessionScreen(
                         "Landscape" -> ActivityInfo.SCREEN_ORIENTATION_LANDSCAPE
                         else -> ActivityInfo.SCREEN_ORIENTATION_FULL_USER
                     }
+                    // Rotasi mengubah bentuk layar: kalau resolusi di mode
+                    // otomatis, desktop remote ikut disesuaikan (live via DISP).
+                    if (DisplayPrefs.resolution(context, profile.id) == DisplayPrefs.AUTOMATIC) {
+                        val view = (context as? Activity)?.window?.decorView
+                        val w = view?.width ?: 0
+                        val h = view?.height ?: 0
+                        if (w > 0 && h > 0) manager.resizeRemote(w, h)
+                    }
                 },
-                onResolutionChange = {
-                    applyingResolution = true
-                    manager.disconnect()
+                onResolutionChange = { preset ->
+                    // Jalur utama: ubah desktop remote saat sesi hidup lewat
+                    // kanal DISP (/dynamic-resolution) — tidak perlu reconnect.
+                    // Kalau server menolak, baru jatuh ke jalur reconnect.
+                    val live = when (preset) {
+                        DisplayPrefs.AUTOMATIC -> {
+                            val view = (context as? Activity)?.window?.decorView
+                            val w = view?.width ?: 0
+                            val h = view?.height ?: 0
+                            w > 0 && h > 0 && manager.resizeRemote(w, h)
+                        }
+
+                        else -> parseSize(preset)?.let { (w, h) ->
+                            manager.resizeRemote(w, h)
+                        } ?: false
+                    }
+                    if (live) {
+                        controller.fitToScreen()
+                    } else {
+                        applyingResolution = true
+                        manager.disconnect()
+                    }
                 },
                 onToggleTrackpad = {
                     val next = if (InputMode.entries[inputMode] == InputMode.TRACKPAD) {
@@ -356,6 +419,28 @@ fun XyDeskSessionScreen(
                 onMouse = { button, down -> sendButton(button, down) },
                 onScroll = { sendScroll(it) },
             )
+
+            // Keyboard layar lengkap: QWERTY + F1-F12 + numpad + simbol +
+            // kombinasi. Terpisah dari keyboard sistem dan dari tombol HUD.
+            if (overlayShown) {
+                Box(Modifier.fillMaxSize().zIndex(13f)) {
+                    SessionKeyboard(
+                        deviceId = profile.id,
+                        scale = keyboardScale,
+                        haptics = prefs.haptics,
+                        onKey = { code, down -> controller.sendVirtualKey(code, down) },
+                        onCombo = { codes -> controller.sendCombo(codes) },
+                        onScaleChange = {
+                            keyboardScale = it
+                            prefs.keyboardScale = it
+                        },
+                        onClose = {
+                            overlayShown = false
+                            prefs.setOverlayShown(profile.id, false)
+                        },
+                    )
+                }
+            }
         }
 
         if (state is SessionState.Connecting || state is SessionState.Authenticating) {

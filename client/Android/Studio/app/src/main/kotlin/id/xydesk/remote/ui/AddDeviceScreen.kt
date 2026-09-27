@@ -71,7 +71,20 @@ fun AddDeviceScreen(
     var error by remember { mutableStateOf<String?>(null) }
 
     val stored = remember(deviceId) {
-        if (deviceId == null) RdpOptions() else RdpOptions.of(context, deviceId)
+        if (deviceId != null) {
+            RdpOptions.of(context, deviceId)
+        } else {
+            // Perangkat baru mewarisi default General (transport/clipboard/drive).
+            val app = AppPrefs(context)
+            RdpOptions(
+                clipboard = app.defaultClipboard,
+                localDrive = app.defaultLocalDrive,
+                udpTransport = app.defaultUdp,
+                networkAutoDetect = app.defaultNetAuto,
+                h264 = app.defaultH264,
+                dynamicResolution = app.defaultDynamicResolution,
+            )
+        }
     }
     var options by remember { mutableStateOf(stored) }
     var gatewayOn by remember { mutableStateOf(stored.gateway != null) }

@@ -66,6 +66,10 @@ object RdpUri {
         if (options.networkAutoDetect) out += "network" to "auto"
         if (options.h264) out += "gfx" to "AVC444"
 
+        // Kanal DISP (Display Control): bikin resolusi remote bisa diubah
+        // saat sesi hidup lewat LibFreeRDP.sendMonitorLayout.
+        if (options.dynamicResolution) out += "dynamic-resolution" to ""
+
         options.gateway?.let { out += "gateway" to gatewayArg(it) }
         return out
     }

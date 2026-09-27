@@ -35,6 +35,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import id.xydesk.remote.core.ConnectionProfile
 import id.xydesk.remote.security.CredentialVault
+import id.xydesk.remote.core.coreBuildInfo
 import id.xydesk.remote.ui.components.XyCard
 import id.xydesk.remote.ui.components.XyIconPill
 import id.xydesk.remote.ui.components.XyIcons
@@ -56,6 +57,7 @@ internal fun SectionScreen(
     appPrefs: AppPrefs,
     onEditDevice: (ConnectionProfile) -> Unit,
     onClearAllCredentials: () -> Unit,
+    onShowLog: () -> Unit = {},
 ) {
     Column(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)) {
         XyTopBar(
@@ -66,7 +68,7 @@ internal fun SectionScreen(
         when (section) {
             XySection.TAMPILAN -> DisplaySection(favorites, onEditDevice)
             XySection.KREDENSIAL -> CredentialsSection(favorites, onClearAllCredentials)
-            XySection.UMUM -> GeneralSection(appPrefs)
+            XySection.UMUM -> GeneralSection(appPrefs, onShowLog)
             XySection.KEAMANAN -> SecuritySection()
             XySection.TENTANG -> AboutSection()
             XySection.PERANGKAT -> Unit
@@ -294,9 +296,18 @@ private fun CredentialsSection(
 // =============================================================
 
 @Composable
-private fun GeneralSection(appPrefs: AppPrefs) {
+private fun GeneralSection(appPrefs: AppPrefs, onShowLog: () -> Unit) {
     val context = LocalContext.current
     val prefs = remember { SessionPrefs(context) }
+    var hudSize by remember { mutableStateOf(prefs.hudButtonSize) }
+    var keyboardScale by remember { mutableStateOf(prefs.keyboardScale) }
+    var keyboardAuto by remember { mutableStateOf(prefs.keyboardAutoOpen) }
+    var defaultUdp by remember { mutableStateOf(appPrefs.defaultUdp) }
+    var defaultNetAuto by remember { mutableStateOf(appPrefs.defaultNetAuto) }
+    var defaultH264 by remember { mutableStateOf(appPrefs.defaultH264) }
+    var defaultDynRes by remember { mutableStateOf(appPrefs.defaultDynamicResolution) }
+    var defaultClipboard by remember { mutableStateOf(appPrefs.defaultClipboard) }
+    var defaultDrive by remember { mutableStateOf(appPrefs.defaultLocalDrive) }
     var themeMode by remember { mutableIntStateOf(appPrefs.themeMode) }
     var autoDisconnect by remember { mutableStateOf(appPrefs.autoDisconnect) }
     var inputMode by remember { mutableIntStateOf(prefs.inputMode.ordinal) }
@@ -481,12 +492,101 @@ private fun GeneralSection(appPrefs: AppPrefs) {
             )
         }
 
-        XySectionLabel("Kanal & transport")
+        XySectionLabel("Keyboard & HUD")
+        XyCard {
+            Text("Ukuran tombol kontrol HUD: ${hudSize.toInt()} dp", style = MaterialTheme.typography.bodyMedium)
+            Spacer(Modifier.height(4.dp))
+            Text(
+                "Tombol kontrol selalu bulat penuh; angka ini sama dengan " +
+                    "diameternya (radius = setengah).",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            Slider(
+                value = hudSize,
+                onValueChange = { hudSize = it; prefs.hudButtonSize = it },
+                valueRange = 40f..80f,
+            )
+            Spacer(Modifier.height(6.dp))
+            Text(
+                "Skala keyboard layar: ${(keyboardScale * 100).toInt()}%",
+                style = MaterialTheme.typography.bodyMedium,
+            )
+            Slider(
+                value = keyboardScale,
+                onValueChange = { keyboardScale = it; prefs.keyboardScale = it },
+                valueRange = 0.7f..1.6f,
+            )
+            XyToggleRow(
+                title = "Buka keyboard layar otomatis",
+                subtitle = "Keyboard QWERTY/Fn/NUM/KOMBO langsung tampil saat sesi terhubung",
+                checked = keyboardAuto,
+                onCheckedChange = { keyboardAuto = it; prefs.keyboardAutoOpen = it },
+            )
+        }
+
+        XySectionLabel("Transport (default perangkat baru)")
         XyCard {
             Text(
-                "Audio, mikrofon, clipboard, drive lokal, kamera, UDP transport, " +
-                    "dan gateway diatur per perangkat di layar Tambah/Ubah perangkat.",
-                style = MaterialTheme.typography.bodyMedium,
+                "Nilai ini dipakai saat menambah perangkat baru. Perangkat yang " +
+                    "sudah ada tetap diatur sendiri di layar Ubah perangkat.",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            XyToggleRow(
+                title = "Transport UDP",
+                subtitle = "RDP-UDP + FEC untuk gerakan halus",
+                checked = defaultUdp,
+                onCheckedChange = { defaultUdp = it; appPrefs.defaultUdp = it },
+            )
+            XyToggleRow(
+                title = "Deteksi bandwidth otomatis",
+                subtitle = "Kualitas mengikuti kondisi jaringan",
+                checked = defaultNetAuto,
+                onCheckedChange = { defaultNetAuto = it; appPrefs.defaultNetAuto = it },
+            )
+            XyToggleRow(
+                title = "H.264 / RemoteFX (GFX)",
+                subtitle = "Matikan kalau server lama tidak mendukung",
+                checked = defaultH264,
+                onCheckedChange = { defaultH264 = it; appPrefs.defaultH264 = it },
+            )
+            XyToggleRow(
+                title = "Resolusi dinamis",
+                subtitle = "Desktop remote bisa diubah saat sesi hidup (kanal DISP)",
+                checked = defaultDynRes,
+                onCheckedChange = { defaultDynRes = it; appPrefs.defaultDynamicResolution = it },
+            )
+            XyToggleRow(
+                title = "Clipboard dua arah",
+                checked = defaultClipboard,
+                onCheckedChange = { defaultClipboard = it; appPrefs.defaultClipboard = it },
+            )
+            XyToggleRow(
+                title = "Penyimpanan lokal (drive)",
+                subtitle = "Folder Download HP muncul sebagai drive di remote",
+                checked = defaultDrive,
+                onCheckedChange = { defaultDrive = it; appPrefs.defaultLocalDrive = it },
+            )
+        }
+
+        XySectionLabel("Masalah koneksi")
+        XyCard {
+            Text(
+                "Audio, mikrofon, clipboard, drive, kamera, dan gateway diatur " +
+                    "per perangkat di layar Tambah/Ubah perangkat.",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            Spacer(Modifier.height(10.dp))
+            Text("Inti: ${coreBuildInfo()}", style = MaterialTheme.typography.bodySmall)
+            Spacer(Modifier.height(10.dp))
+            XyPillButton(
+                "Lihat log sesi terakhir",
+                onShowLog,
+                primary = false,
+                compact = true,
+                modifier = Modifier.fillMaxWidth(),
             )
         }
         Spacer(Modifier.height(12.dp))

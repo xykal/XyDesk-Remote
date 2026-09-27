@@ -35,6 +35,13 @@ data class RdpOptions(
     val networkAutoDetect: Boolean = true,
     /** RemoteFX/H.264 (GFX AVC444) untuk desktop yang berubah cepat. */
     val h264: Boolean = true,
+
+    /**
+     * `/dynamic-resolution` — nyalakan kanal DISP supaya ukuran desktop
+     * remote bisa diubah saat sesi sudah jalan (tanpa reconnect).
+     * Default nyala; tanpa ini server mengunci resolusi saat connect.
+     */
+    val dynamicResolution: Boolean = true,
     val gateway: XyGateway? = null,
 ) {
     fun write(context: Context, deviceId: String) {
@@ -48,6 +55,7 @@ data class RdpOptions(
         sp.putBoolean("$deviceId.udp", udpTransport)
         sp.putBoolean("$deviceId.netauto", networkAutoDetect)
         sp.putBoolean("$deviceId.h264", h264)
+        sp.putBoolean("$deviceId.dynres", dynamicResolution)
         val g = gateway
         if (g == null || g.host.isBlank()) {
             sp.remove("$deviceId.ghost").remove("$deviceId.gport")
@@ -72,7 +80,7 @@ data class RdpOptions(
                 .getSharedPreferences(FILE, Context.MODE_PRIVATE).edit()
             listOf(
                 "audio", "mic", "clipboard", "drive", "camera", "udp",
-                "netauto", "h264", "ghost", "gport", "guser", "gpass", "gdomain",
+                "netauto", "h264", "dynres", "ghost", "gport", "guser", "gpass", "gdomain",
             ).forEach { editor.remove("$deviceId.$it") }
             editor.apply()
         }
@@ -104,6 +112,7 @@ data class RdpOptions(
                 udpTransport = sp.getBoolean("$deviceId.udp", true),
                 networkAutoDetect = sp.getBoolean("$deviceId.netauto", true),
                 h264 = sp.getBoolean("$deviceId.h264", true),
+                dynamicResolution = sp.getBoolean("$deviceId.dynres", true),
                 gateway = gateway,
             )
         }
