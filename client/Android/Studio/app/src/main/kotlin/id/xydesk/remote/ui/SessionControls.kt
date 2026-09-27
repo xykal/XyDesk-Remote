@@ -141,6 +141,17 @@ fun SessionControls(
     var textOpen by remember { mutableStateOf(false) }
     var textValue by remember { mutableStateOf("") }
 
+    fun copyCoreInfo() {
+        val cm = context.getSystemService(Context.CLIPBOARD_SERVICE) as? ClipboardManager
+        cm?.setPrimaryClip(
+            android.content.ClipData.newPlainText(
+                "XyDesk Remote",
+                coreInfo.joinToString("\n"),
+            )
+        )
+        Toast.makeText(context, "Info tersalin", Toast.LENGTH_SHORT).show()
+    }
+
     fun clipboardText(): String {
         val cm = context.getSystemService(Context.CLIPBOARD_SERVICE) as? ClipboardManager
         val clip = cm?.primaryClip ?: return ""
@@ -334,6 +345,9 @@ fun SessionControls(
                 onHaptics = { haptics = it; prefs.haptics = it },
                 onResetCluster = onResetCluster,
                 onToggleTrackpad = onToggleTrackpad,
+                onSendTextClick = { textValue = ""; textOpen = true },
+                coreInfo = coreInfo,
+                onCopyCoreInfo = { copyCoreInfo() },
                 overlayShown = overlayShown,
                 onOverlayShownChange = onOverlayShownChange,
                 keyboardShown = keyboardShown,
@@ -590,6 +604,9 @@ private fun SessionPanel(
     onHaptics: (Boolean) -> Unit = {},
     onResetCluster: () -> Unit = {},
     onToggleTrackpad: () -> Unit = {},
+    onSendTextClick: () -> Unit = {},
+    coreInfo: List<String> = emptyList(),
+    onCopyCoreInfo: () -> Unit = {},
     overlayShown: Boolean = false,
     keyboardShown: Boolean = false,
     onKeyboardShownChange: (Boolean) -> Unit = {},
@@ -656,7 +673,7 @@ private fun SessionPanel(
                     // tombol: tempel dari clipboard HP lalu kirim sebagai unicode.
                     XyPillButton(
                         "Kirim teks ke remote",
-                        { textValue = ""; textOpen = true },
+                        onSendTextClick,
                         primary = false,
                         compact = true,
                         modifier = Modifier.fillMaxWidth(),
@@ -831,17 +848,7 @@ private fun SessionPanel(
                         }
                         XyPillButton(
                             "Salin info teknis",
-                            {
-                                val cm = context.getSystemService(Context.CLIPBOARD_SERVICE)
-                                    as? ClipboardManager
-                                cm?.setPrimaryClip(
-                                    android.content.ClipData.newPlainText(
-                                        "XyDesk Remote",
-                                        coreInfo.joinToString("\n"),
-                                    )
-                                )
-                                Toast.makeText(context, "Info tersalin", Toast.LENGTH_SHORT).show()
-                            },
+                            onCopyCoreInfo,
                             primary = false,
                             compact = true,
                             modifier = Modifier.fillMaxWidth(),
