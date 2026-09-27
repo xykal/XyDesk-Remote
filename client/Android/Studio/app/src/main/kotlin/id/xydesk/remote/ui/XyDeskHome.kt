@@ -155,7 +155,7 @@ fun XyDeskHome(
     fun connectTo(profile: ConnectionProfile) {
         scope.launch { repo.touch(profile) }
         // M2: jalur sesi XyDesk (surface + HUD Compose)
-        context.startActivity(XyDeskSessionActivity.connectIntent(profile))
+        context.startActivity(XyDeskSessionActivity.connectIntent(context, profile))
     }
 
     ModalNavigationDrawer(

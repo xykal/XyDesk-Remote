@@ -1,6 +1,7 @@
 package id.xydesk.remote.ui
 
 import android.content.ClipboardManager
+import android.content.Context
 import android.content.Intent
 import android.graphics.Color
 import android.os.Bundle
@@ -212,8 +213,8 @@ class XyDeskSessionActivity : ComponentActivity() {
         /** M1.2b — auto-disconnect kalau app di-background (default ON). */
         const val BACKGROUND_DISCONNECT_DELAY_MS = 15_000L
 
-        fun connectIntent(profile: ConnectionProfile): Intent =
-            Intent(null, XyDeskSessionActivity::class.java).apply {
+        fun connectIntent(context: Context, profile: ConnectionProfile): Intent =
+            Intent(context, XyDeskSessionActivity::class.java).apply {
                 putExtra(EXTRA_HOST, profile.host)
                 putExtra(EXTRA_PORT, profile.port)
                 putExtra(EXTRA_USER, profile.username)

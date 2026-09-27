@@ -307,7 +307,7 @@ public class CloudRdpActivity extends AppCompatActivity
 			main.post(() -> {
 				status("SIAP — connect otomatis ke " + host);
 				ConnectionProfile profile = new ConnectionProfile(host, port, user, pass, null, null);
-				Intent i = XyDeskSessionActivity.Companion.connectIntent(profile);
+				Intent i = XyDeskSessionActivity.Companion.connectIntent(this, profile);
 				startActivity(i);
 				setBusy(false, null);
 			});
