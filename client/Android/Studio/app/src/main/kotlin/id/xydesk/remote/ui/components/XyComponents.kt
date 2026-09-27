@@ -2,6 +2,10 @@ package id.xydesk.remote.ui.components
 
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.animateDpAsState
+import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -491,5 +495,106 @@ fun XyLogo(
             close()
         }
         drawPath(cursor, tint)
+    }
+}
+
+/**
+ * Shell dialog milik XyDesk.
+ *
+ * Bukan AlertDialog bawaan: panel gelap ber-border tipis dengan radius kecil,
+ * tombol pil buatan sendiri, dan scrim yang bisa dimatikan (mis. untuk prompt
+ * kredensial/sertifikat yang tidak boleh ditutup begitu saja).
+ */
+@Composable
+fun XyOverlay(
+    title: String,
+    modifier: Modifier = Modifier,
+    onDismiss: (() -> Unit)? = null,
+    maxWidth: Dp = 380.dp,
+    content: @Composable ColumnScope.() -> Unit,
+) {
+    Box(
+        Modifier
+            .fillMaxSize()
+            .background(Color(0xCC000000))
+            .then(
+                if (onDismiss != null) Modifier.clickable(onClick = onDismiss) else Modifier,
+            )
+            .padding(20.dp),
+        contentAlignment = Alignment.Center,
+    ) {
+        Column(
+            modifier
+                .widthIn(max = maxWidth)
+                .fillMaxWidth()
+                .clip(RoundedCornerShape(14.dp))
+                .background(MaterialTheme.colorScheme.surface)
+                .border(1.dp, MaterialTheme.colorScheme.outline, RoundedCornerShape(14.dp))
+                .clickable(enabled = false) { }
+                .padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp),
+        ) {
+            Text(
+                title.uppercase(),
+                fontFamily = XyDisplay,
+                fontSize = 11.sp,
+                letterSpacing = 1.3.sp,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            content()
+        }
+    }
+}
+
+/** Dialog teks sederhana: judul + isi (+ opsional tombol kedua). */
+@Composable
+fun XyDialog(
+    title: String,
+    body: String,
+    confirmLabel: String,
+    onConfirm: () -> Unit,
+    dismissLabel: String? = null,
+    onDismiss: (() -> Unit)? = null,
+    mono: Boolean = false,
+) {
+    XyOverlay(title = title, onDismiss = onDismiss) {
+        if (mono) {
+            Column(
+                Modifier
+                    .fillMaxWidth()
+                    .heightIn(max = 380.dp)
+                    .verticalScroll(rememberScrollState()),
+            ) {
+                body.lineSequence().forEach { line ->
+                    Text(line, style = MaterialTheme.typography.bodySmall, fontFamily = FontFamily.Monospace)
+                }
+            }
+        } else {
+            Column(
+                Modifier
+                    .fillMaxWidth()
+                    .heightIn(max = 380.dp)
+                    .verticalScroll(rememberScrollState()),
+            ) {
+                Text(body, style = MaterialTheme.typography.bodyMedium)
+            }
+        }
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            if (dismissLabel != null && onDismiss != null) {
+                XyPillButton(
+                    text = dismissLabel,
+                    onClick = onDismiss,
+                    primary = false,
+                    compact = true,
+                    modifier = Modifier.weight(1f),
+                )
+            }
+            XyPillButton(
+                text = confirmLabel,
+                onClick = onConfirm,
+                compact = true,
+                modifier = Modifier.weight(1f),
+            )
+        }
     }
 }

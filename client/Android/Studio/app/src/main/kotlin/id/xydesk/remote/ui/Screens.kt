@@ -15,11 +15,9 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Slider
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
@@ -37,6 +35,7 @@ import id.xydesk.remote.core.ConnectionProfile
 import id.xydesk.remote.security.CredentialVault
 import id.xydesk.remote.core.coreBuildInfo
 import id.xydesk.remote.ui.components.XyCard
+import id.xydesk.remote.ui.components.XyDialog
 import id.xydesk.remote.ui.components.XyIconPill
 import id.xydesk.remote.ui.components.XyIcons
 import id.xydesk.remote.ui.components.XyLogo
@@ -274,19 +273,16 @@ private fun CredentialsSection(
     }
 
     if (confirmClear) {
-        AlertDialog(
-            onDismissRequest = { confirmClear = false },
-            title = { Text("Hapus semua?") },
-            text = { Text("Semua perangkat tersimpan dan password-nya akan dihapus.") },
-            confirmButton = {
-                TextButton(onClick = {
-                    confirmClear = false
-                    onClearAll()
-                }) { Text("Hapus") }
+        XyDialog(
+            title = "Hapus semua?",
+            body = "Semua perangkat tersimpan dan password-nya akan dihapus.",
+            confirmLabel = "Hapus",
+            onConfirm = {
+                confirmClear = false
+                onClearAll()
             },
-            dismissButton = {
-                TextButton(onClick = { confirmClear = false }) { Text("Batal") }
-            },
+            dismissLabel = "Batal",
+            onDismiss = { confirmClear = false },
         )
     }
 }
@@ -776,15 +772,11 @@ private fun AboutSection() {
     }
 
     if (showLicense) {
-        AlertDialog(
-            onDismissRequest = { showLicense = false },
-            title = { Text(t("about.license.title")) },
-            text = {
-                Column(Modifier.verticalScroll(rememberScrollState())) {
-                    Text(t("about.license.body"), style = MaterialTheme.typography.bodySmall)
-                }
-            },
-            confirmButton = { TextButton(onClick = { showLicense = false }) { Text("OK") } },
+        XyDialog(
+            title = t("about.license.title"),
+            body = t("about.license.body"),
+            confirmLabel = "OK",
+            onConfirm = { showLicense = false },
         )
     }
 }
@@ -882,21 +874,14 @@ private fun EmptyHint(title: String, body: String) {
 
 @Composable
 fun InfoDialog(title: String, body: String, onDismiss: () -> Unit) {
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = { Text(title) },
-        text = {
-            Column(Modifier.verticalScroll(rememberScrollState())) {
-                body.lineSequence().forEach { line ->
-                    Text(
-                        line,
-                        style = MaterialTheme.typography.bodySmall,
-                        fontFamily = FontFamily.Monospace,
-                    )
-                }
-            }
-        },
-        confirmButton = { TextButton(onClick = onDismiss) { Text("Tutup") } },
+    XyDialog(
+        title = title,
+        body = body,
+        confirmLabel = "Tutup",
+        onConfirm = onDismiss,
+        dismissLabel = null,
+        onDismiss = onDismiss,
+        mono = true,
     )
 }
 

@@ -24,14 +24,15 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.ui.text.input.ImeAction
+import id.xydesk.remote.ui.components.XyDialog
+import id.xydesk.remote.ui.components.XyField
+import id.xydesk.remote.ui.components.XyOverlay
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -53,7 +54,6 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
-import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -582,62 +582,81 @@ fun XyDeskSessionScreen(
         }
     }
     if (!active) err?.let { e ->
-        AlertDialog(
-            onDismissRequest = { onExit() },
-            title = { Text("Koneksi gagal") },
-            text = {
-                Column {
-                    Text(e.message)
-                    if (e.code == SessionManager.ERROR_UNREACHABLE) {
-                        Spacer(Modifier.height(8.dp))
-                        Text(
-                            "Host tidak menjawab di port RDP. Cek: RDP aktif " +
-                                "(Windows Pro/Server), firewall, dan alamat/tailnet benar.",
-                            style = MaterialTheme.typography.bodySmall,
-                        )
-                    }
-                }
-            },
-            confirmButton = { TextButton(onClick = { onExit() }) { Text("Tutup") } },
-            dismissButton = {
-                Column {
-                    TextButton(onClick = { showLog = true }) { Text("Detail") }
-                    TextButton(onClick = {
+        XyOverlay(
+            title = "Koneksi gagal",
+            onDismiss = { onExit() },
+        ) {
+            Text(e.message, style = MaterialTheme.typography.bodyMedium)
+            if (e.code == SessionManager.ERROR_UNREACHABLE) {
+                Text(
+                    "Host tidak menjawab di port RDP. Cek: RDP aktif " +
+                        "(Windows Pro/Server), firewall, dan alamat/tailnet benar.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                XyPillButton(
+                    text = "Detail",
+                    onClick = { showLog = true },
+                    primary = false,
+                    compact = true,
+                    modifier = Modifier.weight(1f),
+                )
+                XyPillButton(
+                    text = "Reset resolusi",
+                    onClick = {
                         DisplayPrefs.setResolution(context, profile.id, DisplayPrefs.AUTOMATIC)
                         manager.connect(profile)
-                    }) { Text("Reset resolusi & coba lagi") }
-                }
-            },
-        )
+                    },
+                    primary = false,
+                    compact = true,
+                    modifier = Modifier.weight(1f),
+                )
+            }
+            XyPillButton(
+                text = "Tutup",
+                onClick = { onExit() },
+                compact = true,
+                modifier = Modifier.fillMaxWidth(),
+            )
+        }
     }
     if (!active && err != null && showLog) {
-        AlertDialog(
-            onDismissRequest = { showLog = false },
-            title = { Text("Log koneksi") },
-            text = {
-                Column(Modifier.verticalScroll(rememberScrollState())) {
-                    ConnectionLog.last(60).forEach { line ->
-                        Text(line, style = MaterialTheme.typography.bodySmall, fontFamily = FontFamily.Monospace)
-                    }
+        XyOverlay(title = "Log koneksi", onDismiss = { showLog = false }) {
+            Column(
+                Modifier
+                    .fillMaxWidth()
+                    .heightIn(max = 420.dp)
+                    .verticalScroll(rememberScrollState()),
+            ) {
+                ConnectionLog.last(60).forEach { line ->
+                    Text(
+                        line,
+                        style = MaterialTheme.typography.bodySmall,
+                        fontFamily = FontFamily.Monospace,
+                    )
                 }
-            },
-            confirmButton = { TextButton(onClick = { showLog = false }) { Text("Tutup") } },
-        )
+            }
+            XyPillButton(
+                text = "Tutup",
+                onClick = { showLog = false },
+                compact = true,
+                modifier = Modifier.fillMaxWidth(),
+            )
+        }
     }
     if (!active && err == null && confirmDisconnect) {
-        AlertDialog(
-            onDismissRequest = { confirmDisconnect = false },
-            title = { Text("Sesi masih aktif") },
-            text = { Text("Putuskan sesi sekarang?") },
-            confirmButton = {
-                TextButton(onClick = {
-                    confirmDisconnect = false
-                    manager.disconnect()
-                }) { Text("Putuskan") }
+        XyDialog(
+            title = "Sesi masih aktif",
+            body = "Putuskan sesi sekarang?",
+            confirmLabel = "Putuskan",
+            onConfirm = {
+                confirmDisconnect = false
+                manager.disconnect()
             },
-            dismissButton = {
-                TextButton(onClick = { confirmDisconnect = false }) { Text("Batal") }
-            },
+            dismissLabel = "Batal",
+            onDismiss = { confirmDisconnect = false },
         )
     }
 }
@@ -850,68 +869,71 @@ private fun CertificateDialog(
     onReply: (Int) -> Unit,
     onTrustRemember: () -> Unit,
 ) {
-    AlertDialog(
-        onDismissRequest = {},
-        title = {
-            Text(if (info.isChanged) "Sertifikat server berubah" else "Percaya sertifikat server?")
-        },
-        text = {
-            Column {
-                Text("${info.host}:${info.port}")
-                if (info.isGateway) {
-                    Text("Jenis: RDP Gateway", style = MaterialTheme.typography.bodySmall)
-                }
-                if (info.isMismatch) {
-                    Text(
-                        "PERINGATAN: nama sertifikat tidak cocok dengan host",
-                        color = MaterialTheme.colorScheme.error,
-                        style = MaterialTheme.typography.bodySmall,
-                    )
-                }
-                if (info.isChanged) {
-                    Text(
-                        "PERINGATAN: sertifikat berubah dari yang pernah diterima.",
-                        color = MaterialTheme.colorScheme.error,
-                        style = MaterialTheme.typography.bodySmall,
-                    )
-                }
-                if (oldFingerprint != null && oldFingerprint != info.fingerprint) {
-                    Text(
-                        "PERINGATAN: sertifikat BERUBAH dari yang pernah kamu percaya.",
-                        color = MaterialTheme.colorScheme.error,
-                        style = MaterialTheme.typography.bodySmall,
-                    )
-                    Spacer(Modifier.height(4.dp))
-                    Text(
-                        "Tersimpan : $oldFingerprint",
-                        style = MaterialTheme.typography.bodySmall,
-                        fontFamily = FontFamily.Monospace,
-                    )
-                }
-                Spacer(Modifier.height(8.dp))
-                Text("Subject: ${info.subject}", style = MaterialTheme.typography.bodySmall)
-                Text("Issuer: ${info.issuer}", style = MaterialTheme.typography.bodySmall)
-                Spacer(Modifier.height(8.dp))
-                Text("Fingerprint SHA-256:", style = MaterialTheme.typography.bodySmall)
-                Text(
-                    info.fingerprint,
-                    style = MaterialTheme.typography.bodySmall,
-                    fontFamily = FontFamily.Monospace,
-                )
-            }
-        },
-        confirmButton = {
-            Column {
-                TextButton(onClick = onTrustRemember) { Text("Percaya & ingat") }
-                TextButton(onClick = { onReply(CertificateInfo.VERIFY_ACCEPT) }) {
-                    Text("Percaya (sekali)")
-                }
-            }
-        },
-        dismissButton = {
-            TextButton(onClick = { onReply(CertificateInfo.VERIFY_DENY) }) { Text("Tolak") }
-        },
-    )
+    XyOverlay(
+        title = if (info.isChanged) "Sertifikat server berubah" else "Percaya sertifikat server?",
+        onDismiss = null,
+    ) {
+        Text("${info.host}:${info.port}", style = MaterialTheme.typography.bodyMedium)
+        if (info.isGateway) {
+            Text("Jenis: RDP Gateway", style = MaterialTheme.typography.bodySmall)
+        }
+        if (info.isMismatch) {
+            Text(
+                "PERINGATAN: nama sertifikat tidak cocok dengan host",
+                color = MaterialTheme.colorScheme.error,
+                style = MaterialTheme.typography.bodySmall,
+            )
+        }
+        if (info.isChanged) {
+            Text(
+                "PERINGATAN: sertifikat berubah dari yang pernah diterima.",
+                color = MaterialTheme.colorScheme.error,
+                style = MaterialTheme.typography.bodySmall,
+            )
+        }
+        if (oldFingerprint != null && oldFingerprint != info.fingerprint) {
+            Text(
+                "PERINGATAN: sertifikat BERUBAH dari yang pernah kamu percaya.",
+                color = MaterialTheme.colorScheme.error,
+                style = MaterialTheme.typography.bodySmall,
+            )
+            Text(
+                "Tersimpan : $oldFingerprint",
+                style = MaterialTheme.typography.bodySmall,
+                fontFamily = FontFamily.Monospace,
+            )
+        }
+        Text("Subject: ${info.subject}", style = MaterialTheme.typography.bodySmall)
+        Text("Issuer: ${info.issuer}", style = MaterialTheme.typography.bodySmall)
+        Text("Fingerprint SHA-256:", style = MaterialTheme.typography.bodySmall)
+        Text(
+            info.fingerprint,
+            style = MaterialTheme.typography.bodySmall,
+            fontFamily = FontFamily.Monospace,
+        )
+        XyPillButton(
+            text = "Percaya & ingat",
+            onClick = onTrustRemember,
+            compact = true,
+            modifier = Modifier.fillMaxWidth(),
+        )
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            XyPillButton(
+                text = "Percaya (sekali)",
+                onClick = { onReply(CertificateInfo.VERIFY_ACCEPT) },
+                primary = false,
+                compact = true,
+                modifier = Modifier.weight(1f),
+            )
+            XyPillButton(
+                text = "Tolak",
+                onClick = { onReply(CertificateInfo.VERIFY_DENY) },
+                primary = false,
+                compact = true,
+                modifier = Modifier.weight(1f),
+            )
+        }
+    }
 }
 
 @Composable
@@ -922,43 +944,24 @@ private fun NlaDialog(
     var user by remember { mutableStateOf(p.user ?: "") }
     var domain by remember { mutableStateOf(p.domain ?: "") }
     var pass by remember { mutableStateOf("") }
-    AlertDialog(
-        onDismissRequest = {},
-        title = { Text("Masuk ke server") },
-        text = {
-            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                Text(
-                    "Server meminta kredensial (NLA/CredSSP).",
-                    style = MaterialTheme.typography.bodySmall,
-                )
-                OutlinedTextField(
-                    value = user,
-                    onValueChange = { user = it },
-                    label = { Text("Username") },
-                    singleLine = true,
-                    modifier = Modifier.fillMaxWidth(),
-                )
-                OutlinedTextField(
-                    value = domain,
-                    onValueChange = { domain = it },
-                    label = { Text("Domain (opsional)") },
-                    singleLine = true,
-                    modifier = Modifier.fillMaxWidth(),
-                )
-                OutlinedTextField(
-                    value = pass,
-                    onValueChange = { pass = it },
-                    label = { Text("Password") },
-                    singleLine = true,
-                    visualTransformation = PasswordVisualTransformation(),
-                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
-                    modifier = Modifier.fillMaxWidth(),
-                )
-            }
-        },
-        confirmButton = {
-            TextButton(
-                enabled = user.isNotEmpty() || pass.isNotEmpty(),
+    XyOverlay(title = "Masuk ke server", onDismiss = null) {
+        Text(
+            "Server meminta kredensial (NLA/CredSSP).",
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        XyField(value = user, onValueChange = { user = it }, label = "Username")
+        XyField(value = domain, onValueChange = { domain = it }, label = "Domain (opsional)")
+        XyField(
+            value = pass,
+            onValueChange = { pass = it },
+            label = "Password",
+            isPassword = true,
+            imeAction = ImeAction.Done,
+        )
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            XyPillButton(
+                text = "Masuk",
                 onClick = {
                     onReply(
                         user.ifBlank { null },
@@ -966,10 +969,17 @@ private fun NlaDialog(
                         pass.ifBlank { null },
                     )
                 },
-            ) { Text("Masuk") }
-        },
-        dismissButton = {
-            TextButton(onClick = { onReply(null, null, null) }) { Text("Batal") }
-        },
-    )
+                enabled = user.isNotEmpty() || pass.isNotEmpty(),
+                compact = true,
+                modifier = Modifier.weight(1f),
+            )
+            XyPillButton(
+                text = "Batal",
+                onClick = { onReply(null, null, null) },
+                primary = false,
+                compact = true,
+                modifier = Modifier.weight(1f),
+            )
+        }
+    }
 }
