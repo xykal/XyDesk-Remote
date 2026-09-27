@@ -41,6 +41,29 @@ object ConnectionLog {
         add("APP: diagnostics initialized; external=${external != null}; file=$visiblePath")
     }
 
+    /** Path log native FreeRDP (di-set app saat boot); null kalau tidak aktif. */
+    @Volatile private var nativeLogPath: String? = null
+
+    fun setNativeLogFile(path: String) {
+        nativeLogPath = path
+    }
+
+    fun nativeLogPath(): String? = nativeLogPath
+
+    /**
+     * Ekor log native FreeRDP (kanal audio, clipboard, drive, DISP, dan
+     * error jaringan). Dipakai layar diagnosa: user bisa kirim teks ini
+     * tanpa harus pasang ADB.
+     */
+    fun nativeTail(lines: Int = 120): List<String> {
+        val path = nativeLogPath ?: return emptyList()
+        return runCatching {
+            val file = File(path)
+            if (!file.exists()) return emptyList()
+            file.readLines().takeLast(lines)
+        }.getOrDefault(emptyList())
+    }
+
     @Synchronized
     fun add(msg: String) {
         val line = "${fmt.format(Date())}  $msg"

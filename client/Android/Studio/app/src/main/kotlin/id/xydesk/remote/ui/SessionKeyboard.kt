@@ -194,7 +194,8 @@ fun SessionKeyboard(
                 Box(Modifier.weight(1f))
                 ChromeChip("-", scale) { onScaleChange((scale - 0.1f).coerceIn(0.7f, 1.6f)) }
                 ChromeChip("+", scale) { onScaleChange((scale + 0.1f).coerceIn(0.7f, 1.6f)) }
-                ChromeChip("×", scale) { onClose() }
+                // ABC = balik ke keyboard HP (board ini ditutup, IME dimunculkan).
+                ChromeChip("ABC", scale) { onClose() }
             }
 
             when (page) {

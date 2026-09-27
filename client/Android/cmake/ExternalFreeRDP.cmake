@@ -45,6 +45,16 @@ set(FREERDP_EXTRA_CMAKE_ARGS
     -DWINPR_UTILS_IMAGE_JPEG:BOOL=${WITH_JPEG}
     # Audio
     -DWITH_OPUS:BOOL=${WITH_OPUS}
+    # Kanal audio + mikrofon + clipboard DIPIN ON (bukan sekadar mengandalkan
+    # default upstream). Bukti lapangan: biner v0.4.0 sudah memuat
+    # rdpsnd-client (static), audin-client (dynamic), cliprdr-client (static)
+    # plus subsistem opensles untuk playback DAN capture — jadi yang kurang
+    # cuma izin runtime RECORD_AUDIO untuk mikrofon. Pin ini menjaga kanal
+    # tersebut tidak hilang diam-diam kalau default upstream berubah.
+    -DWITH_OPENSLES:BOOL=ON
+    -DCHANNEL_RDPSND_CLIENT:BOOL=ON
+    -DCHANNEL_AUDIN_CLIENT:BOOL=ON
+    -DCHANNEL_CLIPRDR_CLIENT:BOOL=ON
     # JSON
     -DWITH_CJSON_REQUIRED:BOOL=${WITH_CJSON}
     # Printer channel

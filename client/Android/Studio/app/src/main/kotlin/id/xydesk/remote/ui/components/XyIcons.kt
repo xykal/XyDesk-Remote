@@ -302,4 +302,66 @@ object XyIcons {
         moveTo(4f, 14f); lineTo(10f, 14f); lineTo(10f, 20f); lineTo(4f, 20f); close()
         moveTo(14f, 14f); lineTo(20f, 14f); lineTo(20f, 20f); lineTo(14f, 20f); close()
     }
+
+    /** Mouse dengan tombol kiri ditandai: aksi klik kiri (terpisah dari kanan). */
+    val ClickLeft: ImageVector = xyTwoPath(
+        name = "XyClickLeft",
+        outline = {
+            moveTo(8f, 3.5f); lineTo(16f, 3.5f); lineTo(16f, 20.5f); lineTo(8f, 20.5f); close()
+            moveTo(8f, 9.5f); lineTo(16f, 9.5f)
+            moveTo(12f, 3.5f); lineTo(12f, 9.5f)
+        },
+        solid = {
+            moveTo(9f, 5f); lineTo(10.4f, 5f); lineTo(10.4f, 8.2f); lineTo(9f, 8.2f); close()
+        },
+    )
+
+    /** Hati (dukung lewat Saweria). */
+    val Heart: ImageVector = xyIcon("XyHeart") {
+        moveTo(12f, 20f)
+        cubicTo(4.5f, 15f, 3f, 11.6f, 3f, 9.2f)
+        cubicTo(3f, 6.4f, 5.2f, 4.5f, 7.7f, 4.5f)
+        cubicTo(9.6f, 4.5f, 11.2f, 5.7f, 12f, 7.4f)
+        cubicTo(12.8f, 5.7f, 14.4f, 4.5f, 16.3f, 4.5f)
+        cubicTo(18.8f, 4.5f, 21f, 6.4f, 21f, 9.2f)
+        cubicTo(21f, 11.6f, 19.5f, 15f, 12f, 20f)
+        close()
+    }
+
+    /** Sponsor: dua tangan menopang hati kecil. */
+    val Sponsor: ImageVector = xyTwoPath(
+        name = "XySponsor",
+        outline = {
+            moveTo(3.5f, 13.5f); lineTo(3.5f, 20f)
+            moveTo(20.5f, 13.5f); lineTo(20.5f, 20f)
+            moveTo(3.5f, 14.6f); lineTo(7.6f, 13.4f)
+            moveTo(20.5f, 14.6f); lineTo(16.4f, 13.4f)
+            moveTo(12f, 12.6f)
+            cubicTo(9.2f, 10.6f, 8.6f, 9.2f, 8.6f, 8f)
+            cubicTo(8.6f, 6.6f, 9.6f, 5.7f, 10.8f, 5.7f)
+            cubicTo(11.5f, 5.7f, 12f, 6.2f, 12f, 6.8f)
+            cubicTo(12f, 6.2f, 12.5f, 5.7f, 13.2f, 5.7f)
+            cubicTo(14.4f, 5.7f, 15.4f, 6.6f, 15.4f, 8f)
+            cubicTo(15.4f, 9.2f, 14.8f, 10.6f, 12f, 12.6f)
+            close()
+        },
+        solid = {
+            moveTo(4.6f, 15.4f); lineTo(6.4f, 15f); lineTo(6.4f, 16.8f); lineTo(4.6f, 16.8f); close()
+        },
+    )
+
+    /** Bintang (beri bintang di GitHub). */
+    val Star: ImageVector = xyIcon("XyStar") {
+        moveTo(12f, 3.6f); lineTo(14.5f, 9.2f); lineTo(20.5f, 9.8f)
+        lineTo(16f, 13.8f); lineTo(17.4f, 19.7f); lineTo(12f, 16.5f)
+        lineTo(6.6f, 19.7f); lineTo(8f, 13.8f); lineTo(3.5f, 9.8f)
+        lineTo(9.5f, 9.2f); close()
+    }
+
+    /** Tautan keluar (buat di browser). */
+    val ExternalLink: ImageVector = xyIcon("XyExternalLink") {
+        moveTo(14f, 4.5f); lineTo(19.5f, 4.5f); lineTo(19.5f, 10f)
+        moveTo(19.5f, 4.5f); lineTo(11.5f, 12.5f)
+        moveTo(17f, 14.2f); lineTo(17f, 19f); lineTo(5f, 19f); lineTo(5f, 7f); lineTo(9.8f, 7f)
+    }
 }

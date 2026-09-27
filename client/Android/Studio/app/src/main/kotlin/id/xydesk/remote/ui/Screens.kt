@@ -317,6 +317,7 @@ private fun GeneralSection(appPrefs: AppPrefs, onShowLog: () -> Unit) {
     var clusterScale by remember { mutableStateOf(prefs.clusterScale) }
     var haptics by remember { mutableStateOf(prefs.haptics) }
     var corner by remember { mutableIntStateOf(prefs.keyboardCorner.ordinal) }
+    var lang by remember { mutableStateOf(LangPrefs.current()) }
     var showLeft by remember { mutableStateOf(prefs.showLeft) }
     var showRight by remember { mutableStateOf(prefs.showRight) }
     var showMiddle by remember { mutableStateOf(prefs.showMiddle) }
@@ -423,10 +424,21 @@ private fun GeneralSection(appPrefs: AppPrefs, onShowLog: () -> Unit) {
             )
         }
 
-        XySectionLabel("Cluster tombol mouse")
+        XySectionLabel("Tombol HUD")
         XyCard {
             Text(
-                "Ukuran cluster: ${(clusterScale * 100).toInt()}%",
+                "Setiap tombol di layar sesi berdiri sendiri: bentuknya bulat " +
+                    "penuh, bisa digeser bebas, ukurannya diatur, dan aksinya " +
+                    "dipilih per tombol (sekali klik / tahan / toggle). Tombol " +
+                    "bawaan di bawah ini menentukan set awal untuk perangkat " +
+                    "yang belum pernah diubah; setelah itu daftar tombolnya " +
+                    "diatur langsung dari panel kanan di layar sesi.",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            Spacer(Modifier.height(8.dp))
+            Text(
+                "Ukuran tombol bawaan: ${(clusterScale * 100).toInt()}%",
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
@@ -522,6 +534,25 @@ private fun GeneralSection(appPrefs: AppPrefs, onShowLog: () -> Unit) {
                 subtitle = "Keyboard QWERTY/Fn/NUM/KOMBO langsung tampil saat sesi terhubung",
                 checked = keyboardAuto,
                 onCheckedChange = { keyboardAuto = it; prefs.keyboardAutoOpen = it },
+            )
+        }
+
+        XySectionLabel("Bahasa / Language")
+        XyCard {
+            XySegmented(
+                options = XyLang.entries.map { it.label },
+                selectedIndex = lang.ordinal,
+                onSelect = {
+                    lang = XyLang.entries[it]
+                    LangPrefs.set(context, lang)
+                },
+                modifier = Modifier.fillMaxWidth(),
+            )
+            Spacer(Modifier.height(6.dp))
+            Text(
+                t("home.language.sub"),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
         }
 
@@ -680,6 +711,7 @@ private fun Bullet(text: String) {
 private fun AboutSection() {
     val context = LocalContext.current
     var showLicense by remember { mutableStateOf(false) }
+    var lang by remember { mutableStateOf(LangPrefs.current()) }
     val native = remember {
         runCatching { com.freerdp.freerdpcore.services.LibFreeRDP.getVersion() }.getOrNull()
     }
@@ -695,15 +727,41 @@ private fun AboutSection() {
             Spacer(Modifier.height(12.dp))
             Text("XyDesk Remote", style = MaterialTheme.typography.headlineSmall)
             Text(
-                "Klien RDP Android untuk Windows dan Windows Server.",
+                t("app.tagline"),
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
             Spacer(Modifier.height(12.dp))
-            XyRow(title = "Versi app", subtitle = appVersionName(context))
-            XyRow(title = "Mesin RDP", subtitle = native ?: "FreeRDP (dimuat saat connect)")
-            XyRow(title = "Pengembang", subtitle = "XyVerse")
+            XyRow(title = t("about.version"), subtitle = appVersionName(context))
+            XyRow(
+                title = t("about.engine"),
+                subtitle = native ?: "FreeRDP (dimuat saat connect)",
+            )
+            XyRow(title = t("about.developer"), subtitle = "XyVerse / xykal")
         }
+
+        // ---- Bahasa: satu klik, langsung ganti seluruh teks app ----
+        XyCard {
+            XySectionLabel(t("home.language").uppercase())
+            Text(
+                t("home.language.sub"),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            Spacer(Modifier.height(10.dp))
+            XySegmented(
+                options = XyLang.entries.map { it.label },
+                selectedIndex = lang.ordinal,
+                onSelect = {
+                    lang = XyLang.entries[it]
+                    LangPrefs.set(context, lang)
+                },
+                modifier = Modifier.fillMaxWidth(),
+            )
+        }
+
+        SupportCard()
+
         XyCard {
             Text(
                 "XyDesk Remote dibangun di atas FreeRDP (Apache License 2.0). " +
@@ -712,7 +770,7 @@ private fun AboutSection() {
                 style = MaterialTheme.typography.bodyMedium,
             )
             Spacer(Modifier.height(12.dp))
-            XyPillButton("Lihat lisensi", { showLicense = true }, primary = false)
+            XyPillButton(t("about.license"), { showLicense = true }, primary = false)
         }
         Spacer(Modifier.height(12.dp))
     }
@@ -720,19 +778,93 @@ private fun AboutSection() {
     if (showLicense) {
         AlertDialog(
             onDismissRequest = { showLicense = false },
-            title = { Text("Lisensi") },
+            title = { Text(t("about.license.title")) },
             text = {
                 Column(Modifier.verticalScroll(rememberScrollState())) {
-                    Text(
-                        "FreeRDP — Apache License 2.0\n" +
-                            "Copyright (C) 2012-2026 FreeRDP contributors.\n\n" +
-                            "XyDesk Remote — © XyVerse.\n" +
-                            "Font: Space Grotesk & Inter (SIL Open Font License 1.1).",
-                        style = MaterialTheme.typography.bodySmall,
-                    )
+                    Text(t("about.license.body"), style = MaterialTheme.typography.bodySmall)
                 }
             },
-            confirmButton = { TextButton(onClick = { showLicense = false }) { Text("Tutup") } },
+            confirmButton = { TextButton(onClick = { showLicense = false }) { Text("OK") } },
+        )
+    }
+}
+
+/**
+ * "Dukung saya" — Saweria, GitHub Sponsors, dan bintang repo.
+ *
+ * Semua tautan dibuka lewat browser (Intent VIEW), tanpa SDK pihak ketiga
+ * dan tanpa jaringan dari dalam app sendiri.
+ */
+@Composable
+internal fun SupportCard() {
+    val context = LocalContext.current
+    XyCard {
+        XySectionLabel(t("about.support.title").uppercase())
+        Text(
+            t("about.support.body"),
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        Spacer(Modifier.height(12.dp))
+        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            SupportLink(
+                icon = XyIcons.Heart,
+                title = t("about.support.saweria"),
+                subtitle = "saweria.co/kallsptra",
+                url = "https://saweria.co/kallsptra",
+            )
+            SupportLink(
+                icon = XyIcons.Sponsor,
+                title = t("about.support.github"),
+                subtitle = "github.com/sponsors/xykal",
+                url = "https://github.com/sponsors/xykal",
+            )
+            SupportLink(
+                icon = XyIcons.Star,
+                title = t("about.support.star"),
+                subtitle = "github.com/xykal/XyDesk-Remote",
+                url = "https://github.com/xykal/XyDesk-Remote/stargazers",
+            )
+        }
+        Spacer(Modifier.height(10.dp))
+        Text(
+            t("about.thanks"),
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+    }
+}
+
+@Composable
+private fun SupportLink(icon: ImageVector, title: String, subtitle: String, url: String) {
+    val context = LocalContext.current
+    Row(
+        Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(12.dp))
+            .border(1.dp, MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(12.dp))
+            .clickable {
+                val intent = Intent(Intent.ACTION_VIEW, Uri.parse(url))
+                runCatching { context.startActivity(intent) }
+            }
+            .padding(horizontal = 12.dp, vertical = 11.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(11.dp),
+    ) {
+        Icon(icon, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
+        Column(Modifier.weight(1f)) {
+            Text(title, style = MaterialTheme.typography.bodyMedium)
+            Text(
+                subtitle,
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+        Icon(
+            XyIcons.ExternalLink,
+            contentDescription = null,
+            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.height(16.dp).width(16.dp),
         )
     }
 }

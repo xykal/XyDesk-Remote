@@ -188,10 +188,11 @@ class XyDeskSessionActivity : ComponentActivity() {
     }
 
     /**
-     * Izin runtime yang benar-benar dipakai build ini: KAMERA (channel rdpecam
-     * aktif di superbuild). Mikrofon TIDAK diminta karena jalur audin belum
-     * ada di core (lihat catatan di AddDeviceScreen) — meminta izin untuk
-     * fitur yang tidak jalan cuma bikin user curiga.
+     * Izin runtime yang diminta mengikuti kanal yang benar-benar ada di
+     * biner: KAMERA (rdpecam) dan MIKROFON (audin, capture lewat OpenSLES).
+     * Keduanya terverifikasi ada di libfreerdp-client3.so; capture OpenSLES
+     * di Android wajib punya izin RECORD_AUDIO yang diberikan user, jadi
+     * izinnya diminta tepat sebelum menyambung saat opsi mikrofon menyala.
      */
     private fun requestRuntimePermissions(profile: ConnectionProfile) {
         val options = runCatching { RdpOptions.of(this, profile.id) }.getOrNull()

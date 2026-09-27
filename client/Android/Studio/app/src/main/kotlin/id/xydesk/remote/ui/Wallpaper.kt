@@ -1,17 +1,22 @@
 package id.xydesk.remote.ui
 
 import android.os.Build
+import androidx.compose.ui.Alignment
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.blur
+import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 
@@ -181,4 +186,182 @@ fun XyWallpaper(
 @Composable
 fun XyBackdrop(modifier: Modifier = Modifier) {
     Box(modifier.fillMaxSize().background(Color(0xFF07080A)))
+}
+
+/**
+ * Art preview kartu perangkat.
+ *
+ * Ini BUKAN wallpaper RDP dan bukan wallpaper OS: gambar geometris milik
+ * app sendiri, diturunkan dari nama perangkat (hash) sehingga tiap kartu
+ * berbeda tapi tetap satu keluarga. Palet: grafit + baja + satu aksen amber.
+ * Tidak ada glow neon dan tidak ada gradien ungu — sesuai aturan visual app.
+ */
+@Composable
+fun DevicePreviewArt(
+    seed: String,
+    os: XyWall,
+    modifier: Modifier = Modifier,
+) {
+    val h = seed.hashCode()
+    val corners = listOf(
+        Offset(0f, 0f),
+        Offset(1f, 0f),
+        Offset(1f, 1f),
+        Offset(0f, 1f),
+    )
+    val origin = corners[((h ushr 3) and 0x7fffffff) % corners.size]
+    val accentX = 0.22f + ((h ushr 7) and 0x7fffffff) % 45 / 100f
+    val accentY = 0.30f + ((h ushr 13) and 0x7fffffff) % 40 / 100f
+    val hairShift = ((h ushr 17) and 0x7fffffff) % 4
+
+    Box(
+        modifier
+            .fillMaxSize()
+            .background(
+                Brush.linearGradient(
+                    colors = listOf(Color(0xFF15191E), Color(0xFF0C0F12), Color(0xFF070909)),
+                    start = Offset(0f, 0f),
+                    end = Offset(720f, 420f),
+                ),
+            ),
+    ) {
+        Canvas(Modifier.fillMaxSize()) {
+            val w = size.width
+            val hh = size.height
+            val ox = origin.x * w
+            val oy = origin.y * hh
+
+            // Cincin besar: pusat di sudut terpilih per nama perangkat.
+            val radius = hh * (1.05f + (hairShift * 0.06f))
+            drawCircle(
+                color = Color(0xFF3A5468).copy(alpha = 0.55f),
+                radius = radius,
+                center = Offset(ox, oy),
+                style = Stroke(width = 1.6f),
+            )
+            drawCircle(
+                color = Color(0xFF26313A),
+                radius = radius * 0.78f,
+                center = Offset(ox, oy),
+                style = Stroke(width = 1.2f),
+            )
+
+            // Garis diagonal tipis (arah berbeda per perangkat).
+            val angle = (22f + hairShift * 14f) * (if ((h and 1) == 0) 1f else -1f)
+            val rad = Math.toRadians(angle.toDouble()).toFloat()
+            val dx = kotlin.math.cos(rad)
+            val dy = kotlin.math.sin(rad)
+            for (i in 0..3) {
+                val off = (i + 1) * w * 0.19f
+                drawLine(
+                    color = Color(0xFF2A333B),
+                    start = Offset(-w * 0.2f + off * dx, -hh * 0.2f + off * dy),
+                    end = Offset(w * 1.2f * dx + off * dx, hh * 1.2f * dy + off * dy),
+                    strokeWidth = 1f,
+                )
+            }
+
+            // Titik identitas: satu aksen saja, ukuran kecil.
+            drawCircle(
+                color = Color(0xFFD9A45B),
+                radius = hh * 0.035f,
+                center = Offset(w * accentX, hh * accentY),
+            )
+            drawCircle(
+                color = Color(0xFFD9A45B).copy(alpha = 0.30f),
+                radius = hh * 0.085f,
+                center = Offset(w * accentX, hh * accentY),
+                style = Stroke(width = 1f),
+            )
+
+            // Grid titik halus di sudut berlawanan.
+            val step = hh * 0.09f
+            var gy = hh * 0.62f
+            while (gy < hh) {
+                var gx = w * 0.06f
+                while (gx < w * 0.5f) {
+                    drawCircle(
+                        color = Color(0xFF6C7A85).copy(alpha = 0.28f),
+                        radius = 0.9f,
+                        center = Offset(gx, gy),
+                    )
+                    gx += step
+                }
+                gy += step
+            }
+        }
+
+        // Penanda jenis OS: siluet jendela kecil, bukan logo resmi.
+        Canvas(
+            Modifier
+                .align(Alignment.TopStart)
+                .padding(12.dp)
+                .size(26.dp),
+        ) {
+            val stroke = Stroke(width = 1.4f)
+            when (os) {
+                XyWall.MACOS -> {
+                    drawRoundRect(
+                        color = Color(0xFFB9C4CC),
+                        topLeft = Offset(2f, 2f),
+                        size = Size(size.width - 4f, size.height - 6f),
+                        cornerRadius = CornerRadius(3f, 3f),
+                        style = stroke,
+                    )
+                    drawLine(
+                        color = Color(0xFFB9C4CC),
+                        start = Offset(size.width * 0.42f, size.height - 4f),
+                        end = Offset(size.width * 0.58f, size.height - 4f),
+                        strokeWidth = 1.4f,
+                    )
+                }
+
+                XyWall.WIN10 -> {
+                    drawRect(
+                        color = Color(0xFFB9C4CC),
+                        topLeft = Offset(2f, 4f),
+                        size = Size(size.width - 4f, size.height - 9f),
+                        style = stroke,
+                    )
+                    drawLine(
+                        color = Color(0xFFB9C4CC),
+                        start = Offset(size.width * 0.35f, 4f),
+                        end = Offset(size.width * 0.35f, size.height - 5f),
+                        strokeWidth = 1.4f,
+                    )
+                }
+
+                XyWall.WIN11 -> {
+                    drawRoundRect(
+                        color = Color(0xFFB9C4CC),
+                        topLeft = Offset(2f, 4f),
+                        size = Size(size.width - 4f, size.height - 9f),
+                        cornerRadius = CornerRadius(2f, 2f),
+                        style = stroke,
+                    )
+                    drawLine(
+                        color = Color(0xFFB9C4CC),
+                        start = Offset(size.width * 0.66f, 4f),
+                        end = Offset(size.width * 0.66f, size.height - 5f),
+                        strokeWidth = 1.4f,
+                    )
+                }
+
+                XyWall.NEUTRAL -> {
+                    drawCircle(
+                        color = Color(0xFFB9C4CC),
+                        radius = size.minDimension * 0.36f,
+                        center = Offset(size.width / 2f, size.height / 2f),
+                        style = stroke,
+                    )
+                    drawLine(
+                        color = Color(0xFFB9C4CC),
+                        start = Offset(size.width / 2f, size.height * 0.14f),
+                        end = Offset(size.width / 2f, size.height * 0.86f),
+                        strokeWidth = 1.2f,
+                    )
+                }
+            }
+        }
+    }
 }

@@ -7,6 +7,7 @@ import android.content.Context
 import android.content.Intent
 import android.content.pm.ActivityInfo
 import android.net.Uri
+import android.view.KeyEvent
 import android.view.WindowManager
 import androidx.compose.foundation.background
 import androidx.compose.foundation.gestures.awaitEachGesture
@@ -36,6 +37,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
+import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -136,6 +138,15 @@ fun XyDeskSessionScreen(
         mutableStateOf(prefs.overlayShown(profile.id) || prefs.keyboardAutoOpen)
     }
     var keyboardScale by remember { mutableFloatStateOf(prefs.keyboardScale) }
+    var hudKeys by remember(profile.id) { mutableStateOf(prefs.hudKeys(profile.id)) }
+    var mappingMode by remember { mutableStateOf(false) }
+    var imeHeightPx by remember { mutableIntStateOf(0) }
+    val latchedKeys = remember(profile.id) { mutableStateMapOf<String, Boolean>() }
+
+    fun setHudKeys(list: List<HudKey>) {
+        hudKeys = list
+        prefs.setHudKeys(profile.id, list)
+    }
     var cursorX by remember { mutableFloatStateOf(0f) }
     var cursorY by remember { mutableFloatStateOf(0f) }
     var cursorInit by remember { mutableStateOf(false) }
@@ -178,6 +189,12 @@ fun XyDeskSessionScreen(
                 cm.setPrimaryClip(ClipData.newPlainText("rdp", text))
             }
         })
+    }
+
+    LaunchedEffect(Unit) {
+        // Toolbar HUD menempel di atas keyboard HP: tinggi IME datang dari
+        // controller, jadi toolbar otomatis ikut hilang saat keyboard ditutup.
+        controller.onImeChanged = { px -> imeHeightPx = px }
     }
 
     LaunchedEffect(Unit) {
@@ -290,6 +307,58 @@ fun XyDeskSessionScreen(
         )
     }
 
+    /** Kirim aksi satu tombol HUD (down=true tekan, false lepas). */
+    fun runHudKey(key: HudKey, down: Boolean) {
+        when (key.kind) {
+            HudKind.MOUSE_LEFT -> sendButton(XyMouseButton.LEFT, down)
+            HudKind.MOUSE_RIGHT -> sendButton(XyMouseButton.RIGHT, down)
+            HudKind.MOUSE_MIDDLE -> sendButton(XyMouseButton.MIDDLE, down)
+            HudKind.SCROLL_UP -> if (down) sendScroll(1)
+            HudKind.SCROLL_DOWN -> if (down) sendScroll(-1)
+            HudKind.INPUT_SWITCH -> if (down) {
+                val next = if (InputMode.entries[inputMode] == InputMode.TRACKPAD) {
+                    InputMode.DIRECT
+                } else {
+                    InputMode.TRACKPAD
+                }
+                inputMode = next.ordinal
+                prefs.inputMode = next
+                if (next == InputMode.DIRECT) controller.setKeyboardVisible(keyboardShown)
+            }
+
+            HudKind.KEY -> {
+                if (key.shift && down) controller.sendVirtualKey(KeyEvent.KEYCODE_SHIFT_LEFT, true)
+                controller.sendVirtualKey(key.keyCode, down)
+                if (key.shift && !down) controller.sendVirtualKey(KeyEvent.KEYCODE_SHIFT_LEFT, false)
+            }
+
+            HudKind.COMBO -> if (down) controller.sendCombo(key.combo)
+        }
+    }
+
+    /**
+     * Fase dari layer tombol -> aksi. TAP = tekan+lepas, HOLD = aktif selama
+     * ditahan, TOGGLE = nyala/mati dengan latch terpisah per tombol.
+     */
+    fun handleHudPhase(key: HudKey, phase: HudPhase) {
+        when (key.action) {
+            HudAction.HOLD -> runHudKey(key, phase == HudPhase.DOWN)
+
+            HudAction.TOGGLE -> {
+                if (phase != HudPhase.TAP) return
+                val on = latchedKeys[key.id] == true
+                latchedKeys[key.id] = !on
+                runHudKey(key, !on)
+            }
+
+            HudAction.TAP -> {
+                if (phase != HudPhase.TAP) return
+                runHudKey(key, true)
+                runHudKey(key, false)
+            }
+        }
+    }
+
     val connected = state is SessionState.Connected
 
     Box(Modifier.fillMaxSize().background(Color.Black)) {
@@ -349,7 +418,18 @@ fun XyDeskSessionScreen(
                 onOverlayShownChange = { shown ->
                     overlayShown = shown
                     prefs.setOverlayShown(profile.id, shown)
+                    // Board lengkap hanya muat kalau keyboard HP disembunyikan.
+                    // Chip ABC di board mengembalikan fokus ke keyboard HP.
+                    controller.setKeyboardVisible(!shown)
+                    keyboardShown = !shown
+                    prefs.setKeyboardShown(profile.id, !shown)
                 },
+                keys = hudKeys,
+                onKeysChange = { setHudKeys(it) },
+                mappingMode = mappingMode,
+                onMappingModeChange = { mappingMode = it },
+                imeHeightPx = imeHeightPx,
+                onPhase = { key, phase -> handleHudPhase(key, phase) },
                 onZoomIn = { controller.zoomIn() },
                 onZoomOut = { controller.zoomOut() },
                 onFit = { controller.fitToScreen() },
@@ -367,7 +447,10 @@ fun XyDeskSessionScreen(
                 onDisconnect = { confirmDisconnect = true },
                 onPointerVisibilityChange = { pointerVisible = it },
                 onResetCluster = {
-                    prefs.setCluster(profile.id, 0.72f, 0.55f)
+                    // Kembalikan tombol HUD ke set bawaan (klik kiri/kanan/
+                    // tengah, scroll naik/turun, ganti mode input).
+                    latchedKeys.clear()
+                    setHudKeys(HudKey.defaults())
                 },
                 onRotationChange = { mode ->
                     (context as? Activity)?.requestedOrientation = when (mode) {
@@ -417,8 +500,6 @@ fun XyDeskSessionScreen(
                     prefs.inputMode = next
                     if (next == InputMode.DIRECT) controller.setKeyboardVisible(keyboardShown)
                 },
-                onMouse = { button, down -> sendButton(button, down) },
-                onScroll = { sendScroll(it) },
             )
 
             // Keyboard layar lengkap: QWERTY + F1-F12 + numpad + simbol +
@@ -608,7 +689,7 @@ private fun ConnectingScreen(
         ) {
             Text(
                 deviceLabel,
-                color = Color.White.copy(alpha = 0.92f),
+                color = Color.White.copy(alpha = 0.96f),
                 style = MaterialTheme.typography.headlineSmall,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
@@ -616,7 +697,7 @@ private fun ConnectingScreen(
             Spacer(Modifier.height(6.dp))
             Text(
                 "${elapsed}s",
-                color = Color.White.copy(alpha = 0.55f),
+                color = Color.White.copy(alpha = 0.76f),
                 fontSize = 12.sp,
             )
             Spacer(Modifier.height(26.dp))
@@ -649,7 +730,7 @@ private fun ConnectingScreen(
                         }
                         Text(
                             title,
-                            color = Color.White.copy(alpha = if (index <= active) 0.95f else 0.45f),
+                            color = Color.White.copy(alpha = if (index <= active) 0.96f else 0.72f),
                             fontSize = 14.sp,
                             fontWeight = if (index == active) FontWeight.SemiBold else FontWeight.Normal,
                         )
@@ -682,7 +763,7 @@ private fun DisconnectedScreen(
                 style = MaterialTheme.typography.headlineSmall,
             )
             Spacer(Modifier.height(4.dp))
-            Text(deviceLabel, color = Color.White.copy(alpha = 0.6f), fontSize = 13.sp)
+            Text(deviceLabel, color = Color.White.copy(alpha = 0.78f), fontSize = 13.sp)
             Spacer(Modifier.height(20.dp))
             XyPillButton("Sambungkan lagi", onReconnect, compact = true)
             Spacer(Modifier.height(8.dp))

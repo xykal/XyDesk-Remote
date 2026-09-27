@@ -132,6 +132,28 @@ class SessionPrefs(context: Context) {
             .apply()
     }
 
+    /**
+     * Tombol HUD sesi (bentuk bebas, bulat penuh): satu tombol = satu aksi.
+     * Disimpan per perangkat karena posisi layer bergantung ukuran layar.
+     */
+    fun hudKeys(deviceId: String): List<HudKey> {
+        HudKey.decode(device.getString("$deviceId.hudkeys", null))?.let { return it }
+        // Belum pernah diubah: susun set bawaan, tapi hormati preferensi lama
+        // (toggle cluster ronde 2) supaya tombol yang sengaja dimatikan user
+        // tidak muncul lagi begitu model tombol baru dipakai.
+        var keys = HudKey.defaults()
+        if (!showLeft) keys = keys.filterNot { it.id == "kiri" }
+        if (!showRight) keys = keys.filterNot { it.id == "kanan" }
+        if (!showMiddle) keys = keys.filterNot { it.id == "tengah" }
+        if (!showScroll) keys = keys.filterNot { it.id == "naik" || it.id == "turun" }
+        if (!showSwitch) keys = keys.filterNot { it.id == "switch" }
+        return keys
+    }
+
+    fun setHudKeys(deviceId: String, keys: List<HudKey>) {
+        device.edit().putString("$deviceId.hudkeys", HudKey.encode(keys)).apply()
+    }
+
     /** Keyboard overlay tampil (terpisah dari keyboard sistem/IME). */
     fun overlayShown(id: String): Boolean = device.getBoolean("$id.overlay", false)
 

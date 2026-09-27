@@ -591,8 +591,17 @@ public class LibFreeRDP
 				// To freerdp argument: /key:value
 				if (key.equals("drive") && value.equals("sdcard"))
 				{
-					// Special for sdcard redirect
-					String path = android.os.Environment.getExternalStorageDirectory().getPath();
+					// Special for sdcard redirect.
+					//
+					// PENTING: sejak Android 11 app TIDAK bisa membaca
+					// /storage/emulated/0 sembarangan, jadi mengoper path itu
+					// bikin drive di remote muncul tapi isinya kosong/error.
+					// Urutan pilihan path:
+					//   1. seluruh storage HP  -> hanya kalau user memberi
+					//      izin "semua file" (MANAGE_EXTERNAL_STORAGE);
+					//   2. folder milik app    -> selalu bisa dibaca/tulis
+					//      tanpa izin apa pun.
+					String path = appDrivePath(context);
 					value = "sdcard," + path;
 				}
 
@@ -896,6 +905,35 @@ public class LibFreeRDP
 		UIEventListener uiEventListener = s.getUIEventListener();
 		if (uiEventListener != null)
 			uiEventListener.OnRailMonitoredDesktop(windowIds, activeWindowId);
+	}
+
+	/** True kalau app punya akses "semua file" (Android 11+). */
+	public static boolean hasAllFilesAccess()
+	{
+		if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.R)
+			return android.os.Environment.isExternalStorageManager();
+		return true;
+	}
+
+	/**
+	 * Folder HP yang di-redirect jadi drive di remote.
+	 *
+	 * Tanpa izin "semua file" Android modern hanya mengizinkan folder milik
+	 * app, jadi itu yang dipakai; hasilnya drive tetap jalan (bisa baca/tulis
+	 * lewat File Manager remote, lewat path Android/data/<paket>/files/Share).
+	 */
+	public static String appDrivePath(Context context)
+	{
+		if (hasAllFilesAccess())
+			return android.os.Environment.getExternalStorageDirectory().getAbsolutePath();
+
+		java.io.File dir = context.getExternalFilesDir("Share");
+		if (dir == null)
+			dir = context.getFilesDir();
+		if (dir != null && !dir.exists())
+			//noinspection ResultOfMethodCallIgnored
+			dir.mkdirs();
+		return dir != null ? dir.getAbsolutePath() : "/";
 	}
 
 	public static String getVersion()

@@ -264,9 +264,22 @@ fun XyDeskHome(onExit: () -> Unit) {
         )
     }
     if (showBoot) {
+        // Dua bagian: log app + log native FreeRDP (kanal audio/mikrofon,
+        // clipboard, drive, DISP). Yang native muncul kalau appender file
+        // aktif — dipasang XyApp sebelum library dimuat.
+        val nativeTail = remember(showBoot) { ConnectionLog.nativeTail(160) }
+        val body = buildString {
+            if (nativeTail.isNotEmpty()) {
+                appendLine("=== LOG NATIVE (FreeRDP) ===")
+                appendLine(nativeTail.joinToString("\n"))
+                appendLine()
+            }
+            appendLine("=== LOG APP (xydesk-boot.log) ===")
+            append(bootTail.joinToString("\n"))
+        }
         InfoDialog(
             title = "Log sesi terakhir",
-            body = bootTail.joinToString("\n"),
+            body = body,
             onDismiss = { showBoot = false },
         )
     }
@@ -363,8 +376,10 @@ private fun DeviceCard(
     onEdit: () -> Unit,
     onDelete: () -> Unit,
 ) {
-    // Motif wallpaper mengikuti nama perangkat (Windows 11 / 10 / macOS).
+    // Art preview milik app (bukan wallpaper RDP/OS): geometris, diturunkan
+    // dari nama perangkat + jenis OS sebagai penanda kecil di pojok.
     val wall = XyWall.WIN11.forDevice(profile.label ?: profile.host)
+    val previewSeed = (profile.label ?: profile.host) + "|" + profile.host
     val shape = MaterialTheme.shapes.large
     Column(
         Modifier
@@ -383,7 +398,7 @@ private fun DeviceCard(
                 .height(172.dp)
                 .clip(shape),
         ) {
-            XyWallpaper(wall, dim = 0.12f)
+            DevicePreviewArt(seed = previewSeed, os = wall)
             Box(
                 Modifier
                     .fillMaxSize()

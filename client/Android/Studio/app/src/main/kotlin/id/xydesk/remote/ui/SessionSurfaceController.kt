@@ -58,6 +58,16 @@ class SessionSurfaceController(private val activity: Activity) : GraphicsSink {
     private var inputManager: SessionInputManager? = null
 
     @Volatile private var inst = 0L
+    /** Tinggi IME terakhir (px). 0 = keyboard HP tidak tampil. */
+    @Volatile var imeHeightPx: Int = 0
+        private set
+    private var lastImeBottom = -1
+    /**
+     * Dipanggil tiap tinggi IME berubah. UI memakai ini untuk menaruh
+     * toolbar persis di atas keyboard HP dan menyembunyikannya saat
+     * keyboard HP ditutup.
+     */
+    var onImeChanged: ((Int) -> Unit)? = null
     @Volatile private var bitmap: Bitmap? = null
     @Volatile private var viewReady = false
 
@@ -173,6 +183,11 @@ class SessionSurfaceController(private val activity: Activity) : GraphicsSink {
             val bottomInset = maxOf(nav.bottom, gestures)
             val kbdVisible = kb.visibility == View.VISIBLE
             inputManager?.onImeVisibilityChanged(imeBottom > 0)
+            if (imeBottom != lastImeBottom) {
+                lastImeBottom = imeBottom
+                imeHeightPx = imeBottom
+                onImeChanged?.invoke(imeBottom)
+            }
             // IME sudah termasuk area nav bar: jangan padding dua kali
             kb.setInsets(nav.left, nav.right, if (imeBottom > 0) 0 else bottomInset)
             // PENTING: scroll view TIDAK diberi padding bawah saat keyboard

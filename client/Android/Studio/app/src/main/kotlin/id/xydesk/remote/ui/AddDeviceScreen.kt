@@ -1,5 +1,9 @@
 package id.xydesk.remote.ui
 
+import android.content.Intent
+import android.net.Uri
+import android.os.Build
+import android.provider.Settings
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -28,6 +32,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
+import com.freerdp.freerdpcore.services.LibFreeRDP
 import id.xydesk.remote.core.ConnectionProfile
 import id.xydesk.remote.core.RdpOptions
 import id.xydesk.remote.core.XyAudioMode
@@ -377,11 +382,14 @@ fun AddDeviceScreen(
                 )
                 XyToggleRow(
                     title = "Penyimpanan lokal",
-                    subtitle = "Folder Download HP muncul sebagai drive di remote",
+                    subtitle = "Folder HP muncul sebagai drive 'sdcard' di remote",
                     checked = options.localDrive,
                     onCheckedChange = { options = options.copy(localDrive = it) },
                     leading = XyIcons.Folder,
                 )
+                if (options.localDrive) {
+                    StorageAccessRow()
+                }
                 XyToggleRow(
                     title = "Kamera",
                     subtitle = "Kamera HP sebagai webcam remote (kalau didukung server)",
