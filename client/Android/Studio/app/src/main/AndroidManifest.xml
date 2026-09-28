@@ -47,11 +47,16 @@
 
         <!-- Layar sesi XyDesk (surface + kontrol Compose). Hanya dibuka dari
              home lewat connectIntent() — bukan launcher, bukan exported. -->
+        <!-- adjustNothing: keyboard HP muncul MENIMPA gambar remote, bukan
+             mengecilkan jendela. Kalau jendela ikut mengecil, resolusi
+             otomatis akan mengirim ukuran baru tiap keyboard dibuka dan
+             desktop remote ikut menyusut. -->
         <activity
             android:name="id.xydesk.remote.ui.XyDeskSessionActivity"
             android:exported="false"
             android:label="Sesi RDP"
             android:theme="@style/Theme.XyDeskHome"
+            android:windowSoftInputMode="adjustNothing"
             android:configChanges="orientation|keyboardHidden|screenSize|smallestScreenSize|density|screenLayout" />
 
         <!-- FileProvider buat share screenshot -->
