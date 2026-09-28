@@ -27,6 +27,7 @@ import android.view.PointerIcon;
 import android.view.ScaleGestureDetector;
 import android.view.View;
 import android.view.ViewConfiguration;
+import android.view.KeyEvent;
 import android.view.inputmethod.BaseInputConnection;
 import android.view.inputmethod.EditorInfo;
 import android.view.inputmethod.InputConnection;
@@ -609,12 +610,64 @@ public class SessionView extends View
 		}
 	}
 
+	/**
+	 * Penerima ketikan dari keyboard HP.
+	 *
+	 * XyDesk tidak memakai keyboard virtual, jadi semua karakter dari IME harus
+	 * masuk ke mapper tombol inti. Pemilik sesi memasang sink ini lewat
+	 * setInputSink(); kalau tidak dipasang, perilaku lama dipakai apa adanya.
+	 */
+	public interface InputSink
+	{
+		/** Karakter hasil IME (tanpa info modifier). */
+		void onChar(char ch);
+
+		/** Tombol apa adanya dari IME (backspace, enter, ...). */
+		boolean onKeyEvent(KeyEvent event);
+	}
+
+	private InputSink inputSink;
+
+	public void setInputSink(InputSink sink)
+	{
+		this.inputSink = sink;
+	}
+
 	@Override public InputConnection onCreateInputConnection(EditorInfo outAttrs)
 	{
 		outAttrs.actionLabel = null;
 		outAttrs.inputType = InputType.TYPE_NULL;
 		outAttrs.imeOptions = EditorInfo.IME_ACTION_NONE | EditorInfo.IME_FLAG_NO_EXTRACT_UI |
 		                      EditorInfo.IME_FLAG_NO_FULLSCREEN;
-		return new BaseInputConnection(this, false);
+		final InputSink sink = inputSink;
+		if (sink == null)
+			return new BaseInputConnection(this, false);
+
+		return new BaseInputConnection(this, true) {
+			@Override public boolean commitText(CharSequence text, int newCursorPosition)
+			{
+				if (text != null)
+				{
+					for (int i = 0; i < text.length(); i++)
+						sink.onChar(text.charAt(i));
+				}
+				return true;
+			}
+
+			@Override public boolean sendKeyEvent(KeyEvent event)
+			{
+				return sink.onKeyEvent(event);
+			}
+
+			@Override public boolean deleteSurroundingText(int beforeLength, int afterLength)
+			{
+				for (int i = 0; i < beforeLength; i++)
+				{
+					sink.onKeyEvent(new KeyEvent(KeyEvent.ACTION_DOWN, KeyEvent.KEYCODE_DEL));
+					sink.onKeyEvent(new KeyEvent(KeyEvent.ACTION_UP, KeyEvent.KEYCODE_DEL));
+				}
+				return true;
+			}
+		};
 	}
 }

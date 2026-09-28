@@ -5,10 +5,6 @@ import android.content.Context
 import android.content.Intent
 import android.os.Bundle
 import android.view.KeyEvent
-import android.view.View
-import android.view.inputmethod.BaseInputConnection
-import android.view.inputmethod.EditorInfo
-import android.view.inputmethod.InputConnection
 import android.os.Handler
 import android.os.Looper
 import android.util.Log
@@ -212,57 +208,11 @@ class XyDeskSessionActivity : ComponentActivity() {
     }
 
     /**
-     * Keyboard HP mengetik ke remote.
-     *
-     * Inti FreeRDP (SessionView) memakai BaseInputConnection kosong, jadi
-     * karakter dari keyboard HP tidak pernah sampai ke KeyboardMapper.
-     * Di sini koneksi input diganti versi yang mengubah tiap karakter jadi
-     * KeyEvent Android, sehingga jalur key sudah terbukti milik inti
-     * (scancode, modifier, kombinasi) yang dipakai.
+     * Tombol fisik / event kunci Android diteruskan ke mapper inti. Karakter
+     * dari keyboard HP lewat jalur InputSink milik SessionView.
      */
-    override fun onCreateInputConnection(outAttrs: EditorInfo): InputConnection {
-        outAttrs.imeOptions = EditorInfo.IME_ACTION_NONE or
-            EditorInfo.IME_FLAG_NO_EXTRACT_UI or
-            EditorInfo.IME_FLAG_NO_FULLSCREEN
-        val target: View = window.decorView
-        return ForwardingInputConnection(target, true)
-    }
-
     override fun dispatchKeyEvent(event: KeyEvent): Boolean =
         controller.onKeyEvent(event) || super.dispatchKeyEvent(event)
-
-    private inner class ForwardingInputConnection(
-        target: View,
-        mutable: Boolean,
-    ) : BaseInputConnection(target, mutable) {
-
-        override fun commitText(text: CharSequence?, newCursorPosition: Int): Boolean {
-            text?.forEach { ch -> sendChar(ch) }
-            return true
-        }
-
-        override fun sendKeyEvent(event: KeyEvent): Boolean = controller.onKeyEvent(event)
-
-        override fun deleteSurroundingText(beforeLength: Int, afterLength: Int): Boolean {
-            repeat(beforeLength.coerceAtLeast(0)) {
-                controller.onKeyEvent(KeyEvent(KeyEvent.ACTION_DOWN, KeyEvent.KEYCODE_DEL))
-                controller.onKeyEvent(KeyEvent(KeyEvent.ACTION_UP, KeyEvent.KEYCODE_DEL))
-            }
-            return true
-        }
-
-        private fun sendChar(ch: Char) {
-            val code = keyCodeOf(ch)
-            if (code != 0) {
-                controller.onKeyEvent(KeyEvent(KeyEvent.ACTION_DOWN, code))
-                controller.onKeyEvent(KeyEvent(KeyEvent.ACTION_UP, code))
-            } else {
-                // Karakter yang tidak punya keycode (mis. emoji, aksen):
-                // dikirim sebagai unicode supaya tetap masuk.
-                controller.sendUnicode(ch.code)
-            }
-        }
-    }
 
     /**
      * Izin runtime yang diminta mengikuti kanal yang benar-benar ada di
@@ -319,46 +269,5 @@ class XyDeskSessionActivity : ComponentActivity() {
         const val EXTRA_PASS = "xydesk.pass"
         const val EXTRA_DOMAIN = "xydesk.domain"
         const val EXTRA_LABEL = "xydesk.label"
-
-        /** Karakter -> keycode Android untuk KeyboardMapper inti. */
-        fun keyCodeOf(ch: Char): Int = when {
-            ch in 'a'..'z' -> KeyEvent.KEYCODE_A + (ch - 'a')
-            ch in 'A'..'Z' -> KeyEvent.KEYCODE_A + (ch - 'A')
-            ch in '0'..'9' -> KeyEvent.KEYCODE_0 + (ch - '0')
-            else -> when (ch) {
-                ' ' -> KeyEvent.KEYCODE_SPACE
-                '\n' -> KeyEvent.KEYCODE_ENTER
-                '\t' -> KeyEvent.KEYCODE_TAB
-                '.' -> KeyEvent.KEYCODE_PERIOD
-                ',' -> KeyEvent.KEYCODE_COMMA
-                '-' -> KeyEvent.KEYCODE_MINUS
-                '=' -> KeyEvent.KEYCODE_EQUALS
-                '[' -> KeyEvent.KEYCODE_LEFT_BRACKET
-                ']' -> KeyEvent.KEYCODE_RIGHT_BRACKET
-                ';' -> KeyEvent.KEYCODE_SEMICOLON
-                '\'' -> KeyEvent.KEYCODE_APOSTROPHE
-                '/' -> KeyEvent.KEYCODE_SLASH
-                '\\' -> KeyEvent.KEYCODE_BACKSLASH
-                '`' -> KeyEvent.KEYCODE_GRAVE
-                '@' -> KeyEvent.KEYCODE_AT
-                '*' -> KeyEvent.KEYCODE_STAR
-                '#' -> KeyEvent.KEYCODE_POUND
-                '+' -> KeyEvent.KEYCODE_PLUS
-                else -> 0
-            }
-        }
-
-        /** M1.2b — auto-disconnect kalau app di-background (default ON). */
-        const val BACKGROUND_DISCONNECT_DELAY_MS = 15_000L
-
-        fun connectIntent(context: Context, profile: ConnectionProfile): Intent =
-            Intent(context, XyDeskSessionActivity::class.java).apply {
-                putExtra(EXTRA_HOST, profile.host)
-                putExtra(EXTRA_PORT, profile.port)
-                putExtra(EXTRA_USER, profile.username)
-                putExtra(EXTRA_PASS, profile.password)
-                putExtra(EXTRA_DOMAIN, profile.domain)
-                putExtra(EXTRA_LABEL, profile.label)
-            }
     }
 }

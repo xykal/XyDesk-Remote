@@ -60,6 +60,34 @@ data class RemoteCursor(
     val visible: Boolean,
 )
 
+/** Karakter dari IME -> keycode Android (0 = tidak ada padanannya). */
+internal fun xyKeyCodeOf(ch: Char): Int = when {
+    ch in 'a'..'z' -> KeyEvent.KEYCODE_A + (ch - 'a')
+    ch in 'A'..'Z' -> KeyEvent.KEYCODE_A + (ch - 'A')
+    ch in '0'..'9' -> KeyEvent.KEYCODE_0 + (ch - '0')
+    else -> when (ch) {
+        ' ' -> KeyEvent.KEYCODE_SPACE
+        '\n' -> KeyEvent.KEYCODE_ENTER
+        '\t' -> KeyEvent.KEYCODE_TAB
+        '.' -> KeyEvent.KEYCODE_PERIOD
+        ',' -> KeyEvent.KEYCODE_COMMA
+        '-' -> KeyEvent.KEYCODE_MINUS
+        '=' -> KeyEvent.KEYCODE_EQUALS
+        '[' -> KeyEvent.KEYCODE_LEFT_BRACKET
+        ']' -> KeyEvent.KEYCODE_RIGHT_BRACKET
+        ';' -> KeyEvent.KEYCODE_SEMICOLON
+        '\'' -> KeyEvent.KEYCODE_APOSTROPHE
+        '/' -> KeyEvent.KEYCODE_SLASH
+        '\\' -> KeyEvent.KEYCODE_BACKSLASH
+        '`' -> KeyEvent.KEYCODE_GRAVE
+        '@' -> KeyEvent.KEYCODE_AT
+        '*' -> KeyEvent.KEYCODE_STAR
+        '#' -> KeyEvent.KEYCODE_POUND
+        '+' -> KeyEvent.KEYCODE_PLUS
+        else -> 0
+    }
+}
+
 class SessionSurfaceController(private val activity: Activity) : GraphicsSink {
 
     private val uiHandler = Handler(Looper.getMainLooper())
@@ -140,6 +168,23 @@ class SessionSurfaceController(private val activity: Activity) : GraphicsSink {
         // Board keyboard bawaan FreeRDP tidak dipakai (ronde 5): semua
         // pengetikan lewat keyboard HP, jadi view-nya tidak pernah dibuat.
         val im = SessionInputManager(activity, scroller, sv, tpv, null)
+
+        // Keyboard HP -> mapper tombol inti. SessionView menanyakan koneksi
+        // input ke sini; karakter diubah jadi KeyEvent supaya scancode,
+        // modifier, dan kombinasi ditangani jalur yang sudah terbukti.
+        sv.setInputSink(object : SessionView.InputSink {
+            override fun onChar(ch: Char) {
+                val code = xyKeyCodeOf(ch)
+                if (code != 0) {
+                    im.onAndroidKeyEvent(KeyEvent(KeyEvent.ACTION_DOWN, code))
+                    im.onAndroidKeyEvent(KeyEvent(KeyEvent.ACTION_UP, code))
+                } else {
+                    im.processUnicodeKey(ch.code)
+                }
+            }
+
+            override fun onKeyEvent(event: KeyEvent): Boolean = im.onAndroidKeyEvent(event)
+        })
         sv.setSessionViewListener(im)
         tpv.setTouchPointerListener(im)
         sv.setScaleGestureDetector(
