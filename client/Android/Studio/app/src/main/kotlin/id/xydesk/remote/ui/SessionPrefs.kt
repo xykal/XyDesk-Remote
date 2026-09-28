@@ -28,8 +28,9 @@ enum class PointerStyle(val title: String, val titleEn: String) {
  * kelihatan tanpa menutupi gambar.
  */
 enum class HudPlate(val title: String, val titleEn: String) {
-    DARK("Gelap tipis", "Dark plate"),
-    LIGHT("Terang tipis", "Light plate"),
+    DARK("Gelap tegas", "Dark"),
+    // Keep ordinal 1 for existing preferences; this is now a softer dark plate, not white.
+    LIGHT("Gelap lembut", "Soft dark"),
     NONE("Transparan", "Transparent"),
 }
 

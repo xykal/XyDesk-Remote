@@ -65,13 +65,11 @@ import id.xydesk.remote.ui.theme.XyPill
 import kotlin.math.roundToInt
 
 /**
- * Warna HUD sesi. Ini SATU-SATUNYA bagian yang sengaja tidak ikut tema:
- * tombol dan banner HUD duduk di atas gambar remote (gelap/terang apa pun
- * isinya), jadi kontrasnya harus tetap. Panel dan dialog ikut tema app.
+ * Warna tombol HUD tetap gelap-transparan karena duduk di atas desktop remote;
+ * panel, banner editor, dan dialog mengikuti tema app.
  */
-private val HudInk = Color(0xFFF1F4F6)
-private val HudEdge = Color(0xD9FFFFFF)
-private val HudEdgeDim = Color(0x7AFFFFFF)
+internal fun updateHudEditorDraft(current: HudKey?, updated: HudKey): HudKey? =
+    if (current?.id == updated.id) updated else current
 
 /** Tab di panel sesi — SATU panel, empat seksi jelas. Dulu dua panel kiri/kanan tanpa label: nobody tahu isinya apa. */
 private enum class PanelTab(val id: String, val en: String) {
@@ -176,6 +174,8 @@ fun SessionControls(
     }
 
     fun replace(updated: HudKey) {
+        // Keep the editor's live draft in sync with the persisted per-device layout.
+        editing = updateHudEditorDraft(editing, updated)
         onKeyEdited(updated)
     }
 
@@ -531,21 +531,21 @@ private fun PanelHandle(
             Modifier
                 .clip(XyPill)
                 .shadow(6.dp, XyPill, false, Color.Black, Color.Black)
-                .background(Color(0xD90B0D10))
-                .border(1.dp, HudEdgeDim, XyPill)
+                .background(MaterialTheme.colorScheme.surface)
+                .border(1.dp, MaterialTheme.colorScheme.outlineVariant, XyPill)
                 .padding(horizontal = 10.dp, vertical = 16.dp),
         ) {
             Column(horizontalAlignment = Alignment.CenterHorizontally) {
                 Icon(
                     XyIcons.Sliders,
                     contentDescription = xy("Buka panel sesi", "Open session panel"),
-                    tint = HudInk,
+                    tint = MaterialTheme.colorScheme.onSurface,
                     modifier = Modifier.size(17.dp),
                 )
                 Spacer(Modifier.height(6.dp))
                 Text(
                     xy("Menu", "Menu"),
-                    color = HudInk,
+                    color = MaterialTheme.colorScheme.onSurface,
                     fontSize = 9.sp,
                     letterSpacing = 0.8.sp,
                 )
@@ -1129,7 +1129,12 @@ private fun ButtonsTab(
                 modifier = Modifier.weight(1f),
             )
         }
-        PanelHint(xy("Latar tombol — pakai gelap kalau desktop remote-nya putih", "Button plate — pick dark if the remote desktop is white"))
+        PanelHint(
+            xy(
+                "Pelat ikon selalu gelap dan tembus; pilih ketegasan latar atau transparan.",
+                "Icon plates stay dark and translucent; choose the strength or go transparent.",
+            ),
+        )
         XySegmented(
             options = HudPlate.entries.map { xy(it.title, it.titleEn) },
             selectedIndex = plate.ordinal,

@@ -801,7 +801,13 @@ private fun AboutSection() {
                 title = t("about.engine"),
                 subtitle = native ?: xy("FreeRDP (dimuat saat connect)", "FreeRDP (loaded on connect)"),
             )
-            XyRow(title = t("about.developer"), subtitle = xy("XyVerse / xykal", "XyVerse / xykal"))
+            XyRow(
+                title = t("about.developer"),
+                subtitle = xy(
+                    "Didukung oleh ${AppBrand.PUBLISHER}",
+                    "Powered by ${AppBrand.PUBLISHER}",
+                ),
+            )
         }
 
         // ---- Bahasa: satu klik, langsung ganti seluruh teks app ----

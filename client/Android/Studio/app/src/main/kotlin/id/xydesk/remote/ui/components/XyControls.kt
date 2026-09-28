@@ -30,6 +30,12 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.semantics.ProgressBarRangeInfo
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.progressBarRangeInfo
+import androidx.compose.ui.semantics.role
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.setProgress
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -44,7 +50,25 @@ import androidx.compose.material3.Text
  * kelihatan "asing" di dalam panel kami.
  */
 
-/** Slider: track tipis ber-border, isi putih, pegangan bulat. */
+internal fun sliderValueAtFraction(
+    fraction: Float,
+    valueRange: ClosedFloatingPointRange<Float>,
+    steps: Int,
+): Float {
+    val start = valueRange.start
+    val end = valueRange.endInclusive
+    if (!start.isFinite() || !end.isFinite() || end <= start) return start
+
+    val safeFraction = if (fraction.isFinite()) fraction.coerceIn(0f, 1f) else 0f
+    val raw = start + safeFraction * (end - start)
+    if (steps <= 0) return raw
+
+    val stepSize = (end - start) / (steps + 1)
+    val index = ((raw - start) / stepSize).roundToInt().coerceIn(0, steps + 1)
+    return (start + index * stepSize).coerceIn(start, end)
+}
+
+/** Slider: track tipis ber-border, isi aksen, pegangan bulat dan dapat diakses. */
 @Composable
 fun XySlider(
     value: Float,
@@ -57,27 +81,18 @@ fun XySlider(
 ) {
     val latest = rememberUpdatedState(onValueChange)
     val range = valueRange.endInclusive - valueRange.start
-    val stepSize = if (steps > 0) range / (steps + 1) else 0f
-
-    fun snap(raw: Float): Float =
-        if (stepSize > 0f) {
-            val idx = ((raw - valueRange.start) / stepSize).roundToInt()
-            (valueRange.start + idx * stepSize).coerceIn(valueRange.start, valueRange.endInclusive)
-        } else {
-            raw.coerceIn(valueRange.start, valueRange.endInclusive)
-        }
 
     Box(
         modifier
             .fillMaxWidth()
             .height(34.dp)
-            .pointerInput(valueRange, enabled) {
+            .pointerInput(valueRange, enabled, steps) {
                 if (!enabled) return@pointerInput
                 awaitEachGesture {
                     val down = awaitFirstDown(requireUnconsumed = false)
                     fun apply(x: Float) {
-                        val frac = (x / size.width.toFloat()).coerceIn(0f, 1f)
-                        latest.value(snap(valueRange.start + frac * range))
+                        val fraction = if (size.width > 0) x / size.width.toFloat() else 0f
+                        latest.value(sliderValueAtFraction(fraction, valueRange, steps))
                     }
                     apply(down.position.x)
                     down.consume()
@@ -90,6 +105,23 @@ fun XySlider(
                         }
                         apply(change.position.x)
                         change.consume()
+                    }
+                }
+            }
+            .semantics {
+                role = Role.Slider
+                progressBarRangeInfo = ProgressBarRangeInfo(
+                    value.coerceIn(valueRange.start, valueRange.endInclusive),
+                    valueRange,
+                    steps.coerceAtLeast(0),
+                )
+                setProgress { target ->
+                    if (!enabled || range <= 0f) {
+                        false
+                    } else {
+                        val fraction = (target - valueRange.start) / range
+                        latest.value(sliderValueAtFraction(fraction, valueRange, steps))
+                        true
                     }
                 }
             },
