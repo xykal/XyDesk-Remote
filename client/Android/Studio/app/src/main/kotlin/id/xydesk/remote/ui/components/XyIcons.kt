@@ -371,6 +371,39 @@ object XyIcons {
     }
 
     /** Tautan keluar (buat di browser). */
+    /** Mata: toggle lihat/sembunyikan password. */
+    val Eye: ImageVector = xyIcon("XyEye") {
+        moveTo(3.5f, 12f)
+        curveTo(5.4f, 8.2f, 8.4f, 5.8f, 12f, 5.8f)
+        curveTo(15.6f, 5.8f, 18.6f, 8.2f, 20.5f, 12f)
+        curveTo(18.6f, 15.8f, 15.6f, 18.2f, 12f, 18.2f)
+        curveTo(8.4f, 18.2f, 5.4f, 15.8f, 3.5f, 12f)
+        close()
+        moveTo(14.9f, 12f)
+        curveTo(14.9f, 13.6f, 13.6f, 14.9f, 12f, 14.9f)
+        curveTo(10.4f, 14.9f, 9.1f, 13.6f, 9.1f, 12f)
+        curveTo(9.1f, 10.4f, 10.4f, 9.1f, 12f, 9.1f)
+        curveTo(13.6f, 9.1f, 14.9f, 10.4f, 14.9f, 12f)
+        close()
+    }
+
+    /** Mata dicoret: password sedang tampil, ketuk untuk sembunyikan. */
+    val EyeOff: ImageVector = xyIcon("XyEyeOff") {
+        moveTo(3.5f, 12f)
+        curveTo(5.4f, 8.2f, 8.4f, 5.8f, 12f, 5.8f)
+        curveTo(15.6f, 5.8f, 18.6f, 8.2f, 20.5f, 12f)
+        curveTo(18.6f, 15.8f, 15.6f, 18.2f, 12f, 18.2f)
+        curveTo(8.4f, 18.2f, 5.4f, 15.8f, 3.5f, 12f)
+        close()
+        moveTo(14.9f, 12f)
+        curveTo(14.9f, 13.6f, 13.6f, 14.9f, 12f, 14.9f)
+        curveTo(10.4f, 14.9f, 9.1f, 13.6f, 9.1f, 12f)
+        curveTo(9.1f, 10.4f, 10.4f, 9.1f, 12f, 9.1f)
+        curveTo(13.6f, 9.1f, 14.9f, 10.4f, 14.9f, 12f)
+        close()
+        moveTo(4.5f, 19.5f); lineTo(19.5f, 4.5f)
+    }
+
     val ExternalLink: ImageVector = xyIcon("XyExternalLink") {
         moveTo(14f, 4.5f); lineTo(19.5f, 4.5f); lineTo(19.5f, 10f)
         moveTo(19.5f, 4.5f); lineTo(11.5f, 12.5f)

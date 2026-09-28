@@ -84,6 +84,30 @@ Ronde ini seluruhnya soal input dan kontrol:
 
 Detail teknis: `docs/HUD-BUTTONS.md` (EN) dan `docs/HUD-BUTTONS.id.md` (ID).
 
+## Catatan rilis v0.5.8
+
+Ronde 9 - polesan interaksi yang selama ini jebengan:
+
+- **Ganti tema tanpa kedip.** Dulu memilih Ikut sistem/Gelap/Terang
+  me-recreate seluruh activity: layar kedip, posisi scroll dan drawer
+  hilang. Mode tema sekarang state Compose bersama (XyThemeState) - semua
+  layar recompose sendiri, langsung, tanpa membangun ulang activity.
+- **Field password punya tombol mata.** Semua input password (perangkat,
+  gateway, prompt NLA saat connect) bisa dilihat/ disembunyikan - dulu
+  cuma bisa diketik buta.
+- **Sertifikat terpercaya bisa dihapus satu-satu.** Dulu satu-satunya
+  pilihan adalah menghapus SEMUA kepercayaan; sekarang tiap entri
+  host:port punya tombol hapus sendiri di layar Keamanan.
+- Impor mati dibuang.
+
+## English summary (v0.5.8)
+
+Round 9 polish: theme switching no longer recreates the activity (shared
+Compose state, no flash, scroll positions survive), every password field
+got a show/hide eye toggle (device form, gateway, NLA prompt), and trusted
+certificate entries can now be deleted individually instead of only
+clearing all.
+
 ## Catatan rilis v0.5.7
 
 Ronde 8 - fokusnya kontrol sesi, terutama resolusi/rasio yang selama ini

@@ -9,11 +9,9 @@ import android.os.Handler
 import android.os.Looper
 import android.util.Log
 import id.xydesk.remote.security.CrashLog
-import android.view.WindowManager
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.OnBackPressedCallback
-import android.content.res.Configuration
 import android.Manifest
 import android.content.pm.PackageManager
 import androidx.activity.result.contract.ActivityResultContracts
@@ -31,6 +29,8 @@ import id.xydesk.remote.core.SessionManager
 import id.xydesk.remote.core.SessionState
 import id.xydesk.remote.ui.components.XyNoticeBus
 import id.xydesk.remote.ui.theme.XyDeskTheme
+import id.xydesk.remote.ui.theme.XyThemeState
+import id.xydesk.remote.ui.theme.xyDark
 
 /**
  * M2 — activity sesi XyDesk (Compose): surface RDP + HUD.
@@ -154,15 +154,8 @@ class XyDeskSessionActivity : ComponentActivity() {
             // mode terang panel dan dialog di sini tidak nyambung dengan sisa
             // app). Tombol HUD yang menempel di gambar remote tetap punya
             // warna tetap supaya selalu terbaca.
-            val systemDark = (resources.configuration.uiMode and
-                Configuration.UI_MODE_NIGHT_MASK) == Configuration.UI_MODE_NIGHT_YES
-            val themePrefs = appPrefs ?: AppPrefs(this)
-            val dark = when (themePrefs.themeMode) {
-                1 -> true
-                2 -> false
-                else -> systemDark
-            }
-            XyDeskTheme(dark = dark) {
+            XyThemeState.init(appPrefs ?: AppPrefs(this))
+            XyDeskTheme(dark = xyDark()) {
                 XyDeskSessionScreen(
                     profile = profile,
                     manager = manager,

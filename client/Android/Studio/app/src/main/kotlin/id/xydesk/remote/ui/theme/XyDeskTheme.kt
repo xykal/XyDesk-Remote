@@ -5,7 +5,10 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Shapes
 import androidx.compose.material3.darkColorScheme
 import androidx.compose.material3.lightColorScheme
+import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.Font
@@ -14,6 +17,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import id.xydesk.remote.R
+import id.xydesk.remote.ui.AppPrefs
 
 // =============================================================
 // XyDesk design tokens.
@@ -111,6 +115,48 @@ val XyShapes = Shapes(
     large = RoundedCornerShape(14.dp),
     extraLarge = RoundedCornerShape(18.dp),
 )
+
+/**
+ * Mode tema sebagai state Compose yang di-share lintas activity.
+ *
+ * Dulu mengganti tema memanggil Activity.recreate() — seluruh layar
+ * kedip-kedip dan state UI (posisi scroll, drawer) ikut reset. Sekarang
+ * mode disimpan di sini: mengubahnya membuat semua layar yang memakai
+ * [xyDark] recompose sendiri, tanpa recreate.
+ *
+ * [mode] bernilai Int.MIN_VALUE sampai [init] dipanggil di activity
+ * pertama (membaca preferensi tersimpan).
+ */
+object XyThemeState {
+    const val FOLLOW_SYSTEM = 0
+    const val DARK = 1
+    const val LIGHT = 2
+
+    var mode by mutableIntStateOf(Int.MIN_VALUE)
+        private set
+
+    /** Baca preferensi sekali per proses; panggil di setContent activity. */
+    fun init(prefs: AppPrefs) {
+        if (mode == Int.MIN_VALUE) mode = prefs.themeMode
+    }
+
+    /** Set dari UI pengaturan: tulis prefs + state sekaligus. */
+    fun set(prefs: AppPrefs, value: Int) {
+        mode = value
+        prefs.themeMode = value
+    }
+}
+
+/**
+ * Gelap atau tidaknya app SAAT INI, sebagai state: ikut pilihan user,
+ * fallback ke tema sistem.
+ */
+@Composable
+fun xyDark(): Boolean = when (XyThemeState.mode) {
+    XyThemeState.DARK -> true
+    XyThemeState.LIGHT -> false
+    else -> isSystemInDarkTheme()
+}
 
 @Composable
 fun XyDeskTheme(

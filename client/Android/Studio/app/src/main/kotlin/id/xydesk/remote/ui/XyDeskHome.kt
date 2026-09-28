@@ -2,7 +2,6 @@
 
 package id.xydesk.remote.ui
 
-import android.app.Activity
 import android.content.Context
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -618,7 +617,3 @@ private fun appVersion(context: Context): String = runCatching {
     context.packageManager.getPackageInfo(context.packageName, 0).versionName
 }.getOrNull() ?: "?"
 
-/** Dipakai activity untuk memaksa ulang komposisi saat mode tema berubah. */
-internal fun recreateActivity(context: Context) {
-    (context as? Activity)?.recreate()
-}

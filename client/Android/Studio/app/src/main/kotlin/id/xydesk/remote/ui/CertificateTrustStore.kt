@@ -38,6 +38,14 @@ class CertificateTrustStore(context: Context) {
             .sortedBy { it.first }
     }
 
+    /**
+     * Hapus satu entri memakai kunci persis seperti balikan [entries]
+     * ("host:port" — string mentah dipakai apa adanya supaya IPv6 benar).
+     */
+    fun removeKey(hostPort: String) {
+        sp.edit().remove("fp.$hostPort").apply()
+    }
+
     fun clear() {
         val e = sp.edit()
         sp.all.keys.filter { it.startsWith("fp.") }.forEach { e.remove(it) }

@@ -358,8 +358,10 @@ private fun GeneralSection(appPrefs: AppPrefs, onShowLog: () -> Unit) {
                 selectedIndex = themeMode,
                 onSelect = {
                     themeMode = it
-                    appPrefs.themeMode = it
-                    recreateActivity(context)
+                    // Tanpa recreate(): state tema reaktif, semua layar
+                    // recompose sendiri (dulu seluruh activity di-recreate,
+                    // layar kedip dan posisi scroll hilang).
+                    id.xydesk.remote.ui.theme.XyThemeState.set(appPrefs, it)
                 },
                 modifier = Modifier.fillMaxWidth(),
             )
@@ -698,15 +700,38 @@ private fun SecuritySection() {
                 )
             } else {
                 entries.take(12).forEach { (host, fingerprint) ->
-                    Column(Modifier.padding(vertical = 4.dp)) {
-                        Text(host, style = MaterialTheme.typography.titleSmall)
-                        Text(
-                            fingerprint,
-                            style = MaterialTheme.typography.bodySmall,
-                            fontFamily = FontFamily.Monospace,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis,
-                        )
+                    Row(
+                        Modifier.padding(vertical = 4.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    ) {
+                        Column(Modifier.weight(1f)) {
+                            Text(host, style = MaterialTheme.typography.titleSmall)
+                            Text(
+                                fingerprint,
+                                style = MaterialTheme.typography.bodySmall,
+                                fontFamily = FontFamily.Monospace,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
+                            )
+                        }
+                        // Hapus per entri — dulu satu-satunya jalan adalah
+                        // menghapus SEMUA kepercayaan sertifikat.
+                        Box(
+                            Modifier
+                                .clip(XyPill)
+                                .border(1.dp, MaterialTheme.colorScheme.outlineVariant, XyPill)
+                                .clickable {
+                                    store.removeKey(host)
+                                    tick++
+                                }
+                                .padding(horizontal = 10.dp, vertical = 5.dp),
+                        ) {
+                            Text(
+                                xy("Hapus", "Delete"),
+                                style = MaterialTheme.typography.labelMedium,
+                            )
+                        }
                     }
                 }
                 Spacer(Modifier.height(10.dp))

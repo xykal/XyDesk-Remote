@@ -31,6 +31,9 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -346,6 +349,10 @@ fun XyField(
     imeAction: ImeAction = ImeAction.Next,
     trailing: (@Composable () -> Unit)? = null,
 ) {
+    // Toggle lihat/sembunyikan password hidup otomatis di sini supaya SEMUA
+    // field password di app (perangkat, gateway, NLA) punya perilaku yang
+    // sama — dulu password cuma bisa diketik buta.
+    var pwVisible by remember { mutableStateOf(false) }
     Column(modifier.fillMaxWidth()) {
         Text(
             label.uppercase(),
@@ -363,7 +370,7 @@ fun XyField(
                 color = MaterialTheme.colorScheme.onSurface,
             ),
             cursorBrush = SolidColor(MaterialTheme.colorScheme.primary),
-            visualTransformation = if (isPassword) PasswordVisualTransformation()
+            visualTransformation = if (isPassword && !pwVisible) PasswordVisualTransformation()
             else VisualTransformation.None,
             keyboardOptions = KeyboardOptions(keyboardType = keyboardType, imeAction = imeAction),
             decorationBox = { inner ->
@@ -386,6 +393,25 @@ fun XyField(
                             )
                         }
                         inner()
+                    }
+                    if (isPassword) {
+                        Box(
+                            Modifier
+                                .clip(CircleShape)
+                                .clickable { pwVisible = !pwVisible }
+                                .padding(6.dp),
+                        ) {
+                            Icon(
+                                if (pwVisible) XyIcons.EyeOff else XyIcons.Eye,
+                                contentDescription = if (pwVisible) {
+                                    "Sembunyikan password (hide password)"
+                                } else {
+                                    "Lihat password (show password)"
+                                },
+                                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                                modifier = Modifier.size(18.dp),
+                            )
+                        }
                     }
                     trailing?.invoke()
                 }

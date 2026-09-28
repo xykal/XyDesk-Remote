@@ -1,6 +1,5 @@
 package id.xydesk.remote.ui
 
-import android.content.res.Configuration
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
@@ -12,6 +11,8 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import id.xydesk.remote.ui.theme.XyDeskTheme
+import id.xydesk.remote.ui.theme.XyThemeState
+import id.xydesk.remote.ui.theme.xyDark
 
 /**
  * Home XyDesk (Jetpack Compose).
@@ -25,15 +26,8 @@ class XyDeskHomeActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContent {
-            val prefs = AppPrefs(this)
-            val systemDark = (getResources().configuration.uiMode and
-                Configuration.UI_MODE_NIGHT_MASK) == Configuration.UI_MODE_NIGHT_YES
-            val dark = when (prefs.themeMode) {
-                1 -> true
-                2 -> false
-                else -> systemDark
-            }
-            XyDeskTheme(dark = dark) {
+            XyThemeState.init(AppPrefs(this))
+            XyDeskTheme(dark = xyDark()) {
                 var boot by remember { mutableStateOf(true) }
                 var ready by remember { mutableStateOf(false) }
                 Box(Modifier.fillMaxSize()) {
@@ -47,7 +41,7 @@ class XyDeskHomeActivity : ComponentActivity() {
                     if (boot) {
                         XySplashScreen(
                             ready = ready,
-                            dark = dark,
+                            dark = xyDark(),
                             onDone = { boot = false },
                         )
                     }

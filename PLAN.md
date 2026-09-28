@@ -519,3 +519,15 @@ notifikasi masih tergantung. Pindahkan kepemilikan:
 Tidak dieksekusi di ronde ini karena tanpa perangkat uji, refaktor lifecycle
 sesi berisiko menghasilkan kebocoran instance native — audit P1 sebelumnya
 sudah menutup kelas bug itu dan tidak boleh dibuka lagi tanpa verifikasi.
+
+## 17. M11 - ronde 9 (v0.5.8)
+
+- Tema: `XyThemeState` (ui/theme) = mode tema sebagai shared Compose state;
+  `xyDark()` menggantikan perhitungan manual di kedua activity;
+  `recreateActivity()` dihapus. Prefs tetap sumber persisten; state tetap
+  sumber reaktivitas.
+- `XyField(isPassword = true)` memasang toggle mata otomatis (ikon Eye/EyeOff
+  baru di XyIcons, stroke 1.7 sesuai set) - berlaku ke form perangkat,
+  gateway, dan prompt NLA tanpa ubah call-site.
+- Keamanan: `CertificateTrustStore.removeKey()` + UI hapus per entri di
+  layar Keamanan (dulu hanya "hapus semua").
