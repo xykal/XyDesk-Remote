@@ -149,6 +149,10 @@ class SessionSurfaceController(private val activity: Activity) : GraphicsSink {
         // Board keyboard bawaan FreeRDP tidak dipakai (ronde 5): semua
         // pengetikan lewat keyboard HP, jadi view-nya tidak pernah dibuat.
         val im = SessionInputManager(activity, scroller, sv, tpv, null)
+        fun sendImeKey(keyCode: Int) {
+            im.onAndroidKeyEvent(KeyEvent(KeyEvent.ACTION_DOWN, keyCode))
+            im.onAndroidKeyEvent(KeyEvent(KeyEvent.ACTION_UP, keyCode))
+        }
 
         // Keyboard HP -> mapper tombol inti. SessionView menanyakan koneksi
         // input ke sini; karakter diubah jadi KeyEvent supaya scancode,
@@ -157,9 +161,9 @@ class SessionSurfaceController(private val activity: Activity) : GraphicsSink {
             override fun onText(text: String) {
                 text.forEach { ch ->
                     when (ch) {
-                        '\n' -> sendImeKey(im, KeyEvent.KEYCODE_ENTER)
-                        '\t' -> sendImeKey(im, KeyEvent.KEYCODE_TAB)
-                        '\b' -> sendImeKey(im, KeyEvent.KEYCODE_DEL)
+                        '\n' -> sendImeKey(KeyEvent.KEYCODE_ENTER)
+                        '\t' -> sendImeKey(KeyEvent.KEYCODE_TAB)
+                        '\b' -> sendImeKey(KeyEvent.KEYCODE_DEL)
                         else -> im.processUnicodeKey(ch.code)
                     }
                 }

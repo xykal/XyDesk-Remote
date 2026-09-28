@@ -211,6 +211,7 @@ fun XyDeskSessionScreen(
     // retry tanpa batas dengan backoff (2, 4, 8, 16, lalu 30 detik), dan biarkan
     // user menghentikannya sendiri. Error autentikasi/cert tetap berhenti retry.
     LaunchedEffect(state, everConnected, userDisconnect, applyingResolution) {
+        val currentState = state
         if (!everConnected || userDisconnect || applyingResolution || !prefs.autoReconnect) {
             if (userDisconnect || applyingResolution || !prefs.autoReconnect) {
                 reconnecting = false
@@ -218,10 +219,10 @@ fun XyDeskSessionScreen(
             }
             return@LaunchedEffect
         }
-        val retryable = state is SessionState.Disconnected ||
-            (state is SessionState.Error && state.code in setOf("unreachable", "connect_timeout"))
+        val retryable = currentState is SessionState.Disconnected ||
+            (currentState is SessionState.Error && currentState.code in setOf("unreachable", "connect_timeout"))
         if (!retryable) {
-            if (state is SessionState.Error) {
+            if (currentState is SessionState.Error) {
                 reconnecting = false
                 waitingForNativeRelease = false
             }
