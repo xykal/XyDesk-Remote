@@ -177,6 +177,8 @@ fun XyDeskSessionScreen(
     var everConnected by remember { mutableStateOf(false) }
     var reconnectAttempt by remember { mutableIntStateOf(0) }
     var userDisconnect by remember { mutableStateOf(false) }
+    /** Clipboard terakhir yang datang dari remote (tombol "tempel ke HP"). */
+    var lastRemoteClipboard by remember { mutableStateOf<String?>(null) }
 
     LaunchedEffect(state) {
         if (state is SessionState.Connected) {
@@ -239,6 +241,7 @@ fun XyDeskSessionScreen(
             override fun onRemoteClipboardText(text: String) {
                 val cm = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
                 cm.setPrimaryClip(ClipData.newPlainText("rdp", text))
+                lastRemoteClipboard = text
             }
         })
     }
@@ -589,6 +592,34 @@ fun XyDeskSessionScreen(
                     }
                 },
                 onToggleKeyboard = { toggleKeyboard() },
+                lastClipboard = lastRemoteClipboard,
+                onSendPhoneClipboard = {
+                    val cm = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+                    val text = cm.primaryClip?.takeIf { it.itemCount > 0 }
+                        ?.getItemAt(0)?.coerceToText(context)?.toString().orEmpty()
+                    if (text.isEmpty()) {
+                        notice.show(xyNow("Clipboard HP kosong", "Phone clipboard is empty"))
+                    } else if (manager.sendClipboardData(text)) {
+                        notice.show(xyNow("Clipboard HP dikirim ke remote", "Phone clipboard sent to remote"))
+                    } else {
+                        notice.show(xyNow("Gagal mengirim clipboard", "Failed to send clipboard"))
+                    }
+                },
+                onPasteRemoteClipboard = {
+                    val text = lastRemoteClipboard
+                    if (text.isNullOrEmpty()) {
+                        notice.show(
+                            xyNow(
+                                "Belum ada teks dari remote — salin dulu di sana",
+                                "No text from remote yet — copy something there first",
+                            ),
+                        )
+                    } else {
+                        val cm = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+                        cm.setPrimaryClip(ClipData.newPlainText("rdp", text))
+                        notice.show(xyNow("Teks remote disalin ke HP", "Remote text copied to phone"))
+                    }
+                },
                 // Sesi lain: buka home tanpa memutus sesi ini (keep-alive
                 // default menyala, jadi sesi tetap jalan di latar).
                 onOpenHome = {

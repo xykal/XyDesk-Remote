@@ -123,6 +123,9 @@ fun SessionControls(
     onToggleTrackpad: () -> Unit,
     onToggleKeyboard: () -> Unit = {},
     onOpenHome: () -> Unit = {},
+    lastClipboard: String? = null,
+    onSendPhoneClipboard: () -> Unit = {},
+    onPasteRemoteClipboard: () -> Unit = {},
     onSendText: (String) -> Unit,
     coreInfo: List<String> = emptyList(),
     notice: XyNoticeState,
@@ -414,6 +417,9 @@ fun SessionControls(
                 onSendTextClick = { textValue = ""; textOpen = true },
                 keyboardShown = keyboardShown,
                 onKeyboardShownChange = onKeyboardShownChange,
+                lastClipboard = lastClipboard,
+                onSendPhoneClipboard = onSendPhoneClipboard,
+                onPasteRemoteClipboard = onPasteRemoteClipboard,
                 onClose = { rightOpen = false },
             )
         }
@@ -635,6 +641,9 @@ private fun SessionPanel(
     onMappingModeChange: (Boolean) -> Unit = {},
     plate: HudPlate = HudPlate.DARK,
     onPlate: (HudPlate) -> Unit = {},
+    lastClipboard: String? = null,
+    onSendPhoneClipboard: () -> Unit = {},
+    onPasteRemoteClipboard: () -> Unit = {},
     haptics: Boolean = true,
     onHaptics: (Boolean) -> Unit = {},
     onResetCluster: () -> Unit = {},
@@ -713,6 +722,42 @@ private fun SessionPanel(
                     XyPillButton(
                         xy("Kirim teks ke remote", "Send text to remote"),
                         onSendTextClick,
+                        primary = false,
+                        compact = true,
+                        modifier = Modifier.fillMaxWidth(),
+                    )
+                }
+
+                PanelSection(xy("Clipboard", "Clipboard")) {
+                    PanelHint(
+                        xy(
+                            "Copy di HP langsung terkirim ke remote; copy di remote " +
+                                "langsung masuk clipboard HP.",
+                            "Copying on the phone goes straight to the remote; copying " +
+                                "on the remote lands in the phone clipboard.",
+                        ),
+                    )
+                    XyPillButton(
+                        xy("Kirim clipboard HP ke remote", "Send phone clipboard to remote"),
+                        onSendPhoneClipboard,
+                        primary = false,
+                        compact = true,
+                        modifier = Modifier.fillMaxWidth(),
+                    )
+                    PanelHint(
+                        if (lastClipboard.isNullOrEmpty()) {
+                            xy("Dari remote: belum ada", "From remote: nothing yet")
+                        } else {
+                            xy(
+                                "Dari remote: {0}",
+                                "From remote: {0}",
+                                lastClipboard.take(60).replace("\n", " "),
+                            )
+                        },
+                    )
+                    XyPillButton(
+                        xy("Salin teks remote ke HP", "Copy remote text to phone"),
+                        onPasteRemoteClipboard,
                         primary = false,
                         compact = true,
                         modifier = Modifier.fillMaxWidth(),
