@@ -84,6 +84,49 @@ Ronde ini seluruhnya soal input dan kontrol:
 
 Detail teknis: `docs/HUD-BUTTONS.md` (EN) dan `docs/HUD-BUTTONS.id.md` (ID).
 
+## Catatan rilis v0.5.7
+
+Ronde 8 - fokusnya kontrol sesi, terutama resolusi/rasio yang selama ini
+membingungkan.
+
+- **Rasio dibetulkan di akarnya.** Dulu "Otomatis" mengikuti dimensi layar
+  HP mentah, jadi desktop remote bisa berbentuk 20:9: taskbar mini, teks
+  tidak terbaca, dan tidak ada yang menjelaskan kenapa. Sekarang Otomatis
+  SELALU 16:9 - ukuran standar terbesar yang muat di layar (1280x720 s/d
+  4K). Rasio layar HP masih bisa dipilih eksplisit lewat "Ikuti layar HP",
+  ditandai jelas sebagai opsi video/game, bukan default.
+- **Panel sesi ditata ulang.** Dua panel kiri/kanan tanpa label (isi nya apa
+  saja cuma bisa ditebak) diganti SATU panel dengan empat tab: Layar, Input,
+  Tombol, Sesi. Handle tunggal di tepi kanan, berlabel.
+- **Resolusi jujur.** Daftar ukuran menulis dimensinya (FHD - 1920x1080),
+  panel menampilkan "Desktop sekarang: 1920x1080 - 16:9" dihitung live,
+  dan opsi yang aktif ditandai.
+- **Keluar konsisten.** Dulu tombol power pakai "2x ketuk" sementara panel
+  pakai dialog - dua aturan untuk satu aksi. Semua jalur putus sekarang
+  membuka dialog konfirmasi yang sama.
+- **Error koneksi yang bisa ditindak.** Kode error dipetakan ke penjelasan
+  dua bahasa (host tidak menjawab / timeout / kredensial ditolak / TLS),
+  pesan teknis tetap tampil di bawah untuk laporan bug.
+- **Slider yang ngawur dibenerin.** Slider ukuran tombol HUD memungkinkan
+  32-96 padahal settingannya dipotong 40-80 (angkanya loncat balik sendiri);
+  sekarang 40-80. Slider "ukuran tombol bawaan" di Umum dibuang - nilainya
+  tidak pernah dibaca siapa pun (sisa model lama).
+- **Orientasi ikut bahasa**: Otomatis/Potret/Lanskap (dulu Auto/Portrait/
+  Landscape mentah).
+- **Rapian internal**: preferensi mati (keyboard overlay, cluster, corner,
+  pointer-follows) dibuang dari kode; ukuran live-resize selalu genap dan
+  dalam batas server; `smart169` lama otomatis dianggap Otomatis.
+
+## English summary (v0.5.7)
+
+Round 8 reworks session controls: the confusing resolution/ratio model now
+guarantees a 16:9 desktop by default (phone ratio is an explicit opt-in),
+the two unlabeled edge panels became one four-tab panel (Screen / Input /
+Buttons / Session), exit is consistent everywhere (confirm dialog),
+connection errors map to actionable bilingual hints, dead preferences and
+mismatched slider ranges were cleaned up, and rotation labels follow the
+app language.
+
 ## Catatan rilis v0.5.6
 
 Ronde 7 — yang ini beresin akar keluhannya: logika yang tidak konsisten,

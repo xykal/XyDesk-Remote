@@ -1,6 +1,7 @@
 package id.xydesk.remote.ui
 
 import android.content.Context
+import id.xydesk.remote.core.SmartResolution
 
 /** Cara input di layar sesi. */
 enum class InputMode(val title: String, val titleEn: String, val detail: String, val detailEn: String) {
@@ -32,12 +33,14 @@ enum class HudPlate(val title: String, val titleEn: String) {
     NONE("Transparan", "Transparent"),
 }
 
-enum class Corner(val title: String) { RIGHT("Kanan"), LEFT("Kiri") }
-
 /**
  * Preferensi kontrol sesi (file `xydesk.input`) + preferensi per-perangkat
  * (file `xydesk.session`). Dipisah: yang global dibawa ke semua perangkat,
- * yang per-perangkat (posisi cluster, zoom, panel) disimpan per id.
+ * yang per-perangkat (zoom, keyboard, tombol HUD) disimpan per id.
+ *
+ * Ronde 8: semua kunci model lama yang sudah tidak dibaca siapa pun
+ * (keyboard overlay, cluster, panel, corner) dibuang dari kode —
+ * nilainya dibiarkan di file supaya tidak ada migrasi yang bisa pecah.
  */
 class SessionPrefs(context: Context) {
 
@@ -65,14 +68,6 @@ class SessionPrefs(context: Context) {
     var hudPlate: HudPlate
         get() = HudPlate.entries.getOrElse(input.getInt(KEY_HUD_PLATE, 0)) { HudPlate.DARK }
         set(v) = input.edit().putInt(KEY_HUD_PLATE, v.ordinal).apply()
-
-    var pointerFollows: Boolean
-        get() = input.getBoolean(KEY_POINTER_FOLLOW, true)
-        set(v) = input.edit().putBoolean(KEY_POINTER_FOLLOW, v).apply()
-
-    var keyboardCorner: Corner
-        get() = Corner.entries.getOrElse(input.getInt(KEY_KEYBOARD_CORNER, 0)) { Corner.RIGHT }
-        set(v) = input.edit().putInt(KEY_KEYBOARD_CORNER, v.ordinal).apply()
 
     var haptics: Boolean
         get() = input.getBoolean(KEY_HAPTICS, true)
@@ -105,11 +100,6 @@ class SessionPrefs(context: Context) {
         get() = input.getFloat(KEY_SCROLL_SPEED, 1f).coerceIn(0.4f, 2.5f)
         set(v) = input.edit().putFloat(KEY_SCROLL_SPEED, v.coerceIn(0.4f, 2.5f)).apply()
 
-    /** Ukuran cluster tombol mouse (pengali). */
-    var clusterScale: Float
-        get() = input.getFloat(KEY_CLUSTER_SCALE, 1f).coerceIn(0.7f, 1.8f)
-        set(v) = input.edit().putFloat(KEY_CLUSTER_SCALE, v.coerceIn(0.7f, 1.8f)).apply()
-
     var showLeft: Boolean
         get() = input.getBoolean(KEY_BTN_LEFT, true)
         set(v) = input.edit().putBoolean(KEY_BTN_LEFT, v).apply()
@@ -139,16 +129,6 @@ class SessionPrefs(context: Context) {
         get() = input.getFloat(KEY_HUD_SIZE, 56f).coerceIn(40f, 80f)
         set(v) = input.edit().putFloat(KEY_HUD_SIZE, v.coerceIn(40f, 80f)).apply()
 
-    /** Skala keyboard overlay (pengali ukuran tombol). */
-    var keyboardScale: Float
-        get() = input.getFloat(KEY_KB_SCALE, 1f).coerceIn(0.7f, 1.6f)
-        set(v) = input.edit().putFloat(KEY_KB_SCALE, v.coerceIn(0.7f, 1.6f)).apply()
-
-    /** Keyboard overlay tampil otomatis saat sesi terhubung. */
-    var keyboardAutoOpen: Boolean
-        get() = input.getBoolean(KEY_KB_AUTO, false)
-        set(v) = input.edit().putBoolean(KEY_KB_AUTO, v).apply()
-
     // ---- per perangkat ----
 
     fun zoom(id: String): Float = device.getFloat("$id.zoom", 1f)
@@ -157,28 +137,10 @@ class SessionPrefs(context: Context) {
 
     fun setZoom(id: String, zoom: Float) = device.edit().putFloat("$id.zoom", zoom).apply()
 
-    fun panelShown(id: String): Boolean = device.getBoolean("$id.panel", false)
-
-    fun setPanelShown(id: String, shown: Boolean) {
-        device.edit().putBoolean("$id.panel", shown).apply()
-    }
-
     fun keyboardShown(id: String): Boolean = device.getBoolean("$id.keyboard", false)
 
     fun setKeyboardShown(id: String, shown: Boolean) {
         device.edit().putBoolean("$id.keyboard", shown).apply()
-    }
-
-    /** Posisi cluster tombol mouse, ternormalisasi 0..1 dari kiri-atas. */
-    fun clusterX(id: String): Float = device.getFloat("$id.cluster.x", 0.72f).coerceIn(0f, 1f)
-
-    fun clusterY(id: String): Float = device.getFloat("$id.cluster.y", 0.55f).coerceIn(0f, 1f)
-
-    fun setCluster(id: String, x: Float, y: Float) {
-        device.edit()
-            .putFloat("$id.cluster.x", x.coerceIn(0f, 1f))
-            .putFloat("$id.cluster.y", y.coerceIn(0f, 1f))
-            .apply()
     }
 
     /**
@@ -203,48 +165,24 @@ class SessionPrefs(context: Context) {
         device.edit().putString("$deviceId.hudkeys", HudKey.encode(keys)).apply()
     }
 
-    /** Keyboard overlay tampil (terpisah dari keyboard sistem/IME). */
-    fun overlayShown(id: String): Boolean = device.getBoolean("$id.overlay", false)
-
-    fun setOverlayShown(id: String, shown: Boolean) {
-        device.edit().putBoolean("$id.overlay", shown).apply()
-    }
-
-    /** Posisi keyboard overlay, ternormalisasi 0..1 dari kiri-atas. */
-    fun overlayX(id: String): Float = device.getFloat("$id.overlay.x", 0.06f).coerceIn(0f, 1f)
-
-    fun overlayY(id: String): Float = device.getFloat("$id.overlay.y", 0.62f).coerceIn(0f, 1f)
-
-    fun setOverlayPos(id: String, x: Float, y: Float) {
-        device.edit()
-            .putFloat("$id.overlay.x", x.coerceIn(0f, 1f))
-            .putFloat("$id.overlay.y", y.coerceIn(0f, 1f))
-            .apply()
-    }
-
     companion object {
         private const val INPUT_FILE = "xydesk.input"
         private const val DEVICE_FILE = "xydesk.session"
         private const val KEY_INPUT_MODE = "input_mode"
         private const val KEY_POINTER_STYLE = "pointer_style"
         private const val KEY_POINTER_SIZE = "pointer_size"
-        private const val KEY_POINTER_FOLLOW = "pointer_follow"
-    private const val KEY_AUTO_RECONNECT = "auto_reconnect"
-    private const val KEY_HUD_TIP = "hud_tip"
-    private const val KEY_HUD_PLATE = "hud_plate"
-        private const val KEY_KEYBOARD_CORNER = "keyboard_corner"
+        private const val KEY_AUTO_RECONNECT = "auto_reconnect"
+        private const val KEY_HUD_TIP = "hud_tip"
+        private const val KEY_HUD_PLATE = "hud_plate"
         private const val KEY_AUTO_FIT = "auto_fit"
         private const val KEY_HAPTICS = "haptics"
         private const val KEY_SCROLL_SPEED = "scroll_speed"
-        private const val KEY_CLUSTER_SCALE = "cluster_scale"
         private const val KEY_BTN_LEFT = "btn_left"
         private const val KEY_BTN_RIGHT = "btn_right"
         private const val KEY_BTN_MIDDLE = "btn_middle"
         private const val KEY_BTN_SCROLL = "btn_scroll"
         private const val KEY_BTN_SWITCH = "btn_switch"
         private const val KEY_HUD_SIZE = "hud_size"
-        private const val KEY_KB_SCALE = "kb_scale"
-        private const val KEY_KB_AUTO = "kb_auto"
     }
 }
 
@@ -255,88 +193,64 @@ class SessionPrefs(context: Context) {
  */
 object DisplayPrefs {
 
+    /**
+     * "Otomatis" — rasio desktop SELALU 16:9: ukuran standar terbesar yang
+     * muat di layar saat connect, dan 16:9 pas viewport saat live-resize.
+     * Dulu nilai ini mengikuti dimensi layar HP mentah, jadi desktop bisa
+     * jadi 20:9 — taskbar mini dan teks tidak terbaca. Itu yang bikin
+     * "rasionya membingungkan".
+     */
     const val AUTOMATIC = "automatic"
 
     /**
-     * Pilihan resolusi remote. "Otomatis" = ikut ukuran layar HP (fit).
-     * Ukuran lain dikirim ke server sebagai `/size:WxH`; server yang
-     * mendukung dynamic resolution langsung menyesuaikan desktop-nya.
+     * "Ikuti layar HP" — eksplisit pakai dimensi layar HP apa adanya
+     * (rasio 20:9 dst). Untuk video fullscreen/game, bukan kerja desktop.
      */
-    /** Preset pintar: resolusi 16:9 standar terbesar yang masih muat di layar HP. */
+    const val FOLLOW = "follow"
+
+    /** Nilai lama; diperlakukan sama dengan [AUTOMATIC] saat dibaca. */
     const val SMART_16_9 = "smart169"
 
     /**
-     * Pilihan resolusi remote, dikelompokkan per rasio. Rasio ditulis apa
-     * adanya supaya user tahu 1920x1080 itu 16:9 dan tidak menebak-nebak.
-     * "Otomatis" = persis ukuran layar HP (bisa 20:9, tampil penuh tanpa
-     * bar hitam), "16:9 pas layar" = standar Windows yang paling dekat
-     * dengan layar HP (paling aman untuk desktop Windows).
-     */
-    /**
-     * Daftar resolusi untuk UI. Cuma 16:9 yang ditawarkan: rasio lain di
-     * FreeRDP sering tidak pas (desktop melar / taskbar terpotong), dan yang
-     * benar-benar dipakai user adalah 16:9. "Otomatis" = ukuran area gambar
-     * di HP, "16:9 pas layar" = 16:9 standar terbesar yang muat di layar HP.
+     * Daftar resolusi untuk UI. Kelompok pertama = pintar (Otomatis 16:9,
+     * Ikuti layar HP); kelompok kedua = ukuran 16:9 standar dengan dimensi
+     * ditulis apa adanya supaya tidak ada lagi tebakan "HD 720 itu berapa?".
      */
     val resolutionGroups: List<ResolutionGroup> = listOf(
         ResolutionGroup(
-            "Otomatis", "Automatic",
+            "Pintar", "Smart",
             listOf(
-                ResolutionOption(AUTOMATIC, "Layar HP (otomatis)", "Phone screen (automatic)"),
-                ResolutionOption(SMART_16_9, "16:9 pas layar", "16:9 fit to screen"),
+                ResolutionOption(
+                    AUTOMATIC,
+                    "Otomatis — 16:9 pas layar",
+                    "Automatic — best 16:9 fit",
+                ),
+                ResolutionOption(
+                    FOLLOW,
+                    "Ikuti layar HP (rasio HP)",
+                    "Follow phone screen (phone ratio)",
+                ),
             ),
         ),
         ResolutionGroup(
             "16:9 standar", "16:9 standard",
             listOf(
-                ResolutionOption("1280x720", "HD 720", "HD 720"),
-                ResolutionOption("1600x900", "900p", "900p"),
-                ResolutionOption("1920x1080", "FHD 1080", "FHD 1080"),
-                ResolutionOption("2560x1440", "QHD 1440", "QHD 1440"),
-                ResolutionOption("3840x2160", "4K 2160", "4K 2160"),
+                ResolutionOption("1280x720", "HD 720 · 1280×720", "HD 720 · 1280×720"),
+                ResolutionOption("1600x900", "900p · 1600×900", "900p · 1600×900"),
+                ResolutionOption("1920x1080", "FHD · 1920×1080", "FHD · 1920×1080"),
+                ResolutionOption("2560x1440", "QHD · 2560×1440", "QHD · 2560×1440"),
+                ResolutionOption("3840x2160", "4K · 3840×2160", "4K · 3840×2160"),
             ),
         ),
     )
 
-    /** Resolusi potret (dipakai saat layar HP diputar). */
-    val portraitResolutions = listOf(
-        "720x1280" to "720x1280",
-        "1080x1920" to "1080x1920",
-        "1200x1920" to "1200x1920",
-        "1440x2560" to "1440x2560",
-    )
-
-    /**
-     * Daftar datar untuk UI pemilihan (layar perangkat, panel sesi). Cuma 16:9
-     * + dua opsi pintar: rasio lain memang tidak pas di FreeRDP, jadi tidak
-     * ditawarkan supaya tidak ada desktop melar/terpotong.
-     */
+    /** Daftar datar untuk UI pemilihan (layar perangkat & sesi). */
     val resolutionOptions: List<ResolutionOption> = resolutionGroups.flatMap { it.items }
 
-    /** Data lama: daftar (value, label Indonesia). Masih dipakai migrasi/nama. */
-    val resolutions: List<Pair<String, String>> =
-        resolutionOptions.map { it.value to it.id } + portraitResolutions
-
-    /**
-     * Ubah preset jadi ukuran nyata. SMART_16_9 memilih resolusi 16:9 standar
-     * terbesar yang sisi pendeknya tidak melebihi sisi pendek layar HP, jadi
-     * desktop selalu 16:9 tapi tetap muat di layar.
-     */
-    fun resolvePreset(context: Context, preset: String?): String? {
-        if (preset.isNullOrBlank() || preset == AUTOMATIC) return null
-        if (preset != SMART_16_9) return preset
-        val dm = context.resources.displayMetrics
-        val minSide = minOf(dm.widthPixels, dm.heightPixels)
-        val candidates = listOf(
-            1280 to 720, 1600 to 900, 1920 to 1080, 2560 to 1440, 3840 to 2160,
-        )
-        val pick = candidates.lastOrNull { it.second <= minSide } ?: candidates.first()
-        return "${pick.first}x${pick.second}"
-    }
-
+    /** Nilai orientasi yang disimpan. Label UI dilokalkan saat render. */
     val rotations = listOf("Auto", "Portrait", "Landscape")
 
-    /** Judul grup/opsi resolusi (dua bahasa, dipakai layar sesi & perangkat). */
+    /** Judul grup/opsi resolusi (dua bahasa). */
     data class ResolutionGroup(
         val id: String,
         val en: String,
@@ -359,7 +273,9 @@ object DisplayPrefs {
         context.applicationContext.getSharedPreferences(FILE, Context.MODE_PRIVATE)
 
     fun resolution(context: Context, id: String): String =
-        sp(context).getString("$id.resolution", AUTOMATIC) ?: AUTOMATIC
+        sp(context).getString("$id.resolution", AUTOMATIC)?.let {
+            if (it == SMART_16_9) AUTOMATIC else it
+        } ?: AUTOMATIC
 
     fun setResolution(context: Context, id: String, value: String) =
         sp(context).edit().putString("$id.resolution", value).apply()
@@ -370,7 +286,7 @@ object DisplayPrefs {
     fun setRotation(context: Context, id: String, value: String) =
         sp(context).edit().putString("$id.rotation", value).apply()
 
-    /** Skala tampilan awal saat sesi dibuka, 100..200 (%). */
+    /** Skala tampilan awal saat sesi dibuka, 80..200 (%). */
     fun dpi(context: Context, id: String): Int =
         sp(context).getInt("$id.dpi", 100).coerceIn(80, 200)
 

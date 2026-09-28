@@ -336,7 +336,6 @@ private fun GeneralSection(appPrefs: AppPrefs, onShowLog: () -> Unit) {
     var pointerStyle by remember { mutableIntStateOf(prefs.pointerStyle.ordinal) }
     var pointerSize by remember { mutableStateOf(prefs.pointerSize) }
     var scrollSpeed by remember { mutableStateOf(prefs.scrollSpeed) }
-    var clusterScale by remember { mutableStateOf(prefs.clusterScale) }
     var haptics by remember { mutableStateOf(prefs.haptics) }
     var lang by remember { mutableStateOf(LangPrefs.current()) }
     var showLeft by remember { mutableStateOf(prefs.showLeft) }
@@ -471,24 +470,6 @@ private fun GeneralSection(appPrefs: AppPrefs, onShowLog: () -> Unit) {
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
-            Spacer(Modifier.height(8.dp))
-            Text(
-                xy(
-                    "Ukuran tombol bawaan: {0}%",
-                    "Default button size: {0}%",
-                    (clusterScale * 100).toInt(),
-                ),
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-            XySlider(
-                value = clusterScale,
-                onValueChange = {
-                    clusterScale = it
-                    prefs.clusterScale = it
-                },
-                valueRange = 0.7f..1.8f,
-            )
             XyToggleRow(
                 title = xy("Tombol kiri", "Left button"),
                 checked = showLeft,
@@ -572,7 +553,7 @@ private fun GeneralSection(appPrefs: AppPrefs, onShowLog: () -> Unit) {
             XySlider(
                 value = hudSize,
                 onValueChange = { hudSize = it; prefs.hudButtonSize = it },
-                valueRange = 32f..96f,
+                valueRange = 40f..80f,
             )
         }
 

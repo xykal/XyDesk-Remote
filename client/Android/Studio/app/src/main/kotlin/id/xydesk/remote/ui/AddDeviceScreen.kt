@@ -293,6 +293,16 @@ fun AddDeviceScreen(
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
+                Text(
+                    xy(
+                        "Default \"Otomatis\" selalu 16:9 (pas untuk desktop Windows). " +
+                            "\"Ikuti layar HP\" memakai rasio HP — untuk video/game.",
+                        "The \"Automatic\" default is always 16:9 (right for Windows " +
+                            "desktops). \"Follow phone screen\" uses the phone ratio — for video/games.",
+                    ),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
                 Spacer(Modifier.height(8.dp))
                 Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
                     DisplayPrefs.resolutionOptions.chunked(2).forEachIndexed { rowIndex, row ->

@@ -140,15 +140,25 @@ class SessionManager(context: Context) {
         val base = RdpUri.build(profile, options)
         val prefs = appContext.getSharedPreferences("xydesk.remote.display", Context.MODE_PRIVATE)
         val key = "${profile.id}.resolution"
-        if (!prefs.contains(key)) return base
-        val resolution = prefs.getString(key, "automatic") ?: "automatic"
-        if (resolution == "automatic") return base
-        val parts = resolution.split('x')
-        val width = parts.getOrNull(0)?.toIntOrNull()
-        val height = parts.getOrNull(1)?.toIntOrNull()
-        if (width == null || height == null || width !in 640..8192 || height !in 480..8192) {
-            ConnectionLog.add("CM: invalid remote resolution preset; fallback automatic")
-            return base
+        val stored = if (prefs.contains(key)) prefs.getString(key, null) else null
+        // Model resolusi ronde 8:
+        //  - null / "automatic" / "smart169" (nilai lama) = Otomatis: rasio
+        //    SELALU 16:9 (terbesar yang muat di layar) — bukan rasio layar HP.
+        //  - "follow" = eksplisit ikuti dimensi layar HP (tanpa /size).
+        //  - selain itu = "WxH" eksplisit.
+        val resolution = when (stored) {
+            null, "automatic", "smart169" -> SmartResolution.forScreen(appContext).also {
+                ConnectionLog.add("CM: resolusi otomatis (16:9 pas layar) -> $it")
+            }
+            "follow" -> null
+            else -> stored
+        }
+        if (resolution == null) return base
+        if (SmartResolution.parse(resolution) == null) {
+            ConnectionLog.add("CM: preset resolusi tidak valid; fallback otomatis 16:9")
+            return base.buildUpon()
+                .appendQueryParameter("size", SmartResolution.forScreen(appContext))
+                .build()
         }
         ConnectionLog.add("CM: remote resolution preset=$resolution")
         return base.buildUpon().appendQueryParameter("size", resolution).build()

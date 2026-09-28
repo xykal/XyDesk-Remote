@@ -469,3 +469,53 @@ Berikutnya:
   tombol, ganti resolusi live.
 - Teardown channel saat disconnect; reset fullscreen setelah reconnect.
 - Pangkas lib native yang tidak dipakai.
+
+## 16. M10 - ronde 8 (v0.5.7) & desain M2.1 (sesi milik service)
+
+### Dikode di ronde ini
+
+- **Panel sesi satu-lembar bertab.** Dua panel kiri/kanan tanpa label digantikan
+  SATU panel bertab: Layar / Input / Tombol / Sesi. Handle tunggal di tepi kanan
+  berlabel "Menu". Dua aturan keluar (2x ketuk di rail vs dialog di panel)
+  disatukan: semua jalur putus membuka dialog konfirmasi yang sama.
+- **Model resolusi 16:9.** `SmartResolution` (core-rdp) jadi satu sumber
+  kebenaran: Otomatis = 16:9 terbesar yang muat (screen-time via `forScreen`,
+  live-resize via `forViewport`, selalu genap + dalam batas server). "Ikuti
+  layar HP" jadi opsi eksplisit (`follow`), bukan default. `smart169` lama
+  dialiasikan ke Otomatis. Panel menampilkan desktop sekarang + label rasio
+  (gcd; 16:9 dideteksi mendekat).
+- **Mapping error koneksi** (`ui/RdpErrors.kt`): kode `unreachable`,
+  `connect_timeout`, `connect_failed` (+kata kunci kredensial/TLS),
+  `connect_exception` -> penjelasan dua bahasa yang bisa ditindak; pesan
+  mentah tetap tampil di bawah untuk laporan bug.
+- **Prefs mati dibuang**: `clusterScale` (slider di Umum menulis nilai yang
+  tidak dibaca siapa pun), `keyboardScale`, `keyboardAutoOpen`,
+  `keyboardCorner`, `pointerFollows`, overlay keyboard, posisi cluster,
+  `panelShown`. Nilai lama di file dibiarkan; tidak ada migrasi.
+- **Konsistensi kecil**: slider ukuran HUD 40..80 (sama dengan clamp pref;
+  dulu 32..96 lalu dipotong diam-diam), label orientasi dilokalkan
+  (Otomatis/Potret/Lanskap), slider pointer "Ukuran pointer".
+
+### M2.1 — desain "sesi milik service" (BELUM dikode; butuh uji perangkat)
+
+Masalah: `SessionManager` hidup di `XyDeskSessionActivity`. Android boleh
+membunuh activity di latar meski foreground service jalan — sesi mati dengan
+notifikasi masih tergantung. Pindahkan kepemilikan:
+
+1. `XySessionService` jadi pemilik `SessionManager` (start bound + started):
+   `connect()` dipanggil service; activity hanya BIND, set `GraphicsSink`
+   (surface milik activity) dan meneruskan input.
+2. Urutan kritis "sink sebelum connect": service menahan connect sampai
+   activity pertama binding dan mendaftar sink (`pendingConnect` state);
+   kalau activity dibunuh lalu dibuka lagi, surface baru di-set ulang tanpa
+   memutus sesi (rebind, bukan reconnect).
+3. Multi-sesi: map `sessionId -> SessionManager` di service; activity bind
+   per id; registry sesi pindah ke service.
+4. Kelemahan yang harus diuji di perangkat: transisi kill/recreate activity,
+   permisi `specialUse` FGS saat sesi tidak pernah tampil, dan drawing
+   ulang frame pertama setelah rebind (frame buffer native tidak otomatis
+   di-replay).
+
+Tidak dieksekusi di ronde ini karena tanpa perangkat uji, refaktor lifecycle
+sesi berisiko menghasilkan kebocoran instance native — audit P1 sebelumnya
+sudah menutup kelas bug itu dan tidak boleh dibuka lagi tanpa verifikasi.

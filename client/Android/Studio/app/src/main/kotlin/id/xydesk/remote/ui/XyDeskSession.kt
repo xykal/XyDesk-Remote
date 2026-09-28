@@ -66,6 +66,7 @@ import id.xydesk.remote.XySessionService
 import id.xydesk.remote.core.ConnectionLog
 import id.xydesk.remote.core.ConnectionProfile
 import id.xydesk.remote.core.SessionManager
+import id.xydesk.remote.core.SmartResolution
 import id.xydesk.remote.core.SessionState
 import id.xydesk.remote.core.TelemetrySample
 import id.xydesk.remote.ui.components.XyIcons
@@ -305,14 +306,27 @@ fun XyDeskSessionScreen(
 
     val configuration = LocalConfiguration.current
     LaunchedEffect(state, configuration.screenWidthDp, configuration.screenHeightDp, viewport) {
-        if (state is SessionState.Connected && !applyingResolution &&
-            DisplayPrefs.resolution(context, profile.id) == DisplayPrefs.AUTOMATIC &&
-            viewport.width > 0 && viewport.height > 0
-        ) {
-            // Ukuran yang dikirim = area gambar yang benar-benar terlihat.
-            // Dengan begitu tidak ada bagian desktop yang jatuh di luar layar.
-            manager.resizeRemote(viewport.width, viewport.height)
-            if (autoFit) controller.fitToScreen()
+        if (state !is SessionState.Connected || applyingResolution) return@LaunchedEffect
+        if (viewport.width <= 0 || viewport.height <= 0) return@LaunchedEffect
+        when (DisplayPrefs.resolution(context, profile.id)) {
+            // Otomatis = SELALU 16:9: 16:9 terbesar yang muat di viewport.
+            // Dulu viewport mentah dikirim apa adanya — desktop bisa jadi
+            // 20:9, taskbar mini, dan itulah "rasio membingungkan".
+            DisplayPrefs.AUTOMATIC -> {
+                val size = SmartResolution.parse(
+                    SmartResolution.forViewport(viewport.width, viewport.height),
+                )
+                if (size != null) manager.resizeRemote(size.first, size.second)
+                if (autoFit) controller.fitToScreen()
+            }
+
+            // Eksplisit ikuti layar HP (rasio HP) — pilihan user, bukan default.
+            DisplayPrefs.FOLLOW -> {
+                manager.resizeRemote(viewport.width, viewport.height)
+                if (autoFit) controller.fitToScreen()
+            }
+
+            else -> Unit
         }
     }
 
@@ -597,8 +611,13 @@ fun XyDeskSessionScreen(
                     // kanal DISP (/dynamic-resolution) — tidak perlu reconnect.
                     // Kalau server menolak, baru jatuh ke jalur reconnect.
                     val size = when (preset) {
-                        DisplayPrefs.AUTOMATIC -> viewport.width to viewport.height
-                        else -> parseSize(DisplayPrefs.resolvePreset(context, preset).orEmpty())
+                        DisplayPrefs.AUTOMATIC ->
+                            SmartResolution.parse(
+                                SmartResolution.forViewport(viewport.width, viewport.height),
+                            )
+
+                        DisplayPrefs.FOLLOW -> viewport.width to viewport.height
+                        else -> parseSize(preset)
                     }
                     val live = size != null && size.first > 0 && size.second > 0 &&
                         manager.resizeRemote(size.first, size.second)
@@ -657,16 +676,6 @@ fun XyDeskSessionScreen(
                                 ),
                         )
                     }
-                },
-                onToggleTrackpad = {
-                    val next = if (InputMode.entries[inputMode] == InputMode.TRACKPAD) {
-                        InputMode.DIRECT
-                    } else {
-                        InputMode.TRACKPAD
-                    }
-                    inputMode = next.ordinal
-                    prefs.inputMode = next
-                    if (next == InputMode.DIRECT) controller.setImeVisible(keyboardShown)
                 },
                 // Teks bebas (unicode) — untuk password/URL/karakter yang
                 // tidak ada di pemetaan tombol HUD.
@@ -745,19 +754,19 @@ fun XyDeskSessionScreen(
             title = xy("Koneksi gagal", "Connection failed"),
             onDismiss = { onExit() },
         ) {
-            Text(e.message, style = MaterialTheme.typography.bodyMedium)
-            if (e.code == SessionManager.ERROR_UNREACHABLE) {
+            // Penjelasan yang bisa ditindak dulu, pesan mentah di bawahnya
+            // supaya laporan bug tetap punya isi teknis.
+            val hint = RdpErrors.hint(e.code, e.message)
+            if (hint != null) {
+                Text(xy(hint.first, hint.second), style = MaterialTheme.typography.bodyMedium)
+                Spacer(Modifier.height(6.dp))
                 Text(
-                    xy(
-                        "Host tidak menjawab di port RDP. Cek: RDP aktif " +
-                            "(Windows Pro/Server), firewall, dan alamat/tailnet benar.",
-                        "The host did not answer on the RDP port. Check that RDP is " +
-                            "enabled (Windows Pro/Server), the firewall, and the " +
-                            "address/tailnet.",
-                    ),
+                    e.message,
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
+            } else {
+                Text(e.message, style = MaterialTheme.typography.bodyMedium)
             }
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 XyPillButton(
