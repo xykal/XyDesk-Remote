@@ -81,6 +81,7 @@ import id.xydesk.remote.ui.components.rememberXyNotice
 import id.xydesk.remote.ui.components.XyPillButton
 import id.xydesk.remote.ui.components.XySpinner
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withTimeoutOrNull
 import kotlin.math.roundToInt
@@ -123,6 +124,22 @@ private fun parseSize(preset: String): Pair<Int, Int>? {
     return w to h
 }
 
+internal fun normalizedRemoteResolution(width: Int, height: Int): Pair<Int, Int> {
+    val boundedWidth = width.coerceIn(640, 8192)
+    return (boundedWidth - boundedWidth % 2) to height.coerceIn(480, 8192)
+}
+
+internal fun remoteResolutionMatches(expected: Pair<Int, Int>, width: Int, height: Int): Boolean =
+    expected.first == width && expected.second == height
+
+private suspend fun SessionManager.awaitRemoteResolution(
+    expected: Pair<Int, Int>,
+    timeoutMs: Long = 3_000,
+): Boolean = withTimeoutOrNull(timeoutMs) {
+    telemetry.first { sample -> remoteResolutionMatches(expected, sample.width, sample.height) }
+    true
+} ?: false
+
 @Composable
 fun XyDeskSessionScreen(
     profile: ConnectionProfile,
@@ -131,7 +148,7 @@ fun XyDeskSessionScreen(
     onExit: () -> Unit,
 ) {
     val context = LocalContext.current
-    val screenshotScope = rememberCoroutineScope()
+    val sessionScope = rememberCoroutineScope()
     val state by manager.state.collectAsState(initial = SessionState.Idle)
     val stage by manager.stage.collectAsState(initial = SessionManager.Stage.IDLE)
     val telemetry by manager.telemetry.collectAsState(initial = TelemetrySample.EMPTY)
@@ -165,7 +182,7 @@ fun XyDeskSessionScreen(
     var remoteDpi by remember(profile.id) {
         mutableIntStateOf(DisplayPrefs.remoteDpi(context, profile.id))
     }
-    var appliedRemoteDpi by remember(profile.id) { mutableIntStateOf(100) }
+    var lastRemoteDpiRequest by remember(profile.id) { mutableIntStateOf(100) }
     /** Ukuran area gambar (tanpa kontrol), dipakai untuk resize yang akurat. */
     var viewport by remember { mutableStateOf(IntSize.Zero) }
     /** Resize yang harus dikirim ulang setelah reconnect (ganti resolusi). */
@@ -384,7 +401,7 @@ fun XyDeskSessionScreen(
             val instance = manager.instance()
             if (instance != 0L && boundInstance != instance) {
                 boundInstance = instance
-                appliedRemoteDpi = 100
+                lastRemoteDpiRequest = 100
                 controller.bind(instance)
                 controller.setImeVisible(keyboardShown)
                 when {
@@ -407,7 +424,7 @@ fun XyDeskSessionScreen(
         if (state !is SessionState.Connected || boundInstance == 0L || pendingResize != null) {
             return@LaunchedEffect
         }
-        if (remoteDpi == appliedRemoteDpi) return@LaunchedEffect
+        if (remoteDpi == lastRemoteDpiRequest) return@LaunchedEffect
         var sent = false
         for (attempt in 0 until 8) {
             if (state !is SessionState.Connected || boundInstance == 0L) return@LaunchedEffect
@@ -420,9 +437,9 @@ fun XyDeskSessionScreen(
             kotlinx.coroutines.delay(500)
         }
         if (sent) {
-            appliedRemoteDpi = remoteDpi
+            lastRemoteDpiRequest = remoteDpi
         } else {
-            remoteDpi = appliedRemoteDpi
+            remoteDpi = lastRemoteDpiRequest
             DisplayPrefs.setRemoteDpi(context, profile.id, remoteDpi)
             notice.show(
                 xyNow(
@@ -474,27 +491,33 @@ fun XyDeskSessionScreen(
         }
     }
 
-    // Setelah reconnect karena ganti resolusi: kirim ukuran yang diminta
-    // sekali lagi lewat kanal DISP, lalu muat seluruh desktop.
+    // Setelah reconnect, verifikasi ukuran yang diminta dari telemetry server.
     LaunchedEffect(state) {
         val want = pendingResize ?: return@LaunchedEffect
         if (state is SessionState.Connected) {
-            var sent = false
-            for (attempt in 0 until 8) {
-                if (manager.resizeRemote(want.first, want.second, remoteDpi)) {
-                    sent = true
-                    break
+            var confirmed = manager.awaitRemoteResolution(want, timeoutMs = 1_500)
+            if (!confirmed) {
+                var queued = false
+                for (attempt in 0 until 8) {
+                    if (manager.resizeRemote(want.first, want.second, remoteDpi)) {
+                        queued = true
+                        break
+                    }
+                    delay(500)
                 }
-                kotlinx.coroutines.delay(500)
+                confirmed = queued && manager.awaitRemoteResolution(want)
             }
-            if (sent) {
-                appliedRemoteDpi = remoteDpi
+            if (confirmed) {
+                lastRemoteDpiRequest = remoteDpi
                 controller.fitToScreen()
+                notice.show(xyNow("Resolusi terkonfirmasi: {0} x {1}", "Resolution confirmed: {0} x {1}", want.first, want.second))
             } else {
+                val actual = if (telemetry.width > 0) "${telemetry.width} x ${telemetry.height}" else xyNow("belum dilaporkan", "not reported")
                 notice.show(
                     xyNow(
-                        "Server tidak menerima perubahan resolusi lewat Display Control.",
-                        "The server did not accept the resolution change through Display Control.",
+                        "Host melaporkan {0}; resolusi {1} x {2} tidak terkonfirmasi.",
+                        "Host reports {0}; resolution {1} x {2} was not confirmed.",
+                        actual, want.first, want.second,
                     ),
                 )
             }
@@ -760,7 +783,7 @@ fun XyDeskSessionScreen(
                 },
                 onScreenshot = {
                     val act = context as? Activity ?: return@SessionControls
-                    screenshotScope.launch {
+                    sessionScope.launch {
                         val uri: Uri = controller.captureScreenshot(act) ?: run {
                             notice.show(xyNow("Screenshot gagal atau surface belum siap", "Screenshot failed or surface is not ready"))
                             return@launch
@@ -802,9 +825,6 @@ fun XyDeskSessionScreen(
                     notice.show(xyNow("Orientasi diubah ke {0}", "Orientation set to {0}", mode))
                 },
                 onResolutionChange = { preset ->
-                    // Jalur utama: ubah desktop remote saat sesi hidup lewat
-                    // kanal DISP (/dynamic-resolution) — tidak perlu reconnect.
-                    // Kalau server menolak, baru jatuh ke jalur reconnect.
                     val size = when (preset) {
                         DisplayPrefs.AUTOMATIC ->
                             SmartResolution.parse(
@@ -814,17 +834,33 @@ fun XyDeskSessionScreen(
                         DisplayPrefs.FOLLOW -> viewport.width to viewport.height
                         else -> parseSize(preset)
                     }
-                    val live = size != null && size.first > 0 && size.second > 0 &&
-                        manager.resizeRemote(size.first, size.second, remoteDpi)
-                    if (live) {
-                        controller.fitToScreen()
-                        notice.show(xyNow("Resolusi remote: {0} x {1}", "Remote resolution: {0} x {1}", size.first, size.second))
+                    val target = size?.takeIf { it.first > 0 && it.second > 0 }
+                        ?.let { normalizedRemoteResolution(it.first, it.second) }
+                    if (target == null) {
+                        notice.show(xyNow("Resolusi tidak valid untuk viewport saat ini", "Resolution is invalid for the current viewport"))
                     } else {
-                        // Server menolak ukuran live -> reconnect dengan /size baru.
-                        pendingResize = size
-                        applyingResolution = true
-                        manager.disconnect()
-                        notice.show(xyNow("Menyambung ulang dengan resolusi baru", "Reconnecting with the new resolution"))
+                        sessionScope.launch {
+                            var queued = false
+                            for (attempt in 0 until 4) {
+                                if (manager.resizeRemote(target.first, target.second, remoteDpi)) {
+                                    queued = true
+                                    break
+                                }
+                                delay(250)
+                            }
+                            val confirmed = queued && manager.awaitRemoteResolution(target)
+                            if (confirmed) {
+                                controller.fitToScreen()
+                                notice.show(xyNow("Resolusi terkonfirmasi: {0} x {1}", "Resolution confirmed: {0} x {1}", target.first, target.second))
+                            } else {
+                                // Queue acceptance is not a server acknowledgement. Reconnect
+                                // using /size, then check the dimensions reported by telemetry.
+                                pendingResize = target
+                                applyingResolution = true
+                                manager.disconnect()
+                                notice.show(xyNow("Ukuran belum berubah; menyambung ulang dengan resolusi pilihan", "Size not confirmed; reconnecting with the selected resolution"))
+                            }
+                        }
                     }
                 },
                 onOpenKeyboard = { openKeyboard() },
@@ -837,7 +873,7 @@ fun XyDeskSessionScreen(
                     if (item == null) {
                         notice.show(xyNow("Clipboard HP kosong atau tidak bisa dibaca", "Phone clipboard is empty or unavailable"))
                     } else {
-                        screenshotScope.launch {
+                        sessionScope.launch {
                             val text = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
                                 runCatching { item.coerceToText(context)?.toString().orEmpty() }
                                     .getOrDefault("")
@@ -897,6 +933,9 @@ fun XyDeskSessionScreen(
                 // Teks bebas (unicode) — untuk password/URL/karakter yang
                 // tidak ada di pemetaan tombol HUD.
                 onSendText = { manager.sendText(it) },
+                onSendRemoteClipboardText = { text ->
+                    clipboardSyncEnabled && manager.sendClipboardData(text)
+                },
                 coreInfo = coreInfo,
                 notice = notice,
             )

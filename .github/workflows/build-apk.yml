@@ -73,9 +73,9 @@ jobs:
             "platform-tools" "platforms;android-37.2" "build-tools;37.0.0"
           echo "ANDROID_HOME=$ANDROID_HOME" >> "$GITHUB_ENV"
           echo "ANDROID_SDK_ROOT=$ANDROID_HOME" >> "$GITHUB_ENV"
-      - name: Unit test JVM (core-rdp + UI slider math)
+      - name: Unit test JVM (core-rdp + IME + app UI)
         working-directory: client/Android/Studio
-        run: ./gradlew --stacktrace --no-daemon :core-rdp:testDebugUnitTest :app:testDebugUnitTest
+        run: ./gradlew --stacktrace --no-daemon :core-rdp:testDebugUnitTest :freeRDPCore:testDebugUnitTest :app:testDebugUnitTest
       - name: Compile Kotlin (app + core-rdp)
         working-directory: client/Android/Studio
         run: ./gradlew --stacktrace --no-daemon :app:compileDebugKotlin

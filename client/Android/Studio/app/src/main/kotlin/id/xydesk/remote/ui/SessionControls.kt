@@ -130,6 +130,7 @@ fun SessionControls(
     onSendPhoneClipboard: () -> Unit = {},
     onPasteRemoteClipboard: () -> Unit = {},
     onSendText: (String) -> Unit,
+    onSendRemoteClipboardText: (String) -> Boolean = { false },
     coreInfo: List<String> = emptyList(),
     notice: XyNoticeState,
 ) {
@@ -324,8 +325,8 @@ fun SessionControls(
             XyOverlay(title = xy("Kirim teks", "Send text"), onDismiss = { textOpen = false }) {
                 Text(
                     xy(
-                        "Teks dikirim sebagai unicode ke jendela remote yang sedang fokus.",
-                        "Text is sent as unicode to the focused remote window.",
+                        "Ketik ke remote mengirim sebagai tombol. Untuk menu Paste Windows, pakai Kirim sebagai clipboard Windows; kanal clipboard harus aktif.",
+                        "Type to remote sends keystrokes. For the Windows Paste menu, use Send as Windows clipboard; clipboard channel must be enabled.",
                     ),
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     fontSize = 11.sp,
@@ -350,14 +351,14 @@ fun SessionControls(
                         modifier = Modifier.weight(1f),
                     )
                     XyPillButton(
-                        xy("Kirim", "Send"),
+                        xy("Ketik ke remote", "Type to remote"),
                         {
                             val t = textValue
                             if (t.isEmpty()) {
                                 notice.show(xyNow("Belum ada teks", "No text yet"))
                             } else {
                                 onSendText(t)
-                                notice.show(xyNow("Teks terkirim", "Text sent"))
+                                notice.show(xyNow("Teks diketik ke jendela remote", "Text typed into the remote window"))
                                 textOpen = false
                             }
                         },
@@ -365,6 +366,25 @@ fun SessionControls(
                         modifier = Modifier.weight(1f),
                     )
                 }
+                XyPillButton(
+                    xy("Kirim sebagai clipboard Windows", "Send as Windows clipboard"),
+                    {
+                        val text = textValue
+                        when {
+                            text.isEmpty() -> notice.show(xyNow("Belum ada teks", "No text yet"))
+                            !clipboardSyncEnabled -> notice.show(xyNow("Aktifkan kanal clipboard lalu sambungkan ulang", "Enable clipboard channel and reconnect"))
+                            onSendRemoteClipboardText(text) -> {
+                                notice.show(xyNow("Permintaan clipboard dikirim; tunggu sebentar sebelum Paste", "Clipboard request sent; wait briefly before Paste"))
+                                textOpen = false
+                            }
+                            else -> notice.show(xyNow("Gagal mengirim permintaan clipboard", "Failed to queue clipboard request"))
+                        }
+                    },
+                    primary = false,
+                    compact = true,
+                    modifier = Modifier.fillMaxWidth(),
+                    enabled = clipboardSyncEnabled && textValue.isNotEmpty(),
+                )
                 XyPillButton(
                     xy("Selesai", "Done"),
                     { textOpen = false },
@@ -874,15 +894,15 @@ private fun ScreenTab(
         )
     }
 
-    PanelSection(xy("DPI desktop remote", "Remote desktop DPI")) {
+    PanelSection(xy("Skala tampilan Windows (DPI)", "Windows display scale (DPI)")) {
         PanelHint(
             xy(
-                "Mengubah skala UI Windows lewat kanal Display Control. Ini berbeda dari zoom lokal dan tidak mengubah resolusi yang dipilih.",
-                "Changes Windows UI scaling through Display Control. This is separate from local zoom and does not change the selected resolution.",
+                "Meminta skala Windows melalui RDP Display Control (DesktopScaleFactor), bukan zoom lokal. Nilai hanya benar-benar berubah jika host Windows menerapkan permintaan ini.",
+                "Requests Windows scaling through RDP Display Control (DesktopScaleFactor), not local zoom. The host must apply the request for the actual scale to change.",
             ),
         )
         PanelHint(
-            xy("Desktop scale: {0}%", "Desktop scale: {0}%", remoteDpi),
+            xy("Permintaan skala Windows: {0}%", "Requested Windows scale: {0}%", remoteDpi),
         )
         val scaleOptions = DisplayPrefs.remoteDpiOptions
         val selectedScaleIndex = scaleOptions.indexOf(remoteDpi).coerceAtLeast(0)
@@ -896,8 +916,8 @@ private fun ScreenTab(
         )
         PanelHint(
             xy(
-                "Perlu dukungan server RDP dan kanal DISP/Dynamic Display. Jika tidak tersedia, nilai lama dipertahankan.",
-                "Requires RDP server support and the DISP/Dynamic Display channel. If unavailable, the previous value is kept.",
+                "Permintaan terkirim belum membuktikan Windows menerapkannya; host/kebijakan RDP bisa menolak skala remote.",
+                "A queued request does not confirm Windows applied it; the host or RDP policy may ignore remote scaling.",
             ),
         )
     }
@@ -1016,8 +1036,8 @@ private fun InputTab(
         PanelHint(
             if (clipboardSyncEnabled) {
                 xy(
-                    "Sinkronisasi otomatis aktif: clipboard teks bergerak dua arah.",
-                    "Automatic sync is on: text clipboard updates flow both ways.",
+                    "Clipboard sistem Android disinkronkan dua arah. Clipboard internal keyboard bisa hanya mengetik ke jendela; untuk menu Paste Windows, pakai Kirim sebagai clipboard Windows.",
+                    "Android system clipboard syncs both ways. A keyboard's private clipboard may only type into the window; use Send as Windows clipboard for the Paste menu.",
                 )
             } else {
                 xy(
