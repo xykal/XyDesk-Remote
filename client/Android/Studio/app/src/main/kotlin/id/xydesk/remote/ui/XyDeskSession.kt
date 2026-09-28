@@ -172,6 +172,37 @@ fun XyDeskSessionScreen(
     var cursorY by remember { mutableFloatStateOf(0f) }
     var cursorInit by remember { mutableStateOf(false) }
     var applyingResolution by remember { mutableStateOf(false) }
+    // Sesi pernah tersambung? Dipakai auto-reconnect: koneksi yang putus
+    // sendiri disambung ulang, tapi kegagalan sambung awal tidak diulang.
+    var everConnected by remember { mutableStateOf(false) }
+    var reconnectAttempt by remember { mutableIntStateOf(0) }
+    var userDisconnect by remember { mutableStateOf(false) }
+
+    LaunchedEffect(state) {
+        if (state is SessionState.Connected) {
+            everConnected = true
+            reconnectAttempt = 0
+        }
+    }
+
+    // Auto-reconnect: maksimal 3 kali, jeda bertambah (2s, 4s, 6s).
+    LaunchedEffect(state) {
+        if (state !is SessionState.Disconnected) return@LaunchedEffect
+        if (!everConnected || userDisconnect || applyingResolution) return@LaunchedEffect
+        if (!prefs.autoReconnect || reconnectAttempt >= 3) return@LaunchedEffect
+        reconnectAttempt += 1
+        val attempt = reconnectAttempt
+        notice.show(
+            xyNow(
+                "Koneksi putus — menyambung ulang ({0}/3)",
+                "Connection dropped — reconnecting ({0}/3)",
+                attempt,
+            ),
+        )
+        kotlinx.coroutines.delay(2_000L * attempt)
+        bound = false
+        manager.connect(profile)
+    }
 
     val remoteWidth = if (telemetry.width > 0) telemetry.width else 1920
     val remoteHeight = if (telemetry.height > 0) telemetry.height else 1080
@@ -515,7 +546,10 @@ fun XyDeskSessionScreen(
                     }
                     act.startActivity(Intent.createChooser(send, "Bagikan screenshot"))
                 },
-                onDisconnect = { confirmDisconnect = true },
+                onDisconnect = {
+                    userDisconnect = true
+                    confirmDisconnect = true
+                },
                 onPointerVisibilityChange = { pointerVisible = it },
                 onResetCluster = {
                     // Kembalikan tombol HUD ke set bawaan (klik kiri/kanan/
@@ -555,6 +589,19 @@ fun XyDeskSessionScreen(
                     }
                 },
                 onToggleKeyboard = { toggleKeyboard() },
+                // Sesi lain: buka home tanpa memutus sesi ini (keep-alive
+                // default menyala, jadi sesi tetap jalan di latar).
+                onOpenHome = {
+                    runCatching {
+                        context.startActivity(
+                            android.content.Intent(context, XyDeskHomeActivity::class.java)
+                                .addFlags(
+                                    android.content.Intent.FLAG_ACTIVITY_REORDER_TO_FRONT or
+                                        android.content.Intent.FLAG_ACTIVITY_NEW_TASK,
+                                ),
+                        )
+                    }
+                },
                 onToggleTrackpad = {
                     val next = if (InputMode.entries[inputMode] == InputMode.TRACKPAD) {
                         InputMode.DIRECT

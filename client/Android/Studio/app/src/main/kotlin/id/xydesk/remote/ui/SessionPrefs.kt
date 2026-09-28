@@ -87,6 +87,14 @@ class SessionPrefs(context: Context) {
         get() = input.getBoolean(KEY_AUTO_FIT, true)
         set(v) = input.edit().putBoolean(KEY_AUTO_FIT, v).apply()
 
+    /**
+     * Sambung ulang otomatis kalau koneksi putus sendiri (bukan karena user
+     * menekan putus). Maksimal 3 percobaan dengan jeda bertambah.
+     */
+    var autoReconnect: Boolean
+        get() = input.getBoolean(KEY_AUTO_RECONNECT, true)
+        set(v) = input.edit().putBoolean(KEY_AUTO_RECONNECT, v).apply()
+
     /** Pengali kecepatan scroll (1.0 = satu notch per 40px geser). */
     var scrollSpeed: Float
         get() = input.getFloat(KEY_SCROLL_SPEED, 1f).coerceIn(0.4f, 2.5f)
@@ -216,6 +224,7 @@ class SessionPrefs(context: Context) {
         private const val KEY_POINTER_STYLE = "pointer_style"
         private const val KEY_POINTER_SIZE = "pointer_size"
         private const val KEY_POINTER_FOLLOW = "pointer_follow"
+    private const val KEY_AUTO_RECONNECT = "auto_reconnect"
     private const val KEY_HUD_PLATE = "hud_plate"
         private const val KEY_KEYBOARD_CORNER = "keyboard_corner"
         private const val KEY_AUTO_FIT = "auto_fit"

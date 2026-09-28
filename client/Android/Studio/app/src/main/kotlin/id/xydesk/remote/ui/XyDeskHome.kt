@@ -35,6 +35,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -133,8 +134,8 @@ fun XyDeskHome(
             val saved = runCatching { repo.save(profile, rememberPassword) }
             if (saved.isFailure) {
                 notice.show(
-                    "Profil tidak tersimpan: " +
-                        (saved.exceptionOrNull()?.message ?: "kesalahan penyimpanan"),
+                    xyNow("Profil tidak tersimpan: ", "Profile not saved: ") +
+                        (saved.exceptionOrNull()?.message ?: xyNow("kesalahan penyimpanan", "storage error")),
                 )
             }
             route = XyRoute.Devices
@@ -152,7 +153,7 @@ fun XyDeskHome(
                 if (now - backArmedAt < 2_000L) onExit()
                 else {
                     backArmedAt = now
-                    notice.show(xy("Tekan sekali lagi untuk keluar", "Press again to exit"))
+                    notice.show(xyNow("Tekan sekali lagi untuk keluar", "Press again to exit"))
                 }
             }
         }
@@ -209,7 +210,12 @@ fun XyDeskHome(
                         onClearAllCredentials = {
                             scope.launch {
                                 repo.clear()
-                                notice.show(xy("Kredensial & perangkat dihapus", "Credentials and devices cleared"))
+                                notice.show(
+                                    xyNow(
+                                        "Kredensial & perangkat dihapus",
+                                        "Credentials and devices cleared",
+                                    ),
+                                )
                             }
                         },
                         onShowLog = { showBoot = true },
@@ -334,6 +340,63 @@ fun XyDeskHome(
     }
 }
 
+/**
+ * Sesi yang sedang hidup di proses ini.
+ *
+ * Daftarnya dibaca dari [XySessionRegistry] dan disegarkan tiap 1,5 detik
+ * selama home tampil — cukup untuk kasus "buka server kedua sambil yang
+ * pertama tetap jalan".
+ */
+@Composable
+private fun LiveSessionsCard() {
+    var live by remember { mutableStateOf(XySessionRegistry.list()) }
+    LaunchedEffect(Unit) {
+        while (true) {
+            live = XySessionRegistry.list()
+            kotlinx.coroutines.delay(1_500)
+        }
+    }
+    if (live.isEmpty()) return
+    XyCard {
+        XySectionLabel(xy("Sesi aktif ({0})", "Active sessions ({0})", live.size))
+        Spacer(Modifier.height(6.dp))
+        live.forEach { item ->
+            Row(
+                Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                Column(Modifier.weight(1f)) {
+                    Text(
+                        item.label,
+                        style = MaterialTheme.typography.titleSmall,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                    Text(
+                        item.address,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        maxLines = 1,
+                    )
+                }
+                XyPillButton(
+                    text = xy("Buka", "Open"),
+                    onClick = { item.open() },
+                    compact = true,
+                )
+                XyPillButton(
+                    text = xy("Putus", "Disconnect"),
+                    onClick = { item.kill() },
+                    primary = false,
+                    compact = true,
+                )
+            }
+            Spacer(Modifier.height(8.dp))
+        }
+    }
+}
+
 @Composable
 private fun DevicesScreen(
     favorites: List<ConnectionProfile>,
@@ -406,6 +469,7 @@ private fun DevicesScreen(
         contentPadding = PaddingValues(horizontal = 16.dp, vertical = 6.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
+        item { LiveSessionsCard() }
         items(favorites, key = { it.id }) { profile ->
             DeviceCard(
                 profile = profile,

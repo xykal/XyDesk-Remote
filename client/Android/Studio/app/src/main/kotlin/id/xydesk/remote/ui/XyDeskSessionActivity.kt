@@ -47,6 +47,9 @@ import id.xydesk.remote.ui.theme.XyDeskTheme
  */
 class XyDeskSessionActivity : ComponentActivity() {
 
+    /** Id profil sesi ini; dipakai untuk melepas diri dari registry sesi. */
+    private var sessionId: String? = null
+
     lateinit var manager: SessionManager
         private set
     lateinit var controller: SessionSurfaceController
@@ -95,6 +98,7 @@ class XyDeskSessionActivity : ComponentActivity() {
             return
         }
         ConnectionLog.add("SES: profil ok -> ${profile.host}:${profile.port}")
+        sessionId = profile.id
 
         hideSystemBars()
 
@@ -116,6 +120,22 @@ class XyDeskSessionActivity : ComponentActivity() {
 
         val prefs = AppPrefs(this)
         this.appPrefs = prefs
+        // Daftarkan sesi ini supaya home bisa menampilkan & memindahkan sesi
+        // yang sedang hidup (multi-sesi).
+        XySessionRegistry.add(
+            XySessionRegistry.Live(
+                id = profile.id,
+                label = profile.label ?: "${profile.host}:${profile.port}",
+                address = "${profile.host}:${profile.port}",
+                open = {
+                    startActivity(
+                        Intent(this, XyDeskSessionActivity::class.java)
+                            .addFlags(Intent.FLAG_ACTIVITY_REORDER_TO_FRONT),
+                    )
+                },
+                kill = { runOnUiThread { manager.disconnect(); finish() } },
+            ),
+        )
         requestRuntimePermissions(profile)
         setContent {
             // Layar sesi ikut setelan tema app (dulu dipaksa gelap, jadi di
@@ -192,6 +212,7 @@ class XyDeskSessionActivity : ComponentActivity() {
 
     override fun onDestroy() {
         super.onDestroy()
+        sessionId?.let { XySessionRegistry.remove(it) }
         bgHandler.removeCallbacks(bgDisconnect)
         XySessionBridge.onStopRequested = null
         XySessionService.stop(this)

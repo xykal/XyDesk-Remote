@@ -122,6 +122,7 @@ fun SessionControls(
     onResolutionChange: (String) -> Unit,
     onToggleTrackpad: () -> Unit,
     onToggleKeyboard: () -> Unit = {},
+    onOpenHome: () -> Unit = {},
     onSendText: (String) -> Unit,
     coreInfo: List<String> = emptyList(),
     notice: XyNoticeState,
@@ -245,6 +246,12 @@ fun SessionControls(
                 description = if (keyboardShown) xy("Tutup keyboard HP", "Hide phone keyboard") else xy("Buka keyboard HP", "Show phone keyboard"),
                 plate = plate,
             ) { onToggleKeyboard() }
+            RailButton(
+                icon = XyIcons.Monitor,
+                active = false,
+                description = xy("Sesi lain (buka home)", "Other sessions (open home)"),
+                plate = plate,
+            ) { onOpenHome() }
             RailButton(
                 icon = XyIcons.Power,
                 active = exitArmed,
