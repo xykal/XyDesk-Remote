@@ -33,6 +33,7 @@ import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import kotlin.math.roundToInt
 import androidx.compose.material3.Text
 
 /**
@@ -51,9 +52,20 @@ fun XySlider(
     valueRange: ClosedFloatingPointRange<Float>,
     modifier: Modifier = Modifier,
     enabled: Boolean = true,
+    /** Jumlah langkah antara (0 = bebas). Nilai dibulatkan ke langkah terdekat. */
+    steps: Int = 0,
 ) {
     val latest = rememberUpdatedState(onValueChange)
     val range = valueRange.endInclusive - valueRange.start
+    val stepSize = if (steps > 0) range / (steps + 1) else 0f
+
+    fun snap(raw: Float): Float =
+        if (stepSize > 0f) {
+            val idx = ((raw - valueRange.start) / stepSize).roundToInt()
+            (valueRange.start + idx * stepSize).coerceIn(valueRange.start, valueRange.endInclusive)
+        } else {
+            raw.coerceIn(valueRange.start, valueRange.endInclusive)
+        }
 
     Box(
         modifier
@@ -65,7 +77,7 @@ fun XySlider(
                     val down = awaitFirstDown(requireUnconsumed = false)
                     fun apply(x: Float) {
                         val frac = (x / size.width.toFloat()).coerceIn(0f, 1f)
-                        latest.value(valueRange.start + frac * range)
+                        latest.value(snap(valueRange.start + frac * range))
                     }
                     apply(down.position.x)
                     down.consume()
