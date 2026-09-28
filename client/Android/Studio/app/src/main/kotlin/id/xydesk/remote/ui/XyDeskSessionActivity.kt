@@ -269,5 +269,18 @@ class XyDeskSessionActivity : ComponentActivity() {
         const val EXTRA_PASS = "xydesk.pass"
         const val EXTRA_DOMAIN = "xydesk.domain"
         const val EXTRA_LABEL = "xydesk.label"
+
+        /** Auto-disconnect kalau app di-background dan keep-alive dimatikan. */
+        const val BACKGROUND_DISCONNECT_DELAY_MS = 15_000L
+
+        fun connectIntent(context: Context, profile: ConnectionProfile): Intent =
+            Intent(context, XyDeskSessionActivity::class.java).apply {
+                putExtra(EXTRA_HOST, profile.host)
+                putExtra(EXTRA_PORT, profile.port)
+                putExtra(EXTRA_USER, profile.username)
+                putExtra(EXTRA_PASS, profile.password)
+                putExtra(EXTRA_DOMAIN, profile.domain)
+                putExtra(EXTRA_LABEL, profile.label)
+            }
     }
 }
