@@ -37,6 +37,7 @@ import id.xydesk.remote.core.ConnectionProfile
 import id.xydesk.remote.core.RdpOptions
 import id.xydesk.remote.core.XyAudioMode
 import id.xydesk.remote.core.XyGateway
+import id.xydesk.remote.ui.components.XySlider
 import id.xydesk.remote.ui.components.XyCard
 import id.xydesk.remote.ui.components.XyField
 import id.xydesk.remote.ui.components.XyIcons
@@ -318,7 +319,7 @@ fun AddDeviceScreen(
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
                 Spacer(Modifier.height(4.dp))
-                androidx.compose.material3.Slider(
+                XySlider(
                     value = dpi.toFloat(),
                     onValueChange = { dpi = it.toInt() },
                     valueRange = 80f..200f,

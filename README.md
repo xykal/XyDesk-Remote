@@ -84,6 +84,31 @@ Ronde ini seluruhnya soal input dan kontrol:
 
 Detail teknis: `docs/HUD-BUTTONS.md` (EN) dan `docs/HUD-BUTTONS.id.md` (ID).
 
+## Catatan rilis v0.5.3
+
+Lanjutan ronde 5 — sisa UI bawaan diganti milik app sendiri:
+
+- **Slider** (ukuran pointer, ukuran tombol, DPI, kecepatan) sekarang
+  `XySlider`: track tipis ber-border + pegangan bulat, ikut tema.
+- **Menu drawer** (daftar bagian: Perangkat, Tampilan, Kredensial, Umum,
+  Keamanan, Tentang) bukan lagi `ModalNavigationDrawer` Material: panel geser
+  milik app dengan scrim dan animasi sendiri.
+- **Spinner** proses koneksi (5 langkah) memakai `XySpinner` (busur berputar),
+  bukan `CircularProgressIndicator`.
+- **Garis pemisah** memakai `XyDivider`.
+- Tidak ada lagi Toast, dialog, bottom sheet, drawer, slider, atau indikator
+  bawaan Android/Material yang terlihat. Panel/dialog/menu memakai token tema
+  (gelap & terang dua-duanya benar); tombol kontrol di layar sesi tetap kontras
+  tetap karena berada di atas gambar remote.
+
+## English summary (v0.5.3)
+
+Round 5 continued — the remaining stock UI is replaced with app-owned widgets:
+`XySlider` (thin bordered track + round knob, theme-aware), a custom slide-in
+drawer instead of Material's `ModalNavigationDrawer`, `XySpinner` instead of
+`CircularProgressIndicator`, and `XyDivider`. No visible Android/Material stock
+toast, dialog, sheet, drawer, slider, or indicator remains.
+
 ## Catatan rilis v0.5.2
 
 Ronde 5 — kontrol, taskbar, dan tema:

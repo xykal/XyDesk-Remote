@@ -8,6 +8,11 @@ import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.slideInHorizontally
+import androidx.compose.animation.slideOutHorizontally
+import androidx.compose.foundation.layout.width
+import androidx.compose.ui.zIndex
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -25,14 +30,9 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
-import androidx.compose.material3.DrawerValue
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.ModalDrawerSheet
-import androidx.compose.material3.ModalNavigationDrawer
 import androidx.compose.material3.Text
-import androidx.compose.material3.rememberDrawerState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -53,6 +53,7 @@ import id.xydesk.remote.security.CrashLog
 import id.xydesk.remote.sessions.SessionsRepository
 import id.xydesk.remote.ui.components.XyCard
 import id.xydesk.remote.ui.components.XyIconPill
+import id.xydesk.remote.ui.components.XyDivider
 import id.xydesk.remote.ui.components.XyIcons
 import id.xydesk.remote.ui.components.XyNoticeHost
 import id.xydesk.remote.ui.components.rememberXyNotice
@@ -95,7 +96,7 @@ fun XyDeskHome(onExit: () -> Unit) {
     val favorites by favoritesFlow.collectAsState(initial = emptyList())
     val scope = rememberCoroutineScope()
     val appPrefs = remember { AppPrefs(context) }
-    val drawerState = rememberDrawerState(DrawerValue.Closed)
+    var drawerOpen by remember { mutableStateOf(false) }
     var section by remember { mutableStateOf(XySection.PERANGKAT) }
     var route by remember { mutableStateOf<XyRoute>(XyRoute.Devices) }
     var crashLog by remember { mutableStateOf(CrashLog.last(context.applicationContext)) }
@@ -127,7 +128,7 @@ fun XyDeskHome(onExit: () -> Unit) {
 
     BackHandler {
         when {
-            drawerState.isOpen -> scope.launch { drawerState.close() }
+            drawerOpen -> drawerOpen = false
             route != XyRoute.Devices -> route = XyRoute.Devices
             section != XySection.PERANGKAT -> section = XySection.PERANGKAT
             else -> {
@@ -142,63 +143,12 @@ fun XyDeskHome(onExit: () -> Unit) {
     }
 
     Box(Modifier.fillMaxSize()) {
-    ModalNavigationDrawer(
-        drawerState = drawerState,
-        gesturesEnabled = drawerState.isOpen,
-        drawerContent = {
-            ModalDrawerSheet(
-                modifier = Modifier.fillMaxHeight(),
-                drawerContainerColor = MaterialTheme.colorScheme.surface,
-            ) {
-                Row(
-                    modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 18.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(12.dp),
-                ) {
-                    XyLogo(modifier = Modifier.size(30.dp))
-                    Column {
-                        XyWordmark(fontSize = 21.sp)
-                        Text(
-                            "XyVerse • Remote Desktop",
-                            style = MaterialTheme.typography.labelSmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
-                    }
-                }
-                HorizontalDivider(color = MaterialTheme.colorScheme.outline)
-                Spacer(Modifier.height(8.dp))
-                XySection.entries.forEach { item ->
-                    XyRow(
-                        title = item.title,
-                        modifier = Modifier.padding(horizontal = 8.dp),
-                        leading = when (item) {
-                            XySection.PERANGKAT -> XyIcons.Monitor
-                            XySection.TAMPILAN -> XyIcons.Fit
-                            XySection.KREDENSIAL -> XyIcons.Lock
-                            XySection.UMUM -> XyIcons.Sliders
-                            XySection.KEAMANAN -> XyIcons.Info
-                            XySection.TENTANG -> XyIcons.Info
-                        },
-                        leadingTint = if (item == section) MaterialTheme.colorScheme.onSurface
-                        else MaterialTheme.colorScheme.onSurfaceVariant,
-                        onClick = {
-                            section = item
-                            route = XyRoute.Devices
-                            scope.launch { drawerState.close() }
-                        },
-                    )
-                }
-                Spacer(Modifier.weight(1f))
-                Text(
-                    "v${appVersion(context)}",
-                    style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.padding(20.dp),
-                )
-            }
-        },
-    ) {
-        Column(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)) {
+        Column(
+            Modifier
+                .fillMaxSize()
+                .background(MaterialTheme.colorScheme.background),
+        ) {
+
             when (val current = route) {
                 is XyRoute.EditDevice -> AddDeviceScreen(
                     existing = current.profile,
@@ -212,7 +162,7 @@ fun XyDeskHome(onExit: () -> Unit) {
                         favorites = favorites,
                         crashLog = crashLog,
                         bootTail = bootTail,
-                        onMenu = { scope.launch { drawerState.open() } },
+                        onMenu = { drawerOpen = true },
                         onAdd = { route = XyRoute.EditDevice(null) },
                         onEdit = { route = XyRoute.EditDevice(it) },
                         onConnect = { connect(it) },
@@ -237,7 +187,7 @@ fun XyDeskHome(onExit: () -> Unit) {
                     SectionScreen(
                         section = section,
                         favorites = favorites,
-                        onMenu = { scope.launch { drawerState.open() } },
+                        onMenu = { drawerOpen = true },
                         appPrefs = appPrefs,
                         onEditDevice = { route = XyRoute.EditDevice(it) },
                         onClearAllCredentials = {
@@ -252,6 +202,82 @@ fun XyDeskHome(onExit: () -> Unit) {
 
                 XyRoute.Section -> Unit
             }
+        }
+
+    // ---- drawer kiri (custom, bukan ModalNavigationDrawer bawaan) ----
+    if (drawerOpen) {
+        Box(
+            Modifier
+                .fillMaxSize()
+                .background(MaterialTheme.colorScheme.scrim.copy(alpha = 0.55f))
+                .clickable { drawerOpen = false }
+                .zIndex(40f),
+        )
+    }
+    AnimatedVisibility(
+        visible = drawerOpen,
+        enter = slideInHorizontally { -it },
+        exit = slideOutHorizontally { -it },
+        modifier = Modifier.zIndex(41f),
+    ) {
+        Column(
+            Modifier
+                .width(300.dp)
+                .fillMaxHeight()
+                .background(MaterialTheme.colorScheme.surface)
+                .border(
+                    1.dp,
+                    MaterialTheme.colorScheme.outline,
+                    RoundedCornerShape(topEnd = 16.dp, bottomEnd = 16.dp),
+                )
+                .padding(vertical = 16.dp),
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(12.dp),
+            ) {
+                XyLogo(modifier = Modifier.size(30.dp))
+                Column {
+                    XyWordmark(fontSize = 21.sp)
+                    Text(
+                        "XyVerse \u2022 Remote Desktop",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+            }
+            Spacer(Modifier.height(14.dp))
+            XyDivider()
+            Spacer(Modifier.height(8.dp))
+            XySection.entries.forEach { item ->
+                XyRow(
+                    title = item.title,
+                    modifier = Modifier.padding(horizontal = 8.dp),
+                    leading = when (item) {
+                        XySection.PERANGKAT -> XyIcons.Monitor
+                        XySection.TAMPILAN -> XyIcons.Fit
+                        XySection.KREDENSIAL -> XyIcons.Lock
+                        XySection.UMUM -> XyIcons.Sliders
+                        XySection.KEAMANAN -> XyIcons.Info
+                        XySection.TENTANG -> XyIcons.Info
+                    },
+                    leadingTint = if (item == section) MaterialTheme.colorScheme.onSurface
+                    else MaterialTheme.colorScheme.onSurfaceVariant,
+                    onClick = {
+                        section = item
+                        route = XyRoute.Devices
+                        drawerOpen = false
+                    },
+                )
+            }
+            Spacer(Modifier.weight(1f))
+            Text(
+                "v${appVersion(context)}",
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.padding(20.dp),
+            )
         }
     }
 

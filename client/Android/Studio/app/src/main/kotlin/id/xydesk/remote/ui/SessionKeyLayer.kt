@@ -26,7 +26,6 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Slider
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -53,6 +52,7 @@ import androidx.compose.ui.zIndex
 import id.xydesk.remote.ui.components.XyIcons
 import id.xydesk.remote.ui.components.XyPillButton
 import id.xydesk.remote.ui.components.XySegmented
+import id.xydesk.remote.ui.components.XySlider
 import id.xydesk.remote.ui.theme.XyPill
 import kotlin.math.roundToInt
 
@@ -485,7 +485,7 @@ fun HudKeyEditor(
                 color = MaterialTheme.colorScheme.onSurface,
                 fontSize = 11.sp,
             )
-            Slider(
+            XySlider(
                 value = key.size,
                 onValueChange = { onChange(key.copy(size = it)) },
                 valueRange = 28f..120f,

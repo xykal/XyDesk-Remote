@@ -24,7 +24,6 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Slider
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -58,6 +57,7 @@ import id.xydesk.remote.ui.components.XyNoticeState
 import id.xydesk.remote.ui.components.XyOverlay
 import id.xydesk.remote.ui.components.XyPillButton
 import id.xydesk.remote.ui.components.XySegmented
+import id.xydesk.remote.ui.components.XySlider
 import id.xydesk.remote.ui.components.XyToggleRow
 import id.xydesk.remote.ui.theme.XyPill
 import kotlin.math.roundToInt
@@ -644,7 +644,7 @@ private fun SessionPanel(
                         modifier = Modifier.fillMaxWidth(),
                     )
                     PanelHint("Ukuran cadangan: ${pointerSize.toInt()} dp")
-                    Slider(value = pointerSize, onValueChange = onPointerSize, valueRange = 10f..52f)
+                    XySlider(value = pointerSize, onValueChange = onPointerSize, valueRange = 10f..52f)
                 }
 
                 // ---- kontrol: satu tombol satu aksi, semua bisa digeser ----

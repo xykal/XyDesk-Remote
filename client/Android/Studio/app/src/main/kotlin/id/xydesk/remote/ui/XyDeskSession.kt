@@ -26,7 +26,6 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.ui.text.input.ImeAction
 import id.xydesk.remote.ui.components.XyDialog
@@ -74,6 +73,7 @@ import id.xydesk.remote.ui.components.XyIcons
 import id.xydesk.remote.ui.components.XyNoticeHost
 import id.xydesk.remote.ui.components.rememberXyNotice
 import id.xydesk.remote.ui.components.XyPillButton
+import id.xydesk.remote.ui.components.XySpinner
 import kotlinx.coroutines.delay
 import kotlin.math.roundToInt
 
@@ -796,8 +796,9 @@ private fun ConnectingScreen(
                                     tint = Color.White.copy(alpha = 0.9f),
                                     modifier = Modifier.size(14.dp),
                                 )
-                                index == active -> CircularProgressIndicator(
+                                index == active -> XySpinner(
                                     modifier = Modifier.size(14.dp),
+                                    size = 14.dp,
                                     strokeWidth = 2.dp,
                                     color = Color.White,
                                 )

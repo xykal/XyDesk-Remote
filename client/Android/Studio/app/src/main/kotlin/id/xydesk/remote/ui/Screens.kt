@@ -22,7 +22,6 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Slider
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -40,6 +39,7 @@ import androidx.compose.ui.unit.dp
 import id.xydesk.remote.core.ConnectionProfile
 import id.xydesk.remote.security.CredentialVault
 import id.xydesk.remote.core.coreBuildInfo
+import id.xydesk.remote.ui.components.XySlider
 import id.xydesk.remote.ui.components.XyCard
 import id.xydesk.remote.ui.components.XyDialog
 import id.xydesk.remote.ui.components.XyIconPill
@@ -174,7 +174,7 @@ private fun DisplaySection(
                 "$scale%",
                 style = MaterialTheme.typography.titleMedium,
             )
-            Slider(
+            XySlider(
                 value = scale.toFloat(),
                 onValueChange = {
                     scale = it.toInt()
@@ -391,7 +391,7 @@ private fun GeneralSection(appPrefs: AppPrefs, onShowLog: () -> Unit) {
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
-            Slider(
+            XySlider(
                 value = pointerSize,
                 onValueChange = {
                     pointerSize = it
@@ -405,7 +405,7 @@ private fun GeneralSection(appPrefs: AppPrefs, onShowLog: () -> Unit) {
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
-            Slider(
+            XySlider(
                 value = scrollSpeed,
                 onValueChange = {
                     scrollSpeed = it
@@ -442,7 +442,7 @@ private fun GeneralSection(appPrefs: AppPrefs, onShowLog: () -> Unit) {
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
-            Slider(
+            XySlider(
                 value = clusterScale,
                 onValueChange = {
                     clusterScale = it
@@ -512,7 +512,7 @@ private fun GeneralSection(appPrefs: AppPrefs, onShowLog: () -> Unit) {
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
-            Slider(
+            XySlider(
                 value = hudSize,
                 onValueChange = { hudSize = it; prefs.hudButtonSize = it },
                 valueRange = 32f..96f,
