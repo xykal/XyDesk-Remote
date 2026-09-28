@@ -1,93 +1,76 @@
-# Tombol HUD kustom, toolbar keyboard, dan storage HP
+# Overlay kontrol, mengetik, dan pas-layar
 
-XyDesk Remote memakai keyboard HP untuk mengetik dan sekumpulan tombol bulat
-bebas untuk sisanya. Dokumen ini menjelaskan model yang dibangun di v0.5.0.
+XyDesk Remote tidak punya toolbar dan tidak punya keyboard virtual bawaan. Semua
+kontrol adalah tombol overlay yang kal tempatkan sendiri, dan mengetik memakai
+keyboard HP (IME). Dokumen ini menjelaskan model di v0.5.2.
 
 ## 1. Satu tombol = satu aksi
 
-Setiap tombol di layar adalah satu tombol bulat penuh (`CircleShape`, diameter
-dalam dp). Tidak ada yang digabung jadi satu widget: klik kiri, klik kanan,
-klik tengah, scroll naik, scroll turun, dan tombol ganti mode input adalah enam
-tombol terpisah dengan ikon, posisi, ukuran, dan aksi masing-masing.
+Tiap kontrol di layar adalah satu tombol bulat (`CircleShape`, diameter dalam
+dp). Tidak ada yang digabung: klik kiri, klik kanan, klik tengah, scroll naik,
+scroll turun, keyboard, dan ganti mode input adalah tujuh tombol terpisah —
+masing-masing punya ikon, posisi, ukuran, dan aksi sendiri.
 
 | Properti | Rentang | Cara mengubah |
 |---|---|---|
-| Posisi | ternormalisasi 0..1 dari area sesi | geser tombolnya; atau mode "Atur posisi" |
-| Ukuran | 32..96 dp (diameter, radius = setengah) | tahan tombol, atau daftar tombol di panel kanan |
+| Posisi | 0..1 dari area sesi | geser tombolnya di layar (kapan saja, bukan cuma mode atur posisi) |
+| Ukuran | 24..140 dp (diameter, radius = setengah) | tahan lama tombolnya, atau daftar tombol di panel kanan |
 | Aksi | Sekali klik / Tahan / Toggle | editor tombol |
-| Ikon di toolbar | nyala / mati | editor tombol |
-| Tombol | apa pun dari katalog (F1..F12, numpad, huruf, simbol, panah, modifier) | tombol "Tambah tombol" |
+| Jenis | entri katalog (aksi mouse, modifier, kombinasi, tombol, numpad, huruf, simbol) | "Ganti jenis aksi" di editor, atau "Tambah tombol" |
 | Kombinasi | Ctrl+C, Ctrl+Shift+Esc, Alt+Tab, Win+R, ... | grup katalog "Kombinasi siap pakai" |
 
 Arti aksi:
 
-- **Sekali klik** – tekan lalu lepas (mis. huruf, Enter, kombinasi).
-- **Tahan** – aktif selama ditahan (drag pakai klik kiri, scroll menerus).
+- **Sekali klik** – tekan lalu lepas (mis. huruf biasa, Enter, kombinasi).
+- **Tahan** – aktif selama ditahan (drag pakai klik kiri, scroll terus-menerus).
 - **Toggle** – klik pertama nyala, klik kedua mati (mis. Ctrl sebagai modifier
   lengket).
 
-Tombol disimpan per perangkat (`xydesk.input` → `<deviceId>.hudkeys`) karena
-ukuran layar dan orientasi beda-beda. Format JSON, tanpa aset biner.
+## 2. Akses ke sana
 
-## 2. Toolbar di atas keyboard HP
+- **Di layar** – tombolnya sendiri. Geser untuk pindah, tahan lama untuk membuka
+  editornya.
+- **Mode atur posisi** – panel kanan → Tombol → "Atur posisi". Grid muncul,
+  tombol tetap bisa digeser, dan ada banner di atas dengan "+ Tombol" dan
+  "Selesai".
+- **Tambah tombol** – chip "+ Tombol" di banner atur posisi, atau "Tambah
+  tombol" di panel kanan. Keduanya membuka katalog.
+- **Kembalikan bawaan** – "Kembalikan tombol bawaan" di panel kanan.
 
-Keyboard HP (IME sistem) jadi permukaan mengetik utama. Di atasnya ditempel
-toolbar yang mengikuti tinggi IME sebenarnya, jadi tidak pernah menutupi
-keyboard:
+Posisi dan ukuran disimpan per perangkat (`$deviceId.hudkeys`), jadi layout yang
+pas di satu layar tidak mengganggu perangkat lain.
 
-- sisi kiri: tombol yang ditandai "di toolbar" plus dua chip ikon (panel, pointer);
-- paling ujung kanan: `123` → membuka board lengkap bawaan app (QWERTY + F1..F12
-  + numpad);
-- saat board terbuka chip berubah jadi `ABC` → menutup board dan mengembalikan
-  keyboard HP;
-- keyboard HP di-hide → toolbar dan board ikut hilang; toolbar hanya ada saat
-  IME tampil.
+## 3. Mengetik
 
-Catatan implementasi: tinggi IME diambil dari `WindowInsetsCompat.Type.ime()` di
-`SessionSurfaceController.installInsetsHandling` lalu diteruskan ke Compose
-lewat `SessionSurfaceController.onImeChanged`. Tidak ada polling atau tebakan.
+Tidak ada board QWERTY, F1..F12, atau numpad di layar, dan tidak ada baris tombol
+di atas keyboard. Mengetik memakai keyboard HP:
 
-## 3. Storage HP jadi drive di remote
+- Tombol keyboard di HUD (atau Input → "Keyboard HP (IME)" di panel kanan)
+  membuka/menutup IME.
+- Karakter dari IME diteruskan ke sesi sebagai `KeyEvent`, jadi KeyboardMapper
+  inti yang menentukan scancode, modifier, dan layout. Karakter tanpa keycode
+  (emoji, huruf beraksen) lewat jalur unicode.
+- "Kirim teks ke remote" di panel kanan menempel teks clipboard lalu mengirimnya
+  sebagai unicode.
 
-Opsi `drive` dipetakan ke `/drive:sdcard,<path>`. Sejak Android 11 app tidak
-bisa lagi membaca `/storage/emulated/0` dengan bebas, jadi path dipilih saat
-runtime oleh `LibFreeRDP.appDrivePath(Context)`:
+## 4. Taskbar dan pas-layar
 
-1. kalau app punya izin "semua file" (`MANAGE_EXTERNAL_STORAGE`,
-   `Environment.isExternalStorageManager()`) → seluruh storage eksternal;
-2. kalau tidak → folder milik app (`Android/data/<paket>/files/Share`) yang
-   selalu bisa dipakai tanpa izin apa pun.
+Desktop remote harus masuk layar — kalau tidak, taskbar Windows dan tepi bawah
+desktop jatuh di luar area gambar dan kelihatan seperti tenggelam.
 
-Manifest app menyatakan izinnya (lewat merge manifest `freeRDPCore`) dan layar
-ubah perangkat menampilkan status sekarang plus tombol yang membuka halaman izin
-"semua file" untuk app ini. Drive jalan di kedua kondisi; akses penuh hanya
-memperluas apa yang terlihat.
+- **Muat seluruh desktop (fit)** (panel kiri → Layar, juga di setelan Umum)
+  menyala secara default. Sesudah menyambung, sesudah ganti resolusi, sesudah
+  rotasi, dan setiap kali ukuran area gambar berubah, tampilan dimuat ulang.
+- **Resolusi otomatis** mengirim ukuran area gambar yang benar-benar terlihat
+  (bukan seluruh jendela), jadi tidak ada bagian desktop yang terpotong system
+  bar.
+- **Preset resolusi** dikelompokkan per rasio (16:9, 16:10, 21:9, 4:3, potret)
+  dan "16:9 pas layar" memilih ukuran standar 16:9 terbesar yang masih muat.
+  Setelah resolusi berubah, seluruh desktop langsung dimuat ulang.
 
-## 4. Diagnosa tanpa ADB
+## 5. Kursor
 
-`XyApp` memasang environment log winpr sebelum library native disentuh:
-
-```
-WLOG_APPENDER=file
-WLOG_LEVEL=INFO
-WLOG_FILEAPPENDER_OUTPUT_FILE_PATH=<filesDir app>
-WLOG_FILEAPPENDER_OUTPUT_FILE_NAME=freerdp-native.log
-```
-
-Dialog log di app (Umum → Masalah koneksi → "Lihat log sesi terakhir") menulis
-ekor log native dulu, lalu log app. File itulah yang perlu dikirim saat audio,
-mikrofon, clipboard, atau drive bermasalah — di dalamnya ada baris pemuatan
-kanal dari sisi native.
-
-## 5. Berkas
-
-| Berkas | Peran |
-|---|---|
-| `ui/HudKey.kt` | model tombol, JSON, default, katalog |
-| `ui/SessionKeyLayer.kt` | layer bebas, geser/tahan, toolbar, picker, editor |
-| `ui/SessionControls.kt` | kerangka sesi: panel (kanan: input/pointer/tombol/keyboard, kiri: layar/sesi) |
-| `ui/SessionPrefs.kt` | penyimpanan per perangkat: tombol, pointer, skala keyboard |
-| `ui/Lang.kt` | tabel teks ID/EN dan preferensi bahasa |
-| `ui/Wallpaper.kt` | `DevicePreviewArt` – preview perangkat prosedural (bukan wallpaper RDP) |
-| `SessionSurfaceController.kt` | callback IME → penempatan toolbar |
-| `LibFreeRDP.java` | `appDrivePath`, `hasAllFilesAccess` |
+Pointer memakai bentuk kursor yang dikirim server (panah, tangan, I-beam,
+resize, ...) lengkap dengan hotspot-nya. Kalau server tidak mengirim apa-apa,
+panah/titik bawaan app dipakai. Ukuran dan gaya pointer ada di panel kanan
+bagian Pointer.

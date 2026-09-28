@@ -4,7 +4,6 @@ package id.xydesk.remote.ui
 
 import android.app.Activity
 import android.content.Context
-import android.widget.Toast
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.ui.graphics.Brush
@@ -55,6 +54,8 @@ import id.xydesk.remote.sessions.SessionsRepository
 import id.xydesk.remote.ui.components.XyCard
 import id.xydesk.remote.ui.components.XyIconPill
 import id.xydesk.remote.ui.components.XyIcons
+import id.xydesk.remote.ui.components.XyNoticeHost
+import id.xydesk.remote.ui.components.rememberXyNotice
 import id.xydesk.remote.ui.components.XyLogo
 import id.xydesk.remote.ui.components.XyPillButton
 import id.xydesk.remote.ui.components.XyRow
@@ -102,6 +103,8 @@ fun XyDeskHome(onExit: () -> Unit) {
     var backArmedAt by remember { mutableStateOf(0L) }
     val bootTail = remember { ConnectionLog.tailFromFile(context.applicationContext, 20) }
     var showBoot by remember { mutableStateOf(false) }
+    // Pesan app sendiri (bukan Toast bawaan Android).
+    val notice = rememberXyNotice()
 
     fun connect(profile: ConnectionProfile) {
         scope.launch { repo.touch(profile) }
@@ -112,11 +115,10 @@ fun XyDeskHome(onExit: () -> Unit) {
         scope.launch {
             val saved = runCatching { repo.save(profile, rememberPassword) }
             if (saved.isFailure) {
-                Toast.makeText(
-                    context,
-                    "Profil tidak tersimpan: ${saved.exceptionOrNull()?.message ?: "kesalahan penyimpanan"}",
-                    Toast.LENGTH_LONG,
-                ).show()
+                notice.show(
+                    "Profil tidak tersimpan: " +
+                        (saved.exceptionOrNull()?.message ?: "kesalahan penyimpanan"),
+                )
             }
             route = XyRoute.Devices
             if (startNow) connect(profile)
@@ -133,12 +135,13 @@ fun XyDeskHome(onExit: () -> Unit) {
                 if (now - backArmedAt < 2_000L) onExit()
                 else {
                     backArmedAt = now
-                    Toast.makeText(context, "Tekan sekali lagi untuk keluar", Toast.LENGTH_SHORT).show()
+                    notice.show("Tekan sekali lagi untuk keluar")
                 }
             }
         }
     }
 
+    Box(Modifier.fillMaxSize()) {
     ModalNavigationDrawer(
         drawerState = drawerState,
         gesturesEnabled = drawerState.isOpen,
@@ -240,7 +243,7 @@ fun XyDeskHome(onExit: () -> Unit) {
                         onClearAllCredentials = {
                             scope.launch {
                                 repo.clear()
-                                Toast.makeText(context, "Kredensial & perangkat dihapus", Toast.LENGTH_SHORT).show()
+                                notice.show("Kredensial & perangkat dihapus")
                             }
                         },
                         onShowLog = { showBoot = true },
@@ -282,6 +285,10 @@ fun XyDeskHome(onExit: () -> Unit) {
             body = body,
             onDismiss = { showBoot = false },
         )
+    }
+
+    // Pesan app sendiri — paling atas supaya tidak ketutup drawer/panel.
+    XyNoticeHost(state = notice, modifier = Modifier.align(Alignment.TopCenter))
     }
 }
 

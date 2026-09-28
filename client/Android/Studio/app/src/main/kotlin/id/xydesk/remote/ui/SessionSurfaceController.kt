@@ -14,6 +14,7 @@ import android.graphics.Rect
 import android.graphics.drawable.BitmapDrawable
 import android.os.Handler
 import android.os.Looper
+import android.view.KeyEvent
 import android.view.ScaleGestureDetector
 import android.view.View
 import android.view.ViewGroup
@@ -21,7 +22,6 @@ import android.widget.FrameLayout
 import android.widget.RelativeLayout
 import androidx.compose.ui.geometry.Offset
 import com.freerdp.freerdpcore.application.GlobalApp
-import com.freerdp.freerdpcore.presentation.ExtendedKeyboardView
 import com.freerdp.freerdpcore.presentation.ScrollView2D
 import com.freerdp.freerdpcore.presentation.SessionInputManager
 import com.freerdp.freerdpcore.presentation.SessionView
@@ -32,9 +32,8 @@ import id.xydesk.remote.core.GraphicsSink
 /**
  * M2 — controller surface sesi XyDesk.
  *
- * Menjamu view render inti (SessionView + TouchPointerView +
- * ExtendedKeyboardView + ScrollView2D — susunan programatik dari
- * `session.xml` milik core) dan mengimplementasikan [GraphicsSink]:
+ * Menjamu view render inti (SessionView + TouchPointerView + ScrollView2D —
+ * susunan programatik dari `session.xml` milik core) dan mengimplementasikan [GraphicsSink]:
  *
  *  - OnGraphicsUpdate -> `LibFreeRDP.updateGraphics` (copy piksel ke
  *    bitmap permukaan) -> `SessionView.addInvalidRegion` + invalidate
@@ -69,7 +68,6 @@ class SessionSurfaceController(private val activity: Activity) : GraphicsSink {
     private var scrollView: ScrollView2D? = null
     private var sessionView: SessionView? = null
     private var touchPointerView: TouchPointerView? = null
-    private var keyboard: ExtendedKeyboardView? = null
     private var inputManager: SessionInputManager? = null
 
     @Volatile private var inst = 0L
@@ -111,16 +109,6 @@ class SessionSurfaceController(private val activity: Activity) : GraphicsSink {
             setBackgroundColor(Color.BLACK)
         }
 
-        val kb = ExtendedKeyboardView(context)
-        val kbId = View.generateViewId()
-        kb.id = kbId
-        val kbParams = RelativeLayout.LayoutParams(
-            RelativeLayout.LayoutParams.MATCH_PARENT,
-            RelativeLayout.LayoutParams.WRAP_CONTENT
-        ).apply { addRule(RelativeLayout.ALIGN_PARENT_BOTTOM) }
-        kb.visibility = View.GONE
-        root.addView(kb, kbParams)
-
         val scroller = ScrollView2D(context)
         val rail = FrameLayout(context)
         val sv = SessionView(context)
@@ -137,7 +125,6 @@ class SessionSurfaceController(private val activity: Activity) : GraphicsSink {
             RelativeLayout.LayoutParams.MATCH_PARENT
         ).apply {
             addRule(RelativeLayout.ALIGN_PARENT_TOP)
-            addRule(RelativeLayout.ABOVE, kbId)
         }
         root.addView(scroller, scrollerParams)
 
@@ -150,7 +137,9 @@ class SessionSurfaceController(private val activity: Activity) : GraphicsSink {
         root.addView(tpv, tpvParams)
 
         // Wiring input — cermin SessionActivity.onCreate
-        val im = SessionInputManager(activity, scroller, sv, tpv, kb)
+        // Board keyboard bawaan FreeRDP tidak dipakai (ronde 5): semua
+        // pengetikan lewat keyboard HP, jadi view-nya tidak pernah dibuat.
+        val im = SessionInputManager(activity, scroller, sv, tpv, null)
         sv.setSessionViewListener(im)
         tpv.setTouchPointerListener(im)
         sv.setScaleGestureDetector(
@@ -162,11 +151,10 @@ class SessionSurfaceController(private val activity: Activity) : GraphicsSink {
         scrollView = scroller
         sessionView = sv
         touchPointerView = tpv
-        keyboard = kb
         inputManager = im
         viewReady = true
 
-        installInsetsHandling(root, scroller, kb)
+        installInsetsHandling(root, scroller)
         root.requestApplyInsets()
 
         // Catch-up: kalau resize sudah terjadi sebelum view tree siap
@@ -179,45 +167,27 @@ class SessionSurfaceController(private val activity: Activity) : GraphicsSink {
     }
 
     /**
-     * Insets: keyboard extended harus NAIK di atas IME (bottom margin =
-     * tinggi IME), bukan tenggelam di belakangnya. Ini jalur yang sama
-     * dipakai SessionActivity inti; sebelumnya controller ini tidak
-     * handle sama sekali sehingga baris tombol fungsi keyboard tertutup
-     * keyboard sistem.
+     * Insets: satu-satunya hal yang perlu dilaporkan adalah status keyboard
+     * HP (IME) ke input manager inti. Tidak ada lagi view keyboard yang perlu
+     * digeser, jadi scroll view tidak diberi padding — inilah yang dulu bikin
+     * strip gelap di tepi bawah dan menutupi taskbar remote.
      */
     private fun installInsetsHandling(
         root: RelativeLayout,
         scroller: ScrollView2D,
-        kb: ExtendedKeyboardView,
     ) {
         ViewCompat.setOnApplyWindowInsetsListener(root) { _, insets ->
             val imeBottom = insets.getInsets(WindowInsetsCompat.Type.ime()).bottom
             val nav = insets.getInsets(WindowInsetsCompat.Type.navigationBars())
-            // Layar sesi menyembunyikan system bar, jadi navigationBars() bisa 0
-            // sementara handle gestur tetap ada — pakai yang lebih besar supaya
-            // baris tombol keyboard tidak menempel/terpotong di tepi bawah.
             val gestures = insets.getInsets(WindowInsetsCompat.Type.systemGestures()).bottom
             val bottomInset = maxOf(nav.bottom, gestures)
-            val kbdVisible = kb.visibility == View.VISIBLE
             inputManager?.onImeVisibilityChanged(imeBottom > 0)
             if (imeBottom != lastImeBottom) {
                 lastImeBottom = imeBottom
                 imeHeightPx = imeBottom
                 onImeChanged?.invoke(imeBottom)
             }
-            // IME sudah termasuk area nav bar: jangan padding dua kali
-            kb.setInsets(nav.left, nav.right, if (imeBottom > 0) 0 else bottomInset)
-            // PENTING: scroll view TIDAK diberi padding bawah saat keyboard
-            // extended tersembunyi. Dulu di sini bottomInset selalu dipasang,
-            // dan karena layar sesi immersive itu berarti ada strip gelap di
-            // tepi bawah yang menutupi taskbar remote. Padding bawah hanya
-            // perlu ketika keyboard extended benar-benar tampil.
             scroller.setPadding(nav.left, 0, nav.right, 0)
-            val lp = kb.layoutParams as? ViewGroup.MarginLayoutParams
-            if (lp != null && lp.bottomMargin != imeBottom) {
-                lp.bottomMargin = imeBottom
-                kb.layoutParams = lp
-            }
             WindowInsetsCompat.CONSUMED
         }
     }
@@ -290,19 +260,31 @@ class SessionSurfaceController(private val activity: Activity) : GraphicsSink {
         uiHandler.post { inputManager?.processUnicodeKey(ch) }
     }
 
-    /** Sinkronkan visibilitas keyboard (idempotent). */
-    fun setKeyboardVisible(shown: Boolean) {
+    /**
+     * Nyala/matikan keyboard HP (IME). Board keyboard bawaan sudah dibuang,
+     * jadi ini satu-satunya jalur keyboard: tombol HUD "Keyboard" dan chip
+     * di panel hanya memanggil ini.
+     */
+    fun setImeVisible(shown: Boolean) {
         uiHandler.post {
-            val kb = keyboard ?: return@post
-            val visible = kb.visibility == View.VISIBLE
-            if (shown != visible) {
-                inputManager?.toggleKeyboard()
+            val im = inputManager ?: return@post
+            if (shown != im.isSoftInputActive()) {
+                im.setSoftKeyboard(shown)
                 rootView?.requestApplyInsets()
             }
         }
     }
 
-    fun isKeyboardVisible(): Boolean = keyboard?.visibility == View.VISIBLE
+    fun isImeVisible(): Boolean = inputManager?.isSoftInputActive() ?: false
+
+    /**
+     * Teruskan event tombol Android (dari keyboard HP / keyboard fisik) ke
+     * mapper inti. Activity wajib memanggil ini dari dispatchKeyEvent —
+     * tanpa jalur ini keyboard HP tidak bisa mengetik ke remote.
+     */
+    fun onKeyEvent(event: KeyEvent): Boolean = inputManager?.onAndroidKeyEvent(event) ?: false
+
+    fun onKeyLongPress(keyCode: Int): Boolean = inputManager?.onAndroidKeyLongPress(keyCode) ?: false
 
     /**
      * Konversi koordinat desktop remote -> koordinat layar (px), dipakai
@@ -351,7 +333,6 @@ class SessionSurfaceController(private val activity: Activity) : GraphicsSink {
         inputManager = null
         sessionView = null
         touchPointerView = null
-        keyboard = null
         scrollView = null
         rootView = null
         bitmap = null

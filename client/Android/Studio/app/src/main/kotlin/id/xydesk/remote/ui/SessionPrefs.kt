@@ -51,6 +51,15 @@ class SessionPrefs(context: Context) {
         get() = input.getBoolean(KEY_HAPTICS, true)
         set(v) = input.edit().putBoolean(KEY_HAPTICS, v).apply()
 
+    /**
+     * Muat seluruh desktop setiap sesi dibuka / setelah resolusi berubah.
+     * Default ON: kalau tidak, tepi bawah desktop (taskbar Windows) sering
+     * tidak masuk layar dan kelihatan seperti "tenggelam".
+     */
+    var autoFit: Boolean
+        get() = input.getBoolean(KEY_AUTO_FIT, true)
+        set(v) = input.edit().putBoolean(KEY_AUTO_FIT, v).apply()
+
     /** Pengali kecepatan scroll (1.0 = satu notch per 40px geser). */
     var scrollSpeed: Float
         get() = input.getFloat(KEY_SCROLL_SPEED, 1f).coerceIn(0.4f, 2.5f)
@@ -181,6 +190,7 @@ class SessionPrefs(context: Context) {
         private const val KEY_POINTER_SIZE = "pointer_size"
         private const val KEY_POINTER_FOLLOW = "pointer_follow"
         private const val KEY_KEYBOARD_CORNER = "keyboard_corner"
+        private const val KEY_AUTO_FIT = "auto_fit"
         private const val KEY_HAPTICS = "haptics"
         private const val KEY_SCROLL_SPEED = "scroll_speed"
         private const val KEY_CLUSTER_SCALE = "cluster_scale"
@@ -209,29 +219,79 @@ object DisplayPrefs {
      * Ukuran lain dikirim ke server sebagai `/size:WxH`; server yang
      * mendukung dynamic resolution langsung menyesuaikan desktop-nya.
      */
-    val resolutions = listOf(
-        AUTOMATIC to "Otomatis",
-        "1024x768" to "1024 x 768",
-        "1280x720" to "1280 x 720",
-        "1280x800" to "1280 x 800",
-        "1366x768" to "1366 x 768",
-        "1440x900" to "1440 x 900",
-        "1600x900" to "1600 x 900",
-        "1680x1050" to "1680 x 1050",
-        "1920x1080" to "1920 x 1080",
-        "1920x1200" to "1920 x 1200",
-        "2560x1440" to "2560 x 1440",
-        "2560x1600" to "2560 x 1600",
-        "3840x2160" to "3840 x 2160",
+    /** Preset pintar: resolusi 16:9 standar terbesar yang masih muat di layar HP. */
+    const val SMART_16_9 = "smart169"
+
+    /**
+     * Pilihan resolusi remote, dikelompokkan per rasio. Rasio ditulis apa
+     * adanya supaya user tahu 1920x1080 itu 16:9 dan tidak menebak-nebak.
+     * "Otomatis" = persis ukuran layar HP (bisa 20:9, tampil penuh tanpa
+     * bar hitam), "16:9 pas layar" = standar Windows yang paling dekat
+     * dengan layar HP (paling aman untuk desktop Windows).
+     */
+    val resolutionGroups: List<Pair<String, List<Pair<String, String>>>> = listOf(
+        "Pintar" to listOf(
+            AUTOMATIC to "Otomatis (layar HP)",
+            SMART_16_9 to "16:9 pas layar",
+        ),
+        "16:9 — standar Windows" to listOf(
+            "1280x720" to "1280\u00d7720 (HD)",
+            "1600x900" to "1600\u00d7900",
+            "1920x1080" to "1920\u00d71080 (FHD)",
+            "2560x1440" to "2560\u00d71440 (QHD)",
+            "3840x2160" to "3840\u00d72160 (4K)",
+        ),
+        "16:10" to listOf(
+            "1280x800" to "1280\u00d7800",
+            "1440x900" to "1440\u00d7900",
+            "1680x1050" to "1680\u00d71050",
+            "1920x1200" to "1920\u00d71200",
+            "2560x1600" to "2560\u00d71600",
+        ),
+        "21:9 ultrawide" to listOf(
+            "2560x1080" to "2560\u00d71080",
+            "3440x1440" to "3440\u00d71440",
+        ),
+        "4:3" to listOf(
+            "1024x768" to "1024\u00d7768",
+            "1280x960" to "1280\u00d7960",
+        ),
+        "Potret (layar diputar)" to listOf(
+            "720x1280" to "720\u00d71280",
+            "1080x1920" to "1080\u00d71920",
+            "1200x1920" to "1200\u00d71920",
+            "1440x2560" to "1440\u00d72560",
+        ),
     )
 
-    /** Resolusi portrait (layar diputar). */
+    /** Resolusi potret (dipakai saat layar HP diputar). */
     val portraitResolutions = listOf(
-        "720x1280" to "720 x 1280",
-        "1080x1920" to "1080 x 1920",
-        "1200x1920" to "1200 x 1920",
-        "1440x2560" to "1440 x 2560",
+        "720x1280" to "720x1280",
+        "1080x1920" to "1080x1920",
+        "1200x1920" to "1200x1920",
+        "1440x2560" to "1440x2560",
     )
+
+    /** Daftar datar (dipakai layar perangkat / tempat lain yang butuh list). */
+    val resolutions: List<Pair<String, String>> =
+        resolutionGroups.flatMap { it.second } + portraitResolutions
+
+    /**
+     * Ubah preset jadi ukuran nyata. SMART_16_9 memilih resolusi 16:9 standar
+     * terbesar yang sisi pendeknya tidak melebihi sisi pendek layar HP, jadi
+     * desktop selalu 16:9 tapi tetap muat di layar.
+     */
+    fun resolvePreset(context: Context, preset: String?): String? {
+        if (preset.isNullOrBlank() || preset == AUTOMATIC) return null
+        if (preset != SMART_16_9) return preset
+        val dm = context.resources.displayMetrics
+        val minSide = minOf(dm.widthPixels, dm.heightPixels)
+        val candidates = listOf(
+            1280 to 720, 1600 to 900, 1920 to 1080, 2560 to 1440, 3840 to 2160,
+        )
+        val pick = candidates.lastOrNull { it.second <= minSide } ?: candidates.first()
+        return "${pick.first}x${pick.second}"
+    }
 
     val rotations = listOf("Auto", "Portrait", "Landscape")
 

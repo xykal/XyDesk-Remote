@@ -47,6 +47,9 @@ public class SessionInputManager
 	private final ScrollView2D scrollView;
 	private final SessionView sessionView;
 	private final TouchPointerView touchPointerView;
+	// Baris tombol keyboard bawaan FreeRDP DIHAPUS dari XyDesk (ronde 5).
+	// View-nya sekarang opsional: kalau null, satu-satunya keyboard adalah
+	// keyboard HP (IME) dan statusnya dijaga oleh softKeyboardAllowed.
 	private final ExtendedKeyboardView keyboard;
 	private final PinchZoomListener pinchZoomListener = new PinchZoomListener();
 
@@ -60,6 +63,8 @@ public class SessionInputManager
 	private boolean softInputRequested = false;
 	// the IME reported a non-zero inset, i.e. it really is on screen
 	private boolean softInputVisible = false;
+	// Keyboard HP diizinkan tampil (pengganti board bawaan FreeRDP).
+	private boolean softKeyboardAllowed = false;
 
 	private final Handler handler;
 
@@ -76,7 +81,8 @@ public class SessionInputManager
 		this.keyboardMapper = new KeyboardMapper();
 		this.keyboardMapper.init(context);
 
-		keyboard.setListener(this);
+		if (keyboard != null)
+			keyboard.setListener(this);
 	}
 
 	// Binds this manager to a live FreeRDP session. Until called, all input events are dropped.
@@ -106,26 +112,50 @@ public class SessionInputManager
 		this.screenHeight = height;
 	}
 
+	// Keyboard dianggap tampil: board bawaan (kalau ada) atau izin IME.
+	private boolean isKeyboardShown()
+	{
+		if (keyboard != null)
+			return keyboard.getVisibility() == View.VISIBLE;
+		return softKeyboardAllowed;
+	}
+
+	/**
+	 * Nyalakan/matikan keyboard HP (IME). Dipakai XyDesk: board bawaan
+	 * FreeRDP tidak dipakai lagi, jadi tombol "keyboard" di HUD hanya perlu
+	 * menampilkan keyboard HP.
+	 */
+	public void setSoftKeyboard(boolean shown)
+	{
+		softKeyboardAllowed = shown;
+		if (keyboard != null)
+		{
+			keyboard.setExpanded(false, false);
+			keyboard.setVisibility(shown ? View.VISIBLE : View.GONE);
+		}
+		setSoftInputState(shown);
+		if (!shown)
+			keyboardMapper.clearlAllModifiers();
+	}
+
 	// Shows or hides the key bar together with the system IME.
 	public void toggleKeyboard()
 	{
-		if (keyboard.getVisibility() == View.VISIBLE)
-		{
+		if (isKeyboardShown())
 			hideKeyboards();
-		}
 		else
-		{
-			keyboard.setExpanded(false, false);
-			keyboard.setVisibility(View.VISIBLE);
-			setSoftInputState(true);
-		}
+			setSoftKeyboard(true);
 	}
 
 	// Called from onPause and back-press handling.
 	public void hideKeyboards()
 	{
-		keyboard.setExpanded(false, false);
-		keyboard.setVisibility(View.GONE);
+		softKeyboardAllowed = false;
+		if (keyboard != null)
+		{
+			keyboard.setExpanded(false, false);
+			keyboard.setVisibility(View.GONE);
+		}
 		setSoftInputState(false);
 		keyboardMapper.clearlAllModifiers();
 		// the IME dismiss animation may re-show the nav bar after the refresh above
@@ -135,7 +165,7 @@ public class SessionInputManager
 	// Returns true if the back press was consumed by the keyboard.
 	public boolean handleKeyboardBack()
 	{
-		if (keyboard.getVisibility() != View.VISIBLE)
+		if (keyboard == null || keyboard.getVisibility() != View.VISIBLE)
 			return false;
 
 		if (keyboard.isExpanded())
@@ -154,7 +184,7 @@ public class SessionInputManager
 	// True if the system soft keyboard (IME) is up or on its way up.
 	public boolean isSoftInputActive()
 	{
-		return keyboard.getVisibility() == View.VISIBLE && (softInputRequested || softInputVisible);
+		return isKeyboardShown() && (softInputRequested || softInputVisible);
 	}
 
 	// Fed from the window insets listener. The IME only counts as gone once it has been seen on
@@ -479,6 +509,8 @@ public class SessionInputManager
 
 	@Override public void switchKeyboard(int keyboardType)
 	{
+		if (keyboard == null)
+			return;
 		switch (keyboardType)
 		{
 			case KeyboardMapper.KEYBOARD_TYPE_FUNCTIONKEYS:
@@ -496,7 +528,8 @@ public class SessionInputManager
 
 	@Override public void modifiersChanged()
 	{
-		keyboard.refreshModifiers();
+		if (keyboard != null)
+			keyboard.refreshModifiers();
 	}
 
 	// ****************************************************************************

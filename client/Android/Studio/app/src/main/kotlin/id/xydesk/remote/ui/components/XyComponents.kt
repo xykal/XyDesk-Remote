@@ -133,14 +133,20 @@ fun XyIconPill(
     active: Boolean = false,
     contentDescription: String? = null,
 ) {
-    val bg = if (active) MaterialTheme.colorScheme.primary else Color(0xCC14171B)
+    // Ikut tema penuh: dulu latarnya selalu gelap sehingga di mode terang
+    // tombolnya jadi pulau gelap dengan ikon gelap (nyaris tidak terbaca).
+    val bg = if (active) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surfaceVariant
     val fg = if (active) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurface
     Box(
         modifier = modifier
             .size(size)
             .clip(CircleShape)
             .background(bg)
-            .border(1.dp, if (active) Color.Transparent else Color.White.copy(alpha = 0.14f), CircleShape)
+            .border(
+                1.dp,
+                if (active) Color.Transparent else MaterialTheme.colorScheme.outlineVariant,
+                CircleShape,
+            )
             .clickable(onClick = onClick),
         contentAlignment = Alignment.Center,
     ) {
@@ -503,7 +509,7 @@ fun XyLogo(
 /**
  * Shell dialog milik XyDesk.
  *
- * Bukan AlertDialog bawaan: panel gelap ber-border tipis dengan radius kecil,
+ * Bukan AlertDialog bawaan: panel bertema dengan border tipis dan radius kecil,
  * tombol pil buatan sendiri, dan scrim yang bisa dimatikan (mis. untuk prompt
  * kredensial/sertifikat yang tidak boleh ditutup begitu saja).
  */
@@ -518,7 +524,7 @@ fun XyOverlay(
     Box(
         Modifier
             .fillMaxSize()
-            .background(Color(0xCC000000))
+            .background(MaterialTheme.colorScheme.scrim)
             .then(
                 if (onDismiss != null) Modifier.clickable(onClick = onDismiss) else Modifier,
             )

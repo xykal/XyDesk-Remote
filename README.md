@@ -84,6 +84,32 @@ Ronde ini seluruhnya soal input dan kontrol:
 
 Detail teknis: `docs/HUD-BUTTONS.md` (EN) dan `docs/HUD-BUTTONS.id.md` (ID).
 
+## Catatan rilis v0.5.2
+
+Ronde 5 — kontrol, taskbar, dan tema:
+
+- **Toolbar di atas keyboard dihapus, keyboard virtual dihapus.** Mengetik
+  sepenuhnya lewat keyboard HP; karakter IME diteruskan ke sesi sebagai
+  `KeyEvent` (jalur scancode/modifier milik inti), karakter tanpa keycode lewat
+  jalur unicode.
+- **Kontrol = overlay satu-satu.** Tiap aksi satu tombol bulat: bisa digeser
+  kapan saja, diubah ukurannya (24..140 dp), diganti jenisnya, ditambah dari
+  katalog, dan dihapus. Titik masuk: geser langsung, tahan lama untuk editor,
+  banner "atur posisi" dengan chip "+ Tombol", dan daftar tombol di panel kanan.
+- **Taskbar tidak lagi tenggelam.** Ukuran desktop yang dikirim adalah area
+  gambar yang benar-benar terlihat, tidak ada lagi padding bawah yang dulu
+  membuat strip gelap di tepi; muat-ulang otomatis sesudah connect, ganti
+  resolusi, dan rotasi.
+- **Resolusi per rasio.** Preset dikelompokkan 16:9 / 16:10 / 21:9 / 4:3 /
+  potret, ditambah "16:9 pas layar" yang memilih ukuran 16:9 standar terbesar
+  yang masih muat.
+- **Tema dirapikan.** Panel, dialog, dan pemilih tombol memakai token tema
+  (mode gelap dan terang dua-duanya benar), sementara tombol HUD tetap kontras
+  tetap karena berada di atas gambar remote. Semua pesan singkat memakai
+  notifikasi milik app sendiri, bukan Toast bawaan Android.
+- Panel kanan disederhanakan: yang berhubungan dengan keyboard virtual dibuang,
+  yang tersisa hanya yang benar-benar berfungsi.
+
 ## Catatan rilis v0.5.1
 
 Ronde 4 — perbaikan dari pemakaian nyata di HP:
@@ -104,6 +130,31 @@ Ronde 4 — perbaikan dari pemakaian nyata di HP:
 - Fitur baru: "Kirim teks ke remote" (termasuk tempel dari clipboard HP) dan
   "Salin info teknis" (versi inti RDP) untuk laporan bug.
 - Kontras teks dan garis dinaikkan di panel, keyboard layar, dan ikon HUD.
+
+## English summary (v0.5.2)
+
+Round 5 — controls, taskbar, and theming:
+
+- **The toolbar above the keyboard and the built-in virtual keyboard are gone.**
+  Typing is done entirely with the phone IME; typed characters are forwarded to
+  the session as Android `KeyEvent`s (the core's scancode/modifier path), and
+  characters without a keycode use the unicode path.
+- **Controls are individual overlays.** One action per round button: drag it any
+  time, resize it (24..140 dp), change its type, add more from the catalogue, or
+  delete it. Entry points: drag directly, long-press for the editor, the arrange
+  banner with a "+ Button" chip, and the button list in the right panel.
+- **The remote taskbar no longer sinks off-screen.** The desktop size sent is the
+  visible picture area, the bottom padding that used to leave a dark strip is
+  gone, and the view is re-fitted after connecting, after a resolution change,
+  and after rotation.
+- **Resolution grouped by aspect ratio** (16:9 / 16:10 / 21:9 / 4:3 / portrait),
+  plus "16:9 matched to screen" which picks the largest standard 16:9 size that
+  fits.
+- **Theme cleanup.** Panels, dialogs, and pickers use theme tokens (dark and
+  light are both correct); HUD buttons keep fixed contrast because they sit on
+  top of the remote picture. All short messages use the app's own notice widget
+  instead of the system Toast.
+- Right panel pruned: anything tied to the removed virtual keyboard is gone.
 
 ## English summary (v0.5.1)
 

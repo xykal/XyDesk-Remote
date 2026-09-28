@@ -302,8 +302,7 @@ private fun GeneralSection(appPrefs: AppPrefs, onShowLog: () -> Unit) {
     val context = LocalContext.current
     val prefs = remember { SessionPrefs(context) }
     var hudSize by remember { mutableStateOf(prefs.hudButtonSize) }
-    var keyboardScale by remember { mutableStateOf(prefs.keyboardScale) }
-    var keyboardAuto by remember { mutableStateOf(prefs.keyboardAutoOpen) }
+    var autoFit by remember { mutableStateOf(prefs.autoFit) }
     var defaultUdp by remember { mutableStateOf(appPrefs.defaultUdp) }
     var defaultNetAuto by remember { mutableStateOf(appPrefs.defaultNetAuto) }
     var defaultH264 by remember { mutableStateOf(appPrefs.defaultH264) }
@@ -318,7 +317,6 @@ private fun GeneralSection(appPrefs: AppPrefs, onShowLog: () -> Unit) {
     var scrollSpeed by remember { mutableStateOf(prefs.scrollSpeed) }
     var clusterScale by remember { mutableStateOf(prefs.clusterScale) }
     var haptics by remember { mutableStateOf(prefs.haptics) }
-    var corner by remember { mutableIntStateOf(prefs.keyboardCorner.ordinal) }
     var lang by remember { mutableStateOf(LangPrefs.current()) }
     var showLeft by remember { mutableStateOf(prefs.showLeft) }
     var showRight by remember { mutableStateOf(prefs.showRight) }
@@ -488,21 +486,19 @@ private fun GeneralSection(appPrefs: AppPrefs, onShowLog: () -> Unit) {
 
         XySectionLabel("Keyboard")
         XyCard {
-            XySegmented(
-                options = Corner.entries.map { it.title },
-                selectedIndex = corner,
-                onSelect = {
-                    corner = it
-                    prefs.keyboardCorner = Corner.entries[it]
-                },
-                modifier = Modifier.fillMaxWidth(),
-            )
-            Spacer(Modifier.height(6.dp))
             Text(
-                "Tombol keyboard selalu di pojok bawah, di atas baris tombol " +
-                    "fungsi tambahan supaya tidak tertutup.",
+                "Mengetik memakai keyboard HP (IME). Tidak ada keyboard virtual " +
+                    "bawaan app dan tidak ada toolbar di atas keyboard: semua " +
+                    "kontrol dibuat dari tombol overlay satu-satu di layar sesi.",
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            Spacer(Modifier.height(8.dp))
+            XyToggleRow(
+                title = "Muat seluruh desktop (fit)",
+                subtitle = "Taskbar dan tepi desktop selalu ikut kelihatan",
+                checked = autoFit,
+                onCheckedChange = { autoFit = it; prefs.autoFit = it },
             )
         }
 
@@ -519,23 +515,7 @@ private fun GeneralSection(appPrefs: AppPrefs, onShowLog: () -> Unit) {
             Slider(
                 value = hudSize,
                 onValueChange = { hudSize = it; prefs.hudButtonSize = it },
-                valueRange = 40f..80f,
-            )
-            Spacer(Modifier.height(6.dp))
-            Text(
-                "Skala keyboard layar: ${(keyboardScale * 100).toInt()}%",
-                style = MaterialTheme.typography.bodyMedium,
-            )
-            Slider(
-                value = keyboardScale,
-                onValueChange = { keyboardScale = it; prefs.keyboardScale = it },
-                valueRange = 0.7f..1.6f,
-            )
-            XyToggleRow(
-                title = "Buka keyboard layar otomatis",
-                subtitle = "Keyboard QWERTY/Fn/NUM/KOMBO langsung tampil saat sesi terhubung",
-                checked = keyboardAuto,
-                onCheckedChange = { keyboardAuto = it; prefs.keyboardAutoOpen = it },
+                valueRange = 32f..96f,
             )
         }
 

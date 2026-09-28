@@ -11,6 +11,7 @@ import android.view.KeyEvent
 import android.view.WindowManager
 import androidx.compose.foundation.background
 import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -55,6 +56,8 @@ import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.layout.onSizeChanged
+import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
@@ -68,6 +71,8 @@ import id.xydesk.remote.core.SessionManager
 import id.xydesk.remote.core.SessionState
 import id.xydesk.remote.core.TelemetrySample
 import id.xydesk.remote.ui.components.XyIcons
+import id.xydesk.remote.ui.components.XyNoticeHost
+import id.xydesk.remote.ui.components.rememberXyNotice
 import id.xydesk.remote.ui.components.XyPillButton
 import kotlinx.coroutines.delay
 import kotlin.math.roundToInt
@@ -134,19 +139,21 @@ fun XyDeskSessionScreen(
     var bound by remember { mutableStateOf(false) }
     var inputMode by remember { mutableIntStateOf(prefs.inputMode.ordinal) }
     var pointerVisible by remember { mutableStateOf(true) }
+    // Keyboard HP (IME) — satu-satunya keyboard. Board keyboard virtual dan
+    // toolbar di atas keyboard sudah dihapus dari produk (ronde 5).
     var keyboardShown by remember(profile.id) { mutableStateOf(prefs.keyboardShown(profile.id)) }
-    var overlayShown by remember(profile.id) {
-        mutableStateOf(prefs.overlayShown(profile.id) || prefs.keyboardAutoOpen)
-    }
-    var keyboardScale by remember { mutableFloatStateOf(prefs.keyboardScale) }
     var hudKeys by remember(profile.id) {
-        // Layout lama (sebelum ronde 4) menandai SEMUA tombol sebagai baris
-        // atas; kalau tidak dimigrasi, tombol terapung user hilang dari layar.
+        // Layout lama dimigrasi tanpa mengubah posisi/ukuran yang sudah diatur.
         mutableStateOf(HudKey.migrate(prefs.hudKeys(profile.id)))
     }
     var mappingMode by remember { mutableStateOf(false) }
-    var imeHeightPx by remember { mutableIntStateOf(0) }
     var remoteCursor by remember { mutableStateOf<RemoteCursor?>(null) }
+    val notice = rememberXyNotice()
+    var autoFit by remember { mutableStateOf(prefs.autoFit) }
+    /** Ukuran area gambar (tanpa kontrol), dipakai untuk resize yang akurat. */
+    var viewport by remember { mutableStateOf(IntSize.Zero) }
+    /** Resize yang harus dikirim ulang setelah reconnect (ganti resolusi). */
+    var pendingResize by remember { mutableStateOf<Pair<Int, Int>?>(null) }
     // Info teknis untuk laporan bug: versi FreeRDP + ringkasan build JNI.
     val coreInfo = remember {
         runCatching {
@@ -207,9 +214,6 @@ fun XyDeskSessionScreen(
     }
 
     LaunchedEffect(Unit) {
-        // Toolbar HUD menempel di atas keyboard HP: tinggi IME datang dari
-        // controller, jadi toolbar otomatis ikut hilang saat keyboard ditutup.
-        controller.onImeChanged = { px -> imeHeightPx = px }
         // Bentuk kursor dari server (panah/tangan/I-beam/...) dipakai apa adanya.
         controller.onRemoteCursor = { cursor -> remoteCursor = cursor }
     }
@@ -237,9 +241,12 @@ fun XyDeskSessionScreen(
         if (state is SessionState.Connected && !bound) {
             bound = true
             controller.bind(manager.instance())
-            controller.setKeyboardVisible(keyboardShown)
+            controller.setImeVisible(keyboardShown)
             when {
+                // Zoom sendiri menang; kalau belum pernah diatur dan auto-fit
+                // menyala, seluruh desktop dimuat (taskbar ikut kelihatan).
                 prefs.hasZoom(profile.id) -> controller.applyZoom(zoom)
+                prefs.autoFit -> controller.fitToScreen()
                 else -> {
                     val dpi = DisplayPrefs.dpi(context, profile.id) / 100f
                     if (dpi != 1f) controller.applyZoom(dpi) else controller.fitToScreen()
@@ -249,14 +256,22 @@ fun XyDeskSessionScreen(
     }
 
     val configuration = LocalConfiguration.current
-    LaunchedEffect(state, configuration.screenWidthDp, configuration.screenHeightDp) {
+    LaunchedEffect(state, configuration.screenWidthDp, configuration.screenHeightDp, viewport) {
         if (state is SessionState.Connected && !applyingResolution &&
-            DisplayPrefs.resolution(context, profile.id) == DisplayPrefs.AUTOMATIC
+            DisplayPrefs.resolution(context, profile.id) == DisplayPrefs.AUTOMATIC &&
+            viewport.width > 0 && viewport.height > 0
         ) {
-            val view = (context as? Activity)?.window?.decorView
-            val w = view?.width ?: 0
-            val h = view?.height ?: 0
-            if (w > 0 && h > 0) manager.resizeRemote(w, h)
+            // Ukuran yang dikirim = area gambar yang benar-benar terlihat.
+            // Dengan begitu tidak ada bagian desktop yang jatuh di luar layar.
+            manager.resizeRemote(viewport.width, viewport.height)
+            if (autoFit) controller.fitToScreen()
+        }
+    }
+
+    // Kalau ukuran layar berubah (rotasi), desktop remote ikut menyesuaikan.
+    LaunchedEffect(viewport) {
+        if (state is SessionState.Connected && autoFit && viewport.width > 0) {
+            controller.fitToScreen()
         }
     }
 
@@ -265,6 +280,17 @@ fun XyDeskSessionScreen(
             applyingResolution = false
             bound = false
             manager.connect(profile)
+        }
+    }
+
+    // Setelah reconnect karena ganti resolusi: kirim ukuran yang diminta
+    // sekali lagi lewat kanal DISP, lalu muat seluruh desktop.
+    LaunchedEffect(state) {
+        val want = pendingResize ?: return@LaunchedEffect
+        if (state is SessionState.Connected) {
+            manager.resizeRemote(want.first, want.second)
+            controller.fitToScreen()
+            pendingResize = null
         }
     }
 
@@ -347,7 +373,8 @@ fun XyDeskSessionScreen(
                 val next = !keyboardShown
                 keyboardShown = next
                 prefs.setKeyboardShown(profile.id, next)
-                controller.setKeyboardVisible(next)
+                controller.setImeVisible(next)
+                notice.show(if (next) "Keyboard HP dibuka" else "Keyboard HP ditutup")
             }
 
             HudKind.INPUT_SWITCH -> if (down) {
@@ -358,7 +385,7 @@ fun XyDeskSessionScreen(
                 }
                 inputMode = next.ordinal
                 prefs.inputMode = next
-                if (next == InputMode.DIRECT) controller.setKeyboardVisible(keyboardShown)
+                if (next == InputMode.DIRECT) controller.setImeVisible(keyboardShown)
             }
 
             HudKind.KEY -> {
@@ -396,11 +423,33 @@ fun XyDeskSessionScreen(
 
     val connected = state is SessionState.Connected
 
-    Box(Modifier.fillMaxSize().background(Color.Black)) {
+    Box(
+        Modifier
+            .fillMaxSize()
+            .background(Color.Black)
+            .onSizeChanged { viewport = it },
+    ) {
         AndroidView(
             factory = { ctx -> controller.buildViewTree(ctx) },
             modifier = Modifier.fillMaxSize(),
         )
+
+        // Mode trackpad: ketuk di area mana pun = klik kiri. Ini pengganti
+        // baris kontrol tambahan, jadi layar tetap bersih.
+        if (connected && InputMode.entries[inputMode] == InputMode.TRACKPAD && !mappingMode) {
+            Box(
+                Modifier
+                    .fillMaxSize()
+                    .pointerInput(zoom, remoteWidth, remoteHeight) {
+                        detectTapGestures(
+                            onTap = {
+                                sendButton(XyMouseButton.LEFT, true)
+                                sendButton(XyMouseButton.LEFT, false)
+                            },
+                        )
+                    },
+            )
+        }
 
         // Lapisan gesture trackpad: menutup surface supaya sentuhan tidak
         // diteruskan langsung sebagai klik di posisi jari.
@@ -443,29 +492,21 @@ fun XyDeskSessionScreen(
                 onInputModeChange = { mode ->
                     inputMode = mode.ordinal
                     prefs.inputMode = mode
-                    if (mode == InputMode.DIRECT) controller.setKeyboardVisible(keyboardShown)
+                    if (mode == InputMode.DIRECT) controller.setImeVisible(keyboardShown)
                 },
                 keyboardShown = keyboardShown,
                 onKeyboardShownChange = { shown ->
                     keyboardShown = shown
                     prefs.setKeyboardShown(profile.id, shown)
-                    controller.setKeyboardVisible(shown)
-                },
-                overlayShown = overlayShown,
-                onOverlayShownChange = { shown ->
-                    overlayShown = shown
-                    prefs.setOverlayShown(profile.id, shown)
-                    // Board lengkap hanya muat kalau keyboard HP disembunyikan.
-                    // Chip ABC di board mengembalikan fokus ke keyboard HP.
-                    controller.setKeyboardVisible(!shown)
-                    keyboardShown = !shown
-                    prefs.setKeyboardShown(profile.id, !shown)
+                    controller.setImeVisible(shown)
                 },
                 keys = hudKeys,
                 onKeysChange = { setHudKeys(it) },
                 mappingMode = mappingMode,
-                onMappingModeChange = { mappingMode = it },
-                imeHeightPx = imeHeightPx,
+                onMappingModeChange = {
+                    mappingMode = it
+                    if (it) notice.show("Geser tombol ke posisi yang kal mau")
+                },
                 onPhase = { key, phase -> handleHudPhase(key, phase) },
                 onZoomIn = { controller.zoomIn() },
                 onZoomOut = { controller.zoomOut() },
@@ -495,36 +536,29 @@ fun XyDeskSessionScreen(
                         "Landscape" -> ActivityInfo.SCREEN_ORIENTATION_LANDSCAPE
                         else -> ActivityInfo.SCREEN_ORIENTATION_FULL_USER
                     }
-                    // Rotasi mengubah bentuk layar: kalau resolusi di mode
-                    // otomatis, desktop remote ikut disesuaikan (live via DISP).
-                    if (DisplayPrefs.resolution(context, profile.id) == DisplayPrefs.AUTOMATIC) {
-                        val view = (context as? Activity)?.window?.decorView
-                        val w = view?.width ?: 0
-                        val h = view?.height ?: 0
-                        if (w > 0 && h > 0) manager.resizeRemote(w, h)
-                    }
+                    // Rotasi mengubah bentuk layar: ukuran dikirim ulang oleh
+                    // efek yang memantau ukuran area gambar.
+                    notice.show("Orientasi diubah ke $mode")
                 },
                 onResolutionChange = { preset ->
                     // Jalur utama: ubah desktop remote saat sesi hidup lewat
                     // kanal DISP (/dynamic-resolution) — tidak perlu reconnect.
                     // Kalau server menolak, baru jatuh ke jalur reconnect.
-                    val live = when (preset) {
-                        DisplayPrefs.AUTOMATIC -> {
-                            val view = (context as? Activity)?.window?.decorView
-                            val w = view?.width ?: 0
-                            val h = view?.height ?: 0
-                            w > 0 && h > 0 && manager.resizeRemote(w, h)
-                        }
-
-                        else -> parseSize(preset)?.let { (w, h) ->
-                            manager.resizeRemote(w, h)
-                        } ?: false
+                    val size = when (preset) {
+                        DisplayPrefs.AUTOMATIC -> viewport.width to viewport.height
+                        else -> parseSize(DisplayPrefs.resolvePreset(context, preset).orEmpty())
                     }
+                    val live = size != null && size.first > 0 && size.second > 0 &&
+                        manager.resizeRemote(size.first, size.second)
                     if (live) {
                         controller.fitToScreen()
+                        notice.show("Resolusi remote: ${size.first} x ${size.second}")
                     } else {
+                        // Server menolak ukuran live -> reconnect dengan /size baru.
+                        pendingResize = size
                         applyingResolution = true
                         manager.disconnect()
+                        notice.show("Menyambung ulang dengan resolusi baru")
                     }
                 },
                 onToggleTrackpad = {
@@ -535,51 +569,22 @@ fun XyDeskSessionScreen(
                     }
                     inputMode = next.ordinal
                     prefs.inputMode = next
-                    if (next == InputMode.DIRECT) controller.setKeyboardVisible(keyboardShown)
+                    if (next == InputMode.DIRECT) controller.setImeVisible(keyboardShown)
                 },
                 // Teks bebas (unicode) — untuk password/URL/karakter yang
                 // tidak ada di pemetaan tombol HUD.
                 onSendText = { manager.sendText(it) },
                 coreInfo = coreInfo,
+                notice = notice,
             )
 
-            // Keyboard layar lengkap: QWERTY + F1-F12 + numpad + simbol +
-            // kombinasi. Terpisah dari keyboard sistem dan dari tombol HUD.
-            if (overlayShown) {
-                Box(Modifier.fillMaxSize().zIndex(13f)) {
-                    SessionKeyboard(
-                        deviceId = profile.id,
-                        scale = keyboardScale,
-                        haptics = prefs.haptics,
-                        onKey = { code, down -> controller.sendVirtualKey(code, down) },
-                        onCombo = { codes -> controller.sendCombo(codes) },
-                        onScaleChange = {
-                            keyboardScale = it
-                            prefs.keyboardScale = it
-                        },
-                        // Baris atas keyboard = tombol HUD milik user; kalau
-                        // kosong board tetap jalan seperti biasa.
-                        aux = hudKeys.filter { it.inToolbar },
-                        onAuxPhase = { key, phase -> handleHudPhase(key, phase) },
-                        onHide = {
-                            // Tutup keyboard sepenuhnya (balik ke desktop).
-                            overlayShown = false
-                            prefs.setOverlayShown(profile.id, false)
-                            keyboardShown = false
-                            prefs.setKeyboardShown(profile.id, false)
-                            controller.setKeyboardVisible(false)
-                        },
-                        onClose = {
-                            // ABC = balik ke keyboard HP.
-                            overlayShown = false
-                            prefs.setOverlayShown(profile.id, false)
-                            keyboardShown = true
-                            prefs.setKeyboardShown(profile.id, true)
-                            controller.setKeyboardVisible(true)
-                        },
-                    )
-                }
-            }
+            // Pesan app sendiri (bukan Toast bawaan Android) — satu bahasa
+            // visual dengan panel, ikut tema.
+            XyNoticeHost(
+                state = notice,
+                modifier = Modifier.align(Alignment.TopCenter),
+            )
+
         }
 
         if (state is SessionState.Connecting || state is SessionState.Authenticating) {

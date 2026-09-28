@@ -45,8 +45,6 @@ data class HudKey(
     val y: Float = 0.42f,
     /** Diameter tombol (dp). Bulat penuh: radius = setengah diameter. */
     val size: Float = 48f,
-    /** Ikut tampil di toolbar yang menempel di atas keyboard HP. */
-    val inToolbar: Boolean = true,
 ) {
     fun toJson(): JSONObject = JSONObject().apply {
         put("id", id)
@@ -59,7 +57,6 @@ data class HudKey(
         put("x", x.toDouble())
         put("y", y.toDouble())
         put("size", size.toDouble())
-        put("toolbar", inToolbar)
     }
 
     companion object {
@@ -80,8 +77,7 @@ data class HudKey(
                 action = action,
                 x = o.optDouble("x", 0.78).toFloat().coerceIn(0f, 1f),
                 y = o.optDouble("y", 0.42).toFloat().coerceIn(0f, 1f),
-                size = o.optDouble("size", 48.0).toFloat().coerceIn(32f, 96f),
-                inToolbar = o.optBoolean("toolbar", true),
+                size = o.optDouble("size", 48.0).toFloat().coerceIn(24f, 140f),
             )
         }
 
@@ -108,54 +104,49 @@ data class HudKey(
          */
         fun defaults(): List<HudKey> = listOf(
             // Tombol mengambang: bisa digeser bebas di atas layar remote.
-            HudKey("kiri", HudKind.MOUSE_LEFT, "Kiri", x = 0.84f, y = 0.40f, inToolbar = false),
-            HudKey("kanan", HudKind.MOUSE_RIGHT, "Kanan", x = 0.84f, y = 0.52f, inToolbar = false),
-            HudKey("tengah", HudKind.MOUSE_MIDDLE, "Tengah", x = 0.84f, y = 0.64f, inToolbar = false),
+            HudKey("kiri", HudKind.MOUSE_LEFT, "Kiri", x = 0.84f, y = 0.40f),
+            HudKey("kanan", HudKind.MOUSE_RIGHT, "Kanan", x = 0.84f, y = 0.52f),
+            HudKey("tengah", HudKind.MOUSE_MIDDLE, "Tengah", x = 0.84f, y = 0.64f),
             HudKey(
                 "naik", HudKind.SCROLL_UP, "Naik",
-                action = HudAction.HOLD, x = 0.72f, y = 0.40f, inToolbar = false,
+                action = HudAction.HOLD, x = 0.72f, y = 0.40f,
             ),
             HudKey(
                 "turun", HudKind.SCROLL_DOWN, "Turun",
-                action = HudAction.HOLD, x = 0.72f, y = 0.52f, inToolbar = false,
+                action = HudAction.HOLD, x = 0.72f, y = 0.52f,
             ),
             HudKey(
                 "switch", HudKind.INPUT_SWITCH, "Mode",
-                x = 0.72f, y = 0.64f, inToolbar = false,
+                x = 0.72f, y = 0.64f,
             ),
             // Pengganti tombol "Buka keyboard" yang dulu nempel di pojok bawah
             // dan menutupi taskbar remote: sekarang tombol biasa, bisa digeser.
             HudKey(
                 "keyboard", HudKind.KEYBOARD, "Keyboard",
-                x = 0.84f, y = 0.76f, inToolbar = false,
+                x = 0.84f, y = 0.76f,
             ),
-            // Baris atas keyboard kustom: cuma tampil saat board terbuka, jadi
-            // tidak pernah menutupi desktop/taskbar.
-            HudKey("aux_esc", HudKind.KEY, "Esc", keyCode = KeyEvent.KEYCODE_ESCAPE),
-            HudKey("aux_tab", HudKind.KEY, "Tab", keyCode = KeyEvent.KEYCODE_TAB),
-            HudKey("aux_enter", HudKind.KEY, "Ent", keyCode = KeyEvent.KEYCODE_ENTER),
-            HudKey("aux_del", HudKind.KEY, "\u232b", keyCode = KeyEvent.KEYCODE_DEL),
-            HudKey("aux_ctrl", HudKind.KEY, "Ctrl", keyCode = KeyEvent.KEYCODE_CTRL_LEFT),
-            HudKey("aux_alt", HudKind.KEY, "Alt", keyCode = KeyEvent.KEYCODE_ALT_LEFT),
-            HudKey("aux_win", HudKind.KEY, "Win", keyCode = KeyEvent.KEYCODE_META_LEFT),
-            HudKey("aux_left", HudKind.KEY, "\u25c0", keyCode = KeyEvent.KEYCODE_DPAD_LEFT),
-            HudKey("aux_up", HudKind.KEY, "\u25b2", keyCode = KeyEvent.KEYCODE_DPAD_UP),
-            HudKey("aux_down", HudKind.KEY, "\u25bc", keyCode = KeyEvent.KEYCODE_DPAD_DOWN),
-            HudKey("aux_right", HudKind.KEY, "\u25b6", keyCode = KeyEvent.KEYCODE_DPAD_RIGHT),
         )
 
         /**
-         * Daftar lama tersimpan sebagai satu campuran (semua `inToolbar = true`).
-         * Baris atas keyboard baru saja dipisah, jadi tombol lamanya
-         * dikembalikan sebagai tombol terapung supaya layout user tidak
-         * berubah diam-diam saat update.
+         * Layout lama (ronde 4 dan sebelumnya) memakai konsep "baris atas
+         * keyboard" dengan id `aux_*`. Baris itu sudah dihapus dari produk,
+         * jadi entri `aux_*` dibuang dan sisanya dipertahankan apa adanya —
+         * posisi, ukuran, dan aksi yang sudah diatur user tidak boleh berubah.
+         *
+         * Kalau hasilnya kosong (semua tombol lama cuma baris atas), pakai
+         * set bawaan supaya layar tidak kosong tanpa kontrol.
          */
-        fun migrate(list: List<HudKey>): List<HudKey> =
-            if (list.isNotEmpty() && list.all { it.inToolbar }) {
-                list.map { it.copy(inToolbar = false) }
-            } else {
-                list
+        fun migrate(list: List<HudKey>): List<HudKey> {
+            if (list.isEmpty()) return defaults()
+            val kept = list.filterNot { it.id.startsWith("aux_") }
+            if (kept.isEmpty()) return defaults()
+            // Tombol keyboard wajib ada: itu satu-satunya jalan membuka IME
+            // sekarang, dan pemilik layout lama belum tentu punya.
+            if (kept.none { it.kind == HudKind.KEYBOARD }) {
+                return kept + HudKey("keyboard", HudKind.KEYBOARD, "Keyboard", x = 0.84f, y = 0.76f)
             }
+            return kept
+        }
     }
 }
 

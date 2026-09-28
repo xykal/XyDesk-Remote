@@ -25,13 +25,14 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Icon
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Slider
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -40,7 +41,6 @@ import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.PathEffect
-import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalDensity
@@ -59,17 +59,21 @@ import kotlin.math.roundToInt
 /** Fase aksi tombol: layer cuma melaporkan fase, arti aksinya di screen. */
 enum class HudPhase { DOWN, UP, TAP }
 
+/**
+ * Warna tombol kontrol di atas gambar remote. Sengaja tetap (tidak ikut tema
+ * app) karena latarnya adalah gambar sesi, bukan permukaan app.
+ */
 private val HudBorder = Color(0xD9FFFFFF)
 private val HudBorderDim = Color(0x7AFFFFFF)
-private val HudInk = Color(0xFFEFF3F6)
-private val HudMuted = Color(0xFFC3CBD3)
+private val HudInk = Color(0xFFF1F4F6)
 
 /**
- * Layer tombol HUD: tiap tombol bulat penuh, satu aksi, bisa digeser bebas,
- * ukurannya diatur, dan aksinya dipilih (sekali klik / tahan / toggle).
+ * Lapisan tombol kontrol sesi.
  *
- * Di mode "atur posisi" (screen mapping) tombol diberi ring putus-putus +
- * grid bantu supaya jelas sedang bisa digeser; long-press membuka editor.
+ * Tiap tombol bulat penuh, satu aksi, bisa digeser bebas (kapan saja, tidak
+ * harus masuk mode atur posisi), ukurannya diatur, dan aksinya dipilih
+ * (sekali klik / tahan / toggle). Di mode atur posisi tombol diberi ring +
+ * grid bantu supaya jelas bisa digeser.
  */
 @Composable
 fun HudKeyLayer(
@@ -91,7 +95,7 @@ fun HudKeyLayer(
                 var x = step
                 while (x < size.width) {
                     drawLine(
-                        color = Color(0x22FFFFFF),
+                        color = Color(0x33FFFFFF),
                         start = Offset(x, 0f),
                         end = Offset(x, size.height),
                         strokeWidth = 1f,
@@ -102,7 +106,7 @@ fun HudKeyLayer(
                 var y = step
                 while (y < size.height) {
                     drawLine(
-                        color = Color(0x22FFFFFF),
+                        color = Color(0x33FFFFFF),
                         start = Offset(0f, y),
                         end = Offset(size.width, y),
                         strokeWidth = 1f,
@@ -149,10 +153,9 @@ private fun HudKeyButton(
     var latched by remember(key.id) { mutableStateOf(false) }
     var pressed by remember(key.id) { mutableStateOf(false) }
 
-    // BUG LAMA: blok pointerInput tidak pernah restart saat posisi berubah,
-    // jadi lambda lama terus memakai key.x/key.y versi awal dan tiap event
-    // cuma menggeser beberapa piksel (praktis "tidak bisa digeser").
-    // Sekarang posisi selama geser diakumulasi lokal di sini.
+    // Posisi selama geser diakumulasi lokal: blok pointerInput tidak restart
+    // saat posisi berubah, jadi membaca key.x/key.y langsung akan memakai
+    // nilai basi dan tombol kelihatan tidak mau digeser.
     val latest = rememberUpdatedState(key)
     val dragPos = remember(key.id) { mutableStateOf<Offset?>(null) }
 
@@ -201,9 +204,8 @@ private fun HudKeyButton(
                         travelled += delta.getDistance()
                         if (travelled > 8f) {
                             dragged = true
-                            // Geser = pindahkan tombol (mode normal maupun mode
-                            // atur posisi). Tombol ber-aksi "tahan" tetap
-                            // dipakai untuk drag di remote, bukan dipindah.
+                            // Geser = pindahkan tombol. Tombol ber-aksi "tahan"
+                            // tetap dipakai untuk drag di remote, bukan dipindah.
                             if (!holdActive) {
                                 val base = dragPos.value
                                     ?: Offset(latest.value.x, latest.value.y)
@@ -214,8 +216,6 @@ private fun HudKeyButton(
                             }
                             change.consume()
                         } else if (event.changes.all { it.uptimeMillis - down.uptimeMillis > longPressTimeout }) {
-                            // Tahan di tombol non-"tahan" = buka editor, di mode
-                            // mana pun (bukan cuma saat atur posisi).
                             if (!holdActive && !longPressed && !dragged) {
                                 longPressed = true
                                 onEdit()
@@ -279,46 +279,12 @@ private fun HudKeyGlyph(key: HudKey, tint: Color, boxDp: Float = key.size) {
     )
 }
 
-/**
- * Chip aksi di baris atas keyboard kustom.
- *
- * Dipakai board keyboard (SessionKeyboard) sebagai baris tombol milik user:
- * satu chip = satu aksi, sesuai urutan daftar `inToolbar`.
- */
-@Composable
-fun HudAuxChip(key: HudKey, sizeDp: Float, onPhase: (HudPhase) -> Unit) {
-    Box(
-        Modifier
-            .size(sizeDp.dp)
-            .clip(CircleShape)
-            .border(1.2.dp, HudBorderDim, CircleShape)
-            .pointerInput(key.id, key.action) {
-                awaitEachGesture {
-                    val down = awaitFirstDown(requireUnconsumed = false)
-                    val hold = key.action == HudAction.HOLD
-                    if (hold) onPhase(HudPhase.DOWN)
-                    while (true) {
-                        val event = awaitPointerEvent()
-                        val change = event.changes.firstOrNull { it.id == down.id } ?: break
-                        if (!change.pressed) {
-                            change.consume()
-                            break
-                        }
-                    }
-                    if (hold) onPhase(HudPhase.UP) else onPhase(HudPhase.TAP)
-                }
-            },
-        contentAlignment = Alignment.Center,
-    ) {
-        HudKeyGlyph(key, HudInk, sizeDp)
-    }
-}
-
 // ------------------------------------------------------------------ editor
 
 /**
- * Dialog tambah tombol: daftar katalog per grup. Bukan bottom sheet bawaan
- * Android — panel penuh milik app sendiri supaya gayanya konsisten.
+ * Dialog tambah tombol: satu katalog per grup. Bukan bottom sheet/dialog
+ * bawaan Android — pakai overlay app sendiri supaya gayanya satu bahasa
+ * dengan panel dan tema.
  */
 @Composable
 fun HudKeyPicker(
@@ -329,25 +295,29 @@ fun HudKeyPicker(
     Box(
         Modifier
             .fillMaxSize()
-            .background(Color(0xCC000000))
+            .background(MaterialTheme.colorScheme.scrim)
             .clickable(onClick = onDismiss)
             .zIndex(40f),
         contentAlignment = Alignment.Center,
     ) {
         Column(
             Modifier
-                .widthIn(max = 420.dp)
+                .widthIn(max = 440.dp)
                 .padding(20.dp)
-                .clip(RoundedCornerShape(16.dp))
-                .background(Color(0xF20B0D10))
-                .border(1.dp, HudBorderDim, RoundedCornerShape(16.dp))
+                .clip(RoundedCornerShape(14.dp))
+                .background(MaterialTheme.colorScheme.surface)
+                .border(
+                    1.dp,
+                    MaterialTheme.colorScheme.outline,
+                    RoundedCornerShape(14.dp),
+                )
                 .clickable { }
                 .padding(14.dp),
             verticalArrangement = Arrangement.spacedBy(10.dp),
         ) {
             Text(
                 "TAMBAH TOMBOL",
-                color = HudMuted,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
                 fontSize = 10.sp,
                 letterSpacing = 1.3.sp,
                 fontWeight = FontWeight.SemiBold,
@@ -357,12 +327,14 @@ fun HudKeyPicker(
                 horizontalArrangement = Arrangement.spacedBy(6.dp),
             ) {
                 HudKeyCatalog.groups.forEach { (name, _) ->
+                    val active = name == group
                     Box(
                         Modifier
                             .clip(XyPill)
                             .border(
                                 1.dp,
-                                if (name == group) HudInk else HudBorderDim,
+                                if (active) MaterialTheme.colorScheme.primary
+                                else MaterialTheme.colorScheme.outline,
                                 XyPill,
                             )
                             .clickable { group = name }
@@ -370,8 +342,9 @@ fun HudKeyPicker(
                     ) {
                         Text(
                             name,
-                            color = if (name == group) HudInk else HudMuted,
-                            fontSize = 10.5.sp,
+                            color = if (active) MaterialTheme.colorScheme.onSurface
+                            else MaterialTheme.colorScheme.onSurfaceVariant,
+                            fontSize = 11.sp,
                         )
                     }
                 }
@@ -379,11 +352,11 @@ fun HudKeyPicker(
             val items = HudKeyCatalog.groups.firstOrNull { it.first == group }?.second.orEmpty()
             Column(
                 Modifier
-                    .height(240.dp)
+                    .height(250.dp)
                     .verticalScroll(rememberScrollState()),
                 verticalArrangement = Arrangement.spacedBy(6.dp),
             ) {
-                items.chunked(4).forEach { rowItems ->
+                items.chunked(3).forEach { rowItems ->
                     Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                         rowItems.forEach { item ->
                             Box(
@@ -391,36 +364,41 @@ fun HudKeyPicker(
                                     .weight(1f)
                                     .height(42.dp)
                                     .clip(RoundedCornerShape(9.dp))
-                                    .border(1.dp, HudBorderDim, RoundedCornerShape(9.dp))
+                                    .border(
+                                        1.dp,
+                                        MaterialTheme.colorScheme.outline,
+                                        RoundedCornerShape(9.dp),
+                                    )
                                     .clickable { onPick(item) },
                                 contentAlignment = Alignment.Center,
                             ) {
                                 Text(
                                     item.label,
-                                    color = HudInk,
-                                    fontSize = 11.sp,
+                                    color = MaterialTheme.colorScheme.onSurface,
+                                    fontSize = 11.5.sp,
                                     maxLines = 1,
                                 )
                             }
                         }
-                        repeat(4 - rowItems.size) { Spacer(Modifier.weight(1f)) }
+                        repeat(3 - rowItems.size) { Spacer(Modifier.weight(1f)) }
                     }
                 }
             }
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                XyPillButton(
-                    "Tutup",
-                    onDismiss,
-                    primary = false,
-                    compact = true,
-                    modifier = Modifier.weight(1f),
-                )
-            }
+            XyPillButton(
+                "Tutup",
+                onDismiss,
+                primary = false,
+                compact = true,
+                modifier = Modifier.fillMaxWidth(),
+            )
         }
     }
 }
 
-/** Editor satu tombol: label, aksi, ukuran, ikut toolbar, hapus. */
+/**
+ * Editor satu tombol: aksi (sekali/tahan/toggle), ganti jenis aksi, ukuran,
+ * hapus. Posisi diubah langsung dengan menggeser tombolnya di layar.
+ */
 @Composable
 fun HudKeyEditor(
     key: HudKey,
@@ -428,10 +406,12 @@ fun HudKeyEditor(
     onDelete: () -> Unit,
     onDismiss: () -> Unit,
 ) {
+    var rePick by remember { mutableStateOf(false) }
+
     Box(
         Modifier
             .fillMaxSize()
-            .background(Color(0xCC000000))
+            .background(MaterialTheme.colorScheme.scrim)
             .clickable(onClick = onDismiss)
             .zIndex(40f),
         contentAlignment = Alignment.Center,
@@ -440,26 +420,55 @@ fun HudKeyEditor(
             Modifier
                 .widthIn(max = 400.dp)
                 .padding(20.dp)
-                .clip(RoundedCornerShape(16.dp))
-                .background(Color(0xF20B0D10))
-                .border(1.dp, HudBorderDim, RoundedCornerShape(16.dp))
+                .clip(RoundedCornerShape(14.dp))
+                .background(MaterialTheme.colorScheme.surface)
+                .border(
+                    1.dp,
+                    MaterialTheme.colorScheme.outline,
+                    RoundedCornerShape(14.dp),
+                )
                 .clickable { }
                 .padding(14.dp),
             verticalArrangement = Arrangement.spacedBy(10.dp),
         ) {
             Text(
                 "UBAH TOMBOL",
-                color = HudMuted,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
                 fontSize = 10.sp,
                 letterSpacing = 1.3.sp,
                 fontWeight = FontWeight.SemiBold,
             )
-            Text(key.label, color = HudInk, fontSize = 16.sp, fontWeight = FontWeight.SemiBold)
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(
+                    key.label,
+                    color = MaterialTheme.colorScheme.onSurface,
+                    fontSize = 16.sp,
+                    fontWeight = FontWeight.SemiBold,
+                    modifier = Modifier.weight(1f),
+                )
+                Box(
+                    Modifier
+                        .size((key.size.coerceAtMost(64f)).dp)
+                        .clip(CircleShape)
+                        .border(1.4.dp, MaterialTheme.colorScheme.primary, CircleShape),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    HudKeyGlyph(key, MaterialTheme.colorScheme.onSurface, maxOf(key.size, 40f))
+                }
+            }
             Text(
-                "Aksi",
-                color = HudMuted,
-                fontSize = 10.5.sp,
+                "Jenis: ${key.kind.title}",
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                fontSize = 11.sp,
             )
+            XyPillButton(
+                "Ganti jenis aksi",
+                { rePick = true },
+                primary = false,
+                compact = true,
+                modifier = Modifier.fillMaxWidth(),
+            )
+            Text("Cara pakai", color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 11.sp)
             XySegmented(
                 options = HudAction.entries.map { it.title },
                 selectedIndex = key.action.ordinal,
@@ -468,28 +477,24 @@ fun HudKeyEditor(
             )
             Text(
                 HudAction.entries[key.action.ordinal].detail,
-                color = HudMuted,
-                fontSize = 10.sp,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                fontSize = 10.5.sp,
             )
-            if (key.kind != HudKind.COMBO) {
-                Text("Ukuran: ${key.size.toInt()} dp", color = HudInk, fontSize = 11.sp)
-                Slider(
-                    value = key.size,
-                    onValueChange = { onChange(key.copy(size = it)) },
-                    valueRange = 32f..96f,
-                )
-            }
             Text(
-                "Posisi: ${(key.x * 100).toInt()}% , ${(key.y * 100).toInt()}%  ·  " +
-                    "geser tombolnya langsung untuk memindah (tombol terapung)",
-                color = HudMuted,
-                fontSize = 10.sp,
+                "Ukuran: ${key.size.toInt()} dp",
+                color = MaterialTheme.colorScheme.onSurface,
+                fontSize = 11.sp,
             )
-            XySegmented(
-                options = listOf("Terapung di layar", "Baris atas keyboard"),
-                selectedIndex = if (key.inToolbar) 1 else 0,
-                onSelect = { onChange(key.copy(inToolbar = it == 1)) },
-                modifier = Modifier.fillMaxWidth(),
+            Slider(
+                value = key.size,
+                onValueChange = { onChange(key.copy(size = it)) },
+                valueRange = 28f..120f,
+            )
+            Text(
+                "Posisi: ${(key.x * 100).toInt()}% , ${(key.y * 100).toInt()}% — " +
+                    "geser tombolnya langsung di layar untuk memindah.",
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                fontSize = 10.5.sp,
             )
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 XyPillButton(
@@ -508,24 +513,45 @@ fun HudKeyEditor(
             }
         }
     }
+
+    if (rePick) {
+        HudKeyPicker(
+            onPick = { option ->
+                onChange(
+                    key.copy(
+                        kind = option.kind,
+                        label = option.label,
+                        keyCode = option.keyCode,
+                        shift = option.shift,
+                        combo = option.combo,
+                    )
+                )
+                rePick = false
+            },
+            onDismiss = { rePick = false },
+        )
+    }
 }
 
-/** Baris status mode atur posisi. */
+/** Banner mode atur posisi: tambah tombol, atau selesai. */
 @Composable
-fun HudMappingBanner(onDone: () -> Unit) {
+fun HudMappingBanner(
+    onAdd: () -> Unit,
+    onDone: () -> Unit,
+) {
     Row(
         Modifier
             .fillMaxWidth()
             .padding(12.dp)
-            .clip(XyPill)
-            .background(Color(0xD90B0D10))
-            .border(1.dp, HudBorderDim, XyPill)
-            .padding(horizontal = 14.dp, vertical = 8.dp),
+            .clip(RoundedCornerShape(12.dp))
+            .background(Color(0xE60B0D10))
+            .border(1.dp, HudBorderDim, RoundedCornerShape(12.dp))
+            .padding(horizontal = 12.dp, vertical = 8.dp),
         verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(10.dp),
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
     ) {
         Text(
-            "Mode atur posisi: geser tombol bebas, tahan tombol untuk ubah aksi/ukuran",
+            "Atur posisi: geser tombol, tahan lama untuk ubah aksi/ukuran",
             color = HudInk,
             fontSize = 11.sp,
             modifier = Modifier.weight(1f),
@@ -534,10 +560,19 @@ fun HudMappingBanner(onDone: () -> Unit) {
             Modifier
                 .clip(XyPill)
                 .border(1.dp, HudBorder, XyPill)
+                .clickable(onClick = onAdd)
+                .padding(horizontal = 12.dp, vertical = 6.dp),
+        ) {
+            Text("+ Tombol", color = HudInk, fontSize = 11.sp)
+        }
+        Box(
+            Modifier
+                .clip(XyPill)
+                .background(Color(0xFFF1F4F6))
                 .clickable(onClick = onDone)
                 .padding(horizontal = 12.dp, vertical = 6.dp),
         ) {
-            Text("Selesai", color = HudInk, fontSize = 11.sp)
+            Text("Selesai", color = Color(0xFF0A0B0D), fontSize = 11.sp, fontWeight = FontWeight.SemiBold)
         }
     }
 }
@@ -550,13 +585,13 @@ fun HudLayoutPreview(keys: List<HudKey>, modifier: Modifier = Modifier) {
             .fillMaxWidth()
             .height(110.dp)
             .clip(RoundedCornerShape(10.dp))
-            .background(Color(0xFF0E1114))
-            .border(1.dp, HudBorderDim, RoundedCornerShape(10.dp)),
+            .background(MaterialTheme.colorScheme.surfaceVariant)
+            .border(1.dp, MaterialTheme.colorScheme.outline, RoundedCornerShape(10.dp)),
     ) {
         BoxWithConstraints(Modifier.fillMaxSize()) {
             val density = LocalDensity.current
             keys.forEach { key ->
-                val sizeDp = 12.dp
+                val sizeDp = (key.size / 4f).coerceIn(8f, 18f).dp
                 val sizePx = with(density) { sizeDp.toPx() }
                 val maxX = (constraints.maxWidth - sizePx).coerceAtLeast(1f)
                 val maxY = (constraints.maxHeight - sizePx).coerceAtLeast(1f)
@@ -567,9 +602,7 @@ fun HudLayoutPreview(keys: List<HudKey>, modifier: Modifier = Modifier) {
                         }
                         .size(sizeDp)
                         .clip(CircleShape)
-                        .background(
-                            if (key.inToolbar) Color(0xFFEFF3F6) else Color(0x66EFF3F6),
-                        ),
+                        .background(MaterialTheme.colorScheme.onSurface),
                 )
             }
         }

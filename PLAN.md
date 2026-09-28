@@ -441,3 +441,31 @@ Berikutnya:
 - Audit "fungsi yang belum ada" lanjutan (mis. pengaturan kamera saat sesi).
 - Verifikasi lapangan hasil ronde 4 di HP + log native untuk audio.
 - Pangkas beban mati APK (lib yang tak dipakai).
+
+## 15. M9 - ronde 5 (v0.5.2)
+
+Sudah dikode:
+
+- Toolbar di atas keyboard + keyboard virtual DIHAPUS dari produk
+  (`ui/SessionKeyboard.kt` dihapus, `SessionSurfaceController` tidak lagi
+  membuat `ExtendedKeyboardView`, `SessionInputManager` menerima keyboard null
+  dan menambah `setSoftKeyboard`).
+- Keyboard HP jadi satu-satunya keyboard: `XyDeskSessionActivity` memasang
+  `InputConnection` penerus (`commitText`/`sendKeyEvent`/`deleteSurroundingText`)
+  plus `dispatchKeyEvent` -> `SessionInputManager.onAndroidKeyEvent`.
+- Kontrol overlay satu-satu: `HudKey` tanpa `inToolbar`, `migrate()` membuang
+  entri `aux_*` tapi mempertahankan posisi/ukuran/aksi; editor bisa ganti jenis
+  aksi; banner atur posisi punya chip "+ Tombol".
+- Taskbar: padding bawah dihapus dari insets, ukuran yang dikirim = ukuran area
+  gambar (`viewport`), muat-ulang otomatis (`prefs.autoFit`), resize dikirim
+  ulang sesudah reconnect (`pendingResize`).
+- Resolusi: `DisplayPrefs.resolutionGroups` per rasio + `SMART_16_9`.
+- Tema: `SessionControls`/`SessionKeyLayer`/`XyComponents` pakai token tema;
+  `XyNotice`/`XyNoticeBus` menggantikan semua Toast bawaan Android.
+
+Berikutnya:
+
+- Verifikasi lapangan: IME mengetik ke remote, taskbar terlihat penuh, drag
+  tombol, ganti resolusi live.
+- Teardown channel saat disconnect; reset fullscreen setelah reconnect.
+- Pangkas lib native yang tidak dipakai.
