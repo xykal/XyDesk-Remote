@@ -336,7 +336,7 @@ fun AddDeviceScreen(
                 )
                 Spacer(Modifier.height(16.dp))
                 Text(
-                    xy("Skala tampilan awal: {0}%", "Initial display scale: {0}%", dpi),
+                    xy("Skala lokal awal: {0}%", "Initial local zoom: {0}%", dpi),
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
@@ -349,10 +349,10 @@ fun AddDeviceScreen(
                 )
                 Text(
                     xy(
-                        "Resolusi & skala diterapkan saat sesi dibuka; mengubahnya " +
-                            "menyambungkan ulang sesi dengan ukuran baru.",
-                        "Resolution & scale apply when the session opens; changing " +
-                            "them reconnects with the new size.",
+                        "Zoom lokal ini menjadi nilai awal saat sesi dibuka. DPI desktop Windows " +
+                            "diatur terpisah dari panel sesi; resolusi remote juga kontrol terpisah.",
+                        "This local zoom is the starting value when a session opens. Windows desktop DPI " +
+                            "is controlled separately in the session panel; remote resolution is separate too.",
                     ),
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,

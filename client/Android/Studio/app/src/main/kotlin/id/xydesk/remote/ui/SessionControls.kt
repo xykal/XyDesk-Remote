@@ -40,6 +40,7 @@ import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.IntOffset
@@ -83,7 +84,7 @@ private enum class PanelTab(val id: String, val en: String) {
 /**
  * Kontrol sesi.
  *
- * Model (ronde 8): satu handle di tepi kanan membuka SATU panel bertab —
+ * Model (ronde 8): satu handle di tepi kanan-atas membuka SATU panel bertab —
  * Layar (zoom/resolusi/orientasi), Input (mode/keyboard/clipboard/pointer),
  * Tombol (editor tombol HUD), Sesi (screenshot/putus/info teknis).
  * Rail kanan-bawah tetap: keyboard, home, dan tombol putus yang SEKARANG
@@ -97,16 +98,18 @@ fun SessionControls(
     statusText: String,
     remoteSize: String,
     zoomPercent: Int,
+    remoteDpi: Int,
     pointerScreen: Offset,
     pointerVisible: Boolean,
     remoteCursor: RemoteCursor? = null,
     zoom: Float = 1f,
     inputMode: InputMode,
     onInputModeChange: (InputMode) -> Unit,
-    keyboardShown: Boolean,
-    onKeyboardShownChange: (Boolean) -> Unit,
     keys: List<HudKey>,
     onKeysChange: (List<HudKey>) -> Unit,
+    latchedKeyIds: Set<String>,
+    onKeyEdited: (HudKey) -> Unit,
+    onDeleteKey: (HudKey) -> Unit,
     mappingMode: Boolean,
     onMappingModeChange: (Boolean) -> Unit,
     onPhase: (HudKey, HudPhase) -> Unit,
@@ -114,15 +117,18 @@ fun SessionControls(
     onZoomOut: () -> Unit,
     onFit: () -> Unit,
     onZoomActual: () -> Unit,
+    onZoomScale: (Float) -> Unit,
+    onRemoteDpiChange: (Int) -> Unit,
     onScreenshot: () -> Unit,
     onDisconnect: () -> Unit,
     onPointerVisibilityChange: (Boolean) -> Unit,
     onResetCluster: () -> Unit,
     onRotationChange: (String) -> Unit,
     onResolutionChange: (String) -> Unit,
-    onToggleKeyboard: () -> Unit = {},
+    onOpenKeyboard: () -> Unit = {},
     onOpenHome: () -> Unit = {},
     lastClipboard: String? = null,
+    clipboardSyncEnabled: Boolean = false,
     onSendPhoneClipboard: () -> Unit = {},
     onPasteRemoteClipboard: () -> Unit = {},
     onSendText: (String) -> Unit,
@@ -130,6 +136,7 @@ fun SessionControls(
     notice: XyNoticeState,
 ) {
     val context = LocalContext.current
+    val configuration = LocalConfiguration.current
     val view = androidx.compose.ui.platform.LocalView.current
     val prefs = remember { SessionPrefs(context) }
     var panelOpen by remember { mutableStateOf(false) }
@@ -169,33 +176,79 @@ fun SessionControls(
     }
 
     fun replace(updated: HudKey) {
-        onKeysChange(keys.map { if (it.id == updated.id) updated else it })
+        onKeyEdited(updated)
     }
 
     fun add(option: HudKeyOption) {
-        val id = "k${System.currentTimeMillis().toString(36)}"
-        val slot = keys.size
+        if (keys.size >= 36) {
+            notice.show(xyNow("Maksimal 36 tombol HUD", "Maximum 36 HUD buttons"))
+            return
+        }
+        val width = configuration.screenWidthDp.toFloat().coerceAtLeast(1f)
+        val height = configuration.screenHeightDp.toFloat().coerceAtLeast(1f)
+        val size = prefs.hudButtonSize
+        val maxX = (width - size).coerceAtLeast(1f)
+        val maxY = (height - size).coerceAtLeast(1f)
+        val railCenters = listOf(
+            androidx.compose.ui.geometry.Offset(width - 32f, height - 210f),
+            androidx.compose.ui.geometry.Offset(width - 32f, height - 156f),
+            androidx.compose.ui.geometry.Offset(width - 32f, height - 102f),
+        )
+        val candidates = buildList {
+            var y = 72f
+            while (y <= maxY) {
+                var x = 12f
+                while (x <= maxX) {
+                    this.add(androidx.compose.ui.geometry.Offset(x, y))
+                    x += 88f
+                }
+                y += 64f
+            }
+        }
+        val position = candidates.firstOrNull { candidate ->
+            val cx = candidate.x + size / 2f
+            val cy = candidate.y + size / 2f
+            val hitsExisting = keys.any { oldKey ->
+                val oldCx = oldKey.x * (width - oldKey.size).coerceAtLeast(1f) + oldKey.size / 2f
+                val oldCy = oldKey.y * (height - oldKey.size).coerceAtLeast(1f) + oldKey.size / 2f
+                val dx = cx - oldCx
+                val dy = cy - oldCy
+                val minDistance = (size + oldKey.size) / 2f + 8f
+                dx * dx + dy * dy < minDistance * minDistance
+            }
+            val hitsRail = railCenters.any { rail ->
+                val dx = cx - rail.x
+                val dy = cy - rail.y
+                val minDistance = size / 2f + 22f + 8f
+                dx * dx + dy * dy < minDistance * minDistance
+            }
+            val hitsPanelHandle = kotlin.math.abs(cx - (width - 30f)) < size / 2f + 38f &&
+                kotlin.math.abs(cy - 70f) < size / 2f + 60f
+            !hitsExisting && !hitsRail && !hitsPanelHandle
+        }
+        if (position == null) {
+            notice.show(xyNow("Ruang kontrol penuh — pindahkan tombol dulu", "No free control space — move a button first"))
+            return
+        }
         val key = HudKey(
-            id = id,
+            id = "k${java.util.UUID.randomUUID()}",
             kind = option.kind,
             label = option.label,
             keyCode = option.keyCode,
             shift = option.shift,
             combo = option.combo,
-            action = if (option.kind == HudKind.SCROLL_UP || option.kind == HudKind.SCROLL_DOWN) {
-                HudAction.HOLD
-            } else {
-                HudAction.TAP
-            },
-            x = (0.60f + 0.08f * (slot % 3)).coerceIn(0f, 1f),
-            y = (0.30f + 0.10f * (slot % 5)).coerceIn(0f, 1f),
-            size = 48f,
+            action = HudAction.TAP,
+            x = (position.x / maxX).coerceIn(0f, 1f),
+            y = (position.y / maxY).coerceIn(0f, 1f),
+            size = size,
         )
         onKeysChange(keys + key)
+        panelOpen = false
+        onMappingModeChange(true)
         notice.show(
             xyNow(
-                "Tombol \"{0}\" ditambahkan — geser ke posisi yang kamu mau",
-                "Button \"{0}\" added — drag it where you want",
+                "Tombol \"{0}\" ditambahkan di slot kosong — geser untuk menata",
+                "Button \"{0}\" added to a free slot — drag to arrange",
                 key.label,
             ),
         )
@@ -217,36 +270,33 @@ fun SessionControls(
             keys = keys,
             mappingMode = mappingMode,
             plate = plate,
+            latchedKeys = latchedKeyIds,
             onMove = { id, x, y ->
                 onKeysChange(keys.map { if (it.id == id) it.copy(x = x, y = y) else it })
             },
             onPhase = { key, phase ->
-                haptic()
+                if (phase != HudPhase.UP) haptic()
                 onPhase(key, phase)
             },
             onEdit = { editing = it },
-            onRequestEditMode = {
-                onMappingModeChange(true)
-                notice.show(xyNow("Atur posisi menyala — geser tombol, lalu tekan Selesai", "Layout edit is on — drag the buttons, then press Done"))
-            },
         )
 
-        // Rail tetap: keyboard HP bisa dibuka/ditutup kapan saja, home untuk
-        // pindah sesi, dan putus lewat dialog konfirmasi (satu aturan yang
+        // Rail tetap: tombol keyboard hanya membuka IME (Android Back menutup),
+        // home untuk pindah sesi, dan putus lewat dialog konfirmasi (satu aturan yang
         // sama dengan panel — dulu 2x ketuk di sini tapi dialog di panel).
         Column(
             Modifier
                 .align(Alignment.BottomEnd)
-                .padding(end = 10.dp, bottom = 96.dp)
+                .padding(end = 10.dp, bottom = 80.dp)
                 .zIndex(24f),
             verticalArrangement = Arrangement.spacedBy(10.dp),
         ) {
             RailButton(
                 icon = XyIcons.Keyboard,
-                active = keyboardShown,
-                description = if (keyboardShown) xy("Tutup keyboard HP", "Hide phone keyboard") else xy("Buka keyboard HP", "Show phone keyboard"),
+                active = false,
+                description = xy("Buka keyboard HP", "Open phone keyboard"),
                 plate = plate,
-            ) { onToggleKeyboard() }
+            ) { onOpenKeyboard() }
             RailButton(
                 icon = XyIcons.Monitor,
                 active = false,
@@ -325,11 +375,13 @@ fun SessionControls(
             }
         }
 
-        // ---- handle tunggal panel (kanan tengah) ----
-        if (!panelOpen) {
+        // ---- handle panel di kanan atas, terpisah dari rail kontrol ----
+        if (!panelOpen && !mappingMode) {
             PanelHandle(
                 onClick = { panelOpen = true },
-                modifier = Modifier.align(Alignment.CenterEnd),
+                modifier = Modifier
+                    .align(Alignment.TopEnd)
+                    .padding(top = 12.dp, end = 6.dp),
             )
         }
 
@@ -339,6 +391,7 @@ fun SessionControls(
                 statusText = statusText,
                 remoteSize = remoteSize,
                 zoomPercent = zoomPercent,
+                remoteDpi = remoteDpi,
                 tab = tab,
                 onTab = { tab = it },
                 // Layar
@@ -351,7 +404,7 @@ fun SessionControls(
                 onCustomApply = {
                     val parsed = DisplayPrefs.parseCustom(custom)
                     if (parsed == null) {
-                        notice.show(xyNow("Format resolusi harus WxH, mis. 1920x1080", "Resolution must be WxH, e.g. 1920x1080"))
+                        notice.show(xyNow("Masukkan WxH valid (mis. 1920x1080); lebar harus genap.", "Enter a valid WxH (e.g. 1920x1080); width must be even."))
                     } else {
                         resolution = parsed
                         DisplayPrefs.setResolution(context, deviceId, parsed)
@@ -372,13 +425,14 @@ fun SessionControls(
                 onZoomOut = onZoomOut,
                 onFit = onFit,
                 onZoomActual = onZoomActual,
+                onZoomScale = onZoomScale,
+                onRemoteDpiChange = onRemoteDpiChange,
                 // Input
                 inputMode = inputMode,
                 onInputModeChange = onInputModeChange,
-                keyboardShown = keyboardShown,
-                onKeyboardShownChange = onKeyboardShownChange,
                 onSendTextClick = { textValue = ""; textOpen = true },
                 lastClipboard = lastClipboard,
+                clipboardSyncEnabled = clipboardSyncEnabled,
                 onSendPhoneClipboard = onSendPhoneClipboard,
                 onPasteRemoteClipboard = onPasteRemoteClipboard,
                 pointerVisible = pointerVisible,
@@ -391,7 +445,7 @@ fun SessionControls(
                 keys = keys,
                 onAddKey = { pickerOpen = true },
                 onEditKey = { editing = it },
-                onDeleteKey = { onKeysChange(keys.filterNot { k -> k.id == it.id }) },
+                onDeleteKey = onDeleteKey,
                 mappingMode = mappingMode,
                 onMappingModeChange = onMappingModeChange,
                 plate = plate,
@@ -420,7 +474,7 @@ fun SessionControls(
             key = key,
             onChange = { replace(it) },
             onDelete = {
-                onKeysChange(keys.filterNot { k -> k.id == key.id })
+                onDeleteKey(key)
                 editing = null
                 notice.show(xyNow("Tombol dihapus", "Button deleted"))
             },
@@ -442,18 +496,23 @@ private fun RailButton(
     Box(
         Modifier
             .size(44.dp)
-            .shadow(8.dp, CircleShape, false, Color.Black, Color.Black)
+            .shadow(6.dp, CircleShape, false, Color.Black, Color.Black)
             .clip(CircleShape)
-            .background(pal.plate)
+            .background(if (active) Color(0xE6B9EBDD) else pal.plate)
             .border(
                 if (active) 2.dp else 1.2.dp,
-                if (active) Color(0xFFFFFFFF) else pal.border,
+                if (active) Color(0xFFD9FFF0) else pal.border,
                 CircleShape,
             )
             .clickable(onClick = onClick),
         contentAlignment = Alignment.Center,
     ) {
-        Icon(icon, contentDescription = description, tint = pal.ink, modifier = Modifier.size(20.dp))
+        Icon(
+            icon,
+            contentDescription = description,
+            tint = if (active) Color(0xFF173C30) else pal.ink,
+            modifier = Modifier.size(20.dp),
+        )
     }
 }
 
@@ -596,6 +655,7 @@ private fun SessionPanel(
     statusText: String,
     remoteSize: String,
     zoomPercent: Int,
+    remoteDpi: Int,
     tab: PanelTab,
     onTab: (PanelTab) -> Unit,
     onClose: () -> Unit,
@@ -613,13 +673,14 @@ private fun SessionPanel(
     onZoomOut: () -> Unit,
     onFit: () -> Unit,
     onZoomActual: () -> Unit,
+    onZoomScale: (Float) -> Unit,
+    onRemoteDpiChange: (Int) -> Unit,
     // Input
     inputMode: InputMode,
     onInputModeChange: (InputMode) -> Unit,
-    keyboardShown: Boolean,
-    onKeyboardShownChange: (Boolean) -> Unit,
     onSendTextClick: () -> Unit,
     lastClipboard: String?,
+    clipboardSyncEnabled: Boolean,
     onSendPhoneClipboard: () -> Unit,
     onPasteRemoteClipboard: () -> Unit,
     pointerVisible: Boolean,
@@ -696,6 +757,7 @@ private fun SessionPanel(
                 PanelTab.SCREEN -> ScreenTab(
                     remoteSize = remoteSize,
                     zoomPercent = zoomPercent,
+                    remoteDpi = remoteDpi,
                     resolution = resolution,
                     rotation = rotation,
                     custom = custom,
@@ -709,15 +771,16 @@ private fun SessionPanel(
                     onZoomOut = onZoomOut,
                     onFit = onFit,
                     onZoomActual = onZoomActual,
+                    onZoomScale = onZoomScale,
+                    onRemoteDpiChange = onRemoteDpiChange,
                 )
 
                 PanelTab.INPUT -> InputTab(
                     inputMode = inputMode,
                     onInputModeChange = onInputModeChange,
-                    keyboardShown = keyboardShown,
-                    onKeyboardShownChange = onKeyboardShownChange,
                     onSendTextClick = onSendTextClick,
                     lastClipboard = lastClipboard,
+                    clipboardSyncEnabled = clipboardSyncEnabled,
                     onSendPhoneClipboard = onSendPhoneClipboard,
                     onPasteRemoteClipboard = onPasteRemoteClipboard,
                     pointerVisible = pointerVisible,
@@ -760,6 +823,7 @@ private fun SessionPanel(
 private fun ScreenTab(
     remoteSize: String,
     zoomPercent: Int,
+    remoteDpi: Int,
     resolution: String,
     rotation: String,
     custom: String,
@@ -773,6 +837,8 @@ private fun ScreenTab(
     onZoomOut: () -> Unit,
     onFit: () -> Unit,
     onZoomActual: () -> Unit,
+    onZoomScale: (Float) -> Unit,
+    onRemoteDpiChange: (Int) -> Unit,
 ) {
     PanelSection(xy("Ukuran tampilan", "Display size")) {
         PanelHint(
@@ -789,10 +855,50 @@ private fun ScreenTab(
             XyPillButton(xy("Muat semua", "Fit all"), onFit, primary = false, compact = true, modifier = Modifier.weight(1f))
             XyPillButton("100%", onZoomActual, primary = false, compact = true, modifier = Modifier.weight(1f))
         }
+        PanelHint(
+            xy(
+                "Skala lokal {0}% — hanya mengubah tampilan di HP, bukan DPI atau resolusi Windows.",
+                "Local scale {0}% — changes the phone view only, not Windows DPI or remote resolution.",
+                zoomPercent,
+            ),
+        )
+        XySlider(
+            value = zoomPercent.toFloat().coerceIn(10f, 300f),
+            onValueChange = onZoomScale,
+            valueRange = 10f..300f,
+        )
         XyToggleRow(
             title = xy("Muat seluruh desktop", "Fit whole desktop"),
             checked = autoFit,
             onCheckedChange = onAutoFitChange,
+        )
+    }
+
+    PanelSection(xy("DPI desktop remote", "Remote desktop DPI")) {
+        PanelHint(
+            xy(
+                "Mengubah skala UI Windows lewat kanal Display Control. Ini berbeda dari zoom lokal dan tidak mengubah resolusi yang dipilih.",
+                "Changes Windows UI scaling through Display Control. This is separate from local zoom and does not change the selected resolution.",
+            ),
+        )
+        PanelHint(
+            xy("Desktop scale: {0}%", "Desktop scale: {0}%", remoteDpi),
+        )
+        val scaleOptions = DisplayPrefs.remoteDpiOptions
+        val selectedScaleIndex = scaleOptions.indexOf(remoteDpi).coerceAtLeast(0)
+        XySlider(
+            value = selectedScaleIndex.toFloat(),
+            onValueChange = { index ->
+                onRemoteDpiChange(scaleOptions[index.toInt().coerceIn(scaleOptions.indices)])
+            },
+            valueRange = 0f..(scaleOptions.lastIndex.toFloat()),
+            steps = (scaleOptions.size - 2).coerceAtLeast(0),
+        )
+        PanelHint(
+            xy(
+                "Perlu dukungan server RDP dan kanal DISP/Dynamic Display. Jika tidak tersedia, nilai lama dipertahankan.",
+                "Requires RDP server support and the DISP/Dynamic Display channel. If unavailable, the previous value is kept.",
+            ),
         )
     }
 
@@ -871,10 +977,9 @@ private fun ScreenTab(
 private fun InputTab(
     inputMode: InputMode,
     onInputModeChange: (InputMode) -> Unit,
-    keyboardShown: Boolean,
-    onKeyboardShownChange: (Boolean) -> Unit,
     onSendTextClick: () -> Unit,
     lastClipboard: String?,
+    clipboardSyncEnabled: Boolean,
     onSendPhoneClipboard: () -> Unit,
     onPasteRemoteClipboard: () -> Unit,
     pointerVisible: Boolean,
@@ -892,15 +997,10 @@ private fun InputTab(
             modifier = Modifier.fillMaxWidth(),
         )
         PanelHint(xy(InputMode.entries[inputMode.ordinal].detail, InputMode.entries[inputMode.ordinal].detailEn))
-        XyToggleRow(
-            title = xy("Keyboard HP (IME)", "Phone keyboard (IME)"),
-            checked = keyboardShown,
-            onCheckedChange = onKeyboardShownChange,
-        )
         PanelHint(
             xy(
-                "Untuk membuka cepat, pakai tombol keyboard di rail kanan bawah.",
-                "For quick access, use the keyboard button in the bottom-right rail.",
+                "Tekan tombol keyboard di rail kanan bawah untuk membukanya. Gunakan Back Android untuk menutup; tombol itu tidak berganti fungsi.",
+                "Tap the keyboard button in the bottom-right rail to open it. Use Android Back to close it; the button never changes into a hide toggle.",
             ),
         )
         XyPillButton(
@@ -914,10 +1014,17 @@ private fun InputTab(
 
     PanelSection(xy("Clipboard", "Clipboard")) {
         PanelHint(
-            xy(
-                "Copy di HP langsung terkirim ke remote; copy di remote langsung masuk clipboard HP.",
-                "Copying on the phone goes straight to the remote; copying on the remote lands in the phone clipboard.",
-            ),
+            if (clipboardSyncEnabled) {
+                xy(
+                    "Sinkronisasi otomatis aktif: clipboard teks bergerak dua arah.",
+                    "Automatic sync is on: text clipboard updates flow both ways.",
+                )
+            } else {
+                xy(
+                    "Kanal clipboard mati di opsi perangkat. Aktifkan lalu sambungkan ulang; sinkronisasi dan tombol manual memerlukan kanal ini.",
+                    "The clipboard channel is off in device options. Enable it and reconnect; sync and manual actions both require this channel.",
+                )
+            },
         )
         XyPillButton(
             xy("Kirim clipboard HP ke remote", "Send phone clipboard to remote"),
@@ -925,16 +1032,13 @@ private fun InputTab(
             primary = false,
             compact = true,
             modifier = Modifier.fillMaxWidth(),
+            enabled = clipboardSyncEnabled,
         )
         PanelHint(
-            if (lastClipboard.isNullOrEmpty()) {
-                xy("Dari remote: belum ada", "From remote: nothing yet")
-            } else {
-                xy(
-                    "Dari remote: {0}",
-                    "From remote: {0}",
-                    lastClipboard.take(60).replace("\n", " "),
-                )
+            when {
+                !clipboardSyncEnabled -> xy("Remote: kanal clipboard mati", "Remote: clipboard channel off")
+                lastClipboard.isNullOrEmpty() -> xy("Dari remote: belum ada teks", "From remote: no text received yet")
+                else -> xy("Teks dari remote tersedia; isi disembunyikan", "Remote text is available; its contents are hidden")
             },
         )
         XyPillButton(
@@ -943,6 +1047,7 @@ private fun InputTab(
             primary = false,
             compact = true,
             modifier = Modifier.fillMaxWidth(),
+            enabled = clipboardSyncEnabled && !lastClipboard.isNullOrEmpty(),
         )
     }
 
@@ -996,8 +1101,8 @@ private fun ButtonsTab(
                 )
             } else {
                 xy(
-                    "Tombol terkunci saat dipakai. Tekan \"Atur posisi\" (atau tahan lama satu tombol) untuk memindahkan.",
-                    "Buttons are locked while in use. Press \"Edit layout\" (or long-press a button) to move them.",
+                    "Tombol HUD bulat beraksen mint. Semua aksi, termasuk scroll, bisa digeser saat mode atur posisi menyala.",
+                    "Round, mint-accented HUD buttons. Every action, including scroll, is draggable in layout mode.",
                 )
             },
         )
@@ -1063,7 +1168,7 @@ private fun SessionTab(
         PanelHint(
             xy(
                 "Tombol bulat kanan bawah (ikon power) juga memutus — dialog konfirmasinya sama.",
-                "The round bottom-right button (power icon) also disconnects — same confirm dialog.",
+                "The bottom-right round button (power icon) also disconnects — same confirmation dialog.",
             ),
         )
         XyPillButton(

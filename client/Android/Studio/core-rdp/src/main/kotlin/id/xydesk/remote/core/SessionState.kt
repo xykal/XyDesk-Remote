@@ -28,8 +28,8 @@ sealed class SessionState {
     /** Request disconnect (app atau remote). */
     data object Disconnecting : SessionState()
 
-    /** Sesi selesai (normal/remote). Bukan error. */
-    data object Disconnected : SessionState()
+    /** Sesi selesai (normal/remote). Detail native opsional, bukan selalu sebab pasti. */
+    data class Disconnected(val detail: String? = null) : SessionState()
 
     /**
      * Sesi gagal. [code] stabil (bisa di-`when`), [message] manusia-readable

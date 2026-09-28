@@ -7,8 +7,8 @@ import id.xydesk.remote.core.SmartResolution
 enum class InputMode(val title: String, val titleEn: String, val detail: String, val detailEn: String) {
     TRACKPAD(
         "Trackpad", "Trackpad",
-        "Geser = gerakkan pointer, ketuk = klik kiri",
-        "Drag = move pointer, tap = left click",
+        "1 jari: geser pointer, ketuk = kiri, tahan lalu geser = drag kiri. 2 jari: geser = scroll, ketuk = kanan, tahan lalu geser = drag kanan.",
+        "1 finger: move pointer, tap = left click, hold then drag = left-drag. 2 fingers: swipe = scroll, tap = right click, hold then drag = right-drag.",
     ),
     DIRECT(
         "Sentuh langsung", "Direct touch",
@@ -83,8 +83,8 @@ class SessionPrefs(context: Context) {
         set(v) = input.edit().putBoolean(KEY_AUTO_FIT, v).apply()
 
     /**
-     * Sambung ulang otomatis kalau koneksi putus sendiri (bukan karena user
-     * menekan putus). Maksimal 3 percobaan dengan jeda bertambah.
+     * Sambung ulang otomatis setelah koneksi yang sudah aktif putus sendiri.
+     * Jeda naik sampai 30 detik; user dapat menghentikan retry dari layar sesi.
      */
     var autoReconnect: Boolean
         get() = input.getBoolean(KEY_AUTO_RECONNECT, true)
@@ -120,14 +120,10 @@ class SessionPrefs(context: Context) {
         get() = input.getBoolean(KEY_BTN_SWITCH, true)
         set(v) = input.edit().putBoolean(KEY_BTN_SWITCH, v).apply()
 
-    /**
-     * Diameter tombol kontrol HUD (dp). Default 56; pengguna bisa geser ke
-     * 40..80. Semua tombol kontrol HUD bulat penuh (radius = setengah
-     * diameter), jadi satu angka ini menentukan radius efektifnya juga.
-     */
+    /** Default diameter for newly created/reset HUD buttons; per-button sizing stays intact. */
     var hudButtonSize: Float
-        get() = input.getFloat(KEY_HUD_SIZE, 56f).coerceIn(40f, 80f)
-        set(v) = input.edit().putFloat(KEY_HUD_SIZE, v.coerceIn(40f, 80f)).apply()
+        get() = input.getFloat(KEY_HUD_SIZE, 76f).coerceIn(56f, 80f)
+        set(v) = input.edit().putFloat(KEY_HUD_SIZE, v.coerceIn(56f, 80f)).apply()
 
     // ---- per perangkat ----
 
@@ -144,7 +140,7 @@ class SessionPrefs(context: Context) {
     }
 
     /**
-     * Tombol HUD sesi (bentuk bebas, bulat penuh): satu tombol = satu aksi.
+     * Tombol HUD sesi (bulat): satu tombol = satu aksi.
      * Disimpan per perangkat karena posisi layer bergantung ukuran layar.
      */
     fun hudKeys(deviceId: String): List<HudKey> {
@@ -152,7 +148,7 @@ class SessionPrefs(context: Context) {
         // Belum pernah diubah: susun set bawaan, tapi hormati preferensi lama
         // (toggle cluster ronde 2) supaya tombol yang sengaja dimatikan user
         // tidak muncul lagi begitu model tombol baru dipakai.
-        var keys = HudKey.defaults()
+        var keys = HudKey.defaults(hudButtonSize)
         if (!showLeft) keys = keys.filterNot { it.id == "kiri" }
         if (!showRight) keys = keys.filterNot { it.id == "kanan" }
         if (!showMiddle) keys = keys.filterNot { it.id == "tengah" }
@@ -265,7 +261,7 @@ object DisplayPrefs {
         if (parts.size != 2) return null
         val w = parts[0].trim().toIntOrNull() ?: return null
         val h = parts[1].trim().toIntOrNull() ?: return null
-        if (w !in 640..8192 || h !in 480..8192) return null
+        if (w !in 640..8192 || w % 2 != 0 || h !in 480..8192) return null
         return "${w}x$h"
     }
 
@@ -293,11 +289,24 @@ object DisplayPrefs {
     fun setDpi(context: Context, id: String, value: Int) =
         sp(context).edit().putInt("$id.dpi", value.coerceIn(80, 200)).apply()
 
+    /** Windows DesktopScaleFactor sent over RDP Display Control (not local zoom). */
+    val remoteDpiOptions = listOf(100, 125, 150, 175, 200, 250, 300, 400, 500)
+
+    fun remoteDpi(context: Context, id: String): Int =
+        sp(context).getInt("$id.remote_dpi", 100).let { if (it in remoteDpiOptions) it else 100 }
+
+    fun setRemoteDpi(context: Context, id: String, value: Int): Boolean {
+        if (value !in remoteDpiOptions) return false
+        sp(context).edit().putInt("$id.remote_dpi", value).apply()
+        return true
+    }
+
     fun clear(context: Context, id: String) {
         sp(context).edit()
             .remove("$id.resolution")
             .remove("$id.rotation")
             .remove("$id.dpi")
+            .remove("$id.remote_dpi")
             .apply()
     }
 

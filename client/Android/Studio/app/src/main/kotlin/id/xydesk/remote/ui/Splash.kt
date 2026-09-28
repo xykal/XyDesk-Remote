@@ -90,18 +90,7 @@ fun XySplashScreen(
             Canvas(Modifier.fillMaxWidth(0.74f).height(210.dp)) {
                 drawMorph(progress.value, ink, line, accent, surface)
             }
-            Spacer(Modifier.height(24.dp))
-            Image(
-                painter = painterResource(
-                    if (dark) R.drawable.xy_logo_h_white else R.drawable.xy_logo_h_black,
-                ),
-                contentDescription = "XyVerse",
-                contentScale = ContentScale.Fit,
-                modifier = Modifier
-                    .fillMaxWidth(0.60f)
-                    .alpha(fadeIn(progress.value, 0.08f, 0.42f)),
-            )
-            Spacer(Modifier.height(12.dp))
+            Spacer(Modifier.height(20.dp))
             Text(
                 "XyDesk Remote",
                 color = ink,
@@ -117,11 +106,23 @@ fun XySplashScreen(
                 modifier = Modifier.padding(top = 3.dp),
             )
         }
+        Image(
+            painter = painterResource(
+                if (dark) R.drawable.xy_logo_h_white else R.drawable.xy_logo_h_black,
+            ),
+            contentDescription = "XyVerse",
+            contentScale = ContentScale.Fit,
+            modifier = Modifier
+                .align(Alignment.BottomCenter)
+                .fillMaxWidth(0.40f)
+                .padding(bottom = 18.dp)
+                .alpha(fadeIn(progress.value, 0.08f, 0.42f)),
+        )
         if (animDone && !ready) {
             Canvas(
                 Modifier
                     .align(Alignment.BottomCenter)
-                    .padding(bottom = 42.dp)
+                    .padding(bottom = 64.dp)
                     .fillMaxWidth(0.28f)
                     .height(2.dp),
             ) {

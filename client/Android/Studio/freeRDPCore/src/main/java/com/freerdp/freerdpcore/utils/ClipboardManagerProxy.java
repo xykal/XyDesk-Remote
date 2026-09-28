@@ -20,6 +20,8 @@ import android.net.Uri;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 
 public abstract class ClipboardManagerProxy
 {
@@ -51,6 +53,11 @@ public abstract class ClipboardManagerProxy
 		private final Context mContext;
 		private final ClipboardManager mClipboardManager;
 		private OnClipboardChangedListener mListener;
+		private final ExecutorService mClipboardReader = Executors.newSingleThreadExecutor(r -> {
+			Thread thread = new Thread(r, "XyDesk-clipboard-reader");
+			thread.setDaemon(true);
+			return thread;
+		});
 
 		public HCClipboardManager(Context ctx)
 		{
@@ -60,8 +67,15 @@ public abstract class ClipboardManagerProxy
 
 		@Override public void setClipboardData(String data)
 		{
-			mClipboardManager.setPrimaryClip(
-			    ClipData.newPlainText("rdp-clipboard", data == null ? "" : data));
+			try
+			{
+				mClipboardManager.setPrimaryClip(
+				    ClipboardImageProvider.createTextClip(mContext, "rdp-clipboard", data));
+			}
+			catch (RuntimeException e)
+			{
+				// A platform clipboard failure is not an RDP transport failure.
+			}
 		}
 
 		@Override public void setClipboardImage(byte[] pngData)
@@ -74,25 +88,60 @@ public abstract class ClipboardManagerProxy
 
 		@Override public void onPrimaryClipChanged()
 		{
-			ClipData clip = mClipboardManager.getPrimaryClip();
-			if (clip == null || clip.getItemCount() == 0)
+			ClipData clip;
+			try
+			{
+				clip = mClipboardManager.getPrimaryClip();
+			}
+			catch (RuntimeException e)
+			{
+				// Clipboard binder failures (including oversized clips) must not drop RDP.
+				return;
+			}
+			String label = clip != null && clip.getDescription() != null
+			                   ? String.valueOf(clip.getDescription().getLabel())
+			                   : "";
+			if (clip == null || clip.getItemCount() == 0 ||
+			    "rdp".equals(label) || "rdp-clipboard".equals(label))
 				return;
 
 			ClipData.Item item = clip.getItemAt(0);
+			Uri uri = item.getUri();
+			if (!ClipboardImageProvider.TEXT_CONTENT_URI.equals(uri))
+				ClipboardImageProvider.clearTextData();
 
 			CharSequence cs = item.getText();
 			if (cs != null)
 			{
-				if (mListener != null)
-					mListener.onClipboardChanged(cs.toString());
+				String text = cs.toString();
+				mClipboardReader.execute(() -> {
+					OnClipboardChangedListener listener = mListener;
+					if (listener != null)
+						listener.onClipboardChanged(text);
+				});
 				return;
 			}
 
-			Uri uri = item.getUri();
 			if (uri != null)
 			{
 				String mimeType = mContext.getContentResolver().getType(uri);
-				if (mimeType != null && mimeType.startsWith("image/"))
+				if (mimeType != null && mimeType.startsWith("text/"))
+				{
+					mClipboardReader.execute(() -> {
+						try
+						{
+							CharSequence text = item.coerceToText(mContext);
+							OnClipboardChangedListener listener = mListener;
+							if (text != null && listener != null)
+								listener.onClipboardChanged(text.toString());
+						}
+						catch (RuntimeException e)
+						{
+							// Unavailable or revoked clipboard URI; keep the session alive.
+						}
+					});
+				}
+				else if (mimeType != null && mimeType.startsWith("image/"))
 				{
 					try (InputStream is = mContext.getContentResolver().openInputStream(uri))
 					{

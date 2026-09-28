@@ -1,7 +1,6 @@
 package id.xydesk.remote.ui
 
 import android.app.Activity
-import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
 import android.content.Intent
@@ -9,7 +8,9 @@ import android.content.pm.ActivityInfo
 import android.net.Uri
 import android.view.KeyEvent
 import android.view.WindowManager
+import android.os.SystemClock
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.layout.Arrangement
@@ -24,6 +25,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.ui.text.input.ImeAction
@@ -41,6 +43,7 @@ import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -53,6 +56,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.unit.IntSize
@@ -60,11 +64,13 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.compose.ui.zIndex
+import com.freerdp.freerdpcore.utils.ClipboardImageProvider
 import com.freerdp.freerdpcore.utils.Mouse
 import id.xydesk.remote.core.CertificateInfo
 import id.xydesk.remote.XySessionService
 import id.xydesk.remote.core.ConnectionLog
 import id.xydesk.remote.core.ConnectionProfile
+import id.xydesk.remote.core.RdpOptions
 import id.xydesk.remote.core.SessionManager
 import id.xydesk.remote.core.SmartResolution
 import id.xydesk.remote.core.SessionState
@@ -75,6 +81,8 @@ import id.xydesk.remote.ui.components.rememberXyNotice
 import id.xydesk.remote.ui.components.XyPillButton
 import id.xydesk.remote.ui.components.XySpinner
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withTimeoutOrNull
 import kotlin.math.roundToInt
 
 private data class CertPrompt(
@@ -111,7 +119,7 @@ private fun parseSize(preset: String): Pair<Int, Int>? {
     if (parts.size != 2) return null
     val w = parts[0].toIntOrNull() ?: return null
     val h = parts[1].toIntOrNull() ?: return null
-    if (w !in 640..8192 || h !in 480..8192) return null
+    if (w !in 640..8192 || w % 2 != 0 || h !in 480..8192) return null
     return w to h
 }
 
@@ -123,11 +131,15 @@ fun XyDeskSessionScreen(
     onExit: () -> Unit,
 ) {
     val context = LocalContext.current
+    val screenshotScope = rememberCoroutineScope()
     val state by manager.state.collectAsState(initial = SessionState.Idle)
     val stage by manager.stage.collectAsState(initial = SessionManager.Stage.IDLE)
     val telemetry by manager.telemetry.collectAsState(initial = TelemetrySample.EMPTY)
     val prefs = remember { SessionPrefs(context) }
     val trustStore = remember { CertificateTrustStore(context) }
+    val clipboardSyncEnabled = remember(profile.id) {
+        runCatching { RdpOptions.of(context, profile.id).clipboard }.getOrDefault(false)
+    }
     val wall = remember(profile.id) {
         XyWall.NEUTRAL.forDevice(profile.label ?: profile.host)
     }
@@ -136,7 +148,7 @@ fun XyDeskSessionScreen(
     var confirmDisconnect by remember { mutableStateOf(false) }
     var showLog by remember { mutableStateOf(false) }
     var zoom by remember { mutableFloatStateOf(prefs.zoom(profile.id)) }
-    var bound by remember { mutableStateOf(false) }
+    var boundInstance by remember { mutableStateOf(0L) }
     var inputMode by remember { mutableIntStateOf(prefs.inputMode.ordinal) }
     var pointerVisible by remember { mutableStateOf(true) }
     // Keyboard HP (IME) — satu-satunya keyboard. Board keyboard virtual dan
@@ -144,12 +156,16 @@ fun XyDeskSessionScreen(
     var keyboardShown by remember(profile.id) { mutableStateOf(prefs.keyboardShown(profile.id)) }
     var hudKeys by remember(profile.id) {
         // Layout lama dimigrasi tanpa mengubah posisi/ukuran yang sudah diatur.
-        mutableStateOf(HudKey.migrate(prefs.hudKeys(profile.id)))
+        mutableStateOf(HudKey.migrate(prefs.hudKeys(profile.id), prefs.hudButtonSize))
     }
     var mappingMode by remember { mutableStateOf(false) }
     var remoteCursor by remember { mutableStateOf<RemoteCursor?>(null) }
     val notice = rememberXyNotice()
     var autoFit by remember { mutableStateOf(prefs.autoFit) }
+    var remoteDpi by remember(profile.id) {
+        mutableIntStateOf(DisplayPrefs.remoteDpi(context, profile.id))
+    }
+    var appliedRemoteDpi by remember(profile.id) { mutableIntStateOf(100) }
     /** Ukuran area gambar (tanpa kontrol), dipakai untuk resize yang akurat. */
     var viewport by remember { mutableStateOf(IntSize.Zero) }
     /** Resize yang harus dikirim ulang setelah reconnect (ganti resolusi). */
@@ -177,6 +193,8 @@ fun XyDeskSessionScreen(
     // sendiri disambung ulang, tapi kegagalan sambung awal tidak diulang.
     var everConnected by remember { mutableStateOf(false) }
     var reconnectAttempt by remember { mutableIntStateOf(0) }
+    var reconnecting by remember { mutableStateOf(false) }
+    var waitingForNativeRelease by remember { mutableStateOf(false) }
     var userDisconnect by remember { mutableStateOf(false) }
     /** Clipboard terakhir yang datang dari remote (tombol "tempel ke HP"). */
     var lastRemoteClipboard by remember { mutableStateOf<String?>(null) }
@@ -185,26 +203,53 @@ fun XyDeskSessionScreen(
         if (state is SessionState.Connected) {
             everConnected = true
             reconnectAttempt = 0
+            reconnecting = false
         }
     }
 
-    // Auto-reconnect: maksimal 3 kali, jeda bertambah (2s, 4s, 6s).
-    LaunchedEffect(state) {
-        if (state !is SessionState.Disconnected) return@LaunchedEffect
-        if (!everConnected || userDisconnect || applyingResolution) return@LaunchedEffect
-        if (!prefs.autoReconnect || reconnectAttempt >= 3) return@LaunchedEffect
-        reconnectAttempt += 1
-        val attempt = reconnectAttempt
-        notice.show(
-            xyNow(
-                "Koneksi putus — menyambung ulang ({0}/3)",
-                "Connection dropped — reconnecting ({0}/3)",
-                attempt,
-            ),
-        )
-        kotlinx.coroutines.delay(2_000L * attempt)
-        bound = false
-        manager.connect(profile)
+    // Jangan akhiri UI sesi saat transport terputus sementara. Tetap di layar,
+    // retry tanpa batas dengan backoff (2, 4, 8, 16, lalu 30 detik), dan biarkan
+    // user menghentikannya sendiri. Error autentikasi/cert tetap berhenti retry.
+    LaunchedEffect(state, everConnected, userDisconnect, applyingResolution) {
+        if (!everConnected || userDisconnect || applyingResolution || !prefs.autoReconnect) {
+            if (userDisconnect || applyingResolution || !prefs.autoReconnect) {
+                reconnecting = false
+                waitingForNativeRelease = false
+            }
+            return@LaunchedEffect
+        }
+        val retryable = state is SessionState.Disconnected ||
+            (state is SessionState.Error && state.code in setOf("unreachable", "connect_timeout"))
+        if (!retryable) {
+            if (state is SessionState.Error) {
+                reconnecting = false
+                waitingForNativeRelease = false
+            }
+            return@LaunchedEffect
+        }
+        reconnecting = true
+        reconnectAttempt = (reconnectAttempt + 1).coerceAtMost(5)
+        val waitMs = when (reconnectAttempt) {
+            1 -> 2_000L
+            2 -> 4_000L
+            3 -> 8_000L
+            4 -> 16_000L
+            else -> 30_000L
+        }
+        kotlinx.coroutines.delay(waitMs)
+        if (!userDisconnect && !applyingResolution && reconnecting) {
+            // SessionManager intentionally retains a native instance until its
+            // terminal callback; never race a retry against native cleanup.
+            waitingForNativeRelease = manager.instance() != 0L
+            while (!userDisconnect && !applyingResolution && reconnecting && manager.instance() != 0L) {
+                kotlinx.coroutines.delay(500)
+            }
+            waitingForNativeRelease = false
+            if (!userDisconnect && !applyingResolution && reconnecting) {
+                boundInstance = 0L
+                manager.connect(profile)
+            }
+        }
     }
 
     val remoteWidth = if (telemetry.width > 0) telemetry.width else 1920
@@ -218,8 +263,8 @@ fun XyDeskSessionScreen(
             kotlinx.coroutines.delay(900)
             notice.show(
                 xyNow(
-                    "Tombol kontrol terkunci. Tahan lama satu tombol (atau \"Atur posisi\" di panel kanan) untuk memindahkan.",
-                    "Control buttons are locked. Long-press one (or use \"Edit layout\" in the right panel) to move them.",
+                    "Tombol kontrol terkunci. Gunakan \"Atur posisi\" dari menu panel kanan atas untuk memindahkannya.",
+                    "Control buttons are locked. Use \"Edit layout\" from the top-right session panel to move them.",
                 ),
             )
         }
@@ -243,7 +288,18 @@ fun XyDeskSessionScreen(
                     reply(CertificateInfo.VERIFY_ACCEPT)
                     return
                 }
-                certPrompt = CertPrompt(info, stored, reply)
+                val activity = context as? Activity
+                if (activity == null) {
+                    reply(CertificateInfo.VERIFY_DENY)
+                    return
+                }
+                activity.runOnUiThread {
+                    if (activity.isFinishing || activity.isDestroyed) {
+                        reply(CertificateInfo.VERIFY_DENY)
+                    } else {
+                        certPrompt = CertPrompt(info, stored, reply)
+                    }
+                }
             }
 
             override fun onCredentialsPrompt(
@@ -251,20 +307,51 @@ fun XyDeskSessionScreen(
                 domain: String?,
                 reply: (String?, String?, String?) -> Unit,
             ) {
-                nlaPrompt = NlaPrompt(username, domain, reply)
+                val activity = context as? Activity
+                if (activity == null) {
+                    reply(null, null, null)
+                    return
+                }
+                activity.runOnUiThread {
+                    if (activity.isFinishing || activity.isDestroyed) {
+                        reply(null, null, null)
+                    } else {
+                        nlaPrompt = NlaPrompt(username, domain, reply)
+                    }
+                }
             }
 
             override fun onRemoteClipboardText(text: String) {
-                val cm = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
-                cm.setPrimaryClip(ClipData.newPlainText("rdp", text))
-                lastRemoteClipboard = text
+                val activity = context as? Activity ?: return
+                activity.runOnUiThread {
+                    val clipboardEnabled = runCatching {
+                        RdpOptions.of(activity, profile.id).clipboard
+                    }.getOrDefault(false)
+                    if (!activity.isFinishing && !activity.isDestroyed && clipboardEnabled) {
+                        val cm = activity.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+                        try {
+                            cm.setPrimaryClip(ClipboardImageProvider.createTextClip(activity, "rdp", text))
+                        } catch (e: RuntimeException) {
+                            // Clipboard service errors must not tear down the RDP session.
+                            ConnectionLog.add("clipboard: Android clipboard service rejected remote text")
+                        }
+                        lastRemoteClipboard = text
+                    }
+                }
             }
         })
     }
 
-    LaunchedEffect(Unit) {
-        // Bentuk kursor dari server (panah/tangan/I-beam/...) dipakai apa adanya.
+    LaunchedEffect(profile.id) {
+        // IME bisa ditutup lewat tombol Back Android, bukan hanya dari rail.
+        // Sinkronkan status rail dengan inset IME yang benar-benar terlihat.
+        controller.onImeChanged = { heightPx ->
+            val visible = heightPx > 0
+            keyboardShown = visible
+            prefs.setKeyboardShown(profile.id, visible)
+        }
         controller.onRemoteCursor = { cursor -> remoteCursor = cursor }
+        controller.refreshImeInsets()
     }
 
     LaunchedEffect(Unit) {
@@ -279,28 +366,69 @@ fun XyDeskSessionScreen(
     // notifikasinya memberi jalan pulang + tombol putus.
     LaunchedEffect(state) {
         val label = profile.label ?: "${profile.host}:${profile.port}"
+        val active = manager.instance() != 0L || state is SessionState.Connecting ||
+            state is SessionState.Authenticating || state is SessionState.Connected ||
+            state is SessionState.Disconnecting
+        XySessionRegistry.setActive(profile.id, active)
+        if (active) manager.instance().takeIf { it != 0L }?.let(controller::setInstance)
         if (state is SessionState.Connected) {
             XySessionService.start(context, label)
-        } else if (state is SessionState.Disconnected) {
+        } else if (XySessionRegistry.activeCount() == 0) {
             XySessionService.stop(context)
         }
     }
 
     LaunchedEffect(state) {
-        if (state is SessionState.Connected && !bound) {
-            bound = true
-            controller.bind(manager.instance())
-            controller.setImeVisible(keyboardShown)
-            when {
-                // Zoom sendiri menang; kalau belum pernah diatur dan auto-fit
-                // menyala, seluruh desktop dimuat (taskbar ikut kelihatan).
-                prefs.hasZoom(profile.id) -> controller.applyZoom(zoom)
-                prefs.autoFit -> controller.fitToScreen()
-                else -> {
-                    val dpi = DisplayPrefs.dpi(context, profile.id) / 100f
-                    if (dpi != 1f) controller.applyZoom(dpi) else controller.fitToScreen()
+        if (state is SessionState.Connected) {
+            val instance = manager.instance()
+            if (instance != 0L && boundInstance != instance) {
+                boundInstance = instance
+                appliedRemoteDpi = 100
+                controller.bind(instance)
+                controller.setImeVisible(keyboardShown)
+                when {
+                    // Zoom sendiri menang; kalau belum pernah diatur dan auto-fit
+                    // menyala, seluruh desktop dimuat (taskbar ikut kelihatan).
+                    prefs.hasZoom(profile.id) -> controller.applyZoom(zoom)
+                    prefs.autoFit -> controller.fitToScreen()
+                    else -> {
+                        val dpi = DisplayPrefs.dpi(context, profile.id) / 100f
+                        if (dpi != 1f) controller.applyZoom(dpi) else controller.fitToScreen()
+                    }
                 }
             }
+        }
+    }
+
+    // Restore remote DPI on each new native instance, and apply user changes
+    // through DISP without touching the local zoom slider.
+    LaunchedEffect(state, boundInstance, remoteDpi, pendingResize, telemetry.width, telemetry.height) {
+        if (state !is SessionState.Connected || boundInstance == 0L || pendingResize != null) {
+            return@LaunchedEffect
+        }
+        if (remoteDpi == appliedRemoteDpi) return@LaunchedEffect
+        var sent = false
+        for (attempt in 0 until 8) {
+            if (state !is SessionState.Connected || boundInstance == 0L) return@LaunchedEffect
+            val w = telemetry.width
+            val h = telemetry.height
+            if (w in 640..8192 && h in 480..8192 && manager.resizeRemote(w, h, remoteDpi)) {
+                sent = true
+                break
+            }
+            kotlinx.coroutines.delay(500)
+        }
+        if (sent) {
+            appliedRemoteDpi = remoteDpi
+        } else {
+            remoteDpi = appliedRemoteDpi
+            DisplayPrefs.setRemoteDpi(context, profile.id, remoteDpi)
+            notice.show(
+                xyNow(
+                    "DPI remote tidak tersedia: server atau kanal Display Control belum siap.",
+                    "Remote DPI is unavailable: the server or Display Control channel is not ready.",
+                ),
+            )
         }
     }
 
@@ -316,13 +444,13 @@ fun XyDeskSessionScreen(
                 val size = SmartResolution.parse(
                     SmartResolution.forViewport(viewport.width, viewport.height),
                 )
-                if (size != null) manager.resizeRemote(size.first, size.second)
+                if (size != null) manager.resizeRemote(size.first, size.second, remoteDpi)
                 if (autoFit) controller.fitToScreen()
             }
 
             // Eksplisit ikuti layar HP (rasio HP) — pilihan user, bukan default.
             DisplayPrefs.FOLLOW -> {
-                manager.resizeRemote(viewport.width, viewport.height)
+                manager.resizeRemote(viewport.width, viewport.height, remoteDpi)
                 if (autoFit) controller.fitToScreen()
             }
 
@@ -340,7 +468,7 @@ fun XyDeskSessionScreen(
     LaunchedEffect(state, applyingResolution) {
         if (applyingResolution && state is SessionState.Disconnected) {
             applyingResolution = false
-            bound = false
+            boundInstance = 0L
             manager.connect(profile)
         }
     }
@@ -350,8 +478,25 @@ fun XyDeskSessionScreen(
     LaunchedEffect(state) {
         val want = pendingResize ?: return@LaunchedEffect
         if (state is SessionState.Connected) {
-            manager.resizeRemote(want.first, want.second)
-            controller.fitToScreen()
+            var sent = false
+            for (attempt in 0 until 8) {
+                if (manager.resizeRemote(want.first, want.second, remoteDpi)) {
+                    sent = true
+                    break
+                }
+                kotlinx.coroutines.delay(500)
+            }
+            if (sent) {
+                appliedRemoteDpi = remoteDpi
+                controller.fitToScreen()
+            } else {
+                notice.show(
+                    xyNow(
+                        "Server tidak menerima perubahan resolusi lewat Display Control.",
+                        "The server did not accept the resolution change through Display Control.",
+                    ),
+                )
+            }
             pendingResize = null
         }
     }
@@ -428,15 +573,12 @@ fun XyDeskSessionScreen(
      * bukan state lokal: kalau user menutup keyboard lewat tombol back
      * Android, tombol rail tetap tahu keadaan aslinya.
      */
-    fun toggleKeyboard() {
-        val next = !controller.isImeVisible()
-        keyboardShown = next
-        prefs.setKeyboardShown(profile.id, next)
-        controller.setImeVisible(next)
-        notice.show(
-            if (next) xyNow("Keyboard HP dibuka", "Phone keyboard shown")
-            else xyNow("Keyboard HP ditutup", "Phone keyboard hidden"),
-        )
+    fun openKeyboard() {
+        val wasVisible = controller.isImeVisible()
+        keyboardShown = true
+        prefs.setKeyboardShown(profile.id, true)
+        controller.setImeVisible(true)
+        if (!wasVisible) notice.show(xyNow("Keyboard HP dibuka", "Phone keyboard shown"))
     }
 
     /** Kirim aksi satu tombol HUD (down=true tekan, false lepas). */
@@ -447,7 +589,7 @@ fun XyDeskSessionScreen(
             HudKind.MOUSE_MIDDLE -> sendButton(XyMouseButton.MIDDLE, down)
             HudKind.SCROLL_UP -> if (down) sendScroll(1)
             HudKind.SCROLL_DOWN -> if (down) sendScroll(-1)
-            HudKind.KEYBOARD -> if (down) toggleKeyboard()
+            HudKind.KEYBOARD -> if (down) openKeyboard()
 
             HudKind.INPUT_SWITCH -> if (down) {
                 val next = if (InputMode.entries[inputMode] == InputMode.TRACKPAD) {
@@ -474,6 +616,11 @@ fun XyDeskSessionScreen(
      * Fase dari layer tombol -> aksi. TAP = tekan+lepas, HOLD = aktif selama
      * ditahan, TOGGLE = nyala/mati dengan latch terpisah per tombol.
      */
+    fun releaseLatchedKeys() {
+        hudKeys.filter { latchedKeys[it.id] == true }.forEach { key -> runHudKey(key, false) }
+        latchedKeys.clear()
+    }
+
     fun handleHudPhase(key: HudKey, phase: HudPhase) {
         when (key.action) {
             HudAction.HOLD -> runHudKey(key, phase == HudPhase.DOWN)
@@ -485,10 +632,13 @@ fun XyDeskSessionScreen(
                 runHudKey(key, !on)
             }
 
-            HudAction.TAP -> {
-                if (phase != HudPhase.TAP) return
-                runHudKey(key, true)
-                runHudKey(key, false)
+            HudAction.TAP -> when (phase) {
+                HudPhase.DOWN -> runHudKey(key, true)
+                HudPhase.UP -> runHudKey(key, false)
+                HudPhase.TAP -> {
+                    runHudKey(key, true)
+                    runHudKey(key, false)
+                }
             }
         }
     }
@@ -509,7 +659,26 @@ fun XyDeskSessionScreen(
 
         // Lapisan gesture trackpad: menutup surface supaya sentuhan tidak
         // diteruskan langsung sebagai klik di posisi jari.
-        if (connected && InputMode.entries[inputMode] == InputMode.TRACKPAD) {
+        if (connected && mappingMode) {
+            // Mode layout harus mengisolasi seluruh layar dari surface FreeRDP;
+            // hanya tombol HUD yang berada di atas overlay ini yang menerima input.
+            Box(
+                Modifier
+                    .fillMaxSize()
+                    .zIndex(1f)
+                    .pointerInput(mappingMode) {
+                        awaitEachGesture {
+                            awaitFirstDown(requireUnconsumed = false).consume()
+                            do {
+                                val event = awaitPointerEvent()
+                                event.changes.forEach { it.consume() }
+                            } while (event.changes.any { it.pressed })
+                        }
+                    },
+            )
+        }
+
+        if (connected && !mappingMode && InputMode.entries[inputMode] == InputMode.TRACKPAD) {
             Box(
                 Modifier
                     .fillMaxSize()
@@ -526,6 +695,7 @@ fun XyDeskSessionScreen(
                                 sendButton(XyMouseButton.RIGHT, false)
                             },
                             onScroll = { sendScroll(it) },
+                            onButton = { button, down -> sendButton(button, down) },
                         )
                     },
             )
@@ -540,6 +710,7 @@ fun XyDeskSessionScreen(
                 statusText = xy("Terhubung", "Connected"),
                 remoteSize = if (telemetry.width > 0) "${telemetry.width} x ${telemetry.height}" else xy("menunggu server", "waiting for server"),
                 zoomPercent = (zoom * 100).roundToInt(),
+                remoteDpi = remoteDpi,
                 pointerScreen = pointerScreen,
                 pointerVisible = pointerVisible && InputMode.entries[inputMode] == InputMode.TRACKPAD,
                 remoteCursor = remoteCursor,
@@ -550,14 +721,25 @@ fun XyDeskSessionScreen(
                     prefs.inputMode = mode
                     if (mode == InputMode.DIRECT) controller.setImeVisible(keyboardShown)
                 },
-                keyboardShown = keyboardShown,
-                onKeyboardShownChange = { shown ->
-                    keyboardShown = shown
-                    prefs.setKeyboardShown(profile.id, shown)
-                    controller.setImeVisible(shown)
-                },
                 keys = hudKeys,
                 onKeysChange = { setHudKeys(it) },
+                latchedKeyIds = latchedKeys.filterValues { it }.keys.toSet(),
+                onKeyEdited = { updated ->
+                    val old = hudKeys.firstOrNull { it.id == updated.id }
+                    if (old != null && latchedKeys[old.id] == true &&
+                        (old.kind != updated.kind || old.action != updated.action)
+                    ) {
+                        runHudKey(old, false)
+                        latchedKeys.remove(old.id)
+                    }
+                    setHudKeys(hudKeys.map { if (it.id == updated.id) updated else it })
+                },
+                onDeleteKey = { deleted ->
+                    val old = hudKeys.firstOrNull { it.id == deleted.id } ?: deleted
+                    if (latchedKeys[old.id] == true) runHudKey(old, false)
+                    latchedKeys.remove(old.id)
+                    setHudKeys(hudKeys.filterNot { it.id == deleted.id })
+                },
                 mappingMode = mappingMode,
                 onMappingModeChange = {
                     mappingMode = it
@@ -568,20 +750,32 @@ fun XyDeskSessionScreen(
                 onZoomOut = { controller.zoomOut() },
                 onFit = { controller.fitToScreen() },
                 onZoomActual = { controller.applyZoom(1f) },
+                onZoomScale = { percent -> controller.applyZoom(percent / 100f) },
+                onRemoteDpiChange = { scale ->
+                    if (scale in DisplayPrefs.remoteDpiOptions) {
+                        remoteDpi = scale
+                        DisplayPrefs.setRemoteDpi(context, profile.id, scale)
+                    }
+                },
                 onScreenshot = {
                     val act = context as? Activity ?: return@SessionControls
-                    val uri: Uri = controller.captureScreenshot(act) ?: return@SessionControls
-                    val send = Intent(Intent.ACTION_SEND).apply {
-                        type = "image/png"
-                        putExtra(Intent.EXTRA_STREAM, uri)
-                        addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                    screenshotScope.launch {
+                        val uri: Uri = controller.captureScreenshot(act) ?: run {
+                            notice.show(xyNow("Screenshot gagal atau surface belum siap", "Screenshot failed or surface is not ready"))
+                            return@launch
+                        }
+                        val send = Intent(Intent.ACTION_SEND).apply {
+                            type = "image/png"
+                            putExtra(Intent.EXTRA_STREAM, uri)
+                            addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                        }
+                        act.startActivity(
+                            Intent.createChooser(
+                                send,
+                                xyNow("Bagikan screenshot", "Share screenshot"),
+                            ),
+                        )
                     }
-                    act.startActivity(
-                        Intent.createChooser(
-                            send,
-                            xyNow("Bagikan screenshot", "Share screenshot"),
-                        ),
-                    )
                 },
                 onDisconnect = {
                     // Jangan tandai "putus oleh user" di sini: dialog konfirmasi
@@ -593,8 +787,8 @@ fun XyDeskSessionScreen(
                 onResetCluster = {
                     // Kembalikan tombol HUD ke set bawaan (klik kiri/kanan/
                     // tengah, scroll naik/turun, ganti mode input).
-                    latchedKeys.clear()
-                    setHudKeys(HudKey.defaults())
+                    releaseLatchedKeys()
+                    setHudKeys(HudKey.defaults(prefs.hudButtonSize))
                 },
                 onRotationChange = { mode ->
                     (context as? Activity)?.requestedOrientation = when (mode) {
@@ -620,7 +814,7 @@ fun XyDeskSessionScreen(
                         else -> parseSize(preset)
                     }
                     val live = size != null && size.first > 0 && size.second > 0 &&
-                        manager.resizeRemote(size.first, size.second)
+                        manager.resizeRemote(size.first, size.second, remoteDpi)
                     if (live) {
                         controller.fitToScreen()
                         notice.show(xyNow("Resolusi remote: {0} x {1}", "Remote resolution: {0} x {1}", size.first, size.second))
@@ -632,18 +826,32 @@ fun XyDeskSessionScreen(
                         notice.show(xyNow("Menyambung ulang dengan resolusi baru", "Reconnecting with the new resolution"))
                     }
                 },
-                onToggleKeyboard = { toggleKeyboard() },
+                onOpenKeyboard = { openKeyboard() },
                 lastClipboard = lastRemoteClipboard,
+                clipboardSyncEnabled = clipboardSyncEnabled,
                 onSendPhoneClipboard = {
                     val cm = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
-                    val text = cm.primaryClip?.takeIf { it.itemCount > 0 }
-                        ?.getItemAt(0)?.coerceToText(context)?.toString().orEmpty()
-                    if (text.isEmpty()) {
-                        notice.show(xyNow("Clipboard HP kosong", "Phone clipboard is empty"))
-                    } else if (manager.sendClipboardData(text)) {
-                        notice.show(xyNow("Clipboard HP dikirim ke remote", "Phone clipboard sent to remote"))
+                    val item = runCatching { cm.primaryClip?.takeIf { it.itemCount > 0 }?.getItemAt(0) }
+                        .getOrNull()
+                    if (item == null) {
+                        notice.show(xyNow("Clipboard HP kosong atau tidak bisa dibaca", "Phone clipboard is empty or unavailable"))
                     } else {
-                        notice.show(xyNow("Gagal mengirim clipboard", "Failed to send clipboard"))
+                        screenshotScope.launch {
+                            val text = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+                                runCatching { item.coerceToText(context)?.toString().orEmpty() }
+                                    .getOrDefault("")
+                            }
+                            val sent = text.isNotEmpty() && kotlinx.coroutines.withContext(
+                                kotlinx.coroutines.Dispatchers.IO,
+                            ) { manager.sendClipboardData(text) }
+                            notice.show(
+                                when {
+                                    text.isEmpty() -> xyNow("Clipboard HP kosong atau tidak bisa dibaca", "Phone clipboard is empty or unavailable")
+                                    sent -> xyNow("Clipboard HP dikirim ke remote", "Phone clipboard sent to remote")
+                                    else -> xyNow("Gagal mengirim clipboard", "Failed to send clipboard")
+                                },
+                            )
+                        }
                     }
                 },
                 onPasteRemoteClipboard = {
@@ -657,8 +865,16 @@ fun XyDeskSessionScreen(
                         )
                     } else {
                         val cm = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
-                        cm.setPrimaryClip(ClipData.newPlainText("rdp", text))
-                        notice.show(xyNow("Teks remote disalin ke HP", "Remote text copied to phone"))
+                        val copied = try {
+                            cm.setPrimaryClip(ClipboardImageProvider.createTextClip(context, "rdp", text))
+                            true
+                        } catch (e: RuntimeException) {
+                            false
+                        }
+                        notice.show(
+                            if (copied) xyNow("Teks remote disalin ke HP", "Remote text copied to phone")
+                            else xyNow("Clipboard Android menolak teks ini", "Android clipboard rejected this text"),
+                        )
                     }
                 },
                 // Sesi lain: buka home tanpa memutus sesi ini (keep-alive
@@ -694,20 +910,47 @@ fun XyDeskSessionScreen(
         }
 
         if (state is SessionState.Connecting || state is SessionState.Authenticating) {
-            ConnectingScreen(
-                wall = wall,
-                deviceLabel = profile.label ?: "${profile.host}:${profile.port}",
-                stage = stage,
-                onCancel = { manager.cancelConnection() },
+            if (reconnecting && everConnected) {
+                ReconnectingOverlay(
+                    attempt = reconnectAttempt,
+                    waitingForNativeRelease = waitingForNativeRelease,
+                    onStop = {
+                        userDisconnect = true
+                        reconnecting = false
+                        manager.cancelConnection()
+                    },
+                )
+            } else {
+                ConnectingScreen(
+                    wall = wall,
+                    deviceLabel = profile.label ?: "${profile.host}:${profile.port}",
+                    stage = stage,
+                    onCancel = { manager.cancelConnection() },
+                )
+            }
+        }
+
+        if (reconnecting && everConnected &&
+            (state is SessionState.Disconnected || state is SessionState.Error)
+        ) {
+            ReconnectingOverlay(
+                attempt = reconnectAttempt,
+                waitingForNativeRelease = waitingForNativeRelease,
+                onStop = {
+                    userDisconnect = true
+                    reconnecting = false
+                    manager.cancelConnection()
+                },
             )
         }
 
-        if (state is SessionState.Disconnected && !applyingResolution) {
+        if (state is SessionState.Disconnected && !applyingResolution && !reconnecting) {
             DisconnectedScreen(
                 wall = wall,
                 deviceLabel = profile.label ?: profile.host,
+                detail = (state as SessionState.Disconnected).detail,
                 onReconnect = {
-                    bound = false
+                    boundInstance = 0L
                     manager.connect(profile)
                 },
                 onExit = onExit,
@@ -749,7 +992,7 @@ fun XyDeskSessionScreen(
             nlaPrompt = null
         }
     }
-    if (!active) err?.let { e ->
+    if (!active && !reconnecting) err?.let { e ->
         XyOverlay(
             title = xy("Koneksi gagal", "Connection failed"),
             onDismiss = { onExit() },
@@ -780,6 +1023,7 @@ fun XyDeskSessionScreen(
                     text = xy("Reset resolusi", "Reset resolution"),
                     onClick = {
                         DisplayPrefs.setResolution(context, profile.id, DisplayPrefs.AUTOMATIC)
+                        boundInstance = 0L
                         manager.connect(profile)
                     },
                     primary = false,
@@ -787,6 +1031,16 @@ fun XyDeskSessionScreen(
                     modifier = Modifier.weight(1f),
                 )
             }
+            XyPillButton(
+                text = xy("Coba lagi", "Try again"),
+                onClick = {
+                    showLog = false
+                    boundInstance = 0L
+                    manager.connect(profile)
+                },
+                compact = true,
+                modifier = Modifier.fillMaxWidth(),
+            )
             XyPillButton(
                 text = xy("Tutup", "Close"),
                 onClick = { onExit() },
@@ -854,6 +1108,53 @@ private val connectSteps = listOf(
     "Autentikasi (NLA)" to "Authentication (NLA)",
     "Menyiapkan desktop" to "Preparing desktop",
 )
+
+@Composable
+private fun ReconnectingOverlay(
+    attempt: Int,
+    waitingForNativeRelease: Boolean,
+    onStop: () -> Unit,
+) {
+    Column(
+        Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 24.dp, vertical = 28.dp)
+            .clip(RoundedCornerShape(16.dp))
+            .background(Color(0xE61A201E))
+            .border(1.dp, Color(0x66B9EBDD), RoundedCornerShape(16.dp))
+            .padding(18.dp)
+            .zIndex(20f),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        XySpinner(size = 24.dp, color = Color(0xFFB9EBDD))
+        Text(
+            xy("Jaringan terputus sementara", "Temporary network interruption"),
+            color = Color.White,
+            style = MaterialTheme.typography.titleSmall,
+            textAlign = TextAlign.Center,
+        )
+        Text(
+            xy(
+                if (waitingForNativeRelease) {
+                    "Menunggu sesi native menutup dengan aman; percobaan {0} akan dilanjutkan setelahnya."
+                } else {
+                    "Sesi tetap terbuka. Menunggu jaringan lalu mencoba lagi (percobaan {0})."
+                },
+                if (waitingForNativeRelease) {
+                    "Waiting for the native session to close safely; attempt {0} will continue afterward."
+                } else {
+                    "Session is kept open. Waiting for the network and retrying (attempt {0})."
+                },
+                attempt,
+            ),
+            color = Color.White.copy(alpha = 0.78f),
+            style = MaterialTheme.typography.bodySmall,
+            textAlign = TextAlign.Center,
+        )
+        XyPillButton(xy("Berhenti mencoba", "Stop retrying"), onStop, primary = false, compact = true)
+    }
+}
 
 @Composable
 private fun ConnectingScreen(
@@ -941,6 +1242,7 @@ private fun ConnectingScreen(
 private fun DisconnectedScreen(
     wall: XyWall,
     deviceLabel: String,
+    detail: String?,
     onReconnect: () -> Unit,
     onExit: () -> Unit,
 ) {
@@ -958,6 +1260,25 @@ private fun DisconnectedScreen(
             )
             Spacer(Modifier.height(4.dp))
             Text(deviceLabel, color = Color.White.copy(alpha = 0.78f), fontSize = 13.sp)
+            Spacer(Modifier.height(10.dp))
+            val disconnectHint = RdpErrors.disconnectedHint(detail)
+            Text(
+                disconnectHint?.let { xy(it.first, it.second) }
+                    ?: xy(
+                        "Sesi remote berakhir; penyebab spesifik tidak diberikan.",
+                        "The remote session ended; no specific cause was provided.",
+                    ),
+                color = Color.White.copy(alpha = 0.86f),
+                style = MaterialTheme.typography.bodyMedium,
+            )
+            if (!detail.isNullOrBlank()) {
+                Spacer(Modifier.height(6.dp))
+                Text(
+                    detail,
+                    color = Color.White.copy(alpha = 0.68f),
+                    style = MaterialTheme.typography.bodySmall,
+                )
+            }
             Spacer(Modifier.height(20.dp))
             XyPillButton(xy("Sambungkan lagi", "Reconnect"), onReconnect, compact = true)
             Spacer(Modifier.height(8.dp))
@@ -970,10 +1291,13 @@ private fun DisconnectedScreen(
 // Gesture trackpad
 // =============================================================
 
+private enum class TrackpadGestureMode { SINGLE_PENDING, MOVE, LEFT_DRAG, TWO_PENDING, SCROLL, RIGHT_DRAG, CANCELLED }
+
 /**
- * Gesture trackpad satu jari untuk gerak + ketuk, dua jari untuk scroll dan
- * klik kanan. Dipasang di lapisan atas surface supaya surface tidak
- * menerjemahkan sentuhan sebagai klik di titik jari.
+ * Trackpad: satu jari geser = pointer, tap = klik kiri, tahan diam lalu geser
+ * = drag kiri. Dua jari geser = scroll, tap = klik kanan, tahan lalu geser =
+ * drag kanan. Perubahan jumlah jari merebase centroid agar two-finger tap tidak
+ * salah dibaca sebagai swipe. Button UP selalu dikirim saat gesture dibatalkan.
  */
 private suspend fun androidx.compose.ui.input.pointer.PointerInputScope.trackpadGestures(
     scrollSpeed: Float,
@@ -981,51 +1305,168 @@ private suspend fun androidx.compose.ui.input.pointer.PointerInputScope.trackpad
     onTap: () -> Unit,
     onTwoFingerTap: () -> Unit,
     onScroll: (Int) -> Unit,
+    onButton: (XyMouseButton, Boolean) -> Unit,
 ) {
     awaitEachGesture {
         val slop = viewConfiguration.touchSlop
-        var maxPointers = 1
-        var travelled = 0f
-        var scrollAccum = 0f
-        var sawMulti = false
+        val holdTimeout = viewConfiguration.longPressTimeoutMillis
         val first = awaitFirstDown(requireUnconsumed = false)
+        first.consume()
+
+        var mode = TrackpadGestureMode.SINGLE_PENDING
+        var activePointers = 1
+        var maxPointers = 1
+        var travel = 0f
+        var pendingMove = Offset.Zero
+        var scrollAccum = 0f
         var lastCentroid = first.position
-        var released = false
-        while (!released) {
-            val event = awaitPointerEvent()
-            val pressed = event.changes.filter { it.pressed }
-            if (pressed.isEmpty()) {
-                released = true
-                break
+        var deadline = first.uptimeMillis + holdTimeout
+        var holdEligible = true
+        var tapEligible = true
+        var heldButton: XyMouseButton? = null
+
+        fun emitScroll() {
+            val step = (40f / scrollSpeed).coerceAtLeast(8f)
+            while (scrollAccum <= -step) {
+                onScroll(1)
+                scrollAccum += step
             }
-            maxPointers = maxOf(maxPointers, pressed.size)
-            val centroid = pressed.fold(Offset.Zero) { acc, change -> acc + change.position } /
-                pressed.size.toFloat()
-            val delta = centroid - lastCentroid
-            lastCentroid = centroid
-            val distance = delta.getDistance()
-            if (distance > 0.15f) {
-                travelled += distance
-                if (pressed.size >= 2) {
-                    sawMulti = true
-                    scrollAccum += delta.y
-                    val step = (26f / scrollSpeed).coerceAtLeast(6f)
-                    while (scrollAccum <= -step) {
-                        onScroll(1)
-                        scrollAccum += step
-                    }
-                    while (scrollAccum >= step) {
-                        onScroll(-1)
-                        scrollAccum -= step
-                    }
-                } else if (!sawMulti) {
-                    onMove(delta.x, delta.y)
+            while (scrollAccum >= step) {
+                onScroll(-1)
+                scrollAccum -= step
+            }
+        }
+
+        fun beginLongPress() {
+            when {
+                mode == TrackpadGestureMode.SINGLE_PENDING && activePointers == 1 -> {
+                    heldButton = XyMouseButton.LEFT
+                    onButton(XyMouseButton.LEFT, true)
+                    mode = TrackpadGestureMode.LEFT_DRAG
+                    tapEligible = false
+                }
+                mode == TrackpadGestureMode.TWO_PENDING && activePointers == 2 -> {
+                    heldButton = XyMouseButton.RIGHT
+                    onButton(XyMouseButton.RIGHT, true)
+                    mode = TrackpadGestureMode.RIGHT_DRAG
+                    tapEligible = false
                 }
             }
-            event.changes.forEach { change -> if (change.pressed) change.consume() }
         }
-        if (travelled <= slop && maxPointers < 3) {
-            if (maxPointers >= 2) onTwoFingerTap() else onTap()
+
+        try {
+            while (true) {
+                val waitingForHold = holdEligible &&
+                    (mode == TrackpadGestureMode.SINGLE_PENDING || mode == TrackpadGestureMode.TWO_PENDING)
+                val remaining = deadline - SystemClock.uptimeMillis()
+                if (waitingForHold && remaining <= 0L) {
+                    beginLongPress()
+                    continue
+                }
+                val event = if (waitingForHold) {
+                    withTimeoutOrNull(remaining) { awaitPointerEvent() }
+                } else {
+                    awaitPointerEvent()
+                }
+                if (event == null) {
+                    beginLongPress()
+                    continue
+                }
+
+                val pressed = event.changes.filter { it.pressed }
+                if (pressed.isEmpty()) {
+                    event.changes.forEach { it.consume() }
+                    break
+                }
+                val pointerCount = pressed.size
+                val centroid = pressed.fold(Offset.Zero) { acc, change -> acc + change.position } /
+                    pointerCount.toFloat()
+                maxPointers = maxOf(maxPointers, pointerCount)
+
+                if (pointerCount >= 3) {
+                    heldButton?.let { onButton(it, false) }
+                    heldButton = null
+                    mode = TrackpadGestureMode.CANCELLED
+                    tapEligible = false
+                    holdEligible = false
+                    activePointers = pointerCount
+                    lastCentroid = centroid
+                    event.changes.forEach { it.consume() }
+                    continue
+                }
+
+                if (pointerCount != activePointers) {
+                    // Jangan hitung loncatan centroid saat finger count berubah.
+                    if (pointerCount == 2) {
+                        if (mode == TrackpadGestureMode.SINGLE_PENDING || mode == TrackpadGestureMode.MOVE) {
+                            val hadMoved = mode == TrackpadGestureMode.MOVE
+                            mode = TrackpadGestureMode.TWO_PENDING
+                            deadline = SystemClock.uptimeMillis() + holdTimeout
+                            holdEligible = true
+                            travel = 0f
+                            pendingMove = Offset.Zero
+                            scrollAccum = 0f
+                            if (hadMoved) tapEligible = false
+                        }
+                    } else if (pointerCount == 1 && maxPointers >= 2 && mode == TrackpadGestureMode.TWO_PENDING) {
+                        // Masih boleh menyelesaikan two-finger tap saat jari kedua lepas,
+                        // tetapi jangan mengubah satu jari tersisa menjadi right-hold.
+                        holdEligible = false
+                    }
+                    activePointers = pointerCount
+                    lastCentroid = centroid
+                    event.changes.forEach { it.consume() }
+                    continue
+                }
+
+                val delta = centroid - lastCentroid
+                lastCentroid = centroid
+                val distance = delta.getDistance()
+                if (distance > 0.15f) {
+                    travel += distance
+                    when (mode) {
+                        TrackpadGestureMode.SINGLE_PENDING -> {
+                            pendingMove += delta
+                            if (travel > slop) {
+                                mode = TrackpadGestureMode.MOVE
+                                tapEligible = false
+                                onMove(pendingMove.x, pendingMove.y)
+                                pendingMove = Offset.Zero
+                            }
+                        }
+                        TrackpadGestureMode.MOVE -> onMove(delta.x, delta.y)
+                        TrackpadGestureMode.TWO_PENDING -> {
+                            if (activePointers < 2) {
+                                // Setelah satu jari terangkat, jari tersisa tidak
+                                // boleh berubah menjadi scroll satu-jari.
+                                if (travel > slop) tapEligible = false
+                            } else if (travel > slop) {
+                                mode = TrackpadGestureMode.SCROLL
+                                tapEligible = false
+                                scrollAccum += delta.y
+                                emitScroll()
+                            }
+                        }
+                        TrackpadGestureMode.SCROLL -> {
+                            scrollAccum += delta.y
+                            emitScroll()
+                        }
+                        TrackpadGestureMode.LEFT_DRAG, TrackpadGestureMode.RIGHT_DRAG ->
+                            onMove(delta.x, delta.y)
+                        TrackpadGestureMode.CANCELLED -> Unit
+                    }
+                }
+                event.changes.forEach { it.consume() }
+            }
+
+            if (heldButton == null && tapEligible && travel <= slop) {
+                when {
+                    maxPointers >= 2 -> onTwoFingerTap()
+                    maxPointers == 1 -> onTap()
+                }
+            }
+        } finally {
+            heldButton?.let { onButton(it, false) }
         }
     }
 }

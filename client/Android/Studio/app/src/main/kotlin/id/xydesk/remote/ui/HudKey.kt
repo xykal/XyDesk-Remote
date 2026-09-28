@@ -8,8 +8,8 @@ import org.json.JSONObject
 /**
  * Model tombol HUD sesi.
  *
- * Aturan produk: SATU tombol = SATU aksi, bentuknya bulat penuh, dan tiap
- * tombol bisa digeser, diubah ukurannya, serta diatur aksinya sendiri
+ * Aturan produk: SATU tombol = SATU aksi, berbentuk lingkaran dengan aksen
+ * kontras, dan tiap tombol bisa digeser, diubah ukurannya, serta diatur aksinya sendiri
  * (sekali klik / tahan / toggle). Tidak ada tombol gabungan.
  *
  * Semua tombol disimpan per perangkat (layar sesi bisa beda-beda layout).
@@ -43,8 +43,8 @@ data class HudKey(
     /** Posisi ternormalisasi 0..1 dari kiri-atas area sesi. */
     val x: Float = 0.78f,
     val y: Float = 0.42f,
-    /** Diameter tombol (dp). Bulat penuh: radius = setengah diameter. */
-    val size: Float = 48f,
+    /** Diameter tombol HUD (dp). */
+    val size: Float = 64f,
 ) {
     fun toJson(): JSONObject = JSONObject().apply {
         put("id", id)
@@ -63,8 +63,9 @@ data class HudKey(
         fun fromJson(o: JSONObject): HudKey? {
             val id = o.optString("id").takeIf { it.isNotBlank() } ?: return null
             val kind = runCatching { HudKind.valueOf(o.optString("kind")) }.getOrNull() ?: return null
-            val action = runCatching { HudAction.valueOf(o.optString("action")) }
+            val parsedAction = runCatching { HudAction.valueOf(o.optString("action")) }
                 .getOrDefault(HudAction.TAP)
+            val action = parsedAction.takeIf { it in allowedActions(kind) } ?: HudAction.TAP
             val comboJson = o.optJSONArray("combo") ?: JSONArray()
             val combo = (0 until comboJson.length()).map { comboJson.optInt(it) }
             return HudKey(
@@ -77,7 +78,7 @@ data class HudKey(
                 action = action,
                 x = o.optDouble("x", 0.78).toFloat().coerceIn(0f, 1f),
                 y = o.optDouble("y", 0.42).toFloat().coerceIn(0f, 1f),
-                size = o.optDouble("size", 48.0).toFloat().coerceIn(24f, 140f),
+                size = o.optDouble("size", 64.0).toFloat().coerceIn(56f, 120f),
             )
         }
 
@@ -97,55 +98,62 @@ data class HudKey(
             }.getOrNull()
         }
 
-        /**
-         * Set awal: klik kiri, klik kanan, klik tengah, scroll naik, scroll
-         * turun, ganti mode input. Semua terpisah, tersusun satu kolom di
-         * kanan layar; user bebas geser/ubah/ tambah.
-         */
-        fun defaults(): List<HudKey> = listOf(
-            // Tombol mengambang: bisa digeser bebas di atas layar remote.
-            HudKey("kiri", HudKind.MOUSE_LEFT, "Kiri", x = 0.84f, y = 0.40f),
-            HudKey("kanan", HudKind.MOUSE_RIGHT, "Kanan", x = 0.84f, y = 0.52f),
-            HudKey("tengah", HudKind.MOUSE_MIDDLE, "Tengah", x = 0.84f, y = 0.64f),
-            HudKey(
-                "naik", HudKind.SCROLL_UP, "Naik",
-                action = HudAction.HOLD, x = 0.72f, y = 0.40f,
-            ),
-            HudKey(
-                "turun", HudKind.SCROLL_DOWN, "Turun",
-                action = HudAction.HOLD, x = 0.72f, y = 0.52f,
-            ),
-            HudKey(
-                "switch", HudKind.INPUT_SWITCH, "Mode",
-                x = 0.72f, y = 0.64f,
-            ),
-            // Pengganti tombol "Buka keyboard" yang dulu nempel di pojok bawah
-            // dan menutupi taskbar remote: sekarang tombol biasa, bisa digeser.
-            HudKey(
-                "keyboard", HudKind.KEYBOARD, "Keyboard",
-                x = 0.84f, y = 0.76f,
-            ),
-        )
+        /** Set awal 2x3 lingkaran; jarak baris aman juga di layar landscape pendek. */
+        fun defaults(size: Float = 64f): List<HudKey> {
+            val diameter = size.coerceIn(56f, 80f)
+            return listOf(
+                HudKey("kiri", HudKind.MOUSE_LEFT, "Kiri", x = 0.12f, y = 0.12f),
+                HudKey("kanan", HudKind.MOUSE_RIGHT, "Kanan", x = 0.50f, y = 0.12f),
+                HudKey("tengah", HudKind.MOUSE_MIDDLE, "Tengah", x = 0.12f, y = 0.44f),
+                HudKey("naik", HudKind.SCROLL_UP, "Naik", x = 0.50f, y = 0.44f),
+                HudKey("turun", HudKind.SCROLL_DOWN, "Turun", x = 0.12f, y = 0.76f),
+                HudKey("switch", HudKind.INPUT_SWITCH, "Mode", x = 0.50f, y = 0.76f),
+            ).map { it.copy(size = diameter) }
+        }
+
+        /** Action yang benar-benar punya makna untuk jenis kontrol terkait. */
+        fun allowedActions(kind: HudKind): List<HudAction> = when (kind) {
+            HudKind.MOUSE_LEFT, HudKind.MOUSE_RIGHT, HudKind.MOUSE_MIDDLE, HudKind.KEY ->
+                listOf(HudAction.TAP, HudAction.HOLD, HudAction.TOGGLE)
+            else -> listOf(HudAction.TAP)
+        }
 
         /**
          * Layout lama (ronde 4 dan sebelumnya) memakai konsep "baris atas
          * keyboard" dengan id `aux_*`. Baris itu sudah dihapus dari produk,
-         * jadi entri `aux_*` dibuang dan sisanya dipertahankan apa adanya —
-         * posisi, ukuran, dan aksi yang sudah diatur user tidak boleh berubah.
+         * jadi entri `aux_*` dibuang. Posisi/ukuran kontrol yang sudah diatur
+         * user dipertahankan; aksi yang tidak didukung dinormalisasi.
          *
          * Kalau hasilnya kosong (semua tombol lama cuma baris atas), pakai
          * set bawaan supaya layar tidak kosong tanpa kontrol.
          */
-        fun migrate(list: List<HudKey>): List<HudKey> {
-            if (list.isEmpty()) return defaults()
-            val kept = list.filterNot { it.id.startsWith("aux_") }
-            if (kept.isEmpty()) return defaults()
-            // Tombol keyboard wajib ada: itu satu-satunya jalan membuka IME
-            // sekarang, dan pemilik layout lama belum tentu punya.
-            if (kept.none { it.kind == HudKind.KEYBOARD }) {
-                return kept + HudKey("keyboard", HudKind.KEYBOARD, "Keyboard", x = 0.84f, y = 0.76f)
+        fun migrate(list: List<HudKey>, defaultSize: Float = 76f): List<HudKey> {
+            if (list.isEmpty()) return defaults(defaultSize)
+            val legacyStock = list.size == 7 && list.all { key ->
+                val stock = when (key.id) {
+                    "kiri" -> key.kind == HudKind.MOUSE_LEFT && key.label == "Kiri" && key.x == 0.84f && key.y == 0.40f
+                    "kanan" -> key.kind == HudKind.MOUSE_RIGHT && key.label == "Kanan" && key.x == 0.84f && key.y == 0.52f
+                    "tengah" -> key.kind == HudKind.MOUSE_MIDDLE && key.label == "Tengah" && key.x == 0.84f && key.y == 0.64f
+                    "naik" -> key.kind == HudKind.SCROLL_UP && key.label == "Naik" && key.x == 0.72f && key.y == 0.40f
+                    "turun" -> key.kind == HudKind.SCROLL_DOWN && key.label == "Turun" && key.x == 0.72f && key.y == 0.52f
+                    "switch" -> key.kind == HudKind.INPUT_SWITCH && key.label == "Mode" && key.x == 0.72f && key.y == 0.64f
+                    "keyboard" -> key.kind == HudKind.KEYBOARD && key.label == "Keyboard" && key.x == 0.84f && key.y == 0.76f
+                    else -> false
+                }
+                stock && key.action == HudAction.TAP && key.size == 56f && key.keyCode == 0 &&
+                    !key.shift && key.combo.isEmpty()
             }
-            return kept
+            if (legacyStock) return defaults(defaultSize)
+            val kept = list.filterNot {
+                it.id.startsWith("aux_") || it.id == "keyboard" || it.kind == HudKind.KEYBOARD
+            }
+            if (kept.isEmpty()) return defaults(defaultSize)
+            // Keyboard HP selalu tersedia lewat rail tetap; jangan menambahkan
+            // salinan HUD bawaan yang dulu bertabrakan dengan rail kanan-bawah.
+            return kept.map { key ->
+                if (key.action in allowedActions(key.kind)) key
+                else key.copy(action = HudAction.TAP)
+            }
         }
     }
 }
@@ -155,6 +163,7 @@ data class HudKey(
  * lama; sekarang di model HUD karena HUD yang memakainya.
  */
 enum class XyMouseButton { LEFT, RIGHT, MIDDLE }
+
 
 /** Satu pilihan di daftar "tambah tombol". */
 data class HudKeyOption(
@@ -187,7 +196,6 @@ object HudKeyCatalog {
         HudKeyOption("Aksi", "Scroll naik", HudKind.SCROLL_UP, labelEn = "Scroll up"),
         HudKeyOption("Aksi", "Scroll turun", HudKind.SCROLL_DOWN, labelEn = "Scroll down"),
         HudKeyOption("Aksi", "Ganti mode input", HudKind.INPUT_SWITCH, labelEn = "Switch input mode"),
-        HudKeyOption("Aksi", "Buka keyboard", HudKind.KEYBOARD, labelEn = "Show keyboard"),
         HudKeyOption("Aksi", "Klik kiri (tahan = drag)", HudKind.MOUSE_LEFT, labelEn = "Left click (hold = drag)"),
     )
 

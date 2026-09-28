@@ -45,6 +45,7 @@ import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -82,20 +83,20 @@ fun hudPalette(plate: HudPlate): HudPalette = when (plate) {
 /**
  * Lapisan tombol kontrol sesi.
  *
- * Tiap tombol bulat penuh, satu aksi, bisa digeser bebas (kapan saja, tidak
- * harus masuk mode atur posisi), ukurannya diatur, dan aksinya dipilih
- * (sekali klik / tahan / toggle). Di mode atur posisi tombol diberi ring +
+ * Tiap tombol berbentuk lingkaran, satu aksi, terkunci saat digunakan dan bisa
+ * digeser dalam mode atur posisi. Ukuran dan aksinya dapat diubah. Di mode
+ * atur posisi tombol diberi ring +
  * grid bantu supaya jelas bisa digeser.
  */
 @Composable
 fun HudKeyLayer(
     keys: List<HudKey>,
     mappingMode: Boolean,
-    plate: HudPlate = HudPlate.DARK,
+    plate: HudPlate,
+    latchedKeys: Set<String>,
     onMove: (id: String, x: Float, y: Float) -> Unit,
     onPhase: (HudKey, HudPhase) -> Unit,
     onEdit: (HudKey) -> Unit,
-    onRequestEditMode: () -> Unit = {},
 ) {
     BoxWithConstraints(Modifier.fillMaxSize()) {
         val density = LocalDensity.current
@@ -139,12 +140,12 @@ fun HudKeyLayer(
                 key = key,
                 mappingMode = mappingMode,
                 plate = plate,
+                latched = key.action == HudAction.TOGGLE && key.id in latchedKeys,
                 maxX = maxX,
                 maxY = maxY,
                 onDrag = { x, y -> onMove(key.id, x, y) },
                 onPhase = { phase -> onPhase(key, phase) },
                 onEdit = { onEdit(key) },
-                onRequestEditMode = onRequestEditMode,
                 modifier = Modifier
                     .offset {
                         IntOffset((key.x * maxX).roundToInt(), (key.y * maxY).roundToInt())
@@ -160,15 +161,14 @@ private fun HudKeyButton(
     key: HudKey,
     mappingMode: Boolean,
     plate: HudPlate,
+    latched: Boolean,
     maxX: Float,
     maxY: Float,
     onDrag: (Float, Float) -> Unit,
     onPhase: (HudPhase) -> Unit,
     onEdit: () -> Unit,
-    onRequestEditMode: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    var latched by remember(key.id) { mutableStateOf(false) }
     var pressed by remember(key.id) { mutableStateOf(false) }
 
     // Posisi selama geser diakumulasi lokal: blok pointerInput tidak restart
@@ -179,25 +179,29 @@ private fun HudKeyButton(
 
     val pal = hudPalette(plate)
     val ring = when {
-        mappingMode -> Color(0xFF8FD0FF)
-        latched -> Color(0xFFFFFFFF)
+        mappingMode -> Color(0xFF83D7FF)
+        latched -> Color(0xFFB9F0D9)
         else -> pal.border
+    }
+    val circlePlate = when {
+        pressed || latched -> Color(0xE62B624F)
+        else -> pal.plate
     }
 
     Box(
         modifier
             .size(key.size.dp)
             .shadow(
-                elevation = 8.dp,
+                elevation = 7.dp,
                 shape = CircleShape,
                 clip = false,
                 ambientColor = Color.Black,
                 spotColor = Color.Black,
             )
             .clip(CircleShape)
-            .background(pal.plate)
+            .background(circlePlate)
             .border(
-                if (pressed || latched) 2.dp else 1.4.dp,
+                if (pressed || latched || mappingMode) 2.dp else 1.2.dp,
                 ring,
                 CircleShape,
             )
@@ -207,10 +211,16 @@ private fun HudKeyButton(
                     pressed = true
                     var travelled = 0f
                     var dragged = false
-                    var longPressed = false
-                    val holdActive = key.action == HudAction.HOLD
-                    val longPressTimeout = viewConfiguration.longPressTimeoutMillis
-                    if (holdActive) onPhase(HudPhase.DOWN)
+                    // Edit mode hanya diaktifkan lewat tombol panel, bukan tahan
+                    // lama. TAP pada mouse/key tetap menahan aksi selama jari turun.
+                    val tapCanHold = !mappingMode && key.action == HudAction.TAP &&
+                        key.kind in setOf(
+                            HudKind.MOUSE_LEFT, HudKind.MOUSE_RIGHT,
+                            HudKind.MOUSE_MIDDLE, HudKind.KEY,
+                        )
+                    val holdActive = !mappingMode && key.action == HudAction.HOLD
+                    val heldOnPress = tapCanHold || holdActive
+                    if (heldOnPress) onPhase(HudPhase.DOWN)
 
                     while (true) {
                         val event = awaitPointerEvent()
@@ -224,11 +234,8 @@ private fun HudKeyButton(
                         travelled += delta.getDistance()
                         if (travelled > 8f) {
                             dragged = true
-                            // Geser cuma berlaku di mode atur posisi. Di luar itu
-                            // tombol diam di tempat (dulu bisa kegeser tanpa
-                            // sengaja). Tombol ber-aksi "tahan" tetap dipakai
-                            // untuk drag di remote.
-                            if (!holdActive && mappingMode) {
+                            // Geser hanya berlaku di mode atur posisi.
+                            if (mappingMode) {
                                 val base = dragPos.value
                                     ?: Offset(latest.value.x, latest.value.y)
                                 val nx = (base.x + delta.x / maxX).coerceIn(0f, 1f)
@@ -237,33 +244,23 @@ private fun HudKeyButton(
                                 onDrag(nx, ny)
                             }
                             change.consume()
-                        } else if (event.changes.all { it.uptimeMillis - down.uptimeMillis > longPressTimeout }) {
-                            if (!holdActive && !longPressed && !dragged) {
-                                longPressed = true
-                                if (mappingMode) onEdit() else onRequestEditMode()
-                            }
                         }
                     }
 
                     pressed = false
                     dragPos.value = null
-                    if (holdActive) onPhase(HudPhase.UP)
+                    if (heldOnPress) onPhase(HudPhase.UP)
 
                     // Di mode atur posisi, ketuk = buka editor tombol itu.
                     if (mappingMode) {
-                        if (!dragged && !longPressed) onEdit()
+                        if (!dragged) onEdit()
                         return@awaitEachGesture
                     }
-                    if (longPressed) return@awaitEachGesture
                     if (dragged) return@awaitEachGesture
                     when (key.action) {
                         HudAction.HOLD -> Unit
-                        HudAction.TOGGLE -> {
-                            latched = !latched
-                            onPhase(HudPhase.TAP)
-                        }
-
-                        HudAction.TAP -> onPhase(HudPhase.TAP)
+                        HudAction.TOGGLE -> onPhase(HudPhase.TAP)
+                        HudAction.TAP -> if (!tapCanHold) onPhase(HudPhase.TAP)
                     }
                 }
             },
@@ -291,17 +288,19 @@ private fun HudKeyGlyph(key: HudKey, tint: Color, boxDp: Float = key.size) {
             icon,
             contentDescription = key.label,
             tint = tint,
-            modifier = Modifier.size((boxDp * 0.46f).dp),
+            modifier = Modifier.size(minOf(24f, boxDp * 0.42f).dp),
         )
         return
     }
     Text(
         text = key.label,
         color = tint,
-        fontSize = (boxDp * 0.30f).sp,
-        fontWeight = FontWeight.Medium,
+        fontSize = (boxDp * 0.22f).coerceIn(12f, 20f).sp,
+        fontWeight = FontWeight.SemiBold,
         maxLines = 1,
         textAlign = TextAlign.Center,
+        overflow = TextOverflow.Ellipsis,
+        modifier = Modifier.padding(horizontal = 6.dp),
     )
 }
 
@@ -474,12 +473,12 @@ fun HudKeyEditor(
                 )
                 Box(
                     Modifier
-                        .size((key.size.coerceAtMost(64f)).dp)
+                        .size(key.size.coerceIn(56f, 120f).dp)
                         .clip(CircleShape)
                         .border(1.4.dp, MaterialTheme.colorScheme.primary, CircleShape),
                     contentAlignment = Alignment.Center,
                 ) {
-                    HudKeyGlyph(key, MaterialTheme.colorScheme.onSurface, maxOf(key.size, 40f))
+                    HudKeyGlyph(key, MaterialTheme.colorScheme.onSurface, key.size)
                 }
             }
             Text(
@@ -495,26 +494,28 @@ fun HudKeyEditor(
                 modifier = Modifier.fillMaxWidth(),
             )
             Text(xy("Cara pakai", "How it works"), color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 11.sp)
+            val supportedActions = HudKey.allowedActions(key.kind)
+            val selectedAction = supportedActions.indexOf(key.action).coerceAtLeast(0)
             XySegmented(
-                options = HudAction.entries.map { xy(it.title, it.titleEn) },
-                selectedIndex = key.action.ordinal,
-                onSelect = { onChange(key.copy(action = HudAction.entries[it])) },
+                options = supportedActions.map { xy(it.title, it.titleEn) },
+                selectedIndex = selectedAction,
+                onSelect = { onChange(key.copy(action = supportedActions[it])) },
                 modifier = Modifier.fillMaxWidth(),
             )
             Text(
-                xy(HudAction.entries[key.action.ordinal].detail, HudAction.entries[key.action.ordinal].detailEn),
+                xy(supportedActions[selectedAction].detail, supportedActions[selectedAction].detailEn),
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 fontSize = 10.5.sp,
             )
             Text(
-                xy("Ukuran: {0} dp", "Size: {0} dp", key.size.toInt()),
+                xy("Lebar tombol: {0} dp", "Button width: {0} dp", key.size.toInt()),
                 color = MaterialTheme.colorScheme.onSurface,
                 fontSize = 11.sp,
             )
             XySlider(
                 value = key.size,
                 onValueChange = { onChange(key.copy(size = it)) },
-                valueRange = 28f..120f,
+                valueRange = 56f..120f,
             )
             Text(
                 xy(
@@ -554,6 +555,7 @@ fun HudKeyEditor(
                         keyCode = option.keyCode,
                         shift = option.shift,
                         combo = option.combo,
+                        action = key.action.takeIf { it in HudKey.allowedActions(option.kind) } ?: HudAction.TAP,
                     )
                 )
                 rePick = false
@@ -582,8 +584,8 @@ fun HudMappingBanner(
     ) {
         Text(
             xy(
-                "Atur posisi: geser tombol, tahan lama untuk ubah aksi/ukuran",
-                "Edit layout: drag a button, long-press to change action/size",
+                "Atur posisi: geser tombol; ketuk untuk ubah aksi/ukuran",
+                "Edit layout: drag a button; tap to change its action/size",
             ),
             color = HudInk,
             fontSize = 11.sp,
@@ -624,7 +626,7 @@ fun HudLayoutPreview(keys: List<HudKey>, modifier: Modifier = Modifier) {
         BoxWithConstraints(Modifier.fillMaxSize()) {
             val density = LocalDensity.current
             keys.forEach { key ->
-                val sizeDp = (key.size / 4f).coerceIn(8f, 18f).dp
+                val sizeDp = (key.size / 4f).coerceIn(10f, 18f).dp
                 val sizePx = with(density) { sizeDp.toPx() }
                 val maxX = (constraints.maxWidth - sizePx).coerceAtLeast(1f)
                 val maxY = (constraints.maxHeight - sizePx).coerceAtLeast(1f)

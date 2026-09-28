@@ -136,6 +136,13 @@ fun XyDeskHome(
                     xyNow("Profil tidak tersimpan: ", "Profile not saved: ") +
                         (saved.exceptionOrNull()?.message ?: xyNow("kesalahan penyimpanan", "storage error")),
                 )
+            } else if (saved.getOrDefault(true) == false) {
+                notice.show(
+                    xyNow(
+                        "Profil tersimpan, tapi password gagal disimpan aman. Isi ulang nanti; password tidak diingat.",
+                        "Profile saved, but the password could not be stored securely. Re-enter it later; it was not remembered.",
+                    ),
+                )
             }
             route = XyRoute.Devices
             if (startNow) connect(profile)
@@ -556,7 +563,7 @@ private fun DeviceCard(
         ) {
             XyPillButton(xy("Connect", "Connect"), onConnect, compact = true)
             Spacer(Modifier.weight(1f))
-            XyIconPill(XyIcons.Gear, onEdit, size = 40.dp, contentDescription = xy("Ubah", "Edit"))
+            XyIconPill(XyIcons.Gear, onEdit, size = 40.dp, contentDescription = xy("Pengaturan RDP", "RDP settings"))
             XyIconPill(XyIcons.Trash, onDelete, size = 40.dp, contentDescription = xy("Hapus", "Delete"))
         }
     }

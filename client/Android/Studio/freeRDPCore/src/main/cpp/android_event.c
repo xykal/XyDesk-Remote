@@ -304,6 +304,15 @@ ANDROID_EVENT_CLIPBOARD* android_event_clipboard_new(const void* data, size_t da
 		return nullptr;
 	}
 
+	/* The queued event stores its byte count in a signed int. */
+	if (data_length > (size_t)(INT_MAX - 1))
+	{
+		WLog_WARN(TAG, "Clipboard payload exceeds Android event size limit");
+		free(event->mimeType);
+		free(event);
+		return nullptr;
+	}
+
 	if (data && data_length > 0)
 	{
 		const BOOL isText = !mimeType || strcmp(mimeType, "text/plain") == 0;

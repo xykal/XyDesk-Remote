@@ -8,6 +8,9 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.graphics.vector.PathBuilder
 import androidx.compose.ui.graphics.vector.path
 import androidx.compose.ui.unit.dp
+import kotlin.math.PI
+import kotlin.math.cos
+import kotlin.math.sin
 
 /**
  * Ikon XyDesk — set garis 24dp, stroke 1.7, ujung bulat.
@@ -290,16 +293,38 @@ object XyIcons {
         moveTo(6.5f, 9f); lineTo(6.5f, 20.5f); lineTo(17.5f, 20.5f); lineTo(17.5f, 9f)
     }
 
+    /** Cog-shaped settings glyph (teeth, not sun rays). */
     val Gear: ImageVector = xyIcon("XyGear") {
-        moveTo(12f, 8.6f)
-        curveTo(13.9f, 8.6f, 15.4f, 10.1f, 15.4f, 12f)
-        curveTo(15.4f, 13.9f, 13.9f, 15.4f, 12f, 15.4f)
-        curveTo(10.1f, 15.4f, 8.6f, 13.9f, 8.6f, 12f)
-        curveTo(8.6f, 10.1f, 10.1f, 8.6f, 12f, 8.6f)
+        val profile = listOf(
+            -PI / 8.0 to 7.8f,
+            -PI / 12.0 to 7.8f,
+            -PI / 12.0 to 9.4f,
+            PI / 12.0 to 9.4f,
+            PI / 12.0 to 7.8f,
+            PI / 8.0 to 7.8f,
+        )
+        var first = true
+        for (tooth in 0 until 8) {
+            val center = -PI / 2.0 + tooth * PI / 4.0
+            for ((offset, radius) in profile) {
+                val angle = center + offset
+                val x = 12f + radius * cos(angle).toFloat()
+                val y = 12f + radius * sin(angle).toFloat()
+                if (first) {
+                    moveTo(x, y)
+                    first = false
+                } else {
+                    lineTo(x, y)
+                }
+            }
+        }
         close()
-        moveTo(12f, 2.8f); lineTo(13.3f, 5.4f); moveTo(12f, 21.2f); lineTo(10.7f, 18.6f)
-        moveTo(4.6f, 7.4f); lineTo(7.4f, 7.9f); moveTo(16.6f, 16.1f); lineTo(19.4f, 16.6f)
-        moveTo(4.6f, 16.6f); lineTo(7.4f, 16.1f); moveTo(16.6f, 7.9f); lineTo(19.4f, 7.4f)
+        moveTo(15.3f, 12f)
+        curveTo(15.3f, 13.8f, 13.8f, 15.3f, 12f, 15.3f)
+        curveTo(10.2f, 15.3f, 8.7f, 13.8f, 8.7f, 12f)
+        curveTo(8.7f, 10.2f, 10.2f, 8.7f, 12f, 8.7f)
+        curveTo(13.8f, 8.7f, 15.3f, 10.2f, 15.3f, 12f)
+        close()
     }
 
     val Menu: ImageVector = xyIcon("XyMenu") {

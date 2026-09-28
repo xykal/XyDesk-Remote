@@ -1,79 +1,68 @@
-# Panduan Build — XyDesk Remote
+# Build XyDesk Remote
 
-## Prasyarat lokal
+This guide describes the current Android project configuration. The source tree includes the FreeRDP native client, so the first complete APK build may take substantially longer than a Kotlin-only check.
 
-| Komponen | Versi | Catatan |
-|---|---|---|
-| Android Studio | Ladybug / 2024.2+ | import project Gradle |
-| JDK | 17+ (21 disarankan) | terbawa dari Android Studio |
-| Gradle | 9.6.1 (wrapper) | sudah ada di repo |
-| AGP | 9.2.1 | dideklarasikan di `build.gradle` |
-| Android NDK | **29.0.13113456** | wajib versi persis (di-set `release.properties`) |
-| CMake (SDK) | **4.1.2** | dipasang via SDK Manager |
-| compileSdk | 36 (stabil; 37 masih beta di repo Google) | `platforms;android-36` + `build-tools;37.0.0` |
+## Requirements
 
-## Build lokal (Android Studio)
-
-1. **File → Open** → pilih folder `client/Android/Studio`.
-2. Tunggu Gradle sync. Pastikan di **SDK Manager**:
-   - SDK Platform: Android 37.2 (pakai package name `android-37.2`)
-   - SDK Tools: NDK (Side by side) **29.0.13113456**, CMake **4.1.2**
-3. `Build → Make Project` (atau klik Run).
-4. **Build pertama lama (10–40 menit, butuh internet):** CMake superbuild
-   otomatis download & kompil OpenSSL, FFmpeg, OpenH264, Opus, libpng,
-   webp, libjpeg-turbo, cJSON, uriparser + FreeRDP core untuk tiap ABI.
-   Build berikutnya cepat (incremental).
-5. Output APK: `client/Android/Studio/app/build/outputs/apk/debug/app-debug.apk`
-   (satu APK universal berisi `.so` arm64-v8a + x86_64).
-
-### Catatan penting
-- **Jangan commit** folder `freeRDPCore/src/main/jniLibs/` atau `.cxx/`
-  (sudah di-.gitignore) — itu output superbuild.
-- Device uji: HP asli (arm64). Emulator x86_64 bisa dipakai untuk uji UI
-  cepat, tapi performa RDP & hardware decode tidak representatif.
-- Target RDP: Windows 10/11 Pro/Enterprise/Edu atau Windows Server dengan
-  Remote Desktop + NLA enabled. **Windows Home tidak bisa menjadi target.**
-
-## Build via GitHub Actions (CI)
-
-- Workflow: `.github/workflows/build-apk.yml`
-- Trigger: push ke `main`, atau manual (tab **Actions** → *Build APK* →
-  *Run workflow*).
-- Hasil: artifact **`xydesk-remote-debug`** (unduh dari halaman run).
-- Durasi: run pertama ±45–75 menit (download NDK ~1.3GB + kompil
-  superbuild 2 ABI); run berikutnya lebih cepat (cache NDK/CMake).
-
-## Ubah konfigurasi build
-
-Semua knob ada di `client/Android/Studio/release.properties`:
-
-| Key | Default M0 | Fungsi |
-|---|---|---|
-| `ABI_FILTERS` | `arm64-v8a;x86_64` | ABI yang di-build (tambah `armeabi-v7a` kalau perlu) |
-| `SPLIT_ENABLED` | `false` | `true` = APK per-ABI (plus universal) |
-| `VERSION_NAME` / `VERSION_CODE` | `0.1.0-m0` / `1` | bump tiap milestone |
-| `CMAKE_ARGUMENTS` | semua codec `ON` | matikan `WITH_FFMPEG/OH264/OPUS/...` untuk build jauh lebih cepat (mode uji) |
-| `COMPILE_API` / `TARGET_API` / `MIN_API` | 37/37/29 | tingkat API |
-
-## M0 — smoke test
-
-1. Enable RDP di target Windows: *Settings → System → Remote Desktop → On*
-   (pastikan akun punya password; NLA default on).
-2. Jalankan app di HP (satu LAN / port forward 3389).
-3. Form: **Host** = IP Windows, **Port** = 3389 (bisa kosong), **Username**,
-   **Password** → **Hubungkan**.
-4. Kalau muncul dialog sertifikat: cocokkan fingerprint (di M3 ada UI trust
-   manager; untuk M0 teruskan).
-5. Sukses = desktop Windows tampil, touch = mouse, gesture double-tap = klik
-   kanan, keyboard on-screen tersedia, bisa ngetik di Notepad.
-6. Keluar sesi via tombol disconnect di toolbar bawaan inti FreeRDP.
-
-## Troubleshooting umum
-
-| Gejala | Solusi |
+| Component | Version / package |
 |---|---|
-| CMake error `Could not detect NDK root` | NDK 29.0.13113456 belum terpasang di SDK Manager |
-| Build superbuild gagal download (SSL) | Butuh internet; cek proxy korporat |
-| `APK broken: native library version` | `.so` tertinggal di `jniLibs` dari build lama — hapus `freeRDPCore/src/main/jniLibs/` lalu clean build |
-| Connect gagal: `NLA` | Target harus Windows Pro/Server + NLA on; coba nonaktifkan NLA di target untuk memastikan jalur jaringan dulu |
-| APk install gagal di HP 32-bit | M0 hanya build arm64-v8a + x86_64 |
+| JDK | 17 or newer; CI uses Temurin 21 |
+| Gradle | Wrapper in this repository (9.6.1) |
+| Android Gradle Plugin | 9.2.1 |
+| Android SDK platform | `android-37.2` |
+| Android Build Tools | `37.0.0` |
+| Android NDK | `29.0.13113456` |
+| CMake | `4.1.2` |
+
+The ABI splits and other Android build settings are in `client/Android/Studio/release.properties`. The app currently targets API 37, has a minimum API level of 29, and builds separate APKs for `armeabi-v7a`, `arm64-v8a`, and `x86_64`.
+
+## Local build
+
+1. Install the components listed above with Android Studio's SDK Manager.
+2. Open `client/Android/Studio` in Android Studio, or run Gradle from that directory.
+3. Run the JVM tests and Kotlin compilation:
+
+   ```sh
+   bash gradlew --no-daemon :core-rdp:testDebugUnitTest
+   bash gradlew --no-daemon :app:compileDebugKotlin
+   ```
+
+4. Build the debug APKs (including FreeRDP native libraries):
+
+   ```sh
+   bash gradlew --no-daemon assembleDebug
+   ```
+
+Outputs are under `app/build/outputs/apk/debug/`. Release outputs are under `app/build/outputs/apk/release/`.
+
+## Release signing
+
+A release build requires a dedicated release keystore and all four settings below. Supply them as environment variables to Gradle; do not commit the keystore, passwords, or signing properties to the repository.
+
+- `RELEASE_STORE_FILE` — absolute path to the JKS keystore.
+- `RELEASE_STORE_PASSWORD`
+- `RELEASE_KEY_ALIAS`
+- `RELEASE_KEY_PASSWORD`
+
+The build no longer falls back to Android's debug keystore for release signing. A missing or invalid signing setup must fail rather than produce a debug-signed release. Keep the keystore in a trusted location and make an encrypted backup before using it for distribution. Replacing the signing key can prevent existing installs from accepting an in-place update.
+
+GitHub Actions obtains release signing material from repository secrets, verifies the signatures, and removes the temporary keystore from the runner. The build job has read-only repository permission; a separate job publishes tagged releases. Temporary workflow artifacts expire after a short retention period.
+
+## GitHub Actions
+
+Workflow: `.github/workflows/build-apk.yml`.
+
+- Pushes to `main` run JVM tests, compile Kotlin, and build debug APKs.
+- A `v*` tag pointing to a commit reachable from `main` runs the release build and publishes signed APKs as a GitHub Release.
+- Manual runs can select a debug or release build. A manual release build is accepted only on `main`, produces a short-lived workflow artifact, and does not create a GitHub Release.
+- Repeated runs for the same ref cancel the older run. Debug and signed-release artifacts have explicit short retention periods.
+
+## Troubleshooting
+
+| Symptom | Check |
+|---|---|
+| Gradle reports an unsupported Java version | Use JDK 17 or newer; JDK 21 matches CI. |
+| Android SDK or NDK not found | Install the exact SDK, NDK, Build Tools, and CMake package versions above; check `ANDROID_HOME` / `ANDROID_SDK_ROOT`. |
+| Native build fails while fetching dependencies | Check network access, proxy settings, and TLS inspection on the build host. |
+| Release signing fails | Confirm the keystore path exists and all four signing environment variables match that keystore. Never substitute the debug keystore for a release key. |
+| Old native outputs cause a local build failure | Clean the affected Gradle/native build outputs and rebuild; do not commit generated `.cxx`, `build`, or `jniLibs` outputs. |

@@ -35,28 +35,43 @@ class SessionsRepository(context: Context) {
             }
         }
 
-    /** Simpan/update favorite. [rememberPassword] false = hapus dari vault. */
-    suspend fun save(profile: ConnectionProfile, rememberPassword: Boolean) {
+    /**
+     * Simpan/update favorite. Return false jika user meminta password diingat
+     * tetapi enkripsi/persistensi vault gagal; metadata tetap tersimpan tanpa
+     * mengklaim password aman tersimpan.
+     */
+    suspend fun save(profile: ConnectionProfile, rememberPassword: Boolean): Boolean {
         val existing = dao.byId(profile.id)
         val pass = profile.password // local val: smart cast lintas modul tidak diizinkan
-        if (rememberPassword && !pass.isNullOrEmpty()) {
-            vault.put(profile.id, pass)
-        } else {
-            vault.remove(profile.id)
-        }
-        dao.upsert(
-            FavoriteEntity(
-                id = profile.id,
-                host = profile.host,
-                port = profile.port,
-                username = profile.username,
-                domain = profile.domain,
-                label = profile.label,
-                rememberPassword = rememberPassword,
-                createdAtMs = existing?.createdAtMs ?: System.currentTimeMillis(),
-                lastUsedAtMs = System.currentTimeMillis(),
+        val shouldRemember = rememberPassword && !pass.isNullOrEmpty()
+        val oldPassword = if (shouldRemember) vault.get(profile.id) else null
+        val vaultSaved = shouldRemember && vault.put(profile.id, pass!!)
+        val persistedRememberPassword = shouldRemember && vaultSaved
+        try {
+            dao.upsert(
+                FavoriteEntity(
+                    id = profile.id,
+                    host = profile.host,
+                    port = profile.port,
+                    username = profile.username,
+                    domain = profile.domain,
+                    label = profile.label,
+                    rememberPassword = persistedRememberPassword,
+                    createdAtMs = existing?.createdAtMs ?: System.currentTimeMillis(),
+                    lastUsedAtMs = System.currentTimeMillis(),
+                )
             )
-        )
+        } catch (t: Throwable) {
+            // Roll back vault update if Room failed so the old favorite never
+            // points at a different/new password than the row it describes.
+            if (shouldRemember && vaultSaved) {
+                if (oldPassword != null) vault.put(profile.id, oldPassword)
+                else vault.remove(profile.id)
+            }
+            throw t
+        }
+        if (!persistedRememberPassword) vault.remove(profile.id)
+        return !shouldRemember || vaultSaved
     }
 
     /** Tandai barusan dipakai (urutan "terakhir dipakai" di UI). */

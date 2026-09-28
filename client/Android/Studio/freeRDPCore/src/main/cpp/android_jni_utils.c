@@ -13,6 +13,7 @@
 #include "android_jni_utils.h"
 
 #include <locale.h>
+#include <stdint.h>
 #include <freerdp/channels/channels.h>
 #include <freerdp/log.h>
 
@@ -120,8 +121,10 @@ jstring jniNewStringUTF(JNIEnv* env, const char* in, int len)
 	}
 	if (len < 0)
 		len = strlen(in);
+	if ((size_t)len > (SIZE_MAX / sizeof(jchar)) - 1)
+		return nullptr;
 
-	unicode = (jchar*)malloc(sizeof(jchar) * (len + 1));
+	unicode = (jchar*)malloc(sizeof(jchar) * ((size_t)len + 1));
 	if (!unicode)
 	{
 		return nullptr;

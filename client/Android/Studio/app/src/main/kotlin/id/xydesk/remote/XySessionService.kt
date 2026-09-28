@@ -12,19 +12,12 @@ import android.os.IBinder
 import androidx.core.app.NotificationCompat
 import androidx.core.content.ContextCompat
 import id.xydesk.remote.ui.xyNow
-import id.xydesk.remote.ui.XyDeskSessionActivity
+import id.xydesk.remote.ui.XyDeskHomeActivity
+import id.xydesk.remote.ui.XySessionRegistry
 
 /**
- * Jembatan dalam satu proses: notifikasi "Putus" minta activity menutup sesi.
- *
- * Dipakai karena service dan activity hidup di proses yang sama; callback
- * langsung lebih jujur daripada broadcast yang bisa bocor keluar app.
+ * Aksi notifikasi diarahkan ke registry sesi dalam proses ini.
  */
-object XySessionBridge {
-    @Volatile
-    var onStopRequested: (() -> Unit)? = null
-}
-
 /**
  * Foreground service sesi XyDesk.
  *
@@ -49,8 +42,8 @@ class XySessionService : Service() {
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         when (intent?.action) {
             ACTION_STOP -> {
-                XySessionBridge.onStopRequested?.invoke()
-                stopSelf()
+                if (XySessionRegistry.count() == 0) stopSelf()
+                else XySessionRegistry.disconnectAll()
                 return START_NOT_STICKY
             }
 
@@ -88,7 +81,7 @@ class XySessionService : Service() {
         val open = PendingIntent.getActivity(
             this,
             0,
-            Intent(this, XyDeskSessionActivity::class.java),
+            Intent(this, XyDeskHomeActivity::class.java),
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
         )
         val stop = PendingIntent.getService(

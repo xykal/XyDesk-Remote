@@ -176,7 +176,7 @@ private fun DisplaySection(
                 modifier = Modifier.fillMaxWidth(),
             )
             Spacer(Modifier.height(16.dp))
-            XySectionLabel(xy("Skala tampilan awal", "Initial display scale"))
+            XySectionLabel(xy("Zoom lokal awal", "Initial local zoom"))
             Text(
                 "$scale%",
                 style = MaterialTheme.typography.titleMedium,
@@ -192,10 +192,10 @@ private fun DisplaySection(
             )
             Text(
                 xy(
-                    "Resolusi & orientasi dipakai saat sesi dibuka. Skala bisa diubah " +
-                        "langsung dari panel sesi tanpa memutus koneksi.",
-                    "Resolution & orientation apply when the session opens. Scale can be " +
-                        "changed straight from the session panel without dropping the connection.",
+                    "Zoom lokal bisa diubah dari panel sesi tanpa memutus koneksi. DPI desktop " +
+                        "Windows dan resolusi remote punya kontrol masing-masing.",
+                    "Local zoom can be changed from the session panel without disconnecting. Windows " +
+                        "desktop DPI and remote resolution each have their own controls.",
                 ),
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -457,14 +457,14 @@ private fun GeneralSection(appPrefs: AppPrefs, onShowLog: () -> Unit) {
         XyCard {
             Text(
                 xy(
-                    "Setiap tombol di layar sesi berdiri sendiri: bentuknya bulat " +
-                        "penuh, ukurannya diatur, dan aksinya dipilih per tombol " +
+                    "Setiap tombol di layar sesi berdiri sendiri: bulat, ukurannya " +
+                        "bisa diatur, dan aksinya dipilih per tombol " +
                         "(sekali klik / tahan / toggle). Geser tombol hanya saat " +
                         "mode \"Atur posisi\" menyala, supaya tidak kepencet waktu dipakai. " +
                         "Tombol bawaan di bawah ini menentukan set awal untuk perangkat " +
                         "yang belum pernah diubah.",
-                    "Every on-screen button stands alone: fully round, its size is " +
-                        "configurable, and each one has its own action (single tap / " +
+                    "Every on-screen button stands alone: round, resizable, and " +
+                        "with its own action (single tap / " +
                         "hold / toggle). Dragging only works while \"Edit layout\" is on, " +
                         "so buttons cannot move by accident while you use them. The " +
                         "defaults below seed devices that were never customised.",
@@ -538,16 +538,16 @@ private fun GeneralSection(appPrefs: AppPrefs, onShowLog: () -> Unit) {
         XySectionLabel(xy("Keyboard & HUD", "Keyboard & HUD"))
         XyCard {
             Text(
-                xy("Ukuran tombol kontrol HUD: {0} dp", "HUD button size: {0} dp", hudSize.toInt()),
+                xy("Ukuran default tombol HUD: {0} dp", "Default HUD button size: {0} dp", hudSize.toInt()),
                 style = MaterialTheme.typography.bodyMedium,
             )
             Spacer(Modifier.height(4.dp))
             Text(
                 xy(
-                    "Tombol kontrol selalu bulat penuh; angka ini sama dengan " +
-                        "diameternya (radius = setengah).",
-                    "HUD buttons are always fully round; this number is the diameter " +
-                        "(radius = half).",
+                    "Ukuran ini dipakai untuk tombol baru dan tata letak bawaan. " +
+                        "Tombol yang sudah diatur tetap memakai ukuran masing-masing.",
+                    "New buttons and restored default layouts use this size. " +
+                        "Existing custom buttons keep their individual sizes.",
                 ),
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -555,7 +555,7 @@ private fun GeneralSection(appPrefs: AppPrefs, onShowLog: () -> Unit) {
             XySlider(
                 value = hudSize,
                 onValueChange = { hudSize = it; prefs.hudButtonSize = it },
-                valueRange = 40f..80f,
+                valueRange = 56f..80f,
             )
         }
 

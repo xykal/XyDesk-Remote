@@ -855,7 +855,7 @@ public class SessionActivity extends AppCompatActivity
 
 	@Override public void OnRemoteClipboardChanged(String data)
 	{
-		Log.v(TAG, "OnRemoteClipboardChanged: " + data);
+		Log.v(TAG, "OnRemoteClipboardChanged (text)");
 		mClipboardManager.setClipboardData(data);
 	}
 
@@ -932,7 +932,7 @@ public class SessionActivity extends AppCompatActivity
 	// ClipboardManagerProxy.OnClipboardChangedListener
 	@Override public void onClipboardChanged(String data)
 	{
-		Log.v(TAG, "onClipboardChanged: " + data);
+		Log.v(TAG, "onClipboardChanged (text)");
 		if (session != null)
 			LibFreeRDP.sendClipboardData(session.getInstance(), data);
 	}

@@ -23,6 +23,7 @@
 
 #include <jni.h>
 
+#include <limits.h>
 #include <winpr/crt.h>
 #include <winpr/stream.h>
 
@@ -432,8 +433,11 @@ android_cliprdr_server_format_data_response(CliprdrClientContext* cliprdr,
 
 	if (!format)
 	{
+		/* A clipboard list can change while a large format response is in flight.
+		 * Treat an unmatchable response as a clipboard miss, not a session error. */
+		WLog_WARN(TAG, "Ignoring clipboard response for an outdated or unknown format id");
 		(void)SetEvent(afc->clipboardRequestEvent);
-		return ERROR_INTERNAL_ERROR;
+		return CHANNEL_RC_OK;
 	}
 
 	UINT32 formatId = format->formatId;
@@ -443,7 +447,13 @@ android_cliprdr_server_format_data_response(CliprdrClientContext* cliprdr,
 	uint32_t size = formatDataResponse->common.dataLen;
 
 	if (!ClipboardSetData(afc->clipboard, formatId, formatDataResponse->requestedFormatData, size))
-		return ERROR_INTERNAL_ERROR;
+	{
+		/* A large remote clip can exhaust clipboard allocation. It is a failed
+		 * clipboard update, not a reason to tear down the RDP session. */
+		WLog_WARN(TAG, "Ignoring remote clipboard data that could not be stored (%u bytes)", size);
+		(void)SetEvent(afc->clipboardRequestEvent);
+		return CHANNEL_RC_OK;
+	}
 
 	(void)SetEvent(afc->clipboardRequestEvent);
 
@@ -457,12 +467,32 @@ android_cliprdr_server_format_data_response(CliprdrClientContext* cliprdr,
 			char* data = (char*)ClipboardGetData(afc->clipboard, plainFormatId, &size);
 			if (!data)
 				break;
-			jboolean attached = jni_attach_thread(&env);
 			size = strnlen(data, size);
-			jstring jdata = jniNewStringUTF(env, data, size);
-			freerdp_callback("OnRemoteClipboardChanged", "(JLjava/lang/String;)V", (jlong)instance,
-			                 jdata);
-			(*env)->DeleteLocalRef(env, jdata);
+			if (size > INT_MAX)
+			{
+				/* Java strings and JNI lengths are signed 32-bit values. Reject only
+				 * values the Android runtime cannot represent; do not impose an
+				 * arbitrary app-level clipboard length cap. */
+				WLog_WARN(TAG, "Remote clipboard text exceeds Java string limit (%u bytes)", size);
+				free(data);
+				break;
+			}
+
+			jboolean attached = jni_attach_thread(&env);
+			jstring jdata = jniNewStringUTF(env, data, (int)size);
+			if (jdata)
+			{
+				freerdp_callback("OnRemoteClipboardChanged", "(JLjava/lang/String;)V", (jlong)instance,
+				                 jdata);
+				(*env)->DeleteLocalRef(env, jdata);
+			}
+			else
+			{
+				/* Never pass a null Java String into the non-null Kotlin listener. */
+				if ((*env)->ExceptionCheck(env))
+					(*env)->ExceptionClear(env);
+				WLog_WARN(TAG, "Could not create Java string for remote clipboard (%u bytes)", size);
+			}
 			free(data);
 
 			if (attached == JNI_TRUE)

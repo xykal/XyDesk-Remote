@@ -174,8 +174,17 @@ public class LibFreeRDP
 	                                                                String mimeType);
 
 	private static native boolean freerdp_send_monitor_layout(long inst, int width, int height);
+	private static native boolean freerdp_send_monitor_layout_with_scale(long inst, int width, int height,
+	                                                                    int desktopScaleFactor);
 
 	private static native String freerdp_get_last_error_string(long inst);
+
+	/** Read the current native error while the instance is still alive. */
+	public static String getLastErrorString(long inst)
+	{
+		String detail = freerdp_get_last_error_string(inst);
+		return detail != null ? detail : "";
+	}
 
 	public static void setEventListener(EventListener l)
 	{
@@ -652,6 +661,11 @@ public class LibFreeRDP
 	public static boolean sendMonitorLayout(long inst, int width, int height)
 	{
 		return freerdp_send_monitor_layout(inst, width, height);
+	}
+
+	public static boolean sendMonitorLayout(long inst, int width, int height, int desktopScaleFactor)
+	{
+		return freerdp_send_monitor_layout_with_scale(inst, width, height, desktopScaleFactor);
 	}
 
 	private static void OnConnectionSuccess(long inst)

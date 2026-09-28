@@ -70,7 +70,7 @@ object SmartResolution {
         if (parts.size != 2) return null
         val w = parts[0].toIntOrNull() ?: return null
         val h = parts[1].toIntOrNull() ?: return null
-        if (w !in MIN_W..MAX_W || h !in MIN_H..MAX_H) return null
+        if (w !in MIN_W..MAX_W || w % 2 != 0 || h !in MIN_H..MAX_H) return null
         return w to h
     }
 

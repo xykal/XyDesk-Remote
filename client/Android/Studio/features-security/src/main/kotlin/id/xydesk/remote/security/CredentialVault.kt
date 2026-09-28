@@ -44,10 +44,9 @@ class CredentialVault(context: Context) {
         val iv = cipher.iv
         val ct = cipher.doFinal(plaintext.toByteArray(Charsets.UTF_8))
         val blob = iv + ct
-        prefs.edit().putString(id, Base64.encodeToString(blob, Base64.NO_WRAP)).apply()
-        true
+        prefs.edit().putString(id, Base64.encodeToString(blob, Base64.NO_WRAP)).commit()
     } catch (e: Exception) {
-        android.util.Log.w(TAG, "gagal simpan ke vault (keystore?): ${e.javaClass.simpleName}: ${e.message}")
+        android.util.Log.w(TAG, "gagal simpan ke vault (keystore?): ${e.javaClass.simpleName}")
         false
     }
 

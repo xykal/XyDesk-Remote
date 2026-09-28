@@ -80,7 +80,7 @@ class SessionManager(context: Context) {
     private val _stage = MutableStateFlow(Stage.IDLE)
     val stage: StateFlow<Stage> = _stage.asStateFlow()
 
-    private var watchdogToken = 0
+    @Volatile private var watchdogToken = 0
     private var buildInfoLogged = false
 
     @Volatile private var core: CoreSession? = null
@@ -185,6 +185,14 @@ class SessionManager(context: Context) {
                 Log.w(TAG, "connect() diabaikan, state=$cur")
                 return
             }
+            if (core != null) {
+                // Jangan menimpa instance yang belum memberi callback terminal:
+                // freeInstance() menunggu worker native dan retry harus menunggu
+                // callback itu (atau user menutup sesi, lalu release membersihkan).
+                ConnectionLog.add("CM: retry ditunda; instance native lama belum terminal")
+                Log.w(TAG, "connect() ditunda; instance native lama masih aktif")
+                return
+            }
             val uri = sessionUri(profile)
             // Never log the RDP URI: its query may contain the plaintext password.
             ConnectionLog.add("CM: native createSession mulai (${profile.host}:${profile.port})")
@@ -198,7 +206,7 @@ class SessionManager(context: Context) {
             transition(SessionState.Connecting)
             setStage(Stage.PROBE)
             startWatchdog(inst)
-            logConnectStart(profile)
+            logConnectStart()
             created
         }
         val inst = session.getInstance()
@@ -218,6 +226,7 @@ class SessionManager(context: Context) {
                             "Windows Home (tidak punya server RDP).",
                     )
                 )
+                cleanupTerminalSession(inst)
                 return@execute
             }
             try {
@@ -233,6 +242,7 @@ class SessionManager(context: Context) {
                 Log.w(TAG, "connect() exception", t)
                 if (isCurrent(inst)) {
                     transition(SessionState.Error("connect_exception", t.message ?: "exception"))
+                    cleanupTerminalSession(inst)
                 }
             }
         }
@@ -249,7 +259,13 @@ class SessionManager(context: Context) {
         mainHandler.postDelayed({
             val s = _state.value
             if (isCurrent(inst) && (s is SessionState.Connecting || s is SessionState.Authenticating)) {
-                transition(SessionState.Error("cancelled", "Koneksi dibatalkan"))
+                transition(
+                    SessionState.Error(
+                        "cancelled",
+                        "Pembatalan belum dikonfirmasi engine; tutup sesi untuk menghentikan koneksi dengan aman.",
+                    )
+                )
+                ConnectionLog.add("cancel fallback: menunggu callback terminal native sebelum free")
             }
         }, CANCEL_FALLBACK_MS)
     }
@@ -260,8 +276,29 @@ class SessionManager(context: Context) {
         val inst = core?.getInstance() ?: return
         transition(SessionState.Disconnecting)
         if (!LibFreeRDP.disconnect(inst)) {
-            // native menolak — anggap sudah putus
-            if (isCurrent(inst)) transition(SessionState.Disconnected)
+            // native menolak — anggap sudah putus dan bebaskan instance terminal
+            if (isCurrent(inst)) {
+                transition(
+                    SessionState.Error(
+                        "disconnect_unconfirmed",
+                        "Engine belum mengonfirmasi putus; tutup sesi untuk melepas koneksi dengan aman.",
+                    )
+                )
+                ConnectionLog.add("disconnect ditolak native; instance dipertahankan sampai callback terminal/release")
+            }
+        } else {
+            mainHandler.postDelayed({
+                if (isCurrent(inst) && _state.value is SessionState.Disconnecting) {
+                    ConnectionLog.add("disconnect fallback: native event tidak datang; minta cancel dan tunggu terminal")
+                    runCatching { LibFreeRDP.cancelConnection(inst) }
+                    transition(
+                        SessionState.Error(
+                            "disconnect_unconfirmed",
+                            "Engine belum mengonfirmasi putus; tutup sesi untuk melepas koneksi dengan aman.",
+                        )
+                    )
+                }
+            }, DISCONNECT_FALLBACK_MS)
         }
     }
 
@@ -336,13 +373,20 @@ class SessionManager(context: Context) {
      * (`/dynamic-resolution`). Balikan false = server/kanal belum siap,
      * pemanggil boleh jatuh ke jalur reconnect.
      */
-    fun resizeRemote(width: Int, height: Int): Boolean {
+    fun resizeRemote(width: Int, height: Int, desktopScaleFactor: Int = 100): Boolean {
         if (_state.value !is SessionState.Connected) return false
+        if (desktopScaleFactor !in REMOTE_DESKTOP_SCALE_FACTORS) return false
         val inst = core?.getInstance() ?: return false
-        val w = width.coerceIn(640, 8192)
+        val boundedWidth = width.coerceIn(640, 8192)
+        val w = boundedWidth - boundedWidth % 2
         val h = height.coerceIn(480, 8192)
-        val ok = runCatching { LibFreeRDP.sendMonitorLayout(inst, w, h) }.getOrDefault(false)
-        ConnectionLog.add("CM: resizeRemote ${w}x$h -> ${if (ok) "dikirim (DISP)" else "ditolak"}")
+        val ok = runCatching {
+            LibFreeRDP.sendMonitorLayout(inst, w, h, desktopScaleFactor)
+        }.getOrDefault(false)
+        ConnectionLog.add(
+            "CM: resizeRemote ${w}x${h} scale=${desktopScaleFactor}% -> " +
+                if (ok) "dikirim (DISP)" else "ditolak",
+        )
         return ok
     }
 
@@ -365,6 +409,7 @@ class SessionManager(context: Context) {
             if (isCurrent(inst) && (s is SessionState.Connecting || s is SessionState.Authenticating)) {
                 stopWatchdog()
                 ConnectionLog.add("WATCHDOG: koneksi menggantung >${CONNECT_WATCHDOG_MS}ms")
+                runCatching { LibFreeRDP.cancelConnection(inst) }
                 transition(
                     SessionState.Error(
                         "connect_timeout",
@@ -373,6 +418,7 @@ class SessionManager(context: Context) {
                             "NLA/TLS tidak selesai. Tekan Detail untuk log.",
                     )
                 )
+                ConnectionLog.add("watchdog: instance ditahan sampai callback terminal native")
             }
         }, CONNECT_WATCHDOG_MS)
     }
@@ -381,12 +427,13 @@ class SessionManager(context: Context) {
         watchdogToken++
     }
 
-    private fun logConnectStart(p: ConnectionProfile) {
+    private fun logConnectStart() {
         if (!buildInfoLogged) {
             buildInfoLogged = true
             ConnectionLog.add("BUILD: ${buildInfo()}")
         }
-        ConnectionLog.add("connect mulai -> ${p.host}:${p.port} user=${p.username ?: "(kosong)"}")
+        // Do not write account names or secret credential material into exportable logs.
+        ConnectionLog.add("connect mulai")
     }
 
     private fun transition(s: SessionState) {
@@ -400,6 +447,29 @@ class SessionManager(context: Context) {
     }
 
     private fun isCurrent(inst: Long): Boolean = core?.getInstance() == inst
+
+    /**
+     * Bebaskan hanya instance yang masih menjadi sesi aktif dan jalur native
+     * sudah terminal (atau probe TCP gagal sebelum worker native dimulai).
+     * FreeRDP.freeInstance menunggu worker native berhenti;
+     * lifecycleLock mencegah release/retry membebaskan instance dua kali.
+     */
+    private fun cleanupTerminalSession(inst: Long) {
+        synchronized(lifecycleLock) {
+            val session = core ?: return
+            if (session.getInstance() != inst) return
+            stopWatchdog()
+            GlobalApp.unregisterSessionListener(inst)
+            core = null
+            try {
+                GlobalApp.freeSession(inst)
+                ConnectionLog.add("CM: terminal session freed inst=$inst")
+            } catch (t: Throwable) {
+                Log.e(TAG, "gagal melepas terminal session inst=$inst", t)
+                ConnectionLog.addThrowable("CM: gagal melepas terminal session inst=$inst", t)
+            }
+        }
+    }
 
     /** Probe TCP sederhana (juga gagal saat DNS/resolver gagal). */
     private fun tcpReachable(host: String, port: Int, timeoutMs: Long): Boolean = try {
@@ -427,13 +497,21 @@ class SessionManager(context: Context) {
                 stopWatchdog()
                 ConnectionLog.add("koneksi GAGAL (event native)")
                 val p = lastProfile
-                val msg = if (p != null) {
-                    "Gagal koneksi ke ${p.host}:${p.port} — cek kredensial, " +
-                        "firewall, dan pastikan RDP aktif di host"
+                val nativeDetail = runCatching {
+                    LibFreeRDP.getLastErrorString(inst).trim()
+                }.getOrDefault("")
+                val summary = if (p != null) {
+                    "Gagal koneksi ke ${p.host}:${p.port}"
                 } else {
                     "Gagal koneksi"
                 }
+                val msg = if (nativeDetail.isNotBlank()) {
+                    "$summary — Detail FreeRDP: $nativeDetail"
+                } else {
+                    summary
+                }
                 transition(SessionState.Error("connect_failed", msg))
+                cleanupTerminalSession(inst)
             }
 
             override fun onDisconnected() {
@@ -441,7 +519,17 @@ class SessionManager(context: Context) {
                 stopWatchdog()
                 setStage(Stage.IDLE)
                 ConnectionLog.add("disconnect (event native)")
-                transition(SessionState.Disconnected)
+                val nativeDetail = runCatching {
+                    LibFreeRDP.getLastErrorString(inst).trim()
+                }.getOrDefault("").takeIf { detail ->
+                    val lower = detail.lowercase()
+                    lower.contains("another user connected") ||
+                        lower.contains("active session limit timer") ||
+                        lower.contains("idle session limit timer") ||
+                        lower.contains("server denied connection")
+                }
+                transition(SessionState.Disconnected(nativeDetail))
+                cleanupTerminalSession(inst)
             }
         }
 
@@ -469,7 +557,7 @@ class SessionManager(context: Context) {
                 }
                 if (!isCurrent(inst)) return false
                 setStage(Stage.AUTH)
-                ConnectionLog.add("prompt NLA/credential (${username.toString()})")
+                ConnectionLog.add("prompt NLA/credential")
                 transition(SessionState.Authenticating)
                 val latch = CountDownLatch(1)
                 var ok = false
@@ -609,9 +697,11 @@ class SessionManager(context: Context) {
         private const val TAG = "XyDeskSession"
         private const val PROMPT_TIMEOUT_SEC = 120L
         private const val CANCEL_FALLBACK_MS = 5_000L
+        private const val DISCONNECT_FALLBACK_MS = 8_000L
         private const val TCP_PROBE_TIMEOUT_MS = 2_500L
         private const val TELEMETRY_INTERVAL_MS = 500L
         private const val CONNECT_WATCHDOG_MS = 30_000L
+        private val REMOTE_DESKTOP_SCALE_FACTORS = setOf(100, 125, 150, 175, 200, 250, 300, 400, 500)
 
         /** Code [SessionState.Error] untuk probe TCP gagal (host tak terjangkau). */
         const val ERROR_UNREACHABLE = "unreachable"

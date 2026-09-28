@@ -27,16 +27,16 @@ if (file.canRead()) {
 }
 ext {
     if (!hasProperty('RELEASE_STORE_FILE')) {
-        RELEASE_STORE_FILE=releaseProperties.get('RELEASE_STORE_FILE', '~/.android/debug.keystore')
+        RELEASE_STORE_FILE=System.getenv('RELEASE_STORE_FILE') ?: releaseProperties.get('RELEASE_STORE_FILE', "${rootDir}/.release-signing-required.keystore")
     }
     if (!hasProperty('RELEASE_KEY_ALIAS')) {
-        RELEASE_KEY_ALIAS=releaseProperties.get('RELEASE_KEY_ALIAS', 'androiddebugkey')
+        RELEASE_KEY_ALIAS=System.getenv('RELEASE_KEY_ALIAS') ?: releaseProperties.get('RELEASE_KEY_ALIAS', '')
     }
     if (!hasProperty('RELEASE_KEY_PASSWORD')) {
-        RELEASE_KEY_PASSWORD=releaseProperties.get('RELEASE_KEY_PASSWORD', 'android')
+        RELEASE_KEY_PASSWORD=System.getenv('RELEASE_KEY_PASSWORD') ?: releaseProperties.get('RELEASE_KEY_PASSWORD', '')
     }
     if (!hasProperty('RELEASE_STORE_PASSWORD')) {
-        RELEASE_STORE_PASSWORD=releaseProperties.get('RELEASE_STORE_PASSWORD', 'android')
+        RELEASE_STORE_PASSWORD=System.getenv('RELEASE_STORE_PASSWORD') ?: releaseProperties.get('RELEASE_STORE_PASSWORD', '')
     }
 
     compileApi = releaseProperties.get('COMPILE_API', 37).toInteger()

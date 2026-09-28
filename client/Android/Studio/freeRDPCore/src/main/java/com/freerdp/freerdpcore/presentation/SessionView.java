@@ -619,8 +619,8 @@ public class SessionView extends View
 	 */
 	public interface InputSink
 	{
-		/** Karakter hasil IME (tanpa info modifier). */
-		void onChar(char ch);
+		/** Teks IME, termasuk update komposisi yang belum di-commit oleh keyboard. */
+		void onText(String text);
 
 		/** Tombol apa adanya dari IME (backspace, enter, ...). */
 		boolean onKeyEvent(KeyEvent event);
@@ -633,10 +633,17 @@ public class SessionView extends View
 		this.inputSink = sink;
 	}
 
+	@Override public boolean onCheckIsTextEditor()
+	{
+		return inputSink != null;
+	}
+
 	@Override public InputConnection onCreateInputConnection(EditorInfo outAttrs)
 	{
 		outAttrs.actionLabel = null;
-		outAttrs.inputType = InputType.TYPE_NULL;
+		// Advertise a real text editor so IMEs deliver composing updates as
+		// setComposingText, rather than buffering until Enter/commit.
+		outAttrs.inputType = InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_FLAG_NO_SUGGESTIONS;
 		outAttrs.imeOptions = EditorInfo.IME_ACTION_NONE | EditorInfo.IME_FLAG_NO_EXTRACT_UI |
 		                      EditorInfo.IME_FLAG_NO_FULLSCREEN;
 		final InputSink sink = inputSink;
@@ -644,13 +651,55 @@ public class SessionView extends View
 			return new BaseInputConnection(this, false);
 
 		return new BaseInputConnection(this, true) {
+			private String composingText = "";
+
+			private void sendBackspaces(int count)
+			{
+				for (int i = 0; i < count; i++)
+				{
+					sink.onKeyEvent(new KeyEvent(KeyEvent.ACTION_DOWN, KeyEvent.KEYCODE_DEL));
+					sink.onKeyEvent(new KeyEvent(KeyEvent.ACTION_UP, KeyEvent.KEYCODE_DEL));
+				}
+			}
+
+			private int codePointCount(String value)
+			{
+				return value.codePointCount(0, value.length());
+			}
+
+			private void replaceComposingText(CharSequence text)
+			{
+				String replacement = text == null ? "" : text.toString();
+				if (!composingText.isEmpty())
+					sendBackspaces(codePointCount(composingText));
+				if (!replacement.isEmpty())
+					sink.onText(replacement);
+				composingText = replacement;
+			}
+
+			@Override public boolean setComposingText(CharSequence text, int newCursorPosition)
+			{
+				// Soft keyboards often send composing updates and wait for Enter/space
+				// before calling commitText. Forward each update live, replacing the
+				// previous provisional text instead of buffering it in this view.
+				replaceComposingText(text);
+				return true;
+			}
+
 			@Override public boolean commitText(CharSequence text, int newCursorPosition)
 			{
-				if (text != null)
-				{
-					for (int i = 0; i < text.length(); i++)
-						sink.onChar(text.charAt(i));
-				}
+				String committed = text == null ? "" : text.toString();
+				if (!committed.equals(composingText))
+					replaceComposingText(committed);
+				composingText = "";
+				return true;
+			}
+
+			@Override public boolean finishComposingText()
+			{
+				// The provisional text is already visible remotely; only close its
+				// local bookkeeping so a later composition doesn't erase it.
+				composingText = "";
 				return true;
 			}
 
@@ -661,10 +710,34 @@ public class SessionView extends View
 
 			@Override public boolean deleteSurroundingText(int beforeLength, int afterLength)
 			{
-				for (int i = 0; i < beforeLength; i++)
+				if (beforeLength > 0)
 				{
-					sink.onKeyEvent(new KeyEvent(KeyEvent.ACTION_DOWN, KeyEvent.KEYCODE_DEL));
-					sink.onKeyEvent(new KeyEvent(KeyEvent.ACTION_UP, KeyEvent.KEYCODE_DEL));
+					int deleteUnits = Math.min(beforeLength, 256);
+					int backspaceCount = deleteUnits;
+					if (!composingText.isEmpty())
+					{
+						int start = Math.max(0, composingText.length() - deleteUnits);
+						// Never leave half of a UTF-16 surrogate pair in composition.
+						if (start > 0 && start < composingText.length() &&
+						    Character.isHighSurrogate(composingText.charAt(start - 1)) &&
+						    Character.isLowSurrogate(composingText.charAt(start)))
+							start--;
+						int removedUnits = composingText.length() - start;
+						int composingBackspaces = composingText.codePointCount(start, composingText.length());
+						int outsideBackspaces = Math.max(0, deleteUnits - removedUnits);
+						backspaceCount = composingBackspaces + outsideBackspaces;
+						composingText = composingText.substring(0, start);
+					}
+					sendBackspaces(backspaceCount);
+				}
+				if (afterLength > 0)
+				{
+					for (int i = 0; i < Math.min(afterLength, 256); i++)
+					{
+						sink.onKeyEvent(new KeyEvent(KeyEvent.ACTION_DOWN, KeyEvent.KEYCODE_FORWARD_DEL));
+						sink.onKeyEvent(new KeyEvent(KeyEvent.ACTION_UP, KeyEvent.KEYCODE_FORWARD_DEL));
+					}
+					composingText = "";
 				}
 				return true;
 			}

@@ -20,17 +20,18 @@ import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.WindowInsetsControllerCompat
 import android.os.Build
-import id.xydesk.remote.XySessionBridge
 import id.xydesk.remote.XySessionService
 import id.xydesk.remote.core.ConnectionLog
 import id.xydesk.remote.core.ConnectionProfile
 import id.xydesk.remote.core.RdpOptions
 import id.xydesk.remote.core.SessionManager
 import id.xydesk.remote.core.SessionState
+import com.freerdp.freerdpcore.utils.ClipboardImageProvider
 import id.xydesk.remote.ui.components.XyNoticeBus
 import id.xydesk.remote.ui.theme.XyDeskTheme
 import id.xydesk.remote.ui.theme.XyThemeState
 import id.xydesk.remote.ui.theme.xyDark
+import java.util.concurrent.Executors
 
 /**
  * M2 — activity sesi XyDesk (Compose): surface RDP + HUD.
@@ -78,6 +79,11 @@ class XyDeskSessionActivity : ComponentActivity() {
         }
     }
     private var clipListener: ClipboardManager.OnPrimaryClipChangedListener? = null
+    private val clipboardReader = Executors.newSingleThreadExecutor { task ->
+        Thread(task, "XyDesk-clipboard-reader").apply { isDaemon = true }
+    }
+    private var clipboardSyncEnabled = true
+    private var pendingPermissionProfile: ConnectionProfile? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -111,16 +117,40 @@ class XyDeskSessionActivity : ComponentActivity() {
 
         hideSystemBars()
 
-        // clipboard lokal -> remote (teks; hanya saat Connected)
+        // Clipboard Android -> remote hanya jika opsi profil menyala. Klip
+        // remote diberi label asal "rdp" agar listener tidak memantulkannya.
+        clipboardSyncEnabled = runCatching { RdpOptions.of(this, profile.id).clipboard }
+            .getOrDefault(false)
         val cm = getSystemService(CLIPBOARD_SERVICE) as ClipboardManager
         val listener = object : ClipboardManager.OnPrimaryClipChangedListener {
             override fun onPrimaryClipChanged() {
-                if (manager.state.value is SessionState.Connected) {
-                    val clip = cm.getPrimaryClip() ?: return
-                    if (clip.itemCount > 0) {
-                        val text = clip.getItemAt(0).coerceToText(this@XyDeskSessionActivity).toString()
-                        if (text.isNotEmpty()) manager.sendClipboardData(text)
+                if (!clipboardSyncEnabled || manager.state.value !is SessionState.Connected) return
+                val clip = try {
+                    cm.getPrimaryClip()
+                } catch (e: RuntimeException) {
+                    Log.w(TAG, "clipboard read failed; session left running", e)
+                    return
+                } ?: return
+                val label = clip.description?.label?.toString()
+                if (label == "rdp" || label == "rdp-clipboard" || clip.itemCount == 0) return
+                val item = clip.getItemAt(0)
+                if (item.uri != ClipboardImageProvider.TEXT_CONTENT_URI)
+                    ClipboardImageProvider.clearTextData()
+                try {
+                    clipboardReader.execute {
+                        try {
+                            val text = item.coerceToText(applicationContext)?.toString().orEmpty()
+                            if (text.isNotEmpty() && !isFinishing && !isDestroyed &&
+                                manager.state.value is SessionState.Connected
+                            ) {
+                                manager.sendClipboardData(text)
+                            }
+                        } catch (e: RuntimeException) {
+                            Log.w(TAG, "clipboard text conversion failed; session left running", e)
+                        }
                     }
+                } catch (e: java.util.concurrent.RejectedExecutionException) {
+                    // Activity is already tearing down.
                 }
             }
         }
@@ -148,7 +178,7 @@ class XyDeskSessionActivity : ComponentActivity() {
                 kill = { runOnUiThread { manager.disconnect(); finish() } },
             ),
         )
-        requestRuntimePermissions(profile)
+        val deferConnectForPermission = requestRuntimePermissions(profile)
         setContent {
             // Layar sesi ikut setelan tema app (dulu dipaksa gelap, jadi di
             // mode terang panel dan dialog di sini tidak nyambung dengan sisa
@@ -175,14 +205,10 @@ class XyDeskSessionActivity : ComponentActivity() {
             }
         )
 
-        ConnectionLog.add("SES: memanggil manager.connect (native createSession + parse args)")
-        try {
-            manager.connect(profile)
-            ConnectionLog.add("SES: manager.connect kembali (worker jalan async)")
-        } catch (t: Throwable) {
-            ConnectionLog.addThrowable("SES: connect() JVM-exception", t)
-            Log.e(TAG, "connect() gagal", t)
-            CrashLog.note(this, "connect() gagal: ${t.stackTraceToString().take(12_000)}")
+        if (deferConnectForPermission) {
+            ConnectionLog.add("SES: koneksi menunggu hasil izin kamera/mikrofon")
+        } else {
+            connectProfile(profile)
         }
     }
 
@@ -190,13 +216,6 @@ class XyDeskSessionActivity : ComponentActivity() {
         super.onStart()
         // balik dari background sebelum timer jalan = cancel auto-disconnect
         bgHandler.removeCallbacks(bgDisconnect)
-        // Notifikasi punya tombol "Putuskan" — sambungkan ke sesi yang hidup.
-        XySessionBridge.onStopRequested = {
-            runOnUiThread {
-                if (manager.state.value is SessionState.Connected) manager.disconnect()
-                XySessionService.stop(this)
-            }
-        }
     }
 
     override fun onStop() {
@@ -219,11 +238,11 @@ class XyDeskSessionActivity : ComponentActivity() {
         super.onDestroy()
         sessionId?.let { XySessionRegistry.remove(it) }
         bgHandler.removeCallbacks(bgDisconnect)
-        XySessionBridge.onStopRequested = null
-        XySessionService.stop(this)
+        if (XySessionRegistry.activeCount() == 0) XySessionService.stop(this)
         val cm = getSystemService(CLIPBOARD_SERVICE) as ClipboardManager
         clipListener?.let { cm.removePrimaryClipChangedListener(it) }
         clipListener = null
+        clipboardReader.shutdownNow()
         controller.release()
         manager.release()
     }
@@ -254,26 +273,63 @@ class XyDeskSessionActivity : ComponentActivity() {
      * di Android wajib punya izin RECORD_AUDIO yang diberikan user, jadi
      * izinnya diminta tepat sebelum menyambung saat opsi mikrofon menyala.
      */
-    private fun requestRuntimePermissions(profile: ConnectionProfile) {
+    private fun requestRuntimePermissions(profile: ConnectionProfile): Boolean {
         val options = runCatching { RdpOptions.of(this, profile.id) }.getOrNull()
-            ?: return
+            ?: return false
         val wanted = buildList {
             if (options.camera) add(Manifest.permission.CAMERA)
             if (options.microphone) add(Manifest.permission.RECORD_AUDIO)
-            // Notifikasi sesi (foreground service). Tanpa izin ini service tetap
-            // jalan, tapi notifikasinya tidak terlihat user.
             if (Build.VERSION.SDK_INT >= 33) add(Manifest.permission.POST_NOTIFICATIONS)
         }.filter {
             ContextCompat.checkSelfPermission(this, it) != PackageManager.PERMISSION_GRANTED
         }
-        if (wanted.isEmpty()) return
+        if (wanted.isEmpty()) return false
+        val deferConnect = wanted.any {
+            it == Manifest.permission.CAMERA || it == Manifest.permission.RECORD_AUDIO
+        }
+        if (deferConnect) pendingPermissionProfile = profile
         ConnectionLog.add("SES: minta izin runtime ${wanted.joinToString()}")
         permissionLauncher.launch(wanted.toTypedArray())
+        return deferConnect
+    }
+
+    private fun connectProfile(profile: ConnectionProfile) {
+        ConnectionLog.add("SES: memanggil manager.connect (native createSession + parse args)")
+        try {
+            manager.connect(profile)
+            ConnectionLog.add("SES: manager.connect kembali (worker jalan async)")
+        } catch (t: Throwable) {
+            ConnectionLog.addThrowable("SES: connect() JVM-exception", t)
+            Log.e(TAG, "connect() gagal", t)
+            CrashLog.note(this, "connect() gagal: ${t.stackTraceToString().take(12_000)}")
+        }
     }
 
     private val permissionLauncher =
         registerForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) { result ->
             ConnectionLog.add("SES: hasil izin ${result.entries.joinToString { "${it.key}=${it.value}" }}")
+            val profile = pendingPermissionProfile
+            pendingPermissionProfile = null
+            if (profile != null && !isFinishing && !isDestroyed) {
+                val options = runCatching { RdpOptions.of(this, profile.id) }.getOrNull()
+                if (options != null) {
+                    val cameraGranted = ContextCompat.checkSelfPermission(
+                        this, Manifest.permission.CAMERA,
+                    ) == PackageManager.PERMISSION_GRANTED
+                    val microphoneGranted = ContextCompat.checkSelfPermission(
+                        this, Manifest.permission.RECORD_AUDIO,
+                    ) == PackageManager.PERMISSION_GRANTED
+                    val adjusted = options.copy(
+                        camera = options.camera && cameraGranted,
+                        microphone = options.microphone && microphoneGranted,
+                    )
+                    if (adjusted != options) adjusted.write(this, profile.id)
+                    if ((options.camera && !cameraGranted) || (options.microphone && !microphoneGranted)) {
+                        XyNoticeBus.post("Izin kamera/mikrofon ditolak; kanal dinonaktifkan di opsi profil.")
+                    }
+                }
+                connectProfile(profile)
+            }
         }
 
     private fun profileFromIntent(intent: Intent): ConnectionProfile? {

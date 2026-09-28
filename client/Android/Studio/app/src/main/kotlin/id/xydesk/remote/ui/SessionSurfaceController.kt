@@ -14,6 +14,9 @@ import android.graphics.Rect
 import android.graphics.drawable.BitmapDrawable
 import android.os.Handler
 import android.os.Looper
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
+import id.xydesk.remote.core.ConnectionLog
 import android.view.KeyEvent
 import android.view.ScaleGestureDetector
 import android.view.View
@@ -60,34 +63,6 @@ data class RemoteCursor(
     val visible: Boolean,
 )
 
-/** Karakter dari IME -> keycode Android (0 = tidak ada padanannya). */
-internal fun xyKeyCodeOf(ch: Char): Int = when {
-    ch in 'a'..'z' -> KeyEvent.KEYCODE_A + (ch - 'a')
-    ch in 'A'..'Z' -> KeyEvent.KEYCODE_A + (ch - 'A')
-    ch in '0'..'9' -> KeyEvent.KEYCODE_0 + (ch - '0')
-    else -> when (ch) {
-        ' ' -> KeyEvent.KEYCODE_SPACE
-        '\n' -> KeyEvent.KEYCODE_ENTER
-        '\t' -> KeyEvent.KEYCODE_TAB
-        '.' -> KeyEvent.KEYCODE_PERIOD
-        ',' -> KeyEvent.KEYCODE_COMMA
-        '-' -> KeyEvent.KEYCODE_MINUS
-        '=' -> KeyEvent.KEYCODE_EQUALS
-        '[' -> KeyEvent.KEYCODE_LEFT_BRACKET
-        ']' -> KeyEvent.KEYCODE_RIGHT_BRACKET
-        ';' -> KeyEvent.KEYCODE_SEMICOLON
-        '\'' -> KeyEvent.KEYCODE_APOSTROPHE
-        '/' -> KeyEvent.KEYCODE_SLASH
-        '\\' -> KeyEvent.KEYCODE_BACKSLASH
-        '`' -> KeyEvent.KEYCODE_GRAVE
-        '@' -> KeyEvent.KEYCODE_AT
-        '*' -> KeyEvent.KEYCODE_STAR
-        '#' -> KeyEvent.KEYCODE_POUND
-        '+' -> KeyEvent.KEYCODE_PLUS
-        else -> 0
-    }
-}
-
 class SessionSurfaceController(private val activity: Activity) : GraphicsSink {
 
     private val uiHandler = Handler(Looper.getMainLooper())
@@ -109,9 +84,15 @@ class SessionSurfaceController(private val activity: Activity) : GraphicsSink {
      * keyboard HP ditutup.
      */
     var onImeChanged: ((Int) -> Unit)? = null
+
+    /** Re-dispatch current IME insets after the Compose observer is installed. */
+    fun refreshImeInsets() {
+        rootView?.let { ViewCompat.requestApplyInsets(it) }
+    }
     /** Bentuk kursor dari server untuk digambar Compose (null = panah bawaan). */
     var onRemoteCursor: ((RemoteCursor) -> Unit)? = null
     @Volatile private var bitmap: Bitmap? = null
+    private var remoteCursorBitmap: Bitmap? = null
     @Volatile private var viewReady = false
 
     /** Perubahan zoom (pinch/programatik) — dipanggil di main thread. */
@@ -173,13 +154,14 @@ class SessionSurfaceController(private val activity: Activity) : GraphicsSink {
         // input ke sini; karakter diubah jadi KeyEvent supaya scancode,
         // modifier, dan kombinasi ditangani jalur yang sudah terbukti.
         sv.setInputSink(object : SessionView.InputSink {
-            override fun onChar(ch: Char) {
-                val code = xyKeyCodeOf(ch)
-                if (code != 0) {
-                    im.onAndroidKeyEvent(KeyEvent(KeyEvent.ACTION_DOWN, code))
-                    im.onAndroidKeyEvent(KeyEvent(KeyEvent.ACTION_UP, code))
-                } else {
-                    im.processUnicodeKey(ch.code)
+            override fun onText(text: String) {
+                text.forEach { ch ->
+                    when (ch) {
+                        '\n' -> sendImeKey(im, KeyEvent.KEYCODE_ENTER)
+                        '\t' -> sendImeKey(im, KeyEvent.KEYCODE_TAB)
+                        '\b' -> sendImeKey(im, KeyEvent.KEYCODE_DEL)
+                        else -> im.processUnicodeKey(ch.code)
+                    }
                 }
             }
 
@@ -280,10 +262,6 @@ class SessionSurfaceController(private val activity: Activity) : GraphicsSink {
         inputManager?.toggleTouchPointer()
     }
 
-    fun toggleKeyboard() {
-        inputManager?.toggleKeyboard()
-    }
-
     /**
      * Kirim keycode Android (KeyEvent.KEYCODE_*) lewat input manager inti.
      * Pencocokan ke scancode RDP dilakukan KeyboardMapper, jadi overlay
@@ -371,17 +349,26 @@ class SessionSurfaceController(private val activity: Activity) : GraphicsSink {
      * `getExternalFilesDir/screenshots/` -> content URI (FileProvider)
      * untuk dibagikan. Return null kalau belum ada frame.
      */
-    fun captureScreenshot(activity: Activity): Uri? {
-        val src = bitmap ?: return null
-        val shot = src.copy(Bitmap.Config.ARGB_8888, false)
-        return try {
-            val dir = File(activity.getExternalFilesDir(null), "screenshots")
-            if (!dir.exists()) dir.mkdirs()
+    suspend fun captureScreenshot(activity: Activity): Uri? = withContext(Dispatchers.IO) {
+        val src = bitmap ?: return@withContext null
+        val shot = runCatching { synchronized(src) { src.copy(Bitmap.Config.ARGB_8888, false) } }
+            .getOrNull() ?: return@withContext null
+        try {
+            val externalFiles = activity.getExternalFilesDir(null) ?: return@withContext null
+            val dir = File(externalFiles, "screenshots")
+            if (!dir.exists() && !dir.mkdirs()) return@withContext null
             val f = File(dir, "xydesk-${System.currentTimeMillis()}.png")
-            FileOutputStream(f).use { out ->
+            val saved = FileOutputStream(f).use { out ->
                 shot.compress(Bitmap.CompressFormat.PNG, 100, out)
             }
+            if (!saved) {
+                f.delete()
+                return@withContext null
+            }
             FileProvider.getUriForFile(activity, "${activity.packageName}.files", f)
+        } catch (t: Throwable) {
+            ConnectionLog.addThrowable("SES: screenshot gagal", t)
+            null
         } finally {
             shot.recycle()
         }
@@ -397,6 +384,9 @@ class SessionSurfaceController(private val activity: Activity) : GraphicsSink {
         scrollView = null
         rootView = null
         bitmap = null
+        remoteCursorBitmap?.let { if (!it.isRecycled) it.recycle() }
+        remoteCursorBitmap = null
+        onRemoteCursor?.invoke(RemoteCursor(null, 0, 0, true))
         inst = 0L
         viewReady = false
     }
@@ -409,12 +399,18 @@ class SessionSurfaceController(private val activity: Activity) : GraphicsSink {
         val i = inst
         val bm = bitmap
         if (i == 0L || bm == null) return
-        // copy piksel remote ke bitmap permukaan (thread RDP — aman,
-        // bitmap ditulis native & dibaca Canvas di main; sama dengan M0)
-        LibFreeRDP.updateGraphics(i, bm, x, y, width, height)
+        if (width <= 0 || height <= 0) return
+        val left = x.coerceIn(0, bm.width)
+        val top = y.coerceIn(0, bm.height)
+        val right = (x.toLong() + width).coerceIn(0L, bm.width.toLong()).toInt()
+        val bottom = (y.toLong() + height).coerceIn(0L, bm.height.toLong()).toInt()
+        if (left >= right || top >= bottom) return
+        synchronized(bm) {
+            LibFreeRDP.updateGraphics(i, bm, left, top, right - left, bottom - top)
+        }
         uiHandler.post {
             val sv = sessionView ?: return@post
-            sv.addInvalidRegion(Rect(x, y, x + width, y + height))
+            sv.addInvalidRegion(Rect(left, top, right, bottom))
             sv.invalidateRegion()
         }
     }
@@ -422,10 +418,16 @@ class SessionSurfaceController(private val activity: Activity) : GraphicsSink {
     override fun onGraphicsResize(width: Int, height: Int, bpp: Int) {
         val i = inst
         if (i == 0L) return
-        val newBitmap = if (bpp > 16) {
-            Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888)
-        } else {
-            Bitmap.createBitmap(width, height, Bitmap.Config.RGB_565)
+        if (width !in 1..8192 || height !in 1..8192 || width.toLong() * height > MAX_SURFACE_PIXELS) {
+            ConnectionLog.add("SES: tolak surface di luar batas ${width}x$height")
+            return
+        }
+        val newBitmap = runCatching {
+            if (bpp > 16) Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888)
+            else Bitmap.createBitmap(width, height, Bitmap.Config.RGB_565)
+        }.getOrElse {
+            ConnectionLog.addThrowable("SES: gagal alokasi surface ${width}x$height", it)
+            return
         }
         bitmap = newBitmap
         val session = GlobalApp.getSession(i) ?: return
@@ -456,7 +458,7 @@ class SessionSurfaceController(private val activity: Activity) : GraphicsSink {
                         pixels, width, height, android.graphics.Bitmap.Config.ARGB_8888,
                     )
                 }.getOrNull()
-                if (bmp != null) onRemoteCursor?.invoke(RemoteCursor(bmp, hotX, hotY, true))
+                if (bmp != null) publishRemoteCursor(RemoteCursor(bmp, hotX, hotY, true))
             }
         }
     }
@@ -465,20 +467,29 @@ class SessionSurfaceController(private val activity: Activity) : GraphicsSink {
         uiHandler.post {
             sessionView?.setRemoteCursor(null, 0, 0, 0, 0)
             touchPointerView?.setRemoteCursor(null, 0, 0, 0, 0)
-            onRemoteCursor?.invoke(RemoteCursor(null, 0, 0, false))
+            publishRemoteCursor(RemoteCursor(null, 0, 0, false))
         }
     }
 
     override fun onPointerSetDefault() {
         uiHandler.post {
             sessionView?.setDefaultCursor()
-            onRemoteCursor?.invoke(RemoteCursor(null, 0, 0, true))
+            publishRemoteCursor(RemoteCursor(null, 0, 0, true))
         }
     }
 
     // ------------------------------------------------------------------
     // Internal
     // ------------------------------------------------------------------
+
+    private fun publishRemoteCursor(cursor: RemoteCursor) {
+        val previous = remoteCursorBitmap
+        remoteCursorBitmap = cursor.bitmap
+        onRemoteCursor?.invoke(cursor)
+        if (previous != null && previous !== cursor.bitmap && !previous.isRecycled) {
+            previous.recycle()
+        }
+    }
 
     private fun catchUpSurface() {
         val i = inst
@@ -497,5 +508,6 @@ class SessionSurfaceController(private val activity: Activity) : GraphicsSink {
 
     companion object {
         private const val ZOOM_STEP = 0.1f
+        private const val MAX_SURFACE_PIXELS = 20_000_000L
     }
 }

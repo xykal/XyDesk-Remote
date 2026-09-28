@@ -29,5 +29,7 @@ FREERDP_LOCAL BOOL android_disp_init(androidContext* afc, DispClientContext* dis
 FREERDP_LOCAL BOOL android_disp_uninit(androidContext* afc, DispClientContext* disp);
 FREERDP_LOCAL BOOL android_disp_send_monitor_layout(androidContext* afc, UINT32 width,
                                                     UINT32 height);
+FREERDP_LOCAL BOOL android_disp_send_monitor_layout_with_scale(androidContext* afc, UINT32 width,
+                                                                UINT32 height, UINT32 desktopScaleFactor);
 
 #endif /* FREERDP_CLIENT_ANDROID_DISP_H */

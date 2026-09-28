@@ -1,6 +1,7 @@
 package id.xydesk.remote.ui
 
 import java.util.concurrent.CopyOnWriteArrayList
+import java.util.concurrent.ConcurrentHashMap
 
 /**
  * Daftar sesi yang sedang hidup di proses ini.
@@ -21,6 +22,7 @@ object XySessionRegistry {
     )
 
     private val items = CopyOnWriteArrayList<Live>()
+    private val activeIds = ConcurrentHashMap.newKeySet<String>()
 
     fun add(item: Live) {
         remove(item.id)
@@ -29,9 +31,21 @@ object XySessionRegistry {
 
     fun remove(id: String) {
         items.removeAll { it.id == id }
+        activeIds.remove(id)
     }
 
+    fun setActive(id: String, active: Boolean) {
+        if (active) activeIds.add(id) else activeIds.remove(id)
+    }
+
+    fun activeCount(): Int = activeIds.size
+
     fun list(): List<Live> = items.toList()
+
+    /** Putuskan seluruh sesi yang aktif dari aksi global notifikasi. */
+    fun disconnectAll() {
+        list().forEach { live -> runCatching { live.kill() } }
+    }
 
     fun count(): Int = items.size
 }

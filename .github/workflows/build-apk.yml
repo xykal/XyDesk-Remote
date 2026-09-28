@@ -2,16 +2,12 @@ name: Build APK
 
 # XyDesk Remote — CI/CD
 #  - push ke main        -> build DEBUG per-ABI (armeabi-v7a, arm64-v8a, x86_64)
-#  - tag v* / manual     -> build RELEASE (R8 + signing resmi, per-ABI) + GitHub Release
-#  - manual (dispatch)   -> generate-keystore (sekali saja, buat rilis pertama)
+#  - tag v*              -> build RELEASE (R8 + signing resmi) + GitHub Release
+#  - manual release      -> build signed APK artifact for testing (tanpa publish release)
+#  - manual debug        -> build APK debug
 #
-# Keystore release: JALANKAN JOB 'generate-keystore' SEKALI, unduh artifact
-# 'xydesk-release-keystore', lalu set secret repo:
-#   RELEASE_KEY_BASE64  = base64(release.jks)
-#   RELEASE_KEY_ALIAS   = dari keystore-creds.env
-#   RELEASE_KEY_PASSWORD / RELEASE_STORE_PASSWORD = dari keystore-creds.env
-# Simpan salinan release.jks di tempat AMAN (bukan di repo) — kalau bocor,
-# rantai update app rusak dan harus rotasi (ganti applicationId/keystore).
+# Signing key tidak pernah dibuat/diunggah oleh workflow ini. Buat dan simpan
+# keystore di mesin tepercaya; masukkan nilainya ke repository Actions secrets.
 
 on:
   push:
@@ -22,7 +18,7 @@ on:
       job:
         description: "Job manual"
         type: choice
-        options: [ debug, release, generate-keystore ]
+        options: [ debug, release ]
         default: debug
 
 # Satu run per ref pada satu waktu: push beruntun ke main (atau re-tag)
@@ -41,41 +37,6 @@ env:
 
 jobs:
   # ------------------------------------------------------------------
-  # SEKALI SAJA: generate release keystore di runner (JDK penuh)
-  # ------------------------------------------------------------------
-  generate-keystore:
-    if: ${{ github.event_name == 'workflow_dispatch' && inputs.job == 'generate-keystore' }}
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/setup-java@v5
-        with:
-          distribution: temurin
-          java-version: "21"
-      - name: Generate release keystore (RSA 4096, 100 tahun)
-        run: |
-          set -eux
-          PASS=$(openssl rand -hex 16)
-          echo "::add-mask::$PASS"
-          keytool -genkeypair -v \
-            -keystore release.jks -storetype JKS \
-            -alias xydesk-remote -keyalg RSA -keysize 4096 -validity 36500 \
-            -storepass "$PASS" -keypass "$PASS" \
-            -dname "CN=XyVerse, OU=XyDesk, O=XyVerse, C=ID"
-          {
-            echo "RELEASE_KEY_ALIAS=xydesk-remote"
-            echo "RELEASE_KEY_PASSWORD=$PASS"
-            echo "RELEASE_STORE_PASSWORD=$PASS"
-          } > keystore-creds.env
-          set +x
-          keytool -list -keystore release.jks -storepass "$PASS"
-      - uses: actions/upload-artifact@v4
-        with:
-          name: xydesk-release-keystore
-          path: |
-            release.jks
-            keystore-creds.env
-
-  # ------------------------------------------------------------------
   # GATE CEPAT: jalan di SETIAP push, termasuk commit yang sudah bertag.
   # ------------------------------------------------------------------
   # Kenapa ada: job "Debug per-ABI" di bawah melewati seluruh langkahnya
@@ -93,8 +54,10 @@ jobs:
     permissions:
       contents: read
     steps:
-      - uses: actions/checkout@v5
-      - uses: actions/setup-java@v5
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+        with:
+          persist-credentials: false
+      - uses: actions/setup-java@b6effb05e454b25005698d916606bdc6ffcbf961 # v5
         with:
           distribution: temurin
           java-version: "21"
@@ -129,7 +92,9 @@ jobs:
     permissions:
       contents: read
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+        with:
+          persist-credentials: false
       - name: Lewati kalau commit ini sudah punya tag rilis
         id: tagcheck
         if: github.event_name == 'push'
@@ -139,13 +104,13 @@ jobs:
             echo "tagged=true" >> "$GITHUB_OUTPUT"
             echo "::notice::$GITHUB_SHA sudah bertag — run rilis di sha ini yang dipakai, debug dilewati."
           fi
-      - uses: actions/setup-java@v5
+      - uses: actions/setup-java@b6effb05e454b25005698d916606bdc6ffcbf961 # v5
         with:
           distribution: temurin
           java-version: "21"
         if: steps.tagcheck.outputs.tagged != 'true'
       - name: Cache Android SDK (NDK & CMake)
-        uses: actions/cache@v5
+        uses: actions/cache@caa296126883cff596d87d8935842f9db880ef25 # v5
         if: steps.tagcheck.outputs.tagged != 'true'
         with:
           path: |
@@ -189,10 +154,11 @@ jobs:
         run: find app/build/outputs -name "*.apk" -exec ls -lh {} \;
       - name: Upload debug APKs (per ABI)
         if: steps.tagcheck.outputs.tagged != 'true'
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: xydesk-remote-debug-per-abi
           path: client/Android/Studio/app/build/outputs/apk/debug/*.apk
+          retention-days: 7
 
   # ------------------------------------------------------------------
   # RELEASE per-ABI (R8 + signing resmi) + GitHub Release
@@ -203,19 +169,29 @@ jobs:
     name: Release per-ABI (R8 + signed) + GitHub Release
     runs-on: ubuntu-latest
     timeout-minutes: 400
-    # Satu-satunya job yang butuh nulis: bikin GitHub Release.
+    # Build/signing hanya memerlukan baca; publikasi dipisah ke job sempit.
     permissions:
-      contents: write
+      contents: read
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
         with:
           fetch-depth: 0
-      - uses: actions/setup-java@v5
+          persist-credentials: false
+      - name: Ensure release tag points to a commit on main
+        if: startsWith(github.ref, 'refs/tags/v')
+        run: |
+          set -euo pipefail
+          git fetch --no-tags origin main
+          if ! git merge-base --is-ancestor "$GITHUB_SHA" FETCH_HEAD; then
+            echo "::error::Release tags must point to a commit reachable from main."
+            exit 1
+          fi
+      - uses: actions/setup-java@b6effb05e454b25005698d916606bdc6ffcbf961 # v5
         with:
           distribution: temurin
           java-version: "21"
       - name: Cache Android SDK (NDK & CMake)
-        uses: actions/cache@v5
+        uses: actions/cache@caa296126883cff596d87d8935842f9db880ef25 # v5
         with:
           path: |
             $HOME/android-sdk/ndk/29.0.13113456
@@ -242,39 +218,36 @@ jobs:
       - name: Restore release keystore dari secret
         env:
           RELEASE_KEY_BASE64: ${{ secrets.RELEASE_KEY_BASE64 }}
+          RELEASE_KEY_ALIAS: ${{ secrets.RELEASE_KEY_ALIAS }}
+          RELEASE_KEY_PASSWORD: ${{ secrets.RELEASE_KEY_PASSWORD }}
+          RELEASE_STORE_PASSWORD: ${{ secrets.RELEASE_STORE_PASSWORD }}
         run: |
-          if [ -z "$RELEASE_KEY_BASE64" ]; then
-            echo "::error::Secret RELEASE_KEY_BASE64 belum diset. Jalankan job 'generate-keystore' (Actions tab) lalu set secret sesuai README."
+          if [ -z "$RELEASE_KEY_BASE64" ] || [ -z "$RELEASE_KEY_ALIAS" ] || \
+             [ -z "$RELEASE_KEY_PASSWORD" ] || [ -z "$RELEASE_STORE_PASSWORD" ]; then
+            echo "::error::Secret signing release belum lengkap. Siapkan keystore di mesin tepercaya dan periksa secrets signing yang diwajibkan."
             exit 1
           fi
-          echo "$RELEASE_KEY_BASE64" | base64 -d > "$GITHUB_WORKSPACE/release.keystore"
-          ls -lh "$GITHUB_WORKSPACE/release.keystore"
+          umask 077
+          printf '%s' "$RELEASE_KEY_BASE64" | base64 --decode > "$GITHUB_WORKSPACE/release.keystore"
+          test -s "$GITHUB_WORKSPACE/release.keystore"
       # Fail cepat: kalau Kotlin tidak compile, batalkan SEBELUM membangun
       # native (dulu: 23 menit native dulu, baru ketahuan error Kotlin).
       - name: "Gate: compileReleaseKotlin sebelum build native"
         working-directory: client/Android/Studio
         env:
+          RELEASE_STORE_FILE: ${{ github.workspace }}/release.keystore
           RELEASE_KEY_ALIAS: ${{ secrets.RELEASE_KEY_ALIAS }}
           RELEASE_KEY_PASSWORD: ${{ secrets.RELEASE_KEY_PASSWORD }}
           RELEASE_STORE_PASSWORD: ${{ secrets.RELEASE_STORE_PASSWORD }}
-        run: |
-          ./gradlew --stacktrace --no-daemon :app:compileReleaseKotlin \
-            -PRELEASE_STORE_FILE="$GITHUB_WORKSPACE/release.keystore" \
-            -PRELEASE_KEY_ALIAS="$RELEASE_KEY_ALIAS" \
-            -PRELEASE_KEY_PASSWORD="$RELEASE_KEY_PASSWORD" \
-            -PRELEASE_STORE_PASSWORD="$RELEASE_STORE_PASSWORD"
+        run: ./gradlew --stacktrace --no-daemon :app:compileReleaseKotlin
       - name: Gradle assembleRelease (R8 + signed, per ABI)
         working-directory: client/Android/Studio
         env:
+          RELEASE_STORE_FILE: ${{ github.workspace }}/release.keystore
           RELEASE_KEY_ALIAS: ${{ secrets.RELEASE_KEY_ALIAS }}
           RELEASE_KEY_PASSWORD: ${{ secrets.RELEASE_KEY_PASSWORD }}
           RELEASE_STORE_PASSWORD: ${{ secrets.RELEASE_STORE_PASSWORD }}
-        run: |
-          ./gradlew --stacktrace --no-daemon assembleRelease \
-            -PRELEASE_STORE_FILE="$GITHUB_WORKSPACE/release.keystore" \
-            -PRELEASE_KEY_ALIAS="$RELEASE_KEY_ALIAS" \
-            -PRELEASE_KEY_PASSWORD="$RELEASE_KEY_PASSWORD" \
-            -PRELEASE_STORE_PASSWORD="$RELEASE_STORE_PASSWORD"
+        run: ./gradlew --stacktrace --no-daemon assembleRelease
       - name: Verifikasi signature setiap ABI (apksigner)
         working-directory: client/Android/Studio
         run: |
@@ -287,9 +260,33 @@ jobs:
             "$ANDROID_HOME/build-tools/37.0.0/apksigner" verify --print-certs "$apk"
           done
           [ "$found" -eq 1 ] || { echo "Tidak ada APK release"; exit 1; }
-      - name: Buat GitHub Release (tag v*)
-        if: startsWith(github.ref, 'refs/tags/v')
-        uses: softprops/action-gh-release@v2
+      - name: Upload signed APKs for publishing
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
-          files: client/Android/Studio/app/build/outputs/apk/release/*.apk
+          name: xydesk-remote-release-apks
+          path: client/Android/Studio/app/build/outputs/apk/release/*.apk
+          retention-days: 3
+      - name: Hapus material signing sementara
+        if: always()
+        run: rm -f "$GITHUB_WORKSPACE/release.keystore"
+
+  # Token write hanya tersedia pada job publikasi; proses build/native tidak
+  # mendapat izin membuat atau mengubah GitHub Release.
+  publish-release:
+    if: ${{ startsWith(github.ref, 'refs/tags/v') }}
+    needs: build-release
+    name: Publish GitHub Release
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Download signed APKs
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          name: xydesk-remote-release-apks
+          path: release-apks
+      - name: Buat GitHub Release (tag v*)
+        uses: softprops/action-gh-release@3bb12739c298aeb8a4eeaf626c5b8d85266b0e65 # v2
+        with:
+          files: release-apks/*.apk
           generate_release_notes: true

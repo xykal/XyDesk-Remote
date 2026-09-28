@@ -51,9 +51,41 @@ BOOL android_disp_uninit(androidContext* afc, DispClientContext* disp)
 	return TRUE;
 }
 
+static BOOL valid_desktop_scale_factor(UINT32 scale)
+{
+	switch (scale)
+	{
+		case 100:
+		case 125:
+		case 150:
+		case 175:
+		case 200:
+		case 250:
+		case 300:
+		case 400:
+		case 500:
+			return TRUE;
+		default:
+			return FALSE;
+	}
+}
+
 BOOL android_disp_send_monitor_layout(androidContext* afc, UINT32 width, UINT32 height)
 {
+	return android_disp_send_monitor_layout_with_scale(afc, width, height, 0);
+}
+
+BOOL android_disp_send_monitor_layout_with_scale(androidContext* afc, UINT32 width, UINT32 height,
+                                                 UINT32 desktopScaleFactor)
+{
 	WINPR_ASSERT(afc);
+	// MS-RDPEDISP requires an even width and dimensions between 200 and 8192.
+	if ((width & 1U) != 0U)
+		width--;
+	if ((width < 200) || (height < 200) || (width > 8192) || (height > 8192))
+		return FALSE;
+	if ((desktopScaleFactor != 0) && !valid_desktop_scale_factor(desktopScaleFactor))
+		return FALSE;
 
 	DispClientContext* disp = afc->disp;
 	if (!disp || !disp->SendMonitorLayout)
@@ -63,6 +95,8 @@ BOOL android_disp_send_monitor_layout(androidContext* afc, UINT32 width, UINT32 
 	}
 
 	rdpSettings* settings = afc->common.context.settings;
+	if (!settings)
+		return FALSE;
 
 	DISPLAY_CONTROL_MONITOR_LAYOUT layout = WINPR_C_ARRAY_INIT;
 	layout.Flags = DISPLAY_CONTROL_MONITOR_PRIMARY;
@@ -72,8 +106,15 @@ BOOL android_disp_send_monitor_layout(androidContext* afc, UINT32 width, UINT32 
 	layout.PhysicalWidth = 0;
 	layout.PhysicalHeight = 0;
 	layout.Orientation = freerdp_settings_get_uint16(settings, FreeRDP_DesktopOrientation);
-	layout.DesktopScaleFactor = freerdp_settings_get_uint32(settings, FreeRDP_DesktopScaleFactor);
+	layout.DesktopScaleFactor = desktopScaleFactor != 0
+	                                ? desktopScaleFactor
+	                                : freerdp_settings_get_uint32(settings, FreeRDP_DesktopScaleFactor);
+	if ((layout.DesktopScaleFactor < 100) || (layout.DesktopScaleFactor > 500))
+		layout.DesktopScaleFactor = 100;
 	layout.DeviceScaleFactor = freerdp_settings_get_uint32(settings, FreeRDP_DeviceScaleFactor);
+	if ((layout.DeviceScaleFactor != 100) && (layout.DeviceScaleFactor != 140) &&
+	    (layout.DeviceScaleFactor != 180))
+		layout.DeviceScaleFactor = 100;
 
 	UINT rc = disp->SendMonitorLayout(disp, 1, &layout);
 	if (rc != CHANNEL_RC_OK)
@@ -82,6 +123,7 @@ BOOL android_disp_send_monitor_layout(androidContext* afc, UINT32 width, UINT32 
 		return FALSE;
 	}
 
-	WLog_DBG(TAG, "SendMonitorLayout: %" PRIu32 "x%" PRIu32, width, height);
+	WLog_DBG(TAG, "SendMonitorLayout: %" PRIu32 "x%" PRIu32 " desktop-scale=%" PRIu32,
+	         width, height, layout.DesktopScaleFactor);
 	return TRUE;
 }

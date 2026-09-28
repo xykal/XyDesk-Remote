@@ -1079,7 +1079,7 @@ Java_com_freerdp_freerdpcore_services_LibFreeRDP_freerdp_1send_1key_1event(JNIEn
 		return JNI_FALSE;
 	}
 
-	WLog_DBG(TAG, "send_key_event: %" PRIu32 ", %d", scancode, flags);
+	WLog_DBG(TAG, "send_key_event");
 	return JNI_TRUE;
 }
 
@@ -1101,7 +1101,7 @@ Java_com_freerdp_freerdpcore_services_LibFreeRDP_freerdp_1send_1unicodekey_1even
 		return JNI_FALSE;
 	}
 
-	WLog_DBG(TAG, "send_unicodekey_event: %d", keycode);
+	WLog_DBG(TAG, "send_unicodekey_event");
 	return JNI_TRUE;
 }
 
@@ -1166,7 +1166,8 @@ Java_com_freerdp_freerdpcore_services_LibFreeRDP_freerdp_1send_1clipboard_1data(
 	const char* data = jdata != nullptr ? (*env)->GetStringUTFChars(env, jdata, nullptr) : nullptr;
 	const size_t data_length = data ? (*env)->GetStringUTFLength(env, jdata) : 0;
 	jboolean ret = android_push_clipboard_event(inst, data, data_length, "text/plain");
-	WLog_DBG(TAG, "send_clipboard_data: (%s)", data);
+	/* Clipboard text can contain credentials and arbitrarily large user data. */
+	WLog_DBG(TAG, "send_clipboard_data queued");
 
 	if (data)
 		(*env)->ReleaseStringUTFChars(env, jdata, data);
@@ -1220,6 +1221,24 @@ Java_com_freerdp_freerdpcore_services_LibFreeRDP_freerdp_1send_1monitor_1layout(
 	androidContext* afc = (androidContext*)inst->context;
 	return android_disp_send_monitor_layout(afc, (UINT32)width, (UINT32)height) ? JNI_TRUE
 	                                                                            : JNI_FALSE;
+}
+
+JNIEXPORT jboolean JNICALL
+Java_com_freerdp_freerdpcore_services_LibFreeRDP_freerdp_1send_1monitor_1layout_1with_1scale(
+    JNIEnv* env, jclass cls, jlong instance, jint width, jint height, jint desktopScaleFactor)
+{
+	WINPR_UNUSED(env);
+	WINPR_UNUSED(cls);
+	freerdp* inst = (freerdp*)instance;
+
+	if (!inst || !inst->context || width <= 0 || height <= 0 || desktopScaleFactor <= 0)
+		return JNI_FALSE;
+
+	androidContext* afc = (androidContext*)inst->context;
+	return android_disp_send_monitor_layout_with_scale(afc, (UINT32)width, (UINT32)height,
+	                                                   (UINT32)desktopScaleFactor)
+	           ? JNI_TRUE
+	           : JNI_FALSE;
 }
 
 JNIEXPORT jstring JNICALL

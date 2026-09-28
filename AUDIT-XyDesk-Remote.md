@@ -1,63 +1,35 @@
-# Audit XyDesk Remote — static review
 
-**Tanggal:** 2026-09-26  
-**Ruang lingkup:** alur tombol Simpan & Connect, session lifecycle Kotlin/Java, FreeRDP JNI wrapper, dan native Android event queue.  
-**Batasan:** audit statis pada source checkout; belum ada crash log perangkat, Android SDK/NDK lengkap, atau build Android yang sukses. Ini bukan klaim runtime fix terverifikasi.
 
-## Temuan
+# Progress audit — 2026-09-28
 
-### P1 — Event queue JNI/native tidak disinkronkan (risiko korupsi memori/crash) — PATCH DIBUAT, BELUM DIBUILD
+**Status:** source changes staged only in the shared workspace. The Android build and device behavior have not been verified; do not treat any item below as runtime-confirmed.
 
-`android_event.c` mengubah `event_queue->count`, `events`, dan dapat `realloc()` buffer pada saat thread FreeRDP membaca/menggeser queue. Perbaikan workspace menambahkan `CRITICAL_SECTION`, melindungi enqueue serta pop atomik, melakukan pemrosesan payload di luar lock, dan membuang event yang masih pending saat queue dihancurkan. Kegagalan alokasi / `SetEvent` juga tidak meninggalkan event ter-queue yang caller mungkin bebaskan. Event disconnect yang dikonsumsi kini dianggap sukses; sebelumnya rc default `FALSE` memicu jalur kegagalan event loop.
+## Work completed in this pass
 
-Ini menutup race pada isi queue. Pengamanan terhadap pemanggil yang balapan dengan penghancuran seluruh `event_queue` tetap bergantung pada lifecycle FreeRDP memastikan ClientFree setelah producer berhenti; wajib diuji di build/perangkat.
+- **HUD and input:** HUD controls and preview are round, positions are draggable (including scroll up/down), default row spacing is roomier, and the legacy keyboard HUD action is removed. The rail remains the sole keyboard-toggle control. The IME advertises a text editor, forwards composing updates as they arrive, handles commit and surrounding deletion, and the rail state follows actual IME insets (including Android Back).
+- **Local zoom and remote DPI are separate:** the session panel has a local zoom slider and a distinct Windows desktop scale control. Remote scale is sent as `DesktopScaleFactor` through FreeRDP's DISP monitor-layout channel, using protocol scale choices; when DISP/server support is unavailable, the preference is reverted rather than reported as applied. Resolution changes preserve the selected remote scale.
+- **Network recovery:** after a session has connected, `Disconnected`, `unreachable`, and `connect_timeout` states keep the session screen open and retry with a 2/4/8/16/30-second backoff. The client waits for the previous native instance to reach terminal cleanup before starting another; it does not free a live instance to force a retry. Authentication, certificate, and other non-transient errors are not automatically retried. The user can stop retries. This is a source-level policy only; remote reconnect behavior needs testing.
+- **Signing/build supply chain:** release signing no longer defaults to Android's debug keystore. Workflow write permission is isolated to a release-publishing job; build jobs are read-only. Direct GitHub Actions references are pinned to immutable commit SHAs, credential persistence is disabled on checkout, and debug/release artifacts have 7-day/3-day retention. The Gradle wrapper distribution SHA-256 is pinned.
+- **Documentation, diagnostics, and splash:** README and build guide were rewritten to remove obsolete milestone claims and to distinguish local zoom, desktop DPI, and resolution. NLA/account names are no longer written to the connection log; README warns that host/certificate metadata may still need redaction. XyVerse wordmark is now at the bottom of the splash.
+- **FreeRDP version:** source declares a `3.32.0` fallback version in `cmake/GetProjectVersion.cmake`; this verifies the source version, not a successful Android binary build. The checked GitHub advisory for `freerdp_certificate_data_hash_` affects versions through 3.19.1 and lists 3.20.0 as patched; the source version is later. This is not a comprehensive vulnerability audit: https://github.com/FreeRDP/FreeRDP/security/advisories/GHSA-h78c-5cjx-jw6x
 
-### P1 — Pelepasan instance ketika koneksi native masih berjalan — PATCH DIBUAT, BELUM DIBUILD
+## Workflow and historical release audit
 
-`freeInstance()` sebelumnya hanya menunggu status yang baru menjadi `true` setelah callback `OnConnectionSuccess`; selama handshake belum tercatat, sehingga teardown dapat membebaskan konteks yang masih dipakai thread native. Kini `LibFreeRDP.connect()` mendaftarkan instance sebagai aktif sebelum membuat native worker dan membersihkan/notify bila worker gagal dimulai. `freeInstance()` dapat meminta disconnect dan menunggu terminal callback selama fase handshake. `SessionState.connect()` juga kini memeriksa hasil parse dan hasil mulai thread koneksi daripada mengabaikan keduanya.
+- Prior GitHub API inventory found **19 stable releases** (three APKs each), **23 tags**, latest observed stable release `v0.5.8`, and some older tags without a matching release.
+- No release or tag was deleted in this work. Release deletion remains pending explicit approval of scope. The previously approved exposed-artifact cleanup and signing-key rotation were already completed; changing the signing certificate can prevent older installs from receiving in-place updates.
+- Workflow YAML parses and static assertions passed for tag-source guard, job permissions, artifact retention, immutable action references, and signing fallback checks. No hosted Actions run was triggered from this workspace.
 
-Perubahan ini menutup celah lifecycle yang teridentifikasi secara statis, tetapi belum ada verifikasi device/tombstone untuk menyatakan itulah akar crash pengguna.
+## Verification results and blockers
 
-### P2 — Password sebelumnya ikut masuk ke log
+- Ran `bash gradlew :core-rdp:testDebugUnitTest :app:compileDebugKotlin --no-daemon`; **Gradle stopped before running either task** because this environment has Java 11 and Gradle 9.6.1 requires Java 17+. `ANDROID_HOME` and `ANDROID_SDK_ROOT` are unset.
+- A Python static check passed for YAML parsing, permission boundaries, artifact retention, SHA-pinned actions, IME and remote-DPI wiring, and removal of the debug-signing fallback.
+- No Kotlin/Java compile, native C/C++ compile, unit test, APK build, IME test, RDP/DISP test, reconnect test, or visual/drag test has passed in this pass. This workspace has no `.git`, so `git diff --check` cannot be run here.
 
-- `SessionManager.connect()` menulis URI RDP ke `ConnectionLog`; URI dapat memuat password pada query `p=`.
-- Form klasik `MainActivity` menulis URI yang sama ke Android Logcat.
+## Remaining high-priority validation
 
-Keduanya sudah diperbaiki di workspace audit: log kini hanya menulis host dan port. Ini mitigasi kebocoran kredensial, bukan crash fix.
-
-### P2 — Simpan dan connect sebelumnya berjalan paralel; kegagalan persistensi tak tertangani
-
-Pada form Compose, `repo.save()` dijalankan dalam coroutine sementara `connectTo()` langsung dipanggil di luar coroutine. Error Room/Keystore tidak ditangani dan urutan penyimpanan tidak dijamin. Sudah diubah agar penyimpanan dicoba dulu, exception ditangkap dan dilaporkan, lalu koneksi dibuka. Belum diverifikasi di perangkat/build.
-
-### P2 — Hasil parsing konfigurasi FreeRDP diabaikan — DIPERBAIKI DI WORKSPACE
-
-`SessionState.connect()` sekarang melempar error eksplisit bila parser FreeRDP menolak argumen atau native worker gagal dimulai. JNI `freerdp_parse_arguments()` juga tidak lagi melaporkan sukses ketika alokasi gagal, membersihkan referensi JNI lokal, dan membebaskan buffer argumen parsial.
-
-## Verifikasi yang sudah dilakukan
-
-- Menelusuri alur tombol form → repository → `XyDeskSessionActivity` → `SessionManager` → `GlobalApp` → JNI `freerdp_connect`.
-- Meninjau lifecycle native connect/disconnect dan queue event FreeRDP.
-- `git diff --check`: lulus.
-- Gradle compile belum jalan: JVM sandbox hanya Java 11, sementara wrapper Gradle proyek meminta Java 17+.
-- Belum ada APK hasil build, tes perangkat, atau Logcat crash untuk mengonfirmasi akar crash yang dialami.
-
-## Perubahan di workspace
-
-1. Simpan profil selesai/tertangani sebelum navigasi ke sesi, dengan pesan error yang tidak membunuh aplikasi.
-2. Menghapus password dari URI yang ditulis ke log.
-3. Mengunci event queue native lintas thread serta membersihkan event tersisa.
-4. Menyinkronkan start native connect dengan release, menandai sesi aktif sejak sebelum thread native dimulai, dan menolak parse/start failure.
-5. Menyimpan log ke `Android/media/id.xydesk.remote/log/xydesk-boot.log` (fallback ke internal app storage bila media directory tidak tersedia).
-6. Build release per-ABI memakai GitHub Actions secrets signing yang sudah terkonfigurasi; file APK rilis dipublikasikan satu-satu sebagai asset GitHub Release, tanpa artifact ZIP release.
-
-## Langkah sebelum menyebut fix valid
-
-1. Jalankan CI GitHub Actions debug melalui workflow `Build APK` pada branch berisi patch.
-2. Ambil artifact `xydesk-remote-debug-per-abi`, lalu uji APK `armeabi-v7a` di perangkat fisik.
-3. Reproduksi: simpan & connect, koneksi gagal/sukses, cancel saat handshake, tutup layar saat Connecting, lalu uji input dan clipboard.
-4. Simpan Logcat bila crash; cocokkan crash tombstone/native stack trace ke event queue atau lifecycle.
-5. Build + tes ulang patch queue/lifecycle pada perangkat, khususnya connect/cancel/close saat handshake dan burst input/clipboard/disconnect.
-
-## Status publikasi
-
-Patch masih berada di workspace kerja ini dan belum dipush. Tidak ada GitHub credential aman yang disediakan untuk autentikasi push; token yang sempat muncul di file lampiran harus dicabut/dirotasi, dan tidak digunakan untuk push/build. Karena itu link artifact APK belum tersedia.
+1. Run CI with JDK 21 and the configured Android SDK/NDK/CMake; fix compile/test failures before claiming the patch builds.
+2. Test composing IME updates, commit, backspace (including surrogate-pair text), and IME close via Android Back on physical devices and more than one IME.
+3. Test remote DPI choices on supported Windows RDP servers, including missing DISP channel/server rejection; verify the desktop DPI actually changes while local zoom and resolution remain independent.
+4. Exercise Wi-Fi loss, server disconnect, timeout, failed re-authentication, user stop, and Activity lifecycle teardown; confirm retry waits for native cleanup and never creates overlapping native instances.
+5. Verify HUD drag/reset/collision behavior for every control on portrait/landscape and multiple screen sizes; inspect the new splash positioning visually.
+6. Continue static review of FreeRDP JNI bounds, workflow SDK download integrity, and credential/log paths. Do not delete old releases/tags without the user's confirmation.
