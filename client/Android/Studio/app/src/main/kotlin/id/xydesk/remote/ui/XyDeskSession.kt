@@ -11,7 +11,6 @@ import android.view.KeyEvent
 import android.view.WindowManager
 import androidx.compose.foundation.background
 import androidx.compose.foundation.gestures.awaitEachGesture
-import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -434,22 +433,6 @@ fun XyDeskSessionScreen(
             modifier = Modifier.fillMaxSize(),
         )
 
-        // Mode trackpad: ketuk di area mana pun = klik kiri. Ini pengganti
-        // baris kontrol tambahan, jadi layar tetap bersih.
-        if (connected && InputMode.entries[inputMode] == InputMode.TRACKPAD && !mappingMode) {
-            Box(
-                Modifier
-                    .fillMaxSize()
-                    .pointerInput(zoom, remoteWidth, remoteHeight) {
-                        detectTapGestures(
-                            onTap = {
-                                sendButton(XyMouseButton.LEFT, true)
-                                sendButton(XyMouseButton.LEFT, false)
-                            },
-                        )
-                    },
-            )
-        }
 
         // Lapisan gesture trackpad: menutup surface supaya sentuhan tidak
         // diteruskan langsung sebagai klik di posisi jari.
