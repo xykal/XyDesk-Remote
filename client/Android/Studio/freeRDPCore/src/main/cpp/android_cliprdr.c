@@ -29,10 +29,14 @@
 
 #include <freerdp/client/channels.h>
 #include <freerdp/client/cliprdr.h>
+#include <freerdp/log.h>
+#include <winpr/wlog.h>
 
 #include "android_cliprdr.h"
 #include "android_jni_utils.h"
 #include "android_jni_callback.h"
+
+#define TAG CLIENT_TAG("android.cliprdr")
 
 static void android_cliprdr_free_formats(CLIPRDR_FORMAT* formats, UINT32 numFormats)
 {

@@ -247,7 +247,7 @@ jobs:
           RELEASE_KEY_ALIAS: ${{ secrets.RELEASE_KEY_ALIAS }}
           RELEASE_KEY_PASSWORD: ${{ secrets.RELEASE_KEY_PASSWORD }}
           RELEASE_STORE_PASSWORD: ${{ secrets.RELEASE_STORE_PASSWORD }}
-        run: ./gradlew --stacktrace --no-daemon assembleRelease
+        run: ./gradlew --stacktrace --no-daemon --max-workers=2 assembleRelease
       - name: Verifikasi signature setiap ABI (apksigner)
         working-directory: client/Android/Studio
         run: |
