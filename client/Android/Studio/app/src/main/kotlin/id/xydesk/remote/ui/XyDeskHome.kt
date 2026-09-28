@@ -192,13 +192,6 @@ fun XyDeskHome(
                         },
                         onShowCrash = { showCrash = true },
                         onShowBoot = { showBoot = true },
-                        onClearCrash = {
-                            CrashLog.clear(context.applicationContext)
-                            crashLog = null
-                        },
-                        crashLogText = crashLog,
-                        onDismissCrash = { showCrash = false },
-                        onDismissBoot = { showBoot = false },
                     )
                 } else {
                     SectionScreen(
@@ -274,14 +267,18 @@ fun XyDeskHome(
             Spacer(Modifier.height(8.dp))
             XySection.entries.forEach { item ->
                 XyRow(
-                    title = item.title,
+                    // Dulu title mentah (Indonesia saja) — drawer satu-satunya
+                    // tempat yang tidak ikut bahasa. Sekarang dua bahasa.
+                    title = xy(item.title, item.titleEn),
                     modifier = Modifier.padding(horizontal = 8.dp),
                     leading = when (item) {
                         XySection.PERANGKAT -> XyIcons.Monitor
                         XySection.TAMPILAN -> XyIcons.Fit
                         XySection.KREDENSIAL -> XyIcons.Lock
                         XySection.UMUM -> XyIcons.Sliders
-                        XySection.KEAMANAN -> XyIcons.Info
+                        // Dulu Info — sama dengan Tentang, jadi dua seksi
+                        // bersebelahan punya ikon identik.
+                        XySection.KEAMANAN -> XyIcons.Shield
                         XySection.TENTANG -> XyIcons.Info
                     },
                     leadingTint = if (item == section) MaterialTheme.colorScheme.onSurface
@@ -305,7 +302,7 @@ fun XyDeskHome(
 
     if (showCrash) {
         InfoDialog(
-            title = "Log error terakhir",
+            title = xy("Log error terakhir", "Last error log"),
             body = crashLog.orEmpty(),
             onDismiss = {
                 showCrash = false
@@ -409,10 +406,6 @@ private fun DevicesScreen(
     onDelete: (ConnectionProfile) -> Unit,
     onShowCrash: () -> Unit,
     onShowBoot: () -> Unit,
-    onClearCrash: () -> Unit,
-    crashLogText: String?,
-    onDismissCrash: () -> Unit,
-    onDismissBoot: () -> Unit,
 ) {
     if (crashLog != null) {
         Banner(

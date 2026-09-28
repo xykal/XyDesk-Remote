@@ -3,11 +3,7 @@ package id.xydesk.remote.ui
 import android.content.Context
 import android.content.res.Configuration
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
-import androidx.compose.ui.platform.LocalContext
 import java.util.Locale
 
 /**
@@ -40,16 +36,25 @@ enum class XyLang(val code: String, val label: String) {
  * sebagai argumen langsung atau dibentuk runtime.
  */
 object XyText {
-    @Volatile private var lang: XyLang = XyLang.ID
+    /**
+     * Bahasa aktif sebagai state Compose — BUKA volatile biasa. Dulu ini
+     * `@Volatile var`, jadi mengganti bahasa tidak memberi tahu siapa pun:
+     * layar cuma kebagian render ulang kalau kebetulan ada state lain yang
+     * berubah, dan setengah UI tampil dengan bahasa lama. Sekarang setiap
+     * `xy()` / `t()` / `xyLang()` berlangganan state ini, jadi satu ketuk
+     * di pemilih bahasa mengganti SELURUH teks app seketika.
+     */
+    private val langState = mutableStateOf(XyLang.ID)
 
     fun setLang(value: XyLang) {
-        lang = value
+        langState.value = value
     }
 
-    fun current(): XyLang = lang
+    /** Aman dibaca dari thread mana pun (non-composable). */
+    fun current(): XyLang = langState.value
 
     fun t(key: String): String =
-        table[key]?.get(lang) ?: table[key]?.get(XyLang.ID) ?: key
+        table[key]?.get(current()) ?: table[key]?.get(XyLang.ID) ?: key
 
     fun t(key: String, vararg args: Any?): String {
         var out = t(key)
@@ -201,15 +206,12 @@ object LangPrefs {
 }
 
 /**
- * Bahasa aktif sebagai state Compose: membaca ini membuat composable ikut
- * render ulang saat user mengganti bahasa.
+ * Bahasa aktif sebagai state Compose: membaca ini membuat composable
+ * berlangganan perubahan bahasa — begitu [LangPrefs.set] dipanggil, semua
+ * teks yang memakai `xy()` / `t()` render ulang sendiri.
  */
 @Composable
-fun xyLang(): XyLang {
-    var langState by remember { mutableStateOf(XyText.current()) }
-    langState = XyText.current()
-    return langState
-}
+fun xyLang(): XyLang = XyText.current()
 
 /** Pintasan composable: pakai [XyText.t] dengan recomposition saat bahasa ganti. */
 @Composable

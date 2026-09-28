@@ -243,7 +243,6 @@ fun AddDeviceScreen(
                                     .border(1.dp, MaterialTheme.colorScheme.outline, XyPill)
                                     .clickable {
                                         user = name
-                                        if (domain.isBlank()) domain = ""
                                     }
                                     .padding(horizontal = 12.dp, vertical = 7.dp),
                             ) {
@@ -327,7 +326,7 @@ fun AddDeviceScreen(
                 )
                 Spacer(Modifier.height(16.dp))
                 Text(
-                    "Skala tampilan awal: $dpi%",
+                    xy("Skala tampilan awal: {0}%", "Initial display scale: {0}%", dpi),
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
@@ -431,8 +430,11 @@ fun AddDeviceScreen(
                     leading = XyIcons.Wifi,
                 )
                 XyToggleRow(
-                    title = "Deteksi bandwidth otomatis",
-                    subtitle = "FreeRDP menyesuaikan kualitas mengikuti jaringan",
+                    title = xy("Deteksi bandwidth otomatis", "Automatic bandwidth detection"),
+                    subtitle = xy(
+                        "FreeRDP menyesuaikan kualitas mengikuti jaringan",
+                        "FreeRDP adapts quality to the network",
+                    ),
                     checked = options.networkAutoDetect,
                     onCheckedChange = { options = options.copy(networkAutoDetect = it) },
                     leading = XyIcons.Sliders,
@@ -537,6 +539,20 @@ private fun StorageAccessRow() {
     val context = LocalContext.current
     var granted by remember { mutableStateOf(LibFreeRDP.hasAllFilesAccess()) }
     val path = remember(granted) { LibFreeRDP.appDrivePath(context) }
+    // Cek ulang izin saat layar ini kembali ke depan. Dulu `granted` hanya
+    // dibaca sekali tepat setelah startActivity — padahal activity asal
+    // tidak pernah pause-hilang di momen itu, jadi status selalu "terbatas"
+    // walaupun user baru saja memberi izin di Setelan.
+    val lifecycleOwner = androidx.compose.ui.platform.LocalLifecycleOwner.current
+    androidx.compose.runtime.DisposableEffect(lifecycleOwner) {
+        val observer = androidx.lifecycle.LifecycleEventObserver { _, event ->
+            if (event == androidx.lifecycle.Lifecycle.Event.ON_RESUME) {
+                granted = LibFreeRDP.hasAllFilesAccess()
+            }
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
+    }
     Column(
         Modifier
             .fillMaxWidth()

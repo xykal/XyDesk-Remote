@@ -523,8 +523,8 @@ fun XyDeskSessionScreen(
             SessionControls(
                 deviceId = profile.id,
                 hostLabel = profile.label ?: "${profile.host}:${profile.port}",
-                statusText = "Terhubung",
-                remoteSize = if (telemetry.width > 0) "${telemetry.width} x ${telemetry.height}" else "menunggu server",
+                statusText = xy("Terhubung", "Connected"),
+                remoteSize = if (telemetry.width > 0) "${telemetry.width} x ${telemetry.height}" else xy("menunggu server", "waiting for server"),
                 zoomPercent = (zoom * 100).roundToInt(),
                 pointerScreen = pointerScreen,
                 pointerVisible = pointerVisible && InputMode.entries[inputMode] == InputMode.TRACKPAD,
@@ -547,7 +547,7 @@ fun XyDeskSessionScreen(
                 mappingMode = mappingMode,
                 onMappingModeChange = {
                     mappingMode = it
-                    if (it) notice.show(xyNow("Geser tombol ke posisi yang kal mau", "Drag the buttons where you want them"))
+                    if (it) notice.show(xyNow("Geser tombol ke posisi yang kamu mau", "Drag the buttons where you want them"))
                 },
                 onPhase = { key, phase -> handleHudPhase(key, phase) },
                 onZoomIn = { controller.zoomIn() },
@@ -570,7 +570,9 @@ fun XyDeskSessionScreen(
                     )
                 },
                 onDisconnect = {
-                    userDisconnect = true
+                    // Jangan tandai "putus oleh user" di sini: dialog konfirmasi
+                    // bisa dibatalkan. Kalau flag-nya nyala padahal user batal,
+                    // auto-reconnect mati permanen untuk putusan koneksi asli.
                     confirmDisconnect = true
                 },
                 onPointerVisibilityChange = { pointerVisible = it },
@@ -759,7 +761,7 @@ fun XyDeskSessionScreen(
             }
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 XyPillButton(
-                    text = "Detail",
+                    text = xy("Detail", "Details"),
                     onClick = { showLog = true },
                     primary = false,
                     compact = true,
@@ -777,7 +779,7 @@ fun XyDeskSessionScreen(
                 )
             }
             XyPillButton(
-                text = "Tutup",
+                text = xy("Tutup", "Close"),
                 onClick = { onExit() },
                 compact = true,
                 modifier = Modifier.fillMaxWidth(),
@@ -801,7 +803,7 @@ fun XyDeskSessionScreen(
                 }
             }
             XyPillButton(
-                text = "Tutup",
+                text = xy("Tutup", "Close"),
                 onClick = { showLog = false },
                 compact = true,
                 modifier = Modifier.fillMaxWidth(),
@@ -815,9 +817,10 @@ fun XyDeskSessionScreen(
             confirmLabel = xy("Putuskan", "Disconnect"),
             onConfirm = {
                 confirmDisconnect = false
+                userDisconnect = true
                 manager.disconnect()
             },
-            dismissLabel = "Batal",
+            dismissLabel = xy("Batal", "Cancel"),
             onDismiss = { confirmDisconnect = false },
         )
     }
@@ -1102,7 +1105,7 @@ private fun CertificateDialog(
                 modifier = Modifier.weight(1f),
             )
             XyPillButton(
-                text = "Tolak",
+                text = xy("Tolak", "Deny"),
                 onClick = { onReply(CertificateInfo.VERIFY_DENY) },
                 primary = false,
                 compact = true,
@@ -1126,7 +1129,7 @@ private fun NlaDialog(
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
-        XyField(value = user, onValueChange = { user = it }, label = "Username")
+        XyField(value = user, onValueChange = { user = it }, label = xy("Username", "Username"))
         XyField(
             value = domain,
             onValueChange = { domain = it },
@@ -1135,13 +1138,13 @@ private fun NlaDialog(
         XyField(
             value = pass,
             onValueChange = { pass = it },
-            label = "Password",
+            label = xy("Password", "Password"),
             isPassword = true,
             imeAction = ImeAction.Done,
         )
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             XyPillButton(
-                text = "Masuk",
+                text = xy("Masuk", "Sign in"),
                 onClick = {
                     onReply(
                         user.ifBlank { null },
@@ -1154,7 +1157,7 @@ private fun NlaDialog(
                 modifier = Modifier.weight(1f),
             )
             XyPillButton(
-                text = "Batal",
+                text = xy("Batal", "Cancel"),
                 onClick = { onReply(null, null, null) },
                 primary = false,
                 compact = true,

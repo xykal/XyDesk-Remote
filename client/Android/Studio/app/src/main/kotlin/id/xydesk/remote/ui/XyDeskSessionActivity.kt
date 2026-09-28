@@ -50,6 +50,14 @@ class XyDeskSessionActivity : ComponentActivity() {
     /** Id profil sesi ini; dipakai untuk melepas diri dari registry sesi. */
     private var sessionId: String? = null
 
+    /**
+     * Label sesi (nama perangkat atau host:port) — dipakai ulang saat service
+     * foreground di-ping dari [onStop]. Dulu label dikirim `null` di sini, jadi
+     * begitu app pindah ke latar, teks notifikasi melompat balik ke
+     * "XyDesk Remote" dan nama perangkatnya hilang.
+     */
+    private var sessionLabel: String? = null
+
     lateinit var manager: SessionManager
         private set
     lateinit var controller: SessionSurfaceController
@@ -99,6 +107,7 @@ class XyDeskSessionActivity : ComponentActivity() {
         }
         ConnectionLog.add("SES: profil ok -> ${profile.host}:${profile.port}")
         sessionId = profile.id
+        sessionLabel = profile.label ?: "${profile.host}:${profile.port}"
 
         hideSystemBars()
 
@@ -204,7 +213,7 @@ class XyDeskSessionActivity : ComponentActivity() {
             // Default: sesi dibiarkan hidup di latar lewat foreground service.
             appPrefs?.keepAlive != false -> {
                 Log.i(TAG, "keep-alive: sesi jalan di latar (foreground service)")
-                XySessionService.start(this, null, ping = true)
+                XySessionService.start(this, sessionLabel, ping = true)
             }
 
             appPrefs?.autoDisconnect != false -> {
@@ -284,6 +293,13 @@ class XyDeskSessionActivity : ComponentActivity() {
                 password = intent.getStringExtra(EXTRA_PASS),
                 domain = intent.getStringExtra(EXTRA_DOMAIN),
                 label = intent.getStringExtra(EXTRA_LABEL),
+                // Kunci tetap perangkat WAJIB ikut. Tanpa ini id profil jatuh
+                // balik ke "host:port", padahal RdpOptions/DisplayPrefs/HUD
+                // ditulis pakai kunci tetap — akibatnya semua setelan per
+                // perangkat (audio, mic, gateway, UDP, H264, clipboard,
+                // drive, resolusi, rotasi, dpi, layout tombol) tidak pernah
+                // terbaca dan sesi jalan dengan default.
+                key = intent.getStringExtra(EXTRA_KEY),
             )
         } catch (e: IllegalArgumentException) {
             Log.w(TAG, "profil dari intent tidak valid: ${e.message}")
@@ -300,6 +316,7 @@ class XyDeskSessionActivity : ComponentActivity() {
         const val EXTRA_PASS = "xydesk.pass"
         const val EXTRA_DOMAIN = "xydesk.domain"
         const val EXTRA_LABEL = "xydesk.label"
+        const val EXTRA_KEY = "xydesk.key"
 
         /** Auto-disconnect kalau app di-background dan keep-alive dimatikan. */
         const val BACKGROUND_DISCONNECT_DELAY_MS = 15_000L
@@ -312,6 +329,7 @@ class XyDeskSessionActivity : ComponentActivity() {
                 putExtra(EXTRA_PASS, profile.password)
                 putExtra(EXTRA_DOMAIN, profile.domain)
                 putExtra(EXTRA_LABEL, profile.label)
+                putExtra(EXTRA_KEY, profile.key)
             }
     }
 }

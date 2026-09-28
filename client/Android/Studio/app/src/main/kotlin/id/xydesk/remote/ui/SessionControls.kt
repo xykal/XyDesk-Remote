@@ -197,7 +197,7 @@ fun SessionControls(
         onKeysChange(keys + key)
         notice.show(
             xyNow(
-                "Tombol \"{0}\" ditambahkan — geser ke posisi yang kal mau",
+                "Tombol \"{0}\" ditambahkan — geser ke posisi yang kamu mau",
                 "Button \"{0}\" added — drag it where you want",
                 key.label,
             ),
@@ -296,7 +296,7 @@ fun SessionControls(
                     value = textValue,
                     onValueChange = { textValue = it },
                     label = xy("Teks", "Text"),
-                    hint = "mis. password, alamat URL",
+                    hint = xy("mis. password, alamat URL", "e.g. password, a URL"),
                     imeAction = androidx.compose.ui.text.input.ImeAction.Send,
                 )
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -801,7 +801,7 @@ private fun SessionPanel(
                     PanelHint(
                         if (mappingMode) {
                             xy(
-                                "Mode atur posisi MENYALA: geser tombol ke tempat kal, " +
+                                "Mode atur posisi MENYALA: geser tombol ke tempat yang kamu mau, " +
                                     "ketuk tombol untuk ubah aksi/ukuran, lalu tekan Selesai.",
                                 "Layout mode is ON: drag buttons where you want them, tap a " +
                                     "button to change its action/size, then press Done.",
@@ -1027,16 +1027,6 @@ private fun PanelSection(title: String, content: @Composable () -> Unit) {
         )
         content()
     }
-}
-
-@Composable
-private fun KeyListHeader(text: String) {
-    Text(
-        text,
-        color = MaterialTheme.colorScheme.onSurfaceVariant,
-        fontSize = 10.sp,
-        letterSpacing = 1.sp,
-    )
 }
 
 @Composable

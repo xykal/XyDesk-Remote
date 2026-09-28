@@ -217,6 +217,18 @@ object XyIcons {
         lineTo(15.5f, 10.5f)
     }
 
+    val Shield: ImageVector = xyIcon("XyShield") {
+        // Perisai: keamanan (vault, kepercayaan sertifikat). Garis sama:
+        // stroke 1.7, ujung bulat, viewport 24.
+        moveTo(12f, 3.2f)
+        lineTo(18.4f, 5.6f)
+        lineTo(18.4f, 11.2f)
+        curveTo(18.4f, 15.3f, 15.9f, 18.6f, 12f, 20.8f)
+        curveTo(8.1f, 18.6f, 5.6f, 15.3f, 5.6f, 11.2f)
+        lineTo(5.6f, 5.6f)
+        close()
+    }
+
     val Info: ImageVector = xyIcon("XyInfo") {
         moveTo(12f, 3.5f)
         curveTo(16.7f, 3.5f, 20.5f, 7.3f, 20.5f, 12f)

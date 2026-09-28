@@ -205,7 +205,7 @@ class SessionManager(context: Context) {
                         ERROR_UNREACHABLE,
                         "Tidak bisa menghubungi ${profile.host}:${profile.port}. Kemungkinan: " +
                             "RDP nonaktif, firewall memblokir, nama host salah, atau target " +
-                            "Windows Home (tidak punya server RDP). Coba Cloud RDP.",
+                            "Windows Home (tidak punya server RDP).",
                     )
                 )
                 return@execute

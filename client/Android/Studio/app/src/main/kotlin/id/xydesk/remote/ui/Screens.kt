@@ -218,6 +218,10 @@ private fun CredentialsSection(
     val vault = remember { CredentialVault(context.applicationContext) }
     var tick by remember { mutableIntStateOf(0) }
     var confirmClear by remember { mutableStateOf(false) }
+    // Flag "password tersimpan?" dihitung ulang saat `tick` naik (tombol
+    // Lupakan ditekan) atau daftar perangkat berubah. Dulu ini pakai trik
+    // `if (tick < 0) Text("")` di ujung layar untuk memaksa recompose.
+    val rememberedFlags = remember(tick, favorites) { favorites.map { vault.has(it.id) } }
 
     Column(
         Modifier
@@ -242,8 +246,8 @@ private fun CredentialsSection(
             if (favorites.isEmpty()) {
                 Text(xy("Belum ada perangkat tersimpan.", "No saved devices yet."), style = MaterialTheme.typography.bodyMedium)
             } else {
-                favorites.forEach { profile ->
-                    val remembered = vault.has(profile.id)
+                favorites.forEachIndexed { idx, profile ->
+                    val remembered = rememberedFlags[idx]
                     Row(
                         Modifier.fillMaxWidth(),
                         verticalAlignment = Alignment.CenterVertically,
@@ -293,14 +297,13 @@ private fun CredentialsSection(
             )
         }
         Spacer(Modifier.height(12.dp))
-        if (tick < 0) Text("") // tick dipakai untuk memaksa recompose setelah xy("Lupakan", "Forget")
     }
 
     if (confirmClear) {
         XyDialog(
             title = xy("Hapus semua?", "Delete everything?"),
             body = xy("Semua perangkat tersimpan dan password-nya akan dihapus.", "All saved devices and their passwords will be removed."),
-            confirmLabel = "Hapus",
+            confirmLabel = xy("Hapus", "Delete"),
             onConfirm = {
                 confirmClear = false
                 onClearAll()
@@ -422,7 +425,11 @@ private fun GeneralSection(appPrefs: AppPrefs, onShowLog: () -> Unit) {
             )
             Spacer(Modifier.height(10.dp))
             Text(
-                "Kecepatan scroll: ${"%.1f".format(scrollSpeed)}x",
+                xy(
+                    "Kecepatan scroll: {0}x",
+                    "Scroll speed: {0}x",
+                    "%.1f".format(scrollSpeed),
+                ),
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
@@ -436,7 +443,7 @@ private fun GeneralSection(appPrefs: AppPrefs, onShowLog: () -> Unit) {
             )
             XyToggleRow(
                 title = xy("Getaran saat tombol ditekan", "Haptic feedback on button press"),
-                subtitle = "Haptic halus di cluster mouse dan keyboard",
+                subtitle = xy("Haptic halus di cluster mouse dan keyboard", "Subtle haptics on the mouse cluster and keyboard"),
                 checked = haptics,
                 onCheckedChange = {
                     haptics = it
@@ -650,7 +657,10 @@ private fun GeneralSection(appPrefs: AppPrefs, onShowLog: () -> Unit) {
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
             Spacer(Modifier.height(10.dp))
-            Text("Inti: ${coreBuildInfo()}", style = MaterialTheme.typography.bodySmall)
+            Text(
+                xy("Inti: {0}", "Core: {0}", coreBuildInfo()),
+                style = MaterialTheme.typography.bodySmall,
+            )
             Spacer(Modifier.height(10.dp))
             XyPillButton(
                 xy("Lihat log sesi terakhir", "View last session log"),

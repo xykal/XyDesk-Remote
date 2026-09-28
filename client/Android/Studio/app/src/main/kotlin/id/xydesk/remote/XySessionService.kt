@@ -11,6 +11,7 @@ import android.os.Build
 import android.os.IBinder
 import androidx.core.app.NotificationCompat
 import androidx.core.content.ContextCompat
+import id.xydesk.remote.ui.xyNow
 import id.xydesk.remote.ui.XyDeskSessionActivity
 
 /**
@@ -71,10 +72,13 @@ class XySessionService : Service() {
         if (manager.getNotificationChannel(CHANNEL_ID) != null) return
         val channel = NotificationChannel(
             CHANNEL_ID,
-            "Sesi aktif",
+            xyNow("Sesi aktif", "Active session"),
             NotificationManager.IMPORTANCE_LOW,
         ).apply {
-            description = "Notifikasi selama sesi remote berjalan di latar"
+            description = xyNow(
+                "Notifikasi selama sesi remote berjalan di latar",
+                "Notification while a remote session runs in the background",
+            )
             setShowBadge(false)
         }
         manager.createNotificationChannel(channel)
@@ -94,12 +98,15 @@ class XySessionService : Service() {
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
         )
         return NotificationCompat.Builder(this, CHANNEL_ID)
-            .setSmallIcon(android.R.drawable.stat_sys_upload_done)
-            .setContentTitle("Sesi remote aktif")
+            // Ikon app sendiri (mark monokrom) — dulu pakai
+            // android.R.drawable.stat_sys_upload_done, ikon sistem panah
+            // upload yang tidak ada hubungannya dengan remote desktop.
+            .setSmallIcon(id.xydesk.remote.R.drawable.ic_launcher_monochrome)
+            .setContentTitle(xyNow("Sesi remote aktif", "Remote session active"))
             .setContentText(label ?: "XyDesk Remote")
             .setContentIntent(open)
-            .addAction(0, "Buka", open)
-            .addAction(0, "Putuskan", stop)
+            .addAction(0, xyNow("Buka", "Open"), open)
+            .addAction(0, xyNow("Putuskan", "Disconnect"), stop)
             .setOngoing(true)
             .setOnlyAlertOnce(true)
             .setPriority(NotificationCompat.PRIORITY_LOW)

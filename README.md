@@ -84,6 +84,59 @@ Ronde ini seluruhnya soal input dan kontrol:
 
 Detail teknis: `docs/HUD-BUTTONS.md` (EN) dan `docs/HUD-BUTTONS.id.md` (ID).
 
+## Catatan rilis v0.5.6
+
+Ronde 7 — yang ini beresin akar keluhannya: logika yang tidak konsisten,
+bukan cuma tempelan UI.
+
+- **BUG KRITIS — kunci profil hilang lewat intent.** `connectIntent()` tidak
+  membawa `profile.key`, dan rekonstruksi profil di activity sesi tidak
+  mengembalikannya, jadi id profil di sesi jatuh ke `host:port` padahal semua
+  setelan per perangkat (audio, mikrofon, gateway, UDP, H.264, clipboard,
+  drive, resolusi, rotasi, skala, layout tombol HUD) ditulis pakai kunci
+  tetap perangkat. Akibat nyatanya: setelan yang diatur di layar
+  Tambah/Ubah perangkat tidak pernah terbaca saat connect. Kini key ikut
+  di intent (`xydesk.key`).
+- **Auto-reconnect tidak mati lagi gara-gara batal putus.** Dulu menekan
+  "Putuskan" lalu membatalkan dialog konfirmasi tetap menandai sesi
+  "diputus user", jadi koneksi yang putus sendiri tidak pernah
+  disambung ulang. Penanda sekarang baru diset saat putus dikonfirmasi.
+- **Ganti bahasa langsung berlaku di seluruh layar.** Bahasa dulu disimpan
+  sebagai variabel global biasa: layar hanya kebagian render ulang kalau
+  kebetulan ada state lain berubah, jadi setengah UI tertinggal di bahasa
+  lama. Sekarang bahasa adalah state Compose yang dilangganan `xy()`/`t()`.
+- **Sisa teks satu bahasa dibereskan** (dua bahasa penuh): judul drawer,
+  dialog hapus kredensial, dialog sertifikat (Tolak) & NLA (Username/
+  Password/Masuk/Batal), overlay error (Detail/Tutup/Batal), status panel
+  ("Terhubung" / "menunggu server"), skala tampilan, deteksi bandwidth,
+  haptic, kecepatan scroll, info inti, log error, hint kirim teks, dan
+  typo "kal mau" diganti "kamu mau" (3 tempat).
+- **Ikon seksi Keamanan** tidak lagi kembar dengan Tentang (kini perisai
+  XyShield, gaya garis yang sama).
+- **Notifikasi sesi** memakai ikon XyDesk sendiri (dulu ikon sistem panah
+  upload), teksnya dua bahasa, dan tidak lagi kehilangan nama perangkat
+  saat app pindah ke latar.
+- **Status akses "semua file"** di layar perangkat kini dicek ulang saat
+  kembali dari Setelan — dulu selalu tampil "terbatas" walau izin baru
+  saja diberikan.
+- **Pesan error unreachable** tidak lagi menyuruh "Coba Cloud RDP" — fitur
+  itu sudah dihapus sejak v0.3.
+- **Pembersihan**: parameter mati di `DevicesScreen`, composable
+  `KeyListHeader` yang tak terpakai, baris no-op di chip akun tersimpan,
+  dan trik `if (tick < 0)` di layar Kredensial diganti `remember(tick)`.
+
+## English summary (v0.5.6)
+
+Round 7 fixes the root causes, not just cosmetics: the device key was lost
+across the connect intent so every per-device option (audio, mic, gateway,
+UDP, H.264, clipboard, drive, resolution, rotation, scale, HUD layout) was
+silently ignored; cancelling the disconnect confirmation permanently killed
+auto-reconnect; language switches only half-applied because language was
+plain global state instead of Compose state; remaining Indonesian-only
+strings are bilingual now; the session notification got the app's own icon
+and keeps the device label in background; all-files access status refreshes
+on resume; dead code removed.
+
 ## Catatan rilis v0.5.5
 
 Ronde 6 lanjutan — yang masih setengah jalan dibereskan:
