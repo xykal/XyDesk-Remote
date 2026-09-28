@@ -108,8 +108,8 @@ fun AddDeviceScreen(
     var resolutionIndex by remember(deviceId) {
         mutableStateOf(
             if (deviceId == null) 0
-            else DisplayPrefs.resolutions.indexOfFirst {
-                it.first == DisplayPrefs.resolution(context, deviceId)
+            else DisplayPrefs.resolutionOptions.indexOfFirst {
+                it.value == DisplayPrefs.resolution(context, deviceId)
             }.coerceAtLeast(0)
         )
     }
@@ -172,7 +172,11 @@ fun AddDeviceScreen(
             },
         )
         finalOptions.write(context, profile.id)
-        DisplayPrefs.setResolution(context, profile.id, DisplayPrefs.resolutions[resolutionIndex].first)
+        DisplayPrefs.setResolution(
+            context,
+            profile.id,
+            DisplayPrefs.resolutionOptions[resolutionIndex].value,
+        )
         DisplayPrefs.setRotation(context, profile.id, DisplayPrefs.rotations[rotationIndex])
         DisplayPrefs.setDpi(context, profile.id, dpi)
         onSubmit(profile, rememberPass, connect)
@@ -208,7 +212,7 @@ fun AddDeviceScreen(
                     value = host,
                     onValueChange = { host = it.trim() },
                     label = xy("Host / IP / tailnet", "Host / IP / tailnet"),
-                    hint = "192.168.1.10 atau pc.tailnet.ts.net",
+                    hint = xy("192.168.1.10 atau pc.tailnet.ts.net", "192.168.1.10 or pc.tailnet.ts.net"),
                     keyboardType = KeyboardType.Uri,
                 )
                 Spacer(Modifier.height(14.dp))
@@ -253,7 +257,10 @@ fun AddDeviceScreen(
                     value = user,
                     onValueChange = { user = it },
                     label = xy("Username", "Username"),
-                    hint = "kosongkan kalau mau ditanya saat connect",
+                    hint = xy(
+                            "kosongkan kalau mau ditanya saat connect",
+                            "leave empty to be asked on connect",
+                        ),
                 )
                 Spacer(Modifier.height(14.dp))
                 XyField(
@@ -289,12 +296,12 @@ fun AddDeviceScreen(
                 )
                 Spacer(Modifier.height(8.dp))
                 Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                    DisplayPrefs.resolutions.chunked(2).forEachIndexed { rowIndex, row ->
+                    DisplayPrefs.resolutionOptions.chunked(2).forEachIndexed { rowIndex, row ->
                         Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                            row.forEachIndexed { colIndex, (_, title) ->
+                            row.forEachIndexed { colIndex, option ->
                                 val index = rowIndex * 2 + colIndex
                                 XyPillButton(
-                                    text = title,
+                                    text = xy(option.id, option.en),
                                     onClick = { resolutionIndex = index },
                                     primary = index == resolutionIndex,
                                     compact = true,
@@ -332,8 +339,12 @@ fun AddDeviceScreen(
                     steps = 11,
                 )
                 Text(
-                    "Resolusi & skala diterapkan saat sesi dibuka; mengubahnya " +
-                        "menyambungkan ulang sesi dengan ukuran baru.",
+                    xy(
+                        "Resolusi & skala diterapkan saat sesi dibuka; mengubahnya " +
+                            "menyambungkan ulang sesi dengan ukuran baru.",
+                        "Resolution & scale apply when the session opens; changing " +
+                            "them reconnects with the new size.",
+                    ),
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
@@ -362,9 +373,9 @@ fun AddDeviceScreen(
                             verticalAlignment = Alignment.CenterVertically,
                         ) {
                             Column(Modifier.weight(1f)) {
-                                Text(mode.title, style = MaterialTheme.typography.titleSmall)
+                                Text(xy(mode.title, mode.titleEn), style = MaterialTheme.typography.titleSmall)
                                 Text(
-                                    mode.detail,
+                                    xy(mode.detail, mode.detailEn),
                                     style = MaterialTheme.typography.bodySmall,
                                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                                 )
@@ -410,8 +421,11 @@ fun AddDeviceScreen(
             XyCard {
                 XyToggleRow(
                     title = xy("Transport UDP", "UDP transport"),
-                    subtitle = "RDP-UDP + FEC; lebih halus untuk gerakan cepat, " +
-                        "butuh dukungan server",
+                    subtitle = xy(
+                        "RDP-UDP + FEC; lebih halus untuk gerakan cepat, " +
+                            "butuh dukungan server",
+                        "RDP-UDP + FEC; smoother fast motion, needs server support",
+                    ),
                     checked = options.udpTransport,
                     onCheckedChange = { options = options.copy(udpTransport = it) },
                     leading = XyIcons.Wifi,
@@ -424,8 +438,11 @@ fun AddDeviceScreen(
                     leading = XyIcons.Sliders,
                 )
                 XyToggleRow(
-                    title = "H.264 / RemoteFX (GFX)",
-                    subtitle = "Wajib untuk konten bergerak; matikan kalau remote lama",
+                    title = xy("H.264 / RemoteFX (GFX)", "H.264 / RemoteFX (GFX)"),
+                    subtitle = xy(
+                        "Wajib untuk konten bergerak; matikan kalau remote lama",
+                        "Required for moving content; turn off for an old remote",
+                    ),
                     checked = options.h264,
                     onCheckedChange = { options = options.copy(h264 = it) },
                     leading = XyIcons.Grid,
@@ -527,9 +544,9 @@ private fun StorageAccessRow() {
     ) {
         Text(
             if (granted) {
-                "Akses penuh: seluruh isi HP terbaca remote"
+                xy("Akses penuh: seluruh isi HP terbaca remote", "Full access: the remote reads all phone storage")
             } else {
-                "Akses terbatas: hanya folder app yang terbaca remote"
+                xy("Akses terbatas: hanya folder app yang terbaca remote", "Limited access: only the app folder is visible to the remote")
             },
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,

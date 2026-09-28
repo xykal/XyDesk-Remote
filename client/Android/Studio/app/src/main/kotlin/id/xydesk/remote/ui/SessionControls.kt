@@ -285,7 +285,10 @@ fun SessionControls(
         if (textOpen) {
             XyOverlay(title = xy("Kirim teks", "Send text"), onDismiss = { textOpen = false }) {
                 Text(
-                    "Teks dikirim sebagai unicode ke jendela remote yang sedang fokus.",
+                    xy(
+                        "Teks dikirim sebagai unicode ke jendela remote yang sedang fokus.",
+                        "Text is sent as unicode to the focused remote window.",
+                    ),
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     fontSize = 11.sp,
                 )
@@ -495,7 +498,8 @@ private fun PanelHandle(
         ) {
             Icon(
                 if (checksLeft) XyIcons.ChevronRight else XyIcons.ChevronLeft,
-                contentDescription = if (checksLeft) "Buka panel kiri" else "Buka panel kanan",
+                contentDescription = if (checksLeft) xy("Buka panel kiri", "Open left panel")
+                    else xy("Buka panel kanan", "Open right panel"),
                 tint = HudInk,
                 modifier = Modifier.size(17.dp),
             )
@@ -716,8 +720,12 @@ private fun SessionPanel(
                         onCheckedChange = onKeyboardShownChange,
                     )
                     PanelHint(
-                        "Mengetik lewat keyboard HP. Untuk membuka cepat, pasang " +
-                            "tombol HUD \"Buka keyboard\".",
+                        xy(
+                            "Mengetik lewat keyboard HP. Untuk membuka cepat, pasang " +
+                                "tombol HUD \"Buka keyboard\".",
+                            "Typing uses the phone keyboard. For quick access, add a \"Show " +
+                                "keyboard\" HUD button.",
+                        ),
                     )
                     XyPillButton(
                         xy("Kirim teks ke remote", "Send text to remote"),
@@ -770,14 +778,21 @@ private fun SessionPanel(
                         checked = pointerVisible,
                         onCheckedChange = onPointerVisibilityChange,
                     )
-                    PanelHint("Bentuk pointer mengikuti kursor yang dikirim server (panah, tangan, I-beam).")
+                    PanelHint(
+                        xy(
+                            "Bentuk pointer mengikuti kursor yang dikirim server (panah, tangan, I-beam).",
+                            "Pointer shape follows the cursor sent by the server (arrow, hand, I-beam).",
+                        ),
+                    )
                     XySegmented(
                         options = PointerStyle.entries.map { xy(it.title, it.titleEn) },
                         selectedIndex = pointerStyle.ordinal,
                         onSelect = { onPointerStyle(PointerStyle.entries[it]) },
                         modifier = Modifier.fillMaxWidth(),
                     )
-                    PanelHint("Ukuran cadangan: ${pointerSize.toInt()} dp")
+                    PanelHint(
+                        xy("Ukuran cadangan: {0} dp", "Fallback size: {0} dp", pointerSize.toInt()),
+                    )
                     XySlider(value = pointerSize, onValueChange = onPointerSize, valueRange = 10f..52f)
                 }
 
@@ -785,11 +800,19 @@ private fun SessionPanel(
                 PanelSection(xy("Tombol kontrol ({0})", "Control buttons ({0})", keys.size)) {
                     PanelHint(
                         if (mappingMode) {
-                            "Mode atur posisi MENYALA: geser tombol ke tempat kal, " +
-                                "ketuk tombol untuk ubah aksi/ukuran, lalu tekan Selesai."
+                            xy(
+                                "Mode atur posisi MENYALA: geser tombol ke tempat kal, " +
+                                    "ketuk tombol untuk ubah aksi/ukuran, lalu tekan Selesai.",
+                                "Layout mode is ON: drag buttons where you want them, tap a " +
+                                    "button to change its action/size, then press Done.",
+                            )
                         } else {
-                            "Tombol terkunci: tidak bisa kegeser waktu dipakai. " +
-                                "Tekan \"Atur posisi\" (atau tahan lama satu tombol) untuk memindahkan."
+                            xy(
+                                "Tombol terkunci: tidak bisa kegeser waktu dipakai. " +
+                                    "Tekan \"Atur posisi\" (atau tahan lama satu tombol) untuk memindahkan.",
+                                "Buttons are locked: they cannot move while in use. Press " +
+                                    "\"Edit layout\" (or long-press a button) to move them.",
+                            )
                         },
                     )
                     XyPillButton(
@@ -824,7 +847,12 @@ private fun SessionPanel(
                     )
                     Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
                         if (keys.isEmpty()) {
-                            PanelHint("Belum ada tombol. Tekan \"Tambah tombol\".")
+                            PanelHint(
+                                xy(
+                                    "Belum ada tombol. Tekan \"Tambah tombol\".",
+                                    "No buttons yet. Press \"Add button\".",
+                                ),
+                            )
                         }
                         keys.forEach { key -> KeyRow(key, onEditKey, onDeleteKey) }
                     }
@@ -837,8 +865,12 @@ private fun SessionPanel(
             } else {
                 PanelSection(xy("Ukuran tampilan", "Display size")) {
                     PanelHint(
-                        "Zoom mengubah besar gambar di layar HP, resolusi di " +
-                            "bawah mengubah ukuran desktop remote-nya.",
+                        xy(
+                            "Zoom mengubah besar gambar di layar HP, resolusi di " +
+                                "bawah mengubah ukuran desktop remote-nya.",
+                            "Zoom changes how big the picture is on the phone; the " +
+                                "resolution below changes the remote desktop size.",
+                        ),
                     )
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         XyPillButton(xy("Perkecil", "Zoom out"), onZoomOut, primary = false, compact = true, modifier = Modifier.weight(1f))
@@ -854,21 +886,26 @@ private fun SessionPanel(
                         onCheckedChange = onAutoFitChange,
                     )
                     PanelHint(
-                        "Menyala = seluruh desktop (termasuk taskbar) selalu masuk " +
-                            "layar setiap sesi dibuka atau resolusi berubah.",
+                        xy(
+                            "Menyala = seluruh desktop (termasuk taskbar) selalu masuk " +
+                                "layar setiap sesi dibuka atau resolusi berubah.",
+                            "On = the whole desktop (taskbar included) always fits the " +
+                                "screen whenever a session opens or the resolution changes.",
+                        ),
                     )
                 }
 
                 PanelSection(xy("Resolusi desktop (16:9)", "Remote desktop resolution (16:9)")) {
                     PanelHint(xy("Desktop sekarang: {0}", "Desktop now: {0}", remoteSize))
-                    DisplayPrefs.resolutionGroups.forEach { (groupName, items) ->
-                        PanelHint(groupName)
+                    DisplayPrefs.resolutionGroups.forEach { group ->
+                        PanelHint(xy(group.id, group.en))
                         Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                            items.chunked(2).forEach { row ->
+                            group.items.chunked(2).forEach { row ->
                                 Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                                    row.forEach { (value, title) ->
+                                    row.forEach { option ->
+                                        val value = option.value
                                         XyPillButton(
-                                            text = title,
+                                            text = xy(option.id, option.en),
                                             onClick = { onResolution(value) },
                                             primary = value == resolution,
                                             compact = true,
@@ -900,14 +937,24 @@ private fun SessionPanel(
                         modifier = Modifier.fillMaxWidth(),
                     )
                     PanelHint(
-                        "Resolusi dikirim ke server saat menyambung dan saat diubah " +
-                            "(/size + dynamic resolution). Setelah berubah, tampilan " +
-                            "langsung dimuat ulang supaya semuanya kelihatan.",
+                        xy(
+                            "Resolusi dikirim ke server saat menyambung dan saat diubah " +
+                                "(/size + dynamic resolution). Setelah berubah, tampilan " +
+                                "langsung dimuat ulang supaya semuanya kelihatan.",
+                            "The resolution is sent to the server on connect and whenever " +
+                                "it changes (/size + dynamic resolution). After a change the " +
+                                "view refits so nothing is cut off.",
+                        ),
                     )
                 }
 
                 PanelSection(xy("Sesi & keluar", "Session & exit")) {
-                    PanelHint("Tombol keluar di kanan bawah: dua kali ketuk untuk memutus sesi.")
+                    PanelHint(
+                        xy(
+                            "Tombol keluar di kanan bawah: dua kali ketuk untuk memutus sesi.",
+                            "Exit button at the bottom right: double tap to disconnect.",
+                        ),
+                    )
                     XyPillButton(
                         xy("Ambil screenshot", "Take screenshot"),
                         onScreenshot,
@@ -1017,8 +1064,15 @@ private fun KeyRow(
                 overflow = TextOverflow.Ellipsis,
             )
             Text(
-                "${key.kind.title} · ${key.action.title} · ${key.size.toInt()} dp · " +
-                    "${(key.x * 100).toInt()}%,${(key.y * 100).toInt()}%",
+                xy(
+                    "{0} · {1} · {2} dp · {3}%,{4}%",
+                    "{0} · {1} · {2} dp · {3}%,{4}%",
+                    xy(key.kind.title, key.kind.titleEn),
+                    xy(key.action.title, key.action.titleEn),
+                    key.size.toInt(),
+                    (key.x * 100).toInt(),
+                    (key.y * 100).toInt(),
+                ),
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 fontSize = 10.sp,
                 maxLines = 1,

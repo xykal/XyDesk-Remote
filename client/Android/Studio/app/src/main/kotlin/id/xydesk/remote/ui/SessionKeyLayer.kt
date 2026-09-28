@@ -342,7 +342,7 @@ fun HudKeyPicker(
             verticalArrangement = Arrangement.spacedBy(10.dp),
         ) {
             Text(
-                "TAMBAH TOMBOL",
+                xy("TAMBAH TOMBOL", "ADD BUTTON"),
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 fontSize = 10.sp,
                 letterSpacing = 1.3.sp,
@@ -352,7 +352,7 @@ fun HudKeyPicker(
                 Modifier.horizontalScroll(rememberScrollState()),
                 horizontalArrangement = Arrangement.spacedBy(6.dp),
             ) {
-                HudKeyCatalog.groups.forEach { (name, _) ->
+                HudKeyCatalog.groups.forEach { (name, nameEn, _) ->
                     val active = name == group
                     Box(
                         Modifier
@@ -367,7 +367,7 @@ fun HudKeyPicker(
                             .padding(horizontal = 10.dp, vertical = 6.dp),
                     ) {
                         Text(
-                            name,
+                            xy(name, nameEn),
                             color = if (active) MaterialTheme.colorScheme.onSurface
                             else MaterialTheme.colorScheme.onSurfaceVariant,
                             fontSize = 11.sp,
@@ -375,7 +375,7 @@ fun HudKeyPicker(
                     }
                 }
             }
-            val items = HudKeyCatalog.groups.firstOrNull { it.first == group }?.second.orEmpty()
+            val items = HudKeyCatalog.groups.firstOrNull { it.first == group }?.third.orEmpty()
             Column(
                 Modifier
                     .height(250.dp)
@@ -399,7 +399,7 @@ fun HudKeyPicker(
                                 contentAlignment = Alignment.Center,
                             ) {
                                 Text(
-                                    item.label,
+                                    xy(item.label, item.labelEn),
                                     color = MaterialTheme.colorScheme.onSurface,
                                     fontSize = 11.5.sp,
                                     maxLines = 1,
@@ -458,7 +458,7 @@ fun HudKeyEditor(
             verticalArrangement = Arrangement.spacedBy(10.dp),
         ) {
             Text(
-                "UBAH TOMBOL",
+                xy("UBAH TOMBOL", "EDIT BUTTON"),
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 fontSize = 10.sp,
                 letterSpacing = 1.3.sp,
@@ -483,7 +483,7 @@ fun HudKeyEditor(
                 }
             }
             Text(
-                "Jenis: ${key.kind.title}",
+                xy("Jenis: {0}", "Type: {0}", xy(key.kind.title, key.kind.titleEn)),
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 fontSize = 11.sp,
             )
@@ -496,18 +496,18 @@ fun HudKeyEditor(
             )
             Text(xy("Cara pakai", "How it works"), color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 11.sp)
             XySegmented(
-                options = HudAction.entries.map { it.title },
+                options = HudAction.entries.map { xy(it.title, it.titleEn) },
                 selectedIndex = key.action.ordinal,
                 onSelect = { onChange(key.copy(action = HudAction.entries[it])) },
                 modifier = Modifier.fillMaxWidth(),
             )
             Text(
-                HudAction.entries[key.action.ordinal].detail,
+                xy(HudAction.entries[key.action.ordinal].detail, HudAction.entries[key.action.ordinal].detailEn),
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 fontSize = 10.5.sp,
             )
             Text(
-                "Ukuran: ${key.size.toInt()} dp",
+                xy("Ukuran: {0} dp", "Size: {0} dp", key.size.toInt()),
                 color = MaterialTheme.colorScheme.onSurface,
                 fontSize = 11.sp,
             )
@@ -517,8 +517,12 @@ fun HudKeyEditor(
                 valueRange = 28f..120f,
             )
             Text(
-                "Posisi: ${(key.x * 100).toInt()}% , ${(key.y * 100).toInt()}% — " +
-                    "geser tombolnya langsung di layar untuk memindah.",
+                xy(
+                    "Posisi: {0}% , {1}% — geser tombolnya langsung di layar untuk memindah.",
+                    "Position: {0}% , {1}% — drag the button on screen to move it.",
+                    (key.x * 100).toInt(),
+                    (key.y * 100).toInt(),
+                ),
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 fontSize = 10.5.sp,
             )

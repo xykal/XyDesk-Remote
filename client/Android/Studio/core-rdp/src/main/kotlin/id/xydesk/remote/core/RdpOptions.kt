@@ -7,10 +7,25 @@ import android.content.Context
  * lewat query URI (lihat [RdpUri]) — jadi tiap toggle di UI benar-benar
  * mengubah perilaku native, bukan dekorasi.
  */
-enum class XyAudioMode(val wire: Int, val title: String, val detail: String) {
-    DEVICE(0, "Putar di perangkat ini", "Audio dari remote keluar di speaker HP"),
-    REMOTE(1, "Putar di komputer remote", "Audio tetap di server (hemat bandwidth)"),
-    OFF(2, "Matikan audio", "Tidak ada kanal audio"),
+enum class XyAudioMode(
+    val wire: Int,
+    val title: String,
+    val detail: String,
+    val titleEn: String = title,
+    val detailEn: String = detail,
+) {
+    DEVICE(
+        0, "Putar di perangkat ini", "Audio dari remote keluar di speaker HP",
+        "Play on this device", "Remote audio comes out of the phone speaker",
+    ),
+    REMOTE(
+        1, "Putar di komputer remote", "Audio tetap di server (hemat bandwidth)",
+        "Play on the remote computer", "Audio stays on the server (saves bandwidth)",
+    ),
+    OFF(
+        2, "Matikan audio", "Tidak ada kanal audio",
+        "Mute audio", "No audio channel at all",
+    ),
 }
 
 /** RDP Gateway (RD Gateway). Port default 443. */

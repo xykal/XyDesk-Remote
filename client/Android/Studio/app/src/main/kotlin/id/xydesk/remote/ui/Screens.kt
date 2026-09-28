@@ -92,7 +92,13 @@ private fun DisplaySection(
 ) {
     val context = LocalContext.current
     if (favorites.isEmpty()) {
-        EmptyHint(xy("Belum ada perangkat", "No devices yet"), "Tambahkan perangkat dulu, lalu atur tampilannya di sini.")
+        EmptyHint(
+            title = xy("Belum ada perangkat", "No devices yet"),
+            body = xy(
+                "Tambahkan perangkat dulu, lalu atur tampilannya di sini.",
+                "Add a device first, then set its display options here.",
+            ),
+        )
         return
     }
     var index by remember { mutableIntStateOf(0) }
@@ -138,11 +144,12 @@ private fun DisplaySection(
             XySectionLabel(xy("Resolusi desktop remote", "Remote desktop resolution"))
             Spacer(Modifier.height(8.dp))
             Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                DisplayPrefs.resolutions.chunked(2).forEachIndexed { rowIndex, row ->
+                DisplayPrefs.resolutionOptions.chunked(2).forEachIndexed { rowIndex, row ->
                     Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                        row.forEachIndexed { colIndex, (value, title) ->
+                        row.forEachIndexed { colIndex, option ->
+                            val value = option.value
                             XyPillButton(
-                                text = title,
+                                text = xy(option.id, option.en),
                                 onClick = {
                                     resolution = value
                                     DisplayPrefs.setResolution(context, profile.id, value)
@@ -184,8 +191,12 @@ private fun DisplaySection(
                 steps = 11,
             )
             Text(
-                "Resolusi & orientasi dipakai saat sesi dibuka. Skala bisa diubah " +
-                    "langsung dari panel sesi tanpa memutus koneksi.",
+                xy(
+                    "Resolusi & orientasi dipakai saat sesi dibuka. Skala bisa diubah " +
+                        "langsung dari panel sesi tanpa memutus koneksi.",
+                    "Resolution & orientation apply when the session opens. Scale can be " +
+                        "changed straight from the session panel without dropping the connection.",
+                ),
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
@@ -218,8 +229,12 @@ private fun CredentialsSection(
         XySectionLabel(xy("Password tersimpan", "Saved passwords"))
         XyCard {
             Text(
-                "Password dienkripsi AES-256-GCM; kuncinya tidak bisa keluar dari " +
-                    "Android Keystore perangkat ini.",
+                xy(
+                    "Password dienkripsi AES-256-GCM; kuncinya tidak bisa keluar dari " +
+                        "Android Keystore perangkat ini.",
+                    "Passwords are encrypted with AES-256-GCM; the key cannot leave this " +
+                        "device's Android Keystore.",
+                ),
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
@@ -243,8 +258,11 @@ private fun CredentialsSection(
                             )
                             Text(
                                 buildString {
-                                    append(profile.username ?: "tanpa username")
-                                    append(if (remembered) "  ·  password tersimpan" else "  ·  password tidak disimpan")
+                                    append(profile.username ?: xy("tanpa username", "no username"))
+                                    append(
+                                        if (remembered) xy("  ·  password tersimpan", "  ·  password saved")
+                                        else xy("  ·  password tidak disimpan", "  ·  password not saved"),
+                                    )
                                 },
                                 style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -346,7 +364,10 @@ private fun GeneralSection(appPrefs: AppPrefs, onShowLog: () -> Unit) {
             Spacer(Modifier.height(6.dp))
             XyToggleRow(
                 title = xy("Putuskan sesi saat app ke background", "Disconnect when app goes background"),
-                subtitle = "Cegah sesi menggantung saat HP dipakai untuk hal lain",
+                subtitle = xy(
+                    "Cegah sesi menggantung saat HP dipakai untuk hal lain",
+                    "Avoid a dangling session while the phone does something else",
+                ),
                 checked = autoDisconnect,
                 onCheckedChange = {
                     autoDisconnect = it
@@ -377,7 +398,7 @@ private fun GeneralSection(appPrefs: AppPrefs, onShowLog: () -> Unit) {
             Text(xy("Pointer", "Pointer"), style = MaterialTheme.typography.titleSmall)
             Spacer(Modifier.height(8.dp))
             XySegmented(
-                options = PointerStyle.entries.map { it.title },
+                options = PointerStyle.entries.map { xy(it.title, it.titleEn) },
                 selectedIndex = pointerStyle,
                 onSelect = {
                     pointerStyle = it
@@ -387,7 +408,7 @@ private fun GeneralSection(appPrefs: AppPrefs, onShowLog: () -> Unit) {
             )
             Spacer(Modifier.height(10.dp))
             Text(
-                "Ukuran pointer: ${pointerSize.toInt()} dp",
+                xy("Ukuran pointer: {0} dp", "Pointer size: {0} dp", pointerSize.toInt()),
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
@@ -427,18 +448,29 @@ private fun GeneralSection(appPrefs: AppPrefs, onShowLog: () -> Unit) {
         XySectionLabel(xy("Tombol HUD", "HUD buttons"))
         XyCard {
             Text(
-                "Setiap tombol di layar sesi berdiri sendiri: bentuknya bulat " +
-                    "penuh, bisa digeser bebas, ukurannya diatur, dan aksinya " +
-                    "dipilih per tombol (sekali klik / tahan / toggle). Tombol " +
-                    "bawaan di bawah ini menentukan set awal untuk perangkat " +
-                    "yang belum pernah diubah; setelah itu daftar tombolnya " +
-                    "diatur langsung dari panel kanan di layar sesi.",
+                xy(
+                    "Setiap tombol di layar sesi berdiri sendiri: bentuknya bulat " +
+                        "penuh, ukurannya diatur, dan aksinya dipilih per tombol " +
+                        "(sekali klik / tahan / toggle). Geser tombol hanya saat " +
+                        "mode \"Atur posisi\" menyala, supaya tidak kepencet waktu dipakai. " +
+                        "Tombol bawaan di bawah ini menentukan set awal untuk perangkat " +
+                        "yang belum pernah diubah.",
+                    "Every on-screen button stands alone: fully round, its size is " +
+                        "configurable, and each one has its own action (single tap / " +
+                        "hold / toggle). Dragging only works while \"Edit layout\" is on, " +
+                        "so buttons cannot move by accident while you use them. The " +
+                        "defaults below seed devices that were never customised.",
+                ),
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
             Spacer(Modifier.height(8.dp))
             Text(
-                "Ukuran tombol bawaan: ${(clusterScale * 100).toInt()}%",
+                xy(
+                    "Ukuran tombol bawaan: {0}%",
+                    "Default button size: {0}%",
+                    (clusterScale * 100).toInt(),
+                ),
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
@@ -472,13 +504,19 @@ private fun GeneralSection(appPrefs: AppPrefs, onShowLog: () -> Unit) {
             )
             XyToggleRow(
                 title = xy("Tombol ganti mode input", "Input-mode switch button"),
-                subtitle = "Pindah trackpad <-> sentuh langsung dari layar sesi",
+                subtitle = xy(
+                    "Pindah trackpad <-> sentuh langsung dari layar sesi",
+                    "Switch trackpad <-> direct touch from the session screen",
+                ),
                 checked = showSwitch,
                 onCheckedChange = { showSwitch = it; prefs.showSwitch = it },
             )
             Spacer(Modifier.height(6.dp))
             Text(
-                "Posisi cluster diatur dengan menyeretnya langsung di layar sesi.",
+                xy(
+                    "Posisi cluster diatur dengan menyeretnya langsung di layar sesi.",
+                    "Cluster position is set by dragging it on the session screen.",
+                ),
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
@@ -487,9 +525,14 @@ private fun GeneralSection(appPrefs: AppPrefs, onShowLog: () -> Unit) {
         XySectionLabel(xy("Keyboard", "Keyboard"))
         XyCard {
             Text(
-                "Mengetik memakai keyboard HP (IME). Tidak ada keyboard virtual " +
-                    "bawaan app dan tidak ada toolbar di atas keyboard: semua " +
-                    "kontrol dibuat dari tombol overlay satu-satu di layar sesi.",
+                xy(
+                    "Mengetik memakai keyboard HP (IME). Tidak ada keyboard virtual " +
+                        "bawaan app dan tidak ada toolbar di atas keyboard: semua " +
+                        "kontrol dibuat dari tombol overlay satu-satu di layar sesi.",
+                    "Typing uses the phone keyboard (IME). There is no built-in " +
+                        "virtual keyboard and no toolbar above it: every control is a " +
+                        "separate overlay button on the session screen.",
+                ),
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
@@ -504,11 +547,18 @@ private fun GeneralSection(appPrefs: AppPrefs, onShowLog: () -> Unit) {
 
         XySectionLabel(xy("Keyboard & HUD", "Keyboard & HUD"))
         XyCard {
-            Text("Ukuran tombol kontrol HUD: ${hudSize.toInt()} dp", style = MaterialTheme.typography.bodyMedium)
+            Text(
+                xy("Ukuran tombol kontrol HUD: {0} dp", "HUD button size: {0} dp", hudSize.toInt()),
+                style = MaterialTheme.typography.bodyMedium,
+            )
             Spacer(Modifier.height(4.dp))
             Text(
-                "Tombol kontrol selalu bulat penuh; angka ini sama dengan " +
-                    "diameternya (radius = setengah).",
+                xy(
+                    "Tombol kontrol selalu bulat penuh; angka ini sama dengan " +
+                        "diameternya (radius = setengah).",
+                    "HUD buttons are always fully round; this number is the diameter " +
+                        "(radius = half).",
+                ),
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
@@ -541,8 +591,12 @@ private fun GeneralSection(appPrefs: AppPrefs, onShowLog: () -> Unit) {
         XySectionLabel(xy("Transport (default perangkat baru)", "Transport (new device defaults)"))
         XyCard {
             Text(
-                "Nilai ini dipakai saat menambah perangkat baru. Perangkat yang " +
-                    "sudah ada tetap diatur sendiri di layar Ubah perangkat.",
+                xy(
+                    "Nilai ini dipakai saat menambah perangkat baru. Perangkat yang " +
+                        "sudah ada tetap diatur sendiri di layar Ubah perangkat.",
+                    "These values are used when adding a new device. Existing devices " +
+                        "keep their own settings on the Edit device screen.",
+                ),
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
@@ -586,8 +640,12 @@ private fun GeneralSection(appPrefs: AppPrefs, onShowLog: () -> Unit) {
         XySectionLabel(xy("Masalah koneksi", "Connection issues"))
         XyCard {
             Text(
-                "Audio, mikrofon, clipboard, drive, kamera, dan gateway diatur " +
-                    "per perangkat di layar Tambah/Ubah perangkat.",
+                xy(
+                    "Audio, mikrofon, clipboard, drive, kamera, dan gateway diatur " +
+                        "per perangkat di layar Tambah/Ubah perangkat.",
+                    "Audio, microphone, clipboard, drive, camera and gateway are set " +
+                        "per device on the Add/Edit device screen.",
+                ),
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
@@ -626,17 +684,25 @@ private fun SecuritySection() {
     ) {
         XySectionLabel(xy("Penyimpanan kredensial", "Credential storage"))
         XyCard {
-            Bullet("Password: AES-256-GCM, kunci non-exportable di Android Keystore")
-            Bullet("Password tidak pernah masuk log aplikasi atau URI yang ditulis ke log")
-            Bullet("Backup & transfer data app dimatikan (allowBackup=false)")
-            Bullet("Tidak ada kredensial yang dikirim ke layanan pihak ketiga")
+            Bullet(xy("Password: AES-256-GCM, kunci non-exportable di Android Keystore",
+                "Passwords: AES-256-GCM, non-exportable key in the Android Keystore"))
+            Bullet(xy("Password tidak pernah masuk log aplikasi atau URI yang ditulis ke log",
+                "Passwords never end up in app logs or in logged URIs"))
+            Bullet(xy("Backup & transfer data app dimatikan (allowBackup=false)",
+                "App backup & transfer are disabled (allowBackup=false)"))
+            Bullet(xy("Tidak ada kredensial yang dikirim ke layanan pihak ketiga",
+                "No credentials are sent to any third-party service"))
         }
         XySectionLabel(xy("Sertifikat server yang dipercaya", "Trusted server certificates"))
         XyCard {
             if (entries.isEmpty()) {
                 Text(
-                    "Belum ada sertifikat yang ditandai percaya. Sertifikat hanya " +
-                        "diingat kalau kamu menekan \"Percaya & ingat\" saat connect.",
+                    xy(
+                        "Belum ada sertifikat yang ditandai percaya. Sertifikat hanya " +
+                            "diingat kalau kamu menekan \"Percaya & ingat\" saat connect.",
+                        "No certificate has been trusted yet. A certificate is only " +
+                            "remembered when you press \"Trust & remember\" while connecting.",
+                    ),
                     style = MaterialTheme.typography.bodyMedium,
                 )
             } else {
@@ -717,7 +783,7 @@ private fun AboutSection() {
             XyRow(title = t("about.version"), subtitle = appVersionName(context))
             XyRow(
                 title = t("about.engine"),
-                subtitle = native ?: "FreeRDP (dimuat saat connect)",
+                subtitle = native ?: xy("FreeRDP (dimuat saat connect)", "FreeRDP (loaded on connect)"),
             )
             XyRow(title = t("about.developer"), subtitle = xy("XyVerse / xykal", "XyVerse / xykal"))
         }
@@ -746,9 +812,14 @@ private fun AboutSection() {
 
         XyCard {
             Text(
-                "XyDesk Remote dibangun di atas FreeRDP (Apache License 2.0). " +
-                    "Kode aplikasi milik XyVerse. Daftar perubahan terhadap tree " +
-                    "FreeRDP ada di XYDESK-REMOTE-NOTICE.md.",
+                xy(
+                    "XyDesk Remote dibangun di atas FreeRDP (Apache License 2.0). " +
+                        "Kode aplikasi milik XyVerse. Daftar perubahan terhadap tree " +
+                        "FreeRDP ada di XYDESK-REMOTE-NOTICE.md.",
+                    "XyDesk Remote is built on FreeRDP (Apache License 2.0). The app " +
+                        "code belongs to XyVerse. The list of changes to the FreeRDP " +
+                        "tree is in XYDESK-REMOTE-NOTICE.md.",
+                ),
                 style = MaterialTheme.typography.bodyMedium,
             )
             Spacer(Modifier.height(12.dp))

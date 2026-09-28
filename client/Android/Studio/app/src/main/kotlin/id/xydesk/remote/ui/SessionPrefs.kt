@@ -95,7 +95,12 @@ class SessionPrefs(context: Context) {
         get() = input.getBoolean(KEY_AUTO_RECONNECT, true)
         set(v) = input.edit().putBoolean(KEY_AUTO_RECONNECT, v).apply()
 
-    /** Pengali kecepatan scroll (1.0 = satu notch per 40px geser). */
+    /** Petunjuk pertama dipakai sekali saja: jelaskan cara memindah tombol. */
+    var hudTipShown: Boolean
+        get() = input.getBoolean(KEY_HUD_TIP, false)
+        set(v) = input.edit().putBoolean(KEY_HUD_TIP, v).apply()
+
+    /** Pengali kecepatan scroll (1.0 = one notch per 40px drag). */
     var scrollSpeed: Float
         get() = input.getFloat(KEY_SCROLL_SPEED, 1f).coerceIn(0.4f, 2.5f)
         set(v) = input.edit().putFloat(KEY_SCROLL_SPEED, v.coerceIn(0.4f, 2.5f)).apply()
@@ -225,6 +230,7 @@ class SessionPrefs(context: Context) {
         private const val KEY_POINTER_SIZE = "pointer_size"
         private const val KEY_POINTER_FOLLOW = "pointer_follow"
     private const val KEY_AUTO_RECONNECT = "auto_reconnect"
+    private const val KEY_HUD_TIP = "hud_tip"
     private const val KEY_HUD_PLATE = "hud_plate"
         private const val KEY_KEYBOARD_CORNER = "keyboard_corner"
         private const val KEY_AUTO_FIT = "auto_fit"
@@ -272,17 +278,23 @@ object DisplayPrefs {
      * benar-benar dipakai user adalah 16:9. "Otomatis" = ukuran area gambar
      * di HP, "16:9 pas layar" = 16:9 standar terbesar yang muat di layar HP.
      */
-    val resolutionGroups: List<Pair<String, List<Pair<String, String>>>> = listOf(
-        "Otomatis" to listOf(
-            AUTOMATIC to "Layar HP (otomatis)",
-            SMART_16_9 to "16:9 pas layar",
+    val resolutionGroups: List<ResolutionGroup> = listOf(
+        ResolutionGroup(
+            "Otomatis", "Automatic",
+            listOf(
+                ResolutionOption(AUTOMATIC, "Layar HP (otomatis)", "Phone screen (automatic)"),
+                ResolutionOption(SMART_16_9, "16:9 pas layar", "16:9 fit to screen"),
+            ),
         ),
-        "16:9 standar" to listOf(
-            "1280x720" to "HD 720",
-            "1600x900" to "900p",
-            "1920x1080" to "FHD 1080",
-            "2560x1440" to "QHD 1440",
-            "3840x2160" to "4K 2160",
+        ResolutionGroup(
+            "16:9 standar", "16:9 standard",
+            listOf(
+                ResolutionOption("1280x720", "HD 720", "HD 720"),
+                ResolutionOption("1600x900", "900p", "900p"),
+                ResolutionOption("1920x1080", "FHD 1080", "FHD 1080"),
+                ResolutionOption("2560x1440", "QHD 1440", "QHD 1440"),
+                ResolutionOption("3840x2160", "4K 2160", "4K 2160"),
+            ),
         ),
     )
 
@@ -294,9 +306,16 @@ object DisplayPrefs {
         "1440x2560" to "1440x2560",
     )
 
-    /** Daftar datar (dipakai layar perangkat / tempat lain yang butuh list). */
+    /**
+     * Daftar datar untuk UI pemilihan (layar perangkat, panel sesi). Cuma 16:9
+     * + dua opsi pintar: rasio lain memang tidak pas di FreeRDP, jadi tidak
+     * ditawarkan supaya tidak ada desktop melar/terpotong.
+     */
+    val resolutionOptions: List<ResolutionOption> = resolutionGroups.flatMap { it.items }
+
+    /** Data lama: daftar (value, label Indonesia). Masih dipakai migrasi/nama. */
     val resolutions: List<Pair<String, String>> =
-        resolutionGroups.flatMap { it.second } + portraitResolutions
+        resolutionOptions.map { it.value to it.id } + portraitResolutions
 
     /**
      * Ubah preset jadi ukuran nyata. SMART_16_9 memilih resolusi 16:9 standar
@@ -316,6 +335,15 @@ object DisplayPrefs {
     }
 
     val rotations = listOf("Auto", "Portrait", "Landscape")
+
+    /** Judul grup/opsi resolusi (dua bahasa, dipakai layar sesi & perangkat). */
+    data class ResolutionGroup(
+        val id: String,
+        val en: String,
+        val items: List<ResolutionOption>,
+    )
+
+    data class ResolutionOption(val value: String, val id: String, val en: String)
 
     /** Validasi "WxH" manual (batas sama dengan SessionManager). */
     fun parseCustom(value: String): String? {

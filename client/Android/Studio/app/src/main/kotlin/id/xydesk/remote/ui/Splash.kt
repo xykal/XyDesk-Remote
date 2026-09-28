@@ -110,7 +110,7 @@ fun XySplashScreen(
                 letterSpacing = 0.4.sp,
             )
             Text(
-                "RDP untuk Windows & Windows Server",
+                xy("RDP untuk Windows & Windows Server", "RDP for Windows & Windows Server"),
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 fontSize = 11.5.sp,
                 textAlign = TextAlign.Center,
@@ -158,6 +158,14 @@ private fun DrawScope.drawMorph(
     if (appear <= 0.01f) return
     val toDesktop = smooth(fadeIn(progress, 0.30f, 0.62f))
     val toServer = smooth(fadeIn(progress, 0.62f, 0.92f))
+    // Jendela tiap fase dibuat tidak tumpang tindih: detail HP hilang dulu,
+    // baru detail desktop muncul, lalu detail desktop hilang dulu sebelum
+    // rak server muncul. Tanpa ini strip taskbar ikut kelihatan di fase
+    // server dan gambarnya jadi seperti dua perangkat menumpuk.
+    val phoneAlpha = appear * (1f - smooth(fadeIn(progress, 0.24f, 0.40f)))
+    val deskAlpha = smooth(fadeIn(progress, 0.26f, 0.42f)) *
+        (1f - smooth(fadeIn(progress, 0.60f, 0.74f)))
+    val srvAlpha = smooth(fadeIn(progress, 0.62f, 0.78f))
 
     fun lerp(a: Float, b: Float, t: Float) = a + (b - a) * t
 
@@ -180,6 +188,15 @@ private fun DrawScope.drawMorph(
         cornerRadius = CornerRadius(r, r),
         style = Stroke(width = 1.6f),
     )
+    // Kilau tipis di tepi atas: bikin bentuknya terbaca sebagai layar, bukan
+    // kotak kosong.
+    drawLine(
+        color = ink.copy(alpha = 0.20f * appear),
+        start = Offset(left + r, top + 1.2f),
+        end = Offset(left + w - r, top + 1.2f),
+        strokeWidth = 1.4f,
+        cap = StrokeCap.Round,
+    )
 
     val pad = unit * 0.026f
     val sx = left + pad
@@ -188,7 +205,6 @@ private fun DrawScope.drawMorph(
     val sh = h - pad * 2f
 
     // --- HP: home bar + kursor
-    val phoneAlpha = (1f - toDesktop) * appear
     if (phoneAlpha > 0.02f) {
         val barW = sw * 0.34f
         drawLine(
@@ -206,11 +222,10 @@ private fun DrawScope.drawMorph(
     }
 
     // --- Desktop: strip taskbar + jendela + kursor
-    val deskAlpha = toDesktop * (1f - toServer)
     if (deskAlpha > 0.02f) {
-        val barH = sh * 0.12f
+        val barH = sh * 0.10f
         drawRect(
-            ink.copy(alpha = 0.16f * deskAlpha),
+            ink.copy(alpha = 0.12f * deskAlpha),
             topLeft = Offset(sx, sy + sh - barH),
             size = Size(sw, barH),
         )
@@ -220,10 +235,10 @@ private fun DrawScope.drawMorph(
             Offset(sx + sw, sy + sh - barH),
             1.4f,
         )
-        val winW = sw * 0.42f
-        val winH = sh * 0.44f
-        val winX = sx + sw * 0.08f
-        val winY = sy + sh * 0.16f
+        val winW = sw * 0.46f
+        val winH = sh * 0.46f
+        val winX = sx + sw * 0.06f
+        val winY = sy + sh * 0.14f
         drawRoundRect(
             color = ink.copy(alpha = 0.18f * deskAlpha),
             topLeft = Offset(winX, winY),
@@ -245,7 +260,6 @@ private fun DrawScope.drawMorph(
     }
 
     // --- Server: slot rak + lampu
-    val srvAlpha = toServer
     if (srvAlpha > 0.02f) {
         val gap = sh * 0.16f
         for (i in 0 until 4) {

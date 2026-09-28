@@ -128,10 +128,13 @@ class XyDeskSessionActivity : ComponentActivity() {
                 label = profile.label ?: "${profile.host}:${profile.port}",
                 address = "${profile.host}:${profile.port}",
                 open = {
-                    startActivity(
-                        Intent(this, XyDeskSessionActivity::class.java)
-                            .addFlags(Intent.FLAG_ACTIVITY_REORDER_TO_FRONT),
-                    )
+                    // Intent lengkap (extras profil) dipakai ulang: kalau
+                    // activity-nya masih hidup ini cuma membawa ke depan,
+                    // kalau sudah mati sesinya bisa dibuka lagi dari awal.
+                    val again = Intent(this, XyDeskSessionActivity::class.java)
+                        .putExtras(intent)
+                        .addFlags(Intent.FLAG_ACTIVITY_REORDER_TO_FRONT)
+                    startActivity(again)
                 },
                 kill = { runOnUiThread { manager.disconnect(); finish() } },
             ),

@@ -157,7 +157,7 @@ fun XyDeskSessionScreen(
     val coreInfo = remember {
         runCatching {
             listOf(
-                "Inti RDP ${manager.freeRdpVersion()}",
+                xyNow("Inti RDP {0}", "RDP engine {0}", manager.freeRdpVersion()),
                 manager.buildInfo().lineSequence().firstOrNull()?.take(120).orEmpty(),
             ).filter { it.isNotBlank() }
         }.getOrDefault(emptyList())
@@ -208,6 +208,21 @@ fun XyDeskSessionScreen(
 
     val remoteWidth = if (telemetry.width > 0) telemetry.width else 1920
     val remoteHeight = if (telemetry.height > 0) telemetry.height else 1080
+
+    // Petunjuk sekali saja: di sesi pertama, jelaskan bahwa tombol terkunci
+    // dan cara memindahkannya (ini yang dulu bikin kontrol terasa "gajelas").
+    LaunchedEffect(profile.id) {
+        if (!prefs.hudTipShown) {
+            prefs.hudTipShown = true
+            kotlinx.coroutines.delay(900)
+            notice.show(
+                xyNow(
+                    "Tombol kontrol terkunci. Tahan lama satu tombol (atau \"Atur posisi\" di panel kanan) untuk memindahkan.",
+                    "Control buttons are locked. Long-press one (or use \"Edit layout\" in the right panel) to move them.",
+                ),
+            )
+        }
+    }
 
     LaunchedEffect(profile.id) {
         rotationFor(context, profile.id).let { mode ->
@@ -547,7 +562,12 @@ fun XyDeskSessionScreen(
                         putExtra(Intent.EXTRA_STREAM, uri)
                         addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
                     }
-                    act.startActivity(Intent.createChooser(send, "Bagikan screenshot"))
+                    act.startActivity(
+                        Intent.createChooser(
+                            send,
+                            xyNow("Bagikan screenshot", "Share screenshot"),
+                        ),
+                    )
                 },
                 onDisconnect = {
                     userDisconnect = true
@@ -717,14 +737,19 @@ fun XyDeskSessionScreen(
     }
     if (!active) err?.let { e ->
         XyOverlay(
-            title = "Koneksi gagal",
+            title = xy("Koneksi gagal", "Connection failed"),
             onDismiss = { onExit() },
         ) {
             Text(e.message, style = MaterialTheme.typography.bodyMedium)
             if (e.code == SessionManager.ERROR_UNREACHABLE) {
                 Text(
-                    "Host tidak menjawab di port RDP. Cek: RDP aktif " +
-                        "(Windows Pro/Server), firewall, dan alamat/tailnet benar.",
+                    xy(
+                        "Host tidak menjawab di port RDP. Cek: RDP aktif " +
+                            "(Windows Pro/Server), firewall, dan alamat/tailnet benar.",
+                        "The host did not answer on the RDP port. Check that RDP is " +
+                            "enabled (Windows Pro/Server), the firewall, and the " +
+                            "address/tailnet.",
+                    ),
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
@@ -738,7 +763,7 @@ fun XyDeskSessionScreen(
                     modifier = Modifier.weight(1f),
                 )
                 XyPillButton(
-                    text = "Reset resolusi",
+                    text = xy("Reset resolusi", "Reset resolution"),
                     onClick = {
                         DisplayPrefs.setResolution(context, profile.id, DisplayPrefs.AUTOMATIC)
                         manager.connect(profile)
@@ -757,7 +782,7 @@ fun XyDeskSessionScreen(
         }
     }
     if (!active && err != null && showLog) {
-        XyOverlay(title = "Log koneksi", onDismiss = { showLog = false }) {
+        XyOverlay(title = xy("Log koneksi", "Connection log"), onDismiss = { showLog = false }) {
             Column(
                 Modifier
                     .fillMaxWidth()
@@ -782,9 +807,9 @@ fun XyDeskSessionScreen(
     }
     if (!active && err == null && confirmDisconnect) {
         XyDialog(
-            title = "Sesi masih aktif",
-            body = "Putuskan sesi sekarang?",
-            confirmLabel = "Putuskan",
+            title = xy("Sesi masih aktif", "Session still active"),
+            body = xy("Putuskan sesi sekarang?", "Disconnect the session now?"),
+            confirmLabel = xy("Putuskan", "Disconnect"),
             onConfirm = {
                 confirmDisconnect = false
                 manager.disconnect()
@@ -808,11 +833,11 @@ private fun stepIndex(stage: SessionManager.Stage): Int = when (stage) {
 }
 
 private val connectSteps = listOf(
-    "Menyiapkan sesi",
-    "Memeriksa jaringan",
-    "Security connect",
-    "Autentikasi (NLA)",
-    "Menyiapkan desktop",
+    "Menyiapkan sesi" to "Preparing session",
+    "Memeriksa jaringan" to "Checking network",
+    "Security connect" to "Security connect",
+    "Autentikasi (NLA)" to "Authentication (NLA)",
+    "Menyiapkan desktop" to "Preparing desktop",
 )
 
 @Composable
@@ -855,7 +880,7 @@ private fun ConnectingScreen(
             )
             Spacer(Modifier.height(26.dp))
             Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                connectSteps.forEachIndexed { index, title ->
+                connectSteps.forEachIndexed { index, (title, titleEn) ->
                     Row(
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.spacedBy(12.dp),
@@ -883,7 +908,7 @@ private fun ConnectingScreen(
                             }
                         }
                         Text(
-                            title,
+                            xy(title, titleEn),
                             color = Color.White.copy(alpha = if (index <= active) 0.96f else 0.72f),
                             fontSize = 14.sp,
                             fontWeight = if (index == active) FontWeight.SemiBold else FontWeight.Normal,
@@ -892,7 +917,7 @@ private fun ConnectingScreen(
                 }
             }
             Spacer(Modifier.height(30.dp))
-            XyPillButton("Batalkan", onCancel, primary = false, compact = true)
+            XyPillButton(xy("Batalkan", "Cancel"), onCancel, primary = false, compact = true)
         }
     }
 }
@@ -912,16 +937,16 @@ private fun DisconnectedScreen(
             horizontalAlignment = Alignment.CenterHorizontally,
         ) {
             Text(
-                "Sesi terputus",
+                xy("Sesi terputus", "Session ended"),
                 color = Color.White,
                 style = MaterialTheme.typography.headlineSmall,
             )
             Spacer(Modifier.height(4.dp))
             Text(deviceLabel, color = Color.White.copy(alpha = 0.78f), fontSize = 13.sp)
             Spacer(Modifier.height(20.dp))
-            XyPillButton("Sambungkan lagi", onReconnect, compact = true)
+            XyPillButton(xy("Sambungkan lagi", "Reconnect"), onReconnect, compact = true)
             Spacer(Modifier.height(8.dp))
-            XyPillButton("Kembali ke home", onExit, primary = false, compact = true)
+            XyPillButton(xy("Kembali ke home", "Back to home"), onExit, primary = false, compact = true)
         }
     }
 }
@@ -1005,7 +1030,11 @@ private fun CertificateDialog(
     onTrustRemember: () -> Unit,
 ) {
     XyOverlay(
-        title = if (info.isChanged) "Sertifikat server berubah" else "Percaya sertifikat server?",
+        title = if (info.isChanged) {
+            xy("Sertifikat server berubah", "Server certificate changed")
+        } else {
+            xy("Percaya sertifikat server?", "Trust server certificate?")
+        },
         onDismiss = null,
     ) {
         Text("${info.host}:${info.port}", style = MaterialTheme.typography.bodyMedium)
@@ -1014,26 +1043,35 @@ private fun CertificateDialog(
         }
         if (info.isMismatch) {
             Text(
-                "PERINGATAN: nama sertifikat tidak cocok dengan host",
+                xy(
+                    "PERINGATAN: nama sertifikat tidak cocok dengan host",
+                    "WARNING: certificate name does not match the host",
+                ),
                 color = MaterialTheme.colorScheme.error,
                 style = MaterialTheme.typography.bodySmall,
             )
         }
         if (info.isChanged) {
             Text(
-                "PERINGATAN: sertifikat berubah dari yang pernah diterima.",
+                xy(
+                    "PERINGATAN: sertifikat berubah dari yang pernah diterima.",
+                    "WARNING: certificate changed from the one accepted before.",
+                ),
                 color = MaterialTheme.colorScheme.error,
                 style = MaterialTheme.typography.bodySmall,
             )
         }
         if (oldFingerprint != null && oldFingerprint != info.fingerprint) {
             Text(
-                "PERINGATAN: sertifikat BERUBAH dari yang pernah kamu percaya.",
+                xy(
+                    "PERINGATAN: sertifikat BERUBAH dari yang pernah kamu percaya.",
+                    "WARNING: the certificate CHANGED from the one you trusted.",
+                ),
                 color = MaterialTheme.colorScheme.error,
                 style = MaterialTheme.typography.bodySmall,
             )
             Text(
-                "Tersimpan : $oldFingerprint",
+                xy("Tersimpan : {0}", "Stored: {0}", oldFingerprint),
                 style = MaterialTheme.typography.bodySmall,
                 fontFamily = FontFamily.Monospace,
             )
@@ -1047,14 +1085,14 @@ private fun CertificateDialog(
             fontFamily = FontFamily.Monospace,
         )
         XyPillButton(
-            text = "Percaya & ingat",
+            text = xy("Percaya & ingat", "Trust & remember"),
             onClick = onTrustRemember,
             compact = true,
             modifier = Modifier.fillMaxWidth(),
         )
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             XyPillButton(
-                text = "Percaya (sekali)",
+                text = xy("Percaya (sekali)", "Trust (once)"),
                 onClick = { onReply(CertificateInfo.VERIFY_ACCEPT) },
                 primary = false,
                 compact = true,
@@ -1079,14 +1117,18 @@ private fun NlaDialog(
     var user by remember { mutableStateOf(p.user ?: "") }
     var domain by remember { mutableStateOf(p.domain ?: "") }
     var pass by remember { mutableStateOf("") }
-    XyOverlay(title = "Masuk ke server", onDismiss = null) {
+    XyOverlay(title = xy("Masuk ke server", "Sign in to server"), onDismiss = null) {
         Text(
-            "Server meminta kredensial (NLA/CredSSP).",
+            xy("Server meminta kredensial (NLA/CredSSP).", "The server asks for credentials (NLA/CredSSP)."),
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
         XyField(value = user, onValueChange = { user = it }, label = "Username")
-        XyField(value = domain, onValueChange = { domain = it }, label = "Domain (opsional)")
+        XyField(
+            value = domain,
+            onValueChange = { domain = it },
+            label = xy("Domain (opsional)", "Domain (optional)"),
+        )
         XyField(
             value = pass,
             onValueChange = { pass = it },

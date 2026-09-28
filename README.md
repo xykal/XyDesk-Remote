@@ -84,6 +84,34 @@ Ronde ini seluruhnya soal input dan kontrol:
 
 Detail teknis: `docs/HUD-BUTTONS.md` (EN) dan `docs/HUD-BUTTONS.id.md` (ID).
 
+## Catatan rilis v0.5.5
+
+Ronde 6 lanjutan — yang masih setengah jalan dibereskan:
+
+- **Bahasa benar-benar jalan.** Sebelumnya cuma sebagian: katalog tombol HUD,
+  daftar resolusi, layar Tambah/Ubah perangkat, layar sesi (dialog sertifikat,
+  NLA, log koneksi, layar putus, langkah koneksi), layar Umum/Keamanan/Tentang,
+  dan splash masih Indonesia saja. Sekarang semuanya dua bahasa lewat `xy()`
+  (composable) / `xyNow()` (di dalam callback & pesan).
+- **Splash diperbaiki.** Fase-fase animasinya dulu tumpang tindih: strip
+  taskbar masih ikut kelihatan waktu bentuknya sudah jadi rak server. Tiap
+  fase sekarang punya jendela waktu sendiri, plus kilau tipis di tepi atas
+  layar. Geometri animasinya saya render ulang jadi gambar
+  (`assets/splash-frames.png`) supaya bisa dicek tanpa HP.
+- **Petunjuk tombol terkunci** muncul sekali di sesi pertama: "tombol terkunci,
+  tahan lama untuk memindahkan" — ini yang dulu bikin kontrol terasa tidak jelas.
+- **"Buka" pada sesi aktif** memakai intent lengkap (extras profil), jadi
+  sesinya bisa dibuka lagi walau activity-nya sudah selesai.
+- **Teks audio** (Putar di perangkat / di remote / matikan) ikut dua bahasa.
+
+## English summary (v0.5.5)
+
+Round 6 continued: full bilingual coverage (HUD catalog, resolution list, add/edit
+device screen, session dialogs, about/security screens, splash), fixed the splash
+morph where phases overlapped (taskbar strip leaking into the server phase), a
+one-time hint explaining locked buttons, and "Open" on active sessions now carries
+the full profile intent.
+
 ## Catatan rilis v0.5.4
 
 Ronde 6 — pembetulan perilaku + identitas XyVerse:

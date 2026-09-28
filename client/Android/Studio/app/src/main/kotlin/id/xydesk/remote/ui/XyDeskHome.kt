@@ -329,7 +329,7 @@ fun XyDeskHome(
             append(bootTail.joinToString("\n"))
         }
         InfoDialog(
-            title = "Log sesi terakhir",
+            title = xy("Log sesi terakhir", "Last session log"),
             body = body,
             onDismiss = { showBoot = false },
         )
@@ -416,7 +416,10 @@ private fun DevicesScreen(
 ) {
     if (crashLog != null) {
         Banner(
-            text = "Terjadi error sebelumnya — ketuk untuk lihat log",
+            text = xy(
+                "Terjadi error sebelumnya — ketuk untuk lihat log",
+                "An error happened before — tap to see the log",
+            ),
             onClick = onShowCrash,
             container = MaterialTheme.colorScheme.errorContainer,
             content = MaterialTheme.colorScheme.onErrorContainer,
@@ -430,7 +433,10 @@ private fun DevicesScreen(
     }
     if (bootSuspect) {
         Banner(
-            text = "Sesi terakhir terhenti di tengah jalan — ketuk untuk lihat log",
+            text = xy(
+                "Sesi terakhir terhenti di tengah jalan — ketuk untuk lihat log",
+                "The last session stopped midway — tap to see the log",
+            ),
             onClick = onShowBoot,
             container = MaterialTheme.colorScheme.surfaceVariant,
             content = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -452,8 +458,12 @@ private fun DevicesScreen(
                 Text(xy("Belum ada perangkat", "No devices yet"), style = MaterialTheme.typography.titleMedium)
                 Spacer(Modifier.height(6.dp))
                 Text(
-                    "Tambahkan PC Windows atau server dengan RDP aktif. " +
-                        "Bisa lewat IP lokal, alamat publik, atau nama tailnet.",
+                    xy(
+                        "Tambahkan PC Windows atau server dengan RDP aktif. " +
+                            "Bisa lewat IP lokal, alamat publik, atau nama tailnet.",
+                        "Add a Windows PC or server with RDP enabled. Works over a " +
+                            "local IP, a public address, or a tailnet name.",
+                    ),
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )

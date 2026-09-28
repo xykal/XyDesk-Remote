@@ -14,22 +14,22 @@ import org.json.JSONObject
  *
  * Semua tombol disimpan per perangkat (layar sesi bisa beda-beda layout).
  */
-enum class HudAction(val title: String, val detail: String) {
-    TAP("Sekali klik", "Tekan lalu lepas"),
-    HOLD("Tahan", "Aktif selama ditahan (drag, pilih banyak)"),
-    TOGGLE("Toggle", "Sekali klik nyala, klik lagi mati"),
+enum class HudAction(val title: String, val titleEn: String, val detail: String, val detailEn: String) {
+    TAP("Sekali klik", "Single tap", "Tekan lalu lepas", "Press and release"),
+    HOLD("Tahan", "Hold", "Aktif selama ditahan (drag, pilih banyak)", "Active while held (drag, multi-select)"),
+    TOGGLE("Toggle", "Toggle", "Sekali klik nyala, klik lagi mati", "Tap to turn on, tap again to turn off"),
 }
 
-enum class HudKind(val title: String) {
-    MOUSE_LEFT("Klik kiri"),
-    MOUSE_RIGHT("Klik kanan"),
-    MOUSE_MIDDLE("Klik tengah"),
-    SCROLL_UP("Scroll naik"),
-    SCROLL_DOWN("Scroll turun"),
-    INPUT_SWITCH("Ganti mode input"),
-    KEYBOARD("Buka keyboard"),
-    KEY("Tombol keyboard"),
-    COMBO("Kombinasi"),
+enum class HudKind(val title: String, val titleEn: String) {
+    MOUSE_LEFT("Klik kiri", "Left click"),
+    MOUSE_RIGHT("Klik kanan", "Right click"),
+    MOUSE_MIDDLE("Klik tengah", "Middle click"),
+    SCROLL_UP("Scroll naik", "Scroll up"),
+    SCROLL_DOWN("Scroll turun", "Scroll down"),
+    INPUT_SWITCH("Ganti mode input", "Switch input mode"),
+    KEYBOARD("Buka keyboard", "Show keyboard"),
+    KEY("Tombol keyboard", "Keyboard key"),
+    COMBO("Kombinasi", "Combo"),
 }
 
 data class HudKey(
@@ -164,6 +164,8 @@ data class HudKeyOption(
     val keyCode: Int = 0,
     val shift: Boolean = false,
     val combo: List<Int> = emptyList(),
+    /** Label bahasa Inggris; label utama bahasa Indonesia. */
+    val labelEn: String = label,
 )
 
 /**
@@ -179,14 +181,14 @@ object HudKeyCatalog {
     private const val WIN = KeyEvent.KEYCODE_META_LEFT
 
     val mouse = listOf(
-        HudKeyOption("Aksi", "Klik kiri", HudKind.MOUSE_LEFT),
-        HudKeyOption("Aksi", "Klik kanan", HudKind.MOUSE_RIGHT),
-        HudKeyOption("Aksi", "Klik tengah", HudKind.MOUSE_MIDDLE),
-        HudKeyOption("Aksi", "Scroll naik", HudKind.SCROLL_UP),
-        HudKeyOption("Aksi", "Scroll turun", HudKind.SCROLL_DOWN),
-        HudKeyOption("Aksi", "Ganti mode input", HudKind.INPUT_SWITCH),
-        HudKeyOption("Aksi", "Buka keyboard", HudKind.KEYBOARD),
-        HudKeyOption("Aksi", "Klik kiri (tahan = drag)", HudKind.MOUSE_LEFT),
+        HudKeyOption("Aksi", "Klik kiri", HudKind.MOUSE_LEFT, labelEn = "Left click"),
+        HudKeyOption("Aksi", "Klik kanan", HudKind.MOUSE_RIGHT, labelEn = "Right click"),
+        HudKeyOption("Aksi", "Klik tengah", HudKind.MOUSE_MIDDLE, labelEn = "Middle click"),
+        HudKeyOption("Aksi", "Scroll naik", HudKind.SCROLL_UP, labelEn = "Scroll up"),
+        HudKeyOption("Aksi", "Scroll turun", HudKind.SCROLL_DOWN, labelEn = "Scroll down"),
+        HudKeyOption("Aksi", "Ganti mode input", HudKind.INPUT_SWITCH, labelEn = "Switch input mode"),
+        HudKeyOption("Aksi", "Buka keyboard", HudKind.KEYBOARD, labelEn = "Show keyboard"),
+        HudKeyOption("Aksi", "Klik kiri (tahan = drag)", HudKind.MOUSE_LEFT, labelEn = "Left click (hold = drag)"),
     )
 
     val modifiers = listOf(
@@ -274,16 +276,16 @@ object HudKeyCatalog {
         HudKeyOption("Kombinasi", "Win+Tab", HudKind.COMBO, combo = listOf(WIN, KeyEvent.KEYCODE_TAB)),
     )
 
-    val groups: List<Pair<String, List<HudKeyOption>>> = listOf(
-        "Aksi mouse & scroll" to mouse,
-        "Modifier" to modifiers,
-        "Kombinasi siap pakai" to combos,
-        "Umum" to general,
-        "Panah" to arrows,
-        "F1 - F12" to functionKeys,
-        "Numpad" to numpad,
-        "Huruf" to letters,
-        "Simbol" to symbols,
+    val groups: List<Triple<String, String, List<HudKeyOption>>> = listOf(
+        Triple("Aksi mouse & scroll", "Mouse & scroll", mouse),
+        Triple("Modifier", "Modifiers", modifiers),
+        Triple("Kombinasi siap pakai", "Ready-made combos", combos),
+        Triple("Umum", "General", general),
+        Triple("Panah", "Arrows", arrows),
+        Triple("F1 - F12", "F1 - F12", functionKeys),
+        Triple("Numpad", "Numpad", numpad),
+        Triple("Huruf", "Letters", letters),
+        Triple("Simbol", "Symbols", symbols),
     )
 
     /** Dipakai dialog "ubah tombol": label ringkas untuk aksi non-keyboard. */
@@ -296,6 +298,17 @@ object HudKeyCatalog {
         HudKind.INPUT_SWITCH -> "Mode"
         else -> "Tombol"
     }
+
+    /** Versi bahasa Inggris dari [labelFor]. */
+    fun labelForEn(kind: HudKind): String = when (kind) {
+        HudKind.MOUSE_LEFT -> "L"
+        HudKind.MOUSE_RIGHT -> "R"
+        HudKind.MOUSE_MIDDLE -> "M"
+        HudKind.SCROLL_UP -> "Up"
+        HudKind.SCROLL_DOWN -> "Down"
+        HudKind.INPUT_SWITCH -> "Mode"
+        else -> "Key"
+    }
 }
 
 /** Satu-satunya tempat yang tahu arti XyAudioMode buat label UI. */
@@ -303,4 +316,10 @@ internal fun XyAudioMode.shortTitle(): String = when (this) {
     XyAudioMode.DEVICE -> "Perangkat"
     XyAudioMode.REMOTE -> "Remote"
     XyAudioMode.OFF -> "Mati"
+}
+
+internal fun XyAudioMode.shortTitleEn(): String = when (this) {
+    XyAudioMode.DEVICE -> "Device"
+    XyAudioMode.REMOTE -> "Remote"
+    XyAudioMode.OFF -> "Off"
 }
