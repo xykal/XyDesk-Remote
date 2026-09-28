@@ -62,10 +62,22 @@ enum class HudPhase { DOWN, UP, TAP }
 /**
  * Warna tombol kontrol di atas gambar remote. Sengaja tetap (tidak ikut tema
  * app) karena latarnya adalah gambar sesi, bukan permukaan app.
+ *
+ * Tiga rasa: transparan (cuma border), gelap tipis, dan terang tipis. Ini
+ * yang bikin ikon tetap kelihatan waktu desktop remote-nya putih terang.
  */
 private val HudBorder = Color(0xD9FFFFFF)
 private val HudBorderDim = Color(0x7AFFFFFF)
 private val HudInk = Color(0xFFF1F4F6)
+
+/** Warna per rasa latar tombol. */
+data class HudPalette(val border: Color, val ink: Color, val plate: Color)
+
+fun hudPalette(plate: HudPlate): HudPalette = when (plate) {
+    HudPlate.NONE -> HudPalette(HudBorder, HudInk, Color.Transparent)
+    HudPlate.DARK -> HudPalette(Color(0xF2FFFFFF), Color(0xFFF7F9FA), Color(0x99000000))
+    HudPlate.LIGHT -> HudPalette(Color(0x59000000), Color(0xFF14171B), Color(0xE6FFFFFF))
+}
 
 /**
  * Lapisan tombol kontrol sesi.
@@ -79,9 +91,11 @@ private val HudInk = Color(0xFFF1F4F6)
 fun HudKeyLayer(
     keys: List<HudKey>,
     mappingMode: Boolean,
+    plate: HudPlate = HudPlate.DARK,
     onMove: (id: String, x: Float, y: Float) -> Unit,
     onPhase: (HudKey, HudPhase) -> Unit,
     onEdit: (HudKey) -> Unit,
+    onRequestEditMode: () -> Unit = {},
 ) {
     BoxWithConstraints(Modifier.fillMaxSize()) {
         val density = LocalDensity.current
@@ -124,11 +138,13 @@ fun HudKeyLayer(
             HudKeyButton(
                 key = key,
                 mappingMode = mappingMode,
+                plate = plate,
                 maxX = maxX,
                 maxY = maxY,
                 onDrag = { x, y -> onMove(key.id, x, y) },
                 onPhase = { phase -> onPhase(key, phase) },
                 onEdit = { onEdit(key) },
+                onRequestEditMode = onRequestEditMode,
                 modifier = Modifier
                     .offset {
                         IntOffset((key.x * maxX).roundToInt(), (key.y * maxY).roundToInt())
@@ -143,11 +159,13 @@ fun HudKeyLayer(
 private fun HudKeyButton(
     key: HudKey,
     mappingMode: Boolean,
+    plate: HudPlate,
     maxX: Float,
     maxY: Float,
     onDrag: (Float, Float) -> Unit,
     onPhase: (HudPhase) -> Unit,
     onEdit: () -> Unit,
+    onRequestEditMode: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     var latched by remember(key.id) { mutableStateOf(false) }
@@ -159,10 +177,11 @@ private fun HudKeyButton(
     val latest = rememberUpdatedState(key)
     val dragPos = remember(key.id) { mutableStateOf<Offset?>(null) }
 
+    val pal = hudPalette(plate)
     val ring = when {
-        latched -> Color(0xFFFFFFFF)
         mappingMode -> Color(0xFF8FD0FF)
-        else -> HudBorder
+        latched -> Color(0xFFFFFFFF)
+        else -> pal.border
     }
 
     Box(
@@ -176,12 +195,13 @@ private fun HudKeyButton(
                 spotColor = Color.Black,
             )
             .clip(CircleShape)
+            .background(pal.plate)
             .border(
                 if (pressed || latched) 2.dp else 1.4.dp,
                 ring,
                 CircleShape,
             )
-            .pointerInput(key.id, mappingMode, key.action) {
+            .pointerInput(key.id, mappingMode, key.action, plate) {
                 awaitEachGesture {
                     val down = awaitFirstDown(requireUnconsumed = false)
                     pressed = true
@@ -204,9 +224,11 @@ private fun HudKeyButton(
                         travelled += delta.getDistance()
                         if (travelled > 8f) {
                             dragged = true
-                            // Geser = pindahkan tombol. Tombol ber-aksi "tahan"
-                            // tetap dipakai untuk drag di remote, bukan dipindah.
-                            if (!holdActive) {
+                            // Geser cuma berlaku di mode atur posisi. Di luar itu
+                            // tombol diam di tempat (dulu bisa kegeser tanpa
+                            // sengaja). Tombol ber-aksi "tahan" tetap dipakai
+                            // untuk drag di remote.
+                            if (!holdActive && mappingMode) {
                                 val base = dragPos.value
                                     ?: Offset(latest.value.x, latest.value.y)
                                 val nx = (base.x + delta.x / maxX).coerceIn(0f, 1f)
@@ -218,7 +240,7 @@ private fun HudKeyButton(
                         } else if (event.changes.all { it.uptimeMillis - down.uptimeMillis > longPressTimeout }) {
                             if (!holdActive && !longPressed && !dragged) {
                                 longPressed = true
-                                onEdit()
+                                if (mappingMode) onEdit() else onRequestEditMode()
                             }
                         }
                     }
@@ -227,7 +249,11 @@ private fun HudKeyButton(
                     dragPos.value = null
                     if (holdActive) onPhase(HudPhase.UP)
 
-                    if (mappingMode) return@awaitEachGesture
+                    // Di mode atur posisi, ketuk = buka editor tombol itu.
+                    if (mappingMode) {
+                        if (!dragged && !longPressed) onEdit()
+                        return@awaitEachGesture
+                    }
                     if (longPressed) return@awaitEachGesture
                     if (dragged) return@awaitEachGesture
                     when (key.action) {
@@ -243,7 +269,7 @@ private fun HudKeyButton(
             },
         contentAlignment = Alignment.Center,
     ) {
-        HudKeyGlyph(key, HudInk)
+        HudKeyGlyph(key, pal.ink)
     }
 }
 
@@ -385,7 +411,7 @@ fun HudKeyPicker(
                 }
             }
             XyPillButton(
-                "Tutup",
+                xy("Tutup", "Close"),
                 onDismiss,
                 primary = false,
                 compact = true,
@@ -462,13 +488,13 @@ fun HudKeyEditor(
                 fontSize = 11.sp,
             )
             XyPillButton(
-                "Ganti jenis aksi",
+                xy("Ganti jenis aksi", "Change action type"),
                 { rePick = true },
                 primary = false,
                 compact = true,
                 modifier = Modifier.fillMaxWidth(),
             )
-            Text("Cara pakai", color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 11.sp)
+            Text(xy("Cara pakai", "How it works"), color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 11.sp)
             XySegmented(
                 options = HudAction.entries.map { it.title },
                 selectedIndex = key.action.ordinal,
@@ -498,13 +524,13 @@ fun HudKeyEditor(
             )
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 XyPillButton(
-                    "Simpan",
+                    xy("Simpan", "Save"),
                     onDismiss,
                     compact = true,
                     modifier = Modifier.weight(1f),
                 )
                 XyPillButton(
-                    "Hapus",
+                    xy("Hapus", "Delete"),
                     onDelete,
                     primary = false,
                     compact = true,
@@ -551,7 +577,10 @@ fun HudMappingBanner(
         horizontalArrangement = Arrangement.spacedBy(8.dp),
     ) {
         Text(
-            "Atur posisi: geser tombol, tahan lama untuk ubah aksi/ukuran",
+            xy(
+                "Atur posisi: geser tombol, tahan lama untuk ubah aksi/ukuran",
+                "Edit layout: drag a button, long-press to change action/size",
+            ),
             color = HudInk,
             fontSize = 11.sp,
             modifier = Modifier.weight(1f),
@@ -563,7 +592,7 @@ fun HudMappingBanner(
                 .clickable(onClick = onAdd)
                 .padding(horizontal = 12.dp, vertical = 6.dp),
         ) {
-            Text("+ Tombol", color = HudInk, fontSize = 11.sp)
+            Text(xy("+ Tombol", "+ Button"), color = HudInk, fontSize = 11.sp)
         }
         Box(
             Modifier
@@ -572,7 +601,7 @@ fun HudMappingBanner(
                 .clickable(onClick = onDone)
                 .padding(horizontal = 12.dp, vertical = 6.dp),
         ) {
-            Text("Selesai", color = Color(0xFF0A0B0D), fontSize = 11.sp, fontWeight = FontWeight.SemiBold)
+            Text(xy("Selesai", "Done"), color = Color(0xFF0A0B0D), fontSize = 11.sp, fontWeight = FontWeight.SemiBold)
         }
     }
 }

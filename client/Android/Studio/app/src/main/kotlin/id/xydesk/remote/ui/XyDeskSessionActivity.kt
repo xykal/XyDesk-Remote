@@ -118,12 +118,19 @@ class XyDeskSessionActivity : ComponentActivity() {
         this.appPrefs = prefs
         requestRuntimePermissions(profile)
         setContent {
-            // Layar sesi SELALU gelap, apa pun mode tema app. Alasannya dua:
-            // (1) HUD berada di atas gambar remote, jadi kontrasnya tidak boleh
-            //     bergantung tema sistem; (2) dulu di mode terang panel HUD
-            //     memakai komponen skema terang di atas panel gelap — teks jadi
-            //     tidak terbaca ("ketabrak").
-            XyDeskTheme(dark = true) {
+            // Layar sesi ikut setelan tema app (dulu dipaksa gelap, jadi di
+            // mode terang panel dan dialog di sini tidak nyambung dengan sisa
+            // app). Tombol HUD yang menempel di gambar remote tetap punya
+            // warna tetap supaya selalu terbaca.
+            val systemDark = (resources.configuration.uiMode and
+                Configuration.UI_MODE_NIGHT_MASK) == Configuration.UI_MODE_NIGHT_YES
+            val themePrefs = appPrefs ?: AppPrefs(this)
+            val dark = when (themePrefs.themeMode) {
+                1 -> true
+                2 -> false
+                else -> systemDark
+            }
+            XyDeskTheme(dark = dark) {
                 XyDeskSessionScreen(
                     profile = profile,
                     manager = manager,

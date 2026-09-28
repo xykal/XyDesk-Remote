@@ -77,3 +77,16 @@ bottom edge of the desktop fall outside the visible area and look "sunk".
 The pointer uses the cursor shape sent by the server (arrow, hand, I-beam,
 resize, ...) with the correct hotspot. If the server sends nothing, the built-in
 arrow/dot is used. Pointer size and style are in the right panel under Pointer.
+
+
+## Perubahan ronde 6 (v0.5.4)
+
+- Tombol **terkunci** saat sesi dipakai. Geser/ubah hanya setelah menekan
+  **Atur posisi & ukuran** di panel kanan (atau tahan lama satu tombol, yang
+  otomatis membuka mode itu).
+- Di mode atur posisi: **geser** = pindah tombol, **ketuk** = buka editor,
+  **Selesai atur posisi** = keluar dari mode.
+- **Latar tombol** dipilih per app: Gelap tipis (default), Terang tipis,
+  Transparan — dipakai supaya ikon tetap kelihatan di atas desktop putih.
+- **Rail kanan bawah** (tetap, tidak bisa dihapus): keyboard HP buka/tutup dan
+  tombol keluar dengan konfirmasi dua kali ketuk.

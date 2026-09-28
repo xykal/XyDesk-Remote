@@ -18,10 +18,17 @@ data class ConnectionProfile(
     val password: String? = null,
     val domain: String? = null,
     val label: String? = null,
+    /**
+     * Kunci tetap perangkat. Dibuat sekali saat perangkat ditambahkan dan
+     * tidak ikut berubah kalau host/port diubah, supaya mengubah alamat tidak
+     * meninggalkan baris lama di daftar (dulu id diturunkan dari host:port
+     * sehingga edit = tambah perangkat kedua).
+     */
+    val key: String? = null,
 ) {
-    /** Identifier stabil untuk favorites/vault: `host:port`. */
+    /** Identifier stabil untuk favorites/vault: [key] kalau ada, `host:port` untuk data lama. */
     val id: String
-        get() = "$host:$port"
+        get() = key ?: "$host:$port"
 
     init {
         require(host.isNotBlank()) { "host wajib diisi" }

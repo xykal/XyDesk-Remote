@@ -3,12 +3,34 @@ package id.xydesk.remote.ui
 import android.content.Context
 
 /** Cara input di layar sesi. */
-enum class InputMode(val title: String, val detail: String) {
-    TRACKPAD("Trackpad", "Geser = gerakkan pointer, ketuk = klik kiri"),
-    DIRECT("Sentuh langsung", "Sentuh langsung di titik yang dituju"),
+enum class InputMode(val title: String, val titleEn: String, val detail: String, val detailEn: String) {
+    TRACKPAD(
+        "Trackpad", "Trackpad",
+        "Geser = gerakkan pointer, ketuk = klik kiri",
+        "Drag = move pointer, tap = left click",
+    ),
+    DIRECT(
+        "Sentuh langsung", "Direct touch",
+        "Sentuh langsung di titik yang dituju",
+        "Touch the exact point you want to hit",
+    ),
 }
 
-enum class PointerStyle(val title: String) { DOT("Titik"), ARROW("Panah") }
+enum class PointerStyle(val title: String, val titleEn: String) {
+    DOT("Titik", "Dot"),
+    ARROW("Panah", "Arrow"),
+}
+
+/**
+ * Latar tombol kontrol di layar sesi. Desktop remote bisa putih terang, jadi
+ * tombol border-only putih bisa hilang; rasa gelap tipis bikin ikon selalu
+ * kelihatan tanpa menutupi gambar.
+ */
+enum class HudPlate(val title: String, val titleEn: String) {
+    DARK("Gelap tipis", "Dark plate"),
+    LIGHT("Terang tipis", "Light plate"),
+    NONE("Transparan", "Transparent"),
+}
 
 enum class Corner(val title: String) { RIGHT("Kanan"), LEFT("Kiri") }
 
@@ -38,6 +60,11 @@ class SessionPrefs(context: Context) {
     var pointerSize: Float
         get() = input.getFloat(KEY_POINTER_SIZE, 22f).coerceIn(10f, 52f)
         set(v) = input.edit().putFloat(KEY_POINTER_SIZE, v.coerceIn(10f, 52f)).apply()
+
+    /** Latar tombol kontrol; default gelap tipis supaya ikon kelihatan di desktop terang. */
+    var hudPlate: HudPlate
+        get() = HudPlate.entries.getOrElse(input.getInt(KEY_HUD_PLATE, 0)) { HudPlate.DARK }
+        set(v) = input.edit().putInt(KEY_HUD_PLATE, v.ordinal).apply()
 
     var pointerFollows: Boolean
         get() = input.getBoolean(KEY_POINTER_FOLLOW, true)
@@ -189,6 +216,7 @@ class SessionPrefs(context: Context) {
         private const val KEY_POINTER_STYLE = "pointer_style"
         private const val KEY_POINTER_SIZE = "pointer_size"
         private const val KEY_POINTER_FOLLOW = "pointer_follow"
+    private const val KEY_HUD_PLATE = "hud_plate"
         private const val KEY_KEYBOARD_CORNER = "keyboard_corner"
         private const val KEY_AUTO_FIT = "auto_fit"
         private const val KEY_HAPTICS = "haptics"
@@ -229,38 +257,23 @@ object DisplayPrefs {
      * bar hitam), "16:9 pas layar" = standar Windows yang paling dekat
      * dengan layar HP (paling aman untuk desktop Windows).
      */
+    /**
+     * Daftar resolusi untuk UI. Cuma 16:9 yang ditawarkan: rasio lain di
+     * FreeRDP sering tidak pas (desktop melar / taskbar terpotong), dan yang
+     * benar-benar dipakai user adalah 16:9. "Otomatis" = ukuran area gambar
+     * di HP, "16:9 pas layar" = 16:9 standar terbesar yang muat di layar HP.
+     */
     val resolutionGroups: List<Pair<String, List<Pair<String, String>>>> = listOf(
-        "Pintar" to listOf(
-            AUTOMATIC to "Otomatis (layar HP)",
+        "Otomatis" to listOf(
+            AUTOMATIC to "Layar HP (otomatis)",
             SMART_16_9 to "16:9 pas layar",
         ),
-        "16:9 — standar Windows" to listOf(
-            "1280x720" to "1280\u00d7720 (HD)",
-            "1600x900" to "1600\u00d7900",
-            "1920x1080" to "1920\u00d71080 (FHD)",
-            "2560x1440" to "2560\u00d71440 (QHD)",
-            "3840x2160" to "3840\u00d72160 (4K)",
-        ),
-        "16:10" to listOf(
-            "1280x800" to "1280\u00d7800",
-            "1440x900" to "1440\u00d7900",
-            "1680x1050" to "1680\u00d71050",
-            "1920x1200" to "1920\u00d71200",
-            "2560x1600" to "2560\u00d71600",
-        ),
-        "21:9 ultrawide" to listOf(
-            "2560x1080" to "2560\u00d71080",
-            "3440x1440" to "3440\u00d71440",
-        ),
-        "4:3" to listOf(
-            "1024x768" to "1024\u00d7768",
-            "1280x960" to "1280\u00d7960",
-        ),
-        "Potret (layar diputar)" to listOf(
-            "720x1280" to "720\u00d71280",
-            "1080x1920" to "1080\u00d71920",
-            "1200x1920" to "1200\u00d71920",
-            "1440x2560" to "1440\u00d72560",
+        "16:9 standar" to listOf(
+            "1280x720" to "HD 720",
+            "1600x900" to "900p",
+            "1920x1080" to "FHD 1080",
+            "2560x1440" to "QHD 1440",
+            "3840x2160" to "4K 2160",
         ),
     )
 

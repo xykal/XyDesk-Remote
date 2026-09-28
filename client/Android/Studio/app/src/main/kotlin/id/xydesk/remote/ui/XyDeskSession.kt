@@ -360,6 +360,22 @@ fun XyDeskSessionScreen(
         )
     }
 
+    /**
+     * Buka/tutup keyboard HP. Sumber kebenarannya state IME yang sebenarnya,
+     * bukan state lokal: kalau user menutup keyboard lewat tombol back
+     * Android, tombol rail tetap tahu keadaan aslinya.
+     */
+    fun toggleKeyboard() {
+        val next = !controller.isImeVisible()
+        keyboardShown = next
+        prefs.setKeyboardShown(profile.id, next)
+        controller.setImeVisible(next)
+        notice.show(
+            if (next) xyNow("Keyboard HP dibuka", "Phone keyboard shown")
+            else xyNow("Keyboard HP ditutup", "Phone keyboard hidden"),
+        )
+    }
+
     /** Kirim aksi satu tombol HUD (down=true tekan, false lepas). */
     fun runHudKey(key: HudKey, down: Boolean) {
         when (key.kind) {
@@ -368,13 +384,7 @@ fun XyDeskSessionScreen(
             HudKind.MOUSE_MIDDLE -> sendButton(XyMouseButton.MIDDLE, down)
             HudKind.SCROLL_UP -> if (down) sendScroll(1)
             HudKind.SCROLL_DOWN -> if (down) sendScroll(-1)
-            HudKind.KEYBOARD -> if (down) {
-                val next = !keyboardShown
-                keyboardShown = next
-                prefs.setKeyboardShown(profile.id, next)
-                controller.setImeVisible(next)
-                notice.show(if (next) "Keyboard HP dibuka" else "Keyboard HP ditutup")
-            }
+            HudKind.KEYBOARD -> if (down) toggleKeyboard()
 
             HudKind.INPUT_SWITCH -> if (down) {
                 val next = if (InputMode.entries[inputMode] == InputMode.TRACKPAD) {
@@ -488,7 +498,7 @@ fun XyDeskSessionScreen(
                 mappingMode = mappingMode,
                 onMappingModeChange = {
                     mappingMode = it
-                    if (it) notice.show("Geser tombol ke posisi yang kal mau")
+                    if (it) notice.show(xyNow("Geser tombol ke posisi yang kal mau", "Drag the buttons where you want them"))
                 },
                 onPhase = { key, phase -> handleHudPhase(key, phase) },
                 onZoomIn = { controller.zoomIn() },
@@ -521,7 +531,7 @@ fun XyDeskSessionScreen(
                     }
                     // Rotasi mengubah bentuk layar: ukuran dikirim ulang oleh
                     // efek yang memantau ukuran area gambar.
-                    notice.show("Orientasi diubah ke $mode")
+                    notice.show(xyNow("Orientasi diubah ke {0}", "Orientation set to {0}", mode))
                 },
                 onResolutionChange = { preset ->
                     // Jalur utama: ubah desktop remote saat sesi hidup lewat
@@ -535,15 +545,16 @@ fun XyDeskSessionScreen(
                         manager.resizeRemote(size.first, size.second)
                     if (live) {
                         controller.fitToScreen()
-                        notice.show("Resolusi remote: ${size.first} x ${size.second}")
+                        notice.show(xyNow("Resolusi remote: {0} x {1}", "Remote resolution: {0} x {1}", size.first, size.second))
                     } else {
                         // Server menolak ukuran live -> reconnect dengan /size baru.
                         pendingResize = size
                         applyingResolution = true
                         manager.disconnect()
-                        notice.show("Menyambung ulang dengan resolusi baru")
+                        notice.show(xyNow("Menyambung ulang dengan resolusi baru", "Reconnecting with the new resolution"))
                     }
                 },
+                onToggleKeyboard = { toggleKeyboard() },
                 onToggleTrackpad = {
                     val next = if (InputMode.entries[inputMode] == InputMode.TRACKPAD) {
                         InputMode.DIRECT
@@ -594,7 +605,7 @@ fun XyDeskSessionScreen(
         if (state is SessionState.Disconnected && applyingResolution) {
             Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                 Text(
-                    "Menerapkan resolusi baru...",
+                    xy("Menerapkan resolusi baru...", "Applying new resolution..."),
                     color = Color(0xFFE7EDF2),
                     style = MaterialTheme.typography.titleMedium,
                 )
@@ -921,7 +932,7 @@ private fun CertificateDialog(
     ) {
         Text("${info.host}:${info.port}", style = MaterialTheme.typography.bodyMedium)
         if (info.isGateway) {
-            Text("Jenis: RDP Gateway", style = MaterialTheme.typography.bodySmall)
+            Text(xy("Jenis: RDP Gateway", "Type: RDP Gateway"), style = MaterialTheme.typography.bodySmall)
         }
         if (info.isMismatch) {
             Text(
@@ -951,7 +962,7 @@ private fun CertificateDialog(
         }
         Text("Subject: ${info.subject}", style = MaterialTheme.typography.bodySmall)
         Text("Issuer: ${info.issuer}", style = MaterialTheme.typography.bodySmall)
-        Text("Fingerprint SHA-256:", style = MaterialTheme.typography.bodySmall)
+        Text(xy("Fingerprint SHA-256:", "Fingerprint SHA-256:"), style = MaterialTheme.typography.bodySmall)
         Text(
             info.fingerprint,
             style = MaterialTheme.typography.bodySmall,

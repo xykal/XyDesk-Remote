@@ -23,14 +23,17 @@ import id.xydesk.remote.R
 // kecil (6-14dp) untuk panel; kontrol utama pakai bentuk pil penuh.
 // =============================================================
 
-val XyBg = Color(0xFF07080A)
-val XySurface = Color(0xFF0E1013)
-val XySurfaceAlt = Color(0xFF15181C)
-val XyLine = Color(0xFF22262C)
-val XyLineStrong = Color(0xFF343A42)
-val XyText = Color(0xFFECF0F3)
-val XyTextDim = Color(0xFFA9B1B9)
-val XyTextFaint = Color(0xFF8B939C)
+// Tema gelap: dipisah lebih tegas (latar -> permukaan -> permukaan naik)
+// supaya kartu dan panel tidak menyatu jadi satu bidang gelap. Garis naik
+// satu tingkat supaya hairline tetap kelihatan di layar terang.
+val XyBg = Color(0xFF06070A)
+val XySurface = Color(0xFF11141A)
+val XySurfaceAlt = Color(0xFF191E25)
+val XyLine = Color(0xFF2A3038)
+val XyLineStrong = Color(0xFF404952)
+val XyText = Color(0xFFF0F3F6)
+val XyTextDim = Color(0xFFB6BEC6)
+val XyTextFaint = Color(0xFF9AA2AB)
 val XyAccent = Color(0xFFF1F4F6)
 val XyAccentInk = Color(0xFF0A0B0D)
 val XyOk = Color(0xFF57C08B)

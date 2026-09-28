@@ -74,3 +74,12 @@ Pointer memakai bentuk kursor yang dikirim server (panah, tangan, I-beam,
 resize, ...) lengkap dengan hotspot-nya. Kalau server tidak mengirim apa-apa,
 panah/titik bawaan app dipakai. Ukuran dan gaya pointer ada di panel kanan
 bagian Pointer.
+
+
+## Perubahan ronde 6 (v0.5.4)
+
+- Tombol **terkunci** selama sesi dipakai; memindahkan tombol hanya bisa lewat
+  mode **Atur posisi & ukuran** (panel kanan) atau tahan lama satu tombol.
+- Di mode atur posisi: geser = pindah, ketuk = buka editor tombol.
+- **Latar tombol** per app: Gelap tipis (default), Terang tipis, Transparan.
+- **Rail kanan bawah** tetap: keyboard HP buka/tutup + keluar dua kali ketuk.

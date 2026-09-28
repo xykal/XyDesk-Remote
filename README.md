@@ -84,6 +84,41 @@ Ronde ini seluruhnya soal input dan kontrol:
 
 Detail teknis: `docs/HUD-BUTTONS.md` (EN) dan `docs/HUD-BUTTONS.id.md` (ID).
 
+## Catatan rilis v0.5.4
+
+Ronde 6 — pembetulan perilaku + identitas XyVerse:
+
+- **Tombol kontrol terkunci**: di layar sesi tombol tidak bisa kegeser lagi
+  waktu dipakai. Geser hanya saat "Atur posisi" menyala (tahan lama satu
+  tombol juga membuka mode itu). Menu panel menyesuaikan diri dengan mode.
+- **Latar tombol** bisa dipilih (Gelap tipis / Terang tipis / Transparan):
+  ikon tetap terbaca kalau desktop remote-nya putih.
+- **Rail tetap kanan bawah**: buka/tutup keyboard HP kapan saja, dan tombol
+  keluar butuh dua kali ketuk (anti kepencet).
+- **Resolusi**: daftar dipangkas ke 16:9 saja (Otomatis, 16:9 pas layar,
+  720, 900, 1080, 1440, 4K) — rasio lain memang tidak pas di FreeRDP.
+- **Splash XyVerse**: animasi morphing HP → monitor → rak server, berhenti
+  saat data app siap, memakai logo resmi XyVerse (mark + wordmark).
+- **Wallpaper**: preview desktop memakai wallpaper Windows 11 Bloom resmi,
+  1920x1080 (sebelumnya gambar buatan sendiri).
+- **Bug duplikat diperbaiki**: mengubah perangkat lalu menyimpan tidak lagi
+  membuat entri kedua (kunci perangkat tetap).
+- **Tema**: token gelap dinaikkan kontrasnya, dan layar sesi mengikuti tema
+  app (dulu dipaksa gelap).
+- **Bahasa**: label, tombol, judul panel, dan pesan sudah dua bahasa (ID/EN)
+  lewat `xy()`/`xyNow()`; teks paragraf panjang masih menyusul.
+
+## English summary (v0.5.4)
+
+Round 6 — behaviour fixes plus XyVerse identity: HUD buttons are locked
+unless "Edit layout" is on; button plate is selectable (dark/light/transparent)
+so icons stay readable on white desktops; a fixed bottom-right rail shows/hides
+the phone keyboard and disconnects on double tap; resolution list trimmed to
+16:9 only; XyVerse-branded morphing splash (phone → monitor → server rack)
+that exits when app data is ready; official Windows 11 Bloom wallpaper;
+fixed the duplicate-device bug on edit-save; better dark-theme contrast and the
+session screen now follows the app theme; bilingual labels/buttons/panels.
+
 ## Catatan rilis v0.5.3
 
 Lanjutan ronde 5 — sisa UI bawaan diganti milik app sendiri:

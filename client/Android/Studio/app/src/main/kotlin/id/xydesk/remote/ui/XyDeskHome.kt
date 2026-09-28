@@ -63,17 +63,22 @@ import id.xydesk.remote.ui.components.XyRow
 import id.xydesk.remote.ui.components.XySectionLabel
 import id.xydesk.remote.ui.components.XyTopBar
 import id.xydesk.remote.ui.components.XyWordmark
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 
-/** Seksi di drawer samping. */
-internal enum class XySection(val title: String) {
-    PERANGKAT("Perangkat"),
-    TAMPILAN("Tampilan"),
-    KREDENSIAL("Kredensial"),
-    UMUM("Umum"),
-    KEAMANAN("Keamanan"),
-    TENTANG("Tentang"),
+/** Seksi di drawer samping. Judul dua bahasa dibaca di [sectionTitle]. */
+internal enum class XySection(val title: String, val titleEn: String) {
+    PERANGKAT("Perangkat", "Devices"),
+    TAMPILAN("Tampilan", "Display"),
+    KREDENSIAL("Kredensial", "Credentials"),
+    UMUM("Umum", "General"),
+    KEAMANAN("Keamanan", "Security"),
+    TENTANG("Tentang", "About"),
 }
+
+/** Judul seksi yang ikut bahasa aktif. */
+@Composable
+internal fun sectionTitle(section: XySection): String = xy(section.title, section.titleEn)
 
 /** Layar yang sedang tampil. */
 private sealed interface XyRoute {
@@ -89,11 +94,22 @@ private sealed interface XyRoute {
  * Preview pakai wallpaper motif OS perangkat (digambar prosedural, tanpa aset).
  */
 @Composable
-fun XyDeskHome(onExit: () -> Unit) {
+fun XyDeskHome(
+    onExit: () -> Unit,
+    onReady: () -> Unit = {},
+) {
     val context = LocalContext.current
     val repo = remember { SessionsRepository(context.applicationContext) }
     val favoritesFlow = remember { repo.favorites() }
     val favorites by favoritesFlow.collectAsState(initial = emptyList())
+    // Data siap = daftar perangkat sudah keluar sekali dari database; dipakai
+    // splash supaya dia berhenti tepat waktu, bukan menebak-nebak.
+    var dataReady by remember { mutableStateOf(false) }
+    LaunchedEffect(Unit) {
+        favoritesFlow.first()
+        dataReady = true
+    }
+    LaunchedEffect(dataReady) { if (dataReady) onReady() }
     val scope = rememberCoroutineScope()
     val appPrefs = remember { AppPrefs(context) }
     var drawerOpen by remember { mutableStateOf(false) }
@@ -136,7 +152,7 @@ fun XyDeskHome(onExit: () -> Unit) {
                 if (now - backArmedAt < 2_000L) onExit()
                 else {
                     backArmedAt = now
-                    notice.show("Tekan sekali lagi untuk keluar")
+                    notice.show(xy("Tekan sekali lagi untuk keluar", "Press again to exit"))
                 }
             }
         }
@@ -193,7 +209,7 @@ fun XyDeskHome(onExit: () -> Unit) {
                         onClearAllCredentials = {
                             scope.launch {
                                 repo.clear()
-                                notice.show("Kredensial & perangkat dihapus")
+                                notice.show(xy("Kredensial & perangkat dihapus", "Credentials and devices cleared"))
                             }
                         },
                         onShowLog = { showBoot = true },
@@ -359,18 +375,18 @@ private fun DevicesScreen(
     }
 
     XyTopBar(
-        title = "Perangkat",
+        title = xy("Perangkat", "Devices"),
         onBack = null,
         actions = {
-            XyIconPill(XyIcons.Menu, onMenu, contentDescription = "Menu")
-            XyIconPill(XyIcons.Plus, onAdd, active = true, contentDescription = "Tambah perangkat")
+            XyIconPill(XyIcons.Menu, onMenu, contentDescription = xy("Menu", "Menu"))
+            XyIconPill(XyIcons.Plus, onAdd, active = true, contentDescription = xy("Tambah perangkat", "Add device"))
         },
     )
 
     if (favorites.isEmpty()) {
         Box(Modifier.fillMaxSize().padding(24.dp), contentAlignment = Alignment.Center) {
             XyCard(modifier = Modifier.fillMaxWidth()) {
-                Text("Belum ada perangkat", style = MaterialTheme.typography.titleMedium)
+                Text(xy("Belum ada perangkat", "No devices yet"), style = MaterialTheme.typography.titleMedium)
                 Spacer(Modifier.height(6.dp))
                 Text(
                     "Tambahkan PC Windows atau server dengan RDP aktif. " +
@@ -379,7 +395,7 @@ private fun DevicesScreen(
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
                 Spacer(Modifier.height(16.dp))
-                XyPillButton("Tambah perangkat", onAdd, icon = XyIcons.Plus)
+                XyPillButton(xy("Tambah perangkat", "Add device"), onAdd, icon = XyIcons.Plus)
             }
         }
         return
@@ -472,10 +488,10 @@ private fun DeviceCard(
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(8.dp),
         ) {
-            XyPillButton("Connect", onConnect, compact = true)
+            XyPillButton(xy("Connect", "Connect"), onConnect, compact = true)
             Spacer(Modifier.weight(1f))
-            XyIconPill(XyIcons.Gear, onEdit, size = 40.dp, contentDescription = "Ubah")
-            XyIconPill(XyIcons.Trash, onDelete, size = 40.dp, contentDescription = "Hapus")
+            XyIconPill(XyIcons.Gear, onEdit, size = 40.dp, contentDescription = xy("Ubah", "Edit"))
+            XyIconPill(XyIcons.Trash, onDelete, size = 40.dp, contentDescription = xy("Hapus", "Delete"))
         }
     }
 }

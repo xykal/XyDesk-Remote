@@ -66,7 +66,7 @@ internal fun SectionScreen(
 ) {
     Column(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)) {
         XyTopBar(
-            title = section.title,
+            title = sectionTitle(section),
             onBack = null,
             actions = { XyIconPill(XyIcons.Menu, onMenu, contentDescription = "Menu") },
         )
@@ -92,7 +92,7 @@ private fun DisplaySection(
 ) {
     val context = LocalContext.current
     if (favorites.isEmpty()) {
-        EmptyHint("Belum ada perangkat", "Tambahkan perangkat dulu, lalu atur tampilannya di sini.")
+        EmptyHint(xy("Belum ada perangkat", "No devices yet"), "Tambahkan perangkat dulu, lalu atur tampilannya di sini.")
         return
     }
     var index by remember { mutableIntStateOf(0) }
@@ -114,7 +114,7 @@ private fun DisplaySection(
             .padding(horizontal = 16.dp),
         verticalArrangement = Arrangement.spacedBy(14.dp),
     ) {
-        XySectionLabel("Perangkat")
+        XySectionLabel(xy("Perangkat", "Devices"))
         XySegmented(
             options = favorites.map { it.label ?: it.host },
             selectedIndex = index.coerceIn(0, favorites.lastIndex),
@@ -130,12 +130,12 @@ private fun DisplaySection(
                         XyIcons.Gear,
                         { onEditDevice(profile) },
                         size = 38.dp,
-                        contentDescription = "Ubah perangkat",
+                        contentDescription = xy("Ubah perangkat", "Edit device"),
                     )
                 },
             )
             Spacer(Modifier.height(8.dp))
-            XySectionLabel("Resolusi desktop remote")
+            XySectionLabel(xy("Resolusi desktop remote", "Remote desktop resolution"))
             Spacer(Modifier.height(8.dp))
             Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
                 DisplayPrefs.resolutions.chunked(2).forEachIndexed { rowIndex, row ->
@@ -157,7 +157,7 @@ private fun DisplaySection(
                 }
             }
             Spacer(Modifier.height(16.dp))
-            XySectionLabel("Orientasi")
+            XySectionLabel(xy("Orientasi", "Orientation"))
             Spacer(Modifier.height(8.dp))
             XySegmented(
                 options = DisplayPrefs.rotations,
@@ -169,7 +169,7 @@ private fun DisplaySection(
                 modifier = Modifier.fillMaxWidth(),
             )
             Spacer(Modifier.height(16.dp))
-            XySectionLabel("Skala tampilan awal")
+            XySectionLabel(xy("Skala tampilan awal", "Initial display scale"))
             Text(
                 "$scale%",
                 style = MaterialTheme.typography.titleMedium,
@@ -215,7 +215,7 @@ private fun CredentialsSection(
             .padding(horizontal = 16.dp),
         verticalArrangement = Arrangement.spacedBy(14.dp),
     ) {
-        XySectionLabel("Password tersimpan")
+        XySectionLabel(xy("Password tersimpan", "Saved passwords"))
         XyCard {
             Text(
                 "Password dienkripsi AES-256-GCM; kuncinya tidak bisa keluar dari " +
@@ -225,7 +225,7 @@ private fun CredentialsSection(
             )
             Spacer(Modifier.height(6.dp))
             if (favorites.isEmpty()) {
-                Text("Belum ada perangkat tersimpan.", style = MaterialTheme.typography.bodyMedium)
+                Text(xy("Belum ada perangkat tersimpan.", "No saved devices yet."), style = MaterialTheme.typography.bodyMedium)
             } else {
                 favorites.forEach { profile ->
                     val remembered = vault.has(profile.id)
@@ -252,7 +252,7 @@ private fun CredentialsSection(
                         }
                         if (remembered) {
                             XyPillButton(
-                                text = "Lupakan",
+                                text = xy("Lupakan", "Forget"),
                                 onClick = {
                                     vault.remove(profile.id)
                                     tick++
@@ -268,26 +268,26 @@ private fun CredentialsSection(
         }
         XyCard {
             XyRow(
-                title = "Hapus semua kredensial & perangkat",
-                subtitle = "Vault dikosongkan dan daftar perangkat dibersihkan",
+                title = xy("Hapus semua kredensial & perangkat", "Delete all credentials and devices"),
+                subtitle = xy("Vault dikosongkan dan daftar perangkat dibersihkan", "Vault cleared and device list wiped"),
                 leading = XyIcons.Trash,
                 onClick = { confirmClear = true },
             )
         }
         Spacer(Modifier.height(12.dp))
-        if (tick < 0) Text("") // tick dipakai untuk memaksa recompose setelah "Lupakan"
+        if (tick < 0) Text("") // tick dipakai untuk memaksa recompose setelah xy("Lupakan", "Forget")
     }
 
     if (confirmClear) {
         XyDialog(
-            title = "Hapus semua?",
-            body = "Semua perangkat tersimpan dan password-nya akan dihapus.",
+            title = xy("Hapus semua?", "Delete everything?"),
+            body = xy("Semua perangkat tersimpan dan password-nya akan dihapus.", "All saved devices and their passwords will be removed."),
             confirmLabel = "Hapus",
             onConfirm = {
                 confirmClear = false
                 onClearAll()
             },
-            dismissLabel = "Batal",
+            dismissLabel = xy("Batal", "Cancel"),
             onDismiss = { confirmClear = false },
         )
     }
@@ -331,10 +331,10 @@ private fun GeneralSection(appPrefs: AppPrefs, onShowLog: () -> Unit) {
             .padding(horizontal = 16.dp),
         verticalArrangement = Arrangement.spacedBy(14.dp),
     ) {
-        XySectionLabel("Tampilan app")
+        XySectionLabel(xy("Tampilan app", "App appearance"))
         XyCard {
             XySegmented(
-                options = listOf("Ikut sistem", "Gelap", "Terang"),
+                options = listOf(xy("Ikut sistem", "Follow system"), xy("Gelap", "Dark"), xy("Terang", "Light")),
                 selectedIndex = themeMode,
                 onSelect = {
                     themeMode = it
@@ -345,7 +345,7 @@ private fun GeneralSection(appPrefs: AppPrefs, onShowLog: () -> Unit) {
             )
             Spacer(Modifier.height(6.dp))
             XyToggleRow(
-                title = "Putuskan sesi saat app ke background",
+                title = xy("Putuskan sesi saat app ke background", "Disconnect when app goes background"),
                 subtitle = "Cegah sesi menggantung saat HP dipakai untuk hal lain",
                 checked = autoDisconnect,
                 onCheckedChange = {
@@ -355,9 +355,9 @@ private fun GeneralSection(appPrefs: AppPrefs, onShowLog: () -> Unit) {
             )
         }
 
-        XySectionLabel("Kontrol sesi")
+        XySectionLabel(xy("Kontrol sesi", "Session controls"))
         XyCard {
-            Text("Mode input default", style = MaterialTheme.typography.titleSmall)
+            Text(xy("Mode input default", "Default input mode"), style = MaterialTheme.typography.titleSmall)
             Spacer(Modifier.height(8.dp))
             XySegmented(
                 options = InputMode.entries.map { it.title },
@@ -374,7 +374,7 @@ private fun GeneralSection(appPrefs: AppPrefs, onShowLog: () -> Unit) {
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
             Spacer(Modifier.height(16.dp))
-            Text("Pointer", style = MaterialTheme.typography.titleSmall)
+            Text(xy("Pointer", "Pointer"), style = MaterialTheme.typography.titleSmall)
             Spacer(Modifier.height(8.dp))
             XySegmented(
                 options = PointerStyle.entries.map { it.title },
@@ -414,7 +414,7 @@ private fun GeneralSection(appPrefs: AppPrefs, onShowLog: () -> Unit) {
                 valueRange = 0.4f..2.5f,
             )
             XyToggleRow(
-                title = "Getaran saat tombol ditekan",
+                title = xy("Getaran saat tombol ditekan", "Haptic feedback on button press"),
                 subtitle = "Haptic halus di cluster mouse dan keyboard",
                 checked = haptics,
                 onCheckedChange = {
@@ -424,7 +424,7 @@ private fun GeneralSection(appPrefs: AppPrefs, onShowLog: () -> Unit) {
             )
         }
 
-        XySectionLabel("Tombol HUD")
+        XySectionLabel(xy("Tombol HUD", "HUD buttons"))
         XyCard {
             Text(
                 "Setiap tombol di layar sesi berdiri sendiri: bentuknya bulat " +
@@ -451,27 +451,27 @@ private fun GeneralSection(appPrefs: AppPrefs, onShowLog: () -> Unit) {
                 valueRange = 0.7f..1.8f,
             )
             XyToggleRow(
-                title = "Tombol kiri",
+                title = xy("Tombol kiri", "Left button"),
                 checked = showLeft,
                 onCheckedChange = { showLeft = it; prefs.showLeft = it },
             )
             XyToggleRow(
-                title = "Tombol kanan",
+                title = xy("Tombol kanan", "Right button"),
                 checked = showRight,
                 onCheckedChange = { showRight = it; prefs.showRight = it },
             )
             XyToggleRow(
-                title = "Tombol tengah",
+                title = xy("Tombol tengah", "Middle button"),
                 checked = showMiddle,
                 onCheckedChange = { showMiddle = it; prefs.showMiddle = it },
             )
             XyToggleRow(
-                title = "Scroll atas/bawah",
+                title = xy("Scroll atas/bawah", "Scroll up/down"),
                 checked = showScroll,
                 onCheckedChange = { showScroll = it; prefs.showScroll = it },
             )
             XyToggleRow(
-                title = "Tombol ganti mode input",
+                title = xy("Tombol ganti mode input", "Input-mode switch button"),
                 subtitle = "Pindah trackpad <-> sentuh langsung dari layar sesi",
                 checked = showSwitch,
                 onCheckedChange = { showSwitch = it; prefs.showSwitch = it },
@@ -484,7 +484,7 @@ private fun GeneralSection(appPrefs: AppPrefs, onShowLog: () -> Unit) {
             )
         }
 
-        XySectionLabel("Keyboard")
+        XySectionLabel(xy("Keyboard", "Keyboard"))
         XyCard {
             Text(
                 "Mengetik memakai keyboard HP (IME). Tidak ada keyboard virtual " +
@@ -495,14 +495,14 @@ private fun GeneralSection(appPrefs: AppPrefs, onShowLog: () -> Unit) {
             )
             Spacer(Modifier.height(8.dp))
             XyToggleRow(
-                title = "Muat seluruh desktop (fit)",
-                subtitle = "Taskbar dan tepi desktop selalu ikut kelihatan",
+                title = xy("Muat seluruh desktop (fit)", "Fit whole desktop"),
+                subtitle = xy("Taskbar dan tepi desktop selalu ikut kelihatan", "Taskbar and desktop edges always stay visible"),
                 checked = autoFit,
                 onCheckedChange = { autoFit = it; prefs.autoFit = it },
             )
         }
 
-        XySectionLabel("Keyboard & HUD")
+        XySectionLabel(xy("Keyboard & HUD", "Keyboard & HUD"))
         XyCard {
             Text("Ukuran tombol kontrol HUD: ${hudSize.toInt()} dp", style = MaterialTheme.typography.bodyMedium)
             Spacer(Modifier.height(4.dp))
@@ -519,7 +519,7 @@ private fun GeneralSection(appPrefs: AppPrefs, onShowLog: () -> Unit) {
             )
         }
 
-        XySectionLabel("Bahasa / Language")
+        XySectionLabel(xy("Bahasa / Language", "Language / Bahasa"))
         XyCard {
             XySegmented(
                 options = XyLang.entries.map { it.label },
@@ -538,7 +538,7 @@ private fun GeneralSection(appPrefs: AppPrefs, onShowLog: () -> Unit) {
             )
         }
 
-        XySectionLabel("Transport (default perangkat baru)")
+        XySectionLabel(xy("Transport (default perangkat baru)", "Transport (new device defaults)"))
         XyCard {
             Text(
                 "Nilai ini dipakai saat menambah perangkat baru. Perangkat yang " +
@@ -547,43 +547,43 @@ private fun GeneralSection(appPrefs: AppPrefs, onShowLog: () -> Unit) {
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
             XyToggleRow(
-                title = "Transport UDP",
-                subtitle = "RDP-UDP + FEC untuk gerakan halus",
+                title = xy("Transport UDP", "UDP transport"),
+                subtitle = xy("RDP-UDP + FEC untuk gerakan halus", "RDP-UDP + FEC for smoother motion"),
                 checked = defaultUdp,
                 onCheckedChange = { defaultUdp = it; appPrefs.defaultUdp = it },
             )
             XyToggleRow(
-                title = "Deteksi bandwidth otomatis",
-                subtitle = "Kualitas mengikuti kondisi jaringan",
+                title = xy("Deteksi bandwidth otomatis", "Automatic bandwidth detection"),
+                subtitle = xy("Kualitas mengikuti kondisi jaringan", "Quality follows network conditions"),
                 checked = defaultNetAuto,
                 onCheckedChange = { defaultNetAuto = it; appPrefs.defaultNetAuto = it },
             )
             XyToggleRow(
-                title = "H.264 / RemoteFX (GFX)",
-                subtitle = "Matikan kalau server lama tidak mendukung",
+                title = xy("H.264 / RemoteFX (GFX)", "H.264 / RemoteFX (GFX)"),
+                subtitle = xy("Matikan kalau server lama tidak mendukung", "Turn off if an older server does not support it"),
                 checked = defaultH264,
                 onCheckedChange = { defaultH264 = it; appPrefs.defaultH264 = it },
             )
             XyToggleRow(
-                title = "Resolusi dinamis",
-                subtitle = "Desktop remote bisa diubah saat sesi hidup (kanal DISP)",
+                title = xy("Resolusi dinamis", "Dynamic resolution"),
+                subtitle = xy("Desktop remote bisa diubah saat sesi hidup (kanal DISP)", "Change remote desktop size live (DISP channel)"),
                 checked = defaultDynRes,
                 onCheckedChange = { defaultDynRes = it; appPrefs.defaultDynamicResolution = it },
             )
             XyToggleRow(
-                title = "Clipboard dua arah",
+                title = xy("Clipboard dua arah", "Two-way clipboard"),
                 checked = defaultClipboard,
                 onCheckedChange = { defaultClipboard = it; appPrefs.defaultClipboard = it },
             )
             XyToggleRow(
-                title = "Penyimpanan lokal (drive)",
-                subtitle = "Folder Download HP muncul sebagai drive di remote",
+                title = xy("Penyimpanan lokal (drive)", "Local storage (drive)"),
+                subtitle = xy("Folder Download HP muncul sebagai drive di remote", "Phone storage shows up as a remote drive"),
                 checked = defaultDrive,
                 onCheckedChange = { defaultDrive = it; appPrefs.defaultLocalDrive = it },
             )
         }
 
-        XySectionLabel("Masalah koneksi")
+        XySectionLabel(xy("Masalah koneksi", "Connection issues"))
         XyCard {
             Text(
                 "Audio, mikrofon, clipboard, drive, kamera, dan gateway diatur " +
@@ -595,7 +595,7 @@ private fun GeneralSection(appPrefs: AppPrefs, onShowLog: () -> Unit) {
             Text("Inti: ${coreBuildInfo()}", style = MaterialTheme.typography.bodySmall)
             Spacer(Modifier.height(10.dp))
             XyPillButton(
-                "Lihat log sesi terakhir",
+                xy("Lihat log sesi terakhir", "View last session log"),
                 onShowLog,
                 primary = false,
                 compact = true,
@@ -624,14 +624,14 @@ private fun SecuritySection() {
             .padding(horizontal = 16.dp),
         verticalArrangement = Arrangement.spacedBy(14.dp),
     ) {
-        XySectionLabel("Penyimpanan kredensial")
+        XySectionLabel(xy("Penyimpanan kredensial", "Credential storage"))
         XyCard {
             Bullet("Password: AES-256-GCM, kunci non-exportable di Android Keystore")
             Bullet("Password tidak pernah masuk log aplikasi atau URI yang ditulis ke log")
             Bullet("Backup & transfer data app dimatikan (allowBackup=false)")
             Bullet("Tidak ada kredensial yang dikirim ke layanan pihak ketiga")
         }
-        XySectionLabel("Sertifikat server yang dipercaya")
+        XySectionLabel(xy("Sertifikat server yang dipercaya", "Trusted server certificates"))
         XyCard {
             if (entries.isEmpty()) {
                 Text(
@@ -654,7 +654,7 @@ private fun SecuritySection() {
                 }
                 Spacer(Modifier.height(10.dp))
                 XyPillButton(
-                    text = "Hapus semua kepercayaan sertifikat",
+                    text = xy("Hapus semua kepercayaan sertifikat", "Clear all trusted certificates"),
                     onClick = {
                         store.clear()
                         tick++
@@ -707,7 +707,7 @@ private fun AboutSection() {
         XyCard {
             XyLogo(modifier = Modifier.height(38.dp).fillMaxWidth(0.16f))
             Spacer(Modifier.height(12.dp))
-            Text("XyDesk Remote", style = MaterialTheme.typography.headlineSmall)
+            Text(xy("XyDesk Remote", "XyDesk Remote"), style = MaterialTheme.typography.headlineSmall)
             Text(
                 t("app.tagline"),
                 style = MaterialTheme.typography.bodyMedium,
@@ -719,7 +719,7 @@ private fun AboutSection() {
                 title = t("about.engine"),
                 subtitle = native ?: "FreeRDP (dimuat saat connect)",
             )
-            XyRow(title = t("about.developer"), subtitle = "XyVerse / xykal")
+            XyRow(title = t("about.developer"), subtitle = xy("XyVerse / xykal", "XyVerse / xykal"))
         }
 
         // ---- Bahasa: satu klik, langsung ganti seluruh teks app ----
@@ -768,7 +768,7 @@ private fun AboutSection() {
 }
 
 /**
- * "Dukung saya" — Saweria, GitHub Sponsors, dan bintang repo.
+ * xy("Dukung saya", "Support me") — Saweria, GitHub Sponsors, dan bintang repo.
  *
  * Semua tautan dibuka lewat browser (Intent VIEW), tanpa SDK pihak ketiga
  * dan tanpa jaringan dari dalam app sendiri.
@@ -863,7 +863,7 @@ fun InfoDialog(title: String, body: String, onDismiss: () -> Unit) {
     XyDialog(
         title = title,
         body = body,
-        confirmLabel = "Tutup",
+        confirmLabel = xy("Tutup", "Close"),
         onConfirm = onDismiss,
         dismissLabel = null,
         onDismiss = onDismiss,

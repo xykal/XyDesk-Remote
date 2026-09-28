@@ -217,3 +217,24 @@ fun t(key: String): String {
     xyLang()
     return XyText.t(key)
 }
+
+/**
+ * Teks dua bahasa langsung di tempat: [id] dipakai kalau bahasa Indonesia,
+ * [en] kalau English. Ditulis berdampingan dengan pemakaiannya supaya tidak
+ * ada kunci terjemahan yang lupa diisi, dan ikut render ulang saat bahasa
+ * berganti. Argumen mengisi placeholder {0}, {1}, ...
+ */
+@Composable
+fun xy(id: String, en: String, vararg args: Any?): String =
+    fill(if (xyLang() == XyLang.EN) en else id, args)
+
+/** Versi non-composable (notice, callback) — pakai bahasa yang sedang aktif. */
+fun xyNow(id: String, en: String, vararg args: Any?): String =
+    fill(if (XyText.current() == XyLang.EN) en else id, args)
+
+private fun fill(template: String, args: Array<out Any?>): String {
+    if (args.isEmpty()) return template
+    var out = template
+    args.forEachIndexed { i, a -> out = out.replace("{$i}", a.toString()) }
+    return out
+}

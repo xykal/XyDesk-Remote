@@ -29,6 +29,8 @@ class SessionsRepository(context: Context) {
                     password = if (e.rememberPassword) vault.get(e.id) else null,
                     domain = e.domain,
                     label = e.label,
+                    // id baris = kunci tetap perangkat (data lama tetap host:port)
+                    key = e.id,
                 )
             }
         }

@@ -49,7 +49,7 @@ import id.xydesk.remote.ui.components.XyTopBar
 import id.xydesk.remote.ui.theme.XyPill
 
 /**
- * Layar "Tambah perangkat" — bukan dialog. Semua yang dibutuhkan satu
+ * Layar xy("Tambah perangkat", "Add device") — bukan dialog. Semua yang dibutuhkan satu
  * koneksi RDP ada di sini: alamat, kredensial, tampilan, kanal yang
  * di-redirect, dan gateway.
  *
@@ -65,7 +65,12 @@ fun AddDeviceScreen(
     onSubmit: (profile: ConnectionProfile, rememberPassword: Boolean, connect: Boolean) -> Unit,
 ) {
     val context = LocalContext.current
-    val deviceId = existing?.id
+    // Kunci tetap: dipakai ulang saat mengubah perangkat supaya simpan tidak
+    // menghasilkan baris kedua. Data lama (belum punya key) memakai id-nya.
+    val deviceKey = remember(existing) {
+        existing?.key ?: existing?.id ?: java.util.UUID.randomUUID().toString()
+    }
+    val deviceId = deviceKey
 
     var label by remember { mutableStateOf(existing?.label.orEmpty()) }
     var host by remember { mutableStateOf(existing?.host.orEmpty()) }
@@ -125,15 +130,15 @@ fun AddDeviceScreen(
         val portValue = port.toIntOrNull() ?: 3389
         when {
             hostValue.isEmpty() -> {
-                error = "Alamat host wajib diisi"
+                error = xyNow("Alamat host wajib diisi", "Host address is required")
                 return
             }
             hostValue.any { it.isWhitespace() } -> {
-                error = "Alamat host tidak boleh ada spasi"
+                error = xyNow("Alamat host tidak boleh ada spasi", "Host address cannot contain spaces")
                 return
             }
             portValue !in 1..65535 -> {
-                error = "Port harus 1-65535"
+                error = xyNow("Port harus 1-65535", "Port must be 1-65535")
                 return
             }
         }
@@ -145,6 +150,7 @@ fun AddDeviceScreen(
                 password = pass.ifEmpty { null },
                 domain = domain.trim().ifEmpty { null },
                 label = label.trim().ifEmpty { null },
+                key = deviceKey,
             )
         } catch (e: IllegalArgumentException) {
             error = e.message
@@ -179,7 +185,7 @@ fun AddDeviceScreen(
             .imePadding(),
     ) {
         XyTopBar(
-            title = if (existing == null) "Perangkat baru" else "Ubah perangkat",
+            title = if (existing == null) xy("Perangkat baru", "New device") else xy("Ubah perangkat", "Edit device"),
             onBack = onCancel,
         )
         Column(
@@ -189,19 +195,19 @@ fun AddDeviceScreen(
                 .padding(horizontal = 16.dp),
             verticalArrangement = Arrangement.spacedBy(14.dp),
         ) {
-            XySectionLabel("Alamat")
+            XySectionLabel(xy("Alamat", "Address"))
             XyCard {
                 XyField(
                     value = label,
                     onValueChange = { label = it },
-                    label = "Nama perangkat",
-                    hint = "mis. PC kantor",
+                    label = xy("Nama perangkat", "Device name"),
+                    hint = xy("mis. PC kantor", "e.g. Office PC"),
                 )
                 Spacer(Modifier.height(14.dp))
                 XyField(
                     value = host,
                     onValueChange = { host = it.trim() },
-                    label = "Host / IP / tailnet",
+                    label = xy("Host / IP / tailnet", "Host / IP / tailnet"),
                     hint = "192.168.1.10 atau pc.tailnet.ts.net",
                     keyboardType = KeyboardType.Uri,
                 )
@@ -209,18 +215,18 @@ fun AddDeviceScreen(
                 XyField(
                     value = port,
                     onValueChange = { port = it.filter(Char::isDigit).take(5) },
-                    label = "Port RDP",
+                    label = xy("Port RDP", "RDP port"),
                     hint = "3389",
                     keyboardType = KeyboardType.Number,
                     imeAction = androidx.compose.ui.text.input.ImeAction.Done,
                 )
             }
 
-            XySectionLabel("Kredensial")
+            XySectionLabel(xy("Kredensial", "Credentials"))
             XyCard {
                 if (savedUsers.isNotEmpty()) {
                     Text(
-                        "Akun tersimpan",
+                        xy("Akun tersimpan", "Saved account"),
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
@@ -246,14 +252,14 @@ fun AddDeviceScreen(
                 XyField(
                     value = user,
                     onValueChange = { user = it },
-                    label = "Username",
+                    label = xy("Username", "Username"),
                     hint = "kosongkan kalau mau ditanya saat connect",
                 )
                 Spacer(Modifier.height(14.dp))
                 XyField(
                     value = pass,
                     onValueChange = { pass = it },
-                    label = "Password",
+                    label = xy("Password", "Password"),
                     isPassword = true,
                     keyboardType = KeyboardType.Password,
                 )
@@ -261,23 +267,23 @@ fun AddDeviceScreen(
                 XyField(
                     value = domain,
                     onValueChange = { domain = it },
-                    label = "Domain (opsional)",
+                    label = xy("Domain (opsional)", "Domain (optional)"),
                     hint = "CORP",
                 )
                 Spacer(Modifier.height(6.dp))
                 XyToggleRow(
-                    title = "Ingat password",
-                    subtitle = "Disimpan terenkripsi AES-GCM, kunci di Android Keystore",
+                    title = xy("Ingat password", "Remember password"),
+                    subtitle = xy("Disimpan terenkripsi AES-GCM, kunci di Android Keystore", "Stored AES-GCM encrypted, key in Android Keystore"),
                     checked = rememberPass,
                     onCheckedChange = { rememberPass = it },
                     leading = XyIcons.Lock,
                 )
             }
 
-            XySectionLabel("Tampilan")
+            XySectionLabel(xy("Tampilan", "Display"))
             XyCard {
                 Text(
-                    "Resolusi desktop remote",
+                    xy("Resolusi desktop remote", "Remote desktop resolution"),
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
@@ -301,7 +307,7 @@ fun AddDeviceScreen(
                 }
                 Spacer(Modifier.height(16.dp))
                 Text(
-                    "Orientasi perangkat",
+                    xy("Orientasi perangkat", "Device orientation"),
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
@@ -333,7 +339,7 @@ fun AddDeviceScreen(
                 )
             }
 
-            XySectionLabel("Audio & kanal")
+            XySectionLabel(xy("Audio & kanal", "Audio & channels"))
             XyCard {
                 Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
                     XyAudioMode.entries.forEachIndexed { index, mode ->
@@ -368,21 +374,21 @@ fun AddDeviceScreen(
                 }
                 Spacer(Modifier.height(8.dp))
                 XyToggleRow(
-                    title = "Mikrofon",
-                    subtitle = "Kirim audio HP ke remote (butuh izin mikrofon)",
+                    title = xy("Mikrofon", "Microphone"),
+                    subtitle = xy("Kirim audio HP ke remote (butuh izin mikrofon)", "Send phone audio to remote (needs mic permission)"),
                     checked = options.microphone,
                     onCheckedChange = { options = options.copy(microphone = it) },
                     leading = XyIcons.Mic,
                 )
                 XyToggleRow(
-                    title = "Clipboard",
-                    subtitle = "Copy-paste dua arah",
+                    title = xy("Clipboard", "Clipboard"),
+                    subtitle = xy("Copy-paste dua arah", "Two-way copy-paste"),
                     checked = options.clipboard,
                     onCheckedChange = { options = options.copy(clipboard = it) },
                     leading = XyIcons.Clip,
                 )
                 XyToggleRow(
-                    title = "Penyimpanan lokal",
+                    title = xy("Penyimpanan lokal", "Local storage"),
                     subtitle = "Folder HP muncul sebagai drive 'sdcard' di remote",
                     checked = options.localDrive,
                     onCheckedChange = { options = options.copy(localDrive = it) },
@@ -392,18 +398,18 @@ fun AddDeviceScreen(
                     StorageAccessRow()
                 }
                 XyToggleRow(
-                    title = "Kamera",
-                    subtitle = "Kamera HP sebagai webcam remote (kalau didukung server)",
+                    title = xy("Kamera", "Camera"),
+                    subtitle = xy("Kamera HP sebagai webcam remote (kalau didukung server)", "Phone camera as remote webcam (if the server supports it)"),
                     checked = options.camera,
                     onCheckedChange = { options = options.copy(camera = it) },
                     leading = XyIcons.Shot,
                 )
             }
 
-            XySectionLabel("Jaringan")
+            XySectionLabel(xy("Jaringan", "Network"))
             XyCard {
                 XyToggleRow(
-                    title = "Transport UDP",
+                    title = xy("Transport UDP", "UDP transport"),
                     subtitle = "RDP-UDP + FEC; lebih halus untuk gerakan cepat, " +
                         "butuh dukungan server",
                     checked = options.udpTransport,
@@ -426,11 +432,11 @@ fun AddDeviceScreen(
                 )
             }
 
-            XySectionLabel("Gateway")
+            XySectionLabel(xy("Gateway", "Gateway"))
             XyCard {
                 XyToggleRow(
-                    title = "Lewat RDP Gateway",
-                    subtitle = "RD Gateway untuk jaringan kantor / tanpa port langsung",
+                    title = xy("Lewat RDP Gateway", "Use RDP Gateway"),
+                    subtitle = xy("RD Gateway untuk jaringan kantor / tanpa port langsung", "RD Gateway for office networks / no direct port"),
                     checked = gatewayOn,
                     onCheckedChange = { gatewayOn = it },
                     leading = XyIcons.Lock,
@@ -440,14 +446,14 @@ fun AddDeviceScreen(
                     XyField(
                         value = gwHost,
                         onValueChange = { gwHost = it.trim() },
-                        label = "Gateway host",
+                        label = xy("Gateway host", "Gateway host"),
                         hint = "gw.kantor.com",
                     )
                     Spacer(Modifier.height(12.dp))
                     XyField(
                         value = gwPort,
                         onValueChange = { gwPort = it.filter(Char::isDigit).take(5) },
-                        label = "Gateway port",
+                        label = xy("Gateway port", "Gateway port"),
                         hint = "443",
                         keyboardType = KeyboardType.Number,
                     )
@@ -455,13 +461,13 @@ fun AddDeviceScreen(
                     XyField(
                         value = gwUser,
                         onValueChange = { gwUser = it },
-                        label = "Gateway username (opsional)",
+                        label = xy("Gateway username (opsional)", "Gateway username (optional)"),
                     )
                     Spacer(Modifier.height(12.dp))
                     XyField(
                         value = gwPass,
                         onValueChange = { gwPass = it },
-                        label = "Gateway password (opsional)",
+                        label = xy("Gateway password (opsional)", "Gateway password (optional)"),
                         isPassword = true,
                         keyboardType = KeyboardType.Password,
                     )
@@ -469,7 +475,7 @@ fun AddDeviceScreen(
                     XyField(
                         value = gwDomain,
                         onValueChange = { gwDomain = it },
-                        label = "Gateway domain (opsional)",
+                        label = xy("Gateway domain (opsional)", "Gateway domain (optional)"),
                     )
                 }
             }
@@ -488,13 +494,13 @@ fun AddDeviceScreen(
             horizontalArrangement = Arrangement.spacedBy(10.dp),
         ) {
             XyPillButton(
-                text = "Simpan",
+                text = xy("Simpan", "Save"),
                 onClick = { submit(false) },
                 primary = false,
                 modifier = Modifier.weight(1f),
             )
             XyPillButton(
-                text = "Simpan & connect",
+                text = xy("Simpan & connect", "Save & connect"),
                 onClick = { submit(true) },
                 modifier = Modifier.weight(1.4f),
             )
@@ -537,7 +543,7 @@ private fun StorageAccessRow() {
         if (!granted) {
             Spacer(Modifier.height(8.dp))
             XyPillButton(
-                text = "Beri akses semua file",
+                text = xy("Beri akses semua file", "Grant all-files access"),
                 onClick = {
                     val intent = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
                         Intent(
