@@ -306,6 +306,22 @@ class SessionSurfaceController(private val activity: Activity) : GraphicsSink {
     }
 
     /**
+     * Lepas fokus dari surface sebelum layar sesi ditinggalkan (mis. buka
+     * home). Tanpa ini keyboard HP bisa tertinggal terbuka di layar lain
+     * padahal sesinya tetap jalan di latar.
+     */
+    fun blurInput() {
+        uiHandler.post {
+            runCatching {
+                inputManager?.let { im ->
+                    if (im.isSoftInputActive()) im.setSoftKeyboard(false)
+                }
+                rootView?.clearFocus()
+            }
+        }
+    }
+
+    /**
      * Nyala/matikan keyboard HP (IME). Board keyboard bawaan sudah dibuang,
      * jadi ini satu-satunya jalur keyboard: tombol HUD "Keyboard" dan chip
      * di panel hanya memanggil ini.

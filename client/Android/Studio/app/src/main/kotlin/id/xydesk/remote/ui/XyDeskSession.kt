@@ -643,6 +643,9 @@ fun XyDeskSessionScreen(
                 // Sesi lain: buka home tanpa memutus sesi ini (keep-alive
                 // default menyala, jadi sesi tetap jalan di latar).
                 onOpenHome = {
+                    // Sesi tetap jalan (keep-alive) tapi keyboard HP ditutup
+                    // dulu supaya tidak nyangkut di layar home.
+                    controller.blurInput()
                     runCatching {
                         context.startActivity(
                             android.content.Intent(context, XyDeskHomeActivity::class.java)
