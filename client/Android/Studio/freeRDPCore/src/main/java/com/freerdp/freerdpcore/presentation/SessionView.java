@@ -641,11 +641,9 @@ public class SessionView extends View
 	@Override public InputConnection onCreateInputConnection(EditorInfo outAttrs)
 	{
 		outAttrs.actionLabel = null;
-		// Advertise an immediate text editor without predictive buffering so IMEs
-		// emit every character right away while still supporting setComposingText.
-		outAttrs.inputType = InputType.TYPE_CLASS_TEXT |
-		                     InputType.TYPE_TEXT_VARIATION_VISIBLE_PASSWORD |
-		                     InputType.TYPE_TEXT_FLAG_NO_SUGGESTIONS;
+		// Standard multi-line text input so Gboard/Samsung Keyboard keep their
+		// clipboard toolbar, paste chips, and full keyboard features enabled.
+		outAttrs.inputType = InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_FLAG_MULTI_LINE;
 		outAttrs.imeOptions = EditorInfo.IME_ACTION_NONE | EditorInfo.IME_FLAG_NO_EXTRACT_UI |
 		                      EditorInfo.IME_FLAG_NO_FULLSCREEN;
 		final InputSink sink = inputSink;

@@ -218,6 +218,7 @@ private fun CredentialsSection(
     val vault = remember { CredentialVault(context.applicationContext) }
     var tick by remember { mutableIntStateOf(0) }
     var confirmClear by remember { mutableStateOf(false) }
+    var confirmForgetProfile by remember { mutableStateOf<ConnectionProfile?>(null) }
     // Flag "password tersimpan?" dihitung ulang saat `tick` naik (tombol
     // Lupakan ditekan) atau daftar perangkat berubah. Dulu ini pakai trik
     // `if (tick < 0) Text("")` di ujung layar untuk memaksa recompose.
@@ -275,10 +276,7 @@ private fun CredentialsSection(
                         if (remembered) {
                             XyPillButton(
                                 text = xy("Lupakan", "Forget"),
-                                onClick = {
-                                    vault.remove(profile.id)
-                                    tick++
-                                },
+                                onClick = { confirmForgetProfile = profile },
                                 primary = false,
                                 compact = true,
                             )
@@ -297,6 +295,25 @@ private fun CredentialsSection(
             )
         }
         Spacer(Modifier.height(12.dp))
+    }
+
+    confirmForgetProfile?.let { target ->
+        XyDialog(
+            title = xy("Lupakan password?", "Forget password?"),
+            body = xy(
+                "Hapus password tersimpan untuk \"{0}\"? Kamu akan diminta memasukkan password lagi saat menyambung.",
+                "Remove the saved password for \"{0}\"? You will be asked to enter it again on the next connection.",
+                target.label ?: "${target.host}:${target.port}",
+            ),
+            confirmLabel = xy("Lupakan", "Forget"),
+            onConfirm = {
+                confirmForgetProfile = null
+                vault.remove(target.id)
+                tick++
+            },
+            dismissLabel = xy("Batal", "Cancel"),
+            onDismiss = { confirmForgetProfile = null },
+        )
     }
 
     if (confirmClear) {
@@ -667,6 +684,8 @@ private fun SecuritySection() {
     val store = remember { CertificateTrustStore(context.applicationContext) }
     var tick by remember { mutableIntStateOf(0) }
     var showTrustedCertificates by remember { mutableStateOf(false) }
+    var confirmRemoveCertHost by remember { mutableStateOf<String?>(null) }
+    var confirmClearAllCerts by remember { mutableStateOf(false) }
     val entries = remember(tick) { store.entries() }
 
     Column(
@@ -727,10 +746,7 @@ private fun SecuritySection() {
                             Modifier
                                 .clip(XyPill)
                                 .border(1.dp, MaterialTheme.colorScheme.outlineVariant, XyPill)
-                                .clickable {
-                                    store.removeKey(host)
-                                    tick++
-                                }
+                                .clickable { confirmRemoveCertHost = host }
                                 .padding(horizontal = 10.dp, vertical = 5.dp),
                         ) {
                             Text(
@@ -743,15 +759,49 @@ private fun SecuritySection() {
                 Spacer(Modifier.height(10.dp))
                 XyPillButton(
                     text = xy("Hapus semua kepercayaan sertifikat", "Clear all trusted certificates"),
-                    onClick = {
-                        store.clear()
-                        tick++
-                    },
+                    onClick = { confirmClearAllCerts = true },
                     primary = false,
                 )
             }
         }
         Spacer(Modifier.height(12.dp))
+    }
+
+    confirmRemoveCertHost?.let { targetHost ->
+        XyDialog(
+            title = xy("Hapus sertifikat tepercaya?", "Remove trusted certificate?"),
+            body = xy(
+                "Hapus kepercayaan sertifikat untuk \"{0}\"? Server ini akan meminta verifikasi ulang saat menyambung.",
+                "Remove certificate trust for \"{0}\"? This server will prompt for verification again on the next connection.",
+                targetHost,
+            ),
+            confirmLabel = xy("Hapus", "Remove"),
+            onConfirm = {
+                confirmRemoveCertHost = null
+                store.removeKey(targetHost)
+                tick++
+            },
+            dismissLabel = xy("Batal", "Cancel"),
+            onDismiss = { confirmRemoveCertHost = null },
+        )
+    }
+
+    if (confirmClearAllCerts) {
+        XyDialog(
+            title = xy("Hapus semua sertifikat?", "Clear all certificates?"),
+            body = xy(
+                "Hapus seluruh daftar sertifikat server yang dipercaya? Semua server akan meminta verifikasi ulang saat menyambung.",
+                "Clear the entire trusted server certificate list? Every server will prompt for verification again on connect.",
+            ),
+            confirmLabel = xy("Hapus semua", "Clear all"),
+            onConfirm = {
+                confirmClearAllCerts = false
+                store.clear()
+                tick++
+            },
+            dismissLabel = xy("Batal", "Cancel"),
+            onDismiss = { confirmClearAllCerts = false },
+        )
     }
 }
 

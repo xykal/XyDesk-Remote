@@ -33,6 +33,23 @@ Product attribution: **XyVerse Technology Global**. These are proposals for prio
 | 25 | Custom radial / pie menu HUD trigger | Group up to 8 frequent shortcuts into a single swipe-out ring button | M | Proposed |
 | 26 | Local-to-remote smartcard / YubiKey (RDPDR Scard) pass-through | Authenticate to enterprise Windows hosts using a hardware security key | L | Proposed |
 
+## Differentiators vs Microsoft Remote Desktop / Windows App (12)
+
+| # | Differentiator feature | Why XyDesk Remote beats Microsoft Remote Desktop | Effort | Status |
+|---:|---|---|:---:|---|
+| 1 | Per-button customizable HUD overlay (drag, resize, Tap/One-Shot/Hold/Toggle, JSON share) | Microsoft RD only offers a fixed top bar; XyDesk lets users place any key/combo/mouse circle anywhere | M | Implemented |
+| 2 | Built-in Wake-on-LAN (WoL) + TCP port readiness poller | Boot a sleeping PC from bed and auto-connect the second port 3389 wakes up (Microsoft RD has no WoL) | M | Proposed |
+| 3 | Native SSH Tunnel / Jump-Host & Tailscale/WireGuard endpoint presets | Connect through an SSH bastion directly inside the app without running Termux/ConnectBot | L | Proposed |
+| 4 | Multi-step macro sequence buttons (e.g. `Win+R -> cmd -> Enter` or custom script trigger) | Execute repetitive admin/gaming/coding sequences in 1 tap on the HUD | M | Proposed |
+| 5 | Floating Picture-in-Picture (PiP) live monitor with 1-tap expand | Watch long builds, renders, or downloads while using WhatsApp/browser on the phone | M | Proposed |
+| 6 | Precision trackpad with inertial scroll, 2-finger right-drag, and edge-scroll zones | Desktop-grade trackpad physics instead of Microsoft RD's basic pointer emulation | M | Proposed |
+| 7 | Direct Android Share-Sheet to Remote Desktop (`Send file to PC` from any Android app) | Share a photo/PDF from Android Gallery directly into the active Windows session folder | M | Proposed |
+| 8 | Live network HUD pill (real-time FPS, RTT ping, codec AVC444/AVC420, bandwidth) | Instant visibility into why a session lags; Microsoft RD hides transport telemetry | S | Proposed |
+| 9 | Privacy Curtain / Blackout Remote Monitor mode | Blank the physical PC monitor while remoting in so bystanders at the office/home cannot watch | L | Proposed |
+| 10 | Gamepad / XInput virtual controller & gyro-mouse mode | Map Bluetooth controllers or phone tilt to mouse/WASD for remote gaming & 3D apps | L | Proposed |
+| 11 | Biometric App-Lock + Panic-Lock (`Win+L` auto-send on phone screen-off or shake) | Automatically lock the remote Windows session if the phone is locked or set down | S | Proposed |
+| 12 | Per-app HUD profile switcher (Coding, Gaming, Office, Video Editing) | Switch complete HUD button sets in 2 taps during a live session without reconnecting | S | Proposed |
+
 ## Improvements beyond new features (26)
 
 | # | Improvement | User value | Effort | Status |
