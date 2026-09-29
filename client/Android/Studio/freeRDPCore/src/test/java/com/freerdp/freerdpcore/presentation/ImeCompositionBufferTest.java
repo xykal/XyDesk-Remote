@@ -24,7 +24,8 @@ public class ImeCompositionBufferTest
 		ImeCompositionBuffer.Edit committed = buffer.commitText("hello");
 		assertEquals(0, committed.backspaces);
 		assertEquals("", committed.text);
-		assertEquals("", buffer.finishComposingText());
+		buffer.finishComposingText();
+		assertEquals("", buffer.getComposingText());
 	}
 
 	@Test
