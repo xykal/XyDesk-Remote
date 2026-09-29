@@ -48,6 +48,8 @@ data class RdpOptions(
     /** RDP-UDP (multitransport, FEC). Lebih halus di jaringan mobile. */
     val udpTransport: Boolean = true,
     val networkAutoDetect: Boolean = true,
+    /** Low-bandwidth profile and AVC420 hint; off preserves current defaults. */
+    val lowBandwidth: Boolean = false,
     /** RemoteFX/H.264 (GFX AVC444) untuk desktop yang berubah cepat. */
     val h264: Boolean = true,
 
@@ -69,6 +71,7 @@ data class RdpOptions(
         sp.putBoolean("$deviceId.camera", camera)
         sp.putBoolean("$deviceId.udp", udpTransport)
         sp.putBoolean("$deviceId.netauto", networkAutoDetect)
+        sp.putBoolean("$deviceId.lowbw", lowBandwidth)
         sp.putBoolean("$deviceId.h264", h264)
         sp.putBoolean("$deviceId.dynres", dynamicResolution)
         val g = gateway
@@ -95,7 +98,7 @@ data class RdpOptions(
                 .getSharedPreferences(FILE, Context.MODE_PRIVATE).edit()
             listOf(
                 "audio", "mic", "clipboard", "drive", "camera", "udp",
-                "netauto", "h264", "dynres", "ghost", "gport", "guser", "gpass", "gdomain",
+                "netauto", "lowbw", "h264", "dynres", "ghost", "gport", "guser", "gpass", "gdomain",
             ).forEach { editor.remove("$deviceId.$it") }
             editor.apply()
         }
@@ -126,6 +129,7 @@ data class RdpOptions(
                 camera = sp.getBoolean("$deviceId.camera", false),
                 udpTransport = sp.getBoolean("$deviceId.udp", true),
                 networkAutoDetect = sp.getBoolean("$deviceId.netauto", true),
+                lowBandwidth = sp.getBoolean("$deviceId.lowbw", false),
                 h264 = sp.getBoolean("$deviceId.h264", true),
                 dynamicResolution = sp.getBoolean("$deviceId.dynres", true),
                 gateway = gateway,

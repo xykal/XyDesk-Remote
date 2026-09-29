@@ -666,6 +666,7 @@ private fun SecuritySection() {
     val context = LocalContext.current
     val store = remember { CertificateTrustStore(context.applicationContext) }
     var tick by remember { mutableIntStateOf(0) }
+    var showTrustedCertificates by remember { mutableStateOf(false) }
     val entries = remember(tick) { store.entries() }
 
     Column(
@@ -688,7 +689,12 @@ private fun SecuritySection() {
         }
         XySectionLabel(xy("Sertifikat server yang dipercaya", "Trusted server certificates"))
         XyCard {
-            if (entries.isEmpty()) {
+            Row(Modifier.fillMaxWidth().clickable { showTrustedCertificates = !showTrustedCertificates },
+                verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween) {
+                Text("${if (showTrustedCertificates) "▾" else "▸"} ${xy("Daftar tepercaya ({0})", "Trusted list ({0})", entries.size)}",
+                    style = MaterialTheme.typography.titleSmall)
+            }
+            if (showTrustedCertificates && entries.isEmpty()) {
                 Text(
                     xy(
                         "Belum ada sertifikat yang ditandai percaya. Sertifikat hanya " +
@@ -698,7 +704,7 @@ private fun SecuritySection() {
                     ),
                     style = MaterialTheme.typography.bodyMedium,
                 )
-            } else {
+            } else if (showTrustedCertificates) {
                 entries.take(12).forEach { (host, fingerprint) ->
                     Row(
                         Modifier.padding(vertical = 4.dp),

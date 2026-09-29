@@ -176,6 +176,7 @@ data class HudKeyOption(
     val combo: List<Int> = emptyList(),
     /** Label bahasa Inggris; label utama bahasa Indonesia. */
     val labelEn: String = label,
+    val defaultAction: HudAction = HudAction.TAP,
 )
 
 /**
@@ -198,14 +199,20 @@ object HudKeyCatalog {
         HudKeyOption("Aksi", "Scroll turun", HudKind.SCROLL_DOWN, labelEn = "Scroll down"),
         HudKeyOption("Aksi", "Geser scroll", HudKind.SCROLL_SLIDER, labelEn = "Swipe to scroll"),
         HudKeyOption("Aksi", "Ganti mode input", HudKind.INPUT_SWITCH, labelEn = "Switch input mode"),
-        HudKeyOption("Aksi", "Klik kiri (tahan = drag)", HudKind.MOUSE_LEFT, labelEn = "Left click (hold = drag)"),
+        HudKeyOption(
+            "Aksi",
+            "Klik kiri (tahan = drag)",
+            HudKind.MOUSE_LEFT,
+            labelEn = "Left click (hold = drag)",
+            defaultAction = HudAction.HOLD,
+        ),
     )
 
     val modifiers = listOf(
-        HudKeyOption("Modifier", "Ctrl", HudKind.KEY, CTRL),
-        HudKeyOption("Modifier", "Shift", HudKind.KEY, SHIFT),
-        HudKeyOption("Modifier", "Alt", HudKind.KEY, ALT),
-        HudKeyOption("Modifier", "Win", HudKind.KEY, WIN),
+        HudKeyOption("Modifier", "Ctrl", HudKind.KEY, CTRL, defaultAction = HudAction.TOGGLE),
+        HudKeyOption("Modifier", "Shift", HudKind.KEY, SHIFT, defaultAction = HudAction.TOGGLE),
+        HudKeyOption("Modifier", "Alt", HudKind.KEY, ALT, defaultAction = HudAction.TOGGLE),
+        HudKeyOption("Modifier", "Win", HudKind.KEY, WIN, defaultAction = HudAction.TOGGLE),
     )
 
     val general = listOf(

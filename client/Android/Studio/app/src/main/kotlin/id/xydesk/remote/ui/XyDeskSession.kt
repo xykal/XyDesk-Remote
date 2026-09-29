@@ -11,6 +11,7 @@ import android.view.WindowManager
 import android.os.SystemClock
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.layout.Arrangement
@@ -378,6 +379,11 @@ fun XyDeskSessionScreen(
             prefs.setKeyboardShown(profile.id, visible)
         }
         controller.onRemoteCursor = { cursor -> remoteCursor = cursor }
+        controller.onCursorMoved = { x, y ->
+            cursorInit = true
+            cursorX = x.toFloat().coerceIn(0f, remoteWidth.toFloat())
+            cursorY = y.toFloat().coerceIn(0f, remoteHeight.toFloat())
+        }
         controller.refreshImeInsets()
     }
 
@@ -564,6 +570,14 @@ fun XyDeskSessionScreen(
         }
     }
 
+    fun reportInputDispatchFailure() {
+        (context as? XyDeskSessionActivity)?.reportInputDispatchFailure()
+    }
+    fun sendCursorEvent(x: Int, y: Int, flags: Int) {
+        if (!manager.sendCursorEvent(x, y, flags) && state is SessionState.Connected) {
+            reportInputDispatchFailure()
+        }
+    }
     fun cursor(): Offset {
         if (!cursorInit) {
             cursorInit = true
@@ -578,7 +592,7 @@ fun XyDeskSessionScreen(
         cursorX = (cursorX + dxScreen / scale).coerceIn(0f, remoteWidth.toFloat())
         cursorY = (cursorY + dyScreen / scale).coerceIn(0f, remoteHeight.toFloat())
         val c = cursor()
-        manager.sendCursorEvent(c.x.roundToInt(), c.y.roundToInt(), Mouse.getMoveEvent())
+        sendCursorEvent(c.x.roundToInt(), c.y.roundToInt(), Mouse.getMoveEvent())
     }
 
     fun sendButton(button: XyMouseButton, down: Boolean) {
@@ -588,7 +602,7 @@ fun XyDeskSessionScreen(
             XyMouseButton.RIGHT -> Mouse.getRightButtonEvent(context, down)
             XyMouseButton.MIDDLE -> Mouse.getMiddleButtonEvent(down)
         }
-        manager.sendCursorEvent(c.x.roundToInt(), c.y.roundToInt(), flags)
+        sendCursorEvent(c.x.roundToInt(), c.y.roundToInt(), flags)
     }
 
     fun sendScrollUnits(units: Int) {
@@ -597,7 +611,7 @@ fun XyDeskSessionScreen(
         var remaining = units
         while (remaining != 0) {
             val batch = remaining.coerceIn(-Mouse.WHEEL_DELTA, Mouse.WHEEL_DELTA)
-            manager.sendCursorEvent(
+            sendCursorEvent(
                 c.x.roundToInt(),
                 c.y.roundToInt(),
                 Mouse.getScrollEvent(context, batch),
@@ -1535,6 +1549,7 @@ private fun CertificateDialog(
     onReply: (Int) -> Unit,
     onTrustRemember: () -> Unit,
 ) {
+    var showCertificateDetails by remember(info.host, info.port, info.fingerprint) { mutableStateOf(false) }
     XyOverlay(
         title = if (info.isChanged) {
             xy("Sertifikat server berubah", "Server certificate changed")
@@ -1576,20 +1591,23 @@ private fun CertificateDialog(
                 color = MaterialTheme.colorScheme.error,
                 style = MaterialTheme.typography.bodySmall,
             )
-            Text(
-                xy("Tersimpan : {0}", "Stored: {0}", oldFingerprint),
-                style = MaterialTheme.typography.bodySmall,
-                fontFamily = FontFamily.Monospace,
-            )
         }
-        Text("Subject: ${info.subject}", style = MaterialTheme.typography.bodySmall)
-        Text("Issuer: ${info.issuer}", style = MaterialTheme.typography.bodySmall)
-        Text(xy("Fingerprint SHA-256:", "Fingerprint SHA-256:"), style = MaterialTheme.typography.bodySmall)
         Text(
-            info.fingerprint,
-            style = MaterialTheme.typography.bodySmall,
-            fontFamily = FontFamily.Monospace,
+            text = "${if (showCertificateDetails) "▾" else "▸"} ${xy("Detail sertifikat", "Certificate details")}",
+            modifier = Modifier.fillMaxWidth().clickable { showCertificateDetails = !showCertificateDetails },
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.primary,
         )
+        if (showCertificateDetails) {
+            Text("Subject: ${info.subject}", style = MaterialTheme.typography.bodySmall)
+            Text("Issuer: ${info.issuer}", style = MaterialTheme.typography.bodySmall)
+            Text(xy("Fingerprint SHA-256:", "Fingerprint SHA-256:"), style = MaterialTheme.typography.bodySmall)
+            Text(info.fingerprint, style = MaterialTheme.typography.bodySmall, fontFamily = FontFamily.Monospace)
+            if (oldFingerprint != null && oldFingerprint != info.fingerprint) {
+                Text(xy("Fingerprint tersimpan: {0}", "Stored fingerprint: {0}", oldFingerprint),
+                    style = MaterialTheme.typography.bodySmall, fontFamily = FontFamily.Monospace)
+            }
+        }
         XyPillButton(
             text = xy("Percaya & ingat", "Trust & remember"),
             onClick = onTrustRemember,
@@ -1605,7 +1623,7 @@ private fun CertificateDialog(
                 modifier = Modifier.weight(1f),
             )
             XyPillButton(
-                text = xy("Tolak", "Deny"),
+                text = xy("Tolak kali ini", "Deny this time"),
                 onClick = { onReply(CertificateInfo.VERIFY_DENY) },
                 primary = false,
                 compact = true,

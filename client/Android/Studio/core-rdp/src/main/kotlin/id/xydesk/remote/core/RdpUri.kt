@@ -21,8 +21,9 @@ object RdpUri {
 
     /** `[user@]host[:port]`; port default 3389 tidak ditulis. */
     fun authority(profile: ConnectionProfile): String {
-        var authority = profile.host
-        if (profile.port != 3389) authority = "${profile.host}:${profile.port}"
+        val uriHost = if (profile.host.contains(':') && !profile.host.startsWith('[')) "[${profile.host}]" else profile.host
+        var authority = uriHost
+        if (profile.port != 3389) authority = "$uriHost:${profile.port}"
         if (!profile.username.isNullOrBlank()) authority = "${profile.username}@$authority"
         return authority
     }
@@ -58,13 +59,19 @@ object RdpUri {
         if (options.microphone) out += "microphone" to ""
 
         out += "clipboard" to if (options.clipboard) "+" else "-"
-        if (options.localDrive) out += "drive" to "sdcard"
+        if (options.localDrive) out += "drive" to "XyDesk"
         if (options.camera) out += "dvc" to "rdpecam"
 
         // Hanya dikirim saat aktif: "+multitransport" menyalakan RDP-UDP (FEC).
         if (options.udpTransport) out += "multitransport" to "+"
-        if (options.networkAutoDetect) out += "network" to "auto"
-        if (options.h264) out += "gfx" to "AVC444"
+        when {
+            options.lowBandwidth -> out += "network" to "broadband-low"
+            options.networkAutoDetect -> out += "network" to "auto"
+        }
+        if (options.h264) {
+            val gfxCodec = if (options.lowBandwidth) "AVC420" else "AVC444"
+            out += "gfx" to gfxCodec
+        }
 
         // Kanal DISP (Display Control): bikin resolusi remote bisa diubah
         // saat sesi hidup lewat LibFreeRDP.sendMonitorLayout.

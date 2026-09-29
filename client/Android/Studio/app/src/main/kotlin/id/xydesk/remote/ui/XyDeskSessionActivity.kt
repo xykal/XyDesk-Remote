@@ -7,6 +7,7 @@ import android.os.Bundle
 import android.view.KeyEvent
 import android.os.Handler
 import android.os.Looper
+import android.os.SystemClock
 import android.util.Log
 import id.xydesk.remote.security.CrashLog
 import androidx.activity.ComponentActivity
@@ -84,6 +85,23 @@ class XyDeskSessionActivity : ComponentActivity() {
     }
     private var clipboardSyncEnabled = true
     private var pendingPermissionProfile: ConnectionProfile? = null
+    private var lastInputFailureNoticeAt = 0L
+
+    fun reportInputDispatchFailure() {
+        val now = SystemClock.elapsedRealtime()
+        if (now - lastInputFailureNoticeAt < 2_000L) return
+        lastInputFailureNoticeAt = now
+        val showNotice = {
+            if (!isFinishing && !isDestroyed) {
+                XyNoticeBus.post(xyNow(
+                    "Aksi belum masuk antrean input FreeRDP. Periksa koneksi dan coba lagi.",
+                    "Input was not queued by FreeRDP. Check the connection and try again.",
+                ))
+            }
+        }
+        if (Looper.myLooper() == Looper.getMainLooper()) showNotice()
+        else runOnUiThread { showNotice() }
+    }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -92,6 +110,7 @@ class XyDeskSessionActivity : ComponentActivity() {
             ConnectionLog.add("SES: activity created")
             manager = SessionManager(applicationContext)
             controller = SessionSurfaceController(this)
+            controller.onInputDispatchFailure = { reportInputDispatchFailure() }
             // sink WAJIB sebelum connect — event grafik pertama tidak boleh hilang
             manager.setGraphicsSink(controller)
             ConnectionLog.add("SES: manager+controller ok, sink set")

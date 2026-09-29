@@ -207,7 +207,7 @@ public class KeyboardMapper
 	private final static int EXTKEY_KBFUNCTIONKEYS = 0x1100;
 	private final static int EXTKEY_KBNUMPAD = 0x1101;
 	// this flag indicates if we got a VK or a unicode character in our translation map
-	private static final int KEY_FLAG_UNICODE = 0x80000000;
+	public static final int KEY_FLAG_UNICODE = 0x80000000;
 	// this flag indicates if the key is a toggle key (remains down when pressed and goes up if
 	// pressed again)
 	private static final int KEY_FLAG_TOGGLE = 0x40000000;
@@ -226,9 +226,9 @@ public class KeyboardMapper
 	private boolean isWinKeyDown = false;
 	private boolean isWinComboUsed = false;
 
-	public void init(Context context)
+	private static synchronized void ensureAndroidKeymapInitialized()
 	{
-		if (initialized)
+		if (keymapAndroid != null)
 			return;
 
 		keymapAndroid = new int[256];
@@ -277,8 +277,7 @@ public class KeyboardMapper
 		keymapAndroid[KeyEvent.KEYCODE_TAB] = VK_TAB;
 		keymapAndroid[KeyEvent.KEYCODE_ESCAPE] = VK_ESCAPE;
 		keymapAndroid[KeyEvent.KEYCODE_CAPS_LOCK] = VK_CAPITAL;
-		//		keymapAndroid[KeyEvent.KEYCODE_SHIFT_LEFT] = VK_LSHIFT;
-		//		keymapAndroid[KeyEvent.KEYCODE_SHIFT_RIGHT] = VK_RSHIFT;
+		keymapAndroid[KeyEvent.KEYCODE_MENU] = VK_APPS | VK_EXT_KEY;
 
 		keymapAndroid[KeyEvent.KEYCODE_DPAD_DOWN] = VK_DOWN | VK_EXT_KEY;
 		keymapAndroid[KeyEvent.KEYCODE_DPAD_LEFT] = VK_LEFT | VK_EXT_KEY;
@@ -341,6 +340,14 @@ public class KeyboardMapper
 		keymapAndroid[KeyEvent.KEYCODE_NUMPAD_EQUALS] = KEY_FLAG_UNICODE | 61;
 		keymapAndroid[KeyEvent.KEYCODE_NUMPAD_LEFT_PAREN] = KEY_FLAG_UNICODE | 40;
 		keymapAndroid[KeyEvent.KEYCODE_NUMPAD_RIGHT_PAREN] = KEY_FLAG_UNICODE | 41;
+	}
+
+	public void init(Context context)
+	{
+		if (initialized)
+			return;
+
+		ensureAndroidKeymapInitialized();
 
 		// special keys mapping
 		keymapExt = new int[256];
@@ -613,22 +620,36 @@ public class KeyboardMapper
 		}
 	}
 
-	private int fallbackVkcode(int keycode)
+	public int translateAndroidKeyCode(int keycode)
 	{
 		switch (keycode)
 		{
 			case KeyEvent.KEYCODE_SHIFT_LEFT:
-			case KeyEvent.KEYCODE_SHIFT_RIGHT:
 				return VK_LSHIFT;
+			case KeyEvent.KEYCODE_SHIFT_RIGHT:
+				return VK_RSHIFT;
 			case KeyEvent.KEYCODE_ALT_LEFT:
-			case KeyEvent.KEYCODE_ALT_RIGHT:
 				return VK_LMENU;
+			case KeyEvent.KEYCODE_ALT_RIGHT:
+				return VK_RMENU | VK_EXT_KEY;
 			case KeyEvent.KEYCODE_CTRL_LEFT:
-			case KeyEvent.KEYCODE_CTRL_RIGHT:
 				return VK_LCONTROL;
+			case KeyEvent.KEYCODE_CTRL_RIGHT:
+				return VK_RCONTROL | VK_EXT_KEY;
+			case KeyEvent.KEYCODE_META_LEFT:
+				return VK_LWIN | VK_EXT_KEY;
+			case KeyEvent.KEYCODE_META_RIGHT:
+				return VK_RWIN | VK_EXT_KEY;
+			case KeyEvent.KEYCODE_MENU:
+				return VK_APPS | VK_EXT_KEY;
 			default:
 				return getVirtualKeyCode(keycode);
 		}
+	}
+
+	private int fallbackVkcode(int keycode)
+	{
+		return translateAndroidKeyCode(keycode);
 	}
 
 	public void sendAltF4()
@@ -680,6 +701,7 @@ public class KeyboardMapper
 
 	private int getVirtualKeyCode(int keycode)
 	{
+		ensureAndroidKeymapInitialized();
 		if (keycode >= 0 && keycode <= 0xFF)
 			return keymapAndroid[keycode];
 		return 0;
