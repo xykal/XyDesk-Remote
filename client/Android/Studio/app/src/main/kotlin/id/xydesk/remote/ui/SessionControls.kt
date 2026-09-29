@@ -111,6 +111,7 @@ fun SessionControls(
     mappingMode: Boolean,
     onMappingModeChange: (Boolean) -> Unit,
     onPhase: (HudKey, HudPhase) -> Unit,
+    onScrollUnits: (Int) -> Unit,
     onZoomIn: () -> Unit,
     onZoomOut: () -> Unit,
     onFit: () -> Unit,
@@ -245,11 +246,11 @@ fun SessionControls(
         )
         onKeysChange(keys + key)
         panelOpen = false
-        onMappingModeChange(true)
+        onMappingModeChange(false)
         notice.show(
             xyNow(
-                "Tombol \"{0}\" ditambahkan di slot kosong — geser untuk menata",
-                "Button \"{0}\" added to a free slot — drag to arrange",
+                "Tombol \"{0}\" ditambahkan dan tersimpan — ketuk untuk mencoba. Buka Atur posisi untuk memindah/ubah ukuran.",
+                "Button \"{0}\" added and saved — tap to test. Open Edit layout to move/resize it.",
                 key.label,
             ),
         )
@@ -279,6 +280,8 @@ fun SessionControls(
                 if (phase != HudPhase.UP) haptic()
                 onPhase(key, phase)
             },
+            scrollSpeed = prefs.scrollSpeed,
+            onScrollUnits = onScrollUnits,
             onEdit = { editing = it },
         )
 
@@ -492,7 +495,16 @@ fun SessionControls(
     editing?.let { key ->
         HudKeyEditor(
             key = key,
-            onChange = { replace(it) },
+            onChange = { updated ->
+                val persisted = if (updated.size != key.size) {
+                    resizeHudKeyPreservingCenter(
+                        key, updated.size,
+                        configuration.screenWidthDp.toFloat(),
+                        configuration.screenHeightDp.toFloat(),
+                    )
+                } else updated
+                replace(persisted)
+            },
             onDelete = {
                 onDeleteKey(key)
                 editing = null
@@ -1036,8 +1048,8 @@ private fun InputTab(
         PanelHint(
             if (clipboardSyncEnabled) {
                 xy(
-                    "Clipboard sistem Android disinkronkan dua arah. Clipboard internal keyboard bisa hanya mengetik ke jendela; untuk menu Paste Windows, pakai Kirim sebagai clipboard Windows.",
-                    "Android system clipboard syncs both ways. A keyboard's private clipboard may only type into the window; use Send as Windows clipboard for the Paste menu.",
+                    "Salin lewat fitur Salin Android biasa otomatis terkirim ke Windows saat sesi aktif—tak perlu buka panel. Riwayat Gboard kadang hanya dikomit sebagai teks IME, bukan clipboard sistem; Android tidak membuka riwayat privat itu ke app. Pindahkan teks ke clipboard sistem atau masukkan lewat dialog Kirim teks sebagai clipboard Windows.",
+                    "Copy with Android's normal Copy action auto-syncs to Windows while connected—no panel needed. Gboard history may be committed only as IME text; Android does not expose that private history to apps. Copy it into the system clipboard or enter it in Send text as Windows clipboard.",
                 )
             } else {
                 xy(
@@ -1047,7 +1059,7 @@ private fun InputTab(
             },
         )
         XyPillButton(
-            xy("Kirim clipboard HP ke remote", "Send phone clipboard to remote"),
+            xy("Kirim clipboard sistem HP (manual)", "Send phone system clipboard (manual)"),
             onSendPhoneClipboard,
             primary = false,
             compact = true,
@@ -1121,8 +1133,9 @@ private fun ButtonsTab(
                 )
             } else {
                 xy(
-                    "Tombol HUD bulat beraksen mint. Semua aksi, termasuk scroll, bisa digeser saat mode atur posisi menyala.",
-                    "Round, mint-accented HUD buttons. Every action, including scroll, is draggable in layout mode.",
+                    "Tombol baru langsung berfungsi. Scroll naik/turun = ketuk per langkah; Geser scroll = seret halus. Atur posisi untuk memindah/ubah ukuran; perubahan tersimpan otomatis.",
+                    "New buttons work immediately. Scroll up/down = one step per tap; Swipe to scroll = continuous drag. Edit layout to move/resize; changes save automatically.",
+
                 )
             },
         )

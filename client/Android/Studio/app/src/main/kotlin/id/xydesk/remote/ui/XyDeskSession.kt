@@ -582,15 +582,22 @@ fun XyDeskSessionScreen(
         manager.sendCursorEvent(c.x.roundToInt(), c.y.roundToInt(), flags)
     }
 
-    fun sendScroll(notches: Int) {
+    fun sendScrollUnits(units: Int) {
+        if (units == 0) return
         val c = cursor()
-        val amount = Mouse.WHEEL_DELTA * notches
-        manager.sendCursorEvent(
-            c.x.roundToInt(),
-            c.y.roundToInt(),
-            Mouse.getScrollEvent(context, amount),
-        )
+        var remaining = units
+        while (remaining != 0) {
+            val batch = remaining.coerceIn(-Mouse.WHEEL_DELTA, Mouse.WHEEL_DELTA)
+            manager.sendCursorEvent(
+                c.x.roundToInt(),
+                c.y.roundToInt(),
+                Mouse.getScrollEvent(context, batch),
+            )
+            remaining -= batch
+        }
     }
+
+    fun sendScroll(notches: Int) = sendScrollUnits(Mouse.WHEEL_DELTA * notches)
 
     /**
      * Buka/tutup keyboard HP. Sumber kebenarannya state IME yang sebenarnya,
@@ -613,6 +620,7 @@ fun XyDeskSessionScreen(
             HudKind.MOUSE_MIDDLE -> sendButton(XyMouseButton.MIDDLE, down)
             HudKind.SCROLL_UP -> if (down) sendScroll(1)
             HudKind.SCROLL_DOWN -> if (down) sendScroll(-1)
+            HudKind.SCROLL_SLIDER -> Unit
             HudKind.KEYBOARD -> if (down) openKeyboard()
 
             HudKind.INPUT_SWITCH -> if (down) {
@@ -718,7 +726,7 @@ fun XyDeskSessionScreen(
                                 sendButton(XyMouseButton.RIGHT, true)
                                 sendButton(XyMouseButton.RIGHT, false)
                             },
-                            onScroll = { sendScroll(it) },
+                            onScrollUnits = { sendScrollUnits(it) },
                             onButton = { button, down -> sendButton(button, down) },
                         )
                     },
@@ -770,6 +778,7 @@ fun XyDeskSessionScreen(
                     if (it) notice.show(xyNow("Geser tombol ke posisi yang kamu mau", "Drag the buttons where you want them"))
                 },
                 onPhase = { key, phase -> handleHudPhase(key, phase) },
+                onScrollUnits = { sendScrollUnits(it) },
                 onZoomIn = { controller.zoomIn() },
                 onZoomOut = { controller.zoomOut() },
                 onFit = { controller.fitToScreen() },
@@ -1344,7 +1353,7 @@ private suspend fun androidx.compose.ui.input.pointer.PointerInputScope.trackpad
     onMove: (Float, Float) -> Unit,
     onTap: () -> Unit,
     onTwoFingerTap: () -> Unit,
-    onScroll: (Int) -> Unit,
+    onScrollUnits: (Int) -> Unit,
     onButton: (XyMouseButton, Boolean) -> Unit,
 ) {
     awaitEachGesture {
@@ -1358,23 +1367,17 @@ private suspend fun androidx.compose.ui.input.pointer.PointerInputScope.trackpad
         var maxPointers = 1
         var travel = 0f
         var pendingMove = Offset.Zero
-        var scrollAccum = 0f
+        val scrollAccumulator = ScrollWheelAccumulator()
         var lastCentroid = first.position
         var deadline = first.uptimeMillis + holdTimeout
         var holdEligible = true
         var tapEligible = true
         var heldButton: XyMouseButton? = null
 
-        fun emitScroll() {
-            val step = (40f / scrollSpeed).coerceAtLeast(8f)
-            while (scrollAccum <= -step) {
-                onScroll(1)
-                scrollAccum += step
-            }
-            while (scrollAccum >= step) {
-                onScroll(-1)
-                scrollAccum -= step
-            }
+        fun emitScroll(deltaY: Float) {
+            scrollAccumulator.consume(deltaY, scrollSpeed)
+                .takeIf { it != 0 }
+                ?.let(onScrollUnits)
         }
 
         fun beginLongPress() {
@@ -1445,7 +1448,7 @@ private suspend fun androidx.compose.ui.input.pointer.PointerInputScope.trackpad
                             holdEligible = true
                             travel = 0f
                             pendingMove = Offset.Zero
-                            scrollAccum = 0f
+                            scrollAccumulator.reset()
                             if (hadMoved) tapEligible = false
                         }
                     } else if (pointerCount == 1 && maxPointers >= 2 && mode == TrackpadGestureMode.TWO_PENDING) {
@@ -1483,13 +1486,11 @@ private suspend fun androidx.compose.ui.input.pointer.PointerInputScope.trackpad
                             } else if (travel > slop) {
                                 mode = TrackpadGestureMode.SCROLL
                                 tapEligible = false
-                                scrollAccum += delta.y
-                                emitScroll()
+                                emitScroll(delta.y)
                             }
                         }
                         TrackpadGestureMode.SCROLL -> {
-                            scrollAccum += delta.y
-                            emitScroll()
+                            emitScroll(delta.y)
                         }
                         TrackpadGestureMode.LEFT_DRAG, TrackpadGestureMode.RIGHT_DRAG ->
                             onMove(delta.x, delta.y)

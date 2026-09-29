@@ -1,0 +1,21 @@
+# Audit HUD controls, scrolling, and clipboard — 2026-09-29
+
+Scope: user-reported clutter behind HUD controls, newly added actions not responding, edits/layout resetting, scroll feel, and Android-to-Windows clipboard flow. Source audit only; no Android device or Windows RDP host is attached, and no local build was run.
+
+## Prioritized findings
+
+1. **[HIGH] Adding a control immediately leaves the session in layout-edit mode.** `client/Android/Studio/app/src/main/kotlin/id/xydesk/remote/ui/SessionControls.kt:247-260` calls `onMappingModeChange(true)` after creating a button; `SessionKeyLayer.kt:255-269` routes taps in that mode to the editor instead of dispatching the action. The control is not dead, but can appear dead until the separate Done action is found. Fix: keep the mode/status and Done action conspicuous, and make post-add behavior explicit.
+2. **[HIGH] Edit completion is misleading and can be off-screen.** `SessionKeyLayer.kt:427-568` writes changes through callbacks while editing, but its “Save” button only dismisses; the dialog column has no height cap/scroll container. `SessionControls.kt:177-181, 234-257` writes position and size immediately to per-device SharedPreferences. Make autosave explicit, keep a completion action visible, scroll long editor content, and preserve the button's visual anchor when its size changes.
+3. **[MED] Layout mode draws a white dashed grid across the remote desktop.** `SessionKeyLayer.kt:112-137` paints repeated white guides behind every control, matching the reported clutter. Remove the grid and use the control ring/banner as edit-state cues.
+4. **[MED] Mouse-wheel output is notch-only, so touch scrolling jumps.** `XyDeskSession.kt:585-593` always sends `120 * notches`; the trackpad gesture at `XyDeskSession.kt:1367-1378` accumulates about 40 px per notch. Keep existing tap controls and add the requested swipe control using bounded partial RDP wheel units with an accumulator and JVM tests.
+5. **[MED] “Direct clipboard” has two distinct sources.** `XyDeskSessionActivity.kt:122-158` automatically forwards changes to Android's system `ClipboardManager` when that device's clipboard option is enabled and the RDP session is connected. Gboard's private history may instead call IME `commitText`, which is not a system-clipboard change. Do not silently copy arbitrary typed text into Windows; clarify automatic system-clipboard sync and retain explicit opt-in/channel requirements. Device/host CLIPRDR acceptance remains unverified.
+
+## Fix disposition / verification
+
+- Finding 1: adding a control now returns to use mode so its action can be tapped immediately. Explicit layout mode retains an obvious finish action; pointer handlers restart when the selected control/action changes.
+- Finding 2: editor content scrolls within the viewport; autosave is explicit and the finish/delete actions stay visible. Resizing preserves the control's center, with edge clamping. Preferences still save per device on every change; no device reproduction of a lost write was available.
+- Finding 3: removed the dashed desktop grid; edit status and control rings remain.
+- Finding 4: retained single-step up/down buttons and added a separate vertical-swipe control. Trackpad and swipe gestures now accumulate partial 24-unit RDP wheel deltas (120 units remains one notch at default sensitivity); JVM tests cover direction, remainder, bounds, reset, and resize anchoring.
+- Finding 5: ordinary Android system-clipboard copies auto-sync while connected if that device's clipboard channel is enabled; the panel button is a manual fallback, not a prerequisite. Gboard private history may only commit text through IME; Android does not expose it as system clipboard, so the app will not silently mirror arbitrary typed text. Copy it to system clipboard or re-enter it through the explicit send-text-as-Windows-clipboard action.
+- No clipboard payload or credentials are logged. No local build; compile/JVM-test CI and signed release CI only, with debug APK builds skipped. CI status and release tag are to be recorded after the gates complete.
+- Runtime acceptance for button dispatch, saved layout, smooth wheel behavior, and Windows Paste still requires the user's Android device and Windows RDP host; source/CI cannot prove host behavior.

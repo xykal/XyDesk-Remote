@@ -117,6 +117,12 @@ object XyIcons {
         moveTo(7f, 5f); lineTo(17f, 5f)
     }
 
+    val ScrollSlide: ImageVector = xyIcon("XyScrollSlide") {
+        moveTo(12f, 3f); lineTo(12f, 21f)
+        moveTo(8f, 7f); lineTo(12f, 3f); lineTo(16f, 7f)
+        moveTo(8f, 17f); lineTo(12f, 21f); lineTo(16f, 17f)
+    }
+
     val Swap: ImageVector = xyIcon("XySwap") {
         moveTo(4f, 9f); lineTo(18f, 9f); moveTo(15f, 6f); lineTo(18f, 9f); lineTo(15f, 12f)
         moveTo(20f, 15f); lineTo(6f, 15f); moveTo(9f, 12f); lineTo(6f, 15f); lineTo(9f, 18f)

@@ -26,6 +26,7 @@ enum class HudKind(val title: String, val titleEn: String) {
     MOUSE_MIDDLE("Klik tengah", "Middle click"),
     SCROLL_UP("Scroll naik", "Scroll up"),
     SCROLL_DOWN("Scroll turun", "Scroll down"),
+    SCROLL_SLIDER("Geser scroll", "Swipe to scroll"),
     INPUT_SWITCH("Ganti mode input", "Switch input mode"),
     KEYBOARD("Buka keyboard", "Show keyboard"),
     KEY("Tombol keyboard", "Keyboard key"),
@@ -195,6 +196,7 @@ object HudKeyCatalog {
         HudKeyOption("Aksi", "Klik tengah", HudKind.MOUSE_MIDDLE, labelEn = "Middle click"),
         HudKeyOption("Aksi", "Scroll naik", HudKind.SCROLL_UP, labelEn = "Scroll up"),
         HudKeyOption("Aksi", "Scroll turun", HudKind.SCROLL_DOWN, labelEn = "Scroll down"),
+        HudKeyOption("Aksi", "Geser scroll", HudKind.SCROLL_SLIDER, labelEn = "Swipe to scroll"),
         HudKeyOption("Aksi", "Ganti mode input", HudKind.INPUT_SWITCH, labelEn = "Switch input mode"),
         HudKeyOption("Aksi", "Klik kiri (tahan = drag)", HudKind.MOUSE_LEFT, labelEn = "Left click (hold = drag)"),
     )
@@ -303,6 +305,7 @@ object HudKeyCatalog {
         HudKind.MOUSE_MIDDLE -> "Tengah"
         HudKind.SCROLL_UP -> "Naik"
         HudKind.SCROLL_DOWN -> "Turun"
+        HudKind.SCROLL_SLIDER -> "Geser"
         HudKind.INPUT_SWITCH -> "Mode"
         else -> "Tombol"
     }
@@ -314,6 +317,7 @@ object HudKeyCatalog {
         HudKind.MOUSE_MIDDLE -> "M"
         HudKind.SCROLL_UP -> "Up"
         HudKind.SCROLL_DOWN -> "Down"
+        HudKind.SCROLL_SLIDER -> "Swipe"
         HudKind.INPUT_SWITCH -> "Mode"
         else -> "Key"
     }
