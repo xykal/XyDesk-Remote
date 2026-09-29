@@ -1,7 +1,7 @@
 name: Build APK
 
 # XyDesk Remote — CI/CD
-#  - push ke main        -> build DEBUG per-ABI (armeabi-v7a, arm64-v8a, x86_64)
+#  - push ke main        -> compile gate + debug per-ABI (kecuali commit [skip-debug])
 #  - tag v* / manual     -> build RELEASE (R8 + signing resmi, per-ABI) + GitHub Release
 #  - manual (dispatch)   -> build debug atau release
 #
@@ -81,10 +81,10 @@ jobs:
         run: ./gradlew --stacktrace --no-daemon :app:compileDebugKotlin
 
   # ------------------------------------------------------------------
-  # DEBUG per-ABI (tiap push ke main)
+  # DEBUG per-ABI (tiap push ke main; commit [skip-debug] khusus melewati job ini)
   # ------------------------------------------------------------------
   build-debug:
-    if: ${{ github.event_name == 'push' && !startsWith(github.ref, 'refs/tags/') || (github.event_name == 'workflow_dispatch' && inputs.job == 'debug') }}
+    if: ${{ (github.event_name == 'push' && !startsWith(github.ref, 'refs/tags/') && !contains(github.event.head_commit.message, '[skip-debug]')) || (github.event_name == 'workflow_dispatch' && inputs.job == 'debug') }}
     name: Debug per-ABI (armv7 + arm64 + x86_64)
     runs-on: ubuntu-latest
     timeout-minutes: 360
