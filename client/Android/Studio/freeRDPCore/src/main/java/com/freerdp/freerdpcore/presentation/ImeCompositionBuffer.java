@@ -45,11 +45,14 @@ final class ImeCompositionBuffer
 	Edit commitText(CharSequence text)
 	{
 		String committed = text == null ? "" : text.toString();
-		if (composingText.isEmpty() && justFinishedText != null &&
-		    justFinishedText.equals(committed))
+		if (composingText.isEmpty() && justFinishedText != null)
 		{
+			String finished = justFinishedText;
 			justFinishedText = null;
-			return new Edit(0, "");
+			if (finished.equals(committed))
+				return new Edit(0, "");
+			if (committed.startsWith(finished))
+				return new Edit(0, committed.substring(finished.length()));
 		}
 		justFinishedText = null;
 		Edit edit = replaceWith(committed);
@@ -63,6 +66,16 @@ final class ImeCompositionBuffer
 		if (!composingText.isEmpty())
 			justFinishedText = composingText;
 		composingText = "";
+	}
+
+	/**
+	 * Clears tracked composition without emitting backspaces when a raw key
+	 * event (Enter, Space, digits, navigation) is dispatched directly.
+	 */
+	void onKeyEventDispatched()
+	{
+		composingText = "";
+		justFinishedText = null;
 	}
 
 	/**
@@ -119,20 +132,25 @@ final class ImeCompositionBuffer
 		return new Edit(backspaces, inserted);
 	}
 
-	/** Ignore printable soft-IME key events; their committed text uses commitText. */
+	/**
+	 * Only suppress a printable soft-IME key event when an active composition
+	 * is already streaming that word via setComposingText; never drop direct
+	 * key events (digits, space, symbols, or non-composing letters) when idle.
+	 */
 	static boolean isPrintableImeTextEvent(int flags, int action, int unicodeChar,
 	                                       boolean hasComposingText)
 	{
-		return ((flags & KeyEvent.FLAG_SOFT_KEYBOARD) != 0 || hasComposingText) &&
+		return hasComposingText && (flags & KeyEvent.FLAG_SOFT_KEYBOARD) != 0 &&
 		       action == KeyEvent.ACTION_DOWN && unicodeChar > 0 &&
-		       Character.isValidCodePoint(unicodeChar) && !Character.isISOControl(unicodeChar);
+		       Character.isValidCodePoint(unicodeChar) && !Character.isISOControl(unicodeChar) &&
+		       !Character.isWhitespace(unicodeChar) && !Character.isDigit(unicodeChar);
 	}
 
-	/** ACTION_MULTIPLE character payloads can duplicate committed/composing text. */
+	/** ACTION_MULTIPLE character payloads only duplicate when composition is active. */
 	static boolean isImeMultipleTextEvent(int flags, int action, String characters,
 	                                      boolean hasComposingText)
 	{
-		return ((flags & KeyEvent.FLAG_SOFT_KEYBOARD) != 0 || hasComposingText) &&
+		return hasComposingText && (flags & KeyEvent.FLAG_SOFT_KEYBOARD) != 0 &&
 		       action == KeyEvent.ACTION_MULTIPLE && characters != null && !characters.isEmpty();
 	}
 }

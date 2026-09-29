@@ -49,6 +49,7 @@ import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.zIndex
+import id.xydesk.remote.ui.components.XyField
 import id.xydesk.remote.ui.components.XyIcons
 import id.xydesk.remote.ui.components.XyPillButton
 import id.xydesk.remote.ui.components.XySegmented
@@ -112,7 +113,7 @@ fun HudKeyLayer(
                     key = key,
                     mappingMode = mappingMode,
                     plate = plate,
-                    latched = key.action == HudAction.TOGGLE && key.id in latchedKeys,
+                    latched = (key.action == HudAction.TOGGLE || key.action == HudAction.ONE_SHOT) && key.id in latchedKeys,
                     maxX = maxX,
                     maxY = maxY,
                     onDrag = { x, y -> onMove(key.id, x, y) },
@@ -249,7 +250,7 @@ private fun HudKeyButton(
                     if (dragged) return@awaitEachGesture
                     when (key.action) {
                         HudAction.HOLD -> Unit
-                        HudAction.TOGGLE -> latestOnPhase.value(HudPhase.TAP)
+                        HudAction.TOGGLE, HudAction.ONE_SHOT -> latestOnPhase.value(HudPhase.TAP)
                         HudAction.TAP -> if (!tapCanHold) latestOnPhase.value(HudPhase.TAP)
                     }
                 }
@@ -295,12 +296,33 @@ private fun HudKeyGlyph(key: HudKey, tint: Color, boxDp: Float = key.size) {
     )
 }
 
+internal fun Modifier.consumeBackgroundPointer(onTap: () -> Unit): Modifier =
+    this
+        .pointerInput(onTap) {
+            awaitEachGesture {
+                val down = awaitFirstDown(requireUnconsumed = false)
+                down.consume()
+                var moved = false
+                val slop = viewConfiguration.touchSlop
+                var total = 0f
+                while (true) {
+                    val event = awaitPointerEvent()
+                    event.changes.forEach { change ->
+                        total += (change.position - change.previousPosition).getDistance()
+                        if (total > slop) moved = true
+                        change.consume()
+                    }
+                    if (event.changes.none { it.pressed }) break
+                }
+                if (!moved) onTap()
+            }
+        }
+
 // ------------------------------------------------------------------ editor
 
 /**
- * Dialog tambah tombol: satu katalog per grup. Bukan bottom sheet/dialog
- * bawaan Android — pakai overlay app sendiri supaya gayanya satu bahasa
- * dengan panel dan tema.
+ * Dialog tambah tombol: satu katalog per grup (Kombinasi, F1-F12, Single Key,
+ * Numpad, Huruf A-Z, Modifier, Mouse & Scroll) plus pencarian cepat.
  */
 @Composable
 fun HudKeyPicker(
@@ -308,95 +330,162 @@ fun HudKeyPicker(
     onDismiss: () -> Unit,
 ) {
     var group by remember { mutableStateOf(HudKeyCatalog.groups.first().first) }
+    var search by remember { mutableStateOf("") }
+    val query = search.trim()
+
     Box(
         Modifier
             .fillMaxSize()
-            .background(MaterialTheme.colorScheme.scrim)
-            .clickable(onClick = onDismiss)
+            .background(MaterialTheme.colorScheme.scrim.copy(alpha = 0.6f))
+            .consumeBackgroundPointer(onDismiss)
             .zIndex(40f),
         contentAlignment = Alignment.Center,
     ) {
         Column(
             Modifier
-                .widthIn(max = 440.dp)
-                .padding(20.dp)
-                .clip(RoundedCornerShape(14.dp))
+                .widthIn(max = 460.dp)
+                .fillMaxWidth()
+                .padding(16.dp)
+                .clip(RoundedCornerShape(16.dp))
                 .background(MaterialTheme.colorScheme.surface)
                 .border(
                     1.dp,
                     MaterialTheme.colorScheme.outline,
-                    RoundedCornerShape(14.dp),
+                    RoundedCornerShape(16.dp),
                 )
-                .clickable { }
+                .consumeBackgroundPointer {}
                 .padding(14.dp),
             verticalArrangement = Arrangement.spacedBy(10.dp),
         ) {
-            Text(
-                xy("TAMBAH TOMBOL", "ADD BUTTON"),
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                fontSize = 10.sp,
-                letterSpacing = 1.3.sp,
-                fontWeight = FontWeight.SemiBold,
+            Row(
+                Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                Column(Modifier.weight(1f)) {
+                    Text(
+                        xy("TAMBAH TOMBOL KONTROL", "ADD CONTROL BUTTON"),
+                        color = MaterialTheme.colorScheme.onSurface,
+                        fontSize = 12.sp,
+                        letterSpacing = 1.1.sp,
+                        fontWeight = FontWeight.SemiBold,
+                    )
+                    Text(
+                        xy(
+                            "Pilih dari kategori Kombinasi, F1-F12, Single Key, Numpad, Huruf, Modifier, atau Mouse.",
+                            "Pick from Combos, F1-F12, Single Key, Numpad, Letters, Modifiers, or Mouse.",
+                        ),
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        fontSize = 10.5.sp,
+                    )
+                }
+            }
+            XyField(
+                value = search,
+                onValueChange = { search = it },
+                label = xy("Cari tombol", "Search button"),
+                hint = xy("mis. F4, Ctrl+C, Num 5, Esc, Panah", "e.g. F4, Ctrl+C, Num 5, Esc, Arrow"),
             )
             Row(
                 Modifier.horizontalScroll(rememberScrollState()),
                 horizontalArrangement = Arrangement.spacedBy(6.dp),
             ) {
-                HudKeyCatalog.groups.forEach { (name, nameEn, _) ->
-                    val active = name == group
+                HudKeyCatalog.groups.forEach { (name, nameEn, list) ->
+                    val active = query.isEmpty() && name == group
                     Box(
                         Modifier
                             .clip(XyPill)
+                            .background(
+                                if (active) MaterialTheme.colorScheme.primaryContainer
+                                else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.45f),
+                            )
                             .border(
                                 1.dp,
                                 if (active) MaterialTheme.colorScheme.primary
                                 else MaterialTheme.colorScheme.outline,
                                 XyPill,
                             )
-                            .clickable { group = name }
-                            .padding(horizontal = 10.dp, vertical = 6.dp),
+                            .clickable {
+                                search = ""
+                                group = name
+                            }
+                            .padding(horizontal = 11.dp, vertical = 6.dp),
                     ) {
                         Text(
-                            xy(name, nameEn),
-                            color = if (active) MaterialTheme.colorScheme.onSurface
+                            "${xy(name, nameEn)} (${list.size})",
+                            color = if (active) MaterialTheme.colorScheme.onPrimaryContainer
                             else MaterialTheme.colorScheme.onSurfaceVariant,
                             fontSize = 11.sp,
+                            fontWeight = if (active) FontWeight.SemiBold else FontWeight.Normal,
                         )
                     }
                 }
             }
-            val items = HudKeyCatalog.groups.firstOrNull { it.first == group }?.third.orEmpty()
+            val items = if (query.isNotEmpty()) {
+                HudKeyCatalog.groups.flatMap { it.third }.filter { opt ->
+                    opt.label.contains(query, ignoreCase = true) ||
+                        opt.labelEn.contains(query, ignoreCase = true) ||
+                        opt.group.contains(query, ignoreCase = true)
+                }
+            } else {
+                HudKeyCatalog.groups.firstOrNull { it.first == group }?.third.orEmpty()
+            }
+            val subGroups = remember(items, group, query) {
+                items.groupBy { it.group }
+            }
             Column(
                 Modifier
-                    .height(250.dp)
+                    .height(260.dp)
                     .verticalScroll(rememberScrollState()),
-                verticalArrangement = Arrangement.spacedBy(6.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp),
             ) {
-                items.chunked(3).forEach { rowItems ->
-                    Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                        rowItems.forEach { item ->
-                            Box(
-                                Modifier
-                                    .weight(1f)
-                                    .height(42.dp)
-                                    .clip(RoundedCornerShape(9.dp))
-                                    .border(
-                                        1.dp,
-                                        MaterialTheme.colorScheme.outline,
-                                        RoundedCornerShape(9.dp),
+                if (items.isEmpty()) {
+                    Text(
+                        xy("Tidak ada tombol yang cocok dengan pencarian.", "No matching buttons found."),
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        fontSize = 11.sp,
+                    )
+                }
+                subGroups.forEach { (subName, subItems) ->
+                    if (subGroups.size > 1) {
+                        Text(
+                            subName.uppercase(),
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            fontSize = 9.5.sp,
+                            letterSpacing = 1.1.sp,
+                            fontWeight = FontWeight.SemiBold,
+                        )
+                    }
+                    subItems.chunked(3).forEach { rowItems ->
+                        Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                            rowItems.forEach { item ->
+                                Box(
+                                    Modifier
+                                        .weight(1f)
+                                        .height(42.dp)
+                                        .clip(RoundedCornerShape(9.dp))
+                                        .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f))
+                                        .border(
+                                            1.dp,
+                                            MaterialTheme.colorScheme.outline,
+                                            RoundedCornerShape(9.dp),
+                                        )
+                                        .clickable { onPick(item) }
+                                        .padding(horizontal = 6.dp),
+                                    contentAlignment = Alignment.Center,
+                                ) {
+                                    Text(
+                                        xy(item.label, item.labelEn),
+                                        color = MaterialTheme.colorScheme.onSurface,
+                                        fontSize = 11.5.sp,
+                                        fontWeight = FontWeight.Medium,
+                                        maxLines = 1,
+                                        overflow = TextOverflow.Ellipsis,
                                     )
-                                    .clickable { onPick(item) },
-                                contentAlignment = Alignment.Center,
-                            ) {
-                                Text(
-                                    xy(item.label, item.labelEn),
-                                    color = MaterialTheme.colorScheme.onSurface,
-                                    fontSize = 11.5.sp,
-                                    maxLines = 1,
-                                )
+                                }
                             }
+                            repeat(3 - rowItems.size) { Spacer(Modifier.weight(1f)) }
                         }
-                        repeat(3 - rowItems.size) { Spacer(Modifier.weight(1f)) }
                     }
                 }
             }
@@ -412,8 +501,8 @@ fun HudKeyPicker(
 }
 
 /**
- * Editor satu tombol: aksi (sekali/tahan/toggle), ganti jenis aksi, ukuran,
- * hapus. Posisi diubah langsung dengan menggeser tombolnya di layar.
+ * Editor satu tombol: aksi (sekali/sekali pakai/tahan/toggle), ganti jenis aksi,
+ * ukuran, hapus. Posisi diubah langsung dengan menggeser tombolnya di layar.
  */
 @Composable
 fun HudKeyEditor(
@@ -427,8 +516,8 @@ fun HudKeyEditor(
     BoxWithConstraints(
         Modifier
             .fillMaxSize()
-            .background(MaterialTheme.colorScheme.scrim)
-            .clickable(onClick = onDismiss)
+            .background(MaterialTheme.colorScheme.scrim.copy(alpha = 0.6f))
+            .consumeBackgroundPointer(onDismiss)
             .zIndex(40f),
         contentAlignment = Alignment.Center,
     ) {
@@ -445,7 +534,7 @@ fun HudKeyEditor(
                     MaterialTheme.colorScheme.outline,
                     RoundedCornerShape(14.dp),
                 )
-                .clickable { }
+                .consumeBackgroundPointer {}
                 .padding(14.dp),
             verticalArrangement = Arrangement.spacedBy(8.dp),
         ) {
@@ -571,55 +660,91 @@ fun HudKeyEditor(
     }
 }
 
-/** Banner mode atur posisi: tambah tombol, atau selesai. */
+/** Banner mode atur posisi di bagian atas: tambah tombol, reset, atau selesai. */
 @Composable
 fun HudMappingBanner(
+    keyCount: Int = 0,
     onAdd: () -> Unit,
+    onReset: (() -> Unit)? = null,
     onDone: () -> Unit,
 ) {
     Row(
         Modifier
+            .widthIn(max = 520.dp)
             .fillMaxWidth()
-            .padding(12.dp)
-            .clip(RoundedCornerShape(12.dp))
+            .padding(horizontal = 12.dp, vertical = 6.dp)
+            .shadow(8.dp, RoundedCornerShape(14.dp))
+            .clip(RoundedCornerShape(14.dp))
             .background(MaterialTheme.colorScheme.surface)
-            .border(1.dp, MaterialTheme.colorScheme.outline, RoundedCornerShape(12.dp))
+            .border(1.dp, MaterialTheme.colorScheme.outline, RoundedCornerShape(14.dp))
+            .consumeBackgroundPointer {}
             .padding(horizontal = 12.dp, vertical = 8.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(8.dp),
     ) {
-        Text(
-            xy(
-                "Edit · auto tersimpan",
-                "Edit · auto-saved",
-            ),
-            color = MaterialTheme.colorScheme.onSurface,
-            fontSize = 11.sp,
-            modifier = Modifier.weight(1f),
-        )
-        Box(
-            Modifier
-                .clip(XyPill)
-                .border(1.dp, MaterialTheme.colorScheme.outlineVariant, XyPill)
-                .clickable(onClick = onAdd)
-                .padding(horizontal = 12.dp, vertical = 6.dp),
-        ) {
+        Column(Modifier.weight(1f)) {
             Text(
-                xy("+ Tombol", "+ Button"),
+                xy(
+                    "Atur posisi ({0})",
+                    "Edit layout ({0})",
+                    keyCount,
+                ),
                 color = MaterialTheme.colorScheme.onSurface,
-                fontSize = 11.sp,
+                fontSize = 11.5.sp,
+                fontWeight = FontWeight.SemiBold,
+                maxLines = 1,
+            )
+            Text(
+                xy(
+                    "Geser tombol · Ketuk untuk ubah",
+                    "Drag to move · Tap to edit",
+                ),
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                fontSize = 10.sp,
+                maxLines = 1,
             )
         }
         Box(
             Modifier
                 .clip(XyPill)
                 .background(MaterialTheme.colorScheme.primaryContainer)
-                .clickable(onClick = onDone)
-                .padding(horizontal = 12.dp, vertical = 6.dp),
+                .border(1.dp, MaterialTheme.colorScheme.primary, XyPill)
+                .clickable(onClick = onAdd)
+                .padding(horizontal = 12.dp, vertical = 7.dp),
         ) {
             Text(
-                xy("Simpan & selesai", "Save & finish"),
+                xy("+ Tambah", "+ Add"),
                 color = MaterialTheme.colorScheme.onPrimaryContainer,
+                fontSize = 11.sp,
+                fontWeight = FontWeight.SemiBold,
+            )
+        }
+        if (onReset != null) {
+            Box(
+                Modifier
+                    .clip(XyPill)
+                    .border(1.dp, MaterialTheme.colorScheme.outlineVariant, XyPill)
+                    .clickable(onClick = onReset)
+                    .padding(horizontal = 10.dp, vertical = 7.dp),
+            ) {
+                Text(
+                    xy("Reset", "Reset"),
+                    color = MaterialTheme.colorScheme.onSurface,
+                    fontSize = 11.sp,
+                )
+            }
+        }
+        Box(
+            Modifier
+                .clip(XyPill)
+                .background(MaterialTheme.colorScheme.surfaceVariant)
+                .border(1.dp, MaterialTheme.colorScheme.outline, XyPill)
+                .clickable(onClick = onDone)
+                .padding(horizontal = 12.dp, vertical = 7.dp),
+        ) {
+            Text(
+                xy("Selesai", "Done"),
+                color = MaterialTheme.colorScheme.onSurface,
                 fontSize = 11.sp,
                 fontWeight = FontWeight.SemiBold,
             )

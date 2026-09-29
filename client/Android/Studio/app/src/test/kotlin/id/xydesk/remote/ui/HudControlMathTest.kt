@@ -100,8 +100,44 @@ class HudControlMathTest {
 
     @Test
     fun catalogModifiersAndHoldClickHaveIntendedDefaultActions() {
-        assertTrue(HudKeyCatalog.modifiers.all { it.defaultAction == HudAction.TOGGLE })
+        assertTrue(
+            HudKeyCatalog.modifiers.all {
+                it.defaultAction == HudAction.TOGGLE || it.defaultAction == HudAction.ONE_SHOT
+            },
+        )
+        assertTrue(HudKeyCatalog.modifiers.any { it.defaultAction == HudAction.ONE_SHOT })
         val holdClick = HudKeyCatalog.mouse.first { it.label.contains("tahan") }
         assertEquals(HudAction.HOLD, holdClick.defaultAction)
+    }
+
+    @Test
+    fun layoutExportAndImportRoundTripPreservesOneShotAndDeduplicatesIds() {
+        val sample = listOf(
+            HudKey(
+                id = "ctrl_1x",
+                kind = HudKind.KEY,
+                label = "Ctrl (1x)",
+                keyCode = KeyEvent.KEYCODE_CTRL_LEFT,
+                action = HudAction.ONE_SHOT,
+                x = 0.25f,
+                y = 0.65f,
+                size = 72f,
+            ),
+            HudKey(
+                id = "ctrl_1x",
+                kind = HudKind.COMBO,
+                label = "Ctrl+C",
+                combo = listOf(KeyEvent.KEYCODE_CTRL_LEFT, KeyEvent.KEYCODE_C),
+                action = HudAction.TAP,
+                x = 0.50f,
+                y = 0.65f,
+                size = 64f,
+            ),
+        )
+        val json = HudKey.exportLayoutJson(sample)
+        val imported = HudKey.importLayoutJson(json) ?: error("import returned null")
+        assertEquals(2, imported.size)
+        assertEquals(HudAction.ONE_SHOT, imported[0].action)
+        assertNotEquals(imported[0].id, imported[1].id)
     }
 }

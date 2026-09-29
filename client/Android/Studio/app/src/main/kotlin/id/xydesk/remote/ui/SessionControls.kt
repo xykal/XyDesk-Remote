@@ -25,6 +25,8 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
@@ -132,6 +134,8 @@ fun SessionControls(
     onPasteRemoteClipboard: () -> Unit = {},
     onSendText: (String) -> Unit,
     onSendRemoteClipboardText: (String) -> Boolean = { false },
+    onOverlayActiveChange: (Boolean) -> Unit = {},
+    onRegisterBackHandler: ((() -> Boolean)?) -> Unit = {},
     coreInfo: List<String> = emptyList(),
     notice: XyNoticeState,
 ) {
@@ -153,6 +157,52 @@ fun SessionControls(
     var custom by remember { mutableStateOf("") }
     var textOpen by remember { mutableStateOf(false) }
     var textValue by remember { mutableStateOf("") }
+    var layoutJsonOpen by remember { mutableStateOf(false) }
+    var layoutJsonValue by remember { mutableStateOf("") }
+
+    val anyOverlayOpen = panelOpen || pickerOpen || editing != null || textOpen || layoutJsonOpen
+    LaunchedEffect(anyOverlayOpen) {
+        onOverlayActiveChange(anyOverlayOpen)
+    }
+
+    LaunchedEffect(panelOpen, pickerOpen, editing, textOpen, layoutJsonOpen, mappingMode) {
+        onRegisterBackHandler {
+            when {
+                editing != null -> {
+                    editing = null
+                    true
+                }
+                pickerOpen -> {
+                    pickerOpen = false
+                    true
+                }
+                layoutJsonOpen -> {
+                    layoutJsonOpen = false
+                    true
+                }
+                textOpen -> {
+                    textOpen = false
+                    true
+                }
+                panelOpen -> {
+                    panelOpen = false
+                    true
+                }
+                mappingMode -> {
+                    onMappingModeChange(false)
+                    true
+                }
+                else -> false
+            }
+        }
+    }
+
+    DisposableEffect(Unit) {
+        onDispose {
+            onOverlayActiveChange(false)
+            onRegisterBackHandler(null)
+        }
+    }
 
     fun copyCoreInfo() {
         val cm = context.getSystemService(Context.CLIPBOARD_SERVICE) as? ClipboardManager
@@ -167,6 +217,30 @@ fun SessionControls(
         val clip = cm?.primaryClip ?: return ""
         if (clip.itemCount == 0) return ""
         return clip.getItemAt(0).coerceToText(context).toString()
+    }
+
+    fun exportHudLayoutToClipboard() {
+        val cm = context.getSystemService(Context.CLIPBOARD_SERVICE) as? ClipboardManager
+        val json = HudKey.exportLayoutJson(keys)
+        cm?.setPrimaryClip(ClipData.newPlainText("XyDesk HUD Layout", json))
+        notice.show(xyNow("Layout tombol JSON disalin ke clipboard", "Button layout JSON copied to clipboard"))
+    }
+
+    fun importHudLayoutFromRaw(raw: String): Boolean {
+        val imported = HudKey.importLayoutJson(raw, prefs.hudButtonSize)
+        if (imported == null) {
+            notice.show(xyNow("JSON layout tidak valid atau kosong", "Layout JSON is invalid or empty"))
+            return false
+        }
+        onKeysChange(imported)
+        notice.show(
+            xyNow(
+                "Layout diimpor ({0} tombol)",
+                "Layout imported ({0} buttons)",
+                imported.size,
+            ),
+        )
+        return true
     }
 
     fun haptic() {
@@ -246,18 +320,18 @@ fun SessionControls(
         )
         onKeysChange(keys + key)
         panelOpen = false
-        onMappingModeChange(false)
+        onMappingModeChange(true)
         notice.show(
             xyNow(
-                "Tombol \"{0}\" ditambahkan dan tersimpan — ketuk untuk mencoba. Buka Atur posisi untuk memindah/ubah ukuran.",
-                "Button \"{0}\" added and saved — tap to test. Open Edit layout to move/resize it.",
+                "Tombol \"{0}\" ditambahkan — geser ke posisi yang kamu mau atau tekan Selesai.",
+                "Button \"{0}\" added — drag it into position or press Done.",
                 key.label,
             ),
         )
     }
 
     Box(Modifier.fillMaxSize().zIndex(10f)) {
-        if (pointerVisible) {
+        if (pointerVisible && !panelOpen) {
             XyPointer(
                 position = pointerScreen,
                 sizeDp = pointerSize,
@@ -285,40 +359,42 @@ fun SessionControls(
             onEdit = { editing = it },
         )
 
-        // Rail tetap: tombol keyboard hanya membuka IME (Android Back menutup),
-        // home untuk pindah sesi, dan putus lewat dialog konfirmasi (satu aturan yang
-        // sama dengan panel — dulu 2x ketuk di sini tapi dialog di panel).
-        Column(
-            Modifier
-                .align(Alignment.BottomEnd)
-                .padding(end = 10.dp, bottom = 80.dp)
-                .zIndex(24f),
-            verticalArrangement = Arrangement.spacedBy(10.dp),
-        ) {
-            RailButton(
-                icon = XyIcons.Keyboard,
-                active = false,
-                description = xy("Buka keyboard HP", "Open phone keyboard"),
-                plate = plate,
-            ) { onOpenKeyboard() }
-            RailButton(
-                icon = XyIcons.Monitor,
-                active = false,
-                description = xy("Sesi lain (buka home)", "Other sessions (open home)"),
-                plate = plate,
-            ) { onOpenHome() }
-            RailButton(
-                icon = XyIcons.Power,
-                active = false,
-                description = xy("Putuskan sesi", "Disconnect"),
-                plate = plate,
-            ) { onDisconnect() }
+        // Rail tetap disembunyikan saat panel atau mode atur posisi terbuka agar fokus penuh.
+        if (!panelOpen && !mappingMode) {
+            Column(
+                Modifier
+                    .align(Alignment.BottomEnd)
+                    .padding(end = 10.dp, bottom = 80.dp)
+                    .zIndex(24f),
+                verticalArrangement = Arrangement.spacedBy(10.dp),
+            ) {
+                RailButton(
+                    icon = XyIcons.Keyboard,
+                    active = false,
+                    description = xy("Buka keyboard HP", "Open phone keyboard"),
+                    plate = plate,
+                ) { onOpenKeyboard() }
+                RailButton(
+                    icon = XyIcons.Monitor,
+                    active = false,
+                    description = xy("Sesi lain (buka home)", "Other sessions (open home)"),
+                    plate = plate,
+                ) { onOpenHome() }
+                RailButton(
+                    icon = XyIcons.Power,
+                    active = false,
+                    description = xy("Putuskan sesi", "Disconnect"),
+                    plate = plate,
+                ) { onDisconnect() }
+            }
         }
 
         if (mappingMode) {
             Box(Modifier.align(Alignment.TopCenter).padding(top = 8.dp).zIndex(26f)) {
                 HudMappingBanner(
+                    keyCount = keys.size,
                     onAdd = { pickerOpen = true },
+                    onReset = onResetCluster,
                     onDone = { onMappingModeChange(false) },
                 )
             }
@@ -398,6 +474,72 @@ fun SessionControls(
             }
         }
 
+        if (layoutJsonOpen) {
+            XyOverlay(
+                title = xy("Tata letak tombol (JSON)", "Button layout (JSON)"),
+                onDismiss = { layoutJsonOpen = false },
+            ) {
+                Text(
+                    xy(
+                        "Salin JSON untuk memindahkan tata letak tombol ke perangkat lain, atau tempel JSON lalu tekan Terapkan.",
+                        "Copy JSON to reuse this button layout on another device, or paste JSON and press Apply.",
+                    ),
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    fontSize = 11.sp,
+                )
+                XyField(
+                    value = layoutJsonValue,
+                    onValueChange = { layoutJsonValue = it },
+                    label = xy("JSON layout", "Layout JSON"),
+                    hint = "{\"version\":1,\"keys\":[...]}",
+                )
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    XyPillButton(
+                        xy("Tempel dari clipboard", "Paste clipboard"),
+                        {
+                            val clip = clipboardText()
+                            if (clip.isEmpty()) {
+                                notice.show(xyNow("Clipboard HP kosong", "Phone clipboard is empty"))
+                            } else {
+                                layoutJsonValue = clip
+                            }
+                        },
+                        primary = false,
+                        compact = true,
+                        modifier = Modifier.weight(1f),
+                    )
+                    XyPillButton(
+                        xy("Terapkan JSON", "Apply JSON"),
+                        {
+                            if (importHudLayoutFromRaw(layoutJsonValue)) {
+                                layoutJsonOpen = false
+                                panelOpen = false
+                            }
+                        },
+                        compact = true,
+                        modifier = Modifier.weight(1f),
+                    )
+                }
+                XyPillButton(
+                    xy("Salin layout saat ini", "Copy current layout"),
+                    {
+                        exportHudLayoutToClipboard()
+                        layoutJsonValue = HudKey.exportLayoutJson(keys)
+                    },
+                    primary = false,
+                    compact = true,
+                    modifier = Modifier.fillMaxWidth(),
+                )
+                XyPillButton(
+                    xy("Tutup", "Close"),
+                    { layoutJsonOpen = false },
+                    primary = false,
+                    compact = true,
+                    modifier = Modifier.fillMaxWidth(),
+                )
+            }
+        }
+
         // ---- handle panel di kanan atas, terpisah dari rail kontrol ----
         if (!panelOpen && !mappingMode) {
             PanelHandle(
@@ -470,15 +612,26 @@ fun SessionControls(
                 onEditKey = { editing = it },
                 onDeleteKey = onDeleteKey,
                 mappingMode = mappingMode,
-                onMappingModeChange = onMappingModeChange,
+                onMappingModeChange = { enabled ->
+                    onMappingModeChange(enabled)
+                    if (enabled) panelOpen = false
+                },
                 plate = plate,
                 onPlate = { plate = it; prefs.hudPlate = it },
                 haptics = haptics,
                 onHaptics = { haptics = it; prefs.haptics = it },
                 onResetCluster = onResetCluster,
+                onExportLayoutJson = { exportHudLayoutToClipboard() },
+                onOpenLayoutJson = {
+                    layoutJsonValue = HudKey.exportLayoutJson(keys)
+                    layoutJsonOpen = true
+                },
                 // Sesi
                 onScreenshot = onScreenshot,
-                onDisconnect = onDisconnect,
+                onDisconnect = {
+                    panelOpen = false
+                    onDisconnect()
+                },
                 coreInfo = coreInfo,
                 onCopyCoreInfo = { copyCoreInfo() },
                 onClose = { panelOpen = false },
@@ -733,6 +886,8 @@ private fun SessionPanel(
     haptics: Boolean,
     onHaptics: (Boolean) -> Unit,
     onResetCluster: () -> Unit,
+    onExportLayoutJson: () -> Unit,
+    onOpenLayoutJson: () -> Unit,
     // Sesi
     onScreenshot: () -> Unit,
     onDisconnect: () -> Unit,
@@ -742,24 +897,27 @@ private fun SessionPanel(
     Box(
         Modifier
             .fillMaxSize()
-            .background(MaterialTheme.colorScheme.scrim.copy(alpha = 0.5f))
-            .clickable(onClick = onClose)
+            .background(MaterialTheme.colorScheme.scrim.copy(alpha = 0.58f))
+            .consumeBackgroundPointer(onClose)
             .zIndex(30f),
         contentAlignment = Alignment.CenterEnd,
     ) {
         Column(
             Modifier
                 .fillMaxHeight()
-                .widthIn(max = 340.dp)
-                .fillMaxWidth(0.82f)
+                .widthIn(max = 360.dp)
+                .fillMaxWidth(0.86f)
                 .background(MaterialTheme.colorScheme.surface)
-                .border(1.dp, MaterialTheme.colorScheme.outline, RoundedCornerShape(0.dp))
-                .clickable { }
-                .verticalScroll(rememberScrollState())
-                .padding(14.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp),
+                .border(1.dp, MaterialTheme.colorScheme.outline, RoundedCornerShape(topStart = 16.dp, bottomStart = 16.dp))
+                .clip(RoundedCornerShape(topStart = 16.dp, bottomStart = 16.dp))
+                .consumeBackgroundPointer {}
+                .padding(horizontal = 14.dp, vertical = 12.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp),
         ) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
                 Column(Modifier.weight(1f)) {
                     Text(
                         hostLabel,
@@ -773,7 +931,12 @@ private fun SessionPanel(
                         "$statusText  ·  $zoomPercent%  ·  $remoteSize",
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                         fontSize = 11.sp,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
                     )
+                }
+                if (tab == PanelTab.BUTTONS) {
+                    PanelChip(xy("+ Tombol", "+ Add"), onAddKey)
                 }
                 PanelChip(xy("Tutup", "Close"), onClose)
             }
@@ -785,66 +948,75 @@ private fun SessionPanel(
                 modifier = Modifier.fillMaxWidth(),
             )
 
-            when (tab) {
-                PanelTab.SCREEN -> ScreenTab(
-                    remoteSize = remoteSize,
-                    zoomPercent = zoomPercent,
-                    remoteDpi = remoteDpi,
-                    resolution = resolution,
-                    rotation = rotation,
-                    custom = custom,
-                    autoFit = autoFit,
-                    onAutoFitChange = onAutoFitChange,
-                    onCustomChange = onCustomChange,
-                    onCustomApply = onCustomApply,
-                    onResolution = onResolution,
-                    onRotation = onRotation,
-                    onZoomIn = onZoomIn,
-                    onZoomOut = onZoomOut,
-                    onFit = onFit,
-                    onZoomActual = onZoomActual,
-                    onZoomScale = onZoomScale,
-                    onRemoteDpiChange = onRemoteDpiChange,
-                )
+            Column(
+                Modifier
+                    .weight(1f)
+                    .verticalScroll(rememberScrollState(tab.ordinal)),
+                verticalArrangement = Arrangement.spacedBy(10.dp),
+            ) {
+                when (tab) {
+                    PanelTab.SCREEN -> ScreenTab(
+                        remoteSize = remoteSize,
+                        zoomPercent = zoomPercent,
+                        remoteDpi = remoteDpi,
+                        resolution = resolution,
+                        rotation = rotation,
+                        custom = custom,
+                        autoFit = autoFit,
+                        onAutoFitChange = onAutoFitChange,
+                        onCustomChange = onCustomChange,
+                        onCustomApply = onCustomApply,
+                        onResolution = onResolution,
+                        onRotation = onRotation,
+                        onZoomIn = onZoomIn,
+                        onZoomOut = onZoomOut,
+                        onFit = onFit,
+                        onZoomActual = onZoomActual,
+                        onZoomScale = onZoomScale,
+                        onRemoteDpiChange = onRemoteDpiChange,
+                    )
 
-                PanelTab.INPUT -> InputTab(
-                    inputMode = inputMode,
-                    onInputModeChange = onInputModeChange,
-                    onSendTextClick = onSendTextClick,
-                    lastClipboard = lastClipboard,
-                    clipboardSyncEnabled = clipboardSyncEnabled,
-                    onSendPhoneClipboard = onSendPhoneClipboard,
-                    onPasteRemoteClipboard = onPasteRemoteClipboard,
-                    pointerVisible = pointerVisible,
-                    onPointerVisibilityChange = onPointerVisibilityChange,
-                    pointerStyle = pointerStyle,
-                    onPointerStyle = onPointerStyle,
-                    pointerSize = pointerSize,
-                    onPointerSize = onPointerSize,
-                )
+                    PanelTab.INPUT -> InputTab(
+                        inputMode = inputMode,
+                        onInputModeChange = onInputModeChange,
+                        onSendTextClick = onSendTextClick,
+                        lastClipboard = lastClipboard,
+                        clipboardSyncEnabled = clipboardSyncEnabled,
+                        onSendPhoneClipboard = onSendPhoneClipboard,
+                        onPasteRemoteClipboard = onPasteRemoteClipboard,
+                        pointerVisible = pointerVisible,
+                        onPointerVisibilityChange = onPointerVisibilityChange,
+                        pointerStyle = pointerStyle,
+                        onPointerStyle = onPointerStyle,
+                        pointerSize = pointerSize,
+                        onPointerSize = onPointerSize,
+                    )
 
-                PanelTab.BUTTONS -> ButtonsTab(
-                    keys = keys,
-                    onAddKey = onAddKey,
-                    onEditKey = onEditKey,
-                    onDeleteKey = onDeleteKey,
-                    mappingMode = mappingMode,
-                    onMappingModeChange = onMappingModeChange,
-                    plate = plate,
-                    onPlate = onPlate,
-                    haptics = haptics,
-                    onHaptics = onHaptics,
-                    onResetCluster = onResetCluster,
-                )
+                    PanelTab.BUTTONS -> ButtonsTab(
+                        keys = keys,
+                        onAddKey = onAddKey,
+                        onEditKey = onEditKey,
+                        onDeleteKey = onDeleteKey,
+                        mappingMode = mappingMode,
+                        onMappingModeChange = onMappingModeChange,
+                        plate = plate,
+                        onPlate = onPlate,
+                        haptics = haptics,
+                        onHaptics = onHaptics,
+                        onResetCluster = onResetCluster,
+                        onExportLayoutJson = onExportLayoutJson,
+                        onOpenLayoutJson = onOpenLayoutJson,
+                    )
 
-                PanelTab.SESSION -> SessionTab(
-                    onScreenshot = onScreenshot,
-                    onDisconnect = onDisconnect,
-                    coreInfo = coreInfo,
-                    onCopyCoreInfo = onCopyCoreInfo,
-                )
+                    PanelTab.SESSION -> SessionTab(
+                        onScreenshot = onScreenshot,
+                        onDisconnect = onDisconnect,
+                        coreInfo = coreInfo,
+                        onCopyCoreInfo = onCopyCoreInfo,
+                    )
+                }
+                Spacer(Modifier.height(16.dp))
             }
-            Spacer(Modifier.height(20.dp))
         }
     }
 }
@@ -1121,47 +1293,64 @@ private fun ButtonsTab(
     haptics: Boolean,
     onHaptics: (Boolean) -> Unit,
     onResetCluster: () -> Unit,
+    onExportLayoutJson: () -> Unit,
+    onOpenLayoutJson: () -> Unit,
 ) {
     PanelSection(xy("Tombol kontrol ({0})", "Control buttons ({0})", keys.size)) {
         PanelHint(
             if (mappingMode) {
                 xy(
                     "Mode atur posisi MENYALA: geser tombol ke tempat yang kamu mau, " +
-                        "ketuk tombol untuk ubah aksi/ukuran, lalu tekan Selesai.",
+                        "ketuk tombol untuk ubah aksi/ukuran, atau tekan + Tambah di atas layar.",
                     "Layout mode is ON: drag buttons where you want them, tap a " +
-                        "button to change its action/size, then press Done.",
+                        "button to change its action/size, or press + Add at the top bar.",
                 )
             } else {
                 xy(
-                    "Tombol baru langsung berfungsi. Scroll naik/turun = ketuk per langkah; Geser scroll = seret halus. Atur posisi untuk memindah/ubah ukuran; perubahan tersimpan otomatis.",
-                    "New buttons work immediately. Scroll up/down = one step per tap; Swipe to scroll = continuous drag. Edit layout to move/resize; changes save automatically.",
-
+                    "Tekan \"Atur posisi & ukuran\" untuk menggeser tombol atau menambah kontrol dari bar atas (Kombinasi, F1-F12, Single Key, Numpad, Modifier, Mouse).",
+                    "Press \"Edit layout & size\" to drag buttons or add controls from the top bar (Combos, F1-F12, Single Key, Numpad, Modifiers, Mouse).",
                 )
             },
         )
-        XyPillButton(
-            if (mappingMode) xy("Selesai atur posisi", "Done editing layout") else xy("Atur posisi & ukuran", "Edit layout & size"),
-            { onMappingModeChange(!mappingMode) },
-            primary = mappingMode,
-            compact = true,
-            modifier = Modifier.fillMaxWidth(),
-        )
-        HudLayoutPreview(keys)
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             XyPillButton(
-                xy("Tambah tombol", "Add button"),
+                xy("+ Tambah tombol", "+ Add button"),
                 onAddKey,
                 compact = true,
                 modifier = Modifier.weight(1f),
             )
             XyPillButton(
-                xy("Kembalikan bawaan", "Restore default"),
-                onResetCluster,
+                if (mappingMode) xy("Selesai atur", "Done layout") else xy("Atur posisi", "Edit layout"),
+                { onMappingModeChange(!mappingMode) },
+                primary = mappingMode,
+                compact = true,
+                modifier = Modifier.weight(1f),
+            )
+        }
+        HudLayoutPreview(keys)
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            XyPillButton(
+                xy("Salin JSON", "Copy JSON"),
+                onExportLayoutJson,
+                primary = false,
+                compact = true,
+                modifier = Modifier.weight(1f),
+            )
+            XyPillButton(
+                xy("Impor JSON", "Import JSON"),
+                onOpenLayoutJson,
                 primary = false,
                 compact = true,
                 modifier = Modifier.weight(1f),
             )
         }
+        XyPillButton(
+            xy("Kembalikan bawaan", "Restore default"),
+            onResetCluster,
+            primary = false,
+            compact = true,
+            modifier = Modifier.fillMaxWidth(),
+        )
         PanelHint(
             xy(
                 "Pelat ikon selalu gelap dan tembus; pilih ketegasan latar atau transparan.",
@@ -1178,8 +1367,8 @@ private fun ButtonsTab(
             if (keys.isEmpty()) {
                 PanelHint(
                     xy(
-                        "Belum ada tombol. Tekan \"Tambah tombol\".",
-                        "No buttons yet. Press \"Add button\".",
+                        "Belum ada tombol. Tekan \"+ Tambah tombol\".",
+                        "No buttons yet. Press \"+ Add button\".",
                     ),
                 )
             }
@@ -1269,12 +1458,20 @@ private fun PanelHint(text: String) {
 
 @Composable
 private fun PanelSection(title: String, content: @Composable () -> Unit) {
-    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+    Column(
+        Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(12.dp))
+            .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.24f))
+            .border(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.55f), RoundedCornerShape(12.dp))
+            .padding(11.dp),
+        verticalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
         Text(
             title.uppercase(),
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             fontSize = 10.sp,
-            letterSpacing = 1.3.sp,
+            letterSpacing = 1.2.sp,
             fontWeight = FontWeight.SemiBold,
         )
         content()

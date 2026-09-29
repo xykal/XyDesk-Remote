@@ -340,6 +340,11 @@ public class KeyboardMapper
 		keymapAndroid[KeyEvent.KEYCODE_NUMPAD_EQUALS] = KEY_FLAG_UNICODE | 61;
 		keymapAndroid[KeyEvent.KEYCODE_NUMPAD_LEFT_PAREN] = KEY_FLAG_UNICODE | 40;
 		keymapAndroid[KeyEvent.KEYCODE_NUMPAD_RIGHT_PAREN] = KEY_FLAG_UNICODE | 41;
+
+		keymapAndroid[KeyEvent.KEYCODE_STAR] = VK_MULTIPLY;
+		keymapAndroid[KeyEvent.KEYCODE_PLUS] = KEY_FLAG_UNICODE | '+';
+		keymapAndroid[KeyEvent.KEYCODE_AT] = KEY_FLAG_UNICODE | '@';
+		keymapAndroid[KeyEvent.KEYCODE_POUND] = KEY_FLAG_UNICODE | '#';
 	}
 
 	public void init(Context context)
@@ -499,12 +504,22 @@ public class KeyboardMapper
 					isWinComboUsed = true;
 
 				boolean modifierActive = isModifierPressed();
+				int unicodeChar = event.getUnicodeChar();
+				boolean hasNonShiftModifier = modifierActive || event.isCtrlPressed() ||
+				                              event.isAltPressed() || isWinKeyDown;
 				// if a modifier is pressed we will send a VK event (if possible) so that key
 				// combinations will be recognized correctly. Otherwise we will send the unicode
 				// key. At the end we will reset all modifiers and notify our listener.
 				int vkcode = getVirtualKeyCode(event.getKeyCode());
 				if ((vkcode & KEY_FLAG_UNICODE) != 0)
 					listener.processUnicodeKey(vkcode & (~KEY_FLAG_UNICODE));
+				else if (!hasNonShiftModifier && !event.isShiftPressed() &&
+				         event.getKeyCode() >= KeyEvent.KEYCODE_0 &&
+				         event.getKeyCode() <= KeyEvent.KEYCODE_9 &&
+				         unicodeChar > 0 && !Character.isDigit(unicodeChar))
+				{
+					listener.processUnicodeKey(unicodeChar);
+				}
 				// if we got a valid vkcode send it - except for letters/numbers if a modifier is
 				// active
 				else if (vkcode > 0 && !event.isSymPressed())
@@ -512,7 +527,9 @@ public class KeyboardMapper
 					boolean sendCtrl = !ctrlPressed && event.isCtrlPressed();
 					boolean sendAlt = !altPressed && event.isAltPressed();
 					boolean sendWin = !winPressed && isWinKeyDown;
-					boolean sendShift = !shiftPressed && event.isShiftPressed();
+					boolean sendShift = !shiftPressed &&
+					                    (event.isShiftPressed() ||
+					                     (unicodeChar > 0 && Character.isUpperCase(unicodeChar)));
 
 					if (sendCtrl)
 						listener.processVirtualKey(VK_LCONTROL, true);
@@ -535,8 +552,8 @@ public class KeyboardMapper
 					if (sendCtrl)
 						listener.processVirtualKey(VK_LCONTROL, false);
 				}
-				else if (event.getUnicodeChar() != 0)
-					listener.processUnicodeKey(event.getUnicodeChar());
+				else if (unicodeChar != 0)
+					listener.processUnicodeKey(unicodeChar);
 				else
 					return false;
 

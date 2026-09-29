@@ -88,4 +88,16 @@ class RdpOptionsTest {
         assertEquals(1, CertificateInfo.VERIFY_ACCEPT)
         assertEquals(0, CertificateInfo.VERIFY_DENY)
     }
+
+    @Test
+    fun resolveForLinkAktifkanLowBandwidthSaatSelulerAtauMetered() {
+        val base = RdpOptions(networkAutoDetect = true, lowBandwidth = false)
+        assertTrue(base.resolveForLink(isMetered = false, isCellular = true).lowBandwidth)
+        assertTrue(base.resolveForLink(isMetered = true, isCellular = false).lowBandwidth)
+        assertTrue(base.resolveForLink(isMetered = false, isCellular = false, downstreamKbps = 2500).lowBandwidth)
+        assertTrue(!base.resolveForLink(isMetered = false, isCellular = false, downstreamKbps = 50_000).lowBandwidth)
+
+        val manualOff = RdpOptions(networkAutoDetect = false, lowBandwidth = false)
+        assertTrue(!manualOff.resolveForLink(isMetered = true, isCellular = true).lowBandwidth)
+    }
 }

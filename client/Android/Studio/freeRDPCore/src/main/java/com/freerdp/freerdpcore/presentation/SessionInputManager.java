@@ -239,11 +239,11 @@ public class SessionInputManager
 	// screen: the insets pass right after showSoftInput() still reports a zero inset.
 	public void onImeVisibilityChanged(boolean visible)
 	{
+		if (!visible)
+			softInputRequested = false;
 		if (visible == softInputVisible)
 			return;
 		softInputVisible = visible;
-		if (!visible)
-			softInputRequested = false;
 		refreshSystemBars();
 	}
 
@@ -264,7 +264,7 @@ public class SessionInputManager
 		if (state)
 		{
 			sessionView.requestFocus();
-			mgr.showSoftInput(sessionView, InputMethodManager.SHOW_IMPLICIT);
+			mgr.showSoftInput(sessionView, 0);
 		}
 		else
 		{

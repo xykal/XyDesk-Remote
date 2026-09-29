@@ -641,9 +641,11 @@ public class SessionView extends View
 	@Override public InputConnection onCreateInputConnection(EditorInfo outAttrs)
 	{
 		outAttrs.actionLabel = null;
-		// Advertise a real text editor so IMEs deliver composing updates as
-		// setComposingText, rather than buffering until Enter/commit.
-		outAttrs.inputType = InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_FLAG_NO_SUGGESTIONS;
+		// Advertise an immediate text editor without predictive buffering so IMEs
+		// emit every character right away while still supporting setComposingText.
+		outAttrs.inputType = InputType.TYPE_CLASS_TEXT |
+		                     InputType.TYPE_TEXT_VARIATION_VISIBLE_PASSWORD |
+		                     InputType.TYPE_TEXT_FLAG_NO_SUGGESTIONS;
 		outAttrs.imeOptions = EditorInfo.IME_ACTION_NONE | EditorInfo.IME_FLAG_NO_EXTRACT_UI |
 		                      EditorInfo.IME_FLAG_NO_FULLSCREEN;
 		final InputSink sink = inputSink;
@@ -678,6 +680,21 @@ public class SessionView extends View
 					sink.onText(edit.text);
 			}
 
+			@Override public CharSequence getTextBeforeCursor(int length, int flags)
+			{
+				if (length <= 0)
+					return "";
+				String current = " " + composition.getComposingText();
+				if (current.length() <= length)
+					return current;
+				return current.substring(current.length() - length);
+			}
+
+			@Override public CharSequence getTextAfterCursor(int length, int flags)
+			{
+				return "";
+			}
+
 			@Override public boolean setComposingText(CharSequence text, int newCursorPosition)
 			{
 				// Stream only the changed suffix: live IME text appears immediately,
@@ -701,8 +718,9 @@ public class SessionView extends View
 
 			@Override public boolean sendKeyEvent(KeyEvent event)
 			{
+				if (event == null)
+					return false;
 				if (event.getKeyCode() == KeyEvent.KEYCODE_DEL &&
-				    (event.getFlags() & KeyEvent.FLAG_SOFT_KEYBOARD) != 0 &&
 				    event.getAction() == KeyEvent.ACTION_DOWN && composition.hasComposingText())
 				{
 					sendBackspaces(composition.deleteBeforeCursor(1));
@@ -716,6 +734,11 @@ public class SessionView extends View
 				        event.getFlags(), event.getAction(), event.getCharacters(),
 				        composition.hasComposingText()))
 					return true;
+				if (event.getAction() == KeyEvent.ACTION_DOWN &&
+				    !KeyEvent.isModifierKey(event.getKeyCode()))
+				{
+					composition.onKeyEventDispatched();
+				}
 				return sink.onKeyEvent(event);
 			}
 
