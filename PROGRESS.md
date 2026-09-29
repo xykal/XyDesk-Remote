@@ -13,4 +13,5 @@ Start: 2026-09-28
 - Implemented immediate button usability after Add, explicit auto-save/finish UI, scrollable editor with center-preserving resize, removed the white edit grid, and added a separate vertical swipe-scroll control with partial wheel-unit accumulation.
 - Clarified that Android system clipboard copies already sync automatically when the per-device channel is enabled; Gboard private history may only commit IME text and cannot be read by the app without unsafe silent capture.
 - Added JVM tests for wheel direction/accumulation, bounds/reset, and resize anchoring. Updated release metadata to `0.5.11` / version code `28`. No local build and no debug APK.
-- Next: compile/JVM-test via GitHub Actions, publish signed per-ABI release `v0.5.11`, inspect assets, then request Android/Windows runtime acceptance.
+- Branch compile + JVM-test gate passed: [run 36507438735](https://github.com/xykal/XyDesk-Remote/actions/runs/36507438735). Debug, release-build, and publish jobs were skipped; no APK was built locally or on this branch run.
+- Next: merge the fix through CI, push signed release tag `v0.5.11`, inspect assets, then request Android/Windows runtime acceptance.
