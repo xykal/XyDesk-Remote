@@ -37,6 +37,8 @@ import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import id.xydesk.remote.core.ConnectionProfile
+import id.xydesk.remote.core.XySecurityProtocol
+import id.xydesk.remote.core.XyStreamProfile
 import id.xydesk.remote.security.CredentialVault
 import id.xydesk.remote.core.coreBuildInfo
 import id.xydesk.remote.ui.components.XySlider
@@ -74,7 +76,7 @@ internal fun SectionScreen(
             XySection.TAMPILAN -> DisplaySection(favorites, onEditDevice)
             XySection.KREDENSIAL -> CredentialsSection(favorites, onClearAllCredentials)
             XySection.UMUM -> GeneralSection(appPrefs, onShowLog)
-            XySection.KEAMANAN -> SecuritySection()
+            XySection.KEAMANAN -> SecuritySection(appPrefs)
             XySection.TENTANG -> AboutSection()
             XySection.PERANGKAT -> Unit
         }
@@ -347,6 +349,11 @@ private fun GeneralSection(appPrefs: AppPrefs, onShowLog: () -> Unit) {
     var defaultDynRes by remember { mutableStateOf(appPrefs.defaultDynamicResolution) }
     var defaultClipboard by remember { mutableStateOf(appPrefs.defaultClipboard) }
     var defaultDrive by remember { mutableStateOf(appPrefs.defaultLocalDrive) }
+    var defaultStreamProfile by remember {
+        mutableStateOf(XyStreamProfile.fromCode(appPrefs.defaultStreamProfile))
+    }
+    var defaultAsyncUpdate by remember { mutableStateOf(appPrefs.defaultAsyncUpdate) }
+    var defaultAsyncChannels by remember { mutableStateOf(appPrefs.defaultAsyncChannels) }
     var themeMode by remember { mutableIntStateOf(appPrefs.themeMode) }
     var autoDisconnect by remember { mutableStateOf(appPrefs.autoDisconnect) }
     var inputMode by remember { mutableIntStateOf(prefs.inputMode.ordinal) }
@@ -595,7 +602,7 @@ private fun GeneralSection(appPrefs: AppPrefs, onShowLog: () -> Unit) {
             )
         }
 
-        XySectionLabel(xy("Transport (default perangkat baru)", "Transport (new device defaults)"))
+        XySectionLabel(xy("Streaming & Latensi (default perangkat baru)", "Streaming & Latency (new device defaults)"))
         XyCard {
             Text(
                 xy(
@@ -607,23 +614,61 @@ private fun GeneralSection(appPrefs: AppPrefs, onShowLog: () -> Unit) {
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
+            Spacer(Modifier.height(6.dp))
+            Text(xy("Profil streaming default", "Default streaming profile"), style = MaterialTheme.typography.titleSmall)
+            Spacer(Modifier.height(6.dp))
+            val streamOptions = listOf(
+                XyStreamProfile.BALANCED to xy("Seimbang", "Balanced"),
+                XyStreamProfile.LOW_LATENCY to xy("Latensi Ultra-Rendah", "Ultra-Low Latency"),
+                XyStreamProfile.HIGH_COLOR to xy("Warna Akurat (AVC444)", "Accurate Color (AVC444)"),
+                XyStreamProfile.DATA_SAVER to xy("Hemat Kuota", "Data Saver"),
+            )
+            streamOptions.chunked(2).forEach { row ->
+                Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    row.forEach { (preset, label) ->
+                        XyPillButton(
+                            text = label,
+                            onClick = {
+                                defaultStreamProfile = preset
+                                appPrefs.defaultStreamProfile = preset.code
+                            },
+                            primary = defaultStreamProfile == preset,
+                            compact = true,
+                            modifier = Modifier.weight(1f),
+                        )
+                    }
+                }
+                Spacer(Modifier.height(6.dp))
+            }
             XyToggleRow(
-                title = xy("Transport UDP", "UDP transport"),
-                subtitle = xy("RDP-UDP + FEC untuk gerakan halus", "RDP-UDP + FEC for smoother motion"),
+                title = xy("Transport UDP (RDP-UDP + FEC)", "UDP transport (RDP-UDP + FEC)"),
+                subtitle = xy("Jalur UDP multitransport untuk gerakan mulus", "Multitransport UDP channel for smoother motion"),
                 checked = defaultUdp,
                 onCheckedChange = { defaultUdp = it; appPrefs.defaultUdp = it },
             )
             XyToggleRow(
                 title = xy("Deteksi bandwidth otomatis", "Automatic bandwidth detection"),
-                subtitle = xy("Kualitas mengikuti kondisi jaringan", "Quality follows network conditions"),
+                subtitle = xy("Kualitas mengikuti kondisi jaringan secara dinamis", "Quality adapts dynamically to network conditions"),
                 checked = defaultNetAuto,
                 onCheckedChange = { defaultNetAuto = it; appPrefs.defaultNetAuto = it },
             )
             XyToggleRow(
                 title = xy("H.264 / RemoteFX (GFX)", "H.264 / RemoteFX (GFX)"),
-                subtitle = xy("Matikan kalau server lama tidak mendukung", "Turn off if an older server does not support it"),
+                subtitle = xy("Akselerasi hardware H.264 untuk video & animasi 60 FPS", "H.264 hardware acceleration for 60 FPS video & motion"),
                 checked = defaultH264,
                 onCheckedChange = { defaultH264 = it; appPrefs.defaultH264 = it },
+            )
+            XyToggleRow(
+                title = xy("Async Frame Update (+async-update)", "Async Frame Update (+async-update)"),
+                subtitle = xy("Render layar mandiri tanpa menunggu antrean input", "Decouple frame rendering from input queue"),
+                checked = defaultAsyncUpdate,
+                onCheckedChange = { defaultAsyncUpdate = it; appPrefs.defaultAsyncUpdate = it },
+            )
+            XyToggleRow(
+                title = xy("Async Input & Channels (+async-channels)", "Async Input & Channels (+async-channels)"),
+                subtitle = xy("Proses input & kanal di thread terpisah agar responsif", "Process input & channels on dedicated threads"),
+                checked = defaultAsyncChannels,
+                onCheckedChange = { defaultAsyncChannels = it; appPrefs.defaultAsyncChannels = it },
             )
             XyToggleRow(
                 title = xy("Resolusi dinamis", "Dynamic resolution"),
@@ -632,7 +677,7 @@ private fun GeneralSection(appPrefs: AppPrefs, onShowLog: () -> Unit) {
                 onCheckedChange = { defaultDynRes = it; appPrefs.defaultDynamicResolution = it },
             )
             XyToggleRow(
-                title = xy("Clipboard dua arah", "Two-way clipboard"),
+                title = xy("Clipboard dua arah (Teks & Gambar)", "Two-way clipboard (Text & Image)"),
                 checked = defaultClipboard,
                 onCheckedChange = { defaultClipboard = it; appPrefs.defaultClipboard = it },
             )
@@ -679,13 +724,21 @@ private fun GeneralSection(appPrefs: AppPrefs, onShowLog: () -> Unit) {
 // =============================================================
 
 @Composable
-private fun SecuritySection() {
+private fun SecuritySection(appPrefs: AppPrefs) {
     val context = LocalContext.current
     val store = remember { CertificateTrustStore(context.applicationContext) }
     var tick by remember { mutableIntStateOf(0) }
     var showTrustedCertificates by remember { mutableStateOf(false) }
     var confirmRemoveCertHost by remember { mutableStateOf<String?>(null) }
     var confirmClearAllCerts by remember { mutableStateOf(false) }
+    var screenCaptureProtection by remember { mutableStateOf(appPrefs.screenCaptureProtection) }
+    var requireDeviceLock by remember { mutableStateOf(appPrefs.requireDeviceLock) }
+    var autoLockRemoteOnLeave by remember { mutableStateOf(appPrefs.autoLockRemoteOnLeave) }
+    var clearClipboardOnDisconnect by remember { mutableStateOf(appPrefs.clearClipboardOnDisconnect) }
+    var defaultSecurityProtocol by remember {
+        mutableStateOf(XySecurityProtocol.fromCode(appPrefs.defaultSecurityProtocol))
+    }
+    var defaultTlsSecLevel by remember { mutableIntStateOf(appPrefs.defaultTlsSecLevel) }
     val entries = remember(tick) { store.entries() }
 
     Column(
@@ -695,6 +748,118 @@ private fun SecuritySection() {
             .padding(horizontal = 16.dp),
         verticalArrangement = Arrangement.spacedBy(14.dp),
     ) {
+        XySectionLabel(xy("Perlindungan Layar & Sesi", "Screen & Session Protection"))
+        XyCard {
+            XyToggleRow(
+                title = xy("Proteksi tangkapan layar (FLAG_SECURE)", "Screen capture protection (FLAG_SECURE)"),
+                subtitle = xy(
+                    "Sembunyikan pratinjau layar PC di recent apps Android & cegah perekaman layar pihak ketiga",
+                    "Hide the PC preview in Android recents & block third-party screen recording",
+                ),
+                checked = screenCaptureProtection,
+                onCheckedChange = {
+                    screenCaptureProtection = it
+                    appPrefs.screenCaptureProtection = it
+                },
+            )
+            XyToggleRow(
+                title = xy("Wajib autentikasi perangkat (Biometrik / PIN)", "Require device lock (Biometric / PIN)"),
+                subtitle = xy(
+                    "Minta sidik jari, wajah, atau PIN HP sebelum membuka koneksi remote",
+                    "Prompt for phone fingerprint, face, or PIN before launching a remote session",
+                ),
+                checked = requireDeviceLock,
+                onCheckedChange = {
+                    requireDeviceLock = it
+                    appPrefs.requireDeviceLock = it
+                },
+            )
+            XyToggleRow(
+                title = xy("Kunci PC otomatis saat sesi selesai (Win+L)", "Auto-lock PC on session exit (Win+L)"),
+                subtitle = xy(
+                    "Kirim perintah kunci layar Windows otomatis sesaat sebelum memutus koneksi",
+                    "Automatically send Windows lock screen command right before disconnecting",
+                ),
+                checked = autoLockRemoteOnLeave,
+                onCheckedChange = {
+                    autoLockRemoteOnLeave = it
+                    appPrefs.autoLockRemoteOnLeave = it
+                },
+            )
+            XyToggleRow(
+                title = xy("Bersihkan clipboard HP saat putus", "Clear phone clipboard on disconnect"),
+                subtitle = xy(
+                    "Hapus sisa teks/gambar dari sesi remote di clipboard HP setelah sesi ditutup",
+                    "Wipe synced text/images from the phone clipboard after the session closes",
+                ),
+                checked = clearClipboardOnDisconnect,
+                onCheckedChange = {
+                    clearClipboardOnDisconnect = it
+                    appPrefs.clearClipboardOnDisconnect = it
+                },
+            )
+        }
+
+        XySectionLabel(xy("Protokol & Enkripsi Default", "Default Protocol & Encryption"))
+        XyCard {
+            Text(
+                xy("Protokol keamanan default (perangkat baru)", "Default security protocol (new devices)"),
+                style = MaterialTheme.typography.titleSmall,
+            )
+            Spacer(Modifier.height(6.dp))
+            val secProtocols = listOf(
+                XySecurityProtocol.AUTO to xy("Otomatis", "Auto"),
+                XySecurityProtocol.NLA to "NLA (CredSSP)",
+                XySecurityProtocol.TLS to "TLS",
+                XySecurityProtocol.RDP to xy("RDP Klasik", "Classic RDP"),
+            )
+            secProtocols.chunked(2).forEach { row ->
+                Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    row.forEach { (proto, label) ->
+                        XyPillButton(
+                            text = label,
+                            onClick = {
+                                defaultSecurityProtocol = proto
+                                appPrefs.defaultSecurityProtocol = proto.code
+                            },
+                            primary = defaultSecurityProtocol == proto,
+                            compact = true,
+                            modifier = Modifier.weight(1f),
+                        )
+                    }
+                }
+                Spacer(Modifier.height(6.dp))
+            }
+            Spacer(Modifier.height(6.dp))
+            Text(
+                xy("Level kebijakan OpenSSL TLS default", "Default OpenSSL TLS security level"),
+                style = MaterialTheme.typography.titleSmall,
+            )
+            Spacer(Modifier.height(6.dp))
+            XySegmented(
+                options = listOf(
+                    xy("Kompatibel (0)", "Legacy (0)"),
+                    xy("Standar (1)", "Standard (1)"),
+                    xy("Ketat (2)", "Strict (2)"),
+                ),
+                selectedIndex = defaultTlsSecLevel.coerceIn(0, 2),
+                onSelect = {
+                    defaultTlsSecLevel = it
+                    appPrefs.defaultTlsSecLevel = it
+                },
+                modifier = Modifier.fillMaxWidth(),
+            )
+            Spacer(Modifier.height(4.dp))
+            Text(
+                xy(
+                    "Level 1 adalah standar modern. Gunakan Level 0 untuk Windows Server lama, atau Level 2 untuk enkripsi ketat.",
+                    "Level 1 is the modern default. Use Level 0 for older Windows Servers, or Level 2 for strict ciphers.",
+                ),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+
         XySectionLabel(xy("Penyimpanan kredensial", "Credential storage"))
         XyCard {
             Bullet(xy("Password: AES-256-GCM, kunci non-exportable di Android Keystore",

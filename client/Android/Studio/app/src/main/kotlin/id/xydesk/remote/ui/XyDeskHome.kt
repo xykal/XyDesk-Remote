@@ -51,10 +51,14 @@ import androidx.compose.ui.unit.sp
 import androidx.compose.ui.input.pointer.pointerInput
 import id.xydesk.remote.core.ConnectionLog
 import id.xydesk.remote.core.ConnectionProfile
+import id.xydesk.remote.core.RdpOptions
+import id.xydesk.remote.core.WakeOnLan
+import id.xydesk.remote.core.XyStreamProfile
 import id.xydesk.remote.security.CrashLog
 import id.xydesk.remote.sessions.SessionsRepository
 import id.xydesk.remote.ui.components.XyCard
 import id.xydesk.remote.ui.components.XyDialog
+import id.xydesk.remote.ui.components.XyField
 import id.xydesk.remote.ui.components.XyIconPill
 import id.xydesk.remote.ui.components.XyDivider
 import id.xydesk.remote.ui.components.XyIcons
@@ -66,8 +70,10 @@ import id.xydesk.remote.ui.components.XyRow
 import id.xydesk.remote.ui.components.XySectionLabel
 import id.xydesk.remote.ui.components.XyTopBar
 import id.xydesk.remote.ui.components.XyWordmark
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 /** Seksi di drawer samping. Judul dua bahasa dibaca di [sectionTitle]. */
 internal enum class XySection(val title: String, val titleEn: String) {
@@ -100,6 +106,9 @@ private sealed interface XyRoute {
 fun XyDeskHome(
     onExit: () -> Unit,
     onReady: () -> Unit = {},
+    sharedFileNotice: String? = null,
+    onDismissSharedNotice: () -> Unit = {},
+    onAuthenticateConnect: (() -> Unit) -> Unit = { it() },
 ) {
     val context = LocalContext.current
     val repo = remember { SessionsRepository(context.applicationContext) }
@@ -125,12 +134,78 @@ fun XyDeskHome(
     var feedbackOpen by remember { mutableStateOf(false) }
     var confirmDeleteDevice by remember { mutableStateOf<ConnectionProfile?>(null) }
     var confirmExitApp by remember { mutableStateOf(false) }
+    var wolWaitingProfile by remember { mutableStateOf<ConnectionProfile?>(null) }
     // Pesan app sendiri (bukan Toast bawaan Android).
     val notice = rememberXyNotice()
 
     fun connect(profile: ConnectionProfile) {
-        scope.launch { repo.touch(profile) }
-        context.startActivity(XyDeskSessionActivity.connectIntent(context, profile))
+        onAuthenticateConnect {
+            scope.launch { repo.touch(profile) }
+            context.startActivity(XyDeskSessionActivity.connectIntent(context, profile))
+        }
+    }
+
+    fun wakeAndConnect(profile: ConnectionProfile) {
+        val opts = RdpOptions.of(context, profile.id)
+        val mac = opts.wolMacAddress.trim()
+        if (WakeOnLan.parseMacBytes(mac) == null) {
+            notice.show(xyNow("MAC Address Wake-on-LAN belum diatur atau tidak valid", "Wake-on-LAN MAC address is missing or invalid"))
+            return
+        }
+        wolWaitingProfile = profile
+        scope.launch {
+            val targets = listOf(opts.wolBroadcastIp.ifBlank { "255.255.255.255" }, profile.host).distinct()
+            val sendRes = withContext(Dispatchers.IO) {
+                var last = Result.success(Unit)
+                targets.forEach { target ->
+                    last = WakeOnLan.sendMagicPacket(mac, target, opts.wolPort)
+                }
+                last
+            }
+            if (sendRes.isFailure) {
+                wolWaitingProfile = null
+                notice.show(
+                    xyNow(
+                        "Gagal mengirim paket Wake-on-LAN: ${sendRes.exceptionOrNull()?.message ?: "error"}",
+                        "Failed to send Wake-on-LAN packet: ${sendRes.exceptionOrNull()?.message ?: "error"}",
+                    ),
+                )
+                return@launch
+            }
+            notice.show(
+                xyNow(
+                    "Magic Packet terkirim ke ${profile.label ?: profile.host}. Menunggu port RDP aktif...",
+                    "Magic Packet sent to ${profile.label ?: profile.host}. Waiting for RDP port...",
+                ),
+            )
+            val ready = withContext(Dispatchers.IO) {
+                var elapsed = 0L
+                var portUp = false
+                while (elapsed < 35_000L && wolWaitingProfile?.id == profile.id) {
+                    if (WakeOnLan.isTcpPortOpen(profile.host, profile.port, 900)) {
+                        portUp = true
+                        break
+                    }
+                    Thread.sleep(1_200L)
+                    elapsed += 1_200L
+                }
+                portUp
+            }
+            if (wolWaitingProfile?.id == profile.id) {
+                wolWaitingProfile = null
+                if (ready) {
+                    notice.show(xyNow("PC menyala! Membuka sesi RDP...", "PC is awake! Launching RDP session..."))
+                    connect(profile)
+                } else {
+                    notice.show(
+                        xyNow(
+                            "Paket WoL sudah dikirim, tetapi port ${profile.port} belum merespons dalam 35 detik.",
+                            "WoL packet sent, but port ${profile.port} did not respond within 35 seconds.",
+                        ),
+                    )
+                }
+            }
+        }
     }
 
     fun submit(profile: ConnectionProfile, rememberPassword: Boolean, startNow: Boolean) {
@@ -203,10 +278,13 @@ fun XyDeskHome(
                         favorites = favorites,
                         crashLog = crashLog,
                         bootTail = bootTail,
+                        sharedFileNotice = sharedFileNotice,
+                        onDismissSharedNotice = onDismissSharedNotice,
                         onMenu = { drawerOpen = true },
                         onAdd = { route = XyRoute.EditDevice(null) },
                         onEdit = { route = XyRoute.EditDevice(it) },
                         onConnect = { connect(it) },
+                        onWakeConnect = { wakeAndConnect(it) },
                         onDelete = { profile -> confirmDeleteDevice = profile },
                         onShowCrash = { showCrash = true },
                         onShowBoot = { showBoot = true },
@@ -391,6 +469,26 @@ fun XyDeskHome(
             onDismiss = { confirmDeleteDevice = null },
         )
     }
+    wolWaitingProfile?.let { target ->
+        XyDialog(
+            title = xy("Membangunkan PC (Wake-on-LAN)", "Waking PC (Wake-on-LAN)"),
+            body = xy(
+                "Magic Packet sudah dikirim ke \"{0}\" ({1}:{2}). XyDesk sedang memantau kesiapan port RDP otomatis hingga 35 detik...",
+                "Magic Packet sent to \"{0}\" ({1}:{2}). XyDesk is automatically polling the RDP port for up to 35 seconds...",
+                target.label ?: target.host,
+                target.host,
+                target.port,
+            ),
+            confirmLabel = xy("Konek Sekarang", "Connect Now"),
+            onConfirm = {
+                wolWaitingProfile = null
+                connect(target)
+            },
+            dismissLabel = xy("Batal Tunggu", "Cancel Wait"),
+            onDismiss = { wolWaitingProfile = null },
+        )
+    }
+
     if (confirmExitApp) {
         XyDialog(
             title = xy("Keluar dari XyDesk Remote?", "Exit XyDesk Remote?"),
@@ -494,14 +592,27 @@ private fun DevicesScreen(
     favorites: List<ConnectionProfile>,
     crashLog: String?,
     bootTail: List<String>,
+    sharedFileNotice: String?,
+    onDismissSharedNotice: () -> Unit,
     onMenu: () -> Unit,
     onAdd: () -> Unit,
     onEdit: (ConnectionProfile) -> Unit,
     onConnect: (ConnectionProfile) -> Unit,
+    onWakeConnect: (ConnectionProfile) -> Unit,
     onDelete: (ConnectionProfile) -> Unit,
     onShowCrash: () -> Unit,
     onShowBoot: () -> Unit,
 ) {
+    var searchQuery by remember { mutableStateOf("") }
+
+    if (sharedFileNotice != null) {
+        Banner(
+            text = sharedFileNotice,
+            onClick = onDismissSharedNotice,
+            container = MaterialTheme.colorScheme.primaryContainer,
+            content = MaterialTheme.colorScheme.onPrimaryContainer,
+        )
+    }
     if (crashLog != null) {
         Banner(
             text = xy(
@@ -562,16 +673,41 @@ private fun DevicesScreen(
         return
     }
 
+    val filteredFavorites = remember(favorites, searchQuery) {
+        val q = searchQuery.trim().lowercase()
+        if (q.isEmpty()) {
+            favorites
+        } else {
+            favorites.filter { p ->
+                p.label.orEmpty().lowercase().contains(q) ||
+                    p.host.lowercase().contains(q) ||
+                    p.username.orEmpty().lowercase().contains(q)
+            }
+        }
+    }
+
     LazyColumn(
         modifier = Modifier.fillMaxSize(),
         contentPadding = PaddingValues(horizontal = 16.dp, vertical = 6.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
         item { LiveSessionsCard() }
-        items(favorites, key = { it.id }) { profile ->
+        if (favorites.size >= 2) {
+            item {
+                XyField(
+                    value = searchQuery,
+                    onValueChange = { searchQuery = it },
+                    label = xy("Cari perangkat", "Search devices"),
+                    hint = xy("Nama PC, alamat IP, atau username...", "PC name, IP address, or username..."),
+                    modifier = Modifier.fillMaxWidth(),
+                )
+            }
+        }
+        items(filteredFavorites, key = { it.id }) { profile ->
             DeviceCard(
                 profile = profile,
                 onConnect = { onConnect(profile) },
+                onWakeConnect = { onWakeConnect(profile) },
                 onEdit = { onEdit(profile) },
                 onDelete = { onDelete(profile) },
             )
@@ -584,9 +720,20 @@ private fun DevicesScreen(
 private fun DeviceCard(
     profile: ConnectionProfile,
     onConnect: () -> Unit,
+    onWakeConnect: () -> Unit,
     onEdit: () -> Unit,
     onDelete: () -> Unit,
 ) {
+    val context = LocalContext.current
+    val rdpOptions = remember(profile.id) { RdpOptions.of(context, profile.id) }
+    val hasWol = rdpOptions.wolMacAddress.isNotBlank()
+    val streamBadge = when (rdpOptions.streamProfile) {
+        XyStreamProfile.LOW_LATENCY -> xy("Latensi Rendah", "Low Latency")
+        XyStreamProfile.HIGH_COLOR -> "AVC444"
+        XyStreamProfile.DATA_SAVER -> xy("Hemat Kuota", "Data Saver")
+        XyStreamProfile.CUSTOM -> xy("Kustom", "Custom")
+        XyStreamProfile.BALANCED -> if (rdpOptions.udpTransport) "UDP+H264" else "H264"
+    }
     // Art preview milik app (bukan wallpaper RDP/OS): geometris, diturunkan
     // dari nama perangkat + jenis OS sebagai penanda kecil di pojok.
     val wall = XyWall.WIN11.forDevice(profile.label ?: profile.host)
@@ -636,6 +783,8 @@ private fun DeviceCard(
                     buildString {
                         append(profile.host).append(':').append(profile.port)
                         if (!profile.username.isNullOrBlank()) append("  ·  ").append(profile.username)
+                        append("  ·  ").append(streamBadge)
+                        if (rdpOptions.consoleAdminSession) append("  ·  Admin")
                     },
                     style = MaterialTheme.typography.bodySmall,
                     color = Color.White.copy(alpha = 0.82f),
@@ -651,6 +800,14 @@ private fun DeviceCard(
             horizontalArrangement = Arrangement.spacedBy(8.dp),
         ) {
             XyPillButton(xy("Connect", "Connect"), onConnect, compact = true)
+            if (hasWol) {
+                XyPillButton(
+                    xy("Bangunkan (WoL)", "Wake (WoL)"),
+                    onWakeConnect,
+                    primary = false,
+                    compact = true,
+                )
+            }
             Spacer(Modifier.weight(1f))
             XyIconPill(XyIcons.Gear, onEdit, size = 40.dp, contentDescription = xy("Pengaturan RDP", "RDP settings"))
             XyIconPill(XyIcons.Trash, onDelete, size = 40.dp, contentDescription = xy("Hapus", "Delete"))

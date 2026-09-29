@@ -1,5 +1,8 @@
 package id.xydesk.remote.ui
 
+import android.content.ClipData
+import android.content.ClipboardManager
+import android.content.Context
 import android.content.Intent
 import android.net.Uri
 import android.os.Build
@@ -25,21 +28,29 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import com.freerdp.freerdpcore.services.LibFreeRDP
 import id.xydesk.remote.core.ConnectionProfile
 import id.xydesk.remote.core.RdpOptions
+import id.xydesk.remote.core.WakeOnLan
+import id.xydesk.remote.core.XySecurityProtocol
+import id.xydesk.remote.core.XyStreamProfile
 import id.xydesk.remote.core.formatRdpEndpoint
 import id.xydesk.remote.core.parseRdpEndpoint
 import id.xydesk.remote.core.XyAudioMode
 import id.xydesk.remote.core.XyGateway
 import androidx.activity.compose.BackHandler
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import id.xydesk.remote.ui.components.XySlider
 import id.xydesk.remote.ui.components.XyCard
 import id.xydesk.remote.ui.components.XyDialog
@@ -86,12 +97,14 @@ fun AddDeviceScreen(
     var rememberPass by remember { mutableStateOf(existing?.password?.isNotEmpty() ?: true) }
     var error by remember { mutableStateOf<String?>(null) }
 
-    val stored = remember(deviceId) {
-        if (deviceId != null) {
+    val scope = rememberCoroutineScope()
+    val stored = remember(deviceId, existing) {
+        if (existing != null) {
             RdpOptions.of(context, deviceId)
         } else {
-            // Perangkat baru mewarisi default General (transport/clipboard/drive).
+            // Perangkat baru mewarisi default General & Security.
             val app = AppPrefs(context)
+            val baseProfile = XyStreamProfile.fromCode(app.defaultStreamProfile)
             RdpOptions(
                 clipboard = app.defaultClipboard,
                 localDrive = app.defaultLocalDrive,
@@ -99,10 +112,22 @@ fun AddDeviceScreen(
                 networkAutoDetect = app.defaultNetAuto,
                 h264 = app.defaultH264,
                 dynamicResolution = app.defaultDynamicResolution,
+                asyncUpdate = app.defaultAsyncUpdate,
+                asyncChannels = app.defaultAsyncChannels,
+                securityProtocol = XySecurityProtocol.fromCode(app.defaultSecurityProtocol),
+                tlsSecLevel = app.defaultTlsSecLevel,
+            ).applyStreamProfile(baseProfile).copy(
+                udpTransport = app.defaultUdp,
+                networkAutoDetect = app.defaultNetAuto,
+                h264 = app.defaultH264,
+                dynamicResolution = app.defaultDynamicResolution,
+                asyncUpdate = app.defaultAsyncUpdate,
+                asyncChannels = app.defaultAsyncChannels,
             )
         }
     }
     var options by remember { mutableStateOf(stored) }
+    var wolStatusText by remember { mutableStateOf<String?>(null) }
     var gatewayOn by remember { mutableStateOf(stored.gateway != null) }
     var gwHost by remember { mutableStateOf(stored.gateway?.host.orEmpty()) }
     var gwPort by remember { mutableStateOf((stored.gateway?.port ?: 443).toString()) }
@@ -176,6 +201,15 @@ fun AddDeviceScreen(
             val msg = xyNow(
                 "Gateway diaktifkan tetapi alamat Gateway host masih kosong.",
                 "RDP Gateway is enabled, but the Gateway host address is empty.",
+            )
+            error = msg
+            validationPopup = msg
+            return
+        }
+        if (options.wolMacAddress.isNotBlank() && WakeOnLan.parseMacBytes(options.wolMacAddress) == null) {
+            val msg = xyNow(
+                "Format MAC Address Wake-on-LAN tidak valid. Gunakan 6 pasang heksadesimal seperti AA:BB:CC:DD:EE:FF.",
+                "Invalid Wake-on-LAN MAC address format. Use 6 hex pairs like AA:BB:CC:DD:EE:FF.",
             )
             error = msg
             validationPopup = msg
@@ -458,13 +492,53 @@ fun AddDeviceScreen(
                 )
             }
 
-            XySectionLabel(xy("Jaringan", "Network"))
+            XySectionLabel(xy("Streaming & Latensi", "Streaming & Latency"))
             XyCard {
+                Text(
+                    xy("Profil Streaming & Latensi", "Streaming & Latency Profile"),
+                    style = MaterialTheme.typography.titleSmall,
+                )
+                Text(
+                    xy(
+                        "Pilih profil instan atau atur codec, warna, dan optimasi latensi di bawah.",
+                        "Pick an instant preset or customize codec, color depth, and latency flags below.",
+                    ),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                Spacer(Modifier.height(8.dp))
+                val streamPresets = listOf(
+                    XyStreamProfile.BALANCED to xy("Seimbang", "Balanced"),
+                    XyStreamProfile.LOW_LATENCY to xy("Latensi Ultra-Rendah", "Ultra-Low Latency"),
+                    XyStreamProfile.HIGH_COLOR to xy("Warna Akurat (AVC444)", "Accurate Color (AVC444)"),
+                    XyStreamProfile.DATA_SAVER to xy("Hemat Kuota", "Data Saver"),
+                )
+                streamPresets.chunked(2).forEach { row ->
+                    Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                        row.forEach { (preset, label) ->
+                            XyPillButton(
+                                text = label,
+                                onClick = { options = options.applyStreamProfile(preset) },
+                                primary = options.streamProfile == preset,
+                                compact = true,
+                                modifier = Modifier.weight(1f),
+                            )
+                        }
+                    }
+                    Spacer(Modifier.height(6.dp))
+                }
+                if (options.streamProfile == XyStreamProfile.CUSTOM) {
+                    Text(
+                        xy("Profil aktif: Kustom", "Active profile: Custom"),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.primary,
+                    )
+                    Spacer(Modifier.height(4.dp))
+                }
                 XyToggleRow(
-                    title = xy("Transport UDP", "UDP transport"),
+                    title = xy("Transport UDP (RDP-UDP + FEC)", "UDP transport (RDP-UDP + FEC)"),
                     subtitle = xy(
-                        "RDP-UDP + FEC; lebih halus untuk gerakan cepat, " +
-                            "butuh dukungan server",
+                        "RDP-UDP + FEC; lebih halus untuk gerakan cepat, butuh dukungan server",
                         "RDP-UDP + FEC; smoother fast motion, needs server support",
                     ),
                     checked = options.udpTransport,
@@ -474,34 +548,387 @@ fun AddDeviceScreen(
                 XyToggleRow(
                     title = xy("Deteksi bandwidth otomatis", "Automatic bandwidth detection"),
                     subtitle = xy(
-                        "Profil otomatis FreeRDP; tidak menghilangkan RTT jaringan",
-                        "FreeRDP auto profile; it cannot remove network RTT",
+                        "Profil otomatis FreeRDP mengikuti kondisi jaringan",
+                        "FreeRDP auto profile adapts to network conditions",
                     ),
                     checked = options.networkAutoDetect,
-                    onCheckedChange = { options = options.copy(networkAutoDetect = it) },
+                    onCheckedChange = {
+                        options = options.copy(networkAutoDetect = it, streamProfile = XyStreamProfile.CUSTOM)
+                    },
                     leading = XyIcons.Sliders,
                     enabled = !options.lowBandwidth,
                 )
                 XyToggleRow(
-                    title = xy("Jaringan terbatas", "Low-bandwidth mode"),
+                    title = xy("Jaringan terbatas (broadband-low)", "Low-bandwidth mode"),
                     subtitle = xy(
-                        "Pakai profil broadband-low + AVC420; kualitas gambar dapat berubah. RTT tetap bergantung jaringan.",
-                        "Use broadband-low + AVC420 hints; image quality may change. RTT still depends on the network.",
+                        "Pakai profil broadband-low + AVC420 untuk koneksi seluler/hemat",
+                        "Use broadband-low + AVC420 hints for cellular/metered connections",
                     ),
                     checked = options.lowBandwidth,
-                    onCheckedChange = { options = options.copy(lowBandwidth = it) },
+                    onCheckedChange = {
+                        options = options.copy(lowBandwidth = it, streamProfile = XyStreamProfile.CUSTOM)
+                    },
                     leading = XyIcons.Sliders,
                 )
                 XyToggleRow(
                     title = xy("H.264 / RemoteFX (GFX)", "H.264 / RemoteFX (GFX)"),
                     subtitle = xy(
-                        "GFX H.264; mode jaringan terbatas memilih AVC420, mode biasa AVC444",
-                        "GFX H.264; low-bandwidth mode selects AVC420, normal mode AVC444",
+                        "Akselerasi hardware H.264 untuk video dan animasi 60 FPS",
+                        "H.264 hardware acceleration for 60 FPS video and animations",
                     ),
                     checked = options.h264,
-                    onCheckedChange = { options = options.copy(h264 = it) },
+                    onCheckedChange = {
+                        options = options.copy(h264 = it, streamProfile = XyStreamProfile.CUSTOM)
+                    },
                     leading = XyIcons.Grid,
                 )
+                if (options.h264 && !options.lowBandwidth) {
+                    XyToggleRow(
+                        title = xy("Chroma 4:4:4 penuh (AVC444)", "Full Chroma 4:4:4 (AVC444)"),
+                        subtitle = xy(
+                            "Teks & garis warna tajam (matikan untuk pakai AVC420 yang lebih ringan)",
+                            "Crisp text & colored edges (turn off for lighter AVC420)",
+                        ),
+                        checked = options.avc444,
+                        onCheckedChange = {
+                            options = options.copy(avc444 = it, streamProfile = XyStreamProfile.CUSTOM)
+                        },
+                    )
+                }
+                XyToggleRow(
+                    title = xy("Async Frame Update (+async-update)", "Async Frame Update (+async-update)"),
+                    subtitle = xy(
+                        "Render layar tidak menahan antrean input untuk respons maksimal",
+                        "Decouple frame rendering from input queue for maximum responsiveness",
+                    ),
+                    checked = options.asyncUpdate,
+                    onCheckedChange = {
+                        options = options.copy(asyncUpdate = it, streamProfile = XyStreamProfile.CUSTOM)
+                    },
+                )
+                XyToggleRow(
+                    title = xy("Async Input & Channels (+async-channels)", "Async Input & Channels (+async-channels)"),
+                    subtitle = xy(
+                        "Proses kanal input, audio, dan clipboard di thread mandiri",
+                        "Process input, audio, and clipboard channels on dedicated threads",
+                    ),
+                    checked = options.asyncChannels,
+                    onCheckedChange = {
+                        options = options.copy(asyncChannels = it, streamProfile = XyStreamProfile.CUSTOM)
+                    },
+                )
+                XyToggleRow(
+                    title = xy("Kompresi stream RDP (+compression)", "RDP stream compression (+compression)"),
+                    subtitle = xy(
+                        "Kompresi paket data untuk menghemat bandwidth",
+                        "Compress RDP data packets to save bandwidth",
+                    ),
+                    checked = options.compression,
+                    onCheckedChange = {
+                        options = options.copy(compression = it, streamProfile = XyStreamProfile.CUSTOM)
+                    },
+                )
+                Spacer(Modifier.height(8.dp))
+                Text(
+                    xy("Kedalaman warna (Color Depth)", "Color depth (BPP)"),
+                    style = MaterialTheme.typography.titleSmall,
+                )
+                Spacer(Modifier.height(6.dp))
+                val depthValues = listOf(32, 24, 16)
+                XySegmented(
+                    options = listOf("32-bit", "24-bit", "16-bit"),
+                    selectedIndex = depthValues.indexOf(options.colorDepth).coerceAtLeast(0),
+                    onSelect = {
+                        options = options.copy(
+                            colorDepth = depthValues[it],
+                            streamProfile = XyStreamProfile.CUSTOM,
+                        )
+                    },
+                    modifier = Modifier.fillMaxWidth(),
+                )
+                Spacer(Modifier.height(10.dp))
+                Text(
+                    xy("Pengalaman Visual Desktop Windows", "Windows Desktop Visual Experience"),
+                    style = MaterialTheme.typography.titleSmall,
+                )
+                XyToggleRow(
+                    title = xy("Font Smoothing (ClearType)", "Font Smoothing (ClearType)"),
+                    checked = options.fontSmoothing,
+                    onCheckedChange = {
+                        options = options.copy(fontSmoothing = it, streamProfile = XyStreamProfile.CUSTOM)
+                    },
+                )
+                XyToggleRow(
+                    title = xy("Desktop Composition (Aero DWM)", "Desktop Composition (Aero DWM)"),
+                    checked = options.desktopComposition,
+                    onCheckedChange = {
+                        options = options.copy(desktopComposition = it, streamProfile = XyStreamProfile.CUSTOM)
+                    },
+                )
+                XyToggleRow(
+                    title = xy("Wallpaper Desktop", "Desktop Wallpaper"),
+                    checked = options.desktopWallpaper,
+                    onCheckedChange = {
+                        options = options.copy(desktopWallpaper = it, streamProfile = XyStreamProfile.CUSTOM)
+                    },
+                )
+                XyToggleRow(
+                    title = xy("Tema Visual Windows", "Windows Visual Themes"),
+                    checked = options.visualThemes,
+                    onCheckedChange = {
+                        options = options.copy(visualThemes = it, streamProfile = XyStreamProfile.CUSTOM)
+                    },
+                )
+                XyToggleRow(
+                    title = xy("Tarik Jendela Penuh (Full Window Drag)", "Full Window Drag"),
+                    checked = options.fullWindowDrag,
+                    onCheckedChange = {
+                        options = options.copy(fullWindowDrag = it, streamProfile = XyStreamProfile.CUSTOM)
+                    },
+                )
+                XyToggleRow(
+                    title = xy("Animasi Menu Windows", "Windows Menu Animations"),
+                    checked = options.menuAnimations,
+                    onCheckedChange = {
+                        options = options.copy(menuAnimations = it, streamProfile = XyStreamProfile.CUSTOM)
+                    },
+                )
+            }
+
+            XySectionLabel(xy("Keamanan & Sesi Admin", "Security & Admin Session"))
+            XyCard {
+                Text(
+                    xy("Protokol keamanan autentikasi", "Authentication security protocol"),
+                    style = MaterialTheme.typography.titleSmall,
+                )
+                Spacer(Modifier.height(6.dp))
+                val secOptions = listOf(
+                    XySecurityProtocol.AUTO to xy("Otomatis", "Auto"),
+                    XySecurityProtocol.NLA to "NLA (CredSSP)",
+                    XySecurityProtocol.TLS to "TLS",
+                    XySecurityProtocol.RDP to xy("RDP Klasik", "Classic RDP"),
+                )
+                secOptions.chunked(2).forEach { row ->
+                    Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                        row.forEach { (proto, label) ->
+                            XyPillButton(
+                                text = label,
+                                onClick = { options = options.copy(securityProtocol = proto) },
+                                primary = options.securityProtocol == proto,
+                                compact = true,
+                                modifier = Modifier.weight(1f),
+                            )
+                        }
+                    }
+                    Spacer(Modifier.height(6.dp))
+                }
+                Spacer(Modifier.height(6.dp))
+                Text(
+                    xy("Level Kebijakan OpenSSL TLS", "OpenSSL TLS Security Level"),
+                    style = MaterialTheme.typography.titleSmall,
+                )
+                Spacer(Modifier.height(6.dp))
+                XySegmented(
+                    options = listOf(
+                        xy("Kompatibel (0)", "Legacy (0)"),
+                        xy("Standar (1)", "Standard (1)"),
+                        xy("Ketat (2)", "Strict (2)"),
+                    ),
+                    selectedIndex = options.tlsSecLevel.coerceIn(0, 2),
+                    onSelect = { options = options.copy(tlsSecLevel = it) },
+                    modifier = Modifier.fillMaxWidth(),
+                )
+                Spacer(Modifier.height(6.dp))
+                XyToggleRow(
+                    title = xy("Sesi Konsol / Admin (/admin)", "Console / Admin Session (/admin)"),
+                    subtitle = xy(
+                        "Masuk ke sesi konsol fisik atau sesi administrator Windows Server",
+                        "Connect to the physical console or Windows Server administrator session",
+                    ),
+                    checked = options.consoleAdminSession,
+                    onCheckedChange = { options = options.copy(consoleAdminSession = it) },
+                    leading = XyIcons.Lock,
+                )
+                XyToggleRow(
+                    title = xy("Mode Restricted Admin (/restricted-admin)", "Restricted Admin Mode (/restricted-admin)"),
+                    subtitle = xy(
+                        "Login NLA tanpa menyerahkan kredensial plaintext ke host remote (anti pass-the-hash)",
+                        "Authenticate via NLA without sending plaintext credentials to the remote host",
+                    ),
+                    checked = options.restrictedAdmin,
+                    onCheckedChange = { options = options.copy(restrictedAdmin = it) },
+                    leading = XyIcons.Lock,
+                )
+            }
+
+            XySectionLabel(xy("Wake-on-LAN & SSH Tunnel", "Wake-on-LAN & SSH Tunnel"))
+            XyCard {
+                Text(
+                    xy("Wake-on-LAN (Magic Packet)", "Wake-on-LAN (Magic Packet)"),
+                    style = MaterialTheme.typography.titleSmall,
+                )
+                Text(
+                    xy(
+                        "Nyalakan PC dari kondisi Sleep/Shutdown lewat jaringan lokal atau VPN sebelum konek RDP.",
+                        "Wake the PC from Sleep/Shutdown over LAN or VPN before connecting via RDP.",
+                    ),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                Spacer(Modifier.height(8.dp))
+                XyField(
+                    value = options.wolMacAddress,
+                    onValueChange = { options = options.copy(wolMacAddress = it.trim()) },
+                    label = xy("MAC Address kartu jaringan PC (opsional)", "PC network card MAC Address (optional)"),
+                    hint = "AA:BB:CC:DD:EE:FF",
+                )
+                Spacer(Modifier.height(10.dp))
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    XyField(
+                        value = options.wolBroadcastIp,
+                        onValueChange = { options = options.copy(wolBroadcastIp = it.trim()) },
+                        label = xy("Broadcast / IP tujuan", "Broadcast / target IP"),
+                        hint = "255.255.255.255",
+                        modifier = Modifier.weight(1.4f),
+                    )
+                    XyField(
+                        value = options.wolPort.toString(),
+                        onValueChange = {
+                            val p = it.filter(Char::isDigit).take(5).toIntOrNull() ?: 9
+                            options = options.copy(wolPort = p.coerceIn(1, 65535))
+                        },
+                        label = xy("Port UDP", "UDP Port"),
+                        hint = "9",
+                        keyboardType = KeyboardType.Number,
+                        modifier = Modifier.weight(0.7f),
+                    )
+                }
+                if (options.wolMacAddress.isNotBlank()) {
+                    Spacer(Modifier.height(8.dp))
+                    XyPillButton(
+                        text = xy("Kirim Tes Magic Packet Sekarang", "Send Test Magic Packet Now"),
+                        onClick = {
+                            val mac = options.wolMacAddress
+                            if (WakeOnLan.parseMacBytes(mac) == null) {
+                                wolStatusText = xyNow(
+                                    "MAC Address belum valid (contoh: AA:BB:CC:DD:EE:FF)",
+                                    "Invalid MAC address (e.g. AA:BB:CC:DD:EE:FF)",
+                                )
+                            } else {
+                                wolStatusText = xyNow("Mengirim Magic Packet...", "Sending Magic Packet...")
+                                scope.launch {
+                                    val endpointHost = parseRdpEndpoint(host)?.host
+                                    val targets = buildList {
+                                        add(options.wolBroadcastIp.ifBlank { "255.255.255.255" })
+                                        if (!endpointHost.isNullOrBlank()) add(endpointHost)
+                                    }.distinct()
+                                    val result = withContext(Dispatchers.IO) {
+                                        var lastRes = Result.success(Unit)
+                                        targets.forEach { target ->
+                                            lastRes = WakeOnLan.sendMagicPacket(mac, target, options.wolPort)
+                                        }
+                                        lastRes
+                                    }
+                                    wolStatusText = if (result.isSuccess) {
+                                        xyNow(
+                                            "Magic Packet terkirim ke ${targets.joinToString()} (UDP ${options.wolPort})",
+                                            "Magic Packet sent to ${targets.joinToString()} (UDP ${options.wolPort})",
+                                        )
+                                    } else {
+                                        xyNow(
+                                            "Gagal mengirim Magic Packet: ${result.exceptionOrNull()?.message ?: "error"}",
+                                            "Failed to send Magic Packet: ${result.exceptionOrNull()?.message ?: "error"}",
+                                        )
+                                    }
+                                }
+                            }
+                        },
+                        primary = false,
+                        compact = true,
+                        modifier = Modifier.fillMaxWidth(),
+                    )
+                    wolStatusText?.let { msg ->
+                        Spacer(Modifier.height(4.dp))
+                        Text(
+                            msg,
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                }
+                Spacer(Modifier.height(14.dp))
+                Text(
+                    xy("SSH Jump-Host / Port Forwarding Helper", "SSH Jump-Host / Port Forwarding Helper"),
+                    style = MaterialTheme.typography.titleSmall,
+                )
+                Text(
+                    xy(
+                        "Jika PC berada di belakang firewall/NAT dan diakses via tunnel SSH lokal (mis. Termux), simpan detail jump-host di sini untuk membuat perintah port-forward otomatis.",
+                        "If the PC sits behind a firewall/NAT and is reached via a local SSH tunnel (e.g. Termux), save jump-host details here to generate the port-forwarding command.",
+                    ),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                Spacer(Modifier.height(8.dp))
+                XyField(
+                    value = options.sshJumpHost,
+                    onValueChange = { options = options.copy(sshJumpHost = it.trim()) },
+                    label = xy("SSH Jump Host (user@host:port)", "SSH Jump Host (user@host:port)"),
+                    hint = "user@ssh.kantor.com:22",
+                )
+                if (options.sshJumpHost.isNotBlank()) {
+                    Spacer(Modifier.height(10.dp))
+                    XyField(
+                        value = options.sshRemoteTarget,
+                        onValueChange = { options = options.copy(sshRemoteTarget = it.trim()) },
+                        label = xy("Target LAN di balik SSH (host:port)", "LAN target behind SSH (host:port)"),
+                        hint = "192.168.1.50:3389",
+                    )
+                    val parsedEndpoint = parseRdpEndpoint(host)
+                    val localTunnelPort = if (parsedEndpoint?.host == "127.0.0.1" || parsedEndpoint?.host == "localhost") {
+                        parsedEndpoint.port
+                    } else {
+                        13389
+                    }
+                    val targetParts = options.sshRemoteTarget.ifBlank { "127.0.0.1:3389" }
+                    val targetParsed = parseRdpEndpoint(targetParts)
+                    val sshCmd = WakeOnLan.buildSshTunnelCommand(
+                        sshJumpHost = options.sshJumpHost,
+                        localPort = localTunnelPort,
+                        remoteHost = targetParsed?.host ?: "127.0.0.1",
+                        remotePort = targetParsed?.port ?: 3389,
+                    )
+                    if (sshCmd.isNotBlank()) {
+                        Spacer(Modifier.height(8.dp))
+                        Text(
+                            sshCmd,
+                            style = MaterialTheme.typography.bodySmall,
+                            fontFamily = FontFamily.Monospace,
+                            color = MaterialTheme.colorScheme.onSurface,
+                        )
+                        Spacer(Modifier.height(8.dp))
+                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            XyPillButton(
+                                text = xy("Salin Perintah SSH", "Copy SSH Command"),
+                                onClick = {
+                                    val cm = context.getSystemService(Context.CLIPBOARD_SERVICE) as? ClipboardManager
+                                    cm?.setPrimaryClip(ClipData.newPlainText("SSH Tunnel", sshCmd))
+                                    wolStatusText = xyNow("Perintah SSH disalin ke clipboard.", "SSH command copied to clipboard.")
+                                },
+                                primary = false,
+                                compact = true,
+                                modifier = Modifier.weight(1f),
+                            )
+                            XyPillButton(
+                                text = xy("Pakai 127.0.0.1:$localTunnelPort", "Use 127.0.0.1:$localTunnelPort"),
+                                onClick = { host = "127.0.0.1:$localTunnelPort" },
+                                primary = false,
+                                compact = true,
+                                modifier = Modifier.weight(1f),
+                            )
+                        }
+                    }
+                }
             }
 
             XySectionLabel(xy("Gateway", "Gateway"))
