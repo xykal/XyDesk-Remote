@@ -1,6 +1,5 @@
 package id.xydesk.remote.ui
 
-import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -16,6 +15,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -39,7 +39,6 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.PathEffect
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalDensity
@@ -95,41 +94,14 @@ fun HudKeyLayer(
     latchedKeys: Set<String>,
     onMove: (id: String, x: Float, y: Float) -> Unit,
     onPhase: (HudKey, HudPhase) -> Unit,
+    scrollSpeed: Float,
+    onScrollUnits: (Int) -> Unit,
     onEdit: (HudKey) -> Unit,
 ) {
     BoxWithConstraints(Modifier.fillMaxSize()) {
         val density = LocalDensity.current
         val widthPx = constraints.maxWidth.toFloat()
         val heightPx = constraints.maxHeight.toFloat()
-
-        if (mappingMode) {
-            Canvas(Modifier.fillMaxSize()) {
-                val step = 48.dp.toPx()
-                val dash = PathEffect.dashPathEffect(floatArrayOf(6f, 10f), 0f)
-                var x = step
-                while (x < size.width) {
-                    drawLine(
-                        color = Color(0x33FFFFFF),
-                        start = Offset(x, 0f),
-                        end = Offset(x, size.height),
-                        strokeWidth = 1f,
-                        pathEffect = dash,
-                    )
-                    x += step
-                }
-                var y = step
-                while (y < size.height) {
-                    drawLine(
-                        color = Color(0x33FFFFFF),
-                        start = Offset(0f, y),
-                        end = Offset(size.width, y),
-                        strokeWidth = 1f,
-                        pathEffect = dash,
-                    )
-                    y += step
-                }
-            }
-        }
 
         keys.forEach { key ->
             val sizePx = with(density) { key.size.dp.toPx() }
@@ -144,6 +116,8 @@ fun HudKeyLayer(
                 maxY = maxY,
                 onDrag = { x, y -> onMove(key.id, x, y) },
                 onPhase = { phase -> onPhase(key, phase) },
+                scrollSpeed = scrollSpeed,
+                onScrollUnits = onScrollUnits,
                 onEdit = { onEdit(key) },
                 modifier = Modifier
                     .offset {
@@ -165,6 +139,8 @@ private fun HudKeyButton(
     maxY: Float,
     onDrag: (Float, Float) -> Unit,
     onPhase: (HudPhase) -> Unit,
+    scrollSpeed: Float,
+    onScrollUnits: (Int) -> Unit,
     onEdit: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
@@ -174,6 +150,7 @@ private fun HudKeyButton(
     // saat posisi berubah, jadi membaca key.x/key.y langsung akan memakai
     // nilai basi dan tombol kelihatan tidak mau digeser.
     val latest = rememberUpdatedState(key)
+    val latestScrollUnits = rememberUpdatedState(onScrollUnits)
     val dragPos = remember(key.id) { mutableStateOf<Offset?>(null) }
 
     val pal = hudPalette(plate)
@@ -204,9 +181,10 @@ private fun HudKeyButton(
                 ring,
                 CircleShape,
             )
-            .pointerInput(key.id, mappingMode, key.action, plate) {
+            .pointerInput(key.id, mappingMode, key.action, key.kind, key.keyCode, key.shift, key.combo, key.size, plate, scrollSpeed) {
                 awaitEachGesture {
                     val down = awaitFirstDown(requireUnconsumed = false)
+                    val scrollAccumulator = ScrollWheelAccumulator()
                     pressed = true
                     var travelled = 0f
                     var dragged = false
@@ -241,6 +219,10 @@ private fun HudKeyButton(
                                 val ny = (base.y + delta.y / maxY).coerceIn(0f, 1f)
                                 dragPos.value = Offset(nx, ny)
                                 onDrag(nx, ny)
+                            } else if (key.kind == HudKind.SCROLL_SLIDER) {
+                                scrollAccumulator.consume(delta.y, scrollSpeed)
+                                    .takeIf { it != 0 }
+                                    ?.let(latestScrollUnits.value)
                             }
                             change.consume()
                         }
@@ -278,6 +260,7 @@ private fun HudKeyGlyph(key: HudKey, tint: Color, boxDp: Float = key.size) {
         HudKind.MOUSE_MIDDLE -> XyIcons.ClickMiddle
         HudKind.SCROLL_UP -> XyIcons.ScrollUp
         HudKind.SCROLL_DOWN -> XyIcons.ScrollDown
+        HudKind.SCROLL_SLIDER -> XyIcons.ScrollSlide
         HudKind.INPUT_SWITCH -> XyIcons.Swap
         HudKind.KEYBOARD -> XyIcons.Keyboard
         else -> null
@@ -432,7 +415,7 @@ fun HudKeyEditor(
 ) {
     var rePick by remember { mutableStateOf(false) }
 
-    Box(
+    BoxWithConstraints(
         Modifier
             .fillMaxSize()
             .background(MaterialTheme.colorScheme.scrim)
@@ -443,6 +426,8 @@ fun HudKeyEditor(
         Column(
             Modifier
                 .widthIn(max = 400.dp)
+                .fillMaxWidth()
+                .heightIn(max = (maxHeight - 24.dp).coerceAtLeast(180.dp))
                 .padding(20.dp)
                 .clip(RoundedCornerShape(14.dp))
                 .background(MaterialTheme.colorScheme.surface)
@@ -453,7 +438,7 @@ fun HudKeyEditor(
                 )
                 .clickable { }
                 .padding(14.dp),
-            verticalArrangement = Arrangement.spacedBy(10.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp),
         ) {
             Text(
                 xy("UBAH TOMBOL", "EDIT BUTTON"),
@@ -462,81 +447,92 @@ fun HudKeyEditor(
                 letterSpacing = 1.3.sp,
                 fontWeight = FontWeight.SemiBold,
             )
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Text(
-                    key.label,
-                    color = MaterialTheme.colorScheme.onSurface,
-                    fontSize = 16.sp,
-                    fontWeight = FontWeight.SemiBold,
-                    modifier = Modifier.weight(1f),
-                )
-                Box(
-                    Modifier
-                        .size(key.size.coerceIn(56f, 120f).dp)
-                        .clip(CircleShape)
-                        .border(1.4.dp, MaterialTheme.colorScheme.primary, CircleShape),
-                    contentAlignment = Alignment.Center,
-                ) {
-                    HudKeyGlyph(key, MaterialTheme.colorScheme.onSurface, key.size)
+            Text(
+                xy("Perubahan tersimpan otomatis. Selesai untuk kembali ke sesi.", "Changes save automatically. Finish to return to the session."),
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                fontSize = 11.sp,
+            )
+            Column(
+                Modifier.weight(1f, fill = false).verticalScroll(rememberScrollState()),
+                verticalArrangement = Arrangement.spacedBy(10.dp),
+            ) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(
+                        key.label,
+                        color = MaterialTheme.colorScheme.onSurface,
+                        fontSize = 16.sp,
+                        fontWeight = FontWeight.SemiBold,
+                        modifier = Modifier.weight(1f),
+                    )
+                    Box(
+                        Modifier
+                            .size(key.size.coerceIn(56f, 120f).dp)
+                            .clip(CircleShape)
+                            .border(1.4.dp, MaterialTheme.colorScheme.primary, CircleShape),
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        HudKeyGlyph(key, MaterialTheme.colorScheme.onSurface, key.size)
+                    }
                 }
-            }
-            Text(
-                xy("Jenis: {0}", "Type: {0}", xy(key.kind.title, key.kind.titleEn)),
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                fontSize = 11.sp,
-            )
-            XyPillButton(
-                xy("Ganti jenis aksi", "Change action type"),
-                { rePick = true },
-                primary = false,
-                compact = true,
-                modifier = Modifier.fillMaxWidth(),
-            )
-            Text(xy("Cara pakai", "How it works"), color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 11.sp)
-            val supportedActions = HudKey.allowedActions(key.kind)
-            val selectedAction = supportedActions.indexOf(key.action).coerceAtLeast(0)
-            XySegmented(
-                options = supportedActions.map { xy(it.title, it.titleEn) },
-                selectedIndex = selectedAction,
-                onSelect = { onChange(key.copy(action = supportedActions[it])) },
-                modifier = Modifier.fillMaxWidth(),
-            )
-            Text(
-                xy(supportedActions[selectedAction].detail, supportedActions[selectedAction].detailEn),
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                fontSize = 10.5.sp,
-            )
-            Text(
-                xy("Lebar tombol: {0} dp", "Button width: {0} dp", key.size.toInt()),
-                color = MaterialTheme.colorScheme.onSurface,
-                fontSize = 11.sp,
-            )
-            XySlider(
-                value = key.size,
-                onValueChange = { onChange(key.copy(size = it)) },
-                valueRange = 56f..120f,
-            )
-            Text(
-                xy(
-                    "Posisi: {0}% , {1}% — geser tombolnya langsung di layar untuk memindah.",
-                    "Position: {0}% , {1}% — drag the button on screen to move it.",
-                    (key.x * 100).toInt(),
-                    (key.y * 100).toInt(),
-                ),
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                fontSize = 10.5.sp,
-            )
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                XyPillButton(
-                    xy("Simpan", "Save"),
-                    onDismiss,
-                    compact = true,
-                    modifier = Modifier.weight(1f),
+                Text(
+                    xy("Jenis: {0}", "Type: {0}", xy(key.kind.title, key.kind.titleEn)),
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    fontSize = 11.sp,
                 )
+                XyPillButton(
+                    xy("Ganti jenis aksi", "Change action type"),
+                    { rePick = true },
+                    primary = false,
+                    compact = true,
+                    modifier = Modifier.fillMaxWidth(),
+                )
+                Text(xy("Cara pakai", "How it works"), color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 11.sp)
+                val supportedActions = HudKey.allowedActions(key.kind)
+                val selectedAction = supportedActions.indexOf(key.action).coerceAtLeast(0)
+                XySegmented(
+                    options = supportedActions.map { xy(it.title, it.titleEn) },
+                    selectedIndex = selectedAction,
+                    onSelect = { onChange(key.copy(action = supportedActions[it])) },
+                    modifier = Modifier.fillMaxWidth(),
+                )
+                Text(
+                    xy(supportedActions[selectedAction].detail, supportedActions[selectedAction].detailEn),
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    fontSize = 10.5.sp,
+                )
+                Text(
+                    xy("Ukuran tombol: {0} dp", "Button size: {0} dp", key.size.toInt()),
+                    color = MaterialTheme.colorScheme.onSurface,
+                    fontSize = 11.sp,
+                )
+                XySlider(
+                    value = key.size,
+                    onValueChange = { onChange(key.copy(size = it)) },
+                    valueRange = 56f..120f,
+                )
+                Text(
+                    xy(
+                        "Posisi: {0}% , {1}% — geser tombolnya langsung di layar untuk memindah.",
+                        "Position: {0}% , {1}% — drag the button on screen to move it.",
+                        (key.x * 100).toInt(),
+                        (key.y * 100).toInt(),
+                    ),
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    fontSize = 10.5.sp,
+                )
+            }
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 XyPillButton(
                     xy("Hapus", "Delete"),
                     onDelete,
                     primary = false,
+                    compact = true,
+                    modifier = Modifier.weight(1f),
+                )
+                XyPillButton(
+                    xy("Simpan & selesai", "Save & finish"),
+                    onDismiss,
+                    primary = true,
                     compact = true,
                     modifier = Modifier.weight(1f),
                 )
@@ -583,8 +579,8 @@ fun HudMappingBanner(
     ) {
         Text(
             xy(
-                "Atur posisi: geser tombol; ketuk untuk ubah aksi/ukuran",
-                "Edit layout: drag a button; tap to change its action/size",
+                "Edit · auto tersimpan",
+                "Edit · auto-saved",
             ),
             color = MaterialTheme.colorScheme.onSurface,
             fontSize = 11.sp,
@@ -611,7 +607,7 @@ fun HudMappingBanner(
                 .padding(horizontal = 12.dp, vertical = 6.dp),
         ) {
             Text(
-                xy("Selesai", "Done"),
+                xy("Simpan & selesai", "Save & finish"),
                 color = MaterialTheme.colorScheme.onPrimaryContainer,
                 fontSize = 11.sp,
                 fontWeight = FontWeight.SemiBold,
