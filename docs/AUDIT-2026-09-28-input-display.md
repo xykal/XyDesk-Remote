@@ -17,7 +17,7 @@ Scope: Android soft-keyboard text input, mouse HUD glyphs, Windows display scale
 - Finding 3: left/right/middle mouse glyphs now use rounded geometry.
 - Finding 4: session-panel copy states that DPI is a Windows DisplayScaleFactor request; no host acknowledgement is claimed.
 - Finding 5: requested resolution is checked against actual telemetry before success; timeout triggers the existing reconnect path and reports the dimensions the host reports.
-- CI compile and JVM tests passed: [branch run 36501234993](https://github.com/xykal/XyDesk-Remote/actions/runs/36501234993), [main merge run 36501553819](https://github.com/xykal/XyDesk-Remote/actions/runs/36501553819), [version-bump run 36501831764](https://github.com/xykal/XyDesk-Remote/actions/runs/36501831764). Debug jobs were skipped; there was no local build. Signed release build and device/host verification remain pending.
+- CI compile and JVM tests passed: [branch run 36501234993](https://github.com/xykal/XyDesk-Remote/actions/runs/36501234993), [main merge run 36501553819](https://github.com/xykal/XyDesk-Remote/actions/runs/36501553819), [version-bump run 36501831764](https://github.com/xykal/XyDesk-Remote/actions/runs/36501831764), and [release run 36502440722](https://github.com/xykal/XyDesk-Remote/actions/runs/36502440722). The release Kotlin/JVM gate, R8 signed per-ABI build, `apksigner` validation for every ABI, and publication all succeeded; debug ABI jobs were skipped. Release assets were checked (three APKs uploaded; each download URL returned HTTP 200). No local build was run. Device/host verification remains pending.
 
 ## Existing behavior and scope
 
