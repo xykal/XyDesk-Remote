@@ -100,4 +100,70 @@ class RdpOptionsTest {
         val manualOff = RdpOptions(networkAutoDetect = false, lowBandwidth = false)
         assertTrue(!manualOff.resolveForLink(isMetered = true, isCellular = true).lowBandwidth)
     }
+
+    @Test
+    fun streamProfilePresetsMengaturOpsiPerformaDanCodecDenganBenar() {
+        val ultra = RdpOptions().withStreamProfile(XyStreamProfile.ULTRA_LOW_LATENCY)
+        assertEquals(XyStreamProfile.ULTRA_LOW_LATENCY, ultra.streamProfile)
+        assertTrue(ultra.lowBandwidth)
+        assertTrue(ultra.asyncUpdate)
+        assertTrue(ultra.asyncChannels)
+        assertTrue(ultra.fontSmoothing)
+        assertTrue(!ultra.visualThemes)
+        assertEquals(24, ultra.colorDepth)
+        assertEquals("AVC420", ultra.activeCodecLabel())
+
+        val highVis = ultra.withStreamProfile(XyStreamProfile.HIGH_VISUAL)
+        assertEquals(XyStreamProfile.HIGH_VISUAL, highVis.streamProfile)
+        assertTrue(!highVis.lowBandwidth)
+        assertTrue(highVis.desktopWallpaper)
+        assertTrue(highVis.desktopComposition)
+        assertTrue(highVis.visualThemes)
+        assertEquals(32, highVis.colorDepth)
+        assertEquals("AVC444", highVis.activeCodecLabel())
+
+        val saver = highVis.withStreamProfile(XyStreamProfile.DATA_SAVER)
+        assertEquals(16, saver.colorDepth)
+        assertEquals(2, saver.compressionLevel)
+        assertEquals(30, saver.targetFps)
+        assertEquals("AVC420", saver.activeCodecLabel())
+    }
+
+    @Test
+    fun wakeOnLanNormalizeDanMagicPacketValid() {
+        assertEquals("AA:BB:CC:11:22:33", WakeOnLan.normalizeMac("aa-bb-cc-11-22-33"))
+        assertEquals("AA:BB:CC:11:22:33", WakeOnLan.normalizeMac("aabb.cc11.2233"))
+        assertNull(WakeOnLan.normalizeMac("invalid-mac"))
+        assertNull(WakeOnLan.normalizeMac("AA:BB:CC:DD:EE"))
+
+        val pkt = WakeOnLan.buildMagicPacket("AA:BB:CC:11:22:33")
+        assertEquals(102, pkt.size)
+        for (i in 0 until 6) {
+            assertEquals(0xFF.toByte(), pkt[i])
+        }
+        for (rep in 0 until 16) {
+            val base = 6 + rep * 6
+            assertEquals(0xAA.toByte(), pkt[base])
+            assertEquals(0xBB.toByte(), pkt[base + 1])
+            assertEquals(0xCC.toByte(), pkt[base + 2])
+            assertEquals(0x11.toByte(), pkt[base + 3])
+            assertEquals(0x22.toByte(), pkt[base + 4])
+            assertEquals(0x33.toByte(), pkt[base + 5])
+        }
+    }
+
+    @Test
+    fun sshTunnelCommandGeneratorMenghasilkanFormatPortForwardingYangTepat() {
+        val opts = RdpOptions(
+            sshHost = "bastion.xyverse.id",
+            sshPort = 2222,
+            sshUser = "devops",
+            sshLocalPort = 13389,
+        )
+        assertEquals(
+            "ssh -N -L 13389:10.10.0.25:3389 devops@bastion.xyverse.id -p 2222",
+            WakeOnLan.buildSshTunnelCommand("10.10.0.25", 3389, opts),
+        )
+        assertNull(WakeOnLan.buildSshTunnelCommand("10.10.0.25", 3389, RdpOptions()))
+    }
 }

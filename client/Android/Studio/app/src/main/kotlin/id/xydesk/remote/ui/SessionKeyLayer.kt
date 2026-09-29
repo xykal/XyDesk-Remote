@@ -582,6 +582,24 @@ fun HudKeyEditor(
                     compact = true,
                     modifier = Modifier.fillMaxWidth(),
                 )
+                XyField(
+                    value = key.label,
+                    onValueChange = { onChange(key.copy(label = it.take(10))) },
+                    label = xy("Label tombol (maks 10 huruf)", "Button label (max 10 chars)"),
+                )
+                if (key.kind == HudKind.MACRO) {
+                    XyField(
+                        value = key.macroText,
+                        onValueChange = { onChange(key.copy(macroText = it.take(160))) },
+                        label = xy("Perintah / teks makro otomatis", "Auto-typed macro command / text"),
+                        hint = "powershell",
+                    )
+                    id.xydesk.remote.ui.components.XyToggleRow(
+                        title = xy("Tekan Enter otomatis di akhir", "Press Enter automatically at the end"),
+                        checked = key.macroSendEnter,
+                        onCheckedChange = { onChange(key.copy(macroSendEnter = it)) },
+                    )
+                }
                 Text(xy("Cara pakai", "How it works"), color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 11.sp)
                 val supportedActions = HudKey.allowedActions(key.kind)
                 val selectedAction = supportedActions.indexOf(key.action).coerceAtLeast(0)
@@ -646,6 +664,8 @@ fun HudKeyEditor(
                         keyCode = option.keyCode,
                         shift = option.shift,
                         combo = option.combo,
+                        macroText = option.macroText,
+                        macroSendEnter = option.macroSendEnter,
                         action = option.defaultAction.takeIf { it in HudKey.allowedActions(option.kind) }
                             ?: key.action.takeIf { it in HudKey.allowedActions(option.kind) }
                             ?: HudAction.TAP,

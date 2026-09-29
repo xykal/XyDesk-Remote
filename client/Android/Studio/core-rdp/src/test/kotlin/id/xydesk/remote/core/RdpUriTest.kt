@@ -191,4 +191,42 @@ class RdpUriTest {
         val p = params(simple(), RdpOptions(gateway = XyGateway(host = "gw.corp.id", port = 8443)))
         assertEquals("g:gw.corp.id:8443", p["gateway"])
     }
+
+    // ---------------------------------------------------------------- streaming, latency & security
+
+    @Test
+    fun ultraLowLatencyProfileMenghasilkanFlagAsyncDanMatikanDekorasi() {
+        val opts = RdpOptions().withStreamProfile(XyStreamProfile.ULTRA_LOW_LATENCY)
+        val p = params(simple(), opts)
+        assertEquals("AVC420", p["gfx"])
+        assertEquals("24", p["bpp"])
+        assertEquals("+", p["async-update"])
+        assertEquals("+", p["async-channels"])
+        assertEquals("+", p["fonts"])
+        assertEquals("-", p["wallpaper"])
+        assertEquals("-", p["window-drag"])
+        assertEquals("-", p["menu-anims"])
+        assertEquals("-", p["themes"])
+    }
+
+    @Test
+    fun securityDanSessionHardeningFlagsMasukKeQueryParams() {
+        val opts = RdpOptions(
+            securityProtocol = XySecurityProtocol.NLA,
+            tlsSecLevel = 0,
+            consoleAdmin = true,
+            restrictedAdmin = true,
+            remoteProgram = "powershell.exe",
+            remoteWorkDir = "C:\\Users\\Administrator",
+            compressionLevel = 2,
+        )
+        val p = params(simple(), opts)
+        assertEquals("nla", p["sec"])
+        assertEquals("seclevel:0", p["tls"])
+        assertTrue(p.containsKey("admin"))
+        assertTrue(p.containsKey("restricted-admin"))
+        assertEquals("powershell.exe", p["shell"])
+        assertEquals("C:\\Users\\Administrator", p["shell-dir"])
+        assertEquals("2", p["compression-level"])
+    }
 }

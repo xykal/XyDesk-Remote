@@ -32,6 +32,45 @@ enum class HudKind(val title: String, val titleEn: String) {
     KEYBOARD("Buka keyboard", "Show keyboard"),
     KEY("Tombol keyboard", "Keyboard key"),
     COMBO("Kombinasi", "Combo"),
+    MACRO("Makro otomatis", "Auto macro"),
+}
+
+enum class HudProfilePreset(
+    val title: String,
+    val titleEn: String,
+    val detail: String,
+    val detailEn: String,
+) {
+    STANDARD(
+        "Standar",
+        "Standard",
+        "Klik kiri/kanan/tengah, scroll, dan ganti mode",
+        "Left/right/middle click, scroll, and input mode switch",
+    ),
+    CODING(
+        "Coding / Terminal",
+        "Coding / Terminal",
+        "Esc, Tab, Ctrl 1x, Copy/Paste/Save, Alt+Tab, Enter, dan klik",
+        "Esc, Tab, Ctrl 1x, Copy/Paste/Save, Alt+Tab, Enter, and clicks",
+    ),
+    GAMING(
+        "Gaming / WASD",
+        "Gaming / WASD",
+        "D-pad WASD di kiri, Space/Shift/E/Esc & klik di kanan",
+        "WASD cluster on left, Space/Shift/E/Esc & mouse clicks on right",
+    ),
+    OFFICE(
+        "Office / Kerja",
+        "Office / Work",
+        "Copy, Paste, Undo, Find, Alt+Tab, Win+D, Geser Scroll, dan klik",
+        "Copy, Paste, Undo, Find, Alt+Tab, Win+D, Swipe Scroll, and clicks",
+    ),
+    MEDIA(
+        "Desain / Video",
+        "Design / Video",
+        "Play/Pause (Space), Step ◀/▶, Undo/Redo, Del, Save, dan klik",
+        "Play/Pause (Space), Step ◀/▶, Undo/Redo, Del, Save, and clicks",
+    ),
 }
 
 data class HudKey(
@@ -47,6 +86,10 @@ data class HudKey(
     val y: Float = 0.42f,
     /** Diameter tombol HUD (dp). */
     val size: Float = 64f,
+    /** Teks perintah/snippet yang diketik otomatis untuk [HudKind.MACRO]. */
+    val macroText: String = "",
+    /** Kirim tombol Enter otomatis sesudah [macroText] selesai diketik. */
+    val macroSendEnter: Boolean = true,
 ) {
     fun toJson(): JSONObject = JSONObject().apply {
         put("id", id)
@@ -59,6 +102,10 @@ data class HudKey(
         put("x", x.toDouble())
         put("y", y.toDouble())
         put("size", size.toDouble())
+        if (macroText.isNotEmpty()) {
+            put("macroText", macroText)
+            put("macroEnter", macroSendEnter)
+        }
     }
 
     companion object {
@@ -81,6 +128,8 @@ data class HudKey(
                 x = o.optDouble("x", 0.78).toFloat().coerceIn(0f, 1f),
                 y = o.optDouble("y", 0.42).toFloat().coerceIn(0f, 1f),
                 size = o.optDouble("size", 64.0).toFloat().coerceIn(56f, 120f),
+                macroText = o.optString("macroText", ""),
+                macroSendEnter = o.optBoolean("macroEnter", true),
             )
         }
 
@@ -111,6 +160,67 @@ data class HudKey(
                 HudKey("turun", HudKind.SCROLL_DOWN, "Turun", x = 0.12f, y = 0.76f),
                 HudKey("switch", HudKind.INPUT_SWITCH, "Mode", x = 0.50f, y = 0.76f),
             ).map { it.copy(size = diameter) }
+        }
+
+        /** Hasilkan set tombol siap pakai berdasarkan [HudProfilePreset]. */
+        fun presetLayout(preset: HudProfilePreset, size: Float = 64f): List<HudKey> {
+            val d = size.coerceIn(56f, 80f)
+            val ctrl = KeyEvent.KEYCODE_CTRL_LEFT
+            val shift = KeyEvent.KEYCODE_SHIFT_LEFT
+            val alt = KeyEvent.KEYCODE_ALT_LEFT
+            val win = KeyEvent.KEYCODE_META_LEFT
+            val list = when (preset) {
+                HudProfilePreset.STANDARD -> return defaults(d)
+                HudProfilePreset.CODING -> listOf(
+                    HudKey("c_esc", HudKind.KEY, "Esc", keyCode = KeyEvent.KEYCODE_ESCAPE, x = 0.04f, y = 0.12f),
+                    HudKey("c_tab", HudKind.KEY, "Tab", keyCode = KeyEvent.KEYCODE_TAB, x = 0.04f, y = 0.34f),
+                    HudKey("c_ctrl", HudKind.KEY, "Ctrl 1x", keyCode = ctrl, action = HudAction.ONE_SHOT, x = 0.04f, y = 0.56f),
+                    HudKey("c_copy", HudKind.COMBO, "Ctrl+C", combo = listOf(ctrl, KeyEvent.KEYCODE_C), x = 0.04f, y = 0.78f),
+                    HudKey("c_paste", HudKind.COMBO, "Ctrl+V", combo = listOf(ctrl, KeyEvent.KEYCODE_V), x = 0.18f, y = 0.78f),
+                    HudKey("c_save", HudKind.COMBO, "Ctrl+S", combo = listOf(ctrl, KeyEvent.KEYCODE_S), x = 0.32f, y = 0.78f),
+                    HudKey("c_undo", HudKind.COMBO, "Ctrl+Z", combo = listOf(ctrl, KeyEvent.KEYCODE_Z), x = 0.46f, y = 0.78f),
+                    HudKey("c_alttab", HudKind.COMBO, "Alt+Tab", combo = listOf(alt, KeyEvent.KEYCODE_TAB), x = 0.82f, y = 0.12f),
+                    HudKey("c_enter", HudKind.KEY, "Enter", keyCode = KeyEvent.KEYCODE_ENTER, x = 0.82f, y = 0.34f),
+                    HudKey("kiri", HudKind.MOUSE_LEFT, "Kiri", x = 0.68f, y = 0.56f),
+                    HudKey("kanan", HudKind.MOUSE_RIGHT, "Kanan", x = 0.82f, y = 0.56f),
+                )
+                HudProfilePreset.GAMING -> listOf(
+                    HudKey("g_w", HudKind.KEY, "W", keyCode = KeyEvent.KEYCODE_W, action = HudAction.HOLD, x = 0.14f, y = 0.42f),
+                    HudKey("g_a", HudKind.KEY, "A", keyCode = KeyEvent.KEYCODE_A, action = HudAction.HOLD, x = 0.04f, y = 0.62f),
+                    HudKey("g_s", HudKind.KEY, "S", keyCode = KeyEvent.KEYCODE_S, action = HudAction.HOLD, x = 0.14f, y = 0.62f),
+                    HudKey("g_d", HudKind.KEY, "D", keyCode = KeyEvent.KEYCODE_D, action = HudAction.HOLD, x = 0.24f, y = 0.62f),
+                    HudKey("g_shift", HudKind.KEY, "Shift", keyCode = shift, action = HudAction.HOLD, x = 0.04f, y = 0.82f),
+                    HudKey("g_space", HudKind.KEY, "Space", keyCode = KeyEvent.KEYCODE_SPACE, action = HudAction.TAP, x = 0.24f, y = 0.82f),
+                    HudKey("g_esc", HudKind.KEY, "Esc", keyCode = KeyEvent.KEYCODE_ESCAPE, x = 0.04f, y = 0.12f),
+                    HudKey("g_e", HudKind.KEY, "E", keyCode = KeyEvent.KEYCODE_E, x = 0.82f, y = 0.24f),
+                    HudKey("kiri", HudKind.MOUSE_LEFT, "Kiri", action = HudAction.HOLD, x = 0.68f, y = 0.52f),
+                    HudKey("kanan", HudKind.MOUSE_RIGHT, "Kanan", action = HudAction.TAP, x = 0.82f, y = 0.52f),
+                )
+                HudProfilePreset.OFFICE -> listOf(
+                    HudKey("o_copy", HudKind.COMBO, "Ctrl+C", combo = listOf(ctrl, KeyEvent.KEYCODE_C), x = 0.04f, y = 0.14f),
+                    HudKey("o_paste", HudKind.COMBO, "Ctrl+V", combo = listOf(ctrl, KeyEvent.KEYCODE_V), x = 0.04f, y = 0.36f),
+                    HudKey("o_undo", HudKind.COMBO, "Ctrl+Z", combo = listOf(ctrl, KeyEvent.KEYCODE_Z), x = 0.04f, y = 0.58f),
+                    HudKey("o_find", HudKind.COMBO, "Ctrl+F", combo = listOf(ctrl, KeyEvent.KEYCODE_F), x = 0.04f, y = 0.80f),
+                    HudKey("o_alttab", HudKind.COMBO, "Alt+Tab", combo = listOf(alt, KeyEvent.KEYCODE_TAB), x = 0.82f, y = 0.14f),
+                    HudKey("o_wind", HudKind.COMBO, "Win+D", combo = listOf(win, KeyEvent.KEYCODE_D), x = 0.68f, y = 0.14f),
+                    HudKey("o_scroll", HudKind.SCROLL_SLIDER, "Geser", x = 0.82f, y = 0.36f),
+                    HudKey("kiri", HudKind.MOUSE_LEFT, "Kiri", x = 0.68f, y = 0.58f),
+                    HudKey("kanan", HudKind.MOUSE_RIGHT, "Kanan", x = 0.82f, y = 0.58f),
+                )
+                HudProfilePreset.MEDIA -> listOf(
+                    HudKey("m_space", HudKind.KEY, "Space", keyCode = KeyEvent.KEYCODE_SPACE, x = 0.04f, y = 0.14f),
+                    HudKey("m_left", HudKind.KEY, "\u25c0", keyCode = KeyEvent.KEYCODE_DPAD_LEFT, x = 0.04f, y = 0.36f),
+                    HudKey("m_right", HudKind.KEY, "\u25b6", keyCode = KeyEvent.KEYCODE_DPAD_RIGHT, x = 0.18f, y = 0.36f),
+                    HudKey("m_undo", HudKind.COMBO, "Ctrl+Z", combo = listOf(ctrl, KeyEvent.KEYCODE_Z), x = 0.04f, y = 0.58f),
+                    HudKey("m_redo", HudKind.COMBO, "Ctrl+Y", combo = listOf(ctrl, KeyEvent.KEYCODE_Y), x = 0.18f, y = 0.58f),
+                    HudKey("m_del", HudKind.KEY, "Del", keyCode = KeyEvent.KEYCODE_FORWARD_DEL, x = 0.04f, y = 0.80f),
+                    HudKey("m_save", HudKind.COMBO, "Ctrl+S", combo = listOf(ctrl, KeyEvent.KEYCODE_S), x = 0.18f, y = 0.80f),
+                    HudKey("m_scroll", HudKind.SCROLL_SLIDER, "Geser", x = 0.82f, y = 0.24f),
+                    HudKey("kiri", HudKind.MOUSE_LEFT, "Kiri", action = HudAction.HOLD, x = 0.68f, y = 0.52f),
+                    HudKey("kanan", HudKind.MOUSE_RIGHT, "Kanan", x = 0.82f, y = 0.52f),
+                )
+            }
+            return list.map { it.copy(size = d) }
         }
 
         /** Action yang benar-benar punya makna untuk jenis kontrol terkait. */
@@ -237,6 +347,8 @@ data class HudKeyOption(
     /** Label bahasa Inggris; label utama bahasa Indonesia. */
     val labelEn: String = label,
     val defaultAction: HudAction = HudAction.TAP,
+    val macroText: String = "",
+    val macroSendEnter: Boolean = true,
 )
 
 /**
@@ -382,8 +494,80 @@ object HudKeyCatalog {
         HudKeyOption("Kombinasi", "Win+X", HudKind.COMBO, combo = listOf(WIN, KeyEvent.KEYCODE_X)),
     )
 
+    val macros = listOf(
+        HudKeyOption(
+            "Makro",
+            "CMD",
+            HudKind.MACRO,
+            combo = listOf(WIN, KeyEvent.KEYCODE_R),
+            macroText = "cmd",
+            macroSendEnter = true,
+            labelEn = "CMD",
+        ),
+        HudKeyOption(
+            "Makro",
+            "PShell",
+            HudKind.MACRO,
+            combo = listOf(WIN, KeyEvent.KEYCODE_R),
+            macroText = "powershell",
+            macroSendEnter = true,
+            labelEn = "PShell",
+        ),
+        HudKeyOption(
+            "Makro",
+            "TaskMgr",
+            HudKind.COMBO,
+            combo = listOf(CTRL, SHIFT, KeyEvent.KEYCODE_ESCAPE),
+            labelEn = "TaskMgr",
+        ),
+        HudKeyOption(
+            "Makro",
+            "Kunci PC",
+            HudKind.COMBO,
+            combo = listOf(WIN, KeyEvent.KEYCODE_L),
+            labelEn = "Lock PC",
+        ),
+        HudKeyOption(
+            "Makro",
+            "Snip",
+            HudKind.COMBO,
+            combo = listOf(WIN, SHIFT, KeyEvent.KEYCODE_S),
+            labelEn = "Snip",
+        ),
+        HudKeyOption(
+            "Makro",
+            "Desk+",
+            HudKind.COMBO,
+            combo = listOf(WIN, CTRL, KeyEvent.KEYCODE_D),
+            labelEn = "Desk+",
+        ),
+        HudKeyOption(
+            "Makro",
+            "Desk\u25c0",
+            HudKind.COMBO,
+            combo = listOf(WIN, CTRL, KeyEvent.KEYCODE_DPAD_LEFT),
+            labelEn = "Desk\u25c0",
+        ),
+        HudKeyOption(
+            "Makro",
+            "Desk\u25b6",
+            HudKind.COMBO,
+            combo = listOf(WIN, CTRL, KeyEvent.KEYCODE_DPAD_RIGHT),
+            labelEn = "Desk\u25b6",
+        ),
+        HudKeyOption(
+            "Makro",
+            "Ketik...",
+            HudKind.MACRO,
+            macroText = "ipconfig /all",
+            macroSendEnter = true,
+            labelEn = "Type...",
+        ),
+    )
+
     val groups: List<Triple<String, String, List<HudKeyOption>>> = listOf(
         Triple("Kombinasi", "Combos", combos),
+        Triple("Makro", "Macros", macros),
         Triple("F1 - F12", "F1 - F12", functionKeys),
         Triple("Single Key", "Single Key", singleKeys),
         Triple("Numpad", "Numpad", numpad),

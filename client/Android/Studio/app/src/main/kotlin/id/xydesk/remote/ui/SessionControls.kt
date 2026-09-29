@@ -101,6 +101,7 @@ fun SessionControls(
     remoteSize: String,
     zoomPercent: Int,
     remoteDpi: Int,
+    telemetry: id.xydesk.remote.core.TelemetrySample = id.xydesk.remote.core.TelemetrySample.EMPTY,
     pointerScreen: Offset,
     pointerVisible: Boolean,
     remoteCursor: RemoteCursor? = null,
@@ -134,6 +135,10 @@ fun SessionControls(
     clipboardSyncEnabled: Boolean = false,
     onSendText: (String) -> Unit,
     onSendRemoteClipboardText: (String) -> Boolean = { false },
+    onEnterPip: () -> Unit = {},
+    onLockRemotePc: () -> Unit = {},
+    onActivatePrivacyCurtain: () -> Unit = {},
+    onGyroMouseChanged: (Boolean) -> Unit = {},
     onOverlayActiveChange: (Boolean) -> Unit = {},
     onRegisterBackHandler: ((() -> Boolean)?) -> Unit = {},
     coreInfo: List<String> = emptyList(),
@@ -149,6 +154,15 @@ fun SessionControls(
     var editing by remember { mutableStateOf<HudKey?>(null) }
     var pointerSize by remember { mutableFloatStateOf(prefs.pointerSize) }
     var pointerStyle by remember { mutableStateOf(prefs.pointerStyle) }
+    var pointerSensitivity by remember { mutableFloatStateOf(prefs.pointerSensitivity) }
+    var pointerAcceleration by remember { mutableStateOf(prefs.pointerAcceleration) }
+    var inertialScroll by remember { mutableStateOf(prefs.inertialScroll) }
+    var edgeScrollZone by remember { mutableStateOf(prefs.edgeScrollZone) }
+    var gamepadEnabled by remember { mutableStateOf(prefs.gamepadEnabled) }
+    var gyroMouseEnabled by remember { mutableStateOf(prefs.gyroMouseEnabled) }
+    var showTelemetryPill by remember { mutableStateOf(prefs.showTelemetryPill) }
+    var autoPipOnBackground by remember { mutableStateOf(prefs.autoPipOnBackground) }
+    var hudProfile by remember(deviceId) { mutableStateOf(prefs.hudProfile(deviceId)) }
     var haptics by remember { mutableStateOf(prefs.haptics) }
     var autoFit by remember { mutableStateOf(prefs.autoFit) }
     var plate by remember { mutableStateOf(prefs.hudPlate) }
@@ -162,11 +176,14 @@ fun SessionControls(
     var confirmDeleteKey by remember { mutableStateOf<HudKey?>(null) }
     var confirmResetHud by remember { mutableStateOf(false) }
     var confirmImportLayout by remember { mutableStateOf<List<HudKey>?>(null) }
+    var confirmApplyPreset by remember { mutableStateOf<HudProfilePreset?>(null) }
+    var confirmLockPc by remember { mutableStateOf(false) }
     var confirmResolution by remember { mutableStateOf<String?>(null) }
     var validationAlert by remember { mutableStateOf<Pair<String, String>?>(null) }
 
     val anyOverlayOpen = panelOpen || pickerOpen || editing != null || textOpen || layoutJsonOpen ||
         confirmDeleteKey != null || confirmResetHud || confirmImportLayout != null ||
+        confirmApplyPreset != null || confirmLockPc ||
         confirmResolution != null || validationAlert != null
     LaunchedEffect(anyOverlayOpen) {
         onOverlayActiveChange(anyOverlayOpen)
@@ -174,7 +191,8 @@ fun SessionControls(
 
     LaunchedEffect(
         panelOpen, pickerOpen, editing, textOpen, layoutJsonOpen, mappingMode,
-        confirmDeleteKey, confirmResetHud, confirmImportLayout, confirmResolution, validationAlert,
+        confirmDeleteKey, confirmResetHud, confirmImportLayout, confirmApplyPreset,
+        confirmLockPc, confirmResolution, validationAlert,
     ) {
         onRegisterBackHandler {
             when {
@@ -192,6 +210,14 @@ fun SessionControls(
                 }
                 confirmImportLayout != null -> {
                     confirmImportLayout = null
+                    true
+                }
+                confirmApplyPreset != null -> {
+                    confirmApplyPreset = null
+                    true
+                }
+                confirmLockPc -> {
+                    confirmLockPc = false
                     true
                 }
                 confirmResolution != null -> {
@@ -347,6 +373,8 @@ fun SessionControls(
             x = (position.x / maxX).coerceIn(0f, 1f),
             y = (position.y / maxY).coerceIn(0f, 1f),
             size = size,
+            macroText = option.macroText,
+            macroSendEnter = option.macroSendEnter,
         )
         onKeysChange(keys + key)
         panelOpen = false
@@ -368,6 +396,16 @@ fun SessionControls(
                 style = pointerStyle,
                 remote = remoteCursor,
                 zoom = zoom,
+            )
+        }
+
+        if (showTelemetryPill && !panelOpen && !mappingMode) {
+            LiveTelemetryPill(
+                telemetry = telemetry,
+                modifier = Modifier
+                    .align(Alignment.TopStart)
+                    .padding(start = 10.dp, top = 10.dp)
+                    .zIndex(19f),
             )
         }
 
@@ -633,6 +671,14 @@ fun SessionControls(
                 onZoomActual = onZoomActual,
                 onZoomScale = onZoomScale,
                 onRemoteDpiChange = onRemoteDpiChange,
+                showTelemetryPill = showTelemetryPill,
+                onShowTelemetryPillChange = { showTelemetryPill = it; prefs.showTelemetryPill = it },
+                autoPipOnBackground = autoPipOnBackground,
+                onAutoPipChange = { autoPipOnBackground = it; prefs.autoPipOnBackground = it },
+                onEnterPip = {
+                    panelOpen = false
+                    onEnterPip()
+                },
                 // Input
                 inputMode = inputMode,
                 onInputModeChange = onInputModeChange,
@@ -645,8 +691,30 @@ fun SessionControls(
                 onPointerStyle = { pointerStyle = it; prefs.pointerStyle = it },
                 pointerSize = pointerSize,
                 onPointerSize = { pointerSize = it; prefs.pointerSize = it },
+                pointerSensitivity = pointerSensitivity,
+                onPointerSensitivity = { pointerSensitivity = it; prefs.pointerSensitivity = it },
+                pointerAcceleration = pointerAcceleration,
+                onPointerAcceleration = { pointerAcceleration = it; prefs.pointerAcceleration = it },
+                inertialScroll = inertialScroll,
+                onInertialScroll = { inertialScroll = it; prefs.inertialScroll = it },
+                edgeScrollZone = edgeScrollZone,
+                onEdgeScrollZone = { edgeScrollZone = it; prefs.edgeScrollZone = it },
+                gamepadEnabled = gamepadEnabled,
+                onGamepadEnabled = { gamepadEnabled = it; prefs.gamepadEnabled = it },
+                gyroMouseEnabled = gyroMouseEnabled,
+                onGyroMouseEnabled = {
+                    gyroMouseEnabled = it
+                    prefs.gyroMouseEnabled = it
+                    onGyroMouseChanged(it)
+                },
                 // Tombol
                 keys = keys,
+                hudProfile = hudProfile,
+                onSelectHudProfile = { selectedPreset ->
+                    if (selectedPreset != hudProfile) {
+                        confirmApplyPreset = selectedPreset
+                    }
+                },
                 onAddKey = { pickerOpen = true },
                 onEditKey = { editing = it },
                 onDeleteKey = { confirmDeleteKey = it },
@@ -667,6 +735,11 @@ fun SessionControls(
                 },
                 // Sesi
                 onScreenshot = onScreenshot,
+                onLockRemotePc = { confirmLockPc = true },
+                onActivatePrivacyCurtain = {
+                    panelOpen = false
+                    onActivatePrivacyCurtain()
+                },
                 onDisconnect = {
                     panelOpen = false
                     onDisconnect()
@@ -770,6 +843,51 @@ fun SessionControls(
         )
     }
 
+    confirmApplyPreset?.let { preset ->
+        XyDialog(
+            title = xy("Ganti profil tombol HUD?", "Switch HUD button profile?"),
+            body = xy(
+                "Terapkan profil \"{0}\"? Susunan tombol kontrol di layar sesi akan disesuaikan dengan profil ini.",
+                "Apply profile \"{0}\"? The on-screen control buttons will be updated to match this preset.",
+                xy(preset.title, preset.titleEn),
+            ),
+            confirmLabel = xy("Terapkan", "Apply"),
+            onConfirm = {
+                confirmApplyPreset = null
+                hudProfile = preset
+                prefs.setHudProfile(deviceId, preset)
+                onKeysChange(HudKey.presetLayout(preset, prefs.hudButtonSize))
+                notice.show(
+                    xyNow(
+                        "Profil tombol diubah ke {0}",
+                        "Button profile switched to {0}",
+                        xyNow(preset.title, preset.titleEn),
+                    ),
+                )
+            },
+            dismissLabel = xy("Batal", "Cancel"),
+            onDismiss = { confirmApplyPreset = null },
+        )
+    }
+
+    if (confirmLockPc) {
+        XyDialog(
+            title = xy("Kunci layar PC (Win+L)?", "Lock PC screen (Win+L)?"),
+            body = xy(
+                "Kirim perintah Win+L untuk mengunci sesi Windows di komputer remote sekarang?",
+                "Send Win+L to lock the Windows session on the remote computer now?",
+            ),
+            confirmLabel = xy("Kunci PC", "Lock PC"),
+            onConfirm = {
+                confirmLockPc = false
+                panelOpen = false
+                onLockRemotePc()
+            },
+            dismissLabel = xy("Batal", "Cancel"),
+            onDismiss = { confirmLockPc = false },
+        )
+    }
+
     confirmResolution?.let { targetRes ->
         XyDialog(
             title = xy("Ubah resolusi remote?", "Change remote resolution?"),
@@ -797,6 +915,53 @@ fun SessionControls(
             confirmLabel = xy("Mengerti", "Got it"),
             onConfirm = { validationAlert = null },
             onDismiss = { validationAlert = null },
+        )
+    }
+}
+
+@Composable
+private fun LiveTelemetryPill(
+    telemetry: id.xydesk.remote.core.TelemetrySample,
+    modifier: Modifier = Modifier,
+) {
+    var expanded by remember { mutableStateOf(false) }
+    val rtt = telemetry.rttMs
+    val dotColor = when {
+        rtt <= 0 -> Color(0xFF7BC8A4)
+        rtt < 45 -> Color(0xFF5CE09B)
+        rtt < 120 -> Color(0xFFF5B951)
+        else -> Color(0xFFF26D6D)
+    }
+    Row(
+        modifier
+            .clip(XyPill)
+            .background(Color(0xCC0B0D10))
+            .border(1.dp, Color(0x55FFFFFF), XyPill)
+            .clickable { expanded = !expanded }
+            .padding(horizontal = 10.dp, vertical = 5.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(6.dp),
+    ) {
+        Box(
+            Modifier
+                .size(7.dp)
+                .clip(CircleShape)
+                .background(dotColor),
+        )
+        val rttLabel = if (rtt > 0) "${rtt}ms" else "--ms"
+        val transportLabel = if (telemetry.udpActive) "UDP" else "TCP"
+        val text = if (expanded) {
+            val res = if (telemetry.width > 0) "${telemetry.width}×${telemetry.height}" else "--"
+            "${telemetry.fps} FPS · $rttLabel · ${telemetry.codecLabel} · $transportLabel · $res (${telemetry.colorDepth}b)"
+        } else {
+            "${telemetry.fps} FPS · $rttLabel · ${telemetry.codecLabel}"
+        }
+        Text(
+            text = text,
+            color = Color(0xFFF1F4F6),
+            fontSize = 10.5.sp,
+            fontWeight = FontWeight.Medium,
+            maxLines = 1,
         )
     }
 }
@@ -991,6 +1156,11 @@ private fun SessionPanel(
     onZoomActual: () -> Unit,
     onZoomScale: (Float) -> Unit,
     onRemoteDpiChange: (Int) -> Unit,
+    showTelemetryPill: Boolean,
+    onShowTelemetryPillChange: (Boolean) -> Unit,
+    autoPipOnBackground: Boolean,
+    onAutoPipChange: (Boolean) -> Unit,
+    onEnterPip: () -> Unit,
     // Input
     inputMode: InputMode,
     onInputModeChange: (InputMode) -> Unit,
@@ -1003,8 +1173,22 @@ private fun SessionPanel(
     onPointerStyle: (PointerStyle) -> Unit,
     pointerSize: Float,
     onPointerSize: (Float) -> Unit,
+    pointerSensitivity: Float,
+    onPointerSensitivity: (Float) -> Unit,
+    pointerAcceleration: Boolean,
+    onPointerAcceleration: (Boolean) -> Unit,
+    inertialScroll: Boolean,
+    onInertialScroll: (Boolean) -> Unit,
+    edgeScrollZone: Boolean,
+    onEdgeScrollZone: (Boolean) -> Unit,
+    gamepadEnabled: Boolean,
+    onGamepadEnabled: (Boolean) -> Unit,
+    gyroMouseEnabled: Boolean,
+    onGyroMouseEnabled: (Boolean) -> Unit,
     // Tombol
     keys: List<HudKey>,
+    hudProfile: HudProfilePreset,
+    onSelectHudProfile: (HudProfilePreset) -> Unit,
     onAddKey: () -> Unit,
     onEditKey: (HudKey) -> Unit,
     onDeleteKey: (HudKey) -> Unit,
@@ -1019,6 +1203,8 @@ private fun SessionPanel(
     onOpenLayoutJson: () -> Unit,
     // Sesi
     onScreenshot: () -> Unit,
+    onLockRemotePc: () -> Unit,
+    onActivatePrivacyCurtain: () -> Unit,
     onDisconnect: () -> Unit,
     coreInfo: List<String>,
     onCopyCoreInfo: () -> Unit,
@@ -1108,6 +1294,11 @@ private fun SessionPanel(
                         onZoomActual = onZoomActual,
                         onZoomScale = onZoomScale,
                         onRemoteDpiChange = onRemoteDpiChange,
+                        showTelemetryPill = showTelemetryPill,
+                        onShowTelemetryPillChange = onShowTelemetryPillChange,
+                        autoPipOnBackground = autoPipOnBackground,
+                        onAutoPipChange = onAutoPipChange,
+                        onEnterPip = onEnterPip,
                     )
 
                     PanelTab.INPUT -> InputTab(
@@ -1122,10 +1313,24 @@ private fun SessionPanel(
                         onPointerStyle = onPointerStyle,
                         pointerSize = pointerSize,
                         onPointerSize = onPointerSize,
+                        pointerSensitivity = pointerSensitivity,
+                        onPointerSensitivity = onPointerSensitivity,
+                        pointerAcceleration = pointerAcceleration,
+                        onPointerAcceleration = onPointerAcceleration,
+                        inertialScroll = inertialScroll,
+                        onInertialScroll = onInertialScroll,
+                        edgeScrollZone = edgeScrollZone,
+                        onEdgeScrollZone = onEdgeScrollZone,
+                        gamepadEnabled = gamepadEnabled,
+                        onGamepadEnabled = onGamepadEnabled,
+                        gyroMouseEnabled = gyroMouseEnabled,
+                        onGyroMouseEnabled = onGyroMouseEnabled,
                     )
 
                     PanelTab.BUTTONS -> ButtonsTab(
                         keys = keys,
+                        hudProfile = hudProfile,
+                        onSelectHudProfile = onSelectHudProfile,
                         onAddKey = onAddKey,
                         onEditKey = onEditKey,
                         onDeleteKey = onDeleteKey,
@@ -1142,6 +1347,8 @@ private fun SessionPanel(
 
                     PanelTab.SESSION -> SessionTab(
                         onScreenshot = onScreenshot,
+                        onLockRemotePc = onLockRemotePc,
+                        onActivatePrivacyCurtain = onActivatePrivacyCurtain,
                         onDisconnect = onDisconnect,
                         coreInfo = coreInfo,
                         onCopyCoreInfo = onCopyCoreInfo,
@@ -1175,7 +1382,34 @@ private fun ScreenTab(
     onZoomActual: () -> Unit,
     onZoomScale: (Float) -> Unit,
     onRemoteDpiChange: (Int) -> Unit,
+    showTelemetryPill: Boolean,
+    onShowTelemetryPillChange: (Boolean) -> Unit,
+    autoPipOnBackground: Boolean,
+    onAutoPipChange: (Boolean) -> Unit,
+    onEnterPip: () -> Unit,
 ) {
+    PanelSection(xy("Telemetri & Jendela Mengambang (PiP)", "Live Telemetry & Floating PiP")) {
+        XyToggleRow(
+            title = xy("Pill telemetri live (FPS & Ping)", "Live telemetry pill (FPS & Ping)"),
+            subtitle = xy("Tampilkan FPS, RTT ms, dan codec aktif di pojok kiri atas", "Show live FPS, RTT ms, and active codec at top-left"),
+            checked = showTelemetryPill,
+            onCheckedChange = onShowTelemetryPillChange,
+        )
+        XyToggleRow(
+            title = xy("Otomatis PiP saat tekan Home", "Auto PiP on Home button"),
+            subtitle = xy("Pantau layar PC di jendela kecil saat buka aplikasi lain", "Watch the PC in a floating mini window while using other apps"),
+            checked = autoPipOnBackground,
+            onCheckedChange = onAutoPipChange,
+        )
+        XyPillButton(
+            xy("Masuk Mode Jendela Mengambang (PiP)", "Enter Floating PiP Monitor"),
+            onEnterPip,
+            primary = false,
+            compact = true,
+            modifier = Modifier.fillMaxWidth(),
+        )
+    }
+
     PanelSection(xy("Ukuran tampilan", "Display size")) {
         PanelHint(
             xy(
@@ -1322,6 +1556,18 @@ private fun InputTab(
     onPointerStyle: (PointerStyle) -> Unit,
     pointerSize: Float,
     onPointerSize: (Float) -> Unit,
+    pointerSensitivity: Float,
+    onPointerSensitivity: (Float) -> Unit,
+    pointerAcceleration: Boolean,
+    onPointerAcceleration: (Boolean) -> Unit,
+    inertialScroll: Boolean,
+    onInertialScroll: (Boolean) -> Unit,
+    edgeScrollZone: Boolean,
+    onEdgeScrollZone: (Boolean) -> Unit,
+    gamepadEnabled: Boolean,
+    onGamepadEnabled: (Boolean) -> Unit,
+    gyroMouseEnabled: Boolean,
+    onGyroMouseEnabled: (Boolean) -> Unit,
 ) {
     PanelSection(xy("Mode input", "Input mode")) {
         XySegmented(
@@ -1346,12 +1592,57 @@ private fun InputTab(
         )
     }
 
-    PanelSection(xy("Clipboard otomatis", "Automatic clipboard")) {
+    PanelSection(xy("Fisika Trackpad & Sensor", "Trackpad Physics & Sensors")) {
+        PanelHint(
+            xy(
+                "Sensitivitas pointer: {0}x",
+                "Pointer sensitivity: {0}x",
+                String.format(java.util.Locale.US, "%.1f", pointerSensitivity),
+            ),
+        )
+        XySlider(
+            value = pointerSensitivity,
+            onValueChange = onPointerSensitivity,
+            valueRange = 0.4f..3.0f,
+        )
+        XyToggleRow(
+            title = xy("Akselerasi pointer dinamis", "Dynamic pointer acceleration"),
+            subtitle = xy("Gerak cepat menjangkau layar jauh, gerak pelan tetap presisi", "Fast swipes cross the screen, slow moves stay pixel-accurate"),
+            checked = pointerAcceleration,
+            onCheckedChange = onPointerAcceleration,
+        )
+        XyToggleRow(
+            title = xy("Inertial scroll (momentum)", "Inertial scroll (momentum)"),
+            subtitle = xy("Gulir dua jari tetap meluncur halus saat dilepas", "Two-finger scroll glides smoothly after release"),
+            checked = inertialScroll,
+            onCheckedChange = onInertialScroll,
+        )
+        XyToggleRow(
+            title = xy("Zona scroll tepi kanan", "Right-edge scroll strip"),
+            subtitle = xy("Usap 1 jari di tepi paling kanan layar untuk roda scroll", "Swipe 1 finger along the right screen edge for mouse wheel"),
+            checked = edgeScrollZone,
+            onCheckedChange = onEdgeScrollZone,
+        )
+        XyToggleRow(
+            title = xy("Dukungan Gamepad & Joystick fisik", "Physical Gamepad & Joystick"),
+            subtitle = xy("Stik kiri gerak kursor, stik kanan scroll, A/B klik kiri/kanan", "Left stick moves pointer, right stick scrolls, A/B left/right click"),
+            checked = gamepadEnabled,
+            onCheckedChange = onGamepadEnabled,
+        )
+        XyToggleRow(
+            title = xy("Gyro Air-Mouse (sensor gerak HP)", "Gyro Air-Mouse (phone motion)"),
+            subtitle = xy("Arahkan kursor dengan memiringkan HP seperti pointer laser", "Aim the cursor by tilting your phone like a laser pointer"),
+            checked = gyroMouseEnabled,
+            onCheckedChange = onGyroMouseEnabled,
+        )
+    }
+
+    PanelSection(xy("Clipboard otomatis (Teks & Gambar)", "Automatic clipboard (Text & Image)")) {
         PanelHint(
             if (clipboardSyncEnabled) {
                 xy(
-                    "Sinkronisasi dua arah aktif otomatis: salin di PC langsung masuk ke clipboard HP, dan salin di HP langsung terkirim ke PC tanpa tombol manual.",
-                    "Two-way sync is active automatically: copying on PC goes straight to the phone clipboard, and copying on phone is sent automatically to PC without manual buttons.",
+                    "Sinkronisasi dua arah aktif otomatis: teks maupun gambar/screenshot yang disalin di PC langsung masuk ke clipboard HP, dan sebaliknya.",
+                    "Two-way sync is active automatically: text and images/screenshots copied on PC go straight to the phone clipboard, and vice versa.",
                 )
             } else {
                 xy(
@@ -1398,6 +1689,8 @@ private fun InputTab(
 @Composable
 private fun ButtonsTab(
     keys: List<HudKey>,
+    hudProfile: HudProfilePreset,
+    onSelectHudProfile: (HudProfilePreset) -> Unit,
     onAddKey: () -> Unit,
     onEditKey: (HudKey) -> Unit,
     onDeleteKey: (HudKey) -> Unit,
@@ -1411,6 +1704,29 @@ private fun ButtonsTab(
     onExportLayoutJson: () -> Unit,
     onOpenLayoutJson: () -> Unit,
 ) {
+    PanelSection(xy("Preset Profil HUD", "HUD Profile Presets")) {
+        PanelHint(
+            xy(
+                "Ganti susunan tombol instan sesuai aktivitas: Standar, Coding/Terminal, Gaming/WASD, Office, atau Desain/Video.",
+                "Switch button layouts instantly by activity: Standard, Coding/Terminal, Gaming/WASD, Office, or Design/Video.",
+            ),
+        )
+        HudProfilePreset.entries.chunked(2).forEach { row ->
+            Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                row.forEach { preset ->
+                    XyPillButton(
+                        text = xy(preset.title, preset.titleEn),
+                        onClick = { onSelectHudProfile(preset) },
+                        primary = preset == hudProfile,
+                        compact = true,
+                        modifier = Modifier.weight(1f),
+                    )
+                }
+                repeat(2 - row.size) { Spacer(Modifier.weight(1f)) }
+            }
+        }
+    }
+
     PanelSection(xy("Tombol kontrol ({0})", "Control buttons ({0})", keys.size)) {
         PanelHint(
             if (mappingMode) {
@@ -1502,10 +1818,37 @@ private fun ButtonsTab(
 @Composable
 private fun SessionTab(
     onScreenshot: () -> Unit,
+    onLockRemotePc: () -> Unit,
+    onActivatePrivacyCurtain: () -> Unit,
     onDisconnect: () -> Unit,
     coreInfo: List<String>,
     onCopyCoreInfo: () -> Unit,
 ) {
+    PanelSection(xy("Keamanan & Privasi Cepat", "Quick Security & Privacy")) {
+        PanelHint(
+            xy(
+                "Kunci sesi Windows dari jarak jauh (Win+L) atau aktifkan Tirai Privasi agar layar HP tertutup gelap sementara.",
+                "Remotely lock the Windows session (Win+L) or activate the Privacy Curtain to black out the phone screen temporarily.",
+            ),
+        )
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            XyPillButton(
+                xy("Kunci PC (Win+L)", "Lock PC (Win+L)"),
+                onLockRemotePc,
+                primary = false,
+                compact = true,
+                modifier = Modifier.weight(1f),
+            )
+            XyPillButton(
+                xy("Tirai Privasi", "Privacy Curtain"),
+                onActivatePrivacyCurtain,
+                primary = false,
+                compact = true,
+                modifier = Modifier.weight(1f),
+            )
+        }
+    }
+
     PanelSection(xy("Sesi", "Session")) {
         PanelHint(
             xy(

@@ -373,6 +373,29 @@ fun XyDeskSessionScreen(
                     }
                 }
             }
+
+            override fun onRemoteClipboardImage(data: ByteArray) {
+                val activity = context as? Activity ?: return
+                activity.runOnUiThread {
+                    val clipboardEnabled = runCatching {
+                        RdpOptions.of(activity, profile.id).clipboard
+                    }.getOrDefault(false)
+                    if (!activity.isFinishing && !activity.isDestroyed && clipboardEnabled && data.isNotEmpty()) {
+                        val cm = activity.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+                        runCatching {
+                            (activity as? XyDeskSessionActivity)?.noteRemoteClipboardImage(data)
+                            ClipboardImageProvider.setImageData(data)
+                            cm.setPrimaryClip(
+                                android.content.ClipData.newUri(
+                                    activity.contentResolver,
+                                    "rdp-image",
+                                    ClipboardImageProvider.CONTENT_URI,
+                                ),
+                            )
+                        }
+                    }
+                }
+            }
         })
     }
 
@@ -609,9 +632,15 @@ fun XyDeskSessionScreen(
     }
 
     fun movePointer(dxScreen: Float, dyScreen: Float) {
+        val (scaledDx, scaledDy) = applyTrackpadDelta(
+            dx = dxScreen,
+            dy = dyScreen,
+            sensitivity = prefs.pointerSensitivity,
+            acceleration = prefs.pointerAcceleration,
+        )
         val scale = if (zoom > 0.05f) zoom else 1f
-        cursorX = (cursorX + dxScreen / scale).coerceIn(0f, remoteWidth.toFloat())
-        cursorY = (cursorY + dyScreen / scale).coerceIn(0f, remoteHeight.toFloat())
+        cursorX = (cursorX + scaledDx / scale).coerceIn(0f, remoteWidth.toFloat())
+        cursorY = (cursorY + scaledDy / scale).coerceIn(0f, remoteHeight.toFloat())
         val c = cursor()
         sendCursorEvent(c.x.roundToInt(), c.y.roundToInt(), Mouse.getMoveEvent())
     }
@@ -683,6 +712,23 @@ fun XyDeskSessionScreen(
             }
 
             HudKind.COMBO -> if (down) controller.sendCombo(key.combo)
+
+            HudKind.MACRO -> if (down) {
+                sessionScope.launch {
+                    if (key.combo.isNotEmpty()) {
+                        controller.sendCombo(key.combo)
+                        if (key.macroText.isNotEmpty()) delay(220)
+                    }
+                    if (key.macroText.isNotEmpty()) {
+                        manager.sendText(key.macroText)
+                        if (key.macroSendEnter) {
+                            delay(60)
+                            controller.sendVirtualKey(KeyEvent.KEYCODE_ENTER, true)
+                            controller.sendVirtualKey(KeyEvent.KEYCODE_ENTER, false)
+                        }
+                    }
+                }
+            }
         }
     }
 
@@ -709,6 +755,7 @@ fun XyDeskSessionScreen(
     }
 
     DisposableEffect(controller, clipboardSyncEnabled) {
+        val act = context as? XyDeskSessionActivity
         controller.onInputKeyConsumed = {
             (context as? Activity)?.runOnUiThread {
                 consumeOneShotKeys()
@@ -716,16 +763,27 @@ fun XyDeskSessionScreen(
         }
         controller.onImeSnippetCommitted = { snippet ->
             if (clipboardSyncEnabled && snippet.length > 1) {
-                (context as? XyDeskSessionActivity)?.noteRemoteClipboardText(snippet)
+                act?.noteRemoteClipboardText(snippet)
                 sessionScope.launch(kotlinx.coroutines.Dispatchers.IO) {
                     manager.sendClipboardData(snippet)
                 }
             }
         }
+        act?.onExternalPointerDelta = { dx, dy -> movePointer(dx, dy) }
+        act?.onExternalScrollUnits = { units -> sendScrollUnits(units) }
+        act?.onExternalMouseClick = { btn, down ->
+            sendButton(btn, down)
+            if (!down) consumeOneShotKeys()
+        }
+        act?.setGyroMouseActive(prefs.gyroMouseEnabled)
         onDispose {
             controller.onInputKeyConsumed = null
             controller.onImeSnippetCommitted = null
             controller.hasActiveHudModifiers = false
+            act?.onExternalPointerDelta = null
+            act?.onExternalScrollUnits = null
+            act?.onExternalMouseClick = null
+            act?.setGyroMouseActive(false)
         }
     }
 
@@ -738,7 +796,7 @@ fun XyDeskSessionScreen(
 
     fun shouldConsumeOneShotAfter(key: HudKey): Boolean = when (key.kind) {
         HudKind.KEY -> !HudKey.isModifierKeyCode(key.keyCode)
-        HudKind.COMBO, HudKind.MOUSE_LEFT, HudKind.MOUSE_RIGHT, HudKind.MOUSE_MIDDLE -> true
+        HudKind.COMBO, HudKind.MACRO, HudKind.MOUSE_LEFT, HudKind.MOUSE_RIGHT, HudKind.MOUSE_MIDDLE -> true
         else -> false
     }
 
@@ -786,6 +844,9 @@ fun XyDeskSessionScreen(
     }
 
     val connected = state is SessionState.Connected
+    val inPipMode by ((context as? XyDeskSessionActivity)?.inPipMode
+        ?: remember { kotlinx.coroutines.flow.MutableStateFlow(false) }).collectAsState()
+    var privacyCurtain by remember { mutableStateOf(false) }
 
     Box(
         Modifier
@@ -801,13 +862,13 @@ fun XyDeskSessionScreen(
 
         // Lapisan gesture trackpad: menutup surface supaya sentuhan tidak
         // diteruskan langsung sebagai klik di posisi jari.
-        if (connected && (mappingMode || controlsOverlayOpen)) {
+        if (connected && !inPipMode && (mappingMode || controlsOverlayOpen || privacyCurtain)) {
             // Mode layout atau panel terbuka harus mengisolasi seluruh layar dari surface FreeRDP.
             Box(
                 Modifier
                     .fillMaxSize()
                     .zIndex(1f)
-                    .pointerInput(mappingMode, controlsOverlayOpen) {
+                    .pointerInput(mappingMode, controlsOverlayOpen, privacyCurtain) {
                         awaitEachGesture {
                             awaitFirstDown(requireUnconsumed = false).consume()
                             do {
@@ -819,13 +880,14 @@ fun XyDeskSessionScreen(
             )
         }
 
-        if (connected && !mappingMode && !controlsOverlayOpen && InputMode.entries[inputMode] == InputMode.TRACKPAD) {
+        if (connected && !inPipMode && !privacyCurtain && !mappingMode && !controlsOverlayOpen && InputMode.entries[inputMode] == InputMode.TRACKPAD) {
             Box(
                 Modifier
                     .fillMaxSize()
                     .pointerInput(zoom, remoteWidth, remoteHeight) {
                         trackpadGestures(
                             scrollSpeed = prefs.scrollSpeed,
+                            edgeScrollEnabled = prefs.edgeScrollZone,
                             onMove = { dx, dy -> movePointer(dx, dy) },
                             onTap = {
                                 sendButton(XyMouseButton.LEFT, true)
@@ -838,6 +900,20 @@ fun XyDeskSessionScreen(
                                 consumeOneShotKeys()
                             },
                             onScrollUnits = { sendScrollUnits(it) },
+                            onFlingScroll = { lastVelocityY ->
+                                if (prefs.inertialScroll && kotlin.math.abs(lastVelocityY) > 3f) {
+                                    sessionScope.launch {
+                                        var vel = lastVelocityY
+                                        val acc = ScrollWheelAccumulator()
+                                        while (vel != 0f && state is SessionState.Connected) {
+                                            val u = acc.consume(vel, prefs.scrollSpeed)
+                                            if (u != 0) sendScrollUnits(u)
+                                            delay(16)
+                                            vel = inertialScrollDecayStep(vel)
+                                        }
+                                    }
+                                }
+                            },
                             onButton = { button, down ->
                                 sendButton(button, down)
                                 if (!down) consumeOneShotKeys()
@@ -847,7 +923,7 @@ fun XyDeskSessionScreen(
             )
         }
 
-        if (connected) {
+        if (connected && !inPipMode && !privacyCurtain) {
             val pointerScreen = controller.remoteToScreen(cursor().x, cursor().y)
                 ?: Offset(-1000f, -1000f)
             SessionControls(
@@ -857,6 +933,7 @@ fun XyDeskSessionScreen(
                 remoteSize = if (telemetry.width > 0) "${telemetry.width} x ${telemetry.height}" else xy("menunggu server", "waiting for server"),
                 zoomPercent = (zoom * 100).roundToInt(),
                 remoteDpi = remoteDpi,
+                telemetry = telemetry,
                 pointerScreen = pointerScreen,
                 pointerVisible = pointerVisible && InputMode.entries[inputMode] == InputMode.TRACKPAD,
                 remoteCursor = remoteCursor,
@@ -1015,6 +1092,25 @@ fun XyDeskSessionScreen(
                 onSendRemoteClipboardText = { text ->
                     clipboardSyncEnabled && manager.sendClipboardData(text)
                 },
+                onEnterPip = {
+                    val ok = (context as? XyDeskSessionActivity)?.enterPipMonitorMode() == true
+                    if (!ok) {
+                        notice.show(xyNow("Picture-in-Picture tidak tersedia di perangkat ini", "Picture-in-Picture is not available on this device"))
+                    }
+                },
+                onLockRemotePc = {
+                    if (manager.lockRemoteSession()) {
+                        notice.show(xyNow("Layar PC dikunci (Win+L dikirim)", "PC screen locked (Win+L sent)"))
+                    } else {
+                        notice.show(xyNow("Gagal mengirim perintah kunci PC", "Failed to send PC lock command"))
+                    }
+                },
+                onActivatePrivacyCurtain = {
+                    privacyCurtain = true
+                },
+                onGyroMouseChanged = { enabled ->
+                    (context as? XyDeskSessionActivity)?.setGyroMouseActive(enabled && connected)
+                },
                 onOverlayActiveChange = { controlsOverlayOpen = it },
                 onRegisterBackHandler = { controlsBackHandler = it },
                 coreInfo = coreInfo,
@@ -1028,6 +1124,41 @@ fun XyDeskSessionScreen(
                 modifier = Modifier.align(Alignment.TopCenter),
             )
 
+        }
+
+        if (connected && privacyCurtain && !inPipMode) {
+            Box(
+                Modifier
+                    .fillMaxSize()
+                    .background(Color(0xFA040507))
+                    .zIndex(32f)
+                    .clickable { privacyCurtain = false }
+                    .padding(24.dp),
+                contentAlignment = Alignment.Center,
+            ) {
+                Column(
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.spacedBy(10.dp),
+                ) {
+                    Text(
+                        xy("LAYAR STEALTH / PRIVACY CURTAIN AKTIF", "STEALTH / PRIVACY CURTAIN ACTIVE"),
+                        color = Color(0xFF8C96A6),
+                        fontSize = 11.sp,
+                        letterSpacing = 1.4.sp,
+                        fontWeight = FontWeight.SemiBold,
+                    )
+                    Text(
+                        xy(
+                            "Sesi ke {0} tetap berjalan aman di latar. Ketuk layar untuk membuka kembali tampilan.",
+                            "Session to {0} stays running safely. Tap anywhere to restore the display.",
+                            profile.label ?: "${profile.host}:${profile.port}",
+                        ),
+                        color = Color(0xFF5D6675),
+                        fontSize = 12.sp,
+                        textAlign = TextAlign.Center,
+                    )
+                }
+            }
         }
 
         if (state is SessionState.Connecting || state is SessionState.Authenticating) {
@@ -1432,31 +1563,42 @@ private enum class TrackpadGestureMode { SINGLE_PENDING, MOVE, LEFT_DRAG, TWO_PE
  */
 private suspend fun androidx.compose.ui.input.pointer.PointerInputScope.trackpadGestures(
     scrollSpeed: Float,
+    edgeScrollEnabled: Boolean = false,
     onMove: (Float, Float) -> Unit,
     onTap: () -> Unit,
     onTwoFingerTap: () -> Unit,
     onScrollUnits: (Int) -> Unit,
+    onFlingScroll: (Float) -> Unit = {},
     onButton: (XyMouseButton, Boolean) -> Unit,
 ) {
     awaitEachGesture {
         val slop = viewConfiguration.touchSlop
         val holdTimeout = viewConfiguration.longPressTimeoutMillis
+        val edgeZonePx = 28.dp.toPx()
         val first = awaitFirstDown(requireUnconsumed = false)
         first.consume()
 
-        var mode = TrackpadGestureMode.SINGLE_PENDING
+        val startedInEdgeScroll = isInRightEdgeScrollZone(
+            touchX = first.position.x,
+            viewportWidthPx = size.width.toFloat(),
+            zoneWidthPx = edgeZonePx,
+            enabled = edgeScrollEnabled,
+        )
+        var mode = if (startedInEdgeScroll) TrackpadGestureMode.SCROLL else TrackpadGestureMode.SINGLE_PENDING
         var activePointers = 1
         var maxPointers = 1
         var travel = 0f
         var pendingMove = Offset.Zero
         val scrollAccumulator = ScrollWheelAccumulator()
         var lastCentroid = first.position
+        var lastScrollDeltaY = 0f
         var deadline = first.uptimeMillis + holdTimeout
-        var holdEligible = true
-        var tapEligible = true
+        var holdEligible = !startedInEdgeScroll
+        var tapEligible = !startedInEdgeScroll
         var heldButton: XyMouseButton? = null
 
         fun emitScroll(deltaY: Float) {
+            lastScrollDeltaY = deltaY
             scrollAccumulator.consume(deltaY, scrollSpeed)
                 .takeIf { it != 0 }
                 ?.let(onScrollUnits)
@@ -1582,7 +1724,9 @@ private suspend fun androidx.compose.ui.input.pointer.PointerInputScope.trackpad
                 event.changes.forEach { it.consume() }
             }
 
-            if (heldButton == null && tapEligible && travel <= slop) {
+            if (mode == TrackpadGestureMode.SCROLL && kotlin.math.abs(lastScrollDeltaY) > 2f) {
+                onFlingScroll(lastScrollDeltaY)
+            } else if (heldButton == null && tapEligible && travel <= slop) {
                 when {
                     maxPointers >= 2 -> onTwoFingerTap()
                     maxPointers == 1 -> onTap()

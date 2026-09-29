@@ -57,10 +57,64 @@ class AppPrefs(context: Context) {
         get() = sp.getBoolean("default_drive", false)
         set(v) = sp.edit().putBoolean("default_drive", v).apply()
 
+    var defaultStreamProfile: Int
+        get() = sp.getInt("default_stream_profile", 0).coerceIn(0, 5)
+        set(v) = sp.edit().putInt("default_stream_profile", v.coerceIn(0, 5)).apply()
+
+    var defaultColorDepth: Int
+        get() = sp.getInt("default_bpp", 32).let { if (it in setOf(16, 24, 32)) it else 32 }
+        set(v) = sp.edit().putInt("default_bpp", if (v in setOf(16, 24, 32)) v else 32).apply()
+
+    var defaultAsyncUpdate: Boolean
+        get() = sp.getBoolean("default_async_upd", false)
+        set(v) = sp.edit().putBoolean("default_async_upd", v).apply()
+
+    var defaultAsyncChannels: Boolean
+        get() = sp.getBoolean("default_async_ch", false)
+        set(v) = sp.edit().putBoolean("default_async_ch", v).apply()
+
+    var defaultSecurityProtocol: Int
+        get() = sp.getInt("default_sec_proto", 0).coerceIn(0, 3)
+        set(v) = sp.edit().putInt("default_sec_proto", v.coerceIn(0, 3)).apply()
+
+    var defaultTlsSecLevel: Int
+        get() = sp.getInt("default_tls_sec", -1).coerceIn(-1, 2)
+        set(v) = sp.edit().putInt("default_tls_sec", v.coerceIn(-1, 2)).apply()
+
+    // ---- Keamanan & Privasi App ----
+
+    /** Blokir tangkapan layar / screen recording / preview Recents Android (`FLAG_SECURE`). */
+    var flagSecure: Boolean
+        get() = sp.getBoolean(KEY_FLAG_SECURE, false)
+        set(v) = sp.edit().putBoolean(KEY_FLAG_SECURE, v).apply()
+
+    var screenCaptureProtection: Boolean
+        get() = flagSecure
+        set(v) { flagSecure = v }
+
+    /** Wajibkan PIN / Pola / Biometrik HP sebelum membuka sesi tersimpan. */
+    var requireDeviceLock: Boolean
+        get() = sp.getBoolean(KEY_REQUIRE_LOCK, false)
+        set(v) = sp.edit().putBoolean(KEY_REQUIRE_LOCK, v).apply()
+
+    /** Kirim `Win+L` otomatis untuk mengunci PC saat sesi diputus dari HP. */
+    var autoLockRemoteOnLeave: Boolean
+        get() = sp.getBoolean(KEY_AUTO_LOCK_REMOTE, false)
+        set(v) = sp.edit().putBoolean(KEY_AUTO_LOCK_REMOTE, v).apply()
+
+    /** Bersihkan clipboard HP otomatis saat sesi RDP ditutup. */
+    var clearClipboardOnDisconnect: Boolean
+        get() = sp.getBoolean(KEY_CLEAR_CLIPBOARD, false)
+        set(v) = sp.edit().putBoolean(KEY_CLEAR_CLIPBOARD, v).apply()
+
     companion object {
         private const val NAME = "xydesk.app"
         private const val KEY_THEME = "theme_mode"
         private const val KEY_BG_DISCONNECT = "bg_disconnect"
         private const val KEY_KEEP_ALIVE = "keep_alive"
+        private const val KEY_FLAG_SECURE = "flag_secure"
+        private const val KEY_REQUIRE_LOCK = "require_device_lock"
+        private const val KEY_AUTO_LOCK_REMOTE = "auto_lock_remote"
+        private const val KEY_CLEAR_CLIPBOARD = "clear_clipboard_disconnect"
     }
 }

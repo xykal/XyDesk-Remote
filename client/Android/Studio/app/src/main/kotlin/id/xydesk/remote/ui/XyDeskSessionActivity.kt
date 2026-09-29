@@ -1,14 +1,28 @@
 package id.xydesk.remote.ui
 
+import android.app.PictureInPictureParams
+import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
 import android.content.Intent
+import android.content.res.Configuration
+import android.hardware.Sensor
+import android.hardware.SensorEvent
+import android.hardware.SensorEventListener
+import android.hardware.SensorManager
 import android.os.Bundle
+import android.view.InputDevice
 import android.view.KeyEvent
+import android.view.MotionEvent
+import android.view.WindowManager
 import android.os.Handler
 import android.os.Looper
 import android.os.SystemClock
 import android.util.Log
+import android.util.Rational
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
 import id.xydesk.remote.security.CrashLog
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
@@ -72,25 +86,92 @@ class XyDeskSessionActivity : ComponentActivity() {
     var backHandler: (() -> Boolean)? = null
     var appPrefs: AppPrefs? = null
 
+    private val _inPipMode = MutableStateFlow(false)
+    val inPipMode: StateFlow<Boolean> = _inPipMode.asStateFlow()
+
+    var onExternalPointerDelta: ((Float, Float) -> Unit)? = null
+    var onExternalScrollUnits: ((Int) -> Unit)? = null
+    var onExternalMouseClick: ((XyMouseButton, Boolean) -> Unit)? = null
+
+    private var sensorManager: SensorManager? = null
+    private var gyroSensor: Sensor? = null
+    private var gyroActive = false
+    private val gyroListener = object : SensorEventListener {
+        override fun onSensorChanged(event: SensorEvent) {
+            if (!gyroActive || event.sensor.type != Sensor.TYPE_GYROSCOPE) return
+            val pitch = event.values.getOrElse(0) { 0f }
+            val yaw = event.values.getOrElse(1) { 0f }
+            if (kotlin.math.abs(pitch) > 0.045f || kotlin.math.abs(yaw) > 0.045f) {
+                onExternalPointerDelta?.invoke(-yaw * 16f, -pitch * 16f)
+            }
+        }
+
+        override fun onAccuracyChanged(sensor: Sensor?, accuracy: Int) = Unit
+    }
+
     private val bgHandler = Handler(Looper.getMainLooper())
     private val bgDisconnect = Runnable {
         if (manager.state.value is SessionState.Connected) {
+            if (appPrefs?.autoLockRemoteOnLeave == true) {
+                manager.lockRemoteSession()
+            }
             Log.i(TAG, "policy background: auto-disconnect (lewat ${BACKGROUND_DISCONNECT_DELAY_MS}ms)")
             manager.disconnect()
         }
     }
     private var clipListener: ClipboardManager.OnPrimaryClipChangedListener? = null
     private val clipboardReader = Executors.newSingleThreadExecutor { task ->
-        Thread(task, "XyDesk-clipboard-reader").apply { isDaemon = true }
+        Thread(task, "XyDeskClipboardReader").apply { isDaemon = true }
     }
     private var clipboardSyncEnabled = true
     @Volatile
     private var lastSyncedPhoneClip: String? = null
+    @Volatile
+    private var lastSyncedPhoneImageHash: Int = 0
     private var pendingPermissionProfile: ConnectionProfile? = null
     private var lastInputFailureNoticeAt = 0L
 
     fun noteRemoteClipboardText(text: String) {
         lastSyncedPhoneClip = text
+    }
+
+    fun noteRemoteClipboardImage(bytes: ByteArray) {
+        lastSyncedPhoneImageHash = bytes.contentHashCode()
+    }
+
+    fun setGyroMouseActive(enabled: Boolean) {
+        if (gyroActive == enabled) return
+        val sm = sensorManager ?: (getSystemService(SENSOR_SERVICE) as? SensorManager)?.also {
+            sensorManager = it
+            gyroSensor = it.getDefaultSensor(Sensor.TYPE_GYROSCOPE)
+        }
+        val sensor = gyroSensor
+        if (enabled && sm != null && sensor != null) {
+            gyroActive = sm.registerListener(gyroListener, sensor, SensorManager.SENSOR_DELAY_GAME)
+        } else {
+            sm?.unregisterListener(gyroListener)
+            gyroActive = false
+        }
+    }
+
+    fun enterPipMonitorMode(): Boolean {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) return false
+        if (isFinishing || isDestroyed) return false
+        return runCatching {
+            val params = PictureInPictureParams.Builder()
+                .setAspectRatio(Rational(16, 9))
+                .build()
+            enterPictureInPictureMode(params)
+        }.getOrDefault(false)
+    }
+
+    fun applyWindowSecurityFlags() {
+        val secure = (appPrefs ?: AppPrefs(this)).flagSecure
+        if (secure) {
+            window.addFlags(WindowManager.LayoutParams.FLAG_SECURE)
+        } else {
+            window.clearFlags(WindowManager.LayoutParams.FLAG_SECURE)
+        }
     }
 
     fun syncPhoneClipboardToRemote() {
@@ -103,7 +184,7 @@ class XyDeskSessionActivity : ComponentActivity() {
             return
         } ?: return
         val label = clip.description?.label?.toString()
-        if (label == "rdp" || label == "rdp-clipboard" || clip.itemCount == 0) return
+        if (label == "rdp" || label == "rdp-clipboard" || label == "rdp-image" || clip.itemCount == 0) return
         val item = clip.getItemAt(0)
         if (item.uri != ClipboardImageProvider.TEXT_CONTENT_URI) {
             ClipboardImageProvider.clearTextData()
@@ -111,6 +192,36 @@ class XyDeskSessionActivity : ComponentActivity() {
         try {
             clipboardReader.execute {
                 try {
+                    val uri = item.uri
+                    val mime = uri?.let { runCatching { contentResolver.getType(it) }.getOrNull() }
+                    if (uri != null && mime != null && mime.startsWith("image/") &&
+                        uri != ClipboardImageProvider.CONTENT_URI
+                    ) {
+                        val bytes = runCatching {
+                            contentResolver.openInputStream(uri)?.use { stream ->
+                                val buf = ByteArray(4 * 1024 * 1024 + 1)
+                                var total = 0
+                                while (total < buf.size) {
+                                    val r = stream.read(buf, total, buf.size - total)
+                                    if (r <= 0) break
+                                    total += r
+                                }
+                                if (total in 1..(4 * 1024 * 1024)) buf.copyOf(total) else null
+                            }
+                        }.getOrNull()
+                        if (bytes != null) {
+                            val hash = bytes.contentHashCode()
+                            if (hash != lastSyncedPhoneImageHash &&
+                                !isFinishing && !isDestroyed &&
+                                manager.state.value is SessionState.Connected
+                            ) {
+                                if (manager.sendClipboardImageData(bytes, mime)) {
+                                    lastSyncedPhoneImageHash = hash
+                                }
+                            }
+                        }
+                        return@execute
+                    }
                     val text = item.coerceToText(applicationContext)?.toString().orEmpty()
                     if (text.isNotEmpty() && text != lastSyncedPhoneClip &&
                         !isFinishing && !isDestroyed &&
@@ -193,6 +304,7 @@ class XyDeskSessionActivity : ComponentActivity() {
 
         val prefs = AppPrefs(this)
         this.appPrefs = prefs
+        applyWindowSecurityFlags()
         // Daftarkan sesi ini supaya home bisa menampilkan & memindahkan sesi
         // yang sedang hidup (multi-sesi).
         XySessionRegistry.add(
@@ -209,7 +321,13 @@ class XyDeskSessionActivity : ComponentActivity() {
                         .addFlags(Intent.FLAG_ACTIVITY_REORDER_TO_FRONT)
                     startActivity(again)
                 },
-                kill = { runOnUiThread { manager.disconnect(); finish() } },
+                kill = {
+                    runOnUiThread {
+                        if (prefs.autoLockRemoteOnLeave) manager.lockRemoteSession()
+                        manager.disconnect()
+                        finish()
+                    }
+                },
             ),
         )
         val deferConnectForPermission = requestRuntimePermissions(profile)
@@ -254,6 +372,7 @@ class XyDeskSessionActivity : ComponentActivity() {
 
     override fun onResume() {
         super.onResume()
+        applyWindowSecurityFlags()
         syncPhoneClipboardToRemote()
     }
 
@@ -264,8 +383,24 @@ class XyDeskSessionActivity : ComponentActivity() {
         }
     }
 
+    override fun onUserLeaveHint() {
+        super.onUserLeaveHint()
+        if (manager.state.value is SessionState.Connected && SessionPrefs(this).autoPipOnBackground) {
+            enterPipMonitorMode()
+        }
+    }
+
+    override fun onPictureInPictureModeChanged(
+        isInPictureInPictureMode: Boolean,
+        newConfig: Configuration,
+    ) {
+        super.onPictureInPictureModeChanged(isInPictureInPictureMode, newConfig)
+        _inPipMode.value = isInPictureInPictureMode
+    }
+
     override fun onStop() {
         super.onStop()
+        setGyroMouseActive(false)
         if (manager.state.value !is SessionState.Connected) return
         when {
             // Default: sesi dibiarkan hidup di latar lewat foreground service.
@@ -282,12 +417,22 @@ class XyDeskSessionActivity : ComponentActivity() {
 
     override fun onDestroy() {
         super.onDestroy()
+        setGyroMouseActive(false)
         sessionId?.let { XySessionRegistry.remove(it) }
         bgHandler.removeCallbacks(bgDisconnect)
         if (XySessionRegistry.activeCount() == 0) XySessionService.stop(this)
         val cm = getSystemService(CLIPBOARD_SERVICE) as ClipboardManager
         clipListener?.let { cm.removePrimaryClipChangedListener(it) }
         clipListener = null
+        if (appPrefs?.clearClipboardOnDisconnect == true) {
+            runCatching {
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+                    cm.clearPrimaryClip()
+                } else {
+                    cm.setPrimaryClip(ClipData.newPlainText("", ""))
+                }
+            }
+        }
         clipboardReader.shutdownNow()
         controller.release()
         manager.release()
@@ -307,10 +452,60 @@ class XyDeskSessionActivity : ComponentActivity() {
 
     /**
      * Tombol fisik / event kunci Android diteruskan ke mapper inti. Karakter
-     * dari keyboard HP lewat jalur InputSink milik SessionView.
+     * dari keyboard HP lewat jalur InputSink milik SessionView. Tombol
+     * gamepad Bluetooth/USB dipetakan ke klik & aksi bila diaktifkan.
      */
-    override fun dispatchKeyEvent(event: KeyEvent): Boolean =
-        controller.onKeyEvent(event) || super.dispatchKeyEvent(event)
+    override fun dispatchKeyEvent(event: KeyEvent): Boolean {
+        val isGamepad = (event.source and InputDevice.SOURCE_GAMEPAD) == InputDevice.SOURCE_GAMEPAD ||
+            (event.source and InputDevice.SOURCE_JOYSTICK) == InputDevice.SOURCE_JOYSTICK
+        if (isGamepad && SessionPrefs(this).gamepadEnabled) {
+            val down = event.action == KeyEvent.ACTION_DOWN
+            when (event.keyCode) {
+                KeyEvent.KEYCODE_BUTTON_A -> {
+                    onExternalMouseClick?.invoke(XyMouseButton.LEFT, down)
+                    return true
+                }
+                KeyEvent.KEYCODE_BUTTON_B -> {
+                    onExternalMouseClick?.invoke(XyMouseButton.RIGHT, down)
+                    return true
+                }
+                KeyEvent.KEYCODE_BUTTON_X -> {
+                    controller.sendVirtualKey(KeyEvent.KEYCODE_ENTER, down)
+                    return true
+                }
+                KeyEvent.KEYCODE_BUTTON_Y -> {
+                    controller.sendVirtualKey(KeyEvent.KEYCODE_ESCAPE, down)
+                    return true
+                }
+                KeyEvent.KEYCODE_BUTTON_L1 -> {
+                    if (down) onExternalScrollUnits?.invoke(120)
+                    return true
+                }
+                KeyEvent.KEYCODE_BUTTON_R1 -> {
+                    if (down) onExternalScrollUnits?.invoke(-120)
+                    return true
+                }
+            }
+        }
+        return controller.onKeyEvent(event) || super.dispatchKeyEvent(event)
+    }
+
+    override fun dispatchGenericMotionEvent(event: MotionEvent): Boolean {
+        val isJoystick = (event.source and InputDevice.SOURCE_JOYSTICK) == InputDevice.SOURCE_JOYSTICK
+        if (isJoystick && event.action == MotionEvent.ACTION_MOVE && SessionPrefs(this).gamepadEnabled) {
+            val ax = event.getAxisValue(MotionEvent.AXIS_X)
+            val ay = event.getAxisValue(MotionEvent.AXIS_Y)
+            if (kotlin.math.abs(ax) > 0.14f || kotlin.math.abs(ay) > 0.14f) {
+                onExternalPointerDelta?.invoke(ax * 18f, ay * 18f)
+            }
+            val rz = event.getAxisValue(MotionEvent.AXIS_RZ)
+            if (kotlin.math.abs(rz) > 0.22f) {
+                onExternalScrollUnits?.invoke((-rz * 48f).toInt())
+            }
+            return true
+        }
+        return super.dispatchGenericMotionEvent(event)
+    }
 
     /**
      * Izin runtime yang diminta mengikuti kanal yang benar-benar ada di
