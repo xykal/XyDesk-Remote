@@ -35,6 +35,8 @@ import androidx.compose.ui.unit.dp
 import com.freerdp.freerdpcore.services.LibFreeRDP
 import id.xydesk.remote.core.ConnectionProfile
 import id.xydesk.remote.core.RdpOptions
+import id.xydesk.remote.core.formatRdpEndpoint
+import id.xydesk.remote.core.parseRdpEndpoint
 import id.xydesk.remote.core.XyAudioMode
 import id.xydesk.remote.core.XyGateway
 import id.xydesk.remote.ui.components.XySlider
@@ -73,8 +75,9 @@ fun AddDeviceScreen(
     val deviceId = deviceKey
 
     var label by remember { mutableStateOf(existing?.label.orEmpty()) }
-    var host by remember { mutableStateOf(existing?.host.orEmpty()) }
-    var port by remember { mutableStateOf((existing?.port ?: 3389).toString()) }
+    var host by remember(existing) {
+        mutableStateOf(existing?.let { formatRdpEndpoint(it.host, it.port) }.orEmpty())
+    }
     var user by remember { mutableStateOf(existing?.username.orEmpty()) }
     var pass by remember { mutableStateOf(existing?.password.orEmpty()) }
     var domain by remember { mutableStateOf(existing?.domain.orEmpty()) }
@@ -126,26 +129,22 @@ fun AddDeviceScreen(
     var audioIndex by remember { mutableStateOf(options.audioMode.ordinal) }
 
     fun submit(connect: Boolean) {
-        val hostValue = host.trim()
-        val portValue = port.toIntOrNull() ?: 3389
-        when {
-            hostValue.isEmpty() -> {
-                error = xyNow("Alamat host wajib diisi", "Host address is required")
-                return
-            }
-            hostValue.any { it.isWhitespace() } -> {
-                error = xyNow("Alamat host tidak boleh ada spasi", "Host address cannot contain spaces")
-                return
-            }
-            portValue !in 1..65535 -> {
-                error = xyNow("Port harus 1-65535", "Port must be 1-65535")
-                return
-            }
+        val endpoint = parseRdpEndpoint(host)
+        if (host.isBlank()) {
+            error = xyNow("Alamat host wajib diisi", "Host address is required")
+            return
+        }
+        if (endpoint == null) {
+            error = xyNow(
+                "Alamat/port tidak valid. Port harus 1-65535; IPv6 dengan port gunakan [alamat]:port.",
+                "Invalid address/port. Port must be 1-65535; write IPv6 with a port as [address]:port.",
+            )
+            return
         }
         val profile = try {
             ConnectionProfile(
-                host = hostValue,
-                port = portValue,
+                host = endpoint.host,
+                port = endpoint.port,
                 username = user.trim().ifEmpty { null },
                 password = pass.ifEmpty { null },
                 domain = domain.trim().ifEmpty { null },
@@ -210,18 +209,10 @@ fun AddDeviceScreen(
                 Spacer(Modifier.height(14.dp))
                 XyField(
                     value = host,
-                    onValueChange = { host = it.trim() },
-                    label = xy("Host / IP / tailnet", "Host / IP / tailnet"),
-                    hint = xy("192.168.1.10 atau pc.tailnet.ts.net", "192.168.1.10 or pc.tailnet.ts.net"),
+                    onValueChange = { host = it },
+                    label = xy("Host / IP (port opsional)", "Host / IP (optional port)"),
+                    hint = xy("pc.tailnet.ts.net atau [2001:db8::1]:3390", "pc.example.com or [2001:db8::1]:3390"),
                     keyboardType = KeyboardType.Uri,
-                )
-                Spacer(Modifier.height(14.dp))
-                XyField(
-                    value = port,
-                    onValueChange = { port = it.filter(Char::isDigit).take(5) },
-                    label = xy("Port RDP", "RDP port"),
-                    hint = "3389",
-                    keyboardType = KeyboardType.Number,
                     imeAction = androidx.compose.ui.text.input.ImeAction.Done,
                 )
             }
@@ -409,7 +400,7 @@ fun AddDeviceScreen(
                 )
                 XyToggleRow(
                     title = xy("Penyimpanan lokal", "Local storage"),
-                    subtitle = "Folder HP muncul sebagai drive 'sdcard' di remote",
+                    subtitle = xy("Folder HP muncul sebagai drive 'XyDesk' di PC remote", "Phone folder appears as the 'XyDesk' drive on the remote PC"),
                     checked = options.localDrive,
                     onCheckedChange = { options = options.copy(localDrive = it) },
                     leading = XyIcons.Folder,
@@ -442,18 +433,29 @@ fun AddDeviceScreen(
                 XyToggleRow(
                     title = xy("Deteksi bandwidth otomatis", "Automatic bandwidth detection"),
                     subtitle = xy(
-                        "FreeRDP menyesuaikan kualitas mengikuti jaringan",
-                        "FreeRDP adapts quality to the network",
+                        "Profil otomatis FreeRDP; tidak menghilangkan RTT jaringan",
+                        "FreeRDP auto profile; it cannot remove network RTT",
                     ),
                     checked = options.networkAutoDetect,
                     onCheckedChange = { options = options.copy(networkAutoDetect = it) },
+                    leading = XyIcons.Sliders,
+                    enabled = !options.lowBandwidth,
+                )
+                XyToggleRow(
+                    title = xy("Jaringan terbatas", "Low-bandwidth mode"),
+                    subtitle = xy(
+                        "Pakai profil broadband-low + AVC420; kualitas gambar dapat berubah. RTT tetap bergantung jaringan.",
+                        "Use broadband-low + AVC420 hints; image quality may change. RTT still depends on the network.",
+                    ),
+                    checked = options.lowBandwidth,
+                    onCheckedChange = { options = options.copy(lowBandwidth = it) },
                     leading = XyIcons.Sliders,
                 )
                 XyToggleRow(
                     title = xy("H.264 / RemoteFX (GFX)", "H.264 / RemoteFX (GFX)"),
                     subtitle = xy(
-                        "Wajib untuk konten bergerak; matikan kalau remote lama",
-                        "Required for moving content; turn off for an old remote",
+                        "GFX H.264; mode jaringan terbatas memilih AVC420, mode biasa AVC444",
+                        "GFX H.264; low-bandwidth mode selects AVC420, normal mode AVC444",
                     ),
                     checked = options.h264,
                     onCheckedChange = { options = options.copy(h264 = it) },

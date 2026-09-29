@@ -479,7 +479,7 @@ public class LibFreeRDP
 		if (advanced.getRedirectSDCard())
 		{
 			String path = android.os.Environment.getExternalStorageDirectory().getPath();
-			args.add("/drive:sdcard," + path);
+			args.add("/drive:XyDesk," + path);
 		}
 
 		String info = advanced.getLoadBalanceInfo();
@@ -568,6 +568,8 @@ public class LibFreeRDP
 		int port = openUri.getPort();
 		if (hostname != null)
 		{
+			if (hostname.indexOf(':') >= 0 && !hostname.startsWith("["))
+				hostname = "[" + hostname + "]";
 			hostname = hostname + ((port == -1) ? "" : (":" + port));
 			args.add("/v:" + hostname);
 		}
@@ -598,9 +600,10 @@ public class LibFreeRDP
 			{
 				// Query: key=value
 				// To freerdp argument: /key:value
-				if (key.equals("drive") && value.equals("sdcard"))
+				if (key.equals("drive") && (value.equals("sdcard") || value.equals("XyDesk")))
 				{
-					// Special for sdcard redirect.
+					String driveName = value;
+					// Special for local app-drive redirect.
 					//
 					// PENTING: sejak Android 11 app TIDAK bisa membaca
 					// /storage/emulated/0 sembarangan, jadi mengoper path itu
@@ -611,7 +614,7 @@ public class LibFreeRDP
 					//   2. folder milik app    -> selalu bisa dibaca/tulis
 					//      tanpa izin apa pun.
 					String path = appDrivePath(context);
-					value = "sdcard," + path;
+					value = driveName + "," + path;
 				}
 
 				args.add("/" + key + ":" + value);

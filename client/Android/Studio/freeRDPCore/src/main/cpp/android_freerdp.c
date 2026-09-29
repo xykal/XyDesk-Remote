@@ -1066,6 +1066,8 @@ Java_com_freerdp_freerdpcore_services_LibFreeRDP_freerdp_1send_1key_1event(JNIEn
 	ANDROID_EVENT* event;
 	freerdp* inst = (freerdp*)instance;
 	scancode = GetVirtualScanCodeFromVirtualKeyCode(keycode, 4);
+	if ((scancode & 0xFF) == 0)
+		return JNI_FALSE;
 	int flags = (down == JNI_TRUE) ? KBD_FLAGS_DOWN : KBD_FLAGS_RELEASE;
 	flags |= (scancode & KBDEXT) ? KBD_FLAGS_EXTENDED : 0;
 	event = (ANDROID_EVENT*)android_event_key_new(flags, scancode & 0xFF);

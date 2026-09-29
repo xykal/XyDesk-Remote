@@ -14,6 +14,7 @@ import android.graphics.Rect
 import android.graphics.drawable.BitmapDrawable
 import android.os.Handler
 import android.os.Looper
+import android.os.SystemClock
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import id.xydesk.remote.core.ConnectionLog
@@ -84,6 +85,16 @@ class SessionSurfaceController(private val activity: Activity) : GraphicsSink {
      * keyboard HP ditutup.
      */
     var onImeChanged: ((Int) -> Unit)? = null
+    var onInputDispatchFailure: (() -> Unit)? = null
+    var onCursorMoved: ((Int, Int) -> Unit)? = null
+    private var lastInputDispatchFailureAt = 0L
+
+    private fun reportInputDispatchFailure() {
+        val now = SystemClock.elapsedRealtime()
+        if (now - lastInputDispatchFailureAt < 2_000L) return
+        lastInputDispatchFailureAt = now
+        onInputDispatchFailure?.invoke()
+    }
 
     /** Re-dispatch current IME insets after the Compose observer is installed. */
     fun refreshImeInsets() {
@@ -149,6 +160,8 @@ class SessionSurfaceController(private val activity: Activity) : GraphicsSink {
         // Board keyboard bawaan FreeRDP tidak dipakai (ronde 5): semua
         // pengetikan lewat keyboard HP, jadi view-nya tidak pernah dibuat.
         val im = SessionInputManager(activity, scroller, sv, tpv, null)
+        im.setInputDispatchFailureListener { reportInputDispatchFailure() }
+        im.setCursorPositionListener { x, y -> onCursorMoved?.invoke(x, y) }
         fun sendImeKey(keyCode: Int) {
             im.onAndroidKeyEvent(KeyEvent(KeyEvent.ACTION_DOWN, keyCode))
             im.onAndroidKeyEvent(KeyEvent(KeyEvent.ACTION_UP, keyCode))
@@ -228,16 +241,17 @@ class SessionSurfaceController(private val activity: Activity) : GraphicsSink {
         if (inst == 0L) return
         this.inst = inst
         uiHandler.post {
-            val session = GlobalApp.getSession(inst) ?: return@post
-            val surface = session.getSurface() ?: return@post
-            bitmap = surface.bitmap
-            sessionView?.onSurfaceChange(session)
-            scrollView?.requestLayout()
-            inputManager?.attachSession(inst, surface.bitmap)
+            val session = GlobalApp.getSession(inst)
+            val surface = session?.getSurface()
+            inputManager?.attachSession(inst, surface?.bitmap)
             val root = rootView
             if (root != null && root.width > 0 && root.height > 0) {
                 inputManager?.setScreenSize(root.width, root.height)
             }
+            if (session == null || surface == null) return@post
+            bitmap = surface.bitmap
+            sessionView?.onSurfaceChange(session)
+            scrollView?.requestLayout()
         }
     }
 
@@ -272,7 +286,14 @@ class SessionSurfaceController(private val activity: Activity) : GraphicsSink {
      * keyboard XyDesk tidak perlu tahu tabel scancode.
      */
     fun sendVirtualKey(keyCode: Int, down: Boolean) {
-        uiHandler.post { inputManager?.processVirtualKey(keyCode, down) }
+        uiHandler.post {
+            val im = inputManager
+            if (im == null) {
+                reportInputDispatchFailure()
+            } else {
+                im.sendAndroidKeyCode(keyCode, down)
+            }
+        }
     }
 
     /** Tekan beberapa tombol sekaligus (mis. Ctrl+Alt+Del) lalu lepas terbalik. */

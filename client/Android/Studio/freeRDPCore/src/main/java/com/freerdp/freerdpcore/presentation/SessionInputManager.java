@@ -67,6 +67,54 @@ public class SessionInputManager
 	private boolean softKeyboardAllowed = false;
 
 	private final Handler handler;
+	private InputDispatchFailureListener inputDispatchFailureListener;
+	private CursorPositionListener cursorPositionListener;
+
+	public interface InputDispatchFailureListener
+	{
+		void onInputDispatchFailed();
+	}
+
+	public interface CursorPositionListener
+	{
+		void onCursorPositionChanged(int x, int y);
+	}
+
+	public void setInputDispatchFailureListener(InputDispatchFailureListener listener)
+	{
+		inputDispatchFailureListener = listener;
+	}
+
+	public void setCursorPositionListener(CursorPositionListener listener)
+	{
+		cursorPositionListener = listener;
+	}
+
+	private void reportInputDispatchFailure()
+	{
+		InputDispatchFailureListener listener = inputDispatchFailureListener;
+		if (listener != null)
+			listener.onInputDispatchFailed();
+	}
+
+	private void notifyCursorPosition(int x, int y)
+	{
+		CursorPositionListener listener = cursorPositionListener;
+		if (listener != null)
+			listener.onCursorPositionChanged(x, y);
+	}
+
+	private void sendCursorEvent(int x, int y, int flags)
+	{
+		if (instance != 0 && !LibFreeRDP.sendCursorEvent(instance, x, y, flags))
+			reportInputDispatchFailure();
+	}
+
+	private void sendPositionedCursorEvent(int x, int y, int flags)
+	{
+		notifyCursorPosition(x, y);
+		sendCursorEvent(x, y, flags);
+	}
 
 	public SessionInputManager(Context context, ScrollView2D scrollView, SessionView sessionView,
 	                           TouchPointerView touchPointerView, ExtendedKeyboardView keyboard)
@@ -242,9 +290,9 @@ public class SessionInputManager
 
 		final float vScroll = e.getAxisValue(MotionEvent.AXIS_VSCROLL);
 		if (vScroll < 0)
-			LibFreeRDP.sendCursorEvent(instance, 0, 0, Mouse.getScrollEvent(context, false));
+			sendCursorEvent(0, 0, Mouse.getScrollEvent(context, false));
 		else if (vScroll > 0)
-			LibFreeRDP.sendCursorEvent(instance, 0, 0, Mouse.getScrollEvent(context, true));
+			sendCursorEvent(0, 0, Mouse.getScrollEvent(context, true));
 		return true;
 	}
 
@@ -311,7 +359,7 @@ public class SessionInputManager
 			discardedMoveEvents = 0;
 
 		if (discardedMoveEvents > MAX_DISCARDED_MOVE_EVENTS)
-			LibFreeRDP.sendCursorEvent(instance, x, y, Mouse.getMoveEvent());
+			sendCursorEvent(x, y, Mouse.getMoveEvent());
 		else
 			handler.sendMessageDelayed(Message.obtain(null, MSG_SEND_MOVE_EVENT, x, y),
 			                           SEND_MOVE_EVENT_TIMEOUT);
@@ -362,27 +410,28 @@ public class SessionInputManager
 			return;
 		if (!down)
 			cancelDelayedMoveEvent();
-		LibFreeRDP.sendCursorEvent(instance, x, y, Mouse.getLeftButtonEvent(context, down));
+		sendPositionedCursorEvent(x, y, Mouse.getLeftButtonEvent(context, down));
 	}
 
 	@Override public void onSessionViewMiddleTouch(int x, int y, boolean down)
 	{
 		if (instance == 0)
 			return;
-		LibFreeRDP.sendCursorEvent(instance, x, y, Mouse.getMiddleButtonEvent(down));
+		sendPositionedCursorEvent(x, y, Mouse.getMiddleButtonEvent(down));
 	}
 
 	@Override public void onSessionViewRightTouch(int x, int y, boolean down)
 	{
 		if (instance == 0)
 			return;
-		LibFreeRDP.sendCursorEvent(instance, x, y, Mouse.getRightButtonEvent(context, down));
+		sendPositionedCursorEvent(x, y, Mouse.getRightButtonEvent(context, down));
 	}
 
 	@Override public void onSessionViewMove(int x, int y)
 	{
 		if (instance == 0)
 			return;
+		notifyCursorPosition(x, y);
 		sendDelayedMoveEvent(x, y);
 	}
 
@@ -390,21 +439,21 @@ public class SessionInputManager
 	{
 		if (instance == 0)
 			return;
-		LibFreeRDP.sendCursorEvent(instance, x, y, Mouse.getMoveEvent());
+		sendPositionedCursorEvent(x, y, Mouse.getMoveEvent());
 	}
 
 	@Override public void onSessionViewScroll(boolean down)
 	{
 		if (instance == 0)
 			return;
-		LibFreeRDP.sendCursorEvent(instance, 0, 0, Mouse.getScrollEvent(context, down));
+		sendCursorEvent(0, 0, Mouse.getScrollEvent(context, down));
 	}
 
 	@Override public void onSessionViewHScroll(boolean right)
 	{
 		if (instance == 0)
 			return;
-		LibFreeRDP.sendCursorEvent(instance, 0, 0, Mouse.getHScrollEvent(context, right));
+		sendCursorEvent(0, 0, Mouse.getHScrollEvent(context, right));
 	}
 
 	// ****************************************************************************
@@ -421,7 +470,7 @@ public class SessionInputManager
 		if (instance == 0)
 			return;
 		Point p = mapScreenCoordToSessionCoord(x, y);
-		LibFreeRDP.sendCursorEvent(instance, p.x, p.y, Mouse.getLeftButtonEvent(context, down));
+		sendPositionedCursorEvent(p.x, p.y, Mouse.getLeftButtonEvent(context, down));
 	}
 
 	@Override public void onTouchPointerRightClick(int x, int y, boolean down)
@@ -429,7 +478,7 @@ public class SessionInputManager
 		if (instance == 0)
 			return;
 		Point p = mapScreenCoordToSessionCoord(x, y);
-		LibFreeRDP.sendCursorEvent(instance, p.x, p.y, Mouse.getRightButtonEvent(context, down));
+		sendPositionedCursorEvent(p.x, p.y, Mouse.getRightButtonEvent(context, down));
 	}
 
 	@Override public void onTouchPointerMiddleClick(int x, int y, boolean down)
@@ -437,7 +486,7 @@ public class SessionInputManager
 		if (instance == 0)
 			return;
 		Point p = mapScreenCoordToSessionCoord(x, y);
-		LibFreeRDP.sendCursorEvent(instance, p.x, p.y, Mouse.getMiddleButtonEvent(down));
+		sendPositionedCursorEvent(p.x, p.y, Mouse.getMiddleButtonEvent(down));
 	}
 
 	@Override public void onTouchPointerMove(int x, int y)
@@ -445,7 +494,7 @@ public class SessionInputManager
 		if (instance == 0)
 			return;
 		Point p = mapScreenCoordToSessionCoord(x, y);
-		LibFreeRDP.sendCursorEvent(instance, p.x, p.y, Mouse.getMoveEvent());
+		sendPositionedCursorEvent(p.x, p.y, Mouse.getMoveEvent());
 
 		if (ApplicationSettingsActivity.getAutoScrollTouchPointer(context) &&
 		    !handler.hasMessages(MSG_SCROLLING_REQUESTED))
@@ -463,14 +512,14 @@ public class SessionInputManager
 	{
 		if (instance == 0)
 			return;
-		LibFreeRDP.sendCursorEvent(instance, 0, 0, Mouse.getScrollEvent(context, amount));
+		sendCursorEvent(0, 0, Mouse.getScrollEvent(context, amount));
 	}
 
 	@Override public void onTouchPointerHScroll(int amount)
 	{
 		if (instance == 0)
 			return;
-		LibFreeRDP.sendCursorEvent(instance, 0, 0, Mouse.getHScrollEvent(context, amount));
+		sendCursorEvent(0, 0, Mouse.getHScrollEvent(context, amount));
 	}
 
 	@Override public void onTouchPointerToggleKeyboard()
@@ -487,11 +536,34 @@ public class SessionInputManager
 	// ****************************************************************************
 	// KeyboardMapper.KeyProcessingListener
 
+	public void sendAndroidKeyCode(int androidKeyCode, boolean down)
+	{
+		if (instance == 0)
+		{
+			reportInputDispatchFailure();
+			return;
+		}
+		int vkCode = keyboardMapper.translateAndroidKeyCode(androidKeyCode);
+		if (vkCode == 0)
+		{
+			reportInputDispatchFailure();
+			return;
+		}
+		if ((vkCode & KeyboardMapper.KEY_FLAG_UNICODE) != 0)
+		{
+			if (down)
+				processUnicodeKey(vkCode & (~KeyboardMapper.KEY_FLAG_UNICODE));
+			return;
+		}
+		processVirtualKey(vkCode, down);
+	}
+
 	@Override public void processVirtualKey(int virtualKeyCode, boolean down)
 	{
 		if (instance == 0)
 			return;
-		LibFreeRDP.sendKeyEvent(instance, virtualKeyCode, down);
+		if (!LibFreeRDP.sendKeyEvent(instance, virtualKeyCode, down))
+			reportInputDispatchFailure();
 	}
 
 	@Override public void processUnicodeKey(int unicodeKey)
@@ -500,8 +572,10 @@ public class SessionInputManager
 			return;
 		if (LibFreeRDP.isUnicodeInputSupported(instance))
 		{
-			LibFreeRDP.sendUnicodeKeyEvent(instance, unicodeKey, true);
-			LibFreeRDP.sendUnicodeKeyEvent(instance, unicodeKey, false);
+			boolean downAccepted = LibFreeRDP.sendUnicodeKeyEvent(instance, unicodeKey, true);
+			boolean upAccepted = LibFreeRDP.sendUnicodeKeyEvent(instance, unicodeKey, false);
+			if (!downAccepted || !upAccepted)
+				reportInputDispatchFailure();
 		}
 		else
 			keyboardMapper.processUnicodeFallback(unicodeKey);
@@ -573,7 +647,7 @@ public class SessionInputManager
 				case MSG_SEND_MOVE_EVENT:
 					if (instance == 0)
 						break;
-					LibFreeRDP.sendCursorEvent(instance, msg.arg1, msg.arg2, Mouse.getMoveEvent());
+					sendCursorEvent(msg.arg1, msg.arg2, Mouse.getMoveEvent());
 					break;
 
 				case MSG_SCROLLING_REQUESTED:

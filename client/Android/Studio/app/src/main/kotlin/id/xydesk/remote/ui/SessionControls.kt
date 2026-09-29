@@ -239,7 +239,7 @@ fun SessionControls(
             keyCode = option.keyCode,
             shift = option.shift,
             combo = option.combo,
-            action = HudAction.TAP,
+            action = option.defaultAction.takeIf { it in HudKey.allowedActions(option.kind) } ?: HudAction.TAP,
             x = (position.x / maxX).coerceIn(0f, 1f),
             y = (position.y / maxY).coerceIn(0f, 1f),
             size = size,
@@ -316,7 +316,7 @@ fun SessionControls(
         }
 
         if (mappingMode) {
-            Box(Modifier.align(Alignment.TopCenter).padding(top = 8.dp)) {
+            Box(Modifier.align(Alignment.TopCenter).padding(top = 8.dp).zIndex(26f)) {
                 HudMappingBanner(
                     onAdd = { pickerOpen = true },
                     onDone = { onMappingModeChange(false) },

@@ -98,33 +98,35 @@ fun HudKeyLayer(
     onScrollUnits: (Int) -> Unit,
     onEdit: (HudKey) -> Unit,
 ) {
-    BoxWithConstraints(Modifier.fillMaxSize()) {
+    BoxWithConstraints(Modifier.fillMaxSize().zIndex(12f)) {
         val density = LocalDensity.current
         val widthPx = constraints.maxWidth.toFloat()
         val heightPx = constraints.maxHeight.toFloat()
 
         keys.forEach { key ->
-            val sizePx = with(density) { key.size.dp.toPx() }
-            val maxX = (widthPx - sizePx).coerceAtLeast(1f)
-            val maxY = (heightPx - sizePx).coerceAtLeast(1f)
-            HudKeyButton(
-                key = key,
-                mappingMode = mappingMode,
-                plate = plate,
-                latched = key.action == HudAction.TOGGLE && key.id in latchedKeys,
-                maxX = maxX,
-                maxY = maxY,
-                onDrag = { x, y -> onMove(key.id, x, y) },
-                onPhase = { phase -> onPhase(key, phase) },
-                scrollSpeed = scrollSpeed,
-                onScrollUnits = onScrollUnits,
-                onEdit = { onEdit(key) },
-                modifier = Modifier
-                    .offset {
-                        IntOffset((key.x * maxX).roundToInt(), (key.y * maxY).roundToInt())
-                    }
-                    .zIndex(12f),
-            )
+            androidx.compose.runtime.key(key.id) {
+                val sizePx = with(density) { key.size.dp.toPx() }
+                val maxX = (widthPx - sizePx).coerceAtLeast(1f)
+                val maxY = (heightPx - sizePx).coerceAtLeast(1f)
+                HudKeyButton(
+                    key = key,
+                    mappingMode = mappingMode,
+                    plate = plate,
+                    latched = key.action == HudAction.TOGGLE && key.id in latchedKeys,
+                    maxX = maxX,
+                    maxY = maxY,
+                    onDrag = { x, y -> onMove(key.id, x, y) },
+                    onPhase = { phase -> onPhase(key, phase) },
+                    scrollSpeed = scrollSpeed,
+                    onScrollUnits = onScrollUnits,
+                    onEdit = { onEdit(key) },
+                    modifier = Modifier
+                        .offset {
+                            IntOffset((key.x * maxX).roundToInt(), (key.y * maxY).roundToInt())
+                        }
+                        .zIndex(12f),
+                )
+            }
         }
     }
 }
@@ -146,10 +148,15 @@ private fun HudKeyButton(
 ) {
     var pressed by remember(key.id) { mutableStateOf(false) }
 
-    // Posisi selama geser diakumulasi lokal: blok pointerInput tidak restart
-    // saat posisi berubah, jadi membaca key.x/key.y langsung akan memakai
-    // nilai basi dan tombol kelihatan tidak mau digeser.
+    // Posisi dan callback selama geser dibaca lewat rememberUpdatedState agar
+    // blok pointerInput yang hidup lintas-rekomposisi tidak memakai daftar
+    // tombol lama (yang sebelumnya membuat posisi tombol lain ikut ter-reset).
     val latest = rememberUpdatedState(key)
+    val latestMaxX = rememberUpdatedState(maxX)
+    val latestMaxY = rememberUpdatedState(maxY)
+    val latestOnDrag = rememberUpdatedState(onDrag)
+    val latestOnPhase = rememberUpdatedState(onPhase)
+    val latestOnEdit = rememberUpdatedState(onEdit)
     val latestScrollUnits = rememberUpdatedState(onScrollUnits)
     val dragPos = remember(key.id) { mutableStateOf<Offset?>(null) }
 
@@ -183,7 +190,9 @@ private fun HudKeyButton(
             )
             .pointerInput(key.id, mappingMode, key.action, key.kind, key.keyCode, key.shift, key.combo, key.size, plate, scrollSpeed) {
                 awaitEachGesture {
+                    val slop = viewConfiguration.touchSlop
                     val down = awaitFirstDown(requireUnconsumed = false)
+                    down.consume()
                     val scrollAccumulator = ScrollWheelAccumulator()
                     pressed = true
                     var travelled = 0f
@@ -197,7 +206,7 @@ private fun HudKeyButton(
                         )
                     val holdActive = !mappingMode && key.action == HudAction.HOLD
                     val heldOnPress = tapCanHold || holdActive
-                    if (heldOnPress) onPhase(HudPhase.DOWN)
+                    if (heldOnPress) latestOnPhase.value(HudPhase.DOWN)
 
                     while (true) {
                         val event = awaitPointerEvent()
@@ -209,16 +218,16 @@ private fun HudKeyButton(
                         }
                         val delta = change.position - change.previousPosition
                         travelled += delta.getDistance()
-                        if (travelled > 8f) {
+                        if (shouldStartHudButtonGesture(travelled, slop, mappingMode, key.kind)) {
                             dragged = true
                             // Geser hanya berlaku di mode atur posisi.
                             if (mappingMode) {
                                 val base = dragPos.value
                                     ?: Offset(latest.value.x, latest.value.y)
-                                val nx = (base.x + delta.x / maxX).coerceIn(0f, 1f)
-                                val ny = (base.y + delta.y / maxY).coerceIn(0f, 1f)
+                                val nx = (base.x + delta.x / latestMaxX.value).coerceIn(0f, 1f)
+                                val ny = (base.y + delta.y / latestMaxY.value).coerceIn(0f, 1f)
                                 dragPos.value = Offset(nx, ny)
-                                onDrag(nx, ny)
+                                latestOnDrag.value(nx, ny)
                             } else if (key.kind == HudKind.SCROLL_SLIDER) {
                                 scrollAccumulator.consume(delta.y, scrollSpeed)
                                     .takeIf { it != 0 }
@@ -230,18 +239,18 @@ private fun HudKeyButton(
 
                     pressed = false
                     dragPos.value = null
-                    if (heldOnPress) onPhase(HudPhase.UP)
+                    if (heldOnPress) latestOnPhase.value(HudPhase.UP)
 
                     // Di mode atur posisi, ketuk = buka editor tombol itu.
                     if (mappingMode) {
-                        if (!dragged) onEdit()
+                        if (!dragged) latestOnEdit.value()
                         return@awaitEachGesture
                     }
                     if (dragged) return@awaitEachGesture
                     when (key.action) {
                         HudAction.HOLD -> Unit
-                        HudAction.TOGGLE -> onPhase(HudPhase.TAP)
-                        HudAction.TAP -> if (!tapCanHold) onPhase(HudPhase.TAP)
+                        HudAction.TOGGLE -> latestOnPhase.value(HudPhase.TAP)
+                        HudAction.TAP -> if (!tapCanHold) latestOnPhase.value(HudPhase.TAP)
                     }
                 }
             },
@@ -550,7 +559,9 @@ fun HudKeyEditor(
                         keyCode = option.keyCode,
                         shift = option.shift,
                         combo = option.combo,
-                        action = key.action.takeIf { it in HudKey.allowedActions(option.kind) } ?: HudAction.TAP,
+                        action = option.defaultAction.takeIf { it in HudKey.allowedActions(option.kind) }
+                            ?: key.action.takeIf { it in HudKey.allowedActions(option.kind) }
+                            ?: HudAction.TAP,
                     )
                 )
                 rePick = false

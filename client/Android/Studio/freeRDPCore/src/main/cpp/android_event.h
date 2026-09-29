@@ -53,6 +53,7 @@ typedef struct
 {
 	int size;
 	int count;
+	int head;
 	HANDLE isSet;
 	CRITICAL_SECTION lock;
 	ANDROID_EVENT** events;

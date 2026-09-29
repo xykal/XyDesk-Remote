@@ -18,6 +18,7 @@
 #include <string.h>
 
 #include <freerdp/freerdp.h>
+#include <freerdp/input.h>
 #include <freerdp/log.h>
 
 #define TAG CLIENT_TAG("android")
@@ -40,11 +41,44 @@ BOOL android_push_event(freerdp* inst, ANDROID_EVENT* event)
 		return FALSE;
 
 	/* Producers run on UI/clipboard threads while the RDP worker drains the
-	 * queue. Protect both the count and the reallocating backing array. */
+	 * queue. Protect both the count and the circular backing array. */
 	EnterCriticalSection(&queue->lock);
+	if (!queue->events || queue->size <= 0 || !queue->isSet)
+		goto finish;
+
+	/* Pointer motion carries only the latest position before the next button,
+	 * key, wheel, clipboard, or disconnect event. Collapse adjacent pure moves
+	 * so a slow network cannot build a trail of stale cursor coordinates. */
+	if (event->type == EVENT_TYPE_CURSOR && queue->count > 0)
+	{
+		ANDROID_EVENT_CURSOR* incoming = (ANDROID_EVENT_CURSOR*)event;
+		if (incoming->flags == PTR_FLAGS_MOVE)
+		{
+			const size_t tail = ((size_t)queue->head + (size_t)queue->count - 1u) %
+			                    (size_t)queue->size;
+			ANDROID_EVENT* last = queue->events[tail];
+			if (last && last->type == EVENT_TYPE_CURSOR)
+			{
+				ANDROID_EVENT_CURSOR* previous = (ANDROID_EVENT_CURSOR*)last;
+				if (previous->flags == PTR_FLAGS_MOVE)
+				{
+					success = SetEvent(queue->isSet);
+					if (success)
+					{
+						previous->x = incoming->x;
+						previous->y = incoming->y;
+						android_event_free(event);
+					}
+					goto finish;
+				}
+			}
+		}
+	}
+
 	if (queue->count >= queue->size)
 	{
 		size_t new_size = (size_t)queue->size;
+		ANDROID_EVENT** new_events = nullptr;
 		do
 		{
 			if (new_size > (size_t)INT_MAX - 128u ||
@@ -54,19 +88,31 @@ BOOL android_push_event(freerdp* inst, ANDROID_EVENT* event)
 			new_size += 128ull;
 		} while (new_size <= (size_t)queue->count);
 
-		void* new_events = realloc((void*)queue->events, sizeof(ANDROID_EVENT*) * new_size);
+		new_events = (ANDROID_EVENT**)calloc(new_size, sizeof(ANDROID_EVENT*));
 		if (!new_events)
 			goto finish;
 
-		queue->events = (ANDROID_EVENT**)new_events;
+		/* Linearize only when capacity grows; ordinary enqueue/dequeue remains
+		 * O(1), regardless of how many events are waiting. */
+		for (size_t i = 0; i < (size_t)queue->count; i++)
+		{
+			const size_t source = ((size_t)queue->head + i) % (size_t)queue->size;
+			new_events[i] = queue->events[source];
+		}
+		free(queue->events);
+		queue->events = new_events;
 		queue->size = (int)new_size;
+		queue->head = 0;
 	}
 
-	queue->events[queue->count++] = event;
+	const size_t insert = ((size_t)queue->head + (size_t)queue->count) % (size_t)queue->size;
+	queue->events[insert] = event;
+	queue->count++;
 	success = SetEvent(queue->isSet);
 	if (!success)
 	{
-		queue->events[--queue->count] = nullptr;
+		queue->count--;
+		queue->events[insert] = nullptr;
 	}
 
 finish:
@@ -79,12 +125,12 @@ static ANDROID_EVENT* android_pop_event(ANDROID_EVENT_QUEUE* queue)
 	ANDROID_EVENT* event = nullptr;
 
 	EnterCriticalSection(&queue->lock);
-	if (queue->count > 0)
+	if (queue->events && queue->size > 0 && queue->count > 0)
 	{
-		event = queue->events[0];
+		event = queue->events[queue->head];
+		queue->events[queue->head] = nullptr;
+		queue->head = (queue->head + 1) % queue->size;
 		queue->count--;
-		if (queue->count > 0)
-			memmove(queue->events, queue->events + 1, sizeof(ANDROID_EVENT*) * queue->count);
 	}
 	LeaveCriticalSection(&queue->lock);
 	return event;
@@ -357,6 +403,7 @@ BOOL android_event_queue_init(freerdp* inst)
 
 	queue->size = 16;
 	queue->count = 0;
+	queue->head = 0;
 	InitializeCriticalSection(&queue->lock);
 	queue->isSet = CreateEventA(nullptr, TRUE, FALSE, nullptr);
 
@@ -392,13 +439,22 @@ void android_event_queue_uninit(freerdp* inst)
 
 	aCtx = (androidContext*)inst->context;
 	queue = aCtx->event_queue;
+	aCtx->event_queue = nullptr;
 
 	if (queue)
 	{
 		EnterCriticalSection(&queue->lock);
-		for (int i = 0; i < queue->count; i++)
-			android_event_free(queue->events[i]);
+		if (queue->events && queue->size > 0)
+		{
+			for (int i = 0; i < queue->count; i++)
+			{
+				const int index = (int)(((size_t)queue->head + (size_t)i) % (size_t)queue->size);
+				android_event_free(queue->events[index]);
+				queue->events[index] = nullptr;
+			}
+		}
 		queue->count = 0;
+		queue->head = 0;
 		if (queue->isSet)
 		{
 			(void)CloseHandle(queue->isSet);
@@ -416,7 +472,6 @@ void android_event_queue_uninit(freerdp* inst)
 		LeaveCriticalSection(&queue->lock);
 		DeleteCriticalSection(&queue->lock);
 		free(queue);
-		aCtx->event_queue = nullptr;
 	}
 }
 

@@ -58,3 +58,20 @@ internal fun resizeHudKeyPreservingCenter(
         y = adjust(key.y, viewportHeightDp),
     )
 }
+
+/**
+ * Only layout editing (`mappingMode`) and the swipe-scroll button (`SCROLL_SLIDER`)
+ * convert finger motion into a drag/scroll gesture after crossing touch slop.
+ * Normal HUD buttons must not cancel taps on minor finger wobble.
+ */
+internal fun shouldStartHudButtonGesture(
+    travelledPx: Float,
+    touchSlopPx: Float,
+    mappingMode: Boolean,
+    kind: HudKind,
+): Boolean {
+    if (!mappingMode && kind != HudKind.SCROLL_SLIDER) return false
+    if (!travelledPx.isFinite() || travelledPx <= 0f) return false
+    val threshold = if (touchSlopPx.isFinite() && touchSlopPx > 0f) touchSlopPx else 16f
+    return travelledPx > threshold
+}

@@ -40,6 +40,12 @@ class RdpUriTest {
     }
 
     @Test
+    fun authorityIpv6MemakaiBracketDanPortYangBenar() {
+        assertEquals("[2001:db8::1]", RdpUri.authority(simple(host = "2001:db8::1", user = null)))
+        assertEquals("kal@[2001:db8::1]:3390", RdpUri.authority(simple(host = "2001:db8::1", port = 3390)))
+    }
+
+    @Test
     fun authoritySertakanUserKalauAda() {
         assertEquals("kal@10.0.0.5", RdpUri.authority(simple()))
         assertEquals("10.0.0.5", RdpUri.authority(simple(user = null)))
@@ -57,6 +63,21 @@ class RdpUriTest {
         assertEquals("+", p["multitransport"])
         assertEquals("auto", p["network"])
         assertEquals("AVC444", p["gfx"])
+    }
+
+    @Test
+    fun lowBandwidthUsesConstrainedNetworkAndAvc420Hints() {
+        val p = params(simple(), RdpOptions(lowBandwidth = true))
+        assertEquals("broadband-low", p["network"])
+        assertEquals("AVC420", p["gfx"])
+        assertEquals("+", p["multitransport"])
+    }
+
+    @Test
+    fun lowBandwidthCanStillDisableGfx() {
+        val p = params(simple(), RdpOptions(lowBandwidth = true, h264 = false))
+        assertEquals("broadband-low", p["network"])
+        assertFalse(p.containsKey("gfx"))
     }
 
     @Test
@@ -110,7 +131,7 @@ class RdpUriTest {
     @Test
     fun driveLokalDanKamera() {
         val p = params(simple(), RdpOptions(localDrive = true, camera = true))
-        assertEquals("sdcard", p["drive"])
+        assertEquals("XyDesk", p["drive"])
         assertEquals("rdpecam", p["dvc"])
     }
 
