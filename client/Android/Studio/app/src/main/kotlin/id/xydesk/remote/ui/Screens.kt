@@ -350,7 +350,9 @@ private fun GeneralSection(appPrefs: AppPrefs, onShowLog: () -> Unit) {
     var defaultClipboard by remember { mutableStateOf(appPrefs.defaultClipboard) }
     var defaultDrive by remember { mutableStateOf(appPrefs.defaultLocalDrive) }
     var defaultStreamProfile by remember {
-        mutableStateOf(XyStreamProfile.fromCode(appPrefs.defaultStreamProfile))
+        mutableStateOf(
+            XyStreamProfile.entries.getOrElse(appPrefs.defaultStreamProfile) { XyStreamProfile.AUTO }
+        )
     }
     var defaultAsyncUpdate by remember { mutableStateOf(appPrefs.defaultAsyncUpdate) }
     var defaultAsyncChannels by remember { mutableStateOf(appPrefs.defaultAsyncChannels) }
@@ -618,25 +620,27 @@ private fun GeneralSection(appPrefs: AppPrefs, onShowLog: () -> Unit) {
             Text(xy("Profil streaming default", "Default streaming profile"), style = MaterialTheme.typography.titleSmall)
             Spacer(Modifier.height(6.dp))
             val streamOptions = listOf(
-                XyStreamProfile.BALANCED to xy("Seimbang", "Balanced"),
-                XyStreamProfile.LOW_LATENCY to xy("Latensi Ultra-Rendah", "Ultra-Low Latency"),
-                XyStreamProfile.HIGH_COLOR to xy("Warna Akurat (AVC444)", "Accurate Color (AVC444)"),
-                XyStreamProfile.DATA_SAVER to xy("Hemat Kuota", "Data Saver"),
+                XyStreamProfile.AUTO,
+                XyStreamProfile.BALANCED,
+                XyStreamProfile.ULTRA_LOW_LATENCY,
+                XyStreamProfile.HIGH_VISUAL,
+                XyStreamProfile.DATA_SAVER,
             )
             streamOptions.chunked(2).forEach { row ->
                 Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                    row.forEach { (preset, label) ->
+                    row.forEach { preset ->
                         XyPillButton(
-                            text = label,
+                            text = xy(preset.title, preset.titleEn),
                             onClick = {
                                 defaultStreamProfile = preset
-                                appPrefs.defaultStreamProfile = preset.code
+                                appPrefs.defaultStreamProfile = preset.ordinal
                             },
                             primary = defaultStreamProfile == preset,
                             compact = true,
                             modifier = Modifier.weight(1f),
                         )
                     }
+                    if (row.size == 1) Spacer(Modifier.weight(1f))
                 }
                 Spacer(Modifier.height(6.dp))
             }
@@ -731,12 +735,14 @@ private fun SecuritySection(appPrefs: AppPrefs) {
     var showTrustedCertificates by remember { mutableStateOf(false) }
     var confirmRemoveCertHost by remember { mutableStateOf<String?>(null) }
     var confirmClearAllCerts by remember { mutableStateOf(false) }
-    var screenCaptureProtection by remember { mutableStateOf(appPrefs.screenCaptureProtection) }
+    var screenCaptureProtection by remember { mutableStateOf(appPrefs.flagSecure) }
     var requireDeviceLock by remember { mutableStateOf(appPrefs.requireDeviceLock) }
     var autoLockRemoteOnLeave by remember { mutableStateOf(appPrefs.autoLockRemoteOnLeave) }
     var clearClipboardOnDisconnect by remember { mutableStateOf(appPrefs.clearClipboardOnDisconnect) }
     var defaultSecurityProtocol by remember {
-        mutableStateOf(XySecurityProtocol.fromCode(appPrefs.defaultSecurityProtocol))
+        mutableStateOf(
+            XySecurityProtocol.entries.getOrElse(appPrefs.defaultSecurityProtocol) { XySecurityProtocol.AUTO }
+        )
     }
     var defaultTlsSecLevel by remember { mutableIntStateOf(appPrefs.defaultTlsSecLevel) }
     val entries = remember(tick) { store.entries() }
@@ -807,20 +813,15 @@ private fun SecuritySection(appPrefs: AppPrefs) {
                 style = MaterialTheme.typography.titleSmall,
             )
             Spacer(Modifier.height(6.dp))
-            val secProtocols = listOf(
-                XySecurityProtocol.AUTO to xy("Otomatis", "Auto"),
-                XySecurityProtocol.NLA to "NLA (CredSSP)",
-                XySecurityProtocol.TLS to "TLS",
-                XySecurityProtocol.RDP to xy("RDP Klasik", "Classic RDP"),
-            )
+            val secProtocols = XySecurityProtocol.entries
             secProtocols.chunked(2).forEach { row ->
                 Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                    row.forEach { (proto, label) ->
+                    row.forEach { proto ->
                         XyPillButton(
-                            text = label,
+                            text = xy(proto.title, proto.titleEn),
                             onClick = {
                                 defaultSecurityProtocol = proto
-                                appPrefs.defaultSecurityProtocol = proto.code
+                                appPrefs.defaultSecurityProtocol = proto.ordinal
                             },
                             primary = defaultSecurityProtocol == proto,
                             compact = true,

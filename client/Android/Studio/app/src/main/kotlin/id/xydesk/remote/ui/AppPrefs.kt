@@ -88,6 +88,10 @@ class AppPrefs(context: Context) {
         get() = sp.getBoolean(KEY_FLAG_SECURE, false)
         set(v) = sp.edit().putBoolean(KEY_FLAG_SECURE, v).apply()
 
+    var screenCaptureProtection: Boolean
+        get() = flagSecure
+        set(v) { flagSecure = v }
+
     /** Wajibkan PIN / Pola / Biometrik HP sebelum membuka sesi tersimpan. */
     var requireDeviceLock: Boolean
         get() = sp.getBoolean(KEY_REQUIRE_LOCK, false)

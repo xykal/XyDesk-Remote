@@ -147,20 +147,20 @@ fun XyDeskHome(
 
     fun wakeAndConnect(profile: ConnectionProfile) {
         val opts = RdpOptions.of(context, profile.id)
-        val mac = opts.wolMacAddress.trim()
+        val mac = opts.macAddress?.trim().orEmpty()
         if (WakeOnLan.parseMacBytes(mac) == null) {
             notice.show(xyNow("MAC Address Wake-on-LAN belum diatur atau tidak valid", "Wake-on-LAN MAC address is missing or invalid"))
             return
         }
         wolWaitingProfile = profile
         scope.launch {
-            val targets = listOf(opts.wolBroadcastIp.ifBlank { "255.255.255.255" }, profile.host).distinct()
+            val targets = listOf(opts.wolBroadcast.ifBlank { "255.255.255.255" }, profile.host).distinct()
             val sendRes = withContext(Dispatchers.IO) {
-                var last = Result.success(Unit)
-                targets.forEach { target ->
-                    last = WakeOnLan.sendMagicPacket(mac, target, opts.wolPort)
+                runCatching {
+                    targets.forEach { target ->
+                        WakeOnLan.sendMagicPacket(mac, target, opts.wolPort)
+                    }
                 }
-                last
             }
             if (sendRes.isFailure) {
                 wolWaitingProfile = null
@@ -179,17 +179,12 @@ fun XyDeskHome(
                 ),
             )
             val ready = withContext(Dispatchers.IO) {
-                var elapsed = 0L
-                var portUp = false
-                while (elapsed < 35_000L && wolWaitingProfile?.id == profile.id) {
-                    if (WakeOnLan.isTcpPortOpen(profile.host, profile.port, 900)) {
-                        portUp = true
-                        break
-                    }
-                    Thread.sleep(1_200L)
-                    elapsed += 1_200L
-                }
-                portUp
+                WakeOnLan.pollHostReady(
+                    host = profile.host,
+                    port = profile.port,
+                    timeoutMs = 35_000L,
+                    intervalMs = 1_200L,
+                )
             }
             if (wolWaitingProfile?.id == profile.id) {
                 wolWaitingProfile = null
@@ -726,13 +721,13 @@ private fun DeviceCard(
 ) {
     val context = LocalContext.current
     val rdpOptions = remember(profile.id) { RdpOptions.of(context, profile.id) }
-    val hasWol = rdpOptions.wolMacAddress.isNotBlank()
+    val hasWol = !rdpOptions.macAddress.isNullOrBlank()
     val streamBadge = when (rdpOptions.streamProfile) {
-        XyStreamProfile.LOW_LATENCY -> xy("Latensi Rendah", "Low Latency")
-        XyStreamProfile.HIGH_COLOR -> "AVC444"
+        XyStreamProfile.ULTRA_LOW_LATENCY -> xy("Latensi Rendah", "Low Latency")
+        XyStreamProfile.HIGH_VISUAL -> "AVC444"
         XyStreamProfile.DATA_SAVER -> xy("Hemat Kuota", "Data Saver")
         XyStreamProfile.CUSTOM -> xy("Kustom", "Custom")
-        XyStreamProfile.BALANCED -> if (rdpOptions.udpTransport) "UDP+H264" else "H264"
+        XyStreamProfile.BALANCED, XyStreamProfile.AUTO -> if (rdpOptions.udpTransport) "UDP+H264" else "H264"
     }
     // Art preview milik app (bukan wallpaper RDP/OS): geometris, diturunkan
     // dari nama perangkat + jenis OS sebagai penanda kecil di pojok.
@@ -784,7 +779,7 @@ private fun DeviceCard(
                         append(profile.host).append(':').append(profile.port)
                         if (!profile.username.isNullOrBlank()) append("  ·  ").append(profile.username)
                         append("  ·  ").append(streamBadge)
-                        if (rdpOptions.consoleAdminSession) append("  ·  Admin")
+                        if (rdpOptions.consoleAdmin) append("  ·  Admin")
                     },
                     style = MaterialTheme.typography.bodySmall,
                     color = Color.White.copy(alpha = 0.82f),

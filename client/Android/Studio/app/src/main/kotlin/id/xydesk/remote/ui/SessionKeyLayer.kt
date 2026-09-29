@@ -592,7 +592,7 @@ fun HudKeyEditor(
                         value = key.macroText,
                         onValueChange = { onChange(key.copy(macroText = it.take(160))) },
                         label = xy("Perintah / teks makro otomatis", "Auto-typed macro command / text"),
-                        placeholder = "powershell",
+                        hint = "powershell",
                     )
                     id.xydesk.remote.ui.components.XyToggleRow(
                         title = xy("Tekan Enter otomatis di akhir", "Press Enter automatically at the end"),

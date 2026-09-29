@@ -104,7 +104,12 @@ fun AddDeviceScreen(
         } else {
             // Perangkat baru mewarisi default General & Security.
             val app = AppPrefs(context)
-            val baseProfile = XyStreamProfile.fromCode(app.defaultStreamProfile)
+            val baseProfile = XyStreamProfile.entries.getOrElse(app.defaultStreamProfile) {
+                XyStreamProfile.AUTO
+            }
+            val baseSecProto = XySecurityProtocol.entries.getOrElse(app.defaultSecurityProtocol) {
+                XySecurityProtocol.AUTO
+            }
             RdpOptions(
                 clipboard = app.defaultClipboard,
                 localDrive = app.defaultLocalDrive,
@@ -114,9 +119,9 @@ fun AddDeviceScreen(
                 dynamicResolution = app.defaultDynamicResolution,
                 asyncUpdate = app.defaultAsyncUpdate,
                 asyncChannels = app.defaultAsyncChannels,
-                securityProtocol = XySecurityProtocol.fromCode(app.defaultSecurityProtocol),
+                securityProtocol = baseSecProto,
                 tlsSecLevel = app.defaultTlsSecLevel,
-            ).applyStreamProfile(baseProfile).copy(
+            ).withStreamProfile(baseProfile).copy(
                 udpTransport = app.defaultUdp,
                 networkAutoDetect = app.defaultNetAuto,
                 h264 = app.defaultH264,
@@ -206,7 +211,7 @@ fun AddDeviceScreen(
             validationPopup = msg
             return
         }
-        if (options.wolMacAddress.isNotBlank() && WakeOnLan.parseMacBytes(options.wolMacAddress) == null) {
+        if (!options.macAddress.isNullOrBlank() && WakeOnLan.parseMacBytes(options.macAddress) == null) {
             val msg = xyNow(
                 "Format MAC Address Wake-on-LAN tidak valid. Gunakan 6 pasang heksadesimal seperti AA:BB:CC:DD:EE:FF.",
                 "Invalid Wake-on-LAN MAC address format. Use 6 hex pairs like AA:BB:CC:DD:EE:FF.",
@@ -508,28 +513,30 @@ fun AddDeviceScreen(
                 )
                 Spacer(Modifier.height(8.dp))
                 val streamPresets = listOf(
-                    XyStreamProfile.BALANCED to xy("Seimbang", "Balanced"),
-                    XyStreamProfile.LOW_LATENCY to xy("Latensi Ultra-Rendah", "Ultra-Low Latency"),
-                    XyStreamProfile.HIGH_COLOR to xy("Warna Akurat (AVC444)", "Accurate Color (AVC444)"),
-                    XyStreamProfile.DATA_SAVER to xy("Hemat Kuota", "Data Saver"),
+                    XyStreamProfile.AUTO,
+                    XyStreamProfile.BALANCED,
+                    XyStreamProfile.ULTRA_LOW_LATENCY,
+                    XyStreamProfile.HIGH_VISUAL,
+                    XyStreamProfile.DATA_SAVER,
                 )
                 streamPresets.chunked(2).forEach { row ->
                     Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                        row.forEach { (preset, label) ->
+                        row.forEach { preset ->
                             XyPillButton(
-                                text = label,
-                                onClick = { options = options.applyStreamProfile(preset) },
+                                text = xy(preset.title, preset.titleEn),
+                                onClick = { options = options.withStreamProfile(preset) },
                                 primary = options.streamProfile == preset,
                                 compact = true,
                                 modifier = Modifier.weight(1f),
                             )
                         }
+                        if (row.size == 1) Spacer(Modifier.weight(1f))
                     }
                     Spacer(Modifier.height(6.dp))
                 }
                 if (options.streamProfile == XyStreamProfile.CUSTOM) {
                     Text(
-                        xy("Profil aktif: Kustom", "Active profile: Custom"),
+                        xy("Profil aktif: Kustom Manual", "Active profile: Custom Manual"),
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.primary,
                     )
@@ -559,7 +566,7 @@ fun AddDeviceScreen(
                     enabled = !options.lowBandwidth,
                 )
                 XyToggleRow(
-                    title = xy("Jaringan terbatas (broadband-low)", "Low-bandwidth mode"),
+                    title = xy("Jaringan terbatas (broadband-low / AVC420)", "Low-bandwidth mode (broadband-low / AVC420)"),
                     subtitle = xy(
                         "Pakai profil broadband-low + AVC420 untuk koneksi seluler/hemat",
                         "Use broadband-low + AVC420 hints for cellular/metered connections",
@@ -573,8 +580,8 @@ fun AddDeviceScreen(
                 XyToggleRow(
                     title = xy("H.264 / RemoteFX (GFX)", "H.264 / RemoteFX (GFX)"),
                     subtitle = xy(
-                        "Akselerasi hardware H.264 untuk video dan animasi 60 FPS",
-                        "H.264 hardware acceleration for 60 FPS video and animations",
+                        "Akselerasi hardware H.264 (AVC444 di jaringan normal, AVC420 di mode hemat)",
+                        "H.264 hardware acceleration (AVC444 on normal links, AVC420 in low-bandwidth)",
                     ),
                     checked = options.h264,
                     onCheckedChange = {
@@ -582,19 +589,6 @@ fun AddDeviceScreen(
                     },
                     leading = XyIcons.Grid,
                 )
-                if (options.h264 && !options.lowBandwidth) {
-                    XyToggleRow(
-                        title = xy("Chroma 4:4:4 penuh (AVC444)", "Full Chroma 4:4:4 (AVC444)"),
-                        subtitle = xy(
-                            "Teks & garis warna tajam (matikan untuk pakai AVC420 yang lebih ringan)",
-                            "Crisp text & colored edges (turn off for lighter AVC420)",
-                        ),
-                        checked = options.avc444,
-                        onCheckedChange = {
-                            options = options.copy(avc444 = it, streamProfile = XyStreamProfile.CUSTOM)
-                        },
-                    )
-                }
                 XyToggleRow(
                     title = xy("Async Frame Update (+async-update)", "Async Frame Update (+async-update)"),
                     subtitle = xy(
@@ -617,16 +611,26 @@ fun AddDeviceScreen(
                         options = options.copy(asyncChannels = it, streamProfile = XyStreamProfile.CUSTOM)
                     },
                 )
-                XyToggleRow(
-                    title = xy("Kompresi stream RDP (+compression)", "RDP stream compression (+compression)"),
-                    subtitle = xy(
-                        "Kompresi paket data untuk menghemat bandwidth",
-                        "Compress RDP data packets to save bandwidth",
+                Spacer(Modifier.height(8.dp))
+                Text(
+                    xy("Level kompresi paket RDP", "RDP packet compression level"),
+                    style = MaterialTheme.typography.titleSmall,
+                )
+                Spacer(Modifier.height(6.dp))
+                XySegmented(
+                    options = listOf(
+                        xy("Mati (0)", "Off (0)"),
+                        xy("Standar (1)", "Standard (1)"),
+                        xy("Maksimum (2)", "Maximum (2)"),
                     ),
-                    checked = options.compression,
-                    onCheckedChange = {
-                        options = options.copy(compression = it, streamProfile = XyStreamProfile.CUSTOM)
+                    selectedIndex = options.compressionLevel.coerceIn(0, 2),
+                    onSelect = {
+                        options = options.copy(
+                            compressionLevel = it,
+                            streamProfile = XyStreamProfile.CUSTOM,
+                        )
                     },
+                    modifier = Modifier.fillMaxWidth(),
                 )
                 Spacer(Modifier.height(8.dp))
                 Text(
@@ -681,9 +685,9 @@ fun AddDeviceScreen(
                 )
                 XyToggleRow(
                     title = xy("Tarik Jendela Penuh (Full Window Drag)", "Full Window Drag"),
-                    checked = options.fullWindowDrag,
+                    checked = options.windowDrag,
                     onCheckedChange = {
-                        options = options.copy(fullWindowDrag = it, streamProfile = XyStreamProfile.CUSTOM)
+                        options = options.copy(windowDrag = it, streamProfile = XyStreamProfile.CUSTOM)
                     },
                 )
                 XyToggleRow(
@@ -702,17 +706,11 @@ fun AddDeviceScreen(
                     style = MaterialTheme.typography.titleSmall,
                 )
                 Spacer(Modifier.height(6.dp))
-                val secOptions = listOf(
-                    XySecurityProtocol.AUTO to xy("Otomatis", "Auto"),
-                    XySecurityProtocol.NLA to "NLA (CredSSP)",
-                    XySecurityProtocol.TLS to "TLS",
-                    XySecurityProtocol.RDP to xy("RDP Klasik", "Classic RDP"),
-                )
-                secOptions.chunked(2).forEach { row ->
+                XySecurityProtocol.entries.chunked(2).forEach { row ->
                     Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                        row.forEach { (proto, label) ->
+                        row.forEach { proto ->
                             XyPillButton(
-                                text = label,
+                                text = xy(proto.title, proto.titleEn),
                                 onClick = { options = options.copy(securityProtocol = proto) },
                                 primary = options.securityProtocol == proto,
                                 compact = true,
@@ -728,14 +726,16 @@ fun AddDeviceScreen(
                     style = MaterialTheme.typography.titleSmall,
                 )
                 Spacer(Modifier.height(6.dp))
+                val tlsValues = listOf(-1, 0, 1, 2)
                 XySegmented(
                     options = listOf(
-                        xy("Kompatibel (0)", "Legacy (0)"),
+                        xy("Auto", "Auto"),
+                        xy("Legacy (0)", "Legacy (0)"),
                         xy("Standar (1)", "Standard (1)"),
                         xy("Ketat (2)", "Strict (2)"),
                     ),
-                    selectedIndex = options.tlsSecLevel.coerceIn(0, 2),
-                    onSelect = { options = options.copy(tlsSecLevel = it) },
+                    selectedIndex = tlsValues.indexOf(options.tlsSecLevel).coerceAtLeast(0),
+                    onSelect = { options = options.copy(tlsSecLevel = tlsValues[it]) },
                     modifier = Modifier.fillMaxWidth(),
                 )
                 Spacer(Modifier.height(6.dp))
@@ -745,8 +745,8 @@ fun AddDeviceScreen(
                         "Masuk ke sesi konsol fisik atau sesi administrator Windows Server",
                         "Connect to the physical console or Windows Server administrator session",
                     ),
-                    checked = options.consoleAdminSession,
-                    onCheckedChange = { options = options.copy(consoleAdminSession = it) },
+                    checked = options.consoleAdmin,
+                    onCheckedChange = { options = options.copy(consoleAdmin = it) },
                     leading = XyIcons.Lock,
                 )
                 XyToggleRow(
@@ -777,16 +777,16 @@ fun AddDeviceScreen(
                 )
                 Spacer(Modifier.height(8.dp))
                 XyField(
-                    value = options.wolMacAddress,
-                    onValueChange = { options = options.copy(wolMacAddress = it.trim()) },
+                    value = options.macAddress.orEmpty(),
+                    onValueChange = { options = options.copy(macAddress = it.trim().ifEmpty { null }) },
                     label = xy("MAC Address kartu jaringan PC (opsional)", "PC network card MAC Address (optional)"),
                     hint = "AA:BB:CC:DD:EE:FF",
                 )
                 Spacer(Modifier.height(10.dp))
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     XyField(
-                        value = options.wolBroadcastIp,
-                        onValueChange = { options = options.copy(wolBroadcastIp = it.trim()) },
+                        value = options.wolBroadcast,
+                        onValueChange = { options = options.copy(wolBroadcast = it.trim()) },
                         label = xy("Broadcast / IP tujuan", "Broadcast / target IP"),
                         hint = "255.255.255.255",
                         modifier = Modifier.weight(1.4f),
@@ -803,12 +803,12 @@ fun AddDeviceScreen(
                         modifier = Modifier.weight(0.7f),
                     )
                 }
-                if (options.wolMacAddress.isNotBlank()) {
+                if (!options.macAddress.isNullOrBlank()) {
                     Spacer(Modifier.height(8.dp))
                     XyPillButton(
                         text = xy("Kirim Tes Magic Packet Sekarang", "Send Test Magic Packet Now"),
                         onClick = {
-                            val mac = options.wolMacAddress
+                            val mac = options.macAddress.orEmpty()
                             if (WakeOnLan.parseMacBytes(mac) == null) {
                                 wolStatusText = xyNow(
                                     "MAC Address belum valid (contoh: AA:BB:CC:DD:EE:FF)",
@@ -819,15 +819,15 @@ fun AddDeviceScreen(
                                 scope.launch {
                                     val endpointHost = parseRdpEndpoint(host)?.host
                                     val targets = buildList {
-                                        add(options.wolBroadcastIp.ifBlank { "255.255.255.255" })
+                                        add(options.wolBroadcast.ifBlank { "255.255.255.255" })
                                         if (!endpointHost.isNullOrBlank()) add(endpointHost)
                                     }.distinct()
                                     val result = withContext(Dispatchers.IO) {
-                                        var lastRes = Result.success(Unit)
-                                        targets.forEach { target ->
-                                            lastRes = WakeOnLan.sendMagicPacket(mac, target, options.wolPort)
+                                        runCatching {
+                                            targets.forEach { target ->
+                                                WakeOnLan.sendMagicPacket(mac, target, options.wolPort)
+                                            }
                                         }
-                                        lastRes
                                     }
                                     wolStatusText = if (result.isSuccess) {
                                         xyNow(
@@ -871,34 +871,40 @@ fun AddDeviceScreen(
                 )
                 Spacer(Modifier.height(8.dp))
                 XyField(
-                    value = options.sshJumpHost,
-                    onValueChange = { options = options.copy(sshJumpHost = it.trim()) },
-                    label = xy("SSH Jump Host (user@host:port)", "SSH Jump Host (user@host:port)"),
-                    hint = "user@ssh.kantor.com:22",
+                    value = options.sshHost.orEmpty(),
+                    onValueChange = { options = options.copy(sshHost = it.trim().ifEmpty { null }) },
+                    label = xy("SSH Jump Host", "SSH Jump Host"),
+                    hint = "ssh.kantor.com",
                 )
-                if (options.sshJumpHost.isNotBlank()) {
+                if (!options.sshHost.isNullOrBlank()) {
                     Spacer(Modifier.height(10.dp))
-                    XyField(
-                        value = options.sshRemoteTarget,
-                        onValueChange = { options = options.copy(sshRemoteTarget = it.trim()) },
-                        label = xy("Target LAN di balik SSH (host:port)", "LAN target behind SSH (host:port)"),
-                        hint = "192.168.1.50:3389",
-                    )
-                    val parsedEndpoint = parseRdpEndpoint(host)
-                    val localTunnelPort = if (parsedEndpoint?.host == "127.0.0.1" || parsedEndpoint?.host == "localhost") {
-                        parsedEndpoint.port
-                    } else {
-                        13389
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        XyField(
+                            value = options.sshUser.orEmpty(),
+                            onValueChange = { options = options.copy(sshUser = it.trim().ifEmpty { null }) },
+                            label = xy("SSH User", "SSH User"),
+                            hint = "root",
+                            modifier = Modifier.weight(1.3f),
+                        )
+                        XyField(
+                            value = options.sshPort.toString(),
+                            onValueChange = {
+                                val p = it.filter(Char::isDigit).take(5).toIntOrNull() ?: 22
+                                options = options.copy(sshPort = p.coerceIn(1, 65535))
+                            },
+                            label = xy("SSH Port", "SSH Port"),
+                            hint = "22",
+                            keyboardType = KeyboardType.Number,
+                            modifier = Modifier.weight(0.7f),
+                        )
                     }
-                    val targetParts = options.sshRemoteTarget.ifBlank { "127.0.0.1:3389" }
-                    val targetParsed = parseRdpEndpoint(targetParts)
+                    val parsedEndpoint = parseRdpEndpoint(host)
                     val sshCmd = WakeOnLan.buildSshTunnelCommand(
-                        sshJumpHost = options.sshJumpHost,
-                        localPort = localTunnelPort,
-                        remoteHost = targetParsed?.host ?: "127.0.0.1",
-                        remotePort = targetParsed?.port ?: 3389,
+                        targetHost = parsedEndpoint?.host ?: "127.0.0.1",
+                        targetPort = parsedEndpoint?.port ?: 3389,
+                        options = options,
                     )
-                    if (sshCmd.isNotBlank()) {
+                    if (!sshCmd.isNullOrBlank()) {
                         Spacer(Modifier.height(8.dp))
                         Text(
                             sshCmd,
@@ -907,26 +913,17 @@ fun AddDeviceScreen(
                             color = MaterialTheme.colorScheme.onSurface,
                         )
                         Spacer(Modifier.height(8.dp))
-                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                            XyPillButton(
-                                text = xy("Salin Perintah SSH", "Copy SSH Command"),
-                                onClick = {
-                                    val cm = context.getSystemService(Context.CLIPBOARD_SERVICE) as? ClipboardManager
-                                    cm?.setPrimaryClip(ClipData.newPlainText("SSH Tunnel", sshCmd))
-                                    wolStatusText = xyNow("Perintah SSH disalin ke clipboard.", "SSH command copied to clipboard.")
-                                },
-                                primary = false,
-                                compact = true,
-                                modifier = Modifier.weight(1f),
-                            )
-                            XyPillButton(
-                                text = xy("Pakai 127.0.0.1:$localTunnelPort", "Use 127.0.0.1:$localTunnelPort"),
-                                onClick = { host = "127.0.0.1:$localTunnelPort" },
-                                primary = false,
-                                compact = true,
-                                modifier = Modifier.weight(1f),
-                            )
-                        }
+                        XyPillButton(
+                            text = xy("Salin Perintah SSH", "Copy SSH Command"),
+                            onClick = {
+                                val cm = context.getSystemService(Context.CLIPBOARD_SERVICE) as? ClipboardManager
+                                cm?.setPrimaryClip(ClipData.newPlainText("SSH Tunnel", sshCmd))
+                                wolStatusText = xyNow("Perintah SSH disalin ke clipboard.", "SSH command copied to clipboard.")
+                            },
+                            primary = false,
+                            compact = true,
+                            modifier = Modifier.fillMaxWidth(),
+                        )
                     }
                 }
             }
