@@ -101,6 +101,46 @@ class SessionPrefs(context: Context) {
         get() = input.getFloat(KEY_SCROLL_SPEED, 1f).coerceIn(0.4f, 2.5f)
         set(v) = input.edit().putFloat(KEY_SCROLL_SPEED, v.coerceIn(0.4f, 2.5f)).apply()
 
+    /** Pengali sensitivitas gerakan kursor trackpad (0.4x .. 2.5x). */
+    var pointerSensitivity: Float
+        get() = input.getFloat(KEY_POINTER_SENSITIVITY, 1f).coerceIn(0.4f, 2.5f)
+        set(v) = input.edit().putFloat(KEY_POINTER_SENSITIVITY, v.coerceIn(0.4f, 2.5f)).apply()
+
+    /** Akselerasi kecepatan pointer (sapuan cepat bergerak lebih jauh). */
+    var pointerAcceleration: Boolean
+        get() = input.getBoolean(KEY_POINTER_ACCEL, true)
+        set(v) = input.edit().putBoolean(KEY_POINTER_ACCEL, v).apply()
+
+    /** Kinetic / inertial scroll saat jari dilepas sesudah menggeser scroll. */
+    var inertialScroll: Boolean
+        get() = input.getBoolean(KEY_INERTIAL_SCROLL, true)
+        set(v) = input.edit().putBoolean(KEY_INERTIAL_SCROLL, v).apply()
+
+    /** Zona scroll tepi kanan layar pada mode Trackpad. */
+    var edgeScrollZone: Boolean
+        get() = input.getBoolean(KEY_EDGE_SCROLL, true)
+        set(v) = input.edit().putBoolean(KEY_EDGE_SCROLL, v).apply()
+
+    /** Pemetaan stik kontroler Bluetooth / USB Gamepad ke pointer & tombol. */
+    var gamepadEnabled: Boolean
+        get() = input.getBoolean(KEY_GAMEPAD, true)
+        set(v) = input.edit().putBoolean(KEY_GAMEPAD, v).apply()
+
+    /** Mode Gyro Air-Mouse (miringkan HP untuk menggerakkan kursor). */
+    var gyroMouseEnabled: Boolean
+        get() = input.getBoolean(KEY_GYRO_MOUSE, false)
+        set(v) = input.edit().putBoolean(KEY_GYRO_MOUSE, v).apply()
+
+    /** Pill telemetri jaringan live (FPS, RTT ms, Codec, UDP) di layar sesi. */
+    var showTelemetryPill: Boolean
+        get() = input.getBoolean(KEY_TELEMETRY_PILL, true)
+        set(v) = input.edit().putBoolean(KEY_TELEMETRY_PILL, v).apply()
+
+    /** Masuk ke jendela mengambang Picture-in-Picture (PiP) saat tombol Home ditekan. */
+    var autoPipOnBackground: Boolean
+        get() = input.getBoolean(KEY_AUTO_PIP, false)
+        set(v) = input.edit().putBoolean(KEY_AUTO_PIP, v).apply()
+
     var showLeft: Boolean
         get() = input.getBoolean(KEY_BTN_LEFT, true)
         set(v) = input.edit().putBoolean(KEY_BTN_LEFT, v).apply()
@@ -162,6 +202,15 @@ class SessionPrefs(context: Context) {
         device.edit().putString("$deviceId.hudkeys", HudKey.encode(keys)).apply()
     }
 
+    fun hudProfile(deviceId: String): HudProfilePreset =
+        HudProfilePreset.entries.getOrElse(device.getInt("$deviceId.hudprofile", 0)) {
+            HudProfilePreset.STANDARD
+        }
+
+    fun setHudProfile(deviceId: String, preset: HudProfilePreset) {
+        device.edit().putInt("$deviceId.hudprofile", preset.ordinal).apply()
+    }
+
     companion object {
         private const val INPUT_FILE = "xydesk.input"
         private const val DEVICE_FILE = "xydesk.session"
@@ -174,6 +223,14 @@ class SessionPrefs(context: Context) {
         private const val KEY_AUTO_FIT = "auto_fit"
         private const val KEY_HAPTICS = "haptics"
         private const val KEY_SCROLL_SPEED = "scroll_speed"
+        private const val KEY_POINTER_SENSITIVITY = "pointer_sensitivity"
+        private const val KEY_POINTER_ACCEL = "pointer_accel"
+        private const val KEY_INERTIAL_SCROLL = "inertial_scroll"
+        private const val KEY_EDGE_SCROLL = "edge_scroll"
+        private const val KEY_GAMEPAD = "gamepad_enabled"
+        private const val KEY_GYRO_MOUSE = "gyro_mouse"
+        private const val KEY_TELEMETRY_PILL = "telemetry_pill"
+        private const val KEY_AUTO_PIP = "auto_pip"
         private const val KEY_BTN_LEFT = "btn_left"
         private const val KEY_BTN_RIGHT = "btn_right"
         private const val KEY_BTN_MIDDLE = "btn_middle"

@@ -144,4 +144,44 @@ class HudControlMathTest {
         assertTrue(HudKey.isModifierKeyCode(KeyEvent.KEYCODE_CTRL_LEFT))
         assertFalse(HudKey.isModifierKeyCode(KeyEvent.KEYCODE_C))
     }
+
+    @Test
+    fun hudProfilePresetsProduceValidNonEmptyLayoutsAndMappedKeys() {
+        val mapper = KeyboardMapper()
+        HudProfilePreset.entries.forEach { preset ->
+            val keys = HudKey.presetLayout(preset, 68f)
+            assertTrue("Preset $preset produced empty layout", keys.isNotEmpty())
+            assertTrue("Preset $preset exceeded 36 keys", keys.size <= 36)
+            keys.forEach { key ->
+                assertEquals(68f, key.size, 0.001f)
+                assertTrue(key.x in 0f..1f)
+                assertTrue(key.y in 0f..1f)
+                if (key.kind == HudKind.KEY) {
+                    assertNotEquals(0, mapper.translateAndroidKeyCode(key.keyCode))
+                } else if (key.kind == HudKind.COMBO || (key.kind == HudKind.MACRO && key.combo.isNotEmpty())) {
+                    key.combo.forEach { code ->
+                        assertNotEquals(0, mapper.translateAndroidKeyCode(code))
+                    }
+                }
+            }
+        }
+    }
+
+    @Test
+    fun trackpadPhysicsSensitivityAccelerationEdgeScrollAndInertia() {
+        val (noAccelX, noAccelY) = applyTrackpadDelta(10f, 0f, sensitivity = 1.5f, acceleration = false)
+        assertEquals(15f, noAccelX, 0.01f)
+        assertEquals(0f, noAccelY, 0.01f)
+
+        val (accelX, _) = applyTrackpadDelta(24f, 0f, sensitivity = 1.0f, acceleration = true)
+        assertTrue("Accelerated delta ($accelX) should exceed raw 24f", accelX > 24f)
+
+        assertTrue(isInRightEdgeScrollZone(touchX = 390f, viewportWidthPx = 400f, zoneWidthPx = 28f, enabled = true))
+        assertFalse(isInRightEdgeScrollZone(touchX = 200f, viewportWidthPx = 400f, zoneWidthPx = 28f, enabled = true))
+        assertFalse(isInRightEdgeScrollZone(touchX = 395f, viewportWidthPx = 400f, zoneWidthPx = 28f, enabled = false))
+
+        val step1 = inertialScrollDecayStep(20f, friction = 0.85f)
+        assertEquals(17f, step1, 0.01f)
+        assertEquals(0f, inertialScrollDecayStep(0.5f, friction = 0.85f), 0.001f)
+    }
 }

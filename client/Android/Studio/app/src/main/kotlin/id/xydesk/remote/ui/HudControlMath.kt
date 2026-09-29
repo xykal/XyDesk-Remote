@@ -75,3 +75,55 @@ internal fun shouldStartHudButtonGesture(
     val threshold = if (touchSlopPx.isFinite() && touchSlopPx > 0f) touchSlopPx else 16f
     return travelledPx > threshold
 }
+
+/**
+ * Hitung delta gerakan kursor trackpad dengan sensitivitas & akselerasi kecepatan.
+ * Saat [acceleration] menyala, gerakan jari pelan tetap presisi piksel sementara
+ * sapuan cepat mendapat pengali hingga ~1.88x.
+ */
+internal fun applyTrackpadDelta(
+    dx: Float,
+    dy: Float,
+    sensitivity: Float,
+    acceleration: Boolean,
+): Pair<Float, Float> {
+    val safeDx = if (dx.isFinite()) dx.coerceIn(-400f, 400f) else 0f
+    val safeDy = if (dy.isFinite()) dy.coerceIn(-400f, 400f) else 0f
+    val sens = if (sensitivity.isFinite()) sensitivity.coerceIn(0.4f, 2.5f) else 1f
+    val accelFactor = if (acceleration) {
+        val speed = kotlin.math.hypot(safeDx, safeDy)
+        1f + (speed / 18f).coerceIn(0f, 1.6f) * 0.55f
+    } else {
+        1f
+    }
+    val scale = sens * accelFactor
+    return (safeDx * scale) to (safeDy * scale)
+}
+
+/**
+ * Deteksi apakah titik sentuh awal berada di jalur scroll tepi kanan layar
+ * (Edge-Scroll ala touchpad laptop).
+ */
+internal fun isInRightEdgeScrollZone(
+    touchX: Float,
+    viewportWidthPx: Float,
+    zoneWidthPx: Float,
+    enabled: Boolean,
+): Boolean {
+    if (!enabled) return false
+    if (!touchX.isFinite() || !viewportWidthPx.isFinite() || viewportWidthPx <= 0f) return false
+    val safeZone = if (zoneWidthPx.isFinite()) zoneWidthPx.coerceIn(12f, 120f) else 32f
+    return touchX >= (viewportWidthPx - safeZone)
+}
+
+/** Langkah peluruhan kecepatan kinetic/inertial scroll per frame. */
+internal fun inertialScrollDecayStep(
+    velocityY: Float,
+    friction: Float = 0.88f,
+): Float {
+    if (!velocityY.isFinite()) return 0f
+    val safeFriction = if (friction.isFinite()) friction.coerceIn(0.5f, 0.96f) else 0.88f
+    val next = velocityY * safeFriction
+    return if (kotlin.math.abs(next) < 0.8f) 0f else next
+}
+
