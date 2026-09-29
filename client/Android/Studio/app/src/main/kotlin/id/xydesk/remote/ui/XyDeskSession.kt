@@ -847,6 +847,7 @@ fun XyDeskSessionScreen(
     val inPipMode by ((context as? XyDeskSessionActivity)?.inPipMode
         ?: remember { kotlinx.coroutines.flow.MutableStateFlow(false) }).collectAsState()
     var privacyCurtain by remember { mutableStateOf(false) }
+    var showOverlayPermDialog by remember { mutableStateOf(false) }
 
     Box(
         Modifier
@@ -1095,7 +1096,7 @@ fun XyDeskSessionScreen(
                 onEnterPip = {
                     val ok = (context as? XyDeskSessionActivity)?.enterPipMonitorMode() == true
                     if (!ok) {
-                        notice.show(xyNow("Picture-in-Picture tidak tersedia di perangkat ini", "Picture-in-Picture is not available on this device"))
+                        showOverlayPermDialog = true
                     }
                 },
                 onLockRemotePc = {
@@ -1347,6 +1348,22 @@ fun XyDeskSessionScreen(
             },
             dismissLabel = xy("Lanjutkan", "Keep trying"),
             onDismiss = { confirmCancelConnect = false },
+        )
+    }
+    if (showOverlayPermDialog) {
+        XyDialog(
+            title = xy("Izin Jendela Mengambang (Overlay)", "Floating Window Permission (Overlay)"),
+            body = xy(
+                "ROM perangkat ini membatasi Picture-in-Picture bawaan. Aktifkan izin \"Tampilkan di atas aplikasi lain\" (Display over other apps / AppsPerms) untuk memakai jendela monitor mengambang XyDesk di atas aplikasi lain.",
+                "This device's ROM restricts native Picture-in-Picture. Enable \"Display over other apps\" (AppsPerms) to use XyDesk's floating monitor window over other apps.",
+            ),
+            confirmLabel = xy("Buka Izin Overlay", "Open Overlay Permission"),
+            onConfirm = {
+                showOverlayPermDialog = false
+                XyFloatingOverlay.openOverlayPermissionSettings(context)
+            },
+            dismissLabel = xy("Tutup", "Close"),
+            onDismiss = { showOverlayPermDialog = false },
         )
     }
 }

@@ -92,7 +92,7 @@ internal fun sectionTitle(section: XySection): String = xy(section.title, sectio
 /** Layar yang sedang tampil. */
 private sealed interface XyRoute {
     data object Devices : XyRoute
-    data class EditDevice(val profile: ConnectionProfile?) : XyRoute
+    data class EditDevice(val profile: ConnectionProfile?, val pcQuickMode: Boolean = false) : XyRoute
     data object Section : XyRoute
 }
 
@@ -264,6 +264,8 @@ fun XyDeskHome(
                 is XyRoute.EditDevice -> AddDeviceScreen(
                     existing = current.profile,
                     savedUsers = favorites.mapNotNull { it.username }.distinct(),
+                    savedProfiles = favorites,
+                    initialPcQuickMode = current.pcQuickMode,
                     onCancel = { route = XyRoute.Devices },
                     onSubmit = { profile, remember, startNow -> submit(profile, remember, startNow) },
                 )
@@ -276,7 +278,8 @@ fun XyDeskHome(
                         sharedFileNotice = sharedFileNotice,
                         onDismissSharedNotice = onDismissSharedNotice,
                         onMenu = { drawerOpen = true },
-                        onAdd = { route = XyRoute.EditDevice(null) },
+                        onAddRdp = { route = XyRoute.EditDevice(null, pcQuickMode = false) },
+                        onAddPcQuick = { route = XyRoute.EditDevice(null, pcQuickMode = true) },
                         onEdit = { route = XyRoute.EditDevice(it) },
                         onConnect = { connect(it) },
                         onWakeConnect = { wakeAndConnect(it) },
@@ -590,7 +593,8 @@ private fun DevicesScreen(
     sharedFileNotice: String?,
     onDismissSharedNotice: () -> Unit,
     onMenu: () -> Unit,
-    onAdd: () -> Unit,
+    onAddRdp: () -> Unit,
+    onAddPcQuick: () -> Unit,
     onEdit: (ConnectionProfile) -> Unit,
     onConnect: (ConnectionProfile) -> Unit,
     onWakeConnect: (ConnectionProfile) -> Unit,
@@ -599,115 +603,216 @@ private fun DevicesScreen(
     onShowBoot: () -> Unit,
 ) {
     var searchQuery by remember { mutableStateOf("") }
+    var showAddBubble by remember { mutableStateOf(false) }
 
-    if (sharedFileNotice != null) {
-        Banner(
-            text = sharedFileNotice,
-            onClick = onDismissSharedNotice,
-            container = MaterialTheme.colorScheme.primaryContainer,
-            content = MaterialTheme.colorScheme.onPrimaryContainer,
-        )
-    }
-    if (crashLog != null) {
-        Banner(
-            text = xy(
-                "Terjadi error sebelumnya — ketuk untuk lihat log",
-                "An error happened before — tap to see the log",
-            ),
-            onClick = onShowCrash,
-            container = MaterialTheme.colorScheme.errorContainer,
-            content = MaterialTheme.colorScheme.onErrorContainer,
-        )
-    }
-    val bootSuspect = bootTail.isNotEmpty() && bootTail.last().let { last ->
-        !last.contains("session.connect kembali") &&
-            !last.contains("-> Connected") &&
-            !last.contains("-> Disconnected") &&
-            !last.contains("intent tanpa profil")
-    }
-    if (bootSuspect) {
-        Banner(
-            text = xy(
-                "Sesi terakhir terhenti di tengah jalan — ketuk untuk lihat log",
-                "The last session stopped midway — tap to see the log",
-            ),
-            onClick = onShowBoot,
-            container = MaterialTheme.colorScheme.surfaceVariant,
-            content = MaterialTheme.colorScheme.onSurfaceVariant,
-        )
-    }
-
-    XyTopBar(
-        title = xy("Perangkat", "Devices"),
-        onBack = null,
-        actions = {
-            XyIconPill(XyIcons.Menu, onMenu, contentDescription = xy("Menu", "Menu"))
-            XyIconPill(XyIcons.Plus, onAdd, active = true, contentDescription = xy("Tambah perangkat", "Add device"))
-        },
-    )
-
-    if (favorites.isEmpty()) {
-        Box(Modifier.fillMaxSize().padding(24.dp), contentAlignment = Alignment.Center) {
-            XyCard(modifier = Modifier.fillMaxWidth()) {
-                Text(xy("Belum ada perangkat", "No devices yet"), style = MaterialTheme.typography.titleMedium)
-                Spacer(Modifier.height(6.dp))
-                Text(
-                    xy(
-                        "Tambahkan PC Windows atau server dengan RDP aktif. " +
-                            "Bisa lewat IP lokal, alamat publik, atau nama tailnet.",
-                        "Add a Windows PC or server with RDP enabled. Works over a " +
-                            "local IP, a public address, or a tailnet name.",
+    Box(Modifier.fillMaxSize()) {
+        Column(Modifier.fillMaxSize()) {
+            if (sharedFileNotice != null) {
+                Banner(
+                    text = sharedFileNotice,
+                    onClick = onDismissSharedNotice,
+                    container = MaterialTheme.colorScheme.primaryContainer,
+                    content = MaterialTheme.colorScheme.onPrimaryContainer,
+                )
+            }
+            if (crashLog != null) {
+                Banner(
+                    text = xy(
+                        "Terjadi error sebelumnya — ketuk untuk lihat log",
+                        "An error happened before — tap to see the log",
                     ),
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-                Spacer(Modifier.height(16.dp))
-                XyPillButton(xy("Tambah perangkat", "Add device"), onAdd, icon = XyIcons.Plus)
-            }
-        }
-        return
-    }
-
-    val filteredFavorites = remember(favorites, searchQuery) {
-        val q = searchQuery.trim().lowercase()
-        if (q.isEmpty()) {
-            favorites
-        } else {
-            favorites.filter { p ->
-                p.label.orEmpty().lowercase().contains(q) ||
-                    p.host.lowercase().contains(q) ||
-                    p.username.orEmpty().lowercase().contains(q)
-            }
-        }
-    }
-
-    LazyColumn(
-        modifier = Modifier.fillMaxSize(),
-        contentPadding = PaddingValues(horizontal = 16.dp, vertical = 6.dp),
-        verticalArrangement = Arrangement.spacedBy(12.dp),
-    ) {
-        item { LiveSessionsCard() }
-        if (favorites.size >= 2) {
-            item {
-                XyField(
-                    value = searchQuery,
-                    onValueChange = { searchQuery = it },
-                    label = xy("Cari perangkat", "Search devices"),
-                    hint = xy("Nama PC, alamat IP, atau username...", "PC name, IP address, or username..."),
-                    modifier = Modifier.fillMaxWidth(),
+                    onClick = onShowCrash,
+                    container = MaterialTheme.colorScheme.errorContainer,
+                    content = MaterialTheme.colorScheme.onErrorContainer,
                 )
             }
-        }
-        items(filteredFavorites, key = { it.id }) { profile ->
-            DeviceCard(
-                profile = profile,
-                onConnect = { onConnect(profile) },
-                onWakeConnect = { onWakeConnect(profile) },
-                onEdit = { onEdit(profile) },
-                onDelete = { onDelete(profile) },
+            val bootSuspect = bootTail.isNotEmpty() && bootTail.last().let { last ->
+                !last.contains("session.connect kembali") &&
+                    !last.contains("-> Connected") &&
+                    !last.contains("-> Disconnected") &&
+                    !last.contains("intent tanpa profil")
+            }
+            if (bootSuspect) {
+                Banner(
+                    text = xy(
+                        "Sesi terakhir terhenti di tengah jalan — ketuk untuk lihat log",
+                        "The last session stopped midway — tap to see the log",
+                    ),
+                    onClick = onShowBoot,
+                    container = MaterialTheme.colorScheme.surfaceVariant,
+                    content = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+
+            XyTopBar(
+                title = xy("Perangkat", "Devices"),
+                onBack = null,
+                actions = {
+                    XyIconPill(XyIcons.Menu, onMenu, contentDescription = xy("Menu", "Menu"))
+                    XyIconPill(
+                        XyIcons.Plus,
+                        { showAddBubble = !showAddBubble },
+                        active = true,
+                        contentDescription = xy("Tambah perangkat", "Add device"),
+                    )
+                },
             )
+
+            if (favorites.isEmpty()) {
+                Box(Modifier.fillMaxSize().padding(24.dp), contentAlignment = Alignment.Center) {
+                    XyCard(modifier = Modifier.fillMaxWidth()) {
+                        Text(xy("Belum ada perangkat", "No devices yet"), style = MaterialTheme.typography.titleMedium)
+                        Spacer(Modifier.height(6.dp))
+                        Text(
+                            xy(
+                                "Pilih Koneksi PC (ID & Password via XyDeskHost.exe dengan dukungan GPU Gaming) " +
+                                    "atau Koneksi RDP standar lewat IP lokal, domain, maupun Tailscale.",
+                                "Choose PC Connection (ID & Password via XyDeskHost.exe with Gaming GPU support) " +
+                                    "or standard RDP Connection over a local IP, domain, or Tailscale.",
+                            ),
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                        Spacer(Modifier.height(16.dp))
+                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            XyPillButton(
+                                xy("Koneksi PC (ID)", "PC (ID & Pass)"),
+                                onAddPcQuick,
+                                icon = XyIcons.Plus,
+                                modifier = Modifier.weight(1f),
+                            )
+                            XyPillButton(
+                                xy("Koneksi RDP", "Standard RDP"),
+                                onAddRdp,
+                                primary = false,
+                                modifier = Modifier.weight(1f),
+                            )
+                        }
+                    }
+                }
+            } else {
+                val filteredFavorites = remember(favorites, searchQuery) {
+                    val q = searchQuery.trim().lowercase()
+                    if (q.isEmpty()) {
+                        favorites
+                    } else {
+                        favorites.filter { p ->
+                            p.label.orEmpty().lowercase().contains(q) ||
+                                p.host.lowercase().contains(q) ||
+                                p.username.orEmpty().lowercase().contains(q)
+                        }
+                    }
+                }
+
+                LazyColumn(
+                    modifier = Modifier.fillMaxSize(),
+                    contentPadding = PaddingValues(horizontal = 16.dp, vertical = 6.dp),
+                    verticalArrangement = Arrangement.spacedBy(14.dp),
+                ) {
+                    item { LiveSessionsCard() }
+                    if (favorites.size >= 2) {
+                        item {
+                            XyField(
+                                value = searchQuery,
+                                onValueChange = { searchQuery = it },
+                                label = xy("Cari perangkat", "Search devices"),
+                                hint = xy("Nama PC, alamat IP, atau username...", "PC name, IP address, or username..."),
+                                modifier = Modifier.fillMaxWidth(),
+                            )
+                        }
+                    }
+                    items(filteredFavorites, key = { it.id }) { profile ->
+                        DeviceCard(
+                            profile = profile,
+                            onConnect = { onConnect(profile) },
+                            onWakeConnect = { onWakeConnect(profile) },
+                            onEdit = { onEdit(profile) },
+                            onDelete = { onDelete(profile) },
+                        )
+                    }
+                    item { Spacer(Modifier.height(12.dp)) }
+                }
+            }
         }
-        item { Spacer(Modifier.height(12.dp)) }
+
+        // Bubble Popover Menu saat tombol + ditekan
+        if (showAddBubble) {
+            Box(
+                Modifier
+                    .fillMaxSize()
+                    .background(Color.Black.copy(alpha = 0.35f))
+                    .clickable { showAddBubble = false }
+                    .zIndex(25f),
+            )
+            Column(
+                Modifier
+                    .align(Alignment.TopEnd)
+                    .padding(top = 60.dp, end = 16.dp)
+                    .width(296.dp)
+                    .clip(RoundedCornerShape(16.dp))
+                    .background(MaterialTheme.colorScheme.surface)
+                    .border(1.dp, MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(16.dp))
+                    .pointerInput(Unit) {}
+                    .padding(10.dp)
+                    .zIndex(26f),
+                verticalArrangement = Arrangement.spacedBy(6.dp),
+            ) {
+                Text(
+                    xy("Pilih Jenis Koneksi", "Choose Connection Type"),
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+                )
+                Column(
+                    Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(12.dp))
+                        .background(MaterialTheme.colorScheme.surfaceVariant)
+                        .clickable {
+                            showAddBubble = false
+                            onAddPcQuick()
+                        }
+                        .padding(horizontal = 12.dp, vertical = 10.dp),
+                ) {
+                    Text(
+                        xy("Koneksi PC (ID & Password)", "PC Connection (ID & Password)"),
+                        style = MaterialTheme.typography.titleSmall,
+                    )
+                    Text(
+                        xy(
+                            "Pakai ID PC & Password dari XyDeskHost.exe · Siap GPU Gaming 60 FPS",
+                            "Use PC ID & Password from XyDeskHost.exe · Gaming GPU 60 FPS Ready",
+                        ),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+                Column(
+                    Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(12.dp))
+                        .background(MaterialTheme.colorScheme.surfaceVariant)
+                        .clickable {
+                            showAddBubble = false
+                            onAddRdp()
+                        }
+                        .padding(horizontal = 12.dp, vertical = 10.dp),
+                ) {
+                    Text(
+                        xy("Koneksi RDP (Host / IP)", "RDP Connection (Host / IP)"),
+                        style = MaterialTheme.typography.titleSmall,
+                    )
+                    Text(
+                        xy(
+                            "Koneksi langsung lewat IP lokal, domain publik, atau Tailscale",
+                            "Direct connection via local IP, public domain, or Tailscale",
+                        ),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+            }
+        }
     }
 }
 
@@ -731,8 +836,12 @@ private fun DeviceCard(
     }
     // Art preview milik app (bukan wallpaper RDP/OS): geometris, diturunkan
     // dari nama perangkat + jenis OS sebagai penanda kecil di pojok.
-    val wall = XyWall.WIN11.forDevice(profile.label ?: profile.host)
-    val previewSeed = (profile.label ?: profile.host) + "|" + profile.host
+    val wall = remember(profile.id, profile.label, profile.host) {
+        XyWall.WIN11.forDevice(profile.label ?: profile.host)
+    }
+    val previewSeed = remember(profile.id, profile.label, profile.host) {
+        (profile.label ?: profile.host) + "|" + profile.host
+    }
     val shape = MaterialTheme.shapes.large
     Column(
         Modifier
@@ -742,13 +851,12 @@ private fun DeviceCard(
             .border(1.dp, MaterialTheme.colorScheme.outline, shape)
             .clickable(onClick = onConnect),
     ) {
-        // Preview desktop penuh (bukan banner gepeng): wallpaper mengisi
-        // seluruh kotak membulat, ditutup scrim gelap di bawah supaya teks
-        // tetap terbaca, plus strip taskbar tipis sebagai penanda OS.
+        // Preview desktop penuh yang lebih tinggi (212.dp) supaya proporsi
+        // monitor desktop terlihat lega dan jelas di layar Home.
         Box(
             Modifier
                 .fillMaxWidth()
-                .height(172.dp)
+                .height(212.dp)
                 .clip(shape),
         ) {
             DevicePreviewArt(seed = previewSeed, os = wall)

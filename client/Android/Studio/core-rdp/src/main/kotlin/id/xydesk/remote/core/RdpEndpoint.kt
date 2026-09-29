@@ -59,3 +59,58 @@ fun formatRdpEndpoint(host: String, port: Int): String {
     val formattedHost = if (host.contains(':') && !host.startsWith("[")) "[$host]" else host
     return if (port == 3389) formattedHost else "$formattedHost:$port"
 }
+
+/**
+ * Konversi alamat IPv4 (mis. `192.168.1.50` atau `100.84.12.9`) menjadi
+ * ID PC numerik 10 digit berformat `XXX-XXX-XXXX` (mis. `323-223-5826`).
+ */
+fun encodeIpv4ToPcId(ip: String): String? {
+    val parts = ip.trim().split('.')
+    if (parts.size != 4) return null
+    val octets = parts.map { it.toIntOrNull() ?: return null }
+    if (octets.any { it !in 0..255 }) return null
+    val num = ((octets[0].toLong() and 0xFF) shl 24) or
+        ((octets[1].toLong() and 0xFF) shl 16) or
+        ((octets[2].toLong() and 0xFF) shl 8) or
+        (octets[3].toLong() and 0xFF)
+    val digits = num.toString().padStart(10, '0')
+    return "${digits.substring(0, 3)}-${digits.substring(3, 6)}-${digits.substring(6, 10)}"
+}
+
+/**
+ * Parse ID PC (`323-223-5826`, `323 223 5826`, `XY-C0A8-0132`) atau alamat
+ * host/IP standar menjadi [RdpEndpoint].
+ */
+fun parsePcIdOrEndpoint(input: String, defaultPort: Int = 3389): RdpEndpoint? {
+    val raw = input.trim()
+    if (raw.isEmpty()) return null
+
+    val colonIdx = raw.lastIndexOf(':')
+    val hasPortSuffix = colonIdx > 0 && raw.indexOf(':') == colonIdx
+    val basePart = if (hasPortSuffix) raw.substring(0, colonIdx).trim() else raw
+    val portPart = if (hasPortSuffix) {
+        raw.substring(colonIdx + 1).trim().toIntOrNull() ?: return null
+    } else {
+        defaultPort
+    }
+    if (portPart !in 1..65535) return null
+
+    val compact = basePart.replace("-", "").replace(" ", "")
+    if (compact.uppercase().startsWith("XY") && compact.length == 10) {
+        val hex = compact.substring(2)
+        val num = hex.toLongOrNull(16)
+        if (num != null && num in 16777216L..4294967295L) {
+            val ip = "${(num shr 24) and 0xFF}.${(num shr 16) and 0xFF}.${(num shr 8) and 0xFF}.${num and 0xFF}"
+            return RdpEndpoint(ip, portPart)
+        }
+    }
+    if (compact.length in 8..10 && compact.all { it.isDigit() }) {
+        val num = compact.toLongOrNull()
+        if (num != null && num in 16777216L..4294967295L) {
+            val ip = "${(num shr 24) and 0xFF}.${(num shr 16) and 0xFF}.${(num shr 8) and 0xFF}.${num and 0xFF}"
+            return RdpEndpoint(ip, portPart)
+        }
+    }
+    return parseRdpEndpoint(raw, defaultPort)
+}
+

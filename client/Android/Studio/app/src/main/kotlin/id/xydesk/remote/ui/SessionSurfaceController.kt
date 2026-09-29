@@ -438,6 +438,9 @@ class SessionSurfaceController(private val activity: Activity) : GraphicsSink {
         sessionView?.setZoom(zoom)
     }
 
+    /** Ambil referensi bitmap frame terakhir untuk pratinjau jendela mengambang (PiP overlay). */
+    fun peekBitmap(): Bitmap? = bitmap
+
     /**
      * M2.5 — screenshot surface: copy bitmap -> PNG di
      * `getExternalFilesDir/screenshots/` -> content URI (FileProvider)

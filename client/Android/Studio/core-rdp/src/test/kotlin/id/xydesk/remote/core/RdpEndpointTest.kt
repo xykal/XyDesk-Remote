@@ -34,4 +34,14 @@ class RdpEndpointTest {
         assertEquals("rdp.example:3390", formatRdpEndpoint("rdp.example", 3390))
         assertEquals("[2001:db8::1]:3390", formatRdpEndpoint("2001:db8::1", 3390))
     }
+
+    @Test
+    fun encodesAndParsesPcIdRoundTrip() {
+        val pcId = encodeIpv4ToPcId("192.168.1.50")
+        assertEquals("323-223-5826", pcId)
+        assertEquals(RdpEndpoint("192.168.1.50", 3389), parsePcIdOrEndpoint("323-223-5826"))
+        assertEquals(RdpEndpoint("192.168.1.50", 3390), parsePcIdOrEndpoint("323-223-5826:3390"))
+        assertEquals(RdpEndpoint("192.168.1.50", 3389), parsePcIdOrEndpoint("XY-C0A8-0132"))
+        assertEquals(RdpEndpoint("100.84.12.9", 3389), parsePcIdOrEndpoint(encodeIpv4ToPcId("100.84.12.9")!!))
+    }
 }

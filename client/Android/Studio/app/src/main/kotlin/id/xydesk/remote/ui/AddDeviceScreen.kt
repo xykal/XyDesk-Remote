@@ -43,10 +43,14 @@ import id.xydesk.remote.core.RdpOptions
 import id.xydesk.remote.core.WakeOnLan
 import id.xydesk.remote.core.XySecurityProtocol
 import id.xydesk.remote.core.XyStreamProfile
+import id.xydesk.remote.core.encodeIpv4ToPcId
 import id.xydesk.remote.core.formatRdpEndpoint
+import id.xydesk.remote.core.parsePcIdOrEndpoint
 import id.xydesk.remote.core.parseRdpEndpoint
 import id.xydesk.remote.core.XyAudioMode
 import id.xydesk.remote.core.XyGateway
+import id.xydesk.remote.security.CredentialVault
+import id.xydesk.remote.ui.components.XyNoticeBus
 import androidx.activity.compose.BackHandler
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -72,14 +76,26 @@ import id.xydesk.remote.ui.theme.XyPill
  * dengan id = `host:port`, jadi begitu profil disimpan, sesi berikutnya
  * memakai setelan yang sama.
  */
+private data class SavedAccountOption(
+    val username: String,
+    val domain: String,
+    val password: String,
+)
+
 @Composable
 fun AddDeviceScreen(
     existing: ConnectionProfile?,
     savedUsers: List<String>,
+    savedProfiles: List<ConnectionProfile> = emptyList(),
+    initialPcQuickMode: Boolean = false,
     onCancel: () -> Unit,
     onSubmit: (profile: ConnectionProfile, rememberPassword: Boolean, connect: Boolean) -> Unit,
 ) {
     val context = LocalContext.current
+    val vault = remember { CredentialVault(context.applicationContext) }
+    var isPcQuickMode by remember(existing, initialPcQuickMode) {
+        mutableStateOf(existing == null && initialPcQuickMode)
+    }
     // Kunci tetap: dipakai ulang saat mengubah perangkat supaya simpan tidak
     // menghasilkan baris kedua. Data lama (belum punya key) memakai id-nya.
     val deviceKey = remember(existing) {
@@ -91,11 +107,52 @@ fun AddDeviceScreen(
     var host by remember(existing) {
         mutableStateOf(existing?.let { formatRdpEndpoint(it.host, it.port) }.orEmpty())
     }
-    var user by remember { mutableStateOf(existing?.username.orEmpty()) }
-    var pass by remember { mutableStateOf(existing?.password.orEmpty()) }
+    var user by remember {
+        mutableStateOf(
+            existing?.username
+                ?: if (existing == null && initialPcQuickMode) "XyDesk" else "",
+        )
+    }
+    var pass by remember {
+        mutableStateOf(
+            existing?.password
+                ?: existing?.let { vault.get(it.id) }.orEmpty(),
+        )
+    }
     var domain by remember { mutableStateOf(existing?.domain.orEmpty()) }
     var rememberPass by remember { mutableStateOf(existing?.password?.isNotEmpty() ?: true) }
     var error by remember { mutableStateOf<String?>(null) }
+
+    val baseAccounts = remember(savedProfiles, savedUsers, existing) {
+        val list = mutableListOf<SavedAccountOption>()
+        savedProfiles.forEach { prof ->
+            val u = prof.username?.trim().orEmpty()
+            if (u.isNotEmpty()) {
+                val p = prof.password ?: vault.get(prof.id).orEmpty()
+                val d = prof.domain?.trim().orEmpty()
+                if (list.none { it.username.equals(u, ignoreCase = true) && it.domain.equals(d, ignoreCase = true) }) {
+                    list.add(SavedAccountOption(u, d, p))
+                }
+            }
+        }
+        savedUsers.forEach { u ->
+            val clean = u.trim()
+            if (clean.isNotEmpty() && list.none { it.username.equals(clean, ignoreCase = true) }) {
+                list.add(SavedAccountOption(clean, "", ""))
+            }
+        }
+        list
+    }
+    var extraAccounts by remember { mutableStateOf<List<SavedAccountOption>>(emptyList()) }
+    val allAccounts = remember(baseAccounts, extraAccounts) {
+        (extraAccounts + baseAccounts).distinctBy { "${it.domain.lowercase()}\\${it.username.lowercase()}" }
+    }
+    // Jika sudah ada akun yang terisi (mis. saat edit perangkat atau setelah
+    // user input akun), sembunyikan form dan tampilkan sebagai dropdown.
+    var showCredentialForm by remember(existing) {
+        mutableStateOf(existing?.username.isNullOrBlank() && baseAccounts.isEmpty())
+    }
+    var accountDropdownOpen by remember { mutableStateOf(false) }
 
     val scope = rememberCoroutineScope()
     val stored = remember(deviceId, existing) {
@@ -186,17 +243,21 @@ fun AddDeviceScreen(
     }
 
     fun submit(connect: Boolean) {
-        val endpoint = parseRdpEndpoint(host)
+        val endpoint = parsePcIdOrEndpoint(host)
         if (host.isBlank()) {
-            val msg = xyNow("Alamat host wajib diisi.", "Host address is required.")
+            val msg = if (isPcQuickMode) {
+                xyNow("ID PC atau alamat host wajib diisi.", "PC ID or host address is required.")
+            } else {
+                xyNow("Alamat host wajib diisi.", "Host address is required.")
+            }
             error = msg
             validationPopup = msg
             return
         }
         if (endpoint == null) {
             val msg = xyNow(
-                "Alamat/port tidak valid. Port harus 1-65535; IPv6 dengan port gunakan [alamat]:port.",
-                "Invalid address/port. Port must be 1-65535; write IPv6 with a port as [address]:port.",
+                "ID PC atau Alamat/port tidak valid. Masukkan 10 digit ID PC (mis. 323-223-5826) atau host:port.",
+                "Invalid PC ID or address/port. Enter a 10-digit PC ID (e.g. 323-223-5826) or host:port.",
             )
             error = msg
             validationPopup = msg
@@ -268,7 +329,11 @@ fun AddDeviceScreen(
             .imePadding(),
     ) {
         XyTopBar(
-            title = if (existing == null) xy("Perangkat baru", "New device") else xy("Ubah perangkat", "Edit device"),
+            title = when {
+                existing != null -> xy("Ubah perangkat", "Edit device")
+                isPcQuickMode -> xy("Koneksi PC (ID & Password)", "PC Connection (ID & Password)")
+                else -> xy("Koneksi RDP Baru", "New RDP Connection")
+            },
             onBack = { requestCancel() },
         )
         Column(
@@ -278,83 +343,373 @@ fun AddDeviceScreen(
                 .padding(horizontal = 16.dp),
             verticalArrangement = Arrangement.spacedBy(14.dp),
         ) {
-            XySectionLabel(xy("Alamat", "Address"))
+            if (existing == null) {
+                XySegmented(
+                    options = listOf(
+                        xy("Koneksi RDP (IP / Domain)", "RDP (IP / Domain)"),
+                        xy("Koneksi PC (ID & Password)", "PC (ID & Password)"),
+                    ),
+                    selectedIndex = if (isPcQuickMode) 1 else 0,
+                    onSelect = { idx ->
+                        val wantPc = idx == 1
+                        isPcQuickMode = wantPc
+                        if (wantPc) {
+                            if (user.isBlank()) user = "XyDesk"
+                            options = options.withStreamProfile(XyStreamProfile.ULTRA_LOW_LATENCY)
+                                .copy(udpTransport = true, h264 = true, asyncUpdate = true)
+                        }
+                    },
+                    modifier = Modifier.fillMaxWidth(),
+                )
+            }
+
+            XySectionLabel(
+                if (isPcQuickMode) xy("Identitas PC (XyDeskHost)", "PC Identity (XyDeskHost)")
+                else xy("Alamat", "Address")
+            )
             XyCard {
                 XyField(
                     value = label,
                     onValueChange = { label = it },
                     label = xy("Nama perangkat", "Device name"),
-                    hint = xy("mis. PC kantor", "e.g. Office PC"),
+                    hint = if (isPcQuickMode) xy("mis. PC Gaming / Rig Utama", "e.g. Gaming PC / Main Rig")
+                    else xy("mis. PC kantor", "e.g. Office PC"),
                 )
                 Spacer(Modifier.height(14.dp))
                 XyField(
                     value = host,
                     onValueChange = { host = it },
-                    label = xy("Host / IP (port opsional)", "Host / IP (optional port)"),
-                    hint = xy("pc.tailnet.ts.net atau [2001:db8::1]:3390", "pc.example.com or [2001:db8::1]:3390"),
+                    label = if (isPcQuickMode) {
+                        xy("ID PC (10 Digit / XY-ID) atau IP", "PC ID (10-Digit / XY-ID) or IP")
+                    } else {
+                        xy("Host / IP (port opsional)", "Host / IP (optional port)")
+                    },
+                    hint = if (isPcQuickMode) {
+                        xy("323-223-5826 atau XY-C0A8-0132", "323-223-5826 or XY-C0A8-0132")
+                    } else {
+                        xy("pc.tailnet.ts.net atau [2001:db8::1]:3390", "pc.example.com or [2001:db8::1]:3390")
+                    },
                     keyboardType = KeyboardType.Uri,
                     imeAction = androidx.compose.ui.text.input.ImeAction.Done,
                 )
+                val resolvedPreview = remember(host) { parsePcIdOrEndpoint(host) }
+                val encodedPcId = remember(resolvedPreview) {
+                    resolvedPreview?.let { encodeIpv4ToPcId(it.host) }
+                }
+                if (resolvedPreview != null && host.isNotBlank()) {
+                    Spacer(Modifier.height(6.dp))
+                    Text(
+                        buildString {
+                            append(xy("Target: ", "Target: "))
+                            append(resolvedPreview.host).append(':').append(resolvedPreview.port)
+                            if (encodedPcId != null) {
+                                append("  ·  ID PC: ").append(encodedPcId)
+                            }
+                        },
+                        style = MaterialTheme.typography.bodySmall,
+                        fontFamily = FontFamily.Monospace,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+            }
+
+            if (isPcQuickMode) {
+                XySectionLabel(xy("Agen PC (XyDeskHost.exe) & GPU Gaming", "PC Agent (XyDeskHost.exe) & Gaming GPU"))
+                XyCard {
+                    Text(
+                        xy(
+                            "Pasang XyDeskHost di PC Windows untuk mengaktifkan login cepat via ID PC & Password, sekaligus menyalakan akselerasi GPU Hardware (NVIDIA/AMD/Intel H.264 AVC444 60 FPS + UDP 3389) untuk game dan aplikasi berat.",
+                            "Install XyDeskHost on your Windows PC to enable instant login via PC ID & Password, while unlocking Hardware GPU Acceleration (NVIDIA/AMD/Intel H.264 AVC444 60 FPS + UDP 3389) for games and 3D apps.",
+                        ),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                    Spacer(Modifier.height(10.dp))
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        XyPillButton(
+                            text = xy("Salin Perintah Setup PC", "Copy PC Setup Command"),
+                            onClick = {
+                                val cmd = "irm https://rdp.xydesk.my.id/host | iex"
+                                val cm = context.getSystemService(Context.CLIPBOARD_SERVICE) as? ClipboardManager
+                                cm?.setPrimaryClip(ClipData.newPlainText("xydesk-host-cmd", cmd))
+                                XyNoticeBus.post(
+                                    xyNow(
+                                        "Perintah PowerShell disalin! Jalankan di PowerShell Admin pada PC Anda.",
+                                        "PowerShell command copied! Run it in Admin PowerShell on your PC.",
+                                    ),
+                                )
+                            },
+                            compact = true,
+                            modifier = Modifier.weight(1f),
+                        )
+                        XyPillButton(
+                            text = xy("Unduh XyDeskHost", "Download XyDeskHost"),
+                            onClick = {
+                                runCatching {
+                                    context.startActivity(
+                                        Intent(Intent.ACTION_VIEW, Uri.parse("https://rdp.xydesk.my.id/host")),
+                                    )
+                                }
+                            },
+                            primary = false,
+                            compact = true,
+                            modifier = Modifier.weight(1f),
+                        )
+                    }
+                }
             }
 
             XySectionLabel(xy("Kredensial", "Credentials"))
             XyCard {
-                if (savedUsers.isNotEmpty()) {
-                    Text(
-                        xy("Akun tersimpan", "Saved account"),
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                    Spacer(Modifier.height(8.dp))
-                    Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                        savedUsers.take(4).forEach { name ->
-                            Box(
-                                Modifier
-                                    .clip(XyPill)
-                                    .border(1.dp, MaterialTheme.colorScheme.outline, XyPill)
-                                    .clickable {
-                                        user = name
+                if (!showCredentialForm) {
+                    val activeAccountLabel = if (user.isNotBlank()) {
+                        if (domain.isNotBlank()) "$domain\\$user" else user
+                    } else {
+                        xy("Tanpa Akun (Tanya saat Connect)", "No Account (Ask on Connect)")
+                    }
+                    val activeAccountSub = if (user.isNotBlank()) {
+                        if (pass.isNotEmpty() && rememberPass) {
+                            xy("Password tersimpan (AES-256-GCM) · Ketuk untuk ganti akun", "Password saved (AES-256-GCM) · Tap to switch account")
+                        } else {
+                            xy("Password ditanya saat connect · Ketuk untuk ganti akun", "Password asked on connect · Tap to switch account")
+                        }
+                    } else {
+                        xy("Ketuk untuk memilih akun tersimpan atau tambah akun baru", "Tap to select a saved account or add a new account")
+                    }
+
+                    Box(
+                        Modifier
+                            .fillMaxWidth()
+                            .clip(MaterialTheme.shapes.medium)
+                            .background(MaterialTheme.colorScheme.surfaceVariant)
+                            .border(1.dp, MaterialTheme.colorScheme.outlineVariant, MaterialTheme.shapes.medium)
+                            .clickable { accountDropdownOpen = !accountDropdownOpen }
+                            .padding(horizontal = 14.dp, vertical = 12.dp),
+                    ) {
+                        Row(
+                            Modifier.fillMaxWidth(),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                        ) {
+                            Column(Modifier.weight(1f)) {
+                                Text(
+                                    xy("Akun Kredensial Aktif", "Active Credential Account"),
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                )
+                                Spacer(Modifier.height(2.dp))
+                                Text(
+                                    activeAccountLabel,
+                                    style = MaterialTheme.typography.titleMedium,
+                                )
+                                Text(
+                                    activeAccountSub,
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                )
+                            }
+                            Text(
+                                if (accountDropdownOpen) "▴" else "▾",
+                                style = MaterialTheme.typography.titleMedium,
+                                modifier = Modifier.padding(start = 10.dp),
+                            )
+                        }
+                    }
+
+                    if (accountDropdownOpen) {
+                        Spacer(Modifier.height(8.dp))
+                        Column(
+                            Modifier
+                                .fillMaxWidth()
+                                .clip(MaterialTheme.shapes.medium)
+                                .background(MaterialTheme.colorScheme.surface)
+                                .border(1.dp, MaterialTheme.colorScheme.outline, MaterialTheme.shapes.medium)
+                                .padding(vertical = 4.dp),
+                        ) {
+                            allAccounts.forEach { acc ->
+                                val itemTitle = if (acc.domain.isNotBlank()) "${acc.domain}\\${acc.username}" else acc.username
+                                val isSelected = acc.username.equals(user, ignoreCase = true) &&
+                                    acc.domain.equals(domain, ignoreCase = true)
+                                Row(
+                                    Modifier
+                                        .fillMaxWidth()
+                                        .clickable {
+                                            user = acc.username
+                                            domain = acc.domain
+                                            if (acc.password.isNotEmpty()) {
+                                                pass = acc.password
+                                                rememberPass = true
+                                            }
+                                            accountDropdownOpen = false
+                                        }
+                                        .padding(horizontal = 14.dp, vertical = 10.dp),
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                ) {
+                                    Column(Modifier.weight(1f)) {
+                                        Text(
+                                            itemTitle,
+                                            style = MaterialTheme.typography.titleSmall,
+                                        )
+                                        Text(
+                                            if (acc.password.isNotEmpty()) {
+                                                xy("Akun tersimpan · Password siap pakai", "Saved account · Password ready")
+                                            } else {
+                                                xy("Akun tersimpan", "Saved account")
+                                            },
+                                            style = MaterialTheme.typography.bodySmall,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                        )
                                     }
-                                    .padding(horizontal = 12.dp, vertical = 7.dp),
+                                    if (isSelected) {
+                                        Text(
+                                            xy("Dipilih", "Selected"),
+                                            style = MaterialTheme.typography.labelSmall,
+                                            color = MaterialTheme.colorScheme.primary,
+                                        )
+                                    }
+                                }
+                            }
+
+                            if (user.isNotBlank()) {
+                                Row(
+                                    Modifier
+                                        .fillMaxWidth()
+                                        .clickable {
+                                            accountDropdownOpen = false
+                                            showCredentialForm = true
+                                        }
+                                        .padding(horizontal = 14.dp, vertical = 10.dp),
+                                    verticalAlignment = Alignment.CenterVertically,
+                                ) {
+                                    Text(
+                                        xy("✎ Ubah Detail / Password Akun Ini", "✎ Edit Current Account / Password"),
+                                        style = MaterialTheme.typography.titleSmall,
+                                    )
+                                }
+                            }
+
+                            Row(
+                                Modifier
+                                    .fillMaxWidth()
+                                    .clickable {
+                                        user = ""
+                                        pass = ""
+                                        domain = ""
+                                        accountDropdownOpen = false
+                                        showCredentialForm = true
+                                    }
+                                    .padding(horizontal = 14.dp, vertical = 10.dp),
+                                verticalAlignment = Alignment.CenterVertically,
                             ) {
-                                Text(name, style = MaterialTheme.typography.labelMedium)
+                                Text(
+                                    xy("+ Tambah Akun Baru", "+ Add New Account"),
+                                    style = MaterialTheme.typography.titleSmall,
+                                    color = MaterialTheme.colorScheme.primary,
+                                )
+                            }
+
+                            Row(
+                                Modifier
+                                    .fillMaxWidth()
+                                    .clickable {
+                                        user = ""
+                                        pass = ""
+                                        domain = ""
+                                        accountDropdownOpen = false
+                                        showCredentialForm = false
+                                    }
+                                    .padding(horizontal = 14.dp, vertical = 10.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                            ) {
+                                Text(
+                                    xy("Tanpa Akun (Tanya saat Connect)", "No Account (Ask on Connect)"),
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                )
                             }
                         }
                     }
-                    Spacer(Modifier.height(14.dp))
-                }
-                XyField(
-                    value = user,
-                    onValueChange = { user = it },
-                    label = xy("Username", "Username"),
-                    hint = xy(
+
+                    if (isPcQuickMode && pass.isEmpty()) {
+                        Spacer(Modifier.height(12.dp))
+                        XyField(
+                            value = pass,
+                            onValueChange = { pass = it },
+                            label = xy("Password Akses PC", "PC Access Password"),
+                            hint = xy("Masukkan password PC dari XyDeskHost", "Enter PC password from XyDeskHost"),
+                            isPassword = true,
+                            keyboardType = KeyboardType.Password,
+                        )
+                    }
+                } else {
+                    XyField(
+                        value = user,
+                        onValueChange = { user = it },
+                        label = xy("Username", "Username"),
+                        hint = xy(
                             "kosongkan kalau mau ditanya saat connect",
                             "leave empty to be asked on connect",
                         ),
-                )
-                Spacer(Modifier.height(14.dp))
-                XyField(
-                    value = pass,
-                    onValueChange = { pass = it },
-                    label = xy("Password", "Password"),
-                    isPassword = true,
-                    keyboardType = KeyboardType.Password,
-                )
-                Spacer(Modifier.height(14.dp))
-                XyField(
-                    value = domain,
-                    onValueChange = { domain = it },
-                    label = xy("Domain (opsional)", "Domain (optional)"),
-                    hint = "CORP",
-                )
-                Spacer(Modifier.height(6.dp))
-                XyToggleRow(
-                    title = xy("Ingat password", "Remember password"),
-                    subtitle = xy("Disimpan terenkripsi AES-GCM, kunci di Android Keystore", "Stored AES-GCM encrypted, key in Android Keystore"),
-                    checked = rememberPass,
-                    onCheckedChange = { rememberPass = it },
-                    leading = XyIcons.Lock,
-                )
+                    )
+                    Spacer(Modifier.height(14.dp))
+                    XyField(
+                        value = pass,
+                        onValueChange = { pass = it },
+                        label = xy("Password", "Password"),
+                        isPassword = true,
+                        keyboardType = KeyboardType.Password,
+                    )
+                    Spacer(Modifier.height(14.dp))
+                    XyField(
+                        value = domain,
+                        onValueChange = { domain = it },
+                        label = xy("Domain (opsional)", "Domain (optional)"),
+                        hint = "CORP",
+                    )
+                    Spacer(Modifier.height(6.dp))
+                    XyToggleRow(
+                        title = xy("Ingat password", "Remember password"),
+                        subtitle = xy("Disimpan terenkripsi AES-GCM, kunci di Android Keystore", "Stored AES-GCM encrypted, key in Android Keystore"),
+                        checked = rememberPass,
+                        onCheckedChange = { rememberPass = it },
+                        leading = XyIcons.Lock,
+                    )
+                    Spacer(Modifier.height(10.dp))
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        if (allAccounts.isNotEmpty()) {
+                            XyPillButton(
+                                text = xy("Pilih dari Dropdown ({0})", "Pick from Dropdown ({0})", allAccounts.size),
+                                onClick = {
+                                    if (user.isBlank()) {
+                                        val first = allAccounts.first()
+                                        user = first.username
+                                        domain = first.domain
+                                        if (first.password.isNotEmpty()) pass = first.password
+                                    }
+                                    showCredentialForm = false
+                                    accountDropdownOpen = true
+                                },
+                                primary = false,
+                                compact = true,
+                                modifier = Modifier.weight(1f),
+                            )
+                        }
+                        XyPillButton(
+                            text = xy("Simpan Akun ke Pilihan", "Save Account to Dropdown"),
+                            onClick = {
+                                val u = user.trim()
+                                if (u.isNotEmpty()) {
+                                    extraAccounts = listOf(SavedAccountOption(u, domain.trim(), pass)) + extraAccounts
+                                }
+                                showCredentialForm = false
+                                accountDropdownOpen = false
+                            },
+                            compact = true,
+                            modifier = Modifier.weight(1f),
+                        )
+                    }
+                }
             }
 
             XySectionLabel(xy("Tampilan", "Display"))

@@ -155,14 +155,39 @@ class XyDeskSessionActivity : ComponentActivity() {
     }
 
     fun enterPipMonitorMode(): Boolean {
-        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) return false
         if (isFinishing || isDestroyed) return false
-        return runCatching {
-            val params = PictureInPictureParams.Builder()
-                .setAspectRatio(Rational(16, 9))
-                .build()
-            enterPictureInPictureMode(params)
-        }.getOrDefault(false)
+        // Prioritaskan Overlay ("Display over other apps") jika sudah diizinkan user
+        // (mis. lewat AppsPerms / Setelan Khusus), karena bekerja di semua ROM Android.
+        if (XyFloatingOverlay.canDrawOverlays(this)) {
+            val shown = XyFloatingOverlay.show(
+                context = this,
+                title = sessionLabel ?: "XyDesk Remote",
+                bitmapProvider = { if (::controller.isInitialized) controller.peekBitmap() else null },
+                onRestoreSession = {
+                    val reopen = Intent(applicationContext, XyDeskSessionActivity::class.java)
+                        .putExtras(intent)
+                        .addFlags(Intent.FLAG_ACTIVITY_REORDER_TO_FRONT or Intent.FLAG_ACTIVITY_NEW_TASK)
+                    runCatching { applicationContext.startActivity(reopen) }
+                },
+            )
+            if (shown) {
+                XySessionService.start(this, sessionLabel, ping = true)
+                runCatching { moveTaskToBack(true) }
+                return true
+            }
+        }
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O &&
+            packageManager.hasSystemFeature(PackageManager.FEATURE_PICTURE_IN_PICTURE)
+        ) {
+            val nativeOk = runCatching {
+                val params = PictureInPictureParams.Builder()
+                    .setAspectRatio(Rational(16, 9))
+                    .build()
+                enterPictureInPictureMode(params)
+            }.getOrDefault(false)
+            if (nativeOk) return true
+        }
+        return false
     }
 
     fun applyWindowSecurityFlags() {
@@ -372,6 +397,7 @@ class XyDeskSessionActivity : ComponentActivity() {
 
     override fun onResume() {
         super.onResume()
+        XyFloatingOverlay.dismiss()
         applyWindowSecurityFlags()
         syncPhoneClipboardToRemote()
     }
@@ -417,6 +443,7 @@ class XyDeskSessionActivity : ComponentActivity() {
 
     override fun onDestroy() {
         super.onDestroy()
+        XyFloatingOverlay.dismiss()
         setGyroMouseActive(false)
         sessionId?.let { XySessionRegistry.remove(it) }
         bgHandler.removeCallbacks(bgDisconnect)
