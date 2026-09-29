@@ -1,0 +1,1240 @@
+<!doctype html>
+<html lang="id" data-theme="dark">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>XyDesk Remote — Native Android RDP Workstation Client</title>
+  <meta name="description" content="Klien Remote Desktop (RDP) native untuk Android dengan H.264 AVC444/AVC420, RDP-UDP FEC, HUD kustom, makro otomatis, Wake-on-LAN, dan enkripsi Android Keystore." />
+  <meta name="author" content="XyVerse Technology Global" />
+  <meta name="theme-color" content="#07090D" />
+  <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 48 48'%3E%3Crect width='48' height='48' rx='11' fill='%2307090D'/%3E%3Crect x='6.8' y='13.4' width='34.4' height='20.6' rx='3' fill='none' stroke='%23F2F5F8' stroke-width='2.7'/%3E%3Cline x1='19.5' y1='40.2' x2='28.5' y2='40.2' stroke='%23F2F5F8' stroke-width='2.7' stroke-linecap='round'/%3E%3Cline x1='24' y1='34.2' x2='24' y2='40.2' stroke='%23F2F5F8' stroke-width='2.7' stroke-linecap='round'/%3E%3Cpolygon points='18.6,17.6 18.6,28.4 21.7,25.3 23.9,30.1 26.2,29 24,24.2 28.1,23.8' fill='%23F2F5F8'/%3E%3C/svg%3E" />
+  <style>
+    :root, [data-theme="dark"] {
+      --bg: #07090D;
+      --surface: #11151D;
+      --surface-alt: #1A202C;
+      --primary-container: #263142;
+      --line: #2B3442;
+      --line-strong: #435064;
+      --text: #F2F5F8;
+      --text-dim: #B8C1CC;
+      --text-faint: #9AA2AB;
+      --accent: #F2F5F8;
+      --accent-ink: #0A0D12;
+      --ok: #57C08B;
+      --warn: #D7A54E;
+      --danger: #E0706F;
+      --scrim: rgba(7, 9, 13, 0.74);
+    }
+
+    [data-theme="light"] {
+      --bg: #F5F6F8;
+      --surface: #FFFFFF;
+      --surface-alt: #EFF1F4;
+      --primary-container: #E7EAEE;
+      --line: #DDE1E6;
+      --line-strong: #C6CCD3;
+      --text: #14171B;
+      --text-dim: #5B636B;
+      --text-faint: #6D7680;
+      --accent: #14171B;
+      --accent-ink: #F7F9FA;
+      --ok: #1F7A55;
+      --warn: #9E6C19;
+      --danger: #B3261E;
+      --scrim: rgba(20, 23, 27, 0.62);
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    html {
+      scroll-behavior: smooth;
+      background: var(--bg);
+      color: var(--text);
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+      line-height: 1.55;
+      -webkit-font-smoothing: antialiased;
+    }
+
+    body {
+      background: var(--bg);
+      color: var(--text);
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+    }
+
+    a {
+      color: inherit;
+      text-decoration: none;
+    }
+
+    .mono {
+      font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
+    }
+
+    .container {
+      width: 100%;
+      max-width: 1120px;
+      margin: 0 auto;
+      padding: 0 20px;
+    }
+
+    /* Header */
+    .topbar {
+      position: sticky;
+      top: 0;
+      z-index: 40;
+      background: var(--bg);
+      border-bottom: 1px solid var(--line);
+    }
+
+    .topbar-inner {
+      height: 64px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 16px;
+    }
+
+    .brand {
+      display: flex;
+      align-items: center;
+      gap: 11px;
+      font-weight: 600;
+      font-size: 18px;
+      letter-spacing: -0.02em;
+    }
+
+    .brand svg {
+      width: 30px;
+      height: 30px;
+      flex-shrink: 0;
+    }
+
+    .brand-sub {
+      font-size: 11px;
+      font-weight: 500;
+      color: var(--text-faint);
+      margin-left: 4px;
+      padding: 2px 8px;
+      border: 1px solid var(--line);
+      border-radius: 999px;
+    }
+
+    .nav-actions {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      flex-wrap: wrap;
+    }
+
+    .pill-btn {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      min-height: 40px;
+      padding: 8px 16px;
+      border-radius: 999px;
+      border: 1px solid var(--line);
+      background: transparent;
+      color: var(--text);
+      font-size: 13px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: border-color 0.15s ease, background-color 0.15s ease, transform 0.1s ease;
+      user-select: none;
+    }
+
+    .pill-btn:hover {
+      border-color: var(--line-strong);
+      background: var(--surface-alt);
+    }
+
+    .pill-btn:active {
+      transform: scale(0.99);
+    }
+
+    .pill-btn.primary {
+      background: var(--accent);
+      color: var(--accent-ink);
+      border-color: var(--accent);
+    }
+
+    .pill-btn.primary:hover {
+      opacity: 0.92;
+      background: var(--accent);
+    }
+
+    .pill-btn.lg {
+      min-height: 46px;
+      padding: 11px 22px;
+      font-size: 14px;
+    }
+
+    .status-dot {
+      width: 7px;
+      height: 7px;
+      border-radius: 50%;
+      background: var(--ok);
+      display: inline-block;
+    }
+
+    /* Hero + Interactive Session Preview */
+    .hero {
+      padding: 56px 0 40px;
+      border-bottom: 1px solid var(--line);
+    }
+
+    .hero-grid {
+      display: grid;
+      grid-template-columns: 1.08fr 0.92fr;
+      gap: 32px;
+      align-items: center;
+    }
+
+    .eyebrow {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      padding: 5px 12px;
+      border-radius: 999px;
+      border: 1px solid var(--line);
+      background: var(--surface);
+      font-size: 12px;
+      color: var(--text-dim);
+      margin-bottom: 18px;
+    }
+
+    .hero h1 {
+      font-size: clamp(28px, 4.2vw, 44px);
+      line-height: 1.12;
+      letter-spacing: -0.03em;
+      font-weight: 700;
+      margin-bottom: 16px;
+    }
+
+    .hero p.lead {
+      font-size: 16px;
+      color: var(--text-dim);
+      max-width: 540px;
+      margin-bottom: 24px;
+    }
+
+    .hero-cta {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+      margin-bottom: 24px;
+    }
+
+    .spec-strip {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 10px;
+      padding-top: 18px;
+      border-top: 1px solid var(--line);
+    }
+
+    .spec-item {
+      background: var(--surface);
+      border: 1px solid var(--line);
+      border-radius: 10px;
+      padding: 10px 12px;
+    }
+
+    .spec-item .k {
+      font-size: 11px;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      color: var(--text-faint);
+    }
+
+    .spec-item .v {
+      font-size: 14px;
+      font-weight: 600;
+      margin-top: 2px;
+    }
+
+    /* Simulated Session Viewport */
+    .session-frame {
+      background: var(--surface);
+      border: 1px solid var(--line-strong);
+      border-radius: 14px;
+      overflow: hidden;
+    }
+
+    .session-bar {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 10px 14px;
+      border-bottom: 1px solid var(--line);
+      background: var(--surface-alt);
+      font-size: 12px;
+    }
+
+    .telemetry-pill {
+      display: inline-flex;
+      align-items: center;
+      gap: 7px;
+      padding: 4px 10px;
+      border-radius: 999px;
+      background: var(--bg);
+      border: 1px solid var(--line-strong);
+      font-size: 11px;
+      font-weight: 600;
+    }
+
+    .session-canvas {
+      position: relative;
+      height: 300px;
+      background: #0B0F17;
+      padding: 16px;
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+      color: #F2F5F8;
+    }
+
+    .remote-window {
+      background: #131924;
+      border: 1px solid #2B3442;
+      border-radius: 10px;
+      padding: 12px 14px;
+      max-width: 88%;
+      font-size: 12px;
+    }
+
+    .remote-window-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      color: #9AA2AB;
+      font-size: 11px;
+      margin-bottom: 8px;
+      padding-bottom: 6px;
+      border-bottom: 1px solid #232B38;
+    }
+
+    .hud-cluster {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+      flex-wrap: wrap;
+    }
+
+    .hud-keys {
+      display: flex;
+      gap: 7px;
+      flex-wrap: wrap;
+    }
+
+    .hud-circle {
+      width: 42px;
+      height: 42px;
+      border-radius: 50%;
+      background: rgba(17, 21, 29, 0.88);
+      border: 1px solid #435064;
+      color: #F2F5F8;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 11px;
+      font-weight: 600;
+      cursor: pointer;
+      user-select: none;
+    }
+
+    .hud-circle.active {
+      border-color: #57C08B;
+      color: #57C08B;
+    }
+
+    .hud-preset-bar {
+      display: flex;
+      gap: 6px;
+      padding: 10px 14px;
+      border-top: 1px solid var(--line);
+      background: var(--surface);
+      overflow-x: auto;
+    }
+
+    .preset-chip {
+      padding: 5px 11px;
+      border-radius: 999px;
+      border: 1px solid var(--line);
+      font-size: 11px;
+      font-weight: 600;
+      cursor: pointer;
+      white-space: nowrap;
+      background: transparent;
+      color: var(--text-dim);
+    }
+
+    .preset-chip.active {
+      background: var(--accent);
+      color: var(--accent-ink);
+      border-color: var(--accent);
+    }
+
+    /* Sections */
+    .section {
+      padding: 48px 0;
+      border-bottom: 1px solid var(--line);
+    }
+
+    .section-header {
+      margin-bottom: 24px;
+      display: flex;
+      align-items: flex-end;
+      justify-content: space-between;
+      gap: 16px;
+      flex-wrap: wrap;
+    }
+
+    .section-label {
+      font-size: 11px;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.1em;
+      color: var(--text-faint);
+      margin-bottom: 6px;
+    }
+
+    .section-title {
+      font-size: 24px;
+      font-weight: 700;
+      letter-spacing: -0.02em;
+    }
+
+    .cards-grid {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 14px;
+    }
+
+    .xy-card {
+      background: var(--surface);
+      border: 1px solid var(--line);
+      border-radius: 12px;
+      padding: 18px;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+
+    .xy-card-top {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+    }
+
+    .xy-card h3 {
+      font-size: 15px;
+      font-weight: 600;
+    }
+
+    .xy-card p {
+      font-size: 13px;
+      color: var(--text-dim);
+    }
+
+    .tag-pill {
+      font-size: 10.5px;
+      font-weight: 600;
+      padding: 2px 8px;
+      border-radius: 999px;
+      border: 1px solid var(--line-strong);
+      color: var(--text-dim);
+      white-space: nowrap;
+    }
+
+    /* Download Section with Blur Overlay */
+    .download-wrap {
+      position: relative;
+      border-radius: 16px;
+      border: 1px solid var(--line);
+      background: var(--surface);
+      padding: 28px;
+      overflow: hidden;
+    }
+
+    .abi-grid {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 14px;
+      margin-top: 20px;
+    }
+
+    .abi-card {
+      background: var(--bg);
+      border: 1px solid var(--line);
+      border-radius: 12px;
+      padding: 18px;
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+      gap: 14px;
+    }
+
+    .abi-card.recommended {
+      border-color: var(--line-strong);
+    }
+
+    .abi-meta {
+      font-size: 12px;
+      color: var(--text-dim);
+      margin-top: 4px;
+    }
+
+    /* Launching Ver 1.0.0 Blurred Modal Popup */
+    .launch-modal-backdrop {
+      position: fixed;
+      inset: 0;
+      z-index: 100;
+      background: var(--scrim);
+      backdrop-filter: blur(18px);
+      -webkit-backdrop-filter: blur(18px);
+      display: none;
+      align-items: center;
+      justify-content: center;
+      padding: 20px;
+    }
+
+    .launch-modal-backdrop.open {
+      display: flex;
+    }
+
+    .launch-modal {
+      width: 100%;
+      max-width: 480px;
+      background: var(--surface);
+      border: 1px solid var(--line-strong);
+      border-radius: 16px;
+      padding: 26px 24px;
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+    }
+
+    .launch-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+    }
+
+    .launch-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 7px;
+      padding: 4px 11px;
+      border-radius: 999px;
+      border: 1px solid var(--line-strong);
+      background: var(--surface-alt);
+      font-size: 11px;
+      font-weight: 600;
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
+    }
+
+    .launch-title {
+      font-size: 26px;
+      font-weight: 700;
+      letter-spacing: -0.02em;
+      line-height: 1.15;
+    }
+
+    .launch-ver {
+      display: inline-block;
+      margin-top: 4px;
+      font-size: 13px;
+      font-weight: 600;
+      color: var(--ok);
+    }
+
+    .countdown-grid {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 10px;
+      margin: 4px 0;
+    }
+
+    .cd-box {
+      background: var(--bg);
+      border: 1px solid var(--line-strong);
+      border-radius: 12px;
+      padding: 14px 8px;
+      text-align: center;
+    }
+
+    .cd-num {
+      font-size: 26px;
+      font-weight: 700;
+      letter-spacing: -0.03em;
+      line-height: 1.1;
+    }
+
+    .cd-label {
+      font-size: 10px;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      color: var(--text-faint);
+      margin-top: 5px;
+    }
+
+    .launch-note {
+      font-size: 13px;
+      color: var(--text-dim);
+      background: var(--surface-alt);
+      border: 1px solid var(--line);
+      border-radius: 10px;
+      padding: 12px 14px;
+    }
+
+    .launch-actions {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      margin-top: 4px;
+    }
+
+    /* Footer */
+    footer {
+      margin-top: auto;
+      padding: 28px 0;
+      font-size: 12px;
+      color: var(--text-faint);
+    }
+
+    .footer-inner {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      flex-wrap: wrap;
+      gap: 12px;
+    }
+
+    .footer-links {
+      display: flex;
+      gap: 16px;
+      flex-wrap: wrap;
+    }
+
+    .footer-links a:hover {
+      color: var(--text);
+    }
+
+    @media (max-width: 860px) {
+      .hero-grid,
+      .cards-grid,
+      .abi-grid {
+        grid-template-columns: 1fr;
+      }
+      .spec-strip {
+        grid-template-columns: 1fr;
+      }
+    }
+  </style>
+</head>
+<body>
+  <!-- Top Bar -->
+  <header class="topbar">
+    <div class="container topbar-inner">
+      <a href="#top" class="brand">
+        <svg viewBox="0 0 48 48" fill="none" aria-hidden="true">
+          <rect x="6.8" y="13.4" width="34.4" height="20.6" rx="3" stroke="currentColor" stroke-width="2.7" />
+          <line x1="19.5" y1="40.2" x2="28.5" y2="40.2" stroke="currentColor" stroke-width="2.7" stroke-linecap="round" />
+          <line x1="24" y1="34.2" x2="24" y2="40.2" stroke="currentColor" stroke-width="2.7" stroke-linecap="round" />
+          <polygon points="18.6,17.6 18.6,28.4 21.7,25.3 23.9,30.1 26.2,29 24,24.2 28.1,23.8" fill="currentColor" />
+        </svg>
+        <span>XyDesk Remote</span>
+        <span class="brand-sub mono" id="nav-version">v0.5.15</span>
+      </a>
+      <nav class="nav-actions">
+        <a href="#features" class="pill-btn" data-i18n="nav.features">Fitur Pro</a>
+        <a href="#engine" class="pill-btn" data-i18n="nav.engine">Streaming &amp; Security</a>
+        <button type="button" class="pill-btn" id="lang-btn" aria-label="Switch language">ID / EN</button>
+        <button type="button" class="pill-btn" id="theme-btn" aria-label="Toggle theme">Gelap</button>
+        <a href="#download" class="pill-btn primary" id="nav-download-btn" data-i18n="nav.download">Halaman Unduh</a>
+      </nav>
+    </div>
+  </header>
+
+  <main id="top">
+    <!-- Hero -->
+    <section class="hero">
+      <div class="container hero-grid">
+        <div>
+          <div class="eyebrow">
+            <span class="status-dot"></span>
+            <span data-i18n="hero.eyebrow">Native FreeRDP 3 · Android 10+ (API 29–37)</span>
+          </div>
+          <h1 data-i18n="hero.title">Kendali Penuh Workstation Windows dari Android Tanpa Kompromi.</h1>
+          <p class="lead" data-i18n="hero.lead">
+            Dibangun di atas mesin C/JNI FreeRDP 3 dengan pipeline H.264 AVC444/AVC420, transport RDP-UDP FEC, tombol HUD melingkar yang bisa diprogram, makro multi-langkah, Wake-on-LAN, dan brankas kredensial AES-256-GCM Android Keystore.
+          </p>
+          <div class="hero-cta">
+            <a href="#download" class="pill-btn primary lg" id="hero-download-btn">
+              <span data-i18n="hero.cta.download">Unduh APK &amp; Jadwal Rilis v1.0.0</span>
+            </a>
+            <a href="https://github.com/xykal/XyDesk-Remote/releases/latest" target="_blank" rel="noopener" class="pill-btn lg">
+              <span data-i18n="hero.cta.release">GitHub Release Terbaru</span>
+            </a>
+          </div>
+          <div class="spec-strip">
+            <div class="spec-item">
+              <div class="k" data-i18n="spec.codec.k">Pipeline Video</div>
+              <div class="v mono">AVC444 · AVC420 · RFX</div>
+            </div>
+            <div class="spec-item">
+              <div class="k" data-i18n="spec.transport.k">Transport &amp; Latensi</div>
+              <div class="v mono">RDP-UDP + Async Input</div>
+            </div>
+            <div class="spec-item">
+              <div class="k" data-i18n="spec.sec.k">Keamanan</div>
+              <div class="v mono">NLA · TLS 1.3 · Keystore</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Interactive HUD Preview -->
+        <div class="session-frame" aria-label="Simulasi HUD Sesi XyDesk Remote">
+          <div class="session-bar">
+            <div class="telemetry-pill mono">
+              <span class="status-dot"></span>
+              <span id="sim-telemetry">60 FPS · 8 ms · AVC444</span>
+            </div>
+            <span class="mono" style="color: var(--text-faint);">1920x1080 · 100%</span>
+          </div>
+          <div class="session-canvas">
+            <div class="remote-window mono">
+              <div class="remote-window-header">
+                <span>Administrator: Windows PowerShell</span>
+                <span>RDP-UDP · NLA</span>
+              </div>
+              <div id="sim-terminal-line" style="color:#57C08B;">PS C:\Users\xykal&gt; git status -s</div>
+              <div style="color:#B8C1CC; margin-top:4px;" id="sim-terminal-out">Ready — pilih preset HUD di bawah untuk melihat susunan kontrol.</div>
+            </div>
+            <div class="hud-cluster">
+              <div class="hud-keys" id="sim-hud-keys">
+                <div class="hud-circle active">Ctrl</div>
+                <div class="hud-circle">Shift</div>
+                <div class="hud-circle">Esc</div>
+                <div class="hud-circle">Tab</div>
+                <div class="hud-circle">M1</div>
+                <div class="hud-circle">Klik</div>
+              </div>
+              <div class="telemetry-pill mono" style="background: rgba(17,21,29,0.9);">Trackpad · Gyro · PiP</div>
+            </div>
+          </div>
+          <div class="hud-preset-bar" role="tablist" aria-label="Preset Profil HUD">
+            <button type="button" class="preset-chip active" data-preset="coding">Coding / Terminal</button>
+            <button type="button" class="preset-chip" data-preset="standard">Standar</button>
+            <button type="button" class="preset-chip" data-preset="gaming">Gaming / WASD</button>
+            <button type="button" class="preset-chip" data-preset="office">Office / Kerja</button>
+            <button type="button" class="preset-chip" data-preset="design">Desain / Video</button>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- 12 Pro Differentiator Features -->
+    <section class="section" id="features">
+      <div class="container">
+        <div class="section-header">
+          <div>
+            <div class="section-label" data-i18n="feat.label">12 Fitur Differentiator Pro</div>
+            <h2 class="section-title" data-i18n="feat.title">Dirancang Khusus untuk Layar Sentuh Mobile</h2>
+          </div>
+        </div>
+        <div class="cards-grid">
+          <div class="xy-card">
+            <div class="xy-card-top">
+              <h3 data-i18n="f1.t">Mode Jendela Mengambang (PiP)</h3>
+              <span class="tag-pill mono">PiP Monitor</span>
+            </div>
+            <p data-i18n="f1.d">Pantau proses render, kompilasi, atau server Windows di jendela kecil mengambang saat membuka aplikasi lain di HP.</p>
+          </div>
+          <div class="xy-card">
+            <div class="xy-card-top">
+              <h3 data-i18n="f2.t">Pill Telemetri Live (FPS &amp; RTT)</h3>
+              <span class="tag-pill mono">Live HUD</span>
+            </div>
+            <p data-i18n="f2.d">Indikator ringkas di pojok layar menampilkan FPS real-time, ping TCP RTT (ms), dan codec grafis aktif tanpa menghalangi kerja.</p>
+          </div>
+          <div class="xy-card">
+            <div class="xy-card-top">
+              <h3 data-i18n="f3.t">5 Preset Profil HUD Instan</h3>
+              <span class="tag-pill mono">HUD Profiles</span>
+            </div>
+            <p data-i18n="f3.d">Ganti tata letak tombol sekali ketuk: Standar, Coding/Terminal, Gaming/WASD, Office, atau Desain/Video.</p>
+          </div>
+          <div class="xy-card">
+            <div class="xy-card-top">
+              <h3 data-i18n="f4.t">Tombol Makro Multi-Langkah</h3>
+              <span class="tag-pill mono">Macro Key</span>
+            </div>
+            <p data-i18n="f4.d">Buat tombol bulat dengan label bebas yang otomatis mengetikkan perintah terminal/script dan menekan Enter.</p>
+          </div>
+          <div class="xy-card">
+            <div class="xy-card-top">
+              <h3 data-i18n="f5.t">Clipboard Teks &amp; Gambar 2 Arah</h3>
+              <span class="tag-pill mono">Auto Sync</span>
+            </div>
+            <p data-i18n="f5.d">Salin teks atau screenshot di PC langsung masuk ke clipboard HP secara otomatis, dan salin di HP langsung terkirim ke PC.</p>
+          </div>
+          <div class="xy-card">
+            <div class="xy-card-top">
+              <h3 data-i18n="f6.t">Share-Sheet Langsung ke Drive PC</h3>
+              <span class="tag-pill mono">ACTION_SEND</span>
+            </div>
+            <p data-i18n="f6.d">Bagikan file atau foto dari aplikasi Android apa pun ke XyDesk Remote untuk langsung ditaruh di folder Drive 'XyDesk' PC.</p>
+          </div>
+          <div class="xy-card">
+            <div class="xy-card-top">
+              <h3 data-i18n="f7.t">Wake-on-LAN &amp; Auto-Connect</h3>
+              <span class="tag-pill mono">UDP Magic Packet</span>
+            </div>
+            <p data-i18n="f7.d">Bangunkan PC dari kondisi Sleep/Shutdown lewat paket UDP 102-byte dan otomatis buka sesi RDP begitu port 3389 merespons.</p>
+          </div>
+          <div class="xy-card">
+            <div class="xy-card-top">
+              <h3 data-i18n="f8.t">Fisika Trackpad Presisi</h3>
+              <span class="tag-pill mono">Inertial + Edge</span>
+            </div>
+            <p data-i18n="f8.d">Kurva akselerasi pointer dinamis, inertial momentum scroll 2 jari, dan strip roda scroll 1 jari di tepi kanan layar.</p>
+          </div>
+          <div class="xy-card">
+            <div class="xy-card-top">
+              <h3 data-i18n="f9.t">Gamepad Fisik &amp; Gyro Air-Mouse</h3>
+              <span class="tag-pill mono">Controller + Sensor</span>
+            </div>
+            <p data-i18n="f9.d">Gunakan stik Bluetooth/USB untuk menggerakkan kursor &amp; klik, atau miringkan HP dengan sensor Gyro sebagai pointer laser.</p>
+          </div>
+          <div class="xy-card">
+            <div class="xy-card-top">
+              <h3 data-i18n="f10.t">Tirai Privasi &amp; Kunci PC (Win+L)</h3>
+              <span class="tag-pill mono">Privacy Curtain</span>
+            </div>
+            <p data-i18n="f10.d">Gelapkan tampilan di layar HP saat ada orang di sekitar tanpa memutus sesi, atau kunci layar Windows dari jarak jauh.</p>
+          </div>
+          <div class="xy-card">
+            <div class="xy-card-top">
+              <h3 data-i18n="f11.t">SSH Jump-Host Command Helper</h3>
+              <span class="tag-pill mono">SSH Port Forward</span>
+            </div>
+            <p data-i18n="f11.d">Generator perintah tunnel `ssh -N -L` instan untuk menembus firewall/NAT kantor menuju host LAN internal.</p>
+          </div>
+          <div class="xy-card">
+            <div class="xy-card-top">
+              <h3 data-i18n="f12.t">Resolusi Dinamis &amp; Skala DPI</h3>
+              <span class="tag-pill mono">DISP Channel</span>
+            </div>
+            <p data-i18n="f12.d">Ubah ukuran resolusi desktop Windows dan skala DPI (100%–200%) secara live di tengah sesi tanpa perlu reconnect.</p>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Streaming, Latency & Security Engine -->
+    <section class="section" id="engine">
+      <div class="container">
+        <div class="section-header">
+          <div>
+            <div class="section-label" data-i18n="eng.label">Arsitektur Inti</div>
+            <h2 class="section-title" data-i18n="eng.title">Streaming, Latensi &amp; Keamanan Kelas Enterprise</h2>
+          </div>
+        </div>
+        <div class="cards-grid">
+          <div class="xy-card">
+            <div class="xy-card-top">
+              <h3 data-i18n="e1.t">5 Profil Streaming Adaptif</h3>
+              <span class="tag-pill mono">GFX Pipeline</span>
+            </div>
+            <p data-i18n="e1.d">Pilih Otomatis, Latensi Ultra-Rendah (AVC420 + async pipeline), Seimbang, Visual Tajam (AVC444 32-bit + ClearType + Aero), atau Hemat Kuota (16-bit + kompresi level 2).</p>
+          </div>
+          <div class="xy-card">
+            <div class="xy-card-top">
+              <h3 data-i18n="e2.t">Async Update &amp; Async Channels</h3>
+              <span class="tag-pill mono">Low Latency</span>
+            </div>
+            <p data-i18n="e2.d">Memisahkan antrean render frame (`+async-update`) dan pemrosesan kanal input/audio/clipboard (`+async-channels`) agar sentuhan tetap instan di jaringan seluler.</p>
+          </div>
+          <div class="xy-card">
+            <div class="xy-card-top">
+              <h3 data-i18n="e3.t">Hardening Keamanan Berlapis</h3>
+              <span class="tag-pill mono">Zero-Trust Ready</span>
+            </div>
+            <p data-i18n="e3.d">Pilihan protokol NLA/TLS/RDP, kebijakan OpenSSL TLS SecLevel (0/1/2), Restricted Admin anti pass-the-hash, proteksi layar FLAG_SECURE, kunci biometrik HP, dan auto-clear clipboard.</p>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Download Section -->
+    <section class="section" id="download">
+      <div class="container">
+        <div class="download-wrap">
+          <div class="section-header" style="margin-bottom: 8px;">
+            <div>
+              <div class="section-label" data-i18n="dl.label">Unduh Aplikasi Android</div>
+              <h2 class="section-title" data-i18n="dl.title">Pilih Paket APK Sesuai Arsitektur Perangkat</h2>
+            </div>
+            <div style="display:flex; gap:8px; flex-wrap:wrap;">
+              <button type="button" class="pill-btn" id="reopen-launch-modal-btn" data-i18n="dl.countdown.btn">
+                Lihat Hitung Mundur v1.0.0
+              </button>
+              <a href="https://github.com/xykal/XyDesk-Remote/releases/latest" target="_blank" rel="noopener" class="pill-btn">
+                GitHub Releases
+              </a>
+            </div>
+          </div>
+          <p style="font-size: 13px; color: var(--text-dim);" data-i18n="dl.sub">
+            Setiap APK ditandatangani secara kriptografis (R8 Minified + Signed Release) dan dibangun khusus per-ABI agar ukuran instalasi ramping tanpa pustaka ganda.
+          </p>
+
+          <div class="abi-grid">
+            <div class="abi-card recommended">
+              <div>
+                <div class="xy-card-top">
+                  <strong class="mono" style="font-size: 16px;">arm64-v8a</strong>
+                  <span class="tag-pill mono" style="border-color: var(--ok); color: var(--ok);" data-i18n="dl.rec">Direkomendasikan</span>
+                </div>
+                <div class="abi-meta" data-i18n="dl.arm64.desc">Untuk hampir semua HP &amp; tablet Android modern 64-bit (Snapdragon, Dimensity, Exynos, Tensor).</div>
+              </div>
+              <a id="dl-arm64" href="https://github.com/xykal/XyDesk-Remote/releases/latest/download/app-arm64-v8a-release.apk" class="pill-btn primary">
+                <span data-i18n="dl.btn.arm64">Unduh APK arm64-v8a</span>
+              </a>
+            </div>
+
+            <div class="abi-card">
+              <div>
+                <div class="xy-card-top">
+                  <strong class="mono" style="font-size: 16px;">armeabi-v7a</strong>
+                  <span class="tag-pill mono">ARM 32-bit</span>
+                </div>
+                <div class="abi-meta" data-i18n="dl.armv7.desc">Untuk perangkat Android 32-bit generasi lama atau Android TV box berbasis ARMv7.</div>
+              </div>
+              <a id="dl-armv7" href="https://github.com/xykal/XyDesk-Remote/releases/latest/download/app-armeabi-v7a-release.apk" class="pill-btn">
+                <span data-i18n="dl.btn.armv7">Unduh APK armeabi-v7a</span>
+              </a>
+            </div>
+
+            <div class="abi-card">
+              <div>
+                <div class="xy-card-top">
+                  <strong class="mono" style="font-size: 16px;">x86_64</strong>
+                  <span class="tag-pill mono">Intel / AMD 64-bit</span>
+                </div>
+                <div class="abi-meta" data-i18n="dl.x86.desc">Untuk Chromebook (ChromeOS), PC Android x86_64, dan emulator workstation.</div>
+              </div>
+              <a id="dl-x86" href="https://github.com/xykal/XyDesk-Remote/releases/latest/download/app-x86_64-release.apk" class="pill-btn">
+                <span data-i18n="dl.btn.x86">Unduh APK x86_64</span>
+              </a>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <!-- Blurred Backdrop Launching Ver 1.0.0 Countdown Modal -->
+  <div class="launch-modal-backdrop" id="launch-modal" role="dialog" aria-modal="true" aria-labelledby="launch-modal-title">
+    <div class="launch-modal">
+      <div class="launch-header">
+        <div class="brand">
+          <svg viewBox="0 0 48 48" fill="none" aria-hidden="true">
+            <rect x="6.8" y="13.4" width="34.4" height="20.6" rx="3" stroke="currentColor" stroke-width="2.7" />
+            <line x1="19.5" y1="40.2" x2="28.5" y2="40.2" stroke="currentColor" stroke-width="2.7" stroke-linecap="round" />
+            <line x1="24" y1="34.2" x2="24" y2="40.2" stroke="currentColor" stroke-width="2.7" stroke-linecap="round" />
+            <polygon points="18.6,17.6 18.6,28.4 21.7,25.3 23.9,30.1 26.2,29 24,24.2 28.1,23.8" fill="currentColor" />
+          </svg>
+          <div>
+            <div class="launch-title" id="launch-modal-title">XyDesk Remote</div>
+            <div class="launch-ver mono">Launching · Ver 1.0.0</div>
+          </div>
+        </div>
+        <span class="launch-badge">
+          <span class="status-dot"></span>
+          <span>Ver 1.0.0</span>
+        </span>
+      </div>
+
+      <p style="font-size: 13.5px; color: var(--text-dim);" data-i18n="modal.desc">
+        Menuju peluncuran penuh XyDesk Remote Ver 1.0.0 dengan Pro Suite lengkap (Streaming &amp; Latency Engine, 12 Fitur Pro, dan Security Hardening).
+      </p>
+
+      <div class="countdown-grid" aria-live="polite">
+        <div class="cd-box">
+          <div class="cd-num mono" id="cd-days">10</div>
+          <div class="cd-label" data-i18n="cd.days">Hari</div>
+        </div>
+        <div class="cd-box">
+          <div class="cd-num mono" id="cd-hours">00</div>
+          <div class="cd-label" data-i18n="cd.hours">Jam</div>
+        </div>
+        <div class="cd-box">
+          <div class="cd-num mono" id="cd-mins">00</div>
+          <div class="cd-label" data-i18n="cd.mins">Menit</div>
+        </div>
+        <div class="cd-box">
+          <div class="cd-num mono" id="cd-secs">00</div>
+          <div class="cd-label" data-i18n="cd.secs">Detik</div>
+        </div>
+      </div>
+
+      <div class="launch-note mono" id="modal-target-label">
+        Target Grand Launching Ver 1.0.0: Sabtu, 10 Oktober 2026 · 10:00 WIB
+      </div>
+
+      <div class="launch-actions">
+        <button type="button" class="pill-btn primary lg" id="close-modal-download-btn" data-i18n="modal.cta.early">
+          Buka Halaman Unduh Early Release (v0.5.15)
+        </button>
+        <button type="button" class="pill-btn" id="close-modal-home-btn" data-i18n="modal.cta.back">
+          Tutup &amp; Lihat Fitur
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Footer -->
+  <footer>
+    <div class="container footer-inner">
+      <div>
+        <strong>XyDesk Remote</strong> · Powered by <span>XyVerse Technology Global</span>
+      </div>
+      <div class="footer-links">
+        <a href="privacy.html" data-i18n="footer.privacy">Kebijakan Privasi (Draft)</a>
+        <a href="terms.html" data-i18n="footer.terms">Ketentuan Layanan (Draft)</a>
+        <a href="https://github.com/xykal/XyDesk-Remote" target="_blank" rel="noopener">GitHub</a>
+      </div>
+    </div>
+  </footer>
+
+  <script>
+    (function () {
+      // Target Grand Launching Ver 1.0.0: 10 Oktober 2026 10:00 WIB (UTC+7)
+      var LAUNCH_TARGET_ISO = "2026-10-10T10:00:00+07:00";
+      var launchTargetMs = new Date(LAUNCH_TARGET_ISO).getTime();
+
+      var modal = document.getElementById("launch-modal");
+      var cdDays = document.getElementById("cd-days");
+      var cdHours = document.getElementById("cd-hours");
+      var cdMins = document.getElementById("cd-mins");
+      var cdSecs = document.getElementById("cd-secs");
+
+      function pad2(n) {
+        return n < 10 ? "0" + n : String(n);
+      }
+
+      function updateCountdown() {
+        var now = Date.now();
+        var diff = Math.max(0, launchTargetMs - now);
+        var days = Math.floor(diff / 86400000);
+        var hours = Math.floor((diff % 86400000) / 3600000);
+        var mins = Math.floor((diff % 3600000) / 60000);
+        var secs = Math.floor((diff % 60000) / 1000);
+        cdDays.textContent = pad2(days);
+        cdHours.textContent = pad2(hours);
+        cdMins.textContent = pad2(mins);
+        cdSecs.textContent = pad2(secs);
+      }
+
+      updateCountdown();
+      setInterval(updateCountdown, 1000);
+
+      function openLaunchModal() {
+        modal.classList.add("open");
+      }
+
+      function closeLaunchModal() {
+        modal.classList.remove("open");
+      }
+
+      document.getElementById("nav-download-btn").addEventListener("click", function () {
+        openLaunchModal();
+      });
+      document.getElementById("hero-download-btn").addEventListener("click", function () {
+        openLaunchModal();
+      });
+      document.getElementById("reopen-launch-modal-btn").addEventListener("click", function () {
+        openLaunchModal();
+      });
+      document.getElementById("close-modal-download-btn").addEventListener("click", function () {
+        closeLaunchModal();
+        var dl = document.getElementById("download");
+        if (dl) dl.scrollIntoView({ behavior: "smooth" });
+      });
+      document.getElementById("close-modal-home-btn").addEventListener("click", function () {
+        closeLaunchModal();
+      });
+      modal.addEventListener("click", function (e) {
+        if (e.target === modal) closeLaunchModal();
+      });
+
+      if (window.location.hash === "#download" || window.location.search.indexOf("download") !== -1) {
+        openLaunchModal();
+      }
+
+      // Interactive HUD Preset Switcher
+      var presets = {
+        coding: {
+          keys: ["Ctrl", "Shift", "Esc", "Tab", "M1", "Klik"],
+          cmd: "PS C:\\Users\\xykal> git status -s",
+          out: "Preset Coding aktif: tombol Ctrl, Shift, Esc, Tab, dan Makro terminal siap di jempol."
+        },
+        standard: {
+          keys: ["Klik", "Kanan", "Tengah", "Ctrl", "Alt", "Esc"],
+          cmd: "PS C:\\Users\\xykal> systeminfo | findstr /B /C:\"OS\"",
+          out: "Preset Standar aktif: navigasi desktop harian dengan klik kiri/kanan/tengah & modifier."
+        },
+        gaming: {
+          keys: ["W", "A", "S", "D", "Space", "Shift"],
+          cmd: "DirectX 12 · H.264 AVC420 · RDP-UDP Low Latency",
+          out: "Preset Gaming aktif: kluster WASD + Space + Shift + dukungan Gamepad & Gyro Air-Mouse."
+        },
+        office: {
+          keys: ["Salin", "Tempel", "Undo", "Simpan", "Cari", "AltTab"],
+          cmd: "Microsoft Excel · 1920x1080 · ClearType Font Smoothing",
+          out: "Preset Office aktif: pintasan Ctrl+C, Ctrl+V, Ctrl+Z, Ctrl+S, Ctrl+F sekali ketuk."
+        },
+        design: {
+          keys: ["Undo", "Redo", "Zoom+", "Zoom-", "Space", "Simpan"],
+          cmd: "AVC444 Chroma 4:4:4 · 32-bit Color Depth · 60 FPS",
+          out: "Preset Desain aktif: akurasi warna 4:4:4 penuh dengan kontrol pan & zoom kanvas."
+        }
+      };
+
+      var presetButtons = document.querySelectorAll("[data-preset]");
+      var hudKeysContainer = document.getElementById("sim-hud-keys");
+      var termLine = document.getElementById("sim-terminal-line");
+      var termOut = document.getElementById("sim-terminal-out");
+
+      presetButtons.forEach(function (btn) {
+        btn.addEventListener("click", function () {
+          presetButtons.forEach(function (b) { b.classList.remove("active"); });
+          btn.classList.add("active");
+          var data = presets[btn.getAttribute("data-preset")] || presets.coding;
+          hudKeysContainer.innerHTML = data.keys.map(function (k, idx) {
+            return '<div class="hud-circle' + (idx === 0 ? ' active' : '') + '">' + k + '</div>';
+          }).join("");
+          termLine.textContent = data.cmd;
+          termOut.textContent = data.out;
+        });
+      });
+
+      // Theme Toggle
+      var themeBtn = document.getElementById("theme-btn");
+      var currentTheme = localStorage.getItem("xydesk_theme") || "dark";
+      function applyTheme(t) {
+        currentTheme = t;
+        document.documentElement.setAttribute("data-theme", t);
+        localStorage.setItem("xydesk_theme", t);
+        themeBtn.textContent = t === "dark" ? (currentLang === "id" ? "Gelap" : "Dark") : (currentLang === "id" ? "Terang" : "Light");
+      }
+
+      // Language Toggle (ID / EN)
+      var i18n = {
+        en: {
+          "nav.features": "Pro Features",
+          "nav.engine": "Streaming & Security",
+          "nav.download": "Download Page",
+          "hero.eyebrow": "Native FreeRDP 3 · Android 10+ (API 29–37)",
+          "hero.title": "Full Windows Workstation Control from Android Without Compromise.",
+          "hero.lead": "Built on a native FreeRDP 3 C/JNI engine with H.264 AVC444/AVC420 pipelines, RDP-UDP FEC transport, programmable circular HUD controls, multi-step macros, Wake-on-LAN, and an AES-256-GCM Android Keystore vault.",
+          "hero.cta.download": "Download APK & v1.0.0 Launch Schedule",
+          "hero.cta.release": "Latest GitHub Release",
+          "spec.codec.k": "Video Pipeline",
+          "spec.transport.k": "Transport & Latency",
+          "spec.sec.k": "Security",
+          "feat.label": "12 Pro Differentiator Features",
+          "feat.title": "Purpose-Built for Mobile Touchscreens",
+          "eng.label": "Core Architecture",
+          "eng.title": "Enterprise-Grade Streaming, Latency & Security",
+          "dl.label": "Download Android App",
+          "dl.title": "Choose the APK for Your Device Architecture",
+          "dl.countdown.btn": "View v1.0.0 Countdown",
+          "dl.sub": "Every APK is cryptographically signed (R8 Minified + Signed Release) and split per-ABI for a lean footprint.",
+          "dl.rec": "Recommended",
+          "dl.arm64.desc": "For almost all modern 64-bit Android phones & tablets (Snapdragon, Dimensity, Exynos, Tensor).",
+          "dl.armv7.desc": "For older 32-bit Android devices or ARMv7 Android TV boxes.",
+          "dl.x86.desc": "For Chromebooks (ChromeOS), Android x86_64 PCs, and workstation emulators.",
+          "dl.btn.arm64": "Download arm64-v8a APK",
+          "dl.btn.armv7": "Download armeabi-v7a APK",
+          "dl.btn.x86": "Download x86_64 APK",
+          "modal.desc": "Counting down to the full XyDesk Remote Ver 1.0.0 release featuring the complete Pro Suite (Streaming & Latency Engine, 12 Pro Features, and Security Hardening).",
+          "cd.days": "Days",
+          "cd.hours": "Hours",
+          "cd.mins": "Minutes",
+          "cd.secs": "Seconds",
+          "modal.cta.early": "Access Early Release Downloads (v0.5.15)",
+          "modal.cta.back": "Close & Explore Features",
+          "footer.privacy": "Privacy Policy (Draft)",
+          "footer.terms": "Terms of Service (Draft)"
+        }
+      };
+
+      var currentLang = localStorage.getItem("xydesk_lang") || "id";
+      var defaultIdTexts = {};
+      document.querySelectorAll("[data-i18n]").forEach(function (el) {
+        defaultIdTexts[el.getAttribute("data-i18n")] = el.textContent;
+      });
+
+      function applyLang(lang) {
+        currentLang = lang;
+        localStorage.setItem("xydesk_lang", lang);
+        document.documentElement.setAttribute("lang", lang);
+        document.querySelectorAll("[data-i18n]").forEach(function (el) {
+          var key = el.getAttribute("data-i18n");
+          if (lang === "en" && i18n.en[key]) {
+            el.textContent = i18n.en[key];
+          } else if (defaultIdTexts[key]) {
+            el.textContent = defaultIdTexts[key];
+          }
+        });
+        document.getElementById("modal-target-label").textContent =
+          lang === "en"
+            ? "Target Grand Launching Ver 1.0.0: Saturday, Oct 10, 2026 · 10:00 WIB (UTC+7)"
+            : "Target Grand Launching Ver 1.0.0: Sabtu, 10 Oktober 2026 · 10:00 WIB";
+        applyTheme(currentTheme);
+      }
+
+      themeBtn.addEventListener("click", function () {
+        applyTheme(currentTheme === "dark" ? "light" : "dark");
+      });
+      document.getElementById("lang-btn").addEventListener("click", function () {
+        applyLang(currentLang === "id" ? "en" : "id");
+      });
+
+      applyLang(currentLang);
+
+      // Dynamically sync latest release version tag from GitHub API
+      fetch("https://api.github.com/repos/xykal/XyDesk-Remote/releases/latest")
+        .then(function (r) { return r.ok ? r.json() : null; })
+        .then(function (rel) {
+          if (!rel || !rel.tag_name) return;
+          var navVer = document.getElementById("nav-version");
+          if (navVer) navVer.textContent = rel.tag_name;
+          var earlyBtn = document.getElementById("close-modal-download-btn");
+          if (earlyBtn) {
+            earlyBtn.textContent = currentLang === "en"
+              ? "Access Early Release Downloads (" + rel.tag_name + ")"
+              : "Buka Halaman Unduh Early Release (" + rel.tag_name + ")";
+          }
+        })
+        .catch(function () {});
+    })();
+  </script>
+</body>
+</html>

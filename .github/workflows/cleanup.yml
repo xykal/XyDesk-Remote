@@ -1,0 +1,48 @@
+name: Bersihkan Actions
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: '17 3 * * *'
+  workflow_run:
+    workflows: ['Build APK']
+    types: [completed]
+
+permissions:
+  actions: write
+  contents: write
+
+concurrency:
+  group: cleanup
+  cancel-in-progress: false
+
+jobs:
+  prune:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Bersihkan run lama, artifacts, dan cache usang
+        env:
+          GH_TOKEN: ${{ github.token }}
+          KEEP: '2'
+        run: |
+          set -eu
+          repo="$GITHUB_REPOSITORY"
+          for art in $(gh api --paginate "repos/$repo/actions/artifacts" -q '.artifacts[].id'); do
+            gh api -X DELETE "repos/$repo/actions/artifacts/$art" </dev/null >/dev/null || true
+          done
+          for wf in $(gh api --paginate "repos/$repo/actions/workflows" -q '.workflows[].id'); do
+            for run in $(gh api --paginate "repos/$repo/actions/workflows/$wf/runs?status=completed&per_page=100" \
+              -q '.workflow_runs[].id' | tail -n +"$((KEEP + 1))"); do
+              gh api -X DELETE "repos/$repo/actions/runs/$run" </dev/null >/dev/null || true
+            done
+          done
+          latest_tag=$(gh api "repos/$repo/releases/latest" -q '.tag_name' 2>/dev/null || echo "")
+          if [ -n "$latest_tag" ]; then
+            for rel_id in $(gh api --paginate "repos/$repo/releases" -q ".[] | select(.tag_name != \"$latest_tag\") | .id"); do
+              gh api -X DELETE "repos/$repo/releases/$rel_id" </dev/null >/dev/null || true
+            done
+            for tag in $(gh api --paginate "repos/$repo/tags" -q ".[] | select(.name != \"$latest_tag\") | .name"); do
+              gh api -X DELETE "repos/$repo/git/refs/tags/$tag" </dev/null >/dev/null || true
+            done
+          fi

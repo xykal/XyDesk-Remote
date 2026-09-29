@@ -278,6 +278,7 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: write
+      actions: write
     steps:
       - name: Download signed APKs
         uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
@@ -289,3 +290,20 @@ jobs:
         with:
           files: release-apks/*.apk
           generate_release_notes: true
+      - name: Sisakan hanya rilis terbaru & bersihkan artifacts
+        env:
+          GH_TOKEN: ${{ github.token }}
+          CURRENT_TAG: ${{ github.ref_name }}
+        run: |
+          set -euo pipefail
+          repo="$GITHUB_REPOSITORY"
+          for rel_id in $(gh api --paginate "repos/$repo/releases" -q ".[] | select(.tag_name != \"$CURRENT_TAG\") | .id"); do
+            gh api -X DELETE "repos/$repo/releases/$rel_id" </dev/null >/dev/null || true
+          done
+          for tag in $(gh api --paginate "repos/$repo/tags" -q ".[] | select(.name != \"$CURRENT_TAG\") | .name"); do
+            gh api -X DELETE "repos/$repo/git/refs/tags/$tag" </dev/null >/dev/null || true
+          done
+          for art_id in $(gh api --paginate "repos/$repo/actions/artifacts" -q '.artifacts[].id'); do
+            gh api -X DELETE "repos/$repo/actions/artifacts/$art_id" </dev/null >/dev/null || true
+          done
+
