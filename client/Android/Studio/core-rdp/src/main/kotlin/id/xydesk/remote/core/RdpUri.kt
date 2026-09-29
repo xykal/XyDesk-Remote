@@ -40,7 +40,8 @@ object RdpUri {
     /**
      * Semua query param, urutannya tetap (menentukan argumen CLI di inti):
      * p, domain, audio-mode, sound, microphone, clipboard, drive, dvc,
-     * multitransport, network, gfx, gateway.
+     * multitransport, network, gfx, dynamic-resolution, streaming/latency
+     * flags, security flags, lalu gateway.
      *
      * Catatan: `sound` dikirim dengan nilai kosong — inti menerjemahkan
      * param bernilai kosong jadi argumen tanpa nilai (`/sound`).
@@ -49,7 +50,7 @@ object RdpUri {
         profile: ConnectionProfile,
         options: RdpOptions = RdpOptions(),
     ): List<Pair<String, String>> {
-        val out = ArrayList<Pair<String, String>>(12)
+        val out = ArrayList<Pair<String, String>>(24)
         if (!profile.password.isNullOrBlank()) out += "p" to profile.password!!
         if (!profile.domain.isNullOrBlank()) out += "domain" to profile.domain!!
 
@@ -76,6 +77,53 @@ object RdpUri {
         // Kanal DISP (Display Control): bikin resolusi remote bisa diubah
         // saat sesi hidup lewat LibFreeRDP.sendMonitorLayout.
         if (options.dynamicResolution) out += "dynamic-resolution" to ""
+
+        // ---- Streaming & Latency CLI flags ----
+        if (options.colorDepth != 32 || options.streamProfile != XyStreamProfile.AUTO) {
+            out += "bpp" to options.colorDepth.coerceIn(16, 32).toString()
+        }
+        if (options.asyncUpdate) out += "async-update" to "+"
+        if (options.asyncChannels) out += "async-channels" to "+"
+        when (options.compressionLevel) {
+            0 -> out += "compression" to "-"
+            2 -> out += "compression-level" to "2"
+        }
+        if (options.fontSmoothing) out += "fonts" to "+"
+        if (options.desktopWallpaper) {
+            out += "wallpaper" to "+"
+        } else if (options.streamProfile != XyStreamProfile.AUTO) {
+            out += "wallpaper" to "-"
+        }
+        if (options.windowDrag) {
+            out += "window-drag" to "+"
+        } else if (options.streamProfile != XyStreamProfile.AUTO) {
+            out += "window-drag" to "-"
+        }
+        if (options.menuAnimations) {
+            out += "menu-anims" to "+"
+        } else if (options.streamProfile != XyStreamProfile.AUTO) {
+            out += "menu-anims" to "-"
+        }
+        if (!options.visualThemes) {
+            out += "themes" to "-"
+        } else if (options.streamProfile == XyStreamProfile.HIGH_VISUAL) {
+            out += "themes" to "+"
+        }
+        if (options.desktopComposition) out += "aero" to "+"
+
+        // ---- Security & Session Hardening CLI flags ----
+        options.securityProtocol.wire?.let { out += "sec" to it }
+        if (options.tlsSecLevel in 0..2) {
+            out += "tls" to "seclevel:${options.tlsSecLevel}"
+        }
+        if (options.consoleAdmin) out += "admin" to ""
+        if (options.restrictedAdmin) out += "restricted-admin" to ""
+        options.remoteProgram?.trim()?.takeIf { it.isNotEmpty() }?.let {
+            out += "shell" to it
+        }
+        options.remoteWorkDir?.trim()?.takeIf { it.isNotEmpty() }?.let {
+            out += "shell-dir" to it
+        }
 
         options.gateway?.let { out += "gateway" to gatewayArg(it) }
         return out

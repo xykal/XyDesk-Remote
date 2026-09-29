@@ -30,6 +30,92 @@ enum class XyAudioMode(
     ),
 }
 
+/**
+ * Profil preset streaming & latensi. Memilih preset akan mengisi flag
+ * pipeline grafis, kompresi, dan dekorasi desktop Windows secara otomatis.
+ */
+enum class XyStreamProfile(
+    val title: String,
+    val detail: String,
+    val titleEn: String,
+    val detailEn: String,
+) {
+    AUTO(
+        "Otomatis (Adaptif)",
+        "Ikuti deteksi jaringan aktif (Wi-Fi penuh / seluler hemat)",
+        "Automatic (Adaptive)",
+        "Follow active network detection (full Wi-Fi / cellular saver)",
+    ),
+    ULTRA_LOW_LATENCY(
+        "Latensi Ultra-Rendah",
+        "AVC420 + async update/channel + matikan efek visual berat untuk respons kilat",
+        "Ultra-Low Latency",
+        "AVC420 + async update/channel + disable heavy visual effects for instant response",
+    ),
+    BALANCED(
+        "Seimbang",
+        "AVC444 + async update + font tajam ClearType tanpa wallpaper berat",
+        "Balanced",
+        "AVC444 + async update + crisp ClearType fonts without heavy wallpaper",
+    ),
+    HIGH_VISUAL(
+        "Visual Tajam (Desain)",
+        "AVC444 32-bit penuh + ClearType + Aero + tema & wallpaper",
+        "High Visual (Design)",
+        "Full 32-bit AVC444 + ClearType + Aero + themes & wallpaper",
+    ),
+    DATA_SAVER(
+        "Hemat Kuota (Seluler)",
+        "AVC420 16-bit + kompresi level 2 + matikan semua animasi desktop",
+        "Data Saver (Cellular)",
+        "16-bit AVC420 + level-2 compression + disable all desktop animations",
+    ),
+    CUSTOM(
+        "Kustom Manual",
+        "Atur sendiri kedalaman warna, async pipeline, kompresi, dan efek desktop",
+        "Custom Manual",
+        "Manually tune color depth, async pipeline, compression, and desktop effects",
+    ),
+}
+
+/** Protokol autentikasi & enkripsi transport RDP (`/sec:nla|tls|rdp`). */
+enum class XySecurityProtocol(
+    val wire: String?,
+    val title: String,
+    val detail: String,
+    val titleEn: String,
+    val detailEn: String,
+) {
+    AUTO(
+        null,
+        "Otomatis (Negosiasi)",
+        "Pilih NLA/TLS terbaik yang didukung server",
+        "Automatic (Negotiate)",
+        "Negotiate the strongest NLA/TLS protocol supported by the host",
+    ),
+    NLA(
+        "nla",
+        "NLA / CredSSP Wajib",
+        "Autentikasi level jaringan sebelum sesi layar dibuka (paling aman)",
+        "NLA / CredSSP Required",
+        "Authenticate at the network layer before creating a display session",
+    ),
+    TLS(
+        "tls",
+        "TLS Standar",
+        "Enkripsi TLS tanpa CredSSP (berguna bila NLA dimatikan di host)",
+        "Standard TLS",
+        "TLS encryption without CredSSP (useful when host NLA is disabled)",
+    ),
+    RDP(
+        "rdp",
+        "RDP Klasik (Legacy)",
+        "Kompatibilitas untuk mesin Windows lama / VM internal",
+        "Classic RDP (Legacy)",
+        "Compatibility mode for legacy Windows machines or internal VMs",
+    ),
+}
+
 /** RDP Gateway (RD Gateway). Port default 443. */
 data class XyGateway(
     val host: String,
@@ -62,7 +148,150 @@ data class RdpOptions(
      */
     val dynamicResolution: Boolean = true,
     val gateway: XyGateway? = null,
+
+    // ---- Streaming & Latency Tuning ----
+    val streamProfile: XyStreamProfile = XyStreamProfile.AUTO,
+    /** Kedalaman warna desktop remote: 16, 24, atau 32 bit per piksel (`/bpp:`). */
+    val colorDepth: Int = 32,
+    /** Target kecepatan bingkai sesi (30 atau 60 FPS). */
+    val targetFps: Int = 60,
+    /** `+async-update`: pisahkan antrean render GDI dari thread jaringan. */
+    val asyncUpdate: Boolean = false,
+    /** `+async-channels`: proses kanal virtual (clipboard/audio/drive) secara asinkron. */
+    val asyncChannels: Boolean = false,
+    /** Level kompresi paket RDP: 0 = mati (`-compression`), 1 = standar, 2 = maksimum (`/compression-level:2`). */
+    val compressionLevel: Int = 1,
+    /** `+fonts`: ClearType font smoothing agar teks kode/dokumen tajam. */
+    val fontSmoothing: Boolean = false,
+    /** `+wallpaper`: tampilkan wallpaper desktop remote. */
+    val desktopWallpaper: Boolean = false,
+    /** `+window-drag`: gambar isi jendela saat digeser. */
+    val windowDrag: Boolean = false,
+    /** `+menu-anims`: animasi buka/tutup menu Windows. */
+    val menuAnimations: Boolean = false,
+    /** `+themes` / `-themes`: tema visual Windows. */
+    val visualThemes: Boolean = true,
+    /** `+aero`: komposisi desktop DWM/Aero. */
+    val desktopComposition: Boolean = false,
+
+    // ---- Security & Session Hardening ----
+    val securityProtocol: XySecurityProtocol = XySecurityProtocol.AUTO,
+    /** Level keamanan cipher OpenSSL TLS (`-1` = bawaan, `0` = kompatibel server lama, `1` = standar, `2` = ketat). */
+    val tlsSecLevel: Int = -1,
+    /** `/admin`: sambung ke sesi konsol/admin fisik. */
+    val consoleAdmin: Boolean = false,
+    /** `/restricted-admin`: jangan kirim kredensial plaintext ke host target (anti credential theft). */
+    val restrictedAdmin: Boolean = false,
+    /** `/shell:...`: jalankan program tertentu langsung saat sesi mulai. */
+    val remoteProgram: String? = null,
+    /** `/shell-dir:...`: direktori kerja awal untuk program sesi. */
+    val remoteWorkDir: String? = null,
+
+    // ---- Wake-on-LAN (WoL) & SSH Tunnel / Jump-Host ----
+    val macAddress: String? = null,
+    val wolBroadcast: String = "255.255.255.255",
+    val wolPort: Int = 9,
+    val sshHost: String? = null,
+    val sshPort: Int = 22,
+    val sshUser: String? = null,
+    val sshLocalPort: Int = 0,
 ) {
+    /**
+     * Terapkan preset streaming & latensi ke opsi ini dan kembalikan salinan baru.
+     */
+    fun withStreamProfile(profile: XyStreamProfile): RdpOptions = when (profile) {
+        XyStreamProfile.AUTO -> copy(
+            streamProfile = XyStreamProfile.AUTO,
+            networkAutoDetect = true,
+            lowBandwidth = false,
+            h264 = true,
+            colorDepth = 32,
+            targetFps = 60,
+            asyncUpdate = false,
+            asyncChannels = false,
+            compressionLevel = 1,
+            fontSmoothing = false,
+            desktopWallpaper = false,
+            windowDrag = false,
+            menuAnimations = false,
+            visualThemes = true,
+            desktopComposition = false,
+        )
+        XyStreamProfile.ULTRA_LOW_LATENCY -> copy(
+            streamProfile = XyStreamProfile.ULTRA_LOW_LATENCY,
+            udpTransport = true,
+            networkAutoDetect = false,
+            lowBandwidth = true,
+            h264 = true,
+            colorDepth = 24,
+            targetFps = 60,
+            asyncUpdate = true,
+            asyncChannels = true,
+            compressionLevel = 1,
+            fontSmoothing = true,
+            desktopWallpaper = false,
+            windowDrag = false,
+            menuAnimations = false,
+            visualThemes = false,
+            desktopComposition = false,
+        )
+        XyStreamProfile.BALANCED -> copy(
+            streamProfile = XyStreamProfile.BALANCED,
+            udpTransport = true,
+            networkAutoDetect = true,
+            lowBandwidth = false,
+            h264 = true,
+            colorDepth = 32,
+            targetFps = 60,
+            asyncUpdate = true,
+            asyncChannels = false,
+            compressionLevel = 1,
+            fontSmoothing = true,
+            desktopWallpaper = false,
+            windowDrag = false,
+            menuAnimations = false,
+            visualThemes = true,
+            desktopComposition = false,
+        )
+        XyStreamProfile.HIGH_VISUAL -> copy(
+            streamProfile = XyStreamProfile.HIGH_VISUAL,
+            udpTransport = true,
+            networkAutoDetect = false,
+            lowBandwidth = false,
+            h264 = true,
+            colorDepth = 32,
+            targetFps = 60,
+            asyncUpdate = true,
+            asyncChannels = false,
+            compressionLevel = 1,
+            fontSmoothing = true,
+            desktopWallpaper = true,
+            windowDrag = true,
+            menuAnimations = true,
+            visualThemes = true,
+            desktopComposition = true,
+        )
+        XyStreamProfile.DATA_SAVER -> copy(
+            streamProfile = XyStreamProfile.DATA_SAVER,
+            udpTransport = true,
+            networkAutoDetect = true,
+            lowBandwidth = true,
+            h264 = true,
+            colorDepth = 16,
+            targetFps = 30,
+            asyncUpdate = true,
+            asyncChannels = true,
+            compressionLevel = 2,
+            fontSmoothing = false,
+            desktopWallpaper = false,
+            windowDrag = false,
+            menuAnimations = false,
+            visualThemes = false,
+            desktopComposition = false,
+        )
+        XyStreamProfile.CUSTOM -> copy(streamProfile = XyStreamProfile.CUSTOM)
+    }
+
     /**
      * Saat deteksi bandwidth otomatis aktif dan jaringan yang dipakai adalah
      * seluler/metered atau bandwidth downstream sangat rendah (<5 Mbps),
@@ -93,6 +322,14 @@ data class RdpOptions(
         }.getOrDefault(this)
     }
 
+    /** Label singkat codec aktif untuk indikator telemetri. */
+    fun activeCodecLabel(): String = when {
+        !h264 -> "RFX/GDI"
+        lowBandwidth || streamProfile == XyStreamProfile.ULTRA_LOW_LATENCY ||
+            streamProfile == XyStreamProfile.DATA_SAVER -> "AVC420"
+        else -> "AVC444"
+    }
+
     fun write(context: Context, deviceId: String) {
         val sp = context.applicationContext
             .getSharedPreferences(FILE, Context.MODE_PRIVATE).edit()
@@ -106,6 +343,31 @@ data class RdpOptions(
         sp.putBoolean("$deviceId.lowbw", lowBandwidth)
         sp.putBoolean("$deviceId.h264", h264)
         sp.putBoolean("$deviceId.dynres", dynamicResolution)
+        sp.putInt("$deviceId.stream_profile", streamProfile.ordinal)
+        sp.putInt("$deviceId.bpp", colorDepth)
+        sp.putInt("$deviceId.fps", targetFps)
+        sp.putBoolean("$deviceId.async_upd", asyncUpdate)
+        sp.putBoolean("$deviceId.async_ch", asyncChannels)
+        sp.putInt("$deviceId.comp_lvl", compressionLevel)
+        sp.putBoolean("$deviceId.fonts", fontSmoothing)
+        sp.putBoolean("$deviceId.wallpaper", desktopWallpaper)
+        sp.putBoolean("$deviceId.windrag", windowDrag)
+        sp.putBoolean("$deviceId.menuanim", menuAnimations)
+        sp.putBoolean("$deviceId.themes", visualThemes)
+        sp.putBoolean("$deviceId.aero", desktopComposition)
+        sp.putInt("$deviceId.sec_proto", securityProtocol.ordinal)
+        sp.putInt("$deviceId.tls_sec", tlsSecLevel)
+        sp.putBoolean("$deviceId.admin", consoleAdmin)
+        sp.putBoolean("$deviceId.restricted_admin", restrictedAdmin)
+        sp.putString("$deviceId.remote_prog", remoteProgram.orEmpty())
+        sp.putString("$deviceId.remote_dir", remoteWorkDir.orEmpty())
+        sp.putString("$deviceId.wol_mac", macAddress.orEmpty())
+        sp.putString("$deviceId.wol_bcast", wolBroadcast)
+        sp.putInt("$deviceId.wol_port", wolPort)
+        sp.putString("$deviceId.ssh_host", sshHost.orEmpty())
+        sp.putInt("$deviceId.ssh_port", sshPort)
+        sp.putString("$deviceId.ssh_user", sshUser.orEmpty())
+        sp.putInt("$deviceId.ssh_lport", sshLocalPort)
         val g = gateway
         if (g == null || g.host.isBlank()) {
             sp.remove("$deviceId.ghost").remove("$deviceId.gport")
@@ -124,14 +386,20 @@ data class RdpOptions(
     companion object {
         private const val FILE = "xydesk.rdp.options"
 
+        private val KEYS = listOf(
+            "audio", "mic", "clipboard", "drive", "camera", "udp",
+            "netauto", "lowbw", "h264", "dynres", "ghost", "gport", "guser", "gpass", "gdomain",
+            "stream_profile", "bpp", "fps", "async_upd", "async_ch", "comp_lvl",
+            "fonts", "wallpaper", "windrag", "menuanim", "themes", "aero",
+            "sec_proto", "tls_sec", "admin", "restricted_admin", "remote_prog", "remote_dir",
+            "wol_mac", "wol_bcast", "wol_port", "ssh_host", "ssh_port", "ssh_user", "ssh_lport",
+        )
+
         /** Bersihkan semua opsi milik satu perangkat (dipakai saat device dihapus). */
         fun clear(context: Context, deviceId: String) {
             val editor = context.applicationContext
                 .getSharedPreferences(FILE, Context.MODE_PRIVATE).edit()
-            listOf(
-                "audio", "mic", "clipboard", "drive", "camera", "udp",
-                "netauto", "lowbw", "h264", "dynres", "ghost", "gport", "guser", "gpass", "gdomain",
-            ).forEach { editor.remove("$deviceId.$it") }
+            KEYS.forEach { editor.remove("$deviceId.$it") }
             editor.apply()
         }
 
@@ -141,6 +409,12 @@ data class RdpOptions(
             val audio = XyAudioMode.entries.getOrElse(sp.getInt("$deviceId.audio", 0)) {
                 XyAudioMode.DEVICE
             }
+            val streamProfile = XyStreamProfile.entries.getOrElse(
+                sp.getInt("$deviceId.stream_profile", 0),
+            ) { XyStreamProfile.AUTO }
+            val secProto = XySecurityProtocol.entries.getOrElse(
+                sp.getInt("$deviceId.sec_proto", 0),
+            ) { XySecurityProtocol.AUTO }
             val gatewayHost = sp.getString("$deviceId.ghost", "").orEmpty()
             val gateway = if (gatewayHost.isBlank()) {
                 null
@@ -165,6 +439,32 @@ data class RdpOptions(
                 h264 = sp.getBoolean("$deviceId.h264", true),
                 dynamicResolution = sp.getBoolean("$deviceId.dynres", true),
                 gateway = gateway,
+                streamProfile = streamProfile,
+                colorDepth = sp.getInt("$deviceId.bpp", 32).let { if (it in setOf(16, 24, 32)) it else 32 },
+                targetFps = sp.getInt("$deviceId.fps", 60).let { if (it in setOf(30, 60)) it else 60 },
+                asyncUpdate = sp.getBoolean("$deviceId.async_upd", false),
+                asyncChannels = sp.getBoolean("$deviceId.async_ch", false),
+                compressionLevel = sp.getInt("$deviceId.comp_lvl", 1).coerceIn(0, 2),
+                fontSmoothing = sp.getBoolean("$deviceId.fonts", false),
+                desktopWallpaper = sp.getBoolean("$deviceId.wallpaper", false),
+                windowDrag = sp.getBoolean("$deviceId.windrag", false),
+                menuAnimations = sp.getBoolean("$deviceId.menuanim", false),
+                visualThemes = sp.getBoolean("$deviceId.themes", true),
+                desktopComposition = sp.getBoolean("$deviceId.aero", false),
+                securityProtocol = secProto,
+                tlsSecLevel = sp.getInt("$deviceId.tls_sec", -1).coerceIn(-1, 2),
+                consoleAdmin = sp.getBoolean("$deviceId.admin", false),
+                restrictedAdmin = sp.getBoolean("$deviceId.restricted_admin", false),
+                remoteProgram = sp.getString("$deviceId.remote_prog", "")?.ifBlank { null },
+                remoteWorkDir = sp.getString("$deviceId.remote_dir", "")?.ifBlank { null },
+                macAddress = sp.getString("$deviceId.wol_mac", "")?.ifBlank { null },
+                wolBroadcast = sp.getString("$deviceId.wol_bcast", "255.255.255.255")
+                    ?.ifBlank { "255.255.255.255" } ?: "255.255.255.255",
+                wolPort = sp.getInt("$deviceId.wol_port", 9).coerceIn(1, 65535),
+                sshHost = sp.getString("$deviceId.ssh_host", "")?.ifBlank { null },
+                sshPort = sp.getInt("$deviceId.ssh_port", 22).coerceIn(1, 65535),
+                sshUser = sp.getString("$deviceId.ssh_user", "")?.ifBlank { null },
+                sshLocalPort = sp.getInt("$deviceId.ssh_lport", 0).coerceIn(0, 65535),
             )
         }
     }

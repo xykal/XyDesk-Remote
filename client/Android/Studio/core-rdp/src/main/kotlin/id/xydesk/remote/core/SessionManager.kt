@@ -65,6 +65,9 @@ class SessionManager(context: Context) {
 
         /** Clipboard teks dari remote (dipanggil di thread RDP — post ke main). */
         fun onRemoteClipboardText(text: String) {}
+
+        /** Clipboard gambar dari remote (dipanggil di thread RDP). */
+        fun onRemoteClipboardImage(data: ByteArray) {}
     }
 
     private val appContext = context.applicationContext
@@ -89,9 +92,13 @@ class SessionManager(context: Context) {
     @Volatile private var released = false
     @Volatile private var lastProfile: ConnectionProfile? = null
 
-    // Telemetry (M2)
+    // Telemetry (M2+)
     private val frameCounter = AtomicInteger(0)
     @Volatile private var resolution = intArrayOf(0, 0)
+    @Volatile private var lastRttMs: Int = -1
+    @Volatile private var activeCodec: String = "AVC444"
+    @Volatile private var activeUdp: Boolean = true
+    @Volatile private var activeBpp: Int = 32
 
     /** Versi FreeRDP native (untuk about/diagnostics). */
     fun freeRdpVersion(): String = LibFreeRDP.getVersion()
@@ -118,10 +125,36 @@ class SessionManager(context: Context) {
      * per detik (window 500ms, diekstrapolasi 2x).
      */
     val telemetry: Flow<TelemetrySample> = flow {
+        var tick = 0
         while (true) {
+            val curState = state.value
+            if (curState is SessionState.Connected && tick % 4 == 0) {
+                val p = lastProfile
+                if (p != null) {
+                    kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+                        val t0 = System.nanoTime()
+                        val ok = tcpReachable(p.host, p.port, 900L)
+                        if (ok) {
+                            lastRttMs = ((System.nanoTime() - t0) / 1_000_000L).toInt().coerceAtLeast(1)
+                        }
+                    }
+                }
+            }
+            tick++
             val frames = frameCounter.getAndSet(0)
             val r = resolution
-            emit(TelemetrySample(state.value, r[0], r[1], frames * 2))
+            emit(
+                TelemetrySample(
+                    state = curState,
+                    width = r[0],
+                    height = r[1],
+                    fps = frames * 2,
+                    rttMs = lastRttMs,
+                    codecLabel = activeCodec,
+                    udpActive = activeUdp,
+                    colorDepth = activeBpp,
+                ),
+            )
             delay(TELEMETRY_INTERVAL_MS)
         }
     }
@@ -133,13 +166,17 @@ class SessionManager(context: Context) {
     private fun sessionUri(profile: ConnectionProfile): android.net.Uri {
         val storedOptions = RdpOptions.of(appContext, profile.id)
         val options = storedOptions.resolveForActiveNetwork(appContext)
+        activeCodec = options.activeCodecLabel()
+        activeUdp = options.udpTransport
+        activeBpp = options.colorDepth
         if (options.lowBandwidth && !storedOptions.lowBandwidth) {
             ConnectionLog.add("CM: jaringan seluler/terbatas terdeteksi -> otomatis aktifkan lowBandwidth (AVC420)")
         }
         ConnectionLog.add(
-            "CM: opsi sesi audio=${options.audioMode.name} mic=${options.microphone} " +
-                "clip=${options.clipboard} drive=${options.localDrive} udp=${options.udpTransport} " +
-                "lowbw=${options.lowBandwidth} h264=${options.h264} gateway=${options.gateway?.id ?: "-"}"
+            "CM: opsi sesi profile=${options.streamProfile.name} audio=${options.audioMode.name} " +
+                "mic=${options.microphone} clip=${options.clipboard} drive=${options.localDrive} " +
+                "udp=${options.udpTransport} lowbw=${options.lowBandwidth} h264=${options.h264} " +
+                "bpp=${options.colorDepth} sec=${options.securityProtocol.name} gateway=${options.gateway?.id ?: "-"}"
         )
         val base = RdpUri.build(profile, options)
         val prefs = appContext.getSharedPreferences("xydesk.remote.display", Context.MODE_PRIVATE)
@@ -373,6 +410,28 @@ class SessionManager(context: Context) {
     fun sendClipboardData(data: String): Boolean {
         val inst = core?.getInstance() ?: return false
         return LibFreeRDP.sendClipboardData(inst, data)
+    }
+
+    fun sendClipboardImageData(data: ByteArray, mimeType: String = "image/png"): Boolean {
+        val inst = core?.getInstance() ?: return false
+        if (data.isEmpty()) return false
+        return runCatching {
+            LibFreeRDP.sendClipboardImageData(inst, data, mimeType)
+        }.getOrDefault(false)
+    }
+
+    /**
+     * Kunci layar desktop Windows secara instan (`Win+L` -> `VK_LWIN = 0x5B`,
+     * `VK_KEY_L = 0x4C`). Dipakai untuk fitur Panic-Lock dan Auto-Lock saat
+     * sesi ditinggal / ditutup.
+     */
+    fun lockRemoteSession(): Boolean {
+        val inst = core?.getInstance() ?: return false
+        val winDown = LibFreeRDP.sendKeyEvent(inst, 0x5B, true)
+        val lDown = LibFreeRDP.sendKeyEvent(inst, 0x4C, true)
+        LibFreeRDP.sendKeyEvent(inst, 0x4C, false)
+        LibFreeRDP.sendKeyEvent(inst, 0x5B, false)
+        return winDown && lDown
     }
 
     /**
@@ -644,7 +703,9 @@ class SessionManager(context: Context) {
             }
 
             override fun OnRemoteClipboardImageChanged(data: ByteArray?) {
-                // M3: file/image clipboard
+                if (data != null && data.isNotEmpty()) {
+                    listener?.onRemoteClipboardImage(data)
+                }
             }
 
             override fun OnPointerSet(
