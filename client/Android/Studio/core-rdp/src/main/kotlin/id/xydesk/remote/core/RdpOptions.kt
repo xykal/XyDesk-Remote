@@ -116,6 +116,45 @@ enum class XySecurityProtocol(
     ),
 }
 
+/** Profil penyesuaian encoder GPU pada PC Host (NVIDIA NVENC, AMD AMF, Intel QSV, atau CPU). */
+enum class XyGpuProfile(
+    val title: String,
+    val detail: String,
+    val titleEn: String,
+    val detailEn: String,
+) {
+    AUTO(
+        "Otomatis (Deteksi Host)",
+        "Ikuti konfigurasi adapter grafis bawaan Windows",
+        "Automatic (Host Default)",
+        "Follow Windows host default graphics adapter settings",
+    ),
+    NVIDIA(
+        "NVIDIA GeForce / RTX (NVENC)",
+        "AVC444 32-bit + Level-0 Compression + Async Queue untuk latensi NVENC terendah",
+        "NVIDIA GeForce / RTX (NVENC)",
+        "AVC444 32-bit + Level-0 Compression + Async Queue for lowest NVENC latency",
+    ),
+    AMD(
+        "AMD Radeon RX (AMF)",
+        "AVC444 32-bit + Level-1 Framing + Async Update/Channel untuk pipeline AMF",
+        "AMD Radeon RX (AMF)",
+        "AVC444 32-bit + Level-1 Framing + Async Update/Channel for AMF pipeline",
+    ),
+    INTEL(
+        "Intel Arc / Iris Xe (QuickSync)",
+        "AVC420 24-bit + QSV Low-Power + Async Update untuk efisiensi decoder/encoder",
+        "Intel Arc / Iris Xe (QuickSync)",
+        "AVC420 24-bit + QSV Low-Power + Async Update for QSV efficiency",
+    ),
+    SOFTWARE(
+        "Tanpa GPU Diskrit (CPU / Standard)",
+        "AVC420 16-bit + Kompresi Level 2 agar ringan di PC tanpa GPU dedicated",
+        "No Discrete GPU (CPU / Standard)",
+        "AVC420 16-bit + Level-2 Compression for PCs without a dedicated GPU",
+    ),
+}
+
 /** RDP Gateway (RD Gateway). Port default 443. */
 data class XyGateway(
     val host: String,
@@ -151,6 +190,9 @@ data class RdpOptions(
 
     // ---- Streaming & Latency Tuning ----
     val streamProfile: XyStreamProfile = XyStreamProfile.AUTO,
+    val gpuProfile: XyGpuProfile = XyGpuProfile.AUTO,
+    /** Mode hemat baterai HP: gabungkan frame burst (VSYNC coalescing) & kurangi beban dekoder. */
+    val batterySaver: Boolean = false,
     /** Kedalaman warna desktop remote: 16, 24, atau 32 bit per piksel (`/bpp:`). */
     val colorDepth: Int = 32,
     /** Target kecepatan bingkai sesi (30 atau 60 FPS). */
@@ -293,6 +335,57 @@ data class RdpOptions(
     }
 
     /**
+     * Terapkan optimasi spesifik vendor GPU Host (NVIDIA NVENC, AMD AMF, Intel QuickSync, atau CPU).
+     */
+    fun withGpuProfile(gpu: XyGpuProfile): RdpOptions = when (gpu) {
+        XyGpuProfile.AUTO -> copy(gpuProfile = XyGpuProfile.AUTO)
+        XyGpuProfile.NVIDIA -> copy(
+            gpuProfile = XyGpuProfile.NVIDIA,
+            udpTransport = true,
+            h264 = true,
+            lowBandwidth = false,
+            colorDepth = 32,
+            targetFps = 60,
+            asyncUpdate = true,
+            asyncChannels = true,
+            compressionLevel = 0,
+        )
+        XyGpuProfile.AMD -> copy(
+            gpuProfile = XyGpuProfile.AMD,
+            udpTransport = true,
+            h264 = true,
+            lowBandwidth = false,
+            colorDepth = 32,
+            targetFps = 60,
+            asyncUpdate = true,
+            asyncChannels = true,
+            compressionLevel = 1,
+        )
+        XyGpuProfile.INTEL -> copy(
+            gpuProfile = XyGpuProfile.INTEL,
+            udpTransport = true,
+            h264 = true,
+            lowBandwidth = true,
+            colorDepth = 24,
+            targetFps = 60,
+            asyncUpdate = true,
+            asyncChannels = true,
+            compressionLevel = 1,
+        )
+        XyGpuProfile.SOFTWARE -> copy(
+            gpuProfile = XyGpuProfile.SOFTWARE,
+            udpTransport = true,
+            h264 = true,
+            lowBandwidth = true,
+            colorDepth = 16,
+            targetFps = 30,
+            asyncUpdate = true,
+            asyncChannels = true,
+            compressionLevel = 2,
+        )
+    }
+
+    /**
      * Saat deteksi bandwidth otomatis aktif dan jaringan yang dipakai adalah
      * seluler/metered atau bandwidth downstream sangat rendah (<5 Mbps),
      * otomatis gunakan profil hemat bandwidth (broadband-low + AVC420).
@@ -344,6 +437,8 @@ data class RdpOptions(
         sp.putBoolean("$deviceId.h264", h264)
         sp.putBoolean("$deviceId.dynres", dynamicResolution)
         sp.putInt("$deviceId.stream_profile", streamProfile.ordinal)
+        sp.putInt("$deviceId.gpu_profile", gpuProfile.ordinal)
+        sp.putBoolean("$deviceId.bat_saver", batterySaver)
         sp.putInt("$deviceId.bpp", colorDepth)
         sp.putInt("$deviceId.fps", targetFps)
         sp.putBoolean("$deviceId.async_upd", asyncUpdate)
@@ -389,7 +484,7 @@ data class RdpOptions(
         private val KEYS = listOf(
             "audio", "mic", "clipboard", "drive", "camera", "udp",
             "netauto", "lowbw", "h264", "dynres", "ghost", "gport", "guser", "gpass", "gdomain",
-            "stream_profile", "bpp", "fps", "async_upd", "async_ch", "comp_lvl",
+            "stream_profile", "gpu_profile", "bat_saver", "bpp", "fps", "async_upd", "async_ch", "comp_lvl",
             "fonts", "wallpaper", "windrag", "menuanim", "themes", "aero",
             "sec_proto", "tls_sec", "admin", "restricted_admin", "remote_prog", "remote_dir",
             "wol_mac", "wol_bcast", "wol_port", "ssh_host", "ssh_port", "ssh_user", "ssh_lport",
@@ -412,6 +507,9 @@ data class RdpOptions(
             val streamProfile = XyStreamProfile.entries.getOrElse(
                 sp.getInt("$deviceId.stream_profile", 0),
             ) { XyStreamProfile.AUTO }
+            val gpuProfile = XyGpuProfile.entries.getOrElse(
+                sp.getInt("$deviceId.gpu_profile", 0),
+            ) { XyGpuProfile.AUTO }
             val secProto = XySecurityProtocol.entries.getOrElse(
                 sp.getInt("$deviceId.sec_proto", 0),
             ) { XySecurityProtocol.AUTO }
@@ -440,6 +538,8 @@ data class RdpOptions(
                 dynamicResolution = sp.getBoolean("$deviceId.dynres", true),
                 gateway = gateway,
                 streamProfile = streamProfile,
+                gpuProfile = gpuProfile,
+                batterySaver = sp.getBoolean("$deviceId.bat_saver", false),
                 colorDepth = sp.getInt("$deviceId.bpp", 32).let { if (it in setOf(16, 24, 32)) it else 32 },
                 targetFps = sp.getInt("$deviceId.fps", 60).let { if (it in setOf(30, 60)) it else 60 },
                 asyncUpdate = sp.getBoolean("$deviceId.async_upd", false),

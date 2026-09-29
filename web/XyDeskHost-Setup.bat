@@ -25,7 +25,9 @@ powershell -NoProfile -ExecutionPolicy Bypass -Command ^
    New-ItemProperty -Path $tsPolicy -Name 'AVCHardwareEncodePreferred' -PropertyType DWord -Value 1 -Force | Out-Null; ^
    New-ItemProperty -Path $tsPolicy -Name 'SelectTransport' -PropertyType DWord -Value 0 -Force | Out-Null; ^
    New-ItemProperty -Path 'HKLM:\SYSTEM\CurrentControlSet\Control\Terminal Server\WinStations' -Name 'DWMFRAMEINTERVAL' -PropertyType DWord -Value 15 -Force | Out-Null; ^
-   Write-Host '[3/4] Menghitung ID PC XyDesk Anda...'; ^
+   $gpus = (Get-CimInstance Win32_VideoController | Select-Object -ExpandProperty Name) -join ', '; ^
+   Write-Host ('[3/4] GPU Terdeteksi: ' + $gpus); ^
+   Write-Host '[4/4] Menghitung ID PC XyDesk Anda...'; ^
    $ips = Get-NetIPAddress -AddressFamily IPv4 | Where-Object { $_.IPAddress -notlike '127.*' -and $_.IPAddress -notlike '169.254.*' }; ^
    Write-Host ''; ^
    Write-Host '================================================================'; ^

@@ -81,10 +81,10 @@
 
   <main>
     <div class="container">
-      <div class="meta mono">Windows Host Helper · ID PC &amp; GPU H.264 AVC444 60 FPS</div>
-      <h1>XyDesk Host Setup untuk PC Windows</h1>
+      <div class="meta mono">Windows Host Helper · Tahap Pengembangan (Experimental) · E2EE + Ultra-Low Latency</div>
+      <h1>XyDesk Host Setup &amp; Arsitektur Native PC</h1>
       <p class="lead">
-        Gunakan <strong>XyDeskHost Setup</strong> di PC Windows Anda untuk menampilkan <strong>10-Digit ID PC</strong> serta mengaktifkan enkoding hardware GPU (NVIDIA NVENC / AMD AMF / Intel QuickSync) H.264 AVC444 60 FPS dan jalur UDP 3389 secara otomatis.
+        Fitur <strong>Koneksi PC (ID &amp; Password)</strong> saat ini berada dalam <strong>Tahap Pengembangan (Experimental)</strong>. Fokus utamanya adalah keamanan <strong>End-to-End Encryption (E2EE)</strong> serta pipeline <strong>Ultra-Low Latency</strong> khusus game FPS dan aplikasi grafis berat dengan penyesuaian GPU <strong>NVIDIA (NVENC)</strong>, <strong>AMD (AMF)</strong>, dan <strong>Intel (QuickSync)</strong>.
       </p>
 
       <div class="card">
@@ -107,11 +107,12 @@
       </div>
 
       <div class="card">
-        <h2>Apa Saja yang Diaktifkan oleh XyDeskHost di PC?</h2>
+        <h2>Arsitektur Native `XyDeskHost.exe` + `.dll` + QUIC (Roadmap Tahap Pengembangan)</h2>
         <ul>
-          <li><strong>ID PC 10-Digit Otomatis:</strong> Menghasilkan kode ID PC (mis. <code>323-223-5826</code>) untuk dimasukkan langsung di menu <em>Koneksi PC (ID &amp; Password)</em> pada aplikasi Android XyDesk Remote.</li>
-          <li><strong>Akselerasi GPU Hardware (`bEnumerateHWBeforeSW = 1` &amp; `AVCHardwareEncodePreferred = 1`):</strong> Memaksa sesi RDP merender desktop, aplikasi 3D, dan game menggunakan GPU diskrit PC.</li>
-          <li><strong>Mode Warna Penuh `AVC444ModePreferred = 1` &amp; `DWMFRAMEINTERVAL = 15`:</strong> Membuka batas kecepatan bingkai kompositor desktop Windows hingga <strong>60 FPS</strong> dengan transport <strong>UDP 3389</strong>.</li>
+          <li><strong>Deteksi &amp; Profil GPU Spesifik Vendor:</strong> Penyesuaian otomatis dan manual untuk <strong>NVIDIA GeForce/RTX (NVENC P1 Zero-B-Frame)</strong>, <strong>AMD Radeon RX (AMF Ultra-Low Latency)</strong>, <strong>Intel Arc/Iris Xe (QuickSync Low-Power)</strong>, serta fallback CPU.</li>
+          <li><strong>Transport QUIC Datagram &amp; JNI Native (`.dll` / `.so`):</strong> Pengiriman frame video via QUIC Unreliable Datagrams bebas <em>head-of-line blocking</em> dengan tangkapan layar <em>DXGI Desktop Duplication API</em> zero-copy langsung dari VRAM GPU.</li>
+          <li><strong>Input Mouse Relatif (`RawInput` / `SendInput`) untuk Game FPS:</strong> Mengatasi batasan kursor absolut RDP standar agar pergerakan kamera 360 derajat di game FPS tetap presisi.</li>
+          <li><strong>Keamanan End-to-End (E2EE):</strong> Negosiasi TLS 1.3 ketat (`seclevel 2`), NLA, dan penyematan sidik jari sertifikat perangkat di Android Keystore tanpa server perantara yang dapat mengintip aliran layar.</li>
         </ul>
       </div>
     </div>

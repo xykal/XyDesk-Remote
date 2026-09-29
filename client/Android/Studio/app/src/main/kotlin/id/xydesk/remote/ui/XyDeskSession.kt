@@ -160,6 +160,11 @@ fun XyDeskSessionScreen(
     val clipboardSyncEnabled = remember(profile.id) {
         runCatching { RdpOptions.of(context, profile.id).clipboard }.getOrDefault(false)
     }
+    LaunchedEffect(profile.id, controller) {
+        controller.batterySaverMode = runCatching {
+            RdpOptions.of(context, profile.id).batterySaver
+        }.getOrDefault(false)
+    }
     val wall = remember(profile.id) {
         XyWall.NEUTRAL.forDevice(profile.label ?: profile.host)
     }

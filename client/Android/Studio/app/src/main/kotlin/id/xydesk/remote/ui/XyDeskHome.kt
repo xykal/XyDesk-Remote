@@ -774,14 +774,25 @@ private fun DevicesScreen(
                         }
                         .padding(horizontal = 12.dp, vertical = 10.dp),
                 ) {
-                    Text(
-                        xy("Koneksi PC (ID & Password)", "PC Connection (ID & Password)"),
-                        style = MaterialTheme.typography.titleSmall,
-                    )
+                    Row(
+                        Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Text(
+                            xy("Koneksi PC (ID & Password)", "PC Connection (ID & Password)"),
+                            style = MaterialTheme.typography.titleSmall,
+                        )
+                        Text(
+                            xy("Tahap Pengembangan", "Experimental"),
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.primary,
+                        )
+                    }
                     Text(
                         xy(
-                            "Pakai ID PC & Password dari XyDeskHost.exe · Siap GPU Gaming 60 FPS",
-                            "Use PC ID & Password from XyDeskHost.exe · Gaming GPU 60 FPS Ready",
+                            "Jalur E2EE + Ultra-Low Latency FPS Gaming (NVIDIA / AMD / Intel GPU)",
+                            "E2EE + Ultra-Low Latency FPS Gaming path (NVIDIA / AMD / Intel GPU)",
                         ),
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,

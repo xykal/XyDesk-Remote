@@ -41,6 +41,7 @@ import com.freerdp.freerdpcore.services.LibFreeRDP
 import id.xydesk.remote.core.ConnectionProfile
 import id.xydesk.remote.core.RdpOptions
 import id.xydesk.remote.core.WakeOnLan
+import id.xydesk.remote.core.XyGpuProfile
 import id.xydesk.remote.core.XySecurityProtocol
 import id.xydesk.remote.core.XyStreamProfile
 import id.xydesk.remote.core.encodeIpv4ToPcId
@@ -347,7 +348,7 @@ fun AddDeviceScreen(
                 XySegmented(
                     options = listOf(
                         xy("Koneksi RDP (IP / Domain)", "RDP (IP / Domain)"),
-                        xy("Koneksi PC (ID & Password)", "PC (ID & Password)"),
+                        xy("Koneksi PC [Tahap Pengembangan]", "PC Connect [Experimental]"),
                     ),
                     selectedIndex = if (isPcQuickMode) 1 else 0,
                     onSelect = { idx ->
@@ -356,7 +357,14 @@ fun AddDeviceScreen(
                         if (wantPc) {
                             if (user.isBlank()) user = "XyDesk"
                             options = options.withStreamProfile(XyStreamProfile.ULTRA_LOW_LATENCY)
-                                .copy(udpTransport = true, h264 = true, asyncUpdate = true)
+                                .copy(
+                                    udpTransport = true,
+                                    h264 = true,
+                                    asyncUpdate = true,
+                                    asyncChannels = true,
+                                    securityProtocol = XySecurityProtocol.NLA,
+                                    tlsSecLevel = 2,
+                                )
                         }
                     },
                     modifier = Modifier.fillMaxWidth(),
@@ -364,7 +372,7 @@ fun AddDeviceScreen(
             }
 
             XySectionLabel(
-                if (isPcQuickMode) xy("Identitas PC (XyDeskHost)", "PC Identity (XyDeskHost)")
+                if (isPcQuickMode) xy("Identitas PC · Tahap Pengembangan (E2EE + Ultra-Low Latency)", "PC Identity · Experimental (E2EE + Ultra-Low Latency)")
                 else xy("Alamat", "Address")
             )
             XyCard {
@@ -414,12 +422,40 @@ fun AddDeviceScreen(
             }
 
             if (isPcQuickMode) {
-                XySectionLabel(xy("Agen PC (XyDeskHost.exe) & GPU Gaming", "PC Agent (XyDeskHost.exe) & Gaming GPU"))
+                XySectionLabel(
+                    xy(
+                        "Agen PC Native (XyDeskHost.exe · Tahap Pengembangan)",
+                        "Native PC Agent (XyDeskHost.exe · In Development)",
+                    ),
+                )
                 XyCard {
+                    Row(
+                        Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Text(
+                            xy("XyDeskHost.exe + QUIC/UDP + E2EE", "XyDeskHost.exe + QUIC/UDP + E2EE"),
+                            style = MaterialTheme.typography.titleSmall,
+                        )
+                        Box(
+                            Modifier
+                                .clip(XyPill)
+                                .border(1.dp, MaterialTheme.colorScheme.outlineVariant, XyPill)
+                                .padding(horizontal = 8.dp, vertical = 3.dp),
+                        ) {
+                            Text(
+                                xy("TAHAP PENGEMBANGAN", "EXPERIMENTAL"),
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.primary,
+                            )
+                        }
+                    }
+                    Spacer(Modifier.height(6.dp))
                     Text(
                         xy(
-                            "Pasang XyDeskHost di PC Windows untuk mengaktifkan login cepat via ID PC & Password, sekaligus menyalakan akselerasi GPU Hardware (NVIDIA/AMD/Intel H.264 AVC444 60 FPS + UDP 3389) untuk game dan aplikasi berat.",
-                            "Install XyDeskHost on your Windows PC to enable instant login via PC ID & Password, while unlocking Hardware GPU Acceleration (NVIDIA/AMD/Intel H.264 AVC444 60 FPS + UDP 3389) for games and 3D apps.",
+                            "Jalur Koneksi PC mengutamakan enkripsi End-to-End (TLS 1.3 Ketat + NLA + Pinning Sertifikat Keystore) dan pipeline Ultra-Low Latency untuk game FPS (Zero Double-Compression, Async Input/Frame Queue, dan Akselerasi Hardware GPU NVIDIA NVENC / AMD AMF / Intel QuickSync). Modul native XyDeskHost.exe (.dll DXGI + QUIC Datagram + RawInput Mouse FPS) sedang dalam tahap pengembangan aktif.",
+                            "PC Connection prioritizes End-to-End security (Strict TLS 1.3 + NLA + Keystore Certificate Pinning) and an Ultra-Low Latency pipeline for FPS gaming (Zero Double-Compression, Async Input/Frame Queue, and NVIDIA NVENC / AMD AMF / Intel QuickSync Hardware GPU encoding). The native XyDeskHost.exe (.dll DXGI + QUIC Datagram + RawInput FPS Mouse) module is in active development.",
                         ),
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -443,7 +479,7 @@ fun AddDeviceScreen(
                             modifier = Modifier.weight(1f),
                         )
                         XyPillButton(
-                            text = xy("Unduh XyDeskHost", "Download XyDeskHost"),
+                            text = xy("Info XyDeskHost", "XyDeskHost Info"),
                             onClick = {
                                 runCatching {
                                     context.startActivity(
@@ -897,6 +933,63 @@ fun AddDeviceScreen(
                     )
                     Spacer(Modifier.height(4.dp))
                 }
+                Spacer(Modifier.height(8.dp))
+                Text(
+                    xy("Penyesuaian GPU Host PC (NVIDIA, AMD, Intel, CPU)", "Host PC GPU Encoder Tuning (NVIDIA, AMD, Intel, CPU)"),
+                    style = MaterialTheme.typography.titleSmall,
+                )
+                Text(
+                    xy(
+                        "Sesuaikan pipeline codec, kompresi, dan antrean frame dengan jenis kartu grafis pada PC target untuk game/FPS.",
+                        "Match codec pipeline, compression, and frame queues to the target PC's graphics card for gaming/FPS.",
+                    ),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                Spacer(Modifier.height(8.dp))
+                Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    XyGpuProfile.entries.forEach { gpu ->
+                        val active = options.gpuProfile == gpu
+                        Row(
+                            Modifier
+                                .fillMaxWidth()
+                                .clip(MaterialTheme.shapes.medium)
+                                .background(
+                                    if (active) MaterialTheme.colorScheme.surfaceVariant
+                                    else MaterialTheme.colorScheme.surface,
+                                )
+                                .border(
+                                    1.dp,
+                                    if (active) MaterialTheme.colorScheme.outlineVariant
+                                    else MaterialTheme.colorScheme.outline,
+                                    MaterialTheme.shapes.medium,
+                                )
+                                .clickable { options = options.withGpuProfile(gpu) }
+                                .padding(horizontal = 14.dp, vertical = 10.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            Column(Modifier.weight(1f)) {
+                                Text(xy(gpu.title, gpu.titleEn), style = MaterialTheme.typography.titleSmall)
+                                Text(
+                                    xy(gpu.detail, gpu.detailEn),
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                )
+                            }
+                        }
+                    }
+                }
+                Spacer(Modifier.height(8.dp))
+                XyToggleRow(
+                    title = xy("Mode Hemat Baterai & Suhu Dingin (VSYNC Pacing)", "Battery Saver & Cool Thermal Mode (VSYNC Pacing)"),
+                    subtitle = xy(
+                        "Gabungkan burst update piksel per siklus layar agar HP tidak cepat panas dan hemat baterai",
+                        "Coalesce pixel burst updates per screen cycle to keep the phone cool and save battery",
+                    ),
+                    checked = options.batterySaver,
+                    onCheckedChange = { options = options.copy(batterySaver = it) },
+                    leading = XyIcons.Sliders,
+                )
                 XyToggleRow(
                     title = xy("Transport UDP (RDP-UDP + FEC)", "UDP transport (RDP-UDP + FEC)"),
                     subtitle = xy(

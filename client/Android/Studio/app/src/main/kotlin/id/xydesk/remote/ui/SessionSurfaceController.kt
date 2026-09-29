@@ -92,7 +92,31 @@ class SessionSurfaceController(private val activity: Activity) : GraphicsSink {
     var onImeSnippetCommitted: ((String) -> Unit)? = null
     @Volatile var hasActiveHudModifiers: Boolean = false
     @Volatile var overlayInputActive: Boolean = false
+    @Volatile var batterySaverMode: Boolean = false
     private var lastInputDispatchFailureAt = 0L
+    private val dirtyLock = Any()
+    private val pendingDirtyRect = Rect()
+    private var hasPendingDirty = false
+    private var flushScheduled = false
+    private val flushDirtyRunnable = Runnable {
+        val left: Int
+        val top: Int
+        val right: Int
+        val bottom: Int
+        synchronized(dirtyLock) {
+            flushScheduled = false
+            if (!hasPendingDirty) return@Runnable
+            left = pendingDirtyRect.left
+            top = pendingDirtyRect.top
+            right = pendingDirtyRect.right
+            bottom = pendingDirtyRect.bottom
+            pendingDirtyRect.setEmpty()
+            hasPendingDirty = false
+        }
+        val sv = sessionView ?: return@Runnable
+        sv.addInvalidRegion(Rect(left, top, right, bottom))
+        sv.invalidateRegion()
+    }
 
     private fun asciiToAndroidKeyCode(codePoint: Int): Int = when (codePoint) {
         in 'a'.code..'z'.code -> KeyEvent.KEYCODE_A + (codePoint - 'a'.code)
@@ -505,10 +529,24 @@ class SessionSurfaceController(private val activity: Activity) : GraphicsSink {
         synchronized(bm) {
             LibFreeRDP.updateGraphics(i, bm, left, top, right - left, bottom - top)
         }
-        uiHandler.post {
-            val sv = sessionView ?: return@post
-            sv.addInvalidRegion(Rect(left, top, right, bottom))
-            sv.invalidateRegion()
+        val shouldSchedule: Boolean
+        synchronized(dirtyLock) {
+            if (!hasPendingDirty) {
+                pendingDirtyRect.set(left, top, right, bottom)
+                hasPendingDirty = true
+            } else {
+                pendingDirtyRect.union(left, top, right, bottom)
+            }
+            shouldSchedule = !flushScheduled
+            if (shouldSchedule) flushScheduled = true
+        }
+        if (shouldSchedule) {
+            val sv = sessionView
+            if (!batterySaverMode && sv != null) {
+                sv.postOnAnimation(flushDirtyRunnable)
+            } else {
+                uiHandler.postDelayed(flushDirtyRunnable, if (batterySaverMode) 28L else 0L)
+            }
         }
     }
 
