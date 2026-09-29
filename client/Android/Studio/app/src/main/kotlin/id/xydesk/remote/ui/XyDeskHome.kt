@@ -3,6 +3,7 @@
 package id.xydesk.remote.ui
 
 import android.content.Context
+import android.content.Intent
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.ui.graphics.Brush
@@ -120,6 +121,7 @@ fun XyDeskHome(
     var backArmedAt by remember { mutableStateOf(0L) }
     val bootTail = remember { ConnectionLog.tailFromFile(context.applicationContext, 20) }
     var showBoot by remember { mutableStateOf(false) }
+    var feedbackOpen by remember { mutableStateOf(false) }
     // Pesan app sendiri (bukan Toast bawaan Android).
     val notice = rememberXyNotice()
 
@@ -149,8 +151,26 @@ fun XyDeskHome(
         }
     }
 
+    fun shareFeedback(category: String, message: String) {
+        feedbackOpen = false
+        val draft = feedbackShareDraft(category, message)
+        val sendIntent = Intent(Intent.ACTION_SEND).apply {
+            type = "text/plain"
+            putExtra(Intent.EXTRA_SUBJECT, "XyDesk Remote feedback")
+            putExtra(Intent.EXTRA_TEXT, draft)
+        }
+        runCatching {
+            context.startActivity(
+                Intent.createChooser(sendIntent, xyNow("Pilih aplikasi untuk berbagi", "Choose an app to share")),
+            )
+        }.onFailure {
+            notice.show(xyNow("Menu berbagi tidak tersedia", "Share menu is unavailable"))
+        }
+    }
+
     BackHandler {
         when {
+            feedbackOpen -> feedbackOpen = false
             drawerOpen -> drawerOpen = false
             route != XyRoute.Devices -> route = XyRoute.Devices
             section != XySection.PERANGKAT -> section = XySection.PERANGKAT
@@ -296,6 +316,18 @@ fun XyDeskHome(
                     },
                 )
             }
+            Spacer(Modifier.height(8.dp))
+            XyPillButton(
+                text = xy("Masukan & saran", "Feedback & suggestions"),
+                onClick = {
+                    drawerOpen = false
+                    feedbackOpen = true
+                },
+                modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp),
+                primary = false,
+                icon = XyIcons.Info,
+                compact = true,
+            )
             Spacer(Modifier.weight(1f))
             Text(
                 "v${appVersion(context)}",
@@ -335,6 +367,12 @@ fun XyDeskHome(
             title = xy("Log sesi terakhir", "Last session log"),
             body = body,
             onDismiss = { showBoot = false },
+        )
+    }
+    if (feedbackOpen) {
+        FeedbackDialog(
+            onDismiss = { feedbackOpen = false },
+            onShare = ::shareFeedback,
         )
     }
 

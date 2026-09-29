@@ -671,27 +671,31 @@ public class SessionView extends View
 				}
 			}
 
+			private void applyCompositionEdit(ImeCompositionBuffer.Edit edit)
+			{
+				sendBackspaces(edit.backspaces);
+				if (!edit.text.isEmpty())
+					sink.onText(edit.text);
+			}
+
 			@Override public boolean setComposingText(CharSequence text, int newCursorPosition)
 			{
-				// Keep provisional IME text local. Sending each composing revision as
-				// backspace + replacement makes remote apps flicker and can double text.
-				composition.setComposingText(text);
+				// Stream only the changed suffix: live IME text appears immediately,
+				// while autocorrect replaces it without re-sending the common prefix.
+				applyCompositionEdit(composition.setComposingText(text));
 				return true;
 			}
 
 			@Override public boolean commitText(CharSequence text, int newCursorPosition)
 			{
-				String committed = composition.commitText(text);
-				if (!committed.isEmpty())
-					sink.onText(committed);
+				applyCompositionEdit(composition.commitText(text));
 				return true;
 			}
 
 			@Override public boolean finishComposingText()
 			{
-				String remaining = composition.finishComposingText();
-				if (!remaining.isEmpty())
-					sink.onText(remaining);
+				// All provisional content has already been sent by setComposingText.
+				composition.finishComposingText();
 				return true;
 			}
 
@@ -701,7 +705,7 @@ public class SessionView extends View
 				    (event.getFlags() & KeyEvent.FLAG_SOFT_KEYBOARD) != 0 &&
 				    event.getAction() == KeyEvent.ACTION_DOWN && composition.hasComposingText())
 				{
-					composition.deleteBeforeCursor(1);
+					sendBackspaces(composition.deleteBeforeCursor(1));
 					return true;
 				}
 				if (ImeCompositionBuffer.isPrintableImeTextEvent(

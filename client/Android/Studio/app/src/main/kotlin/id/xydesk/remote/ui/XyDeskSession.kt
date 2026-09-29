@@ -30,6 +30,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.ui.text.input.ImeAction
 import id.xydesk.remote.ui.components.XyDialog
+import id.xydesk.remote.ui.components.XyNoticeBus
 import id.xydesk.remote.ui.components.XyField
 import id.xydesk.remote.ui.components.XyOverlay
 import androidx.compose.material3.MaterialTheme
@@ -347,13 +348,21 @@ fun XyDeskSessionScreen(
                     }.getOrDefault(false)
                     if (!activity.isFinishing && !activity.isDestroyed && clipboardEnabled) {
                         val cm = activity.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
-                        try {
+                        val applied = try {
                             cm.setPrimaryClip(ClipboardImageProvider.createTextClip(activity, "rdp", text))
+                            true
                         } catch (e: RuntimeException) {
-                            // Clipboard service errors must not tear down the RDP session.
+                            // Never log remote clipboard contents or exception details.
                             ConnectionLog.add("clipboard: Android clipboard service rejected remote text")
+                            XyNoticeBus.post(
+                                xyNow(
+                                    "Clipboard remote gagal disalin ke HP; isi tidak dicatat",
+                                    "Remote clipboard could not be copied to phone; contents were not logged",
+                                ),
+                            )
+                            false
                         }
-                        lastRemoteClipboard = text
+                        if (applied) lastRemoteClipboard = text
                     }
                 }
             }
