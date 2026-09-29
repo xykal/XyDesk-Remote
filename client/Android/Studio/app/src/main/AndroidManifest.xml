@@ -32,7 +32,7 @@
                 android:value="remote desktop session" />
         </service>
 
-        <!-- Launcher: home Compose (daftar perangkat + koneksi) -->
+        <!-- Launcher: home Compose (daftar perangkat + koneksi + target Share ke PC) -->
         <activity
             android:name="id.xydesk.remote.ui.XyDeskHomeActivity"
             android:exported="true"
@@ -43,19 +43,20 @@
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
+            <intent-filter android:label="Kirim ke PC (XyDesk)">
+                <action android:name="android.intent.action.SEND" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <data android:mimeType="*/*" />
+            </intent-filter>
         </activity>
 
-        <!-- Layar sesi XyDesk (surface + kontrol Compose). Hanya dibuka dari
-             home lewat connectIntent() — bukan launcher, bukan exported. -->
-        <!-- adjustNothing: keyboard HP muncul MENIMPA gambar remote, bukan
-             mengecilkan jendela. Kalau jendela ikut mengecil, resolusi
-             otomatis akan mengirim ukuran baru tiap keyboard dibuka dan
-             desktop remote ikut menyusut. -->
+        <!-- Layar sesi XyDesk (surface + kontrol Compose + Picture-in-Picture). -->
         <activity
             android:name="id.xydesk.remote.ui.XyDeskSessionActivity"
             android:exported="false"
             android:label="Sesi RDP"
             android:theme="@style/Theme.XyDeskHome"
+            android:supportsPictureInPicture="true"
             android:windowSoftInputMode="adjustNothing"
             android:configChanges="orientation|keyboardHidden|screenSize|smallestScreenSize|density|screenLayout" />
 
