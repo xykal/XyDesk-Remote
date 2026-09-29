@@ -345,46 +345,29 @@
       color: var(--text-faint);
     }
 
-    /* Locked Download Section */
+    /* Locked Download Section with Live Countdown on All 3 Download Buttons */
     .download-shell {
       position: relative;
       border: 1px solid var(--line);
       border-radius: 14px;
       background: var(--surface);
-      padding: 28px;
+      padding: 24px;
       overflow: hidden;
     }
 
-    .download-locked-area {
-      filter: blur(9px);
-      -webkit-filter: blur(9px);
-      pointer-events: none;
-      user-select: none;
-      opacity: 0.48;
-      transition: filter 0.25s ease, opacity 0.25s ease;
-    }
-
-    .download-locked-area.unlocked {
-      filter: none;
-      -webkit-filter: none;
-      pointer-events: auto;
-      user-select: auto;
-      opacity: 1;
-    }
-
     .pkg-table {
-      margin-top: 18px;
+      margin-top: 16px;
       border: 1px solid var(--line);
-      border-radius: 10px;
+      border-radius: 12px;
       overflow: hidden;
       background: var(--bg);
     }
 
     .pkg-row {
       display: grid;
-      grid-template-columns: 170px 1fr 160px;
+      grid-template-columns: 160px 1fr 250px;
       gap: 16px;
-      padding: 16px 18px;
+      padding: 18px 20px;
       border-bottom: 1px solid var(--line);
       align-items: center;
     }
@@ -393,28 +376,41 @@
       border-bottom: none;
     }
 
-    .pkg-inline-lock {
-      position: absolute;
-      inset: 0;
-      z-index: 10;
-      background: rgba(10, 11, 14, 0.56);
-      backdrop-filter: blur(14px);
-      -webkit-backdrop-filter: blur(14px);
+    .dl-countdown-btn {
+      width: 100%;
       display: flex;
       flex-direction: column;
       align-items: center;
       justify-content: center;
+      gap: 4px;
+      padding: 10px 14px;
+      border-radius: 10px;
+      border: 1px solid var(--line-strong);
+      background: var(--surface-alt);
+      color: var(--text);
+      cursor: pointer;
+      transition: background 0.15s ease, border-color 0.15s ease;
       text-align: center;
-      padding: 24px;
-      gap: 12px;
     }
 
-    [data-theme="light"] .pkg-inline-lock {
-      background: rgba(246, 247, 249, 0.68);
+    .dl-countdown-btn:hover {
+      background: var(--surface);
+      border-color: var(--text-dim);
     }
 
-    .pkg-inline-lock.hidden {
-      display: none;
+    .dl-btn-top {
+      font-size: 11px;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      color: var(--text-dim);
+    }
+
+    .dl-btn-timer {
+      font-size: 13px;
+      font-weight: 700;
+      letter-spacing: 0.03em;
+      color: var(--text);
     }
 
     /* Fullscreen Blurred Launching Modal Popup */
@@ -752,46 +748,59 @@
         </div>
 
         <div class="download-shell">
-          <!-- Locked Inline Blur Overlay -->
-          <div class="pkg-inline-lock" id="inline-lock-overlay">
-            <div class="launch-pill mono">XyDesk Remote · Ver 1.0.0</div>
-            <div style="font-size: 20px; font-weight: 700; letter-spacing: -0.02em;" data-i18n="lock.heading">
-              Unduhan Dikunci Menunggu Peluncuran Resmi Ver 1.0.0
-            </div>
-            <p style="font-size: 13px; color: var(--text-dim); max-width: 480px;" data-i18n="lock.sub">
-              Seluruh paket APK rilis sedang dalam status Draft terverifikasi dan akan dibuka secara otomatis saat hitung mundur peluncuran selesai.
+          <div style="display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap;">
+            <p style="font-size: 13.5px; color: var(--text-dim);" data-i18n="dl.desc">
+              Setiap paket APK ditandatangani dengan kunci rilis resmi dan dipisahkan per arsitektur prosesor (ABI). Unduhan terkunci selama hitung mundur peluncuran <strong>Ver 1.0.0</strong> berlangsung.
             </p>
-            <button type="button" class="pill-btn primary lg" data-open-launch data-i18n="lock.btn">
-              Buka Popup Hitung Mundur Peluncuran
-            </button>
+            <span class="launch-pill mono">Launching · Ver 1.0.0</span>
           </div>
 
-          <!-- Blurred Unclickable Package List -->
-          <div class="download-locked-area" id="locked-download-list" aria-hidden="true">
-            <p style="font-size: 13px; color: var(--text-dim);" data-i18n="dl.desc">
-              Setiap paket APK ditandatangani dengan kunci rilis resmi dan dipisahkan per arsitektur prosesor (ABI).
-            </p>
-            <div class="pkg-table">
-              <div class="pkg-row">
-                <div class="mono" style="font-weight: 600;">arm64-v8a</div>
-                <div style="font-size: 13px; color: var(--text-dim);">Perangkat Android 64-bit utama (ARMv8-A · ~84 MB)</div>
-                <div style="text-align: right;">
-                  <span class="pill-btn">Terkunci (Ver 1.0.0)</span>
-                </div>
+          <div class="pkg-table">
+            <div class="pkg-row">
+              <div>
+                <div class="mono" style="font-weight: 700; font-size: 14.5px;">arm64-v8a</div>
+                <div class="mono" style="font-size: 11.5px; color: var(--text-faint);">Utama · 64-bit ARM</div>
               </div>
-              <div class="pkg-row">
-                <div class="mono" style="font-weight: 600;">armeabi-v7a</div>
-                <div style="font-size: 13px; color: var(--text-dim);">Perangkat Android 32-bit (ARMv7 · ~70 MB)</div>
-                <div style="text-align: right;">
-                  <span class="pill-btn">Terkunci (Ver 1.0.0)</span>
-                </div>
+              <div style="font-size: 13px; color: var(--text-dim);" data-i18n="dl.abi1">
+                Perangkat Android 64-bit modern (ARMv8-A · ~80.2 MB · Signed R8)
               </div>
-              <div class="pkg-row">
-                <div class="mono" style="font-weight: 600;">x86_64</div>
-                <div style="font-size: 13px; color: var(--text-dim);">Chromebook, PC Android &amp; Emulator 64-bit (~89 MB)</div>
-                <div style="text-align: right;">
-                  <span class="pill-btn">Terkunci (Ver 1.0.0)</span>
-                </div>
+              <div>
+                <button type="button" class="dl-countdown-btn" data-open-launch>
+                  <span class="dl-btn-top" data-i18n="dl.btn.lbl">Unduh arm64-v8a · Ver 1.0.0</span>
+                  <span class="dl-btn-timer mono" data-btn-countdown>10H : 00J : 00M : 00D</span>
+                </button>
+              </div>
+            </div>
+
+            <div class="pkg-row">
+              <div>
+                <div class="mono" style="font-weight: 700; font-size: 14.5px;">armeabi-v7a</div>
+                <div class="mono" style="font-size: 11.5px; color: var(--text-faint);">Kompatibilitas · 32-bit ARM</div>
+              </div>
+              <div style="font-size: 13px; color: var(--text-dim);" data-i18n="dl.abi2">
+                Perangkat Android 32-bit generasi lama (ARMv7 · ~67.3 MB · Signed R8)
+              </div>
+              <div>
+                <button type="button" class="dl-countdown-btn" data-open-launch>
+                  <span class="dl-btn-top" data-i18n="dl.btn.lbl2">Unduh armeabi-v7a · Ver 1.0.0</span>
+                  <span class="dl-btn-timer mono" data-btn-countdown>10H : 00J : 00M : 00D</span>
+                </button>
+              </div>
+            </div>
+
+            <div class="pkg-row">
+              <div>
+                <div class="mono" style="font-weight: 700; font-size: 14.5px;">x86_64</div>
+                <div class="mono" style="font-size: 11.5px; color: var(--text-faint);">Desktop / Emulator · 64-bit</div>
+              </div>
+              <div style="font-size: 13px; color: var(--text-dim);" data-i18n="dl.abi3">
+                Chromebook, PC Android &amp; Emulator x86_64 (~85.4 MB · Signed R8)
+              </div>
+              <div>
+                <button type="button" class="dl-countdown-btn" data-open-launch>
+                  <span class="dl-btn-top" data-i18n="dl.btn.lbl3">Unduh x86_64 · Ver 1.0.0</span>
+                  <span class="dl-btn-timer mono" data-btn-countdown>10H : 00J : 00M : 00D</span>
+                </button>
               </div>
             </div>
           </div>
@@ -800,8 +809,8 @@
     </section>
   </main>
 
-  <!-- Full-Screen Blurred Launching Ver 1.0.0 Countdown Modal -->
-  <div class="launch-backdrop" id="launch-modal" role="dialog" aria-modal="true" aria-labelledby="launch-modal-title">
+  <!-- Full-Screen Blurred Launching Ver 1.0.0 Countdown Modal (Opens Automatically on Page Load) -->
+  <div class="launch-backdrop open" id="launch-modal" role="dialog" aria-modal="true" aria-labelledby="launch-modal-title">
     <div class="launch-dialog">
       <div class="launch-top">
         <div class="brand">
@@ -880,6 +889,9 @@
       var cdHours = document.getElementById("cd-hours");
       var cdMins = document.getElementById("cd-mins");
       var cdSecs = document.getElementById("cd-secs");
+      var btnCountdowns = document.querySelectorAll("[data-btn-countdown]");
+      var currentTheme = localStorage.getItem("xydesk_theme") || "dark";
+      var currentLang = localStorage.getItem("xydesk_lang") || "id";
 
       function pad2(n) {
         return n < 10 ? "0" + n : String(n);
@@ -895,10 +907,15 @@
         cdHours.textContent = pad2(h);
         cdMins.textContent = pad2(m);
         cdSecs.textContent = pad2(s);
-      }
 
-      tickCountdown();
-      setInterval(tickCountdown, 1000);
+        var inlineStr =
+          currentLang === "en"
+            ? pad2(d) + "D : " + pad2(h) + "H : " + pad2(m) + "M : " + pad2(s) + "S"
+            : pad2(d) + "H : " + pad2(h) + "J : " + pad2(m) + "M : " + pad2(s) + "D";
+        btnCountdowns.forEach(function (el) {
+          el.textContent = inlineStr;
+        });
+      }
 
       function openModal() {
         modal.classList.add("open");
@@ -907,6 +924,11 @@
       function closeModal() {
         modal.classList.remove("open");
       }
+
+      // Popup muncul otomatis pas awal buka web
+      openModal();
+      tickCountdown();
+      setInterval(tickCountdown, 1000);
 
       document.querySelectorAll("[data-open-launch]").forEach(function (btn) {
         btn.addEventListener("click", function (e) {
@@ -920,19 +942,9 @@
         if (e.target === modal) closeModal();
       });
 
-      if (
-        window.location.hash === "#download" ||
-        window.location.pathname.indexOf("download") !== -1 ||
-        window.location.search.indexOf("download") !== -1
-      ) {
-        openModal();
-      }
-
       // Theme & Language
       var themeBtn = document.getElementById("theme-btn");
       var langBtn = document.getElementById("lang-btn");
-      var currentTheme = localStorage.getItem("xydesk_theme") || "dark";
-      var currentLang = localStorage.getItem("xydesk_lang") || "id";
 
       var idDefaults = {};
       document.querySelectorAll("[data-i18n]").forEach(function (el) {
@@ -964,9 +976,13 @@
         "arch.title": "Streaming, Latency & Security Settings",
         "dl.kicker": "Application Distribution",
         "dl.title": "Download Android Installation Packages (APK)",
-        "lock.heading": "Downloads Locked Pending Official Ver 1.0.0 Launch",
-        "lock.sub": "All signed release APK packages are currently held in verified Draft state and will unlock automatically when the launch countdown finishes.",
-        "lock.btn": "Open Launch Countdown Popup",
+        "dl.desc": "Each APK package is signed with the official release key and separated by processor architecture (ABI). Downloads remain locked while the Ver 1.0.0 launch countdown is running.",
+        "dl.abi1": "Modern 64-bit Android devices (ARMv8-A · ~80.2 MB · Signed R8)",
+        "dl.abi2": "Legacy 32-bit Android devices (ARMv7 · ~67.3 MB · Signed R8)",
+        "dl.abi3": "Chromebooks, Android PCs & x86_64 Emulators (~85.4 MB · Signed R8)",
+        "dl.btn.lbl": "Download arm64-v8a · Ver 1.0.0",
+        "dl.btn.lbl2": "Download armeabi-v7a · Ver 1.0.0",
+        "dl.btn.lbl3": "Download x86_64 · Ver 1.0.0",
         "modal.body": "Public downloads are currently locked. Official XyDesk Remote Ver 1.0.0 installation packages will unlock automatically once the countdown below reaches zero.",
         "cd.d": "Days",
         "cd.h": "Hours",
@@ -1007,6 +1023,7 @@
           l === "en"
             ? "Release State: Locked Draft (Awaiting Launch)"
             : "Status Rilis: Draft Terkunci (Menunggu Peluncuran)";
+        tickCountdown();
         applyTheme(currentTheme);
       }
 
