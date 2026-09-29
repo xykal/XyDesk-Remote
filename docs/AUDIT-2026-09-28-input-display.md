@@ -10,6 +10,15 @@ Scope: Android soft-keyboard text input, mouse HUD glyphs, Windows display scale
 4. **[MED] Remote DPI is sent as Windows DesktopScaleFactor, but app cannot confirm host application.** `core-rdp/.../SessionManager.kt:373-390` invokes the DISP monitor-layout request; native `android_disp.c:78-127` sets `DesktopScaleFactor`. A successful call means the request was queued, not that Windows applied it. Distinguish this from local zoom and avoid “applied” language; host support must be tested.
 5. **[MED] Resolution UI treats a queued DISP request as success.** `app/.../XyDeskSession.kt:804-827` reacts to `resizeRemote()`'s send result, while actual dimensions arrive later through telemetry. Wait for the reported width/height, then use the existing reconnect fallback and report the actual dimensions if the host refuses the requested size.
 
+## Fix disposition and verification
+
+- Finding 1: composition is buffered and committed once; a JVM regression suite covers composition, deletion, surrogate pairs, and duplicate soft-IME events.
+- Finding 2: the text dialog now distinguishes direct typing from updating the Windows clipboard, allowing Gboard-pasted text to use CLIPRDR. End-to-end acceptance on the target host remains pending.
+- Finding 3: left/right/middle mouse glyphs now use rounded geometry.
+- Finding 4: session-panel copy states that DPI is a Windows DisplayScaleFactor request; no host acknowledgement is claimed.
+- Finding 5: requested resolution is checked against actual telemetry before success; timeout triggers the existing reconnect path and reports the dimensions the host reports.
+- CI compile and JVM tests passed: [branch run 36501234993](https://github.com/xykal/XyDesk-Remote/actions/runs/36501234993), [main merge run 36501553819](https://github.com/xykal/XyDesk-Remote/actions/runs/36501553819), [version-bump run 36501831764](https://github.com/xykal/XyDesk-Remote/actions/runs/36501831764). Debug jobs were skipped; there was no local build. Signed release build and device/host verification remain pending.
+
 ## Existing behavior and scope
 
 - Resolution presets are passed at initial connect and can also use the DISP channel; only actual telemetry can confirm a change.
