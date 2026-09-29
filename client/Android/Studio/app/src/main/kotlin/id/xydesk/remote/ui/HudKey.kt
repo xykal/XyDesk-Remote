@@ -141,6 +141,28 @@ data class HudKey(
             put("keys", arr)
         }.toString()
 
+        fun normalizeImportedKeys(
+            items: List<HudKey>,
+            defaultSize: Float = 64f,
+        ): List<HudKey> {
+            val seenIds = mutableSetOf<String>()
+            return items
+                .filterNot { it.kind == HudKind.KEYBOARD || it.id.startsWith("aux_") || it.id.isBlank() }
+                .take(36)
+                .mapIndexed { i, item ->
+                    val uniqueId = if (seenIds.add(item.id)) item.id else "${item.id}_$i"
+                    seenIds.add(uniqueId)
+                    val validAction = item.action.takeIf { it in allowedActions(item.kind) } ?: HudAction.TAP
+                    item.copy(
+                        id = uniqueId,
+                        action = validAction,
+                        x = item.x.coerceIn(0f, 1f),
+                        y = item.y.coerceIn(0f, 1f),
+                        size = item.size.coerceIn(56f, 120f).takeIf { it > 0f } ?: defaultSize.coerceIn(56f, 120f),
+                    )
+                }
+        }
+
         fun importLayoutJson(raw: String?, defaultSize: Float = 64f): List<HudKey>? {
             val trimmed = raw?.trim().orEmpty()
             if (trimmed.isEmpty()) return null
@@ -151,18 +173,10 @@ data class HudKey(
                     JSONArray(trimmed)
                 }
             }.getOrNull() ?: return null
-            val seenIds = mutableSetOf<String>()
             val parsed = (0 until minOf(arr.length(), 36)).mapNotNull { i ->
-                val item = arr.optJSONObject(i)?.let { fromJson(it) } ?: return@mapNotNull null
-                if (item.kind == HudKind.KEYBOARD || item.id.startsWith("aux_")) return@mapNotNull null
-                val uniqueId = if (seenIds.add(item.id)) item.id else "${item.id}_$i"
-                seenIds.add(uniqueId)
-                item.copy(
-                    id = uniqueId,
-                    size = item.size.coerceIn(56f, 120f).takeIf { it > 0f } ?: defaultSize.coerceIn(56f, 120f),
-                )
+                arr.optJSONObject(i)?.let { fromJson(it) }
             }
-            return parsed.takeIf { it.isNotEmpty() }
+            return normalizeImportedKeys(parsed, defaultSize).takeIf { it.isNotEmpty() }
         }
 
         /**
