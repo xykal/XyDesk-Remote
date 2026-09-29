@@ -651,7 +651,7 @@ public class SessionView extends View
 			return new BaseInputConnection(this, false);
 
 		return new BaseInputConnection(this, true) {
-			private String composingText = "";
+			private final ImeCompositionBuffer composition = new ImeCompositionBuffer();
 
 			private void sendBackspaces(int count)
 			{
@@ -662,83 +662,63 @@ public class SessionView extends View
 				}
 			}
 
-			private int codePointCount(String value)
+			private void sendForwardDeletes(int count)
 			{
-				return value.codePointCount(0, value.length());
-			}
-
-			private void replaceComposingText(CharSequence text)
-			{
-				String replacement = text == null ? "" : text.toString();
-				if (!composingText.isEmpty())
-					sendBackspaces(codePointCount(composingText));
-				if (!replacement.isEmpty())
-					sink.onText(replacement);
-				composingText = replacement;
+				for (int i = 0; i < count; i++)
+				{
+					sink.onKeyEvent(new KeyEvent(KeyEvent.ACTION_DOWN, KeyEvent.KEYCODE_FORWARD_DEL));
+					sink.onKeyEvent(new KeyEvent(KeyEvent.ACTION_UP, KeyEvent.KEYCODE_FORWARD_DEL));
+				}
 			}
 
 			@Override public boolean setComposingText(CharSequence text, int newCursorPosition)
 			{
-				// Soft keyboards often send composing updates and wait for Enter/space
-				// before calling commitText. Forward each update live, replacing the
-				// previous provisional text instead of buffering it in this view.
-				replaceComposingText(text);
+				// Keep provisional IME text local. Sending each composing revision as
+				// backspace + replacement makes remote apps flicker and can double text.
+				composition.setComposingText(text);
 				return true;
 			}
 
 			@Override public boolean commitText(CharSequence text, int newCursorPosition)
 			{
-				String committed = text == null ? "" : text.toString();
-				if (!committed.equals(composingText))
-					replaceComposingText(committed);
-				composingText = "";
+				String committed = composition.commitText(text);
+				if (!committed.isEmpty())
+					sink.onText(committed);
 				return true;
 			}
 
 			@Override public boolean finishComposingText()
 			{
-				// The provisional text is already visible remotely; only close its
-				// local bookkeeping so a later composition doesn't erase it.
-				composingText = "";
+				String remaining = composition.finishComposingText();
+				if (!remaining.isEmpty())
+					sink.onText(remaining);
 				return true;
 			}
 
 			@Override public boolean sendKeyEvent(KeyEvent event)
 			{
+				if (event.getKeyCode() == KeyEvent.KEYCODE_DEL &&
+				    (event.getFlags() & KeyEvent.FLAG_SOFT_KEYBOARD) != 0 &&
+				    event.getAction() == KeyEvent.ACTION_DOWN && composition.hasComposingText())
+				{
+					composition.deleteBeforeCursor(1);
+					return true;
+				}
+				if (ImeCompositionBuffer.isPrintableImeTextEvent(
+				        event.getFlags(), event.getAction(), event.getUnicodeChar(),
+				        composition.hasComposingText()))
+					return true;
+				if (ImeCompositionBuffer.isImeMultipleTextEvent(
+				        event.getFlags(), event.getAction(), event.getCharacters(),
+				        composition.hasComposingText()))
+					return true;
 				return sink.onKeyEvent(event);
 			}
 
 			@Override public boolean deleteSurroundingText(int beforeLength, int afterLength)
 			{
-				if (beforeLength > 0)
-				{
-					int deleteUnits = Math.min(beforeLength, 256);
-					int backspaceCount = deleteUnits;
-					if (!composingText.isEmpty())
-					{
-						int start = Math.max(0, composingText.length() - deleteUnits);
-						// Never leave half of a UTF-16 surrogate pair in composition.
-						if (start > 0 && start < composingText.length() &&
-						    Character.isHighSurrogate(composingText.charAt(start - 1)) &&
-						    Character.isLowSurrogate(composingText.charAt(start)))
-							start--;
-						int removedUnits = composingText.length() - start;
-						int composingBackspaces = composingText.codePointCount(start, composingText.length());
-						int outsideBackspaces = Math.max(0, deleteUnits - removedUnits);
-						backspaceCount = composingBackspaces + outsideBackspaces;
-						composingText = composingText.substring(0, start);
-					}
-					sendBackspaces(backspaceCount);
-				}
-				if (afterLength > 0)
-				{
-					for (int i = 0; i < Math.min(afterLength, 256); i++)
-					{
-						sink.onKeyEvent(new KeyEvent(KeyEvent.ACTION_DOWN, KeyEvent.KEYCODE_FORWARD_DEL));
-						sink.onKeyEvent(new KeyEvent(KeyEvent.ACTION_UP, KeyEvent.KEYCODE_FORWARD_DEL));
-					}
-					composingText = "";
-				}
+				sendBackspaces(composition.deleteBeforeCursor(beforeLength));
+				sendForwardDeletes(composition.deleteAfterCursor(afterLength));
 				return true;
 			}
 		};

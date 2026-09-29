@@ -1,10 +1,9 @@
 name: Build APK
 
 # XyDesk Remote — CI/CD
-#  - push ke main        -> build DEBUG per-ABI (armeabi-v7a, arm64-v8a, x86_64)
-#  - tag v*              -> build RELEASE (R8 + signing resmi) + GitHub Release
-#  - manual release      -> build signed APK artifact for testing (tanpa publish release)
-#  - manual debug        -> build APK debug
+#  - push ke main        -> compile gate + debug per-ABI (kecuali commit [skip-debug])
+#  - tag v* / manual     -> build RELEASE (R8 + signing resmi, per-ABI) + GitHub Release
+#  - manual (dispatch)   -> build debug atau release
 #
 # Signing key tidak pernah dibuat/diunggah oleh workflow ini. Buat dan simpan
 # keystore di mesin tepercaya; masukkan nilainya ke repository Actions secrets.
@@ -74,18 +73,18 @@ jobs:
             "platform-tools" "platforms;android-37.2" "build-tools;37.0.0"
           echo "ANDROID_HOME=$ANDROID_HOME" >> "$GITHUB_ENV"
           echo "ANDROID_SDK_ROOT=$ANDROID_HOME" >> "$GITHUB_ENV"
-      - name: Unit test JVM (core-rdp)
+      - name: Unit test JVM (core-rdp + IME + app UI)
         working-directory: client/Android/Studio
-        run: ./gradlew --stacktrace --no-daemon :core-rdp:testDebugUnitTest
+        run: ./gradlew --stacktrace --no-daemon :core-rdp:testDebugUnitTest :freeRDPCore:testDebugUnitTest :app:testDebugUnitTest
       - name: Compile Kotlin (app + core-rdp)
         working-directory: client/Android/Studio
         run: ./gradlew --stacktrace --no-daemon :app:compileDebugKotlin
 
   # ------------------------------------------------------------------
-  # DEBUG per-ABI (tiap push ke main)
+  # DEBUG per-ABI (tiap push ke main; commit [skip-debug] khusus melewati job ini)
   # ------------------------------------------------------------------
   build-debug:
-    if: ${{ github.event_name == 'push' && !startsWith(github.ref, 'refs/tags/') || (github.event_name == 'workflow_dispatch' && inputs.job == 'debug') }}
+    if: ${{ (github.event_name == 'push' && !startsWith(github.ref, 'refs/tags/') && !contains(github.event.head_commit.message, '[skip-debug]')) || (github.event_name == 'workflow_dispatch' && inputs.job == 'debug') }}
     name: Debug per-ABI (armv7 + arm64 + x86_64)
     runs-on: ubuntu-latest
     timeout-minutes: 360
@@ -165,7 +164,7 @@ jobs:
   # Trigger: tag v* (otomatis) atau manual 'release'
   # ------------------------------------------------------------------
   build-release:
-    if: ${{ startsWith(github.ref, 'refs/tags/v') || (github.event_name == 'workflow_dispatch' && inputs.job == 'release') }}
+    if: ${{ startsWith(github.ref, 'refs/tags/v') || (github.event_name == 'workflow_dispatch' && inputs.job == 'release' && github.ref == 'refs/heads/main') }}
     name: Release per-ABI (R8 + signed) + GitHub Release
     runs-on: ubuntu-latest
     timeout-minutes: 400
@@ -247,7 +246,7 @@ jobs:
           RELEASE_KEY_ALIAS: ${{ secrets.RELEASE_KEY_ALIAS }}
           RELEASE_KEY_PASSWORD: ${{ secrets.RELEASE_KEY_PASSWORD }}
           RELEASE_STORE_PASSWORD: ${{ secrets.RELEASE_STORE_PASSWORD }}
-        run: ./gradlew --stacktrace --no-daemon --max-workers=2 assembleRelease
+        run: ./gradlew --stacktrace --no-daemon assembleRelease
       - name: Verifikasi signature setiap ABI (apksigner)
         working-directory: client/Android/Studio
         run: |

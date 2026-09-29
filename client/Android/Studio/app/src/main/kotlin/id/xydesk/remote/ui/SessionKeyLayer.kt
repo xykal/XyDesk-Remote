@@ -64,11 +64,10 @@ enum class HudPhase { DOWN, UP, TAP }
  * Warna tombol kontrol di atas gambar remote. Sengaja tetap (tidak ikut tema
  * app) karena latarnya adalah gambar sesi, bukan permukaan app.
  *
- * Tiga rasa: transparan (cuma border), gelap tipis, dan terang tipis. Ini
- * yang bikin ikon tetap kelihatan waktu desktop remote-nya putih terang.
+ * Tiga rasa: transparan, gelap lembut, dan gelap tegas. Pelat terang sengaja
+ * tidak dipakai agar ikon tidak mendapat cakram putih saat app bertema gelap.
  */
 private val HudBorder = Color(0xD9FFFFFF)
-private val HudBorderDim = Color(0x7AFFFFFF)
 private val HudInk = Color(0xFFF1F4F6)
 
 /** Warna per rasa latar tombol. */
@@ -76,8 +75,8 @@ data class HudPalette(val border: Color, val ink: Color, val plate: Color)
 
 fun hudPalette(plate: HudPlate): HudPalette = when (plate) {
     HudPlate.NONE -> HudPalette(HudBorder, HudInk, Color.Transparent)
-    HudPlate.DARK -> HudPalette(Color(0xF2FFFFFF), Color(0xFFF7F9FA), Color(0x99000000))
-    HudPlate.LIGHT -> HudPalette(Color(0x59000000), Color(0xFF14171B), Color(0xE6FFFFFF))
+    HudPlate.DARK -> HudPalette(Color(0xF2FFFFFF), Color(0xFFF7F9FA), Color(0xCC0B0D10))
+    HudPlate.LIGHT -> HudPalette(Color(0xBFFFFFFF), Color(0xFFF1F4F6), Color(0x700B0D10))
 }
 
 /**
@@ -576,8 +575,8 @@ fun HudMappingBanner(
             .fillMaxWidth()
             .padding(12.dp)
             .clip(RoundedCornerShape(12.dp))
-            .background(Color(0xE60B0D10))
-            .border(1.dp, HudBorderDim, RoundedCornerShape(12.dp))
+            .background(MaterialTheme.colorScheme.surface)
+            .border(1.dp, MaterialTheme.colorScheme.outline, RoundedCornerShape(12.dp))
             .padding(horizontal = 12.dp, vertical = 8.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(8.dp),
@@ -587,27 +586,36 @@ fun HudMappingBanner(
                 "Atur posisi: geser tombol; ketuk untuk ubah aksi/ukuran",
                 "Edit layout: drag a button; tap to change its action/size",
             ),
-            color = HudInk,
+            color = MaterialTheme.colorScheme.onSurface,
             fontSize = 11.sp,
             modifier = Modifier.weight(1f),
         )
         Box(
             Modifier
                 .clip(XyPill)
-                .border(1.dp, HudBorder, XyPill)
+                .border(1.dp, MaterialTheme.colorScheme.outlineVariant, XyPill)
                 .clickable(onClick = onAdd)
                 .padding(horizontal = 12.dp, vertical = 6.dp),
         ) {
-            Text(xy("+ Tombol", "+ Button"), color = HudInk, fontSize = 11.sp)
+            Text(
+                xy("+ Tombol", "+ Button"),
+                color = MaterialTheme.colorScheme.onSurface,
+                fontSize = 11.sp,
+            )
         }
         Box(
             Modifier
                 .clip(XyPill)
-                .background(Color(0xFFF1F4F6))
+                .background(MaterialTheme.colorScheme.primaryContainer)
                 .clickable(onClick = onDone)
                 .padding(horizontal = 12.dp, vertical = 6.dp),
         ) {
-            Text(xy("Selesai", "Done"), color = Color(0xFF0A0B0D), fontSize = 11.sp, fontWeight = FontWeight.SemiBold)
+            Text(
+                xy("Selesai", "Done"),
+                color = MaterialTheme.colorScheme.onPrimaryContainer,
+                fontSize = 11.sp,
+                fontWeight = FontWeight.SemiBold,
+            )
         }
     }
 }
