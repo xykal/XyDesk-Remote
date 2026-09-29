@@ -3,54 +3,139 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Kebijakan Privasi (DRAFT) — XyDesk Remote</title>
+  <title>Kebijakan Privasi — XyDesk Remote</title>
+  <meta name="description" content="Kebijakan Privasi dan Arsitektur Keamanan Data XyDesk Remote oleh XyVerse Technology Global." />
   <style>
+    :root {
+      --bg: #0A0B0E;
+      --surface: #12141A;
+      --surface-alt: #181B22;
+      --line: #252934;
+      --line-strong: #3A4050;
+      --text: #F4F6F8;
+      --text-dim: #A6AEBB;
+      --text-faint: #737B88;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
     body {
-      background: #07090D;
-      color: #F2F5F8;
-      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Inter, Roboto, sans-serif;
       line-height: 1.6;
-      max-width: 780px;
-      margin: 0 auto;
-      padding: 40px 20px;
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
     }
-    .card {
-      background: #11151D;
-      border: 1px solid #2B3442;
-      border-radius: 12px;
-      padding: 24px;
-      margin-top: 16px;
-    }
-    a { color: #57C08B; text-decoration: none; }
-    h1, h2 { margin-bottom: 8px; }
-    p, li { color: #B8C1CC; font-size: 14px; }
-    .badge {
-      display: inline-block;
-      padding: 3px 10px;
+    a { color: inherit; text-decoration: none; }
+    .mono { font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace; }
+    .container { width: 100%; max-width: 860px; margin: 0 auto; padding: 0 20px; }
+    .topbar { border-bottom: 1px solid var(--line); background: var(--bg); }
+    .topbar-inner { min-height: 60px; display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+    .pill {
+      display: inline-flex;
+      align-items: center;
+      padding: 6px 14px;
       border-radius: 999px;
-      border: 1px solid #D7A54E;
-      color: #D7A54E;
-      font-size: 11px;
+      border: 1px solid var(--line);
+      font-size: 12.5px;
       font-weight: 600;
     }
+    .pill:hover { background: var(--surface-alt); border-color: var(--line-strong); }
+    main { padding: 44px 0; flex: 1; }
+    .meta { font-size: 11.5px; color: var(--text-faint); text-transform: uppercase; letter-spacing: 0.06em; margin-bottom: 8px; }
+    h1 { font-size: 28px; font-weight: 700; letter-spacing: -0.02em; margin-bottom: 12px; }
+    .lead { font-size: 14.5px; color: var(--text-dim); margin-bottom: 28px; }
+    .section-card {
+      background: var(--surface);
+      border: 1px solid var(--line);
+      border-radius: 12px;
+      padding: 22px;
+      margin-bottom: 14px;
+    }
+    .section-card h2 { font-size: 16px; font-weight: 600; margin-bottom: 8px; }
+    .section-card p, .section-card li { font-size: 13.5px; color: var(--text-dim); }
+    .section-card ul { padding-left: 18px; margin-top: 8px; display: flex; flex-direction: column; gap: 6px; }
+    footer { border-top: 1px solid var(--line); padding: 24px 0; font-size: 12px; color: var(--text-faint); }
+    .footer-inner { display: flex; justify-content: space-between; flex-wrap: wrap; gap: 12px; }
+    .footer-links { display: flex; gap: 14px; flex-wrap: wrap; }
   </style>
 </head>
 <body>
-  <a href="index.html">&larr; Kembali ke XyDesk Remote</a>
-  <div class="card">
-    <span class="badge">DRAFT — Menunggu Tinjauan Hukum (Pending Counsel Review)</span>
-    <h1>Kebijakan Privasi — XyDesk Remote</h1>
-    <p>Pembaruan terakhir: 29 September 2026 · Diterbitkan oleh <strong>XyVerse Technology Global</strong></p>
-    <h2>1. Penyimpanan Lokal &amp; Kredensial</h2>
-    <p>XyDesk Remote menghubungkan perangkat Android Anda secara langsung ke server Remote Desktop (RDP) milik Anda sendiri. Seluruh kata sandi yang disimpan dienkripsi menggunakan AES-256-GCM dengan kunci kriptografi non-exportable di dalam Android Keystore perangkat Anda.</p>
-    <h2>2. Tidak Ada Pengumpulan Data Pihak Ketiga</h2>
-    <p>Aplikasi ini tidak mengirimkan alamat host, kredensial, isi layar remote, maupun isi clipboard Anda ke server XyVerse Technology Global atau layanan analitik pihak ketiga.</p>
-    <h2>3. Izin Perangkat</h2>
-    <ul>
-      <li><strong>Jaringan (Internet):</strong> Diperlukan untuk koneksi TCP/UDP langsung ke host RDP dan paket Wake-on-LAN.</li>
-      <li><strong>Mikrofon &amp; Kamera (Opsional):</strong> Hanya digunakan apabila Anda mengaktifkan pengalihan kanal audio masuk atau kamera pada profil perangkat terkait.</li>
-      <li><strong>Penyimpanan Lokal (Opsional):</strong> Hanya digunakan apabila Anda mengaktifkan fitur berbagi folder Drive 'XyDesk' dengan PC remote.</li>
-    </ul>
-  </div>
+  <header class="topbar">
+    <div class="container topbar-inner">
+      <a href="index.html" style="font-weight: 600; font-size: 16px;">XyDesk Remote</a>
+      <div style="display:flex; gap:8px;">
+        <a href="status.html" class="pill">Status Sistem</a>
+        <a href="licenses.html" class="pill">Lisensi</a>
+        <a href="index.html" class="pill">Beranda</a>
+      </div>
+    </div>
+  </header>
+
+  <main>
+    <div class="container">
+      <div class="meta mono">Dokumen Kebijakan · Efektif 29 September 2026</div>
+      <h1>Kebijakan Privasi &amp; Keamanan Data</h1>
+      <p class="lead">
+        Dokumen ini menjelaskan bagaimana XyDesk Remote menangani konfigurasi koneksi, kredensial, izin perangkat, dan keamanan komunikasi. Diterbitkan oleh <strong>XyVerse Technology Global</strong>.
+      </p>
+
+      <div class="section-card">
+        <h2>1. Arsitektur Koneksi Langsung (Zero-Relay)</h2>
+        <p>
+          XyDesk Remote beroperasi sebagai klien protokol Remote Desktop (RDP) langsung dari perangkat Android Anda ke alamat host atau RD Gateway yang Anda tentukan sendiri. Aliran layar, input keyboard/mouse, audio, berkas, maupun clipboard tidak pernah melewati atau disimpan di server milik XyVerse Technology Global.
+        </p>
+      </div>
+
+      <div class="section-card">
+        <h2>2. Penyimpanan Kredensial &amp; Enkripsi Android Keystore</h2>
+        <p>
+          Apabila Anda memilih opsi untuk menyimpan kata sandi koneksi pada perangkat:
+        </p>
+        <ul>
+          <li>Kata sandi dienkripsi secara lokal menggunakan algoritma <strong>AES-256-GCM</strong> (`CredentialVault`).</li>
+          <li>Kunci enkripsi utama dibuat dan disimpan di dalam perangkat keras <strong>Android Keystore</strong> yang bersifat non-exportable (tidak dapat diekstrak keluar dari perangkat).</li>
+          <li>Kata sandi dan isi clipboard tidak pernah ditulis ke berkas log diagnostik aplikasi maupun URI log internal.</li>
+          <li>Pencadangan otomatis sistem Android dimatikan (`android:allowBackup="false"`) untuk mencegah salinan data sensitif berpindah ke penyimpanan cloud pihak ketiga.</li>
+        </ul>
+      </div>
+
+      <div class="section-card">
+        <h2>3. Verifikasi Sertifikat Server (Trust-On-First-Use)</h2>
+        <p>
+          Saat terhubung ke server RDP, sidik jari (fingerprint) sertifikat TLS/NLA diverifikasi terhadap daftar kepercayaan lokal (`CertificateTrustStore`). Apabila sertifikat berubah atau belum dikenal, aplikasi menampilkan dialog konfirmasi eksplisit sebelum melanjutkan koneksi.
+        </p>
+      </div>
+
+      <div class="section-card">
+        <h2>4. Penggunaan Izin Perangkat Android</h2>
+        <ul>
+          <li><strong>Akses Jaringan (`INTERNET`, `ACCESS_NETWORK_STATE`):</strong> Digunakan semata-mata untuk membuka soket TCP/UDP RDP, deteksi profil jaringan lokal, serta pengiriman paket UDP Wake-on-LAN.</li>
+          <li><strong>Layanan Latar Depan (`FOREGROUND_SERVICE`):</strong> Menjaga sesi RDP tetap hidup saat pengguna berpindah aplikasi atau menggunakan mode Picture-in-Picture (PiP).</li>
+          <li><strong>Mikrofon (`RECORD_AUDIO` — Opsional):</strong> Hanya diakses apabila pengguna mengaktifkan pengalihan mikrofon pada profil koneksi terkait.</li>
+          <li><strong>Penyimpanan Lokal (Opsional):</strong> Hanya diakses apabila pengguna mengaktifkan pengalihan folder Drive 'XyDesk' atau mengirimkan berkas melalui menu Bagikan Android (`ACTION_SEND`).</li>
+        </ul>
+      </div>
+
+      <div class="section-card">
+        <h2>5. Perlindungan Privasi Sesi Lokal</h2>
+        <p>
+          Pengguna dapat mengaktifkan fitur perlindungan tambahan di menu Keamanan aplikasi, meliputi blokir tangkapan layar (`FLAG_SECURE`), autentikasi kunci layar/biometrik perangkat sebelum membuka sesi, penguncian sesi Windows otomatis (`Win+L`) saat terputus, serta pembersihan clipboard HP otomatis setelah sesi berakhir.
+        </p>
+      </div>
+    </div>
+  </main>
+
+  <footer>
+    <div class="container footer-inner">
+      <div><strong>XyDesk Remote</strong> · Powered by <span>XyVerse Technology Global</span></div>
+      <div class="footer-links">
+        <a href="index.html">Beranda</a>
+        <a href="terms.html">Ketentuan Layanan</a>
+        <a href="licenses.html">Lisensi</a>
+        <a href="status.html">Status Sistem</a>
+      </div>
+    </div>
+  </footer>
 </body>
 </html>

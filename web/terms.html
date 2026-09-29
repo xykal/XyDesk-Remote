@@ -3,50 +3,122 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Ketentuan Layanan (DRAFT) — XyDesk Remote</title>
+  <title>Ketentuan Layanan — XyDesk Remote</title>
+  <meta name="description" content="Ketentuan Layanan Penggunaan Aplikasi XyDesk Remote oleh XyVerse Technology Global." />
   <style>
+    :root {
+      --bg: #0A0B0E;
+      --surface: #12141A;
+      --surface-alt: #181B22;
+      --line: #252934;
+      --line-strong: #3A4050;
+      --text: #F4F6F8;
+      --text-dim: #A6AEBB;
+      --text-faint: #737B88;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
     body {
-      background: #07090D;
-      color: #F2F5F8;
-      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Inter, Roboto, sans-serif;
       line-height: 1.6;
-      max-width: 780px;
-      margin: 0 auto;
-      padding: 40px 20px;
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
     }
-    .card {
-      background: #11151D;
-      border: 1px solid #2B3442;
-      border-radius: 12px;
-      padding: 24px;
-      margin-top: 16px;
-    }
-    a { color: #57C08B; text-decoration: none; }
-    h1, h2 { margin-bottom: 8px; }
-    p, li { color: #B8C1CC; font-size: 14px; }
-    .badge {
-      display: inline-block;
-      padding: 3px 10px;
+    a { color: inherit; text-decoration: none; }
+    .mono { font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace; }
+    .container { width: 100%; max-width: 860px; margin: 0 auto; padding: 0 20px; }
+    .topbar { border-bottom: 1px solid var(--line); background: var(--bg); }
+    .topbar-inner { min-height: 60px; display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+    .pill {
+      display: inline-flex;
+      align-items: center;
+      padding: 6px 14px;
       border-radius: 999px;
-      border: 1px solid #D7A54E;
-      color: #D7A54E;
-      font-size: 11px;
+      border: 1px solid var(--line);
+      font-size: 12.5px;
       font-weight: 600;
     }
+    .pill:hover { background: var(--surface-alt); border-color: var(--line-strong); }
+    main { padding: 44px 0; flex: 1; }
+    .meta { font-size: 11.5px; color: var(--text-faint); text-transform: uppercase; letter-spacing: 0.06em; margin-bottom: 8px; }
+    h1 { font-size: 28px; font-weight: 700; letter-spacing: -0.02em; margin-bottom: 12px; }
+    .lead { font-size: 14.5px; color: var(--text-dim); margin-bottom: 28px; }
+    .section-card {
+      background: var(--surface);
+      border: 1px solid var(--line);
+      border-radius: 12px;
+      padding: 22px;
+      margin-bottom: 14px;
+    }
+    .section-card h2 { font-size: 16px; font-weight: 600; margin-bottom: 8px; }
+    .section-card p { font-size: 13.5px; color: var(--text-dim); }
+    footer { border-top: 1px solid var(--line); padding: 24px 0; font-size: 12px; color: var(--text-faint); }
+    .footer-inner { display: flex; justify-content: space-between; flex-wrap: wrap; gap: 12px; }
+    .footer-links { display: flex; gap: 14px; flex-wrap: wrap; }
   </style>
 </head>
 <body>
-  <a href="index.html">&larr; Kembali ke XyDesk Remote</a>
-  <div class="card">
-    <span class="badge">DRAFT — Menunggu Tinjauan Hukum (Pending Counsel Review)</span>
-    <h1>Ketentuan Layanan — XyDesk Remote</h1>
-    <p>Pembaruan terakhir: 29 September 2026 · Diterbitkan oleh <strong>XyVerse Technology Global</strong></p>
-    <h2>1. Penggunaan yang Sah</h2>
-    <p>Anda hanya diperkenankan menggunakan XyDesk Remote untuk mengakses komputer, workstation, atau server yang Anda miliki atau yang telah memberikan otorisasi eksplisit kepada Anda.</p>
-    <h2>2. Lisensi &amp; Komponen Sumber Terbuka</h2>
-    <p>XyDesk Remote dibangun di atas mesin protokol FreeRDP di bawah lisensi Apache License 2.0. Pemberitahuan atribusi lengkap tersedia di dalam repositori dan bagian Tentang aplikasi.</p>
-    <h2>3. Batasan Tanggung Jawab</h2>
-    <p>Perangkat lunak disediakan sebagaimana adanya ("AS IS"). Anda bertanggung jawab penuh atas pengamanan jaringan, konfigurasi firewall/gateway, serta pencadangan data pada mesin remote Anda.</p>
-  </div>
+  <header class="topbar">
+    <div class="container topbar-inner">
+      <a href="index.html" style="font-weight: 600; font-size: 16px;">XyDesk Remote</a>
+      <div style="display:flex; gap:8px;">
+        <a href="privacy.html" class="pill">Kebijakan Privasi</a>
+        <a href="licenses.html" class="pill">Lisensi</a>
+        <a href="index.html" class="pill">Beranda</a>
+      </div>
+    </div>
+  </header>
+
+  <main>
+    <div class="container">
+      <div class="meta mono">Ketentuan Penggunaan · Efektif 29 September 2026</div>
+      <h1>Ketentuan Layanan</h1>
+      <p class="lead">
+        Ketentuan ini mengatur penggunaan perangkat lunak klien XyDesk Remote yang dikembangkan dan didistribusikan oleh <strong>XyVerse Technology Global</strong>.
+      </p>
+
+      <div class="section-card">
+        <h2>1. Otorisasi Akses Sistem</h2>
+        <p>
+          Pengguna wajib memastikan bahwa setiap koneksi Remote Desktop (RDP), pengiriman paket Wake-on-LAN, maupun penerusan port SSH yang dilakukan melalui XyDesk Remote hanya ditujukan ke perangkat komputer atau server yang dimiliki secara sah atau yang telah memberikan izin akses tertulis kepada pengguna.
+        </p>
+      </div>
+
+      <div class="section-card">
+        <h2>2. Tanggung Jawab Konfigurasi &amp; Keamanan Host</h2>
+        <p>
+          Pengamanan host Windows target, kebijakan Network Level Authentication (NLA), sertifikat TLS, konfigurasi firewall, VPN/Tailscale, serta pencadangan berkas pada mesin target sepenuhnya berada di bawah tanggung jawab pengguna atau administrator sistem terkait.
+        </p>
+      </div>
+
+      <div class="section-card">
+        <h2>3. Hak Kekayaan Intelektual &amp; Lisensi</h2>
+        <p>
+          Identitas merek XyDesk Remote, antarmuka pengguna, dan komponen khusus aplikasi dimiliki oleh <strong>XyVerse Technology Global</strong>. Pustaka protokol inti dan codec pihak ketiga dilisensikan sesuai ketentuan masing-masing yang tercantum secara lengkap pada halaman Lisensi Open Source.
+        </p>
+      </div>
+
+      <div class="section-card">
+        <h2>4. Batasan Jaminan</h2>
+        <p>
+          Perangkat lunak disediakan sebagaimana adanya ("AS IS") tanpa jaminan tersurat maupun tersirat terkait ketersediaan jaringan pihak ketiga atau kompatibilitas kebijakan grup (Group Policy) pada server target.
+        </p>
+      </div>
+    </div>
+  </main>
+
+  <footer>
+    <div class="container footer-inner">
+      <div><strong>XyDesk Remote</strong> · Powered by <span>XyVerse Technology Global</span></div>
+      <div class="footer-links">
+        <a href="index.html">Beranda</a>
+        <a href="privacy.html">Kebijakan Privasi</a>
+        <a href="licenses.html">Lisensi</a>
+        <a href="status.html">Status Sistem</a>
+      </div>
+    </div>
+  </footer>
 </body>
 </html>

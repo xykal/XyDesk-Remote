@@ -290,6 +290,7 @@ jobs:
         with:
           files: release-apks/*.apk
           generate_release_notes: true
+          draft: ${{ !startsWith(github.ref_name, 'v1.') }}
       - name: Sisakan hanya rilis terbaru & bersihkan artifacts
         env:
           GH_TOKEN: ${{ github.token }}

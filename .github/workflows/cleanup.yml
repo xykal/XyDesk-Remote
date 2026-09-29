@@ -37,7 +37,7 @@ jobs:
               gh api -X DELETE "repos/$repo/actions/runs/$run" </dev/null >/dev/null || true
             done
           done
-          latest_tag=$(gh api "repos/$repo/releases/latest" -q '.tag_name' 2>/dev/null || echo "")
+          latest_tag=$(gh api "repos/$repo/releases?per_page=1" -q '.[0].tag_name' 2>/dev/null || echo "")
           if [ -n "$latest_tag" ]; then
             for rel_id in $(gh api --paginate "repos/$repo/releases" -q ".[] | select(.tag_name != \"$latest_tag\") | .id"); do
               gh api -X DELETE "repos/$repo/releases/$rel_id" </dev/null >/dev/null || true
