@@ -1,6 +1,8 @@
 package id.xydesk.remote.core
 
 import android.content.Context
+import android.net.ConnectivityManager
+import android.net.NetworkCapabilities
 
 /**
  * Opsi sesi per-perangkat. Semua nilai di sini dipetakan ke argumen FreeRDP
@@ -61,6 +63,36 @@ data class RdpOptions(
     val dynamicResolution: Boolean = true,
     val gateway: XyGateway? = null,
 ) {
+    /**
+     * Saat deteksi bandwidth otomatis aktif dan jaringan yang dipakai adalah
+     * seluler/metered atau bandwidth downstream sangat rendah (<5 Mbps),
+     * otomatis gunakan profil hemat bandwidth (broadband-low + AVC420).
+     */
+    fun resolveForLink(
+        isMetered: Boolean,
+        isCellular: Boolean,
+        downstreamKbps: Int = Int.MAX_VALUE,
+    ): RdpOptions {
+        if (lowBandwidth || !networkAutoDetect) return this
+        val constrained = isCellular || isMetered || (downstreamKbps in 1..4_999)
+        return if (constrained) copy(lowBandwidth = true) else this
+    }
+
+    fun resolveForActiveNetwork(context: Context): RdpOptions {
+        if (lowBandwidth || !networkAutoDetect) return this
+        return runCatching {
+            val cm = context.applicationContext
+                .getSystemService(Context.CONNECTIVITY_SERVICE) as? ConnectivityManager
+                ?: return@runCatching this
+            val caps = cm.activeNetwork?.let { cm.getNetworkCapabilities(it) }
+            val isCellular = caps?.hasTransport(NetworkCapabilities.TRANSPORT_CELLULAR) == true
+            val isMetered = cm.isActiveNetworkMetered ||
+                (caps != null && !caps.hasCapability(NetworkCapabilities.NET_CAPABILITY_NOT_METERED))
+            val downstream = caps?.linkDownstreamBandwidthKbps ?: Int.MAX_VALUE
+            resolveForLink(isMetered = isMetered, isCellular = isCellular, downstreamKbps = downstream)
+        }.getOrDefault(this)
+    }
+
     fun write(context: Context, deviceId: String) {
         val sp = context.applicationContext
             .getSharedPreferences(FILE, Context.MODE_PRIVATE).edit()

@@ -16,6 +16,7 @@ import org.json.JSONObject
  */
 enum class HudAction(val title: String, val titleEn: String, val detail: String, val detailEn: String) {
     TAP("Sekali klik", "Single tap", "Tekan lalu lepas", "Press and release"),
+    ONE_SHOT("Sekali pakai", "One-shot", "Aktif untuk 1 tombol/klik berikutnya lalu lepas otomatis", "Arms for the next key/click then auto-releases"),
     HOLD("Tahan", "Hold", "Aktif selama ditahan (drag, pilih banyak)", "Active while held (drag, multi-select)"),
     TOGGLE("Toggle", "Toggle", "Sekali klik nyala, klik lagi mati", "Tap to turn on, tap again to turn off"),
 }
@@ -114,9 +115,54 @@ data class HudKey(
 
         /** Action yang benar-benar punya makna untuk jenis kontrol terkait. */
         fun allowedActions(kind: HudKind): List<HudAction> = when (kind) {
-            HudKind.MOUSE_LEFT, HudKind.MOUSE_RIGHT, HudKind.MOUSE_MIDDLE, HudKind.KEY ->
+            HudKind.KEY ->
+                listOf(HudAction.TAP, HudAction.ONE_SHOT, HudAction.HOLD, HudAction.TOGGLE)
+            HudKind.MOUSE_LEFT, HudKind.MOUSE_RIGHT, HudKind.MOUSE_MIDDLE ->
                 listOf(HudAction.TAP, HudAction.HOLD, HudAction.TOGGLE)
             else -> listOf(HudAction.TAP)
+        }
+
+        fun isModifierKeyCode(keyCode: Int): Boolean = keyCode in setOf(
+            KeyEvent.KEYCODE_CTRL_LEFT,
+            KeyEvent.KEYCODE_CTRL_RIGHT,
+            KeyEvent.KEYCODE_SHIFT_LEFT,
+            KeyEvent.KEYCODE_SHIFT_RIGHT,
+            KeyEvent.KEYCODE_ALT_LEFT,
+            KeyEvent.KEYCODE_ALT_RIGHT,
+            KeyEvent.KEYCODE_META_LEFT,
+            KeyEvent.KEYCODE_META_RIGHT,
+        )
+
+        fun exportLayoutJson(list: List<HudKey>): String = JSONObject().apply {
+            put("app", "XyDesk Remote")
+            put("version", 1)
+            val arr = JSONArray()
+            list.take(36).forEach { arr.put(it.toJson()) }
+            put("keys", arr)
+        }.toString()
+
+        fun importLayoutJson(raw: String?, defaultSize: Float = 64f): List<HudKey>? {
+            val trimmed = raw?.trim().orEmpty()
+            if (trimmed.isEmpty()) return null
+            val arr = runCatching {
+                if (trimmed.startsWith("{")) {
+                    JSONObject(trimmed).optJSONArray("keys")
+                } else {
+                    JSONArray(trimmed)
+                }
+            }.getOrNull() ?: return null
+            val seenIds = mutableSetOf<String>()
+            val parsed = (0 until minOf(arr.length(), 36)).mapNotNull { i ->
+                val item = arr.optJSONObject(i)?.let { fromJson(it) } ?: return@mapNotNull null
+                if (item.kind == HudKind.KEYBOARD || item.id.startsWith("aux_")) return@mapNotNull null
+                val uniqueId = if (seenIds.add(item.id)) item.id else "${item.id}_$i"
+                seenIds.add(uniqueId)
+                item.copy(
+                    id = uniqueId,
+                    size = item.size.coerceIn(56f, 120f).takeIf { it > 0f } ?: defaultSize.coerceIn(56f, 120f),
+                )
+            }
+            return parsed.takeIf { it.isNotEmpty() }
         }
 
         /**
@@ -213,23 +259,29 @@ object HudKeyCatalog {
         HudKeyOption("Modifier", "Shift", HudKind.KEY, SHIFT, defaultAction = HudAction.TOGGLE),
         HudKeyOption("Modifier", "Alt", HudKind.KEY, ALT, defaultAction = HudAction.TOGGLE),
         HudKeyOption("Modifier", "Win", HudKind.KEY, WIN, defaultAction = HudAction.TOGGLE),
+        HudKeyOption("Modifier", "Ctrl (1x)", HudKind.KEY, CTRL, labelEn = "Ctrl (1x)", defaultAction = HudAction.ONE_SHOT),
+        HudKeyOption("Modifier", "Shift (1x)", HudKind.KEY, SHIFT, labelEn = "Shift (1x)", defaultAction = HudAction.ONE_SHOT),
+        HudKeyOption("Modifier", "Alt (1x)", HudKind.KEY, ALT, labelEn = "Alt (1x)", defaultAction = HudAction.ONE_SHOT),
+        HudKeyOption("Modifier", "Win (1x)", HudKind.KEY, WIN, labelEn = "Win (1x)", defaultAction = HudAction.ONE_SHOT),
     )
 
     val general = listOf(
-        HudKeyOption("Umum", "Esc", HudKind.KEY, KeyEvent.KEYCODE_ESCAPE),
-        HudKeyOption("Umum", "Tab", HudKind.KEY, KeyEvent.KEYCODE_TAB),
-        HudKeyOption("Umum", "Enter", HudKind.KEY, KeyEvent.KEYCODE_ENTER),
-        HudKeyOption("Umum", "Backspace", HudKind.KEY, KeyEvent.KEYCODE_DEL),
-        HudKeyOption("Umum", "Del", HudKind.KEY, KeyEvent.KEYCODE_FORWARD_DEL),
-        HudKeyOption("Umum", "Space", HudKind.KEY, KeyEvent.KEYCODE_SPACE),
-        HudKeyOption("Umum", "PrtSc", HudKind.KEY, KeyEvent.KEYCODE_SYSRQ),
-        HudKeyOption("Umum", "Menu", HudKind.KEY, KeyEvent.KEYCODE_MENU),
-        HudKeyOption("Umum", "Caps", HudKind.KEY, KeyEvent.KEYCODE_CAPS_LOCK),
-        HudKeyOption("Umum", "Ins", HudKind.KEY, KeyEvent.KEYCODE_INSERT),
-        HudKeyOption("Umum", "Home", HudKind.KEY, KeyEvent.KEYCODE_MOVE_HOME),
-        HudKeyOption("Umum", "End", HudKind.KEY, KeyEvent.KEYCODE_MOVE_END),
-        HudKeyOption("Umum", "PgUp", HudKind.KEY, KeyEvent.KEYCODE_PAGE_UP),
-        HudKeyOption("Umum", "PgDn", HudKind.KEY, KeyEvent.KEYCODE_PAGE_DOWN),
+        HudKeyOption("Single Key", "Esc", HudKind.KEY, KeyEvent.KEYCODE_ESCAPE),
+        HudKeyOption("Single Key", "Tab", HudKind.KEY, KeyEvent.KEYCODE_TAB),
+        HudKeyOption("Single Key", "Enter", HudKind.KEY, KeyEvent.KEYCODE_ENTER),
+        HudKeyOption("Single Key", "Backspace", HudKind.KEY, KeyEvent.KEYCODE_DEL),
+        HudKeyOption("Single Key", "Del", HudKind.KEY, KeyEvent.KEYCODE_FORWARD_DEL),
+        HudKeyOption("Single Key", "Space", HudKind.KEY, KeyEvent.KEYCODE_SPACE),
+        HudKeyOption("Single Key", "Ins", HudKind.KEY, KeyEvent.KEYCODE_INSERT),
+        HudKeyOption("Single Key", "Home", HudKind.KEY, KeyEvent.KEYCODE_MOVE_HOME),
+        HudKeyOption("Single Key", "End", HudKind.KEY, KeyEvent.KEYCODE_MOVE_END),
+        HudKeyOption("Single Key", "PgUp", HudKind.KEY, KeyEvent.KEYCODE_PAGE_UP),
+        HudKeyOption("Single Key", "PgDn", HudKind.KEY, KeyEvent.KEYCODE_PAGE_DOWN),
+        HudKeyOption("Single Key", "PrtSc", HudKind.KEY, KeyEvent.KEYCODE_SYSRQ),
+        HudKeyOption("Single Key", "Pause", HudKind.KEY, KeyEvent.KEYCODE_BREAK),
+        HudKeyOption("Single Key", "ScrLk", HudKind.KEY, KeyEvent.KEYCODE_SCROLL_LOCK),
+        HudKeyOption("Single Key", "Menu", HudKind.KEY, KeyEvent.KEYCODE_MENU),
+        HudKeyOption("Single Key", "Caps", HudKind.KEY, KeyEvent.KEYCODE_CAPS_LOCK),
     )
 
     val arrows = listOf(
@@ -239,21 +291,28 @@ object HudKeyCatalog {
         HudKeyOption("Panah", "\u25b6", HudKind.KEY, KeyEvent.KEYCODE_DPAD_RIGHT),
     )
 
-    val functionKeys = (1..12).map {
-        HudKeyOption("Fungsi", "F$it", HudKind.KEY, KeyEvent.KEYCODE_F1 + (it - 1))
+    val topNumbers = (0..9).map { digit ->
+        HudKeyOption("Angka", "$digit", HudKind.KEY, KeyEvent.KEYCODE_0 + digit)
     }
 
-    val numpad = listOf(
-        HudKeyOption("Numpad", "Num", HudKind.KEY, KeyEvent.KEYCODE_NUM_LOCK),
-        HudKeyOption("Numpad", "/", HudKind.KEY, KeyEvent.KEYCODE_NUMPAD_DIVIDE),
-        HudKeyOption("Numpad", "*", HudKind.KEY, KeyEvent.KEYCODE_NUMPAD_MULTIPLY),
-        HudKeyOption("Numpad", "-", HudKind.KEY, KeyEvent.KEYCODE_NUMPAD_SUBTRACT),
-        HudKeyOption("Numpad", "+", HudKind.KEY, KeyEvent.KEYCODE_NUMPAD_ADD),
-        HudKeyOption("Numpad", ".", HudKind.KEY, KeyEvent.KEYCODE_NUMPAD_DOT),
-        HudKeyOption("Numpad", "↵", HudKind.KEY, KeyEvent.KEYCODE_NUMPAD_ENTER),
-    ) + (0..9).map {
-        HudKeyOption("Numpad", "$it", HudKind.KEY, KeyEvent.KEYCODE_NUMPAD_0 + it)
+    val functionKeys = (1..12).map {
+        HudKeyOption("F1 - F12", "F$it", HudKind.KEY, KeyEvent.KEYCODE_F1 + (it - 1))
     }
+
+    val numpad = (0..9).map {
+        HudKeyOption("Numpad", "Num $it", HudKind.KEY, KeyEvent.KEYCODE_NUMPAD_0 + it, labelEn = "Num $it")
+    } + listOf(
+        HudKeyOption("Numpad", "NumLk", HudKind.KEY, KeyEvent.KEYCODE_NUM_LOCK, labelEn = "NumLk"),
+        HudKeyOption("Numpad", "Num /", HudKind.KEY, KeyEvent.KEYCODE_NUMPAD_DIVIDE, labelEn = "Num /"),
+        HudKeyOption("Numpad", "Num *", HudKind.KEY, KeyEvent.KEYCODE_NUMPAD_MULTIPLY, labelEn = "Num *"),
+        HudKeyOption("Numpad", "Num -", HudKind.KEY, KeyEvent.KEYCODE_NUMPAD_SUBTRACT, labelEn = "Num -"),
+        HudKeyOption("Numpad", "Num +", HudKind.KEY, KeyEvent.KEYCODE_NUMPAD_ADD, labelEn = "Num +"),
+        HudKeyOption("Numpad", "Num .", HudKind.KEY, KeyEvent.KEYCODE_NUMPAD_DOT, labelEn = "Num ."),
+        HudKeyOption("Numpad", "Num \u21b5", HudKind.KEY, KeyEvent.KEYCODE_NUMPAD_ENTER, labelEn = "Num \u21b5"),
+        HudKeyOption("Numpad", "Num =", HudKind.KEY, KeyEvent.KEYCODE_NUMPAD_EQUALS, labelEn = "Num ="),
+        HudKeyOption("Numpad", "Num (", HudKind.KEY, KeyEvent.KEYCODE_NUMPAD_LEFT_PAREN, labelEn = "Num ("),
+        HudKeyOption("Numpad", "Num )", HudKind.KEY, KeyEvent.KEYCODE_NUMPAD_RIGHT_PAREN, labelEn = "Num )"),
+    )
 
     val letters = ('A'..'Z').map { ch ->
         HudKeyOption("Huruf", "$ch", HudKind.KEY, KeyEvent.KEYCODE_A + (ch - 'A'))
@@ -271,38 +330,52 @@ object HudKeyCatalog {
         HudKeyOption("Simbol", ",", HudKind.KEY, KeyEvent.KEYCODE_COMMA),
         HudKeyOption("Simbol", ".", HudKind.KEY, KeyEvent.KEYCODE_PERIOD),
         HudKeyOption("Simbol", "`", HudKind.KEY, KeyEvent.KEYCODE_GRAVE),
+        HudKeyOption("Simbol", "*", HudKind.KEY, KeyEvent.KEYCODE_STAR),
+        HudKeyOption("Simbol", "+", HudKind.KEY, KeyEvent.KEYCODE_PLUS),
+        HudKeyOption("Simbol", "@", HudKind.KEY, KeyEvent.KEYCODE_AT),
+        HudKeyOption("Simbol", "#", HudKind.KEY, KeyEvent.KEYCODE_POUND),
     )
+
+    val singleKeys = general + arrows + topNumbers + symbols
 
     val combos = listOf(
         HudKeyOption("Kombinasi", "Ctrl+C", HudKind.COMBO, combo = listOf(CTRL, KeyEvent.KEYCODE_C)),
         HudKeyOption("Kombinasi", "Ctrl+V", HudKind.COMBO, combo = listOf(CTRL, KeyEvent.KEYCODE_V)),
         HudKeyOption("Kombinasi", "Ctrl+X", HudKind.COMBO, combo = listOf(CTRL, KeyEvent.KEYCODE_X)),
         HudKeyOption("Kombinasi", "Ctrl+Z", HudKind.COMBO, combo = listOf(CTRL, KeyEvent.KEYCODE_Z)),
+        HudKeyOption("Kombinasi", "Ctrl+Y", HudKind.COMBO, combo = listOf(CTRL, KeyEvent.KEYCODE_Y)),
         HudKeyOption("Kombinasi", "Ctrl+A", HudKind.COMBO, combo = listOf(CTRL, KeyEvent.KEYCODE_A)),
         HudKeyOption("Kombinasi", "Ctrl+S", HudKind.COMBO, combo = listOf(CTRL, KeyEvent.KEYCODE_S)),
         HudKeyOption("Kombinasi", "Ctrl+F", HudKind.COMBO, combo = listOf(CTRL, KeyEvent.KEYCODE_F)),
+        HudKeyOption("Kombinasi", "Ctrl+P", HudKind.COMBO, combo = listOf(CTRL, KeyEvent.KEYCODE_P)),
         HudKeyOption("Kombinasi", "Ctrl+W", HudKind.COMBO, combo = listOf(CTRL, KeyEvent.KEYCODE_W)),
+        HudKeyOption("Kombinasi", "Ctrl+T", HudKind.COMBO, combo = listOf(CTRL, KeyEvent.KEYCODE_T)),
+        HudKeyOption("Kombinasi", "Ctrl+N", HudKind.COMBO, combo = listOf(CTRL, KeyEvent.KEYCODE_N)),
+        HudKeyOption("Kombinasi", "Ctrl+R", HudKind.COMBO, combo = listOf(CTRL, KeyEvent.KEYCODE_R)),
+        HudKeyOption("Kombinasi", "Ctrl+Shift+T", HudKind.COMBO, combo = listOf(CTRL, SHIFT, KeyEvent.KEYCODE_T)),
         HudKeyOption("Kombinasi", "Ctrl+Shift+Esc", HudKind.COMBO, combo = listOf(CTRL, SHIFT, KeyEvent.KEYCODE_ESCAPE)),
         HudKeyOption("Kombinasi", "Ctrl+Alt+Del", HudKind.COMBO, combo = listOf(CTRL, ALT, KeyEvent.KEYCODE_FORWARD_DEL)),
         HudKeyOption("Kombinasi", "Alt+Tab", HudKind.COMBO, combo = listOf(ALT, KeyEvent.KEYCODE_TAB)),
         HudKeyOption("Kombinasi", "Alt+F4", HudKind.COMBO, combo = listOf(ALT, KeyEvent.KEYCODE_F4)),
+        HudKeyOption("Kombinasi", "Alt+Enter", HudKind.COMBO, combo = listOf(ALT, KeyEvent.KEYCODE_ENTER)),
         HudKeyOption("Kombinasi", "Win+D", HudKind.COMBO, combo = listOf(WIN, KeyEvent.KEYCODE_D)),
         HudKeyOption("Kombinasi", "Win+E", HudKind.COMBO, combo = listOf(WIN, KeyEvent.KEYCODE_E)),
         HudKeyOption("Kombinasi", "Win+R", HudKind.COMBO, combo = listOf(WIN, KeyEvent.KEYCODE_R)),
         HudKeyOption("Kombinasi", "Win+L", HudKind.COMBO, combo = listOf(WIN, KeyEvent.KEYCODE_L)),
         HudKeyOption("Kombinasi", "Win+Tab", HudKind.COMBO, combo = listOf(WIN, KeyEvent.KEYCODE_TAB)),
+        HudKeyOption("Kombinasi", "Win+Shift+S", HudKind.COMBO, combo = listOf(WIN, SHIFT, KeyEvent.KEYCODE_S)),
+        HudKeyOption("Kombinasi", "Win+I", HudKind.COMBO, combo = listOf(WIN, KeyEvent.KEYCODE_I)),
+        HudKeyOption("Kombinasi", "Win+X", HudKind.COMBO, combo = listOf(WIN, KeyEvent.KEYCODE_X)),
     )
 
     val groups: List<Triple<String, String, List<HudKeyOption>>> = listOf(
-        Triple("Aksi mouse & scroll", "Mouse & scroll", mouse),
-        Triple("Modifier", "Modifiers", modifiers),
-        Triple("Kombinasi siap pakai", "Ready-made combos", combos),
-        Triple("Umum", "General", general),
-        Triple("Panah", "Arrows", arrows),
+        Triple("Kombinasi", "Combos", combos),
         Triple("F1 - F12", "F1 - F12", functionKeys),
+        Triple("Single Key", "Single Key", singleKeys),
         Triple("Numpad", "Numpad", numpad),
-        Triple("Huruf", "Letters", letters),
-        Triple("Simbol", "Symbols", symbols),
+        Triple("Huruf A-Z", "Letters A-Z", letters),
+        Triple("Modifier", "Modifiers", modifiers),
+        Triple("Mouse & Scroll", "Mouse & Scroll", mouse),
     )
 
     /** Dipakai dialog "ubah tombol": label ringkas untuk aksi non-keyboard. */

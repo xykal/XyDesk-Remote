@@ -199,6 +199,9 @@ fun XyDeskSessionScreen(
         }.getOrDefault(emptyList())
     }
     val latchedKeys = remember(profile.id) { mutableStateMapOf<String, Boolean>() }
+    val oneShotKeys = remember(profile.id) { mutableStateMapOf<String, Boolean>() }
+    var controlsOverlayOpen by remember { mutableStateOf(false) }
+    var controlsBackHandler by remember { mutableStateOf<(() -> Boolean)?>(null) }
 
     fun setHudKeys(list: List<HudKey>) {
         hudKeys = list
@@ -549,10 +552,20 @@ fun XyDeskSessionScreen(
         }
     }
 
-    LaunchedEffect(state, certPrompt != null, nlaPrompt != null, confirmDisconnect) {
+    val overlayActive = controlsOverlayOpen || certPrompt != null || nlaPrompt != null || confirmDisconnect || showLog
+    LaunchedEffect(overlayActive) {
+        controller.setOverlayActive(overlayActive)
+    }
+
+    LaunchedEffect(state, certPrompt != null, nlaPrompt != null, confirmDisconnect, showLog, controlsBackHandler) {
         (context as? XyDeskSessionActivity)?.backHandler = {
             when {
                 certPrompt != null || nlaPrompt != null -> true
+                showLog -> {
+                    showLog = false
+                    true
+                }
+                controlsBackHandler?.invoke() == true -> true
                 confirmDisconnect -> {
                     confirmDisconnect = false
                     true
@@ -668,12 +681,50 @@ fun XyDeskSessionScreen(
     }
 
     /**
-     * Fase dari layer tombol -> aksi. TAP = tekan+lepas, HOLD = aktif selama
-     * ditahan, TOGGLE = nyala/mati dengan latch terpisah per tombol.
+     * Fase dari layer tombol -> aksi. TAP = tekan+lepas, ONE_SHOT = aktif untuk
+     * 1 aksi berikutnya lalu lepas otomatis, HOLD = aktif selama ditahan,
+     * TOGGLE = nyala/mati dengan latch terpisah per tombol.
      */
+    fun syncHudModifierState() {
+        controller.hasActiveHudModifiers = hudKeys.any { key ->
+            latchedKeys[key.id] == true && key.kind == HudKind.KEY && HudKey.isModifierKeyCode(key.keyCode)
+        }
+    }
+
+    fun consumeOneShotKeys() {
+        if (oneShotKeys.isEmpty()) return
+        val armedIds = oneShotKeys.filterValues { it }.keys.toList()
+        oneShotKeys.clear()
+        armedIds.forEach { id ->
+            latchedKeys.remove(id)
+            hudKeys.firstOrNull { it.id == id }?.let { key -> runHudKey(key, false) }
+        }
+        syncHudModifierState()
+    }
+
+    DisposableEffect(controller) {
+        controller.onInputKeyConsumed = {
+            (context as? Activity)?.runOnUiThread {
+                consumeOneShotKeys()
+            }
+        }
+        onDispose {
+            controller.onInputKeyConsumed = null
+            controller.hasActiveHudModifiers = false
+        }
+    }
+
     fun releaseLatchedKeys() {
         hudKeys.filter { latchedKeys[it.id] == true }.forEach { key -> runHudKey(key, false) }
         latchedKeys.clear()
+        oneShotKeys.clear()
+        syncHudModifierState()
+    }
+
+    fun shouldConsumeOneShotAfter(key: HudKey): Boolean = when (key.kind) {
+        HudKind.KEY -> !HudKey.isModifierKeyCode(key.keyCode)
+        HudKind.COMBO, HudKind.MOUSE_LEFT, HudKind.MOUSE_RIGHT, HudKind.MOUSE_MIDDLE -> true
+        else -> false
     }
 
     fun handleHudPhase(key: HudKey, phase: HudPhase) {
@@ -683,16 +734,37 @@ fun XyDeskSessionScreen(
             HudAction.TOGGLE -> {
                 if (phase != HudPhase.TAP) return
                 val on = latchedKeys[key.id] == true
+                oneShotKeys.remove(key.id)
                 latchedKeys[key.id] = !on
                 runHudKey(key, !on)
+                syncHudModifierState()
+            }
+
+            HudAction.ONE_SHOT -> {
+                if (phase != HudPhase.TAP) return
+                val on = oneShotKeys[key.id] == true || latchedKeys[key.id] == true
+                if (on) {
+                    oneShotKeys.remove(key.id)
+                    latchedKeys.remove(key.id)
+                    runHudKey(key, false)
+                } else {
+                    oneShotKeys[key.id] = true
+                    latchedKeys[key.id] = true
+                    runHudKey(key, true)
+                }
+                syncHudModifierState()
             }
 
             HudAction.TAP -> when (phase) {
                 HudPhase.DOWN -> runHudKey(key, true)
-                HudPhase.UP -> runHudKey(key, false)
+                HudPhase.UP -> {
+                    runHudKey(key, false)
+                    if (shouldConsumeOneShotAfter(key)) consumeOneShotKeys()
+                }
                 HudPhase.TAP -> {
                     runHudKey(key, true)
                     runHudKey(key, false)
+                    if (shouldConsumeOneShotAfter(key)) consumeOneShotKeys()
                 }
             }
         }
@@ -714,14 +786,13 @@ fun XyDeskSessionScreen(
 
         // Lapisan gesture trackpad: menutup surface supaya sentuhan tidak
         // diteruskan langsung sebagai klik di posisi jari.
-        if (connected && mappingMode) {
-            // Mode layout harus mengisolasi seluruh layar dari surface FreeRDP;
-            // hanya tombol HUD yang berada di atas overlay ini yang menerima input.
+        if (connected && (mappingMode || controlsOverlayOpen)) {
+            // Mode layout atau panel terbuka harus mengisolasi seluruh layar dari surface FreeRDP.
             Box(
                 Modifier
                     .fillMaxSize()
                     .zIndex(1f)
-                    .pointerInput(mappingMode) {
+                    .pointerInput(mappingMode, controlsOverlayOpen) {
                         awaitEachGesture {
                             awaitFirstDown(requireUnconsumed = false).consume()
                             do {
@@ -733,7 +804,7 @@ fun XyDeskSessionScreen(
             )
         }
 
-        if (connected && !mappingMode && InputMode.entries[inputMode] == InputMode.TRACKPAD) {
+        if (connected && !mappingMode && !controlsOverlayOpen && InputMode.entries[inputMode] == InputMode.TRACKPAD) {
             Box(
                 Modifier
                     .fillMaxSize()
@@ -744,13 +815,18 @@ fun XyDeskSessionScreen(
                             onTap = {
                                 sendButton(XyMouseButton.LEFT, true)
                                 sendButton(XyMouseButton.LEFT, false)
+                                consumeOneShotKeys()
                             },
                             onTwoFingerTap = {
                                 sendButton(XyMouseButton.RIGHT, true)
                                 sendButton(XyMouseButton.RIGHT, false)
+                                consumeOneShotKeys()
                             },
                             onScrollUnits = { sendScrollUnits(it) },
-                            onButton = { button, down -> sendButton(button, down) },
+                            onButton = { button, down ->
+                                sendButton(button, down)
+                                if (!down) consumeOneShotKeys()
+                            },
                         )
                     },
             )
@@ -786,6 +862,8 @@ fun XyDeskSessionScreen(
                     ) {
                         runHudKey(old, false)
                         latchedKeys.remove(old.id)
+                        oneShotKeys.remove(old.id)
+                        syncHudModifierState()
                     }
                     setHudKeys(hudKeys.map { if (it.id == updated.id) updated else it })
                 },
@@ -793,6 +871,8 @@ fun XyDeskSessionScreen(
                     val old = hudKeys.firstOrNull { it.id == deleted.id } ?: deleted
                     if (latchedKeys[old.id] == true) runHudKey(old, false)
                     latchedKeys.remove(old.id)
+                    oneShotKeys.remove(old.id)
+                    syncHudModifierState()
                     setHudKeys(hudKeys.filterNot { it.id == deleted.id })
                 },
                 mappingMode = mappingMode,
@@ -968,6 +1048,8 @@ fun XyDeskSessionScreen(
                 onSendRemoteClipboardText = { text ->
                     clipboardSyncEnabled && manager.sendClipboardData(text)
                 },
+                onOverlayActiveChange = { controlsOverlayOpen = it },
+                onRegisterBackHandler = { controlsBackHandler = it },
                 coreInfo = coreInfo,
                 notice = notice,
             )

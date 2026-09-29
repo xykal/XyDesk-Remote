@@ -4,6 +4,7 @@ import android.app.Activity
 import android.net.Uri
 import androidx.core.content.FileProvider
 import androidx.core.view.ViewCompat
+import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
 import java.io.File
 import java.io.FileOutputStream
@@ -87,7 +88,28 @@ class SessionSurfaceController(private val activity: Activity) : GraphicsSink {
     var onImeChanged: ((Int) -> Unit)? = null
     var onInputDispatchFailure: (() -> Unit)? = null
     var onCursorMoved: ((Int, Int) -> Unit)? = null
+    var onInputKeyConsumed: (() -> Unit)? = null
+    @Volatile var hasActiveHudModifiers: Boolean = false
+    @Volatile var overlayInputActive: Boolean = false
     private var lastInputDispatchFailureAt = 0L
+
+    private fun asciiToAndroidKeyCode(codePoint: Int): Int = when (codePoint) {
+        in 'a'.code..'z'.code -> KeyEvent.KEYCODE_A + (codePoint - 'a'.code)
+        in 'A'.code..'Z'.code -> KeyEvent.KEYCODE_A + (codePoint - 'A'.code)
+        in '0'.code..'9'.code -> KeyEvent.KEYCODE_0 + (codePoint - '0'.code)
+        '-'.code -> KeyEvent.KEYCODE_MINUS
+        '='.code -> KeyEvent.KEYCODE_EQUALS
+        '['.code -> KeyEvent.KEYCODE_LEFT_BRACKET
+        ']'.code -> KeyEvent.KEYCODE_RIGHT_BRACKET
+        '\\'.code -> KeyEvent.KEYCODE_BACKSLASH
+        ';'.code -> KeyEvent.KEYCODE_SEMICOLON
+        '\''.code -> KeyEvent.KEYCODE_APOSTROPHE
+        '`'.code -> KeyEvent.KEYCODE_GRAVE
+        ','.code -> KeyEvent.KEYCODE_COMMA
+        '.'.code -> KeyEvent.KEYCODE_PERIOD
+        '/'.code -> KeyEvent.KEYCODE_SLASH
+        else -> 0
+    }
 
     private fun reportInputDispatchFailure() {
         val now = SystemClock.elapsedRealtime()
@@ -172,17 +194,34 @@ class SessionSurfaceController(private val activity: Activity) : GraphicsSink {
         // modifier, dan kombinasi ditangani jalur yang sudah terbukti.
         sv.setInputSink(object : SessionView.InputSink {
             override fun onText(text: String) {
-                text.forEach { ch ->
-                    when (ch) {
-                        '\n' -> sendImeKey(KeyEvent.KEYCODE_ENTER)
-                        '\t' -> sendImeKey(KeyEvent.KEYCODE_TAB)
-                        '\b' -> sendImeKey(KeyEvent.KEYCODE_DEL)
-                        else -> im.processUnicodeKey(ch.code)
+                if (text.isEmpty()) return
+                var i = 0
+                while (i < text.length) {
+                    val cp = Character.codePointAt(text, i)
+                    val mappedKey = if (hasActiveHudModifiers) asciiToAndroidKeyCode(cp) else 0
+                    when {
+                        cp == '\n'.code -> sendImeKey(KeyEvent.KEYCODE_ENTER)
+                        cp == '\t'.code -> sendImeKey(KeyEvent.KEYCODE_TAB)
+                        cp == '\b'.code -> sendImeKey(KeyEvent.KEYCODE_DEL)
+                        cp == ' '.code -> sendImeKey(KeyEvent.KEYCODE_SPACE)
+                        mappedKey != 0 -> {
+                            im.sendAndroidKeyCode(mappedKey, true)
+                            im.sendAndroidKeyCode(mappedKey, false)
+                        }
+                        else -> im.processUnicodeKey(cp)
                     }
+                    i += Character.charCount(cp)
                 }
+                onInputKeyConsumed?.invoke()
             }
 
-            override fun onKeyEvent(event: KeyEvent): Boolean = im.onAndroidKeyEvent(event)
+            override fun onKeyEvent(event: KeyEvent): Boolean {
+                val handled = im.onAndroidKeyEvent(event)
+                if (handled && event.action == KeyEvent.ACTION_DOWN && !KeyEvent.isModifierKey(event.keyCode)) {
+                    onInputKeyConsumed?.invoke()
+                }
+                return handled
+            }
         })
         sv.setSessionViewListener(im)
         tpv.setTouchPointerListener(im)
@@ -316,11 +355,23 @@ class SessionSurfaceController(private val activity: Activity) : GraphicsSink {
     fun blurInput() {
         uiHandler.post {
             runCatching {
-                inputManager?.let { im ->
-                    if (im.isSoftInputActive()) im.setSoftKeyboard(false)
+                inputManager?.setSoftKeyboard(false)
+                sessionView?.let { sv ->
+                    WindowCompat.getInsetsController(activity.window, sv)
+                        .hide(WindowInsetsCompat.Type.ime())
                 }
                 rootView?.clearFocus()
             }
+        }
+    }
+
+    fun setOverlayActive(active: Boolean) {
+        if (overlayInputActive == active) return
+        overlayInputActive = active
+        if (active) {
+            blurInput()
+        } else {
+            uiHandler.post { sessionView?.requestFocus() }
         }
     }
 
@@ -332,21 +383,35 @@ class SessionSurfaceController(private val activity: Activity) : GraphicsSink {
     fun setImeVisible(shown: Boolean) {
         uiHandler.post {
             val im = inputManager ?: return@post
-            if (shown != im.isSoftInputActive()) {
-                im.setSoftKeyboard(shown)
-                rootView?.requestApplyInsets()
+            im.setSoftKeyboard(shown)
+            sessionView?.let { sv ->
+                val insetsController = WindowCompat.getInsetsController(activity.window, sv)
+                if (shown) {
+                    sv.requestFocus()
+                    insetsController.show(WindowInsetsCompat.Type.ime())
+                } else {
+                    insetsController.hide(WindowInsetsCompat.Type.ime())
+                }
             }
+            rootView?.requestApplyInsets()
         }
     }
 
-    fun isImeVisible(): Boolean = inputManager?.isSoftInputActive() ?: false
+    fun isImeVisible(): Boolean = imeHeightPx > 0 || (inputManager?.isSoftInputActive() ?: false)
 
     /**
      * Teruskan event tombol Android (dari keyboard HP / keyboard fisik) ke
      * mapper inti. Activity wajib memanggil ini dari dispatchKeyEvent —
      * tanpa jalur ini keyboard HP tidak bisa mengetik ke remote.
      */
-    fun onKeyEvent(event: KeyEvent): Boolean = inputManager?.onAndroidKeyEvent(event) ?: false
+    fun onKeyEvent(event: KeyEvent): Boolean {
+        if (overlayInputActive) return false
+        val handled = inputManager?.onAndroidKeyEvent(event) ?: false
+        if (handled && event.action == KeyEvent.ACTION_DOWN && !KeyEvent.isModifierKey(event.keyCode)) {
+            onInputKeyConsumed?.invoke()
+        }
+        return handled
+    }
 
     fun onKeyLongPress(keyCode: Int): Boolean = inputManager?.onAndroidKeyLongPress(keyCode) ?: false
 

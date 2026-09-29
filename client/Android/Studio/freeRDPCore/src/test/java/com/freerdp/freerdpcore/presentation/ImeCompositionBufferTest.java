@@ -86,15 +86,39 @@ public class ImeCompositionBufferTest
 	}
 
 	@Test
-	public void duplicatePrintableSoftImeEventsAreSuppressedButPhysicalEventsRemain()
+	public void duplicatePrintableSoftImeEventsAreSuppressedOnlyDuringActiveComposition()
 	{
-		assertTrue(ImeCompositionBuffer.isPrintableImeTextEvent(
+		assertFalse(ImeCompositionBuffer.isPrintableImeTextEvent(
 		        KeyEvent.FLAG_SOFT_KEYBOARD, KeyEvent.ACTION_DOWN, 'x', false));
 		assertTrue(ImeCompositionBuffer.isPrintableImeTextEvent(
+		        KeyEvent.FLAG_SOFT_KEYBOARD, KeyEvent.ACTION_DOWN, 'x', true));
+		assertFalse(ImeCompositionBuffer.isPrintableImeTextEvent(
+		        KeyEvent.FLAG_SOFT_KEYBOARD, KeyEvent.ACTION_DOWN, '5', true));
+		assertFalse(ImeCompositionBuffer.isPrintableImeTextEvent(
+		        KeyEvent.FLAG_SOFT_KEYBOARD, KeyEvent.ACTION_DOWN, ' ', true));
+		assertFalse(ImeCompositionBuffer.isPrintableImeTextEvent(
 		        0, KeyEvent.ACTION_DOWN, 'x', true));
 		assertFalse(ImeCompositionBuffer.isPrintableImeTextEvent(
 		        0, KeyEvent.ACTION_DOWN, 'x', false));
 		assertFalse(ImeCompositionBuffer.isPrintableImeTextEvent(
 		        KeyEvent.FLAG_SOFT_KEYBOARD, KeyEvent.ACTION_DOWN, '\n', false));
+	}
+
+	@Test
+	public void finishFollowedByCommitWithTrailingSpaceEmitsOnlySuffixAndKeyEventResetsState()
+	{
+		ImeCompositionBuffer buffer = new ImeCompositionBuffer();
+		assertEquals("halo", buffer.setComposingText("halo").text);
+		buffer.finishComposingText();
+		ImeCompositionBuffer.Edit trailing = buffer.commitText("halo ");
+		assertEquals(0, trailing.backspaces);
+		assertEquals(" ", trailing.text);
+
+		assertEquals("tes", buffer.setComposingText("tes").text);
+		buffer.onKeyEventDispatched();
+		assertFalse(buffer.hasComposingText());
+		ImeCompositionBuffer.Edit nextWord = buffer.setComposingText("baru");
+		assertEquals(0, nextWord.backspaces);
+		assertEquals("baru", nextWord.text);
 	}
 }

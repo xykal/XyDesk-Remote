@@ -131,11 +131,15 @@ class SessionManager(context: Context) {
     // ------------------------------------------------------------------
 
     private fun sessionUri(profile: ConnectionProfile): android.net.Uri {
-        val options = RdpOptions.of(appContext, profile.id)
+        val storedOptions = RdpOptions.of(appContext, profile.id)
+        val options = storedOptions.resolveForActiveNetwork(appContext)
+        if (options.lowBandwidth && !storedOptions.lowBandwidth) {
+            ConnectionLog.add("CM: jaringan seluler/terbatas terdeteksi -> otomatis aktifkan lowBandwidth (AVC420)")
+        }
         ConnectionLog.add(
             "CM: opsi sesi audio=${options.audioMode.name} mic=${options.microphone} " +
                 "clip=${options.clipboard} drive=${options.localDrive} udp=${options.udpTransport} " +
-                "h264=${options.h264} gateway=${options.gateway?.id ?: "-"}"
+                "lowbw=${options.lowBandwidth} h264=${options.h264} gateway=${options.gateway?.id ?: "-"}"
         )
         val base = RdpUri.build(profile, options)
         val prefs = appContext.getSharedPreferences("xydesk.remote.display", Context.MODE_PRIVATE)
@@ -354,12 +358,15 @@ class SessionManager(context: Context) {
         return LibFreeRDP.sendUnicodeKeyEvent(inst, code, down)
     }
 
-    /** Ketik string sebagai unicode key events (satu char = down+up). */
+    /** Ketik string sebagai unicode key events (satu code point = down+up). */
     fun sendText(text: String) {
         val inst = core?.getInstance() ?: return
-        for (ch in text) {
-            LibFreeRDP.sendUnicodeKeyEvent(inst, ch.code, true)
-            LibFreeRDP.sendUnicodeKeyEvent(inst, ch.code, false)
+        var i = 0
+        while (i < text.length) {
+            val cp = Character.codePointAt(text, i)
+            LibFreeRDP.sendUnicodeKeyEvent(inst, cp, true)
+            LibFreeRDP.sendUnicodeKeyEvent(inst, cp, false)
+            i += Character.charCount(cp)
         }
     }
 
