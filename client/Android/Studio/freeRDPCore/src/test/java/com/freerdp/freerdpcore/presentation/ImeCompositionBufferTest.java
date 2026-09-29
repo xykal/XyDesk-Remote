@@ -9,43 +9,79 @@ import static org.junit.Assert.assertTrue;
 public class ImeCompositionBufferTest
 {
 	@Test
-	public void composingUpdatesStayLocalAndCommitOnlyOnce()
+	public void composingUpdatesStreamOnlyTheChangedSuffixAndCommitDoesNotDuplicate()
 	{
 		ImeCompositionBuffer buffer = new ImeCompositionBuffer();
-		buffer.setComposingText("h");
-		buffer.setComposingText("hello");
+		ImeCompositionBuffer.Edit first = buffer.setComposingText("h");
+		assertEquals(0, first.backspaces);
+		assertEquals("h", first.text);
+
+		ImeCompositionBuffer.Edit second = buffer.setComposingText("hello");
+		assertEquals(0, second.backspaces);
+		assertEquals("ello", second.text);
 		assertEquals("hello", buffer.getComposingText());
-		assertEquals("hello", buffer.commitText("hello"));
+
+		ImeCompositionBuffer.Edit committed = buffer.commitText("hello");
+		assertEquals(0, committed.backspaces);
+		assertEquals("", committed.text);
 		assertEquals("", buffer.finishComposingText());
 	}
 
 	@Test
-	public void finishCompositionFlushesUncommittedTextOnce()
+	public void autocorrectReplacesOnlyChangedSuffixAndFinishDoesNotResend()
 	{
 		ImeCompositionBuffer buffer = new ImeCompositionBuffer();
-		buffer.setComposingText("text");
-		assertEquals("text", buffer.finishComposingText());
-		assertEquals("", buffer.finishComposingText());
+		assertEquals("helo", buffer.setComposingText("helo").text);
+		ImeCompositionBuffer.Edit corrected = buffer.setComposingText("hello");
+		assertEquals(1, corrected.backspaces);
+		assertEquals("lo", corrected.text);
+		buffer.finishComposingText();
+		assertEquals("", buffer.commitText("hello").text);
+		assertEquals("hello", buffer.commitText("hello").text);
 	}
 
 	@Test
-	public void deleteEditsCompositionBeforeSendingRemoteBackspaces()
+	public void cancellationRemovesPreviouslyStreamedComposingText()
+	{
+		ImeCompositionBuffer buffer = new ImeCompositionBuffer();
+		buffer.setComposingText("draft");
+		ImeCompositionBuffer.Edit cancelled = buffer.setComposingText("");
+		assertEquals(5, cancelled.backspaces);
+		assertEquals("", cancelled.text);
+	}
+
+	@Test
+	public void deletionEditsStreamedCompositionAndDeletesBeyondIt()
 	{
 		ImeCompositionBuffer buffer = new ImeCompositionBuffer();
 		buffer.setComposingText("ab");
-		assertEquals(0, buffer.deleteBeforeCursor(1));
+		assertEquals(1, buffer.deleteBeforeCursor(1));
 		assertEquals("a", buffer.getComposingText());
-		assertEquals(2, buffer.deleteBeforeCursor(3));
+		assertEquals(3, buffer.deleteBeforeCursor(3));
 		assertEquals("", buffer.getComposingText());
 	}
 
 	@Test
-	public void deletionDoesNotSplitASurrogatePair()
+	public void replacingOrDeletingSupplementaryUnicodeDoesNotSplitSurrogatePair()
 	{
 		ImeCompositionBuffer buffer = new ImeCompositionBuffer();
-		buffer.setComposingText("A\uD83D\uDE00");
-		assertEquals(0, buffer.deleteBeforeCursor(1));
+		ImeCompositionBuffer.Edit initial = buffer.setComposingText("A\uD83D\uDE00");
+		assertEquals("A\uD83D\uDE00", initial.text);
+
+		ImeCompositionBuffer.Edit replaced = buffer.setComposingText("A\uD83D\uDE01");
+		assertEquals(1, replaced.backspaces);
+		assertEquals("\uD83D\uDE01", replaced.text);
+		assertEquals(1, buffer.deleteBeforeCursor(1));
 		assertEquals("A", buffer.getComposingText());
+	}
+
+	@Test
+	public void forwardDeleteDoesNotDiscardTrackedComposition()
+	{
+		ImeCompositionBuffer buffer = new ImeCompositionBuffer();
+		buffer.setComposingText("abc");
+		assertEquals(1, buffer.deleteAfterCursor(1));
+		assertEquals("abc", buffer.getComposingText());
 	}
 
 	@Test

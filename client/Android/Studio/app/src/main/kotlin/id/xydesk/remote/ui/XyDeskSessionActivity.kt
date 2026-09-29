@@ -128,7 +128,8 @@ class XyDeskSessionActivity : ComponentActivity() {
                 val clip = try {
                     cm.getPrimaryClip()
                 } catch (e: RuntimeException) {
-                    Log.w(TAG, "clipboard read failed; session left running", e)
+                    // Do not attach clipboard-related exception details to logs.
+                    Log.w(TAG, "clipboard read failed; session left running")
                     return
                 } ?: return
                 val label = clip.description?.label?.toString()
@@ -143,10 +144,19 @@ class XyDeskSessionActivity : ComponentActivity() {
                             if (text.isNotEmpty() && !isFinishing && !isDestroyed &&
                                 manager.state.value is SessionState.Connected
                             ) {
-                                manager.sendClipboardData(text)
+                                if (!manager.sendClipboardData(text)) {
+                                    ConnectionLog.add("SES: Android-to-remote clipboard send rejected; contents omitted")
+                                    XyNoticeBus.post(
+                                        xyNow(
+                                            "Clipboard HP gagal dikirim; isi tidak dicatat",
+                                            "Phone clipboard could not be sent; contents were not logged",
+                                        ),
+                                    )
+                                }
                             }
                         } catch (e: RuntimeException) {
-                            Log.w(TAG, "clipboard text conversion failed; session left running", e)
+                            // Never log exception details while handling private clipboard content.
+                            Log.w(TAG, "clipboard processing failed; contents omitted")
                         }
                     }
                 } catch (e: java.util.concurrent.RejectedExecutionException) {

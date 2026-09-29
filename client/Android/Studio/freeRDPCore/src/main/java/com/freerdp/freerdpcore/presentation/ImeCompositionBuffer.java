@@ -3,19 +3,32 @@ package com.freerdp.freerdpcore.presentation;
 import android.view.KeyEvent;
 
 /**
- * Holds soft-keyboard composing text locally until the IME commits it.
- * Remote text controls do not expose Android's composition range, so sending
- * every composing update would require remote backspace/retype and can flicker
- * or duplicate characters.
+ * Tracks provisional IME text that has already been streamed to the remote
+ * control. Each update replaces the prior provisional value by a minimal
+ * suffix backspace + insertion, so commit does not type the text twice.
  */
 final class ImeCompositionBuffer
 {
 	private static final int MAX_DELETE_UNITS = 256;
 	private String composingText = "";
+	private String justFinishedText;
 
-	void setComposingText(CharSequence text)
+	static final class Edit
 	{
-		composingText = text == null ? "" : text.toString();
+		final int backspaces;
+		final String text;
+
+		Edit(int backspaces, String text)
+		{
+			this.backspaces = backspaces;
+			this.text = text;
+		}
+	}
+
+	Edit setComposingText(CharSequence text)
+	{
+		justFinishedText = null;
+		return replaceWith(text == null ? "" : text.toString());
 	}
 
 	boolean hasComposingText()
@@ -28,30 +41,39 @@ final class ImeCompositionBuffer
 		return composingText;
 	}
 
-	/** Returns committed text to send once, then clears the provisional text. */
-	String commitText(CharSequence text)
+	/** Commit may correct the final composing value; send only that delta. */
+	Edit commitText(CharSequence text)
 	{
 		String committed = text == null ? "" : text.toString();
+		if (composingText.isEmpty() && justFinishedText != null &&
+		    justFinishedText.equals(committed))
+		{
+			justFinishedText = null;
+			return new Edit(0, "");
+		}
+		justFinishedText = null;
+		Edit edit = replaceWith(committed);
 		composingText = "";
-		return committed;
+		return edit;
 	}
 
-	/** Flushes an IME that finishes composition without calling commitText. */
-	String finishComposingText()
+	/** Provisional text is remote; retain one value briefly to dedupe a final commit. */
+	void finishComposingText()
 	{
-		String remaining = composingText;
+		if (!composingText.isEmpty())
+			justFinishedText = composingText;
 		composingText = "";
-		return remaining;
 	}
 
 	/**
-	 * Applies deletion to the local composing range. The return value is the
-	 * number of backspaces that still need to be sent to the remote window.
+	 * Deletes from the tracked composing suffix, plus any requested deletion
+	 * outside it. The returned backspaces must all be sent to the remote.
 	 */
 	int deleteBeforeCursor(int beforeLength)
 	{
 		if (beforeLength <= 0)
 			return 0;
+		justFinishedText = null;
 
 		int deleteUnits = Math.min(beforeLength, MAX_DELETE_UNITS);
 		if (composingText.isEmpty())
@@ -63,17 +85,38 @@ final class ImeCompositionBuffer
 		    Character.isLowSurrogate(composingText.charAt(start)))
 			start--;
 
-		int removedUnits = composingText.length() - start;
-		int outsideBackspaces = Math.max(0, deleteUnits - removedUnits);
+		int composingBackspaces = Character.codePointCount(
+		        composingText, start, composingText.length());
+		int outsideBackspaces = Math.max(0, deleteUnits - (composingText.length() - start));
 		composingText = composingText.substring(0, start);
-		return outsideBackspaces;
+		return composingBackspaces + outsideBackspaces;
 	}
 
-	/** Clears provisional text and returns forward deletes for remote text. */
+	/** Forward deletes do not alter the tracked composing text. */
 	int deleteAfterCursor(int afterLength)
 	{
-		composingText = "";
-		return Math.min(Math.max(afterLength, 0), MAX_DELETE_UNITS);
+		int deletes = Math.min(Math.max(afterLength, 0), MAX_DELETE_UNITS);
+		if (deletes > 0)
+			justFinishedText = null;
+		return deletes;
+	}
+
+	private Edit replaceWith(String next)
+	{
+		int prefix = 0;
+		int limit = Math.min(composingText.length(), next.length());
+		while (prefix < limit && composingText.charAt(prefix) == next.charAt(prefix))
+			prefix++;
+		// Never leave a dangling high surrogate in the text sent for deletion.
+		if (prefix > 0 && prefix < composingText.length() &&
+		    Character.isHighSurrogate(composingText.charAt(prefix - 1)) &&
+		    Character.isLowSurrogate(composingText.charAt(prefix)))
+			prefix--;
+
+		int backspaces = Character.codePointCount(composingText, prefix, composingText.length());
+		String inserted = next.substring(prefix);
+		composingText = next;
+		return new Edit(backspaces, inserted);
 	}
 
 	/** Ignore printable soft-IME key events; their committed text uses commitText. */
