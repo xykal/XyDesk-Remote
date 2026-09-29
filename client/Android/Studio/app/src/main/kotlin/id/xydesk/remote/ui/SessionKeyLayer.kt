@@ -175,13 +175,6 @@ private fun HudKeyButton(
     Box(
         modifier
             .size(key.size.dp)
-            .shadow(
-                elevation = 7.dp,
-                shape = CircleShape,
-                clip = false,
-                ambientColor = Color.Black,
-                spotColor = Color.Black,
-            )
             .clip(CircleShape)
             .background(circlePlate)
             .border(
@@ -261,13 +254,10 @@ private fun HudKeyButton(
     }
 }
 
-/** Isi tombol: ikon untuk aksi mouse/scroll/mode, teks untuk tombol keyboard. */
+/** Isi tombol: ikon garis untuk scroll/mode/keyboard, label teks jelas untuk klik & tombol. */
 @Composable
 private fun HudKeyGlyph(key: HudKey, tint: Color, boxDp: Float = key.size) {
     val icon: ImageVector? = when (key.kind) {
-        HudKind.MOUSE_LEFT -> XyIcons.ClickLeft
-        HudKind.MOUSE_RIGHT -> XyIcons.ClickRight
-        HudKind.MOUSE_MIDDLE -> XyIcons.ClickMiddle
         HudKind.SCROLL_UP -> XyIcons.ScrollUp
         HudKind.SCROLL_DOWN -> XyIcons.ScrollDown
         HudKind.SCROLL_SLIDER -> XyIcons.ScrollSlide
@@ -336,11 +326,15 @@ fun HudKeyPicker(
     Box(
         Modifier
             .fillMaxSize()
-            .background(MaterialTheme.colorScheme.scrim.copy(alpha = 0.6f))
-            .consumeBackgroundPointer(onDismiss)
             .zIndex(40f),
         contentAlignment = Alignment.Center,
     ) {
+        Box(
+            Modifier
+                .fillMaxSize()
+                .background(MaterialTheme.colorScheme.scrim.copy(alpha = 0.62f))
+                .consumeBackgroundPointer(onDismiss),
+        )
         Column(
             Modifier
                 .widthIn(max = 460.dp)
@@ -353,7 +347,7 @@ fun HudKeyPicker(
                     MaterialTheme.colorScheme.outline,
                     RoundedCornerShape(16.dp),
                 )
-                .consumeBackgroundPointer {}
+                .pointerInput(Unit) {}
                 .padding(14.dp),
             verticalArrangement = Arrangement.spacedBy(10.dp),
         ) {
@@ -516,11 +510,15 @@ fun HudKeyEditor(
     BoxWithConstraints(
         Modifier
             .fillMaxSize()
-            .background(MaterialTheme.colorScheme.scrim.copy(alpha = 0.6f))
-            .consumeBackgroundPointer(onDismiss)
             .zIndex(40f),
         contentAlignment = Alignment.Center,
     ) {
+        Box(
+            Modifier
+                .fillMaxSize()
+                .background(MaterialTheme.colorScheme.scrim.copy(alpha = 0.62f))
+                .consumeBackgroundPointer(onDismiss),
+        )
         Column(
             Modifier
                 .widthIn(max = 400.dp)
@@ -534,7 +532,7 @@ fun HudKeyEditor(
                     MaterialTheme.colorScheme.outline,
                     RoundedCornerShape(14.dp),
                 )
-                .consumeBackgroundPointer {}
+                .pointerInput(Unit) {}
                 .padding(14.dp),
             verticalArrangement = Arrangement.spacedBy(8.dp),
         ) {

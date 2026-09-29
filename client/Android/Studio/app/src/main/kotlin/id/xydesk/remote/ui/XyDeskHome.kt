@@ -48,11 +48,13 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.input.pointer.pointerInput
 import id.xydesk.remote.core.ConnectionLog
 import id.xydesk.remote.core.ConnectionProfile
 import id.xydesk.remote.security.CrashLog
 import id.xydesk.remote.sessions.SessionsRepository
 import id.xydesk.remote.ui.components.XyCard
+import id.xydesk.remote.ui.components.XyDialog
 import id.xydesk.remote.ui.components.XyIconPill
 import id.xydesk.remote.ui.components.XyDivider
 import id.xydesk.remote.ui.components.XyIcons
@@ -118,10 +120,11 @@ fun XyDeskHome(
     var route by remember { mutableStateOf<XyRoute>(XyRoute.Devices) }
     var crashLog by remember { mutableStateOf(CrashLog.last(context.applicationContext)) }
     var showCrash by remember { mutableStateOf(false) }
-    var backArmedAt by remember { mutableStateOf(0L) }
     val bootTail = remember { ConnectionLog.tailFromFile(context.applicationContext, 20) }
     var showBoot by remember { mutableStateOf(false) }
     var feedbackOpen by remember { mutableStateOf(false) }
+    var confirmDeleteDevice by remember { mutableStateOf<ConnectionProfile?>(null) }
+    var confirmExitApp by remember { mutableStateOf(false) }
     // Pesan app sendiri (bukan Toast bawaan Android).
     val notice = rememberXyNotice()
 
@@ -170,18 +173,13 @@ fun XyDeskHome(
 
     BackHandler {
         when {
+            confirmDeleteDevice != null -> confirmDeleteDevice = null
+            confirmExitApp -> confirmExitApp = false
             feedbackOpen -> feedbackOpen = false
             drawerOpen -> drawerOpen = false
             route != XyRoute.Devices -> route = XyRoute.Devices
             section != XySection.PERANGKAT -> section = XySection.PERANGKAT
-            else -> {
-                val now = System.currentTimeMillis()
-                if (now - backArmedAt < 2_000L) onExit()
-                else {
-                    backArmedAt = now
-                    notice.show(xyNow("Tekan sekali lagi untuk keluar", "Press again to exit"))
-                }
-            }
+            else -> confirmExitApp = true
         }
     }
 
@@ -209,13 +207,7 @@ fun XyDeskHome(
                         onAdd = { route = XyRoute.EditDevice(null) },
                         onEdit = { route = XyRoute.EditDevice(it) },
                         onConnect = { connect(it) },
-                        onDelete = { profile ->
-                            scope.launch {
-                                repo.remove(profile.id)
-                                id.xydesk.remote.core.RdpOptions.clear(context, profile.id)
-                                DisplayPrefs.clear(context, profile.id)
-                            }
-                        },
+                        onDelete = { profile -> confirmDeleteDevice = profile },
                         onShowCrash = { showCrash = true },
                         onShowBoot = { showBoot = true },
                     )
@@ -265,12 +257,14 @@ fun XyDeskHome(
             Modifier
                 .width(300.dp)
                 .fillMaxHeight()
+                .clip(RoundedCornerShape(topEnd = 16.dp, bottomEnd = 16.dp))
                 .background(MaterialTheme.colorScheme.surface)
                 .border(
                     1.dp,
                     MaterialTheme.colorScheme.outline,
                     RoundedCornerShape(topEnd = 16.dp, bottomEnd = 16.dp),
                 )
+                .pointerInput(Unit) {}
                 .padding(vertical = 16.dp),
         ) {
             Row(
@@ -375,6 +369,44 @@ fun XyDeskHome(
             onShare = ::shareFeedback,
         )
     }
+    confirmDeleteDevice?.let { target ->
+        XyDialog(
+            title = xy("Hapus perangkat?", "Delete device?"),
+            body = xy(
+                "Hapus \"{0}\" beserta password dan pengaturannya?",
+                "Delete \"{0}\" along with its saved password and settings?",
+                target.label ?: "${target.host}:${target.port}",
+            ),
+            confirmLabel = xy("Hapus", "Delete"),
+            onConfirm = {
+                confirmDeleteDevice = null
+                scope.launch {
+                    repo.remove(target.id)
+                    id.xydesk.remote.core.RdpOptions.clear(context, target.id)
+                    DisplayPrefs.clear(context, target.id)
+                    notice.show(xyNow("Perangkat dihapus", "Device deleted"))
+                }
+            },
+            dismissLabel = xy("Batal", "Cancel"),
+            onDismiss = { confirmDeleteDevice = null },
+        )
+    }
+    if (confirmExitApp) {
+        XyDialog(
+            title = xy("Keluar dari XyDesk Remote?", "Exit XyDesk Remote?"),
+            body = xy(
+                "Tutup aplikasi sekarang? Sesi yang sedang aktif di latar akan tetap berjalan jika keep-alive menyala.",
+                "Close the application now? Active background sessions will stay running while keep-alive is enabled.",
+            ),
+            confirmLabel = xy("Keluar", "Exit"),
+            onConfirm = {
+                confirmExitApp = false
+                onExit()
+            },
+            dismissLabel = xy("Batal", "Cancel"),
+            onDismiss = { confirmExitApp = false },
+        )
+    }
 
     // Pesan app sendiri — paling atas supaya tidak ketutup drawer/panel.
     XyNoticeHost(state = notice, modifier = Modifier.align(Alignment.TopCenter))
@@ -391,6 +423,7 @@ fun XyDeskHome(
 @Composable
 private fun LiveSessionsCard() {
     var live by remember { mutableStateOf(XySessionRegistry.list()) }
+    var confirmKill by remember { mutableStateOf<XySessionRegistry.Live?>(null) }
     LaunchedEffect(Unit) {
         while (true) {
             live = XySessionRegistry.list()
@@ -428,13 +461,31 @@ private fun LiveSessionsCard() {
                 )
                 XyPillButton(
                     text = xy("Putus", "Disconnect"),
-                    onClick = { item.kill() },
+                    onClick = { confirmKill = item },
                     primary = false,
                     compact = true,
                 )
             }
             Spacer(Modifier.height(8.dp))
         }
+    }
+    confirmKill?.let { target ->
+        XyDialog(
+            title = xy("Putuskan sesi aktif?", "Disconnect active session?"),
+            body = xy(
+                "Putuskan koneksi ke \"{0}\" ({1}) sekarang?",
+                "Disconnect from \"{0}\" ({1}) now?",
+                target.label,
+                target.address,
+            ),
+            confirmLabel = xy("Putuskan", "Disconnect"),
+            onConfirm = {
+                confirmKill = null
+                target.kill()
+            },
+            dismissLabel = xy("Batal", "Cancel"),
+            onDismiss = { confirmKill = null },
+        )
     }
 }
 

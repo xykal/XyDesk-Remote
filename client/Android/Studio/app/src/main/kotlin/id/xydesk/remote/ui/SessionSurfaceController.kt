@@ -89,6 +89,7 @@ class SessionSurfaceController(private val activity: Activity) : GraphicsSink {
     var onInputDispatchFailure: (() -> Unit)? = null
     var onCursorMoved: ((Int, Int) -> Unit)? = null
     var onInputKeyConsumed: (() -> Unit)? = null
+    var onImeSnippetCommitted: ((String) -> Unit)? = null
     @Volatile var hasActiveHudModifiers: Boolean = false
     @Volatile var overlayInputActive: Boolean = false
     private var lastInputDispatchFailureAt = 0L
@@ -211,6 +212,9 @@ class SessionSurfaceController(private val activity: Activity) : GraphicsSink {
                         else -> im.processUnicodeKey(cp)
                     }
                     i += Character.charCount(cp)
+                }
+                if (text.length > 1) {
+                    onImeSnippetCommitted?.invoke(text)
                 }
                 onInputKeyConsumed?.invoke()
             }

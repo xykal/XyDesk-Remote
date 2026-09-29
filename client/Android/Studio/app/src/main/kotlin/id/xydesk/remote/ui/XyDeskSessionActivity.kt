@@ -84,8 +84,52 @@ class XyDeskSessionActivity : ComponentActivity() {
         Thread(task, "XyDesk-clipboard-reader").apply { isDaemon = true }
     }
     private var clipboardSyncEnabled = true
+    @Volatile
+    private var lastSyncedPhoneClip: String? = null
     private var pendingPermissionProfile: ConnectionProfile? = null
     private var lastInputFailureNoticeAt = 0L
+
+    fun noteRemoteClipboardText(text: String) {
+        lastSyncedPhoneClip = text
+    }
+
+    fun syncPhoneClipboardToRemote() {
+        if (!clipboardSyncEnabled || manager.state.value !is SessionState.Connected) return
+        val cm = getSystemService(CLIPBOARD_SERVICE) as? ClipboardManager ?: return
+        val clip = try {
+            cm.getPrimaryClip()
+        } catch (e: RuntimeException) {
+            Log.w(TAG, "clipboard read failed; session left running")
+            return
+        } ?: return
+        val label = clip.description?.label?.toString()
+        if (label == "rdp" || label == "rdp-clipboard" || clip.itemCount == 0) return
+        val item = clip.getItemAt(0)
+        if (item.uri != ClipboardImageProvider.TEXT_CONTENT_URI) {
+            ClipboardImageProvider.clearTextData()
+        }
+        try {
+            clipboardReader.execute {
+                try {
+                    val text = item.coerceToText(applicationContext)?.toString().orEmpty()
+                    if (text.isNotEmpty() && text != lastSyncedPhoneClip &&
+                        !isFinishing && !isDestroyed &&
+                        manager.state.value is SessionState.Connected
+                    ) {
+                        if (manager.sendClipboardData(text)) {
+                            lastSyncedPhoneClip = text
+                        } else {
+                            ConnectionLog.add("SES: Android-to-remote clipboard send rejected; contents omitted")
+                        }
+                    }
+                } catch (e: RuntimeException) {
+                    Log.w(TAG, "clipboard processing failed; contents omitted")
+                }
+            }
+        } catch (e: java.util.concurrent.RejectedExecutionException) {
+            // Activity is already tearing down.
+        }
+    }
 
     fun reportInputDispatchFailure() {
         val now = SystemClock.elapsedRealtime()
@@ -141,47 +185,8 @@ class XyDeskSessionActivity : ComponentActivity() {
         clipboardSyncEnabled = runCatching { RdpOptions.of(this, profile.id).clipboard }
             .getOrDefault(false)
         val cm = getSystemService(CLIPBOARD_SERVICE) as ClipboardManager
-        val listener = object : ClipboardManager.OnPrimaryClipChangedListener {
-            override fun onPrimaryClipChanged() {
-                if (!clipboardSyncEnabled || manager.state.value !is SessionState.Connected) return
-                val clip = try {
-                    cm.getPrimaryClip()
-                } catch (e: RuntimeException) {
-                    // Do not attach clipboard-related exception details to logs.
-                    Log.w(TAG, "clipboard read failed; session left running")
-                    return
-                } ?: return
-                val label = clip.description?.label?.toString()
-                if (label == "rdp" || label == "rdp-clipboard" || clip.itemCount == 0) return
-                val item = clip.getItemAt(0)
-                if (item.uri != ClipboardImageProvider.TEXT_CONTENT_URI)
-                    ClipboardImageProvider.clearTextData()
-                try {
-                    clipboardReader.execute {
-                        try {
-                            val text = item.coerceToText(applicationContext)?.toString().orEmpty()
-                            if (text.isNotEmpty() && !isFinishing && !isDestroyed &&
-                                manager.state.value is SessionState.Connected
-                            ) {
-                                if (!manager.sendClipboardData(text)) {
-                                    ConnectionLog.add("SES: Android-to-remote clipboard send rejected; contents omitted")
-                                    XyNoticeBus.post(
-                                        xyNow(
-                                            "Clipboard HP gagal dikirim; isi tidak dicatat",
-                                            "Phone clipboard could not be sent; contents were not logged",
-                                        ),
-                                    )
-                                }
-                            }
-                        } catch (e: RuntimeException) {
-                            // Never log exception details while handling private clipboard content.
-                            Log.w(TAG, "clipboard processing failed; contents omitted")
-                        }
-                    }
-                } catch (e: java.util.concurrent.RejectedExecutionException) {
-                    // Activity is already tearing down.
-                }
-            }
+        val listener = ClipboardManager.OnPrimaryClipChangedListener {
+            syncPhoneClipboardToRemote()
         }
         clipListener = listener
         cm.addPrimaryClipChangedListener(listener)
@@ -245,6 +250,18 @@ class XyDeskSessionActivity : ComponentActivity() {
         super.onStart()
         // balik dari background sebelum timer jalan = cancel auto-disconnect
         bgHandler.removeCallbacks(bgDisconnect)
+    }
+
+    override fun onResume() {
+        super.onResume()
+        syncPhoneClipboardToRemote()
+    }
+
+    override fun onWindowFocusChanged(hasFocus: Boolean) {
+        super.onWindowFocusChanged(hasFocus)
+        if (hasFocus) {
+            syncPhoneClipboardToRemote()
+        }
     }
 
     override fun onStop() {

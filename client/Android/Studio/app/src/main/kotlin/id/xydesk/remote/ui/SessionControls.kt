@@ -54,7 +54,9 @@ import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
 import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.input.pointer.pointerInput
 import id.xydesk.remote.core.SmartResolution
+import id.xydesk.remote.ui.components.XyDialog
 import id.xydesk.remote.ui.components.XyField
 import id.xydesk.remote.ui.components.XyIcons
 import id.xydesk.remote.ui.components.XyNoticeState
@@ -130,8 +132,6 @@ fun SessionControls(
     onOpenHome: () -> Unit = {},
     lastClipboard: String? = null,
     clipboardSyncEnabled: Boolean = false,
-    onSendPhoneClipboard: () -> Unit = {},
-    onPasteRemoteClipboard: () -> Unit = {},
     onSendText: (String) -> Unit,
     onSendRemoteClipboardText: (String) -> Boolean = { false },
     onOverlayActiveChange: (Boolean) -> Unit = {},
@@ -159,15 +159,45 @@ fun SessionControls(
     var textValue by remember { mutableStateOf("") }
     var layoutJsonOpen by remember { mutableStateOf(false) }
     var layoutJsonValue by remember { mutableStateOf("") }
+    var confirmDeleteKey by remember { mutableStateOf<HudKey?>(null) }
+    var confirmResetHud by remember { mutableStateOf(false) }
+    var confirmImportLayout by remember { mutableStateOf<List<HudKey>?>(null) }
+    var confirmResolution by remember { mutableStateOf<String?>(null) }
+    var validationAlert by remember { mutableStateOf<Pair<String, String>?>(null) }
 
-    val anyOverlayOpen = panelOpen || pickerOpen || editing != null || textOpen || layoutJsonOpen
+    val anyOverlayOpen = panelOpen || pickerOpen || editing != null || textOpen || layoutJsonOpen ||
+        confirmDeleteKey != null || confirmResetHud || confirmImportLayout != null ||
+        confirmResolution != null || validationAlert != null
     LaunchedEffect(anyOverlayOpen) {
         onOverlayActiveChange(anyOverlayOpen)
     }
 
-    LaunchedEffect(panelOpen, pickerOpen, editing, textOpen, layoutJsonOpen, mappingMode) {
+    LaunchedEffect(
+        panelOpen, pickerOpen, editing, textOpen, layoutJsonOpen, mappingMode,
+        confirmDeleteKey, confirmResetHud, confirmImportLayout, confirmResolution, validationAlert,
+    ) {
         onRegisterBackHandler {
             when {
+                validationAlert != null -> {
+                    validationAlert = null
+                    true
+                }
+                confirmDeleteKey != null -> {
+                    confirmDeleteKey = null
+                    true
+                }
+                confirmResetHud -> {
+                    confirmResetHud = false
+                    true
+                }
+                confirmImportLayout != null -> {
+                    confirmImportLayout = null
+                    true
+                }
+                confirmResolution != null -> {
+                    confirmResolution = null
+                    true
+                }
                 editing != null -> {
                     editing = null
                     true
@@ -394,7 +424,7 @@ fun SessionControls(
                 HudMappingBanner(
                     keyCount = keys.size,
                     onAdd = { pickerOpen = true },
-                    onReset = onResetCluster,
+                    onReset = { confirmResetHud = true },
                     onDone = { onMappingModeChange(false) },
                 )
             }
@@ -434,7 +464,8 @@ fun SessionControls(
                         {
                             val t = textValue
                             if (t.isEmpty()) {
-                                notice.show(xyNow("Belum ada teks", "No text yet"))
+                                validationAlert = xyNow("Teks kosong", "Empty text") to
+                                    xyNow("Masukkan teks terlebih dahulu sebelum mengirim ke remote.", "Enter some text before sending to the remote.")
                             } else {
                                 onSendText(t)
                                 notice.show(xyNow("Teks diketik ke jendela remote", "Text typed into the remote window"))
@@ -450,8 +481,10 @@ fun SessionControls(
                     {
                         val text = textValue
                         when {
-                            text.isEmpty() -> notice.show(xyNow("Belum ada teks", "No text yet"))
-                            !clipboardSyncEnabled -> notice.show(xyNow("Aktifkan kanal clipboard lalu sambungkan ulang", "Enable clipboard channel and reconnect"))
+                            text.isEmpty() -> validationAlert = xyNow("Teks kosong", "Empty text") to
+                                xyNow("Masukkan teks terlebih dahulu sebelum mengirim ke clipboard Windows.", "Enter some text before sending to Windows clipboard.")
+                            !clipboardSyncEnabled -> validationAlert = xyNow("Kanal clipboard nonaktif", "Clipboard channel off") to
+                                xyNow("Aktifkan kanal clipboard di pengaturan perangkat lalu sambungkan ulang.", "Enable the clipboard channel in device settings and reconnect.")
                             onSendRemoteClipboardText(text) -> {
                                 notice.show(xyNow("Permintaan clipboard dikirim; tunggu sebentar sebelum Paste", "Clipboard request sent; wait briefly before Paste"))
                                 textOpen = false
@@ -511,9 +544,15 @@ fun SessionControls(
                     XyPillButton(
                         xy("Terapkan JSON", "Apply JSON"),
                         {
-                            if (importHudLayoutFromRaw(layoutJsonValue)) {
-                                layoutJsonOpen = false
-                                panelOpen = false
+                            val imported = HudKey.importLayoutJson(layoutJsonValue, prefs.hudButtonSize)
+                            if (imported == null) {
+                                validationAlert = xyNow("JSON tidak valid", "Invalid JSON") to
+                                    xyNow(
+                                        "Format JSON tata letak tombol tidak valid atau tidak memuat tombol kontrol.",
+                                        "The button layout JSON format is invalid or contains no control buttons.",
+                                    )
+                            } else {
+                                confirmImportLayout = imported
                             }
                         },
                         compact = true,
@@ -569,17 +608,19 @@ fun SessionControls(
                 onCustomApply = {
                     val parsed = DisplayPrefs.parseCustom(custom)
                     if (parsed == null) {
-                        notice.show(xyNow("Masukkan WxH valid (mis. 1920x1080); lebar harus genap.", "Enter a valid WxH (e.g. 1920x1080); width must be even."))
+                        validationAlert = xyNow("Resolusi kustom tidak valid", "Invalid custom resolution") to
+                            xyNow(
+                                "Masukkan format WxH yang valid (640..8192 x 480..8192, lebar harus genap), contoh: 1920x1080.",
+                                "Enter a valid WxH format (640..8192 x 480..8192, even width), e.g. 1920x1080.",
+                            )
                     } else {
-                        resolution = parsed
-                        DisplayPrefs.setResolution(context, deviceId, parsed)
-                        onResolutionChange(parsed)
+                        confirmResolution = parsed
                     }
                 },
-                onResolution = {
-                    resolution = it
-                    DisplayPrefs.setResolution(context, deviceId, it)
-                    onResolutionChange(it)
+                onResolution = { selected ->
+                    if (selected != resolution) {
+                        confirmResolution = selected
+                    }
                 },
                 onRotation = {
                     rotation = it
@@ -598,8 +639,6 @@ fun SessionControls(
                 onSendTextClick = { textValue = ""; textOpen = true },
                 lastClipboard = lastClipboard,
                 clipboardSyncEnabled = clipboardSyncEnabled,
-                onSendPhoneClipboard = onSendPhoneClipboard,
-                onPasteRemoteClipboard = onPasteRemoteClipboard,
                 pointerVisible = pointerVisible,
                 onPointerVisibilityChange = onPointerVisibilityChange,
                 pointerStyle = pointerStyle,
@@ -610,7 +649,7 @@ fun SessionControls(
                 keys = keys,
                 onAddKey = { pickerOpen = true },
                 onEditKey = { editing = it },
-                onDeleteKey = onDeleteKey,
+                onDeleteKey = { confirmDeleteKey = it },
                 mappingMode = mappingMode,
                 onMappingModeChange = { enabled ->
                     onMappingModeChange(enabled)
@@ -620,7 +659,7 @@ fun SessionControls(
                 onPlate = { plate = it; prefs.hudPlate = it },
                 haptics = haptics,
                 onHaptics = { haptics = it; prefs.haptics = it },
-                onResetCluster = onResetCluster,
+                onResetCluster = { confirmResetHud = true },
                 onExportLayoutJson = { exportHudLayoutToClipboard() },
                 onOpenLayoutJson = {
                     layoutJsonValue = HudKey.exportLayoutJson(keys)
@@ -659,11 +698,105 @@ fun SessionControls(
                 replace(persisted)
             },
             onDelete = {
-                onDeleteKey(key)
-                editing = null
-                notice.show(xyNow("Tombol dihapus", "Button deleted"))
+                confirmDeleteKey = key
             },
             onDismiss = { editing = null },
+        )
+    }
+
+    confirmDeleteKey?.let { key ->
+        XyDialog(
+            title = xy("Hapus tombol kontrol?", "Delete control button?"),
+            body = xy(
+                "Hapus tombol \"{0}\" dari tata letak sesi ini?",
+                "Delete button \"{0}\" from this session layout?",
+                key.label,
+            ),
+            confirmLabel = xy("Hapus", "Delete"),
+            onConfirm = {
+                confirmDeleteKey = null
+                if (editing?.id == key.id) editing = null
+                onDeleteKey(key)
+                notice.show(xyNow("Tombol dihapus", "Button deleted"))
+            },
+            dismissLabel = xy("Batal", "Cancel"),
+            onDismiss = { confirmDeleteKey = null },
+        )
+    }
+
+    if (confirmResetHud) {
+        XyDialog(
+            title = xy("Reset tata letak tombol?", "Reset button layout?"),
+            body = xy(
+                "Kembalikan semua tombol kontrol ke setelan bawaan? Susunan tombol kustom saat ini akan diganti.",
+                "Restore all control buttons to the default set? Your current custom button layout will be replaced.",
+            ),
+            confirmLabel = xy("Reset", "Reset"),
+            onConfirm = {
+                confirmResetHud = false
+                editing = null
+                onResetCluster()
+                notice.show(xyNow("Tata letak tombol dikembalikan ke bawaan", "Button layout restored to default"))
+            },
+            dismissLabel = xy("Batal", "Cancel"),
+            onDismiss = { confirmResetHud = false },
+        )
+    }
+
+    confirmImportLayout?.let { imported ->
+        XyDialog(
+            title = xy("Terapkan tata letak JSON?", "Apply JSON layout?"),
+            body = xy(
+                "Ganti tata letak tombol saat ini dengan {0} tombol dari JSON?",
+                "Replace the current button layout with {0} buttons from JSON?",
+                imported.size,
+            ),
+            confirmLabel = xy("Terapkan", "Apply"),
+            onConfirm = {
+                confirmImportLayout = null
+                layoutJsonOpen = false
+                panelOpen = false
+                onKeysChange(imported)
+                notice.show(
+                    xyNow(
+                        "Layout diimpor ({0} tombol)",
+                        "Layout imported ({0} buttons)",
+                        imported.size,
+                    ),
+                )
+            },
+            dismissLabel = xy("Batal", "Cancel"),
+            onDismiss = { confirmImportLayout = null },
+        )
+    }
+
+    confirmResolution?.let { targetRes ->
+        XyDialog(
+            title = xy("Ubah resolusi remote?", "Change remote resolution?"),
+            body = xy(
+                "Terapkan resolusi \"{0}\"? Jika server belum menerapkan perubahan langsung, sesi akan menyambung ulang otomatis.",
+                "Apply resolution \"{0}\"? If the server does not apply live resize, the session will reconnect automatically.",
+                targetRes,
+            ),
+            confirmLabel = xy("Terapkan", "Apply"),
+            onConfirm = {
+                confirmResolution = null
+                resolution = targetRes
+                DisplayPrefs.setResolution(context, deviceId, targetRes)
+                onResolutionChange(targetRes)
+            },
+            dismissLabel = xy("Batal", "Cancel"),
+            onDismiss = { confirmResolution = null },
+        )
+    }
+
+    validationAlert?.let { (alertTitle, alertBody) ->
+        XyDialog(
+            title = alertTitle,
+            body = alertBody,
+            confirmLabel = xy("Mengerti", "Got it"),
+            onConfirm = { validationAlert = null },
+            onDismiss = { validationAlert = null },
         )
     }
 }
@@ -681,7 +814,6 @@ private fun RailButton(
     Box(
         Modifier
             .size(44.dp)
-            .shadow(6.dp, CircleShape, false, Color.Black, Color.Black)
             .clip(CircleShape)
             .background(if (active) Color(0xE6B9EBDD) else pal.plate)
             .border(
@@ -715,7 +847,6 @@ private fun PanelHandle(
         Box(
             Modifier
                 .clip(XyPill)
-                .shadow(6.dp, XyPill, false, Color.Black, Color.Black)
                 .background(MaterialTheme.colorScheme.surface)
                 .border(1.dp, MaterialTheme.colorScheme.outlineVariant, XyPill)
                 .padding(horizontal = 10.dp, vertical = 16.dp),
@@ -866,8 +997,6 @@ private fun SessionPanel(
     onSendTextClick: () -> Unit,
     lastClipboard: String?,
     clipboardSyncEnabled: Boolean,
-    onSendPhoneClipboard: () -> Unit,
-    onPasteRemoteClipboard: () -> Unit,
     pointerVisible: Boolean,
     onPointerVisibilityChange: (Boolean) -> Unit,
     pointerStyle: PointerStyle,
@@ -897,20 +1026,24 @@ private fun SessionPanel(
     Box(
         Modifier
             .fillMaxSize()
-            .background(MaterialTheme.colorScheme.scrim.copy(alpha = 0.58f))
-            .consumeBackgroundPointer(onClose)
             .zIndex(30f),
         contentAlignment = Alignment.CenterEnd,
     ) {
+        Box(
+            Modifier
+                .fillMaxSize()
+                .background(MaterialTheme.colorScheme.scrim.copy(alpha = 0.62f))
+                .consumeBackgroundPointer(onClose),
+        )
         Column(
             Modifier
                 .fillMaxHeight()
                 .widthIn(max = 360.dp)
                 .fillMaxWidth(0.86f)
+                .clip(RoundedCornerShape(topStart = 16.dp, bottomStart = 16.dp))
                 .background(MaterialTheme.colorScheme.surface)
                 .border(1.dp, MaterialTheme.colorScheme.outline, RoundedCornerShape(topStart = 16.dp, bottomStart = 16.dp))
-                .clip(RoundedCornerShape(topStart = 16.dp, bottomStart = 16.dp))
-                .consumeBackgroundPointer {}
+                .pointerInput(Unit) {}
                 .padding(horizontal = 14.dp, vertical = 12.dp),
             verticalArrangement = Arrangement.spacedBy(10.dp),
         ) {
@@ -948,10 +1081,11 @@ private fun SessionPanel(
                 modifier = Modifier.fillMaxWidth(),
             )
 
+            val tabScroll = androidx.compose.runtime.key(tab) { rememberScrollState() }
             Column(
                 Modifier
                     .weight(1f)
-                    .verticalScroll(rememberScrollState(tab.ordinal)),
+                    .verticalScroll(tabScroll),
                 verticalArrangement = Arrangement.spacedBy(10.dp),
             ) {
                 when (tab) {
@@ -982,8 +1116,6 @@ private fun SessionPanel(
                         onSendTextClick = onSendTextClick,
                         lastClipboard = lastClipboard,
                         clipboardSyncEnabled = clipboardSyncEnabled,
-                        onSendPhoneClipboard = onSendPhoneClipboard,
-                        onPasteRemoteClipboard = onPasteRemoteClipboard,
                         pointerVisible = pointerVisible,
                         onPointerVisibilityChange = onPointerVisibilityChange,
                         pointerStyle = pointerStyle,
@@ -1184,8 +1316,6 @@ private fun InputTab(
     onSendTextClick: () -> Unit,
     lastClipboard: String?,
     clipboardSyncEnabled: Boolean,
-    onSendPhoneClipboard: () -> Unit,
-    onPasteRemoteClipboard: () -> Unit,
     pointerVisible: Boolean,
     onPointerVisibilityChange: (Boolean) -> Unit,
     pointerStyle: PointerStyle,
@@ -1216,43 +1346,28 @@ private fun InputTab(
         )
     }
 
-    PanelSection(xy("Clipboard", "Clipboard")) {
+    PanelSection(xy("Clipboard otomatis", "Automatic clipboard")) {
         PanelHint(
             if (clipboardSyncEnabled) {
                 xy(
-                    "Salin lewat fitur Salin Android biasa otomatis terkirim ke Windows saat sesi aktif—tak perlu buka panel. Riwayat Gboard kadang hanya dikomit sebagai teks IME, bukan clipboard sistem; Android tidak membuka riwayat privat itu ke app. Pindahkan teks ke clipboard sistem atau masukkan lewat dialog Kirim teks sebagai clipboard Windows.",
-                    "Copy with Android's normal Copy action auto-syncs to Windows while connected—no panel needed. Gboard history may be committed only as IME text; Android does not expose that private history to apps. Copy it into the system clipboard or enter it in Send text as Windows clipboard.",
+                    "Sinkronisasi dua arah aktif otomatis: salin di PC langsung masuk ke clipboard HP, dan salin di HP langsung terkirim ke PC tanpa tombol manual.",
+                    "Two-way sync is active automatically: copying on PC goes straight to the phone clipboard, and copying on phone is sent automatically to PC without manual buttons.",
                 )
             } else {
                 xy(
-                    "Kanal clipboard mati di opsi perangkat. Aktifkan lalu sambungkan ulang; sinkronisasi dan tombol manual memerlukan kanal ini.",
-                    "The clipboard channel is off in device options. Enable it and reconnect; sync and manual actions both require this channel.",
+                    "Kanal clipboard mati di pengaturan perangkat. Aktifkan lalu sambungkan ulang untuk sinkronisasi otomatis PC dan HP.",
+                    "Clipboard channel is off in device settings. Enable it and reconnect for automatic PC and phone clipboard sync.",
                 )
             },
         )
-        XyPillButton(
-            xy("Kirim clipboard sistem HP (manual)", "Send phone system clipboard (manual)"),
-            onSendPhoneClipboard,
-            primary = false,
-            compact = true,
-            modifier = Modifier.fillMaxWidth(),
-            enabled = clipboardSyncEnabled,
-        )
-        PanelHint(
-            when {
-                !clipboardSyncEnabled -> xy("Remote: kanal clipboard mati", "Remote: clipboard channel off")
-                lastClipboard.isNullOrEmpty() -> xy("Dari remote: belum ada teks", "From remote: no text received yet")
-                else -> xy("Teks dari remote tersedia; isi disembunyikan", "Remote text is available; its contents are hidden")
-            },
-        )
-        XyPillButton(
-            xy("Salin teks remote ke HP", "Copy remote text to phone"),
-            onPasteRemoteClipboard,
-            primary = false,
-            compact = true,
-            modifier = Modifier.fillMaxWidth(),
-            enabled = clipboardSyncEnabled && !lastClipboard.isNullOrEmpty(),
-        )
+        if (clipboardSyncEnabled && !lastClipboard.isNullOrEmpty()) {
+            PanelHint(
+                xy(
+                    "Status: teks terakhir dari remote sudah tersalin otomatis ke clipboard HP.",
+                    "Status: latest remote text has been automatically copied to the phone clipboard.",
+                ),
+            )
+        }
     }
 
     PanelSection(xy("Pointer", "Pointer")) {

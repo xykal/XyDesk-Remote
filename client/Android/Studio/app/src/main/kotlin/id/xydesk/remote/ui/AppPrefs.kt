@@ -13,7 +13,7 @@ class AppPrefs(context: Context) {
         context.applicationContext.getSharedPreferences(NAME, Context.MODE_PRIVATE)
 
     var themeMode: Int
-        get() = sp.getInt(KEY_THEME, 0)
+        get() = sp.getInt(KEY_THEME, 1)
         set(v) = sp.edit().putInt(KEY_THEME, v).apply()
 
     var autoDisconnect: Boolean

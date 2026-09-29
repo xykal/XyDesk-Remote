@@ -1,22 +1,29 @@
 package id.xydesk.remote.ui.theme
 
+import android.app.Activity
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.LocalContentColor
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Shapes
 import androidx.compose.material3.darkColorScheme
 import androidx.compose.material3.lightColorScheme
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.toArgb
+import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.Font
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.core.view.WindowCompat
 import id.xydesk.remote.R
 import id.xydesk.remote.ui.AppPrefs
 
@@ -31,16 +38,17 @@ import id.xydesk.remote.ui.AppPrefs
 // Tema gelap: dipisah lebih tegas (latar -> permukaan -> permukaan naik)
 // supaya kartu dan panel tidak menyatu jadi satu bidang gelap. Garis naik
 // satu tingkat supaya hairline tetap kelihatan di layar terang.
-val XyBg = Color(0xFF06070A)
-val XySurface = Color(0xFF11141A)
-val XySurfaceAlt = Color(0xFF191E25)
-val XyLine = Color(0xFF2A3038)
-val XyLineStrong = Color(0xFF404952)
-val XyText = Color(0xFFF0F3F6)
-val XyTextDim = Color(0xFFB6BEC6)
+val XyBg = Color(0xFF07090D)
+val XySurface = Color(0xFF11151D)
+val XySurfaceAlt = Color(0xFF1A202C)
+val XyPrimaryContainer = Color(0xFF263142)
+val XyLine = Color(0xFF2B3442)
+val XyLineStrong = Color(0xFF435064)
+val XyText = Color(0xFFF2F5F8)
+val XyTextDim = Color(0xFFB8C1CC)
 val XyTextFaint = Color(0xFF9AA2AB)
-val XyAccent = Color(0xFFF1F4F6)
-val XyAccentInk = Color(0xFF0A0B0D)
+val XyAccent = Color(0xFFF2F5F8)
+val XyAccentInk = Color(0xFF0A0D12)
 val XyOk = Color(0xFF57C08B)
 val XyWarn = Color(0xFFD7A54E)
 val XyDanger = Color(0xFFE0706F)
@@ -48,7 +56,7 @@ val XyDanger = Color(0xFFE0706F)
 val DarkScheme = darkColorScheme(
     primary = XyAccent,
     onPrimary = XyAccentInk,
-    primaryContainer = XySurfaceAlt,
+    primaryContainer = XyPrimaryContainer,
     onPrimaryContainer = XyText,
     secondary = XyTextDim,
     onSecondary = XyAccentInk,
@@ -164,8 +172,19 @@ fun XyDeskTheme(
     dark: Boolean,
     content: @Composable () -> Unit,
 ) {
+    val scheme = if (dark) DarkScheme else LightScheme
+    val view = LocalView.current
+    if (!view.isInEditMode) {
+        SideEffect {
+            val window = (view.context as? Activity)?.window ?: return@SideEffect
+            window.decorView.setBackgroundColor(scheme.background.toArgb())
+            val insets = WindowCompat.getInsetsController(window, view)
+            insets.isAppearanceLightStatusBars = !dark
+            insets.isAppearanceLightNavigationBars = !dark
+        }
+    }
     MaterialTheme(
-        colorScheme = if (dark) DarkScheme else LightScheme,
+        colorScheme = scheme,
         shapes = XyShapes,
         typography = MaterialTheme.typography.copy(
             displaySmall = TextStyle(
@@ -204,6 +223,10 @@ fun XyDeskTheme(
                 fontWeight = FontWeight.Medium, letterSpacing = 0.6.sp,
             ),
         ),
-        content = content,
+        content = {
+            CompositionLocalProvider(LocalContentColor provides scheme.onSurface) {
+                content()
+            }
+        },
     )
 }

@@ -39,8 +39,10 @@ import id.xydesk.remote.core.formatRdpEndpoint
 import id.xydesk.remote.core.parseRdpEndpoint
 import id.xydesk.remote.core.XyAudioMode
 import id.xydesk.remote.core.XyGateway
+import androidx.activity.compose.BackHandler
 import id.xydesk.remote.ui.components.XySlider
 import id.xydesk.remote.ui.components.XyCard
+import id.xydesk.remote.ui.components.XyDialog
 import id.xydesk.remote.ui.components.XyField
 import id.xydesk.remote.ui.components.XyIcons
 import id.xydesk.remote.ui.components.XyPillButton
@@ -127,18 +129,56 @@ fun AddDeviceScreen(
         mutableStateOf(if (deviceId == null) 100 else DisplayPrefs.dpi(context, deviceId))
     }
     var audioIndex by remember { mutableStateOf(options.audioMode.ordinal) }
+    var confirmDiscard by remember { mutableStateOf(false) }
+    var validationPopup by remember { mutableStateOf<String?>(null) }
+
+    val initialHost = remember(existing) {
+        existing?.let { formatRdpEndpoint(it.host, it.port) }.orEmpty()
+    }
+    val hasChanges = host != initialHost ||
+        label != existing?.label.orEmpty() ||
+        user != existing?.username.orEmpty() ||
+        pass != existing?.password.orEmpty() ||
+        domain != existing?.domain.orEmpty() ||
+        options != stored ||
+        gatewayOn != (stored.gateway != null)
+
+    fun requestCancel() {
+        if (hasChanges) confirmDiscard = true else onCancel()
+    }
+
+    BackHandler {
+        when {
+            validationPopup != null -> validationPopup = null
+            confirmDiscard -> confirmDiscard = false
+            else -> requestCancel()
+        }
+    }
 
     fun submit(connect: Boolean) {
         val endpoint = parseRdpEndpoint(host)
         if (host.isBlank()) {
-            error = xyNow("Alamat host wajib diisi", "Host address is required")
+            val msg = xyNow("Alamat host wajib diisi.", "Host address is required.")
+            error = msg
+            validationPopup = msg
             return
         }
         if (endpoint == null) {
-            error = xyNow(
+            val msg = xyNow(
                 "Alamat/port tidak valid. Port harus 1-65535; IPv6 dengan port gunakan [alamat]:port.",
                 "Invalid address/port. Port must be 1-65535; write IPv6 with a port as [address]:port.",
             )
+            error = msg
+            validationPopup = msg
+            return
+        }
+        if (gatewayOn && gwHost.isBlank()) {
+            val msg = xyNow(
+                "Gateway diaktifkan tetapi alamat Gateway host masih kosong.",
+                "RDP Gateway is enabled, but the Gateway host address is empty.",
+            )
+            error = msg
+            validationPopup = msg
             return
         }
         val profile = try {
@@ -153,6 +193,7 @@ fun AddDeviceScreen(
             )
         } catch (e: IllegalArgumentException) {
             error = e.message
+            validationPopup = e.message
             return
         }
         error = null
@@ -189,7 +230,7 @@ fun AddDeviceScreen(
     ) {
         XyTopBar(
             title = if (existing == null) xy("Perangkat baru", "New device") else xy("Ubah perangkat", "Edit device"),
-            onBack = onCancel,
+            onBack = { requestCancel() },
         )
         Column(
             Modifier
@@ -536,6 +577,33 @@ fun AddDeviceScreen(
                 modifier = Modifier.weight(1.4f),
             )
         }
+    }
+
+    if (confirmDiscard) {
+        XyDialog(
+            title = xy("Buang perubahan?", "Discard changes?"),
+            body = xy(
+                "Perubahan pada pengaturan perangkat ini belum disimpan. Kembali tanpa menyimpan?",
+                "Changes to this device configuration have not been saved. Leave without saving?",
+            ),
+            confirmLabel = xy("Buang", "Discard"),
+            onConfirm = {
+                confirmDiscard = false
+                onCancel()
+            },
+            dismissLabel = xy("Lanjut ubah", "Keep editing"),
+            onDismiss = { confirmDiscard = false },
+        )
+    }
+
+    validationPopup?.let { msg ->
+        XyDialog(
+            title = xy("Data belum valid", "Validation error"),
+            body = msg,
+            confirmLabel = xy("Mengerti", "Got it"),
+            onConfirm = { validationPopup = null },
+            onDismiss = { validationPopup = null },
+        )
     }
 }
 

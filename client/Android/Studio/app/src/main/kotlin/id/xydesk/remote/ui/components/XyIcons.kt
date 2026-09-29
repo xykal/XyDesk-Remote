@@ -128,53 +128,20 @@ object XyIcons {
         moveTo(20f, 15f); lineTo(6f, 15f); moveTo(9f, 12f); lineTo(6f, 15f); lineTo(9f, 18f)
     }
 
-    /** Mouse membulat dengan tombol kanan ditandai: aksi klik kanan. */
-    val ClickRight: ImageVector = xyTwoPath(
-        name = "XyClickRight",
-        outline = {
-            moveTo(12f, 3f)
-            curveTo(8.1f, 3f, 6f, 5.7f, 6f, 9.4f)
-            lineTo(6f, 14.5f)
-            curveTo(6f, 18.3f, 8.5f, 21f, 12f, 21f)
-            curveTo(15.5f, 21f, 18f, 18.3f, 18f, 14.5f)
-            lineTo(18f, 9.4f)
-            curveTo(18f, 5.7f, 15.9f, 3f, 12f, 3f)
-            close()
-            moveTo(6.4f, 9.5f); lineTo(17.6f, 9.5f)
-            moveTo(12f, 3.3f); lineTo(12f, 9.3f)
-        },
-        solid = {
-            moveTo(12.6f, 4.8f)
-            curveTo(15.1f, 5.1f, 16.4f, 6.8f, 16.4f, 9.1f)
-            lineTo(12.6f, 9.1f)
-            close()
-        },
-    )
+    /** Aksi klik kanan: garis bersih tanpa blok putih heksagon. */
+    val ClickRight: ImageVector = xyIcon("XyClickRight") {
+        moveTo(6f, 4f); lineTo(18f, 4f); lineTo(18f, 20f); lineTo(6f, 20f); close()
+        moveTo(6f, 10f); lineTo(18f, 10f)
+        moveTo(12f, 4f); lineTo(12f, 10f)
+        moveTo(15f, 7f); lineTo(15.01f, 7f)
+    }
 
-    /** Roda mouse ditekan: aksi klik tengah. */
-    val ClickMiddle: ImageVector = xyTwoPath(
-        name = "XyClickMiddle",
-        outline = {
-            moveTo(12f, 3f)
-            curveTo(8.1f, 3f, 6f, 5.7f, 6f, 9.4f)
-            lineTo(6f, 14.5f)
-            curveTo(6f, 18.3f, 8.5f, 21f, 12f, 21f)
-            curveTo(15.5f, 21f, 18f, 18.3f, 18f, 14.5f)
-            lineTo(18f, 9.4f)
-            curveTo(18f, 5.7f, 15.9f, 3f, 12f, 3f)
-            close()
-            moveTo(12f, 3.3f); lineTo(12f, 9.3f)
-        },
-        solid = {
-            moveTo(11.1f, 5.3f)
-            curveTo(11.1f, 4.7f, 11.5f, 4.3f, 12f, 4.3f)
-            curveTo(12.5f, 4.3f, 12.9f, 4.7f, 12.9f, 5.3f)
-            lineTo(12.9f, 7.8f)
-            curveTo(12.9f, 8.4f, 12.5f, 8.8f, 12f, 8.8f)
-            curveTo(11.5f, 8.8f, 11.1f, 8.4f, 11.1f, 7.8f)
-            close()
-        },
-    )
+    /** Aksi klik tengah: garis bersih tanpa blok putih heksagon. */
+    val ClickMiddle: ImageVector = xyIcon("XyClickMiddle") {
+        moveTo(6f, 4f); lineTo(18f, 4f); lineTo(18f, 20f); lineTo(6f, 20f); close()
+        moveTo(6f, 10f); lineTo(18f, 10f)
+        moveTo(12f, 5.5f); lineTo(12f, 8.5f)
+    }
 
     val Shot: ImageVector = xyIcon("XyShot") {
         moveTo(3f, 7.5f); lineTo(8f, 7.5f); lineTo(9.5f, 5f); lineTo(14.5f, 5f)
@@ -369,28 +336,13 @@ object XyIcons {
         moveTo(14f, 14f); lineTo(20f, 14f); lineTo(20f, 20f); lineTo(14f, 20f); close()
     }
 
-    /** Mouse membulat dengan tombol kiri ditandai: aksi klik kiri. */
-    val ClickLeft: ImageVector = xyTwoPath(
-        name = "XyClickLeft",
-        outline = {
-            moveTo(12f, 3f)
-            curveTo(8.1f, 3f, 6f, 5.7f, 6f, 9.4f)
-            lineTo(6f, 14.5f)
-            curveTo(6f, 18.3f, 8.5f, 21f, 12f, 21f)
-            curveTo(15.5f, 21f, 18f, 18.3f, 18f, 14.5f)
-            lineTo(18f, 9.4f)
-            curveTo(18f, 5.7f, 15.9f, 3f, 12f, 3f)
-            close()
-            moveTo(6.4f, 9.5f); lineTo(17.6f, 9.5f)
-            moveTo(12f, 3.3f); lineTo(12f, 9.3f)
-        },
-        solid = {
-            moveTo(11.4f, 4.8f)
-            curveTo(8.9f, 5.1f, 7.6f, 6.8f, 7.6f, 9.1f)
-            lineTo(11.4f, 9.1f)
-            close()
-        },
-    )
+    /** Aksi klik kiri: garis bersih tanpa blok putih heksagon. */
+    val ClickLeft: ImageVector = xyIcon("XyClickLeft") {
+        moveTo(6f, 4f); lineTo(18f, 4f); lineTo(18f, 20f); lineTo(6f, 20f); close()
+        moveTo(6f, 10f); lineTo(18f, 10f)
+        moveTo(12f, 4f); lineTo(12f, 10f)
+        moveTo(9f, 7f); lineTo(9.01f, 7f)
+    }
 
     /** Hati (dukung lewat Saweria). */
     val Heart: ImageVector = xyIcon("XyHeart") {

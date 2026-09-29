@@ -166,6 +166,7 @@ fun XyDeskSessionScreen(
     var certPrompt by remember { mutableStateOf<CertPrompt?>(null) }
     var nlaPrompt by remember { mutableStateOf<NlaPrompt?>(null) }
     var confirmDisconnect by remember { mutableStateOf(false) }
+    var confirmCancelConnect by remember { mutableStateOf(false) }
     var showLog by remember { mutableStateOf(false) }
     var zoom by remember { mutableFloatStateOf(prefs.zoom(profile.id)) }
     var boundInstance by remember { mutableStateOf(0L) }
@@ -354,6 +355,7 @@ fun XyDeskSessionScreen(
                     if (!activity.isFinishing && !activity.isDestroyed && clipboardEnabled) {
                         val cm = activity.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
                         val applied = try {
+                            (activity as? XyDeskSessionActivity)?.noteRemoteClipboardText(text)
                             cm.setPrimaryClip(ClipboardImageProvider.createTextClip(activity, "rdp", text))
                             true
                         } catch (e: RuntimeException) {
@@ -423,6 +425,7 @@ fun XyDeskSessionScreen(
                 lastRemoteDpiRequest = 100
                 controller.bind(instance)
                 controller.setImeVisible(keyboardShown)
+                (context as? XyDeskSessionActivity)?.syncPhoneClipboardToRemote()
                 when {
                     // Zoom sendiri menang; kalau belum pernah diatur dan auto-fit
                     // menyala, seluruh desktop dimuat (taskbar ikut kelihatan).
@@ -553,12 +556,12 @@ fun XyDeskSessionScreen(
         }
     }
 
-    val overlayActive = controlsOverlayOpen || certPrompt != null || nlaPrompt != null || confirmDisconnect || showLog
+    val overlayActive = controlsOverlayOpen || certPrompt != null || nlaPrompt != null || confirmDisconnect || confirmCancelConnect || showLog
     LaunchedEffect(overlayActive) {
         controller.setOverlayActive(overlayActive)
     }
 
-    LaunchedEffect(state, certPrompt != null, nlaPrompt != null, confirmDisconnect, showLog, controlsBackHandler) {
+    LaunchedEffect(state, certPrompt != null, nlaPrompt != null, confirmDisconnect, confirmCancelConnect, showLog, controlsBackHandler) {
         (context as? XyDeskSessionActivity)?.backHandler = {
             when {
                 certPrompt != null || nlaPrompt != null -> true
@@ -571,12 +574,16 @@ fun XyDeskSessionScreen(
                     confirmDisconnect = false
                     true
                 }
+                confirmCancelConnect -> {
+                    confirmCancelConnect = false
+                    true
+                }
                 state is SessionState.Connected -> {
                     confirmDisconnect = true
                     true
                 }
                 state is SessionState.Connecting || state is SessionState.Authenticating -> {
-                    manager.cancelConnection()
+                    confirmCancelConnect = true
                     true
                 }
                 else -> false
@@ -642,11 +649,9 @@ fun XyDeskSessionScreen(
      * Android, tombol rail tetap tahu keadaan aslinya.
      */
     fun openKeyboard() {
-        val wasVisible = controller.isImeVisible()
         keyboardShown = true
         prefs.setKeyboardShown(profile.id, true)
         controller.setImeVisible(true)
-        if (!wasVisible) notice.show(xyNow("Keyboard HP dibuka", "Phone keyboard shown"))
     }
 
     /** Kirim aksi satu tombol HUD (down=true tekan, false lepas). */
@@ -703,14 +708,23 @@ fun XyDeskSessionScreen(
         syncHudModifierState()
     }
 
-    DisposableEffect(controller) {
+    DisposableEffect(controller, clipboardSyncEnabled) {
         controller.onInputKeyConsumed = {
             (context as? Activity)?.runOnUiThread {
                 consumeOneShotKeys()
             }
         }
+        controller.onImeSnippetCommitted = { snippet ->
+            if (clipboardSyncEnabled && snippet.length > 1) {
+                (context as? XyDeskSessionActivity)?.noteRemoteClipboardText(snippet)
+                sessionScope.launch(kotlinx.coroutines.Dispatchers.IO) {
+                    manager.sendClipboardData(snippet)
+                }
+            }
+        }
         onDispose {
             controller.onInputKeyConsumed = null
+            controller.onImeSnippetCommitted = null
             controller.hasActiveHudModifiers = false
         }
     }
@@ -979,54 +993,6 @@ fun XyDeskSessionScreen(
                 onOpenKeyboard = { openKeyboard() },
                 lastClipboard = lastRemoteClipboard,
                 clipboardSyncEnabled = clipboardSyncEnabled,
-                onSendPhoneClipboard = {
-                    val cm = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
-                    val item = runCatching { cm.primaryClip?.takeIf { it.itemCount > 0 }?.getItemAt(0) }
-                        .getOrNull()
-                    if (item == null) {
-                        notice.show(xyNow("Clipboard HP kosong atau tidak bisa dibaca", "Phone clipboard is empty or unavailable"))
-                    } else {
-                        sessionScope.launch {
-                            val text = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
-                                runCatching { item.coerceToText(context)?.toString().orEmpty() }
-                                    .getOrDefault("")
-                            }
-                            val sent = text.isNotEmpty() && kotlinx.coroutines.withContext(
-                                kotlinx.coroutines.Dispatchers.IO,
-                            ) { manager.sendClipboardData(text) }
-                            notice.show(
-                                when {
-                                    text.isEmpty() -> xyNow("Clipboard HP kosong atau tidak bisa dibaca", "Phone clipboard is empty or unavailable")
-                                    sent -> xyNow("Clipboard HP dikirim ke remote", "Phone clipboard sent to remote")
-                                    else -> xyNow("Gagal mengirim clipboard", "Failed to send clipboard")
-                                },
-                            )
-                        }
-                    }
-                },
-                onPasteRemoteClipboard = {
-                    val text = lastRemoteClipboard
-                    if (text.isNullOrEmpty()) {
-                        notice.show(
-                            xyNow(
-                                "Belum ada teks dari remote — salin dulu di sana",
-                                "No text from remote yet — copy something there first",
-                            ),
-                        )
-                    } else {
-                        val cm = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
-                        val copied = try {
-                            cm.setPrimaryClip(ClipboardImageProvider.createTextClip(context, "rdp", text))
-                            true
-                        } catch (e: RuntimeException) {
-                            false
-                        }
-                        notice.show(
-                            if (copied) xyNow("Teks remote disalin ke HP", "Remote text copied to phone")
-                            else xyNow("Clipboard Android menolak teks ini", "Android clipboard rejected this text"),
-                        )
-                    }
-                },
                 // Sesi lain: buka home tanpa memutus sesi ini (keep-alive
                 // default menyala, jadi sesi tetap jalan di latar).
                 onOpenHome = {
@@ -1069,18 +1035,14 @@ fun XyDeskSessionScreen(
                 ReconnectingOverlay(
                     attempt = reconnectAttempt,
                     waitingForNativeRelease = waitingForNativeRelease,
-                    onStop = {
-                        userDisconnect = true
-                        reconnecting = false
-                        manager.cancelConnection()
-                    },
+                    onStop = { confirmCancelConnect = true },
                 )
             } else {
                 ConnectingScreen(
                     wall = wall,
                     deviceLabel = profile.label ?: "${profile.host}:${profile.port}",
                     stage = stage,
-                    onCancel = { manager.cancelConnection() },
+                    onCancel = { confirmCancelConnect = true },
                 )
             }
         }
@@ -1091,11 +1053,7 @@ fun XyDeskSessionScreen(
             ReconnectingOverlay(
                 attempt = reconnectAttempt,
                 waitingForNativeRelease = waitingForNativeRelease,
-                onStop = {
-                    userDisconnect = true
-                    reconnecting = false
-                    manager.cancelConnection()
-                },
+                onStop = { confirmCancelConnect = true },
             )
         }
 
@@ -1242,6 +1200,24 @@ fun XyDeskSessionScreen(
             onDismiss = { confirmDisconnect = false },
         )
     }
+    if (!active && confirmCancelConnect) {
+        XyDialog(
+            title = xy("Batalkan koneksi?", "Cancel connection?"),
+            body = xy(
+                "Hentikan proses menyambung ke server sekarang?",
+                "Stop connecting to the server now?",
+            ),
+            confirmLabel = xy("Batalkan", "Cancel connection"),
+            onConfirm = {
+                confirmCancelConnect = false
+                userDisconnect = true
+                reconnecting = false
+                manager.cancelConnection()
+            },
+            dismissLabel = xy("Lanjutkan", "Keep trying"),
+            onDismiss = { confirmCancelConnect = false },
+        )
+    }
 }
 
 // =============================================================
@@ -1275,17 +1251,17 @@ private fun ReconnectingOverlay(
             .fillMaxWidth()
             .padding(horizontal = 24.dp, vertical = 28.dp)
             .clip(RoundedCornerShape(16.dp))
-            .background(Color(0xE61A201E))
-            .border(1.dp, Color(0x66B9EBDD), RoundedCornerShape(16.dp))
+            .background(MaterialTheme.colorScheme.surface.copy(alpha = 0.94f))
+            .border(1.dp, MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(16.dp))
             .padding(18.dp)
             .zIndex(20f),
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.spacedBy(8.dp),
     ) {
-        XySpinner(size = 24.dp, color = Color(0xFFB9EBDD))
+        XySpinner(size = 24.dp, color = MaterialTheme.colorScheme.primary)
         Text(
             xy("Jaringan terputus sementara", "Temporary network interruption"),
-            color = Color.White,
+            color = MaterialTheme.colorScheme.onSurface,
             style = MaterialTheme.typography.titleSmall,
             textAlign = TextAlign.Center,
         )
@@ -1303,7 +1279,7 @@ private fun ReconnectingOverlay(
                 },
                 attempt,
             ),
-            color = Color.White.copy(alpha = 0.78f),
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
             style = MaterialTheme.typography.bodySmall,
             textAlign = TextAlign.Center,
         )

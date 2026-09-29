@@ -50,6 +50,10 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.TextUnit
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.foundation.gestures.awaitFirstDown
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.zIndex
 import id.xydesk.remote.ui.theme.XyDisplay
 import id.xydesk.remote.ui.theme.XyPill
 
@@ -198,7 +202,11 @@ fun XyRow(
             )
         }
         Column(Modifier.weight(1f)) {
-            Text(title, style = MaterialTheme.typography.titleSmall)
+            Text(
+                title,
+                style = MaterialTheme.typography.titleSmall,
+                color = MaterialTheme.colorScheme.onSurface,
+            )
             if (!subtitle.isNullOrBlank()) {
                 Text(
                     subtitle,
@@ -447,6 +455,7 @@ fun XyTopBar(
             title,
             modifier = Modifier.weight(1f).padding(start = if (onBack == null) 12.dp else 4.dp),
             style = MaterialTheme.typography.titleLarge,
+            color = MaterialTheme.colorScheme.onBackground,
             maxLines = 1,
             overflow = TextOverflow.Ellipsis,
         )
@@ -462,7 +471,7 @@ fun XyStatusDot(color: Color, label: String, modifier: Modifier = Modifier) {
         horizontalArrangement = Arrangement.spacedBy(6.dp),
     ) {
         Box(Modifier.size(7.dp).clip(CircleShape).background(color))
-        Text(label, style = MaterialTheme.typography.labelMedium)
+        Text(label, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurface)
     }
 }
 
@@ -548,23 +557,42 @@ fun XyOverlay(
     content: @Composable ColumnScope.() -> Unit,
 ) {
     Box(
-        Modifier
-            .fillMaxSize()
-            .background(MaterialTheme.colorScheme.scrim)
-            .then(
-                if (onDismiss != null) Modifier.clickable(onClick = onDismiss) else Modifier,
-            )
-            .padding(20.dp),
+        Modifier.fillMaxSize().zIndex(50f),
         contentAlignment = Alignment.Center,
     ) {
+        Box(
+            Modifier
+                .fillMaxSize()
+                .background(MaterialTheme.colorScheme.scrim)
+                .pointerInput(onDismiss) {
+                    awaitEachGesture {
+                        val down = awaitFirstDown(requireUnconsumed = false)
+                        down.consume()
+                        var moved = false
+                        val slop = viewConfiguration.touchSlop
+                        var total = 0f
+                        while (true) {
+                            val event = awaitPointerEvent()
+                            event.changes.forEach { change ->
+                                total += (change.position - change.previousPosition).getDistance()
+                                if (total > slop) moved = true
+                                change.consume()
+                            }
+                            if (event.changes.none { it.pressed }) break
+                        }
+                        if (!moved) onDismiss?.invoke()
+                    }
+                },
+        )
         Column(
             modifier
+                .padding(20.dp)
                 .widthIn(max = maxWidth)
                 .fillMaxWidth()
                 .clip(RoundedCornerShape(14.dp))
                 .background(MaterialTheme.colorScheme.surface)
                 .border(1.dp, MaterialTheme.colorScheme.outline, RoundedCornerShape(14.dp))
-                .clickable(enabled = false) { }
+                .pointerInput(Unit) {}
                 .padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(10.dp),
         ) {
@@ -600,7 +628,12 @@ fun XyDialog(
                     .verticalScroll(rememberScrollState()),
             ) {
                 body.lineSequence().forEach { line ->
-                    Text(line, style = MaterialTheme.typography.bodySmall, fontFamily = FontFamily.Monospace)
+                    Text(
+                        line,
+                        style = MaterialTheme.typography.bodySmall,
+                        fontFamily = FontFamily.Monospace,
+                        color = MaterialTheme.colorScheme.onSurface,
+                    )
                 }
             }
         } else {
@@ -610,7 +643,11 @@ fun XyDialog(
                     .heightIn(max = 380.dp)
                     .verticalScroll(rememberScrollState()),
             ) {
-                Text(body, style = MaterialTheme.typography.bodyMedium)
+                Text(
+                    body,
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurface,
+                )
             }
         }
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
