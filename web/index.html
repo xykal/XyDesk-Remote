@@ -975,7 +975,7 @@
     <section class="section" id="capabilities">
       <div class="container">
         <div class="section-head">
-          <div class="section-kicker" data-i18n="cap.kicker">Fitur Nyata yang Terimplementasi (Build v0.5.19)</div>
+          <div class="section-kicker" data-i18n="cap.kicker">Fitur Nyata yang Terimplementasi (Build v0.5.20)</div>
           <h2 class="section-title" data-i18n="cap.title">Kemampuan Sesi, Engine Native &amp; Kontrol</h2>
         </div>
 
@@ -1080,7 +1080,20 @@
         <div class="changelog-list">
           <div class="cl-card">
             <div class="cl-head">
-              <div class="cl-ver mono">v0.5.19 (VERSION_CODE 36) — Build Terbaru</div>
+              <div class="cl-ver mono">v0.5.20 (VERSION_CODE 37) — Build Terbaru</div>
+              <span class="cl-badge mono">30 September 2026 · Perbaikan Audio PC</span>
+            </div>
+            <ul class="arch-list">
+              <li><strong>Perbaikan Pipeline Suara PC (OpenSLES Unmute &amp; Media Routing):</strong> Memperbaiki bug di mana <code>rdpsnd_opensles.c</code> menginisialisasi volume awal <code>0</code> sehingga <code>rdpsnd_opensles_open</code> langsung memanggil <code>android_SetOutputMute(..., true)</code> (membisukan suara PC saat sesi dibuka). Kini volume awal diinisialisasi penuh (<code>0xFFFFFFFF</code>) dengan kurva atenuasi <code>-4000 mB</code> yang natural di telinga.</li>
+              <li><strong>Routing ke Speaker Utama (<code>SL_ANDROID_STREAM_MEDIA</code>) &amp; Tombol Volume Fisik:</strong> Mengubah tipe aliran OpenSLES di <code>opensl_io.c</code> ke <code>SL_ANDROID_STREAM_MEDIA</code> serta mengikat <code>volumeControlStream = STREAM_MUSIC</code> di <code>XyDeskSessionActivity</code> agar suara PC keluar jernih lewat speaker utama/headset Bluetooth dan tombol volume HP langsung mengatur suara PC.</li>
+              <li><strong>Stream Tetap Hidup Saat <code>SNDC_CLOSE</code> &amp; Antrean 32-Buffer Anti-Putus:</strong> Menjaga stream OpenSLES tetap hidup lintas paket <code>SNDC_CLOSE</code> agar ekor suara tidak terpotong, mengganti <code>WaitForSingleObject</code> pada event antrean yang salah dengan sinkronisasi antrean 32-buffer + <em>rollback</em> otomatis jika <code>Enqueue</code> gagal, serta memastikan kompilasi ulang CMake via <code>BUILD_ALWAYS ON</code>.</li>
+              <li><strong>Kebijakan Audio Host Windows Otomatis:</strong> Memperbarui <code>XyDeskHost-Setup.bat</code> dan <code>host.ps1</code> untuk membuka kunci kebijakan pengalihan audio RDP Windows (<code>fDisableAudio=0</code>, <code>fDisableAudioCapture=0</code>) serta menyalakan layanan <code>Audiosrv</code>.</li>
+            </ul>
+          </div>
+
+          <div class="cl-card">
+            <div class="cl-head">
+              <div class="cl-ver mono">v0.5.19 (VERSION_CODE 36)</div>
               <span class="cl-badge mono">30 September 2026 · Terverifikasi</span>
             </div>
             <ul class="arch-list">
