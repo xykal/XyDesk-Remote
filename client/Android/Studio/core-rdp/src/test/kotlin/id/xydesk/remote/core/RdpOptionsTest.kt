@@ -166,4 +166,24 @@ class RdpOptionsTest {
         )
         assertNull(WakeOnLan.buildSshTunnelCommand("10.10.0.25", 3389, RdpOptions()))
     }
+
+    @Test
+    fun pcStreamEngineMengunciModeKonsolDanMematikanDynamicResolution() {
+        val game = RdpOptions().withPcStreamEngine(XyPcStreamEngine.DIRECT_GAME_ULTRA)
+        assertTrue(game.pcConnectMode)
+        assertTrue(game.consoleAdmin)
+        assertTrue(!game.dynamicResolution)
+        assertEquals(XyPcStreamEngine.DIRECT_GAME_ULTRA, game.pcStreamEngine)
+
+        val studio = game.withPcStreamEngine(XyPcStreamEngine.DIRECT_STUDIO_444)
+        assertEquals(XyPcStreamEngine.DIRECT_STUDIO_444, studio.pcStreamEngine)
+        assertEquals(32, studio.colorDepth)
+        assertTrue(!studio.lowBandwidth)
+    }
+
+    @Test
+    fun lanScannerEncodeIpv4ToPcIdMenghasilkanSepuluhDigitTerformat() {
+        assertEquals("323-223-5826", LanScanner.encodeIpv4ToPcId("192.168.1.50"))
+        assertNull(LanScanner.encodeIpv4ToPcId("invalid"))
+    }
 }

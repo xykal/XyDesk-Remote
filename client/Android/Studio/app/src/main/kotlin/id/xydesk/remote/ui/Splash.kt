@@ -1,10 +1,14 @@
 package id.xydesk.remote.ui
 
-import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.LinearEasing
+import androidx.compose.animation.core.RepeatMode
+import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Canvas
-import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
@@ -18,13 +22,15 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -32,276 +38,417 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.scale
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.StrokeJoin
-import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.Stroke
-import androidx.compose.ui.graphics.vector.ImageVector
-import androidx.compose.ui.layout.ContentScale
-import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.graphics.drawscope.rotate
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import id.xydesk.remote.R
-import id.xydesk.remote.ui.components.XyIcons
-import id.xydesk.remote.ui.theme.XyDisplay
-import id.xydesk.remote.ui.theme.XyPill
-import kotlin.math.min
+import id.xydesk.remote.BuildConfig
+import id.xydesk.remote.ui.theme.xy
+import kotlinx.coroutines.delay
 
 /**
- * Splash XyDesk Remote (Revisi):
- * Emblem vektor presisi (dual-monitor + kursor + sinyal sinkronisasi),
- * badge kapabilitas dengan ikon vektor, progress bar tipis responsif,
- * dan identitas XyVerse Technology Global di bagian bawah.
+ * Splash pembuka XyDesk Remote — Dual-Engine Architecture (Direct PC Stream +
+ * Enterprise RDP Core) dengan animasi presisi tinggi, indikator tahapan muat
+ * mesin native, dan identitas XyVerse Technology Global.
  */
 @Composable
-fun XySplashScreen(
-    ready: Boolean,
-    dark: Boolean,
-    onDone: () -> Unit,
-    modifier: Modifier = Modifier,
-) {
-    val progress = remember { Animatable(0f) }
-    val fade = remember { Animatable(1f) }
-    var animDone by remember { mutableStateOf(false) }
+fun XySplash(onReady: () -> Unit) {
+    var visible by remember { mutableStateOf(false) }
+    var bootStage by remember { mutableIntStateOf(0) }
+
+    val alpha by animateFloatAsState(
+        targetValue = if (visible) 1f else 0f,
+        animationSpec = tween(durationMillis = 360, easing = FastOutSlowInEasing),
+        label = "splashAlpha",
+    )
+    val scale by animateFloatAsState(
+        targetValue = if (visible) 1f else 0.92f,
+        animationSpec = tween(durationMillis = 420, easing = FastOutSlowInEasing),
+        label = "splashScale",
+    )
+    val progress by animateFloatAsState(
+        targetValue = when (bootStage) {
+            0 -> 0.28f
+            1 -> 0.68f
+            else -> 1.0f
+        },
+        animationSpec = tween(durationMillis = 280, easing = FastOutSlowInEasing),
+        label = "splashProgress",
+    )
+
+    val infinite = rememberInfiniteTransition(label = "splashOrbit")
+    val orbitAngle by infinite.animateFloat(
+        initialValue = 0f,
+        targetValue = 360f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(durationMillis = 9000, easing = LinearEasing),
+            repeatMode = RepeatMode.Restart,
+        ),
+        label = "orbitAngle",
+    )
+    val pulse by infinite.animateFloat(
+        initialValue = 0.86f,
+        targetValue = 1.06f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(durationMillis = 1400, easing = FastOutSlowInEasing),
+            repeatMode = RepeatMode.Reverse,
+        ),
+        label = "pulse",
+    )
 
     LaunchedEffect(Unit) {
-        progress.animateTo(1f, tween(durationMillis = 1_150, easing = FastOutSlowInEasing))
-        animDone = true
+        visible = true
+        delay(280)
+        bootStage = 1
+        delay(300)
+        bootStage = 2
+        delay(280)
+        onReady()
     }
 
-    LaunchedEffect(animDone, ready) {
-        if (animDone && ready) {
-            fade.animateTo(0f, tween(durationMillis = 260))
-            onDone()
-        }
+    val stageLabel = when (bootStage) {
+        0 -> xy("Memuat mesin native FreeRDP3 & dekoder H.264...", "Loading FreeRDP3 native engine & H.264 decoder...")
+        1 -> xy("Menyiapkan pipeline Direct PC Stream & RawInput...", "Preparing Direct PC Stream & RawInput pipeline...")
+        else -> xy("Mengaktifkan brankas kredensial AES-256-GCM...", "Activating AES-256-GCM credential vault...")
     }
-
-    val bg = MaterialTheme.colorScheme.background
-    val ink = MaterialTheme.colorScheme.onBackground
-    val muted = MaterialTheme.colorScheme.onSurfaceVariant
-    val line = MaterialTheme.colorScheme.outlineVariant
-    val accent = MaterialTheme.colorScheme.primary
-    val surface = MaterialTheme.colorScheme.surface
-
-    val p = progress.value.coerceIn(0f, 1f)
-    val cardAlpha = ((p - 0.02f) / 0.35f).coerceIn(0f, 1f)
 
     Box(
-        modifier
+        Modifier
             .fillMaxSize()
-            .background(bg)
-            .alpha(fade.value.coerceIn(0f, 1f)),
-        contentAlignment = Alignment.Center,
+            .background(
+                Brush.verticalGradient(
+                    colors = listOf(
+                        Color(0xFF07090D),
+                        Color(0xFF0B0F16),
+                        Color(0xFF07090C),
+                    ),
+                ),
+            )
+            .padding(horizontal = 28.dp, vertical = 32.dp),
     ) {
-        Column(
-            horizontalAlignment = Alignment.CenterHorizontally,
+        // Latar kisi arsitektur presisi tipis
+        Canvas(Modifier.fillMaxSize()) {
+            val step = 36.dp.toPx()
+            val gridColor = Color(0xFF1A2230).copy(alpha = 0.22f)
+            var x = 0f
+            while (x < size.width) {
+                drawLine(gridColor, Offset(x, 0f), Offset(x, size.height), strokeWidth = 1f)
+                x += step
+            }
+            var y = 0f
+            while (y < size.height) {
+                drawLine(gridColor, Offset(0f, y), Offset(size.width, y), strokeWidth = 1f)
+                y += step
+            }
+            drawCircle(
+                brush = Brush.radialGradient(
+                    colors = listOf(
+                        Color(0xFF1E293B).copy(alpha = 0.42f),
+                        Color.Transparent,
+                    ),
+                    center = Offset(size.width / 2f, size.height * 0.40f),
+                    radius = size.minDimension * 0.62f,
+                ),
+                radius = size.minDimension * 0.62f,
+                center = Offset(size.width / 2f, size.height * 0.40f),
+            )
+        }
+
+        // Badge Versi di Atas
+        Row(
             modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 28.dp)
-                .alpha(cardAlpha),
+                .align(Alignment.TopCenter)
+                .alpha(alpha)
+                .clip(RoundedCornerShape(999.dp))
+                .background(Color(0xFF111620))
+                .border(1.dp, Color(0xFF232C3D), RoundedCornerShape(999.dp))
+                .padding(horizontal = 14.dp, vertical = 6.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
         ) {
             Box(
-                modifier = Modifier
-                    .size(94.dp)
-                    .clip(RoundedCornerShape(24.dp))
-                    .background(surface)
-                    .border(1.2.dp, line, RoundedCornerShape(24.dp)),
+                Modifier
+                    .size(6.dp)
+                    .clip(CircleShape)
+                    .background(Color(0xFFE2E8F0)),
+            )
+            Text(
+                text = "XYDESK REMOTE  ·  v${BuildConfig.VERSION_NAME} (${BuildConfig.VERSION_CODE})",
+                fontFamily = FontFamily.Monospace,
+                fontSize = 10.sp,
+                fontWeight = FontWeight.SemiBold,
+                letterSpacing = 1.1.sp,
+                color = Color(0xFFCBD5E1),
+            )
+        }
+
+        // Inti Emblem + Identitas Dual-Engine di Tengah
+        Column(
+            modifier = Modifier
+                .align(Alignment.Center)
+                .widthIn(max = 360.dp)
+                .alpha(alpha)
+                .scale(scale),
+            horizontalAlignment = Alignment.CenterHorizontally,
+        ) {
+            Box(
+                modifier = Modifier.size(132.dp),
                 contentAlignment = Alignment.Center,
             ) {
-                Canvas(Modifier.size(56.dp)) {
-                    drawXySplashEmblem(
-                        progress = p,
-                        ink = ink,
-                        accent = accent,
-                        muted = muted,
+                // Cincin orbit luar berputar halus
+                Canvas(Modifier.fillMaxSize()) {
+                    val rOuter = size.minDimension * 0.48f
+                    val rMid = size.minDimension * 0.39f
+                    drawCircle(
+                        color = Color(0xFF232C3D),
+                        radius = rOuter * pulse,
+                        style = Stroke(width = 1.2.dp.toPx()),
                     )
+                    rotate(orbitAngle) {
+                        drawArc(
+                            color = Color(0xFF94A3B8).copy(alpha = 0.55f),
+                            startAngle = -35f,
+                            sweepAngle = 70f,
+                            useCenter = false,
+                            topLeft = Offset(center.x - rMid, center.y - rMid),
+                            size = Size(rMid * 2f, rMid * 2f),
+                            style = Stroke(width = 2.dp.toPx(), cap = StrokeCap.Round),
+                        )
+                        drawArc(
+                            color = Color(0xFF64748B).copy(alpha = 0.45f),
+                            startAngle = 145f,
+                            sweepAngle = 70f,
+                            useCenter = false,
+                            topLeft = Offset(center.x - rMid, center.y - rMid),
+                            size = Size(rMid * 2f, rMid * 2f),
+                            style = Stroke(width = 2.dp.toPx(), cap = StrokeCap.Round),
+                        )
+                    }
                 }
+
+                // Kotak inti kristal gelap
+                Box(
+                    modifier = Modifier
+                        .size(84.dp)
+                        .clip(RoundedCornerShape(24.dp))
+                        .background(
+                            Brush.linearGradient(
+                                colors = listOf(
+                                    Color(0xFF171E2B),
+                                    Color(0xFF0E131C),
+                                ),
+                            ),
+                        )
+                        .border(1.2.dp, Color(0xFF2D384D), RoundedCornerShape(24.dp)),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    val fg = Color(0xFFF1F5F9)
+                    val accent = Color(0xFF94A3B8)
+                    Canvas(Modifier.size(44.dp)) {
+                        val s = size.minDimension
+                        val stroke = s * 0.072f
+                        // Layar Monitor Fisik PC
+                        drawRoundRect(
+                            color = fg,
+                            topLeft = Offset(s * 0.08f, s * 0.12f),
+                            size = Size(s * 0.84f, s * 0.56f),
+                            cornerRadius = CornerRadius(s * 0.10f, s * 0.10f),
+                            style = Stroke(width = stroke, cap = StrokeCap.Round),
+                        )
+                        // Gelombang Sinyal Direct Stream di dalam layar
+                        val wave = Path().apply {
+                            moveTo(s * 0.24f, s * 0.42f)
+                            lineTo(s * 0.38f, s * 0.42f)
+                            lineTo(s * 0.45f, s * 0.27f)
+                            lineTo(s * 0.55f, s * 0.53f)
+                            lineTo(s * 0.62f, s * 0.38f)
+                            lineTo(s * 0.76f, s * 0.38f)
+                        }
+                        drawPath(
+                            path = wave,
+                            color = accent,
+                            style = Stroke(width = stroke * 0.82f, cap = StrokeCap.Round, join = StrokeJoin.Round),
+                        )
+                        // Penyangga & Dudukan Monitor Presisi
+                        drawLine(
+                            color = fg,
+                            start = Offset(s * 0.50f, s * 0.68f),
+                            end = Offset(s * 0.50f, s * 0.84f),
+                            strokeWidth = stroke,
+                            cap = StrokeCap.Round,
+                        )
+                        drawLine(
+                            color = fg,
+                            start = Offset(s * 0.30f, s * 0.84f),
+                            end = Offset(s * 0.70f, s * 0.84f),
+                            strokeWidth = stroke,
+                            cap = StrokeCap.Round,
+                        )
+                    }
+                }
+            }
+
+            Spacer(Modifier.height(20.dp))
+
+            Text(
+                text = "XyDesk Remote",
+                fontSize = 26.sp,
+                fontWeight = FontWeight.Bold,
+                letterSpacing = (-0.5).sp,
+                color = Color(0xFFF8FAFC),
+            )
+            Spacer(Modifier.height(6.dp))
+            Text(
+                text = xy(
+                    "Mesin Ganda: Direct PC Stream 1:1  &  Windows RDP Desktop",
+                    "Dual Engine: 1:1 Direct PC Stream  &  Windows RDP Desktop",
+                ),
+                style = MaterialTheme.typography.bodySmall,
+                color = Color(0xFF94A3B8),
+                textAlign = TextAlign.Center,
+            )
+
+            Spacer(Modifier.height(22.dp))
+
+            // Kartu Arsitektur Terpisah (Koneksi PC vs Koneksi RDP)
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(10.dp),
+            ) {
+                SplashEngineCard(
+                    badge = "DIRECT PC",
+                    title = xy("Koneksi PC", "PC Connect"),
+                    subtitle = xy("ID 10-Digit · 60/120 FPS · RawInput", "10-Digit ID · 60/120 FPS · RawInput"),
+                    modifier = Modifier.weight(1f),
+                )
+                SplashEngineCard(
+                    badge = "RDP CORE",
+                    title = xy("Koneksi RDP", "RDP Session"),
+                    subtitle = xy("Multi-User · DISP · Drive RDPDR", "Multi-User · DISP · RDPDR Drive"),
+                    modifier = Modifier.weight(1f),
+                )
             }
 
             Spacer(Modifier.height(22.dp))
 
-            Text(
-                text = "XyDesk Remote",
-                fontFamily = XyDisplay,
-                color = ink,
-                fontSize = 21.sp,
-                fontWeight = FontWeight.Bold,
-                letterSpacing = (-0.3).sp,
-            )
-
-            Spacer(Modifier.height(5.dp))
-
-            Text(
-                text = xy(
-                    "Remote Desktop & Direct PC Control",
-                    "Remote Desktop & Direct PC Control",
-                ),
-                color = muted,
-                fontSize = 12.sp,
-                textAlign = TextAlign.Center,
-            )
-
-            Spacer(Modifier.height(16.dp))
-
-            Row(
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                SplashFeatureBadge(icon = XyIcons.Monitor, label = "Multi-Display", ink = ink, border = line, surface = surface)
-                SplashFeatureBadge(icon = XyIcons.Windows, label = "H.264 60FPS", ink = ink, border = line, surface = surface)
-                SplashFeatureBadge(icon = XyIcons.Volume, label = "Low-Latency", ink = ink, border = line, surface = surface)
-            }
-
-            Spacer(Modifier.height(24.dp))
-
-            Box(
+            // Progress Bar & Status Inisialisasi Live
+            Column(
                 modifier = Modifier
-                    .width(148.dp)
-                    .height(3.dp)
-                    .clip(XyPill)
-                    .background(line.copy(alpha = 0.45f)),
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(14.dp))
+                    .background(Color(0xFF10151F))
+                    .border(1.dp, Color(0xFF1E2636), RoundedCornerShape(14.dp))
+                    .padding(horizontal = 14.dp, vertical = 12.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp),
             ) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Text(
+                        text = stageLabel,
+                        fontSize = 11.sp,
+                        color = Color(0xFFCBD5E1),
+                        maxLines = 1,
+                    )
+                    Text(
+                        text = "${(progress * 100).toInt()}%",
+                        fontFamily = FontFamily.Monospace,
+                        fontSize = 10.5.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = Color(0xFFE2E8F0),
+                    )
+                }
                 Box(
                     modifier = Modifier
-                        .fillMaxWidth(p.coerceIn(0.08f, 1f))
-                        .height(3.dp)
-                        .clip(XyPill)
-                        .background(accent),
-                )
+                        .fillMaxWidth()
+                        .height(4.dp)
+                        .clip(RoundedCornerShape(999.dp))
+                        .background(Color(0xFF1E293B)),
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth(progress.coerceIn(0.05f, 1f))
+                            .height(4.dp)
+                            .clip(RoundedCornerShape(999.dp))
+                            .background(Color(0xFFE2E8F0)),
+                    )
+                }
             }
         }
 
+        // Signature XyVerse Technology Global di Bawah
         Column(
-            horizontalAlignment = Alignment.CenterHorizontally,
             modifier = Modifier
                 .align(Alignment.BottomCenter)
-                .padding(bottom = 24.dp)
-                .alpha(((p - 0.10f) / 0.45f).coerceIn(0f, 1f)),
+                .alpha(alpha),
+            horizontalAlignment = Alignment.CenterHorizontally,
         ) {
-            Image(
-                painter = painterResource(
-                    if (dark) R.drawable.xy_logo_h_white else R.drawable.xy_logo_h_black,
-                ),
-                contentDescription = "XyVerse Technology Global",
-                contentScale = ContentScale.Fit,
-                modifier = Modifier
-                    .fillMaxWidth(0.36f)
-                    .height(22.dp),
-            )
-            Spacer(Modifier.height(4.dp))
             Text(
                 text = "XyVerse Technology Global",
-                fontFamily = FontFamily.Monospace,
-                fontSize = 9.5.sp,
-                color = muted.copy(alpha = 0.78f),
+                style = MaterialTheme.typography.labelMedium,
+                fontWeight = FontWeight.SemiBold,
                 letterSpacing = 0.6.sp,
+                color = Color(0xFFCBD5E1),
+            )
+            Spacer(Modifier.height(2.dp))
+            Text(
+                text = "rdp.xydesk.my.id  ·  rilisin.xyverse.my.id",
+                fontFamily = FontFamily.Monospace,
+                fontSize = 10.sp,
+                color = Color(0xFF64748B),
             )
         }
     }
 }
 
 @Composable
-private fun SplashFeatureBadge(
-    icon: ImageVector,
-    label: String,
-    ink: Color,
-    border: Color,
-    surface: Color,
+private fun SplashEngineCard(
+    badge: String,
+    title: String,
+    subtitle: String,
+    modifier: Modifier = Modifier,
 ) {
-    Row(
-        modifier = Modifier
-            .clip(XyPill)
-            .background(surface)
-            .border(1.dp, border, XyPill)
-            .padding(horizontal = 9.dp, vertical = 5.dp),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(5.dp),
+    Column(
+        modifier = modifier
+            .clip(RoundedCornerShape(14.dp))
+            .background(Color(0xFF10151F))
+            .border(1.dp, Color(0xFF222B3B), RoundedCornerShape(14.dp))
+            .padding(horizontal = 12.dp, vertical = 10.dp),
+        verticalArrangement = Arrangement.spacedBy(3.dp),
     ) {
-        Icon(
-            imageVector = icon,
-            contentDescription = null,
-            tint = ink,
-            modifier = Modifier.size(12.dp),
+        Text(
+            text = badge,
+            fontFamily = FontFamily.Monospace,
+            fontSize = 9.sp,
+            fontWeight = FontWeight.Bold,
+            letterSpacing = 0.9.sp,
+            color = Color(0xFF94A3B8),
         )
         Text(
-            text = label,
-            fontSize = 9.5.sp,
-            fontWeight = FontWeight.Medium,
-            color = ink,
+            text = title,
+            fontSize = 13.sp,
+            fontWeight = FontWeight.SemiBold,
+            color = Color(0xFFF1F5F9),
+        )
+        Text(
+            text = subtitle,
+            fontSize = 10.sp,
+            color = Color(0xFF64748B),
+            lineHeight = 13.sp,
         )
     }
-}
-
-private fun DrawScope.drawXySplashEmblem(
-    progress: Float,
-    ink: Color,
-    accent: Color,
-    muted: Color,
-) {
-    val u = min(size.width, size.height)
-    val stroke = Stroke(width = u * 0.052f, cap = StrokeCap.Round, join = StrokeJoin.Round)
-    val thinStroke = Stroke(width = u * 0.038f, cap = StrokeCap.Round, join = StrokeJoin.Round)
-
-    // Back secondary display frame (multi-monitor depth)
-    val backShift = u * 0.08f * ((progress - 0.15f) / 0.65f).coerceIn(0f, 1f)
-    drawRoundRect(
-        color = muted.copy(alpha = 0.45f),
-        topLeft = Offset(u * 0.18f + backShift, u * 0.10f),
-        size = Size(u * 0.64f, u * 0.42f),
-        cornerRadius = CornerRadius(u * 0.06f, u * 0.06f),
-        style = thinStroke,
-    )
-
-    // Primary monitor frame
-    val monLeft = u * 0.08f
-    val monTop = u * 0.20f
-    val monW = u * 0.72f
-    val monH = u * 0.48f
-    drawRoundRect(
-        color = ink,
-        topLeft = Offset(monLeft, monTop),
-        size = Size(monW, monH),
-        cornerRadius = CornerRadius(u * 0.07f, u * 0.07f),
-        style = stroke,
-    )
-
-    // Monitor stand
-    drawLine(
-        color = ink,
-        start = Offset(monLeft + monW * 0.5f, monTop + monH),
-        end = Offset(monLeft + monW * 0.5f, u * 0.82f),
-        strokeWidth = u * 0.052f,
-        cap = StrokeCap.Round,
-    )
-    drawLine(
-        color = ink,
-        start = Offset(monLeft + monW * 0.28f, u * 0.82f),
-        end = Offset(monLeft + monW * 0.72f, u * 0.82f),
-        strokeWidth = u * 0.052f,
-        cap = StrokeCap.Round,
-    )
-
-    // Precision cursor arrow inside primary monitor
-    val cursorShift = (1f - ((progress - 0.1f) / 0.6f).coerceIn(0f, 1f)) * (u * 0.06f)
-    val cx = monLeft + monW * 0.42f + cursorShift
-    val cy = monTop + monH * 0.24f + cursorShift
-    val cursorPath = Path().apply {
-        moveTo(cx, cy)
-        lineTo(cx, cy + u * 0.22f)
-        lineTo(cx + u * 0.065f, cy + u * 0.165f)
-        lineTo(cx + u * 0.11f, cy + u * 0.25f)
-        lineTo(cx + u * 0.15f, cy + u * 0.23f)
-        lineTo(cx + u * 0.105f, cy + u * 0.145f)
-        lineTo(cx + u * 0.185f, cy + u * 0.14f)
-        close()
-    }
-    drawPath(path = cursorPath, color = accent)
 }

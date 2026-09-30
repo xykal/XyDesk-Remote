@@ -14,12 +14,14 @@ if %errorLevel% neq 0 (
 
 powershell -NoProfile -ExecutionPolicy Bypass -Command ^
   "$ErrorActionPreference = 'SilentlyContinue'; ^
-   Write-Host '[1/4] Mengaktifkan layanan Remote Desktop (TCP & UDP 3389)...'; ^
+   Write-Host '[1/4] Mengaktifkan layanan Remote Desktop (TCP & UDP 3389 + Multi-Session)...'; ^
    Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server' -Name 'fDenyTSConnections' -Value 0; ^
+   Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server' -Name 'fSingleSessionPerUser' -Value 0; ^
    Enable-NetFirewallRule -DisplayGroup 'Remote Desktop'; ^
    Write-Host '[2/4] Mengaktifkan Akselerasi GPU Hardware (AVC444 + 60 FPS)...'; ^
    $tsPolicy = 'HKLM:\SOFTWARE\Policies\Microsoft\Windows NT\Terminal Services'; ^
    if (!(Test-Path $tsPolicy)) { New-Item -Path $tsPolicy -Force | Out-Null }; ^
+   New-ItemProperty -Path $tsPolicy -Name 'fSingleSessionPerUser' -PropertyType DWord -Value 0 -Force | Out-Null; ^
    New-ItemProperty -Path $tsPolicy -Name 'bEnumerateHWBeforeSW' -PropertyType DWord -Value 1 -Force | Out-Null; ^
    New-ItemProperty -Path $tsPolicy -Name 'AVC444ModePreferred' -PropertyType DWord -Value 1 -Force | Out-Null; ^
    New-ItemProperty -Path $tsPolicy -Name 'AVCHardwareEncodePreferred' -PropertyType DWord -Value 1 -Force | Out-Null; ^

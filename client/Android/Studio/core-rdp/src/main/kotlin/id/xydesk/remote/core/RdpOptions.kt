@@ -155,6 +155,48 @@ enum class XyGpuProfile(
     ),
 }
 
+/**
+ * Mesin Streaming Khusus Mode `Koneksi PC` (Direct PC Stream Foundation).
+ * Terpisah penuh dari profil desktop RDP (`XyStreamProfile`) — tidak dipakai
+ * pada Koneksi RDP standar.
+ */
+enum class XyPcStreamEngine(
+    val title: String,
+    val detail: String,
+    val titleEn: String,
+    val detailEn: String,
+    val badge: String,
+) {
+    DIRECT_GAME_ULTRA(
+        "Direct Game FPS (Ultra-Low Latency)",
+        "Jalur langsung tanpa antrean desktop, pacing frame instan & input relatif murni",
+        "Direct Game FPS (Ultra-Low Latency)",
+        "Zero-queue direct pipeline, instant frame pacing & pure relative mouse input",
+        "GAME 60/120",
+    ),
+    DIRECT_STUDIO_444(
+        "Direct Creator 4:4:4 (Presisi Warna 1:1)",
+        "Teks & warna monitor fisik 1:1 tanpa subsampling kroma untuk desain/kode",
+        "Direct Creator 4:4:4 (1:1 Color Precision)",
+        "Uncompressed-like 1:1 physical monitor chroma for design & coding",
+        "4:4:4 STUDIO",
+    ),
+    DIRECT_CINEMA(
+        "Direct Cinema & Multimedia",
+        "Pacing frame video halus dengan sinkronisasi audio stereo latensi rendah",
+        "Direct Cinema & Multimedia",
+        "Smooth video frame pacing with low-latency stereo audio sync",
+        "CINEMA",
+    ),
+    DIRECT_LAN_TURBO(
+        "Direct LAN Turbo (Throughput Maksimum)",
+        "Bitrate tinggi tanpa kompresi paket untuk jaringan Wi-Fi 5GHz / Gigabit LAN",
+        "Direct LAN Turbo (Max Throughput)",
+        "High-bitrate uncompressed packet path for 5GHz Wi-Fi / Gigabit LAN",
+        "LAN TURBO",
+    ),
+}
+
 /** RDP Gateway (RD Gateway). Port default 443. */
 data class XyGateway(
     val host: String,
@@ -190,6 +232,9 @@ data class RdpOptions(
 
     // ---- Streaming & Latency Tuning ----
     val pcConnectMode: Boolean = false,
+    val pcStreamEngine: XyPcStreamEngine = XyPcStreamEngine.DIRECT_GAME_ULTRA,
+    val pcTargetFps: Int = 60,
+    val pcBitrateMbps: Int = 25,
     val rawInputMouse: Boolean = true,
     val streamProfile: XyStreamProfile = XyStreamProfile.AUTO,
     val gpuProfile: XyGpuProfile = XyGpuProfile.AUTO,
@@ -388,6 +433,106 @@ data class RdpOptions(
     }
 
     /**
+     * Terapkan mesin streaming khusus mode `Koneksi PC` (Direct PC Stream).
+     * Mengunci sesi langsung ke konsol fisik 1:1 dan menonaktifkan fitur-fitur
+     * eksklusif desktop RDP (seperti Dynamic Resolution DISP, Gateway, RemoteApp).
+     */
+    fun withPcStreamEngine(engine: XyPcStreamEngine): RdpOptions = when (engine) {
+        XyPcStreamEngine.DIRECT_GAME_ULTRA -> copy(
+            pcConnectMode = true,
+            pcStreamEngine = XyPcStreamEngine.DIRECT_GAME_ULTRA,
+            pcTargetFps = if (pcTargetFps in setOf(60, 90, 120)) pcTargetFps else 60,
+            pcBitrateMbps = pcBitrateMbps.coerceIn(15, 80),
+            udpTransport = true,
+            networkAutoDetect = false,
+            lowBandwidth = true,
+            h264 = true,
+            dynamicResolution = false,
+            consoleAdmin = true,
+            colorDepth = 24,
+            targetFps = 60,
+            asyncUpdate = true,
+            asyncChannels = true,
+            compressionLevel = 0,
+            fontSmoothing = false,
+            desktopWallpaper = false,
+            windowDrag = false,
+            menuAnimations = false,
+            visualThemes = false,
+            desktopComposition = false,
+        )
+        XyPcStreamEngine.DIRECT_STUDIO_444 -> copy(
+            pcConnectMode = true,
+            pcStreamEngine = XyPcStreamEngine.DIRECT_STUDIO_444,
+            pcTargetFps = 60,
+            pcBitrateMbps = pcBitrateMbps.coerceIn(25, 80),
+            udpTransport = true,
+            networkAutoDetect = false,
+            lowBandwidth = false,
+            h264 = true,
+            dynamicResolution = false,
+            consoleAdmin = true,
+            colorDepth = 32,
+            targetFps = 60,
+            asyncUpdate = true,
+            asyncChannels = true,
+            compressionLevel = 0,
+            fontSmoothing = true,
+            desktopWallpaper = true,
+            windowDrag = true,
+            menuAnimations = false,
+            visualThemes = true,
+            desktopComposition = true,
+        )
+        XyPcStreamEngine.DIRECT_CINEMA -> copy(
+            pcConnectMode = true,
+            pcStreamEngine = XyPcStreamEngine.DIRECT_CINEMA,
+            pcTargetFps = 60,
+            pcBitrateMbps = pcBitrateMbps.coerceIn(15, 60),
+            udpTransport = true,
+            networkAutoDetect = true,
+            lowBandwidth = false,
+            h264 = true,
+            dynamicResolution = false,
+            consoleAdmin = true,
+            colorDepth = 32,
+            targetFps = 60,
+            asyncUpdate = true,
+            asyncChannels = true,
+            compressionLevel = 1,
+            fontSmoothing = true,
+            desktopWallpaper = true,
+            windowDrag = false,
+            menuAnimations = false,
+            visualThemes = true,
+            desktopComposition = true,
+        )
+        XyPcStreamEngine.DIRECT_LAN_TURBO -> copy(
+            pcConnectMode = true,
+            pcStreamEngine = XyPcStreamEngine.DIRECT_LAN_TURBO,
+            pcTargetFps = if (pcTargetFps >= 90) pcTargetFps else 120,
+            pcBitrateMbps = 65,
+            udpTransport = true,
+            networkAutoDetect = false,
+            lowBandwidth = false,
+            h264 = true,
+            dynamicResolution = false,
+            consoleAdmin = true,
+            colorDepth = 32,
+            targetFps = 60,
+            asyncUpdate = true,
+            asyncChannels = true,
+            compressionLevel = 0,
+            fontSmoothing = true,
+            desktopWallpaper = true,
+            windowDrag = true,
+            menuAnimations = true,
+            visualThemes = true,
+            desktopComposition = true,
+        )
+    }
+
+    /**
      * Saat deteksi bandwidth otomatis aktif dan jaringan yang dipakai adalah
      * seluler/metered atau bandwidth downstream sangat rendah (<5 Mbps),
      * otomatis gunakan profil hemat bandwidth (broadband-low + AVC420).
@@ -439,6 +584,9 @@ data class RdpOptions(
         val sp = context.applicationContext
             .getSharedPreferences(FILE, Context.MODE_PRIVATE).edit()
         sp.putBoolean("$deviceId.pc_mode", pcConnectMode)
+        sp.putInt("$deviceId.pc_engine", pcStreamEngine.ordinal)
+        sp.putInt("$deviceId.pc_fps", pcTargetFps)
+        sp.putInt("$deviceId.pc_bitrate", pcBitrateMbps)
         sp.putBoolean("$deviceId.raw_mouse", rawInputMouse)
         sp.putInt("$deviceId.audio", audioMode.ordinal)
         sp.putBoolean("$deviceId.mic", microphone)
@@ -496,7 +644,7 @@ data class RdpOptions(
         private const val FILE = "xydesk.rdp.options"
 
         private val KEYS = listOf(
-            "pc_mode", "raw_mouse",
+            "pc_mode", "pc_engine", "pc_fps", "pc_bitrate", "raw_mouse",
             "audio", "mic", "clipboard", "drive", "camera", "udp",
             "netauto", "lowbw", "h264", "dynres", "ghost", "gport", "guser", "gpass", "gdomain",
             "stream_profile", "gpu_profile", "bat_saver", "bpp", "fps", "async_upd", "async_ch", "comp_lvl",
@@ -528,6 +676,9 @@ data class RdpOptions(
             val secProto = XySecurityProtocol.entries.getOrElse(
                 sp.getInt("$deviceId.sec_proto", 0),
             ) { XySecurityProtocol.AUTO }
+            val pcEngine = XyPcStreamEngine.entries.getOrElse(
+                sp.getInt("$deviceId.pc_engine", 0),
+            ) { XyPcStreamEngine.DIRECT_GAME_ULTRA }
             val gatewayHost = sp.getString("$deviceId.ghost", "").orEmpty()
             val gateway = if (gatewayHost.isBlank()) {
                 null
@@ -542,6 +693,9 @@ data class RdpOptions(
             }
             return RdpOptions(
                 pcConnectMode = sp.getBoolean("$deviceId.pc_mode", false),
+                pcStreamEngine = pcEngine,
+                pcTargetFps = sp.getInt("$deviceId.pc_fps", 60).let { if (it in setOf(30, 60, 90, 120)) it else 60 },
+                pcBitrateMbps = sp.getInt("$deviceId.pc_bitrate", 25).coerceIn(5, 80),
                 rawInputMouse = sp.getBoolean("$deviceId.raw_mouse", true),
                 audioMode = audio,
                 microphone = sp.getBoolean("$deviceId.mic", false),

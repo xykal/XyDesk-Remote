@@ -2,12 +2,17 @@
 
 package id.xydesk.remote.ui
 
+import android.content.ClipData
+import android.content.ClipboardManager
 import android.content.Context
 import android.content.Intent
+import android.net.Uri
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.text.font.FontFamily
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.slideInHorizontally
 import androidx.compose.animation.slideOutHorizontally
@@ -63,11 +68,13 @@ import id.xydesk.remote.ui.components.XyIconPill
 import id.xydesk.remote.ui.components.XyDivider
 import id.xydesk.remote.ui.components.XyIcons
 import id.xydesk.remote.ui.components.XyNoticeHost
+import id.xydesk.remote.ui.components.XyOverlay
 import id.xydesk.remote.ui.components.rememberXyNotice
 import id.xydesk.remote.ui.components.XyLogo
 import id.xydesk.remote.ui.components.XyPillButton
 import id.xydesk.remote.ui.components.XyRow
 import id.xydesk.remote.ui.components.XySectionLabel
+import id.xydesk.remote.ui.components.XySegmented
 import id.xydesk.remote.ui.components.XyTopBar
 import id.xydesk.remote.ui.components.XyWordmark
 import kotlinx.coroutines.Dispatchers
@@ -132,6 +139,11 @@ fun XyDeskHome(
     val bootTail = remember { ConnectionLog.tailFromFile(context.applicationContext, 20) }
     var showBoot by remember { mutableStateOf(false) }
     var feedbackOpen by remember { mutableStateOf(false) }
+    var backupModalOpen by remember { mutableStateOf(false) }
+    var backupJsonInput by remember { mutableStateOf("") }
+    var confirmRestoreProfiles by remember { mutableStateOf<List<Pair<ConnectionProfile, Boolean>>?>(null) }
+    var updateModalOpen by remember { mutableStateOf(false) }
+    var updateStatusText by remember { mutableStateOf<String?>(null) }
     var confirmDeleteDevice by remember { mutableStateOf<ConnectionProfile?>(null) }
     var confirmExitApp by remember { mutableStateOf(false) }
     var wolWaitingProfile by remember { mutableStateOf<ConnectionProfile?>(null) }
@@ -243,6 +255,9 @@ fun XyDeskHome(
 
     BackHandler {
         when {
+            confirmRestoreProfiles != null -> confirmRestoreProfiles = null
+            backupModalOpen -> backupModalOpen = false
+            updateModalOpen -> updateModalOpen = false
             confirmDeleteDevice != null -> confirmDeleteDevice = null
             confirmExitApp -> confirmExitApp = false
             feedbackOpen -> feedbackOpen = false
@@ -398,6 +413,36 @@ fun XyDeskHome(
             }
             Spacer(Modifier.height(8.dp))
             XyPillButton(
+                text = xy("Cadangkan / Pulihkan Profil", "Backup / Restore Profiles"),
+                onClick = {
+                    drawerOpen = false
+                    backupJsonInput = exportProfilesJson(context, favorites)
+                    backupModalOpen = true
+                },
+                modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp),
+                primary = false,
+                icon = XyIcons.Folder,
+                compact = true,
+            )
+            Spacer(Modifier.height(6.dp))
+            XyPillButton(
+                text = xy("Cek Pembaruan & RilisIn Store", "Check Update & RilisIn Store"),
+                onClick = {
+                    drawerOpen = false
+                    updateModalOpen = true
+                    updateStatusText = xyNow("Memeriksa status rilis terbaru dari rdp.xydesk.my.id...", "Checking latest release status from rdp.xydesk.my.id...")
+                    scope.launch {
+                        val status = withContext(Dispatchers.IO) { fetchRemoteReleaseStatus(context) }
+                        updateStatusText = status
+                    }
+                },
+                modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp),
+                primary = false,
+                icon = XyIcons.Shield,
+                compact = true,
+            )
+            Spacer(Modifier.height(6.dp))
+            XyPillButton(
                 text = xy("Masukan & saran", "Feedback & suggestions"),
                 onClick = {
                     drawerOpen = false
@@ -514,6 +559,143 @@ fun XyDeskHome(
         )
     }
 
+    if (backupModalOpen) {
+        XyOverlay(
+            title = xy("Cadangkan & Pulihkan Profil (JSON)", "Backup & Restore Profiles (JSON)"),
+            onDismiss = { backupModalOpen = false },
+        ) {
+            Text(
+                xy(
+                    "Salin JSON di bawah untuk mencadangkan seluruh daftar Koneksi PC & Koneksi RDP Anda, atau tempel JSON cadangan lalu ketuk Pulihkan.",
+                    "Copy the JSON below to back up all your PC Connect & RDP profiles, or paste a backup JSON and tap Restore.",
+                ),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            XyField(
+                value = backupJsonInput,
+                onValueChange = { backupJsonInput = it },
+                label = xy("Data JSON Profil Perangkat", "Device Profiles JSON Data"),
+                hint = "{\"version\":1,\"profiles\":[...]}",
+            )
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                XyPillButton(
+                    text = xy("Salin Cadangan", "Copy Backup"),
+                    onClick = {
+                        val json = exportProfilesJson(context, favorites)
+                        backupJsonInput = json
+                        val cm = context.getSystemService(Context.CLIPBOARD_SERVICE) as? ClipboardManager
+                        cm?.setPrimaryClip(ClipData.newPlainText("xydesk-profiles-backup", json))
+                        notice.show(xyNow("Cadangan JSON disalin ke clipboard ({0} perangkat)", "Backup JSON copied to clipboard ({0} devices)", favorites.size))
+                    },
+                    primary = false,
+                    compact = true,
+                    modifier = Modifier.weight(1f),
+                )
+                XyPillButton(
+                    text = xy("Pulihkan JSON", "Restore JSON"),
+                    onClick = {
+                        val parsed = importProfilesJson(backupJsonInput)
+                        if (parsed.isEmpty()) {
+                            notice.show(xyNow("Format JSON tidak valid atau kosong", "Invalid or empty JSON format"))
+                        } else {
+                            confirmRestoreProfiles = parsed
+                        }
+                    },
+                    compact = true,
+                    modifier = Modifier.weight(1f),
+                )
+            }
+            XyPillButton(
+                text = xy("Tutup", "Close"),
+                onClick = { backupModalOpen = false },
+                primary = false,
+                compact = true,
+                modifier = Modifier.fillMaxWidth(),
+            )
+        }
+    }
+
+    confirmRestoreProfiles?.let { listToRestore ->
+        XyDialog(
+            title = xy("Pulihkan {0} profil perangkat?", "Restore {0} device profiles?", listToRestore.size),
+            body = xy(
+                "Tambahkan / perbarui {0} profil perangkat dari data cadangan JSON sekarang?",
+                "Add / update {0} device profiles from the JSON backup now?",
+                listToRestore.size,
+            ),
+            confirmLabel = xy("Pulihkan", "Restore"),
+            onConfirm = {
+                val items = listToRestore
+                confirmRestoreProfiles = null
+                backupModalOpen = false
+                scope.launch {
+                    items.forEach { (prof, isPcMode) ->
+                        runCatching {
+                            repo.save(prof, rememberPassword = false)
+                            val opts = RdpOptions.of(context, prof.id)
+                            if (isPcMode) {
+                                opts.withPcStreamEngine(opts.pcStreamEngine).write(context, prof.id)
+                            } else {
+                                opts.copy(pcConnectMode = false).write(context, prof.id)
+                            }
+                        }
+                    }
+                    notice.show(xyNow("{0} profil perangkat berhasil dipulihkan", "{0} device profiles restored", items.size))
+                }
+            },
+            dismissLabel = xy("Batal", "Cancel"),
+            onDismiss = { confirmRestoreProfiles = null },
+        )
+    }
+
+    if (updateModalOpen) {
+        XyOverlay(
+            title = xy("Pembaruan & RilisIn Store", "Updates & RilisIn Store"),
+            onDismiss = { updateModalOpen = false },
+        ) {
+            Text(
+                text = "XyDesk Remote v${appVersion(context)}  ·  XyVerse Technology Global",
+                style = MaterialTheme.typography.titleSmall,
+            )
+            Text(
+                text = updateStatusText ?: xy("Memeriksa pembaruan...", "Checking for updates..."),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                XyPillButton(
+                    text = xy("Portal rdp.xydesk.my.id", "rdp.xydesk.my.id Portal"),
+                    onClick = {
+                        runCatching {
+                            context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse("https://rdp.xydesk.my.id")))
+                        }
+                    },
+                    compact = true,
+                    modifier = Modifier.weight(1f),
+                )
+                XyPillButton(
+                    text = xy("Buka RilisIn Store", "Open RilisIn Store"),
+                    onClick = {
+                        runCatching {
+                            context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse("https://rilisin.xyverse.my.id")))
+                        }
+                    },
+                    primary = false,
+                    compact = true,
+                    modifier = Modifier.weight(1f),
+                )
+            }
+            XyPillButton(
+                text = xy("Tutup", "Close"),
+                onClick = { updateModalOpen = false },
+                primary = false,
+                compact = true,
+                modifier = Modifier.fillMaxWidth(),
+            )
+        }
+    }
+
     // Pesan app sendiri — paling atas supaya tidak ketutup drawer/panel.
     XyNoticeHost(state = notice, modifier = Modifier.align(Alignment.TopCenter))
     }
@@ -612,7 +794,9 @@ private fun DevicesScreen(
     onShowCrash: () -> Unit,
     onShowBoot: () -> Unit,
 ) {
+    val context = LocalContext.current
     var searchQuery by remember { mutableStateOf("") }
+    var modeFilterIndex by remember { mutableStateOf(0) } // 0 = Semua, 1 = Koneksi PC, 2 = Koneksi RDP
     var showAddBubble by remember { mutableStateOf(false) }
 
     Box(Modifier.fillMaxSize()) {
@@ -701,16 +885,20 @@ private fun DevicesScreen(
                     }
                 }
             } else {
-                val filteredFavorites = remember(favorites, searchQuery) {
+                val filteredFavorites = remember(favorites, searchQuery, modeFilterIndex) {
                     val q = searchQuery.trim().lowercase()
-                    if (q.isEmpty()) {
-                        favorites
-                    } else {
-                        favorites.filter { p ->
-                            p.label.orEmpty().lowercase().contains(q) ||
-                                p.host.lowercase().contains(q) ||
-                                p.username.orEmpty().lowercase().contains(q)
+                    favorites.filter { p ->
+                        val isPc = RdpOptions.of(context, p.id).pcConnectMode
+                        val modeOk = when (modeFilterIndex) {
+                            1 -> isPc
+                            2 -> !isPc
+                            else -> true
                         }
+                        val queryOk = q.isEmpty() ||
+                            p.label.orEmpty().lowercase().contains(q) ||
+                            p.host.lowercase().contains(q) ||
+                            p.username.orEmpty().lowercase().contains(q)
+                        modeOk && queryOk
                     }
                 }
 
@@ -720,6 +908,18 @@ private fun DevicesScreen(
                     verticalArrangement = Arrangement.spacedBy(14.dp),
                 ) {
                     item { LiveSessionsCard() }
+                    item {
+                        XySegmented(
+                            options = listOf(
+                                xy("Semua ({0})", "All ({0})", favorites.size),
+                                xy("Koneksi PC", "PC Connect"),
+                                xy("Koneksi RDP", "RDP Session"),
+                            ),
+                            selectedIndex = modeFilterIndex,
+                            onSelect = { modeFilterIndex = it },
+                            modifier = Modifier.fillMaxWidth(),
+                        )
+                    }
                     if (favorites.size >= 2) {
                         item {
                             XyField(
@@ -891,6 +1091,28 @@ private fun DeviceCard(
                         ),
                     ),
             )
+            // Badge Arsitektur Koneksi di Pojok Kiri Atas Preview
+            Box(
+                Modifier
+                    .align(Alignment.TopStart)
+                    .padding(12.dp)
+                    .clip(RoundedCornerShape(999.dp))
+                    .background(Color(0xD90D121B))
+                    .border(1.dp, Color(0xFF2B364B), RoundedCornerShape(999.dp))
+                    .padding(horizontal = 10.dp, vertical = 4.dp),
+            ) {
+                Text(
+                    text = if (rdpOptions.pcConnectMode) {
+                        "DIRECT PC  ·  ${rdpOptions.pcStreamEngine.badge}  ·  ${rdpOptions.pcTargetFps}FPS"
+                    } else {
+                        "RDP DESKTOP  ·  $streamBadge"
+                    },
+                    fontFamily = FontFamily.Monospace,
+                    fontSize = 9.5.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = Color(0xFFE2E8F0),
+                )
+            }
             Column(
                 Modifier
                     .align(Alignment.BottomStart)
@@ -1003,4 +1225,81 @@ private fun Banner(
 private fun appVersion(context: Context): String = runCatching {
     context.packageManager.getPackageInfo(context.packageName, 0).versionName
 }.getOrNull() ?: "?"
+
+private fun exportProfilesJson(
+    context: Context,
+    profiles: List<ConnectionProfile>,
+): String {
+    val arr = org.json.JSONArray()
+    profiles.forEach { p ->
+        val opts = RdpOptions.of(context, p.id)
+        val obj = org.json.JSONObject()
+            .put("host", p.host)
+            .put("port", p.port)
+            .put("username", p.username.orEmpty())
+            .put("domain", p.domain.orEmpty())
+            .put("label", p.label.orEmpty())
+            .put("pcConnectMode", opts.pcConnectMode)
+        arr.put(obj)
+    }
+    return org.json.JSONObject()
+        .put("version", 1)
+        .put("profiles", arr)
+        .toString()
+}
+
+private fun importProfilesJson(raw: String): List<Pair<ConnectionProfile, Boolean>> = runCatching {
+    val root = org.json.JSONObject(raw.trim())
+    val arr = root.optJSONArray("profiles") ?: return@runCatching emptyList()
+    buildList {
+        for (i in 0 until arr.length()) {
+            val obj = arr.optJSONObject(i) ?: continue
+            val host = obj.optString("host", "").trim()
+            if (host.isEmpty()) continue
+            val port = obj.optInt("port", 3389).coerceIn(1, 65535)
+            val username = obj.optString("username", "").trim().ifEmpty { null }
+            val domain = obj.optString("domain", "").trim().ifEmpty { null }
+            val label = obj.optString("label", "").trim().ifEmpty { null }
+            val isPc = obj.optBoolean("pcConnectMode", false)
+            add(
+                ConnectionProfile(
+                    host = host,
+                    port = port,
+                    username = username,
+                    domain = domain,
+                    label = label,
+                ) to isPc,
+            )
+        }
+    }
+}.getOrDefault(emptyList())
+
+private fun fetchRemoteReleaseStatus(context: Context): String {
+    val current = appVersion(context)
+    return runCatching {
+        val conn = (java.net.URL("https://rdp.xydesk.my.id/api/status").openConnection() as java.net.HttpURLConnection).apply {
+            connectTimeout = 5000
+            readTimeout = 5000
+            requestMethod = "GET"
+        }
+        val body = conn.inputStream.bufferedReader().use { it.readText() }
+        val json = org.json.JSONObject(body)
+        val latest = json.optString("version", "1.0.0")
+        val launchDate = json.optString("launchWib", "Sabtu, 3 Oktober 2026 · 10:00 WIB")
+        xyNow(
+            "Versi terpasang: v{0} · Target Rilis Publik: v{1} ({2}). Toko aplikasi resmi ekosistem XyVerse akan tersedia di rilisin.xyverse.my.id.",
+            "Installed version: v{0} · Public Release Target: v{1} ({2}). Official XyVerse app store will be available at rilisin.xyverse.my.id.",
+            current,
+            latest,
+            launchDate,
+        )
+    }.getOrElse {
+        xyNow(
+            "Versi terpasang: v{0} · Kunjungi rdp.xydesk.my.id atau rilisin.xyverse.my.id untuk informasi rilis terbaru.",
+            "Installed version: v{0} · Visit rdp.xydesk.my.id or rilisin.xyverse.my.id for the latest release info.",
+            current,
+        )
+    }
+}
+
 

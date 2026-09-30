@@ -59,11 +59,11 @@ object RdpUri {
         if (options.audioMode == XyAudioMode.DEVICE) {
             out += "sound" to "sys:opensles,format:1,quality:high"
         }
-        if (options.microphone) out += "microphone" to ""
+        if (options.microphone && !options.pcConnectMode) out += "microphone" to ""
 
         out += "clipboard" to if (options.clipboard) "+" else "-"
-        if (options.localDrive) out += "drive" to "XyDesk"
-        if (options.camera) out += "dvc" to "rdpecam"
+        if (options.localDrive && !options.pcConnectMode) out += "drive" to "XyDesk"
+        if (options.camera && !options.pcConnectMode) out += "dvc" to "rdpecam"
 
         // Hanya dikirim saat aktif: "+multitransport" menyalakan RDP-UDP (FEC).
         if (options.udpTransport) out += "multitransport" to "+"
@@ -78,7 +78,8 @@ object RdpUri {
 
         // Kanal DISP (Display Control): bikin resolusi remote bisa diubah
         // saat sesi hidup lewat LibFreeRDP.sendMonitorLayout.
-        if (options.dynamicResolution) out += "dynamic-resolution" to ""
+        // Koneksi PC (Direct Stream) mengunci 1:1 ke monitor fisik, tidak memakai DISP.
+        if (options.dynamicResolution && !options.pcConnectMode) out += "dynamic-resolution" to ""
 
         // ---- Streaming & Latency CLI flags ----
         if (options.colorDepth != 32 || options.streamProfile != XyStreamProfile.AUTO) {
@@ -118,16 +119,17 @@ object RdpUri {
         if (options.tlsSecLevel in 0..2) {
             out += "tls" to "seclevel:${options.tlsSecLevel}"
         }
-        if (options.consoleAdmin) out += "admin" to ""
-        if (options.restrictedAdmin) out += "restricted-admin" to ""
-        options.remoteProgram?.trim()?.takeIf { it.isNotEmpty() }?.let {
-            out += "shell" to it
+        if (options.consoleAdmin || options.pcConnectMode) out += "admin" to ""
+        if (options.restrictedAdmin && !options.pcConnectMode) out += "restricted-admin" to ""
+        if (!options.pcConnectMode) {
+            options.remoteProgram?.trim()?.takeIf { it.isNotEmpty() }?.let {
+                out += "shell" to it
+            }
+            options.remoteWorkDir?.trim()?.takeIf { it.isNotEmpty() }?.let {
+                out += "shell-dir" to it
+            }
+            options.gateway?.let { out += "gateway" to gatewayArg(it) }
         }
-        options.remoteWorkDir?.trim()?.takeIf { it.isNotEmpty() }?.let {
-            out += "shell-dir" to it
-        }
-
-        options.gateway?.let { out += "gateway" to gatewayArg(it) }
         return out
     }
 

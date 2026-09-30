@@ -930,6 +930,39 @@ fun XyDeskSessionScreen(
                 Modifier
                     .fillMaxSize()
                     .pointerInput(zoom, remoteWidth, remoteHeight) {
+                        awaitPointerEventScope {
+                            var lastMousePos: Offset? = null
+                            while (true) {
+                                val ev = awaitPointerEvent()
+                                val firstChange = ev.changes.firstOrNull() ?: continue
+                                if (firstChange.type == androidx.compose.ui.input.pointer.PointerType.Mouse) {
+                                    when (ev.type) {
+                                        androidx.compose.ui.input.pointer.PointerEventType.Move -> {
+                                            if (!firstChange.pressed) {
+                                                val prev = lastMousePos
+                                                lastMousePos = firstChange.position
+                                                if (prev != null) {
+                                                    val d = firstChange.position - prev
+                                                    if (d.getDistance() > 0.1f) movePointer(d.x, d.y)
+                                                }
+                                            } else {
+                                                lastMousePos = firstChange.position
+                                            }
+                                        }
+                                        androidx.compose.ui.input.pointer.PointerEventType.Scroll -> {
+                                            val scrollY = firstChange.scrollDelta.y
+                                            if (scrollY != 0f) {
+                                                sendScroll(if (scrollY < 0f) 1 else -1)
+                                                firstChange.consume()
+                                            }
+                                        }
+                                        else -> Unit
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    .pointerInput(zoom, remoteWidth, remoteHeight) {
                         trackpadGestures(
                             scrollSpeed = prefs.scrollSpeed,
                             edgeScrollEnabled = prefs.edgeScrollZone,
@@ -1140,22 +1173,38 @@ fun XyDeskSessionScreen(
                 activeUsername = activeProfile.username,
                 consoleAdminMode = consoleAdminMode,
                 onSwitchConsoleMode = { useConsole ->
-                    if (useConsole != consoleAdminMode) {
-                        consoleAdminMode = useConsole
-                        runCatching {
-                            RdpOptions.of(context, activeProfile.id)
-                                .copy(consoleAdmin = useConsole)
-                                .write(context, activeProfile.id)
-                        }
-                        applyingResolution = true
-                        manager.disconnect()
-                        notice.show(
-                            if (useConsole) xyNow("Beralih ke Sesi Konsol Fisik (/admin)...", "Switching to Physical Console (/admin)...")
-                            else xyNow("Beralih ke Sesi User RDP...", "Switching to RDP User Session..."),
-                        )
+                    consoleAdminMode = useConsole
+                    val currentUser = activeProfile.username.orEmpty()
+                    val nextUser = when {
+                        useConsole && (currentUser.isBlank() || currentUser.equals("XyDesk", ignoreCase = true)) -> "runneradmin"
+                        !useConsole && currentUser.equals("runneradmin", ignoreCase = true) -> "XyDesk"
+                        else -> activeProfile.username
                     }
+                    activeProfile = activeProfile.copy(username = nextUser)
+                    runCatching {
+                        RdpOptions.of(context, activeProfile.id)
+                            .copy(consoleAdmin = useConsole)
+                            .write(context, activeProfile.id)
+                    }
+                    applyingResolution = true
+                    manager.disconnect()
+                    notice.show(
+                        if (useConsole) {
+                            xyNow("Beralih ke Konsol Runner ({0} · /admin)...", "Switching to Runner Console ({0} · /admin)...", nextUser ?: "admin")
+                        } else {
+                            xyNow("Beralih ke Sesi Virtual ({0} · Multi-User)...", "Switching to Virtual Session ({0} · Multi-User)...", nextUser ?: "RDP")
+                        },
+                    )
                 },
                 onSwitchUserSession = { newUser, newDomain, newPass ->
+                    val wantConsole = newUser.equals("runneradmin", ignoreCase = true) ||
+                        newUser.equals("Administrator", ignoreCase = true)
+                    consoleAdminMode = wantConsole
+                    runCatching {
+                        RdpOptions.of(context, activeProfile.id)
+                            .copy(consoleAdmin = wantConsole)
+                            .write(context, activeProfile.id)
+                    }
                     activeProfile = activeProfile.copy(
                         username = newUser,
                         domain = newDomain ?: activeProfile.domain,
@@ -1164,7 +1213,12 @@ fun XyDeskSessionScreen(
                     applyingResolution = true
                     manager.disconnect()
                     notice.show(
-                        xyNow("Beralih sesi ke user {0}...", "Switching session to user {0}...", newUser),
+                        xyNow(
+                            "Beralih sesi ke user {0} ({1})...",
+                            "Switching session to user {0} ({1})...",
+                            newUser,
+                            if (wantConsole) "/admin" else "Multi-User",
+                        ),
                     )
                 },
                 swapMouseButtons = swapMouseButtons,

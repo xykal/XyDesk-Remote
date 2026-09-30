@@ -653,6 +653,7 @@ fun SessionControls(
 
         if (monitorGridOpen) {
             MonitorAndUserGridModal(
+                deviceId = deviceId,
                 hostLabel = hostLabel,
                 remoteSize = remoteSize,
                 codecLabel = telemetry.codecLabel,
@@ -674,6 +675,10 @@ fun SessionControls(
                     monitorGridOpen = false
                     onSwitchUserSession(user, dom, pass)
                 },
+                onActivatePrivacyCurtain = {
+                    monitorGridOpen = false
+                    onActivatePrivacyCurtain()
+                },
                 onLockRemotePc = {
                     monitorGridOpen = false
                     onLockRemotePc()
@@ -682,12 +687,14 @@ fun SessionControls(
                     monitorGridOpen = false
                     onOpenHome()
                 },
+                notice = notice,
                 onDismiss = { monitorGridOpen = false },
             )
         }
 
         if (panelOpen) {
             SessionPanel(
+                deviceId = deviceId,
                 hostLabel = hostLabel,
                 statusText = statusText,
                 remoteSize = remoteSize,
@@ -695,6 +702,7 @@ fun SessionControls(
                 remoteDpi = remoteDpi,
                 tab = tab,
                 onTab = { tab = it },
+                notice = notice,
                 // Layar
                 resolution = resolution,
                 rotation = rotation,
@@ -1220,6 +1228,7 @@ private fun XyPointer(
 
 @Composable
 private fun SessionPanel(
+    deviceId: String,
     hostLabel: String,
     statusText: String,
     remoteSize: String,
@@ -1227,6 +1236,7 @@ private fun SessionPanel(
     remoteDpi: Int,
     tab: PanelTab,
     onTab: (PanelTab) -> Unit,
+    notice: XyNoticeState,
     onClose: () -> Unit,
     // Layar
     resolution: String,
@@ -1365,6 +1375,7 @@ private fun SessionPanel(
             ) {
                 when (tab) {
                     PanelTab.SCREEN -> ScreenTab(
+                        deviceId = deviceId,
                         remoteSize = remoteSize,
                         zoomPercent = zoomPercent,
                         remoteDpi = remoteDpi,
@@ -1387,6 +1398,7 @@ private fun SessionPanel(
                         onShowTelemetryPillChange = onShowTelemetryPillChange,
                         onOpenMonitorGrid = onOpenMonitorGrid,
                         pcConnectMode = pcConnectMode,
+                        notice = notice,
                     )
 
                     PanelTab.INPUT -> InputTab(
@@ -1454,6 +1466,7 @@ private fun SessionPanel(
 
 @Composable
 private fun ScreenTab(
+    deviceId: String,
     remoteSize: String,
     zoomPercent: Int,
     remoteDpi: Int,
@@ -1476,8 +1489,15 @@ private fun ScreenTab(
     onShowTelemetryPillChange: (Boolean) -> Unit,
     onOpenMonitorGrid: () -> Unit,
     pcConnectMode: Boolean = false,
+    notice: XyNoticeState,
 ) {
-    PanelSection(xy("Telemetri & Multi-Monitor / Sesi", "Live Telemetry & Multi-Monitor / Sessions")) {
+    val context = LocalContext.current
+    var pcOptions by remember(deviceId) { mutableStateOf(RdpOptions.of(context, deviceId)) }
+
+    PanelSection(
+        if (pcConnectMode) xy("Telemetri & Kontrol Monitor Fisik PC", "Live Telemetry & Physical PC Monitor")
+        else xy("Telemetri & Multi-Monitor / Sesi RDP", "Live Telemetry & Multi-Monitor / RDP Sessions"),
+    ) {
         XyToggleRow(
             title = xy("Status telemetri live (FPS, Latency, Network)", "Live telemetry status (FPS, Latency, Network)"),
             subtitle = xy("Tampilkan FPS, Latency, Resolusi, Encode, Relay, dan Network secara ringkas di kiri atas", "Show compact FPS, Latency, Resolution, Encode, Relay, and Network at top-left"),
@@ -1485,7 +1505,11 @@ private fun ScreenTab(
             onCheckedChange = onShowTelemetryPillChange,
         )
         XyPillButton(
-            text = xy("Grid Monitor & Sesi User Aktif", "Active Monitors & User Sessions Grid"),
+            text = if (pcConnectMode) {
+                xy("Monitor Fisik 1:1 & Mesin Direct Stream", "1:1 Physical Monitor & Direct Stream Engine")
+            } else {
+                xy("Grid Monitor & Sesi Multi-User / Konsol", "Active Monitors & Multi-User / Console Grid")
+            },
             onClick = onOpenMonitorGrid,
             icon = XyIcons.DualMonitor,
             primary = false,
@@ -1529,12 +1553,48 @@ private fun ScreenTab(
     }
 
     if (pcConnectMode) {
-        PanelSection(xy("Layar Native Monitor PC (1:1)", "Native PC Monitor Display (1:1)")) {
+        PanelSection(xy("Mesin Direct PC Stream (Eksklusif Koneksi PC)", "Direct PC Stream Engine (PC Connect Exclusive)")) {
             PanelHint(
                 xy(
-                    "Mode Koneksi PC aktif (${remoteSize}): Resolusi dan DPI dikunci 1:1 mengikuti monitor fisik PC (Native DXGI Desktop Duplication) dan tidak dapat diubah manual.",
-                    "PC Connection mode active (${remoteSize}): Resolution and DPI are locked 1:1 to the physical PC monitor (Native DXGI Desktop Duplication).",
+                    "Layar Monitor Fisik 1:1 (${remoteSize}): Resolusi, DPI, dan sesi dikunci ke monitor konsol fisik PC. Pengaturan resolusi virtual & multi-user RDP tidak digunakan di mode ini.",
+                    "1:1 Physical Monitor (${remoteSize}): Resolution, DPI, and session are locked to the physical PC console monitor. Virtual RDP resolution & multi-user are disabled in this mode.",
                 ),
+            )
+            id.xydesk.remote.core.XyPcStreamEngine.entries.chunked(2).forEach { row ->
+                Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    row.forEach { engine ->
+                        XyPillButton(
+                            text = engine.badge,
+                            onClick = {
+                                val next = pcOptions.withPcStreamEngine(engine)
+                                pcOptions = next
+                                next.write(context, deviceId)
+                                notice.show(
+                                    xyNow(
+                                        "Mesin Direct Stream: {0} disimpan",
+                                        "Direct Stream Engine: {0} saved",
+                                        engine.badge,
+                                    ),
+                                )
+                            },
+                            primary = pcOptions.pcStreamEngine == engine,
+                            compact = true,
+                            modifier = Modifier.weight(1f),
+                        )
+                    }
+                }
+            }
+            val fpsList = listOf(30, 60, 90, 120)
+            XySegmented(
+                options = fpsList.map { "$it FPS" },
+                selectedIndex = fpsList.indexOf(pcOptions.pcTargetFps).coerceAtLeast(1),
+                onSelect = { idx ->
+                    val next = pcOptions.copy(pcTargetFps = fpsList[idx], pcConnectMode = true)
+                    pcOptions = next
+                    next.write(context, deviceId)
+                    notice.show(xyNow("Target FPS Koneksi PC: {0} FPS", "PC Connect Target FPS: {0} FPS", fpsList[idx]))
+                },
+                modifier = Modifier.fillMaxWidth(),
             )
         }
     } else {
@@ -2181,6 +2241,7 @@ private data class MonitorGridItem(
  */
 @Composable
 private fun MonitorAndUserGridModal(
+    deviceId: String,
     hostLabel: String,
     remoteSize: String,
     codecLabel: String,
@@ -2191,11 +2252,14 @@ private fun MonitorAndUserGridModal(
     onSelectMonitorResolution: (String) -> Unit,
     onSwitchConsoleMode: (Boolean) -> Unit,
     onSwitchUserSession: (String, String?, String?) -> Unit,
+    onActivatePrivacyCurtain: () -> Unit,
     onLockRemotePc: () -> Unit,
     onOpenHome: () -> Unit,
+    notice: XyNoticeState,
     onDismiss: () -> Unit,
 ) {
     val context = LocalContext.current
+    var pcOptions by remember(deviceId) { mutableStateOf(RdpOptions.of(context, deviceId)) }
     val repo = remember { id.xydesk.remote.sessions.SessionsRepository(context) }
     val allFavorites by repo.favorites().collectAsState(initial = emptyList())
     val savedAccounts = remember(allFavorites) {
@@ -2245,7 +2309,11 @@ private fun MonitorAndUserGridModal(
     )
 
     XyOverlay(
-        title = xy("Monitor & Sesi User Aktif (Auto-Detect)", "Active Monitors & User Sessions (Auto-Detect)"),
+        title = if (pcConnectMode) {
+            xy("Monitor Fisik 1:1 & Mesin Direct Stream", "1:1 Physical Monitor & Direct Stream Engine")
+        } else {
+            xy("Monitor & Sesi Multi-User / Konsol RDP", "Active Monitors & Multi-User / Console Grid")
+        },
         maxWidth = 440.dp,
         onDismiss = onDismiss,
     ) {
@@ -2284,8 +2352,16 @@ private fun MonitorAndUserGridModal(
                     )
                     Text(
                         text = buildString {
-                            append(if (consoleAdminMode || pcConnectMode) xy("Sesi Konsol Fisik (/admin)", "Physical Console (/admin)") else xy("Sesi User RDP", "RDP User Session"))
-                            if (!activeUsername.isNullOrBlank()) append(" · $activeUsername")
+                            if (pcConnectMode) {
+                                append(xy("Koneksi PC · Direct Stream 1:1", "PC Connect · 1:1 Direct Stream"))
+                                append(" · ${pcOptions.pcStreamEngine.badge}")
+                            } else {
+                                append(
+                                    if (consoleAdminMode) xy("Konsol Fisik / Runner (/admin)", "Physical / Runner Console (/admin)")
+                                    else xy("Sesi Virtual Multi-User RDP", "Multi-User Virtual RDP Session"),
+                                )
+                                if (!activeUsername.isNullOrBlank()) append(" · $activeUsername")
+                            }
                             append(" · $codecLabel")
                         },
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -2296,310 +2372,470 @@ private fun MonitorAndUserGridModal(
                 }
             }
 
-            // Grid Monitor Aktif
-            Text(
-                text = xy("GRID MONITOR & LAYAR AKTIF", "ACTIVE MONITORS & DISPLAYS GRID"),
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                fontSize = 9.5.sp,
-                fontWeight = FontWeight.SemiBold,
-                letterSpacing = 1.1.sp,
-            )
-            monitorItems.chunked(2).forEach { row ->
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    row.forEach { item ->
-                        Box(
-                            modifier = Modifier
-                                .weight(1f)
-                                .clip(RoundedCornerShape(11.dp))
-                                .background(
-                                    if (item.active) MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.48f)
-                                    else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.25f),
-                                )
-                                .border(
-                                    if (item.active) 1.4.dp else 1.dp,
-                                    if (item.active) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outline,
-                                    RoundedCornerShape(11.dp),
-                                )
-                                .clickable(enabled = !pcConnectMode) {
-                                    onSelectMonitorResolution(item.value)
-                                }
-                                .padding(10.dp),
-                        ) {
-                            Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                                Row(
-                                    verticalAlignment = Alignment.CenterVertically,
-                                    horizontalArrangement = Arrangement.SpaceBetween,
-                                    modifier = Modifier.fillMaxWidth(),
-                                ) {
-                                    Icon(
-                                        item.icon,
-                                        contentDescription = null,
-                                        tint = if (item.active) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface,
-                                        modifier = Modifier.size(17.dp),
-                                    )
-                                    Text(
-                                        text = if (item.active) xy("AKTIF", "ACTIVE") else item.badge,
-                                        fontFamily = FontFamily.Monospace,
-                                        fontSize = 8.5.sp,
-                                        fontWeight = FontWeight.Bold,
-                                        color = if (item.active) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
-                                    )
-                                }
-                                Text(
-                                    text = item.title,
-                                    color = MaterialTheme.colorScheme.onSurface,
-                                    fontSize = 11.5.sp,
-                                    fontWeight = FontWeight.SemiBold,
-                                    maxLines = 1,
-                                    overflow = TextOverflow.Ellipsis,
-                                )
-                                Text(
-                                    text = item.subtitle,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                    fontSize = 9.5.sp,
-                                    maxLines = 1,
-                                    overflow = TextOverflow.Ellipsis,
-                                )
-                            }
-                        }
-                    }
-                }
-            }
-
-            // Grid Sesi User & Konsol Windows
-            Text(
-                text = xy("GRID SESI WINDOWS & USER / KONSOL", "WINDOWS SESSIONS & USER / CONSOLE GRID"),
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                fontSize = 9.5.sp,
-                fontWeight = FontWeight.SemiBold,
-                letterSpacing = 1.1.sp,
-            )
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                // Card 1: Sesi Konsol (/admin)
-                val isConsole = consoleAdminMode || pcConnectMode
-                Box(
-                    modifier = Modifier
-                        .weight(1f)
-                        .clip(RoundedCornerShape(11.dp))
-                        .background(
-                            if (isConsole) MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.48f)
-                            else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.25f),
-                        )
-                        .border(
-                            if (isConsole) 1.4.dp else 1.dp,
-                            if (isConsole) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outline,
-                            RoundedCornerShape(11.dp),
-                        )
-                        .clickable { onSwitchConsoleMode(true) }
-                        .padding(10.dp),
-                ) {
-                    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                            modifier = Modifier.fillMaxWidth(),
-                        ) {
-                            Icon(
-                                XyIcons.Monitor,
-                                contentDescription = null,
-                                tint = if (isConsole) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface,
-                                modifier = Modifier.size(17.dp),
-                            )
-                            Text(
-                                text = if (isConsole) xy("AKTIF", "ACTIVE") else "/ADMIN",
-                                fontFamily = FontFamily.Monospace,
-                                fontSize = 8.5.sp,
-                                fontWeight = FontWeight.Bold,
-                                color = if (isConsole) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
-                            )
-                        }
-                        Text(
-                            text = xy("Konsol Fisik PC", "Physical Console"),
-                            color = MaterialTheme.colorScheme.onSurface,
-                            fontSize = 11.5.sp,
-                            fontWeight = FontWeight.SemiBold,
-                            maxLines = 1,
-                        )
-                        Text(
-                            text = xy("Sesi langsung monitor PC", "Direct PC monitor session"),
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            fontSize = 9.5.sp,
-                            maxLines = 1,
-                        )
-                    }
-                }
-
-                // Card 2: Sesi User RDP Virtual
-                val isVirtualUser = !isConsole
-                Box(
-                    modifier = Modifier
-                        .weight(1f)
-                        .clip(RoundedCornerShape(11.dp))
-                        .background(
-                            if (isVirtualUser) MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.48f)
-                            else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.25f),
-                        )
-                        .border(
-                            if (isVirtualUser) 1.4.dp else 1.dp,
-                            if (isVirtualUser) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outline,
-                            RoundedCornerShape(11.dp),
-                        )
-                        .clickable { onSwitchConsoleMode(false) }
-                        .padding(10.dp),
-                ) {
-                    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                            modifier = Modifier.fillMaxWidth(),
-                        ) {
-                            Icon(
-                                XyIcons.Users,
-                                contentDescription = null,
-                                tint = if (isVirtualUser) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface,
-                                modifier = Modifier.size(17.dp),
-                            )
-                            Text(
-                                text = if (isVirtualUser) xy("AKTIF", "ACTIVE") else "MULTI",
-                                fontFamily = FontFamily.Monospace,
-                                fontSize = 8.5.sp,
-                                fontWeight = FontWeight.Bold,
-                                color = if (isVirtualUser) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
-                            )
-                        }
-                        Text(
-                            text = activeUsername?.takeIf { it.isNotBlank() } ?: xy("Sesi User RDP", "RDP User Session"),
-                            color = MaterialTheme.colorScheme.onSurface,
-                            fontSize = 11.5.sp,
-                            fontWeight = FontWeight.SemiBold,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis,
-                        )
-                        Text(
-                            text = xy("Sesi virtual multi-user", "Multi-user virtual session"),
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            fontSize = 9.5.sp,
-                            maxLines = 1,
-                        )
-                    }
-                }
-            }
-
-            if (savedAccounts.isNotEmpty()) {
-                savedAccounts.chunked(2).forEach { row ->
+            if (pcConnectMode) {
+                // Mode Koneksi PC: Eksklusif Direct Stream Engine (Tidak ada Multi-User RDP)
+                Text(
+                    text = xy("MESIN DIRECT PC STREAM (EKSKLUSIF KONEKSI PC)", "DIRECT PC STREAM ENGINE (PC CONNECT EXCLUSIVE)"),
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    fontSize = 9.5.sp,
+                    fontWeight = FontWeight.SemiBold,
+                    letterSpacing = 1.1.sp,
+                )
+                id.xydesk.remote.core.XyPcStreamEngine.entries.chunked(2).forEach { row ->
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        row.forEach { acc ->
-                            val accUser = acc.username.orEmpty()
-                            val isCurrentAcc = !activeUsername.isNullOrBlank() &&
-                                activeUsername.equals(accUser, ignoreCase = true)
+                        row.forEach { engine ->
+                            val isActive = pcOptions.pcStreamEngine == engine
                             Box(
                                 modifier = Modifier
                                     .weight(1f)
-                                    .clip(RoundedCornerShape(10.dp))
-                                    .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.25f))
+                                    .clip(RoundedCornerShape(11.dp))
+                                    .background(
+                                        if (isActive) MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.48f)
+                                        else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.25f),
+                                    )
                                     .border(
-                                        1.dp,
-                                        if (isCurrentAcc) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outline,
-                                        RoundedCornerShape(10.dp),
+                                        if (isActive) 1.4.dp else 1.dp,
+                                        if (isActive) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outline,
+                                        RoundedCornerShape(11.dp),
                                     )
                                     .clickable {
-                                        onSwitchUserSession(accUser, acc.domain, acc.password)
+                                        val next = pcOptions.withPcStreamEngine(engine)
+                                        pcOptions = next
+                                        next.write(context, deviceId)
+                                        notice.show(xyNow("Mesin Direct Stream: {0} aktif", "Direct Stream Engine: {0} active", engine.badge))
                                     }
-                                    .padding(9.dp),
+                                    .padding(10.dp),
                             ) {
-                                Row(
-                                    verticalAlignment = Alignment.CenterVertically,
-                                    horizontalArrangement = Arrangement.spacedBy(7.dp),
-                                ) {
-                                    Icon(
-                                        XyIcons.Users,
-                                        contentDescription = null,
-                                        tint = MaterialTheme.colorScheme.onSurface,
-                                        modifier = Modifier.size(15.dp),
-                                    )
-                                    Column(Modifier.weight(1f)) {
-                                        Text(
-                                            text = acc.label?.takeIf { it.isNotBlank() } ?: accUser,
-                                            color = MaterialTheme.colorScheme.onSurface,
-                                            fontSize = 11.sp,
-                                            fontWeight = FontWeight.SemiBold,
-                                            maxLines = 1,
-                                            overflow = TextOverflow.Ellipsis,
+                                Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                                    Row(
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        horizontalArrangement = Arrangement.SpaceBetween,
+                                        modifier = Modifier.fillMaxWidth(),
+                                    ) {
+                                        Icon(
+                                            XyIcons.Monitor,
+                                            contentDescription = null,
+                                            tint = if (isActive) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface,
+                                            modifier = Modifier.size(16.dp),
                                         )
                                         Text(
-                                            text = accUser,
-                                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                            fontSize = 9.5.sp,
-                                            maxLines = 1,
-                                            overflow = TextOverflow.Ellipsis,
+                                            text = if (isActive) xy("AKTIF", "ACTIVE") else engine.badge,
+                                            fontFamily = FontFamily.Monospace,
+                                            fontSize = 8.5.sp,
+                                            fontWeight = FontWeight.Bold,
+                                            color = if (isActive) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
                                         )
                                     }
+                                    Text(
+                                        text = xy(engine.title, engine.titleEn),
+                                        color = MaterialTheme.colorScheme.onSurface,
+                                        fontSize = 11.sp,
+                                        fontWeight = FontWeight.SemiBold,
+                                        maxLines = 1,
+                                        overflow = TextOverflow.Ellipsis,
+                                    )
+                                    Text(
+                                        text = xy(engine.detail, engine.detailEn),
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                        fontSize = 9.5.sp,
+                                        maxLines = 1,
+                                        overflow = TextOverflow.Ellipsis,
+                                    )
                                 }
                             }
                         }
-                        repeat(2 - row.size) { Spacer(Modifier.weight(1f)) }
                     }
                 }
-            }
-
-            if (customUserOpen) {
-                Column(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .clip(RoundedCornerShape(10.dp))
-                        .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.25f))
-                        .border(1.dp, MaterialTheme.colorScheme.outline, RoundedCornerShape(10.dp))
-                        .padding(10.dp),
-                    verticalArrangement = Arrangement.spacedBy(8.dp),
-                ) {
-                    XyField(
-                        value = customUsername,
-                        onValueChange = { customUsername = it },
-                        label = xy("Username Windows", "Windows Username"),
-                        hint = "Administrator",
-                    )
-                    XyField(
-                        value = customPassword,
-                        onValueChange = { customPassword = it },
-                        label = xy("Password (opsional)", "Password (optional)"),
-                        isPassword = true,
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    XyPillButton(
+                        text = xy("Layar Stealth (Privacy)", "Stealth Screen (Privacy)"),
+                        icon = XyIcons.EyeOff,
+                        onClick = onActivatePrivacyCurtain,
+                        primary = false,
+                        compact = true,
+                        modifier = Modifier.weight(1f),
                     )
                     XyPillButton(
-                        text = xy("Pindah ke User Ini Sekarang", "Switch to This User Now"),
-                        icon = XyIcons.Users,
-                        onClick = {
-                            val u = customUsername.trim()
-                            if (u.isNotEmpty()) {
-                                onSwitchUserSession(
-                                    u,
-                                    customDomain.trim().takeIf { it.isNotEmpty() },
-                                    customPassword.takeIf { it.isNotEmpty() },
-                                )
-                            }
-                        },
+                        text = xy("Kunci Fisik PC (Win+L)", "Lock Physical PC (Win+L)"),
+                        icon = XyIcons.Windows,
+                        onClick = onLockRemotePc,
+                        primary = false,
                         compact = true,
-                        modifier = Modifier.fillMaxWidth(),
+                        modifier = Modifier.weight(1f),
                     )
                 }
-            }
+            } else {
+                // Mode Koneksi RDP: Grid Monitor Virtual + Multi-User & Konsol Runner
+                Text(
+                    text = xy("GRID MONITOR & LAYAR AKTIF", "ACTIVE MONITORS & DISPLAYS GRID"),
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    fontSize = 9.5.sp,
+                    fontWeight = FontWeight.SemiBold,
+                    letterSpacing = 1.1.sp,
+                )
+                monitorItems.chunked(2).forEach { row ->
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        row.forEach { item ->
+                            Box(
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .clip(RoundedCornerShape(11.dp))
+                                    .background(
+                                        if (item.active) MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.48f)
+                                        else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.25f),
+                                    )
+                                    .border(
+                                        if (item.active) 1.4.dp else 1.dp,
+                                        if (item.active) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outline,
+                                        RoundedCornerShape(11.dp),
+                                    )
+                                    .clickable {
+                                        onSelectMonitorResolution(item.value)
+                                    }
+                                    .padding(10.dp),
+                            ) {
+                                Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                                    Row(
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        horizontalArrangement = Arrangement.SpaceBetween,
+                                        modifier = Modifier.fillMaxWidth(),
+                                    ) {
+                                        Icon(
+                                            item.icon,
+                                            contentDescription = null,
+                                            tint = if (item.active) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface,
+                                            modifier = Modifier.size(17.dp),
+                                        )
+                                        Text(
+                                            text = if (item.active) xy("AKTIF", "ACTIVE") else item.badge,
+                                            fontFamily = FontFamily.Monospace,
+                                            fontSize = 8.5.sp,
+                                            fontWeight = FontWeight.Bold,
+                                            color = if (item.active) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
+                                        )
+                                    }
+                                    Text(
+                                        text = item.title,
+                                        color = MaterialTheme.colorScheme.onSurface,
+                                        fontSize = 11.5.sp,
+                                        fontWeight = FontWeight.SemiBold,
+                                        maxLines = 1,
+                                        overflow = TextOverflow.Ellipsis,
+                                    )
+                                    Text(
+                                        text = item.subtitle,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                        fontSize = 9.5.sp,
+                                        maxLines = 1,
+                                        overflow = TextOverflow.Ellipsis,
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
 
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                XyPillButton(
-                    text = xy("Pindah User Lain", "Switch User"),
-                    icon = XyIcons.Users,
-                    onClick = { customUserOpen = !customUserOpen },
-                    primary = customUserOpen,
-                    compact = true,
-                    modifier = Modifier.weight(1f),
+                // Grid Sesi User & Konsol Runner Windows
+                Text(
+                    text = xy("GRID SESI WINDOWS: KONSOL RUNNER (/ADMIN) VS MULTI-USER", "WINDOWS SESSIONS: RUNNER CONSOLE (/ADMIN) VS MULTI-USER"),
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    fontSize = 9.5.sp,
+                    fontWeight = FontWeight.SemiBold,
+                    letterSpacing = 1.1.sp,
                 )
-                XyPillButton(
-                    text = xy("Layar Kunci Windows", "Windows Lock Screen"),
-                    icon = XyIcons.Windows,
-                    onClick = onLockRemotePc,
-                    primary = false,
-                    compact = true,
-                    modifier = Modifier.weight(1f),
-                )
+                val isConsole = consoleAdminMode && !activeUsername.equals("XyDesk", ignoreCase = true)
+                val isVirtualUser = !isConsole
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    // Card 1: Sesi Konsol Runner (/admin)
+                    Box(
+                        modifier = Modifier
+                            .weight(1f)
+                            .clip(RoundedCornerShape(11.dp))
+                            .background(
+                                if (isConsole) MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.48f)
+                                else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.25f),
+                            )
+                            .border(
+                                if (isConsole) 1.4.dp else 1.dp,
+                                if (isConsole) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outline,
+                                RoundedCornerShape(11.dp),
+                            )
+                            .clickable { onSwitchConsoleMode(true) }
+                            .padding(10.dp),
+                    ) {
+                        Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                modifier = Modifier.fillMaxWidth(),
+                            ) {
+                                Icon(
+                                    XyIcons.Monitor,
+                                    contentDescription = null,
+                                    tint = if (isConsole) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface,
+                                    modifier = Modifier.size(17.dp),
+                                )
+                                Text(
+                                    text = if (isConsole) xy("AKTIF", "ACTIVE") else "/ADMIN",
+                                    fontFamily = FontFamily.Monospace,
+                                    fontSize = 8.5.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = if (isConsole) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
+                                )
+                            }
+                            Text(
+                                text = xy("Konsol Runner / Admin", "Runner / Admin Console"),
+                                color = MaterialTheme.colorScheme.onSurface,
+                                fontSize = 11.5.sp,
+                                fontWeight = FontWeight.SemiBold,
+                                maxLines = 1,
+                            )
+                            Text(
+                                text = xy("Sesi 1 Konsol (runneradmin)", "Session 1 Console (runneradmin)"),
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                fontSize = 9.5.sp,
+                                maxLines = 1,
+                            )
+                        }
+                    }
+
+                    // Card 2: Sesi User RDP Virtual
+                    Box(
+                        modifier = Modifier
+                            .weight(1f)
+                            .clip(RoundedCornerShape(11.dp))
+                            .background(
+                                if (isVirtualUser) MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.48f)
+                                else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.25f),
+                            )
+                            .border(
+                                if (isVirtualUser) 1.4.dp else 1.dp,
+                                if (isVirtualUser) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outline,
+                                RoundedCornerShape(11.dp),
+                            )
+                            .clickable { onSwitchConsoleMode(false) }
+                            .padding(10.dp),
+                    ) {
+                        Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                modifier = Modifier.fillMaxWidth(),
+                            ) {
+                                Icon(
+                                    XyIcons.Users,
+                                    contentDescription = null,
+                                    tint = if (isVirtualUser) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface,
+                                    modifier = Modifier.size(17.dp),
+                                )
+                                Text(
+                                    text = if (isVirtualUser) xy("AKTIF", "ACTIVE") else "MULTI",
+                                    fontFamily = FontFamily.Monospace,
+                                    fontSize = 8.5.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = if (isVirtualUser) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
+                                )
+                            }
+                            Text(
+                                text = xy("Sesi Virtual Multi-User", "Multi-User Virtual Session"),
+                                color = MaterialTheme.colorScheme.onSurface,
+                                fontSize = 11.5.sp,
+                                fontWeight = FontWeight.SemiBold,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
+                            )
+                            Text(
+                                text = xy("Sesi 2 Terpisah (XyDesk)", "Separate Session 2 (XyDesk)"),
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                fontSize = 9.5.sp,
+                                maxLines = 1,
+                            )
+                        }
+                    }
+                }
+
+                // Target Akun Cepat (Runneradmin vs XyDesk + Akun Tersimpan)
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    val isRunnerActive = activeUsername.equals("runneradmin", ignoreCase = true)
+                    Box(
+                        modifier = Modifier
+                            .weight(1f)
+                            .clip(RoundedCornerShape(10.dp))
+                            .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.25f))
+                            .border(
+                                1.dp,
+                                if (isRunnerActive) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outline,
+                                RoundedCornerShape(10.dp),
+                            )
+                            .clickable {
+                                RdpOptions.of(context, deviceId).copy(consoleAdmin = true).write(context, deviceId)
+                                onSwitchUserSession("runneradmin", null, null)
+                            }
+                            .padding(9.dp),
+                    ) {
+                        Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                            Text(
+                                text = "runneradmin (/admin)",
+                                color = MaterialTheme.colorScheme.onSurface,
+                                fontSize = 11.sp,
+                                fontWeight = FontWeight.SemiBold,
+                            )
+                            Text(
+                                text = xy("Pindah ke Konsol Runner", "Switch to Runner Console"),
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                fontSize = 9.5.sp,
+                            )
+                        }
+                    }
+                    val isXyDeskActive = activeUsername.equals("XyDesk", ignoreCase = true)
+                    Box(
+                        modifier = Modifier
+                            .weight(1f)
+                            .clip(RoundedCornerShape(10.dp))
+                            .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.25f))
+                            .border(
+                                1.dp,
+                                if (isXyDeskActive) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outline,
+                                RoundedCornerShape(10.dp),
+                            )
+                            .clickable {
+                                RdpOptions.of(context, deviceId).copy(consoleAdmin = false).write(context, deviceId)
+                                onSwitchUserSession("XyDesk", null, null)
+                            }
+                            .padding(9.dp),
+                    ) {
+                        Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                            Text(
+                                text = "XyDesk (Multi-User)",
+                                color = MaterialTheme.colorScheme.onSurface,
+                                fontSize = 11.sp,
+                                fontWeight = FontWeight.SemiBold,
+                            )
+                            Text(
+                                text = xy("Pindah ke Sesi Virtual 2", "Switch to Virtual Session 2"),
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                fontSize = 9.5.sp,
+                            )
+                        }
+                    }
+                }
+
+                if (savedAccounts.isNotEmpty()) {
+                    savedAccounts.chunked(2).forEach { row ->
+                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            row.forEach { acc ->
+                                val accUser = acc.username.orEmpty()
+                                val isCurrentAcc = !activeUsername.isNullOrBlank() &&
+                                    activeUsername.equals(accUser, ignoreCase = true)
+                                Box(
+                                    modifier = Modifier
+                                        .weight(1f)
+                                        .clip(RoundedCornerShape(10.dp))
+                                        .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.25f))
+                                        .border(
+                                            1.dp,
+                                            if (isCurrentAcc) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outline,
+                                            RoundedCornerShape(10.dp),
+                                        )
+                                        .clickable {
+                                            onSwitchUserSession(accUser, acc.domain, acc.password)
+                                        }
+                                        .padding(9.dp),
+                                ) {
+                                    Row(
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        horizontalArrangement = Arrangement.spacedBy(7.dp),
+                                    ) {
+                                        Icon(
+                                            XyIcons.Users,
+                                            contentDescription = null,
+                                            tint = MaterialTheme.colorScheme.onSurface,
+                                            modifier = Modifier.size(15.dp),
+                                        )
+                                        Column(Modifier.weight(1f)) {
+                                            Text(
+                                                text = acc.label?.takeIf { it.isNotBlank() } ?: accUser,
+                                                color = MaterialTheme.colorScheme.onSurface,
+                                                fontSize = 11.sp,
+                                                fontWeight = FontWeight.SemiBold,
+                                                maxLines = 1,
+                                                overflow = TextOverflow.Ellipsis,
+                                            )
+                                            Text(
+                                                text = accUser,
+                                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                                fontSize = 9.5.sp,
+                                                maxLines = 1,
+                                                overflow = TextOverflow.Ellipsis,
+                                            )
+                                        }
+                                    }
+                                }
+                            }
+                            repeat(2 - row.size) { Spacer(Modifier.weight(1f)) }
+                        }
+                    }
+                }
+
+                if (customUserOpen) {
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clip(RoundedCornerShape(10.dp))
+                            .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.25f))
+                            .border(1.dp, MaterialTheme.colorScheme.outline, RoundedCornerShape(10.dp))
+                            .padding(10.dp),
+                        verticalArrangement = Arrangement.spacedBy(8.dp),
+                    ) {
+                        XyField(
+                            value = customUsername,
+                            onValueChange = { customUsername = it },
+                            label = xy("Username Windows", "Windows Username"),
+                            hint = "runneradmin / Administrator / XyDesk",
+                        )
+                        XyField(
+                            value = customPassword,
+                            onValueChange = { customPassword = it },
+                            label = xy("Password (opsional)", "Password (optional)"),
+                            isPassword = true,
+                        )
+                        XyPillButton(
+                            text = xy("Pindah ke User Ini Sekarang", "Switch to This User Now"),
+                            icon = XyIcons.Users,
+                            onClick = {
+                                val u = customUsername.trim()
+                                if (u.isNotEmpty()) {
+                                    onSwitchUserSession(
+                                        u,
+                                        customDomain.trim().takeIf { it.isNotEmpty() },
+                                        customPassword.takeIf { it.isNotEmpty() },
+                                    )
+                                }
+                            },
+                            compact = true,
+                            modifier = Modifier.fillMaxWidth(),
+                        )
+                    }
+                }
+
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    XyPillButton(
+                        text = xy("Pindah User Lain", "Switch User"),
+                        icon = XyIcons.Users,
+                        onClick = { customUserOpen = !customUserOpen },
+                        primary = customUserOpen,
+                        compact = true,
+                        modifier = Modifier.weight(1f),
+                    )
+                    XyPillButton(
+                        text = xy("Layar Kunci Windows", "Windows Lock Screen"),
+                        icon = XyIcons.Windows,
+                        onClick = onLockRemotePc,
+                        primary = false,
+                        compact = true,
+                        modifier = Modifier.weight(1f),
+                    )
+                }
             }
 
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {

@@ -381,6 +381,17 @@ public class SessionView extends View
 		final boolean isMouse = event.isFromSource(InputDevice.SOURCE_MOUSE);
 		int action = event.getActionMasked();
 
+		if (isMouse && action == MotionEvent.ACTION_HOVER_MOVE)
+		{
+			MotionEvent mapped = mapTouchEvent(event);
+			if (sessionViewListener != null)
+			{
+				sessionViewListener.onSessionViewMouseMove((int)mapped.getX(), (int)mapped.getY());
+			}
+			mapped.recycle();
+			return true;
+		}
+
 		if (isMouse && (action == MotionEvent.ACTION_BUTTON_PRESS ||
 		                action == MotionEvent.ACTION_BUTTON_RELEASE))
 		{

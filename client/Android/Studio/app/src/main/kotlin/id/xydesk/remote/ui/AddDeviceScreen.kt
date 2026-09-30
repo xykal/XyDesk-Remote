@@ -39,9 +39,12 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import com.freerdp.freerdpcore.services.LibFreeRDP
 import id.xydesk.remote.core.ConnectionProfile
+import id.xydesk.remote.core.DiscoveredPcHost
+import id.xydesk.remote.core.LanScanner
 import id.xydesk.remote.core.RdpOptions
 import id.xydesk.remote.core.WakeOnLan
 import id.xydesk.remote.core.XyGpuProfile
+import id.xydesk.remote.core.XyPcStreamEngine
 import id.xydesk.remote.core.XySecurityProtocol
 import id.xydesk.remote.core.XyStreamProfile
 import id.xydesk.remote.core.encodeIpv4ToPcId
@@ -61,6 +64,7 @@ import id.xydesk.remote.ui.components.XyCard
 import id.xydesk.remote.ui.components.XyDialog
 import id.xydesk.remote.ui.components.XyField
 import id.xydesk.remote.ui.components.XyIcons
+import id.xydesk.remote.ui.components.XyOverlay
 import id.xydesk.remote.ui.components.XyPillButton
 import id.xydesk.remote.ui.components.XySectionLabel
 import id.xydesk.remote.ui.components.XySegmented
@@ -235,6 +239,23 @@ fun AddDeviceScreen(
     var audioIndex by remember { mutableStateOf(options.audioMode.ordinal) }
     var confirmDiscard by remember { mutableStateOf(false) }
     var validationPopup by remember { mutableStateOf<String?>(null) }
+    var lanScanModalOpen by remember { mutableStateOf(false) }
+    var lanScanning by remember { mutableStateOf(false) }
+    var lanFoundHosts by remember { mutableStateOf<List<DiscoveredPcHost>>(emptyList()) }
+    var lanSelfIp by remember { mutableStateOf<String?>(null) }
+
+    fun triggerLanScan() {
+        lanScanModalOpen = true
+        if (lanScanning) return
+        lanScanning = true
+        scope.launch {
+            val localIp = withContext(Dispatchers.IO) { LanScanner.detectLocalIpv4Address() }
+            lanSelfIp = localIp
+            val hosts = withContext(Dispatchers.IO) { LanScanner.scanLocalSubnet() }
+            lanFoundHosts = hosts
+            lanScanning = false
+        }
+    }
 
     val initialHost = remember(existing) {
         existing?.let { formatRdpEndpoint(it.host, it.port) }.orEmpty()
@@ -330,13 +351,23 @@ fun AddDeviceScreen(
         }
         error = null
         val finalOptions = if (isPcQuickMode) {
-            options.copy(
+            options.withPcStreamEngine(options.pcStreamEngine).copy(
                 pcConnectMode = true,
+                pcTargetFps = options.pcTargetFps,
+                pcBitrateMbps = options.pcBitrateMbps,
+                rawInputMouse = options.rawInputMouse,
+                udpTransport = options.udpTransport,
+                clipboard = options.clipboard,
+                batterySaver = options.batterySaver,
                 audioMode = XyAudioMode.entries[audioIndex],
+                microphone = false,
+                localDrive = false,
+                camera = false,
                 dynamicResolution = false,
-                h264 = true,
-                asyncUpdate = true,
-                asyncChannels = true,
+                consoleAdmin = true,
+                restrictedAdmin = false,
+                remoteProgram = null,
+                remoteWorkDir = null,
                 securityProtocol = XySecurityProtocol.NLA,
                 tlsSecLevel = 2,
                 gateway = null,
@@ -344,6 +375,7 @@ fun AddDeviceScreen(
         } else {
             options.copy(
                 pcConnectMode = false,
+                gpuProfile = XyGpuProfile.AUTO,
                 audioMode = XyAudioMode.entries[audioIndex],
                 gateway = if (gatewayOn && gwHost.isNotBlank()) {
                     XyGateway(
@@ -401,29 +433,21 @@ fun AddDeviceScreen(
             if (existing == null) {
                 XySegmented(
                     options = listOf(
-                        xy("Koneksi RDP (IP / Domain)", "RDP (IP / Domain)"),
-                        xy("Koneksi PC [Tahap Pengembangan]", "PC Connect [Experimental]"),
+                        xy("Koneksi RDP (Desktop / Server)", "RDP Session (Desktop / Server)"),
+                        xy("Koneksi PC (Direct Stream)", "PC Connect (Direct Stream)"),
                     ),
                     selectedIndex = if (isPcQuickMode) 1 else 0,
                     onSelect = { idx ->
                         val wantPc = idx == 1
                         isPcQuickMode = wantPc
                         if (wantPc) {
-                            options = options.withStreamProfile(XyStreamProfile.ULTRA_LOW_LATENCY)
-                                .copy(
-                                    pcConnectMode = true,
-                                    udpTransport = true,
-                                    h264 = true,
-                                    dynamicResolution = false,
-                                    asyncUpdate = true,
-                                    asyncChannels = true,
-                                    securityProtocol = XySecurityProtocol.NLA,
-                                    tlsSecLevel = 2,
-                                )
+                            options = options.withPcStreamEngine(options.pcStreamEngine)
                         } else {
-                            options = options.copy(
+                            options = options.withStreamProfile(XyStreamProfile.AUTO).copy(
                                 pcConnectMode = false,
+                                gpuProfile = XyGpuProfile.AUTO,
                                 dynamicResolution = true,
+                                consoleAdmin = false,
                             )
                         }
                     },
@@ -432,8 +456,8 @@ fun AddDeviceScreen(
             }
 
             XySectionLabel(
-                if (isPcQuickMode) xy("Identitas PC · Tahap Pengembangan (Tanpa Akun RDP)", "PC Identity · Experimental (No RDP Credentials)")
-                else xy("Alamat", "Address")
+                if (isPcQuickMode) xy("Identitas PC · Direct Stream 1:1 (Tanpa Akun RDP)", "PC Identity · 1:1 Direct Stream (No RDP Account)")
+                else xy("Alamat Host / Server RDP", "RDP Host / Server Address")
             )
             XyCard {
                 XyField(
@@ -460,6 +484,19 @@ fun AddDeviceScreen(
                     },
                     keyboardType = KeyboardType.Uri,
                     imeAction = androidx.compose.ui.text.input.ImeAction.Done,
+                )
+                Spacer(Modifier.height(10.dp))
+                XyPillButton(
+                    text = if (isPcQuickMode) {
+                        xy("Pindai PC Otomatis di Wi-Fi (LAN)", "Auto-Scan PCs on Wi-Fi (LAN)")
+                    } else {
+                        xy("Pindai Host RDP di Jaringan Lokal (LAN)", "Scan RDP Hosts on Local Network (LAN)")
+                    },
+                    onClick = { triggerLanScan() },
+                    icon = XyIcons.Wifi,
+                    primary = false,
+                    compact = true,
+                    modifier = Modifier.fillMaxWidth(),
                 )
                 if (isPcQuickMode) {
                     Spacer(Modifier.height(14.dp))
@@ -566,16 +603,114 @@ fun AddDeviceScreen(
                     }
                 }
 
-                XySectionLabel(xy("Encoder GPU Host & Mode FPS", "Host GPU Encoder & FPS Mode"))
+                XySectionLabel(
+                    xy(
+                        "Mesin Direct PC Stream (Eksklusif Koneksi PC)",
+                        "Direct PC Stream Engine (PC Connect Exclusive)",
+                    ),
+                )
                 XyCard {
                     Text(
-                        xy("Akselerasi Hardware GPU PC (NVENC / AMF / QuickSync)", "PC Hardware GPU Acceleration (NVENC / AMF / QuickSync)"),
+                        xy("Arsitektur Pipeline Direct Stream", "Direct Stream Pipeline Architecture"),
                         style = MaterialTheme.typography.titleSmall,
                     )
                     Text(
                         xy(
-                            "Pilih arsitektur kartu grafis di PC Anda agar encoder hardware bekerja tanpa membebani CPU.",
-                            "Select your PC's graphics card architecture so the hardware encoder runs with zero CPU overhead.",
+                            "Sistem streaming khusus Koneksi PC (tidak tersedia di mode RDP Desktop). Mengunci monitor fisik 1:1 dengan antrean frame nol.",
+                            "Dedicated streaming pipeline for PC Connect (unavailable in RDP Desktop mode). Locks 1:1 to the physical monitor with zero frame queue.",
+                        ),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                    Spacer(Modifier.height(8.dp))
+                    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                        XyPcStreamEngine.entries.forEach { engine ->
+                            val selected = options.pcStreamEngine == engine
+                            Row(
+                                Modifier
+                                    .fillMaxWidth()
+                                    .clip(MaterialTheme.shapes.medium)
+                                    .background(
+                                        if (selected) MaterialTheme.colorScheme.surfaceVariant
+                                        else MaterialTheme.colorScheme.surface,
+                                    )
+                                    .border(
+                                        1.dp,
+                                        if (selected) MaterialTheme.colorScheme.primary
+                                        else MaterialTheme.colorScheme.outline,
+                                        MaterialTheme.shapes.medium,
+                                    )
+                                    .clickable {
+                                        options = options.withPcStreamEngine(engine)
+                                    }
+                                    .padding(horizontal = 14.dp, vertical = 10.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                            ) {
+                                Column(Modifier.weight(1f)) {
+                                    Text(xy(engine.title, engine.titleEn), style = MaterialTheme.typography.titleSmall)
+                                    Text(
+                                        xy(engine.detail, engine.detailEn),
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    )
+                                }
+                                Box(
+                                    Modifier
+                                        .padding(start = 8.dp)
+                                        .clip(XyPill)
+                                        .border(1.dp, MaterialTheme.colorScheme.outlineVariant, XyPill)
+                                        .padding(horizontal = 8.dp, vertical = 3.dp),
+                                ) {
+                                    Text(
+                                        text = engine.badge,
+                                        fontFamily = FontFamily.Monospace,
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = if (selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
+                                    )
+                                }
+                            }
+                        }
+                    }
+
+                    Spacer(Modifier.height(14.dp))
+                    Text(
+                        xy("Target Kecepatan Frame (Direct Pacing)", "Target Frame Rate (Direct Pacing)"),
+                        style = MaterialTheme.typography.titleSmall,
+                    )
+                    Spacer(Modifier.height(6.dp))
+                    val fpsChoices = listOf(30, 60, 90, 120)
+                    XySegmented(
+                        options = fpsChoices.map { "$it FPS" },
+                        selectedIndex = fpsChoices.indexOf(options.pcTargetFps).coerceAtLeast(1),
+                        onSelect = { idx ->
+                            options = options.copy(pcTargetFps = fpsChoices[idx], pcConnectMode = true)
+                        },
+                        modifier = Modifier.fillMaxWidth(),
+                    )
+
+                    Spacer(Modifier.height(14.dp))
+                    Text(
+                        xy("Target Bitrate Video: {0} Mbps", "Target Video Bitrate: {0} Mbps", options.pcBitrateMbps),
+                        style = MaterialTheme.typography.titleSmall,
+                    )
+                    Spacer(Modifier.height(4.dp))
+                    XySlider(
+                        value = options.pcBitrateMbps.toFloat(),
+                        onValueChange = { options = options.copy(pcBitrateMbps = it.toInt().coerceIn(5, 80)) },
+                        valueRange = 5f..80f,
+                        steps = 14,
+                    )
+
+                    Spacer(Modifier.height(12.dp))
+                    Text(
+                        xy("Binding Hardware GPU Encoder Host (NVENC / AMF / QuickSync)", "Host Hardware GPU Encoder Binding (NVENC / AMF / QuickSync)"),
+                        style = MaterialTheme.typography.titleSmall,
+                    )
+                    Text(
+                        xy(
+                            "Eksklusif Koneksi PC: ikat langsung pipeline encode ke arsitektur kartu grafis PC Anda.",
+                            "PC Connect Exclusive: bind the encode pipeline directly to your PC graphics card architecture.",
                         ),
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -613,62 +748,18 @@ fun AddDeviceScreen(
                             }
                         }
                     }
-                    Spacer(Modifier.height(12.dp))
-                    Text(
-                        xy("Target Pacing & Latensi Streaming", "Target Pacing & Streaming Latency"),
-                        style = MaterialTheme.typography.titleSmall,
-                    )
-                    Spacer(Modifier.height(6.dp))
-                    val pcModes = listOf(
-                        XyStreamProfile.ULTRA_LOW_LATENCY to xy("Gaming FPS (Ultra-Low Latency)", "FPS Gaming (Ultra-Low Latency)"),
-                        XyStreamProfile.BALANCED to xy("Desktop 1:1 (AVC444 Tajam)", "1:1 Desktop (Crisp AVC444)"),
-                        XyStreamProfile.DATA_SAVER to xy("Hemat Jaringan (Seluler)", "Network Saver (Cellular)"),
-                    )
-                    pcModes.forEach { (preset, labelText) ->
-                        val selected = options.streamProfile == preset
-                        Row(
-                            Modifier
-                                .fillMaxWidth()
-                                .padding(vertical = 3.dp)
-                                .clip(MaterialTheme.shapes.medium)
-                                .background(
-                                    if (selected) MaterialTheme.colorScheme.surfaceVariant
-                                    else MaterialTheme.colorScheme.surface,
-                                )
-                                .border(
-                                    1.dp,
-                                    if (selected) MaterialTheme.colorScheme.outlineVariant
-                                    else MaterialTheme.colorScheme.outline,
-                                    MaterialTheme.shapes.medium,
-                                )
-                                .clickable {
-                                    options = options.withStreamProfile(preset).copy(
-                                        pcConnectMode = true,
-                                        udpTransport = true,
-                                        asyncUpdate = true,
-                                        asyncChannels = true,
-                                        securityProtocol = XySecurityProtocol.NLA,
-                                        tlsSecLevel = 2,
-                                    )
-                                }
-                                .padding(horizontal = 14.dp, vertical = 10.dp),
-                            verticalAlignment = Alignment.CenterVertically,
-                        ) {
-                            Text(labelText, style = MaterialTheme.typography.titleSmall)
-                        }
-                    }
                     Spacer(Modifier.height(10.dp))
                     Text(
                         xy(
-                            "Info Layar: Resolusi dan DPI dikunci 1:1 mengikuti monitor fisik PC (Native DXGI Desktop Duplication) dan tidak perlu diubah manual.",
-                            "Display Info: Resolution and DPI are locked 1:1 to the physical PC monitor (Native DXGI Desktop Duplication) and cannot be manually overridden.",
+                            "Info Layar: Resolusi dan DPI dikunci 1:1 mengikuti monitor konsol fisik PC (DXGI Desktop Duplication). Fitur multi-user virtual RDP, Dynamic Resolution DISP, dan RD Gateway dinonaktifkan pada mode ini.",
+                            "Display Info: Resolution and DPI are locked 1:1 to the physical PC console monitor (DXGI Desktop Duplication). Virtual multi-user RDP, DISP Dynamic Resolution, and RD Gateway are disabled in this mode.",
                         ),
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                 }
 
-                XySectionLabel(xy("Input Game FPS, Transport & Daya", "FPS Game Input, Transport & Power"))
+                XySectionLabel(xy("Input Game FPS, Transport & Wake-on-LAN PC", "FPS Game Input, Transport & PC Wake-on-LAN"))
                 XyCard {
                     XyToggleRow(
                         title = xy("Mouse Relatif RawInput (Rotasi 360° Game FPS)", "RawInput Relative Mouse (360° FPS Camera)"),
@@ -719,6 +810,13 @@ fun AddDeviceScreen(
                         checked = options.batterySaver,
                         onCheckedChange = { options = options.copy(batterySaver = it) },
                         leading = XyIcons.Sliders,
+                    )
+                    Spacer(Modifier.height(10.dp))
+                    XyField(
+                        value = options.macAddress.orEmpty(),
+                        onValueChange = { options = options.copy(macAddress = it.trim().ifEmpty { null }) },
+                        label = xy("MAC Address PC untuk Wake-on-LAN (opsional)", "PC MAC Address for Wake-on-LAN (optional)"),
+                        hint = "AA:BB:CC:DD:EE:FF",
                     )
                 }
             } else {
@@ -1160,52 +1258,6 @@ fun AddDeviceScreen(
                         color = MaterialTheme.colorScheme.primary,
                     )
                     Spacer(Modifier.height(4.dp))
-                }
-                Spacer(Modifier.height(8.dp))
-                Text(
-                    xy("Penyesuaian GPU Host PC (NVIDIA, AMD, Intel, CPU)", "Host PC GPU Encoder Tuning (NVIDIA, AMD, Intel, CPU)"),
-                    style = MaterialTheme.typography.titleSmall,
-                )
-                Text(
-                    xy(
-                        "Sesuaikan pipeline codec, kompresi, dan antrean frame dengan jenis kartu grafis pada PC target untuk game/FPS.",
-                        "Match codec pipeline, compression, and frame queues to the target PC's graphics card for gaming/FPS.",
-                    ),
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-                Spacer(Modifier.height(8.dp))
-                Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                    XyGpuProfile.entries.forEach { gpu ->
-                        val active = options.gpuProfile == gpu
-                        Row(
-                            Modifier
-                                .fillMaxWidth()
-                                .clip(MaterialTheme.shapes.medium)
-                                .background(
-                                    if (active) MaterialTheme.colorScheme.surfaceVariant
-                                    else MaterialTheme.colorScheme.surface,
-                                )
-                                .border(
-                                    1.dp,
-                                    if (active) MaterialTheme.colorScheme.outlineVariant
-                                    else MaterialTheme.colorScheme.outline,
-                                    MaterialTheme.shapes.medium,
-                                )
-                                .clickable { options = options.withGpuProfile(gpu) }
-                                .padding(horizontal = 14.dp, vertical = 10.dp),
-                            verticalAlignment = Alignment.CenterVertically,
-                        ) {
-                            Column(Modifier.weight(1f)) {
-                                Text(xy(gpu.title, gpu.titleEn), style = MaterialTheme.typography.titleSmall)
-                                Text(
-                                    xy(gpu.detail, gpu.detailEn),
-                                    style = MaterialTheme.typography.bodySmall,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                )
-                            }
-                        }
-                    }
                 }
                 Spacer(Modifier.height(8.dp))
                 XyToggleRow(
@@ -1706,6 +1758,103 @@ fun AddDeviceScreen(
             onDismiss = { validationPopup = null },
         )
     }
+
+    if (lanScanModalOpen) {
+        XyOverlay(
+            title = if (isPcQuickMode) {
+                xy("Pindai PC di Jaringan Wi-Fi (LAN)", "Scan PCs on Wi-Fi Network (LAN)")
+            } else {
+                xy("Pindai Host RDP di Jaringan Lokal", "Scan RDP Hosts on Local Network")
+            },
+            onDismiss = { lanScanModalOpen = false },
+        ) {
+            Text(
+                text = if (!lanSelfIp.isNullOrBlank()) {
+                    xy("IP HP Anda: {0} · Memindai port 3389 di subnet lokal", "Your Phone IP: {0} · Scanning port 3389 on local subnet", lanSelfIp!!)
+                } else {
+                    xy("Pastikan HP dan PC berada di jaringan Wi-Fi / Hotspot yang sama.", "Make sure your phone and PC are on the same Wi-Fi / Hotspot network.")
+                },
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            if (lanScanning) {
+                Text(
+                    text = xy("Memindai 254 alamat lokal secara paralel...", "Scanning 254 local addresses in parallel..."),
+                    style = MaterialTheme.typography.titleSmall,
+                    color = MaterialTheme.colorScheme.primary,
+                )
+            } else if (lanFoundHosts.isEmpty()) {
+                Text(
+                    text = xy(
+                        "Belum ditemukan PC aktif di subnet ini. Pastikan PC menyala dan XyDeskHost / Remote Desktop (Port 3389) sudah aktif.",
+                        "No active PC found on this subnet yet. Ensure the PC is powered on and XyDeskHost / Remote Desktop (Port 3389) is enabled.",
+                    ),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            } else {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    lanFoundHosts.forEach { item ->
+                        Row(
+                            Modifier
+                                .fillMaxWidth()
+                                .clip(MaterialTheme.shapes.medium)
+                                .background(MaterialTheme.colorScheme.surfaceVariant)
+                                .border(1.dp, MaterialTheme.colorScheme.outlineVariant, MaterialTheme.shapes.medium)
+                                .clickable {
+                                    host = if (isPcQuickMode) item.pcId else "${item.ip}:${item.port}"
+                                    if (label.isBlank()) {
+                                        label = if (isPcQuickMode) "PC ${item.pcId.takeLast(4)}" else "RDP ${item.ip}"
+                                    }
+                                    lanScanModalOpen = false
+                                }
+                                .padding(horizontal = 14.dp, vertical = 11.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                        ) {
+                            Column(Modifier.weight(1f)) {
+                                Text(
+                                    text = if (isPcQuickMode) "ID PC: ${item.pcId}" else "${item.ip}:${item.port}",
+                                    style = MaterialTheme.typography.titleSmall,
+                                    fontFamily = FontFamily.Monospace,
+                                )
+                                Text(
+                                    text = if (isPcQuickMode) {
+                                        xy("Endpoint: {0}:{1} · Ketuk untuk pakai ID ini", "Endpoint: {0}:{1} · Tap to use this ID", item.ip, item.port)
+                                    } else {
+                                        xy("ID PC: {0} · Ketuk untuk pakai IP ini", "PC ID: {0} · Tap to use this IP", item.pcId)
+                                    },
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                )
+                            }
+                            Text(
+                                text = "${item.rttMs} ms",
+                                fontFamily = FontFamily.Monospace,
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.primary,
+                            )
+                        }
+                    }
+                }
+            }
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                XyPillButton(
+                    text = xy("Pindai Ulang", "Rescan"),
+                    onClick = { triggerLanScan() },
+                    primary = false,
+                    compact = true,
+                    modifier = Modifier.weight(1f),
+                )
+                XyPillButton(
+                    text = xy("Tutup", "Close"),
+                    onClick = { lanScanModalOpen = false },
+                    compact = true,
+                    modifier = Modifier.weight(1f),
+                )
+            }
+        }
+    }
     }
 }
 
@@ -1751,9 +1900,19 @@ private fun StorageAccessRow() {
         )
         Spacer(Modifier.height(4.dp))
         Text(
-            "Path: $path",
+            "Path HP: $path",
             style = MaterialTheme.typography.bodySmall,
+            fontFamily = FontFamily.Monospace,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        Spacer(Modifier.height(4.dp))
+        Text(
+            xy(
+                "Cara transfer file di PC: Buka File Explorer Windows -> This PC -> klik drive 'XyDesk on Android' (atau ketik \\\\tsclient\\XyDesk di address bar) untuk salin/tempel file dua arah.",
+                "How to transfer files on PC: Open Windows File Explorer -> This PC -> open 'XyDesk on Android' drive (or type \\\\tsclient\\XyDesk in the address bar) for two-way file copy/paste.",
+            ),
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.primary,
         )
         if (!granted) {
             Spacer(Modifier.height(8.dp))

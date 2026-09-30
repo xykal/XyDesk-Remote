@@ -229,4 +229,25 @@ class RdpUriTest {
         assertEquals("C:\\Users\\Administrator", p["shell-dir"])
         assertEquals("2", p["compression-level"])
     }
+
+    @Test
+    fun pcConnectModeMengirimAdminDanMemblokirFiturEksklusifRdp() {
+        val opts = RdpOptions(
+            pcConnectMode = true,
+            dynamicResolution = true,
+            localDrive = true,
+            camera = true,
+            microphone = true,
+            remoteProgram = "cmd.exe",
+            gateway = XyGateway(host = "gw.corp.id"),
+        ).withPcStreamEngine(XyPcStreamEngine.DIRECT_GAME_ULTRA)
+        val p = params(simple(), opts)
+        assertTrue(p.containsKey("admin"))
+        assertFalse(p.containsKey("dynamic-resolution"))
+        assertFalse(p.containsKey("drive"))
+        assertFalse(p.containsKey("dvc"))
+        assertFalse(p.containsKey("microphone"))
+        assertFalse(p.containsKey("shell"))
+        assertFalse(p.containsKey("gateway"))
+    }
 }
