@@ -420,10 +420,10 @@ data class RdpOptions(
     /** Label singkat codec aktif untuk indikator telemetri. */
     fun activeCodecLabel(): String {
         val base = when {
-            !h264 -> "RFX/GDI"
+            !h264 -> "RFX"
             lowBandwidth || streamProfile == XyStreamProfile.ULTRA_LOW_LATENCY ||
-                streamProfile == XyStreamProfile.DATA_SAVER -> "H.264 AVC420"
-            else -> "H.264 AVC444"
+                streamProfile == XyStreamProfile.DATA_SAVER -> "AVC420"
+            else -> "AVC444"
         }
         val gpuTag = when (gpuProfile) {
             XyGpuProfile.NVIDIA -> "NVENC"
