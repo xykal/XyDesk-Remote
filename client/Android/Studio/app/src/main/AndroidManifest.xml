@@ -13,7 +13,6 @@
          ini tidak masuk kategori foreground bawaan. -->
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_SPECIAL_USE" />
-    <uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW" />
 
     <application
         android:name="id.xydesk.remote.XyApp"
@@ -51,13 +50,12 @@
             </intent-filter>
         </activity>
 
-        <!-- Layar sesi XyDesk (surface + kontrol Compose + Picture-in-Picture). -->
+        <!-- Layar sesi XyDesk (surface + kontrol Compose). -->
         <activity
             android:name="id.xydesk.remote.ui.XyDeskSessionActivity"
             android:exported="false"
             android:label="Sesi RDP"
             android:theme="@style/Theme.XyDeskHome"
-            android:supportsPictureInPicture="true"
             android:windowSoftInputMode="adjustNothing"
             android:configChanges="orientation|keyboardHidden|screenSize|smallestScreenSize|density|screenLayout" />
 

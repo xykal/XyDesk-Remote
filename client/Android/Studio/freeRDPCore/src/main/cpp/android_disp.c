@@ -103,8 +103,6 @@ BOOL android_disp_send_monitor_layout_with_scale(androidContext* afc, UINT32 wid
 	layout.Top = layout.Left = 0;
 	layout.Width = width;
 	layout.Height = height;
-	layout.PhysicalWidth = 0;
-	layout.PhysicalHeight = 0;
 	layout.Orientation = freerdp_settings_get_uint16(settings, FreeRDP_DesktopOrientation);
 	layout.DesktopScaleFactor = desktopScaleFactor != 0
 	                                ? desktopScaleFactor
@@ -115,6 +113,13 @@ BOOL android_disp_send_monitor_layout_with_scale(androidContext* afc, UINT32 wid
 	if ((layout.DeviceScaleFactor != 100) && (layout.DeviceScaleFactor != 140) &&
 	    (layout.DeviceScaleFactor != 180))
 		layout.DeviceScaleFactor = 100;
+
+	/* MS-RDPEDISP 2.2.2.2.1: PhysicalWidth and PhysicalHeight MUST be in 10..1000 mm
+	 * when DesktopScaleFactor / DeviceScaleFactor are specified. */
+	const UINT32 physW = (width * 254U) / (96U * 10U);
+	const UINT32 physH = (height * 254U) / (96U * 10U);
+	layout.PhysicalWidth = (physW < 10U) ? 10U : ((physW > 1000U) ? 1000U : physW);
+	layout.PhysicalHeight = (physH < 10U) ? 10U : ((physH > 1000U) ? 1000U : physH);
 
 	UINT rc = disp->SendMonitorLayout(disp, 1, &layout);
 	if (rc != CHANNEL_RC_OK)

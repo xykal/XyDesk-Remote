@@ -22,9 +22,6 @@ object XySessionRegistry {
         val bitmapProvider: (() -> android.graphics.Bitmap?)? = null,
     )
 
-    @Volatile
-    var floatingMiniActive: Boolean = false
-
     private val items = CopyOnWriteArrayList<Live>()
     private val activeIds = ConcurrentHashMap.newKeySet<String>()
 

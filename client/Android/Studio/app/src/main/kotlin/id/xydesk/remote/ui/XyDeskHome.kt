@@ -514,34 +514,6 @@ fun XyDeskHome(
         )
     }
 
-    // Jendela Mengambang internal (aktif saat berpindah dari sesi ke Beranda)
-    var liveFloatingSessions by remember { mutableStateOf(XySessionRegistry.list()) }
-    var floatingActive by remember { mutableStateOf(XySessionRegistry.floatingMiniActive) }
-    LaunchedEffect(Unit) {
-        while (true) {
-            liveFloatingSessions = XySessionRegistry.list()
-            floatingActive = XySessionRegistry.floatingMiniActive
-            kotlinx.coroutines.delay(500)
-        }
-    }
-    val activeFloatingSession = liveFloatingSessions.firstOrNull()
-    if (floatingActive && activeFloatingSession != null) {
-        XyDraggableFloatingMiniWindow(
-            title = activeFloatingSession.label,
-            bitmapProvider = { activeFloatingSession.bitmapProvider?.invoke() },
-            onRestoreFull = {
-                XySessionRegistry.floatingMiniActive = false
-                floatingActive = false
-                activeFloatingSession.open()
-            },
-            onOpenHomeWithMini = null,
-            onCloseMini = {
-                XySessionRegistry.floatingMiniActive = false
-                floatingActive = false
-            },
-        )
-    }
-
     // Pesan app sendiri — paling atas supaya tidak ketutup drawer/panel.
     XyNoticeHost(state = notice, modifier = Modifier.align(Alignment.TopCenter))
     }

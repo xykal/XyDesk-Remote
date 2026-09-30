@@ -1,11 +1,9 @@
 package id.xydesk.remote.ui
 
-import android.app.PictureInPictureParams
 import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
 import android.content.Intent
-import android.content.res.Configuration
 import android.hardware.Sensor
 import android.hardware.SensorEvent
 import android.hardware.SensorEventListener
@@ -19,10 +17,6 @@ import android.os.Handler
 import android.os.Looper
 import android.os.SystemClock
 import android.util.Log
-import android.util.Rational
-import kotlinx.coroutines.flow.MutableStateFlow
-import kotlinx.coroutines.flow.StateFlow
-import kotlinx.coroutines.flow.asStateFlow
 import id.xydesk.remote.security.CrashLog
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
@@ -85,9 +79,6 @@ class XyDeskSessionActivity : ComponentActivity() {
      */
     var backHandler: (() -> Boolean)? = null
     var appPrefs: AppPrefs? = null
-
-    private val _inPipMode = MutableStateFlow(false)
-    val inPipMode: StateFlow<Boolean> = _inPipMode.asStateFlow()
 
     var onExternalPointerDelta: ((Float, Float) -> Unit)? = null
     var onExternalScrollUnits: ((Int) -> Unit)? = null
@@ -152,39 +143,6 @@ class XyDeskSessionActivity : ComponentActivity() {
             sm?.unregisterListener(gyroListener)
             gyroActive = false
         }
-    }
-
-    fun enterPipMonitorMode(): Boolean {
-        if (isFinishing || isDestroyed) return false
-        // Coba langsung tampilkan jendela mengambang (tanpa mengecek Settings.canDrawOverlays
-        // lebih dulu) agar izin dari AppsPerms langsung jalan tanpa melempar user ke
-        // halaman pengaturan "Display over other apps" yang dibatasi ROM.
-        val shown = XyFloatingOverlay.show(
-            context = this,
-            title = sessionLabel ?: "XyDesk Remote",
-            bitmapProvider = { if (::controller.isInitialized) controller.peekBitmap() else null },
-            onRestoreSession = {
-                val reopen = Intent(applicationContext, XyDeskSessionActivity::class.java)
-                    .putExtras(intent)
-                    .addFlags(Intent.FLAG_ACTIVITY_REORDER_TO_FRONT or Intent.FLAG_ACTIVITY_NEW_TASK)
-                runCatching { applicationContext.startActivity(reopen) }
-            },
-        )
-        if (shown) {
-            XySessionService.start(this, sessionLabel, ping = true)
-            runCatching { moveTaskToBack(true) }
-            return true
-        }
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            val nativeOk = runCatching {
-                val params = PictureInPictureParams.Builder()
-                    .setAspectRatio(Rational(16, 9))
-                    .build()
-                enterPictureInPictureMode(params)
-            }.getOrDefault(false)
-            if (nativeOk) return true
-        }
-        return false
     }
 
     fun applyWindowSecurityFlags() {
@@ -415,7 +373,6 @@ class XyDeskSessionActivity : ComponentActivity() {
 
     override fun onResume() {
         super.onResume()
-        XyFloatingOverlay.dismiss()
         applyWindowSecurityFlags()
         syncPhoneClipboardToRemote()
     }
@@ -425,21 +382,6 @@ class XyDeskSessionActivity : ComponentActivity() {
         if (hasFocus) {
             syncPhoneClipboardToRemote()
         }
-    }
-
-    override fun onUserLeaveHint() {
-        super.onUserLeaveHint()
-        if (manager.state.value is SessionState.Connected && SessionPrefs(this).autoPipOnBackground) {
-            enterPipMonitorMode()
-        }
-    }
-
-    override fun onPictureInPictureModeChanged(
-        isInPictureInPictureMode: Boolean,
-        newConfig: Configuration,
-    ) {
-        super.onPictureInPictureModeChanged(isInPictureInPictureMode, newConfig)
-        _inPipMode.value = isInPictureInPictureMode
     }
 
     override fun onStop() {
@@ -461,7 +403,6 @@ class XyDeskSessionActivity : ComponentActivity() {
 
     override fun onDestroy() {
         super.onDestroy()
-        XyFloatingOverlay.dismiss()
         setGyroMouseActive(false)
         sessionId?.let { XySessionRegistry.remove(it) }
         bgHandler.removeCallbacks(bgDisconnect)

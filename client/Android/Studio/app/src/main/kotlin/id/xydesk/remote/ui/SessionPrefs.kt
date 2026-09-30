@@ -136,10 +136,10 @@ class SessionPrefs(context: Context) {
         get() = input.getBoolean(KEY_TELEMETRY_PILL, true)
         set(v) = input.edit().putBoolean(KEY_TELEMETRY_PILL, v).apply()
 
-    /** Masuk ke jendela mengambang Picture-in-Picture (PiP) saat tombol Home ditekan. */
-    var autoPipOnBackground: Boolean
-        get() = input.getBoolean(KEY_AUTO_PIP, false)
-        set(v) = input.edit().putBoolean(KEY_AUTO_PIP, v).apply()
+    /** Tukar fungsi klik kiri dan klik kanan mouse (Mouse Left/Right Switch). */
+    var swapMouseButtons: Boolean
+        get() = input.getBoolean(KEY_SWAP_MOUSE, false)
+        set(v) = input.edit().putBoolean(KEY_SWAP_MOUSE, v).apply()
 
     var showLeft: Boolean
         get() = input.getBoolean(KEY_BTN_LEFT, true)
@@ -161,10 +161,10 @@ class SessionPrefs(context: Context) {
         get() = input.getBoolean(KEY_BTN_SWITCH, true)
         set(v) = input.edit().putBoolean(KEY_BTN_SWITCH, v).apply()
 
-    /** Default diameter for newly created/reset HUD buttons; per-button sizing stays intact. */
+    /** Default diameter for newly created/reset HUD buttons; compact 46dp default. */
     var hudButtonSize: Float
-        get() = input.getFloat(KEY_HUD_SIZE, 76f).coerceIn(56f, 80f)
-        set(v) = input.edit().putFloat(KEY_HUD_SIZE, v.coerceIn(56f, 80f)).apply()
+        get() = input.getFloat(KEY_HUD_SIZE, 46f).coerceIn(34f, 64f)
+        set(v) = input.edit().putFloat(KEY_HUD_SIZE, v.coerceIn(34f, 64f)).apply()
 
     // ---- per perangkat ----
 
@@ -202,6 +202,13 @@ class SessionPrefs(context: Context) {
         device.edit().putString("$deviceId.hudkeys", HudKey.encode(keys)).apply()
     }
 
+    fun customHudKeys(deviceId: String): List<HudKey>? =
+        HudKey.decode(device.getString("$deviceId.hudkeys.custom", null))
+
+    fun setCustomHudKeys(deviceId: String, keys: List<HudKey>) {
+        device.edit().putString("$deviceId.hudkeys.custom", HudKey.encode(keys)).apply()
+    }
+
     fun hudProfile(deviceId: String): HudProfilePreset =
         HudProfilePreset.entries.getOrElse(device.getInt("$deviceId.hudprofile", 0)) {
             HudProfilePreset.STANDARD
@@ -230,13 +237,13 @@ class SessionPrefs(context: Context) {
         private const val KEY_GAMEPAD = "gamepad_enabled"
         private const val KEY_GYRO_MOUSE = "gyro_mouse"
         private const val KEY_TELEMETRY_PILL = "telemetry_pill"
-        private const val KEY_AUTO_PIP = "auto_pip"
+        private const val KEY_SWAP_MOUSE = "swap_mouse_buttons"
         private const val KEY_BTN_LEFT = "btn_left"
         private const val KEY_BTN_RIGHT = "btn_right"
         private const val KEY_BTN_MIDDLE = "btn_middle"
         private const val KEY_BTN_SCROLL = "btn_scroll"
         private const val KEY_BTN_SWITCH = "btn_switch"
-        private const val KEY_HUD_SIZE = "hud_size"
+        private const val KEY_HUD_SIZE = "hud_size_v2"
     }
 }
 

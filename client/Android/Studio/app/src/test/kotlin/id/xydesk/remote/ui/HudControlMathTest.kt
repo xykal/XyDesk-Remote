@@ -149,11 +149,11 @@ class HudControlMathTest {
     fun hudProfilePresetsProduceValidNonEmptyLayoutsAndMappedKeys() {
         val mapper = KeyboardMapper()
         HudProfilePreset.entries.forEach { preset ->
-            val keys = HudKey.presetLayout(preset, 68f)
+            val keys = HudKey.presetLayout(preset, 46f)
             assertTrue("Preset $preset produced empty layout", keys.isNotEmpty())
             assertTrue("Preset $preset exceeded 36 keys", keys.size <= 36)
             keys.forEach { key ->
-                assertEquals(68f, key.size, 0.001f)
+                assertTrue("Button size out of compact range: ${key.size}", key.size in HudKey.MIN_SIZE..54f)
                 assertTrue(key.x in 0f..1f)
                 assertTrue(key.y in 0f..1f)
                 if (key.kind == HudKind.KEY) {
@@ -183,5 +183,25 @@ class HudControlMathTest {
         val step1 = inertialScrollDecayStep(20f, friction = 0.85f)
         assertEquals(17f, step1, 0.01f)
         assertEquals(0f, inertialScrollDecayStep(0.5f, friction = 0.85f), 0.001f)
+    }
+
+    @Test
+    fun iconFirstHudGlyphResolvesVectorIconsForWindowsMouseAndNavigationKeys() {
+        val winKey = HudKey(id = "win", kind = HudKind.KEY, label = "Win", keyCode = KeyEvent.KEYCODE_META_LEFT)
+        val leftMouse = HudKey(id = "ml", kind = HudKind.MOUSE_LEFT, label = "Kiri")
+        val rightMouse = HudKey(id = "mr", kind = HudKind.MOUSE_RIGHT, label = "Kanan")
+        val midMouse = HudKey(id = "mm", kind = HudKind.MOUSE_MIDDLE, label = "Tengah")
+        val swapMouse = HudKey(id = "ms", kind = HudKind.MOUSE_SWAP, label = "Kiri⇄Kanan")
+        val enterKey = HudKey(id = "ent", kind = HudKind.KEY, label = "Enter", keyCode = KeyEvent.KEYCODE_ENTER)
+        val upKey = HudKey(id = "up", kind = HudKind.KEY, label = "↑", keyCode = KeyEvent.KEYCODE_DPAD_UP)
+
+        assertTrue(hudIconFor(winKey) != null)
+        assertTrue(hudIconFor(leftMouse) != null)
+        assertTrue(hudIconFor(rightMouse) != null)
+        assertTrue(hudIconFor(midMouse) != null)
+        assertTrue(hudIconFor(swapMouse) != null)
+        assertTrue(hudIconFor(enterKey) != null)
+        assertTrue(hudIconFor(upKey) != null)
+        assertTrue(HudProfilePreset.entries.contains(HudProfilePreset.CUSTOM))
     }
 }

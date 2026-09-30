@@ -128,20 +128,46 @@ object XyIcons {
         moveTo(20f, 15f); lineTo(6f, 15f); moveTo(9f, 12f); lineTo(6f, 15f); lineTo(9f, 18f)
     }
 
-    /** Aksi klik kanan: garis bersih tanpa blok putih heksagon. */
-    val ClickRight: ImageVector = xyIcon("XyClickRight") {
-        moveTo(6f, 4f); lineTo(18f, 4f); lineTo(18f, 20f); lineTo(6f, 20f); close()
-        moveTo(6f, 10f); lineTo(18f, 10f)
-        moveTo(12f, 4f); lineTo(12f, 10f)
-        moveTo(15f, 7f); lineTo(15.01f, 7f)
-    }
+    /** Aksi klik kanan: siluet mouse dengan tombol kanan terisi penuh. */
+    val ClickRight: ImageVector = xyTwoPath(
+        name = "XyClickRight",
+        outline = {
+            moveTo(6.5f, 9f)
+            curveTo(6.5f, 5.5f, 8.8f, 3.5f, 12f, 3.5f)
+            curveTo(15.2f, 3.5f, 17.5f, 5.5f, 17.5f, 9f)
+            lineTo(17.5f, 15f)
+            curveTo(17.5f, 18.5f, 15.2f, 20.5f, 12f, 20.5f)
+            curveTo(8.8f, 20.5f, 6.5f, 18.5f, 6.5f, 15f)
+            close()
+            moveTo(6.5f, 10.5f); lineTo(17.5f, 10.5f)
+            moveTo(12f, 3.5f); lineTo(12f, 10.5f)
+        },
+        solid = {
+            moveTo(12.4f, 4.2f)
+            curveTo(14.9f, 4.4f, 16.8f, 6.1f, 16.8f, 9f)
+            lineTo(16.8f, 10.1f)
+            lineTo(12.4f, 10.1f)
+            close()
+        },
+    )
 
-    /** Aksi klik tengah: garis bersih tanpa blok putih heksagon. */
-    val ClickMiddle: ImageVector = xyIcon("XyClickMiddle") {
-        moveTo(6f, 4f); lineTo(18f, 4f); lineTo(18f, 20f); lineTo(6f, 20f); close()
-        moveTo(6f, 10f); lineTo(18f, 10f)
-        moveTo(12f, 5.5f); lineTo(12f, 8.5f)
-    }
+    /** Aksi klik tengah: siluet mouse dengan roda tengah terisi. */
+    val ClickMiddle: ImageVector = xyTwoPath(
+        name = "XyClickMiddle",
+        outline = {
+            moveTo(6.5f, 9f)
+            curveTo(6.5f, 5.5f, 8.8f, 3.5f, 12f, 3.5f)
+            curveTo(15.2f, 3.5f, 17.5f, 5.5f, 17.5f, 9f)
+            lineTo(17.5f, 15f)
+            curveTo(17.5f, 18.5f, 15.2f, 20.5f, 12f, 20.5f)
+            curveTo(8.8f, 20.5f, 6.5f, 18.5f, 6.5f, 15f)
+            close()
+            moveTo(6.5f, 10.5f); lineTo(17.5f, 10.5f)
+        },
+        solid = {
+            moveTo(10.7f, 5.2f); lineTo(13.3f, 5.2f); lineTo(13.3f, 9.4f); lineTo(10.7f, 9.4f); close()
+        },
+    )
 
     val Shot: ImageVector = xyIcon("XyShot") {
         moveTo(3f, 7.5f); lineTo(8f, 7.5f); lineTo(9.5f, 5f); lineTo(14.5f, 5f)
@@ -336,12 +362,158 @@ object XyIcons {
         moveTo(14f, 14f); lineTo(20f, 14f); lineTo(20f, 20f); lineTo(14f, 20f); close()
     }
 
-    /** Aksi klik kiri: garis bersih tanpa blok putih heksagon. */
-    val ClickLeft: ImageVector = xyIcon("XyClickLeft") {
-        moveTo(6f, 4f); lineTo(18f, 4f); lineTo(18f, 20f); lineTo(6f, 20f); close()
-        moveTo(6f, 10f); lineTo(18f, 10f)
+    /** Aksi klik kiri: siluet mouse dengan tombol kiri terisi penuh. */
+    val ClickLeft: ImageVector = xyTwoPath(
+        name = "XyClickLeft",
+        outline = {
+            moveTo(6.5f, 9f)
+            curveTo(6.5f, 5.5f, 8.8f, 3.5f, 12f, 3.5f)
+            curveTo(15.2f, 3.5f, 17.5f, 5.5f, 17.5f, 9f)
+            lineTo(17.5f, 15f)
+            curveTo(17.5f, 18.5f, 15.2f, 20.5f, 12f, 20.5f)
+            curveTo(8.8f, 20.5f, 6.5f, 18.5f, 6.5f, 15f)
+            close()
+            moveTo(6.5f, 10.5f); lineTo(17.5f, 10.5f)
+            moveTo(12f, 3.5f); lineTo(12f, 10.5f)
+        },
+        solid = {
+            moveTo(11.6f, 4.2f)
+            curveTo(9.1f, 4.4f, 7.2f, 6.1f, 7.2f, 9f)
+            lineTo(7.2f, 10.1f)
+            lineTo(11.6f, 10.1f)
+            close()
+        },
+    )
+
+    /** Tukar klik kiri & kanan mouse (Mouse Left/Right Swap). */
+    val MouseSwap: ImageVector = xyIcon("XyMouseSwap") {
+        moveTo(7f, 9.5f)
+        curveTo(7f, 6.2f, 9f, 4f, 12f, 4f)
+        curveTo(15f, 4f, 17f, 6.2f, 17f, 9.5f)
+        lineTo(17f, 14.5f)
+        curveTo(17f, 17.8f, 15f, 20f, 12f, 20f)
+        curveTo(9f, 20f, 7f, 17.8f, 7f, 14.5f)
+        close()
         moveTo(12f, 4f); lineTo(12f, 10f)
-        moveTo(9f, 7f); lineTo(9.01f, 7f)
+        moveTo(8.5f, 13.5f); lineTo(15.5f, 13.5f)
+        moveTo(10.5f, 11.7f); lineTo(8.5f, 13.5f); lineTo(10.5f, 15.3f)
+        moveTo(13.5f, 11.7f); lineTo(15.5f, 13.5f); lineTo(13.5f, 15.3f)
+    }
+
+    /** Ikon tombol Windows (4 panel jendela). */
+    val Windows: ImageVector = xySolid("XyWindows") {
+        moveTo(4f, 4.5f); lineTo(11f, 4.5f); lineTo(11f, 11.2f); lineTo(4f, 11.2f); close()
+        moveTo(12.8f, 4.5f); lineTo(20f, 4.5f); lineTo(20f, 11.2f); lineTo(12.8f, 11.2f); close()
+        moveTo(4f, 12.8f); lineTo(11f, 12.8f); lineTo(11f, 19.5f); lineTo(4f, 19.5f); close()
+        moveTo(12.8f, 12.8f); lineTo(20f, 12.8f); lineTo(20f, 19.5f); lineTo(12.8f, 19.5f); close()
+    }
+
+    /** Dual Monitor / Multi-Display switcher icon. */
+    val DualMonitor: ImageVector = xyIcon("XyDualMonitor") {
+        moveTo(2.5f, 6.5f); lineTo(15.5f, 6.5f); lineTo(15.5f, 15.5f); lineTo(2.5f, 15.5f); close()
+        moveTo(6.5f, 19f); lineTo(11.5f, 19f)
+        moveTo(9f, 15.5f); lineTo(9f, 19f)
+        moveTo(9f, 4f); lineTo(21.5f, 4f); lineTo(21.5f, 13f); lineTo(15.5f, 13f)
+    }
+
+    /** Users / Active Windows Session switcher icon. */
+    val Users: ImageVector = xyIcon("XyUsers") {
+        moveTo(9.5f, 11f)
+        curveTo(11.4f, 11f, 13f, 9.4f, 13f, 7.5f)
+        curveTo(13f, 5.6f, 11.4f, 4f, 9.5f, 4f)
+        curveTo(7.6f, 4f, 6f, 5.6f, 6f, 7.5f)
+        curveTo(6f, 9.4f, 7.6f, 11f, 9.5f, 11f)
+        close()
+        moveTo(3.5f, 19.5f)
+        curveTo(3.5f, 16f, 6.1f, 13.8f, 9.5f, 13.8f)
+        curveTo(12.9f, 13.8f, 15.5f, 16f, 15.5f, 19.5f)
+        moveTo(15.5f, 4.5f)
+        curveTo(17.2f, 5f, 18.3f, 6.4f, 18.3f, 8f)
+        curveTo(18.3f, 9.6f, 17.2f, 11f, 15.5f, 11.5f)
+        moveTo(17f, 14.2f)
+        curveTo(19.3f, 14.8f, 20.8f, 16.7f, 20.8f, 19.5f)
+    }
+
+    val ArrowUp: ImageVector = xyIcon("XyArrowUp") {
+        moveTo(12f, 19f); lineTo(12f, 5f)
+        moveTo(6.5f, 10.5f); lineTo(12f, 5f); lineTo(17.5f, 10.5f)
+    }
+
+    val ArrowDown: ImageVector = xyIcon("XyArrowDown") {
+        moveTo(12f, 5f); lineTo(12f, 19f)
+        moveTo(6.5f, 13.5f); lineTo(12f, 19f); lineTo(17.5f, 13.5f)
+    }
+
+    val ArrowLeft: ImageVector = xyIcon("XyArrowLeft") {
+        moveTo(19f, 12f); lineTo(5f, 12f)
+        moveTo(10.5f, 6.5f); lineTo(5f, 12f); lineTo(10.5f, 17.5f)
+    }
+
+    val ArrowRight: ImageVector = xyIcon("XyArrowRight") {
+        moveTo(5f, 12f); lineTo(19f, 12f)
+        moveTo(13.5f, 6.5f); lineTo(19f, 12f); lineTo(13.5f, 17.5f)
+    }
+
+    val EnterKey: ImageVector = xyIcon("XyEnterKey") {
+        moveTo(18.5f, 6f); lineTo(18.5f, 13.5f); lineTo(5.5f, 13.5f)
+        moveTo(9.5f, 9.5f); lineTo(5.5f, 13.5f); lineTo(9.5f, 17.5f)
+    }
+
+    val BackspaceKey: ImageVector = xyIcon("XyBackspaceKey") {
+        moveTo(20.5f, 6.5f); lineTo(9f, 6.5f); lineTo(3.5f, 12f); lineTo(9f, 17.5f); lineTo(20.5f, 17.5f); close()
+        moveTo(11.5f, 9.5f); lineTo(16.5f, 14.5f)
+        moveTo(16.5f, 9.5f); lineTo(11.5f, 14.5f)
+    }
+
+    val TabKey: ImageVector = xyIcon("XyTabKey") {
+        moveTo(4f, 12f); lineTo(16.5f, 12f)
+        moveTo(12f, 7.5f); lineTo(16.5f, 12f); lineTo(12f, 16.5f)
+        moveTo(19.5f, 6.5f); lineTo(19.5f, 17.5f)
+    }
+
+    val SpaceKey: ImageVector = xyIcon("XySpaceKey") {
+        moveTo(4f, 10.5f); lineTo(4f, 15.5f); lineTo(20f, 15.5f); lineTo(20f, 10.5f)
+    }
+
+    val ShiftKey: ImageVector = xyIcon("XyShiftKey") {
+        moveTo(12f, 4.5f); lineTo(20f, 12.5f); lineTo(15.5f, 12.5f)
+        lineTo(15.5f, 19.5f); lineTo(8.5f, 19.5f); lineTo(8.5f, 12.5f)
+        lineTo(4f, 12.5f); close()
+    }
+
+    val Copy: ImageVector = xyIcon("XyCopy") {
+        moveTo(9f, 8.5f); lineTo(19.5f, 8.5f); lineTo(19.5f, 20f); lineTo(9f, 20f); close()
+        moveTo(15f, 8.5f); lineTo(15f, 4.5f); lineTo(4.5f, 4.5f); lineTo(4.5f, 16f); lineTo(9f, 16f)
+    }
+
+    val Undo: ImageVector = xyIcon("XyUndo") {
+        moveTo(9f, 7f); lineTo(4.5f, 11.5f); lineTo(9f, 16f)
+        moveTo(4.5f, 11.5f); lineTo(14.5f, 11.5f)
+        curveTo(17.5f, 11.5f, 19.5f, 13.5f, 19.5f, 16f)
+        curveTo(19.5f, 17.5f, 18.8f, 18.8f, 17.5f, 19.5f)
+    }
+
+    val Redo: ImageVector = xyIcon("XyRedo") {
+        moveTo(15f, 7f); lineTo(19.5f, 11.5f); lineTo(15f, 16f)
+        moveTo(19.5f, 11.5f); lineTo(9.5f, 11.5f)
+        curveTo(6.5f, 11.5f, 4.5f, 13.5f, 4.5f, 16f)
+        curveTo(4.5f, 17.5f, 5.2f, 18.8f, 6.5f, 19.5f)
+    }
+
+    val Search: ImageVector = xyIcon("XySearch") {
+        moveTo(11f, 4.5f)
+        curveTo(14.6f, 4.5f, 17.5f, 7.4f, 17.5f, 11f)
+        curveTo(17.5f, 14.6f, 14.6f, 17.5f, 11f, 17.5f)
+        curveTo(7.4f, 17.5f, 4.5f, 14.6f, 4.5f, 11f)
+        curveTo(4.5f, 7.4f, 7.4f, 4.5f, 11f, 4.5f)
+        close()
+        moveTo(15.8f, 15.8f); lineTo(20f, 20f)
+    }
+
+    val Terminal: ImageVector = xyIcon("XyTerminal") {
+        moveTo(3.5f, 5f); lineTo(20.5f, 5f); lineTo(20.5f, 19f); lineTo(3.5f, 19f); close()
+        moveTo(7f, 9.5f); lineTo(10.5f, 12.5f); lineTo(7f, 15.5f)
+        moveTo(12.5f, 15.5f); lineTo(16.5f, 15.5f)
     }
 
     /** Hati (dukung lewat Saweria). */

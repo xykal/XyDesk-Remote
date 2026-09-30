@@ -254,35 +254,90 @@ private fun HudKeyButton(
     }
 }
 
-/** Isi tombol: ikon garis untuk scroll/mode/keyboard, label teks jelas untuk klik & tombol. */
-@Composable
-private fun HudKeyGlyph(key: HudKey, tint: Color, boxDp: Float = key.size) {
-    val icon: ImageVector? = when (key.kind) {
-        HudKind.SCROLL_UP -> XyIcons.ScrollUp
-        HudKind.SCROLL_DOWN -> XyIcons.ScrollDown
-        HudKind.SCROLL_SLIDER -> XyIcons.ScrollSlide
-        HudKind.INPUT_SWITCH -> XyIcons.Swap
-        HudKind.KEYBOARD -> XyIcons.Keyboard
+/** Peta ikon vektor untuk setiap tombol HUD yang punya representasi ikon visual. */
+internal fun hudIconFor(
+    kind: HudKind,
+    keyCode: Int = 0,
+    combo: List<Int> = emptyList(),
+    label: String = "",
+): ImageVector? = when (kind) {
+    HudKind.MOUSE_LEFT -> XyIcons.ClickLeft
+    HudKind.MOUSE_RIGHT -> XyIcons.ClickRight
+    HudKind.MOUSE_MIDDLE -> XyIcons.ClickMiddle
+    HudKind.MOUSE_SWAP -> XyIcons.MouseSwap
+    HudKind.SCROLL_UP -> XyIcons.ScrollUp
+    HudKind.SCROLL_DOWN -> XyIcons.ScrollDown
+    HudKind.SCROLL_SLIDER -> XyIcons.ScrollSlide
+    HudKind.INPUT_SWITCH -> XyIcons.Swap
+    HudKind.KEYBOARD -> XyIcons.Keyboard
+    HudKind.KEY -> when (keyCode) {
+        android.view.KeyEvent.KEYCODE_META_LEFT,
+        android.view.KeyEvent.KEYCODE_META_RIGHT -> XyIcons.Windows
+        android.view.KeyEvent.KEYCODE_DPAD_UP -> XyIcons.ArrowUp
+        android.view.KeyEvent.KEYCODE_DPAD_DOWN -> XyIcons.ArrowDown
+        android.view.KeyEvent.KEYCODE_DPAD_LEFT -> XyIcons.ArrowLeft
+        android.view.KeyEvent.KEYCODE_DPAD_RIGHT -> XyIcons.ArrowRight
+        android.view.KeyEvent.KEYCODE_ENTER,
+        android.view.KeyEvent.KEYCODE_NUMPAD_ENTER -> XyIcons.EnterKey
+        android.view.KeyEvent.KEYCODE_DEL -> XyIcons.BackspaceKey
+        android.view.KeyEvent.KEYCODE_TAB -> XyIcons.TabKey
+        android.view.KeyEvent.KEYCODE_SPACE -> XyIcons.SpaceKey
+        android.view.KeyEvent.KEYCODE_SHIFT_LEFT,
+        android.view.KeyEvent.KEYCODE_SHIFT_RIGHT -> XyIcons.ShiftKey
+        android.view.KeyEvent.KEYCODE_MENU -> XyIcons.Menu
+        android.view.KeyEvent.KEYCODE_SYSRQ -> XyIcons.Shot
+        else -> if (label.startsWith("Win", ignoreCase = true)) XyIcons.Windows else null
+    }
+    HudKind.COMBO -> when {
+        combo == listOf(android.view.KeyEvent.KEYCODE_META_LEFT, android.view.KeyEvent.KEYCODE_L) -> XyIcons.Lock
+        combo == listOf(android.view.KeyEvent.KEYCODE_META_LEFT, android.view.KeyEvent.KEYCODE_D) -> XyIcons.Monitor
+        combo == listOf(android.view.KeyEvent.KEYCODE_META_LEFT, android.view.KeyEvent.KEYCODE_E) -> XyIcons.Folder
+        combo == listOf(android.view.KeyEvent.KEYCODE_META_LEFT, android.view.KeyEvent.KEYCODE_I) -> XyIcons.Gear
+        combo == listOf(android.view.KeyEvent.KEYCODE_META_LEFT, android.view.KeyEvent.KEYCODE_TAB) ||
+            combo == listOf(android.view.KeyEvent.KEYCODE_ALT_LEFT, android.view.KeyEvent.KEYCODE_TAB) -> XyIcons.Grid
+        combo == listOf(
+            android.view.KeyEvent.KEYCODE_META_LEFT,
+            android.view.KeyEvent.KEYCODE_SHIFT_LEFT,
+            android.view.KeyEvent.KEYCODE_S,
+        ) -> XyIcons.Shot
+        combo == listOf(android.view.KeyEvent.KEYCODE_CTRL_LEFT, android.view.KeyEvent.KEYCODE_C) -> XyIcons.Copy
+        combo == listOf(android.view.KeyEvent.KEYCODE_CTRL_LEFT, android.view.KeyEvent.KEYCODE_V) -> XyIcons.Clip
+        combo == listOf(android.view.KeyEvent.KEYCODE_CTRL_LEFT, android.view.KeyEvent.KEYCODE_Z) -> XyIcons.Undo
+        combo == listOf(android.view.KeyEvent.KEYCODE_CTRL_LEFT, android.view.KeyEvent.KEYCODE_Y) -> XyIcons.Redo
+        combo == listOf(android.view.KeyEvent.KEYCODE_CTRL_LEFT, android.view.KeyEvent.KEYCODE_F) -> XyIcons.Search
+        combo == listOf(android.view.KeyEvent.KEYCODE_ALT_LEFT, android.view.KeyEvent.KEYCODE_F4) -> XyIcons.Close
         else -> null
     }
+    HudKind.MACRO -> when {
+        label.equals("CMD", ignoreCase = true) ||
+            label.equals("PShell", ignoreCase = true) ||
+            label.equals("Terminal", ignoreCase = true) -> XyIcons.Terminal
+        else -> null
+    }
+}
+
+/** Isi tombol: utamakan ikon vektor untuk semua tombol yang punya ikon (termasuk Windows, Mouse, Panah, dll). */
+@Composable
+internal fun HudKeyGlyph(key: HudKey, tint: Color, boxDp: Float = key.size) {
+    val icon: ImageVector? = hudIconFor(key.kind, key.keyCode, key.combo, key.label)
     if (icon != null) {
         Icon(
             icon,
             contentDescription = key.label,
             tint = tint,
-            modifier = Modifier.size(minOf(24f, boxDp * 0.42f).dp),
+            modifier = Modifier.size((boxDp * 0.44f).coerceIn(15f, 24f).dp),
         )
         return
     }
     Text(
         text = key.label,
         color = tint,
-        fontSize = (boxDp * 0.22f).coerceIn(12f, 20f).sp,
+        fontSize = (boxDp * 0.22f).coerceIn(10f, 16f).sp,
         fontWeight = FontWeight.SemiBold,
         maxLines = 1,
         textAlign = TextAlign.Center,
         overflow = TextOverflow.Ellipsis,
-        modifier = Modifier.padding(horizontal = 6.dp),
+        modifier = Modifier.padding(horizontal = 4.dp),
     )
 }
 
@@ -453,6 +508,7 @@ fun HudKeyPicker(
                     subItems.chunked(3).forEach { rowItems ->
                         Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                             rowItems.forEach { item ->
+                                val itemIcon = hudIconFor(item.kind, item.keyCode, item.combo, item.label)
                                 Box(
                                     Modifier
                                         .weight(1f)
@@ -468,14 +524,27 @@ fun HudKeyPicker(
                                         .padding(horizontal = 6.dp),
                                     contentAlignment = Alignment.Center,
                                 ) {
-                                    Text(
-                                        xy(item.label, item.labelEn),
-                                        color = MaterialTheme.colorScheme.onSurface,
-                                        fontSize = 11.5.sp,
-                                        fontWeight = FontWeight.Medium,
-                                        maxLines = 1,
-                                        overflow = TextOverflow.Ellipsis,
-                                    )
+                                    Row(
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        horizontalArrangement = Arrangement.spacedBy(5.dp),
+                                    ) {
+                                        if (itemIcon != null) {
+                                            Icon(
+                                                itemIcon,
+                                                contentDescription = null,
+                                                tint = MaterialTheme.colorScheme.onSurface,
+                                                modifier = Modifier.size(15.dp),
+                                            )
+                                        }
+                                        Text(
+                                            xy(item.label, item.labelEn),
+                                            color = MaterialTheme.colorScheme.onSurface,
+                                            fontSize = 11.sp,
+                                            fontWeight = FontWeight.Medium,
+                                            maxLines = 1,
+                                            overflow = TextOverflow.Ellipsis,
+                                        )
+                                    }
                                 }
                             }
                             repeat(3 - rowItems.size) { Spacer(Modifier.weight(1f)) }
@@ -622,7 +691,7 @@ fun HudKeyEditor(
                 XySlider(
                     value = key.size,
                     onValueChange = { onChange(key.copy(size = it)) },
-                    valueRange = 56f..120f,
+                    valueRange = HudKey.MIN_SIZE..HudKey.MAX_SIZE,
                 )
                 Text(
                     xy(

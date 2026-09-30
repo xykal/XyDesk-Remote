@@ -179,7 +179,11 @@ fun XyDeskSessionScreen(
     var confirmDisconnect by remember { mutableStateOf(false) }
     var confirmCancelConnect by remember { mutableStateOf(false) }
     var showLog by remember { mutableStateOf(false) }
-    var inAppFloatingWindow by remember { mutableStateOf(false) }
+    var activeProfile by remember(profile.id) { mutableStateOf(profile) }
+    var consoleAdminMode by remember(profile.id) {
+        mutableStateOf(runCatching { RdpOptions.of(context, profile.id).consoleAdmin }.getOrDefault(false))
+    }
+    var swapMouseButtons by remember { mutableStateOf(prefs.swapMouseButtons) }
     var zoom by remember { mutableFloatStateOf(prefs.zoom(profile.id)) }
     var boundInstance by remember { mutableStateOf(0L) }
     var inputMode by remember { mutableIntStateOf(prefs.inputMode.ordinal) }
@@ -220,6 +224,9 @@ fun XyDeskSessionScreen(
     fun setHudKeys(list: List<HudKey>) {
         hudKeys = list
         prefs.setHudKeys(profile.id, list)
+        if (prefs.hudProfile(profile.id) == HudProfilePreset.CUSTOM) {
+            prefs.setCustomHudKeys(profile.id, list)
+        }
     }
     var cursorX by remember { mutableFloatStateOf(0f) }
     var cursorY by remember { mutableFloatStateOf(0f) }
@@ -284,7 +291,7 @@ fun XyDeskSessionScreen(
             waitingForNativeRelease = false
             if (!userDisconnect && !applyingResolution && reconnecting) {
                 boundInstance = 0L
-                manager.connect(profile)
+                manager.connect(activeProfile)
             }
         }
     }
@@ -550,10 +557,13 @@ fun XyDeskSessionScreen(
     }
 
     LaunchedEffect(state, applyingResolution) {
-        if (applyingResolution && state is SessionState.Disconnected) {
+        if (applyingResolution && (state is SessionState.Disconnected || state is SessionState.Error)) {
+            while (manager.instance() != 0L) {
+                kotlinx.coroutines.delay(120)
+            }
             applyingResolution = false
             boundInstance = 0L
-            manager.connect(profile)
+            manager.connect(activeProfile)
         }
     }
 
@@ -605,14 +615,9 @@ fun XyDeskSessionScreen(
         controller.setOverlayActive(overlayActive)
     }
 
-    LaunchedEffect(state, certPrompt != null, nlaPrompt != null, confirmDisconnect, confirmCancelConnect, showLog, controlsBackHandler, inAppFloatingWindow) {
+    LaunchedEffect(state, certPrompt != null, nlaPrompt != null, confirmDisconnect, confirmCancelConnect, showLog, controlsBackHandler) {
         (context as? XyDeskSessionActivity)?.backHandler = {
             when {
-                inAppFloatingWindow -> {
-                    inAppFloatingWindow = false
-                    XySessionRegistry.floatingMiniActive = false
-                    true
-                }
                 certPrompt != null || nlaPrompt != null -> true
                 showLog -> {
                     showLog = false
@@ -673,7 +678,14 @@ fun XyDeskSessionScreen(
 
     fun sendButton(button: XyMouseButton, down: Boolean) {
         val c = cursor()
-        val flags = when (button) {
+        val effectiveButton = if (swapMouseButtons) {
+            when (button) {
+                XyMouseButton.LEFT -> XyMouseButton.RIGHT
+                XyMouseButton.RIGHT -> XyMouseButton.LEFT
+                XyMouseButton.MIDDLE -> XyMouseButton.MIDDLE
+            }
+        } else button
+        val flags = when (effectiveButton) {
             XyMouseButton.LEFT -> Mouse.getLeftButtonEvent(context, down)
             XyMouseButton.RIGHT -> Mouse.getRightButtonEvent(context, down)
             XyMouseButton.MIDDLE -> Mouse.getMiddleButtonEvent(down)
@@ -715,6 +727,15 @@ fun XyDeskSessionScreen(
             HudKind.MOUSE_LEFT -> sendButton(XyMouseButton.LEFT, down)
             HudKind.MOUSE_RIGHT -> sendButton(XyMouseButton.RIGHT, down)
             HudKind.MOUSE_MIDDLE -> sendButton(XyMouseButton.MIDDLE, down)
+            HudKind.MOUSE_SWAP -> if (down) {
+                val next = !swapMouseButtons
+                swapMouseButtons = next
+                prefs.swapMouseButtons = next
+                notice.show(
+                    if (next) xyNow("Klik Kiri ⇄ Kanan ditukar", "Left ⇄ Right click swapped")
+                    else xyNow("Klik Kiri & Kanan normal", "Left & Right click normal"),
+                )
+            }
             HudKind.SCROLL_UP -> if (down) sendScroll(1)
             HudKind.SCROLL_DOWN -> if (down) sendScroll(-1)
             HudKind.SCROLL_SLIDER -> Unit
@@ -870,8 +891,6 @@ fun XyDeskSessionScreen(
     }
 
     val connected = state is SessionState.Connected
-    val inPipMode by ((context as? XyDeskSessionActivity)?.inPipMode
-        ?: remember { kotlinx.coroutines.flow.MutableStateFlow(false) }).collectAsState()
     var privacyCurtain by remember { mutableStateOf(false) }
 
     Box(
@@ -888,7 +907,7 @@ fun XyDeskSessionScreen(
 
         // Lapisan gesture trackpad: menutup surface supaya sentuhan tidak
         // diteruskan langsung sebagai klik di posisi jari.
-        if (connected && !inPipMode && !inAppFloatingWindow && (mappingMode || controlsOverlayOpen || privacyCurtain)) {
+        if (connected && (mappingMode || controlsOverlayOpen || privacyCurtain)) {
             // Mode layout atau panel terbuka harus mengisolasi seluruh layar dari surface FreeRDP.
             Box(
                 Modifier
@@ -906,7 +925,7 @@ fun XyDeskSessionScreen(
             )
         }
 
-        if (connected && !inPipMode && !inAppFloatingWindow && !privacyCurtain && !mappingMode && !controlsOverlayOpen && InputMode.entries[inputMode] == InputMode.TRACKPAD) {
+        if (connected && !privacyCurtain && !mappingMode && !controlsOverlayOpen && InputMode.entries[inputMode] == InputMode.TRACKPAD) {
             Box(
                 Modifier
                     .fillMaxSize()
@@ -949,12 +968,12 @@ fun XyDeskSessionScreen(
             )
         }
 
-        if (connected && !inPipMode && !inAppFloatingWindow && !privacyCurtain) {
+        if (connected && !privacyCurtain) {
             val pointerScreen = controller.remoteToScreen(cursor().x, cursor().y)
                 ?: Offset(-1000f, -1000f)
             SessionControls(
                 deviceId = profile.id,
-                hostLabel = profile.label ?: "${profile.host}:${profile.port}",
+                hostLabel = activeProfile.label ?: "${activeProfile.host}:${activeProfile.port}",
                 statusText = xy("Terhubung", "Connected"),
                 remoteSize = if (telemetry.width > 0) "${telemetry.width} x ${telemetry.height}" else xy("menunggu server", "waiting for server"),
                 zoomPercent = (zoom * 100).roundToInt(),
@@ -1118,14 +1137,44 @@ fun XyDeskSessionScreen(
                 onSendRemoteClipboardText = { text ->
                     clipboardSyncEnabled && manager.sendClipboardData(text)
                 },
-                onEnterPip = {
-                    val ok = (context as? XyDeskSessionActivity)?.enterPipMonitorMode() == true
-                    if (!ok) {
-                        // Jangan buka halaman pengaturan "Display over other apps" yang dibatasi ROM;
-                        // langsung aktifkan Mode Jendela Mengambang internal & multi-layar XyDesk.
-                        XySessionRegistry.floatingMiniActive = true
-                        inAppFloatingWindow = true
+                activeUsername = activeProfile.username,
+                consoleAdminMode = consoleAdminMode,
+                onSwitchConsoleMode = { useConsole ->
+                    if (useConsole != consoleAdminMode) {
+                        consoleAdminMode = useConsole
+                        runCatching {
+                            RdpOptions.of(context, activeProfile.id)
+                                .copy(consoleAdmin = useConsole)
+                                .save(context, activeProfile.id)
+                        }
+                        applyingResolution = true
+                        manager.disconnect()
+                        notice.show(
+                            if (useConsole) xyNow("Beralih ke Sesi Konsol Fisik (/admin)...", "Switching to Physical Console (/admin)...")
+                            else xyNow("Beralih ke Sesi User RDP...", "Switching to RDP User Session..."),
+                        )
                     }
+                },
+                onSwitchUserSession = { newUser, newDomain, newPass ->
+                    activeProfile = activeProfile.copy(
+                        username = newUser,
+                        domain = newDomain ?: activeProfile.domain,
+                        password = newPass ?: activeProfile.password,
+                    )
+                    applyingResolution = true
+                    manager.disconnect()
+                    notice.show(
+                        xyNow("Beralih sesi ke user {0}...", "Switching session to user {0}...", newUser),
+                    )
+                },
+                swapMouseButtons = swapMouseButtons,
+                onSwapMouseButtonsChange = { swapped ->
+                    swapMouseButtons = swapped
+                    prefs.swapMouseButtons = swapped
+                    notice.show(
+                        if (swapped) xyNow("Klik Kiri ⇄ Kanan ditukar", "Left ⇄ Right click swapped")
+                        else xyNow("Klik Kiri & Kanan normal", "Left & Right click normal"),
+                    )
                 },
                 onLockRemotePc = {
                     if (manager.lockRemoteSession()) {
@@ -1155,37 +1204,7 @@ fun XyDeskSessionScreen(
 
         }
 
-        if (connected && inAppFloatingWindow && !inPipMode) {
-            XyDraggableFloatingMiniWindow(
-                title = profile.label ?: "${profile.host}:${profile.port}",
-                fps = telemetry.fps,
-                rttMs = telemetry.rttMs,
-                bitmapProvider = { controller.peekBitmap() },
-                onRestoreFull = {
-                    inAppFloatingWindow = false
-                    XySessionRegistry.floatingMiniActive = false
-                },
-                onOpenHomeWithMini = {
-                    controller.blurInput()
-                    XySessionRegistry.floatingMiniActive = true
-                    runCatching {
-                        context.startActivity(
-                            android.content.Intent(context, XyDeskHomeActivity::class.java)
-                                .addFlags(
-                                    android.content.Intent.FLAG_ACTIVITY_REORDER_TO_FRONT or
-                                        android.content.Intent.FLAG_ACTIVITY_NEW_TASK,
-                                ),
-                        )
-                    }
-                },
-                onCloseMini = {
-                    inAppFloatingWindow = false
-                    XySessionRegistry.floatingMiniActive = false
-                },
-            )
-        }
-
-        if (connected && privacyCurtain && !inPipMode) {
+        if (connected && privacyCurtain) {
             Box(
                 Modifier
                     .fillMaxSize()
@@ -1247,23 +1266,23 @@ fun XyDeskSessionScreen(
             )
         }
 
-        if (state is SessionState.Disconnected && !applyingResolution && !reconnecting) {
+        if (state is SessionState.Disconnected && !applyingResolution && !reconnecting && !userDisconnect) {
             DisconnectedScreen(
                 wall = wall,
-                deviceLabel = profile.label ?: profile.host,
+                deviceLabel = activeProfile.label ?: activeProfile.host,
                 detail = (state as SessionState.Disconnected).detail,
                 onReconnect = {
                     boundInstance = 0L
-                    manager.connect(profile)
+                    manager.connect(activeProfile)
                 },
                 onExit = onExit,
             )
         }
 
-        if (state is SessionState.Disconnected && applyingResolution) {
+        if ((state is SessionState.Disconnected || state is SessionState.Disconnecting) && applyingResolution) {
             Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                 Text(
-                    xy("Menerapkan resolusi baru...", "Applying new resolution..."),
+                    xy("Menerapkan tampilan / sesi baru...", "Applying new display / session..."),
                     color = Color(0xFFE7EDF2),
                     style = MaterialTheme.typography.titleMedium,
                 )
@@ -1295,7 +1314,7 @@ fun XyDeskSessionScreen(
             nlaPrompt = null
         }
     }
-    if (!active && !reconnecting) err?.let { e ->
+    if (!active && !reconnecting && !applyingResolution && !userDisconnect) err?.let { e ->
         XyOverlay(
             title = xy("Koneksi gagal", "Connection failed"),
             onDismiss = { onExit() },
@@ -1325,9 +1344,9 @@ fun XyDeskSessionScreen(
                 XyPillButton(
                     text = xy("Reset resolusi", "Reset resolution"),
                     onClick = {
-                        DisplayPrefs.setResolution(context, profile.id, DisplayPrefs.AUTOMATIC)
+                        DisplayPrefs.setResolution(context, activeProfile.id, DisplayPrefs.AUTOMATIC)
                         boundInstance = 0L
-                        manager.connect(profile)
+                        manager.connect(activeProfile)
                     },
                     primary = false,
                     compact = true,
@@ -1339,7 +1358,7 @@ fun XyDeskSessionScreen(
                 onClick = {
                     showLog = false
                     boundInstance = 0L
-                    manager.connect(profile)
+                    manager.connect(activeProfile)
                 },
                 compact = true,
                 modifier = Modifier.fillMaxWidth(),
@@ -1352,7 +1371,7 @@ fun XyDeskSessionScreen(
             )
         }
     }
-    if (!active && err != null && showLog) {
+    if (!active && err != null && showLog && !userDisconnect) {
         XyOverlay(title = xy("Log koneksi", "Connection log"), onDismiss = { showLog = false }) {
             Column(
                 Modifier
@@ -1378,13 +1397,19 @@ fun XyDeskSessionScreen(
     }
     if (!active && err == null && confirmDisconnect) {
         XyDialog(
-            title = xy("Sesi masih aktif", "Session still active"),
-            body = xy("Putuskan sesi sekarang?", "Disconnect the session now?"),
+            title = xy("Putuskan sesi?", "Disconnect session?"),
+            body = xy("Putuskan sesi sekarang dan kembali ke beranda?", "Disconnect the session now and return to home?"),
             confirmLabel = xy("Putuskan", "Disconnect"),
             onConfirm = {
                 confirmDisconnect = false
                 userDisconnect = true
+                reconnecting = false
+                releaseLatchedKeys()
+                if (context.let { runCatching { AppPrefs(it).autoLockRemoteOnLeave }.getOrDefault(false) }) {
+                    manager.lockRemoteSession()
+                }
                 manager.disconnect()
+                onExit()
             },
             dismissLabel = xy("Batal", "Cancel"),
             onDismiss = { confirmDisconnect = false },
@@ -1394,8 +1419,8 @@ fun XyDeskSessionScreen(
         XyDialog(
             title = xy("Batalkan koneksi?", "Cancel connection?"),
             body = xy(
-                "Hentikan proses menyambung ke server sekarang?",
-                "Stop connecting to the server now?",
+                "Hentikan proses menyambung ke server dan kembali ke beranda?",
+                "Stop connecting to the server and return to home?",
             ),
             confirmLabel = xy("Batalkan", "Cancel connection"),
             onConfirm = {
@@ -1403,6 +1428,7 @@ fun XyDeskSessionScreen(
                 userDisconnect = true
                 reconnecting = false
                 manager.cancelConnection()
+                onExit()
             },
             dismissLabel = xy("Lanjutkan", "Keep trying"),
             onDismiss = { confirmCancelConnect = false },
@@ -1947,151 +1973,4 @@ private fun NlaDialog(
     }
 }
 
-@Composable
-internal fun XyDraggableFloatingMiniWindow(
-    title: String,
-    fps: Int = 0,
-    rttMs: Int = 0,
-    bitmapProvider: () -> android.graphics.Bitmap?,
-    onRestoreFull: () -> Unit,
-    onOpenHomeWithMini: (() -> Unit)? = null,
-    onCloseMini: () -> Unit,
-) {
-    var expanded by remember { mutableStateOf(false) }
-    var offsetX by remember { mutableFloatStateOf(24f) }
-    var offsetY by remember { mutableFloatStateOf(80f) }
-    var frameTick by remember { mutableIntStateOf(0) }
-
-    LaunchedEffect(Unit) {
-        while (true) {
-            delay(50)
-            frameTick++
-        }
-    }
-
-    val widthDp = if (expanded) 308.dp else 236.dp
-    val heightDp = if (expanded) 198.dp else 154.dp
-
-    Box(
-        modifier = Modifier
-            .fillMaxSize()
-            .zIndex(28f),
-    ) {
-        Column(
-            modifier = Modifier
-                .offset { IntOffset(offsetX.roundToInt(), offsetY.roundToInt()) }
-                .size(widthDp, heightDp)
-                .clip(RoundedCornerShape(14.dp))
-                .background(Color(0xF20D0F14))
-                .border(1.dp, Color(0x557EA6E0), RoundedCornerShape(14.dp))
-                .pointerInput(Unit) {
-                    detectDragGestures { change, dragAmount ->
-                        change.consume()
-                        offsetX = (offsetX + dragAmount.x).coerceAtLeast(8f)
-                        offsetY = (offsetY + dragAmount.y).coerceAtLeast(24f)
-                    }
-                },
-        ) {
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .background(Color(0xFF141821))
-                    .padding(horizontal = 8.dp, vertical = 5.dp),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(6.dp),
-            ) {
-                Box(
-                    Modifier
-                        .size(6.dp)
-                        .clip(CircleShape)
-                        .background(Color(0xFF3FB950)),
-                )
-                Text(
-                    text = buildString {
-                        append(title)
-                        if (fps > 0) append(" · ${fps}fps")
-                        if (rttMs > 0) append(" · ${rttMs}ms")
-                    },
-                    color = Color(0xFFE6EDF3),
-                    fontSize = 10.sp,
-                    fontWeight = FontWeight.SemiBold,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                    modifier = Modifier.weight(1f),
-                )
-                Text(
-                    text = if (expanded) "−" else "+",
-                    color = Color(0xFF9FB8E8),
-                    fontSize = 11.sp,
-                    fontWeight = FontWeight.Bold,
-                    modifier = Modifier
-                        .clip(RoundedCornerShape(5.dp))
-                        .background(Color(0xFF1E2636))
-                        .clickable { expanded = !expanded }
-                        .padding(horizontal = 6.dp, vertical = 2.dp),
-                )
-                if (onOpenHomeWithMini != null) {
-                    Text(
-                        text = xy("Beranda", "Home"),
-                        color = Color(0xFF8B949E),
-                        fontSize = 9.sp,
-                        fontWeight = FontWeight.SemiBold,
-                        modifier = Modifier
-                            .clip(RoundedCornerShape(5.dp))
-                            .background(Color(0xFF1B202C))
-                            .clickable(onClick = onOpenHomeWithMini)
-                            .padding(horizontal = 6.dp, vertical = 2.dp),
-                    )
-                }
-                Text(
-                    text = xy("Penuh", "Full"),
-                    color = Color(0xFF7EA6E0),
-                    fontSize = 9.sp,
-                    fontWeight = FontWeight.SemiBold,
-                    modifier = Modifier
-                        .clip(RoundedCornerShape(5.dp))
-                        .background(Color(0xFF1B2436))
-                        .clickable(onClick = onRestoreFull)
-                        .padding(horizontal = 6.dp, vertical = 2.dp),
-                )
-                Text(
-                    text = "×",
-                    color = Color(0xFFE57373),
-                    fontSize = 11.sp,
-                    fontWeight = FontWeight.Bold,
-                    modifier = Modifier
-                        .clip(RoundedCornerShape(5.dp))
-                        .background(Color(0xFF281A1D))
-                        .clickable(onClick = onCloseMini)
-                        .padding(horizontal = 6.dp, vertical = 2.dp),
-                )
-            }
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .weight(1f)
-                    .background(Color(0xFF06080C))
-                    .clickable(onClick = onRestoreFull),
-                contentAlignment = Alignment.Center,
-            ) {
-                val bmp = remember(frameTick) { bitmapProvider() }
-                if (bmp != null && !bmp.isRecycled) {
-                    Canvas(modifier = Modifier.fillMaxSize()) {
-                        drawIntoCanvas { canvas ->
-                            val src = android.graphics.Rect(0, 0, bmp.width, bmp.height)
-                            val dst = android.graphics.Rect(0, 0, size.width.toInt(), size.height.toInt())
-                            canvas.nativeCanvas.drawBitmap(bmp, src, dst, null)
-                        }
-                    }
-                } else {
-                    Text(
-                        text = xy("Sesi Aktif · Ketuk untuk layar penuh", "Live Session · Tap for full screen"),
-                        color = Color(0xFF8B949E),
-                        fontSize = 10.sp,
-                    )
-                }
-            }
-        }
-    }
-}
 

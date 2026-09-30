@@ -246,6 +246,19 @@ static BOOL android_pre_connect(freerdp* instance)
 		return FALSE;
 	}
 
+	/* XyDesk native tuning: low-latency fast-path input/output, dynamic monitor layout,
+	 * extended mouse/wheel, frame markers, and enlarged pointer cache. */
+	(void)freerdp_settings_set_bool(settings, FreeRDP_FastPathInput, TRUE);
+	(void)freerdp_settings_set_bool(settings, FreeRDP_FastPathOutput, TRUE);
+	(void)freerdp_settings_set_bool(settings, FreeRDP_HasExtendedMouseEvent, TRUE);
+	(void)freerdp_settings_set_bool(settings, FreeRDP_HasHorizontalWheel, TRUE);
+	(void)freerdp_settings_set_bool(settings, FreeRDP_UnicodeInput, TRUE);
+	(void)freerdp_settings_set_bool(settings, FreeRDP_SupportMonitorLayoutPdu, TRUE);
+	(void)freerdp_settings_set_bool(settings, FreeRDP_FrameMarkerCommandEnabled, TRUE);
+	(void)freerdp_settings_set_bool(settings, FreeRDP_SurfaceFrameMarkerEnabled, TRUE);
+	if (freerdp_settings_get_uint32(settings, FreeRDP_PointerCacheSize) < 128)
+		(void)freerdp_settings_set_uint32(settings, FreeRDP_PointerCacheSize, 128);
+
 	freerdp_callback("OnPreConnect", "(J)V", (jlong)instance);
 	return TRUE;
 }

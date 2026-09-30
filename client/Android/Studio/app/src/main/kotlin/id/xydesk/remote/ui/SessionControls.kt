@@ -139,7 +139,12 @@ fun SessionControls(
     clipboardSyncEnabled: Boolean = false,
     onSendText: (String) -> Unit,
     onSendRemoteClipboardText: (String) -> Boolean = { false },
-    onEnterPip: () -> Unit = {},
+    activeUsername: String? = null,
+    consoleAdminMode: Boolean = false,
+    onSwitchConsoleMode: (Boolean) -> Unit = {},
+    onSwitchUserSession: (String, String?, String?) -> Unit = { _, _, _ -> },
+    swapMouseButtons: Boolean = false,
+    onSwapMouseButtonsChange: (Boolean) -> Unit = {},
     onLockRemotePc: () -> Unit = {},
     onActivatePrivacyCurtain: () -> Unit = {},
     onGyroMouseChanged: (Boolean) -> Unit = {},
@@ -153,6 +158,7 @@ fun SessionControls(
     val view = androidx.compose.ui.platform.LocalView.current
     val prefs = remember { SessionPrefs(context) }
     var panelOpen by remember { mutableStateOf(false) }
+    var monitorGridOpen by remember { mutableStateOf(false) }
     var tab by remember { mutableStateOf(PanelTab.SCREEN) }
     var pickerOpen by remember { mutableStateOf(false) }
     var editing by remember { mutableStateOf<HudKey?>(null) }
@@ -165,7 +171,6 @@ fun SessionControls(
     var gamepadEnabled by remember { mutableStateOf(prefs.gamepadEnabled) }
     var gyroMouseEnabled by remember { mutableStateOf(prefs.gyroMouseEnabled) }
     var showTelemetryPill by remember { mutableStateOf(prefs.showTelemetryPill) }
-    var autoPipOnBackground by remember { mutableStateOf(prefs.autoPipOnBackground) }
     var hudProfile by remember(deviceId) { mutableStateOf(prefs.hudProfile(deviceId)) }
     val pcConnectMode = remember(deviceId) { RdpOptions.of(context, deviceId).pcConnectMode }
     var haptics by remember { mutableStateOf(prefs.haptics) }
@@ -186,7 +191,7 @@ fun SessionControls(
     var confirmResolution by remember { mutableStateOf<String?>(null) }
     var validationAlert by remember { mutableStateOf<Pair<String, String>?>(null) }
 
-    val anyOverlayOpen = panelOpen || pickerOpen || editing != null || textOpen || layoutJsonOpen ||
+    val anyOverlayOpen = panelOpen || monitorGridOpen || pickerOpen || editing != null || textOpen || layoutJsonOpen ||
         confirmDeleteKey != null || confirmResetHud || confirmImportLayout != null ||
         confirmApplyPreset != null || confirmLockPc ||
         confirmResolution != null || validationAlert != null
@@ -195,7 +200,7 @@ fun SessionControls(
     }
 
     LaunchedEffect(
-        panelOpen, pickerOpen, editing, textOpen, layoutJsonOpen, mappingMode,
+        panelOpen, monitorGridOpen, pickerOpen, editing, textOpen, layoutJsonOpen, mappingMode,
         confirmDeleteKey, confirmResetHud, confirmImportLayout, confirmApplyPreset,
         confirmLockPc, confirmResolution, validationAlert,
     ) {
@@ -243,6 +248,10 @@ fun SessionControls(
                 }
                 textOpen -> {
                     textOpen = false
+                    true
+                }
+                monitorGridOpen -> {
+                    monitorGridOpen = false
                     true
                 }
                 panelOpen -> {
@@ -313,6 +322,8 @@ fun SessionControls(
     fun replace(updated: HudKey) {
         // Keep the editor's live draft in sync with the persisted per-device layout.
         editing = updateHudEditorDraft(editing, updated)
+        val updatedKeys = keys.map { if (it.id == updated.id) updated else it }
+        prefs.setCustomHudKeys(deviceId, updatedKeys)
         onKeyEdited(updated)
     }
 
@@ -381,7 +392,11 @@ fun SessionControls(
             macroText = option.macroText,
             macroSendEnter = option.macroSendEnter,
         )
-        onKeysChange(keys + key)
+        val updatedKeys = keys + key
+        onKeysChange(updatedKeys)
+        prefs.setCustomHudKeys(deviceId, updatedKeys)
+        hudProfile = HudProfilePreset.CUSTOM
+        prefs.setHudProfile(deviceId, HudProfilePreset.CUSTOM)
         panelOpen = false
         onMappingModeChange(true)
         notice.show(
@@ -394,7 +409,7 @@ fun SessionControls(
     }
 
     Box(Modifier.fillMaxSize().zIndex(10f)) {
-        if (pointerVisible && !panelOpen) {
+        if (pointerVisible && !panelOpen && !monitorGridOpen) {
             XyPointer(
                 position = pointerScreen,
                 sizeDp = pointerSize,
@@ -404,12 +419,12 @@ fun SessionControls(
             )
         }
 
-        if (showTelemetryPill && !panelOpen && !mappingMode) {
+        if (showTelemetryPill && !panelOpen && !monitorGridOpen && !mappingMode) {
             LiveTelemetryPill(
                 telemetry = telemetry,
                 modifier = Modifier
                     .align(Alignment.TopStart)
-                    .padding(start = 10.dp, top = 10.dp)
+                    .padding(start = 8.dp, top = 8.dp)
                     .zIndex(19f),
             )
         }
@@ -421,7 +436,9 @@ fun SessionControls(
             plate = plate,
             latchedKeys = latchedKeyIds,
             onMove = { id, x, y ->
-                onKeysChange(keys.map { if (it.id == id) it.copy(x = x, y = y) else it })
+                val moved = keys.map { if (it.id == id) it.copy(x = x, y = y) else it }
+                onKeysChange(moved)
+                prefs.setCustomHudKeys(deviceId, moved)
             },
             onPhase = { key, phase ->
                 if (phase != HudPhase.UP) haptic()
@@ -433,7 +450,7 @@ fun SessionControls(
         )
 
         // Rail tetap disembunyikan saat panel atau mode atur posisi terbuka agar fokus penuh.
-        if (!panelOpen && !mappingMode) {
+        if (!panelOpen && !monitorGridOpen && !mappingMode) {
             Column(
                 Modifier
                     .align(Alignment.BottomEnd)
@@ -442,12 +459,6 @@ fun SessionControls(
                 verticalArrangement = Arrangement.spacedBy(10.dp),
             ) {
                 RailButton(
-                    icon = XyIcons.Fit,
-                    active = false,
-                    description = xy("Jendela Mengambang (PiP)", "Floating Window (PiP)"),
-                    plate = plate,
-                ) { onEnterPip() }
-                RailButton(
                     icon = XyIcons.Keyboard,
                     active = false,
                     description = xy("Buka keyboard HP", "Open phone keyboard"),
@@ -455,10 +466,10 @@ fun SessionControls(
                 ) { onOpenKeyboard() }
                 RailButton(
                     icon = XyIcons.Monitor,
-                    active = false,
-                    description = xy("Sesi lain (buka home)", "Other sessions (open home)"),
+                    active = monitorGridOpen,
+                    description = xy("Grid Monitor & Sesi User Aktif", "Active Monitors & User Sessions Grid"),
                     plate = plate,
-                ) { onOpenHome() }
+                ) { monitorGridOpen = true }
                 RailButton(
                     icon = XyIcons.Power,
                     active = false,
@@ -629,12 +640,47 @@ fun SessionControls(
         }
 
         // ---- handle panel di kanan atas, terpisah dari rail kontrol ----
-        if (!panelOpen && !mappingMode) {
+        if (!panelOpen && !monitorGridOpen && !mappingMode) {
             PanelHandle(
                 onClick = { panelOpen = true },
                 modifier = Modifier
                     .align(Alignment.TopEnd)
                     .padding(top = 12.dp, end = 6.dp),
+            )
+        }
+
+        if (monitorGridOpen) {
+            MonitorAndUserGridModal(
+                hostLabel = hostLabel,
+                remoteSize = remoteSize,
+                codecLabel = telemetry.codecLabel,
+                resolution = resolution,
+                pcConnectMode = pcConnectMode,
+                activeUsername = activeUsername,
+                consoleAdminMode = consoleAdminMode,
+                onSelectMonitorResolution = { selectedRes ->
+                    monitorGridOpen = false
+                    resolution = selectedRes
+                    DisplayPrefs.setResolution(context, deviceId, selectedRes)
+                    onResolutionChange(selectedRes)
+                },
+                onSwitchConsoleMode = { useConsole ->
+                    monitorGridOpen = false
+                    onSwitchConsoleMode(useConsole)
+                },
+                onSwitchUserSession = { user, dom, pass ->
+                    monitorGridOpen = false
+                    onSwitchUserSession(user, dom, pass)
+                },
+                onLockRemotePc = {
+                    monitorGridOpen = false
+                    onLockRemotePc()
+                },
+                onOpenHome = {
+                    monitorGridOpen = false
+                    onOpenHome()
+                },
+                onDismiss = { monitorGridOpen = false },
             )
         }
 
@@ -684,16 +730,16 @@ fun SessionControls(
                 onRemoteDpiChange = onRemoteDpiChange,
                 showTelemetryPill = showTelemetryPill,
                 onShowTelemetryPillChange = { showTelemetryPill = it; prefs.showTelemetryPill = it },
-                autoPipOnBackground = autoPipOnBackground,
-                onAutoPipChange = { autoPipOnBackground = it; prefs.autoPipOnBackground = it },
-                onEnterPip = {
+                onOpenMonitorGrid = {
                     panelOpen = false
-                    onEnterPip()
+                    monitorGridOpen = true
                 },
                 pcConnectMode = pcConnectMode,
                 // Input
                 inputMode = inputMode,
                 onInputModeChange = onInputModeChange,
+                swapMouseButtons = swapMouseButtons,
+                onSwapMouseButtonsChange = onSwapMouseButtonsChange,
                 onSendTextClick = { textValue = ""; textOpen = true },
                 lastClipboard = lastClipboard,
                 clipboardSyncEnabled = clipboardSyncEnabled,
@@ -723,7 +769,24 @@ fun SessionControls(
                 keys = keys,
                 hudProfile = hudProfile,
                 onSelectHudProfile = { selectedPreset ->
-                    if (selectedPreset != hudProfile) {
+                    if (selectedPreset == HudProfilePreset.CUSTOM) {
+                        hudProfile = HudProfilePreset.CUSTOM
+                        prefs.setHudProfile(deviceId, HudProfilePreset.CUSTOM)
+                        val savedCustom = prefs.customHudKeys(deviceId)
+                        if (savedCustom != null && savedCustom.isNotEmpty()) {
+                            onKeysChange(savedCustom)
+                        } else {
+                            prefs.setCustomHudKeys(deviceId, keys)
+                        }
+                        panelOpen = false
+                        onMappingModeChange(true)
+                        notice.show(
+                            xyNow(
+                                "Mode Kustom aktif — geser, tambah, atau ubah tombol sesuai keinginanmu",
+                                "Custom mode active — drag, add, or edit buttons to build your layout",
+                            ),
+                        )
+                    } else if (selectedPreset != hudProfile) {
                         confirmApplyPreset = selectedPreset
                     }
                 },
@@ -944,31 +1007,48 @@ private fun LiveTelemetryPill(
         else -> Color(0xFFFF8A8A)
     }
     val textShadow = Shadow(
-        color = Color(0xF0000000),
-        offset = Offset(1.5f, 1.5f),
-        blurRadius = 3.5f,
+        color = Color(0xF2000000),
+        offset = Offset(1.2f, 1.2f),
+        blurRadius = 3f,
     )
-    val baseStyle = TextStyle(
-        color = Color(0xFFF2F6FA),
-        fontSize = 10.sp,
+    val labelStyle = TextStyle(
+        color = Color(0xB8DCE6F2),
+        fontSize = 7.sp,
         fontWeight = FontWeight.SemiBold,
         fontFamily = FontFamily.Monospace,
-        lineHeight = 13.sp,
+        letterSpacing = 0.4.sp,
+        lineHeight = 8.sp,
+        shadow = textShadow,
+    )
+    val valueStyle = TextStyle(
+        color = Color(0xFFF4F8FC),
+        fontSize = 8.5.sp,
+        fontWeight = FontWeight.Bold,
+        fontFamily = FontFamily.Monospace,
+        lineHeight = 10.sp,
         shadow = textShadow,
     )
     val rttLabel = if (rtt > 0) "${rtt} ms" else "-- ms"
     val resLabel = if (telemetry.width > 0) "${telemetry.width}x${telemetry.height}" else "--"
+    val items = listOf(
+        Triple("FPS", "${telemetry.fps}", Color(0xFFF4F8FC)),
+        Triple("LATENCY", rttLabel, rttColor),
+        Triple("RESOLUSI", resLabel, Color(0xFFF4F8FC)),
+        Triple("ENCODE", telemetry.codecLabel, Color(0xFFF4F8FC)),
+        Triple("RELAY", telemetry.relayLabel, Color(0xFFF4F8FC)),
+        Triple("NETWORK", telemetry.networkLabel, Color(0xFFF4F8FC)),
+    )
 
     Column(
         modifier = modifier.padding(horizontal = 2.dp, vertical = 2.dp),
-        verticalArrangement = Arrangement.spacedBy(1.dp),
+        verticalArrangement = Arrangement.spacedBy(3.dp),
     ) {
-        Text(text = "FPS     : ${telemetry.fps}", style = baseStyle)
-        Text(text = "Latency : $rttLabel", style = baseStyle.copy(color = rttColor))
-        Text(text = "Resolusi: $resLabel", style = baseStyle)
-        Text(text = "Encode  : ${telemetry.codecLabel}", style = baseStyle)
-        Text(text = "Relay   : ${telemetry.relayLabel}", style = baseStyle)
-        Text(text = "Network : ${telemetry.networkLabel}", style = baseStyle)
+        items.forEach { (label, value, color) ->
+            Column(verticalArrangement = Arrangement.spacedBy(0.dp)) {
+                Text(text = label, style = labelStyle)
+                Text(text = value, style = valueStyle.copy(color = color))
+            }
+        }
     }
 }
 
@@ -1164,13 +1244,13 @@ private fun SessionPanel(
     onRemoteDpiChange: (Int) -> Unit,
     showTelemetryPill: Boolean,
     onShowTelemetryPillChange: (Boolean) -> Unit,
-    autoPipOnBackground: Boolean,
-    onAutoPipChange: (Boolean) -> Unit,
-    onEnterPip: () -> Unit,
+    onOpenMonitorGrid: () -> Unit,
     pcConnectMode: Boolean = false,
     // Input
     inputMode: InputMode,
     onInputModeChange: (InputMode) -> Unit,
+    swapMouseButtons: Boolean,
+    onSwapMouseButtonsChange: (Boolean) -> Unit,
     onSendTextClick: () -> Unit,
     lastClipboard: String?,
     clipboardSyncEnabled: Boolean,
@@ -1303,15 +1383,15 @@ private fun SessionPanel(
                         onRemoteDpiChange = onRemoteDpiChange,
                         showTelemetryPill = showTelemetryPill,
                         onShowTelemetryPillChange = onShowTelemetryPillChange,
-                        autoPipOnBackground = autoPipOnBackground,
-                        onAutoPipChange = onAutoPipChange,
-                        onEnterPip = onEnterPip,
+                        onOpenMonitorGrid = onOpenMonitorGrid,
                         pcConnectMode = pcConnectMode,
                     )
 
                     PanelTab.INPUT -> InputTab(
                         inputMode = inputMode,
                         onInputModeChange = onInputModeChange,
+                        swapMouseButtons = swapMouseButtons,
+                        onSwapMouseButtonsChange = onSwapMouseButtonsChange,
                         onSendTextClick = onSendTextClick,
                         lastClipboard = lastClipboard,
                         clipboardSyncEnabled = clipboardSyncEnabled,
@@ -1392,27 +1472,20 @@ private fun ScreenTab(
     onRemoteDpiChange: (Int) -> Unit,
     showTelemetryPill: Boolean,
     onShowTelemetryPillChange: (Boolean) -> Unit,
-    autoPipOnBackground: Boolean,
-    onAutoPipChange: (Boolean) -> Unit,
-    onEnterPip: () -> Unit,
+    onOpenMonitorGrid: () -> Unit,
     pcConnectMode: Boolean = false,
 ) {
-    PanelSection(xy("Telemetri & Jendela Mengambang (PiP)", "Live Telemetry & Floating PiP")) {
+    PanelSection(xy("Telemetri & Multi-Monitor / Sesi", "Live Telemetry & Multi-Monitor / Sessions")) {
         XyToggleRow(
             title = xy("Status telemetri live (FPS, Latency, Network)", "Live telemetry status (FPS, Latency, Network)"),
-            subtitle = xy("Tampilkan FPS, Latency, Resolusi, Encode, Relay, dan Network di kiri atas", "Show FPS, Latency, Resolution, Encode, Relay, and Network at top-left"),
+            subtitle = xy("Tampilkan FPS, Latency, Resolusi, Encode, Relay, dan Network secara ringkas di kiri atas", "Show compact FPS, Latency, Resolution, Encode, Relay, and Network at top-left"),
             checked = showTelemetryPill,
             onCheckedChange = onShowTelemetryPillChange,
         )
-        XyToggleRow(
-            title = xy("Otomatis PiP saat tekan Home", "Auto PiP on Home button"),
-            subtitle = xy("Pantau layar PC di jendela kecil saat buka aplikasi lain", "Watch the PC in a floating mini window while using other apps"),
-            checked = autoPipOnBackground,
-            onCheckedChange = onAutoPipChange,
-        )
         XyPillButton(
-            xy("Masuk Mode Jendela Mengambang (PiP)", "Enter Floating PiP Monitor"),
-            onEnterPip,
+            text = xy("Grid Monitor & Sesi User Aktif", "Active Monitors & User Sessions Grid"),
+            onClick = onOpenMonitorGrid,
+            icon = XyIcons.DualMonitor,
             primary = false,
             compact = true,
             modifier = Modifier.fillMaxWidth(),
@@ -1567,6 +1640,8 @@ private fun ScreenTab(
 private fun InputTab(
     inputMode: InputMode,
     onInputModeChange: (InputMode) -> Unit,
+    swapMouseButtons: Boolean,
+    onSwapMouseButtonsChange: (Boolean) -> Unit,
     onSendTextClick: () -> Unit,
     lastClipboard: String?,
     clipboardSyncEnabled: Boolean,
@@ -1589,7 +1664,7 @@ private fun InputTab(
     gyroMouseEnabled: Boolean,
     onGyroMouseEnabled: (Boolean) -> Unit,
 ) {
-    PanelSection(xy("Mode input", "Input mode")) {
+    PanelSection(xy("Mode input & Klik Mouse", "Input mode & Mouse Click")) {
         XySegmented(
             options = InputMode.entries.map { xy(it.title, it.titleEn) },
             selectedIndex = inputMode.ordinal,
@@ -1597,15 +1672,75 @@ private fun InputTab(
             modifier = Modifier.fillMaxWidth(),
         )
         PanelHint(xy(InputMode.entries[inputMode.ordinal].detail, InputMode.entries[inputMode.ordinal].detailEn))
-        PanelHint(
-            xy(
-                "Tekan tombol keyboard di rail kanan bawah untuk membukanya. Gunakan Back Android untuk menutup; tombol itu tidak berganti fungsi.",
-                "Tap the keyboard button in the bottom-right rail to open it. Use Android Back to close it; the button never changes into a hide toggle.",
-            ),
-        )
+        // Switch Ikon Mouse Kiri <-> Kanan (tanpa bergantung pada teks)
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .clip(RoundedCornerShape(10.dp))
+                .background(
+                    if (swapMouseButtons) MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.45f)
+                    else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f),
+                )
+                .border(
+                    1.dp,
+                    if (swapMouseButtons) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outline,
+                    RoundedCornerShape(10.dp),
+                )
+                .clickable { onSwapMouseButtonsChange(!swapMouseButtons) }
+                .padding(horizontal = 12.dp, vertical = 10.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.SpaceBetween,
+        ) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(10.dp),
+            ) {
+                Box(
+                    Modifier
+                        .size(34.dp)
+                        .clip(CircleShape)
+                        .background(MaterialTheme.colorScheme.surface)
+                        .border(1.dp, MaterialTheme.colorScheme.outlineVariant, CircleShape),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Icon(
+                        if (swapMouseButtons) XyIcons.ClickRight else XyIcons.ClickLeft,
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.size(18.dp),
+                    )
+                }
+                Icon(
+                    XyIcons.MouseSwap,
+                    contentDescription = xy("Tukar Klik Kiri & Kanan", "Swap Left & Right Click"),
+                    tint = MaterialTheme.colorScheme.onSurface,
+                    modifier = Modifier.size(20.dp),
+                )
+                Box(
+                    Modifier
+                        .size(34.dp)
+                        .clip(CircleShape)
+                        .background(MaterialTheme.colorScheme.surface)
+                        .border(1.dp, MaterialTheme.colorScheme.outlineVariant, CircleShape),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Icon(
+                        if (swapMouseButtons) XyIcons.ClickLeft else XyIcons.ClickRight,
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.size(18.dp),
+                    )
+                }
+            }
+            id.xydesk.remote.ui.components.XySwitch(
+                checked = swapMouseButtons,
+                onCheckedChange = onSwapMouseButtonsChange,
+            )
+        }
         XyPillButton(
             xy("Kirim teks ke remote", "Send text to remote"),
             onSendTextClick,
+            icon = XyIcons.Keyboard,
             primary = false,
             compact = true,
             modifier = Modifier.fillMaxWidth(),
@@ -1853,8 +1988,9 @@ private fun SessionTab(
         )
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             XyPillButton(
-                xy("Kunci PC (Win+L)", "Lock PC (Win+L)"),
+                xy("Kunci PC", "Lock PC"),
                 onLockRemotePc,
+                icon = XyIcons.Lock,
                 primary = false,
                 compact = true,
                 modifier = Modifier.weight(1f),
@@ -1862,6 +1998,7 @@ private fun SessionTab(
             XyPillButton(
                 xy("Tirai Privasi", "Privacy Curtain"),
                 onActivatePrivacyCurtain,
+                icon = XyIcons.EyeOff,
                 primary = false,
                 compact = true,
                 modifier = Modifier.weight(1f),
@@ -1872,13 +2009,14 @@ private fun SessionTab(
     PanelSection(xy("Sesi", "Session")) {
         PanelHint(
             xy(
-                "Tombol bulat kanan bawah (ikon power) juga memutus — dialog konfirmasinya sama.",
-                "The bottom-right round button (power icon) also disconnects — same confirmation dialog.",
+                "Tombol bulat kanan bawah (ikon power) juga memutus — langsung kembali ke beranda setelah konfirmasi.",
+                "The bottom-right round button (power icon) also disconnects — returns straight to home after confirmation.",
             ),
         )
         XyPillButton(
             xy("Ambil screenshot", "Take screenshot"),
             onScreenshot,
+            icon = XyIcons.Shot,
             primary = false,
             compact = true,
             modifier = Modifier.fillMaxWidth(),
@@ -1886,6 +2024,7 @@ private fun SessionTab(
         XyPillButton(
             xy("Putuskan sesi", "Disconnect"),
             onDisconnect,
+            icon = XyIcons.Power,
             primary = false,
             compact = true,
             modifier = Modifier.fillMaxWidth(),
@@ -1970,8 +2109,18 @@ private fun KeyRow(
             .clickable { onEdit(key) }
             .padding(horizontal = 10.dp, vertical = 8.dp),
         verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(8.dp),
+        horizontalArrangement = Arrangement.spacedBy(9.dp),
     ) {
+        Box(
+            Modifier
+                .size(30.dp)
+                .clip(CircleShape)
+                .background(MaterialTheme.colorScheme.surfaceVariant)
+                .border(1.dp, MaterialTheme.colorScheme.outlineVariant, CircleShape),
+            contentAlignment = Alignment.Center,
+        ) {
+            HudKeyGlyph(key = key, tint = MaterialTheme.colorScheme.onSurface, boxDp = 30f)
+        }
         Column(Modifier.weight(1f)) {
             Text(
                 key.label,
@@ -1998,12 +2147,472 @@ private fun KeyRow(
         }
         Box(
             Modifier
-                .clip(XyPill)
-                .border(1.dp, MaterialTheme.colorScheme.outlineVariant, XyPill)
-                .clickable { onDelete(key) }
-                .padding(horizontal = 10.dp, vertical = 5.dp),
+                .size(28.dp)
+                .clip(CircleShape)
+                .border(1.dp, MaterialTheme.colorScheme.outlineVariant, CircleShape)
+                .clickable { onDelete(key) },
+            contentAlignment = Alignment.Center,
         ) {
-            Text(xy("Hapus", "Delete"), color = MaterialTheme.colorScheme.onSurface, fontSize = 10.5.sp)
+            Icon(
+                XyIcons.Trash,
+                contentDescription = xy("Hapus", "Delete"),
+                tint = MaterialTheme.colorScheme.onSurface,
+                modifier = Modifier.size(14.dp),
+            )
+        }
+    }
+}
+
+private data class MonitorGridItem(
+    val badge: String,
+    val title: String,
+    val subtitle: String,
+    val value: String,
+    val icon: ImageVector,
+    val active: Boolean,
+)
+
+/**
+ * Modal Grid Monitor & Sesi User Aktif (dibuka dari tombol Monitor di atas Disconnect).
+ * Mendeteksi otomatis monitor aktif (DISP / resolusi sesi) serta sesi konsol (/admin)
+ * maupun akun user tersimpan untuk berpindah secara langsung saat sesi berlangsung.
+ */
+@Composable
+private fun MonitorAndUserGridModal(
+    hostLabel: String,
+    remoteSize: String,
+    codecLabel: String,
+    resolution: String,
+    pcConnectMode: Boolean,
+    activeUsername: String?,
+    consoleAdminMode: Boolean,
+    onSelectMonitorResolution: (String) -> Unit,
+    onSwitchConsoleMode: (Boolean) -> Unit,
+    onSwitchUserSession: (String, String?, String?) -> Unit,
+    onLockRemotePc: () -> Unit,
+    onOpenHome: () -> Unit,
+    onDismiss: () -> Unit,
+) {
+    val context = LocalContext.current
+    val savedAccounts = remember {
+        runCatching { id.xydesk.remote.security.VaultStore(context).list() }.getOrDefault(emptyList())
+    }
+    var customUserOpen by remember { mutableStateOf(false) }
+    var customUsername by remember { mutableStateOf(activeUsername.orEmpty()) }
+    var customDomain by remember { mutableStateOf("") }
+    var customPassword by remember { mutableStateOf("") }
+
+    val cleanRemoteSize = remoteSize.replace(" ", "")
+    val monitorItems = listOf(
+        MonitorGridItem(
+            badge = "MON 1",
+            title = xy("Monitor 1 · Utama", "Monitor 1 · Primary"),
+            subtitle = if (cleanRemoteSize.isNotBlank() && cleanRemoteSize != "--") "$cleanRemoteSize · 16:9" else "1920x1080 · 16:9",
+            value = DisplayPrefs.AUTOMATIC,
+            icon = XyIcons.Monitor,
+            active = resolution == DisplayPrefs.AUTOMATIC || resolution == "1920x1080",
+        ),
+        MonitorGridItem(
+            badge = "MON 2",
+            title = xy("Monitor 2 · QHD", "Monitor 2 · QHD"),
+            subtitle = "2560x1440 · Studio",
+            value = "2560x1440",
+            icon = XyIcons.DualMonitor,
+            active = resolution == "2560x1440",
+        ),
+        MonitorGridItem(
+            badge = "SPAN",
+            title = xy("Dual-Monitor Span", "Dual-Monitor Span"),
+            subtitle = "2560x1080 · 21:9",
+            value = "2560x1080",
+            icon = XyIcons.DualMonitor,
+            active = resolution == "2560x1080",
+        ),
+        MonitorGridItem(
+            badge = "VIEW",
+            title = xy("Layar Penuh HP", "Phone Native View"),
+            subtitle = xy("Ikuti Viewport", "Follow Viewport"),
+            value = DisplayPrefs.FOLLOW,
+            icon = XyIcons.Fit,
+            active = resolution == DisplayPrefs.FOLLOW,
+        ),
+    )
+
+    XyOverlay(
+        title = xy("Monitor & Sesi User Aktif (Auto-Detect)", "Active Monitors & User Sessions (Auto-Detect)"),
+        maxWidth = 440.dp,
+        onDismiss = onDismiss,
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .heightIn(max = 420.dp)
+                .verticalScroll(rememberScrollState()),
+            verticalArrangement = Arrangement.spacedBy(10.dp),
+        ) {
+            // Baris status deteksi otomatis
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(10.dp))
+                    .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f))
+                    .border(1.dp, MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(10.dp))
+                    .padding(horizontal = 11.dp, vertical = 8.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                Icon(
+                    XyIcons.DualMonitor,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier.size(18.dp),
+                )
+                Column(Modifier.weight(1f)) {
+                    Text(
+                        text = "$hostLabel · $remoteSize",
+                        color = MaterialTheme.colorScheme.onSurface,
+                        fontSize = 12.sp,
+                        fontWeight = FontWeight.SemiBold,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                    Text(
+                        text = buildString {
+                            append(if (consoleAdminMode || pcConnectMode) xy("Sesi Konsol Fisik (/admin)", "Physical Console (/admin)") else xy("Sesi User RDP", "RDP User Session"))
+                            if (!activeUsername.isNullOrBlank()) append(" · $activeUsername")
+                            append(" · $codecLabel")
+                        },
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        fontSize = 10.sp,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                }
+            }
+
+            // Grid Monitor Aktif
+            Text(
+                text = xy("GRID MONITOR & LAYAR AKTIF", "ACTIVE MONITORS & DISPLAYS GRID"),
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                fontSize = 9.5.sp,
+                fontWeight = FontWeight.SemiBold,
+                letterSpacing = 1.1.sp,
+            )
+            monitorItems.chunked(2).forEach { row ->
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    row.forEach { item ->
+                        Box(
+                            modifier = Modifier
+                                .weight(1f)
+                                .clip(RoundedCornerShape(11.dp))
+                                .background(
+                                    if (item.active) MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.48f)
+                                    else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.25f),
+                                )
+                                .border(
+                                    if (item.active) 1.4.dp else 1.dp,
+                                    if (item.active) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outline,
+                                    RoundedCornerShape(11.dp),
+                                )
+                                .clickable(enabled = !pcConnectMode) {
+                                    onSelectMonitorResolution(item.value)
+                                }
+                                .padding(10.dp),
+                        ) {
+                            Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                    modifier = Modifier.fillMaxWidth(),
+                                ) {
+                                    Icon(
+                                        item.icon,
+                                        contentDescription = null,
+                                        tint = if (item.active) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface,
+                                        modifier = Modifier.size(17.dp),
+                                    )
+                                    Text(
+                                        text = if (item.active) xy("AKTIF", "ACTIVE") else item.badge,
+                                        fontFamily = FontFamily.Monospace,
+                                        fontSize = 8.5.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        color = if (item.active) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
+                                    )
+                                }
+                                Text(
+                                    text = item.title,
+                                    color = MaterialTheme.colorScheme.onSurface,
+                                    fontSize = 11.5.sp,
+                                    fontWeight = FontWeight.SemiBold,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis,
+                                )
+                                Text(
+                                    text = item.subtitle,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    fontSize = 9.5.sp,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis,
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+
+            // Grid Sesi User & Konsol Windows
+            Text(
+                text = xy("GRID SESI WINDOWS & USER / KONSOL", "WINDOWS SESSIONS & USER / CONSOLE GRID"),
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                fontSize = 9.5.sp,
+                fontWeight = FontWeight.SemiBold,
+                letterSpacing = 1.1.sp,
+            )
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                // Card 1: Sesi Konsol (/admin)
+                val isConsole = consoleAdminMode || pcConnectMode
+                Box(
+                    modifier = Modifier
+                        .weight(1f)
+                        .clip(RoundedCornerShape(11.dp))
+                        .background(
+                            if (isConsole) MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.48f)
+                            else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.25f),
+                        )
+                        .border(
+                            if (isConsole) 1.4.dp else 1.dp,
+                            if (isConsole) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outline,
+                            RoundedCornerShape(11.dp),
+                        )
+                        .clickable { onSwitchConsoleMode(true) }
+                        .padding(10.dp),
+                ) {
+                    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            modifier = Modifier.fillMaxWidth(),
+                        ) {
+                            Icon(
+                                XyIcons.Monitor,
+                                contentDescription = null,
+                                tint = if (isConsole) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface,
+                                modifier = Modifier.size(17.dp),
+                            )
+                            Text(
+                                text = if (isConsole) xy("AKTIF", "ACTIVE") else "/ADMIN",
+                                fontFamily = FontFamily.Monospace,
+                                fontSize = 8.5.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = if (isConsole) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        }
+                        Text(
+                            text = xy("Konsol Fisik PC", "Physical Console"),
+                            color = MaterialTheme.colorScheme.onSurface,
+                            fontSize = 11.5.sp,
+                            fontWeight = FontWeight.SemiBold,
+                            maxLines = 1,
+                        )
+                        Text(
+                            text = xy("Sesi langsung monitor PC", "Direct PC monitor session"),
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            fontSize = 9.5.sp,
+                            maxLines = 1,
+                        )
+                    }
+                }
+
+                // Card 2: Sesi User RDP Virtual
+                val isVirtualUser = !isConsole
+                Box(
+                    modifier = Modifier
+                        .weight(1f)
+                        .clip(RoundedCornerShape(11.dp))
+                        .background(
+                            if (isVirtualUser) MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.48f)
+                            else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.25f),
+                        )
+                        .border(
+                            if (isVirtualUser) 1.4.dp else 1.dp,
+                            if (isVirtualUser) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outline,
+                            RoundedCornerShape(11.dp),
+                        )
+                        .clickable { onSwitchConsoleMode(false) }
+                        .padding(10.dp),
+                ) {
+                    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            modifier = Modifier.fillMaxWidth(),
+                        ) {
+                            Icon(
+                                XyIcons.Users,
+                                contentDescription = null,
+                                tint = if (isVirtualUser) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface,
+                                modifier = Modifier.size(17.dp),
+                            )
+                            Text(
+                                text = if (isVirtualUser) xy("AKTIF", "ACTIVE") else "MULTI",
+                                fontFamily = FontFamily.Monospace,
+                                fontSize = 8.5.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = if (isVirtualUser) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        }
+                        Text(
+                            text = activeUsername?.takeIf { it.isNotBlank() } ?: xy("Sesi User RDP", "RDP User Session"),
+                            color = MaterialTheme.colorScheme.onSurface,
+                            fontSize = 11.5.sp,
+                            fontWeight = FontWeight.SemiBold,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                        )
+                        Text(
+                            text = xy("Sesi virtual multi-user", "Multi-user virtual session"),
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            fontSize = 9.5.sp,
+                            maxLines = 1,
+                        )
+                    }
+                }
+            }
+
+            if (savedAccounts.isNotEmpty()) {
+                savedAccounts.chunked(2).forEach { row ->
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        row.forEach { acc ->
+                            val isCurrentAcc = !activeUsername.isNullOrBlank() &&
+                                activeUsername.equals(acc.username, ignoreCase = true)
+                            Box(
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .clip(RoundedCornerShape(10.dp))
+                                    .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.25f))
+                                    .border(
+                                        1.dp,
+                                        if (isCurrentAcc) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outline,
+                                        RoundedCornerShape(10.dp),
+                                    )
+                                    .clickable {
+                                        onSwitchUserSession(acc.username, acc.domain, acc.password)
+                                    }
+                                    .padding(9.dp),
+                            ) {
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(7.dp),
+                                ) {
+                                    Icon(
+                                        XyIcons.Users,
+                                        contentDescription = null,
+                                        tint = MaterialTheme.colorScheme.onSurface,
+                                        modifier = Modifier.size(15.dp),
+                                    )
+                                    Column(Modifier.weight(1f)) {
+                                        Text(
+                                            text = acc.label.ifBlank { acc.username },
+                                            color = MaterialTheme.colorScheme.onSurface,
+                                            fontSize = 11.sp,
+                                            fontWeight = FontWeight.SemiBold,
+                                            maxLines = 1,
+                                            overflow = TextOverflow.Ellipsis,
+                                        )
+                                        Text(
+                                            text = acc.username,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                            fontSize = 9.5.sp,
+                                            maxLines = 1,
+                                            overflow = TextOverflow.Ellipsis,
+                                        )
+                                    }
+                                }
+                            }
+                        }
+                        repeat(2 - row.size) { Spacer(Modifier.weight(1f)) }
+                    }
+                }
+            }
+
+            if (customUserOpen) {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(10.dp))
+                        .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.25f))
+                        .border(1.dp, MaterialTheme.colorScheme.outline, RoundedCornerShape(10.dp))
+                        .padding(10.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    XyField(
+                        value = customUsername,
+                        onValueChange = { customUsername = it },
+                        label = xy("Username Windows", "Windows Username"),
+                        hint = "Administrator",
+                    )
+                    XyField(
+                        value = customPassword,
+                        onValueChange = { customPassword = it },
+                        label = xy("Password (opsional)", "Password (optional)"),
+                        isPassword = true,
+                    )
+                    XyPillButton(
+                        text = xy("Pindah ke User Ini Sekarang", "Switch to This User Now"),
+                        icon = XyIcons.Users,
+                        onClick = {
+                            val u = customUsername.trim()
+                            if (u.isNotEmpty()) {
+                                onSwitchUserSession(
+                                    u,
+                                    customDomain.trim().takeIf { it.isNotEmpty() },
+                                    customPassword.takeIf { it.isNotEmpty() },
+                                )
+                            }
+                        },
+                        compact = true,
+                        modifier = Modifier.fillMaxWidth(),
+                    )
+                }
+            }
+
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                XyPillButton(
+                    text = xy("Pindah User Lain", "Switch User"),
+                    icon = XyIcons.Users,
+                    onClick = { customUserOpen = !customUserOpen },
+                    primary = customUserOpen,
+                    compact = true,
+                    modifier = Modifier.weight(1f),
+                )
+                XyPillButton(
+                    text = xy("Layar Kunci Windows", "Windows Lock Screen"),
+                    icon = XyIcons.Windows,
+                    onClick = onLockRemotePc,
+                    primary = false,
+                    compact = true,
+                    modifier = Modifier.weight(1f),
+                )
+            }
+
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                XyPillButton(
+                    text = xy("Perangkat Lain (Beranda)", "Other Devices (Home)"),
+                    icon = XyIcons.Grid,
+                    onClick = onOpenHome,
+                    primary = false,
+                    compact = true,
+                    modifier = Modifier.weight(1f),
+                )
+                XyPillButton(
+                    text = xy("Tutup", "Close"),
+                    icon = XyIcons.Close,
+                    onClick = onDismiss,
+                    primary = false,
+                    compact = true,
+                    modifier = Modifier.weight(1f),
+                )
+            }
         }
     }
 }

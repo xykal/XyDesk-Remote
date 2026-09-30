@@ -337,11 +337,20 @@ int android_AudioOut(OPENSL_STREAM* p, const short* buffer, int size)
 	WINPR_ASSERT(size > 0);
 
 	HANDLE ev = Queue_Event(p->queue);
-	/* Assure, that the queue is not full. */
-	if (p->queuesize <= Queue_Count(p->queue) && WaitForSingleObject(ev, INFINITE) == WAIT_FAILED)
+	/* Bounded wait (max 35ms) to prevent audio buffer buildup or stalling RDPSND thread. */
+	if (p->queuesize <= Queue_Count(p->queue))
 	{
-		DEBUG_SND("WaitForSingleObject failed!");
-		return -1;
+		DWORD waitStatus = WaitForSingleObject(ev, 35);
+		if (waitStatus == WAIT_FAILED)
+		{
+			DEBUG_SND("WaitForSingleObject failed!");
+			return -1;
+		}
+		if (p->queuesize <= Queue_Count(p->queue))
+		{
+			/* Drop frame when sink lags to keep audio real-time with video. */
+			return size;
+		}
 	}
 
 	void* data = calloc(size, sizeof(short));

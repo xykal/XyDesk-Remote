@@ -96,21 +96,27 @@ static int rdpsnd_opensles_set_params(rdpsndopenslesPlugin* opensles)
 {
 	DEBUG_SND("opensles=%p", (void*)opensles);
 
-	if (!rdpsnd_opensles_check_handle(opensles))
-		return 0;
+	if (!opensles)
+		return -1;
 
 	if (opensles->stream)
+	{
 		android_CloseAudioDevice(opensles->stream);
+		opensles->stream = nullptr;
+	}
 
-	opensles->stream = android_OpenAudioDevice(opensles->rate, opensles->channels, 20);
-	return 0;
+	const UINT32 rate = (opensles->rate > 0) ? opensles->rate : 48000;
+	const UINT32 channels = (opensles->channels > 0) ? opensles->channels : 2;
+	opensles->stream = android_OpenAudioDevice((int)rate, (int)channels, 8);
+	return opensles->stream ? 0 : -1;
 }
 
 static BOOL rdpsnd_opensles_set_format(rdpsndDevicePlugin* device, const AUDIO_FORMAT* format,
                                        UINT32 latency)
 {
 	rdpsndopenslesPlugin* opensles = (rdpsndopenslesPlugin*)device;
-	rdpsnd_opensles_check_handle(opensles);
+	if (!opensles)
+		return FALSE;
 	DEBUG_SND("opensles=%p format=%p, latency=%" PRIu32, (void*)opensles, (void*)format, latency);
 
 	if (format)
@@ -119,6 +125,13 @@ static BOOL rdpsnd_opensles_set_format(rdpsndDevicePlugin* device, const AUDIO_F
 		          ", channels=%" PRIu16 ", align=%" PRIu16 "",
 		          format->wFormatTag, format->cbSize, format->nSamplesPerSec,
 		          format->wBitsPerSample, format->nChannels, format->nBlockAlign);
+		if (opensles->stream && opensles->rate == format->nSamplesPerSec &&
+		    opensles->channels == format->nChannels && opensles->wformat == format->wFormatTag)
+		{
+			opensles->latency = latency;
+			opensles->block_size = format->nBlockAlign;
+			return TRUE;
+		}
 		opensles->rate = format->nSamplesPerSec;
 		opensles->channels = format->nChannels;
 		opensles->format = format->wFormatTag;
@@ -138,17 +151,16 @@ static BOOL rdpsnd_opensles_open(rdpsndDevicePlugin* device, const AUDIO_FORMAT*
 	          (void*)format, latency, opensles->rate);
 
 	if (rdpsnd_opensles_check_handle(opensles))
-		return TRUE;
+		return rdpsnd_opensles_set_format(device, format, latency);
 
-	opensles->stream = android_OpenAudioDevice(opensles->rate, opensles->channels, 20);
-	WINPR_ASSERT(opensles->stream);
-
-	if (!opensles->stream)
+	if (!rdpsnd_opensles_set_format(device, format, latency))
+	{
 		WLog_ERR(TAG, "android_OpenAudioDevice failed");
-	else
-		rdpsnd_opensles_set_volume(device, opensles->volume);
+		return FALSE;
+	}
 
-	return rdpsnd_opensles_set_format(device, format, latency);
+	rdpsnd_opensles_set_volume(device, opensles->volume);
+	return TRUE;
 }
 
 static void rdpsnd_opensles_close(rdpsndDevicePlugin* device)
