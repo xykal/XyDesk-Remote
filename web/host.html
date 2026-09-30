@@ -2,9 +2,12 @@
 <html lang="id" data-theme="dark">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
   <title>XyDesk Host Setup (PC ID &amp; GPU Gaming) — XyDesk Remote</title>
   <meta name="description" content="Agen Konfigurasi PC Windows XyDeskHost untuk Login via ID PC & Password serta Akselerasi GPU Hardware AVC444 60 FPS." />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@500;600;700&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
   <style>
     :root {
       --bg: #0A0B0E;
@@ -15,66 +18,78 @@
       --text: #F4F6F8;
       --text-dim: #A6AEBB;
       --text-faint: #737B88;
+      --font-sans: "Plus Jakarta Sans", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
     }
     * { box-sizing: border-box; margin: 0; padding: 0; }
     body {
       background: var(--bg);
       color: var(--text);
-      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Inter, Roboto, sans-serif;
-      line-height: 1.6;
+      font-family: var(--font-sans);
+      line-height: 1.62;
       min-height: 100vh;
+      min-height: 100dvh;
       display: flex;
       flex-direction: column;
+      overflow-x: hidden;
+      -webkit-font-smoothing: antialiased;
     }
     a { color: inherit; text-decoration: none; }
-    .mono { font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace; }
-    .container { width: 100%; max-width: 860px; margin: 0 auto; padding: 0 20px; }
-    .topbar { border-bottom: 1px solid var(--line); background: var(--bg); }
-    .topbar-inner { min-height: 60px; display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+    button { font-family: inherit; }
+    .mono { font-family: var(--font-mono); font-feature-settings: "tnum" on, "zero" on; }
+    .container { width: 100%; max-width: 880px; margin: 0 auto; padding: 0 clamp(16px, 4vw, 24px); }
+    .topbar { border-bottom: 1px solid var(--line); background: var(--bg); position: sticky; top: 0; z-index: 30; }
+    .topbar-inner { min-height: 60px; padding: 10px 0; display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
     .pill {
       display: inline-flex;
       align-items: center;
       justify-content: center;
-      padding: 8px 16px;
+      padding: 8px 15px;
       border-radius: 999px;
       border: 1px solid var(--line-strong);
       background: var(--surface-alt);
-      font-size: 13px;
+      color: var(--text);
+      font-size: clamp(12px, 1.5vw, 13px);
       font-weight: 600;
       cursor: pointer;
     }
     .pill.primary { background: var(--text); color: var(--bg); border-color: var(--text); }
-    main { padding: 44px 0; flex: 1; }
-    .meta { font-size: 11.5px; color: var(--text-faint); text-transform: uppercase; letter-spacing: 0.06em; margin-bottom: 8px; }
-    h1 { font-size: 28px; font-weight: 700; letter-spacing: -0.02em; margin-bottom: 12px; }
-    .lead { font-size: 14.5px; color: var(--text-dim); margin-bottom: 24px; }
+    main { padding: clamp(28px, 5vw, 46px) 0; flex: 1; }
+    .meta { font-size: clamp(10.5px, 1.4vw, 11.5px); font-weight: 600; color: var(--text-faint); text-transform: uppercase; letter-spacing: 0.06em; margin-bottom: 8px; }
+    h1 { font-size: clamp(22px, 4vw, 30px); font-weight: 800; letter-spacing: -0.025em; line-height: 1.2; margin-bottom: 12px; }
+    .lead { font-size: clamp(13.8px, 1.7vw, 15px); color: var(--text-dim); margin-bottom: 24px; line-height: 1.65; }
     .card {
       background: var(--surface);
       border: 1px solid var(--line);
-      border-radius: 12px;
-      padding: 22px;
+      border-radius: 14px;
+      padding: clamp(16px, 3vw, 22px);
       margin-bottom: 16px;
     }
-    .card h2 { font-size: 16px; font-weight: 600; margin-bottom: 8px; }
-    .card p, .card li { font-size: 13.5px; color: var(--text-dim); }
-    .card ul { padding-left: 18px; margin-top: 8px; display: flex; flex-direction: column; gap: 6px; }
+    .card h2 { font-size: clamp(15px, 2vw, 16.5px); font-weight: 700; letter-spacing: -0.015em; margin-bottom: 8px; }
+    .card p, .card li { font-size: clamp(13px, 1.5vw, 14px); color: var(--text-dim); line-height: 1.6; }
+    .card ul { padding-left: 18px; margin-top: 8px; display: flex; flex-direction: column; gap: 7px; }
     .code-box {
       background: var(--bg);
       border: 1px solid var(--line);
-      border-radius: 8px;
+      border-radius: 9px;
       padding: 12px 14px;
-      font-size: 13px;
+      font-size: clamp(12px, 1.5vw, 13px);
       margin: 12px 0;
       overflow-x: auto;
+      white-space: nowrap;
     }
     footer { border-top: 1px solid var(--line); padding: 24px 0; font-size: 12px; color: var(--text-faint); }
     .footer-inner { display: flex; justify-content: space-between; flex-wrap: wrap; gap: 12px; }
+    @media (max-width: 540px) {
+      .pill.primary { width: 100%; }
+      .footer-inner { flex-direction: column; align-items: flex-start; }
+    }
   </style>
 </head>
 <body>
   <header class="topbar">
     <div class="container topbar-inner">
-      <a href="index.html" style="font-weight: 600; font-size: 16px;">XyDesk Remote</a>
+      <a href="index.html" style="font-weight: 700; font-size: 16px; letter-spacing: -0.02em;">XyDesk Remote</a>
       <a href="index.html" class="pill">Beranda</a>
     </div>
   </header>

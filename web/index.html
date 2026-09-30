@@ -2,11 +2,14 @@
 <html lang="id" data-theme="dark">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
   <title>XyDesk Remote — Klien Remote Desktop Android</title>
   <meta name="description" content="Klien Remote Desktop (RDP) untuk Android berbasis FreeRDP 3 dengan H.264 AVC444/AVC420, transport RDP-UDP, kontrol HUD terprogram, Wake-on-LAN, dan enkripsi Android Keystore." />
   <meta name="author" content="XyVerse Technology Global" />
   <meta name="theme-color" content="#0A0B0E" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@500;600;700&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
   <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 48 48'%3E%3Crect width='48' height='48' rx='11' fill='%230A0B0E'/%3E%3Crect x='6.8' y='13.4' width='34.4' height='20.6' rx='3' fill='none' stroke='%23F4F6F8' stroke-width='2.7'/%3E%3Cline x1='19.5' y1='40.2' x2='28.5' y2='40.2' stroke='%23F4F6F8' stroke-width='2.7' stroke-linecap='round'/%3E%3Cline x1='24' y1='34.2' x2='24' y2='40.2' stroke='%23F4F6F8' stroke-width='2.7' stroke-linecap='round'/%3E%3Cpolygon points='18.6,17.6 18.6,28.4 21.7,25.3 23.9,30.1 26.2,29 24,24.2 28.1,23.8' fill='%23F4F6F8'/%3E%3C/svg%3E" />
   <style>
     :root, [data-theme="dark"] {
@@ -20,7 +23,9 @@
       --text-faint: #737B88;
       --accent: #F4F6F8;
       --accent-ink: #0A0B0E;
-      --scrim: rgba(10, 11, 14, 0.78);
+      --scrim: rgba(10, 11, 14, 0.76);
+      --font-sans: "Plus Jakarta Sans", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
     }
 
     [data-theme="light"] {
@@ -34,7 +39,7 @@
       --text-faint: #747C8A;
       --accent: #121418;
       --accent-ink: #F6F7F9;
-      --scrim: rgba(18, 20, 24, 0.62);
+      --scrim: rgba(18, 20, 24, 0.60);
     }
 
     * {
@@ -47,17 +52,22 @@
       scroll-behavior: smooth;
       background: var(--bg);
       color: var(--text);
-      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Inter, Roboto, sans-serif;
-      line-height: 1.55;
+      font-family: var(--font-sans);
+      font-size: 16px;
+      line-height: 1.6;
       -webkit-font-smoothing: antialiased;
+      -moz-osx-font-smoothing: grayscale;
+      text-rendering: optimizeLegibility;
     }
 
     body {
       background: var(--bg);
       color: var(--text);
       min-height: 100vh;
+      min-height: 100dvh;
       display: flex;
       flex-direction: column;
+      overflow-x: hidden;
     }
 
     a {
@@ -65,15 +75,20 @@
       text-decoration: none;
     }
 
+    button {
+      font-family: inherit;
+    }
+
     .mono {
-      font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+      font-family: var(--font-mono);
+      font-feature-settings: "tnum" on, "zero" on;
     }
 
     .container {
       width: 100%;
-      max-width: 1060px;
+      max-width: 1080px;
       margin: 0 auto;
-      padding: 0 20px;
+      padding: 0 clamp(16px, 4vw, 28px);
     }
 
     /* Topbar */
@@ -91,57 +106,69 @@
       display: flex;
       align-items: center;
       justify-content: space-between;
-      gap: 14px;
-      flex-wrap: wrap;
+      gap: 12px;
     }
 
     .brand {
       display: inline-flex;
       align-items: center;
-      gap: 10px;
-      font-weight: 600;
-      font-size: 17px;
-      letter-spacing: -0.02em;
+      gap: 9px;
+      font-weight: 700;
+      font-size: clamp(15px, 2vw, 17px);
+      letter-spacing: -0.025em;
+      flex-shrink: 0;
     }
 
     .brand svg {
-      width: 28px;
-      height: 28px;
+      width: 26px;
+      height: 26px;
       flex-shrink: 0;
     }
 
     .brand-tag {
       font-size: 11px;
-      font-weight: 500;
+      font-weight: 600;
       color: var(--text-faint);
       padding: 2px 8px;
       border: 1px solid var(--line);
       border-radius: 999px;
+      white-space: nowrap;
     }
 
     .nav-row {
       display: flex;
       align-items: center;
       gap: 6px;
-      flex-wrap: wrap;
+      overflow-x: auto;
+      scrollbar-width: none;
+      -ms-overflow-style: none;
+      -webkit-overflow-scrolling: touch;
+      max-width: 100%;
+    }
+
+    .nav-row::-webkit-scrollbar {
+      display: none;
     }
 
     .pill-btn {
       display: inline-flex;
       align-items: center;
       justify-content: center;
-      gap: 8px;
-      min-height: 38px;
-      padding: 7px 14px;
+      gap: 6px;
+      min-height: 36px;
+      padding: 6px 13px;
       border-radius: 999px;
       border: 1px solid var(--line);
       background: transparent;
       color: var(--text);
-      font-size: 12.5px;
+      font-size: clamp(12px, 1.4vw, 13px);
       font-weight: 600;
+      letter-spacing: -0.01em;
+      white-space: nowrap;
       cursor: pointer;
       user-select: none;
-      transition: background-color 0.12s ease, border-color 0.12s ease;
+      flex-shrink: 0;
+      transition: background-color 0.14s ease, border-color 0.14s ease, opacity 0.14s ease;
     }
 
     .pill-btn:hover {
@@ -162,38 +189,40 @@
 
     .pill-btn.lg {
       min-height: 44px;
-      padding: 10px 20px;
-      font-size: 13.5px;
+      padding: 10px 18px;
+      font-size: clamp(13px, 1.6vw, 14px);
     }
 
     /* Editorial Intro */
     .intro {
-      padding: 56px 0 44px;
+      padding: clamp(32px, 6vw, 58px) 0 clamp(30px, 5vw, 46px);
       border-bottom: 1px solid var(--line);
     }
 
     .intro-meta {
-      font-size: 12px;
+      font-size: clamp(11px, 1.3vw, 12px);
+      font-weight: 600;
       color: var(--text-faint);
-      letter-spacing: 0.04em;
+      letter-spacing: 0.05em;
       text-transform: uppercase;
-      margin-bottom: 14px;
+      margin-bottom: 12px;
     }
 
     .intro h1 {
-      font-size: clamp(28px, 4vw, 42px);
-      font-weight: 700;
+      font-size: clamp(24px, 4.2vw, 42px);
+      font-weight: 800;
       letter-spacing: -0.03em;
-      line-height: 1.14;
-      max-width: 780px;
-      margin-bottom: 16px;
+      line-height: 1.18;
+      max-width: 800px;
+      margin-bottom: 14px;
     }
 
     .intro p {
-      font-size: 15.5px;
+      font-size: clamp(14px, 1.8vw, 16px);
+      line-height: 1.65;
       color: var(--text-dim);
-      max-width: 680px;
-      margin-bottom: 26px;
+      max-width: 700px;
+      margin-bottom: 24px;
     }
 
     .intro-actions {
@@ -201,22 +230,23 @@
       align-items: center;
       gap: 10px;
       flex-wrap: wrap;
-      margin-bottom: 36px;
+      margin-bottom: clamp(26px, 4vw, 38px);
     }
 
     /* Specification Ledger */
     .ledger {
       display: grid;
-      grid-template-columns: repeat(4, 1fr);
+      grid-template-columns: repeat(4, minmax(0, 1fr));
       border: 1px solid var(--line);
-      border-radius: 12px;
+      border-radius: 14px;
       background: var(--surface);
       overflow: hidden;
     }
 
     .ledger-cell {
-      padding: 16px 18px;
+      padding: clamp(14px, 2vw, 18px);
       border-right: 1px solid var(--line);
+      min-width: 0;
     }
 
     .ledger-cell:last-child {
@@ -225,31 +255,36 @@
 
     .ledger-k {
       font-size: 11px;
+      font-weight: 600;
       text-transform: uppercase;
       letter-spacing: 0.06em;
       color: var(--text-faint);
-      margin-bottom: 4px;
+      margin-bottom: 5px;
     }
 
     .ledger-v {
-      font-size: 14px;
-      font-weight: 600;
+      font-size: clamp(13.5px, 1.6vw, 15px);
+      font-weight: 700;
+      letter-spacing: -0.02em;
+      word-break: break-word;
     }
 
     .ledger-sub {
       font-size: 12px;
       color: var(--text-dim);
-      margin-top: 2px;
+      margin-top: 3px;
+      line-height: 1.45;
+      word-break: break-word;
     }
 
     /* Sections */
     .section {
-      padding: 48px 0;
+      padding: clamp(34px, 5vw, 52px) 0;
       border-bottom: 1px solid var(--line);
     }
 
     .section-head {
-      margin-bottom: 24px;
+      margin-bottom: clamp(18px, 3vw, 26px);
     }
 
     .section-kicker {
@@ -262,24 +297,25 @@
     }
 
     .section-title {
-      font-size: 22px;
+      font-size: clamp(19px, 2.8vw, 24px);
       font-weight: 700;
-      letter-spacing: -0.02em;
+      letter-spacing: -0.025em;
+      line-height: 1.25;
     }
 
     /* Structured Capability Table */
     .cap-table {
       border: 1px solid var(--line);
-      border-radius: 12px;
+      border-radius: 14px;
       background: var(--surface);
       overflow: hidden;
     }
 
     .cap-row {
       display: grid;
-      grid-template-columns: 240px 1fr 170px;
+      grid-template-columns: 230px minmax(0, 1fr) 165px;
       gap: 16px;
-      padding: 15px 18px;
+      padding: clamp(14px, 2vw, 17px) clamp(16px, 2.2vw, 20px);
       border-bottom: 1px solid var(--line);
       align-items: baseline;
     }
@@ -289,52 +325,58 @@
     }
 
     .cap-name {
-      font-size: 14px;
-      font-weight: 600;
+      font-size: clamp(13.5px, 1.5vw, 14.5px);
+      font-weight: 700;
+      letter-spacing: -0.01em;
     }
 
     .cap-desc {
-      font-size: 13.5px;
+      font-size: clamp(13px, 1.45vw, 14px);
       color: var(--text-dim);
+      line-height: 1.58;
     }
 
     .cap-spec {
-      font-size: 12px;
+      font-size: 11.5px;
+      font-weight: 600;
       color: var(--text-faint);
       text-align: right;
+      white-space: nowrap;
     }
 
     /* Architecture Split */
     .arch-split {
       display: grid;
-      grid-template-columns: 1fr 1fr;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
       gap: 16px;
     }
 
     .arch-box {
       background: var(--surface);
       border: 1px solid var(--line);
-      border-radius: 12px;
-      padding: 20px;
+      border-radius: 14px;
+      padding: clamp(18px, 2.5vw, 22px);
     }
 
     .arch-box h3 {
-      font-size: 15px;
-      font-weight: 600;
-      margin-bottom: 10px;
+      font-size: clamp(14.5px, 1.7vw, 16px);
+      font-weight: 700;
+      letter-spacing: -0.015em;
+      margin-bottom: 12px;
     }
 
     .arch-list {
       list-style: none;
       display: flex;
       flex-direction: column;
-      gap: 8px;
+      gap: 9px;
     }
 
     .arch-list li {
-      font-size: 13px;
+      font-size: clamp(12.8px, 1.4vw, 13.8px);
+      line-height: 1.58;
       color: var(--text-dim);
-      padding-left: 14px;
+      padding-left: 16px;
       position: relative;
     }
 
@@ -351,8 +393,23 @@
       border: 1px solid var(--line);
       border-radius: 14px;
       background: var(--surface);
-      padding: 24px;
+      padding: clamp(16px, 3vw, 24px);
       overflow: hidden;
+    }
+
+    .download-head {
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: 12px;
+      flex-wrap: wrap;
+    }
+
+    .download-desc {
+      font-size: clamp(13px, 1.45vw, 14px);
+      color: var(--text-dim);
+      max-width: 680px;
+      line-height: 1.58;
     }
 
     .pkg-table {
@@ -365,15 +422,33 @@
 
     .pkg-row {
       display: grid;
-      grid-template-columns: 160px 1fr 250px;
+      grid-template-columns: 165px minmax(0, 1fr) 260px;
       gap: 16px;
-      padding: 18px 20px;
+      padding: clamp(15px, 2.2vw, 18px) clamp(16px, 2.4vw, 20px);
       border-bottom: 1px solid var(--line);
       align-items: center;
     }
 
     .pkg-row:last-child {
       border-bottom: none;
+    }
+
+    .pkg-abi {
+      font-weight: 700;
+      font-size: clamp(14px, 1.6vw, 15px);
+      letter-spacing: -0.01em;
+    }
+
+    .pkg-sub {
+      font-size: 11.5px;
+      color: var(--text-faint);
+      margin-top: 2px;
+    }
+
+    .pkg-info {
+      font-size: clamp(12.8px, 1.4vw, 13.5px);
+      color: var(--text-dim);
+      line-height: 1.5;
     }
 
     .dl-countdown-btn {
@@ -383,7 +458,7 @@
       align-items: center;
       justify-content: center;
       gap: 4px;
-      padding: 10px 14px;
+      padding: 11px 14px;
       border-radius: 10px;
       border: 1px solid var(--line-strong);
       background: var(--surface-alt);
@@ -399,15 +474,15 @@
     }
 
     .dl-btn-top {
-      font-size: 11px;
-      font-weight: 600;
+      font-size: 10.5px;
+      font-weight: 700;
       text-transform: uppercase;
       letter-spacing: 0.06em;
       color: var(--text-dim);
     }
 
     .dl-btn-timer {
-      font-size: 13px;
+      font-size: clamp(12.5px, 1.5vw, 13.5px);
       font-weight: 700;
       letter-spacing: 0.03em;
       color: var(--text);
@@ -419,12 +494,12 @@
       inset: 0;
       z-index: 100;
       background: var(--scrim);
-      backdrop-filter: blur(18px);
-      -webkit-backdrop-filter: blur(18px);
+      backdrop-filter: blur(16px);
+      -webkit-backdrop-filter: blur(16px);
       display: none;
       align-items: center;
       justify-content: center;
-      padding: 20px;
+      padding: clamp(12px, 3.5vw, 22px);
     }
 
     .launch-backdrop.open {
@@ -434,74 +509,85 @@
     .launch-dialog {
       width: 100%;
       max-width: 460px;
+      max-height: calc(100dvh - 24px);
+      overflow-y: auto;
       background: var(--surface);
       border: 1px solid var(--line-strong);
       border-radius: 16px;
-      padding: 26px 24px;
+      padding: clamp(18px, 4vw, 26px);
       display: flex;
       flex-direction: column;
-      gap: 16px;
+      gap: clamp(12px, 2.5vw, 16px);
     }
 
     .launch-top {
       display: flex;
       align-items: center;
       justify-content: space-between;
-      gap: 12px;
+      gap: 10px;
     }
 
     .launch-pill {
       font-size: 11px;
       font-weight: 600;
-      letter-spacing: 0.06em;
+      letter-spacing: 0.05em;
       text-transform: uppercase;
       padding: 4px 10px;
       border-radius: 999px;
       border: 1px solid var(--line-strong);
       background: var(--surface-alt);
       color: var(--text);
+      white-space: nowrap;
+      flex-shrink: 0;
     }
 
     .launch-name {
-      font-size: 24px;
-      font-weight: 700;
-      letter-spacing: -0.02em;
+      font-size: clamp(19px, 4.5vw, 23px);
+      font-weight: 800;
+      letter-spacing: -0.025em;
       line-height: 1.15;
     }
 
     .launch-sub {
-      font-size: 13px;
+      font-size: clamp(11.5px, 2.8vw, 12.5px);
       font-weight: 600;
       color: var(--text-dim);
       margin-top: 2px;
     }
 
+    .modal-body-text {
+      font-size: clamp(12.8px, 3.2vw, 13.8px);
+      line-height: 1.58;
+      color: var(--text-dim);
+    }
+
     .cd-grid {
       display: grid;
-      grid-template-columns: repeat(4, 1fr);
-      gap: 8px;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      gap: clamp(6px, 2vw, 10px);
     }
 
     .cd-cell {
       background: var(--bg);
       border: 1px solid var(--line-strong);
       border-radius: 10px;
-      padding: 14px 6px;
+      padding: clamp(10px, 2.5vw, 14px) 4px;
       text-align: center;
+      min-width: 0;
     }
 
     .cd-val {
-      font-size: 25px;
+      font-size: clamp(19px, 5vw, 25px);
       font-weight: 700;
       letter-spacing: -0.03em;
       line-height: 1.1;
     }
 
     .cd-lbl {
-      font-size: 10px;
+      font-size: clamp(9.5px, 2.3vw, 10.5px);
       font-weight: 600;
       text-transform: uppercase;
-      letter-spacing: 0.08em;
+      letter-spacing: 0.06em;
       color: var(--text-faint);
       margin-top: 5px;
     }
@@ -511,17 +597,29 @@
       border: 1px solid var(--line);
       border-radius: 10px;
       padding: 12px 14px;
-      font-size: 12.5px;
+      font-size: clamp(11.5px, 2.8vw, 12.5px);
+      line-height: 1.5;
       color: var(--text-dim);
       display: flex;
       flex-direction: column;
       gap: 4px;
     }
 
+    .modal-actions {
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+    }
+
+    .modal-actions > * {
+      flex: 1 1 140px;
+      min-height: 40px;
+    }
+
     /* Footer */
     footer {
       margin-top: auto;
-      padding: 28px 0;
+      padding: clamp(22px, 4vw, 30px) 0;
       font-size: 12px;
       color: var(--text-faint);
     }
@@ -536,7 +634,7 @@
 
     .footer-nav {
       display: flex;
-      gap: 16px;
+      gap: 14px;
       flex-wrap: wrap;
     }
 
@@ -544,21 +642,79 @@
       color: var(--text);
     }
 
-    @media (max-width: 820px) {
+    /* Tablet & Mobile Responsive Breakpoints */
+    @media (max-width: 860px) {
       .ledger {
-        grid-template-columns: 1fr 1fr;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
       }
-      .ledger-cell {
+      .ledger-cell:nth-child(2) {
+        border-right: none;
+      }
+      .ledger-cell:nth-child(1),
+      .ledger-cell:nth-child(2) {
         border-bottom: 1px solid var(--line);
       }
-      .cap-row,
-      .pkg-row,
-      .arch-split {
+      .cap-row {
         grid-template-columns: 1fr;
-        gap: 6px;
+        gap: 5px;
       }
       .cap-spec {
         text-align: left;
+        margin-top: 2px;
+      }
+      .pkg-row {
+        grid-template-columns: 1fr;
+        gap: 10px;
+      }
+      .arch-split {
+        grid-template-columns: 1fr;
+        gap: 12px;
+      }
+    }
+
+    @media (max-width: 680px) {
+      .topbar-inner {
+        flex-direction: column;
+        align-items: stretch;
+        gap: 8px;
+        padding: 10px 0;
+      }
+      .brand {
+        justify-content: space-between;
+        width: 100%;
+      }
+      .brand-left {
+        display: inline-flex;
+        align-items: center;
+        gap: 9px;
+      }
+      .nav-row {
+        width: 100%;
+        padding-bottom: 2px;
+      }
+      .intro-actions {
+        flex-direction: column;
+        align-items: stretch;
+      }
+      .intro-actions .pill-btn {
+        width: 100%;
+      }
+      .footer-inner {
+        flex-direction: column;
+        align-items: flex-start;
+      }
+    }
+
+    @media (max-width: 420px) {
+      .ledger {
+        grid-template-columns: 1fr;
+      }
+      .ledger-cell {
+        border-right: none !important;
+        border-bottom: 1px solid var(--line);
+      }
+      .ledger-cell:last-child {
+        border-bottom: none;
       }
     }
   </style>
@@ -567,23 +723,26 @@
   <header class="topbar">
     <div class="container topbar-inner">
       <a href="#top" class="brand">
-        <svg viewBox="0 0 48 48" fill="none" aria-hidden="true">
-          <rect x="6.8" y="13.4" width="34.4" height="20.6" rx="3" stroke="currentColor" stroke-width="2.7" />
-          <line x1="19.5" y1="40.2" x2="28.5" y2="40.2" stroke="currentColor" stroke-width="2.7" stroke-linecap="round" />
-          <line x1="24" y1="34.2" x2="24" y2="40.2" stroke="currentColor" stroke-width="2.7" stroke-linecap="round" />
-          <polygon points="18.6,17.6 18.6,28.4 21.7,25.3 23.9,30.1 26.2,29 24,24.2 28.1,23.8" fill="currentColor" />
-        </svg>
-        <span>XyDesk Remote</span>
+        <span class="brand-left" style="display:inline-flex;align-items:center;gap:9px;">
+          <svg viewBox="0 0 48 48" fill="none" aria-hidden="true">
+            <rect x="6.8" y="13.4" width="34.4" height="20.6" rx="3" stroke="currentColor" stroke-width="2.7" />
+            <line x1="19.5" y1="40.2" x2="28.5" y2="40.2" stroke="currentColor" stroke-width="2.7" stroke-linecap="round" />
+            <line x1="24" y1="34.2" x2="24" y2="40.2" stroke="currentColor" stroke-width="2.7" stroke-linecap="round" />
+            <polygon points="18.6,17.6 18.6,28.4 21.7,25.3 23.9,30.1 26.2,29 24,24.2 28.1,23.8" fill="currentColor" />
+          </svg>
+          <span>XyDesk Remote</span>
+        </span>
         <span class="brand-tag mono">Ver 1.0.0</span>
       </a>
-      <nav class="nav-row">
+      <nav class="nav-row" aria-label="Navigasi Utama">
+        <button type="button" class="pill-btn primary" data-open-launch data-i18n="nav.download">Unduh</button>
         <a href="#capabilities" class="pill-btn" data-i18n="nav.cap">Kemampuan</a>
         <a href="#architecture" class="pill-btn" data-i18n="nav.arch">Arsitektur</a>
+        <a href="host.html" class="pill-btn">PC Host</a>
         <a href="status.html" class="pill-btn" data-i18n="nav.status">Status Sistem</a>
         <a href="licenses.html" class="pill-btn" data-i18n="nav.licenses">Lisensi</a>
         <button type="button" class="pill-btn" id="lang-btn">ID / EN</button>
         <button type="button" class="pill-btn" id="theme-btn">Gelap</button>
-        <button type="button" class="pill-btn primary" data-open-launch data-i18n="nav.download">Unduh</button>
       </nav>
     </div>
   </header>
@@ -595,17 +754,17 @@
         <div class="intro-meta mono" data-i18n="intro.meta">Klien Remote Desktop Android · FreeRDP 3 Native</div>
         <h1 data-i18n="intro.title">Klien Remote Desktop Windows yang Presisi, Ringan, dan Terenkripsi untuk Android.</h1>
         <p data-i18n="intro.lead">
-          XyDesk Remote menghubungkan perangkat Android langsung ke workstation dan server Windows melalui protokol RDP native. Dirancang dengan tata letak kontrol layar sentuh yang dapat dikonfigurasi per perangkat, dukungan codec H.264 AVC444/AVC420, serta penyimpanan kredensial di dalam Android Keystore.
+          XyDesk Remote menghubungkan perangkat Android langsung ke workstation dan server Windows melalui protokol RDP native maupun mode Koneksi PC (ID &amp; Password). Dirancang dengan tata letak kontrol layar sentuh yang dapat dikonfigurasi per perangkat, dukungan codec H.264 AVC444/AVC420, serta penyimpanan kredensial di dalam Android Keystore.
         </p>
         <div class="intro-actions">
           <button type="button" class="pill-btn primary lg" data-open-launch data-i18n="intro.cta.dl">
             Halaman Unduh (Ver 1.0.0)
           </button>
+          <a href="host.html" class="pill-btn lg" data-i18n="intro.cta.host">
+            Setup XyDesk Host (PC Windows)
+          </a>
           <a href="status.html" class="pill-btn lg" data-i18n="intro.cta.status">
             Status &amp; Kesehatan Layanan
-          </a>
-          <a href="privacy.html" class="pill-btn lg" data-i18n="intro.cta.privacy">
-            Kebijakan &amp; Keamanan
           </a>
         </div>
 
@@ -618,7 +777,7 @@
           <div class="ledger-cell">
             <div class="ledger-k" data-i18n="led.2.k">Pipeline Grafis</div>
             <div class="ledger-v mono">AVC444 / AVC420</div>
-            <div class="ledger-sub" data-i18n="led.2.s">16 / 24 / 32-bit · Async Update</div>
+            <div class="ledger-sub" data-i18n="led.2.s">NVENC · AMF · QSV · 60 FPS</div>
           </div>
           <div class="ledger-cell">
             <div class="ledger-k" data-i18n="led.3.k">Keamanan</div>
@@ -645,13 +804,13 @@
         <div class="cap-table">
           <div class="cap-row">
             <div class="cap-name" data-i18n="c1.n">Jendela Mengambang (PiP)</div>
-            <div class="cap-desc" data-i18n="c1.d">Memantau layar komputer remote di jendela kecil Android saat berpindah ke aplikasi lain, dengan penyembunyian tombol HUD otomatis.</div>
-            <div class="cap-spec mono">Android PiP API</div>
+            <div class="cap-desc" data-i18n="c1.d">Memantau layar komputer remote di jendela mengambang yang dapat digeser dan diubah ukurannya, baik di atas aplikasi lain maupun lintas layar XyDesk.</div>
+            <div class="cap-spec mono">Floating Monitor</div>
           </div>
           <div class="cap-row">
-            <div class="cap-name" data-i18n="c2.n">Telemetri Sesi Real-Time</div>
-            <div class="cap-desc" data-i18n="c2.d">Menampilkan kecepatan bingkai (FPS), latensi pulang-pergi TCP (RTT ms), dan codec grafis aktif secara ringkas di sudut layar.</div>
-            <div class="cap-spec mono">FPS · TCP RTT</div>
+            <div class="cap-name" data-i18n="c2.n">Telemetri Sesi Vertikal</div>
+            <div class="cap-desc" data-i18n="c2.d">Menampilkan FPS, Latency (ms), Resolusi, Encode GPU, Relay, dan Network aktif (Wi-Fi / Data Seluler) secara ringkas dari atas ke bawah tanpa blok latar.</div>
+            <div class="cap-spec mono">6-Metric HUD</div>
           </div>
           <div class="cap-row">
             <div class="cap-name" data-i18n="c3.n">Preset Tata Letak HUD</div>
@@ -664,9 +823,9 @@
             <div class="cap-spec mono">Auto-Type Macro</div>
           </div>
           <div class="cap-row">
-            <div class="cap-name" data-i18n="c5.n">Clipboard Teks &amp; Gambar</div>
-            <div class="cap-desc" data-i18n="c5.d">Sinkronisasi clipboard dua arah otomatis antara Android dan Windows untuk teks maupun tangkapan layar/gambar bitmap.</div>
-            <div class="cap-spec mono">CLIPRDR Text/BMP</div>
+            <div class="cap-name" data-i18n="c5.n">Clipboard Anti-Disconnect</div>
+            <div class="cap-desc" data-i18n="c5.d">Sinkronisasi clipboard dua arah otomatis antara Android dan Windows untuk teks panjang (.txt) maupun gambar bitmap dengan proteksi batas paket 256 KB.</div>
+            <div class="cap-spec mono">CLIPRDR Guard</div>
           </div>
           <div class="cap-row">
             <div class="cap-name" data-i18n="c6.n">Integrasi Share-Sheet ke Drive</div>
@@ -694,13 +853,13 @@
             <div class="cap-spec mono">Privacy Curtain</div>
           </div>
           <div class="cap-row">
-            <div class="cap-name" data-i18n="c11.n">Bantuan Tunnel SSH Jump-Host</div>
-            <div class="cap-desc" data-i18n="c11.d">Menyimpan konfigurasi jump-host dan menghasilkan perintah port-forwarding `ssh -N -L` untuk koneksi melalui jaringan internal.</div>
-            <div class="cap-spec mono">SSH Tunnel CLI</div>
+            <div class="cap-name" data-i18n="c11.n">Koneksi PC (ID &amp; Password)</div>
+            <div class="cap-desc" data-i18n="c11.d">Mode terpisah dari RDP standar: cukup masukkan ID PC 10 digit dan PIN sesi tanpa kredensial akun Windows atau pengaturan resolusi/DPI rumit.</div>
+            <div class="cap-spec mono">XyDeskHost Beta</div>
           </div>
           <div class="cap-row">
             <div class="cap-name" data-i18n="c12.n">Resolusi Dinamis &amp; Skala DPI</div>
-            <div class="cap-desc" data-i18n="c12.d">Mengubah ukuran desktop remote dan faktor skala tampilan Windows (100%–200%) secara langsung saat sesi berjalan melalui kanal DISP.</div>
+            <div class="cap-desc" data-i18n="c12.d">Pada mode Koneksi RDP penuh, ubah ukuran desktop remote dan skala tampilan Windows (100%–200%) secara langsung melalui kanal DISP.</div>
             <div class="cap-spec mono">MS-RDPEDISP</div>
           </div>
         </div>
@@ -719,8 +878,8 @@
           <div class="arch-box">
             <h3 data-i18n="arch.stream.t">Pipeline Streaming &amp; Optimasi Latensi</h3>
             <ul class="arch-list">
-              <li data-i18n="arch.s1">Profil adaptif: Otomatis, Latensi Ultra-Rendah, Seimbang, Visual Tajam (AVC444), Hemat Kuota, dan Kustom Manual.</li>
-              <li data-i18n="arch.s2">Pemisahan antrean render layar (`+async-update`) dan pemrosesan kanal virtual asinkron (`+async-channels`).</li>
+              <li data-i18n="arch.s1">Profil adaptif: Otomatis, Latensi Ultra-Rendah, Seimbang, Visual Tajam (AVC444), Hemat Kuota, serta profil encoder GPU (NVIDIA NVENC, AMD AMF, Intel QSV).</li>
+              <li data-i18n="arch.s2">Pemisahan antrean render layar (`+async-update`), kanal virtual asinkron (`+async-channels`), dan VSYNC dirty-rect coalescing hemat baterai.</li>
               <li data-i18n="arch.s3">Pilihan kedalaman warna 32-bit, 24-bit, atau 16-bit serta pengaturan tingkat kompresi aliran data (Level 0, 1, 2).</li>
               <li data-i18n="arch.s4">Kontrol penuh bendera pengalaman visual Windows: ClearType Font Smoothing, Desktop Composition (Aero), Wallpaper, Tema, dan Tarik Jendela.</li>
             </ul>
@@ -748,8 +907,8 @@
         </div>
 
         <div class="download-shell">
-          <div style="display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap;">
-            <p style="font-size: 13.5px; color: var(--text-dim);" data-i18n="dl.desc">
+          <div class="download-head">
+            <p class="download-desc" data-i18n="dl.desc">
               Setiap paket APK ditandatangani dengan kunci rilis resmi dan dipisahkan per arsitektur prosesor (ABI). Unduhan terkunci selama hitung mundur peluncuran <strong>Ver 1.0.0</strong> berlangsung.
             </p>
             <span class="launch-pill mono">Launching · Ver 1.0.0</span>
@@ -758,48 +917,48 @@
           <div class="pkg-table">
             <div class="pkg-row">
               <div>
-                <div class="mono" style="font-weight: 700; font-size: 14.5px;">arm64-v8a</div>
-                <div class="mono" style="font-size: 11.5px; color: var(--text-faint);">Utama · 64-bit ARM</div>
+                <div class="pkg-abi mono">arm64-v8a</div>
+                <div class="pkg-sub mono">Utama · 64-bit ARM</div>
               </div>
-              <div style="font-size: 13px; color: var(--text-dim);" data-i18n="dl.abi1">
+              <div class="pkg-info" data-i18n="dl.abi1">
                 Perangkat Android 64-bit modern (ARMv8-A · ~80.2 MB · Signed R8)
               </div>
               <div>
                 <button type="button" class="dl-countdown-btn" data-open-launch>
                   <span class="dl-btn-top" data-i18n="dl.btn.lbl">Unduh arm64-v8a · Ver 1.0.0</span>
-                  <span class="dl-btn-timer mono" data-btn-countdown>10H : 00J : 00M : 00D</span>
+                  <span class="dl-btn-timer mono" data-btn-countdown>06H : 00J : 00M : 00D</span>
                 </button>
               </div>
             </div>
 
             <div class="pkg-row">
               <div>
-                <div class="mono" style="font-weight: 700; font-size: 14.5px;">armeabi-v7a</div>
-                <div class="mono" style="font-size: 11.5px; color: var(--text-faint);">Kompatibilitas · 32-bit ARM</div>
+                <div class="pkg-abi mono">armeabi-v7a</div>
+                <div class="pkg-sub mono">Kompatibilitas · 32-bit ARM</div>
               </div>
-              <div style="font-size: 13px; color: var(--text-dim);" data-i18n="dl.abi2">
+              <div class="pkg-info" data-i18n="dl.abi2">
                 Perangkat Android 32-bit generasi lama (ARMv7 · ~67.3 MB · Signed R8)
               </div>
               <div>
                 <button type="button" class="dl-countdown-btn" data-open-launch>
                   <span class="dl-btn-top" data-i18n="dl.btn.lbl2">Unduh armeabi-v7a · Ver 1.0.0</span>
-                  <span class="dl-btn-timer mono" data-btn-countdown>10H : 00J : 00M : 00D</span>
+                  <span class="dl-btn-timer mono" data-btn-countdown>06H : 00J : 00M : 00D</span>
                 </button>
               </div>
             </div>
 
             <div class="pkg-row">
               <div>
-                <div class="mono" style="font-weight: 700; font-size: 14.5px;">x86_64</div>
-                <div class="mono" style="font-size: 11.5px; color: var(--text-faint);">Desktop / Emulator · 64-bit</div>
+                <div class="pkg-abi mono">x86_64</div>
+                <div class="pkg-sub mono">Desktop / Emulator · 64-bit</div>
               </div>
-              <div style="font-size: 13px; color: var(--text-dim);" data-i18n="dl.abi3">
-                Chromebook, PC Android &amp; Emulator x86_64 (~85.4 MB · Signed R8)
+              <div class="pkg-info" data-i18n="dl.abi3">
+                Chromebook, PC Android &amp; Emulator x86_64 (~85.5 MB · Signed R8)
               </div>
               <div>
                 <button type="button" class="dl-countdown-btn" data-open-launch>
                   <span class="dl-btn-top" data-i18n="dl.btn.lbl3">Unduh x86_64 · Ver 1.0.0</span>
-                  <span class="dl-btn-timer mono" data-btn-countdown>10H : 00J : 00M : 00D</span>
+                  <span class="dl-btn-timer mono" data-btn-countdown>06H : 00J : 00M : 00D</span>
                 </button>
               </div>
             </div>
@@ -813,14 +972,14 @@
   <div class="launch-backdrop open" id="launch-modal" role="dialog" aria-modal="true" aria-labelledby="launch-modal-title">
     <div class="launch-dialog">
       <div class="launch-top">
-        <div class="brand">
-          <svg viewBox="0 0 48 48" fill="none" aria-hidden="true">
+        <div style="display:inline-flex;align-items:center;gap:10px;min-width:0;">
+          <svg viewBox="0 0 48 48" fill="none" aria-hidden="true" style="width:28px;height:28px;flex-shrink:0;">
             <rect x="6.8" y="13.4" width="34.4" height="20.6" rx="3" stroke="currentColor" stroke-width="2.7" />
             <line x1="19.5" y1="40.2" x2="28.5" y2="40.2" stroke="currentColor" stroke-width="2.7" stroke-linecap="round" />
             <line x1="24" y1="34.2" x2="24" y2="40.2" stroke="currentColor" stroke-width="2.7" stroke-linecap="round" />
             <polygon points="18.6,17.6 18.6,28.4 21.7,25.3 23.9,30.1 26.2,29 24,24.2 28.1,23.8" fill="currentColor" />
           </svg>
-          <div>
+          <div style="min-width:0;">
             <div class="launch-name" id="launch-modal-title">XyDesk Remote</div>
             <div class="launch-sub mono">Launching · Ver 1.0.0</div>
           </div>
@@ -828,13 +987,13 @@
         <span class="launch-pill mono">Ver 1.0.0</span>
       </div>
 
-      <p style="font-size: 13.5px; color: var(--text-dim);" data-i18n="modal.body">
+      <p class="modal-body-text" data-i18n="modal.body">
         Unduhan publik saat ini masih dikunci. Paket instalasi resmi XyDesk Remote Ver 1.0.0 akan dibuka secara otomatis ketika hitung mundur di bawah selesai.
       </p>
 
       <div class="cd-grid" aria-live="polite">
         <div class="cd-cell">
-          <div class="cd-val mono" id="cd-days">10</div>
+          <div class="cd-val mono" id="cd-days">06</div>
           <div class="cd-lbl" data-i18n="cd.d">Hari</div>
         </div>
         <div class="cd-cell">
@@ -852,13 +1011,13 @@
       </div>
 
       <div class="launch-info-box mono">
-        <div id="modal-schedule-line">Jadwal Rilis: Sabtu, 10 Oktober 2026 · 10:00 WIB</div>
+        <div id="modal-schedule-line">Jadwal Rilis: Selasa, 6 Oktober 2026 · 10:00 WIB</div>
         <div id="modal-status-line" style="color: var(--text-faint);">Status Rilis: Draft Terkunci (Menunggu Peluncuran)</div>
       </div>
 
-      <div style="display: flex; gap: 8px; flex-wrap: wrap;">
-        <a href="status.html" class="pill-btn" style="flex: 1;" data-i18n="modal.status.btn">Status Sistem</a>
-        <button type="button" class="pill-btn primary" style="flex: 1;" id="close-launch-modal" data-i18n="modal.close.btn">
+      <div class="modal-actions">
+        <a href="status.html" class="pill-btn" data-i18n="modal.status.btn">Status Sistem</a>
+        <button type="button" class="pill-btn primary" id="close-launch-modal" data-i18n="modal.close.btn">
           Tutup Popup
         </button>
       </div>
@@ -871,6 +1030,7 @@
         <strong>XyDesk Remote</strong> · Powered by <span>XyVerse Technology Global</span>
       </div>
       <div class="footer-nav">
+        <a href="host.html">PC Host</a>
         <a href="status.html" data-i18n="foot.status">Status &amp; Kesehatan</a>
         <a href="privacy.html" data-i18n="foot.privacy">Kebijakan Privasi</a>
         <a href="terms.html" data-i18n="foot.terms">Ketentuan Layanan</a>
@@ -881,7 +1041,7 @@
 
   <script>
     (function () {
-      var LAUNCH_TARGET_ISO = "2026-10-10T10:00:00+07:00";
+      var LAUNCH_TARGET_ISO = "2026-10-06T10:00:00+07:00";
       var launchTargetMs = new Date(LAUNCH_TARGET_ISO).getTime();
 
       var modal = document.getElementById("launch-modal");
@@ -959,14 +1119,14 @@
         "nav.download": "Download",
         "intro.meta": "Android Remote Desktop Client · Native FreeRDP 3",
         "intro.title": "A Precise, Lightweight, Encrypted Windows Remote Desktop Client for Android.",
-        "intro.lead": "XyDesk Remote connects Android devices directly to Windows workstations and servers over the native RDP protocol. Built with per-device configurable touch HUD controls, H.264 AVC444/AVC420 graphics pipelines, and Android Keystore credential encryption.",
+        "intro.lead": "XyDesk Remote connects Android devices directly to Windows workstations and servers over native RDP or Connect PC (ID & Password) mode. Built with per-device configurable touch HUD controls, H.264 AVC444/AVC420 graphics pipelines, and Android Keystore credential encryption.",
         "intro.cta.dl": "Download Page (Ver 1.0.0)",
+        "intro.cta.host": "XyDesk Host Setup (Windows PC)",
         "intro.cta.status": "Service Status & Health",
-        "intro.cta.privacy": "Privacy & Security",
         "led.1.k": "Protocol Engine",
         "led.1.s": "OpenH264 · FFmpeg · Opus",
         "led.2.k": "Graphics Pipeline",
-        "led.2.s": "16 / 24 / 32-bit · Async Update",
+        "led.2.s": "NVENC · AMF · QSV · 60 FPS",
         "led.3.k": "Security",
         "led.3.s": "AES-256-GCM · Restricted Admin",
         "led.4.k": "Package Layout",
@@ -979,7 +1139,7 @@
         "dl.desc": "Each APK package is signed with the official release key and separated by processor architecture (ABI). Downloads remain locked while the Ver 1.0.0 launch countdown is running.",
         "dl.abi1": "Modern 64-bit Android devices (ARMv8-A · ~80.2 MB · Signed R8)",
         "dl.abi2": "Legacy 32-bit Android devices (ARMv7 · ~67.3 MB · Signed R8)",
-        "dl.abi3": "Chromebooks, Android PCs & x86_64 Emulators (~85.4 MB · Signed R8)",
+        "dl.abi3": "Chromebooks, Android PCs & x86_64 Emulators (~85.5 MB · Signed R8)",
         "dl.btn.lbl": "Download arm64-v8a · Ver 1.0.0",
         "dl.btn.lbl2": "Download armeabi-v7a · Ver 1.0.0",
         "dl.btn.lbl3": "Download x86_64 · Ver 1.0.0",
@@ -1017,8 +1177,8 @@
         });
         document.getElementById("modal-schedule-line").textContent =
           l === "en"
-            ? "Release Schedule: Saturday, Oct 10, 2026 · 10:00 WIB (UTC+7)"
-            : "Jadwal Rilis: Sabtu, 10 Oktober 2026 · 10:00 WIB";
+            ? "Release Schedule: Tuesday, Oct 6, 2026 · 10:00 WIB (UTC+7)"
+            : "Jadwal Rilis: Selasa, 6 Oktober 2026 · 10:00 WIB";
         document.getElementById("modal-status-line").textContent =
           l === "en"
             ? "Release State: Locked Draft (Awaiting Launch)"
