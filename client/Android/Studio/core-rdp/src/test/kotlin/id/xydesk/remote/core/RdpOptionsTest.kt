@@ -58,6 +58,7 @@ class RdpOptionsTest {
         assertTrue(o.networkAutoDetect)
         assertTrue(!o.lowBandwidth)
         assertTrue(o.h264)
+        assertTrue(o.fontSmoothing)
         assertTrue("resolusi dinamis (kanal DISP) nyala untuk user baru", o.dynamicResolution)
         assertEquals(false, o.microphone)
         assertEquals(false, o.localDrive)
@@ -185,5 +186,12 @@ class RdpOptionsTest {
     fun lanScannerEncodeIpv4ToPcIdMenghasilkanSepuluhDigitTerformat() {
         assertEquals("323-223-5826", LanScanner.encodeIpv4ToPcId("192.168.1.50"))
         assertNull(LanScanner.encodeIpv4ToPcId("invalid"))
+    }
+
+    @Test
+    fun smartResolutionForViewportMenjagaResolusi169StandarDiPortraitMaupunLandscape() {
+        assertEquals("1920x1080", SmartResolution.forViewport(1080, 2400))
+        assertEquals("1920x1080", SmartResolution.forViewport(2400, 1080))
+        assertEquals("1280x720", SmartResolution.forViewport(720, 1600))
     }
 }

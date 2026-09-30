@@ -162,6 +162,14 @@ public class SessionView extends View
 	public void onSurfaceChange(SessionState session)
 	{
 		surface = session.getSurface();
+		surface.setFilterBitmap(true);
+		surface.setDither(true);
+		if (surface.getPaint() != null)
+		{
+			surface.getPaint().setFilterBitmap(true);
+			surface.getPaint().setAntiAlias(true);
+			surface.getPaint().setDither(true);
+		}
 		Bitmap bitmap = surface.getBitmap();
 		width = bitmap.getWidth();
 		height = bitmap.getHeight();

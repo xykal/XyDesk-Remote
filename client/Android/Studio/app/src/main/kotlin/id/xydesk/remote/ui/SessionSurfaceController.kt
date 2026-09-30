@@ -572,15 +572,23 @@ class SessionSurfaceController(private val activity: Activity) : GraphicsSink {
             return
         }
         val newBitmap = runCatching {
-            if (bpp > 16) Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888)
-            else Bitmap.createBitmap(width, height, Bitmap.Config.RGB_565)
+            Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888).apply {
+                setHasAlpha(false)
+            }
         }.getOrElse {
             ConnectionLog.addThrowable("SES: gagal alokasi surface ${width}x$height", it)
             return
         }
         bitmap = newBitmap
         val session = GlobalApp.getSession(i) ?: return
-        session.setSurface(BitmapDrawable(activity.getResources(), newBitmap))
+        val drawable = BitmapDrawable(activity.getResources(), newBitmap).apply {
+            isFilterBitmap = true
+            setDither(true)
+            paint.isFilterBitmap = true
+            paint.isAntiAlias = true
+            paint.isDither = true
+        }
+        session.setSurface(drawable)
         uiHandler.post {
             if (!viewReady) return@post
             val sv = sessionView ?: return@post

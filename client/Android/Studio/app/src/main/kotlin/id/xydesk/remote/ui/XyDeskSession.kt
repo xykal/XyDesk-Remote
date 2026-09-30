@@ -485,15 +485,22 @@ fun XyDeskSessionScreen(
     val isPcConnectMode = remember(profile.id) {
         runCatching { RdpOptions.of(context, profile.id).pcConnectMode }.getOrDefault(false)
     }
+    val isConsoleAdminMode = remember(profile.id) {
+        runCatching {
+            val o = RdpOptions.of(context, profile.id)
+            o.pcConnectMode || o.consoleAdmin
+        }.getOrDefault(false)
+    }
 
     // Restore remote DPI on each new native instance, and apply user changes
     // through DISP without touching the local zoom slider.
     LaunchedEffect(state, boundInstance, remoteDpi, pendingResize, telemetry.width, telemetry.height) {
-        if (isPcConnectMode) return@LaunchedEffect
+        if (isPcConnectMode || isConsoleAdminMode) return@LaunchedEffect
         if (state !is SessionState.Connected || boundInstance == 0L || pendingResize != null) {
             return@LaunchedEffect
         }
         if (remoteDpi == lastRemoteDpiRequest) return@LaunchedEffect
+        kotlinx.coroutines.delay(450)
         var sent = false
         for (attempt in 0 until 8) {
             if (state !is SessionState.Connected || boundInstance == 0L) return@LaunchedEffect
@@ -523,25 +530,31 @@ fun XyDeskSessionScreen(
     LaunchedEffect(state, configuration.screenWidthDp, configuration.screenHeightDp, viewport) {
         if (state !is SessionState.Connected || applyingResolution) return@LaunchedEffect
         if (viewport.width <= 0 || viewport.height <= 0) return@LaunchedEffect
-        if (isPcConnectMode) {
+        if (isPcConnectMode || isConsoleAdminMode) {
             if (autoFit) controller.fitToScreen()
             return@LaunchedEffect
         }
+        if (autoFit) controller.fitToScreen()
+        kotlinx.coroutines.delay(950)
+        if (state !is SessionState.Connected || applyingResolution) return@LaunchedEffect
         when (DisplayPrefs.resolution(context, profile.id)) {
-            // Otomatis = SELALU 16:9: 16:9 terbesar yang muat di viewport.
-            // Dulu viewport mentah dikirim apa adanya — desktop bisa jadi
-            // 20:9, taskbar mini, dan itulah "rasio membingungkan".
+            // Otomatis = SELALU 16:9 standar PC (tidak menyusut saat keyboard/portrait).
             DisplayPrefs.AUTOMATIC -> {
                 val size = SmartResolution.parse(
                     SmartResolution.forViewport(viewport.width, viewport.height),
                 )
-                if (size != null) manager.resizeRemote(size.first, size.second, remoteDpi)
+                if (size != null && !remoteResolutionMatches(size, telemetry.width, telemetry.height)) {
+                    manager.resizeRemote(size.first, size.second, remoteDpi)
+                }
                 if (autoFit) controller.fitToScreen()
             }
 
             // Eksplisit ikuti layar HP (rasio HP) — pilihan user, bukan default.
             DisplayPrefs.FOLLOW -> {
-                manager.resizeRemote(viewport.width, viewport.height, remoteDpi)
+                val target = normalizedRemoteResolution(viewport.width, viewport.height)
+                if (!remoteResolutionMatches(target, telemetry.width, telemetry.height)) {
+                    manager.resizeRemote(target.first, target.second, remoteDpi)
+                }
                 if (autoFit) controller.fitToScreen()
             }
 
@@ -1120,27 +1133,48 @@ fun XyDeskSessionScreen(
                         ?.let { normalizedRemoteResolution(it.first, it.second) }
                     if (target == null) {
                         notice.show(xyNow("Resolusi tidak valid untuk viewport saat ini", "Resolution is invalid for the current viewport"))
+                    } else if (remoteResolutionMatches(target, telemetry.width, telemetry.height)) {
+                        controller.fitToScreen()
+                        notice.show(xyNow("Resolusi terkonfirmasi: {0} x {1}", "Resolution confirmed: {0} x {1}", target.first, target.second))
+                    } else if (isPcConnectMode || isConsoleAdminMode) {
+                        controller.fitToScreen()
+                        notice.show(
+                            xyNow(
+                                "Mode Konsol (/admin) mengikuti resolusi monitor host ({0} x {1})",
+                                "Console (/admin) mode follows the host monitor resolution ({0} x {1})",
+                                telemetry.width,
+                                telemetry.height,
+                            ),
+                        )
                     } else {
                         sessionScope.launch {
                             var queued = false
-                            for (attempt in 0 until 4) {
+                            for (attempt in 0 until 6) {
                                 if (manager.resizeRemote(target.first, target.second, remoteDpi)) {
                                     queued = true
                                     break
                                 }
-                                delay(250)
+                                delay(350)
                             }
                             val confirmed = queued && manager.awaitRemoteResolution(target)
                             if (confirmed) {
                                 controller.fitToScreen()
                                 notice.show(xyNow("Resolusi terkonfirmasi: {0} x {1}", "Resolution confirmed: {0} x {1}", target.first, target.second))
-                            } else {
-                                // Queue acceptance is not a server acknowledgement. Reconnect
-                                // using /size, then check the dimensions reported by telemetry.
+                            } else if (!RdpOptions.of(context, profile.id).dynamicResolution) {
                                 pendingResize = target
                                 applyingResolution = true
                                 manager.disconnect()
                                 notice.show(xyNow("Ukuran belum berubah; menyambung ulang dengan resolusi pilihan", "Size not confirmed; reconnecting with the selected resolution"))
+                            } else {
+                                controller.fitToScreen()
+                                notice.show(
+                                    xyNow(
+                                        "Resolusi {0} x {1} disimpan (akan diterapkan saat sesi berikutnya bila kanal DISP ditolak host)",
+                                        "Resolution {0} x {1} saved (will apply on next session if host ignores DISP)",
+                                        target.first,
+                                        target.second,
+                                    ),
+                                )
                             }
                         }
                     }

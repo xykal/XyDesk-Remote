@@ -251,7 +251,7 @@ data class RdpOptions(
     /** Level kompresi paket RDP: 0 = mati (`-compression`), 1 = standar, 2 = maksimum (`/compression-level:2`). */
     val compressionLevel: Int = 1,
     /** `+fonts`: ClearType font smoothing agar teks kode/dokumen tajam. */
-    val fontSmoothing: Boolean = false,
+    val fontSmoothing: Boolean = true,
     /** `+wallpaper`: tampilkan wallpaper desktop remote. */
     val desktopWallpaper: Boolean = false,
     /** `+window-drag`: gambar isi jendela saat digeser. */
@@ -299,7 +299,7 @@ data class RdpOptions(
             asyncUpdate = false,
             asyncChannels = false,
             compressionLevel = 1,
-            fontSmoothing = false,
+            fontSmoothing = true,
             desktopWallpaper = false,
             windowDrag = false,
             menuAnimations = false,
@@ -371,7 +371,7 @@ data class RdpOptions(
             asyncUpdate = true,
             asyncChannels = true,
             compressionLevel = 2,
-            fontSmoothing = false,
+            fontSmoothing = true,
             desktopWallpaper = false,
             windowDrag = false,
             menuAnimations = false,
@@ -454,7 +454,7 @@ data class RdpOptions(
             asyncUpdate = true,
             asyncChannels = true,
             compressionLevel = 0,
-            fontSmoothing = false,
+            fontSmoothing = true,
             desktopWallpaper = false,
             windowDrag = false,
             menuAnimations = false,
@@ -555,9 +555,10 @@ data class RdpOptions(
                 ?: return@runCatching this
             val caps = cm.activeNetwork?.let { cm.getNetworkCapabilities(it) }
             val isCellular = caps?.hasTransport(NetworkCapabilities.TRANSPORT_CELLULAR) == true
-            val isMetered = cm.isActiveNetworkMetered ||
-                (caps != null && !caps.hasCapability(NetworkCapabilities.NET_CAPABILITY_NOT_METERED))
             val downstream = caps?.linkDownstreamBandwidthKbps ?: Int.MAX_VALUE
+            val isMetered = (cm.isActiveNetworkMetered ||
+                (caps != null && !caps.hasCapability(NetworkCapabilities.NET_CAPABILITY_NOT_METERED))) &&
+                (isCellular || downstream < 15_000)
             resolveForLink(isMetered = isMetered, isCellular = isCellular, downstreamKbps = downstream)
         }.getOrDefault(this)
     }
@@ -716,7 +717,7 @@ data class RdpOptions(
                 asyncUpdate = sp.getBoolean("$deviceId.async_upd", false),
                 asyncChannels = sp.getBoolean("$deviceId.async_ch", false),
                 compressionLevel = sp.getInt("$deviceId.comp_lvl", 1).coerceIn(0, 2),
-                fontSmoothing = sp.getBoolean("$deviceId.fonts", false),
+                fontSmoothing = sp.getBoolean("$deviceId.fonts", true),
                 desktopWallpaper = sp.getBoolean("$deviceId.wallpaper", false),
                 windowDrag = sp.getBoolean("$deviceId.windrag", false),
                 menuAnimations = sp.getBoolean("$deviceId.menuanim", false),

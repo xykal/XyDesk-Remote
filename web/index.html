@@ -1165,7 +1165,7 @@
     <section class="section" id="capabilities">
       <div class="container">
         <div class="section-head">
-          <div class="section-kicker" data-i18n="cap.kicker">Fitur Nyata yang Terimplementasi (Build v0.5.21)</div>
+          <div class="section-kicker" data-i18n="cap.kicker">Fitur Nyata yang Terimplementasi (Build v0.5.22)</div>
           <h2 class="section-title" data-i18n="cap.title">Kemampuan Sesi, Engine Native &amp; Kontrol</h2>
         </div>
 
@@ -1270,7 +1270,19 @@
         <div class="changelog-list">
           <div class="cl-card">
             <div class="cl-head">
-              <div class="cl-ver mono">v0.5.21 (VERSION_CODE 38) — Build Terbaru</div>
+              <div class="cl-ver mono">v0.5.22 (VERSION_CODE 39) — Build Terbaru</div>
+              <span class="cl-badge mono">30 September 2026 · Ketajaman Piksel/Teks &amp; Stabilitas Sesi Anti-Disconnect</span>
+            </div>
+            <ul class="arch-list">
+              <li><strong>Ketajaman Teks Windows (ClearType <code>+fonts</code> Default &amp; Bilinear Filtering):</strong> Mengaktifkan <code>fontSmoothing = true</code> (<code>+fonts</code>) secara bawaan di semua profil <code>RdpOptions</code>, mengunci surface Android ke 32-bit <code>ARGB_8888</code> penuh, dan mengaktifkan <em>bilinear filtering</em> + <em>anti-aliasing</em> pada <code>SessionView</code> agar huruf Windows tidak lagi burik/bergerigi saat di-<em>scale</em>.</li>
+              <li><strong>Resolusi 16:9 Standar PC di Mode Portrait &amp; Deteksi Jaringan Cerdas:</strong> Memperbaiki <code>SmartResolution.forViewport</code> agar menjaga resolusi 16:9 standar PC (<code>1920x1080</code> / <code>1280x720</code>) tanpa menyusut ke <code>1080x606</code> saat HP vertikal, serta mencegah Wi-Fi hotspot berkecepatan tinggi ter-<em>downgrade</em> paksa ke <code>broadband-low</code> / <code>AVC420</code>.</li>
+              <li><strong>Stabilitas Kanal <code>DISP</code>, Debounce DPI Slider &amp; Penghapusan Banjir Socket Port 3389:</strong> Menambahkan proteksi <em>settle window</em> 900ms &amp; deduplikasi pada <code>resizeRemote</code> (mencegah PDU <code>MonitorLayout</code> 16-byte cacat saat awal <code>Connected</code> maupun saat keyboard muncul), men-<em>debounce</em> slider DPI, menghentikan paksaan <code>disconnect()</code> di mode <code>/admin</code>, menonaktifkan <em>silent disconnect</em> pada <em>long-press</em> tombol Back, dan menghapus pembukaan socket TCP mentah ke port 3389 tiap 2 detik di <code>telemetry</code>.</li>
+            </ul>
+          </div>
+
+          <div class="cl-card">
+            <div class="cl-head">
+              <div class="cl-ver mono">v0.5.21 (VERSION_CODE 38)</div>
               <span class="cl-badge mono">30 September 2026 · Pemisahan Mesin Direct PC &amp; Multi-User</span>
             </div>
             <ul class="arch-list">

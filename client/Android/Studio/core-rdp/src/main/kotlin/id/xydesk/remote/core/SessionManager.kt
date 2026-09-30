@@ -101,6 +101,12 @@ class SessionManager(context: Context) {
     @Volatile private var activeBpp: Int = 32
     @Volatile private var activeRelayLabel: String = "Direct UDP"
     @Volatile private var activeNetworkLabel: String = "Wi-Fi"
+    @Volatile private var activeDynamicResolution: Boolean = true
+    @Volatile private var connectedAtMs: Long = 0L
+    @Volatile private var lastDispLayoutW: Int = 0
+    @Volatile private var lastDispLayoutH: Int = 0
+    @Volatile private var lastDispScale: Int = 100
+    @Volatile private var lastDispSentAtMs: Long = 0L
     @Volatile private var lastSentClipboardHash: Int = 0
     @Volatile private var lastSentClipboardAtMs: Long = 0L
 
@@ -135,12 +141,13 @@ class SessionManager(context: Context) {
             if (curState is SessionState.Connected && tick % 4 == 0) {
                 activeNetworkLabel = detectActiveNetworkLabel()
                 val p = lastProfile
-                if (p != null) {
+                if (p != null && tick % 60 == 0) {
                     kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
-                        val t0 = System.nanoTime()
-                        val ok = tcpReachable(p.host, p.port, 900L)
-                        if (ok) {
-                            lastRttMs = ((System.nanoTime() - t0) / 1_000_000L).toInt().coerceAtLeast(1)
+                        runCatching {
+                            val t0 = System.nanoTime()
+                            if (java.net.InetAddress.getByName(p.host).isReachable(750)) {
+                                lastRttMs = ((System.nanoTime() - t0) / 1_000_000L).toInt().coerceAtLeast(1)
+                            }
                         }
                     }
                 }
@@ -190,6 +197,12 @@ class SessionManager(context: Context) {
         activeCodec = options.activeCodecLabel()
         activeUdp = options.udpTransport
         activeBpp = options.colorDepth
+        activeDynamicResolution = options.dynamicResolution && !options.pcConnectMode && !options.consoleAdmin
+        connectedAtMs = 0L
+        lastDispLayoutW = 0
+        lastDispLayoutH = 0
+        lastDispScale = 100
+        lastDispSentAtMs = 0L
         activeNetworkLabel = detectActiveNetworkLabel()
         val proto = if (options.udpTransport) "UDP" else "TCP"
         activeRelayLabel = when {
@@ -281,7 +294,11 @@ class SessionManager(context: Context) {
         }
         val inst = session.getInstance()
         worker.execute {
+            val probeStartNs = System.nanoTime()
             val reachable = tcpReachable(profile.host, profile.port, TCP_PROBE_TIMEOUT_MS)
+            if (reachable) {
+                lastRttMs = ((System.nanoTime() - probeStartNs) / 1_000_000L).toInt().coerceAtLeast(1)
+            }
             if (!isCurrent(inst)) return@execute
             ConnectionLog.add(
                 if (reachable) "TCP ${profile.host}:${profile.port} OK"
@@ -520,14 +537,34 @@ class SessionManager(context: Context) {
      */
     fun resizeRemote(width: Int, height: Int, desktopScaleFactor: Int = 100): Boolean {
         if (_state.value !is SessionState.Connected) return false
+        if (!activeDynamicResolution) return false
         if (desktopScaleFactor !in REMOTE_DESKTOP_SCALE_FACTORS) return false
         val inst = core?.getInstance() ?: return false
         val boundedWidth = width.coerceIn(640, 8192)
         val w = boundedWidth - boundedWidth % 2
         val h = height.coerceIn(480, 8192)
+        val curRes = resolution
+        if ((curRes[0] == w && curRes[1] == h && lastDispScale == desktopScaleFactor) ||
+            (lastDispLayoutW == w && lastDispLayoutH == h && lastDispScale == desktopScaleFactor)
+        ) {
+            return true
+        }
+        val now = android.os.SystemClock.elapsedRealtime()
+        if (connectedAtMs > 0L && now - connectedAtMs < 900L) {
+            return false
+        }
+        if (now - lastDispSentAtMs < 350L) {
+            return false
+        }
         val ok = runCatching {
             LibFreeRDP.sendMonitorLayout(inst, w, h, desktopScaleFactor)
         }.getOrDefault(false)
+        if (ok) {
+            lastDispLayoutW = w
+            lastDispLayoutH = h
+            lastDispScale = desktopScaleFactor
+            lastDispSentAtMs = now
+        }
         ConnectionLog.add(
             "CM: resizeRemote ${w}x${h} scale=${desktopScaleFactor}% -> " +
                 if (ok) "dikirim (DISP)" else "ditolak",
@@ -632,6 +669,7 @@ class SessionManager(context: Context) {
             override fun onConnectionSuccess() {
                 if (!isCurrent(inst)) return
                 stopWatchdog()
+                connectedAtMs = android.os.SystemClock.elapsedRealtime()
                 setStage(Stage.READY)
                 ConnectionLog.add("koneksi SUKSES")
                 transition(SessionState.Connected)
@@ -774,6 +812,8 @@ class SessionManager(context: Context) {
 
             override fun OnGraphicsResize(width: Int, height: Int, bpp: Int) {
                 resolution = intArrayOf(width, height)
+                lastDispLayoutW = width
+                lastDispLayoutH = height
                 sink?.onGraphicsResize(width, height, bpp)
             }
 

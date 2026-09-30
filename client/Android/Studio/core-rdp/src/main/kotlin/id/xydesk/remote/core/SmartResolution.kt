@@ -41,27 +41,21 @@ object SmartResolution {
     }
 
     /**
-     * 16:9 terbesar yang muat PERSIS di area viewport (tanpa downscale).
-     * Dipakai saat live-resize lewat kanal DISP: portrait 1080x2400 ->
-     * 1080x608, landscape 2400x1080 -> 2400x1350. Selalu 16:9, genap,
-     * dan di dalam batas [MIN_W]..[MAX_W].
+     * Resolusi 16:9 standar yang sesuai dengan kapasitas layar perangkat.
+     * Dipakai saat mode Otomatis agar desktop Windows tetap memakai resolusi
+     * 16:9 standar PC yang tajam (minimal 1280x720, atau 1920x1080 di layar
+     * FHD) tanpa menyusut menjadi 1080x606 saat portrait atau berubah menjadi
+     * ukuran ganjil saat keyboard/inset muncul.
      */
     fun forViewport(viewportW: Int, viewportH: Int): String {
         val vw = viewportW.coerceAtLeast(1)
         val vh = viewportH.coerceAtLeast(1)
-        val scale = minOf(vw / 16f, vh / 9f)
-        var w = (scale * 16f).toInt() / 2 * 2   // bulatkan ke bawah, genap
-        var h = (scale * 9f).toInt() / 2 * 2
-        if (w < MIN_W || h < MIN_H) {
-            // Viewport terlalu kecil untuk 16:9 penuh — jangan sampai di
-            // bawah batas server; korbankan pas (yang penting masih 16:9
-            // dan bisa dikirim), fit-to-screen yang menanganinya.
-            w = maxOf(w, MIN_W)
-            h = maxOf(h, (w * 9f / 16f).toInt() / 2 * 2)
-        }
-        w = w.coerceIn(MIN_W, MAX_W)
-        h = h.coerceIn(MIN_H, MAX_H)
-        return "${w}x$h"
+        val maxSide = maxOf(vw, vh)
+        val minSide = minOf(vw, vh)
+        val pick = CANDIDATES.lastOrNull { (cw, ch) ->
+            cw <= maxSide && ch <= minSide
+        } ?: CANDIDATES.first()
+        return "${pick.first}x${pick.second}"
     }
 
     /** "1920x1080" -> (1920, 1080); null kalau tidak valid. */

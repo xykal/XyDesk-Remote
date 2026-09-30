@@ -304,17 +304,9 @@ public class SessionInputManager
 		return keyboardMapper.processAndroidKeyEvent(event);
 	}
 
-	// Handles a long-press on the BACK key by disconnecting the active session.
-	// Returns true if the event was consumed.
+	// Long-press on Android system keys should not silently disconnect the session.
 	public boolean onAndroidKeyLongPress(int keyCode)
 	{
-		if (instance == 0)
-			return false;
-		if (keyCode == KeyEvent.KEYCODE_BACK)
-		{
-			LibFreeRDP.disconnect(instance);
-			return true;
-		}
 		return false;
 	}
 
