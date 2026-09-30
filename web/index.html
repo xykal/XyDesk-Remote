@@ -86,27 +86,28 @@
 
     .container {
       width: 100%;
-      max-width: 1080px;
+      max-width: 1120px;
       margin: 0 auto;
-      padding: 0 clamp(16px, 4vw, 28px);
+      padding-left: max(clamp(14px, 4vw, 28px), env(safe-area-inset-left));
+      padding-right: max(clamp(14px, 4vw, 28px), env(safe-area-inset-right));
     }
 
-    /* Topbar */
+    /* Topbar & Mobile Hamburger Drawer */
     .topbar {
       position: sticky;
       top: 0;
-      z-index: 40;
+      z-index: 60;
       background: var(--bg);
       border-bottom: 1px solid var(--line);
     }
 
     .topbar-inner {
-      min-height: 62px;
-      padding: 10px 0;
+      min-height: 60px;
+      padding: 8px 0;
       display: flex;
       align-items: center;
       justify-content: space-between;
-      gap: 12px;
+      gap: 10px;
     }
 
     .brand {
@@ -114,40 +115,143 @@
       align-items: center;
       gap: 9px;
       font-weight: 700;
-      font-size: clamp(15px, 2vw, 17px);
+      font-size: clamp(14.5px, 2vw, 17px);
       letter-spacing: -0.025em;
-      flex-shrink: 0;
+      min-width: 0;
+      flex-shrink: 1;
     }
 
     .brand svg {
-      width: 26px;
-      height: 26px;
+      width: 25px;
+      height: 25px;
       flex-shrink: 0;
     }
 
     .brand-tag {
-      font-size: 11px;
+      font-size: 10.5px;
       font-weight: 600;
       color: var(--text-faint);
       padding: 2px 8px;
       border: 1px solid var(--line);
       border-radius: 999px;
       white-space: nowrap;
+      flex-shrink: 0;
     }
 
     .nav-row {
       display: flex;
       align-items: center;
       gap: 6px;
-      overflow-x: auto;
-      scrollbar-width: none;
-      -ms-overflow-style: none;
-      -webkit-overflow-scrolling: touch;
-      max-width: 100%;
+      flex-wrap: nowrap;
     }
 
-    .nav-row::-webkit-scrollbar {
+    .mobile-actions {
       display: none;
+      align-items: center;
+      gap: 6px;
+      flex-shrink: 0;
+    }
+
+    .hamburger-btn {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 38px;
+      height: 38px;
+      border-radius: 10px;
+      border: 1px solid var(--line-strong);
+      background: var(--surface);
+      color: var(--text);
+      cursor: pointer;
+      flex-shrink: 0;
+      transition: background-color 0.14s ease, border-color 0.14s ease;
+    }
+
+    .hamburger-btn:hover {
+      background: var(--surface-alt);
+    }
+
+    .hamburger-btn svg {
+      width: 19px;
+      height: 19px;
+    }
+
+    .hamburger-btn .icon-close {
+      display: none;
+    }
+
+    .hamburger-btn[aria-expanded="true"] .icon-menu {
+      display: none;
+    }
+
+    .hamburger-btn[aria-expanded="true"] .icon-close {
+      display: block;
+    }
+
+    .drawer-scrim {
+      position: fixed;
+      inset: 0;
+      z-index: 50;
+      background: var(--scrim);
+      backdrop-filter: blur(6px);
+      -webkit-backdrop-filter: blur(6px);
+      display: none;
+    }
+
+    .drawer-scrim.open {
+      display: block;
+    }
+
+    .mobile-drawer {
+      display: none;
+      border-top: 1px solid var(--line);
+      background: var(--surface);
+      padding: 14px 0 16px;
+      max-height: calc(100dvh - 60px);
+      overflow-y: auto;
+    }
+
+    .mobile-drawer.open {
+      display: block;
+    }
+
+    .drawer-grid {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 8px;
+      margin-bottom: 10px;
+    }
+
+    .drawer-link {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+      min-height: 42px;
+      padding: 9px 12px;
+      border-radius: 10px;
+      border: 1px solid var(--line);
+      background: var(--bg);
+      color: var(--text);
+      font-size: 12.8px;
+      font-weight: 600;
+      line-height: 1.3;
+      min-width: 0;
+      overflow-wrap: anywhere;
+    }
+
+    .drawer-link:hover,
+    .drawer-link:active {
+      background: var(--surface-alt);
+      border-color: var(--line-strong);
+    }
+
+    .drawer-utils {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 8px;
+      padding-top: 10px;
+      border-top: 1px solid var(--line);
     }
 
     .pill-btn {
@@ -741,7 +845,22 @@
       color: var(--text);
     }
 
-    /* Tablet & Mobile Responsive Breakpoints */
+    /* Responsive Breakpoints Across All Devices, Resolutions & Aspect Ratios */
+    @media (min-width: 1520px) {
+      .container {
+        max-width: 1240px;
+      }
+    }
+
+    @media (max-width: 980px) {
+      .nav-row {
+        display: none;
+      }
+      .mobile-actions {
+        display: inline-flex;
+      }
+    }
+
     @media (max-width: 860px) {
       .ledger {
         grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -759,6 +878,16 @@
       }
       .diff-row.head {
         display: none;
+      }
+      .diff-std::before {
+        content: "XyDesk Biasa: ";
+        font-weight: 700;
+        color: var(--text-dim);
+      }
+      .diff-rem::before {
+        content: "XyDesk Remote: ";
+        font-weight: 700;
+        color: var(--text);
       }
       .cap-row {
         grid-template-columns: 1fr;
@@ -778,29 +907,14 @@
       }
     }
 
-    @media (max-width: 680px) {
-      .topbar-inner {
-        flex-direction: column;
-        align-items: stretch;
-        gap: 8px;
-        padding: 10px 0;
-      }
-      .brand {
-        justify-content: space-between;
-        width: 100%;
-      }
-      .brand-left {
-        display: inline-flex;
-        align-items: center;
-        gap: 9px;
-      }
-      .nav-row {
-        width: 100%;
-        padding-bottom: 2px;
+    @media (max-width: 640px) {
+      .brand-tag {
+        display: none;
       }
       .intro-actions {
-        flex-direction: column;
-        align-items: stretch;
+        display: grid;
+        grid-template-columns: 1fr;
+        gap: 8px;
       }
       .intro-actions .pill-btn {
         width: 100%;
@@ -811,7 +925,10 @@
       }
     }
 
-    @media (max-width: 420px) {
+    @media (max-width: 460px) {
+      .drawer-grid {
+        grid-template-columns: 1fr;
+      }
       .ledger {
         grid-template-columns: 1fr;
       }
@@ -823,22 +940,60 @@
         border-bottom: none;
       }
     }
+
+    @media (max-width: 350px) {
+      .cd-grid {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+      }
+      .mobile-dl-quick {
+        display: none;
+      }
+    }
+
+    /* Landscape Phones & Compact Short Aspect Ratios (19.5:9 / 20:9 Horizontal) */
+    @media (max-height: 540px) and (orientation: landscape) {
+      .topbar-inner {
+        min-height: 48px;
+        padding: 4px 0;
+      }
+      .intro {
+        padding: 20px 0 18px;
+      }
+      .section {
+        padding: 22px 0;
+      }
+      .launch-dialog {
+        max-width: 640px;
+        padding: 14px 18px;
+        gap: 10px;
+      }
+      .cd-cell {
+        padding: 7px 4px;
+      }
+      .cd-val {
+        font-size: 18px;
+      }
+      .drawer-grid {
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+      }
+    }
   </style>
 </head>
 <body>
+  <div class="drawer-scrim" id="drawer-scrim" aria-hidden="true"></div>
   <header class="topbar">
     <div class="container topbar-inner">
       <a href="#top" class="brand">
-        <span class="brand-left" style="display:inline-flex;align-items:center;gap:9px;">
+        <span class="brand-left" style="display:inline-flex;align-items:center;gap:9px;min-width:0;">
           <svg viewBox="0 0 48 48" fill="none" aria-hidden="true">
             <rect x="6.8" y="13.4" width="34.4" height="20.6" rx="3" stroke="currentColor" stroke-width="2.7" />
             <line x1="19.5" y1="40.2" x2="28.5" y2="40.2" stroke="currentColor" stroke-width="2.7" stroke-linecap="round" />
             <line x1="24" y1="34.2" x2="24" y2="40.2" stroke="currentColor" stroke-width="2.7" stroke-linecap="round" />
             <polygon points="18.6,17.6 18.6,28.4 21.7,25.3 23.9,30.1 26.2,29 24,24.2 28.1,23.8" fill="currentColor" />
           </svg>
-          <span>XyDesk Remote</span>
+          <span style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">XyDesk Remote</span>
         </span>
-        <span class="brand-tag mono">Ver 1.0.0 · Build 0.5.19</span>
+        <span class="brand-tag mono">Ver 1.0.0 · Build 0.5.20</span>
       </a>
       <nav class="nav-row" aria-label="Navigasi Utama">
         <button type="button" class="pill-btn primary" data-open-launch data-i18n="nav.download">Unduh</button>
@@ -851,6 +1006,41 @@
         <button type="button" class="pill-btn" id="lang-btn">ID / EN</button>
         <button type="button" class="pill-btn" id="theme-btn">Gelap</button>
       </nav>
+      <div class="mobile-actions">
+        <button type="button" class="pill-btn primary mobile-dl-quick" data-open-launch data-i18n="nav.download">Unduh</button>
+        <button type="button" class="hamburger-btn" id="hamburger-btn" aria-label="Buka Menu Navigasi" aria-expanded="false" aria-controls="mobile-drawer">
+          <svg class="icon-menu" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round">
+            <line x1="4" y1="7" x2="20" y2="7" />
+            <line x1="4" y1="12" x2="20" y2="12" />
+            <line x1="4" y1="17" x2="20" y2="17" />
+          </svg>
+          <svg class="icon-close" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round">
+            <line x1="6" y1="6" x2="18" y2="18" />
+            <line x1="18" y1="6" x2="6" y2="18" />
+          </svg>
+        </button>
+      </div>
+    </div>
+    <div class="mobile-drawer" id="mobile-drawer" aria-label="Menu Mobile">
+      <div class="container">
+        <div class="drawer-grid">
+          <a href="#about-diff" class="drawer-link" data-drawer-close><span data-i18n="nav.about">Tentang &amp; Perbedaan</span><span>→</span></a>
+          <a href="#capabilities" class="drawer-link" data-drawer-close><span data-i18n="nav.cap">Fitur Terbaru</span><span>→</span></a>
+          <a href="#architecture" class="drawer-link" data-drawer-close><span>Arsitektur &amp; Keamanan</span><span>→</span></a>
+          <a href="#changelog" class="drawer-link" data-drawer-close><span data-i18n="nav.changelog">Changelog</span><span>→</span></a>
+          <a href="host.html" class="drawer-link"><span>Setup PC Host (Windows)</span><span>→</span></a>
+          <a href="status.html" class="drawer-link"><span data-i18n="nav.status">Status Sistem</span><span>→</span></a>
+          <a href="privacy.html" class="drawer-link"><span data-i18n="foot.privacy">Kebijakan Privasi</span><span>→</span></a>
+          <a href="licenses.html" class="drawer-link"><span data-i18n="nav.licenses">Lisensi</span><span>→</span></a>
+        </div>
+        <div class="drawer-utils">
+          <button type="button" class="pill-btn" id="lang-btn-mobile">Bahasa: ID / EN</button>
+          <button type="button" class="pill-btn" id="theme-btn-mobile">Tema: Gelap</button>
+          <button type="button" class="pill-btn primary" style="grid-column: 1 / -1;" data-open-launch data-drawer-close data-i18n="intro.cta.dl">
+            Halaman Unduh (Ver 1.0.0)
+          </button>
+        </div>
+      </div>
     </div>
   </header>
 
@@ -858,17 +1048,17 @@
     <!-- Editorial Intro -->
     <section class="intro">
       <div class="container">
-        <div class="intro-meta mono" data-i18n="intro.meta">Klien Remote Desktop Android · FreeRDP 3 Native · Build v0.5.19 (36)</div>
+        <div class="intro-meta mono" data-i18n="intro.meta">Klien Remote Desktop Android · FreeRDP 3 Native · Build v0.5.20 (37)</div>
         <h1 data-i18n="intro.title">Kendali Penuh Workstation &amp; Server Windows dari Perangkat Android.</h1>
         <p data-i18n="intro.lead">
-          XyDesk Remote adalah klien Remote Desktop berbasis engine C/JNI FreeRDP 3 yang dimodifikasi khusus untuk Android. Dilengkapi Grid Monitor &amp; Multi-User Auto-Detect, penyetelan audio OpenSLES low-latency, HUD kontrol vektor yang dapat dirakit sendiri (Custom Preset), serta dua jalur koneksi terpisah: Koneksi PC (10-Digit ID) dan Koneksi RDP penuh.
+          XyDesk Remote adalah klien Remote Desktop berbasis engine C/JNI FreeRDP 3 yang dimodifikasi khusus untuk Android. Dilengkapi Grid Monitor &amp; Multi-User Auto-Detect, audio OpenSLES 32-buffer stereo unmute ke speaker utama, HUD kontrol vektor yang dapat dirakit sendiri (Custom Preset), serta dua jalur koneksi terpisah: Koneksi PC (10-Digit ID) dan Koneksi RDP penuh.
         </p>
         <div class="intro-actions">
           <button type="button" class="pill-btn primary lg" data-open-launch data-i18n="intro.cta.dl">
             Halaman Unduh (Ver 1.0.0)
           </button>
           <a href="#changelog" class="pill-btn lg" data-i18n="intro.cta.cl">
-            Lihat Changelog v0.5.19
+            Lihat Changelog v0.5.20
           </a>
           <a href="host.html" class="pill-btn lg" data-i18n="intro.cta.host">
             Setup XyDesk Host (PC Windows)
@@ -1167,7 +1357,7 @@
                 <div class="pkg-sub mono">Utama · 64-bit ARM</div>
               </div>
               <div class="pkg-info" data-i18n="dl.abi1">
-                Perangkat Android 64-bit modern (ARMv8-A · ~80.2 MB · Signed R8 · Build 36)
+                Perangkat Android 64-bit modern (ARMv8-A · ~80.2 MB · Signed R8 · Build 37)
               </div>
               <div>
                 <button type="button" class="dl-countdown-btn" data-open-launch>
@@ -1183,7 +1373,7 @@
                 <div class="pkg-sub mono">Kompatibilitas · 32-bit ARM</div>
               </div>
               <div class="pkg-info" data-i18n="dl.abi2">
-                Perangkat Android 32-bit generasi lama (ARMv7 · ~67.3 MB · Signed R8 · Build 36)
+                Perangkat Android 32-bit generasi lama (ARMv7 · ~67.3 MB · Signed R8 · Build 37)
               </div>
               <div>
                 <button type="button" class="dl-countdown-btn" data-open-launch>
@@ -1199,7 +1389,7 @@
                 <div class="pkg-sub mono">Desktop / Emulator · 64-bit</div>
               </div>
               <div class="pkg-info" data-i18n="dl.abi3">
-                Chromebook, PC Android &amp; Emulator x86_64 (~85.5 MB · Signed R8 · Build 36)
+                Chromebook, PC Android &amp; Emulator x86_64 (~85.5 MB · Signed R8 · Build 37)
               </div>
               <div>
                 <button type="button" class="dl-countdown-btn" data-open-launch>
@@ -1258,7 +1448,7 @@
 
       <div class="launch-info-box mono">
         <div id="modal-schedule-line">Jadwal Rilis (Dipercepat): Sabtu, 3 Oktober 2026 · 10:00 WIB</div>
-        <div id="modal-status-line" style="color: var(--text-faint);">Build Kandidat Aktif: v0.5.19 (36) · Draft Terkunci</div>
+        <div id="modal-status-line" style="color: var(--text-faint);">Build Kandidat Aktif: v0.5.20 (37) · Draft Terkunci</div>
       </div>
 
       <div class="modal-actions">
@@ -1354,9 +1544,53 @@
         if (e.target === modal) closeModal();
       });
 
+      // Mobile Hamburger Drawer
+      var hamburgerBtn = document.getElementById("hamburger-btn");
+      var mobileDrawer = document.getElementById("mobile-drawer");
+      var drawerScrim = document.getElementById("drawer-scrim");
+
+      function setDrawerOpen(isOpen) {
+        if (!hamburgerBtn || !mobileDrawer || !drawerScrim) return;
+        hamburgerBtn.setAttribute("aria-expanded", isOpen ? "true" : "false");
+        mobileDrawer.classList.toggle("open", isOpen);
+        drawerScrim.classList.toggle("open", isOpen);
+      }
+
+      if (hamburgerBtn) {
+        hamburgerBtn.addEventListener("click", function () {
+          var isOpen = hamburgerBtn.getAttribute("aria-expanded") === "true";
+          setDrawerOpen(!isOpen);
+        });
+      }
+
+      if (drawerScrim) {
+        drawerScrim.addEventListener("click", function () {
+          setDrawerOpen(false);
+        });
+      }
+
+      document.querySelectorAll("[data-drawer-close]").forEach(function (el) {
+        el.addEventListener("click", function () {
+          setDrawerOpen(false);
+        });
+      });
+
+      window.addEventListener("resize", function () {
+        if (window.innerWidth > 980) setDrawerOpen(false);
+      });
+
+      window.addEventListener("keydown", function (e) {
+        if (e.key === "Escape") {
+          setDrawerOpen(false);
+          closeModal();
+        }
+      });
+
       // Theme & Language
       var themeBtn = document.getElementById("theme-btn");
       var langBtn = document.getElementById("lang-btn");
+      var themeBtnMobile = document.getElementById("theme-btn-mobile");
+      var langBtnMobile = document.getElementById("lang-btn-mobile");
 
       var idDefaults = {};
       document.querySelectorAll("[data-i18n]").forEach(function (el) {
@@ -1370,14 +1604,14 @@
         "nav.status": "System Status",
         "nav.licenses": "Licenses",
         "nav.download": "Download",
-        "intro.meta": "Android Remote Desktop Client · Native FreeRDP 3 · Build v0.5.19 (36)",
+        "intro.meta": "Android Remote Desktop Client · Native FreeRDP 3 · Build v0.5.20 (37)",
         "intro.title": "Full Control of Windows Workstations & Servers from Android.",
-        "intro.lead": "XyDesk Remote is a Remote Desktop client powered by a custom-tuned C/JNI FreeRDP 3 engine for Android. Featuring Auto-Detect Monitor & Multi-User Grid Switching, low-latency OpenSLES audio tuning, custom vector-icon HUD controls, and two distinct connection modes: Connect PC (10-Digit ID) and full RDP.",
+        "intro.lead": "XyDesk Remote is a Remote Desktop client powered by a custom-tuned C/JNI FreeRDP 3 engine for Android. Featuring Auto-Detect Monitor & Multi-User Grid Switching, 32-buffer stereo OpenSLES media audio, custom vector-icon HUD controls, and two distinct connection modes: Connect PC (10-Digit ID) and full RDP.",
         "intro.cta.dl": "Download Page (Ver 1.0.0)",
-        "intro.cta.cl": "View v0.5.19 Changelog",
+        "intro.cta.cl": "View v0.5.20 Changelog",
         "intro.cta.host": "XyDesk Host Setup (Windows PC)",
         "led.1.k": "Protocol Engine",
-        "led.1.s": "Fast-Path I/O · 8-Buf OpenSLES",
+        "led.1.s": "Fast-Path I/O · 32-Buf OpenSLES",
         "led.2.k": "Multi-Display & Session",
         "led.2.s": "Multi-Monitor · /admin Console",
         "led.3.k": "Touch Control Layer",
@@ -1386,7 +1620,7 @@
         "about.kicker": "Understanding the XyDesk Ecosystem",
         "about.title": "What Is XyDesk Remote & How Does It Differ from Standard XyDesk?",
         "about.lead": "Within the XyVerse Technology Global software lineup, Standard XyDesk and XyDesk Remote are engineered for two fundamentally different workflows.",
-        "cap.kicker": "Verified Implemented Features (Build v0.5.19)",
+        "cap.kicker": "Verified Implemented Features (Build v0.5.20)",
         "cap.title": "Session, Native Engine & Control Capabilities",
         "arch.kicker": "Technical Configuration",
         "arch.title": "Streaming, Latency & Security Settings",
@@ -1396,9 +1630,9 @@
         "dl.kicker": "Application Distribution",
         "dl.title": "Download Android Installation Packages (APK)",
         "dl.desc": "Each APK package is signed with the official release key and separated by processor architecture (ABI). The official launch has been accelerated to Saturday, October 3, 2026 — downloads remain locked while the Ver 1.0.0 countdown runs.",
-        "dl.abi1": "Modern 64-bit Android devices (ARMv8-A · ~80.2 MB · Signed R8 · Build 36)",
-        "dl.abi2": "Legacy 32-bit Android devices (ARMv7 · ~67.3 MB · Signed R8 · Build 36)",
-        "dl.abi3": "Chromebooks, Android PCs & x86_64 Emulators (~85.5 MB · Signed R8 · Build 36)",
+        "dl.abi1": "Modern 64-bit Android devices (ARMv8-A · ~80.2 MB · Signed R8 · Build 37)",
+        "dl.abi2": "Legacy 32-bit Android devices (ARMv7 · ~67.3 MB · Signed R8 · Build 37)",
+        "dl.abi3": "Chromebooks, Android PCs & x86_64 Emulators (~85.5 MB · Signed R8 · Build 37)",
         "dl.btn.lbl": "Download arm64-v8a · Ver 1.0.0",
         "dl.btn.lbl2": "Download armeabi-v7a · Ver 1.0.0",
         "dl.btn.lbl3": "Download x86_64 · Ver 1.0.0",
@@ -1419,7 +1653,11 @@
         currentTheme = t;
         document.documentElement.setAttribute("data-theme", t);
         localStorage.setItem("xydesk_theme", t);
-        themeBtn.textContent = t === "dark" ? (currentLang === "id" ? "Gelap" : "Dark") : (currentLang === "id" ? "Terang" : "Light");
+        var label = t === "dark" ? (currentLang === "id" ? "Gelap" : "Dark") : (currentLang === "id" ? "Terang" : "Light");
+        themeBtn.textContent = label;
+        if (themeBtnMobile) {
+          themeBtnMobile.textContent = (currentLang === "id" ? "Tema: " : "Theme: ") + label;
+        }
       }
 
       function applyLang(l) {
@@ -1440,8 +1678,11 @@
             : "Jadwal Rilis (Dipercepat): Sabtu, 3 Oktober 2026 · 10:00 WIB";
         document.getElementById("modal-status-line").textContent =
           l === "en"
-            ? "Active Candidate Build: v0.5.19 (36) · Locked Draft"
-            : "Build Kandidat Aktif: v0.5.19 (36) · Draft Terkunci";
+            ? "Active Candidate Build: v0.5.20 (37) · Locked Draft"
+            : "Build Kandidat Aktif: v0.5.20 (37) · Draft Terkunci";
+        if (langBtnMobile) {
+          langBtnMobile.textContent = l === "en" ? "Language: EN / ID" : "Bahasa: ID / EN";
+        }
         tickCountdown();
         applyTheme(currentTheme);
       }
@@ -1452,6 +1693,16 @@
       langBtn.addEventListener("click", function () {
         applyLang(currentLang === "id" ? "en" : "id");
       });
+      if (themeBtnMobile) {
+        themeBtnMobile.addEventListener("click", function () {
+          applyTheme(currentTheme === "dark" ? "light" : "dark");
+        });
+      }
+      if (langBtnMobile) {
+        langBtnMobile.addEventListener("click", function () {
+          applyLang(currentLang === "id" ? "en" : "id");
+        });
+      }
 
       applyLang(currentLang);
     })();

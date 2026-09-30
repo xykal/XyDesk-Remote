@@ -37,9 +37,52 @@
     a { color: inherit; text-decoration: none; }
     button { font-family: inherit; }
     .mono { font-family: var(--font-mono); font-feature-settings: "tnum" on, "zero" on; }
-    .container { width: 100%; max-width: 880px; margin: 0 auto; padding: 0 clamp(16px, 4vw, 24px); }
-    .topbar { border-bottom: 1px solid var(--line); background: var(--bg); position: sticky; top: 0; z-index: 30; }
-    .topbar-inner { min-height: 60px; padding: 10px 0; display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+    .container {
+      width: 100%;
+      max-width: 920px;
+      margin: 0 auto;
+      padding-left: max(clamp(14px, 4vw, 24px), env(safe-area-inset-left));
+      padding-right: max(clamp(14px, 4vw, 24px), env(safe-area-inset-right));
+    }
+    .topbar { border-bottom: 1px solid var(--line); background: var(--bg); position: sticky; top: 0; z-index: 60; }
+    .topbar-inner { min-height: 58px; padding: 8px 0; display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+    .nav-links { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+    .hamburger-btn {
+      display: none;
+      align-items: center;
+      justify-content: center;
+      width: 38px;
+      height: 38px;
+      border-radius: 10px;
+      border: 1px solid var(--line-strong);
+      background: var(--surface);
+      color: var(--text);
+      cursor: pointer;
+    }
+    .hamburger-btn svg { width: 19px; height: 19px; }
+    .hamburger-btn .icon-close { display: none; }
+    .hamburger-btn[aria-expanded="true"] .icon-menu { display: none; }
+    .hamburger-btn[aria-expanded="true"] .icon-close { display: block; }
+    .mobile-drawer {
+      display: none;
+      border-top: 1px solid var(--line);
+      background: var(--surface);
+      padding: 12px 0 14px;
+    }
+    .mobile-drawer.open { display: block; }
+    .drawer-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+    .drawer-link {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      min-height: 40px;
+      padding: 8px 12px;
+      border-radius: 10px;
+      border: 1px solid var(--line);
+      background: var(--bg);
+      font-size: 12.8px;
+      font-weight: 600;
+    }
     .pill {
       display: inline-flex;
       align-items: center;
@@ -54,34 +97,39 @@
       cursor: pointer;
     }
     .pill.primary { background: var(--text); color: var(--bg); border-color: var(--text); }
-    main { padding: clamp(28px, 5vw, 46px) 0; flex: 1; }
+    main { padding: clamp(24px, 5vw, 46px) 0; flex: 1; }
     .meta { font-size: clamp(10.5px, 1.4vw, 11.5px); font-weight: 600; color: var(--text-faint); text-transform: uppercase; letter-spacing: 0.06em; margin-bottom: 8px; }
-    h1 { font-size: clamp(22px, 4vw, 30px); font-weight: 800; letter-spacing: -0.025em; line-height: 1.2; margin-bottom: 12px; }
-    .lead { font-size: clamp(13.8px, 1.7vw, 15px); color: var(--text-dim); margin-bottom: 24px; line-height: 1.65; }
+    h1 { font-size: clamp(21px, 4vw, 30px); font-weight: 800; letter-spacing: -0.025em; line-height: 1.2; margin-bottom: 12px; }
+    .lead { font-size: clamp(13.5px, 1.7vw, 15px); color: var(--text-dim); margin-bottom: 24px; line-height: 1.65; }
     .card {
       background: var(--surface);
       border: 1px solid var(--line);
       border-radius: 14px;
-      padding: clamp(16px, 3vw, 22px);
+      padding: clamp(15px, 3vw, 22px);
       margin-bottom: 16px;
     }
-    .card h2 { font-size: clamp(15px, 2vw, 16.5px); font-weight: 700; letter-spacing: -0.015em; margin-bottom: 8px; }
-    .card p, .card li { font-size: clamp(13px, 1.5vw, 14px); color: var(--text-dim); line-height: 1.6; }
+    .card h2 { font-size: clamp(14.8px, 2vw, 16.5px); font-weight: 700; letter-spacing: -0.015em; margin-bottom: 8px; }
+    .card p, .card li { font-size: clamp(12.8px, 1.5vw, 14px); color: var(--text-dim); line-height: 1.6; overflow-wrap: anywhere; }
     .card ul { padding-left: 18px; margin-top: 8px; display: flex; flex-direction: column; gap: 7px; }
     .code-box {
       background: var(--bg);
       border: 1px solid var(--line);
       border-radius: 9px;
       padding: 12px 14px;
-      font-size: clamp(12px, 1.5vw, 13px);
+      font-size: clamp(11.8px, 1.5vw, 13px);
       margin: 12px 0;
       overflow-x: auto;
       white-space: nowrap;
     }
     footer { border-top: 1px solid var(--line); padding: 24px 0; font-size: 12px; color: var(--text-faint); }
     .footer-inner { display: flex; justify-content: space-between; flex-wrap: wrap; gap: 12px; }
+    @media (max-width: 720px) {
+      .nav-links { display: none; }
+      .hamburger-btn { display: inline-flex; }
+    }
     @media (max-width: 540px) {
       .pill.primary { width: 100%; }
+      .drawer-grid { grid-template-columns: 1fr; }
       .footer-inner { flex-direction: column; align-items: flex-start; }
     }
   </style>
@@ -90,9 +138,44 @@
   <header class="topbar">
     <div class="container topbar-inner">
       <a href="index.html" style="font-weight: 700; font-size: 16px; letter-spacing: -0.02em;">XyDesk Remote</a>
-      <a href="index.html" class="pill">Beranda</a>
+      <nav class="nav-links" aria-label="Navigasi">
+        <a href="index.html#about-diff" class="pill">Perbedaan XyDesk</a>
+        <a href="index.html#changelog" class="pill">Changelog</a>
+        <a href="status.html" class="pill">Status Sistem</a>
+        <a href="index.html" class="pill">Beranda</a>
+      </nav>
+      <button type="button" class="hamburger-btn" id="hamburger-btn" aria-label="Buka Menu" aria-expanded="false">
+        <svg class="icon-menu" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round">
+          <line x1="4" y1="7" x2="20" y2="7" /><line x1="4" y1="12" x2="20" y2="12" /><line x1="4" y1="17" x2="20" y2="17" />
+        </svg>
+        <svg class="icon-close" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round">
+          <line x1="6" y1="6" x2="18" y2="18" /><line x1="18" y1="6" x2="6" y2="18" />
+        </svg>
+      </button>
+    </div>
+    <div class="mobile-drawer" id="mobile-drawer">
+      <div class="container drawer-grid">
+        <a href="index.html" class="drawer-link"><span>Beranda Utama</span><span>→</span></a>
+        <a href="index.html#about-diff" class="drawer-link"><span>Tentang &amp; Perbedaan</span><span>→</span></a>
+        <a href="index.html#changelog" class="drawer-link"><span>Changelog v0.5.20</span><span>→</span></a>
+        <a href="status.html" class="drawer-link"><span>Status Sistem</span><span>→</span></a>
+        <a href="privacy.html" class="drawer-link"><span>Kebijakan Privasi</span><span>→</span></a>
+        <a href="licenses.html" class="drawer-link"><span>Lisensi Open Source</span><span>→</span></a>
+      </div>
     </div>
   </header>
+  <script>
+    (function(){
+      var b = document.getElementById("hamburger-btn"), d = document.getElementById("mobile-drawer");
+      if (b && d) {
+        b.addEventListener("click", function(){
+          var open = b.getAttribute("aria-expanded") === "true";
+          b.setAttribute("aria-expanded", open ? "false" : "true");
+          d.classList.toggle("open", !open);
+        });
+      }
+    })();
+  </script>
 
   <main>
     <div class="container">
