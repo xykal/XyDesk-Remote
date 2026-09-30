@@ -187,15 +187,22 @@ static BOOL android_process_event(ANDROID_EVENT_QUEUE* queue, freerdp* inst)
 			{
 				ANDROID_EVENT_CLIPBOARD* clipboard_event = (ANDROID_EVENT_CLIPBOARD*)event;
 				const char* mimeType = clipboard_event->mimeType;
-				UINT32 formatId = ClipboardRegisterFormat(afc->clipboard, mimeType);
-				UINT32 size = clipboard_event->data_length;
+				if (afc->clipboard)
+				{
+					UINT32 formatId = ClipboardRegisterFormat(afc->clipboard, mimeType);
+					UINT32 size = clipboard_event->data_length;
 
-				if (size)
-					ClipboardSetData(afc->clipboard, formatId, clipboard_event->data, size);
-				else
-					ClipboardEmpty(afc->clipboard);
+					if (size)
+						ClipboardSetData(afc->clipboard, formatId, clipboard_event->data, size);
+					else
+						ClipboardEmpty(afc->clipboard);
+				}
 
-				rc = (android_cliprdr_send_client_format_list(afc->cliprdr) == CHANNEL_RC_OK);
+				if (afc->cliprdr)
+					(void)android_cliprdr_send_client_format_list(afc->cliprdr);
+
+				/* Never tear down the RDP session if a clipboard announcement fails. */
+				rc = TRUE;
 			}
 			break;
 
@@ -210,10 +217,12 @@ static BOOL android_process_event(ANDROID_EVENT_QUEUE* queue, freerdp* inst)
 				break;
 		}
 
-		android_event_free(event);
-
 		if (!rc)
-			return FALSE;
+		{
+			WLog_WARN(TAG, "Transient Android input/channel event failure (type=%d); keeping session alive",
+			          event->type);
+		}
+		android_event_free(event);
 	}
 
 	return TRUE;

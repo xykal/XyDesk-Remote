@@ -226,6 +226,7 @@ private fun CredentialsSection(
     // `if (tick < 0) Text("")` di ujung layar untuk memaksa recompose.
     val rememberedFlags = remember(tick, favorites) { favorites.map { vault.has(it.id) } }
 
+    Box(Modifier.fillMaxSize()) {
     Column(
         Modifier
             .fillMaxSize()
@@ -330,6 +331,7 @@ private fun CredentialsSection(
             dismissLabel = xy("Batal", "Cancel"),
             onDismiss = { confirmClear = false },
         )
+    }
     }
 }
 
@@ -747,6 +749,7 @@ private fun SecuritySection(appPrefs: AppPrefs) {
     var defaultTlsSecLevel by remember { mutableIntStateOf(appPrefs.defaultTlsSecLevel) }
     val entries = remember(tick) { store.entries() }
 
+    Box(Modifier.fillMaxSize()) {
     Column(
         Modifier
             .fillMaxSize()
@@ -969,6 +972,7 @@ private fun SecuritySection(appPrefs: AppPrefs) {
             onDismiss = { confirmClearAllCerts = false },
         )
     }
+    }
 }
 
 @Composable
@@ -1001,6 +1005,7 @@ private fun AboutSection() {
     val native = remember {
         runCatching { com.freerdp.freerdpcore.services.LibFreeRDP.getVersion() }.getOrNull()
     }
+    Box(Modifier.fillMaxSize()) {
     Column(
         Modifier
             .fillMaxSize()
@@ -1079,6 +1084,7 @@ private fun AboutSection() {
             confirmLabel = "OK",
             onConfirm = { showLicense = false },
         )
+    }
     }
 }
 

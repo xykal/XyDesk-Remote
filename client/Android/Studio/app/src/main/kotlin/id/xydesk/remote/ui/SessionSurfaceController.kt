@@ -220,6 +220,20 @@ class SessionSurfaceController(private val activity: Activity) : GraphicsSink {
         sv.setInputSink(object : SessionView.InputSink {
             override fun onText(text: String) {
                 if (text.isEmpty()) return
+                // Jika user menempelkan teks panjang (>16 karakter, mis. dari bar clipboard Gboard
+                // atau file .txt), jangan lempar ribuan event unicode beruntun ke antrean 512 slot
+                // yang bisa memicu disconnect. Sinkronkan ke clipboard remote lalu kirim Ctrl+V.
+                if (text.length > 16) {
+                    onImeSnippetCommitted?.invoke(text)
+                    uiHandler.postDelayed({
+                        im.sendAndroidKeyCode(KeyEvent.KEYCODE_CTRL_LEFT, true)
+                        im.sendAndroidKeyCode(KeyEvent.KEYCODE_V, true)
+                        im.sendAndroidKeyCode(KeyEvent.KEYCODE_V, false)
+                        im.sendAndroidKeyCode(KeyEvent.KEYCODE_CTRL_LEFT, false)
+                        onInputKeyConsumed?.invoke()
+                    }, 105L)
+                    return
+                }
                 var i = 0
                 while (i < text.length) {
                     val cp = Character.codePointAt(text, i)

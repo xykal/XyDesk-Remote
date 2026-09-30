@@ -280,7 +280,12 @@ fun XyDeskHome(
                         onMenu = { drawerOpen = true },
                         onAddRdp = { route = XyRoute.EditDevice(null, pcQuickMode = false) },
                         onAddPcQuick = { route = XyRoute.EditDevice(null, pcQuickMode = true) },
-                        onEdit = { route = XyRoute.EditDevice(it) },
+                        onEdit = {
+                            route = XyRoute.EditDevice(
+                                it,
+                                pcQuickMode = RdpOptions.of(context, it.id).pcConnectMode,
+                            )
+                        },
                         onConnect = { connect(it) },
                         onWakeConnect = { wakeAndConnect(it) },
                         onDelete = { profile -> confirmDeleteDevice = profile },
@@ -293,7 +298,12 @@ fun XyDeskHome(
                         favorites = favorites,
                         onMenu = { drawerOpen = true },
                         appPrefs = appPrefs,
-                        onEditDevice = { route = XyRoute.EditDevice(it) },
+                        onEditDevice = {
+                            route = XyRoute.EditDevice(
+                                it,
+                                pcQuickMode = RdpOptions.of(context, it.id).pcConnectMode,
+                            )
+                        },
                         onClearAllCredentials = {
                             scope.launch {
                                 repo.clear()
@@ -501,6 +511,34 @@ fun XyDeskHome(
             },
             dismissLabel = xy("Batal", "Cancel"),
             onDismiss = { confirmExitApp = false },
+        )
+    }
+
+    // Jendela Mengambang internal (aktif saat berpindah dari sesi ke Beranda)
+    var liveFloatingSessions by remember { mutableStateOf(XySessionRegistry.list()) }
+    var floatingActive by remember { mutableStateOf(XySessionRegistry.floatingMiniActive) }
+    LaunchedEffect(Unit) {
+        while (true) {
+            liveFloatingSessions = XySessionRegistry.list()
+            floatingActive = XySessionRegistry.floatingMiniActive
+            kotlinx.coroutines.delay(500)
+        }
+    }
+    val activeFloatingSession = liveFloatingSessions.firstOrNull()
+    if (floatingActive && activeFloatingSession != null) {
+        XyDraggableFloatingMiniWindow(
+            title = activeFloatingSession.label,
+            bitmapProvider = { activeFloatingSession.bitmapProvider?.invoke() },
+            onRestoreFull = {
+                XySessionRegistry.floatingMiniActive = false
+                floatingActive = false
+                activeFloatingSession.open()
+            },
+            onOpenHomeWithMini = null,
+            onCloseMini = {
+                XySessionRegistry.floatingMiniActive = false
+                floatingActive = false
+            },
         )
     }
 
@@ -894,11 +932,21 @@ private fun DeviceCard(
                     overflow = TextOverflow.Ellipsis,
                 )
                 Text(
-                    buildString {
-                        append(profile.host).append(':').append(profile.port)
-                        if (!profile.username.isNullOrBlank()) append("  ·  ").append(profile.username)
-                        append("  ·  ").append(streamBadge)
-                        if (rdpOptions.consoleAdmin) append("  ·  Admin")
+                    if (rdpOptions.pcConnectMode) {
+                        buildString {
+                            append(xy("Koneksi PC", "Connect PC"))
+                            append("  ·  ")
+                            append(profile.host)
+                            append("  ·  ")
+                            append(rdpOptions.activeCodecLabel())
+                        }
+                    } else {
+                        buildString {
+                            append(profile.host).append(':').append(profile.port)
+                            if (!profile.username.isNullOrBlank()) append("  ·  ").append(profile.username)
+                            append("  ·  ").append(streamBadge)
+                            if (rdpOptions.consoleAdmin) append("  ·  Admin")
+                        }
                     },
                     style = MaterialTheme.typography.bodySmall,
                     color = Color.White.copy(alpha = 0.82f),

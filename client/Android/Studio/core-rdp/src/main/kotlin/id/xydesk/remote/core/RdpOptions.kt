@@ -189,6 +189,8 @@ data class RdpOptions(
     val gateway: XyGateway? = null,
 
     // ---- Streaming & Latency Tuning ----
+    val pcConnectMode: Boolean = false,
+    val rawInputMouse: Boolean = true,
     val streamProfile: XyStreamProfile = XyStreamProfile.AUTO,
     val gpuProfile: XyGpuProfile = XyGpuProfile.AUTO,
     /** Mode hemat baterai HP: gabungkan frame burst (VSYNC coalescing) & kurangi beban dekoder. */
@@ -416,16 +418,28 @@ data class RdpOptions(
     }
 
     /** Label singkat codec aktif untuk indikator telemetri. */
-    fun activeCodecLabel(): String = when {
-        !h264 -> "RFX/GDI"
-        lowBandwidth || streamProfile == XyStreamProfile.ULTRA_LOW_LATENCY ||
-            streamProfile == XyStreamProfile.DATA_SAVER -> "AVC420"
-        else -> "AVC444"
+    fun activeCodecLabel(): String {
+        val base = when {
+            !h264 -> "RFX/GDI"
+            lowBandwidth || streamProfile == XyStreamProfile.ULTRA_LOW_LATENCY ||
+                streamProfile == XyStreamProfile.DATA_SAVER -> "H.264 AVC420"
+            else -> "H.264 AVC444"
+        }
+        val gpuTag = when (gpuProfile) {
+            XyGpuProfile.NVIDIA -> "NVENC"
+            XyGpuProfile.AMD -> "AMF"
+            XyGpuProfile.INTEL -> "QSV"
+            XyGpuProfile.SOFTWARE -> "CPU"
+            XyGpuProfile.AUTO -> null
+        }
+        return if (gpuTag != null) "$base ($gpuTag)" else base
     }
 
     fun write(context: Context, deviceId: String) {
         val sp = context.applicationContext
             .getSharedPreferences(FILE, Context.MODE_PRIVATE).edit()
+        sp.putBoolean("$deviceId.pc_mode", pcConnectMode)
+        sp.putBoolean("$deviceId.raw_mouse", rawInputMouse)
         sp.putInt("$deviceId.audio", audioMode.ordinal)
         sp.putBoolean("$deviceId.mic", microphone)
         sp.putBoolean("$deviceId.clipboard", clipboard)
@@ -482,6 +496,7 @@ data class RdpOptions(
         private const val FILE = "xydesk.rdp.options"
 
         private val KEYS = listOf(
+            "pc_mode", "raw_mouse",
             "audio", "mic", "clipboard", "drive", "camera", "udp",
             "netauto", "lowbw", "h264", "dynres", "ghost", "gport", "guser", "gpass", "gdomain",
             "stream_profile", "gpu_profile", "bat_saver", "bpp", "fps", "async_upd", "async_ch", "comp_lvl",
@@ -526,6 +541,8 @@ data class RdpOptions(
                 )
             }
             return RdpOptions(
+                pcConnectMode = sp.getBoolean("$deviceId.pc_mode", false),
+                rawInputMouse = sp.getBoolean("$deviceId.raw_mouse", true),
                 audioMode = audio,
                 microphone = sp.getBoolean("$deviceId.mic", false),
                 clipboard = sp.getBoolean("$deviceId.clipboard", true),

@@ -389,6 +389,22 @@ android_cliprdr_server_format_data_request(CliprdrClientContext* cliprdr,
 
 	formatId = formatDataRequest->requestedFormatId;
 	data = (BYTE*)ClipboardGetData(afc->clipboard, formatId, &size);
+	/* Guard CLIPRDR single-PDU response size so huge .txt buffers cannot
+	 * overflow the Windows rdpclip/termsrv virtual channel buffer and drop
+	 * the session. 256 KB UTF-16LE (~131k characters) is safe on all Windows builds. */
+	if (data && (formatId == CF_UNICODETEXT || formatId == CF_TEXT || formatId == CF_OEMTEXT))
+	{
+		const UINT32 maxSafeBytes = 256U * 1024U;
+		if (size > maxSafeBytes)
+		{
+			size = maxSafeBytes & ~1U;
+			if (size >= 2)
+			{
+				data[size - 2] = 0;
+				data[size - 1] = 0;
+			}
+		}
+	}
 	response.common.msgFlags = CB_RESPONSE_OK;
 	response.common.dataLen = size;
 	response.requestedFormatData = data;
@@ -402,7 +418,11 @@ android_cliprdr_server_format_data_request(CliprdrClientContext* cliprdr,
 
 	rc = cliprdr->ClientFormatDataResponse(cliprdr, &response);
 	free(data);
-	return rc;
+	if (rc != CHANNEL_RC_OK)
+	{
+		WLog_WARN(TAG, "ClientFormatDataResponse returned %u; keeping session alive", rc);
+	}
+	return CHANNEL_RC_OK;
 }
 
 /**

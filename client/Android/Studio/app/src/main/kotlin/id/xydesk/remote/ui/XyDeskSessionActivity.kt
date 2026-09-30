@@ -156,29 +156,26 @@ class XyDeskSessionActivity : ComponentActivity() {
 
     fun enterPipMonitorMode(): Boolean {
         if (isFinishing || isDestroyed) return false
-        // Prioritaskan Overlay ("Display over other apps") jika sudah diizinkan user
-        // (mis. lewat AppsPerms / Setelan Khusus), karena bekerja di semua ROM Android.
-        if (XyFloatingOverlay.canDrawOverlays(this)) {
-            val shown = XyFloatingOverlay.show(
-                context = this,
-                title = sessionLabel ?: "XyDesk Remote",
-                bitmapProvider = { if (::controller.isInitialized) controller.peekBitmap() else null },
-                onRestoreSession = {
-                    val reopen = Intent(applicationContext, XyDeskSessionActivity::class.java)
-                        .putExtras(intent)
-                        .addFlags(Intent.FLAG_ACTIVITY_REORDER_TO_FRONT or Intent.FLAG_ACTIVITY_NEW_TASK)
-                    runCatching { applicationContext.startActivity(reopen) }
-                },
-            )
-            if (shown) {
-                XySessionService.start(this, sessionLabel, ping = true)
-                runCatching { moveTaskToBack(true) }
-                return true
-            }
+        // Coba langsung tampilkan jendela mengambang (tanpa mengecek Settings.canDrawOverlays
+        // lebih dulu) agar izin dari AppsPerms langsung jalan tanpa melempar user ke
+        // halaman pengaturan "Display over other apps" yang dibatasi ROM.
+        val shown = XyFloatingOverlay.show(
+            context = this,
+            title = sessionLabel ?: "XyDesk Remote",
+            bitmapProvider = { if (::controller.isInitialized) controller.peekBitmap() else null },
+            onRestoreSession = {
+                val reopen = Intent(applicationContext, XyDeskSessionActivity::class.java)
+                    .putExtras(intent)
+                    .addFlags(Intent.FLAG_ACTIVITY_REORDER_TO_FRONT or Intent.FLAG_ACTIVITY_NEW_TASK)
+                runCatching { applicationContext.startActivity(reopen) }
+            },
+        )
+        if (shown) {
+            XySessionService.start(this, sessionLabel, ping = true)
+            runCatching { moveTaskToBack(true) }
+            return true
         }
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O &&
-            packageManager.hasSystemFeature(PackageManager.FEATURE_PICTURE_IN_PICTURE)
-        ) {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             val nativeOk = runCatching {
                 val params = PictureInPictureParams.Builder()
                     .setAspectRatio(Rational(16, 9))
@@ -247,7 +244,25 @@ class XyDeskSessionActivity : ComponentActivity() {
                         }
                         return@execute
                     }
-                    val text = item.coerceToText(applicationContext)?.toString().orEmpty()
+                    val text = runCatching {
+                        val direct = item.text?.toString()
+                        if (direct != null) {
+                            if (direct.length > 120_000) direct.substring(0, 120_000) else direct
+                        } else if (uri != null && uri != ClipboardImageProvider.TEXT_CONTENT_URI) {
+                            contentResolver.openInputStream(uri)?.bufferedReader(Charsets.UTF_8)?.use { reader ->
+                                val sb = StringBuilder()
+                                val chBuf = CharArray(4096)
+                                while (sb.length < 120_000) {
+                                    val n = reader.read(chBuf, 0, minOf(chBuf.size, 120_000 - sb.length))
+                                    if (n <= 0) break
+                                    sb.append(chBuf, 0, n)
+                                }
+                                sb.toString()
+                            }.orEmpty()
+                        } else {
+                            ""
+                        }
+                    }.getOrDefault("")
                     if (text.isNotEmpty() && text != lastSyncedPhoneClip &&
                         !isFinishing && !isDestroyed &&
                         manager.state.value is SessionState.Connected
@@ -352,6 +367,9 @@ class XyDeskSessionActivity : ComponentActivity() {
                         manager.disconnect()
                         finish()
                     }
+                },
+                bitmapProvider = {
+                    if (::controller.isInitialized) controller.peekBitmap() else null
                 },
             ),
         )

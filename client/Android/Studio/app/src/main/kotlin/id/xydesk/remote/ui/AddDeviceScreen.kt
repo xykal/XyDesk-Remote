@@ -94,25 +94,28 @@ fun AddDeviceScreen(
 ) {
     val context = LocalContext.current
     val vault = remember { CredentialVault(context.applicationContext) }
-    var isPcQuickMode by remember(existing, initialPcQuickMode) {
-        mutableStateOf(existing == null && initialPcQuickMode)
-    }
     // Kunci tetap: dipakai ulang saat mengubah perangkat supaya simpan tidak
     // menghasilkan baris kedua. Data lama (belum punya key) memakai id-nya.
     val deviceKey = remember(existing) {
         existing?.key ?: existing?.id ?: java.util.UUID.randomUUID().toString()
     }
     val deviceId = deviceKey
+    val existingStored = remember(deviceId, existing) {
+        if (existing != null) RdpOptions.of(context, deviceId) else null
+    }
+    var isPcQuickMode by remember(existing, initialPcQuickMode) {
+        mutableStateOf(
+            if (existing != null) existingStored?.pcConnectMode == true
+            else initialPcQuickMode,
+        )
+    }
 
     var label by remember { mutableStateOf(existing?.label.orEmpty()) }
     var host by remember(existing) {
         mutableStateOf(existing?.let { formatRdpEndpoint(it.host, it.port) }.orEmpty())
     }
     var user by remember {
-        mutableStateOf(
-            existing?.username
-                ?: if (existing == null && initialPcQuickMode) "XyDesk" else "",
-        )
+        mutableStateOf(existing?.username.orEmpty())
     }
     var pass by remember {
         mutableStateOf(
@@ -128,7 +131,7 @@ fun AddDeviceScreen(
         val list = mutableListOf<SavedAccountOption>()
         savedProfiles.forEach { prof ->
             val u = prof.username?.trim().orEmpty()
-            if (u.isNotEmpty()) {
+            if (u.isNotEmpty() && !u.equals("XyDesk", ignoreCase = true)) {
                 val p = prof.password ?: vault.get(prof.id).orEmpty()
                 val d = prof.domain?.trim().orEmpty()
                 if (list.none { it.username.equals(u, ignoreCase = true) && it.domain.equals(d, ignoreCase = true) }) {
@@ -138,7 +141,9 @@ fun AddDeviceScreen(
         }
         savedUsers.forEach { u ->
             val clean = u.trim()
-            if (clean.isNotEmpty() && list.none { it.username.equals(clean, ignoreCase = true) }) {
+            if (clean.isNotEmpty() && !clean.equals("XyDesk", ignoreCase = true) &&
+                list.none { it.username.equals(clean, ignoreCase = true) }
+            ) {
                 list.add(SavedAccountOption(clean, "", ""))
             }
         }
@@ -156,36 +161,47 @@ fun AddDeviceScreen(
     var accountDropdownOpen by remember { mutableStateOf(false) }
 
     val scope = rememberCoroutineScope()
-    val stored = remember(deviceId, existing) {
-        if (existing != null) {
-            RdpOptions.of(context, deviceId)
+    val stored = remember(deviceId, existing, initialPcQuickMode) {
+        if (existingStored != null) {
+            existingStored
         } else {
-            // Perangkat baru mewarisi default General & Security.
             val app = AppPrefs(context)
-            val baseProfile = XyStreamProfile.entries.getOrElse(app.defaultStreamProfile) {
-                XyStreamProfile.AUTO
+            val baseProfile = if (initialPcQuickMode) {
+                XyStreamProfile.ULTRA_LOW_LATENCY
+            } else {
+                XyStreamProfile.entries.getOrElse(app.defaultStreamProfile) {
+                    XyStreamProfile.AUTO
+                }
             }
-            val baseSecProto = XySecurityProtocol.entries.getOrElse(app.defaultSecurityProtocol) {
-                XySecurityProtocol.AUTO
+            val baseSecProto = if (initialPcQuickMode) {
+                XySecurityProtocol.NLA
+            } else {
+                XySecurityProtocol.entries.getOrElse(app.defaultSecurityProtocol) {
+                    XySecurityProtocol.AUTO
+                }
             }
             RdpOptions(
+                pcConnectMode = initialPcQuickMode,
                 clipboard = app.defaultClipboard,
-                localDrive = app.defaultLocalDrive,
-                udpTransport = app.defaultUdp,
+                localDrive = if (initialPcQuickMode) false else app.defaultLocalDrive,
+                udpTransport = if (initialPcQuickMode) true else app.defaultUdp,
                 networkAutoDetect = app.defaultNetAuto,
-                h264 = app.defaultH264,
-                dynamicResolution = app.defaultDynamicResolution,
-                asyncUpdate = app.defaultAsyncUpdate,
-                asyncChannels = app.defaultAsyncChannels,
+                h264 = true,
+                dynamicResolution = if (initialPcQuickMode) false else app.defaultDynamicResolution,
+                asyncUpdate = if (initialPcQuickMode) true else app.defaultAsyncUpdate,
+                asyncChannels = if (initialPcQuickMode) true else app.defaultAsyncChannels,
                 securityProtocol = baseSecProto,
-                tlsSecLevel = app.defaultTlsSecLevel,
+                tlsSecLevel = if (initialPcQuickMode) 2 else app.defaultTlsSecLevel,
             ).withStreamProfile(baseProfile).copy(
-                udpTransport = app.defaultUdp,
+                pcConnectMode = initialPcQuickMode,
+                udpTransport = if (initialPcQuickMode) true else app.defaultUdp,
                 networkAutoDetect = app.defaultNetAuto,
-                h264 = app.defaultH264,
-                dynamicResolution = app.defaultDynamicResolution,
-                asyncUpdate = app.defaultAsyncUpdate,
-                asyncChannels = app.defaultAsyncChannels,
+                h264 = true,
+                dynamicResolution = if (initialPcQuickMode) false else app.defaultDynamicResolution,
+                asyncUpdate = if (initialPcQuickMode) true else app.defaultAsyncUpdate,
+                asyncChannels = if (initialPcQuickMode) true else app.defaultAsyncChannels,
+                securityProtocol = baseSecProto,
+                tlsSecLevel = if (initialPcQuickMode) 2 else app.defaultTlsSecLevel,
             )
         }
     }
@@ -223,16 +239,25 @@ fun AddDeviceScreen(
     val initialHost = remember(existing) {
         existing?.let { formatRdpEndpoint(it.host, it.port) }.orEmpty()
     }
-    val hasChanges = host != initialHost ||
-        label != existing?.label.orEmpty() ||
-        user != existing?.username.orEmpty() ||
-        pass != existing?.password.orEmpty() ||
-        domain != existing?.domain.orEmpty() ||
-        options != stored ||
-        gatewayOn != (stored.gateway != null)
+    val hasChanges = if (existing == null) {
+        host.isNotBlank() || label.isNotBlank() || pass.isNotBlank()
+    } else {
+        host != initialHost ||
+            label != existing.label.orEmpty() ||
+            user != existing.username.orEmpty() ||
+            pass != existing.password.orEmpty() ||
+            domain != existing.domain.orEmpty() ||
+            options != stored ||
+            gatewayOn != (stored.gateway != null)
+    }
 
     fun requestCancel() {
-        if (hasChanges) confirmDiscard = true else onCancel()
+        if (confirmDiscard || !hasChanges) {
+            confirmDiscard = false
+            onCancel()
+        } else {
+            confirmDiscard = true
+        }
     }
 
     BackHandler {
@@ -282,13 +307,19 @@ fun AddDeviceScreen(
             validationPopup = msg
             return
         }
+        val effectiveUser = if (isPcQuickMode) {
+            if (pass.isNotBlank()) "XyDesk" else null
+        } else {
+            user.trim().ifEmpty { null }
+        }
+        val effectiveDomain = if (isPcQuickMode) null else domain.trim().ifEmpty { null }
         val profile = try {
             ConnectionProfile(
                 host = endpoint.host,
                 port = endpoint.port,
-                username = user.trim().ifEmpty { null },
+                username = effectiveUser,
                 password = pass.ifEmpty { null },
-                domain = domain.trim().ifEmpty { null },
+                domain = effectiveDomain,
                 label = label.trim().ifEmpty { null },
                 key = deviceKey,
             )
@@ -298,31 +329,53 @@ fun AddDeviceScreen(
             return
         }
         error = null
-        val finalOptions = options.copy(
-            audioMode = XyAudioMode.entries[audioIndex],
-            gateway = if (gatewayOn && gwHost.isNotBlank()) {
-                XyGateway(
-                    host = gwHost.trim(),
-                    port = gwPort.toIntOrNull() ?: 443,
-                    username = gwUser.trim().ifEmpty { null },
-                    password = gwPass.ifEmpty { null },
-                    domain = gwDomain.trim().ifEmpty { null },
-                )
-            } else {
-                null
-            },
-        )
+        val finalOptions = if (isPcQuickMode) {
+            options.copy(
+                pcConnectMode = true,
+                audioMode = XyAudioMode.entries[audioIndex],
+                dynamicResolution = false,
+                h264 = true,
+                asyncUpdate = true,
+                asyncChannels = true,
+                securityProtocol = XySecurityProtocol.NLA,
+                tlsSecLevel = 2,
+                gateway = null,
+            )
+        } else {
+            options.copy(
+                pcConnectMode = false,
+                audioMode = XyAudioMode.entries[audioIndex],
+                gateway = if (gatewayOn && gwHost.isNotBlank()) {
+                    XyGateway(
+                        host = gwHost.trim(),
+                        port = gwPort.toIntOrNull() ?: 443,
+                        username = gwUser.trim().ifEmpty { null },
+                        password = gwPass.ifEmpty { null },
+                        domain = gwDomain.trim().ifEmpty { null },
+                    )
+                } else {
+                    null
+                },
+            )
+        }
         finalOptions.write(context, profile.id)
-        DisplayPrefs.setResolution(
-            context,
-            profile.id,
-            DisplayPrefs.resolutionOptions[resolutionIndex].value,
-        )
-        DisplayPrefs.setRotation(context, profile.id, DisplayPrefs.rotations[rotationIndex])
-        DisplayPrefs.setDpi(context, profile.id, dpi)
+        if (isPcQuickMode) {
+            DisplayPrefs.setResolution(context, profile.id, DisplayPrefs.AUTOMATIC)
+            DisplayPrefs.setRotation(context, profile.id, DisplayPrefs.rotations[rotationIndex])
+            DisplayPrefs.setDpi(context, profile.id, 100)
+        } else {
+            DisplayPrefs.setResolution(
+                context,
+                profile.id,
+                DisplayPrefs.resolutionOptions[resolutionIndex].value,
+            )
+            DisplayPrefs.setRotation(context, profile.id, DisplayPrefs.rotations[rotationIndex])
+            DisplayPrefs.setDpi(context, profile.id, dpi)
+        }
         onSubmit(profile, rememberPass, connect)
     }
 
+    Box(Modifier.fillMaxSize()) {
     Column(
         Modifier
             .fillMaxSize()
@@ -331,8 +384,9 @@ fun AddDeviceScreen(
     ) {
         XyTopBar(
             title = when {
-                existing != null -> xy("Ubah perangkat", "Edit device")
-                isPcQuickMode -> xy("Koneksi PC (ID & Password)", "PC Connection (ID & Password)")
+                existing != null && isPcQuickMode -> xy("Ubah Koneksi PC", "Edit PC Connection")
+                existing != null -> xy("Ubah Perangkat RDP", "Edit RDP Device")
+                isPcQuickMode -> xy("Koneksi PC [Tahap Pengembangan]", "PC Connect [Experimental]")
                 else -> xy("Koneksi RDP Baru", "New RDP Connection")
             },
             onBack = { requestCancel() },
@@ -355,16 +409,22 @@ fun AddDeviceScreen(
                         val wantPc = idx == 1
                         isPcQuickMode = wantPc
                         if (wantPc) {
-                            if (user.isBlank()) user = "XyDesk"
                             options = options.withStreamProfile(XyStreamProfile.ULTRA_LOW_LATENCY)
                                 .copy(
+                                    pcConnectMode = true,
                                     udpTransport = true,
                                     h264 = true,
+                                    dynamicResolution = false,
                                     asyncUpdate = true,
                                     asyncChannels = true,
                                     securityProtocol = XySecurityProtocol.NLA,
                                     tlsSecLevel = 2,
                                 )
+                        } else {
+                            options = options.copy(
+                                pcConnectMode = false,
+                                dynamicResolution = true,
+                            )
                         }
                     },
                     modifier = Modifier.fillMaxWidth(),
@@ -372,14 +432,15 @@ fun AddDeviceScreen(
             }
 
             XySectionLabel(
-                if (isPcQuickMode) xy("Identitas PC · Tahap Pengembangan (E2EE + Ultra-Low Latency)", "PC Identity · Experimental (E2EE + Ultra-Low Latency)")
+                if (isPcQuickMode) xy("Identitas PC · Tahap Pengembangan (Tanpa Akun RDP)", "PC Identity · Experimental (No RDP Credentials)")
                 else xy("Alamat", "Address")
             )
             XyCard {
                 XyField(
                     value = label,
                     onValueChange = { label = it },
-                    label = xy("Nama perangkat", "Device name"),
+                    label = if (isPcQuickMode) xy("Label PC (opsional)", "PC Label (optional)")
+                    else xy("Nama perangkat", "Device name"),
                     hint = if (isPcQuickMode) xy("mis. PC Gaming / Rig Utama", "e.g. Gaming PC / Main Rig")
                     else xy("mis. PC kantor", "e.g. Office PC"),
                 )
@@ -388,7 +449,7 @@ fun AddDeviceScreen(
                     value = host,
                     onValueChange = { host = it },
                     label = if (isPcQuickMode) {
-                        xy("ID PC (10 Digit / XY-ID) atau IP", "PC ID (10-Digit / XY-ID) or IP")
+                        xy("ID PC (10 Digit / XY-ID)", "PC ID (10-Digit / XY-ID)")
                     } else {
                         xy("Host / IP (port opsional)", "Host / IP (optional port)")
                     },
@@ -400,6 +461,17 @@ fun AddDeviceScreen(
                     keyboardType = KeyboardType.Uri,
                     imeAction = androidx.compose.ui.text.input.ImeAction.Done,
                 )
+                if (isPcQuickMode) {
+                    Spacer(Modifier.height(14.dp))
+                    XyField(
+                        value = pass,
+                        onValueChange = { pass = it },
+                        label = xy("PIN / Kunci Sesi XyDeskHost (opsional)", "XyDeskHost Session PIN / Key (optional)"),
+                        hint = xy("PIN 6 digit dari XyDeskHost.exe (bukan akun Windows)", "6-digit PIN from XyDeskHost.exe (not Windows account)"),
+                        isPassword = true,
+                        keyboardType = KeyboardType.Password,
+                    )
+                }
                 val resolvedPreview = remember(host) { parsePcIdOrEndpoint(host) }
                 val encodedPcId = remember(resolvedPreview) {
                     resolvedPreview?.let { encodeIpv4ToPcId(it.host) }
@@ -435,7 +507,7 @@ fun AddDeviceScreen(
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
                         Text(
-                            xy("XyDeskHost.exe + QUIC/UDP + E2EE", "XyDeskHost.exe + QUIC/UDP + E2EE"),
+                            xy("XyDeskHost.exe + .dll + QUIC + E2EE", "XyDeskHost.exe + .dll + QUIC + E2EE"),
                             style = MaterialTheme.typography.titleSmall,
                         )
                         Box(
@@ -454,8 +526,8 @@ fun AddDeviceScreen(
                     Spacer(Modifier.height(6.dp))
                     Text(
                         xy(
-                            "Jalur Koneksi PC mengutamakan enkripsi End-to-End (TLS 1.3 Ketat + NLA + Pinning Sertifikat Keystore) dan pipeline Ultra-Low Latency untuk game FPS (Zero Double-Compression, Async Input/Frame Queue, dan Akselerasi Hardware GPU NVIDIA NVENC / AMD AMF / Intel QuickSync). Modul native XyDeskHost.exe (.dll DXGI + QUIC Datagram + RawInput Mouse FPS) sedang dalam tahap pengembangan aktif.",
-                            "PC Connection prioritizes End-to-End security (Strict TLS 1.3 + NLA + Keystore Certificate Pinning) and an Ultra-Low Latency pipeline for FPS gaming (Zero Double-Compression, Async Input/Frame Queue, and NVIDIA NVENC / AMD AMF / Intel QuickSync Hardware GPU encoding). The native XyDeskHost.exe (.dll DXGI + QUIC Datagram + RawInput FPS Mouse) module is in active development.",
+                            "Berbeda dari RDP standar: Koneksi PC tidak memakai kredensial akun/domain Windows dan mengunci resolusi + DPI 1:1 mengikuti monitor fisik PC (DXGI Desktop Duplication). Seluruh paket dienkripsi End-to-End (TLS 1.3 + Pinning Keystore) dengan jalur Ultra-Low Latency untuk game FPS.",
+                            "Unlike standard RDP: PC Connection does not use Windows account/domain credentials and locks resolution + DPI 1:1 to the physical PC monitor (DXGI Desktop Duplication). All traffic is End-to-End Encrypted (TLS 1.3 + Keystore Pinning) with an Ultra-Low Latency path for FPS games.",
                         ),
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -493,7 +565,163 @@ fun AddDeviceScreen(
                         )
                     }
                 }
-            }
+
+                XySectionLabel(xy("Encoder GPU Host & Mode FPS", "Host GPU Encoder & FPS Mode"))
+                XyCard {
+                    Text(
+                        xy("Akselerasi Hardware GPU PC (NVENC / AMF / QuickSync)", "PC Hardware GPU Acceleration (NVENC / AMF / QuickSync)"),
+                        style = MaterialTheme.typography.titleSmall,
+                    )
+                    Text(
+                        xy(
+                            "Pilih arsitektur kartu grafis di PC Anda agar encoder hardware bekerja tanpa membebani CPU.",
+                            "Select your PC's graphics card architecture so the hardware encoder runs with zero CPU overhead.",
+                        ),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                    Spacer(Modifier.height(8.dp))
+                    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                        XyGpuProfile.entries.forEach { gpu ->
+                            val active = options.gpuProfile == gpu
+                            Row(
+                                Modifier
+                                    .fillMaxWidth()
+                                    .clip(MaterialTheme.shapes.medium)
+                                    .background(
+                                        if (active) MaterialTheme.colorScheme.surfaceVariant
+                                        else MaterialTheme.colorScheme.surface,
+                                    )
+                                    .border(
+                                        1.dp,
+                                        if (active) MaterialTheme.colorScheme.outlineVariant
+                                        else MaterialTheme.colorScheme.outline,
+                                        MaterialTheme.shapes.medium,
+                                    )
+                                    .clickable { options = options.withGpuProfile(gpu).copy(pcConnectMode = true) }
+                                    .padding(horizontal = 14.dp, vertical = 10.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                            ) {
+                                Column(Modifier.weight(1f)) {
+                                    Text(xy(gpu.title, gpu.titleEn), style = MaterialTheme.typography.titleSmall)
+                                    Text(
+                                        xy(gpu.detail, gpu.detailEn),
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    )
+                                }
+                            }
+                        }
+                    }
+                    Spacer(Modifier.height(12.dp))
+                    Text(
+                        xy("Target Pacing & Latensi Streaming", "Target Pacing & Streaming Latency"),
+                        style = MaterialTheme.typography.titleSmall,
+                    )
+                    Spacer(Modifier.height(6.dp))
+                    val pcModes = listOf(
+                        XyStreamProfile.ULTRA_LOW_LATENCY to xy("Gaming FPS (Ultra-Low Latency)", "FPS Gaming (Ultra-Low Latency)"),
+                        XyStreamProfile.BALANCED to xy("Desktop 1:1 (AVC444 Tajam)", "1:1 Desktop (Crisp AVC444)"),
+                        XyStreamProfile.DATA_SAVER to xy("Hemat Jaringan (Seluler)", "Network Saver (Cellular)"),
+                    )
+                    pcModes.forEach { (preset, labelText) ->
+                        val selected = options.streamProfile == preset
+                        Row(
+                            Modifier
+                                .fillMaxWidth()
+                                .padding(vertical = 3.dp)
+                                .clip(MaterialTheme.shapes.medium)
+                                .background(
+                                    if (selected) MaterialTheme.colorScheme.surfaceVariant
+                                    else MaterialTheme.colorScheme.surface,
+                                )
+                                .border(
+                                    1.dp,
+                                    if (selected) MaterialTheme.colorScheme.outlineVariant
+                                    else MaterialTheme.colorScheme.outline,
+                                    MaterialTheme.shapes.medium,
+                                )
+                                .clickable {
+                                    options = options.withStreamProfile(preset).copy(
+                                        pcConnectMode = true,
+                                        udpTransport = true,
+                                        asyncUpdate = true,
+                                        asyncChannels = true,
+                                        securityProtocol = XySecurityProtocol.NLA,
+                                        tlsSecLevel = 2,
+                                    )
+                                }
+                                .padding(horizontal = 14.dp, vertical = 10.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            Text(labelText, style = MaterialTheme.typography.titleSmall)
+                        }
+                    }
+                    Spacer(Modifier.height(10.dp))
+                    Text(
+                        xy(
+                            "Info Layar: Resolusi dan DPI dikunci 1:1 mengikuti monitor fisik PC (Native DXGI Desktop Duplication) dan tidak perlu diubah manual.",
+                            "Display Info: Resolution and DPI are locked 1:1 to the physical PC monitor (Native DXGI Desktop Duplication) and cannot be manually overridden.",
+                        ),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+
+                XySectionLabel(xy("Input Game FPS, Transport & Daya", "FPS Game Input, Transport & Power"))
+                XyCard {
+                    XyToggleRow(
+                        title = xy("Mouse Relatif RawInput (Rotasi 360° Game FPS)", "RawInput Relative Mouse (360° FPS Camera)"),
+                        subtitle = xy(
+                            "Kirim delta pergerakan mouse murni tanpa batas tepi layar untuk game shooter/3D",
+                            "Send pure relative mouse deltas without screen-edge clamping for shooter/3D games",
+                        ),
+                        checked = options.rawInputMouse,
+                        onCheckedChange = { options = options.copy(rawInputMouse = it) },
+                        leading = XyIcons.Sliders,
+                    )
+                    XyToggleRow(
+                        title = xy("Transport QUIC / UDP Datagram (Zero HoL Blocking)", "QUIC / UDP Datagram Transport (Zero HoL Blocking)"),
+                        subtitle = xy(
+                            "Prioritaskan frame terbaru tanpa antrean TCP yang menahan paket saat jitter",
+                            "Prioritize newest frames without TCP head-of-line blocking during jitter",
+                        ),
+                        checked = options.udpTransport,
+                        onCheckedChange = { options = options.copy(udpTransport = it) },
+                        leading = XyIcons.Wifi,
+                    )
+                    XyToggleRow(
+                        title = xy("Audio Real-Time Latensi Rendah", "Low-Latency Real-Time Audio"),
+                        subtitle = xy(
+                            "Streaming suara game & desktop langsung ke HP",
+                            "Stream game and desktop audio directly to your phone",
+                        ),
+                        checked = audioIndex == 0,
+                        onCheckedChange = { audioIndex = if (it) 0 else 2 },
+                        leading = XyIcons.Mic,
+                    )
+                    XyToggleRow(
+                        title = xy("Clipboard Otomatis (Anti-Putus Teks Panjang)", "Auto Clipboard (Long-Text Anti-Disconnect)"),
+                        subtitle = xy(
+                            "Sinkronisasi teks & gambar otomatis dengan proteksi ukuran buffer aman",
+                            "Two-way text & image sync with safe buffer ceiling protection",
+                        ),
+                        checked = options.clipboard,
+                        onCheckedChange = { options = options.copy(clipboard = it) },
+                        leading = XyIcons.Clip,
+                    )
+                    XyToggleRow(
+                        title = xy("Mode Hemat Baterai & Suhu Dingin (VSYNC Pacing)", "Battery Saver & Cool Thermal Mode (VSYNC Pacing)"),
+                        subtitle = xy(
+                            "Gabungkan burst update per siklus layar agar HP tetap dingin dan irit baterai",
+                            "Coalesce pixel bursts per VSYNC cycle to keep the phone cool and save battery",
+                        ),
+                        checked = options.batterySaver,
+                        onCheckedChange = { options = options.copy(batterySaver = it) },
+                        leading = XyIcons.Sliders,
+                    )
+                }
+            } else {
 
             XySectionLabel(xy("Kredensial", "Credentials"))
             XyCard {
@@ -1423,6 +1651,7 @@ fun AddDeviceScreen(
                     )
                 }
             }
+            }
 
             error?.let {
                 Text(it, color = MaterialTheme.colorScheme.error)
@@ -1476,6 +1705,7 @@ fun AddDeviceScreen(
             onConfirm = { validationPopup = null },
             onDismiss = { validationPopup = null },
         )
+    }
     }
 }
 

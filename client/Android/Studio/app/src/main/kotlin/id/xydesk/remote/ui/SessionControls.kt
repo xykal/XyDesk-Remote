@@ -39,10 +39,13 @@ import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
+import androidx.compose.ui.graphics.Shadow
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalConfiguration
+import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.IntOffset
@@ -55,6 +58,7 @@ import android.content.ClipboardManager
 import android.content.Context
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.input.pointer.pointerInput
+import id.xydesk.remote.core.RdpOptions
 import id.xydesk.remote.core.SmartResolution
 import id.xydesk.remote.ui.components.XyDialog
 import id.xydesk.remote.ui.components.XyField
@@ -163,6 +167,7 @@ fun SessionControls(
     var showTelemetryPill by remember { mutableStateOf(prefs.showTelemetryPill) }
     var autoPipOnBackground by remember { mutableStateOf(prefs.autoPipOnBackground) }
     var hudProfile by remember(deviceId) { mutableStateOf(prefs.hudProfile(deviceId)) }
+    val pcConnectMode = remember(deviceId) { RdpOptions.of(context, deviceId).pcConnectMode }
     var haptics by remember { mutableStateOf(prefs.haptics) }
     var autoFit by remember { mutableStateOf(prefs.autoFit) }
     var plate by remember { mutableStateOf(prefs.hudPlate) }
@@ -437,6 +442,12 @@ fun SessionControls(
                 verticalArrangement = Arrangement.spacedBy(10.dp),
             ) {
                 RailButton(
+                    icon = XyIcons.Fit,
+                    active = false,
+                    description = xy("Jendela Mengambang (PiP)", "Floating Window (PiP)"),
+                    plate = plate,
+                ) { onEnterPip() }
+                RailButton(
                     icon = XyIcons.Keyboard,
                     active = false,
                     description = xy("Buka keyboard HP", "Open phone keyboard"),
@@ -679,6 +690,7 @@ fun SessionControls(
                     panelOpen = false
                     onEnterPip()
                 },
+                pcConnectMode = pcConnectMode,
                 // Input
                 inputMode = inputMode,
                 onInputModeChange = onInputModeChange,
@@ -924,45 +936,39 @@ private fun LiveTelemetryPill(
     telemetry: id.xydesk.remote.core.TelemetrySample,
     modifier: Modifier = Modifier,
 ) {
-    var expanded by remember { mutableStateOf(false) }
     val rtt = telemetry.rttMs
-    val dotColor = when {
-        rtt <= 0 -> Color(0xFF7BC8A4)
-        rtt < 45 -> Color(0xFF5CE09B)
-        rtt < 120 -> Color(0xFFF5B951)
-        else -> Color(0xFFF26D6D)
+    val rttColor = when {
+        rtt <= 0 -> Color(0xFFEAF0F6)
+        rtt < 45 -> Color(0xFF7BF2B3)
+        rtt < 120 -> Color(0xFFFAD075)
+        else -> Color(0xFFFF8A8A)
     }
-    Row(
-        modifier
-            .clip(XyPill)
-            .background(Color(0xCC0B0D10))
-            .border(1.dp, Color(0x55FFFFFF), XyPill)
-            .clickable { expanded = !expanded }
-            .padding(horizontal = 10.dp, vertical = 5.dp),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(6.dp),
+    val textShadow = Shadow(
+        color = Color(0xF0000000),
+        offset = Offset(1.5f, 1.5f),
+        blurRadius = 3.5f,
+    )
+    val baseStyle = TextStyle(
+        color = Color(0xFFF2F6FA),
+        fontSize = 10.sp,
+        fontWeight = FontWeight.SemiBold,
+        fontFamily = FontFamily.Monospace,
+        lineHeight = 13.sp,
+        shadow = textShadow,
+    )
+    val rttLabel = if (rtt > 0) "${rtt} ms" else "-- ms"
+    val resLabel = if (telemetry.width > 0) "${telemetry.width}x${telemetry.height}" else "--"
+
+    Column(
+        modifier = modifier.padding(horizontal = 2.dp, vertical = 2.dp),
+        verticalArrangement = Arrangement.spacedBy(1.dp),
     ) {
-        Box(
-            Modifier
-                .size(7.dp)
-                .clip(CircleShape)
-                .background(dotColor),
-        )
-        val rttLabel = if (rtt > 0) "${rtt}ms" else "--ms"
-        val transportLabel = if (telemetry.udpActive) "UDP" else "TCP"
-        val text = if (expanded) {
-            val res = if (telemetry.width > 0) "${telemetry.width}×${telemetry.height}" else "--"
-            "${telemetry.fps} FPS · $rttLabel · ${telemetry.codecLabel} · $transportLabel · $res (${telemetry.colorDepth}b)"
-        } else {
-            "${telemetry.fps} FPS · $rttLabel · ${telemetry.codecLabel}"
-        }
-        Text(
-            text = text,
-            color = Color(0xFFF1F4F6),
-            fontSize = 10.5.sp,
-            fontWeight = FontWeight.Medium,
-            maxLines = 1,
-        )
+        Text(text = "FPS     : ${telemetry.fps}", style = baseStyle)
+        Text(text = "Latency : $rttLabel", style = baseStyle.copy(color = rttColor))
+        Text(text = "Resolusi: $resLabel", style = baseStyle)
+        Text(text = "Encode  : ${telemetry.codecLabel}", style = baseStyle)
+        Text(text = "Relay   : ${telemetry.relayLabel}", style = baseStyle)
+        Text(text = "Network : ${telemetry.networkLabel}", style = baseStyle)
     }
 }
 
@@ -1161,6 +1167,7 @@ private fun SessionPanel(
     autoPipOnBackground: Boolean,
     onAutoPipChange: (Boolean) -> Unit,
     onEnterPip: () -> Unit,
+    pcConnectMode: Boolean = false,
     // Input
     inputMode: InputMode,
     onInputModeChange: (InputMode) -> Unit,
@@ -1299,6 +1306,7 @@ private fun SessionPanel(
                         autoPipOnBackground = autoPipOnBackground,
                         onAutoPipChange = onAutoPipChange,
                         onEnterPip = onEnterPip,
+                        pcConnectMode = pcConnectMode,
                     )
 
                     PanelTab.INPUT -> InputTab(
@@ -1387,11 +1395,12 @@ private fun ScreenTab(
     autoPipOnBackground: Boolean,
     onAutoPipChange: (Boolean) -> Unit,
     onEnterPip: () -> Unit,
+    pcConnectMode: Boolean = false,
 ) {
     PanelSection(xy("Telemetri & Jendela Mengambang (PiP)", "Live Telemetry & Floating PiP")) {
         XyToggleRow(
-            title = xy("Pill telemetri live (FPS & Ping)", "Live telemetry pill (FPS & Ping)"),
-            subtitle = xy("Tampilkan FPS, RTT ms, dan codec aktif di pojok kiri atas", "Show live FPS, RTT ms, and active codec at top-left"),
+            title = xy("Status telemetri live (FPS, Latency, Network)", "Live telemetry status (FPS, Latency, Network)"),
+            subtitle = xy("Tampilkan FPS, Latency, Resolusi, Encode, Relay, dan Network di kiri atas", "Show FPS, Latency, Resolution, Encode, Relay, and Network at top-left"),
             checked = showTelemetryPill,
             onCheckedChange = onShowTelemetryPillChange,
         )
@@ -1444,6 +1453,16 @@ private fun ScreenTab(
         )
     }
 
+    if (pcConnectMode) {
+        PanelSection(xy("Layar Native Monitor PC (1:1)", "Native PC Monitor Display (1:1)")) {
+            PanelHint(
+                xy(
+                    "Mode Koneksi PC aktif (${remoteSize}): Resolusi dan DPI dikunci 1:1 mengikuti monitor fisik PC (Native DXGI Desktop Duplication) dan tidak dapat diubah manual.",
+                    "PC Connection mode active (${remoteSize}): Resolution and DPI are locked 1:1 to the physical PC monitor (Native DXGI Desktop Duplication).",
+                ),
+            )
+        }
+    } else {
     PanelSection(xy("Skala tampilan Windows (DPI)", "Windows display scale (DPI)")) {
         PanelHint(
             xy(
@@ -1522,6 +1541,7 @@ private fun ScreenTab(
             )
             XyPillButton(xy("Pasang", "Apply"), onCustomApply, primary = false, compact = true)
         }
+    }
     }
 
     PanelSection(xy("Orientasi", "Orientation")) {

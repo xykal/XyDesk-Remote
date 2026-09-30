@@ -96,9 +96,13 @@ class SessionManager(context: Context) {
     private val frameCounter = AtomicInteger(0)
     @Volatile private var resolution = intArrayOf(0, 0)
     @Volatile private var lastRttMs: Int = -1
-    @Volatile private var activeCodec: String = "AVC444"
+    @Volatile private var activeCodec: String = "H.264 AVC444"
     @Volatile private var activeUdp: Boolean = true
     @Volatile private var activeBpp: Int = 32
+    @Volatile private var activeRelayLabel: String = "Direct UDP"
+    @Volatile private var activeNetworkLabel: String = "Wi-Fi"
+    @Volatile private var lastSentClipboardHash: Int = 0
+    @Volatile private var lastSentClipboardAtMs: Long = 0L
 
     /** Versi FreeRDP native (untuk about/diagnostics). */
     fun freeRdpVersion(): String = LibFreeRDP.getVersion()
@@ -129,6 +133,7 @@ class SessionManager(context: Context) {
         while (true) {
             val curState = state.value
             if (curState is SessionState.Connected && tick % 4 == 0) {
+                activeNetworkLabel = detectActiveNetworkLabel()
                 val p = lastProfile
                 if (p != null) {
                     kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
@@ -153,6 +158,8 @@ class SessionManager(context: Context) {
                     codecLabel = activeCodec,
                     udpActive = activeUdp,
                     colorDepth = activeBpp,
+                    relayLabel = activeRelayLabel,
+                    networkLabel = activeNetworkLabel,
                 ),
             )
             delay(TELEMETRY_INTERVAL_MS)
@@ -163,12 +170,34 @@ class SessionManager(context: Context) {
     // Lifecycle
     // ------------------------------------------------------------------
 
+    private fun detectActiveNetworkLabel(): String = runCatching {
+        val cm = appContext.getSystemService(Context.CONNECTIVITY_SERVICE) as? android.net.ConnectivityManager
+            ?: return@runCatching "Unknown"
+        val caps = cm.activeNetwork?.let { cm.getNetworkCapabilities(it) } ?: return@runCatching "Offline"
+        val vpn = caps.hasTransport(android.net.NetworkCapabilities.TRANSPORT_VPN)
+        val base = when {
+            caps.hasTransport(android.net.NetworkCapabilities.TRANSPORT_WIFI) -> "Wi-Fi"
+            caps.hasTransport(android.net.NetworkCapabilities.TRANSPORT_CELLULAR) -> "Data Seluler"
+            caps.hasTransport(android.net.NetworkCapabilities.TRANSPORT_ETHERNET) -> "Ethernet"
+            else -> "Network"
+        }
+        if (vpn) "$base + VPN" else base
+    }.getOrDefault("Wi-Fi")
+
     private fun sessionUri(profile: ConnectionProfile): android.net.Uri {
         val storedOptions = RdpOptions.of(appContext, profile.id)
         val options = storedOptions.resolveForActiveNetwork(appContext)
         activeCodec = options.activeCodecLabel()
         activeUdp = options.udpTransport
         activeBpp = options.colorDepth
+        activeNetworkLabel = detectActiveNetworkLabel()
+        val proto = if (options.udpTransport) "UDP" else "TCP"
+        activeRelayLabel = when {
+            options.gateway != null && options.gateway.host.isNotBlank() -> "RD Gateway ($proto)"
+            profile.host.startsWith("100.") || profile.host.endsWith(".ts.net", ignoreCase = true) -> "Tailscale ($proto)"
+            options.pcConnectMode -> "Direct P2P ($proto)"
+            else -> "Direct $proto"
+        }
         if (options.lowBandwidth && !storedOptions.lowBandwidth) {
             ConnectionLog.add("CM: jaringan seluler/terbatas terdeteksi -> otomatis aktifkan lowBandwidth (AVC420)")
         }
@@ -395,9 +424,42 @@ class SessionManager(context: Context) {
         return LibFreeRDP.sendUnicodeKeyEvent(inst, code, down)
     }
 
-    /** Ketik string sebagai unicode key events (satu code point = down+up). */
+    /**
+     * Ketik string sebagai unicode key events, atau bila teks panjang (>24 karakter)
+     * gunakan jalur clipboard + Ctrl+V secara bertahap agar antrean 512 event native
+     * tidak pernah penuh / disconnect.
+     */
     fun sendText(text: String) {
+        if (text.isEmpty()) return
         val inst = core?.getInstance() ?: return
+        if (text.length > 24) {
+            Thread {
+                val synced = sendClipboardData(text)
+                if (synced) {
+                    try { Thread.sleep(95) } catch (_: InterruptedException) {}
+                    // Kirim Ctrl+V (VK_LCONTROL = 0xA2, VK_KEY_V = 0x56)
+                    LibFreeRDP.sendKeyEvent(inst, 0xA2, true)
+                    LibFreeRDP.sendKeyEvent(inst, 0x56, true)
+                    LibFreeRDP.sendKeyEvent(inst, 0x56, false)
+                    LibFreeRDP.sendKeyEvent(inst, 0xA2, false)
+                } else {
+                    var i = 0
+                    var countInBatch = 0
+                    while (i < text.length && isCurrent(inst)) {
+                        val cp = Character.codePointAt(text, i)
+                        LibFreeRDP.sendUnicodeKeyEvent(inst, cp, true)
+                        LibFreeRDP.sendUnicodeKeyEvent(inst, cp, false)
+                        i += Character.charCount(cp)
+                        countInBatch++
+                        if (countInBatch >= 18) {
+                            countInBatch = 0
+                            try { Thread.sleep(14) } catch (_: InterruptedException) { break }
+                        }
+                    }
+                }
+            }.apply { isDaemon = true }.start()
+            return
+        }
         var i = 0
         while (i < text.length) {
             val cp = Character.codePointAt(text, i)
@@ -409,7 +471,24 @@ class SessionManager(context: Context) {
 
     fun sendClipboardData(data: String): Boolean {
         val inst = core?.getInstance() ?: return false
-        return LibFreeRDP.sendClipboardData(inst, data)
+        if (data.isEmpty()) return false
+        // Batasi panjang teks clipboard maksimal 120.000 karakter (~240 KB UTF-16LE)
+        // dan normalisasi newline ke CRLF agar kanal CLIPRDR Windows (rdpclip.exe)
+        // tidak pernah overflow/disconnect saat menyalin file .txt besar.
+        val capped = if (data.length > 120_000) data.substring(0, 120_000) else data
+        val safeText = if (capped.contains('\n') && !capped.contains("\r\n")) {
+            capped.replace("\n", "\r\n").let { if (it.length > 120_000) it.substring(0, 120_000) else it }
+        } else {
+            capped
+        }
+        val now = android.os.SystemClock.elapsedRealtime()
+        val hash = safeText.hashCode()
+        if (hash == lastSentClipboardHash && now - lastSentClipboardAtMs < 350L) {
+            return true
+        }
+        lastSentClipboardHash = hash
+        lastSentClipboardAtMs = now
+        return runCatching { LibFreeRDP.sendClipboardData(inst, safeText) }.getOrDefault(false)
     }
 
     fun sendClipboardImageData(data: ByteArray, mimeType: String = "image/png"): Boolean {

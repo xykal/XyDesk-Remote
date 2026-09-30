@@ -563,7 +563,7 @@ fun XyOverlay(
         Box(
             Modifier
                 .fillMaxSize()
-                .background(MaterialTheme.colorScheme.scrim)
+                .background(Color(0x42000000))
                 .pointerInput(onDismiss) {
                     awaitEachGesture {
                         val down = awaitFirstDown(requireUnconsumed = false)

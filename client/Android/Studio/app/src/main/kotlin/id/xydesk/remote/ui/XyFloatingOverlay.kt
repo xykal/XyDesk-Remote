@@ -73,11 +73,15 @@ object XyFloatingOverlay {
         bitmapProvider: () -> Bitmap?,
         onRestoreSession: () -> Unit,
     ): Boolean {
-        if (!canDrawOverlays(context)) return false
+        // Jangan blokir di awal dengan Settings.canDrawOverlays(context), karena
+        // pada ROM yang memakai AppsPerms / AppOps khusus, wm.addView tetap diizinkan
+        // meskipun Settings.canDrawOverlays() mengembalikan false.
         dismiss()
 
         val appCtx = context.applicationContext
-        val wm = appCtx.getSystemService(Context.WINDOW_SERVICE) as? WindowManager ?: return false
+        val wm = (context.getSystemService(Context.WINDOW_SERVICE) as? WindowManager)
+            ?: (appCtx.getSystemService(Context.WINDOW_SERVICE) as? WindowManager)
+            ?: return false
         val density = appCtx.resources.displayMetrics.density
         fun dp(v: Int): Int = (v * density + 0.5f).toInt()
 
@@ -266,10 +270,27 @@ object XyFloatingOverlay {
         container.addView(header)
         container.addView(surfacePreview)
 
-        val added = runCatching {
-            wm.addView(container, params)
-            true
-        }.getOrDefault(false)
+        @Suppress("DEPRECATION")
+        val candidateTypes = buildList {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                add(WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY)
+            }
+            add(WindowManager.LayoutParams.TYPE_PHONE)
+            add(WindowManager.LayoutParams.TYPE_SYSTEM_ALERT)
+            add(WindowManager.LayoutParams.TYPE_TOAST)
+        }
+        var added = false
+        for (candidateType in candidateTypes) {
+            params.type = candidateType
+            val ok = runCatching {
+                wm.addView(container, params)
+                true
+            }.getOrDefault(false)
+            if (ok) {
+                added = true
+                break
+            }
+        }
 
         if (!added) return false
 

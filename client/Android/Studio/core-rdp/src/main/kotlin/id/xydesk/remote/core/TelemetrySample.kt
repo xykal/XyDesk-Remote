@@ -13,9 +13,11 @@ data class TelemetrySample(
     val height: Int,
     val fps: Int,
     val rttMs: Int = -1,
-    val codecLabel: String = "AVC444",
+    val codecLabel: String = "H.264 AVC444",
     val udpActive: Boolean = true,
     val colorDepth: Int = 32,
+    val relayLabel: String = "Direct UDP",
+    val networkLabel: String = "Wi-Fi",
 ) {
     companion object {
         val EMPTY = TelemetrySample(SessionState.Idle, 0, 0, 0)

@@ -75,7 +75,7 @@ val DarkScheme = darkColorScheme(
     onError = XyAccentInk,
     errorContainer = Color(0xFF3A1D1D),
     onErrorContainer = Color(0xFFFFDAD8),
-    scrim = Color(0xCC000000),
+    scrim = Color(0x47000000),
 )
 
 val LightScheme = lightColorScheme(
@@ -100,6 +100,7 @@ val LightScheme = lightColorScheme(
     onError = Color.White,
     errorContainer = Color(0xFFF9DEDC),
     onErrorContainer = Color(0xFF410E0B),
+    scrim = Color(0x38000000),
 )
 
 // Space Grotesk = display, Inter = body (variable fonts, OFL).
