@@ -4,7 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
   <title>XyDesk Remote — Klien Remote Desktop Android</title>
-  <meta name="description" content="Klien Remote Desktop (RDP) untuk Android berbasis FreeRDP 3 dengan H.264 AVC444/AVC420, transport RDP-UDP, kontrol HUD terprogram, Wake-on-LAN, dan enkripsi Android Keystore." />
+  <meta name="description" content="Klien Remote Desktop (RDP) untuk Android berbasis FreeRDP 3 dengan H.264 AVC444/AVC420, Grid Monitor & Multi-User Auto-Detect, Audio OpenSLES Low-Latency, HUD Ikon Vektor Kustom, dan enkripsi Android Keystore." />
   <meta name="author" content="XyVerse Technology Global" />
   <meta name="theme-color" content="#0A0B0E" />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
@@ -213,7 +213,7 @@
       font-weight: 800;
       letter-spacing: -0.03em;
       line-height: 1.18;
-      max-width: 800px;
+      max-width: 820px;
       margin-bottom: 14px;
     }
 
@@ -221,7 +221,7 @@
       font-size: clamp(14px, 1.8vw, 16px);
       line-height: 1.65;
       color: var(--text-dim);
-      max-width: 700px;
+      max-width: 740px;
       margin-bottom: 24px;
     }
 
@@ -303,6 +303,64 @@
       line-height: 1.25;
     }
 
+    .section-lead {
+      font-size: clamp(13.5px, 1.55vw, 15px);
+      color: var(--text-dim);
+      max-width: 780px;
+      margin-top: 8px;
+      line-height: 1.62;
+    }
+
+    /* Comparison Table (XyDesk Biasa vs XyDesk Remote) */
+    .diff-table {
+      margin-top: 18px;
+      border: 1px solid var(--line);
+      border-radius: 14px;
+      background: var(--surface);
+      overflow: hidden;
+    }
+
+    .diff-row {
+      display: grid;
+      grid-template-columns: 200px minmax(0, 1fr) minmax(0, 1.15fr);
+      gap: 16px;
+      padding: clamp(13px, 2vw, 16px) clamp(15px, 2.2vw, 20px);
+      border-bottom: 1px solid var(--line);
+      align-items: baseline;
+    }
+
+    .diff-row.head {
+      background: var(--surface-alt);
+      font-size: 11.5px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      color: var(--text-faint);
+    }
+
+    .diff-row:last-child {
+      border-bottom: none;
+    }
+
+    .diff-aspect {
+      font-size: clamp(13px, 1.45vw, 14px);
+      font-weight: 700;
+      color: var(--text);
+    }
+
+    .diff-std {
+      font-size: clamp(12.5px, 1.4vw, 13.5px);
+      color: var(--text-faint);
+      line-height: 1.55;
+    }
+
+    .diff-rem {
+      font-size: clamp(12.8px, 1.45vw, 13.8px);
+      color: var(--text);
+      line-height: 1.55;
+      font-weight: 500;
+    }
+
     /* Structured Capability Table */
     .cap-table {
       border: 1px solid var(--line);
@@ -313,7 +371,7 @@
 
     .cap-row {
       display: grid;
-      grid-template-columns: 230px minmax(0, 1fr) 165px;
+      grid-template-columns: 240px minmax(0, 1fr) 170px;
       gap: 16px;
       padding: clamp(14px, 2vw, 17px) clamp(16px, 2.2vw, 20px);
       border-bottom: 1px solid var(--line);
@@ -385,6 +443,47 @@
       position: absolute;
       left: 0;
       color: var(--text-faint);
+    }
+
+    /* Changelog Section */
+    .changelog-list {
+      display: flex;
+      flex-direction: column;
+      gap: 14px;
+    }
+
+    .cl-card {
+      background: var(--surface);
+      border: 1px solid var(--line);
+      border-radius: 14px;
+      padding: clamp(16px, 2.4vw, 22px);
+    }
+
+    .cl-head {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+      flex-wrap: wrap;
+      margin-bottom: 10px;
+      padding-bottom: 10px;
+      border-bottom: 1px solid var(--line);
+    }
+
+    .cl-ver {
+      font-size: clamp(14.5px, 1.7vw, 16px);
+      font-weight: 700;
+      letter-spacing: -0.015em;
+    }
+
+    .cl-badge {
+      font-size: 11px;
+      font-weight: 600;
+      padding: 3px 9px;
+      border-radius: 999px;
+      border: 1px solid var(--line-strong);
+      background: var(--surface-alt);
+      color: var(--text-dim);
     }
 
     /* Locked Download Section with Live Countdown on All 3 Download Buttons */
@@ -654,6 +753,13 @@
       .ledger-cell:nth-child(2) {
         border-bottom: 1px solid var(--line);
       }
+      .diff-row {
+        grid-template-columns: 1fr;
+        gap: 6px;
+      }
+      .diff-row.head {
+        display: none;
+      }
       .cap-row {
         grid-template-columns: 1fr;
         gap: 5px;
@@ -732,12 +838,13 @@
           </svg>
           <span>XyDesk Remote</span>
         </span>
-        <span class="brand-tag mono">Ver 1.0.0</span>
+        <span class="brand-tag mono">Ver 1.0.0 · Build 0.5.19</span>
       </a>
       <nav class="nav-row" aria-label="Navigasi Utama">
         <button type="button" class="pill-btn primary" data-open-launch data-i18n="nav.download">Unduh</button>
-        <a href="#capabilities" class="pill-btn" data-i18n="nav.cap">Kemampuan</a>
-        <a href="#architecture" class="pill-btn" data-i18n="nav.arch">Arsitektur</a>
+        <a href="#about-diff" class="pill-btn" data-i18n="nav.about">Tentang &amp; Perbedaan</a>
+        <a href="#capabilities" class="pill-btn" data-i18n="nav.cap">Fitur Terbaru</a>
+        <a href="#changelog" class="pill-btn" data-i18n="nav.changelog">Changelog</a>
         <a href="host.html" class="pill-btn">PC Host</a>
         <a href="status.html" class="pill-btn" data-i18n="nav.status">Status Sistem</a>
         <a href="licenses.html" class="pill-btn" data-i18n="nav.licenses">Lisensi</a>
@@ -751,20 +858,20 @@
     <!-- Editorial Intro -->
     <section class="intro">
       <div class="container">
-        <div class="intro-meta mono" data-i18n="intro.meta">Klien Remote Desktop Android · FreeRDP 3 Native</div>
-        <h1 data-i18n="intro.title">Klien Remote Desktop Windows yang Presisi, Ringan, dan Terenkripsi untuk Android.</h1>
+        <div class="intro-meta mono" data-i18n="intro.meta">Klien Remote Desktop Android · FreeRDP 3 Native · Build v0.5.19 (36)</div>
+        <h1 data-i18n="intro.title">Kendali Penuh Workstation &amp; Server Windows dari Perangkat Android.</h1>
         <p data-i18n="intro.lead">
-          XyDesk Remote menghubungkan perangkat Android langsung ke workstation dan server Windows melalui protokol RDP native maupun mode Koneksi PC (ID &amp; Password). Dirancang dengan tata letak kontrol layar sentuh yang dapat dikonfigurasi per perangkat, dukungan codec H.264 AVC444/AVC420, serta penyimpanan kredensial di dalam Android Keystore.
+          XyDesk Remote adalah klien Remote Desktop berbasis engine C/JNI FreeRDP 3 yang dimodifikasi khusus untuk Android. Dilengkapi Grid Monitor &amp; Multi-User Auto-Detect, penyetelan audio OpenSLES low-latency, HUD kontrol vektor yang dapat dirakit sendiri (Custom Preset), serta dua jalur koneksi terpisah: Koneksi PC (10-Digit ID) dan Koneksi RDP penuh.
         </p>
         <div class="intro-actions">
           <button type="button" class="pill-btn primary lg" data-open-launch data-i18n="intro.cta.dl">
             Halaman Unduh (Ver 1.0.0)
           </button>
+          <a href="#changelog" class="pill-btn lg" data-i18n="intro.cta.cl">
+            Lihat Changelog v0.5.19
+          </a>
           <a href="host.html" class="pill-btn lg" data-i18n="intro.cta.host">
             Setup XyDesk Host (PC Windows)
-          </a>
-          <a href="status.html" class="pill-btn lg" data-i18n="intro.cta.status">
-            Status &amp; Kesehatan Layanan
           </a>
         </div>
 
@@ -772,17 +879,17 @@
           <div class="ledger-cell">
             <div class="ledger-k" data-i18n="led.1.k">Mesin Protokol</div>
             <div class="ledger-v mono">FreeRDP 3.x JNI</div>
-            <div class="ledger-sub" data-i18n="led.1.s">OpenH264 · FFmpeg · Opus</div>
+            <div class="ledger-sub" data-i18n="led.1.s">Fast-Path I/O · OpenSLES 8-Buf</div>
           </div>
           <div class="ledger-cell">
-            <div class="ledger-k" data-i18n="led.2.k">Pipeline Grafis</div>
-            <div class="ledger-v mono">AVC444 / AVC420</div>
-            <div class="ledger-sub" data-i18n="led.2.s">NVENC · AMF · QSV · 60 FPS</div>
+            <div class="ledger-k" data-i18n="led.2.k">Multi-Layar &amp; Sesi</div>
+            <div class="ledger-v mono">Grid Auto-Detect</div>
+            <div class="ledger-sub" data-i18n="led.2.s">Multi-Monitor · Konsol /admin</div>
           </div>
           <div class="ledger-cell">
-            <div class="ledger-k" data-i18n="led.3.k">Keamanan</div>
-            <div class="ledger-v mono">NLA · TLS · Keystore</div>
-            <div class="ledger-sub" data-i18n="led.3.s">AES-256-GCM · Restricted Admin</div>
+            <div class="ledger-k" data-i18n="led.3.k">Kontrol Layar Sentuh</div>
+            <div class="ledger-v mono">Vector Icon HUD</div>
+            <div class="ledger-sub" data-i18n="led.3.s">Preset Kustom · Tukar Klik L/R</div>
           </div>
           <div class="ledger-cell">
             <div class="ledger-k" data-i18n="led.4.k">Arsitektur Paket</div>
@@ -793,74 +900,135 @@
       </div>
     </section>
 
-    <!-- Capabilities Table -->
+    <!-- What is XyDesk Remote & Difference from Regular XyDesk -->
+    <section class="section" id="about-diff">
+      <div class="container">
+        <div class="section-head">
+          <div class="section-kicker" data-i18n="about.kicker">Mengenal Ekosistem XyDesk</div>
+          <h2 class="section-title" data-i18n="about.title">Apa Itu XyDesk Remote &amp; Perbedaannya dengan XyDesk Biasa?</h2>
+          <p class="section-lead" data-i18n="about.lead">
+            Di dalam lini perangkat lunak XyVerse Technology Global, <strong>XyDesk Biasa (Reguler)</strong> dan <strong>XyDesk Remote</strong> dibangun untuk dua skenario penggunaan yang berbeda secara fundamental.
+          </p>
+        </div>
+
+        <div class="arch-split" style="margin-bottom: 18px;">
+          <div class="arch-box">
+            <h3 data-i18n="about.rem.t">Apa Itu XyDesk Remote?</h3>
+            <ul class="arch-list">
+              <li data-i18n="about.rem.1"><strong>Klien Akses Desktop Jarak Jauh Native:</strong> Aplikasi Android yang terhubung langsung ke PC atau Server Windows melalui protokol RDP native (FreeRDP 3 C/JNI) maupun agen pendamping <code>XyDeskHost</code>.</li>
+              <li data-i18n="about.rem.2"><strong>Streaming Grafis &amp; Audio Real-Time:</strong> Menerima aliran frame H.264 (<code>AVC444</code>/<code>AVC420</code>) hingga 60 FPS dengan profil GPU (NVENC/AMF/QSV) dan aliran suara langsung melalui engine OpenSLES low-latency.</li>
+              <li data-i18n="about.rem.3"><strong>Translasi Input Mobile-ke-Desktop:</strong> Mengubah layar sentuh Android menjadi trackpad presisi, sakelar klik kiri/kanan, gyro air-mouse, serta tombol HUD melingkar berikon vektor yang dapat dirakit sendiri.</li>
+            </ul>
+          </div>
+
+          <div class="arch-box">
+            <h3 data-i18n="about.std.t">Apa Bedanya dengan XyDesk Biasa?</h3>
+            <ul class="arch-list">
+              <li data-i18n="about.std.1"><strong>Lingkup Kerja Lokal vs Jarak Jauh:</strong> XyDesk biasa berfokus pada manajemen ruang kerja, panel utilitas, dan produktivitas lokal di perangkat itu sendiri, tanpa modul transmisi layar lintas jaringan.</li>
+              <li data-i18n="about.std.2"><strong>Manajemen Sesi Multi-User &amp; Multi-Monitor:</strong> Hanya XyDesk Remote yang memiliki Grid Auto-Detect untuk berpindah antar-monitor fisik/virtual PC (Monitor 1, QHD, Span 21:9) dan berpindah antara Sesi Konsol Fisik (<code>/admin</code>) dengan Sesi User RDP secara live.</li>
+              <li data-i18n="about.std.3"><strong>Keamanan Kredensial &amp; Jaringan Server:</strong> XyDesk Remote menyertakan brankas kredensial AES-256-GCM di Android Keystore, dukungan RD Gateway, SSH Tunneling, Restricted Admin, serta Wake-on-LAN.</li>
+            </ul>
+          </div>
+        </div>
+
+        <div class="diff-table">
+          <div class="diff-row head mono">
+            <div>Aspek Teknis</div>
+            <div>XyDesk Biasa (Reguler)</div>
+            <div>XyDesk Remote (Android RDP &amp; Host)</div>
+          </div>
+          <div class="diff-row">
+            <div class="diff-aspect" data-i18n="df.1.a">Fungsi Utama</div>
+            <div class="diff-std" data-i18n="df.1.s">Manajemen meja kerja &amp; utilitas produktivitas lokal pada perangkat utama.</div>
+            <div class="diff-rem" data-i18n="df.1.r">Kendali penuh PC &amp; Server Windows jarak jauh secara real-time dari perangkat Android.</div>
+          </div>
+          <div class="diff-row">
+            <div class="diff-aspect" data-i18n="df.2.a">Mesin Inti (Core Engine)</div>
+            <div class="diff-std" data-i18n="df.2.s">Runtime aplikasi antarmuka lokal standar tanpa protokol remote display.</div>
+            <div class="diff-rem" data-i18n="df.2.r">Engine C/JNI FreeRDP 3 yang dimodifikasi (FastPath Input/Output, PointerCache 128, FrameMarker).</div>
+          </div>
+          <div class="diff-row">
+            <div class="diff-aspect" data-i18n="df.3.a">Mode Koneksi</div>
+            <div class="diff-std" data-i18n="df.3.s">Berjalan langsung di perangkat lokal tanpa autentikasi host jarak jauh.</div>
+            <div class="diff-rem" data-i18n="df.3.r">2 Mode Terpisah: <strong>Koneksi PC</strong> (10-Digit ID &amp; Password) dan <strong>Koneksi RDP Penuh</strong> (IP/Host, Domain, Gateway, WoL).</div>
+          </div>
+          <div class="diff-row">
+            <div class="diff-aspect" data-i18n="df.4.a">Multi-Monitor &amp; Multi-User</div>
+            <div class="diff-std" data-i18n="df.4.s">Mengikuti satu layar perangkat tempat aplikasi dibuka.</div>
+            <div class="diff-rem" data-i18n="df.4.r">Tombol <strong>Grid Monitor &amp; User Aktif (Auto-Detect)</strong> untuk pindah Monitor 1/2/Span dan pindah Konsol (<code>/admin</code>) vs Sesi User saat sesi aktif.</div>
+          </div>
+          <div class="diff-row">
+            <div class="diff-aspect" data-i18n="df.5.a">Sistem Input &amp; HUD</div>
+            <div class="diff-std" data-i18n="df.5.s">Navigasi sentuh atau kursor standar sistem operasi.</div>
+            <div class="diff-rem" data-i18n="df.5.r">HUD tombol vektor ringkas (<code>34dp–54dp</code>), Preset <strong>Kustom (Buat Sendiri)</strong>, Tukar Klik Kiri⇄Kanan, Trackpad inersia, dan Gyro Mouse.</div>
+          </div>
+          <div class="diff-row">
+            <div class="diff-aspect" data-i18n="df.6.a">Pipeline Audio &amp; Clipboard</div>
+            <div class="diff-std" data-i18n="df.6.s">Menggunakan pemutar media dan papan klip lokal perangkat.</div>
+            <div class="diff-rem" data-i18n="df.6.r">Audio OpenSLES 8-buffer dengan batas antrean 35ms bebas delay + Sinkronisasi Clipboard 2 arah otomatis (anti-disconnect hingga 256 KB).</div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Real Capabilities Table (Updated for v0.5.19) -->
     <section class="section" id="capabilities">
       <div class="container">
         <div class="section-head">
-          <div class="section-kicker" data-i18n="cap.kicker">Spesifikasi Fungsional</div>
-          <h2 class="section-title" data-i18n="cap.title">Kemampuan Sesi, Input &amp; Jaringan</h2>
+          <div class="section-kicker" data-i18n="cap.kicker">Fitur Nyata yang Terimplementasi (Build v0.5.19)</div>
+          <h2 class="section-title" data-i18n="cap.title">Kemampuan Sesi, Engine Native &amp; Kontrol</h2>
         </div>
 
         <div class="cap-table">
           <div class="cap-row">
-            <div class="cap-name" data-i18n="c1.n">Jendela Mengambang (PiP)</div>
-            <div class="cap-desc" data-i18n="c1.d">Memantau layar komputer remote di jendela mengambang yang dapat digeser dan diubah ukurannya, baik di atas aplikasi lain maupun lintas layar XyDesk.</div>
-            <div class="cap-spec mono">Floating Monitor</div>
+            <div class="cap-name" data-i18n="c1.n">Grid Monitor &amp; Sesi User Aktif</div>
+            <div class="cap-desc" data-i18n="c1.d">Tombol ikon Monitor tepat di atas tombol Putuskan membuka Grid Auto-Detect untuk berpindah layar (Monitor 1 Utama, Monitor 2 QHD 2560x1440, Dual-Monitor Span 21:9, Viewport HP) sekaligus berpindah antara Sesi Konsol Fisik (/admin) dan Sesi User RDP / Multi-Akun secara langsung di tengah sesi.</div>
+            <div class="cap-spec mono">Auto-Detect Grid</div>
           </div>
           <div class="cap-row">
-            <div class="cap-name" data-i18n="c2.n">Telemetri Sesi Vertikal</div>
-            <div class="cap-desc" data-i18n="c2.d">Menampilkan FPS, Latency (ms), Resolusi, Encode GPU, Relay, dan Network aktif (Wi-Fi / Data Seluler) secara ringkas dari atas ke bawah tanpa blok latar.</div>
-            <div class="cap-spec mono">6-Metric HUD</div>
+            <div class="cap-name" data-i18n="c2.n">Modifikasi FreeRDP 3 Native &amp; Audio</div>
+            <div class="cap-desc" data-i18n="c2.d">Jembatan JNI C mengaktifkan FastPathInput/Output, ExtendedMouse, HorizontalWheel, UnicodeInput, SupportMonitorLayoutPdu (dengan dimensi fisik mm MS-RDPEDISP), serta tuning audio OpenSLES 8-buffer dengan batas tunggu 35ms agar suara bebas lag menumpuk.</div>
+            <div class="cap-spec mono">FastPath + OpenSLES</div>
           </div>
           <div class="cap-row">
-            <div class="cap-name" data-i18n="c3.n">Preset Tata Letak HUD</div>
-            <div class="cap-desc" data-i18n="c3.d">Lima susunan tombol cepat sesuai kebutuhan: Standar, Coding/Terminal, Gaming/WASD, Office, dan Desain/Video, ditambah ekspor/impor JSON.</div>
-            <div class="cap-spec mono">5 Profil + JSON</div>
+            <div class="cap-name" data-i18n="c3.n">HUD Ikon Vektor &amp; Preset Kustom</div>
+            <div class="cap-desc" data-i18n="c3.d">Seluruh tombol kontrol yang memiliki simbol memakai ikon vektor presisi (termasuk tombol Windows/Win, Klik Kiri/Tengah/Kanan, Tukar Klik, Panah, Enter, Backspace, Tab, Space, Shift, Menu, PrtSc). Ukuran tombol preset diperkecil (34dp–54dp) dengan dukungan profil Kustom (Buat Sendiri) + ekspor/impor JSON.</div>
+            <div class="cap-spec mono">6 Preset + Custom</div>
           </div>
           <div class="cap-row">
-            <div class="cap-name" data-i18n="c4.n">Tombol Makro Terprogram</div>
-            <div class="cap-desc" data-i18n="c4.d">Tombol HUD dengan label kustom yang mengirimkan rangkaian teks atau perintah terminal diikuti penekanan Enter otomatis.</div>
-            <div class="cap-spec mono">Auto-Type Macro</div>
+            <div class="cap-name" data-i18n="c4.n">Sakelar Klik Kiri ⇄ Kanan</div>
+            <div class="cap-desc" data-i18n="c4.d">Fitur tukar fungsi klik mouse kiri dan kanan berbasis UI ikon di panel Input maupun sebagai tombol HUD langsung di layar, memudahkan operasi satu tangan atau pengguna kidal.</div>
+            <div class="cap-spec mono">Mouse L/R Swap</div>
           </div>
           <div class="cap-row">
-            <div class="cap-name" data-i18n="c5.n">Clipboard Anti-Disconnect</div>
-            <div class="cap-desc" data-i18n="c5.d">Sinkronisasi clipboard dua arah otomatis antara Android dan Windows untuk teks panjang (.txt) maupun gambar bitmap dengan proteksi batas paket 256 KB.</div>
+            <div class="cap-name" data-i18n="c5.n">Telemetri Vertikal Ringkas</div>
+            <div class="cap-desc" data-i18n="c5.d">Statistik sesi real-time di pojok kiri atas tanpa latar penghalang (FPS, PING, RES, ENC, RLY, NET) dengan ukuran ringkas dan nilai metrik tersusun rapi tepat di bawah labelnya.</div>
+            <div class="cap-spec mono">Stacked Telemetry</div>
+          </div>
+          <div class="cap-row">
+            <div class="cap-name" data-i18n="c6.n">Clipboard Dua Arah Anti-Disconnect</div>
+            <div class="cap-desc" data-i18n="c6.d">Sinkronisasi clipboard otomatis antara HP dan PC untuk teks panjang (.txt) maupun gambar bitmap dengan penjaga paket 256 KB, tanpa menyembunyikan bar clipboard bawaan keyboard HP.</div>
             <div class="cap-spec mono">CLIPRDR Guard</div>
           </div>
           <div class="cap-row">
-            <div class="cap-name" data-i18n="c6.n">Integrasi Share-Sheet ke Drive</div>
-            <div class="cap-desc" data-i18n="c6.d">Menerima kiriman berkas dari menu Bagikan Android (ACTION_SEND) dan menempatkannya langsung di folder penyimpanan 'XyDesk' yang terlihat di PC.</div>
-            <div class="cap-spec mono">RDPDR Drive</div>
+            <div class="cap-name" data-i18n="c7.n">Koneksi PC vs Koneksi RDP</div>
+            <div class="cap-desc" data-i18n="c7.d">Pemisahan murni antara mode Koneksi PC (cukup 10-Digit ID PC &amp; Password + profil GPU NVENC/AMF/QSV tanpa form rumit) dan Koneksi RDP penuh (Host/IP, Username/Domain, resolusi &amp; DPI).</div>
+            <div class="cap-spec mono">Dual Connect Mode</div>
           </div>
           <div class="cap-row">
-            <div class="cap-name" data-i18n="c7.n">Wake-on-LAN &amp; Pemantau Port</div>
-            <div class="cap-desc" data-i18n="c7.d">Mengirim Magic Packet UDP 102-byte untuk membangunkan PC dan memantau kesiapan port TCP 3389 sebelum membuka sesi secara otomatis.</div>
-            <div class="cap-spec mono">UDP Port 9 / 7</div>
+            <div class="cap-name" data-i18n="c8.n">Fisika Trackpad, Gyro &amp; Gamepad</div>
+            <div class="cap-desc" data-i18n="c8.d">Kurva akselerasi pointer, momentum gulir dua jari (inertial scroll), zona gulir tepi kanan (edge scroll), dukungan pengontrol Bluetooth/USB HID, serta mode Gyro Air-Mouse.</div>
+            <div class="cap-spec mono">Trackpad + Gyro</div>
           </div>
           <div class="cap-row">
-            <div class="cap-name" data-i18n="c8.n">Fisika Trackpad &amp; Edge Scroll</div>
-            <div class="cap-desc" data-i18n="c8.d">Kurva akselerasi pointer berdasarkan kecepatan usapan, momentum scroll dua jari (inertial scroll), dan zona gulir satu jari di tepi kanan layar.</div>
-            <div class="cap-spec mono">Velocity Curve</div>
+            <div class="cap-name" data-i18n="c9.n">Share-Sheet ke Drive &amp; Wake-on-LAN</div>
+            <div class="cap-desc" data-i18n="c9.d">Kirim berkas langsung dari menu Bagikan Android ke folder drive 'XyDesk' di PC (RDPDR), serta bangunkan PC dari jarak jauh menggunakan Magic Packet UDP disertai pemantau kesiapan port.</div>
+            <div class="cap-spec mono">RDPDR + WoL</div>
           </div>
           <div class="cap-row">
-            <div class="cap-name" data-i18n="c9.n">Gamepad Fisik &amp; Sensor Gyro</div>
-            <div class="cap-desc" data-i18n="c9.d">Mendukung pengontrol Bluetooth/USB untuk pergerakan pointer dan klik, serta mode Gyro Air-Mouse menggunakan sensor rotasi perangkat.</div>
-            <div class="cap-spec mono">HID + Gyroscope</div>
-          </div>
-          <div class="cap-row">
-            <div class="cap-name" data-i18n="c10.n">Tirai Privasi &amp; Kunci Sesi</div>
-            <div class="cap-desc" data-i18n="c10.d">Menutup tampilan layar HP dengan lapisan gelap lokal tanpa memutus koneksi, serta perintah cepat penguncian Windows (Win+L).</div>
-            <div class="cap-spec mono">Privacy Curtain</div>
-          </div>
-          <div class="cap-row">
-            <div class="cap-name" data-i18n="c11.n">Koneksi PC (ID &amp; Password)</div>
-            <div class="cap-desc" data-i18n="c11.d">Mode terpisah dari RDP standar: cukup masukkan ID PC 10 digit dan PIN sesi tanpa kredensial akun Windows atau pengaturan resolusi/DPI rumit.</div>
-            <div class="cap-spec mono">XyDeskHost Beta</div>
-          </div>
-          <div class="cap-row">
-            <div class="cap-name" data-i18n="c12.n">Resolusi Dinamis &amp; Skala DPI</div>
-            <div class="cap-desc" data-i18n="c12.d">Pada mode Koneksi RDP penuh, ubah ukuran desktop remote dan skala tampilan Windows (100%–200%) secara langsung melalui kanal DISP.</div>
-            <div class="cap-spec mono">MS-RDPEDISP</div>
+            <div class="cap-name" data-i18n="c10.n">Putus Sesi Instan &amp; Tirai Privasi</div>
+            <div class="cap-desc" data-i18n="c10.d">Konfirmasi putuskan sesi langsung mengembalikan pengguna ke Beranda tanpa tertahan di dialog coba lagi, dilengkapi fitur Tirai Privasi layar gelap dan penguncian sesi PC (Win+L).</div>
+            <div class="cap-spec mono">Clean Disconnect</div>
           </div>
         </div>
       </div>
@@ -879,7 +1047,7 @@
             <h3 data-i18n="arch.stream.t">Pipeline Streaming &amp; Optimasi Latensi</h3>
             <ul class="arch-list">
               <li data-i18n="arch.s1">Profil adaptif: Otomatis, Latensi Ultra-Rendah, Seimbang, Visual Tajam (AVC444), Hemat Kuota, serta profil encoder GPU (NVIDIA NVENC, AMD AMF, Intel QSV).</li>
-              <li data-i18n="arch.s2">Pemisahan antrean render layar (`+async-update`), kanal virtual asinkron (`+async-channels`), dan VSYNC dirty-rect coalescing hemat baterai.</li>
+              <li data-i18n="arch.s2">Pemisahan antrean render layar (`+async-update`), kanal virtual asinkron (`+async-channels`), Frame Marker command, dan VSYNC dirty-rect coalescing hemat baterai.</li>
               <li data-i18n="arch.s3">Pilihan kedalaman warna 32-bit, 24-bit, atau 16-bit serta pengaturan tingkat kompresi aliran data (Level 0, 1, 2).</li>
               <li data-i18n="arch.s4">Kontrol penuh bendera pengalaman visual Windows: ClearType Font Smoothing, Desktop Composition (Aero), Wallpaper, Tema, dan Tarik Jendela.</li>
             </ul>
@@ -889,9 +1057,74 @@
             <h3 data-i18n="arch.sec.t">Keamanan Protokol &amp; Perlindungan Perangkat</h3>
             <ul class="arch-list">
               <li data-i18n="arch.k1">Pemilihan protokol autentikasi per perangkat: Otomatis, NLA (CredSSP Wajib), TLS Standar, atau RDP Klasik.</li>
-              <li data-i18n="arch.k2">Konfigurasi tingkat kebijakan keamanan cipher OpenSSL TLS (`seclevel` 0, 1, atau 2) serta dukungan RD Gateway.</li>
+              <li data-i18n="arch.k2">Konfigurasi tingkat kebijakan keamanan cipher OpenSSL TLS (`seclevel` 0, 1, atau 2) serta dukungan RD Gateway dan SSH Port Forwarding.</li>
               <li data-i18n="arch.k3">Dukungan sesi konsol fisik (`/admin`) dan mode `/restricted-admin` untuk mencegah pengiriman kredensial teks biasa ke host.</li>
               <li data-i18n="arch.k4">Opsi proteksi tangkapan layar (`FLAG_SECURE`), verifikasi kunci layar/biometrik HP sebelum terhubung, kunci PC otomatis saat keluar, dan pembersihan clipboard saat putus.</li>
+            </ul>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Changelog Section -->
+    <section class="section" id="changelog">
+      <div class="container">
+        <div class="section-head">
+          <div class="section-kicker" data-i18n="cl.kicker">Catatan Rilis &amp; Pembaruan Kode</div>
+          <h2 class="section-title" data-i18n="cl.title">Changelog XyDesk Remote</h2>
+          <p class="section-lead" data-i18n="cl.lead">
+            Riwayat perubahan teknis nyata yang telah dibangun, diuji lewat unit test JVM, dan diverifikasi tanda tangan kriptografinya pada pipeline rilis menuju peluncuran <strong>Ver 1.0.0</strong>.
+          </p>
+        </div>
+
+        <div class="changelog-list">
+          <div class="cl-card">
+            <div class="cl-head">
+              <div class="cl-ver mono">v0.5.19 (VERSION_CODE 36) — Build Terbaru</div>
+              <span class="cl-badge mono">30 September 2026 · Terverifikasi</span>
+            </div>
+            <ul class="arch-list">
+              <li><strong>Grid Monitor &amp; Sesi User Aktif (Auto-Detect):</strong> Menambahkan tombol ikon Monitor tepat di atas tombol Putuskan (Disconnect) pada rail dan sidebar untuk membuka grid perpindahan layar aktif (Monitor 1 Utama, Monitor 2 QHD 2560x1440, Dual-Monitor Span 21:9, Viewport HP) serta perpindahan live antara Sesi Konsol Fisik (<code>/admin</code>) dan Sesi User RDP / Multi-Akun Tersimpan.</li>
+              <li><strong>Optimasi Engine FreeRDP Native C &amp; MS-RDPEDISP:</strong> Mengaktifkan <code>FastPathInput</code>, <code>FastPathOutput</code>, <code>HasExtendedMouseEvent</code>, <code>HasHorizontalWheel</code>, <code>UnicodeInput</code>, <code>SupportMonitorLayoutPdu</code>, <code>SurfaceFrameMarkerEnabled</code>, dan <code>PointerCacheSize=128</code> di <code>android_freerdp.c</code>, ditambah perhitungan otomatis dimensi fisik monitor (<code>PhysicalWidth</code> &amp; <code>PhysicalHeight</code> 10–1000 mm) di <code>android_disp.c</code>.</li>
+              <li><strong>Penyetelan Audio OpenSLES Low-Latency:</strong> Mencegah <em>double-open</em> stream pada <code>rdpsnd_opensles.c</code>, menurunkan antrean dari 20 menjadi 8 buffer, dan mengganti penantian tak terbatas pada <code>opensl_io.c</code> dengan <em>bounded wait</em> 35ms agar audio real-time tidak menumpuk delay.</li>
+              <li><strong>HUD Kontrol Full Ikon Vektor, Ukuran Ringkas &amp; Preset Kustom:</strong> Mengganti teks tombol HUD dengan ikon vektor presisi (termasuk ikon Windows untuk tombol <code>Win</code>, siluet mouse klik kiri/tengah/kanan, panah, Enter, Backspace, Tab, Space, Shift, Menu, PrtSc), memperkecil ukuran tombol preset ke rentang <code>34dp–54dp</code> (bawaan <code>46dp</code>), serta menghadirkan opsi preset <strong>Kustom (Buat Sendiri)</strong>.</li>
+              <li><strong>Sakelar Tukar Klik Kiri ⇄ Kanan &amp; Revisi Telemetri Pojok Kiri:</strong> Menambahkan switch berikon untuk menukar klik mouse kiri dan kanan di tab Input maupun tombol HUD; memperkecil statistik pojok kiri atas tanpa latar dengan nilai metrik tersusun rapi di bawah labelnya.</li>
+              <li><strong>Perbaikan Alur Putuskan Sesi, Revisi Splash Screen &amp; Penghapusan PiP:</strong> Konfirmasi Putuskan Sesi kini langsung keluar ke Beranda tanpa memunculkan modal "Coba lagi"; menghapus fitur Floating Window/PiP beserta izin overlay; serta memperbarui tampilan <em>Splash Screen</em> dengan emblem vektor dual-monitor.</li>
+            </ul>
+          </div>
+
+          <div class="cl-card">
+            <div class="cl-head">
+              <div class="cl-ver mono">v0.5.18 (VERSION_CODE 35)</div>
+              <span class="cl-badge mono">Pemisahan Mode Koneksi &amp; Profil GPU</span>
+            </div>
+            <ul class="arch-list">
+              <li><strong>Pemisahan Murni Koneksi PC vs Koneksi RDP:</strong> Menyembunyikan opsi kredensial akun Windows serta pengaturan resolusi/DPI pada mode Koneksi PC (ID &amp; Password) agar tetap ringkas.</li>
+              <li><strong>Deteksi &amp; Profil Encoder GPU Host:</strong> Menambahkan dukungan profil encoder hardware <strong>NVIDIA NVENC</strong>, <strong>AMD AMF</strong>, dan <strong>Intel QuickSync (QSV)</strong> beserta skrip otomatis <code>XyDeskHost-Setup.bat</code> untuk PC Windows.</li>
+              <li><strong>Telemetri Sesi Vertikal 6 Metrik:</strong> Menyusun indikator <code>FPS</code>, <code>Latency</code>, <code>Resolusi</code>, <code>Encode</code>, <code>Relay</code>, dan <code>Network</code> (Wi-Fi/Seluler) secara vertikal tanpa blok pill.</li>
+            </ul>
+          </div>
+
+          <div class="cl-card">
+            <div class="cl-head">
+              <div class="cl-ver mono">v0.5.17 (VERSION_CODE 34)</div>
+              <span class="cl-badge mono">Clipboard Dua Arah &amp; Input IME</span>
+            </div>
+            <ul class="arch-list">
+              <li><strong>Sinkronisasi Clipboard Otomatis Anti-Disconnect:</strong> Menyinkronkan teks dan gambar secara otomatis antara HP dan PC dengan batas aman 256 KB per pengiriman sehingga salin-tempel file <code>.txt</code> panjang tidak memutus sesi RDP.</li>
+              <li><strong>Dukungan Penuh Bilah Clipboard Keyboard HP:</strong> Menghapus pembatasan variasi password pada <code>SessionView</code> sehingga bilah clipboard bawaan Gboard dan Samsung Keyboard selalu dapat digunakan di dalam sesi.</li>
+              <li><strong>Konsistensi Dark UI &amp; Modal Validasi:</strong> Menyeragamkan tema gelap di seluruh layar dan menambahkan dialog konfirmasi pada setiap aksi kritis tanpa membuat latar belakang sesi menjadi hitam pekat.</li>
+            </ul>
+          </div>
+
+          <div class="cl-card">
+            <div class="cl-head">
+              <div class="cl-ver mono">v0.5.16 &amp; Fondasi Awal (VERSION_CODE 1–33)</div>
+              <span class="cl-badge mono">Arsitektur Inti FreeRDP 3</span>
+            </div>
+            <ul class="arch-list">
+              <li><strong>Integrasi Engine FreeRDP 3 Native (ARM64, ARMv7, x86_64):</strong> Kompilasi CMake superbuild dengan dukungan <code>OpenH264</code>, <code>FFmpeg</code>, <code>Opus</code>, <code>OpenSSL 3</code>, dan dekoder hardware <code>MediaCodec</code>.</li>
+              <li><strong>Keamanan Android Keystore &amp; Sesi Latar:</strong> Penyimpanan sandi terenkripsi AES-256-GCM, <em>Certificate Trust Store</em> (TOFU), layanan latar <em>Foreground Service</em> multi-sesi, pengalihan penyimpanan <code>RDPDR</code>, dan <em>Wake-on-LAN</em>.</li>
             </ul>
           </div>
         </div>
@@ -909,7 +1142,7 @@
         <div class="download-shell">
           <div class="download-head">
             <p class="download-desc" data-i18n="dl.desc">
-              Setiap paket APK ditandatangani dengan kunci rilis resmi dan dipisahkan per arsitektur prosesor (ABI). Unduhan terkunci selama hitung mundur peluncuran <strong>Ver 1.0.0</strong> berlangsung.
+              Setiap paket APK ditandatangani dengan kunci rilis resmi dan dipisahkan per arsitektur prosesor (ABI). Jadwal peluncuran telah dipercepat ke hari <strong>Sabtu, 3 Oktober 2026</strong> — unduhan terkunci selama hitung mundur <strong>Ver 1.0.0</strong> berlangsung.
             </p>
             <span class="launch-pill mono">Launching · Ver 1.0.0</span>
           </div>
@@ -921,12 +1154,12 @@
                 <div class="pkg-sub mono">Utama · 64-bit ARM</div>
               </div>
               <div class="pkg-info" data-i18n="dl.abi1">
-                Perangkat Android 64-bit modern (ARMv8-A · ~80.2 MB · Signed R8)
+                Perangkat Android 64-bit modern (ARMv8-A · ~80.2 MB · Signed R8 · Build 36)
               </div>
               <div>
                 <button type="button" class="dl-countdown-btn" data-open-launch>
                   <span class="dl-btn-top" data-i18n="dl.btn.lbl">Unduh arm64-v8a · Ver 1.0.0</span>
-                  <span class="dl-btn-timer mono" data-btn-countdown>06H : 00J : 00M : 00D</span>
+                  <span class="dl-btn-timer mono" data-btn-countdown>02H : 00J : 00M : 00D</span>
                 </button>
               </div>
             </div>
@@ -937,12 +1170,12 @@
                 <div class="pkg-sub mono">Kompatibilitas · 32-bit ARM</div>
               </div>
               <div class="pkg-info" data-i18n="dl.abi2">
-                Perangkat Android 32-bit generasi lama (ARMv7 · ~67.3 MB · Signed R8)
+                Perangkat Android 32-bit generasi lama (ARMv7 · ~67.3 MB · Signed R8 · Build 36)
               </div>
               <div>
                 <button type="button" class="dl-countdown-btn" data-open-launch>
                   <span class="dl-btn-top" data-i18n="dl.btn.lbl2">Unduh armeabi-v7a · Ver 1.0.0</span>
-                  <span class="dl-btn-timer mono" data-btn-countdown>06H : 00J : 00M : 00D</span>
+                  <span class="dl-btn-timer mono" data-btn-countdown>02H : 00J : 00M : 00D</span>
                 </button>
               </div>
             </div>
@@ -953,12 +1186,12 @@
                 <div class="pkg-sub mono">Desktop / Emulator · 64-bit</div>
               </div>
               <div class="pkg-info" data-i18n="dl.abi3">
-                Chromebook, PC Android &amp; Emulator x86_64 (~85.5 MB · Signed R8)
+                Chromebook, PC Android &amp; Emulator x86_64 (~85.5 MB · Signed R8 · Build 36)
               </div>
               <div>
                 <button type="button" class="dl-countdown-btn" data-open-launch>
                   <span class="dl-btn-top" data-i18n="dl.btn.lbl3">Unduh x86_64 · Ver 1.0.0</span>
-                  <span class="dl-btn-timer mono" data-btn-countdown>06H : 00J : 00M : 00D</span>
+                  <span class="dl-btn-timer mono" data-btn-countdown>02H : 00J : 00M : 00D</span>
                 </button>
               </div>
             </div>
@@ -988,12 +1221,12 @@
       </div>
 
       <p class="modal-body-text" data-i18n="modal.body">
-        Unduhan publik saat ini masih dikunci. Paket instalasi resmi XyDesk Remote Ver 1.0.0 akan dibuka secara otomatis ketika hitung mundur di bawah selesai.
+        Peluncuran resmi dipercepat ke akhir pekan ini (Sabtu). Paket instalasi XyDesk Remote Ver 1.0.0 akan dibuka secara otomatis begitu hitung mundur di bawah selesai.
       </p>
 
       <div class="cd-grid" aria-live="polite">
         <div class="cd-cell">
-          <div class="cd-val mono" id="cd-days">06</div>
+          <div class="cd-val mono" id="cd-days">02</div>
           <div class="cd-lbl" data-i18n="cd.d">Hari</div>
         </div>
         <div class="cd-cell">
@@ -1011,12 +1244,12 @@
       </div>
 
       <div class="launch-info-box mono">
-        <div id="modal-schedule-line">Jadwal Rilis: Selasa, 6 Oktober 2026 · 10:00 WIB</div>
-        <div id="modal-status-line" style="color: var(--text-faint);">Status Rilis: Draft Terkunci (Menunggu Peluncuran)</div>
+        <div id="modal-schedule-line">Jadwal Rilis (Dipercepat): Sabtu, 3 Oktober 2026 · 10:00 WIB</div>
+        <div id="modal-status-line" style="color: var(--text-faint);">Build Kandidat Aktif: v0.5.19 (36) · Draft Terkunci</div>
       </div>
 
       <div class="modal-actions">
-        <a href="status.html" class="pill-btn" data-i18n="modal.status.btn">Status Sistem</a>
+        <a href="#changelog" class="pill-btn" id="modal-changelog-btn" data-i18n="modal.cl.btn">Lihat Changelog</a>
         <button type="button" class="pill-btn primary" id="close-launch-modal" data-i18n="modal.close.btn">
           Tutup Popup
         </button>
@@ -1030,6 +1263,8 @@
         <strong>XyDesk Remote</strong> · Powered by <span>XyVerse Technology Global</span>
       </div>
       <div class="footer-nav">
+        <a href="#about-diff">Perbedaan XyDesk</a>
+        <a href="#changelog">Changelog</a>
         <a href="host.html">PC Host</a>
         <a href="status.html" data-i18n="foot.status">Status &amp; Kesehatan</a>
         <a href="privacy.html" data-i18n="foot.privacy">Kebijakan Privasi</a>
@@ -1041,7 +1276,7 @@
 
   <script>
     (function () {
-      var LAUNCH_TARGET_ISO = "2026-10-06T10:00:00+07:00";
+      var LAUNCH_TARGET_ISO = "2026-10-03T10:00:00+07:00";
       var launchTargetMs = new Date(LAUNCH_TARGET_ISO).getTime();
 
       var modal = document.getElementById("launch-modal");
@@ -1098,6 +1333,10 @@
       });
 
       document.getElementById("close-launch-modal").addEventListener("click", closeModal);
+      var modalClBtn = document.getElementById("modal-changelog-btn");
+      if (modalClBtn) {
+        modalClBtn.addEventListener("click", closeModal);
+      }
       modal.addEventListener("click", function (e) {
         if (e.target === modal) closeModal();
       });
@@ -1112,43 +1351,50 @@
       });
 
       var enDict = {
-        "nav.cap": "Capabilities",
-        "nav.arch": "Architecture",
+        "nav.about": "About & Comparison",
+        "nav.cap": "Latest Features",
+        "nav.changelog": "Changelog",
         "nav.status": "System Status",
         "nav.licenses": "Licenses",
         "nav.download": "Download",
-        "intro.meta": "Android Remote Desktop Client · Native FreeRDP 3",
-        "intro.title": "A Precise, Lightweight, Encrypted Windows Remote Desktop Client for Android.",
-        "intro.lead": "XyDesk Remote connects Android devices directly to Windows workstations and servers over native RDP or Connect PC (ID & Password) mode. Built with per-device configurable touch HUD controls, H.264 AVC444/AVC420 graphics pipelines, and Android Keystore credential encryption.",
+        "intro.meta": "Android Remote Desktop Client · Native FreeRDP 3 · Build v0.5.19 (36)",
+        "intro.title": "Full Control of Windows Workstations & Servers from Android.",
+        "intro.lead": "XyDesk Remote is a Remote Desktop client powered by a custom-tuned C/JNI FreeRDP 3 engine for Android. Featuring Auto-Detect Monitor & Multi-User Grid Switching, low-latency OpenSLES audio tuning, custom vector-icon HUD controls, and two distinct connection modes: Connect PC (10-Digit ID) and full RDP.",
         "intro.cta.dl": "Download Page (Ver 1.0.0)",
+        "intro.cta.cl": "View v0.5.19 Changelog",
         "intro.cta.host": "XyDesk Host Setup (Windows PC)",
-        "intro.cta.status": "Service Status & Health",
         "led.1.k": "Protocol Engine",
-        "led.1.s": "OpenH264 · FFmpeg · Opus",
-        "led.2.k": "Graphics Pipeline",
-        "led.2.s": "NVENC · AMF · QSV · 60 FPS",
-        "led.3.k": "Security",
-        "led.3.s": "AES-256-GCM · Restricted Admin",
+        "led.1.s": "Fast-Path I/O · 8-Buf OpenSLES",
+        "led.2.k": "Multi-Display & Session",
+        "led.2.s": "Multi-Monitor · /admin Console",
+        "led.3.k": "Touch Control Layer",
+        "led.3.s": "Custom Preset · Mouse L/R Swap",
         "led.4.k": "Package Layout",
-        "cap.kicker": "Functional Specifications",
-        "cap.title": "Session, Input & Network Capabilities",
+        "about.kicker": "Understanding the XyDesk Ecosystem",
+        "about.title": "What Is XyDesk Remote & How Does It Differ from Standard XyDesk?",
+        "about.lead": "Within the XyVerse Technology Global software lineup, Standard XyDesk and XyDesk Remote are engineered for two fundamentally different workflows.",
+        "cap.kicker": "Verified Implemented Features (Build v0.5.19)",
+        "cap.title": "Session, Native Engine & Control Capabilities",
         "arch.kicker": "Technical Configuration",
         "arch.title": "Streaming, Latency & Security Settings",
+        "cl.kicker": "Release Notes & Code Updates",
+        "cl.title": "XyDesk Remote Changelog",
+        "cl.lead": "Real technical changes built, unit-tested, and cryptographically verified across our release pipeline toward Ver 1.0.0.",
         "dl.kicker": "Application Distribution",
         "dl.title": "Download Android Installation Packages (APK)",
-        "dl.desc": "Each APK package is signed with the official release key and separated by processor architecture (ABI). Downloads remain locked while the Ver 1.0.0 launch countdown is running.",
-        "dl.abi1": "Modern 64-bit Android devices (ARMv8-A · ~80.2 MB · Signed R8)",
-        "dl.abi2": "Legacy 32-bit Android devices (ARMv7 · ~67.3 MB · Signed R8)",
-        "dl.abi3": "Chromebooks, Android PCs & x86_64 Emulators (~85.5 MB · Signed R8)",
+        "dl.desc": "Each APK package is signed with the official release key and separated by processor architecture (ABI). The official launch has been accelerated to Saturday, October 3, 2026 — downloads remain locked while the Ver 1.0.0 countdown runs.",
+        "dl.abi1": "Modern 64-bit Android devices (ARMv8-A · ~80.2 MB · Signed R8 · Build 36)",
+        "dl.abi2": "Legacy 32-bit Android devices (ARMv7 · ~67.3 MB · Signed R8 · Build 36)",
+        "dl.abi3": "Chromebooks, Android PCs & x86_64 Emulators (~85.5 MB · Signed R8 · Build 36)",
         "dl.btn.lbl": "Download arm64-v8a · Ver 1.0.0",
         "dl.btn.lbl2": "Download armeabi-v7a · Ver 1.0.0",
         "dl.btn.lbl3": "Download x86_64 · Ver 1.0.0",
-        "modal.body": "Public downloads are currently locked. Official XyDesk Remote Ver 1.0.0 installation packages will unlock automatically once the countdown below reaches zero.",
+        "modal.body": "The official launch has been moved up to this Saturday. Official XyDesk Remote Ver 1.0.0 installation packages will unlock automatically once the countdown below reaches zero.",
         "cd.d": "Days",
         "cd.h": "Hours",
         "cd.m": "Minutes",
         "cd.s": "Seconds",
-        "modal.status.btn": "System Status",
+        "modal.cl.btn": "View Changelog",
         "modal.close.btn": "Close Popup",
         "foot.status": "Status & Health",
         "foot.privacy": "Privacy Policy",
@@ -1177,12 +1423,12 @@
         });
         document.getElementById("modal-schedule-line").textContent =
           l === "en"
-            ? "Release Schedule: Tuesday, Oct 6, 2026 · 10:00 WIB (UTC+7)"
-            : "Jadwal Rilis: Selasa, 6 Oktober 2026 · 10:00 WIB";
+            ? "Accelerated Launch: Saturday, Oct 3, 2026 · 10:00 WIB (UTC+7)"
+            : "Jadwal Rilis (Dipercepat): Sabtu, 3 Oktober 2026 · 10:00 WIB";
         document.getElementById("modal-status-line").textContent =
           l === "en"
-            ? "Release State: Locked Draft (Awaiting Launch)"
-            : "Status Rilis: Draft Terkunci (Menunggu Peluncuran)";
+            ? "Active Candidate Build: v0.5.19 (36) · Locked Draft"
+            : "Build Kandidat Aktif: v0.5.19 (36) · Draft Terkunci";
         tickCountdown();
         applyTheme(currentTheme);
       }
