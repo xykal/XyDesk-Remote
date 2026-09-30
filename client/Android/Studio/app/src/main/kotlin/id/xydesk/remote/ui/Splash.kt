@@ -49,13 +49,12 @@ import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.StrokeJoin
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.drawscope.rotate
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import id.xydesk.remote.BuildConfig
-import id.xydesk.remote.ui.theme.xy
 import kotlinx.coroutines.delay
 
 /**
@@ -64,9 +63,21 @@ import kotlinx.coroutines.delay
  * mesin native, dan identitas XyVerse Technology Global.
  */
 @Composable
-fun XySplash(onReady: () -> Unit) {
+fun XySplashScreen(
+    ready: Boolean,
+    dark: Boolean = true,
+    onDone: () -> Unit,
+) {
+    val context = LocalContext.current
+    val versionLabel = remember(context) {
+        runCatching {
+            val info = context.packageManager.getPackageInfo(context.packageName, 0)
+            info.versionName ?: "0.5.21"
+        }.getOrDefault("0.5.21")
+    }
     var visible by remember { mutableStateOf(false) }
     var bootStage by remember { mutableIntStateOf(0) }
+    var minTimeElapsed by remember { mutableStateOf(false) }
 
     val alpha by animateFloatAsState(
         targetValue = if (visible) 1f else 0f,
@@ -80,8 +91,8 @@ fun XySplash(onReady: () -> Unit) {
     )
     val progress by animateFloatAsState(
         targetValue = when (bootStage) {
-            0 -> 0.28f
-            1 -> 0.68f
+            0 -> 0.32f
+            1 -> 0.72f
             else -> 1.0f
         },
         animationSpec = tween(durationMillis = 280, easing = FastOutSlowInEasing),
@@ -112,10 +123,16 @@ fun XySplash(onReady: () -> Unit) {
         visible = true
         delay(280)
         bootStage = 1
-        delay(300)
+        delay(320)
         bootStage = 2
-        delay(280)
-        onReady()
+        delay(260)
+        minTimeElapsed = true
+    }
+
+    LaunchedEffect(ready, minTimeElapsed) {
+        if (ready && minTimeElapsed) {
+            onDone()
+        }
     }
 
     val stageLabel = when (bootStage) {
@@ -185,7 +202,7 @@ fun XySplash(onReady: () -> Unit) {
                     .background(Color(0xFFE2E8F0)),
             )
             Text(
-                text = "XYDESK REMOTE  ·  v${BuildConfig.VERSION_NAME} (${BuildConfig.VERSION_CODE})",
+                text = "XYDESK REMOTE  ·  v$versionLabel",
                 fontFamily = FontFamily.Monospace,
                 fontSize = 10.sp,
                 fontWeight = FontWeight.SemiBold,
