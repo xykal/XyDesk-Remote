@@ -54,9 +54,11 @@ object RdpUri {
         if (!profile.password.isNullOrBlank()) out += "p" to profile.password!!
         if (!profile.domain.isNullOrBlank()) out += "domain" to profile.domain!!
 
-        // Audio: /audio-mode:0|1|2, ditambah /sound saat diputar di perangkat.
+        // Audio: /audio-mode:0|1|2, ditambah /sound:sys:opensles,format:1,quality:high saat diputar di perangkat.
         out += "audio-mode" to options.audioMode.wire.toString()
-        if (options.audioMode == XyAudioMode.DEVICE) out += "sound" to ""
+        if (options.audioMode == XyAudioMode.DEVICE) {
+            out += "sound" to "sys:opensles,format:1,quality:high"
+        }
         if (options.microphone) out += "microphone" to ""
 
         out += "clipboard" to if (options.clipboard) "+" else "-"

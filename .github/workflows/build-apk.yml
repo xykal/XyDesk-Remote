@@ -202,7 +202,7 @@ jobs:
           path: |
             client/Android/Studio/freeRDPCore/.cxx
             $HOME/.gradle/caches
-          key: freerdp-native-cxx-v1-${{ hashFiles('client/Android/cmake/**', 'client/Android/Studio/freeRDPCore/src/main/cpp/**') }}
+          key: freerdp-native-cxx-v1-${{ hashFiles('client/Android/cmake/**', 'client/Android/Studio/freeRDPCore/src/main/cpp/**', 'channels/rdpsnd/**', 'libfreerdp/codec/**') }}
           restore-keys: |
             freerdp-native-cxx-v1-
       - name: Install Android SDK (cmdline-tools + components)

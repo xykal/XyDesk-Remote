@@ -24,6 +24,17 @@ powershell -NoProfile -ExecutionPolicy Bypass -Command ^
    New-ItemProperty -Path $tsPolicy -Name 'AVC444ModePreferred' -PropertyType DWord -Value 1 -Force | Out-Null; ^
    New-ItemProperty -Path $tsPolicy -Name 'AVCHardwareEncodePreferred' -PropertyType DWord -Value 1 -Force | Out-Null; ^
    New-ItemProperty -Path $tsPolicy -Name 'SelectTransport' -PropertyType DWord -Value 0 -Force | Out-Null; ^
+   New-ItemProperty -Path $tsPolicy -Name 'fDisableAudio' -PropertyType DWord -Value 0 -Force | Out-Null; ^
+   New-ItemProperty -Path $tsPolicy -Name 'fDisableAudioCapture' -PropertyType DWord -Value 0 -Force | Out-Null; ^
+   New-ItemProperty -Path $tsPolicy -Name 'fDisableCam' -PropertyType DWord -Value 0 -Force | Out-Null; ^
+   $rdpTcp = 'HKLM:\SYSTEM\CurrentControlSet\Control\Terminal Server\WinStations\RDP-Tcp'; ^
+   if (Test-Path $rdpTcp) { ^
+     New-ItemProperty -Path $rdpTcp -Name 'fDisableAudio' -PropertyType DWord -Value 0 -Force | Out-Null; ^
+     New-ItemProperty -Path $rdpTcp -Name 'fDisableAudioCapture' -PropertyType DWord -Value 0 -Force | Out-Null; ^
+     New-ItemProperty -Path $rdpTcp -Name 'fDisableCam' -PropertyType DWord -Value 0 -Force | Out-Null; ^
+   }; ^
+   Start-Service -Name 'AudioEndpointBuilder' -ErrorAction SilentlyContinue; ^
+   Start-Service -Name 'Audiosrv' -ErrorAction SilentlyContinue; ^
    New-ItemProperty -Path 'HKLM:\SYSTEM\CurrentControlSet\Control\Terminal Server\WinStations' -Name 'DWMFRAMEINTERVAL' -PropertyType DWord -Value 15 -Force | Out-Null; ^
    $gpus = (Get-CimInstance Win32_VideoController | Select-Object -ExpandProperty Name) -join ', '; ^
    Write-Host ('[3/4] GPU Terdeteksi: ' + $gpus); ^

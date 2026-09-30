@@ -8,6 +8,7 @@ import android.hardware.Sensor
 import android.hardware.SensorEvent
 import android.hardware.SensorEventListener
 import android.hardware.SensorManager
+import android.media.AudioManager
 import android.os.Bundle
 import android.view.InputDevice
 import android.view.KeyEvent
@@ -258,6 +259,13 @@ class XyDeskSessionActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        volumeControlStream = AudioManager.STREAM_MUSIC
+        runCatching {
+            val am = getSystemService(AUDIO_SERVICE) as? AudioManager
+            if (am != null && am.mode != AudioManager.MODE_NORMAL) {
+                am.mode = AudioManager.MODE_NORMAL
+            }
+        }
 
         try {
             ConnectionLog.add("SES: activity created")

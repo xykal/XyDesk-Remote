@@ -1532,7 +1532,9 @@ BOOL freerdp_dsp_supports_format(const AUDIO_FORMAT* WINPR_RESTRICT format, BOOL
 	switch (format->wFormatTag)
 	{
 		case WAVE_FORMAT_PCM:
-			return TRUE;
+			return (format->wBitsPerSample == 16) &&
+			       (format->nChannels == 1 || format->nChannels == 2) &&
+			       (format->nSamplesPerSec <= 48000);
 #if defined(WITH_DSP_EXPERIMENTAL)
 
 		case WAVE_FORMAT_ADPCM:
@@ -1629,11 +1631,10 @@ BOOL freerdp_dsp_context_reset(FREERDP_DSP_CONTEXT* WINPR_RESTRICT context,
 		{
 			if (!valid_ima_adpcm_format(context))
 				return FALSE;
-			if (FramesPerPacket == 0)
-				return FALSE;
+			const UINT32 effFrames = (FramesPerPacket == 0) ? 1024u : FramesPerPacket;
 
 			const size_t min_frame_data = 1ull * context->common.format.wBitsPerSample *
-			                              context->common.format.nChannels * FramesPerPacket;
+			                              context->common.format.nChannels * effFrames;
 			const size_t data_per_block = (1ULL * context->common.format.nBlockAlign -
 			                               4ULL * context->common.format.nChannels) *
 			                              8ULL;

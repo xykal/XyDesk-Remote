@@ -171,16 +171,29 @@ static SLresult openSLPlayOpen(OPENSL_STREAM* p)
 		SLDataLocator_OutputMix loc_outmix = { SL_DATALOCATOR_OUTPUTMIX, p->outputMixObject };
 		SLDataSink audioSnk = { &loc_outmix, nullptr };
 		// create audio player
-		const SLInterfaceID ids1[] = { SL_IID_ANDROIDSIMPLEBUFFERQUEUE, SL_IID_VOLUME };
-		const SLboolean req1[] = { SL_BOOLEAN_TRUE, SL_BOOLEAN_TRUE };
+		const SLInterfaceID ids1[] = { SL_IID_ANDROIDSIMPLEBUFFERQUEUE, SL_IID_VOLUME,
+		                               SL_IID_ANDROIDCONFIGURATION };
+		const SLboolean req1[] = { SL_BOOLEAN_TRUE, SL_BOOLEAN_TRUE, SL_BOOLEAN_FALSE };
 		result = (*p->engineEngine)
 		             ->CreateAudioPlayer(p->engineEngine, &(p->bqPlayerObject), &audioSrc,
-		                                 &audioSnk, 2, ids1, req1);
+		                                 &audioSnk, 3, ids1, req1);
 		DEBUG_SND("bqPlayerObject=%p", (void*)p->bqPlayerObject);
 		WINPR_ASSERT(!result);
 
 		if (result != SL_RESULT_SUCCESS)
 			goto end_openaudio;
+
+		SLAndroidConfigurationItf playerConfig = nullptr;
+		if ((*p->bqPlayerObject)
+		            ->GetInterface(p->bqPlayerObject, SL_IID_ANDROIDCONFIGURATION, &playerConfig) ==
+		        SL_RESULT_SUCCESS &&
+		    playerConfig != nullptr)
+		{
+			SLint32 streamType = SL_ANDROID_STREAM_MEDIA;
+			(*playerConfig)
+			    ->SetConfiguration(playerConfig, SL_ANDROID_KEY_STREAM_TYPE, &streamType,
+			                       sizeof(SLint32));
+		}
 
 		// realize the player
 		result = (*p->bqPlayerObject)->Realize(p->bqPlayerObject, SL_BOOLEAN_FALSE);
@@ -207,6 +220,14 @@ static SLresult openSLPlayOpen(OPENSL_STREAM* p)
 
 		if (result != SL_RESULT_SUCCESS)
 			goto end_openaudio;
+
+		(*p->bqPlayerVolume)->SetMute(p->bqPlayerVolume, SL_BOOLEAN_FALSE);
+		SLmillibel maxLevel = 0;
+		if ((*p->bqPlayerVolume)->GetMaxVolumeLevel(p->bqPlayerVolume, &maxLevel) ==
+		    SL_RESULT_SUCCESS)
+		{
+			(*p->bqPlayerVolume)->SetVolumeLevel(p->bqPlayerVolume, maxLevel);
+		}
 
 		// get the buffer queue interface
 		result = (*p->bqPlayerObject)
@@ -314,7 +335,14 @@ void android_CloseAudioDevice(OPENSL_STREAM* p)
 	openSLDestroyEngine(p);
 
 	if (p->queue)
+	{
+		while (Queue_Count(p->queue) > 0)
+		{
+			void* data = Queue_Dequeue(p->queue);
+			free(data);
+		}
 		Queue_Free(p->queue);
+	}
 
 	free(p);
 }
@@ -323,6 +351,7 @@ void android_CloseAudioDevice(OPENSL_STREAM* p)
 static void bqPlayerCallback(SLAndroidSimpleBufferQueueItf bq, void* context)
 {
 	OPENSL_STREAM* p = (OPENSL_STREAM*)context;
+	WINPR_UNUSED(bq);
 	WINPR_ASSERT(p);
 	WINPR_ASSERT(p->queue);
 	void* data = Queue_Dequeue(p->queue);
@@ -336,24 +365,19 @@ int android_AudioOut(OPENSL_STREAM* p, const short* buffer, int size)
 	WINPR_ASSERT(buffer);
 	WINPR_ASSERT(size > 0);
 
-	HANDLE ev = Queue_Event(p->queue);
-	/* Bounded wait (max 35ms) to prevent audio buffer buildup or stalling RDPSND thread. */
-	if (p->queuesize <= Queue_Count(p->queue))
+	int waitedMs = 0;
+	while (p->queuesize <= Queue_Count(p->queue))
 	{
-		DWORD waitStatus = WaitForSingleObject(ev, 35);
-		if (waitStatus == WAIT_FAILED)
-		{
-			DEBUG_SND("WaitForSingleObject failed!");
-			return -1;
-		}
-		if (p->queuesize <= Queue_Count(p->queue))
+		if (waitedMs >= 120)
 		{
 			/* Drop frame when sink lags to keep audio real-time with video. */
 			return size;
 		}
+		Sleep(2);
+		waitedMs += 2;
 	}
 
-	void* data = calloc(size, sizeof(short));
+	void* data = calloc((size_t)size, sizeof(short));
 
 	if (!data)
 	{
@@ -361,13 +385,20 @@ int android_AudioOut(OPENSL_STREAM* p, const short* buffer, int size)
 		return -1;
 	}
 
-	memcpy(data, buffer, size * sizeof(short));
+	memcpy(data, buffer, (size_t)size * sizeof(short));
 	if (!Queue_Enqueue(p->queue, data))
 	{
 		free(data);
 		return -1;
 	}
-	(*p->bqPlayerBufferQueue)->Enqueue(p->bqPlayerBufferQueue, data, sizeof(short) * size);
+	SLresult eqResult = (*p->bqPlayerBufferQueue)
+	                        ->Enqueue(p->bqPlayerBufferQueue, data, sizeof(short) * (SLuint32)size);
+	if (eqResult != SL_RESULT_SUCCESS)
+	{
+		void* stale = Queue_Dequeue(p->queue);
+		free(stale);
+		return -1;
+	}
 	return size;
 }
 
