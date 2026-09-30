@@ -1165,7 +1165,7 @@
     <section class="section" id="capabilities">
       <div class="container">
         <div class="section-head">
-          <div class="section-kicker" data-i18n="cap.kicker">Fitur Nyata yang Terimplementasi (Build v0.5.20)</div>
+          <div class="section-kicker" data-i18n="cap.kicker">Fitur Nyata yang Terimplementasi (Build v0.5.21)</div>
           <h2 class="section-title" data-i18n="cap.title">Kemampuan Sesi, Engine Native &amp; Kontrol</h2>
         </div>
 
@@ -1270,7 +1270,20 @@
         <div class="changelog-list">
           <div class="cl-card">
             <div class="cl-head">
-              <div class="cl-ver mono">v0.5.20 (VERSION_CODE 37) — Build Terbaru</div>
+              <div class="cl-ver mono">v0.5.21 (VERSION_CODE 38) — Build Terbaru</div>
+              <span class="cl-badge mono">30 September 2026 · Pemisahan Mesin Direct PC &amp; Multi-User</span>
+            </div>
+            <ul class="arch-list">
+              <li><strong>Pemisahan Arsitektur Streaming <code>Koneksi PC</code> vs <code>Koneksi RDP</code>:</strong> Memisahkan penuh fitur dan pipeline streaming antara <strong>Koneksi PC</strong> (khusus Direct PC Stream Engine: <code>Direct Game FPS 60/120</code>, <code>Direct Creator 4:4:4</code>, <code>Direct Cinema</code>, <code>Direct LAN Turbo</code>, penguncian FPS <code>30/60/90/120</code>, slider Bitrate <code>5–80 Mbps</code>, dan binding hardware GPU <code>NVENC/AMF/QSV</code>) dan <strong>Koneksi RDP</strong> (khusus Virtual Desktop Resolution, Dynamic Channel <code>DISP</code>, Multi-User/Konsol, Drive Bersama <code>RDPDR</code>, dan <code>RD Gateway</code>).</li>
+              <li><strong>Perbaikan Perpindahan Multi-User &amp; Konsol Runner (<code>/admin</code>):</strong> Memperbaiki perpindahan antara <strong>Konsol Runner / Admin (<code>runneradmin</code> · <code>/admin</code>)</strong> dan <strong>Sesi Virtual Multi-User (<code>XyDesk</code>)</strong> agar memperbarui <em>flag</em> <code>/admin</code> sekaligus akun target secara atomik, disertai pembukaan kebijakan <code>fSingleSessionPerUser = 0</code> pada <code>XyDeskHost-Setup.bat</code> dan <code>host.ps1</code>.</li>
+              <li><strong>Redesain <em>Splash Screen</em> Dual-Engine &amp; Filter Beranda:</strong> Memperbarui <code>Splash.kt</code> dengan animasi orbit presisi, indikator tahap muat engine native, dan kartu arsitektur ganda; menambahkan filter tab (<code>Semua</code>, <code>Koneksi PC</code>, <code>Koneksi RDP</code>) serta <em>badge</em> engine pada setiap kartu perangkat di Beranda.</li>
+              <li><strong>Auto-Scanner PC di Wi-Fi (LAN), Mouse OTG/Bluetooth, Cadangan JSON &amp; Cek Update:</strong> Menambahkan pemindai otomatis subnet lokal (<code>LanScanner.kt</code>) untuk mendeteksi ID PC 10-digit dan IP:3389 dalam 1 ketukan, dukungan hover &amp; <em>scroll wheel</em> mouse fisik di mode Trackpad/Direct, fitur ekspor/impor profil JSON, serta pemeriksa pembaruan terhubung ke <code>rdp.xydesk.my.id</code> dan <code>rilisin.xyverse.my.id</code>.</li>
+            </ul>
+          </div>
+
+          <div class="cl-card">
+            <div class="cl-head">
+              <div class="cl-ver mono">v0.5.20 (VERSION_CODE 37)</div>
               <span class="cl-badge mono">30 September 2026 · Perbaikan Audio PC</span>
             </div>
             <ul class="arch-list">
