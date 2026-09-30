@@ -13,6 +13,7 @@ import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -27,6 +28,7 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
@@ -2194,8 +2196,12 @@ private fun MonitorAndUserGridModal(
     onDismiss: () -> Unit,
 ) {
     val context = LocalContext.current
-    val savedAccounts = remember {
-        runCatching { id.xydesk.remote.security.VaultStore(context).list() }.getOrDefault(emptyList())
+    val repo = remember { id.xydesk.remote.sessions.SessionsRepository(context) }
+    val allFavorites by repo.favorites().collectAsState(initial = emptyList())
+    val savedAccounts = remember(allFavorites) {
+        allFavorites
+            .filter { !it.username.isNullOrBlank() && !it.username.equals("XyDesk", ignoreCase = true) }
+            .distinctBy { "${it.domain.orEmpty().lowercase()}\\${it.username.orEmpty().lowercase()}" }
     }
     var customUserOpen by remember { mutableStateOf(false) }
     var customUsername by remember { mutableStateOf(activeUsername.orEmpty()) }
@@ -2483,8 +2489,9 @@ private fun MonitorAndUserGridModal(
                 savedAccounts.chunked(2).forEach { row ->
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         row.forEach { acc ->
+                            val accUser = acc.username.orEmpty()
                             val isCurrentAcc = !activeUsername.isNullOrBlank() &&
-                                activeUsername.equals(acc.username, ignoreCase = true)
+                                activeUsername.equals(accUser, ignoreCase = true)
                             Box(
                                 modifier = Modifier
                                     .weight(1f)
@@ -2496,7 +2503,7 @@ private fun MonitorAndUserGridModal(
                                         RoundedCornerShape(10.dp),
                                     )
                                     .clickable {
-                                        onSwitchUserSession(acc.username, acc.domain, acc.password)
+                                        onSwitchUserSession(accUser, acc.domain, acc.password)
                                     }
                                     .padding(9.dp),
                             ) {
@@ -2512,7 +2519,7 @@ private fun MonitorAndUserGridModal(
                                     )
                                     Column(Modifier.weight(1f)) {
                                         Text(
-                                            text = acc.label.ifBlank { acc.username },
+                                            text = acc.label?.takeIf { it.isNotBlank() } ?: accUser,
                                             color = MaterialTheme.colorScheme.onSurface,
                                             fontSize = 11.sp,
                                             fontWeight = FontWeight.SemiBold,
@@ -2520,7 +2527,7 @@ private fun MonitorAndUserGridModal(
                                             overflow = TextOverflow.Ellipsis,
                                         )
                                         Text(
-                                            text = acc.username,
+                                            text = accUser,
                                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                                             fontSize = 9.5.sp,
                                             maxLines = 1,

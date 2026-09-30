@@ -1145,7 +1145,7 @@ fun XyDeskSessionScreen(
                         runCatching {
                             RdpOptions.of(context, activeProfile.id)
                                 .copy(consoleAdmin = useConsole)
-                                .save(context, activeProfile.id)
+                                .write(context, activeProfile.id)
                         }
                         applyingResolution = true
                         manager.disconnect()
