@@ -358,7 +358,7 @@ object DisplayPrefs {
     val remoteDpiOptions = listOf(100, 125, 150, 175, 200, 250, 300, 400, 500)
 
     fun remoteDpi(context: Context, id: String): Int =
-        sp(context).getInt("$id.remote_dpi", 100).let { if (it in remoteDpiOptions) it else 100 }
+        sp(context).getInt("$id.remote_dpi", 125).let { if (it in remoteDpiOptions) it else 125 }
 
     fun setRemoteDpi(context: Context, id: String, value: Int): Boolean {
         if (value !in remoteDpiOptions) return false

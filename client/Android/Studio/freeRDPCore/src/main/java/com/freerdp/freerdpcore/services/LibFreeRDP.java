@@ -83,6 +83,7 @@ public class LibFreeRDP
 	{
 		try
 		{
+			tryLoad("xydesk-quic");
 			System.loadLibrary("freerdp-android");
 
 			/* Load dependent libraries too to trigger JNI_OnLoad calls */
@@ -178,6 +179,36 @@ public class LibFreeRDP
 	                                                                    int desktopScaleFactor);
 
 	private static native String freerdp_get_last_error_string(long inst);
+
+	private static native String freerdp_quic_probe_host(String host, int port, int timeoutMs);
+
+	private static native String freerdp_quic_engine_info();
+
+	public static String quicProbeHost(String host, int port, int timeoutMs)
+	{
+		try
+		{
+			String res = freerdp_quic_probe_host(host, port, timeoutMs);
+			return res != null ? res : "{\"ok\":false}";
+		}
+		catch (Throwable t)
+		{
+			return "{\"ok\":false}";
+		}
+	}
+
+	public static String getQuicEngineInfo()
+	{
+		try
+		{
+			String info = freerdp_quic_engine_info();
+			return info != null ? info : "libxydesk-quic.so";
+		}
+		catch (Throwable t)
+		{
+			return "libxydesk-quic.so";
+		}
+	}
 
 	/** Read the current native error while the instance is still alive. */
 	public static String getLastErrorString(long inst)

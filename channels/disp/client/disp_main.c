@@ -71,6 +71,12 @@ disp_send_display_control_monitor_layout_pdu(GENERIC_CHANNEL_CALLBACK* callback,
 	DISP_PLUGIN* disp = (DISP_PLUGIN*)callback->plugin;
 	WINPR_ASSERT(disp);
 
+	if ((disp->MaxNumMonitors == 0) || (NumMonitors == 0))
+		return CHANNEL_RC_NOT_INITIALIZED;
+
+	if (NumMonitors > disp->MaxNumMonitors)
+		NumMonitors = disp->MaxNumMonitors;
+
 	const UINT32 MonitorLayoutSize = DISPLAY_CONTROL_MONITOR_LAYOUT_SIZE;
 	const DISPLAY_CONTROL_HEADER header = { .length = 8 + 8 + (NumMonitors * MonitorLayoutSize),
 		                                    .type = DISPLAY_CONTROL_PDU_TYPE_MONITOR_LAYOUT };
@@ -89,9 +95,6 @@ disp_send_display_control_monitor_layout_pdu(GENERIC_CHANNEL_CALLBACK* callback,
 		           status);
 		goto out;
 	}
-
-	if (NumMonitors > disp->MaxNumMonitors)
-		NumMonitors = disp->MaxNumMonitors;
 
 	Stream_Write_UINT32(s, MonitorLayoutSize); /* MonitorLayoutSize (4 bytes) */
 	Stream_Write_UINT32(s, NumMonitors);       /* NumMonitors (4 bytes) */

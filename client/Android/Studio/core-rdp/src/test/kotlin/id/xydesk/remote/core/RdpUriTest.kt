@@ -64,6 +64,7 @@ class RdpUriTest {
         assertEquals("auto", p["network"])
         assertEquals("AVC444", p["gfx"])
         assertEquals("+", p["fonts"])
+        assertEquals("+", p["aero"])
     }
 
     @Test

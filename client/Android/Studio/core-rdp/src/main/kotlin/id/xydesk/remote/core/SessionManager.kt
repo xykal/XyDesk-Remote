@@ -208,7 +208,7 @@ class SessionManager(context: Context) {
         activeRelayLabel = when {
             options.gateway != null && options.gateway.host.isNotBlank() -> "RD Gateway ($proto)"
             profile.host.startsWith("100.") || profile.host.endsWith(".ts.net", ignoreCase = true) -> "Tailscale ($proto)"
-            options.pcConnectMode -> "Direct P2P ($proto)"
+            options.pcConnectMode -> "Direct QUIC+$proto"
             else -> "Direct $proto"
         }
         if (options.lowBandwidth && !storedOptions.lowBandwidth) {
@@ -222,6 +222,9 @@ class SessionManager(context: Context) {
         )
         val base = RdpUri.build(profile, options)
         val prefs = appContext.getSharedPreferences("xydesk.remote.display", Context.MODE_PRIVATE)
+        val remoteScale = prefs.getInt("${profile.id}.remote_dpi", 125)
+            .let { if (it in REMOTE_DESKTOP_SCALE_FACTORS) it else 125 }
+        lastDispScale = if (options.pcConnectMode) 100 else remoteScale
         val key = "${profile.id}.resolution"
         val stored = if (prefs.contains(key)) prefs.getString(key, null) else null
         // Model resolusi ronde 8:
@@ -236,15 +239,19 @@ class SessionManager(context: Context) {
             "follow" -> null
             else -> stored
         }
-        if (resolution == null) return base
+        val uriBuilder = base.buildUpon()
+        if (!options.pcConnectMode && remoteScale in REMOTE_DESKTOP_SCALE_FACTORS && remoteScale != 100) {
+            uriBuilder.appendQueryParameter("scale-desktop", remoteScale.toString())
+        }
+        if (resolution == null) return uriBuilder.build()
         if (SmartResolution.parse(resolution) == null) {
             ConnectionLog.add("CM: preset resolusi tidak valid; fallback otomatis 16:9")
-            return base.buildUpon()
+            return uriBuilder
                 .appendQueryParameter("size", SmartResolution.forScreen(appContext))
                 .build()
         }
-        ConnectionLog.add("CM: remote resolution preset=$resolution")
-        return base.buildUpon().appendQueryParameter("size", resolution).build()
+        ConnectionLog.add("CM: remote resolution preset=$resolution scale=${remoteScale}%")
+        return uriBuilder.appendQueryParameter("size", resolution).build()
     }
 
     /**
@@ -294,6 +301,13 @@ class SessionManager(context: Context) {
         }
         val inst = session.getInstance()
         worker.execute {
+            val quicProbe = runCatching {
+                LibFreeRDP.quicProbeHost(profile.host, 4433, 450)
+            }.getOrDefault("")
+            if (quicProbe.contains("\"ok\":true")) {
+                ConnectionLog.add("QUIC Native Agent OK: $quicProbe")
+                activeRelayLabel = "Direct QUIC v1 (Native C++)"
+            }
             val probeStartNs = System.nanoTime()
             val reachable = tcpReachable(profile.host, profile.port, TCP_PROBE_TIMEOUT_MS)
             if (reachable) {
@@ -904,5 +918,5 @@ class SessionManager(context: Context) {
  * bukan dari tebakan.
  */
 fun coreBuildInfo(): String = runCatching {
-    "FreeRDP ${LibFreeRDP.getVersion()} | ${LibFreeRDP.getFeatureSummary()}"
+    "FreeRDP ${LibFreeRDP.getVersion()} | ${LibFreeRDP.getFeatureSummary()} | ${LibFreeRDP.getQuicEngineInfo()}"
 }.getOrDefault("FreeRDP (info build tidak terbaca)")

@@ -1428,8 +1428,8 @@ static BOOL freerdp_apply_connection_type(rdpSettings* settings, UINT32 type)
 	};
 	const struct network_settings config[] = {
 		{ FreeRDP_DisableWallpaper, { TRUE, TRUE, TRUE, TRUE, FALSE, FALSE, FALSE } },
-		{ FreeRDP_AllowFontSmoothing, { FALSE, FALSE, FALSE, FALSE, TRUE, TRUE, TRUE } },
-		{ FreeRDP_AllowDesktopComposition, { FALSE, FALSE, TRUE, TRUE, TRUE, TRUE, TRUE } },
+		{ FreeRDP_AllowFontSmoothing, { TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE } },
+		{ FreeRDP_AllowDesktopComposition, { TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE } },
 		{ FreeRDP_DisableFullWindowDrag, { TRUE, TRUE, TRUE, TRUE, FALSE, FALSE, FALSE } },
 		{ FreeRDP_DisableMenuAnims, { TRUE, TRUE, TRUE, TRUE, FALSE, FALSE, FALSE } },
 		{ FreeRDP_DisableThemes, { TRUE, FALSE, FALSE, FALSE, FALSE, FALSE, FALSE } }
@@ -2367,8 +2367,8 @@ static int parse_gfx_options(rdpSettings* settings, const COMMAND_LINE_ARGUMENT_
 		{
 			BOOL GfxH264 = FALSE;
 			BOOL GfxAVC444 = FALSE;
-			BOOL RemoteFxCodec = FALSE;
-			BOOL GfxProgressive = FALSE;
+			BOOL RemoteFxCodec = TRUE;
+			BOOL GfxProgressive = TRUE;
 			BOOL codecSelected = FALSE;
 
 			for (size_t x = 0; x < count; x++)
@@ -2508,6 +2508,8 @@ static int parse_gfx_options(rdpSettings* settings, const COMMAND_LINE_ARGUMENT_
 				if (!freerdp_settings_set_bool(settings, FreeRDP_RemoteFxCodec, RemoteFxCodec))
 					rc = COMMAND_LINE_ERROR;
 				if (!freerdp_settings_set_bool(settings, FreeRDP_GfxProgressive, GfxProgressive))
+					rc = COMMAND_LINE_ERROR;
+				if (!freerdp_settings_set_bool(settings, FreeRDP_GfxProgressiveV2, GfxProgressive))
 					rc = COMMAND_LINE_ERROR;
 			}
 		}

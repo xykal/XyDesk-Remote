@@ -574,6 +574,7 @@ class SessionSurfaceController(private val activity: Activity) : GraphicsSink {
         val newBitmap = runCatching {
             Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888).apply {
                 setHasAlpha(false)
+                setHasMipMap(true)
             }
         }.getOrElse {
             ConnectionLog.addThrowable("SES: gagal alokasi surface ${width}x$height", it)

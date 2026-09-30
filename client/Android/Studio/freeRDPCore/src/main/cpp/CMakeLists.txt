@@ -26,7 +26,10 @@ if(NOT FREERDP_DEFAULT_PROJECT_VERSION)
   set(FREERDP_DEFAULT_PROJECT_VERSION "1.0.0.0")
 endif()
 
-project("freerdp-android" LANGUAGES C VERSION ${FREERDP_DEFAULT_PROJECT_VERSION})
+project("freerdp-android" LANGUAGES C CXX VERSION ${FREERDP_DEFAULT_PROJECT_VERSION})
+
+set(CMAKE_CXX_STANDARD 17)
+set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
 message("project ${PROJECT_NAME} is using version ${PROJECT_VERSION}")
 
@@ -103,10 +106,13 @@ find_library(log-lib log)
 find_library(dl-lib dl)
 find_library(jnigraphics-lib jnigraphics)
 
+add_library(xydesk-quic SHARED xydesk_quic_client.cpp xydesk_quic_client.h)
+target_link_libraries(xydesk-quic PRIVATE ${log-lib})
+
 # Specifies libraries CMake should link to your target library. You
 # can link multiple libraries, such as libraries you define in this
 # build script, prebuilt third-party libraries, or system libraries.
 
 target_link_libraries(
-  ${MODULE_NAME} PRIVATE freerdp3-lib freerdp-client3-lib winpr3-lib ${log-lib} ${dl-lib} ${jnigraphics-lib}
+  ${MODULE_NAME} PRIVATE xydesk-quic freerdp3-lib freerdp-client3-lib winpr3-lib ${log-lib} ${dl-lib} ${jnigraphics-lib}
 )

@@ -261,7 +261,7 @@ data class RdpOptions(
     /** `+themes` / `-themes`: tema visual Windows. */
     val visualThemes: Boolean = true,
     /** `+aero`: komposisi desktop DWM/Aero. */
-    val desktopComposition: Boolean = false,
+    val desktopComposition: Boolean = true,
 
     // ---- Security & Session Hardening ----
     val securityProtocol: XySecurityProtocol = XySecurityProtocol.AUTO,
@@ -304,7 +304,7 @@ data class RdpOptions(
             windowDrag = false,
             menuAnimations = false,
             visualThemes = true,
-            desktopComposition = false,
+            desktopComposition = true,
         )
         XyStreamProfile.ULTRA_LOW_LATENCY -> copy(
             streamProfile = XyStreamProfile.ULTRA_LOW_LATENCY,
@@ -444,12 +444,12 @@ data class RdpOptions(
             pcTargetFps = if (pcTargetFps in setOf(60, 90, 120)) pcTargetFps else 60,
             pcBitrateMbps = pcBitrateMbps.coerceIn(15, 80),
             udpTransport = true,
-            networkAutoDetect = false,
-            lowBandwidth = true,
+            networkAutoDetect = true,
+            lowBandwidth = false,
             h264 = true,
             dynamicResolution = false,
             consoleAdmin = true,
-            colorDepth = 24,
+            colorDepth = 32,
             targetFps = 60,
             asyncUpdate = true,
             asyncChannels = true,
@@ -458,8 +458,8 @@ data class RdpOptions(
             desktopWallpaper = false,
             windowDrag = false,
             menuAnimations = false,
-            visualThemes = false,
-            desktopComposition = false,
+            visualThemes = true,
+            desktopComposition = true,
         )
         XyPcStreamEngine.DIRECT_STUDIO_444 -> copy(
             pcConnectMode = true,
@@ -613,6 +613,7 @@ data class RdpOptions(
         sp.putBoolean("$deviceId.menuanim", menuAnimations)
         sp.putBoolean("$deviceId.themes", visualThemes)
         sp.putBoolean("$deviceId.aero", desktopComposition)
+        sp.putInt("$deviceId.clarity_v2", 2)
         sp.putInt("$deviceId.sec_proto", securityProtocol.ordinal)
         sp.putInt("$deviceId.tls_sec", tlsSecLevel)
         sp.putBoolean("$deviceId.admin", consoleAdmin)
@@ -649,7 +650,7 @@ data class RdpOptions(
             "audio", "mic", "clipboard", "drive", "camera", "udp",
             "netauto", "lowbw", "h264", "dynres", "ghost", "gport", "guser", "gpass", "gdomain",
             "stream_profile", "gpu_profile", "bat_saver", "bpp", "fps", "async_upd", "async_ch", "comp_lvl",
-            "fonts", "wallpaper", "windrag", "menuanim", "themes", "aero",
+            "fonts", "wallpaper", "windrag", "menuanim", "themes", "aero", "clarity_v2",
             "sec_proto", "tls_sec", "admin", "restricted_admin", "remote_prog", "remote_dir",
             "wol_mac", "wol_bcast", "wol_port", "ssh_host", "ssh_port", "ssh_user", "ssh_lport",
         )
@@ -692,6 +693,8 @@ data class RdpOptions(
                     domain = sp.getString("$deviceId.gdomain", "")?.ifBlank { null },
                 )
             }
+            val migratedV2 = sp.getInt("$deviceId.clarity_v2", 0) >= 2
+            val isDataSaver = streamProfile == XyStreamProfile.DATA_SAVER
             return RdpOptions(
                 pcConnectMode = sp.getBoolean("$deviceId.pc_mode", false),
                 pcStreamEngine = pcEngine,
@@ -705,24 +708,28 @@ data class RdpOptions(
                 camera = sp.getBoolean("$deviceId.camera", false),
                 udpTransport = sp.getBoolean("$deviceId.udp", true),
                 networkAutoDetect = sp.getBoolean("$deviceId.netauto", true),
-                lowBandwidth = sp.getBoolean("$deviceId.lowbw", false),
+                lowBandwidth = if (migratedV2 || isDataSaver) sp.getBoolean("$deviceId.lowbw", false) else false,
                 h264 = sp.getBoolean("$deviceId.h264", true),
                 dynamicResolution = sp.getBoolean("$deviceId.dynres", true),
                 gateway = gateway,
                 streamProfile = streamProfile,
                 gpuProfile = gpuProfile,
                 batterySaver = sp.getBoolean("$deviceId.bat_saver", false),
-                colorDepth = sp.getInt("$deviceId.bpp", 32).let { if (it in setOf(16, 24, 32)) it else 32 },
+                colorDepth = if (migratedV2 || isDataSaver) {
+                    sp.getInt("$deviceId.bpp", 32).let { if (it in setOf(16, 24, 32)) it else 32 }
+                } else {
+                    32
+                },
                 targetFps = sp.getInt("$deviceId.fps", 60).let { if (it in setOf(30, 60)) it else 60 },
                 asyncUpdate = sp.getBoolean("$deviceId.async_upd", false),
                 asyncChannels = sp.getBoolean("$deviceId.async_ch", false),
                 compressionLevel = sp.getInt("$deviceId.comp_lvl", 1).coerceIn(0, 2),
-                fontSmoothing = sp.getBoolean("$deviceId.fonts", true),
+                fontSmoothing = if (migratedV2) sp.getBoolean("$deviceId.fonts", true) else true,
                 desktopWallpaper = sp.getBoolean("$deviceId.wallpaper", false),
                 windowDrag = sp.getBoolean("$deviceId.windrag", false),
                 menuAnimations = sp.getBoolean("$deviceId.menuanim", false),
                 visualThemes = sp.getBoolean("$deviceId.themes", true),
-                desktopComposition = sp.getBoolean("$deviceId.aero", false),
+                desktopComposition = if (migratedV2) sp.getBoolean("$deviceId.aero", true) else true,
                 securityProtocol = secProto,
                 tlsSecLevel = sp.getInt("$deviceId.tls_sec", -1).coerceIn(-1, 2),
                 consoleAdmin = sp.getBoolean("$deviceId.admin", false),

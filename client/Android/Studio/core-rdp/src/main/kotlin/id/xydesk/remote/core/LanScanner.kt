@@ -1,5 +1,6 @@
 package id.xydesk.remote.core
 
+import com.freerdp.freerdpcore.services.LibFreeRDP
 import java.net.Inet4Address
 import java.net.InetSocketAddress
 import java.net.NetworkInterface
@@ -62,6 +63,22 @@ object LanScanner {
                     val targetIp = "$prefix.$hostOctet"
                     if (targetIp == selfIp) return@Callable null
                     val startNs = System.nanoTime()
+                    val quicJson = runCatching {
+                        LibFreeRDP.quicProbeHost(targetIp, 4433, 150)
+                    }.getOrDefault("")
+                    if (quicJson.contains("\"ok\":true")) {
+                        val elapsedMs = ((System.nanoTime() - startNs) / 1_000_000L)
+                            .toInt()
+                            .coerceAtLeast(1)
+                        val pcId = encodeIpv4ToPcId(targetIp) ?: targetIp
+                        return@Callable DiscoveredPcHost(
+                            ip = targetIp,
+                            port = port,
+                            pcId = pcId,
+                            rttMs = elapsedMs,
+                            subnetPrefix = "$prefix.0/24 (QUIC)",
+                        )
+                    }
                     try {
                         Socket().use { socket ->
                             socket.tcpNoDelay = true

@@ -1,7 +1,7 @@
 @echo off
-title XyDesk Host Setup - XyVerse Technology Global
+title XyDesk Remote Host v0.5.23 - XyVerse Technology Global
 echo ================================================================
-echo   XyDesk Remote - Windows PC Host ^& GPU Gaming Setup
+echo   XyDesk Remote v0.5.23 - Windows PC Host ^& Native QUIC Setup
 echo   Powered by XyVerse Technology Global
 echo ================================================================
 echo.
@@ -12,19 +12,28 @@ if %errorLevel% neq 0 (
     exit /b
 )
 
+cd /d "%~dp0"
+
 powershell -NoProfile -ExecutionPolicy Bypass -Command ^
   "$ErrorActionPreference = 'SilentlyContinue'; ^
-   Write-Host '[1/4] Mengaktifkan layanan Remote Desktop (TCP & UDP 3389 + Multi-Session)...'; ^
+   Write-Host '[1/4] Mengaktifkan layanan Remote Desktop (TCP/UDP 3389 + QUIC UDP 4433 + Multi-Session)...'; ^
    Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server' -Name 'fDenyTSConnections' -Value 0; ^
    Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server' -Name 'fSingleSessionPerUser' -Value 0; ^
    Enable-NetFirewallRule -DisplayGroup 'Remote Desktop'; ^
-   Write-Host '[2/4] Mengaktifkan Akselerasi GPU Hardware (AVC444 + 60 FPS)...'; ^
+   netsh advfirewall firewall add rule name='XyDesk Remote RDP TCP' dir=in action=allow protocol=TCP localport=3389 | Out-Null; ^
+   netsh advfirewall firewall add rule name='XyDesk Remote RDP UDP' dir=in action=allow protocol=UDP localport=3389 | Out-Null; ^
+   netsh advfirewall firewall add rule name='XyDesk Remote QUIC UDP' dir=in action=allow protocol=UDP localport=4433 | Out-Null; ^
+   Write-Host '[2/4] Mengaktifkan Akselerasi GPU Hardware (AVC 4:4:4 + ClearType Font + 60 FPS)...'; ^
    $tsPolicy = 'HKLM:\SOFTWARE\Policies\Microsoft\Windows NT\Terminal Services'; ^
    if (!(Test-Path $tsPolicy)) { New-Item -Path $tsPolicy -Force | Out-Null }; ^
+   New-ItemProperty -Path $tsPolicy -Name 'fDenyTSConnections' -PropertyType DWord -Value 0 -Force | Out-Null; ^
    New-ItemProperty -Path $tsPolicy -Name 'fSingleSessionPerUser' -PropertyType DWord -Value 0 -Force | Out-Null; ^
    New-ItemProperty -Path $tsPolicy -Name 'bEnumerateHWBeforeSW' -PropertyType DWord -Value 1 -Force | Out-Null; ^
    New-ItemProperty -Path $tsPolicy -Name 'AVC444ModePreferred' -PropertyType DWord -Value 1 -Force | Out-Null; ^
    New-ItemProperty -Path $tsPolicy -Name 'AVCHardwareEncodePreferred' -PropertyType DWord -Value 1 -Force | Out-Null; ^
+   New-ItemProperty -Path $tsPolicy -Name 'VGAdapter' -PropertyType DWord -Value 1 -Force | Out-Null; ^
+   New-ItemProperty -Path $tsPolicy -Name 'fAllowFontAntiAlias' -PropertyType DWord -Value 1 -Force | Out-Null; ^
+   New-ItemProperty -Path $tsPolicy -Name 'fAllowDesktopComposition' -PropertyType DWord -Value 1 -Force | Out-Null; ^
    New-ItemProperty -Path $tsPolicy -Name 'SelectTransport' -PropertyType DWord -Value 0 -Force | Out-Null; ^
    New-ItemProperty -Path $tsPolicy -Name 'fDisableAudio' -PropertyType DWord -Value 0 -Force | Out-Null; ^
    New-ItemProperty -Path $tsPolicy -Name 'fDisableAudioCapture' -PropertyType DWord -Value 0 -Force | Out-Null; ^
@@ -34,6 +43,7 @@ powershell -NoProfile -ExecutionPolicy Bypass -Command ^
      New-ItemProperty -Path $rdpTcp -Name 'fDisableAudio' -PropertyType DWord -Value 0 -Force | Out-Null; ^
      New-ItemProperty -Path $rdpTcp -Name 'fDisableAudioCapture' -PropertyType DWord -Value 0 -Force | Out-Null; ^
      New-ItemProperty -Path $rdpTcp -Name 'fDisableCam' -PropertyType DWord -Value 0 -Force | Out-Null; ^
+     New-ItemProperty -Path $rdpTcp -Name 'MaxMonitors' -PropertyType DWord -Value 16 -Force | Out-Null; ^
    }; ^
    Start-Service -Name 'AudioEndpointBuilder' -ErrorAction SilentlyContinue; ^
    Start-Service -Name 'Audiosrv' -ErrorAction SilentlyContinue; ^
@@ -44,7 +54,7 @@ powershell -NoProfile -ExecutionPolicy Bypass -Command ^
    $ips = Get-NetIPAddress -AddressFamily IPv4 | Where-Object { $_.IPAddress -notlike '127.*' -and $_.IPAddress -notlike '169.254.*' }; ^
    Write-Host ''; ^
    Write-Host '================================================================'; ^
-   Write-Host '  XYDESK HOST AKTIF (GPU AVC444 60 FPS + UDP 3389 READY)'; ^
+   Write-Host '  XYDESK HOST AKTIF (GPU AVC444 + CLEARTYPE + QUIC UDP 4433)'; ^
    Write-Host '================================================================'; ^
    foreach ($ipObj in $ips) { ^
      $parts = $ipObj.IPAddress.Split('.'); ^
@@ -57,5 +67,12 @@ powershell -NoProfile -ExecutionPolicy Bypass -Command ^
    Write-Host '  Password              : Gunakan Password Login Windows Anda'; ^
    Write-Host '================================================================'; ^
    Write-Host ''"
-echo.
-pause
+
+if exist "%~dp0XyDeskRemoteHost.exe" (
+    echo Menjalankan XyDesk Native C++ Host Agent ^(XyDeskRemoteHost.exe + xydesk_quic.dll + xydesk_host_core.dll^)...
+    echo.
+    "%~dp0XyDeskRemoteHost.exe"
+) else (
+    echo.
+    pause
+)

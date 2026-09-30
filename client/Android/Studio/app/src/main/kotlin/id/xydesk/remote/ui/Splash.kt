@@ -72,8 +72,8 @@ fun XySplashScreen(
     val versionLabel = remember(context) {
         runCatching {
             val info = context.packageManager.getPackageInfo(context.packageName, 0)
-            info.versionName ?: "0.5.22"
-        }.getOrDefault("0.5.22")
+            info.versionName ?: "0.5.23"
+        }.getOrDefault("0.5.23")
     }
     var visible by remember { mutableStateOf(false) }
     var bootStage by remember { mutableIntStateOf(0) }

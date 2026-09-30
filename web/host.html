@@ -157,7 +157,7 @@
       <div class="container drawer-grid">
         <a href="index.html" class="drawer-link"><span>Beranda Utama</span><span>→</span></a>
         <a href="index.html#about-diff" class="drawer-link"><span>Tentang &amp; Perbedaan</span><span>→</span></a>
-        <a href="index.html#changelog" class="drawer-link"><span>Changelog v0.5.20</span><span>→</span></a>
+        <a href="index.html#changelog" class="drawer-link"><span>Changelog v0.5.23</span><span>→</span></a>
         <a href="status.html" class="drawer-link"><span>Status Sistem</span><span>→</span></a>
         <a href="privacy.html" class="drawer-link"><span>Kebijakan Privasi</span><span>→</span></a>
         <a href="licenses.html" class="drawer-link"><span>Lisensi Open Source</span><span>→</span></a>
@@ -186,13 +186,16 @@
       </p>
 
       <div class="card">
-        <h2>Opsi 1 — Unduh File Installer Cepat (`XyDeskHost-Setup.bat`)</h2>
+        <h2>Opsi 1 — Unduh Paket Native C++17 (`XyDeskRemoteHost.exe` + `xydesk_quic.dll` + `xydesk_host_core.dll`)</h2>
         <p>
-          Unduh lalu klik dua kali berkas di bawah pada PC Windows Anda. Skrip akan otomatis meminta izin Administrator, menyalakan GPU Acceleration + RDP UDP, dan menampilkan <strong>ID PC (XXX-XXX-XXXX)</strong> Anda di layar.
+          Paket lengkap Windows Host Agent 64-bit yang dibangun dengan <strong>C++17 Native</strong>: mencakup <code>xydesk_quic.dll</code> (Responder UDP QUIC v1 RFC 9000 port 4433), <code>xydesk_host_core.dll</code> (Deteksi DXGI GPU + Kebijakan AVC 4:4:4 + ClearType Font Smoothing + Multi-Session), <code>XyDeskRemoteHost.exe</code>, dan <code>XyDeskHost-Setup.bat</code>.
         </p>
         <div style="margin-top: 14px; display: flex; gap: 10px; flex-wrap: wrap;">
-          <a href="/XyDeskHost-Setup.bat" download="XyDeskHost-Setup.bat" class="pill primary">
-            Unduh XyDeskHost-Setup.bat (Untuk PC Windows)
+          <a href="/XyDesk-Remote-Host-Agent-win64.zip" download="XyDesk-Remote-Host-Agent-win64.zip" class="pill primary">
+            Unduh XyDesk-Remote-Host-Agent-win64.zip (C++17 Native + .dll)
+          </a>
+          <a href="/XyDeskHost-Setup.bat" download="XyDeskHost-Setup.bat" class="pill">
+            Unduh XyDeskHost-Setup.bat Saja
           </a>
         </div>
       </div>

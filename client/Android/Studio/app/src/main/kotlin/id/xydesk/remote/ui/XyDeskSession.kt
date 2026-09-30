@@ -464,7 +464,7 @@ fun XyDeskSessionScreen(
             val instance = manager.instance()
             if (instance != 0L && boundInstance != instance) {
                 boundInstance = instance
-                lastRemoteDpiRequest = 100
+                lastRemoteDpiRequest = DisplayPrefs.remoteDpi(context, profile.id)
                 controller.bind(instance)
                 controller.setImeVisible(keyboardShown)
                 (context as? XyDeskSessionActivity)?.syncPhoneClipboardToRemote()

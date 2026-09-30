@@ -247,7 +247,8 @@ static BOOL android_pre_connect(freerdp* instance)
 	}
 
 	/* XyDesk native tuning: low-latency fast-path input/output, dynamic monitor layout,
-	 * extended mouse/wheel, frame markers, and enlarged pointer cache. */
+	 * extended mouse/wheel, frame markers, ClearType/DWM + Progressive/RFX text clarity,
+	 * and enlarged pointer cache. */
 	(void)freerdp_settings_set_bool(settings, FreeRDP_FastPathInput, TRUE);
 	(void)freerdp_settings_set_bool(settings, FreeRDP_FastPathOutput, TRUE);
 	(void)freerdp_settings_set_bool(settings, FreeRDP_HasExtendedMouseEvent, TRUE);
@@ -256,6 +257,12 @@ static BOOL android_pre_connect(freerdp* instance)
 	(void)freerdp_settings_set_bool(settings, FreeRDP_SupportMonitorLayoutPdu, TRUE);
 	(void)freerdp_settings_set_bool(settings, FreeRDP_FrameMarkerCommandEnabled, TRUE);
 	(void)freerdp_settings_set_bool(settings, FreeRDP_SurfaceFrameMarkerEnabled, TRUE);
+	(void)freerdp_settings_set_bool(settings, FreeRDP_AllowFontSmoothing, TRUE);
+	(void)freerdp_settings_set_bool(settings, FreeRDP_AllowDesktopComposition, TRUE);
+	(void)freerdp_settings_set_bool(settings, FreeRDP_GfxProgressive, TRUE);
+	(void)freerdp_settings_set_bool(settings, FreeRDP_GfxProgressiveV2, TRUE);
+	(void)freerdp_settings_set_bool(settings, FreeRDP_RemoteFxCodec, TRUE);
+	freerdp_performance_flags_make(settings);
 	if (freerdp_settings_get_uint32(settings, FreeRDP_PointerCacheSize) < 128)
 		(void)freerdp_settings_set_uint32(settings, FreeRDP_PointerCacheSize, 128);
 

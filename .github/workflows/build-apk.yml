@@ -79,6 +79,29 @@ jobs:
       - name: Compile Kotlin (app + core-rdp)
         working-directory: client/Android/Studio
         run: ./gradlew --stacktrace --no-daemon :app:compileDebugKotlin
+      - name: Compile Windows Native C++17 Host Agent & DLLs (mingw-w64)
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq g++-mingw-w64-x86-64 zip
+          mkdir -p /tmp/dist-host
+          x86_64-w64-mingw32-g++ -std=c++17 -O2 -shared \
+            host-agent/src/xydesk_quic.cpp -Ihost-agent/include \
+            -o /tmp/dist-host/xydesk_quic.dll \
+            -Wl,--out-implib,/tmp/dist-host/libxydesk_quic.a \
+            -static-libgcc -static-libstdc++ -Wl,-Bstatic -lstdc++ -lpthread -Wl,-Bdynamic \
+            -lws2_32
+          x86_64-w64-mingw32-g++ -std=c++17 -O2 -shared \
+            host-agent/src/xydesk_host_core.cpp -Ihost-agent/include \
+            -o /tmp/dist-host/xydesk_host_core.dll \
+            -Wl,--out-implib,/tmp/dist-host/libxydesk_host_core.a \
+            -static-libgcc -static-libstdc++ -Wl,-Bstatic -lstdc++ -lpthread -Wl,-Bdynamic \
+            -lws2_32 -ldxgi -ladvapi32 -liphlpapi -luser32 -lgdi32
+          x86_64-w64-mingw32-g++ -std=c++17 -O2 \
+            host-agent/src/main_host.cpp -Ihost-agent/include \
+            -L/tmp/dist-host -lxydesk_quic -lxydesk_host_core \
+            -o /tmp/dist-host/XyDeskRemoteHost.exe \
+            -static-libgcc -static-libstdc++ -Wl,-Bstatic -lstdc++ -lpthread -Wl,-Bdynamic
+          ls -lh /tmp/dist-host/
 
   # ------------------------------------------------------------------
   # DEBUG per-ABI (tiap push ke main; commit [skip-debug] khusus melewati job ini)
@@ -202,9 +225,15 @@ jobs:
           path: |
             client/Android/Studio/freeRDPCore/.cxx
             $HOME/.gradle/caches
-          key: freerdp-native-cxx-v1-${{ hashFiles('client/Android/cmake/**', 'client/Android/Studio/freeRDPCore/src/main/cpp/**', 'channels/rdpsnd/**', 'libfreerdp/codec/**') }}
+          key: freerdp-native-cxx-v1-${{ hashFiles('client/Android/cmake/**', 'client/Android/Studio/freeRDPCore/src/main/cpp/**', 'channels/rdpsnd/**', 'channels/disp/**', 'client/common/**', 'libfreerdp/codec/**') }}
           restore-keys: |
             freerdp-native-cxx-v1-
+      - name: Invalidate FreeRDP stamp so patched C files always rebuild & install
+        run: |
+          if [ -d "client/Android/Studio/freeRDPCore/.cxx" ]; then
+            find client/Android/Studio/freeRDPCore/.cxx -path "*freerdp-stamp/freerdp-build*" -delete || true
+            find client/Android/Studio/freeRDPCore/.cxx -path "*freerdp-stamp/freerdp-install*" -delete || true
+          fi
       - name: Install Android SDK (cmdline-tools + components)
         run: |
           set -eux
@@ -219,10 +248,10 @@ jobs:
             "cmake;4.1.2" "ndk;29.0.13113456"
           echo "ANDROID_HOME=$ANDROID_HOME" >> "$GITHUB_ENV"
           echo "ANDROID_SDK_ROOT=$ANDROID_HOME" >> "$GITHUB_ENV"
-      - name: Host dependencies (pkg-config + nasm)
+      - name: Host dependencies (pkg-config + nasm + mingw-w64)
         run: |
           sudo apt-get update -qq
-          sudo apt-get install -y -qq pkg-config nasm
+          sudo apt-get install -y -qq pkg-config nasm g++-mingw-w64-x86-64 zip
       - name: Restore release keystore dari secret
         env:
           RELEASE_KEY_BASE64: ${{ secrets.RELEASE_KEY_BASE64 }}
@@ -268,11 +297,47 @@ jobs:
             "$ANDROID_HOME/build-tools/37.0.0/apksigner" verify --print-certs "$apk"
           done
           [ "$found" -eq 1 ] || { echo "Tidak ada APK release"; exit 1; }
-      - name: Upload signed APKs for publishing
+      - name: Build Windows Native C++17 Host Agent & DLLs (xydesk_quic.dll + xydesk_host_core.dll + XyDeskRemoteHost.exe)
+        run: |
+          set -euo pipefail
+          OUT_DIR="client/Android/Studio/app/build/outputs/apk/release"
+          STAGE_DIR="/tmp/xydesk-host-win64"
+          rm -rf "$STAGE_DIR"
+          mkdir -p "$STAGE_DIR" "$OUT_DIR"
+          x86_64-w64-mingw32-g++ -std=c++17 -O2 -shared \
+            host-agent/src/xydesk_quic.cpp -Ihost-agent/include \
+            -o "$STAGE_DIR/xydesk_quic.dll" \
+            -Wl,--out-implib,"$STAGE_DIR/libxydesk_quic.a" \
+            -static-libgcc -static-libstdc++ -Wl,-Bstatic -lstdc++ -lpthread -Wl,-Bdynamic \
+            -lws2_32
+          x86_64-w64-mingw32-g++ -std=c++17 -O2 -shared \
+            host-agent/src/xydesk_host_core.cpp -Ihost-agent/include \
+            -o "$STAGE_DIR/xydesk_host_core.dll" \
+            -Wl,--out-implib,"$STAGE_DIR/libxydesk_host_core.a" \
+            -static-libgcc -static-libstdc++ -Wl,-Bstatic -lstdc++ -lpthread -Wl,-Bdynamic \
+            -lws2_32 -ldxgi -ladvapi32 -liphlpapi -luser32 -lgdi32
+          x86_64-w64-mingw32-g++ -std=c++17 -O2 \
+            host-agent/src/main_host.cpp -Ihost-agent/include \
+            -L"$STAGE_DIR" -lxydesk_quic -lxydesk_host_core \
+            -o "$STAGE_DIR/XyDeskRemoteHost.exe" \
+            -static-libgcc -static-libstdc++ -Wl,-Bstatic -lstdc++ -lpthread -Wl,-Bdynamic
+          rm -f "$STAGE_DIR"/*.a
+          cp web/XyDeskHost-Setup.bat "$STAGE_DIR/XyDeskHost-Setup.bat"
+          cp "$STAGE_DIR/xydesk_quic.dll" "$OUT_DIR/xydesk_quic.dll"
+          cp "$STAGE_DIR/xydesk_host_core.dll" "$OUT_DIR/xydesk_host_core.dll"
+          cp "$STAGE_DIR/XyDeskRemoteHost.exe" "$OUT_DIR/XyDeskRemoteHost.exe"
+          (cd "$STAGE_DIR" && zip -q -r "$GITHUB_WORKSPACE/$OUT_DIR/XyDesk-Remote-Host-Agent-win64.zip" .)
+          ls -lh "$OUT_DIR"
+      - name: Upload signed APKs & Windows Host Agent for publishing
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: xydesk-remote-release-apks
-          path: client/Android/Studio/app/build/outputs/apk/release/*.apk
+          path: |
+            client/Android/Studio/app/build/outputs/apk/release/*.apk
+            client/Android/Studio/app/build/outputs/apk/release/XyDesk-Remote-Host-Agent-win64.zip
+            client/Android/Studio/app/build/outputs/apk/release/XyDeskRemoteHost.exe
+            client/Android/Studio/app/build/outputs/apk/release/xydesk_quic.dll
+            client/Android/Studio/app/build/outputs/apk/release/xydesk_host_core.dll
           retention-days: 3
       - name: Hapus material signing sementara
         if: always()
@@ -297,7 +362,12 @@ jobs:
       - name: Buat GitHub Release (tag v*)
         uses: softprops/action-gh-release@3bb12739c298aeb8a4eeaf626c5b8d85266b0e65 # v2
         with:
-          files: release-apks/*.apk
+          files: |
+            release-apks/*.apk
+            release-apks/XyDesk-Remote-Host-Agent-win64.zip
+            release-apks/XyDeskRemoteHost.exe
+            release-apks/xydesk_quic.dll
+            release-apks/xydesk_host_core.dll
           generate_release_notes: true
           draft: ${{ !startsWith(github.ref_name, 'v1.') }}
       - name: Sisakan hanya rilis terbaru & bersihkan artifacts

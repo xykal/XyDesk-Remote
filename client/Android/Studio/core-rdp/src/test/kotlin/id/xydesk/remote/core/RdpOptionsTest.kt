@@ -175,6 +175,10 @@ class RdpOptionsTest {
         assertTrue(game.consoleAdmin)
         assertTrue(!game.dynamicResolution)
         assertEquals(XyPcStreamEngine.DIRECT_GAME_ULTRA, game.pcStreamEngine)
+        assertEquals(32, game.colorDepth)
+        assertTrue(game.fontSmoothing)
+        assertTrue(game.desktopComposition)
+        assertTrue(!game.lowBandwidth)
 
         val studio = game.withPcStreamEngine(XyPcStreamEngine.DIRECT_STUDIO_444)
         assertEquals(XyPcStreamEngine.DIRECT_STUDIO_444, studio.pcStreamEngine)
