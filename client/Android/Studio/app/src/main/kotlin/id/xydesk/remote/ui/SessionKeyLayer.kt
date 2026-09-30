@@ -255,6 +255,9 @@ private fun HudKeyButton(
 }
 
 /** Peta ikon vektor untuk setiap tombol HUD yang punya representasi ikon visual. */
+internal fun hudIconFor(key: HudKey): ImageVector? =
+    hudIconFor(key.kind, key.keyCode, key.combo, key.label)
+
 internal fun hudIconFor(
     kind: HudKind,
     keyCode: Int = 0,
