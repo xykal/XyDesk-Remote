@@ -353,6 +353,7 @@ jobs:
             -static-libgcc -static-libstdc++ -Wl,-Bstatic -lstdc++ -lpthread -Wl,-Bdynamic
           rm -f "$STAGE_DIR"/*.a
           cp web/XyDeskHost-Setup.bat "$STAGE_DIR/XyDeskHost-Setup.bat"
+          cp web/XyDesk-Remote-Agent-Setup.ps1 "$STAGE_DIR/XyDesk-Remote-Agent-Setup.ps1"
           cp "$STAGE_DIR/xydesk_quic.dll" "$OUT_DIR/xydesk_quic.dll"
           cp "$STAGE_DIR/xydesk_host_core.dll" "$OUT_DIR/xydesk_host_core.dll"
           cp "$STAGE_DIR/XyDeskRemoteHost.exe" "$OUT_DIR/XyDeskRemoteHost.exe"
