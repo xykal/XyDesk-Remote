@@ -111,7 +111,7 @@ void QuicServerLoop() {
 }  // namespace
 
 extern "C" XYDESK_QUIC_API const char* xydesk_quic_dll_version(void) {
-    return "xydesk_quic.dll v0.5.23 (Native C++17 · QUIC v1 RFC 9000 + RFC 9221 Datagram)";
+    return "xydesk_quic.dll v0.5.24 (Native C++17 · QUIC v1 RFC 9000 + RFC 9221 Datagram)";
 }
 
 extern "C" XYDESK_QUIC_API int xydesk_quic_server_start(const XyQuicHostMetadata* meta) {

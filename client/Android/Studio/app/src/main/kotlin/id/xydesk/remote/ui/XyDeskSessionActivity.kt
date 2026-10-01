@@ -120,15 +120,19 @@ class XyDeskSessionActivity : ComponentActivity() {
     private var lastSyncedPhoneClip: String? = null
     @Volatile
     private var lastSyncedPhoneImageHash: Int = 0
+    @Volatile
+    private var lastRemoteClipboardAtMs: Long = 0L
     private var pendingPermissionProfile: ConnectionProfile? = null
     private var lastInputFailureNoticeAt = 0L
 
     fun noteRemoteClipboardText(text: String) {
         lastSyncedPhoneClip = text
+        lastRemoteClipboardAtMs = SystemClock.elapsedRealtime()
     }
 
     fun noteRemoteClipboardImage(bytes: ByteArray) {
         lastSyncedPhoneImageHash = bytes.contentHashCode()
+        lastRemoteClipboardAtMs = SystemClock.elapsedRealtime()
     }
 
     fun setGyroMouseActive(enabled: Boolean) {
@@ -157,6 +161,7 @@ class XyDeskSessionActivity : ComponentActivity() {
 
     fun syncPhoneClipboardToRemote() {
         if (!clipboardSyncEnabled || manager.state.value !is SessionState.Connected) return
+        if (SystemClock.elapsedRealtime() - lastRemoteClipboardAtMs < 2_000L) return
         val cm = getSystemService(CLIPBOARD_SERVICE) as? ClipboardManager ?: return
         val clip = try {
             cm.getPrimaryClip()
@@ -178,16 +183,19 @@ class XyDeskSessionActivity : ComponentActivity() {
                     if (uri != null && mime != null && mime.startsWith("image/") &&
                         uri != ClipboardImageProvider.CONTENT_URI
                     ) {
+                        // Hanya kirim gambar clipboard HP yang ukurannya ringkas (<= 512 KB)
+                        // agar screenshot layar HP beresolusi penuh tidak membanjiri kanal
+                        // virtual RDP (CF_DIB) dan memicu putus sesi.
                         val bytes = runCatching {
                             contentResolver.openInputStream(uri)?.use { stream ->
-                                val buf = ByteArray(4 * 1024 * 1024 + 1)
+                                val buf = ByteArray(512 * 1024 + 1)
                                 var total = 0
                                 while (total < buf.size) {
                                     val r = stream.read(buf, total, buf.size - total)
                                     if (r <= 0) break
                                     total += r
                                 }
-                                if (total in 1..(4 * 1024 * 1024)) buf.copyOf(total) else null
+                                if (total in 1..(512 * 1024)) buf.copyOf(total) else null
                             }
                         }.getOrNull()
                         if (bytes != null) {
@@ -222,7 +230,9 @@ class XyDeskSessionActivity : ComponentActivity() {
                             ""
                         }
                     }.getOrDefault("")
-                    if (text.isNotEmpty() && text != lastSyncedPhoneClip &&
+                    val prevNorm = lastSyncedPhoneClip?.replace("\r\n", "\n")
+                    val curNorm = text.replace("\r\n", "\n")
+                    if (text.isNotEmpty() && curNorm != prevNorm &&
                         !isFinishing && !isDestroyed &&
                         manager.state.value is SessionState.Connected
                     ) {

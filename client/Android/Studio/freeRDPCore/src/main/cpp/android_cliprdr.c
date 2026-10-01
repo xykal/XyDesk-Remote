@@ -301,18 +301,37 @@ static UINT android_cliprdr_server_format_list(CliprdrClientContext* cliprdr,
 		}
 	}
 
-	/* No text format found — request the first available image format. */
+	/* No text format found — prefer CF_DIB (supported by WinPR BMP/PNG synthesizer)
+	 * before falling back to CF_DIBV5. */
+	BOOL requestedImage = FALSE;
 	for (UINT32 index = 0; index < afc->numServerFormats; index++)
 	{
 		format = &(afc->serverFormats[index]);
 
-		if (format->formatId == CF_DIB || format->formatId == CF_DIBV5)
+		if (format->formatId == CF_DIB)
 		{
-			if ((rc = android_cliprdr_send_client_format_data_request(cliprdr, format->formatId)) !=
+			if ((rc = android_cliprdr_send_client_format_data_request(cliprdr, CF_DIB)) !=
 			    CHANNEL_RC_OK)
 				return rc;
 
+			requestedImage = TRUE;
 			break;
+		}
+	}
+	if (!requestedImage)
+	{
+		for (UINT32 index = 0; index < afc->numServerFormats; index++)
+		{
+			format = &(afc->serverFormats[index]);
+
+			if (format->formatId == CF_DIBV5)
+			{
+				if ((rc = android_cliprdr_send_client_format_data_request(cliprdr, CF_DIBV5)) !=
+				    CHANNEL_RC_OK)
+					return rc;
+
+				break;
+			}
 		}
 	}
 
@@ -389,9 +408,9 @@ android_cliprdr_server_format_data_request(CliprdrClientContext* cliprdr,
 
 	formatId = formatDataRequest->requestedFormatId;
 	data = (BYTE*)ClipboardGetData(afc->clipboard, formatId, &size);
-	/* Guard CLIPRDR single-PDU response size so huge .txt buffers cannot
+	/* Guard CLIPRDR single-PDU response size so huge .txt or screenshot DIB buffers cannot
 	 * overflow the Windows rdpclip/termsrv virtual channel buffer and drop
-	 * the session. 256 KB UTF-16LE (~131k characters) is safe on all Windows builds. */
+	 * the session. */
 	if (data && (formatId == CF_UNICODETEXT || formatId == CF_TEXT || formatId == CF_OEMTEXT))
 	{
 		const UINT32 maxSafeBytes = 256U * 1024U;
@@ -404,6 +423,14 @@ android_cliprdr_server_format_data_request(CliprdrClientContext* cliprdr,
 				data[size - 1] = 0;
 			}
 		}
+	}
+	else if (data && size > (2U * 1024U * 1024U))
+	{
+		/* Reject oversized uncompressed DIB/binary clipboard uploads (> 2 MB) cleanly
+		 * with CB_RESPONSE_FAIL instead of stalling or dropping the RDP channel. */
+		free(data);
+		data = nullptr;
+		size = 0;
 	}
 	response.common.msgFlags = CB_RESPONSE_OK;
 	response.common.dataLen = size;
@@ -448,6 +475,14 @@ android_cliprdr_server_format_data_response(CliprdrClientContext* cliprdr,
 
 	if (!instance)
 		return ERROR_INVALID_PARAMETER;
+
+	if ((formatDataResponse->common.msgFlags & CB_RESPONSE_FAIL) != 0 ||
+	    !formatDataResponse->requestedFormatData || formatDataResponse->common.dataLen == 0)
+	{
+		WLog_WARN(TAG, "Remote clipboard FormatDataResponse failed or empty; ignoring");
+		(void)SetEvent(afc->clipboardRequestEvent);
+		return CHANNEL_RC_OK;
+	}
 
 	for (UINT32 index = 0; index < afc->numServerFormats; index++)
 	{

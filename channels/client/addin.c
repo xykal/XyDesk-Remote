@@ -550,8 +550,9 @@ static DWORD WINAPI channel_client_thread_proc(LPVOID userdata)
 
 			if ((error = internals->msg_handler(internals->userdata, data)))
 			{
-				WLog_ERR(TAG, "msg_handler failed with error %" PRIu32 "!", error);
-				break;
+				WLog_WARN(TAG, "%s msg_handler transient error %" PRIu32 "; keeping session alive",
+				          internals->channel_name ? internals->channel_name : "channel", error);
+				error = CHANNEL_RC_OK;
 			}
 		}
 	}
@@ -658,54 +659,62 @@ UINT channel_client_post_message(void* MsgsHandle, LPVOID pData, UINT32 dataLeng
 
 	if (dataFlags & CHANNEL_FLAG_FIRST)
 	{
-		if (internals->firstFlagReceived)
-			return ERROR_INVALID_DATA;
-		internals->firstFlagReceived = TRUE;
-
+		const size_t allocLen = (totalLength >= dataLength) ? totalLength : dataLength;
 		if (internals->data_in)
 		{
-			if (!Stream_EnsureCapacity(internals->data_in, dataLength))
-				return CHANNEL_RC_NO_MEMORY;
+			Stream_Free(internals->data_in, TRUE);
+			internals->data_in = nullptr;
 		}
-		else
-			internals->data_in = Stream_New(nullptr, dataLength);
+		internals->firstFlagReceived = TRUE;
+		internals->data_in = Stream_New(nullptr, allocLen > 0 ? allocLen : 16);
 	}
 
 	if (!(data_in = internals->data_in))
 	{
-		WLog_ERR(TAG, "Stream_New failed!");
-		return CHANNEL_RC_NO_MEMORY;
+		WLog_WARN(TAG, "Channel chunk without active stream; ignoring");
+		internals->firstFlagReceived = FALSE;
+		return CHANNEL_RC_OK;
 	}
 
 	if (!Stream_EnsureRemainingCapacity(data_in, dataLength))
 	{
 		Stream_Free(internals->data_in, TRUE);
 		internals->data_in = nullptr;
-		return CHANNEL_RC_NO_MEMORY;
+		internals->firstFlagReceived = FALSE;
+		return CHANNEL_RC_OK;
 	}
 
 	Stream_Write(data_in, pData, dataLength);
 
-	if (Stream_GetPosition(data_in) > totalLength)
+	if (totalLength > 0 && Stream_GetPosition(data_in) > totalLength)
 	{
 		Stream_Free(internals->data_in, TRUE);
 		internals->data_in = nullptr;
-		return ERROR_INVALID_DATA;
+		internals->firstFlagReceived = FALSE;
+		return CHANNEL_RC_OK;
 	}
 
 	if (dataFlags & CHANNEL_FLAG_LAST)
 	{
 		if (!internals->firstFlagReceived)
-			return ERROR_INVALID_DATA;
+		{
+			Stream_Free(internals->data_in, TRUE);
+			internals->data_in = nullptr;
+			return CHANNEL_RC_OK;
+		}
 		internals->firstFlagReceived = FALSE;
 
 		if (!data_in)
-			return ERROR_INVALID_DATA;
+			return CHANNEL_RC_OK;
 
-		if (Stream_Capacity(data_in) != Stream_GetPosition(data_in))
+		if (totalLength > 0 && Stream_GetPosition(data_in) != totalLength)
 		{
-			WLog_ERR(TAG, "%s_plugin_process_received: read error", internals->channel_name);
-			return ERROR_INTERNAL_ERROR;
+			WLog_WARN(TAG, "%s_plugin_process_received: length mismatch (got %" PRIuz ", expected %" PRIu32 "); dropping PDU",
+			          internals->channel_name ? internals->channel_name : "channel",
+			          Stream_GetPosition(data_in), totalLength);
+			Stream_Free(internals->data_in, TRUE);
+			internals->data_in = nullptr;
+			return CHANNEL_RC_OK;
 		}
 
 		internals->data_in = nullptr;
@@ -718,17 +727,14 @@ UINT channel_client_post_message(void* MsgsHandle, LPVOID pData, UINT32 dataLeng
 			UINT error = CHANNEL_RC_OK;
 			if ((error = internals->msg_handler(internals->userdata, data_in)))
 			{
-				WLog_ERR(TAG,
-				         "msg_handler failed with error"
-				         " %" PRIu32 "!",
-				         error);
-				return ERROR_INTERNAL_ERROR;
+				WLog_WARN(TAG, "msg_handler transient error %" PRIu32 "; keeping session alive",
+				          error);
 			}
 		}
 		else if (!MessageQueue_Post(internals->queue, nullptr, 0, (void*)data_in, nullptr))
 		{
-			WLog_ERR(TAG, "MessageQueue_Post failed!");
-			return ERROR_INTERNAL_ERROR;
+			WLog_WARN(TAG, "MessageQueue_Post failed; dropping PDU");
+			Stream_Free(data_in, TRUE);
 		}
 	}
 	return CHANNEL_RC_OK;

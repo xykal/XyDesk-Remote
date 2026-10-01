@@ -140,9 +140,6 @@ UINT cliprdr_process_format_list(cliprdrPlugin* cliprdr, wStream* s, UINT32 data
 		    &formatList, mask, CLIPRDR_FLAG_REMOTE_TO_LOCAL | CLIPRDR_FLAG_REMOTE_TO_LOCAL_FILES);
 	}
 
-	if (filteredFormatList.numFormats == 0)
-		goto error_out;
-
 	{
 		const DWORD level = WLOG_DEBUG;
 		if (WLog_IsLevelActive(cliprdr->log, level))

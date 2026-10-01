@@ -228,6 +228,11 @@ static BOOL android_pre_connect(freerdp* instance)
 	if (!settings)
 		return FALSE;
 
+	PubSub_UnsubscribeChannelConnected(instance->context->pubSub,
+	                                   android_OnChannelConnectedEventHandler);
+	PubSub_UnsubscribeChannelDisconnected(instance->context->pubSub,
+	                                      android_OnChannelDisconnectedEventHandler);
+
 	int rc = PubSub_SubscribeChannelConnected(instance->context->pubSub,
 	                                          android_OnChannelConnectedEventHandler);
 
@@ -248,7 +253,7 @@ static BOOL android_pre_connect(freerdp* instance)
 
 	/* XyDesk native tuning: low-latency fast-path input/output, dynamic monitor layout,
 	 * extended mouse/wheel, frame markers, ClearType/DWM + Progressive/RFX text clarity,
-	 * and enlarged pointer cache. */
+	 * mobile-data blip resilience (45s TCP_USER_TIMEOUT + AutoReconnect), and pointer cache. */
 	(void)freerdp_settings_set_bool(settings, FreeRDP_FastPathInput, TRUE);
 	(void)freerdp_settings_set_bool(settings, FreeRDP_FastPathOutput, TRUE);
 	(void)freerdp_settings_set_bool(settings, FreeRDP_HasExtendedMouseEvent, TRUE);
@@ -262,6 +267,14 @@ static BOOL android_pre_connect(freerdp* instance)
 	(void)freerdp_settings_set_bool(settings, FreeRDP_GfxProgressive, TRUE);
 	(void)freerdp_settings_set_bool(settings, FreeRDP_GfxProgressiveV2, TRUE);
 	(void)freerdp_settings_set_bool(settings, FreeRDP_RemoteFxCodec, TRUE);
+	(void)freerdp_settings_set_bool(settings, FreeRDP_AutoReconnectionEnabled, TRUE);
+	(void)freerdp_settings_set_bool(settings, FreeRDP_AutoReconnectionPacketSupported, TRUE);
+	(void)freerdp_settings_set_uint32(settings, FreeRDP_AutoReconnectMaxRetries, 25);
+	(void)freerdp_settings_set_bool(settings, FreeRDP_TcpKeepAlive, TRUE);
+	(void)freerdp_settings_set_uint32(settings, FreeRDP_TcpKeepAliveDelay, 20);
+	(void)freerdp_settings_set_uint32(settings, FreeRDP_TcpKeepAliveInterval, 5);
+	(void)freerdp_settings_set_uint32(settings, FreeRDP_TcpKeepAliveRetries, 6);
+	(void)freerdp_settings_set_uint32(settings, FreeRDP_TcpAckTimeout, 45000);
 	freerdp_performance_flags_make(settings);
 	if (freerdp_settings_get_uint32(settings, FreeRDP_PointerCacheSize) < 128)
 		(void)freerdp_settings_set_uint32(settings, FreeRDP_PointerCacheSize, 128);

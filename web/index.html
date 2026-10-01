@@ -993,7 +993,7 @@
           </svg>
           <span style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">XyDesk Remote</span>
         </span>
-        <span class="brand-tag mono">Ver 1.0.0 · Build 0.5.23</span>
+        <span class="brand-tag mono">Ver 1.0.0 · Build 0.5.24</span>
       </a>
       <nav class="nav-row" aria-label="Navigasi Utama">
         <button type="button" class="pill-btn primary" data-open-launch data-i18n="nav.download">Unduh</button>
@@ -1048,7 +1048,7 @@
     <!-- Editorial Intro -->
     <section class="intro">
       <div class="container">
-        <div class="intro-meta mono" data-i18n="intro.meta">Klien Remote Desktop Android · FreeRDP 3 Native + C++17 QUIC · Build v0.5.23 (40)</div>
+        <div class="intro-meta mono" data-i18n="intro.meta">Klien Remote Desktop Android · FreeRDP 3 Native + C++17 QUIC · Build v0.5.24 (41)</div>
         <h1 data-i18n="intro.title">Kendali Penuh Workstation &amp; Server Windows dari Perangkat Android.</h1>
         <p data-i18n="intro.lead">
           XyDesk Remote adalah klien Remote Desktop berbasis engine C/JNI FreeRDP 3 + C++17 QUIC yang dimodifikasi khusus untuk Android. Dilengkapi Grid Monitor &amp; Multi-User Auto-Detect, audio OpenSLES 32-buffer stereo unmute ke speaker utama, HUD kontrol vektor yang dapat dirakit sendiri (Custom Preset), serta dua jalur koneksi terpisah: Koneksi PC (10-Digit ID + Native QUIC Host Agent) dan Koneksi RDP penuh.
@@ -1058,7 +1058,7 @@
             Halaman Unduh (Ver 1.0.0)
           </button>
           <a href="#changelog" class="pill-btn lg" data-i18n="intro.cta.cl">
-            Lihat Changelog v0.5.23
+            Lihat Changelog v0.5.24
           </a>
           <a href="host.html" class="pill-btn lg" data-i18n="intro.cta.host">
             Setup XyDesk Host (PC Windows)
@@ -1270,7 +1270,19 @@
         <div class="changelog-list">
           <div class="cl-card">
             <div class="cl-head">
-              <div class="cl-ver mono">v0.5.23 (VERSION_CODE 40) — Build Terbaru</div>
+              <div class="cl-ver mono">v0.5.24 (VERSION_CODE 41) — Build Terbaru</div>
+              <span class="cl-badge mono">1 Oktober 2026 · Perbaikan Disconnect Saat Copy Terminal/Screenshot &amp; Auto-Reconnect Data Seluler</span>
+            </div>
+            <ul class="arch-list">
+              <li><strong>Perbaikan Bug Fatal Multi-Chunk <code>CLIPRDR</code> (<code>channels/client/addin.c</code> &amp; <code>cliprdr_main.c</code>):</strong> Memperbaiki bug di <code>channel_client_post_message</code> di mana <code>Stream_New(nullptr, dataLength)</code> mengalokasikan ukuran chunk pertama (<code>1600</code> byte) alih-alih <code>totalLength</code>, lalu saat kapasitas stream berlipat ganda pada chunk ke-2+, pengecekan <code>Stream_Capacity(data_in) != Stream_GetPosition(data_in)</code> di <code>CHANNEL_FLAG_LAST</code> selalu gagal dan memanggil <code>setChannelError</code> yang memutus sesi RDP seketika saat menyalin teks panjang di Console/Terminal atau mengambil Screenshot.</li>
+              <li><strong>Prioritas <code>CF_DIB</code> Screenshot, Proteksi Echo Clipboard 2 Detik &amp; Batas Gambar (<code>android_cliprdr.c</code> &amp; <code>XyDeskSessionActivity.kt</code>):</strong> Memprioritaskan <code>CF_DIB</code> di atas <code>CF_DIBV5</code> agar screenshot PC dapat dikonversi penuh oleh synthesizer PNG WinPR, mengabaikan <code>CB_RESPONSE_FAIL</code> dari delayed-rendering Console Windows, menambahkan <em>cooldown</em> anti-echo 2 detik + normalisasi CRLF, dan membatasi ukuran PDU gambar <code>CLIPRDR</code> agar screenshot layar HP tidak membanjiri <code>termsrv</code>.</li>
+              <li><strong>Ketahanan Sinyal Data Seluler (<code>TCP_USER_TIMEOUT</code> 45s) &amp; Dual-Layer Auto-Reconnect (<code>android_freerdp.c</code>, <code>client.c</code>, <code>SessionManager.kt</code>):</strong> Menaikkan <code>FreeRDP_TcpAckTimeout</code> dari 9 detik menjadi 45 detik dan <code>TcpKeepAlive</code> menjadi 20s + 6x5s agar hilangnya sinyal data seluler sesaat tidak memutus soket TCP; mengaktifkan <code>FreeRDP_AutoReconnectionEnabled</code> (25x retry tiap 1,5 detik) ditambah auto-reconnect tingkat <code>SessionManager</code> hingga 6x saat jaringan berpindah.</li>
+            </ul>
+          </div>
+
+          <div class="cl-card">
+            <div class="cl-head">
+              <div class="cl-ver mono">v0.5.23 (VERSION_CODE 40)</div>
               <span class="cl-badge mono">30 September 2026 · Perbaikan Teks Pecah/Bergerigi Native C &amp; C++17 QUIC Host Agent (.dll)</span>
             </div>
             <ul class="arch-list">
@@ -1502,7 +1514,7 @@
 
       <div class="launch-info-box mono">
         <div id="modal-schedule-line">Jadwal Rilis (Dipercepat): Sabtu, 3 Oktober 2026 · 10:00 WIB</div>
-        <div id="modal-status-line" style="color: var(--text-faint);">Build Kandidat Aktif: v0.5.23 (40) · Draft Terkunci</div>
+        <div id="modal-status-line" style="color: var(--text-faint);">Build Kandidat Aktif: v0.5.24 (41) · Draft Terkunci</div>
         <div id="modal-rilisin-line" style="color: var(--text-faint);">Publikasi Store: rilisin.xyverse.my.id (Dalam Pengembangan)</div>
       </div>
 
@@ -1659,11 +1671,11 @@
         "nav.status": "System Status",
         "nav.licenses": "Licenses",
         "nav.download": "Download",
-        "intro.meta": "Android Remote Desktop Client · Native FreeRDP 3 + C++17 QUIC · Build v0.5.23 (40)",
+        "intro.meta": "Android Remote Desktop Client · Native FreeRDP 3 + C++17 QUIC · Build v0.5.24 (41)",
         "intro.title": "Full Control of Windows Workstations & Servers from Android.",
         "intro.lead": "XyDesk Remote is a Remote Desktop client powered by a custom-tuned C/JNI FreeRDP 3 + C++17 QUIC engine for Android. Featuring Auto-Detect Monitor & Multi-User Grid Switching, 32-buffer stereo OpenSLES media audio, custom vector-icon HUD controls, and two distinct connection modes: Connect PC (10-Digit ID + Native QUIC Host Agent) and full RDP.",
         "intro.cta.dl": "Download Page (Ver 1.0.0)",
-        "intro.cta.cl": "View v0.5.23 Changelog",
+        "intro.cta.cl": "View v0.5.24 Changelog",
         "intro.cta.host": "XyDesk Host Setup (Windows PC)",
         "led.1.k": "Protocol Engine",
         "led.1.s": "Fast-Path I/O · 32-Buf OpenSLES",
@@ -1675,7 +1687,7 @@
         "about.kicker": "Understanding the XyDesk Ecosystem",
         "about.title": "What Is XyDesk Remote & How Does It Differ from Standard XyDesk?",
         "about.lead": "Within the XyVerse Technology Global software lineup, Standard XyDesk and XyDesk Remote are engineered for two fundamentally different workflows.",
-        "cap.kicker": "Verified Implemented Features (Build v0.5.23)",
+        "cap.kicker": "Verified Implemented Features (Build v0.5.24)",
         "cap.title": "Session, Native Engine & Control Capabilities",
         "arch.kicker": "Technical Configuration",
         "arch.title": "Streaming, Latency & Security Settings",
@@ -1736,8 +1748,8 @@
             : "Jadwal Rilis (Dipercepat): Sabtu, 3 Oktober 2026 · 10:00 WIB";
         document.getElementById("modal-status-line").textContent =
           l === "en"
-            ? "Active Candidate Build: v0.5.23 (40) · Locked Draft"
-            : "Build Kandidat Aktif: v0.5.23 (40) · Draft Terkunci";
+            ? "Active Candidate Build: v0.5.24 (41) · Locked Draft"
+            : "Build Kandidat Aktif: v0.5.24 (41) · Draft Terkunci";
         if (langBtnMobile) {
           langBtnMobile.textContent = l === "en" ? "Language: EN / ID" : "Bahasa: ID / EN";
         }

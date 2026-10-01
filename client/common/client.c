@@ -1424,7 +1424,7 @@ SSIZE_T client_common_retry_dialog(freerdp* instance, const char* what, size_t c
 	}
 
 	const size_t max = freerdp_settings_get_uint32(settings, FreeRDP_AutoReconnectMaxRetries);
-	const size_t delay = freerdp_settings_get_uint32(settings, FreeRDP_TcpConnectTimeout);
+	const size_t delay = 1500;
 	if (current >= max)
 	{
 		WLog_ERR(TAG,
@@ -1462,22 +1462,25 @@ BOOL client_auto_reconnect_ex(freerdp* instance, BOOL (*window_events)(freerdp* 
 	const UINT32 maxRetries =
 	    freerdp_settings_get_uint32(settings, FreeRDP_AutoReconnectMaxRetries);
 
-	/* Only auto reconnect on network disconnects. */
+	/* Auto reconnect on all network/transient disconnects unless explicitly logged off or displaced. */
 	error = freerdp_error_info(instance);
 	switch (error)
 	{
-		case ERRINFO_GRAPHICS_SUBSYSTEM_FAILED:
-			/* A network disconnect was detected */
-			WLog_WARN(TAG, "Disconnected by server hitting a bug or resource limit [%s]",
+		case ERRINFO_RPC_INITIATED_DISCONNECT:
+		case ERRINFO_RPC_INITIATED_LOGOFF:
+		case ERRINFO_IDLE_TIMEOUT:
+		case ERRINFO_LOGON_TIMEOUT:
+		case ERRINFO_DISCONNECTED_BY_OTHER_CONNECTION:
+		case ERRINFO_OUT_OF_MEMORY:
+		case ERRINFO_SERVER_DENIED_CONNECTION:
+		case ERRINFO_LOGOFF_BY_USER:
+			WLog_DBG(TAG, "Deliberate server/user disconnect: %s",
+			         freerdp_get_error_info_string(error));
+			return FALSE;
+		default:
+			WLog_INFO(TAG, "Transient/network disconnect [%s], attempting auto-reconnect",
 			          freerdp_get_error_info_string(error));
 			break;
-		case ERRINFO_SUCCESS:
-			/* A network disconnect was detected */
-			WLog_INFO(TAG, "Network disconnect!");
-			break;
-		default:
-			WLog_DBG(TAG, "Other error: %s", freerdp_get_error_info_string(error));
-			return FALSE;
 	}
 
 	if (!freerdp_settings_get_bool(settings, FreeRDP_AutoReconnectionEnabled))

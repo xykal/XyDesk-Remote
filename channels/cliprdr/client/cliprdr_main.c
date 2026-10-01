@@ -546,7 +546,13 @@ static UINT cliprdr_order_recv(LPVOID userdata, wStream* s)
 	}
 
 	Stream_Free(s, TRUE);
-	return error;
+	if (error != CHANNEL_RC_OK)
+	{
+		WLog_Print(cliprdr->log, WLOG_WARN,
+		           "cliprdr_order_recv ignoring error %" PRIu32 " on msgType %" PRIu16, error,
+		           msgType);
+	}
+	return CHANNEL_RC_OK;
 }
 
 /**
@@ -1003,9 +1009,13 @@ static VOID VCAPITYPE cliprdr_virtual_channel_open_event_ex(LPVOID lpUserParam, 
 			break;
 	}
 
-	if (error && cliprdr->context->rdpcontext)
-		setChannelError(cliprdr->context->rdpcontext, error,
-		                "cliprdr_virtual_channel_open_event_ex reported an error");
+	if (error)
+	{
+		WLog_Print(cliprdr->log, WLOG_WARN,
+		           "cliprdr_virtual_channel_open_event_ex transient error %" PRIu32
+		           "; keeping RDP session alive",
+		           error);
+	}
 }
 
 /**

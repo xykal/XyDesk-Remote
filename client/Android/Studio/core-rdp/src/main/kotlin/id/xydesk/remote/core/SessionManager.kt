@@ -103,6 +103,8 @@ class SessionManager(context: Context) {
     @Volatile private var activeNetworkLabel: String = "Wi-Fi"
     @Volatile private var activeDynamicResolution: Boolean = true
     @Volatile private var connectedAtMs: Long = 0L
+    @Volatile private var userInitiatedDisconnect: Boolean = false
+    @Volatile private var autoReconnectAttempts: Int = 0
     @Volatile private var lastDispLayoutW: Int = 0
     @Volatile private var lastDispLayoutH: Int = 0
     @Volatile private var lastDispScale: Int = 100
@@ -269,8 +271,8 @@ class SessionManager(context: Context) {
         val session = synchronized(lifecycleLock) {
             if (released) return
             val cur = _state.value
-            if (cur is SessionState.Connected || cur is SessionState.Connecting ||
-                cur is SessionState.Authenticating
+            if (cur is SessionState.Connected || cur is SessionState.Authenticating ||
+                (cur is SessionState.Connecting && core != null)
             ) {
                 Log.w(TAG, "connect() diabaikan, state=$cur")
                 return
@@ -319,6 +321,17 @@ class SessionManager(context: Context) {
                 else "TCP ${profile.host}:${profile.port} GAGAL"
             )
             if (!reachable) {
+                cleanupTerminalSession(inst)
+                if (!userInitiatedDisconnect && !released && connectedAtMs > 0L && autoReconnectAttempts in 1..7) {
+                    autoReconnectAttempts++
+                    ConnectionLog.add("CM: jaringan belum pulih, tunggu 2s untuk auto-reconnect #${autoReconnectAttempts}")
+                    mainHandler.postDelayed({
+                        if (!released && !userInitiatedDisconnect) {
+                            lastProfile?.let { connect(it) }
+                        }
+                    }, 2_000L)
+                    return@execute
+                }
                 transition(
                     SessionState.Error(
                         ERROR_UNREACHABLE,
@@ -327,7 +340,6 @@ class SessionManager(context: Context) {
                             "Windows Home (tidak punya server RDP).",
                     )
                 )
-                cleanupTerminalSession(inst)
                 return@execute
             }
             try {
@@ -351,6 +363,7 @@ class SessionManager(context: Context) {
 
     /** Batalkan koneksi yang sedang berjalan (tanpa menunggu timeout server). */
     fun cancelConnection() {
+        userInitiatedDisconnect = true
         stopWatchdog()
         val inst = core?.getInstance() ?: return
         if (!LibFreeRDP.cancelConnection(inst)) {
@@ -373,6 +386,7 @@ class SessionManager(context: Context) {
 
     /** Ajaikan disconnect normal (dari sisi kita). */
     fun disconnect() {
+        userInitiatedDisconnect = true
         stopWatchdog()
         val inst = core?.getInstance() ?: return
         transition(SessionState.Disconnecting)
@@ -683,6 +697,8 @@ class SessionManager(context: Context) {
             override fun onConnectionSuccess() {
                 if (!isCurrent(inst)) return
                 stopWatchdog()
+                userInitiatedDisconnect = false
+                autoReconnectAttempts = 0
                 connectedAtMs = android.os.SystemClock.elapsedRealtime()
                 setStage(Stage.READY)
                 ConnectionLog.add("koneksi SUKSES")
@@ -697,6 +713,22 @@ class SessionManager(context: Context) {
                 val nativeDetail = runCatching {
                     LibFreeRDP.getLastErrorString(inst).trim()
                 }.getOrDefault("")
+                val isAuthFailure = nativeDetail.lowercase().let { lower ->
+                    lower.contains("logon") || lower.contains("password") ||
+                        lower.contains("access_denied") || lower.contains("denied")
+                }
+                cleanupTerminalSession(inst)
+                if (!userInitiatedDisconnect && !released && !isAuthFailure &&
+                    connectedAtMs > 0L && autoReconnectAttempts < 6 && p != null
+                ) {
+                    autoReconnectAttempts++
+                    ConnectionLog.add("CM: sinyal putus sesaat, auto-reconnect #${autoReconnectAttempts}...")
+                    transition(SessionState.Connecting)
+                    mainHandler.postDelayed({
+                        if (!released && !userInitiatedDisconnect) connect(p)
+                    }, 1_500L)
+                    return
+                }
                 val summary = if (p != null) {
                     "Gagal koneksi ke ${p.host}:${p.port}"
                 } else {
@@ -708,7 +740,6 @@ class SessionManager(context: Context) {
                     summary
                 }
                 transition(SessionState.Error("connect_failed", msg))
-                cleanupTerminalSession(inst)
             }
 
             override fun onDisconnected() {
@@ -725,8 +756,20 @@ class SessionManager(context: Context) {
                         lower.contains("idle session limit timer") ||
                         lower.contains("server denied connection")
                 }
-                transition(SessionState.Disconnected(nativeDetail))
+                val p = lastProfile
                 cleanupTerminalSession(inst)
+                if (!userInitiatedDisconnect && !released && nativeDetail == null &&
+                    connectedAtMs > 0L && autoReconnectAttempts < 6 && p != null
+                ) {
+                    autoReconnectAttempts++
+                    ConnectionLog.add("CM: sesi terputus mendadak, auto-reconnect #${autoReconnectAttempts}...")
+                    transition(SessionState.Connecting)
+                    mainHandler.postDelayed({
+                        if (!released && !userInitiatedDisconnect) connect(p)
+                    }, 1_500L)
+                    return
+                }
+                transition(SessionState.Disconnected(nativeDetail))
             }
         }
 

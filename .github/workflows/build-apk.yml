@@ -225,7 +225,7 @@ jobs:
           path: |
             client/Android/Studio/freeRDPCore/.cxx
             $HOME/.gradle/caches
-          key: freerdp-native-cxx-v1-${{ hashFiles('client/Android/cmake/**', 'client/Android/Studio/freeRDPCore/src/main/cpp/**', 'channels/rdpsnd/**', 'channels/disp/**', 'client/common/**', 'libfreerdp/codec/**') }}
+          key: freerdp-native-cxx-v1-${{ hashFiles('client/Android/cmake/**', 'client/Android/Studio/freeRDPCore/src/main/cpp/**', 'channels/rdpsnd/**', 'channels/disp/**', 'channels/client/**', 'channels/cliprdr/**', 'client/common/**', 'libfreerdp/codec/**') }}
           restore-keys: |
             freerdp-native-cxx-v1-
       - name: Invalidate FreeRDP stamp so patched C files always rebuild & install
