@@ -993,7 +993,7 @@
           </svg>
           <span style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">XyDesk Remote</span>
         </span>
-        <span class="brand-tag mono">Ver 1.0.0 · Build 0.5.30</span>
+        <span class="brand-tag mono">Ver 1.0.0 · Build 0.5.31</span>
       </a>
       <nav class="nav-row" aria-label="Navigasi Utama">
         <button type="button" class="pill-btn primary" data-open-launch data-i18n="nav.download">Unduh</button>
@@ -1048,7 +1048,7 @@
     <!-- Editorial Intro -->
     <section class="intro">
       <div class="container">
-        <div class="intro-meta mono" data-i18n="intro.meta">Klien Remote Desktop Android · FreeRDP 3 Native + C++17 QUIC · Build v0.5.30 (47)</div>
+        <div class="intro-meta mono" data-i18n="intro.meta">Klien Remote Desktop Android · FreeRDP 3 Native + C++17 QUIC · Build v0.5.31 (48)</div>
         <h1 data-i18n="intro.title">Kendali Penuh Workstation &amp; Server Windows dari Perangkat Android.</h1>
         <p data-i18n="intro.lead">
           XyDesk Remote adalah klien Remote Desktop berbasis engine C/JNI FreeRDP 3 + C++17 QUIC yang dimodifikasi khusus untuk Android. Dilengkapi Grid Monitor &amp; Multi-User Auto-Detect, audio OpenSLES 32-buffer stereo unmute ke speaker utama, HUD kontrol vektor yang dapat dirakit sendiri (Custom Preset), serta dua jalur koneksi terpisah: Koneksi PC (10-Digit ID + Native QUIC Host Agent) dan Koneksi RDP penuh.
@@ -1058,7 +1058,7 @@
             Halaman Unduh (Ver 1.0.0)
           </button>
           <a href="#changelog" class="pill-btn lg" data-i18n="intro.cta.cl">
-            Lihat Changelog v0.5.30
+            Lihat Changelog v0.5.31
           </a>
           <a href="host.html" class="pill-btn lg" data-i18n="intro.cta.host">
             Setup XyDesk Host (PC Windows)
@@ -1165,7 +1165,7 @@
     <section class="section" id="capabilities">
       <div class="container">
         <div class="section-head">
-          <div class="section-kicker" data-i18n="cap.kicker">Fitur Nyata yang Terimplementasi (Build v0.5.30)</div>
+          <div class="section-kicker" data-i18n="cap.kicker">Fitur Nyata yang Terimplementasi (Build v0.5.31)</div>
           <h2 class="section-title" data-i18n="cap.title">Kemampuan Sesi, Engine Native &amp; Kontrol</h2>
         </div>
 
@@ -1270,7 +1270,19 @@
         <div class="changelog-list">
           <div class="cl-card">
             <div class="cl-head">
-              <div class="cl-ver mono">v0.5.30 (VERSION_CODE 47) — Build Terbaru</div>
+              <div class="cl-ver mono">v0.5.31 (VERSION_CODE 48) — Build Terbaru</div>
+              <span class="cl-badge mono">1 Oktober 2026 · Resolusi Otomatis Kembali 1:1 dengan Layar (Teks Tajam)</span>
+            </div>
+            <ul class="arch-list">
+              <li><strong>Akar "teks pecah" yang sebenarnya (<code>SmartResolution.kt</code>):</strong> Sejak v0.5.22 mode <em>Otomatis</em> memilih salah satu ukuran 16:9 standar (1280x720 / 1920x1080 / dst) alih-alih menyesuaikan layar HP. Akibatnya desktop remote tidak pernah sama dengan layar HP lalu <em>di-resample</em> oleh HP — dan resampling itulah yang menghilangkan ketajaman ClearType. Sekarang <em>Otomatis</em> kembali memakai 16:9 yang <strong>pas 1:1</strong> dengan layar (portrait 1080x2400 → 1080x606, landscape 2400x1080 → 1920x1080), jadi piksel remote tidak disentuh ulang oleh HP.</li>
+              <li><strong>Kenapa ubah resolusi dari dalam sesi tidak menolong:</strong> daftar resolusi hanya berisi ukuran standar, dan live-resize DISP memilih dari daftar yang sama sehingga tetap tidak pernah pas dengan layar. Setelah v0.5.31 live-resize ikut memakai perhitungan 1:1 yang sama.</li>
+              <li><strong>Konsisten dengan v0.5.30:</strong> codec RFX-Progressive (lossy) tetap mati, penskalaan Windows default tetap 100%, mipmap trilinear tetap mati. Ketiganya penyumbang kekaburan teks; 1:1 melengkapinya.</li>
+            </ul>
+          </div>
+
+          <div class="cl-card">
+            <div class="cl-head">
+              <div class="cl-ver mono">v0.5.30 (VERSION_CODE 47)</div>
               <span class="cl-badge mono">1 Oktober 2026 · Mencabut Tiga Penyebab Teks Pecah (RFX-Progressive, Skala 125%, Mipmap)</span>
             </div>
             <ul class="arch-list">
@@ -1527,7 +1539,7 @@
 
       <div class="launch-info-box mono">
         <div id="modal-schedule-line">Jadwal Rilis (Dipercepat): Jumat, 2 Oktober 2026 · 10:00 WIB</div>
-        <div id="modal-status-line" style="color: var(--text-faint);">Build Kandidat Aktif: v0.5.30 (47) · Draft Terkunci</div>
+        <div id="modal-status-line" style="color: var(--text-faint);">Build Kandidat Aktif: v0.5.31 (48) · Draft Terkunci</div>
         <div id="modal-rilisin-line" style="color: var(--text-faint);">Publikasi Store: rilisin.xyverse.my.id (Dalam Pengembangan)</div>
       </div>
 
@@ -1684,11 +1696,11 @@
         "nav.status": "System Status",
         "nav.licenses": "Licenses",
         "nav.download": "Download",
-        "intro.meta": "Android Remote Desktop Client · Native FreeRDP 3 + C++17 QUIC · Build v0.5.30 (47)",
+        "intro.meta": "Android Remote Desktop Client · Native FreeRDP 3 + C++17 QUIC · Build v0.5.31 (48)",
         "intro.title": "Full Control of Windows Workstations & Servers from Android.",
         "intro.lead": "XyDesk Remote is a Remote Desktop client powered by a custom-tuned C/JNI FreeRDP 3 + C++17 QUIC engine for Android. Featuring Auto-Detect Monitor & Multi-User Grid Switching, 32-buffer stereo OpenSLES media audio, custom vector-icon HUD controls, and two distinct connection modes: Connect PC (10-Digit ID + Native QUIC Host Agent) and full RDP.",
         "intro.cta.dl": "Download Page (Ver 1.0.0)",
-        "intro.cta.cl": "View v0.5.30 Changelog",
+        "intro.cta.cl": "View v0.5.31 Changelog",
         "intro.cta.host": "XyDesk Host Setup (Windows PC)",
         "led.1.k": "Protocol Engine",
         "led.1.s": "Fast-Path I/O · 32-Buf OpenSLES",
@@ -1700,7 +1712,7 @@
         "about.kicker": "Understanding the XyDesk Ecosystem",
         "about.title": "What Is XyDesk Remote & How Does It Differ from Standard XyDesk?",
         "about.lead": "Within the XyVerse Technology Global software lineup, Standard XyDesk and XyDesk Remote are engineered for two fundamentally different workflows.",
-        "cap.kicker": "Verified Implemented Features (Build v0.5.30)",
+        "cap.kicker": "Verified Implemented Features (Build v0.5.31)",
         "cap.title": "Session, Native Engine & Control Capabilities",
         "arch.kicker": "Technical Configuration",
         "arch.title": "Streaming, Latency & Security Settings",
@@ -1761,8 +1773,8 @@
             : "Jadwal Rilis (Dipercepat): Jumat, 2 Oktober 2026 · 10:00 WIB";
         document.getElementById("modal-status-line").textContent =
           l === "en"
-            ? "Active Candidate Build: v0.5.30 (47) · Locked Draft"
-            : "Build Kandidat Aktif: v0.5.30 (47) · Draft Terkunci";
+            ? "Active Candidate Build: v0.5.31 (48) · Locked Draft"
+            : "Build Kandidat Aktif: v0.5.31 (48) · Draft Terkunci";
         if (langBtnMobile) {
           langBtnMobile.textContent = l === "en" ? "Language: EN / ID" : "Bahasa: ID / EN";
         }

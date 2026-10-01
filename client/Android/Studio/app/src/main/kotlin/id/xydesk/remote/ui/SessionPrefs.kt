@@ -283,8 +283,8 @@ object DisplayPrefs {
             listOf(
                 ResolutionOption(
                     AUTOMATIC,
-                    "Otomatis — 16:9 pas layar",
-                    "Automatic — best 16:9 fit",
+                    "Otomatis — 16:9 pas layar (paling tajam, 1:1)",
+                    "Automatic — 16:9 fit to screen (sharpest, 1:1)",
                 ),
                 ResolutionOption(
                     FOLLOW,

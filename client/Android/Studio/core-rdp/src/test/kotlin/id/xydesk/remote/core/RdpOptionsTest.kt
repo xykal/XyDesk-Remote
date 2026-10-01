@@ -193,9 +193,12 @@ class RdpOptionsTest {
     }
 
     @Test
-    fun smartResolutionForViewportMenjagaResolusi169StandarDiPortraitMaupunLandscape() {
-        assertEquals("1920x1080", SmartResolution.forViewport(1080, 2400))
+    fun smartResolutionForViewportMemilih169YangPasSatuBandingSatu() {
+        // 1:1 dengan layar = piksel remote tidak di-resample HP (teks paling tajam).
+        assertEquals("1080x606", SmartResolution.forViewport(1080, 2400))
         assertEquals("1920x1080", SmartResolution.forViewport(2400, 1080))
+        assertEquals("1440x810", SmartResolution.forViewport(1440, 3200))
+        // Viewport terlalu kecil di batas server -> pakai 16:9 terkecil yang sah.
         assertEquals("1280x720", SmartResolution.forViewport(720, 1600))
     }
 }

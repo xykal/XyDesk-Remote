@@ -29,33 +29,41 @@ object SmartResolution {
     const val MAX_H = 8192
 
     /**
-     * 16:9 standar terbesar yang sisi pendeknya masih muat di layar HP.
-     * Dipakai saat connect (/size) supaya desktop rasionya PC tapi tanpa
-     * downscale berlebihan.
+     * Ukuran 16:9 yang PAS dengan layar HP pada orientasi saat ini.
+     * Dipakai saat connect (/size) supaya piksel remote 1:1 dengan layar —
+     * di situlah teks paling tajam (tanpa downscale/upscale oleh HP).
      */
     fun forScreen(context: Context): String {
         val dm = context.resources.displayMetrics
-        val minSide = minOf(dm.widthPixels, dm.heightPixels)
-        val pick = CANDIDATES.lastOrNull { it.second <= minSide } ?: CANDIDATES.first()
-        return "${pick.first}x${pick.second}"
+        return forViewport(dm.widthPixels, dm.heightPixels)
     }
 
     /**
-     * Resolusi 16:9 standar yang sesuai dengan kapasitas layar perangkat.
-     * Dipakai saat mode Otomatis agar desktop Windows tetap memakai resolusi
-     * 16:9 standar PC yang tajam (minimal 1280x720, atau 1920x1080 di layar
-     * FHD) tanpa menyusut menjadi 1080x606 saat portrait atau berubah menjadi
-     * ukuran ganjil saat keyboard/inset muncul.
+     * Resolusi 16:9 yang PAS dengan viewport (1:1 piksel), bukan salah satu
+     * ukuran standar.
+     *
+     * Kenapa: kalau ukuran remote tidak sama dengan layar HP, desktop direntangkan
+     * atau diperkecil oleh HP (resampling) sehingga huruf tipis Windows ikut
+     * dilunakkan — inilah "teks pecah/bergerigi" yang sulit dibetulkan dari dalam
+     * sesi. Dengan 1:1, ClearType yang digambar Windows tampil apa adanya.
+     *
+     * Portrait 1080x2400 -> 1080x606, landscape 2400x1080 -> 1920x1080.
+     * Selalu genap (syarat server) dan di dalam batas MIN/MAX.
      */
     fun forViewport(viewportW: Int, viewportH: Int): String {
         val vw = viewportW.coerceAtLeast(1)
         val vh = viewportH.coerceAtLeast(1)
-        val maxSide = maxOf(vw, vh)
-        val minSide = minOf(vw, vh)
-        val pick = CANDIDATES.lastOrNull { (cw, ch) ->
-            cw <= maxSide && ch <= minSide
-        } ?: CANDIDATES.first()
-        return "${pick.first}x${pick.second}"
+        val scale = minOf(vw / 16f, vh / 9f)
+        var w = (scale * 16f).toInt() / 2 * 2
+        var h = (scale * 9f).toInt() / 2 * 2
+        if (w < MIN_W || h < MIN_H) {
+            // Layar terlalu kecil untuk 16:9 penuh di batas server: pakai ukuran
+            // 16:9 terkecil yang masih boleh, biarkan fit-to-screen yang bekerja.
+            return "${CANDIDATES.first().first}x${CANDIDATES.first().second}"
+        }
+        w = w.coerceIn(MIN_W, MAX_W)
+        h = h.coerceIn(MIN_H, MAX_H)
+        return "${w}x$h"
     }
 
     /** "1920x1080" -> (1920, 1080); null kalau tidak valid. */

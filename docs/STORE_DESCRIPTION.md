@@ -81,6 +81,12 @@ Note: this is an RDP client. RDP audio and microphone require the Windows host t
 allow audio redirection (`fDisableAudio`/`fDisableAudioCapture` = 0) and the
 Android microphone permission.
 
+## What's new di 0.5.31
+
+- Mode resolusi **Otomatis** kembali memakai 16:9 yang pas 1:1 dengan layar HP,
+  jadi piksel remote tidak di-resample lagi oleh HP — inilah penyebab utama teks
+  terlihat pecah/kabur. Live-resize dari dalam sesi memakai perhitungan yang sama.
+
 ## What's new di 0.5.30
 
 - Teks remote kembali tajam: codec RFX-Progressive (lossy) dimatikan, jalur teks
