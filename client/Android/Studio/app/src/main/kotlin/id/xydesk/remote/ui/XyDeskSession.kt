@@ -1608,7 +1608,8 @@ private fun ConnectingScreen(
     val active = stepIndex(stage)
 
     Box(Modifier.fillMaxSize()) {
-        XyWallpaper(wall, blurRadius = 34.dp, dim = 0.62f)
+        // Blur layar penuh berbiaya tinggi di HP kelas menengah -> pakai dim saja.
+        XyWallpaper(wall, blurRadius = 0.dp, dim = 0.78f)
         Column(
             Modifier
                 .fillMaxSize()
@@ -1682,7 +1683,7 @@ private fun DisconnectedScreen(
     onExit: () -> Unit,
 ) {
     Box(Modifier.fillMaxSize()) {
-        XyWallpaper(wall, blurRadius = 40.dp, dim = 0.7f)
+        XyWallpaper(wall, blurRadius = 0.dp, dim = 0.84f)
         Column(
             Modifier.fillMaxSize().padding(32.dp),
             verticalArrangement = Arrangement.Center,

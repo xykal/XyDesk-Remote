@@ -114,6 +114,10 @@ fun AddDeviceScreen(
         )
     }
 
+    // "Setelan cepat" menyembunyikan bagian lanjutan supaya layar tidak panjang
+    // dan tidak perlu scroll jauh saat cuma mau konek.
+    var showAdvanced by remember { mutableStateOf(false) }
+
     var label by remember { mutableStateOf(existing?.label.orEmpty()) }
     var host by remember(existing) {
         mutableStateOf(existing?.let { formatRdpEndpoint(it.host, it.port) }.orEmpty())
@@ -430,6 +434,27 @@ fun AddDeviceScreen(
                 .padding(horizontal = 16.dp),
             verticalArrangement = Arrangement.spacedBy(14.dp),
         ) {
+            XySegmented(
+                options = listOf(
+                    xy("Setelan cepat", "Quick setup"),
+                    xy("Lanjutan", "Advanced"),
+                ),
+                selectedIndex = if (showAdvanced) 1 else 0,
+                onSelect = { showAdvanced = it == 1 },
+                modifier = Modifier.fillMaxWidth(),
+            )
+            if (!showAdvanced) {
+                Text(
+                    xy(
+                        "Mode cepat hanya menampilkan yang perlu untuk konek: akun, tipe koneksi, audio, " +
+                            "clipboard, drive, dan kamera.",
+                        "Quick mode shows only what a connection needs: account, connection type, audio, " +
+                            "clipboard, drive, and camera.",
+                    ),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
             if (existing == null) {
                 XySegmented(
                     options = listOf(
@@ -1074,6 +1099,8 @@ fun AddDeviceScreen(
                 }
             }
 
+            // Mode cepat menyembunyikan bagian ini; ada di tab Lanjutan.
+            if (showAdvanced) {
             XySectionLabel(xy("Tampilan", "Display"))
             XyCard {
                 Text(
@@ -1145,6 +1172,8 @@ fun AddDeviceScreen(
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
+            }
+
             }
 
             XySectionLabel(xy("Audio & kanal", "Audio & channels"))
@@ -1291,6 +1320,7 @@ fun AddDeviceScreen(
                 )
             }
 
+            if (showAdvanced) {
             XySectionLabel(xy("Streaming & Latensi", "Streaming & Latency"))
             XyCard {
                 Text(
@@ -1780,6 +1810,8 @@ fun AddDeviceScreen(
                     )
                 }
             }
+            }
+
             }
 
             error?.let {

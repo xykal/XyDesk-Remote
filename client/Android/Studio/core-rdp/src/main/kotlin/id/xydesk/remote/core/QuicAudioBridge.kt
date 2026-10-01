@@ -132,6 +132,7 @@ class QuicAudioBridge(
             var lastHostMs = 0L
             var loggedSilence = false
             var rxPeak = 0
+            var lastLevelMs = 0L
 
             while (running.get()) {
                 val now = System.currentTimeMillis()
@@ -187,8 +188,14 @@ class QuicAudioBridge(
                     loggedSilence = true
                     onStatus("host-agent tidak menjawab UDP :4433 (jalankan XyDeskRemoteHost.exe + izinkan firewall UDP 4433)")
                 }
-                val lvl = if (rxPeak > 0) min(100, rxPeak * 100 / 32767) else 0
-                onLevel(min(100, micPeak.get() * 100 / 32767), lvl)
+                // Level meter maksimal 10x/detik: tiap paket audio (~200/detik
+                // dua arah) tidak boleh memicu kerja UI/recomposition.
+                val levelNow = System.currentTimeMillis()
+                if (levelNow - lastLevelMs >= 100L) {
+                    lastLevelMs = levelNow
+                    val lvl = if (rxPeak > 0) min(100, rxPeak * 100 / 32767) else 0
+                    onLevel(min(100, micPeak.get() * 100 / 32767), lvl)
+                }
                 rxPeak = 0
             }
         } catch (_: Throwable) {
