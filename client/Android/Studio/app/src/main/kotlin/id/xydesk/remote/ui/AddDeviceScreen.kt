@@ -1179,8 +1179,41 @@ fun AddDeviceScreen(
                             }
                         }
                     }
+                    val audioNote = when (XyAudioMode.entries[audioIndex]) {
+                        XyAudioMode.DEVICE ->
+                            xy(
+                                "Mode Perangkat memakai kanal audio RDP. Kalau di PC 'Remote Audio' dimatikan " +
+                                    "demi VB-CABLE, jembatan UDP di bawah yang mengantar suara ke HP.",
+                                "Device mode uses the RDP audio channel. If PC 'Remote Audio' is disabled for " +
+                                    "VB-CABLE, the UDP bridge below carries the sound to your phone.",
+                            )
+                        XyAudioMode.REMOTE ->
+                            xy(
+                                "Mode Remote mengandalkan jembatan UDP :4433 (WASAPI loopback di Host Agent) " +
+                                    "supaya suara PC tetap sampai ke HP tanpa kanal audio RDP.",
+                                "Remote mode relies on the UDP :4433 bridge (WASAPI loopback in the Host Agent) " +
+                                    "so PC sound still reaches your phone without the RDP audio channel.",
+                            )
+                        XyAudioMode.OFF ->
+                            xy("Audio dimatikan total — jembatan UDP tidak dijalankan.", "Audio fully off — the UDP bridge stays down.")
+                    }
+                    Text(
+                        audioNote,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
                 }
                 Spacer(Modifier.height(8.dp))
+                XyToggleRow(
+                    title = xy("Audio PC via UDP (bridge)", "PC audio over UDP (bridge)"),
+                    subtitle = xy(
+                        "Suara PC -> HP lewat XyDeskRemoteHost.exe :4433 (tanpa kanal audio RDP)",
+                        "PC sound -> phone via XyDeskRemoteHost.exe :4433 (no RDP audio channel)",
+                    ),
+                    checked = options.quicAudio && audioIndex != 2,
+                    onCheckedChange = { v -> options = options.copy(quicAudio = v) },
+                    leading = XyIcons.Volume,
+                )
                 XyToggleRow(
                     title = xy("Mikrofon", "Microphone"),
                     subtitle = xy("Kirim audio HP ke remote (butuh izin mikrofon)", "Send phone audio to remote (needs mic permission)"),
@@ -1188,6 +1221,50 @@ fun AddDeviceScreen(
                     onCheckedChange = { options = options.copy(microphone = it) },
                     leading = XyIcons.Mic,
                 )
+                if (options.microphone) {
+                    Spacer(Modifier.height(8.dp))
+                    XySectionLabel(xy("Mic lanjutan (DSP di HP)", "Microphone DSP (on phone)"))
+                    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                        XySliderRow(
+                            label = xy("Gain mic", "Mic gain"),
+                            value = options.micGainDb.toFloat(),
+                            suffix = " dB",
+                            range = -12f..24f,
+                            steps = 6,
+                        ) { options = options.copy(micGainDb = it.toInt()) }
+                        XySliderRow(
+                            label = xy("Noise gate", "Noise gate"),
+                            value = options.micGateDb.toFloat(),
+                            suffix = " dBFS",
+                            range = -70f..0f,
+                            steps = 6,
+                        ) { options = options.copy(micGateDb = it.toInt()) }
+                        XyToggleRow(
+                            title = xy("Noise suppression", "Noise suppression"),
+                            subtitle = xy("High-pass + expander buang desis/AC/angin", "High-pass + expander kills hiss, AC hum, wind"),
+                            checked = options.micNoiseSuppression,
+                            onCheckedChange = { options = options.copy(micNoiseSuppression = it) },
+                            leading = XyIcons.Mic,
+                        )
+                        XyToggleRow(
+                            title = xy("Auto gain (AGC)", "Auto gain (AGC)"),
+                            subtitle = xy("Level mic HP disamakan otomatis saat bicara", "Phone mic level auto-levelled while talking"),
+                            checked = options.micAgc,
+                            onCheckedChange = { options = options.copy(micAgc = it) },
+                            leading = XyIcons.Mic,
+                        )
+                        Text(
+                            xy(
+                                "Mic dirender ke endpoint 'CABLE Input / XyDesk Virtual Microphone' di PC; " +
+                                    "kalau tidak ada, Host Agent pakai perangkat default.",
+                                "The mic renders into the PC's 'CABLE Input / XyDesk Virtual Microphone' endpoint; " +
+                                    "if missing, the Host Agent falls back to the default device.",
+                            ),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                }
                 XyToggleRow(
                     title = xy("Clipboard", "Clipboard"),
                     subtitle = xy("Copy-paste dua arah", "Two-way copy-paste"),
@@ -1937,5 +2014,29 @@ private fun StorageAccessRow() {
                 compact = true,
             )
         }
+    }
+}
+
+/** Baris slider berlabel untuk pengaturan DSP mic. */
+@Composable
+private fun XySliderRow(
+    label: String,
+    value: Float,
+    suffix: String,
+    range: ClosedFloatingPointRange<Float>,
+    steps: Int,
+    onValueChange: (Float) -> Unit,
+) {
+    Column(Modifier.fillMaxWidth().padding(horizontal = 14.dp)) {
+        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+            Text(label, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f))
+            Text(
+                "${value.toInt()}$suffix",
+                style = MaterialTheme.typography.bodySmall,
+                fontFamily = FontFamily.Monospace,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+        XySlider(value = value, onValueChange = onValueChange, valueRange = range, steps = steps)
     }
 }

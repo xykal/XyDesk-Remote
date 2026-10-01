@@ -47,7 +47,7 @@ void WriteRegDword(HKEY root, const char* subkey, const char* name, DWORD val) {
 }  // namespace
 
 extern "C" XYDESK_CORE_API const char* xydesk_host_core_version(void) {
-    return "xydesk_host_core.dll v0.5.25 (Native C++17 · DXGI GPU + AVC444 + ClearType Engine)";
+    return "xydesk_host_core.dll v0.5.26 (Native C++17 · DXGI GPU + AVC444 + ClearType Engine)";
 }
 
 extern "C" XYDESK_CORE_API int xydesk_host_inspect_system(XyQuicHostMetadata* out_meta) {

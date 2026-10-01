@@ -211,6 +211,20 @@ data class XyGateway(
 data class RdpOptions(
     val audioMode: XyAudioMode = XyAudioMode.DEVICE,
     val microphone: Boolean = false,
+    /**
+     * Kirim suara PC langsung ke HP lewat UDP/QUIC :4433 (WASAPI Loopback
+     * di Host Agent) sehingga audio tetap terdengar walau `Remote Audio`
+     * RDP dimatikan demi VB-CABLE / XyDesk Virtual Microphone.
+     */
+    val quicAudio: Boolean = true,
+    /** DSP mic HP: gain pre-amp dalam dB (-12..+24). */
+    val micGainDb: Int = 6,
+    /** DSP mic HP: noise gate dBFS (-70..0); makin tinggi makin agresif. */
+    val micGateDb: Int = -42,
+    /** DSP mic HP: noise suppression (high-pass + expander). */
+    val micNoiseSuppression: Boolean = true,
+    /** DSP mic HP: automatic gain control. */
+    val micAgc: Boolean = true,
     val clipboard: Boolean = true,
     val localDrive: Boolean = false,
     val camera: Boolean = false,
@@ -591,6 +605,11 @@ data class RdpOptions(
         sp.putBoolean("$deviceId.raw_mouse", rawInputMouse)
         sp.putInt("$deviceId.audio", audioMode.ordinal)
         sp.putBoolean("$deviceId.mic", microphone)
+        sp.putBoolean("$deviceId.quic_audio", quicAudio)
+        sp.putInt("$deviceId.mic_gain", micGainDb)
+        sp.putInt("$deviceId.mic_gate", micGateDb)
+        sp.putBoolean("$deviceId.mic_ns", micNoiseSuppression)
+        sp.putBoolean("$deviceId.mic_agc", micAgc)
         sp.putBoolean("$deviceId.clipboard", clipboard)
         sp.putBoolean("$deviceId.drive", localDrive)
         sp.putBoolean("$deviceId.camera", camera)
@@ -614,6 +633,7 @@ data class RdpOptions(
         sp.putBoolean("$deviceId.themes", visualThemes)
         sp.putBoolean("$deviceId.aero", desktopComposition)
         sp.putInt("$deviceId.clarity_v2", 2)
+        sp.putInt("$deviceId.audio_dsp_v1", 1)
         sp.putInt("$deviceId.sec_proto", securityProtocol.ordinal)
         sp.putInt("$deviceId.tls_sec", tlsSecLevel)
         sp.putBoolean("$deviceId.admin", consoleAdmin)
@@ -703,6 +723,11 @@ data class RdpOptions(
                 rawInputMouse = sp.getBoolean("$deviceId.raw_mouse", true),
                 audioMode = audio,
                 microphone = sp.getBoolean("$deviceId.mic", false),
+                quicAudio = sp.getBoolean("$deviceId.quic_audio", true),
+                micGainDb = sp.getInt("$deviceId.mic_gain", 6).coerceIn(-12, 24),
+                micGateDb = sp.getInt("$deviceId.mic_gate", -42).coerceIn(-70, 0),
+                micNoiseSuppression = sp.getBoolean("$deviceId.mic_ns", true),
+                micAgc = sp.getBoolean("$deviceId.mic_agc", true),
                 clipboard = sp.getBoolean("$deviceId.clipboard", true),
                 localDrive = sp.getBoolean("$deviceId.drive", false),
                 camera = sp.getBoolean("$deviceId.camera", false),

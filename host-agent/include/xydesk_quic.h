@@ -28,6 +28,18 @@ typedef struct XyQuicHostMetadata {
     uint32_t max_fps;
 } XyQuicHostMetadata;
 
+/*
+ * Kontrak jembatan audio/mic (lihat docs/AUDIO_BRIDGE.md):
+ *  - HP kirim "XYDESK_QUIC_AUDIO_SUB_V1" ke UDP :4433 tiap 2 detik (subscribe).
+ *  - Host kirim "XYA1" + seq:u16 + frames:u16 + PCM16 stereo 24 kHz (suara PC
+ *    hasil WASAPI loopback; endpoint dipilih otomatis + rotasi bila senyap).
+ *  - HP kirim "XYM1" + seq:u16 + frames:u16 + PCM16 mono 24 kHz (mic HP);
+ *    host merender ke endpoint "CABLE Input"/"XyDesk Virtual Microphone"
+ *    (fallback: default render) supaya jadi input mic virtual di PC.
+ *  - Host kirim "XYST1" (16 B + teks) tiap 1 detik: flags, level mic, jumlah
+ *    paket, lalu "audio=<endpoint>|mic=<endpoint>".
+ */
+
 /** Returns the native QUIC DLL version & protocol summary. */
 XYDESK_QUIC_API const char* xydesk_quic_dll_version(void);
 

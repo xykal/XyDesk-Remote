@@ -68,6 +68,15 @@ class SessionManager(context: Context) {
 
         /** Clipboard gambar dari remote (dipanggil di thread RDP). */
         fun onRemoteClipboardImage(data: ByteArray) {}
+
+        /**
+         * Status jembatan audio/mic UDP:4433 (suara PC ke HP & mic HP ke PC).
+         * Dipanggil dari thread bridge; UI harus post ke main.
+         */
+        fun onAudioBridge(state: String) {}
+
+        /** Level meter bridge 0..100 (tx = mic HP, rx = suara PC) untuk HUD. */
+        fun onAudioLevel(tx: Int, rx: Int) {}
     }
 
     private val appContext = context.applicationContext
@@ -106,6 +115,9 @@ class SessionManager(context: Context) {
     @Volatile private var userInitiatedDisconnect: Boolean = false
     @Volatile private var autoReconnectAttempts: Int = 0
     @Volatile private var quicAudioBridge: QuicAudioBridge? = null
+    /** Status teks bridge audio/mic untuk diagnostik & HUD. */
+    @Volatile var audioBridgeState: String = "idle"
+        private set
     @Volatile private var lastDispLayoutW: Int = 0
     @Volatile private var lastDispLayoutH: Int = 0
     @Volatile private var lastDispScale: Int = 100
@@ -708,12 +720,35 @@ class SessionManager(context: Context) {
                 lastProfile?.let { p ->
                     val opts = runCatching { RdpOptions.of(appContext, p.id) }.getOrDefault(RdpOptions())
                     quicAudioBridge?.stop()
-                    quicAudioBridge = QuicAudioBridge(
-                        host = p.host,
-                        port = 4433,
-                        enableSpeaker = opts.audioMode == XyAudioMode.DEVICE,
-                        enableMic = opts.microphone,
-                    ).also { it.start() }
+                    val speakerOn = opts.quicAudio && opts.audioMode != XyAudioMode.OFF
+                    val micOn = opts.microphone
+                    if (speakerOn || micOn) {
+                        audioBridgeState = "start…"
+                        listener?.onAudioBridge(audioBridgeState)
+                        ConnectionLog.add(
+                            "AUDIO: bridge UDP :4433 speaker=$speakerOn mic=$micOn " +
+                                "gain=${opts.micGainDb}dB gate=${opts.micGateDb}dB ns=${opts.micNoiseSuppression}"
+                        )
+                        quicAudioBridge = QuicAudioBridge(
+                            host = p.host,
+                            port = 4433,
+                            enableSpeaker = speakerOn,
+                            enableMic = micOn,
+                            micGainDb = opts.micGainDb,
+                            micGateDb = opts.micGateDb,
+                            micNoiseSuppression = opts.micNoiseSuppression,
+                            micAgc = opts.micAgc,
+                            onStatus = { st ->
+                                audioBridgeState = st
+                                ConnectionLog.add("AUDIO: $st")
+                                listener?.onAudioBridge(st)
+                            },
+                            onLevel = { tx, rx -> listener?.onAudioLevel(tx, rx) },
+                        ).also { it.start() }
+                    } else {
+                        audioBridgeState = "off (audio & mic mati di pengaturan sesi)"
+                        listener?.onAudioBridge(audioBridgeState)
+                    }
                 }
                 transition(SessionState.Connected)
             }
