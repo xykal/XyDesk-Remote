@@ -47,7 +47,7 @@ void WriteRegDword(HKEY root, const char* subkey, const char* name, DWORD val) {
 }  // namespace
 
 extern "C" XYDESK_CORE_API const char* xydesk_host_core_version(void) {
-    return "xydesk_host_core.dll v0.5.26 (Native C++17 · DXGI GPU + AVC444 + ClearType Engine)";
+    return "xydesk_host_core.dll v0.5.30 (Native C++17 · DXGI GPU + AVC444 + ClearType Engine)";
 }
 
 extern "C" XYDESK_CORE_API int xydesk_host_inspect_system(XyQuicHostMetadata* out_meta) {
@@ -142,7 +142,10 @@ extern "C" XYDESK_CORE_API int xydesk_host_apply_windows_policies(void) {
     WriteRegDword(HKEY_LOCAL_MACHINE, ts_pol, "bEnumerateHWBeforeSW", 1);
     WriteRegDword(HKEY_LOCAL_MACHINE, ts_pol, "VGAdapter", 1);
     WriteRegDword(HKEY_LOCAL_MACHINE, ts_pol, "SelectTransport", 0); // TCP + UDP
-    WriteRegDword(HKEY_LOCAL_MACHINE, ts_pol, "fAllowFontAntiAlias", 1);
+    // Nama nilai kebijakan resmi: "Do not allow font smoothing" = fNoFontSmoothing.
+    // Nilai lama (fAllowFontAntiAlias) BUKAN kunci kebijakan yang dibaca Windows,
+    // jadi tulisannya tidak berefek apa pun. 0 = font smoothing/ClearType boleh.
+    WriteRegDword(HKEY_LOCAL_MACHINE, ts_pol, "fNoFontSmoothing", 0);
     WriteRegDword(HKEY_LOCAL_MACHINE, ts_pol, "fAllowDesktopComposition", 1);
     WriteRegDword(HKEY_LOCAL_MACHINE, ts_pol, "DWMFRAMEINTERVAL", 15);
 
@@ -150,6 +153,10 @@ extern "C" XYDESK_CORE_API int xydesk_host_apply_windows_policies(void) {
     SystemParametersInfoA(SPI_SETFONTSMOOTHING, TRUE, nullptr, SPIF_UPDATEINIFILE | SPIF_SENDCHANGE);
     SystemParametersInfoA(SPI_SETFONTSMOOTHINGTYPE, 0, reinterpret_cast<PVOID>(static_cast<uintptr_t>(2)),
                           SPIF_UPDATEINIFILE | SPIF_SENDCHANGE);
+    // WinStations\RDP-Tcp: beberapa build Windows masih membaca nama lama ini.
+    WriteRegDword(HKEY_LOCAL_MACHINE,
+                  "SYSTEM\\CurrentControlSet\\Control\\Terminal Server\\WinStations\\RDP-Tcp",
+                  "AllowFontAntiAlias", 1);
 
     // 4. Open Windows Firewall for TCP 3389, UDP 3389, and UDP 4433 (QUIC)
     WinExec("netsh advfirewall firewall add rule name=\"XyDesk Remote RDP TCP\" dir=in action=allow protocol=TCP localport=3389", SW_HIDE);

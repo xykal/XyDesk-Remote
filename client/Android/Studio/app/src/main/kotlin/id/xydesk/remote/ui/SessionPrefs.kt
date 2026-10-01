@@ -357,8 +357,15 @@ object DisplayPrefs {
     /** Windows DesktopScaleFactor sent over RDP Display Control (not local zoom). */
     val remoteDpiOptions = listOf(100, 125, 150, 175, 200, 250, 300, 400, 500)
 
+    /**
+     * Skala Windows yang diminta ke host. Default 100% (tanpa penskalaan):
+     * skala bukan 100% membuat aplikasi lama yang tidak DPI-aware direntangkan
+     * bitmap oleh Windows sehingga teksnya bergerigi/pecah. Karena itu
+     * penskalaan tidak lagi diminta secara default — user yang memang ingin
+     * UI Windows lebih besar tetap bisa memilihnya di panel sesi.
+     */
     fun remoteDpi(context: Context, id: String): Int =
-        sp(context).getInt("$id.remote_dpi", 125).let { if (it in remoteDpiOptions) it else 125 }
+        sp(context).getInt("$id.remote_dpi", 100).let { if (it in remoteDpiOptions) it else 100 }
 
     fun setRemoteDpi(context: Context, id: String, value: Int): Boolean {
         if (value !in remoteDpiOptions) return false

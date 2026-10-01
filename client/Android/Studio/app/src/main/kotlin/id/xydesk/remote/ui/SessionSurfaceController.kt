@@ -574,7 +574,11 @@ class SessionSurfaceController(private val activity: Activity) : GraphicsSink {
         val newBitmap = runCatching {
             Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888).apply {
                 setHasAlpha(false)
-                setHasMipMap(true)
+                // Mipmap trilinear dimatikan: pada skala non-bulat mip level
+                // yang dipilih GPU membuat stroke huruf tipis ikut turun
+                // resolusi sehingga teks tampak pecah. Filter bilinear
+                // (isFilterBitmap) sudah cukup untuk diperkecil/diperbesar.
+                setHasMipMap(false)
             }
         }.getOrElse {
             ConnectionLog.addThrowable("SES: gagal alokasi surface ${width}x$height", it)

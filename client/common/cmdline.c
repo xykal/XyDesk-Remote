@@ -2367,8 +2367,8 @@ static int parse_gfx_options(rdpSettings* settings, const COMMAND_LINE_ARGUMENT_
 		{
 			BOOL GfxH264 = FALSE;
 			BOOL GfxAVC444 = FALSE;
-			BOOL RemoteFxCodec = TRUE;
-			BOOL GfxProgressive = TRUE;
+			BOOL RemoteFxCodec = FALSE;
+			BOOL GfxProgressive = FALSE;
 			BOOL codecSelected = FALSE;
 
 			for (size_t x = 0; x < count; x++)
@@ -2508,8 +2508,6 @@ static int parse_gfx_options(rdpSettings* settings, const COMMAND_LINE_ARGUMENT_
 				if (!freerdp_settings_set_bool(settings, FreeRDP_RemoteFxCodec, RemoteFxCodec))
 					rc = COMMAND_LINE_ERROR;
 				if (!freerdp_settings_set_bool(settings, FreeRDP_GfxProgressive, GfxProgressive))
-					rc = COMMAND_LINE_ERROR;
-				if (!freerdp_settings_set_bool(settings, FreeRDP_GfxProgressiveV2, GfxProgressive))
 					rc = COMMAND_LINE_ERROR;
 			}
 		}

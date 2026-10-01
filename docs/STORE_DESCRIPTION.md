@@ -81,6 +81,18 @@ Note: this is an RDP client. RDP audio and microphone require the Windows host t
 allow audio redirection (`fDisableAudio`/`fDisableAudioCapture` = 0) and the
 Android microphone permission.
 
+## What's new di 0.5.30
+
+- Teks remote kembali tajam: codec RFX-Progressive (lossy) dimatikan, jalur teks
+  memakai AVC444 4:4:4 / bitmap apa adanya sehingga ClearType utuh.
+- Penskalaan Windows tidak lagi dipaksa 125%; default kembali 100% karena skala
+  bukan 100% membuat aplikasi lama direntangkan bitmap (teks bergerigi). Pilihan
+  skala lain tetap tersedia di panel sesi.
+- Mipmap trilinear pada kanvas sesi dimatikan (menyebabkan huruf tipis ikut turun
+  resolusi saat layar diperkecil).
+- Agen host: nilai kebijakan font smoothing dibetulkan ke nama resmi
+  (`fNoFontSmoothing = 0`).
+
 ## What's new di 0.5.29
 
 - Layar **Status** baru (ikon roda gigi di halaman Perangkat): versi aplikasi,

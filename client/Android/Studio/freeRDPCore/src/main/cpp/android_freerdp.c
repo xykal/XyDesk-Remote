@@ -252,8 +252,8 @@ static BOOL android_pre_connect(freerdp* instance)
 	}
 
 	/* XyDesk native tuning: low-latency fast-path input/output, dynamic monitor layout,
-	 * extended mouse/wheel, frame markers, ClearType/DWM + Progressive/RFX text clarity,
-	 * mobile-data blip resilience (45s TCP_USER_TIMEOUT + AutoReconnect), and pointer cache. */
+	 * extended mouse/wheel, frame markers, ClearType/DWM text clarity, mobile-data blip
+	 * resilience (45s TCP_USER_TIMEOUT + AutoReconnect), and pointer cache. */
 	(void)freerdp_settings_set_bool(settings, FreeRDP_FastPathInput, TRUE);
 	(void)freerdp_settings_set_bool(settings, FreeRDP_FastPathOutput, TRUE);
 	(void)freerdp_settings_set_bool(settings, FreeRDP_HasExtendedMouseEvent, TRUE);
@@ -264,9 +264,13 @@ static BOOL android_pre_connect(freerdp* instance)
 	(void)freerdp_settings_set_bool(settings, FreeRDP_SurfaceFrameMarkerEnabled, TRUE);
 	(void)freerdp_settings_set_bool(settings, FreeRDP_AllowFontSmoothing, TRUE);
 	(void)freerdp_settings_set_bool(settings, FreeRDP_AllowDesktopComposition, TRUE);
-	(void)freerdp_settings_set_bool(settings, FreeRDP_GfxProgressive, TRUE);
-	(void)freerdp_settings_set_bool(settings, FreeRDP_GfxProgressiveV2, TRUE);
-	(void)freerdp_settings_set_bool(settings, FreeRDP_RemoteFxCodec, TRUE);
+	/* Teks tajam: codec RFX-Progressive (CAPROGRESSIVE) dimatikan. Codec itu
+	 * mengirim versi resolusi rendah lalu memperhalus bertahap; kalau refinement
+	 * tidak selesai (HP sibuk / link lambat) teks Windows tampak pecah dan bisa
+	 * bertahan sampai sesi ditutup. AVC444 (4:4:4) dari argumen /gfx: tetap
+	 * dipakai karena mempertahankan chroma penuh, jadi ClearType tidak rusak. */
+	(void)freerdp_settings_set_bool(settings, FreeRDP_GfxProgressive, FALSE);
+	(void)freerdp_settings_set_bool(settings, FreeRDP_GfxProgressiveV2, FALSE);
 	(void)freerdp_settings_set_bool(settings, FreeRDP_AutoReconnectionEnabled, TRUE);
 	(void)freerdp_settings_set_bool(settings, FreeRDP_AutoReconnectionPacketSupported, TRUE);
 	(void)freerdp_settings_set_uint32(settings, FreeRDP_AutoReconnectMaxRetries, 25);

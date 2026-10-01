@@ -1608,6 +1608,14 @@ private fun ScreenTab(
         PanelHint(
             xy("Permintaan skala Windows: {0}%", "Requested Windows scale: {0}%", remoteDpi),
         )
+        if (remoteDpi != 100) {
+            PanelHint(
+                xy(
+                    "Skala selain 100% membuat aplikasi lama di Windows direntangkan bitmap, jadi teksnya bisa terlihat pecah/bergerigi. Pakai 100% kalau mengutamakan teks tajam.",
+                    "Any scale other than 100% makes legacy Windows apps bitmap-stretched, so their text can look broken/jagged. Use 100% when sharp text matters most.",
+                ),
+            )
+        }
         val scaleOptions = DisplayPrefs.remoteDpiOptions
         val selectedScaleIndex = scaleOptions.indexOf(remoteDpi).coerceAtLeast(0)
         XySlider(

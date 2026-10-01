@@ -993,7 +993,7 @@
           </svg>
           <span style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">XyDesk Remote</span>
         </span>
-        <span class="brand-tag mono">Ver 1.0.0 · Build 0.5.29</span>
+        <span class="brand-tag mono">Ver 1.0.0 · Build 0.5.30</span>
       </a>
       <nav class="nav-row" aria-label="Navigasi Utama">
         <button type="button" class="pill-btn primary" data-open-launch data-i18n="nav.download">Unduh</button>
@@ -1048,7 +1048,7 @@
     <!-- Editorial Intro -->
     <section class="intro">
       <div class="container">
-        <div class="intro-meta mono" data-i18n="intro.meta">Klien Remote Desktop Android · FreeRDP 3 Native + C++17 QUIC · Build v0.5.29 (46)</div>
+        <div class="intro-meta mono" data-i18n="intro.meta">Klien Remote Desktop Android · FreeRDP 3 Native + C++17 QUIC · Build v0.5.30 (47)</div>
         <h1 data-i18n="intro.title">Kendali Penuh Workstation &amp; Server Windows dari Perangkat Android.</h1>
         <p data-i18n="intro.lead">
           XyDesk Remote adalah klien Remote Desktop berbasis engine C/JNI FreeRDP 3 + C++17 QUIC yang dimodifikasi khusus untuk Android. Dilengkapi Grid Monitor &amp; Multi-User Auto-Detect, audio OpenSLES 32-buffer stereo unmute ke speaker utama, HUD kontrol vektor yang dapat dirakit sendiri (Custom Preset), serta dua jalur koneksi terpisah: Koneksi PC (10-Digit ID + Native QUIC Host Agent) dan Koneksi RDP penuh.
@@ -1058,7 +1058,7 @@
             Halaman Unduh (Ver 1.0.0)
           </button>
           <a href="#changelog" class="pill-btn lg" data-i18n="intro.cta.cl">
-            Lihat Changelog v0.5.29
+            Lihat Changelog v0.5.30
           </a>
           <a href="host.html" class="pill-btn lg" data-i18n="intro.cta.host">
             Setup XyDesk Host (PC Windows)
@@ -1165,7 +1165,7 @@
     <section class="section" id="capabilities">
       <div class="container">
         <div class="section-head">
-          <div class="section-kicker" data-i18n="cap.kicker">Fitur Nyata yang Terimplementasi (Build v0.5.29)</div>
+          <div class="section-kicker" data-i18n="cap.kicker">Fitur Nyata yang Terimplementasi (Build v0.5.30)</div>
           <h2 class="section-title" data-i18n="cap.title">Kemampuan Sesi, Engine Native &amp; Kontrol</h2>
         </div>
 
@@ -1270,7 +1270,20 @@
         <div class="changelog-list">
           <div class="cl-card">
             <div class="cl-head">
-              <div class="cl-ver mono">v0.5.29 (VERSION_CODE 46) — Build Terbaru</div>
+              <div class="cl-ver mono">v0.5.30 (VERSION_CODE 47) — Build Terbaru</div>
+              <span class="cl-badge mono">1 Oktober 2026 · Mencabut Tiga Penyebab Teks Pecah (RFX-Progressive, Skala 125%, Mipmap)</span>
+            </div>
+            <ul class="arch-list">
+              <li><strong>Codec RFX-Progressive dicabut (<code>cmdline.c</code> &amp; <code>android_freerdp.c</code>):</strong> Sejak v0.5.23 klien menyalakan <code>RemoteFxCodec</code> + <code>GfxProgressiveV2</code> dan menyebutnya <em>lossless text tile encoding</em> — label itu salah. RFX dan RFX-Progressive adalah codec <strong>lossy</strong>: server mengirim versi resolusi rendah lalu memperhalus bertahap, dan kalau refinement tidak selesai (HP sibuk, link lambat) teks Windows tampak pecah serta bertahan sampai sesi ditutup. Sekarang kedua flag itu <code>FALSE</code>; jalur teks kembali ke <code>AVC444</code> (4:4:4, chroma penuh sehingga ClearType utuh) dan fallback bitmap/RFX apa adanya.</li>
+              <li><strong>Skala Windows default kembali 100% (<code>SessionPrefs.kt</code>, <code>SessionManager.kt</code>):</strong> <code>/scale-desktop:125</code> yang dipaksakan sejak v0.5.23 membuat aplikasi Windows yang tidak DPI-aware <em>direntangkan bitmap</em> oleh Windows, sehingga teksnya bergerigi — dan tidak bisa dibetulkan dari dalam sesi karena klien meminta 125% lagi setiap konek/resize. Default kini 100% (tanpa penskalaan host); pilihan skala lain tetap ada di panel sesi, lengkap dengan peringatan teks.</li>
+              <li><strong>Mipmap trilinear dimatikan (<code>SessionSurfaceController.kt</code>):</strong> Pada skala non-bulat, mip level yang dipilih GPU ikut menurunkan resolusi <em>stroke</em> huruf tipis sehingga teks tampak pecah. Kembali ke filter bilinear (<code>isFilterBitmap</code>) yang sudah cukup untuk diperkecil/diperbesar.</li>
+              <li><strong>Kebijakan font smoothing host dibetulkan (<code>xydesk_host_core.cpp</code>):</strong> Nilai <code>fAllowFontAntiAlias</code> yang ditulis agen <strong>bukan</strong> kunci kebijakan yang dibaca Windows (tidak berefek apa pun). Diganti ke nama resmi <code>fNoFontSmoothing = 0</code> (kebijakan “Do not allow font smoothing”) plus <code>AllowFontAntiAlias = 1</code> di <code>WinStations\RDP-Tcp</code>, jadi ClearType benar-benar diizinkan pada sesi remote.</li>
+            </ul>
+          </div>
+
+          <div class="cl-card">
+            <div class="cl-head">
+              <div class="cl-ver mono">v0.5.29 (VERSION_CODE 46)</div>
               <span class="cl-badge mono">1 Oktober 2026 · Perbaikan Disconnect Saat Copy Terminal/Screenshot &amp; Auto-Reconnect Data Seluler</span>
             </div>
             <ul class="arch-list">
@@ -1286,7 +1299,7 @@
               <span class="cl-badge mono">30 September 2026 · Perbaikan Teks Pecah/Bergerigi Native C &amp; C++17 QUIC Host Agent (.dll)</span>
             </div>
             <ul class="arch-list">
-              <li><strong>Perbaikan Akar Masalah Teks Pecah/Bergerigi di Native FreeRDP C (<code>cmdline.c</code> &amp; <code>android_freerdp.c</code>):</strong> Memperbaiki bug urutan evaluasi argumen FreeRDP di mana <code>/network:...</code> dievaluasi secara alfabetis <em>setelah</em> <code>+fonts</code> dan <code>+aero</code> lalu memanggil <code>freerdp_apply_connection_type</code> yang diam-diam me-<em>reset</em> <code>FreeRDP_AllowFontSmoothing = FALSE</code> (<code>PERF_DISABLE_FONT_SMOOTHING</code>) dan mematikan ClearType di Windows PC. Kini <code>AllowFontSmoothing</code> dan <code>AllowDesktopComposition</code> dikunci aktif bersama <code>RemoteFxCodec</code> + <code>GfxProgressiveV2</code> (<em>lossless text tile encoding</em>) serta sinkronisasi <code>freerdp_performance_flags_make</code>.</li>
+              <li><strong>Perbaikan Akar Masalah Teks Pecah/Bergerigi di Native FreeRDP C (<code>cmdline.c</code> &amp; <code>android_freerdp.c</code>):</strong> Memperbaiki bug urutan evaluasi argumen FreeRDP di mana <code>/network:...</code> dievaluasi secara alfabetis <em>setelah</em> <code>+fonts</code> dan <code>+aero</code> lalu memanggil <code>freerdp_apply_connection_type</code> yang diam-diam me-<em>reset</em> <code>FreeRDP_AllowFontSmoothing = FALSE</code> (<code>PERF_DISABLE_FONT_SMOOTHING</code>) dan mematikan ClearType di Windows PC. Kini <code>AllowFontSmoothing</code> dan <code>AllowDesktopComposition</code> dikunci aktif bersama <code>RemoteFxCodec</code> + <code>GfxProgressiveV2</code> (<em>lossless text tile encoding</em>) serta sinkronisasi <code>freerdp_performance_flags_make</code>. <strong>Koreksi (v0.5.30):</strong> label <em>lossless text tile encoding</em> di sini keliru — RFX/RFX-Progressive adalah codec lossy dan pemakaiannya dicabut pada v0.5.30.</li>
               <li><strong>Trilinear Mipmap Downscaling (<code>setHasMipMap(true)</code>) &amp; Skala Default 125% DPI:</strong> Mengaktifkan <em>hardware trilinear mipmap</em> pada bitmap <code>SessionSurfaceController</code> agar <em>stroke</em> huruf tipis 1-piksel dari <code>1920x1080</code> tidak pecah saat diperkecil ke layar HP, meng-<em>upgrade</em> preset <code>DIRECT_GAME_ULTRA</code> ke 32-bit warna penuh + ClearType (migrasi otomatis <code>clarity_v2</code>), dan menyertakan <code>/scale-desktop:125</code> sejak jabat tangan awal <code>CS_CORE</code>.</li>
               <li><strong>Perbaikan PDU <code>MonitorLayout</code> (<code>disp_main.c</code>):</strong> Menambahkan penjaga <code>disp-&gt;MaxNumMonitors == 0</code> dan melakukan <em>clamping</em> <code>NumMonitors</code> <strong>sebelum</strong> menghitung <code>header.length</code> agar server Windows tidak pernah memutus koneksi karena ketidakcocokan panjang paket <code>DISP</code>.</li>
               <li><strong>Engine Native C++17 QUIC Client (<code>libxydesk-quic.so</code>) &amp; Windows Host Agent (<code>xydesk_quic.dll</code> + <code>xydesk_host_core.dll</code> + <code>XyDeskRemoteHost.exe</code>):</strong> Membangun pustaka C++17 native di Android dan Windows untuk penemuan instan UDP QUIC v1 RFC 9000 pada port <code>4433</code>, deteksi adapter GPU DXGI (<code>NVENC</code>/<code>AMF</code>/<code>QSV</code>), dan konfigurasi otomatis kebijakan Windows AVC 4:4:4 + ClearType + Multi-Session.</li>
@@ -1514,7 +1527,7 @@
 
       <div class="launch-info-box mono">
         <div id="modal-schedule-line">Jadwal Rilis (Dipercepat): Jumat, 2 Oktober 2026 · 10:00 WIB</div>
-        <div id="modal-status-line" style="color: var(--text-faint);">Build Kandidat Aktif: v0.5.29 (46) · Draft Terkunci</div>
+        <div id="modal-status-line" style="color: var(--text-faint);">Build Kandidat Aktif: v0.5.30 (47) · Draft Terkunci</div>
         <div id="modal-rilisin-line" style="color: var(--text-faint);">Publikasi Store: rilisin.xyverse.my.id (Dalam Pengembangan)</div>
       </div>
 
@@ -1671,11 +1684,11 @@
         "nav.status": "System Status",
         "nav.licenses": "Licenses",
         "nav.download": "Download",
-        "intro.meta": "Android Remote Desktop Client · Native FreeRDP 3 + C++17 QUIC · Build v0.5.29 (46)",
+        "intro.meta": "Android Remote Desktop Client · Native FreeRDP 3 + C++17 QUIC · Build v0.5.30 (47)",
         "intro.title": "Full Control of Windows Workstations & Servers from Android.",
         "intro.lead": "XyDesk Remote is a Remote Desktop client powered by a custom-tuned C/JNI FreeRDP 3 + C++17 QUIC engine for Android. Featuring Auto-Detect Monitor & Multi-User Grid Switching, 32-buffer stereo OpenSLES media audio, custom vector-icon HUD controls, and two distinct connection modes: Connect PC (10-Digit ID + Native QUIC Host Agent) and full RDP.",
         "intro.cta.dl": "Download Page (Ver 1.0.0)",
-        "intro.cta.cl": "View v0.5.29 Changelog",
+        "intro.cta.cl": "View v0.5.30 Changelog",
         "intro.cta.host": "XyDesk Host Setup (Windows PC)",
         "led.1.k": "Protocol Engine",
         "led.1.s": "Fast-Path I/O · 32-Buf OpenSLES",
@@ -1687,7 +1700,7 @@
         "about.kicker": "Understanding the XyDesk Ecosystem",
         "about.title": "What Is XyDesk Remote & How Does It Differ from Standard XyDesk?",
         "about.lead": "Within the XyVerse Technology Global software lineup, Standard XyDesk and XyDesk Remote are engineered for two fundamentally different workflows.",
-        "cap.kicker": "Verified Implemented Features (Build v0.5.29)",
+        "cap.kicker": "Verified Implemented Features (Build v0.5.30)",
         "cap.title": "Session, Native Engine & Control Capabilities",
         "arch.kicker": "Technical Configuration",
         "arch.title": "Streaming, Latency & Security Settings",
@@ -1748,8 +1761,8 @@
             : "Jadwal Rilis (Dipercepat): Jumat, 2 Oktober 2026 · 10:00 WIB";
         document.getElementById("modal-status-line").textContent =
           l === "en"
-            ? "Active Candidate Build: v0.5.29 (46) · Locked Draft"
-            : "Build Kandidat Aktif: v0.5.29 (46) · Draft Terkunci";
+            ? "Active Candidate Build: v0.5.30 (47) · Locked Draft"
+            : "Build Kandidat Aktif: v0.5.30 (47) · Draft Terkunci";
         if (langBtnMobile) {
           langBtnMobile.textContent = l === "en" ? "Language: EN / ID" : "Bahasa: ID / EN";
         }

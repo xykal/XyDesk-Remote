@@ -237,8 +237,8 @@ class SessionManager(context: Context) {
         )
         val base = RdpUri.build(profile, options)
         val prefs = appContext.getSharedPreferences("xydesk.remote.display", Context.MODE_PRIVATE)
-        val remoteScale = prefs.getInt("${profile.id}.remote_dpi", 125)
-            .let { if (it in REMOTE_DESKTOP_SCALE_FACTORS) it else 125 }
+        val remoteScale = prefs.getInt("${profile.id}.remote_dpi", 100)
+            .let { if (it in REMOTE_DESKTOP_SCALE_FACTORS) it else 100 }
         lastDispScale = if (options.pcConnectMode) 100 else remoteScale
         val key = "${profile.id}.resolution"
         val stored = if (prefs.contains(key)) prefs.getString(key, null) else null
