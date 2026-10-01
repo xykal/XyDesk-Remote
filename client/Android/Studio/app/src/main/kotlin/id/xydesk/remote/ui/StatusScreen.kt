@@ -62,8 +62,7 @@ fun StatusScreen(
     }
     val versionCode = remember(context) {
         runCatching {
-            val info = context.packageManager.getPackageInfo(context.packageName, 0)
-            if (Build.VERSION.SDK_INT >= 28) info.longVersionCode.toString() else "@Suppress(\"DEPRECATION\") info.versionCode.toString()
+            context.packageManager.getPackageInfo(context.packageName, 0).longVersionCode.toString()
         }.getOrNull() ?: "-"
     }
     val abi = remember { Build.SUPPORTED_ABIS.firstOrNull() ?: "-" }
