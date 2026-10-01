@@ -7,7 +7,7 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 add_library(xydesk_quic SHARED src/xydesk_quic.cpp)
 target_include_directories(xydesk_quic PUBLIC include)
 if(WIN32)
-  target_link_libraries(xydesk_quic PRIVATE ws2_32)
+  target_link_libraries(xydesk_quic PRIVATE ws2_32 ole32)
 endif()
 
 add_library(xydesk_host_core SHARED src/xydesk_host_core.cpp)

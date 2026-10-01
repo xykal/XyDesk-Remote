@@ -105,6 +105,7 @@ class SessionManager(context: Context) {
     @Volatile private var connectedAtMs: Long = 0L
     @Volatile private var userInitiatedDisconnect: Boolean = false
     @Volatile private var autoReconnectAttempts: Int = 0
+    @Volatile private var quicAudioBridge: QuicAudioBridge? = null
     @Volatile private var lastDispLayoutW: Int = 0
     @Volatile private var lastDispLayoutH: Int = 0
     @Volatile private var lastDispScale: Int = 100
@@ -666,6 +667,8 @@ class SessionManager(context: Context) {
      */
     private fun cleanupTerminalSession(inst: Long) {
         synchronized(lifecycleLock) {
+            quicAudioBridge?.stop()
+            quicAudioBridge = null
             val session = core ?: return
             if (session.getInstance() != inst) return
             stopWatchdog()
@@ -702,6 +705,16 @@ class SessionManager(context: Context) {
                 connectedAtMs = android.os.SystemClock.elapsedRealtime()
                 setStage(Stage.READY)
                 ConnectionLog.add("koneksi SUKSES")
+                lastProfile?.let { p ->
+                    val opts = runCatching { RdpOptions.of(appContext, p.id) }.getOrDefault(RdpOptions())
+                    quicAudioBridge?.stop()
+                    quicAudioBridge = QuicAudioBridge(
+                        host = p.host,
+                        port = 4433,
+                        enableSpeaker = opts.audioMode == XyAudioMode.DEVICE,
+                        enableMic = opts.microphone,
+                    ).also { it.start() }
+                }
                 transition(SessionState.Connected)
             }
 

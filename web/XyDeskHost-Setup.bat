@@ -69,9 +69,10 @@ powershell -NoProfile -ExecutionPolicy Bypass -Command ^
    Write-Host ''"
 
 if exist "%~dp0XyDeskRemoteHost.exe" (
-    echo Menjalankan XyDesk Native C++ Host Agent ^(XyDeskRemoteHost.exe + xydesk_quic.dll + xydesk_host_core.dll^)...
-    echo.
-    "%~dp0XyDeskRemoteHost.exe"
+    echo Menjalankan XyDesk Native C++ Host Agent di latar belakang ^(UDP QUIC + WASAPI Audio/Mic Bridge :4433^)...
+    powershell -NoProfile -ExecutionPolicy Bypass -Command "Stop-Process -Name 'XyDeskRemoteHost' -Force -ErrorAction SilentlyContinue; Start-Process -FilePath '%~dp0XyDeskRemoteHost.exe' -WindowStyle Minimized"
+    echo [READY] XyDeskRemoteHost.exe berjalan aktif di latar belakang.
+    timeout /t 4
 ) else (
     echo.
     pause
