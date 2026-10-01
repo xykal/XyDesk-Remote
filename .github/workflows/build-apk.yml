@@ -81,8 +81,11 @@ jobs:
         run: ./gradlew --stacktrace --no-daemon :app:compileDebugKotlin
       - name: Compile Windows Native C++17 Host Agent & DLLs (mingw-w64)
         run: |
-          sudo apt-get update -qq
-          sudo apt-get install -y -qq g++-mingw-w64-x86-64 zip
+          # apt di runner kadang menggantung tanpa batas waktu -> pasang timeout + retry
+          export DEBIAN_FRONTEND=noninteractive
+          APT_OPTS="-o Acquire::Retries=5 -o Acquire::http::Timeout=25 -o Acquire::https::Timeout=25 -o Acquire::ForceIPv4=true"
+          sudo apt-get $APT_OPTS update -qq
+          timeout 600 sudo apt-get $APT_OPTS install -y -qq g++-mingw-w64-x86-64 zip
           mkdir -p /tmp/dist-host
           x86_64-w64-mingw32-g++ -std=c++17 -O2 -shared \
             host-agent/src/xydesk_quic.cpp -Ihost-agent/include \
@@ -158,10 +161,12 @@ jobs:
       - name: Host dependencies (pkg-config + nasm)
         if: steps.tagcheck.outputs.tagged != 'true'
         run: |
-          sudo apt-get update -qq
+          export DEBIAN_FRONTEND=noninteractive
+          APT_OPTS="-o Acquire::Retries=5 -o Acquire::http::Timeout=25 -o Acquire::https::Timeout=25 -o Acquire::ForceIPv4=true"
+          sudo apt-get $APT_OPTS update -qq
           # pkg-config: disyaratkan ExternalFreeRDP.cmake
           # nasm: OpenH264 mem-compile cpuid.asm untuk target x86/x86_64
-          sudo apt-get install -y -qq pkg-config nasm
+          timeout 600 sudo apt-get $APT_OPTS install -y -qq pkg-config nasm
       - name: Unit test JVM (core-rdp)
         if: steps.tagcheck.outputs.tagged != 'true'
         working-directory: client/Android/Studio
@@ -250,8 +255,10 @@ jobs:
           echo "ANDROID_SDK_ROOT=$ANDROID_HOME" >> "$GITHUB_ENV"
       - name: Host dependencies (pkg-config + nasm + mingw-w64)
         run: |
-          sudo apt-get update -qq
-          sudo apt-get install -y -qq pkg-config nasm g++-mingw-w64-x86-64 zip
+          export DEBIAN_FRONTEND=noninteractive
+          APT_OPTS="-o Acquire::Retries=5 -o Acquire::http::Timeout=25 -o Acquire::https::Timeout=25 -o Acquire::ForceIPv4=true"
+          sudo apt-get $APT_OPTS update -qq
+          timeout 900 sudo apt-get $APT_OPTS install -y -qq pkg-config nasm g++-mingw-w64-x86-64 zip
       - name: Restore release keystore dari secret
         env:
           RELEASE_KEY_BASE64: ${{ secrets.RELEASE_KEY_BASE64 }}
