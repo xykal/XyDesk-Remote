@@ -1211,17 +1211,17 @@ fun AddDeviceScreen(
                     val audioNote = when (XyAudioMode.entries[audioIndex]) {
                         XyAudioMode.DEVICE ->
                             xy(
-                                "Mode Perangkat memakai kanal audio RDP. Kalau di PC 'Remote Audio' dimatikan " +
-                                    "demi VB-CABLE, jembatan UDP di bawah yang mengantar suara ke HP.",
-                                "Device mode uses the RDP audio channel. If PC 'Remote Audio' is disabled for " +
-                                    "VB-CABLE, the UDP bridge below carries the sound to your phone.",
+                                "Mode Perangkat memutar suara PC lewat kanal audio RDP (tanpa host agent). " +
+                                    "Kalau di PC 'Remote Audio' dimatikan demi VB-CABLE, pilih mode Remote.",
+                                "Device mode plays PC sound over the RDP audio channel (no host agent). " +
+                                    "If PC 'Remote Audio' is disabled for VB-CABLE, switch to Remote mode.",
                             )
                         XyAudioMode.REMOTE ->
                             xy(
-                                "Mode Remote mengandalkan jembatan UDP :4433 (WASAPI loopback di Host Agent) " +
-                                    "supaya suara PC tetap sampai ke HP tanpa kanal audio RDP.",
-                                "Remote mode relies on the UDP :4433 bridge (WASAPI loopback in the Host Agent) " +
-                                    "so PC sound still reaches your phone without the RDP audio channel.",
+                                "Mode Remote = suara PC lewat jembatan UDP :4433, jadi XyDeskRemoteHost.exe " +
+                                    "harus jalan di PC. Pakai ini kalau kanal audio RDP diblokir/kosong.",
+                                "Remote mode routes PC sound through the UDP :4433 bridge, so XyDeskRemoteHost.exe " +
+                                    "must run on the PC. Use it when the RDP audio channel is blocked/empty.",
                             )
                         XyAudioMode.OFF ->
                             xy("Audio dimatikan total — jembatan UDP tidak dijalankan.", "Audio fully off — the UDP bridge stays down.")
@@ -1233,15 +1233,24 @@ fun AddDeviceScreen(
                     )
                 }
                 Spacer(Modifier.height(8.dp))
+                val bridgeRelevant = XyAudioMode.entries[audioIndex] == XyAudioMode.REMOTE
                 XyToggleRow(
                     title = xy("Audio PC via UDP (bridge)", "PC audio over UDP (bridge)"),
-                    subtitle = xy(
-                        "Suara PC -> HP lewat XyDeskRemoteHost.exe :4433 (tanpa kanal audio RDP)",
-                        "PC sound -> phone via XyDeskRemoteHost.exe :4433 (no RDP audio channel)",
-                    ),
-                    checked = options.quicAudio && audioIndex != 2,
+                    subtitle = if (bridgeRelevant) {
+                        xy(
+                            "Perlu XyDeskRemoteHost.exe di PC (port UDP 4433). Tanpa itu suara PC tidak sampai.",
+                            "Needs XyDeskRemoteHost.exe on the PC (UDP 4433). Without it, PC sound never arrives.",
+                        )
+                    } else {
+                        xy(
+                            "Tidak dipakai: mode Perangkat memutar suara lewat kanal RDP.",
+                            "Not used: Device mode plays sound through the RDP channel.",
+                        )
+                    },
+                    checked = options.quicAudio && bridgeRelevant,
                     onCheckedChange = { v -> options = options.copy(quicAudio = v) },
                     leading = XyIcons.Volume,
+                    enabled = bridgeRelevant,
                 )
                 XyToggleRow(
                     title = xy("Mikrofon", "Microphone"),

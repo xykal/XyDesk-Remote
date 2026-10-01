@@ -720,7 +720,10 @@ class SessionManager(context: Context) {
                 lastProfile?.let { p ->
                     val opts = runCatching { RdpOptions.of(appContext, p.id) }.getOrDefault(RdpOptions())
                     quicAudioBridge?.stop()
-                    val speakerOn = opts.quicAudio && opts.audioMode != XyAudioMode.OFF
+                    // Hindari suara dobel: mode Perangkat sudah memutar suara lewat
+                    // kanal RDP (rdpsnd), jadi bridge hanya mengantar suara di mode
+                    // "Audio di PC" (REMOTE).
+                    val speakerOn = opts.quicAudio && opts.audioMode == XyAudioMode.REMOTE
                     val micOn = opts.microphone
                     if (speakerOn || micOn) {
                         audioBridgeState = "start…"
