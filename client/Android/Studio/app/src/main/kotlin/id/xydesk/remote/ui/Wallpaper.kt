@@ -192,16 +192,6 @@ fun DevicePreviewArt(
     modifier: Modifier = Modifier,
 ) {
     val h = seed.hashCode()
-    val corners = listOf(
-        Offset(0f, 0f),
-        Offset(1f, 0f),
-        Offset(1f, 1f),
-        Offset(0f, 1f),
-    )
-    val origin = corners[((h ushr 3) and 0x7fffffff) % corners.size]
-    val accentX = 0.22f + ((h ushr 7) and 0x7fffffff) % 45 / 100f
-    val accentY = 0.30f + ((h ushr 13) and 0x7fffffff) % 40 / 100f
-    val hairShift = ((h ushr 17) and 0x7fffffff) % 4
 
     Box(
         modifier.fillMaxSize(),
@@ -237,74 +227,9 @@ fun DevicePreviewArt(
                     ),
             )
         }
-        // Garis rambut lebih tipis di atas foto supaya tidak terlihat kotor.
-        val artAlpha = if (os == XyWall.WIN11) 0.42f else 1f
-        Canvas(Modifier.fillMaxSize()) {
-            val w = size.width
-            val hh = size.height
-            val ox = origin.x * w
-            val oy = origin.y * hh
-
-            // Cincin besar: pusat di sudut terpilih per nama perangkat.
-            val radius = hh * (1.05f + (hairShift * 0.06f))
-            drawCircle(
-                color = Color(0xFF3A5468).copy(alpha = 0.55f * artAlpha),
-                radius = radius,
-                center = Offset(ox, oy),
-                style = Stroke(width = 1.6f),
-            )
-            drawCircle(
-                color = Color(0xFF26313A).copy(alpha = artAlpha),
-                radius = radius * 0.78f,
-                center = Offset(ox, oy),
-                style = Stroke(width = 1.2f),
-            )
-
-            // Garis diagonal tipis (arah berbeda per perangkat).
-            val angle = (22f + hairShift * 14f) * (if ((h and 1) == 0) 1f else -1f)
-            val rad = Math.toRadians(angle.toDouble()).toFloat()
-            val dx = kotlin.math.cos(rad)
-            val dy = kotlin.math.sin(rad)
-            for (i in 0..3) {
-                val off = (i + 1) * w * 0.19f
-                drawLine(
-                    color = Color(0xFF2A333B).copy(alpha = artAlpha),
-                    start = Offset(-w * 0.2f + off * dx, -hh * 0.2f + off * dy),
-                    end = Offset(w * 1.2f * dx + off * dx, hh * 1.2f * dy + off * dy),
-                    strokeWidth = 1f,
-                )
-            }
-
-            // Titik identitas: satu aksen saja, ukuran kecil.
-            drawCircle(
-                color = Color(0xFFD9A45B),
-                radius = hh * 0.035f,
-                center = Offset(w * accentX, hh * accentY),
-            )
-            drawCircle(
-                color = Color(0xFFD9A45B).copy(alpha = 0.30f),
-                radius = hh * 0.085f,
-                center = Offset(w * accentX, hh * accentY),
-                style = Stroke(width = 1f),
-            )
-
-            // Grid titik halus di sudut berlawanan.
-            val step = hh * 0.09f
-            var gy = hh * 0.62f
-            while (gy < hh) {
-                var gx = w * 0.06f
-                while (gx < w * 0.5f) {
-                    drawCircle(
-                        color = Color(0xFF6C7A85).copy(alpha = 0.28f),
-                        radius = 0.9f,
-                        center = Offset(gx, gy),
-                    )
-                    gx += step
-                }
-                gy += step
-            }
-        }
-
+        // Overlay dekoratif (cincin, garis diagonal, titik aksen kuning) dihapus:
+        // di preview perangkat terlihat seperti noda dan tidak menambah informasi.
+        // Sisa: foto/gradien dasar + scrim gelap supaya teks tetap terbaca.
         // Penanda jenis OS: siluet jendela kecil, bukan logo resmi.
         Canvas(
             Modifier

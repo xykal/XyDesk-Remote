@@ -63,6 +63,7 @@ import id.xydesk.remote.ui.components.XySlider
 import id.xydesk.remote.ui.components.XyCard
 import id.xydesk.remote.ui.components.XyDialog
 import id.xydesk.remote.ui.components.XyField
+import id.xydesk.remote.ui.components.XyIconPill
 import id.xydesk.remote.ui.components.XyIcons
 import id.xydesk.remote.ui.components.XyOverlay
 import id.xydesk.remote.ui.components.XyPillButton
@@ -426,6 +427,14 @@ fun AddDeviceScreen(
                 else -> xy("Koneksi RDP Baru", "New RDP Connection")
             },
             onBack = { requestCancel() },
+            actions = {
+                XyIconPill(
+                    XyIcons.Gear,
+                    { showAdvanced = true },
+                    active = showAdvanced,
+                    contentDescription = xy("Pengaturan lanjutan", "Advanced settings"),
+                )
+            },
         )
         Column(
             Modifier

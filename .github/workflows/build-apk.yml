@@ -390,6 +390,13 @@ jobs:
         with:
           name: xydesk-remote-release-apks
           path: release-apks
+      - name: Buat SHA256SUMS.txt (integritas rilis + bahan cek VirusTotal)
+        run: |
+          cd release-apks
+          rm -f SHA256SUMS.txt
+          find . -maxdepth 1 -type f ! -name 'SHA256SUMS.txt' -printf '%f\n' | sort |
+            while read -r f; do sha256sum "$f"; done > SHA256SUMS.txt
+          cat SHA256SUMS.txt
       - name: Buat GitHub Release (tag v*)
         uses: softprops/action-gh-release@3bb12739c298aeb8a4eeaf626c5b8d85266b0e65 # v2
         with:
@@ -399,6 +406,7 @@ jobs:
             release-apks/XyDeskRemoteHost.exe
             release-apks/xydesk_quic.dll
             release-apks/xydesk_host_core.dll
+            release-apks/SHA256SUMS.txt
           generate_release_notes: true
           draft: ${{ !startsWith(github.ref_name, 'v1.') }}
       - name: Sisakan hanya rilis terbaru & bersihkan artifacts
