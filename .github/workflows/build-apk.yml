@@ -426,3 +426,49 @@ jobs:
             gh api -X DELETE "repos/$repo/actions/artifacts/$art_id" </dev/null >/dev/null || true
           done
 
+
+  # ------------------------------------------------------------------
+  # VIRUSTOTAL: bukti pihak ketiga untuk rilis. Informatif, tidak
+  # memblokir rilis — kalau VT sedang error, rilis tetap terbit.
+  # Lewati sendiri kalau secret VT_API_KEY belum diisi.
+  # ------------------------------------------------------------------
+  scan-virustotal:
+    if: ${{ startsWith(github.ref, 'refs/tags/v') }}
+    needs: publish-release
+    name: Scan VirusTotal (hasil + hash)
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+      - name: Cek kunci VirusTotal tersedia
+        id: vtkey
+        env:
+          VT_API_KEY: ${{ secrets.VT_API_KEY }}
+        run: |
+          set -euo pipefail
+          if [ -n "${VT_API_KEY}" ]; then
+            echo "ok=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "ok=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::Secret VT_API_KEY belum diset — langkah scan dilewati."
+          fi
+      - name: Unduh aset rilis
+        if: steps.vtkey.outputs.ok == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          mkdir -p vt-assets
+          gh release download "${{ github.ref_name }}" --dir vt-assets --clobber
+          ls -la vt-assets
+      - name: Scan ke VirusTotal
+        if: steps.vtkey.outputs.ok == 'true'
+        env:
+          VT_API_KEY: ${{ secrets.VT_API_KEY }}
+        run: python3 scripts/virustotal_scan.py --dir vt-assets --tag "${{ github.ref_name }}" --out VIRUSTOTAL.txt
+      - name: Tempel VIRUSTOTAL.txt ke rilis
+        if: steps.vtkey.outputs.ok == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release upload "${{ github.ref_name }}" VIRUSTOTAL.txt --clobber
