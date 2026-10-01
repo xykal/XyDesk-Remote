@@ -44,6 +44,7 @@ SMALL_UPLOAD_LIMIT = 32 * 1024 * 1024  # di atas ini pakai bigfiles
 MIN_INTERVAL = 16.0                    # detik antar request (batas 4/menit)
 POLL_INTERVAL = 20.0                   # jeda antar pemeriksaan hasil analisis
 POLL_MAX = 45                          # ~15 menit per berkas
+PENDING_MAX = 8                        # tunggu hasil tersimpan yang masih kosong
 MAX_UPLOAD_BYTES = 650 * 1024 * 1024   # batas keras VirusTotal
 
 # Aset teks/dokumen tidak perlu dipindai; APK/EXE/DLL/ZIP/MSI yang relevan.
@@ -150,13 +151,33 @@ def flagged_of(attrs: dict) -> list[str]:
     return sorted(out)
 
 
+def attribut_siap(key: str, sha: str, log=print) -> dict | None:
+    """Ambil atribut berkas yang sudah ada di VirusTotal.
+
+    Kalau hash-nya dikenal tapi seluruh mesin masih nol (artinya analisis
+    tersimpan belum jalan), tunggu sebentar; kalau tetap kosong kembalikan
+    None supaya berkas diunggah ulang dan diproses sebagai analisis baru.
+    """
+    for attempt in range(PENDING_MAX):
+        attrs = existing_report(key, sha)
+        if attrs is None:
+            return None
+        if sum(stats_of(attrs).values()) > 0:
+            return attrs
+        if attempt == 0:
+            log("      ada di VirusTotal tapi mesin belum selesai -> menunggu")
+        time.sleep(POLL_INTERVAL)
+    log("      hasil tersimpan masih kosong -> unggah ulang untuk analisis baru")
+    return None
+
+
 def scan_file(key: str, path: Path, log=print) -> dict:
     size = path.stat().st_size
     log(f"  {path.name} ({size:,} byte)")
     sha = sha256_of(path)
     record: dict = {"name": path.name, "size": size, "sha256": sha}
 
-    attrs = existing_report(key, sha)
+    attrs = attribut_siap(key, sha, log=log)
     if attrs:
         log("      sudah ada di VirusTotal -> pakai hasil yang tersimpan")
         record["source"] = "hasil tersimpan"
@@ -208,6 +229,20 @@ def tulis_laporan(records: list[dict], out: Path, tag: str) -> None:
             lines.append("- Engine yang menandai:")
             lines.extend(f"    - {item}" for item in rec["flagged"])
         lines.append("")
+    if total_mal:
+        lines += [
+            "## Catatan soal penandaan di atas",
+            "",
+            "Penilaian di atas datang dari mesin otomatis VirusTotal. Untuk biner Windows kecil",
+            "yang belum ditandatangani secara digital, beberapa mesin heuristik/ML rutin memberi",
+            "label generik (misalnya nama berakhiran `Wacatac`, `Genus`, atau `Malware.<kode>`).",
+            "Yang perlu diperiksa dua hal: (1) SHA-256 di atas persis sama dengan berkas di halaman",
+            "rilis, jadi berkas yang dipindai = berkas yang diunduh siapa pun; dan (2) laporan rilis",
+            "lengkap ada di repositori publik. Cara membuat penandaan hilang sepenuhnya adalah",
+            "menandatangani biner Windows dengan sertifikat code signing.",
+            "",
+        ]
+
     lines += [
         "## Verifikasi mandiri",
         "",

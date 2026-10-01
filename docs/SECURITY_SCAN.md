@@ -28,17 +28,23 @@ Bandingkan hasilnya dengan baris `app-arm64-v8a-release.apk` di `SHA256SUMS.txt`
 Catatan: `rdp.xydesk.my.id` mengarahkan (HTTP 302) ke URL aset resmi GitHub.
 Kalau hash berbeda, hentikan pemasangan dan laporkan.
 
-## 3. Prosedur VirusTotal (manual, tanpa API key)
+## 3. Pemindaian VirusTotal (otomatis per rilis)
 
-1. Buka `https://www.virustotal.com/gui/home/upload`.
-2. Unggah `app-arm64-v8a-release.apk` (atau varian ABI yang dipakai) + `XyDeskRemoteHost.zip`.
-3. Catat: tanggal pemindaian, jumlah engine deteksi, dan hash SHA256 dari tab Details.
-4. Tempel hasilnya ke tabel bagian 4 (jangan unggah ulang berkali-kali; satu upload
-   per rilis cukup, lalu bagikan tautan hasilnya).
+Setiap tag rilis menjalankan job `scan-virustotal` di workflow `build-apk.yml`
+(setelah rilis terbit). Job itu memanggil `scripts/virustotal_scan.py` yang:
 
-Kalau ingin otomatis di CI, dibutuhkan API key VirusTotal gratis:
-`VT_API_KEY` sebagai repository secret, lalu langkah upload dijalankan di job
-`publish-release`. Belum diaktifkan karena key belum tersedia.
+1. mengunduh aset rilis yang benar-benar sudah diunggah (bukan hasil build lokal),
+2. menghitung SHA-256 tiap berkas,
+3. mengunggah ke VirusTotal lewat API v3 (berkas > 32 MB memakai endpoint bigfiles),
+4. menulis hasilnya apa adanya ke `VIRUSTOTAL.txt` dan menempelkannya sebagai aset rilis.
+
+Kunci API disimpan sebagai repository secret `VT_API_KEY` dan tidak pernah masuk
+ke repo maupun ke berkas laporan. Kalau secret itu kosong, job hanya mencatat
+`notice` dan dilewati — rilis tidak pernah tertahan karena VirusTotal.
+
+Manual (kalau perlu ulang): buka `https://www.virustotal.com/gui/home/upload`,
+unggah berkas yang mau diperiksa, lalu cocokkan SHA-256 di tab Details dengan
+`SHA256SUMS.txt` rilis tersebut. Satu unggahan per rilis sudah cukup.
 
 ### Deteksi palsu yang lazim pada klien RDP
 
@@ -52,9 +58,28 @@ Kalau ingin otomatis di CI, dibutuhkan API key VirusTotal gratis:
 
 ## 4. Catatan hasil pemindaian
 
-| Tanggal (UTC) | Versi | Berkas | Deteksi | Hash cocok | Tautan hasil |
-| --- | --- | --- | --- | --- | --- |
-| (belum dipindai) | 0.5.29 | app-arm64-v8a-release.apk | - | - | - |
+Pemindaian v0.5.29 (2026-10-01, API VirusTotal v3). Rincian penuh + tautan per
+berkas ada di aset rilis `VIRUSTOTAL.txt`; hash semuanya cocok dengan
+`SHA256SUMS.txt` (diverifikasi ulang dengan `sha256sum -c`).
+
+| Berkas | Segar | Deteksi | Catatan |
+| --- | --- | --- | --- |
+| app-arm64-v8a-release.apk | ya (unggah baru) | 0 malicious dari 75 | undetected 67, type-unsupported 8 |
+| app-armeabi-v7a-release.apk | ya (unggah baru) | 0 malicious dari 75 | undetected 68, type-unsupported 7 |
+| app-x86_64-release.apk | ya (unggah baru) | 0 malicious dari 75 | undetected 68, type-unsupported 7 |
+| XyDeskRemoteHost.exe | hasil tersimpan | 4 malicious dari 71 | Bkav, Elastic, VirIT, Lionic — label generik |
+| xydesk_host_core.dll | hasil tersimpan | 2 malicious dari 71 | Elastic + Microsoft `Trojan:Win32/Wacatac.C!ml` |
+| xydesk_quic.dll | hasil tersimpan | 0 malicious dari 75 | bersih |
+| XyDesk-Remote-Host-Agent-win64.zip | ya (unggah baru) | 3 malicious dari 68 | isi zip = exe + 2 DLL di atas |
+
+Tiga APK rilis bersih di semua engine. Penandaan yang tersisa ada di biner
+Windows tanpa tanda tangan digital dan bersifat heuristik/ML generik
+(`Wacatac`, `Genus`, `Malware.<kode>` adalah nama yang lazim muncul untuk biner
+baru tanpa code signing). Yang bisa dipastikan: hash cocok, jadi berkas yang
+dipindai = berkas yang diunduh. Cara menghilangkan penandaan sepenuhnya:
+tandatangani biner Windows dengan sertifikat code signing, dan/atau ajukan
+koreksi deteksi palsu ke vendor masing-masing (Microsoft menyediakan portal
+submisi gratis).
 
 ## 5. Bahan cek yang bisa dilakukan sendiri tanpa alat pihak ketiga
 

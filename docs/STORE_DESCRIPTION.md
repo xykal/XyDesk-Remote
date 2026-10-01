@@ -89,7 +89,8 @@ Android microphone permission.
 - Wallpaper preview dibersihkan (cincin, garis diagonal, dan titik aksen kuning dihapus).
 - Mode "Putar di perangkat ini" memakai kanal RDP murni; jembatan UDP :4433 hanya
   aktif di mode "Putar di komputer remote".
-- `SHA256SUMS.txt` ikut diterbitkan pada setiap rilis untuk pemeriksaan integritas.
+- `SHA256SUMS.txt` dan laporan `VIRUSTOTAL.txt` ikut diterbitkan pada setiap rilis
+  untuk pemeriksaan integritas.
 
 ## Kata kunci (untuk store, bukan klaim)
 
@@ -106,6 +107,6 @@ Android microphone permission.
 | Ketentuan layanan | ada (`/terms.html`) |
 | Lisensi pihak ketiga | ada (`/licenses.html`) |
 | Buku besar integritas (SHA256) | otomatis per rilis (`SHA256SUMS.txt`) |
-| Pemindaian malware (VirusTotal) | prosedur di `docs/SECURITY_SCAN.md` |
+| Pemindaian malware (VirusTotal) | otomatis per rilis; hasil di `VIRUSTOTAL.txt` + tabel di `docs/SECURITY_SCAN.md` |
 | Format Play Store (AAB) | belum dibuat — rilis saat ini APK per-ABI |
 | Biaya akun Play Console | ditunda kall (belum ada anggaran) |
