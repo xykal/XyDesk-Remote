@@ -26,7 +26,6 @@ import kotlinx.coroutines.flow.filterNotNull
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -110,13 +109,13 @@ fun XyNoticeHost(
                     .widthIn(max = 420.dp)
                     .padding(horizontal = 24.dp)
                     .clip(RoundedCornerShape(50))
-                    .background(Color(0xF20B0D10))
-                    .border(1.dp, Color(0x7AFFFFFF), RoundedCornerShape(50))
+                    .background(MaterialTheme.colorScheme.surfaceVariant)
+                    .border(1.dp, MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(50))
                     .padding(horizontal = 16.dp, vertical = 9.dp),
             ) {
                 Text(
                     text = text.orEmpty(),
-                    color = Color(0xFFF1F4F6),
+                    color = MaterialTheme.colorScheme.onSurface,
                     fontSize = 12.sp,
                     fontWeight = FontWeight.Medium,
                     style = MaterialTheme.typography.bodyMedium,

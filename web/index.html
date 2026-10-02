@@ -993,7 +993,7 @@
           </svg>
           <span style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">XyDesk Remote</span>
         </span>
-        <span class="brand-tag mono">Ver 1.0.0 · Build 0.5.33</span>
+        <span class="brand-tag mono">Ver 1.0.0 · Build 0.5.34</span>
       </a>
       <nav class="nav-row" aria-label="Navigasi Utama">
         <button type="button" class="pill-btn primary" data-open-launch data-i18n="nav.download">Unduh</button>
@@ -1048,7 +1048,7 @@
     <!-- Editorial Intro -->
     <section class="intro">
       <div class="container">
-        <div class="intro-meta mono" data-i18n="intro.meta">Klien Remote Desktop Android · FreeRDP 3 Native + C++17 QUIC · Build v0.5.33 (50)</div>
+        <div class="intro-meta mono" data-i18n="intro.meta">Klien Remote Desktop Android · FreeRDP 3 Native + C++17 QUIC · Build v0.5.34 (51)</div>
         <h1 data-i18n="intro.title">Kendali Penuh Workstation &amp; Server Windows dari Perangkat Android.</h1>
         <p data-i18n="intro.lead">
           XyDesk Remote adalah klien Remote Desktop berbasis engine C/JNI FreeRDP 3 + C++17 QUIC yang dimodifikasi khusus untuk Android. Dilengkapi Grid Monitor &amp; Multi-User Auto-Detect, audio OpenSLES 32-buffer stereo unmute ke speaker utama, HUD kontrol vektor yang dapat dirakit sendiri (Custom Preset), serta dua jalur koneksi terpisah: Koneksi PC (10-Digit ID + Native QUIC Host Agent) dan Koneksi RDP penuh.
@@ -1058,7 +1058,7 @@
             Halaman Unduh (Ver 1.0.0)
           </button>
           <a href="#changelog" class="pill-btn lg" data-i18n="intro.cta.cl">
-            Lihat Changelog v0.5.33
+            Lihat Changelog v0.5.34
           </a>
           <a href="host.html" class="pill-btn lg" data-i18n="intro.cta.host">
             Setup XyDesk Host (PC Windows)
@@ -1165,7 +1165,7 @@
     <section class="section" id="capabilities">
       <div class="container">
         <div class="section-head">
-          <div class="section-kicker" data-i18n="cap.kicker">Fitur Nyata yang Terimplementasi (Build v0.5.33)</div>
+          <div class="section-kicker" data-i18n="cap.kicker">Fitur Nyata yang Terimplementasi (Build v0.5.34)</div>
           <h2 class="section-title" data-i18n="cap.title">Kemampuan Sesi, Engine Native &amp; Kontrol</h2>
         </div>
 
@@ -1270,7 +1270,20 @@
         <div class="changelog-list">
           <div class="cl-card">
             <div class="cl-head">
-              <div class="cl-ver mono">v0.5.33 (VERSION_CODE 50) — Build Terbaru</div>
+              <div class="cl-ver mono">v0.5.34 (VERSION_CODE 51) — Build Terbaru</div>
+              <span class="cl-badge mono">2 Oktober 2026 · Sisa Permukaan Gelap Disamakan dengan Web</span>
+            </div>
+            <ul class="arch-list">
+              <li><strong>Toast/notifikasi (<code>XyNotice.kt</code>):</strong> pelat hitam pekat dengan garis putih diganti token tema — latar <code>--surface-alt</code>, garis <code>--line-strong</code>, teks <code>--text</code>. Ini permukaan yang paling sering kelihatan dan sebelumnya masih menyalahi aturan "tanpa hitam pekat/putih murni".</li>
+              <li><strong>Latar jendela &amp; splash (<code>themes.xml</code>):</strong> <code>android:windowBackground</code> kini arang <code>#14161A</code>, jadi tidak ada kilatan putih sebelum Compose menggambar dan splash menyatu dengan tema gelap.</li>
+              <li><strong>Mark ikon peluncur:</strong> putih murni diganti off-white <code>#E4E7EB</code> — sama persis dengan mark di favicon web.</li>
+              <li><strong>Label status di layar sesi</strong> ikut memakai warna teks tema, bukan nilai lepas.</li>
+            </ul>
+          </div>
+
+          <div class="cl-card">
+            <div class="cl-head">
+              <div class="cl-ver mono">v0.5.33 (VERSION_CODE 50)</div>
               <span class="cl-badge mono">2 Oktober 2026 · Mode Normal: Resolusi Otomatis 16:9 Standar (Maks FHD)</span>
             </div>
             <ul class="arch-list">
@@ -1565,7 +1578,7 @@
 
       <div class="launch-info-box mono">
         <div id="modal-schedule-line">Jadwal Rilis (Dipercepat): Jumat, 2 Oktober 2026 · 10:00 WIB</div>
-        <div id="modal-status-line" style="color: var(--text-faint);">Build Kandidat Aktif: v0.5.33 (50) · Draft Terkunci</div>
+        <div id="modal-status-line" style="color: var(--text-faint);">Build Kandidat Aktif: v0.5.34 (51) · Draft Terkunci</div>
         <div id="modal-rilisin-line" style="color: var(--text-faint);">Publikasi Store: rilisin.xyverse.my.id (Dalam Pengembangan)</div>
       </div>
 
@@ -1722,11 +1735,11 @@
         "nav.status": "System Status",
         "nav.licenses": "Licenses",
         "nav.download": "Download",
-        "intro.meta": "Android Remote Desktop Client · Native FreeRDP 3 + C++17 QUIC · Build v0.5.33 (50)",
+        "intro.meta": "Android Remote Desktop Client · Native FreeRDP 3 + C++17 QUIC · Build v0.5.34 (51)",
         "intro.title": "Full Control of Windows Workstations & Servers from Android.",
         "intro.lead": "XyDesk Remote is a Remote Desktop client powered by a custom-tuned C/JNI FreeRDP 3 + C++17 QUIC engine for Android. Featuring Auto-Detect Monitor & Multi-User Grid Switching, 32-buffer stereo OpenSLES media audio, custom vector-icon HUD controls, and two distinct connection modes: Connect PC (10-Digit ID + Native QUIC Host Agent) and full RDP.",
         "intro.cta.dl": "Download Page (Ver 1.0.0)",
-        "intro.cta.cl": "View v0.5.33 Changelog",
+        "intro.cta.cl": "View v0.5.34 Changelog",
         "intro.cta.host": "XyDesk Host Setup (Windows PC)",
         "led.1.k": "Protocol Engine",
         "led.1.s": "Fast-Path I/O · 32-Buf OpenSLES",
@@ -1738,7 +1751,7 @@
         "about.kicker": "Understanding the XyDesk Ecosystem",
         "about.title": "What Is XyDesk Remote & How Does It Differ from Standard XyDesk?",
         "about.lead": "Within the XyVerse Technology Global software lineup, Standard XyDesk and XyDesk Remote are engineered for two fundamentally different workflows.",
-        "cap.kicker": "Verified Implemented Features (Build v0.5.33)",
+        "cap.kicker": "Verified Implemented Features (Build v0.5.34)",
         "cap.title": "Session, Native Engine & Control Capabilities",
         "arch.kicker": "Technical Configuration",
         "arch.title": "Streaming, Latency & Security Settings",
@@ -1799,8 +1812,8 @@
             : "Jadwal Rilis (Dipercepat): Jumat, 2 Oktober 2026 · 10:00 WIB";
         document.getElementById("modal-status-line").textContent =
           l === "en"
-            ? "Active Candidate Build: v0.5.33 (50) · Locked Draft"
-            : "Build Kandidat Aktif: v0.5.33 (50) · Draft Terkunci";
+            ? "Active Candidate Build: v0.5.34 (51) · Locked Draft"
+            : "Build Kandidat Aktif: v0.5.34 (51) · Draft Terkunci";
         if (langBtnMobile) {
           langBtnMobile.textContent = l === "en" ? "Language: EN / ID" : "Bahasa: ID / EN";
         }

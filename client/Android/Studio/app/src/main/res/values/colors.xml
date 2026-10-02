@@ -2,4 +2,6 @@
 <resources>
     <!-- Latar ikon launcher: netral gelap, bukan ungu. Mark-nya monokrom putih. -->
     <color name="xy_launcher_bg">#14161A</color>
+    <!-- Latar jendela sebelum Compose menggambar: sama dengan splash Compose -->
+    <color name="xy_window_bg">#14161A</color>
 </resources>

@@ -81,6 +81,13 @@ Note: this is an RDP client. RDP audio and microphone require the Windows host t
 allow audio redirection (`fDisableAudio`/`fDisableAudioCapture` = 0) and the
 Android microphone permission.
 
+## What's new di 0.5.34
+
+- Sisa permukaan gelap disamakan dengan situs: toast/notifikasi memakai
+  surface-alt + line-strong + teks tema (bukan hitam pekat + garis putih).
+- Latar jendela/splash jadi arang #14161A di themes.xml — tanpa kilatan putih.
+- Mark ikon peluncur off-white #E4E7EB, sama dengan mark di favicon situs.
+
 ## What's new di 0.5.33
 
 - Mode **Otomatis** kini memakai ukuran 16:9 standar (1280x720 / 1600x900 /

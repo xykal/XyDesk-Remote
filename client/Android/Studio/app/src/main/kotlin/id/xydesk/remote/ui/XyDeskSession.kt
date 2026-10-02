@@ -1371,7 +1371,7 @@ fun XyDeskSessionScreen(
             Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                 Text(
                     xy("Menerapkan tampilan / sesi baru...", "Applying new display / session..."),
-                    color = Color(0xFFE7EDF2),
+                    color = MaterialTheme.colorScheme.onSurface,
                     style = MaterialTheme.typography.titleMedium,
                 )
             }
