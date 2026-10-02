@@ -5,11 +5,15 @@ import android.content.Context
 /**
  * Sumber ukuran resolusi 16:9.
  *
- * Aturan produk (ronde 8): desktop remote itu desktop WINDOWS — rasionya
- * 16:9, bukan rasio layar HP. "Otomatis" berarti "16:9 terbesar yang muat",
- * bukan "ikuti dimensi layar HP" (yang menghasilkan desktop 20:9, taskbar
- * mini, dan teks yang tidak bisa dibaca). Kalau user memang mau rasio layar
- * HP (video fullscreen, game), ada opsi eksplisit "Ikuti layar HP".
+ * Aturan produk (ronde 9 — "mending normal aja"): desktop remote itu desktop
+ * WINDOWS — rasionya 16:9, bukan rasio layar HP. "Otomatis" berarti "ukuran
+ * 16:9 STANDAR terbesar yang muat di layar", dibatasi maksimal FHD
+ * ([AUTO_MAX_W]x[AUTO_MAX_H]) supaya tidak ada resolusi di atas kebutuhan
+ * layar HP (boros bandwidth, teks malah jadi terlalu rapat). Rasio layar HP
+ * tetap tersedia lewat opsi eksplisit "Ikuti layar HP".
+ *
+ * Catatan riwayat: v0.5.31/0.5.32 sempat mengejar "1:1 piksel dengan layar"
+ * untuk mempertajam teks. Itu ditolak produk — bukan tujuan aplikasi ini.
  */
 object SmartResolution {
 
@@ -22,6 +26,10 @@ object SmartResolution {
         3840 to 2160,
     )
 
+    /** Batas "Mode Otomatis": jangan pernah otomatis melebihi FHD. */
+    const val AUTO_MAX_W = 1920
+    const val AUTO_MAX_H = 1080
+
     /** Batas yang sama dengan validasi ukuran manual (SessionManager/DisplayPrefs). */
     const val MIN_W = 640
     const val MIN_H = 480
@@ -29,9 +37,8 @@ object SmartResolution {
     const val MAX_H = 8192
 
     /**
-     * Ukuran 16:9 yang PAS dengan layar HP pada orientasi saat ini.
-     * Dipakai saat connect (/size) supaya piksel remote 1:1 dengan layar —
-     * di situlah teks paling tajam (tanpa downscale/upscale oleh HP).
+     * Ukuran 16:9 standar terbesar (maks FHD) yang muat di layar HP pada
+     * orientasi saat ini. Dipakai saat connect (/size) untuk mode Otomatis.
      */
     fun forScreen(context: Context): String {
         val dm = context.resources.displayMetrics
@@ -39,31 +46,22 @@ object SmartResolution {
     }
 
     /**
-     * Resolusi 16:9 yang PAS dengan viewport (1:1 piksel), bukan salah satu
-     * ukuran standar.
+     * Resolusi 16:9 STANDAR terbesar yang muat di viewport, dibatasi FHD.
      *
-     * Kenapa: kalau ukuran remote tidak sama dengan layar HP, desktop direntangkan
-     * atau diperkecil oleh HP (resampling) sehingga huruf tipis Windows ikut
-     * dilunakkan — inilah "teks pecah/bergerigi" yang sulit dibetulkan dari dalam
-     * sesi. Dengan 1:1, ClearType yang digambar Windows tampil apa adanya.
+     * Dipilih dari [CANDIDATES] (1280x720 / 1600x900 / 1920x1080) supaya
+     * desktop selalu memakai ukuran yang dikenal driver & pengguna, bukan
+     * angka ganjil hasil hitungan layar.
      *
-     * Portrait 1080x2400 -> 1080x606, landscape 2400x1080 -> 1920x1080.
-     * Selalu genap (syarat server) dan di dalam batas MIN/MAX.
+     * Portrait 1080x2400 -> 1280x720 (tidak ada standar 16:9 yang muat di
+     * lebar 1080; dipakai ukuran normal terkecil). Landscape 2400x1080 ->
+     * 1920x1080. Layar besar -> tetap 1920x1080, tidak naik ke QHD/4K.
      */
     fun forViewport(viewportW: Int, viewportH: Int): String {
         val vw = viewportW.coerceAtLeast(1)
         val vh = viewportH.coerceAtLeast(1)
-        val scale = minOf(vw / 16f, vh / 9f)
-        var w = (scale * 16f).toInt() / 2 * 2
-        var h = (scale * 9f).toInt() / 2 * 2
-        if (w < MIN_W || h < MIN_H) {
-            // Layar terlalu kecil untuk 16:9 penuh di batas server: pakai ukuran
-            // 16:9 terkecil yang masih boleh, biarkan fit-to-screen yang bekerja.
-            return "${CANDIDATES.first().first}x${CANDIDATES.first().second}"
-        }
-        w = w.coerceIn(MIN_W, MAX_W)
-        h = h.coerceIn(MIN_H, MAX_H)
-        return "${w}x$h"
+        val std = CANDIDATES.filter { it.first <= AUTO_MAX_W && it.second <= AUTO_MAX_H }
+        val picked = std.lastOrNull { it.first <= vw && it.second <= vh } ?: CANDIDATES.first()
+        return "${picked.first}x${picked.second}"
     }
 
     /**

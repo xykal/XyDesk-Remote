@@ -203,12 +203,15 @@ class RdpOptionsTest {
     }
 
     @Test
-    fun smartResolutionForViewportMemilih169YangPasSatuBandingSatu() {
-        // 1:1 dengan layar = piksel remote tidak di-resample HP (teks paling tajam).
-        assertEquals("1080x606", SmartResolution.forViewport(1080, 2400))
+    fun smartResolutionForViewportMemilihUkuran169StandarTerbesarMaksFhd() {
+        // Mode normal: selalu ukuran 16:9 standar, sekalipun hasil hitungan layar
+        // akan menghasilkan angka lain (portrait 1080x2400 -> 1280x720, bukan 1080x606).
+        assertEquals("1280x720", SmartResolution.forViewport(1080, 2400))
         assertEquals("1920x1080", SmartResolution.forViewport(2400, 1080))
-        assertEquals("1440x810", SmartResolution.forViewport(1440, 3200))
-        // Viewport terlalu kecil di batas server -> pakai 16:9 terkecil yang sah.
+        assertEquals("1280x720", SmartResolution.forViewport(1440, 3200))
+        // Viewport terlalu kecil untuk standar 720p -> jatuh ke 16:9 terkecil yang sah.
         assertEquals("1280x720", SmartResolution.forViewport(720, 1600))
+        // Layar besar tidak menaikkan resolusi otomatis ke QHD/4K (batas FHD).
+        assertEquals("1920x1080", SmartResolution.forViewport(2560, 1600))
     }
 }

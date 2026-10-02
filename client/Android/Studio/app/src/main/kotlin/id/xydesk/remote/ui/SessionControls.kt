@@ -974,23 +974,13 @@ fun SessionControls(
     }
 
     confirmResolution?.let { targetRes ->
-        // Bukan 1:1 = desktop akan di-resample HP; beri tahu sebelum user memilih,
-        // karena inilah kondisi yang membuat teks tampak pecah.
-        val bukanSatuSatu = !SmartResolution.isPixelPerfectForScreen(context, targetRes)
         XyDialog(
             title = xy("Ubah resolusi remote?", "Change remote resolution?"),
             body = xy(
                 "Terapkan resolusi \"{0}\"? Jika server belum menerapkan perubahan langsung, sesi akan menyambung ulang otomatis.",
                 "Apply resolution \"{0}\"? If the server does not apply live resize, the session will reconnect automatically.",
                 targetRes,
-            ) + if (bukanSatuSatu) {
-                xy(
-                    "\n\nCatatan: resolusi ini bukan 1:1 dengan layar HP, jadi desktop diperkecil/diperbesar dan teks bisa terlihat kurang tajam. ClearType dimatikan otomatis untuk sesi ini. Pilih \"Otomatis\" kalau mengutamakan teks tajam.",
-                    "\n\nNote: this resolution is not 1:1 with the phone screen, so the desktop is scaled and text may look less sharp. ClearType is disabled automatically for such a session. Choose \"Automatic\" when sharp text matters most.",
-                )
-            } else {
-                ""
-            },
+            ),
             confirmLabel = xy("Terapkan", "Apply"),
             onConfirm = {
                 confirmResolution = null

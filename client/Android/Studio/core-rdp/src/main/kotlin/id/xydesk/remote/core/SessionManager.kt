@@ -111,10 +111,6 @@ class SessionManager(context: Context) {
     @Volatile private var activeRelayLabel: String = "Direct UDP"
     @Volatile private var activeNetworkLabel: String = "Wi-Fi"
     @Volatile private var activeDynamicResolution: Boolean = true
-
-    /** True kalau ClearType dimatikan otomatis karena resolusi bukan 1:1. */
-    @Volatile var fontSmoothingAutoDisabled: Boolean = false
-        private set
     @Volatile private var connectedAtMs: Long = 0L
     @Volatile private var userInitiatedDisconnect: Boolean = false
     @Volatile private var autoReconnectAttempts: Int = 0
@@ -246,42 +242,19 @@ class SessionManager(context: Context) {
         val key = "${profile.id}.resolution"
         val stored = if (prefs.contains(key)) prefs.getString(key, null) else null
         // Model resolusi:
-        //  - null / "automatic" / "smart169" (nilai lama) = Otomatis: 16:9 yang
-        //    PAS 1:1 dengan layar HP (piksel remote tidak di-resample HP).
+        //  - null / "automatic" / "smart169" (nilai lama) = Otomatis: ukuran
+        //    16:9 STANDAR terbesar yang muat (maks FHD), bukan tajam-tajaman.
         //  - "follow" = eksplisit ikuti dimensi layar HP (tanpa /size).
-        //  - selain itu = "WxH" eksplisit (biasanya bukan 1:1 saat dipasang).
+        //  - selain itu = "WxH" eksplisit (ukuran pilihan user).
         val resolution = when (stored) {
             null, "automatic", "smart169" -> SmartResolution.forScreen(appContext).also {
-                ConnectionLog.add("CM: resolusi otomatis (16:9 pas layar, 1:1) -> $it")
+                ConnectionLog.add("CM: resolusi otomatis (16:9 standar, maks FHD) -> $it")
             }
             "follow" -> null
             else -> stored
         }
 
-        // ClearType itu antialias subpiksel: hanya benar saat 1:1. Kalau resolusi
-        // pilihan user bukan 1:1, desktop diperkecil/diperbesar dan ClearType
-        // tampil sebagai tepi huruf berwarna/bergerigi. Untuk sesi seperti itu
-        // font smoothing dimatikan otomatis (Windows memakai antialias abu-abu
-        // yang lebih tahan resample).
-        var effectiveOptions = options
-        fontSmoothingAutoDisabled = false
-        val parsedResolution = resolution?.let { SmartResolution.parse(it) }
-        if (options.fontSmoothing && parsedResolution != null) {
-            val dm = appContext.resources.displayMetrics
-            if (!SmartResolution.isPixelPerfect(
-                    dm.widthPixels, dm.heightPixels, parsedResolution.first, parsedResolution.second,
-                )
-            ) {
-                effectiveOptions = options.copy(fontSmoothing = false)
-                fontSmoothingAutoDisabled = true
-                ConnectionLog.add(
-                    "CM: resolusi $resolution bukan 1:1 dengan layar ${dm.widthPixels}x${dm.heightPixels}" +
-                        " -> ClearType dimatikan otomatis agar teks tidak bergerigi saat di-resample"
-                )
-            }
-        }
-
-        val base = RdpUri.build(profile, effectiveOptions)
+        val base = RdpUri.build(profile, options)
         val uriBuilder = base.buildUpon()
         if (!options.pcConnectMode && remoteScale in REMOTE_DESKTOP_SCALE_FACTORS && remoteScale != 100) {
             uriBuilder.appendQueryParameter("scale-desktop", remoteScale.toString())

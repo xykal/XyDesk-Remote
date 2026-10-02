@@ -255,11 +255,9 @@ class SessionPrefs(context: Context) {
 object DisplayPrefs {
 
     /**
-     * "Otomatis" — rasio desktop SELALU 16:9: ukuran standar terbesar yang
-     * muat di layar saat connect, dan 16:9 pas viewport saat live-resize.
-     * Dulu nilai ini mengikuti dimensi layar HP mentah, jadi desktop bisa
-     * jadi 20:9 — taskbar mini dan teks tidak terbaca. Itu yang bikin
-     * "rasionya membingungkan".
+     * "Otomatis" — rasio desktop SELALU 16:9 dan ukurannya ukuran STANDAR
+     * (1280x720 / 1600x900 / 1920x1080): yang terbesar yang muat di layar,
+     * dibatasi FHD. Mode normal — bukan pengejaran resolusi/ketajaman.
      */
     const val AUTOMATIC = "automatic"
 
@@ -283,8 +281,8 @@ object DisplayPrefs {
             listOf(
                 ResolutionOption(
                     AUTOMATIC,
-                    "Otomatis — 16:9 pas layar (paling tajam, 1:1)",
-                    "Automatic — 16:9 fit to screen (sharpest, 1:1)",
+                    "Otomatis — 16:9 standar (maks FHD)",
+                    "Automatic — standard 16:9 (max FHD)",
                 ),
                 ResolutionOption(
                     FOLLOW,

@@ -81,6 +81,14 @@ Note: this is an RDP client. RDP audio and microphone require the Windows host t
 allow audio redirection (`fDisableAudio`/`fDisableAudioCapture` = 0) and the
 Android microphone permission.
 
+## What's new di 0.5.33
+
+- Mode **Otomatis** kini memakai ukuran 16:9 standar (1280x720 / 1600x900 /
+  1920x1080) dengan batas atas FHD — perilaku normal, bukan pengejaran resolusi.
+- Pengaturan font smoothing tidak lagi diubah otomatis oleh aplikasi; apa yang
+  dipilih user itulah yang dipakai.
+- Dialog ubah resolusi kembali ringkas (tanpa peringatan teknis).
+
 ## What's new di 0.5.32
 
 - ClearType (font smoothing) dimatikan otomatis untuk sesi yang resolusinya bukan
