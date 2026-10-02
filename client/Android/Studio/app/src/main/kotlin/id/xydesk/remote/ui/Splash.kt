@@ -62,7 +62,7 @@ fun XySplashScreen(
     Box(
         Modifier
             .fillMaxSize()
-            .background(if (dark) Color(0xFF07090D) else Color(0xFFF6F7F9)),
+            .background(if (dark) Color(0xFF14161A) else Color(0xFFF6F7F9)),
         contentAlignment = Alignment.Center,
     ) {
         Image(

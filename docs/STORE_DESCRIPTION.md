@@ -88,6 +88,9 @@ Android microphone permission.
 - Pengaturan font smoothing tidak lagi diubah otomatis oleh aplikasi; apa yang
   dipilih user itulah yang dipakai.
 - Dialog ubah resolusi kembali ringkas (tanpa peringatan teknis).
+- Tema gelap aplikasi disamakan dengan situs resmi: arang netral (#14161A),
+  permukaan #1A1D23, garis #2E333B, teks #E4E7EB, aksen perak #D3D7DC —
+  tanpa hitam pekat/putih murni, kontras tetap tinggi tapi lebih nyaman.
 
 ## What's new di 0.5.32
 

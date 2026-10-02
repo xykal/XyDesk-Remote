@@ -35,20 +35,22 @@ import id.xydesk.remote.ui.AppPrefs
 // kecil (6-14dp) untuk panel; kontrol utama pakai bentuk pil penuh.
 // =============================================================
 
-// Tema gelap: dipisah lebih tegas (latar -> permukaan -> permukaan naik)
-// supaya kartu dan panel tidak menyatu jadi satu bidang gelap. Garis naik
-// satu tingkat supaya hairline tetap kelihatan di layar terang.
-val XyBg = Color(0xFF07090D)
-val XySurface = Color(0xFF11151D)
-val XySurfaceAlt = Color(0xFF1A202C)
-val XyPrimaryContainer = Color(0xFF263142)
-val XyLine = Color(0xFF2B3442)
-val XyLineStrong = Color(0xFF435064)
-val XyText = Color(0xFFF2F5F8)
-val XyTextDim = Color(0xFFB8C1CC)
-val XyTextFaint = Color(0xFF9AA2AB)
-val XyAccent = Color(0xFFF2F5F8)
-val XyAccentInk = Color(0xFF0A0D12)
+// Tema gelap = palet yang sama dengan situs (rdp.xydesk.my.id, mode gelap):
+// arang netral, teks off-white, aksen perak. Sengaja TANPA hitam pekat dan
+// tanpa putih murni supaya tidak "neon" — kontras tetap tinggi tapi kalem.
+// Latar -> permukaan -> permukaan naik dipisah satu langkah, garis naik satu
+// tingkat supaya hairline tetap kelihatan di layar terang.
+val XyBg = Color(0xFF14161A) // web: --bg
+val XySurface = Color(0xFF1A1D23) // web: --surface
+val XySurfaceAlt = Color(0xFF23272E) // web: --surface-alt
+val XyPrimaryContainer = Color(0xFF262B33) // langkah antara surface-alt dan line
+val XyLine = Color(0xFF2E333B) // web: --line
+val XyLineStrong = Color(0xFF3C424A) // web: --line-strong
+val XyText = Color(0xFFE4E7EB) // web: --text
+val XyTextDim = Color(0xFF9BA2AC) // web: --text-dim
+val XyTextFaint = Color(0xFF6F7681) // web: --text-faint
+val XyAccent = Color(0xFFD3D7DC) // web: --accent (perak)
+val XyAccentInk = Color(0xFF14161A) // web: --accent-ink
 val XyOk = Color(0xFF57C08B)
 val XyWarn = Color(0xFFD7A54E)
 val XyDanger = Color(0xFFE0706F)

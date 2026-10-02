@@ -1308,7 +1308,7 @@ fun XyDeskSessionScreen(
                 ) {
                     Text(
                         xy("LAYAR STEALTH / PRIVACY CURTAIN AKTIF", "STEALTH / PRIVACY CURTAIN ACTIVE"),
-                        color = Color(0xFF8C96A6),
+                        color = Color(0xFF9BA2AC),
                         fontSize = 11.sp,
                         letterSpacing = 1.4.sp,
                         fontWeight = FontWeight.SemiBold,

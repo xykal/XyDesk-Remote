@@ -1097,8 +1097,8 @@ private fun DeviceCard(
                     .align(Alignment.TopStart)
                     .padding(12.dp)
                     .clip(RoundedCornerShape(999.dp))
-                    .background(Color(0xD90D121B))
-                    .border(1.dp, Color(0xFF2B364B), RoundedCornerShape(999.dp))
+                    .background(Color(0xD91A1D23))
+                    .border(1.dp, Color(0xFF3C424A), RoundedCornerShape(999.dp))
                     .padding(horizontal = 10.dp, vertical = 4.dp),
             ) {
                 Text(
@@ -1110,7 +1110,7 @@ private fun DeviceCard(
                     fontFamily = FontFamily.Monospace,
                     fontSize = 9.5.sp,
                     fontWeight = FontWeight.Bold,
-                    color = Color(0xFFE2E8F0),
+                    color = Color(0xFFE4E7EB),
                 )
             }
             Column(
