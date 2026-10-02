@@ -265,7 +265,7 @@ class SessionManager(context: Context) {
         // yang lebih tahan resample).
         var effectiveOptions = options
         fontSmoothingAutoDisabled = false
-        val parsedResolution = SmartResolution.parse(resolution)
+        val parsedResolution = resolution?.let { SmartResolution.parse(it) }
         if (options.fontSmoothing && parsedResolution != null) {
             val dm = appContext.resources.displayMetrics
             if (!SmartResolution.isPixelPerfect(
