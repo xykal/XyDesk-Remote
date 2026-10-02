@@ -1,6 +1,7 @@
 package id.xydesk.remote.core
 
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertThrows
 import org.junit.Assert.assertTrue
@@ -190,6 +191,15 @@ class RdpOptionsTest {
     fun lanScannerEncodeIpv4ToPcIdMenghasilkanSepuluhDigitTerformat() {
         assertEquals("323-223-5826", LanScanner.encodeIpv4ToPcId("192.168.1.50"))
         assertNull(LanScanner.encodeIpv4ToPcId("invalid"))
+    }
+
+    @Test
+    fun smartResolutionHanyaSatuBandingSatuSaatResolusiSamaDenganLayar() {
+        // Desktop 1:1 dengan layar -> ClearType tetap dipakai.
+        assertTrue(SmartResolution.isPixelPerfect(1080, 2400, 1080, 606))
+        // 1080p pada layar 1080 lebar -> diperkecil 0,56x, bukan 1:1.
+        assertFalse(SmartResolution.isPixelPerfect(1080, 2400, 1920, 1080))
+        assertFalse(SmartResolution.isPixelPerfect(2400, 1080, 1280, 720))
     }
 
     @Test

@@ -66,6 +66,34 @@ object SmartResolution {
         return "${w}x$h"
     }
 
+    /**
+     * Skala yang dipakai HP saat menggambar desktop remote ke layar
+     * (fit = muat, ambil sisi paling sempit). 1.0 = 1:1 piksel.
+     *
+     * Kenapa penting: ClearType (font smoothing RDP) menggambar di level
+     * subpiksel; begitu desktop di-resample dengan skala != 1.0, tepi huruf
+     * jadi bercak warna/bergerigi. Di kondisi itu font smoothing lebih baik
+     * dimatikan supaya Windows memakai antialias abu-abu yang lebih tahan
+     * diperkecil.
+     */
+    fun fitFactor(viewportW: Int, viewportH: Int, resW: Int, resH: Int): Float {
+        if (viewportW <= 0 || viewportH <= 0 || resW <= 0 || resH <= 0) return 1f
+        return minOf(viewportW.toFloat() / resW, viewportH.toFloat() / resH)
+    }
+
+    /** True kalau desktop remote digambar 1:1 (tanpa resample) di layar ini. */
+    fun isPixelPerfect(viewportW: Int, viewportH: Int, resW: Int, resH: Int): Boolean {
+        val f = fitFactor(viewportW, viewportH, resW, resH)
+        return kotlin.math.abs(f - 1f) <= 0.02f
+    }
+
+    /** Versi string untuk pemanggil yang menyimpan resolusi sebagai "WxH". */
+    fun isPixelPerfectForScreen(context: Context, resolution: String?): Boolean {
+        val parsed = resolution?.let { parse(it) } ?: return true
+        val dm = context.resources.displayMetrics
+        return isPixelPerfect(dm.widthPixels, dm.heightPixels, parsed.first, parsed.second)
+    }
+
     /** "1920x1080" -> (1920, 1080); null kalau tidak valid. */
     fun parse(preset: String): Pair<Int, Int>? {
         val parts = preset.split('x')

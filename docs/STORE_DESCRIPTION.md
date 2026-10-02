@@ -81,6 +81,12 @@ Note: this is an RDP client. RDP audio and microphone require the Windows host t
 allow audio redirection (`fDisableAudio`/`fDisableAudioCapture` = 0) and the
 Android microphone permission.
 
+## What's new di 0.5.32
+
+- ClearType (font smoothing) dimatikan otomatis untuk sesi yang resolusinya bukan
+  1:1 dengan layar HP — kondisi itu membuat teks bergerigi karena di-resample.
+- Dialog ubah resolusi memperingatkan lebih dulu kalau pilihan bukan 1:1.
+
 ## What's new di 0.5.31
 
 - Mode resolusi **Otomatis** kembali memakai 16:9 yang pas 1:1 dengan layar HP,
