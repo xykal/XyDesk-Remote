@@ -54,6 +54,106 @@ test("mobile release-status API retains legacy fields and reports publication, n
   assert.ok(body.storePortal);
 });
 
+test("download stats sum APK asset counts across all available releases only", async () => {
+  const originalFetch = globalThis.fetch;
+  let requestedUrl;
+  let authorization;
+  globalThis.fetch = async (url, init) => {
+    requestedUrl = String(url);
+    authorization = new Headers(init.headers).get("authorization");
+    return new Response(JSON.stringify([
+      {
+        tag_name: "v1.0.0",
+        draft: false,
+        assets: [
+          { name: "app-arm64-v8a-release.apk", download_count: 40 },
+          { name: "app-armeabi-v7a-release.apk", download_count: 18 },
+          { name: "app-x86_64-release.apk", download_count: 14 },
+          { name: "XyDesk-Remote-Host-Agent-win64.zip", download_count: 90 },
+        ],
+      },
+      { tag_name: "v0.9.0", draft: false, assets: [{ name: "xydesk-legacy.apk", download_count: 13 }] },
+      { tag_name: "draft", draft: true, assets: [{ name: "unpublished.apk", download_count: 999 }] },
+    ]), { headers: { "content-type": "application/json" } });
+  };
+  try {
+    const response = await worker.fetch(
+      new Request("https://rdp.xydesk.my.id/api/stats"),
+      envFor({}, { GH_TOKEN: "test-token" }),
+    );
+    assert.equal(response.status, 200);
+    assert.match(response.headers.get("cache-control"), /s-maxage=900/);
+    const body = await response.json();
+    assert.equal(body.status, "ok");
+    assert.equal(body.total_apk_downloads, 85);
+    assert.equal(body.apk_asset_count, 4);
+    assert.equal(body.release_count, 2);
+    assert.match(body.note, /bukan jumlah pengguna unik/);
+    assert.equal(requestedUrl, "https://api.github.com/repos/xykal/XyDesk-Remote/releases?per_page=100&page=1");
+    assert.equal(authorization, "Bearer test-token");
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test("download stats fall back to the public GitHub API if the optional token is rejected", async () => {
+  const originalFetch = globalThis.fetch;
+  const authorizations = [];
+  globalThis.fetch = async (_url, init) => {
+    const authorization = new Headers(init.headers).get("authorization");
+    authorizations.push(authorization);
+    if (authorization) return new Response("bad token", { status: 401 });
+    return new Response(JSON.stringify([
+      { tag_name: "v1.0.0", assets: [{ name: "app.apk", download_count: 7 }] },
+    ]), { headers: { "content-type": "application/json" } });
+  };
+  try {
+    const response = await worker.fetch(
+      new Request("https://rdp.xydesk.my.id/api/stats"),
+      envFor({}, { GH_TOKEN: "expired-token" }),
+    );
+    assert.equal(response.status, 200);
+    assert.equal((await response.json()).total_apk_downloads, 7);
+    assert.deepEqual(authorizations, ["Bearer expired-token", null]);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test("download stats fail closed when GitHub release metadata is unavailable", async () => {
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async () => new Response("rate limited", { status: 403 });
+  try {
+    const response = await worker.fetch(new Request("https://rdp.xydesk.my.id/api/stats"), envFor());
+    assert.equal(response.status, 503);
+    assert.equal(response.headers.get("cache-control"), "no-store");
+    assert.deepEqual(await response.json(), {
+      status: "unavailable",
+      error: "Unduhan belum dapat dimuat dari GitHub.",
+    });
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test("download stats HEAD request returns headers without a body", async () => {
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async () => new Response(JSON.stringify([]), {
+    headers: { "content-type": "application/json" },
+  });
+  try {
+    const response = await worker.fetch(
+      new Request("https://rdp.xydesk.my.id/api/stats", { method: "HEAD" }),
+      envFor(),
+    );
+    assert.equal(response.status, 200);
+    assert.equal(await response.text(), "");
+    assert.match(response.headers.get("content-type"), /application\/json/);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
 test("APK alias keeps GH_TOKEN asset lookup and returns GitHub's redirect", async () => {
   const originalFetch = globalThis.fetch;
   let requestedUrl;

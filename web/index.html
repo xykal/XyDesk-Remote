@@ -709,6 +709,73 @@
       line-height: 1.55;
     }
     .download-facts strong { color: var(--text); }
+
+    .release-stats {
+      display: grid;
+      grid-template-columns: minmax(0, 1.15fr) minmax(220px, 0.85fr);
+      gap: 12px;
+      margin-top: 14px;
+    }
+
+    .release-stat-card {
+      min-width: 0;
+      padding: 16px 18px;
+      border: 1px solid var(--line);
+      border-radius: 12px;
+      background: var(--surface-alt);
+    }
+
+    .release-stat-label {
+      color: var(--text-dim);
+      font-size: 11px;
+      font-weight: 700;
+      letter-spacing: 0.07em;
+      text-transform: uppercase;
+    }
+
+    .release-stat-value {
+      display: block;
+      margin: 3px 0 5px;
+      color: var(--text);
+      font-size: clamp(28px, 5vw, 38px);
+      font-weight: 800;
+      letter-spacing: -0.05em;
+      line-height: 1.15;
+    }
+
+    .release-stat-note {
+      color: var(--text-dim);
+      font-size: 12px;
+      line-height: 1.5;
+    }
+
+    .release-stat-details {
+      display: grid;
+      align-content: center;
+      gap: 10px;
+    }
+
+    .release-stat-detail {
+      display: flex;
+      align-items: baseline;
+      justify-content: space-between;
+      gap: 12px;
+      color: var(--text-dim);
+      font-size: 12px;
+    }
+
+    .release-stat-detail strong {
+      color: var(--text);
+      font-family: var(--font-mono);
+      font-size: 14px;
+    }
+
+    #download-stats-updated {
+      color: var(--text-faint);
+      font-size: 11px;
+      line-height: 1.4;
+    }
+
     .release-actions { display: grid; gap: 8px; }
     .checksum-link { font-size: 12px; color: var(--text-dim); text-align: center; text-decoration: underline; text-underline-offset: 3px; }
     .checksum-link:hover { color: var(--text); }
@@ -884,6 +951,9 @@
     }
 
     @media (max-width: 640px) {
+      .release-stats {
+        grid-template-columns: 1fr;
+      }
       .brand-tag {
         display: none;
       }
@@ -1432,6 +1502,19 @@
             <p><strong data-i18n="dl.label.abi">Pilih ABI:</strong> <span data-i18n="dl.abi-help">arm64-v8a untuk kebanyakan HP modern, armeabi-v7a untuk perangkat ARM 32-bit, dan x86_64 untuk emulator/perangkat Android x86_64.</span></p>
           </div>
 
+          <div class="release-stats" aria-label="Statistik unduhan APK">
+            <div class="release-stat-card">
+              <div class="release-stat-label" data-i18n="dl.stats.total">Total unduhan APK</div>
+              <strong class="release-stat-value mono" id="apk-download-total" aria-live="polite">—</strong>
+              <p class="release-stat-note" data-i18n="dl.stats.scope">Jumlah unduhan APK dari semua rilis publik GitHub yang masih tersedia. Unduhan ulang ikut terhitung; ini bukan jumlah pengguna unik.</p>
+            </div>
+            <div class="release-stat-card release-stat-details">
+              <div class="release-stat-detail"><span data-i18n="dl.stats.releases">Rilis dengan APK</span><strong id="apk-release-count">—</strong></div>
+              <div class="release-stat-detail"><span data-i18n="dl.stats.files">Berkas APK</span><strong id="apk-asset-count">—</strong></div>
+              <div id="download-stats-updated" aria-live="polite" data-i18n="dl.stats.loading">Memuat statistik dari GitHub Releases…</div>
+            </div>
+          </div>
+
           <div class="pkg-table">
             <div class="pkg-row">
               <div>
@@ -1524,6 +1607,57 @@
     (function () {
       var currentTheme = localStorage.getItem("xydesk_theme") || "dark";
       var currentLang = localStorage.getItem("xydesk_lang") || "id";
+      var latestDownloadStats = null;
+      var downloadStatsFailed = false;
+
+      function renderDownloadStats() {
+        var total = document.getElementById("apk-download-total");
+        var releaseCount = document.getElementById("apk-release-count");
+        var assetCount = document.getElementById("apk-asset-count");
+        var updated = document.getElementById("download-stats-updated");
+        if (!total || !releaseCount || !assetCount || !updated) return;
+
+        if (!latestDownloadStats) {
+          if (downloadStatsFailed) {
+            updated.textContent = currentLang === "en"
+              ? "Download statistics are temporarily unavailable."
+              : "Statistik unduhan sementara tidak tersedia.";
+          }
+          return;
+        }
+
+        var locale = currentLang === "en" ? "en-US" : "id-ID";
+        total.textContent = new Intl.NumberFormat(locale).format(latestDownloadStats.total_apk_downloads);
+        releaseCount.textContent = new Intl.NumberFormat(locale).format(latestDownloadStats.release_count);
+        assetCount.textContent = new Intl.NumberFormat(locale).format(latestDownloadStats.apk_asset_count);
+        var date = new Date(latestDownloadStats.updated_at);
+        var dateText = Number.isNaN(date.getTime()) ? "" : date.toLocaleString(locale, {
+          dateStyle: "medium",
+          timeStyle: "short",
+          timeZone: "UTC"
+        }) + " UTC";
+        updated.textContent = (currentLang === "en" ? "Updated " : "Diperbarui ") + dateText;
+      }
+
+      function loadDownloadStats() {
+        fetch("/api/stats", { headers: { Accept: "application/json" } })
+          .then(function (response) {
+            if (!response.ok) throw new Error("Download stats request failed");
+            return response.json();
+          })
+          .then(function (data) {
+            if (data.status !== "ok" || !Number.isFinite(data.total_apk_downloads)) {
+              throw new Error("Invalid download stats response");
+            }
+            latestDownloadStats = data;
+            downloadStatsFailed = false;
+            renderDownloadStats();
+          })
+          .catch(function () {
+            downloadStatsFailed = true;
+            renderDownloadStats();
+          });
+      }
 
       // Mobile Hamburger Drawer
       var hamburgerBtn = document.getElementById("hamburger-btn");
@@ -1624,6 +1758,11 @@
         "dl.release.source": "Official source",
         "dl.release.source.sub": "GitHub · v1.0.0",
         "dl.checksum": "View SHA-256 checksums",
+        "dl.stats.total": "Total APK downloads",
+        "dl.stats.scope": "APK download count across all currently available public GitHub releases. Repeat downloads are counted; this is not a unique-user total.",
+        "dl.stats.releases": "Releases with APKs",
+        "dl.stats.files": "APK files counted",
+        "dl.stats.loading": "Loading statistics from GitHub Releases…",
         "dl.abi1": "Recommended for most modern 64-bit Android phones and tablets · 86.1 MB",
         "dl.abi2": "For 32-bit ARM Android devices only · 72.0 MB",
         "dl.abi3": "For x86_64 Android emulators or x86_64 Android PCs · 91.5 MB",
@@ -1667,6 +1806,7 @@
           langBtnMobile.textContent = l === "en" ? "Language: EN / ID" : "Bahasa: ID / EN";
         }
         applyTheme(currentTheme);
+        renderDownloadStats();
       }
 
       themeBtn.addEventListener("click", function () {
@@ -1687,6 +1827,7 @@
       }
 
       applyLang(currentLang);
+      loadDownloadStats();
     })();
   </script>
 </body>

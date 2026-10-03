@@ -28,10 +28,10 @@ const HEADERS = {
   "x-content-type-options": "nosniff",
 };
 
-function jsonResponse(data, status = 200, requestMethod = "GET") {
+function jsonResponse(data, status = 200, requestMethod = "GET", extraHeaders = {}) {
   return new Response(requestMethod === "HEAD" ? null : JSON.stringify(data), {
     status,
-    headers: HEADERS,
+    headers: { ...HEADERS, ...extraHeaders },
   });
 }
 
@@ -179,6 +179,96 @@ async function serveScriptAsset(request, env, fileName, downloadName, contentTyp
   });
 }
 
+async function downloadStatsResponse(request, env) {
+  const cache = globalThis.caches?.default;
+  const cacheKey = new Request(new URL("/api/stats", request.url), { method: "GET" });
+  if (cache) {
+    try {
+      const cached = await cache.match(cacheKey);
+      if (cached) {
+        return request.method === "HEAD"
+          ? new Response(null, { status: cached.status, headers: cached.headers })
+          : cached;
+      }
+    } catch {
+      // Cache is an optimization; a cache outage must not hide public release stats.
+    }
+  }
+
+  const headers = {
+    Accept: "application/vnd.github+json",
+    "User-Agent": "XyDesk-Remote-Web-Stats",
+    "X-GitHub-Api-Version": "2022-11-28",
+  };
+  if (env.GH_TOKEN) headers.Authorization = `Bearer ${env.GH_TOKEN}`;
+
+  try {
+    const releases = [];
+    let page = 1;
+    for (; page <= 20; page += 1) {
+      const releasesUrl = `https://api.github.com/repos/xykal/XyDesk-Remote/releases?per_page=100&page=${page}`;
+      let githubResponse = await fetch(releasesUrl, { headers });
+      if (!githubResponse.ok && env.GH_TOKEN && (githubResponse.status === 401 || githubResponse.status === 403)) {
+        try {
+          await githubResponse.body?.cancel();
+        } catch {
+          // Retry unauthenticated even if the rejected response body cannot be cancelled.
+        }
+        const publicHeaders = { ...headers };
+        delete publicHeaders.Authorization;
+        githubResponse = await fetch(releasesUrl, { headers: publicHeaders });
+      }
+      if (!githubResponse.ok) throw new Error(`GitHub API returned ${githubResponse.status}`);
+      const items = await githubResponse.json();
+      if (!Array.isArray(items)) throw new Error("Invalid GitHub releases response");
+      releases.push(...items.filter((release) => !release.draft));
+      if (items.length < 100) break;
+    }
+    if (page > 20) throw new Error("Release list exceeds the supported page limit");
+
+    const apkAssets = releases.flatMap((release) =>
+      (release.assets || [])
+        .filter((asset) => typeof asset.name === "string" && asset.name.toLowerCase().endsWith(".apk"))
+        .map((asset) => ({
+          tag: String(release.tag_name || "").slice(0, 100),
+          name: asset.name.slice(0, 160),
+          downloads: Math.max(0, Number(asset.download_count) || 0),
+        })),
+    );
+    const releaseTags = new Set(apkAssets.map((asset) => asset.tag).filter(Boolean));
+    const body = {
+      status: "ok",
+      scope: "available-public-releases",
+      total_apk_downloads: apkAssets.reduce((sum, asset) => sum + asset.downloads, 0),
+      apk_asset_count: apkAssets.length,
+      release_count: releaseTags.size,
+      source: "GitHub Releases API",
+      note: "Jumlah unduhan aset APK pada rilis yang masih tersedia, bukan jumlah pengguna unik. Unduhan ulang dihitung lagi.",
+      updated_at: new Date().toISOString(),
+    };
+    const response = jsonResponse(body, 200, "GET", {
+      "cache-control": "public, max-age=300, s-maxage=900",
+    });
+    if (cache) {
+      try {
+        await cache.put(cacheKey, response.clone());
+      } catch {
+        // Ignore cache write failures; the response is still valid.
+      }
+    }
+    return request.method === "HEAD"
+      ? new Response(null, { status: response.status, headers: response.headers })
+      : response;
+  } catch {
+    return jsonResponse(
+      { status: "unavailable", error: "Unduhan belum dapat dimuat dari GitHub." },
+      503,
+      request.method,
+      { "cache-control": "no-store" },
+    );
+  }
+}
+
 export default {
   async fetch(request, env) {
     if (request.method !== "GET" && request.method !== "HEAD") return methodNotAllowed();
@@ -188,6 +278,7 @@ export default {
 
     if (path === "/api/health") return healthResponse(request, env);
     if (path === "/api/status") return statusResponse(request, env);
+    if (path === "/api/stats") return downloadStatsResponse(request, env);
     if (path.startsWith("/api/")) return jsonResponse({ status: "not_found" }, 404, request.method);
 
     if (path === "/host" || path === "/host.ps1") {
