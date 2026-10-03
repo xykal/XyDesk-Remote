@@ -76,6 +76,54 @@ async function getReleaseMetadata(request, env) {
   return response.json();
 }
 
+function githubTokenCandidates(env) {
+  return [...new Set([env.GH_TOKEN, env.GH_PAT].filter((token) => typeof token === "string" && token.trim()))];
+}
+
+async function fetchGithubWithTokenFallback(url, env, headers, options = {}, authScheme = "Bearer") {
+  let lastError;
+  for (const token of githubTokenCandidates(env)) {
+    try {
+      const response = await fetch(url, {
+        ...options,
+        headers: { ...headers, Authorization: `${authScheme} ${token}` },
+      });
+      if (response.ok || response.headers.get("location")) return response;
+      try {
+        await response.body?.cancel();
+      } catch {
+        // Continue to the other configured token or the public API.
+      }
+    } catch (error) {
+      lastError = error;
+    }
+  }
+  try {
+    return await fetch(url, { ...options, headers });
+  } catch (error) {
+    throw lastError || error;
+  }
+}
+
+async function currentReleaseAssetUrl(asset, request, env) {
+  if (asset.repo !== "xykal/XyDesk-Remote") return null;
+  try {
+    const state = await getReleaseMetadata(request, env);
+    const tag = String(state.release_tag || "");
+    const fileName = String(asset.fileName || "");
+    if (!/^v[0-9A-Za-z._-]{1,80}$/.test(tag) || !/^[A-Za-z0-9._-]{1,160}$/.test(fileName)) return null;
+    const expectedPath = `/xykal/XyDesk-Remote/releases/download/${encodeURIComponent(tag)}/${encodeURIComponent(fileName)}`;
+    const configured = (state.downloads || []).find((entry) => entry?.file === fileName)?.url;
+    if (typeof configured === "string") {
+      const parsed = new URL(configured);
+      if (parsed.origin === "https://github.com" && parsed.pathname === expectedPath) return parsed.href;
+    }
+    return `https://github.com${expectedPath}`;
+  } catch {
+    return null;
+  }
+}
+
 async function healthResponse(request, env) {
   try {
     const state = await getReleaseMetadata(request, env);
@@ -122,33 +170,46 @@ async function statusResponse(request, env) {
   }
 }
 
-async function redirectLegacyAsset(asset, env) {
-  if (!asset || !env.GH_TOKEN) {
+async function redirectLegacyAsset(asset, env, request) {
+  if (!asset) {
     return new Response("Not Found", {
       status: 404,
       headers: { "content-type": "text/plain; charset=utf-8", "cache-control": "no-store" },
     });
   }
 
-  const authHeaders = {
-    Authorization: `token ${env.GH_TOKEN}`,
-    Accept: "application/octet-stream",
-    "User-Agent": "XyDesk-Remote-Worker",
-  };
+  // Current XyDesk Remote downloads already have a validated official URL in
+  // release-state.json. Use it directly so public APK links do not depend on a
+  // long-lived GitHub API token or its rate limit.
+  const currentUrl = await currentReleaseAssetUrl(asset, request, env);
+  if (currentUrl) return redirectResponse(currentUrl);
+
+  if (githubTokenCandidates(env).length === 0) {
+    return new Response("Not Found", {
+      status: 404,
+      headers: { "content-type": "text/plain; charset=utf-8", "cache-control": "no-store" },
+    });
+  }
+
   const metadataHeaders = {
-    Authorization: `token ${env.GH_TOKEN}`,
     Accept: "application/vnd.github+json",
     "User-Agent": "XyDesk-Remote-Worker",
   };
+  const assetHeaders = {
+    Accept: "application/octet-stream",
+    "User-Agent": "XyDesk-Remote-Worker",
+  };
 
-  // Prefer the matching APK asset from the newest available releases. The IDs
-  // below are only a fallback: GitHub keeps old asset IDs valid after a new APK
-  // is published, so trying the pinned ID first would silently serve an older build.
+  // For legacy repo aliases, try the configured token(s), then the public API.
   const assetIds = [];
   try {
-    const releasesResponse = await fetch(`https://api.github.com/repos/${asset.repo}/releases?per_page=10`, {
-      headers: metadataHeaders,
-    });
+    const releasesResponse = await fetchGithubWithTokenFallback(
+      `https://api.github.com/repos/${asset.repo}/releases?per_page=10`,
+      env,
+      metadataHeaders,
+      {},
+      "token",
+    );
     if (releasesResponse.ok) {
       const releases = await releasesResponse.json();
       if (Array.isArray(releases)) {
@@ -160,17 +221,24 @@ async function redirectLegacyAsset(asset, env) {
       }
     }
   } catch {
-    // Fall back to the saved asset ID if release metadata is temporarily unavailable.
+    // Use the saved asset ID if GitHub release metadata is temporarily unavailable.
   }
   if (Number.isSafeInteger(asset.id)) assetIds.push(asset.id);
 
   for (const id of [...new Set(assetIds)]) {
-    const response = await fetch(`https://api.github.com/repos/${asset.repo}/releases/assets/${id}`, {
-      headers: authHeaders,
-      redirect: "manual",
-    });
-    const location = response.headers.get("location");
-    if (location) return redirectResponse(location);
+    try {
+      const response = await fetchGithubWithTokenFallback(
+        `https://api.github.com/repos/${asset.repo}/releases/assets/${id}`,
+        env,
+        assetHeaders,
+        { redirect: "manual" },
+        "token",
+      );
+      const location = response.headers.get("location");
+      if (location) return redirectResponse(location);
+    } catch {
+      // Try the next candidate ID.
+    }
   }
 
   return new Response("Asset stream error", {
@@ -216,24 +284,13 @@ async function downloadStatsResponse(request, env) {
     "User-Agent": "XyDesk-Remote-Web-Stats",
     "X-GitHub-Api-Version": "2022-11-28",
   };
-  if (env.GH_TOKEN) headers.Authorization = `Bearer ${env.GH_TOKEN}`;
 
   try {
     const releases = [];
     let page = 1;
     for (; page <= 20; page += 1) {
       const releasesUrl = `https://api.github.com/repos/xykal/XyDesk-Remote/releases?per_page=100&page=${page}`;
-      let githubResponse = await fetch(releasesUrl, { headers });
-      if (!githubResponse.ok && env.GH_TOKEN && (githubResponse.status === 401 || githubResponse.status === 403)) {
-        try {
-          await githubResponse.body?.cancel();
-        } catch {
-          // Retry unauthenticated even if the rejected response body cannot be cancelled.
-        }
-        const publicHeaders = { ...headers };
-        delete publicHeaders.Authorization;
-        githubResponse = await fetch(releasesUrl, { headers: publicHeaders });
-      }
+      const githubResponse = await fetchGithubWithTokenFallback(releasesUrl, env, headers);
       if (!githubResponse.ok) throw new Error(`GitHub API returned ${githubResponse.status}`);
       const items = await githubResponse.json();
       if (!Array.isArray(items)) throw new Error("Invalid GitHub releases response");
@@ -524,12 +581,12 @@ export default {
 
     const key = path.slice(1);
     if (PUBLIC_ASSETS[key]) return redirectResponse(PUBLIC_ASSETS[key]);
-    if (QA_ASSETS[key]) return redirectLegacyAsset(QA_ASSETS[key], env);
+    if (QA_ASSETS[key]) return redirectLegacyAsset(QA_ASSETS[key], env, request);
 
     const qaPrefix = "/_qa/xykal-qa-latest/";
     if (path.startsWith(qaPrefix)) {
       const qaKey = path.slice(qaPrefix.length);
-      if (QA_ASSETS[qaKey]) return redirectLegacyAsset(QA_ASSETS[qaKey], env);
+      if (QA_ASSETS[qaKey]) return redirectLegacyAsset(QA_ASSETS[qaKey], env, request);
       if (PUBLIC_ASSETS[qaKey]) return redirectResponse(PUBLIC_ASSETS[qaKey]);
       return notFound(request.method);
     }

@@ -10,6 +10,11 @@ const releaseState = {
   release_tag: "v1.0.1",
   app_build: { version: "0.5.35", version_code: 52 },
   release_url: "https://github.com/xykal/XyDesk-Remote/releases/tag/v1.0.1",
+  downloads: [
+    { abi: "arm64-v8a", file: "app-arm64-v8a-release.apk", url: "https://github.com/xykal/XyDesk-Remote/releases/download/v1.0.1/app-arm64-v8a-release.apk" },
+    { abi: "armeabi-v7a", file: "app-armeabi-v7a-release.apk", url: "https://github.com/xykal/XyDesk-Remote/releases/download/v1.0.1/app-armeabi-v7a-release.apk" },
+    { abi: "x86_64", file: "app-x86_64-release.apk", url: "https://github.com/xykal/XyDesk-Remote/releases/download/v1.0.1/app-x86_64-release.apk" },
+  ],
 };
 
 function envFor(files = {}, extra = {}) {
@@ -115,6 +120,33 @@ test("download stats fall back to the public GitHub API if the optional token is
     assert.equal(response.status, 200);
     assert.equal((await response.json()).total_apk_downloads, 7);
     assert.deepEqual(authorizations, ["Bearer expired-token", null]);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test("download stats retry the read-only GH_PAT when GH_TOKEN is rejected", async () => {
+  const originalFetch = globalThis.fetch;
+  const authorizations = [];
+  globalThis.fetch = async (_url, init) => {
+    const authorization = new Headers(init.headers).get("authorization");
+    authorizations.push(authorization);
+    if (authorization === "Bearer expired-token") return new Response("bad token", { status: 401 });
+    if (authorization === "Bearer read-only-token") {
+      return new Response(JSON.stringify([
+        { tag_name: "v1.0.1", assets: [{ name: "app-arm64-v8a-release.apk", download_count: 5 }] },
+      ]), { headers: { "content-type": "application/json" } });
+    }
+    throw new Error("Unexpected unauthenticated GitHub request");
+  };
+  try {
+    const response = await worker.fetch(
+      new Request("https://rdp.xydesk.my.id/api/stats"),
+      envFor({}, { GH_TOKEN: "expired-token", GH_PAT: "read-only-token" }),
+    );
+    assert.equal(response.status, 200);
+    assert.equal((await response.json()).total_apk_downloads, 5);
+    assert.deepEqual(authorizations, ["Bearer expired-token", "Bearer read-only-token"]);
   } finally {
     globalThis.fetch = originalFetch;
   }
@@ -289,64 +321,94 @@ test("Android active-session reporting stays opt-in and sends only a random sess
   assert.doesNotMatch(reporter, /\.put\("(?:host|profile|username|password|clipboard)"/i);
 });
 
-test("APK alias prefers the newest matching release asset over the pinned old ID", async () => {
+test("current XyDesk Remote APK alias redirects from release-state without a GitHub token", async () => {
   const originalFetch = globalThis.fetch;
-  const requests = [];
-  globalThis.fetch = async (url, init) => {
-    const value = String(url);
-    requests.push({ url: value, authorization: new Headers(init.headers).get("authorization") });
-    if (value.endsWith("/releases?per_page=10")) {
-      return new Response(JSON.stringify([
-        { tag_name: "v1.0.1", draft: false, assets: [{ name: "app-arm64-v8a-release.apk", id: 707000001 }] },
-        { tag_name: "v1.0.0", draft: false, assets: [{ name: "app-arm64-v8a-release.apk", id: 606095803 }] },
-      ]), { headers: { "content-type": "application/json" } });
-    }
-    if (value.endsWith("/assets/707000001")) {
-      return new Response(null, {
-        status: 302,
-        headers: { location: "https://release-assets.githubusercontent.com/current.apk" },
-      });
-    }
-    throw new Error(`Unexpected GitHub request: ${value}`);
-  };
+  globalThis.fetch = async () => { throw new Error("current XyDesk Remote alias must not call the GitHub API"); };
   try {
     const response = await worker.fetch(
       new Request("https://rdp.xydesk.my.id/arm64-v8a.apk"),
-      envFor({}, { GH_TOKEN: "test-token" }),
+      envFor(),
     );
     assert.equal(response.status, 302);
-    assert.equal(response.headers.get("location"), "https://release-assets.githubusercontent.com/current.apk");
-    assert.ok(requests[0].url.endsWith("/releases?per_page=10"));
-    assert.equal(requests[0].authorization, "token test-token");
-    assert.ok(requests[1].url.endsWith("/assets/707000001"));
-    assert.equal(requests[1].authorization, "token test-token");
-    assert.equal(requests.some(({ url }) => url.endsWith("/assets/606095803")), false);
+    assert.equal(
+      response.headers.get("location"),
+      "https://github.com/xykal/XyDesk-Remote/releases/download/v1.0.1/app-arm64-v8a-release.apk",
+    );
   } finally {
     globalThis.fetch = originalFetch;
   }
 });
 
-test("APK alias falls back to its pinned asset ID when release metadata is unavailable", async () => {
+test("current XyDesk Remote host alias uses the published release tag without a GitHub token", async () => {
+  const response = await worker.fetch(
+    new Request("https://rdp.xydesk.my.id/XyDesk-Remote-Host-Agent-win64.zip"),
+    envFor(),
+  );
+  assert.equal(response.status, 302);
+  assert.equal(
+    response.headers.get("location"),
+    "https://github.com/xykal/XyDesk-Remote/releases/download/v1.0.1/XyDesk-Remote-Host-Agent-win64.zip",
+  );
+});
+
+test("legacy aliases retry GH_PAT when GH_TOKEN is rejected and choose the newest matching release", async () => {
+  const originalFetch = globalThis.fetch;
+  const requests = [];
+  globalThis.fetch = async (url, init) => {
+    const value = String(url);
+    const authorization = new Headers(init.headers).get("authorization");
+    requests.push({ url: value, authorization });
+    if (value.endsWith("/releases?per_page=10")) {
+      if (authorization === "token expired-token") return new Response("bad token", { status: 401 });
+      if (authorization === "token read-only-token") {
+        return new Response(JSON.stringify([
+          { tag_name: "v2.0.0", draft: false, assets: [{ name: "XyDesk-x64.exe", id: 707000001 }] },
+          { tag_name: "v1.0.0", draft: false, assets: [{ name: "XyDesk-x64.exe", id: 603985510 }] },
+        ]), { headers: { "content-type": "application/json" } });
+      }
+    }
+    if (value.endsWith("/assets/707000001") && authorization === "token read-only-token") {
+      return new Response(null, { status: 302, headers: { location: "https://release-assets.githubusercontent.com/current-legacy.exe" } });
+    }
+    throw new Error(`Unexpected GitHub request: ${value}`);
+  };
+  try {
+    const response = await worker.fetch(
+      new Request("https://rdp.xydesk.my.id/XyDesk-x64.exe"),
+      envFor({}, { GH_TOKEN: "expired-token", GH_PAT: "read-only-token" }),
+    );
+    assert.equal(response.status, 302);
+    assert.equal(response.headers.get("location"), "https://release-assets.githubusercontent.com/current-legacy.exe");
+    assert.deepEqual(requests.map((item) => item.authorization), [
+      "token expired-token", "token read-only-token", "token expired-token", "token read-only-token",
+    ]);
+    assert.ok(requests[2].url.endsWith("/assets/707000001"));
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test("legacy asset alias falls back to its pinned asset ID when release metadata is unavailable", async () => {
   const originalFetch = globalThis.fetch;
   const requested = [];
   globalThis.fetch = async (url) => {
     const value = String(url);
     requested.push(value);
     if (value.endsWith("/releases?per_page=10")) return new Response("temporarily unavailable", { status: 503 });
-    if (value.endsWith("/assets/606095803")) {
-      return new Response(null, { status: 302, headers: { location: "https://release-assets.githubusercontent.com/fallback.apk" } });
+    if (value.endsWith("/assets/603985510")) {
+      return new Response(null, { status: 302, headers: { location: "https://release-assets.githubusercontent.com/fallback-legacy.exe" } });
     }
     throw new Error(`Unexpected GitHub request: ${value}`);
   };
   try {
     const response = await worker.fetch(
-      new Request("https://rdp.xydesk.my.id/arm64-v8a.apk"),
+      new Request("https://rdp.xydesk.my.id/XyDesk-x64.exe"),
       envFor({}, { GH_TOKEN: "test-token" }),
     );
     assert.equal(response.status, 302);
-    assert.equal(response.headers.get("location"), "https://release-assets.githubusercontent.com/fallback.apk");
-    assert.ok(requested[0].endsWith("/releases?per_page=10"));
-    assert.ok(requested[1].endsWith("/assets/606095803"));
+    assert.equal(response.headers.get("location"), "https://release-assets.githubusercontent.com/fallback-legacy.exe");
+    assert.ok(requested.some((url) => url.endsWith("/releases?per_page=10")));
+    assert.ok(requested.some((url) => url.endsWith("/assets/603985510")));
   } finally {
     globalThis.fetch = originalFetch;
   }

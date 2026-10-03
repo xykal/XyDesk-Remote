@@ -4,7 +4,7 @@
 
 The public site is served at `https://rdp.xydesk.my.id/`. Its HTML and public assets live in `web/`; the Cloudflare Worker adapter lives in `cloudflare/worker.mjs`, with deployment settings in `wrangler.jsonc`.
 
-The production Worker was previously maintained as an embedded HTML script outside this repository; a Git push alone does **not** deploy the website. The project owner explicitly approved this current v1.0.1 full-ship deployment on 2026-10-03; that approval is limited to this release. The production deployment has not yet been run. Confirm `rdp.xydesk.my.id` as the Cloudflare target before executing the production command. Future production changes still require explicit approval.
+The production Worker was previously maintained as an embedded HTML script outside this repository; a Git push alone does **not** deploy the website. The project owner explicitly approved this v1.0.1 full-ship deployment on 2026-10-03; that approval is limited to this release. Initial deployment version `1374c19e-2ea5-4699-935e-bac0f7a9f26c` is live on `rdp.xydesk.my.id`. Smoke tests confirmed the SEO/static pages, Search Console file, release metadata, `/api/health`, `/api/status`, and `/api/active-sessions`; they also found `/api/stats` unavailable and APK aliases returning 502. A source correction is prepared locally and must be pushed before the corrective Worker deployment. Future production changes still require explicit approval.
 
 ## Local validation
 
@@ -21,7 +21,7 @@ A deployment replaces the code serving `rdp.xydesk.my.id`. Use a Cloudflare API 
 npx --yes wrangler@4 deploy --config wrangler.jsonc
 ```
 
-The Worker uses `GH_TOKEN` for both XyDesk Remote and legacy XyDesk asset aliases. For APKs it prefers the matching filename from the newest available GitHub Release, then falls back to the stored asset ID if release metadata is unavailable; this prevents a still-valid older asset ID from silently serving an outdated APK. `/SHA256SUMS.txt` is pinned to the current public release tag. The production `GH_TOKEN` binding was confirmed before deployment; keep it configured or those asset aliases will return 404. Set it through Wrangler's secret prompt if required; never commit its value.
+Current XyDesk Remote asset aliases redirect to the validated matching URL/tag in `release-state.json`, so APK and Host Agent downloads do not depend on a GitHub API token. `/SHA256SUMS.txt` is pinned to the current public release tag. Aggregate download statistics and legacy `xykal/XyDesk` aliases try `GH_TOKEN`, then `GH_PAT` (configure it with read-only access), then the public GitHub API where available. Keep a valid least-privilege read token for stable statistics/legacy aliases; set secrets through Wrangler and never commit or print their values.
 
 `GET /api/stats` sums the `download_count` values of `.apk` assets across currently available, non-draft GitHub Releases. It caches the aggregate at the Worker edge for up to 15 minutes; `GH_TOKEN` is optional for the public GitHub API request. The displayed number is asset downloads, not unique people, and deleted release assets cannot be counted. The release workflows retain published releases/tags so available APK releases continue contributing to the aggregate; only temporary Actions artifacts and old workflow runs are pruned.
 
