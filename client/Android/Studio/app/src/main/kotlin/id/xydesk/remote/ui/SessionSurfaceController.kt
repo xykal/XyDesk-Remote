@@ -89,6 +89,8 @@ class SessionSurfaceController(private val activity: Activity) : GraphicsSink {
     var onInputDispatchFailure: (() -> Unit)? = null
     var onCursorMoved: ((Int, Int) -> Unit)? = null
     var onInputKeyConsumed: (() -> Unit)? = null
+    /** Called once per coalesced display refresh when a dirty region is invalidated. */
+    var onGraphicsInvalidated: (() -> Unit)? = null
     var onImeSnippetCommitted: ((String) -> Unit)? = null
     @Volatile var hasActiveHudModifiers: Boolean = false
     @Volatile var overlayInputActive: Boolean = false
@@ -116,6 +118,7 @@ class SessionSurfaceController(private val activity: Activity) : GraphicsSink {
         val sv = sessionView ?: return@Runnable
         sv.addInvalidRegion(Rect(left, top, right, bottom))
         sv.invalidateRegion()
+        onGraphicsInvalidated?.invoke()
     }
 
     private fun asciiToAndroidKeyCode(codePoint: Int): Int = when (codePoint) {
@@ -522,6 +525,7 @@ class SessionSurfaceController(private val activity: Activity) : GraphicsSink {
         remoteCursorBitmap?.let { if (!it.isRecycled) it.recycle() }
         remoteCursorBitmap = null
         onRemoteCursor?.invoke(RemoteCursor(null, 0, 0, true))
+        onGraphicsInvalidated = null
         inst = 0L
         viewReady = false
     }

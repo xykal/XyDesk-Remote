@@ -4,7 +4,8 @@ package id.xydesk.remote.core
  * Sampel telemetri sesi (M2+) — dasar panel Stats HUD & Live Telemetry Pill.
  *
  * Dipancarkan [SessionManager.telemetry] tiap 500ms. `fps` = jumlah
- * update grafik per detik (ekstrapolasi 2x dari window 500ms).
+ * invalidasi grafik yang sudah dikoaleskan per detik (ekstrapolasi 2x dari
+ * window 500ms), bukan FPS yang dijanjikan host RDP.
  * `rttMs` = estimasi latensi TCP round-trip dalam milidetik (`-1` bila belum diukur).
  */
 data class TelemetrySample(

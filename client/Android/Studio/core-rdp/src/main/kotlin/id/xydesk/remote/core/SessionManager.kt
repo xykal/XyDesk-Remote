@@ -137,6 +137,11 @@ class SessionManager(context: Context) {
         this.sink = sink
     }
 
+    /** Count a coalesced graphics invalidation scheduled near display refresh. */
+    fun recordCoalescedGraphicsInvalidation() {
+        frameCounter.incrementAndGet()
+    }
+
     /** Instance native sesi aktif, 0L jika tidak ada. */
     fun instance(): Long = core?.getInstance() ?: 0L
 
@@ -146,8 +151,8 @@ class SessionManager(context: Context) {
 
     /**
      * Sampel telemetri tiap [TELEMETRY_INTERVAL_MS] — dikoleksi oleh UI
-     * (collectAsState) selama composition hidup. `fps` = update grafik
-     * per detik (window 500ms, diekstrapolasi 2x).
+     * (collectAsState) selama composition hidup. `fps` = invalidasi grafik
+     * yang dikoaleskan per detik (window 500ms, diekstrapolasi 2x), bukan FPS host.
      */
     val telemetry: Flow<TelemetrySample> = flow {
         var tick = 0
@@ -919,7 +924,6 @@ class SessionManager(context: Context) {
             override fun OnExperimentalFeature(feature: Int): Boolean = true
 
             override fun OnGraphicsUpdate(x: Int, y: Int, width: Int, height: Int) {
-                frameCounter.incrementAndGet()
                 sink?.onGraphicsUpdate(x, y, width, height)
             }
 

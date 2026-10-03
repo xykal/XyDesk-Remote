@@ -131,7 +131,7 @@ class SessionPrefs(context: Context) {
         get() = input.getBoolean(KEY_GYRO_MOUSE, false)
         set(v) = input.edit().putBoolean(KEY_GYRO_MOUSE, v).apply()
 
-    /** Pill telemetri jaringan live (FPS, RTT ms, Codec, UDP) di layar sesi. */
+    /** Pill telemetri live (invalidasi UI/dtk, RTT ms, codec, dan UDP) di layar sesi. */
     var showTelemetryPill: Boolean
         get() = input.getBoolean(KEY_TELEMETRY_PILL, true)
         set(v) = input.edit().putBoolean(KEY_TELEMETRY_PILL, v).apply()

@@ -323,7 +323,7 @@ public class SessionView extends View
 		if (event.isFromSource(InputDevice.SOURCE_MOUSE))
 		{
 			int action = event.getActionMasked();
-			if (event.getClassification() == MotionEvent.CLASSIFICATION_TWO_FINGER_SWIPE)
+			if (TouchEventCompat.isTwoFingerSwipe(event))
 			{
 				handleTouchpadScroll(event);
 				return true;

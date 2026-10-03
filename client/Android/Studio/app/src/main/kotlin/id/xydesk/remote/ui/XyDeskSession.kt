@@ -161,6 +161,7 @@ fun XyDeskSessionScreen(
     manager: SessionManager,
     controller: SessionSurfaceController,
     onExit: () -> Unit,
+    onDisplayRefreshPreferenceChange: (Int) -> Unit,
 ) {
     val context = LocalContext.current
     val sessionScope = rememberCoroutineScope()
@@ -1104,6 +1105,7 @@ fun XyDeskSessionScreen(
                         DisplayPrefs.setRemoteDpi(context, profile.id, scale)
                     }
                 },
+                onDisplayRefreshPreferenceChange = onDisplayRefreshPreferenceChange,
                 onScreenshot = {
                     val act = context as? Activity ?: return@SessionControls
                     sessionScope.launch {

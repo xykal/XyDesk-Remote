@@ -188,6 +188,14 @@ class RdpOptionsTest {
     }
 
     @Test
+    fun pcStreamEnginePreservesHandsetRefreshPreference() {
+        for (engine in XyPcStreamEngine.entries) {
+            assertEquals(90, RdpOptions(pcTargetFps = 90).withPcStreamEngine(engine).pcTargetFps)
+            assertEquals(30, RdpOptions(pcTargetFps = 30).withPcStreamEngine(engine).pcTargetFps)
+        }
+    }
+
+    @Test
     fun lanScannerEncodeIpv4ToPcIdMenghasilkanSepuluhDigitTerformat() {
         assertEquals("323-223-5826", LanScanner.encodeIpv4ToPcId("192.168.1.50"))
         assertNull(LanScanner.encodeIpv4ToPcId("invalid"))

@@ -62,6 +62,8 @@ internal fun SectionScreen(
     favorites: List<ConnectionProfile>,
     onMenu: () -> Unit,
     appPrefs: AppPrefs,
+    showFunHub: Boolean,
+    onShowFunHubChange: (Boolean) -> Unit,
     onEditDevice: (ConnectionProfile) -> Unit,
     onClearAllCredentials: () -> Unit,
     onShowLog: () -> Unit = {},
@@ -75,7 +77,7 @@ internal fun SectionScreen(
         when (section) {
             XySection.TAMPILAN -> DisplaySection(favorites, onEditDevice)
             XySection.KREDENSIAL -> CredentialsSection(favorites, onClearAllCredentials)
-            XySection.UMUM -> GeneralSection(appPrefs, onShowLog)
+            XySection.UMUM -> GeneralSection(appPrefs, showFunHub, onShowFunHubChange, onShowLog)
             XySection.KEAMANAN -> SecuritySection(appPrefs)
             XySection.TENTANG -> AboutSection()
             XySection.PERANGKAT -> Unit
@@ -340,7 +342,12 @@ private fun CredentialsSection(
 // =============================================================
 
 @Composable
-private fun GeneralSection(appPrefs: AppPrefs, onShowLog: () -> Unit) {
+private fun GeneralSection(
+    appPrefs: AppPrefs,
+    showFunHub: Boolean,
+    onShowFunHubChange: (Boolean) -> Unit,
+    onShowLog: () -> Unit,
+) {
     val context = LocalContext.current
     val prefs = remember { SessionPrefs(context) }
     var hudSize by remember { mutableStateOf(prefs.hudButtonSize) }
@@ -379,6 +386,19 @@ private fun GeneralSection(appPrefs: AppPrefs, onShowLog: () -> Unit) {
             .padding(horizontal = 16.dp),
         verticalArrangement = Arrangement.spacedBy(14.dp),
     ) {
+        XySectionLabel(xy("Beranda", "Home screen"))
+        XyCard {
+            XyToggleRow(
+                title = xy("Ruang Santai (meme & jokes)", "Fun corner (memes & jokes)"),
+                subtitle = xy(
+                    "Kartu humor ringan nonpartisan di beranda. Bisa disembunyikan kapan saja.",
+                    "An optional, nonpartisan humor card on the home screen. Hide it any time.",
+                ),
+                checked = showFunHub,
+                onCheckedChange = onShowFunHubChange,
+            )
+        }
+
         XySectionLabel(xy("Tampilan app", "App appearance"))
         XyCard {
             XySegmented(

@@ -247,6 +247,7 @@ data class RdpOptions(
     // ---- Streaming & Latency Tuning ----
     val pcConnectMode: Boolean = false,
     val pcStreamEngine: XyPcStreamEngine = XyPcStreamEngine.DIRECT_GAME_ULTRA,
+    /** Preferred handset display refresh for PC Connect; it does not force the host stream FPS. */
     val pcTargetFps: Int = 60,
     val pcBitrateMbps: Int = 25,
     val rawInputMouse: Boolean = true,
@@ -455,7 +456,7 @@ data class RdpOptions(
         XyPcStreamEngine.DIRECT_GAME_ULTRA -> copy(
             pcConnectMode = true,
             pcStreamEngine = XyPcStreamEngine.DIRECT_GAME_ULTRA,
-            pcTargetFps = if (pcTargetFps in setOf(60, 90, 120)) pcTargetFps else 60,
+            pcTargetFps = if (pcTargetFps in setOf(30, 60, 90, 120)) pcTargetFps else 60,
             pcBitrateMbps = pcBitrateMbps.coerceIn(15, 80),
             udpTransport = true,
             networkAutoDetect = true,
@@ -478,7 +479,6 @@ data class RdpOptions(
         XyPcStreamEngine.DIRECT_STUDIO_444 -> copy(
             pcConnectMode = true,
             pcStreamEngine = XyPcStreamEngine.DIRECT_STUDIO_444,
-            pcTargetFps = 60,
             pcBitrateMbps = pcBitrateMbps.coerceIn(25, 80),
             udpTransport = true,
             networkAutoDetect = false,
@@ -501,7 +501,6 @@ data class RdpOptions(
         XyPcStreamEngine.DIRECT_CINEMA -> copy(
             pcConnectMode = true,
             pcStreamEngine = XyPcStreamEngine.DIRECT_CINEMA,
-            pcTargetFps = 60,
             pcBitrateMbps = pcBitrateMbps.coerceIn(15, 60),
             udpTransport = true,
             networkAutoDetect = true,
@@ -524,7 +523,6 @@ data class RdpOptions(
         XyPcStreamEngine.DIRECT_LAN_TURBO -> copy(
             pcConnectMode = true,
             pcStreamEngine = XyPcStreamEngine.DIRECT_LAN_TURBO,
-            pcTargetFps = if (pcTargetFps >= 90) pcTargetFps else 120,
             pcBitrateMbps = 65,
             udpTransport = true,
             networkAutoDetect = false,

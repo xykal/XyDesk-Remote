@@ -709,16 +709,24 @@ fun AddDeviceScreen(
 
                     Spacer(Modifier.height(14.dp))
                     Text(
-                        xy("Target Kecepatan Frame (Direct Pacing)", "Target Frame Rate (Direct Pacing)"),
+                        xy("Preferensi refresh layar HP", "Handset display refresh preference"),
                         style = MaterialTheme.typography.titleSmall,
                     )
+                    Text(
+                        xy(
+                            "Meminta Android memilih refresh panel yang tersedia. FPS stream remote tetap dibatasi host, jaringan, dan kemampuan layar.",
+                            "Asks Android to select a supported panel refresh mode. Remote stream FPS still depends on the host, network, and display.",
+                        ),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
                     Spacer(Modifier.height(6.dp))
-                    val fpsChoices = listOf(30, 60, 90, 120)
+                    val refreshChoices = listOf(30, 60, 90, 120)
                     XySegmented(
-                        options = fpsChoices.map { "$it FPS" },
-                        selectedIndex = fpsChoices.indexOf(options.pcTargetFps).coerceAtLeast(1),
+                        options = refreshChoices.map { "$it Hz" },
+                        selectedIndex = refreshChoices.indexOf(options.pcTargetFps).coerceAtLeast(1),
                         onSelect = { idx ->
-                            options = options.copy(pcTargetFps = fpsChoices[idx], pcConnectMode = true)
+                            options = options.copy(pcTargetFps = refreshChoices[idx], pcConnectMode = true)
                         },
                         modifier = Modifier.fillMaxWidth(),
                     )

@@ -129,6 +129,7 @@ fun SessionControls(
     onZoomActual: () -> Unit,
     onZoomScale: (Float) -> Unit,
     onRemoteDpiChange: (Int) -> Unit,
+    onDisplayRefreshPreferenceChange: (Int) -> Unit = {},
     onScreenshot: () -> Unit,
     onDisconnect: () -> Unit,
     onPointerVisibilityChange: (Boolean) -> Unit,
@@ -738,6 +739,7 @@ fun SessionControls(
                 onZoomActual = onZoomActual,
                 onZoomScale = onZoomScale,
                 onRemoteDpiChange = onRemoteDpiChange,
+                onDisplayRefreshPreferenceChange = onDisplayRefreshPreferenceChange,
                 showTelemetryPill = showTelemetryPill,
                 onShowTelemetryPillChange = { showTelemetryPill = it; prefs.showTelemetryPill = it },
                 onOpenMonitorGrid = {
@@ -1041,7 +1043,7 @@ private fun LiveTelemetryPill(
     val rttLabel = if (rtt > 0) "${rtt} ms" else "-- ms"
     val resLabel = if (telemetry.width > 0) "${telemetry.width}x${telemetry.height}" else "--"
     val items = listOf(
-        Triple("FPS", "${telemetry.fps}", Color(0xFFF4F8FC)),
+        Triple("UI/s", "${telemetry.fps}", Color(0xFFF4F8FC)),
         Triple("LATENCY", rttLabel, rttColor),
         Triple("RESOLUSI", resLabel, Color(0xFFF4F8FC)),
         Triple("ENCODE", telemetry.codecLabel, Color(0xFFF4F8FC)),
@@ -1254,6 +1256,7 @@ private fun SessionPanel(
     onZoomActual: () -> Unit,
     onZoomScale: (Float) -> Unit,
     onRemoteDpiChange: (Int) -> Unit,
+    onDisplayRefreshPreferenceChange: (Int) -> Unit,
     showTelemetryPill: Boolean,
     onShowTelemetryPillChange: (Boolean) -> Unit,
     onOpenMonitorGrid: () -> Unit,
@@ -1394,6 +1397,7 @@ private fun SessionPanel(
                         onZoomActual = onZoomActual,
                         onZoomScale = onZoomScale,
                         onRemoteDpiChange = onRemoteDpiChange,
+                        onDisplayRefreshPreferenceChange = onDisplayRefreshPreferenceChange,
                         showTelemetryPill = showTelemetryPill,
                         onShowTelemetryPillChange = onShowTelemetryPillChange,
                         onOpenMonitorGrid = onOpenMonitorGrid,
@@ -1485,6 +1489,7 @@ private fun ScreenTab(
     onZoomActual: () -> Unit,
     onZoomScale: (Float) -> Unit,
     onRemoteDpiChange: (Int) -> Unit,
+    onDisplayRefreshPreferenceChange: (Int) -> Unit,
     showTelemetryPill: Boolean,
     onShowTelemetryPillChange: (Boolean) -> Unit,
     onOpenMonitorGrid: () -> Unit,
@@ -1499,8 +1504,8 @@ private fun ScreenTab(
         else xy("Telemetri & Multi-Monitor / Sesi RDP", "Live Telemetry & Multi-Monitor / RDP Sessions"),
     ) {
         XyToggleRow(
-            title = xy("Status telemetri live (FPS, Latency, Network)", "Live telemetry status (FPS, Latency, Network)"),
-            subtitle = xy("Tampilkan FPS, Latency, Resolusi, Encode, Relay, dan Network secara ringkas di kiri atas", "Show compact FPS, Latency, Resolution, Encode, Relay, and Network at top-left"),
+            title = xy("Status telemetri live (Update UI, Latency, Network)", "Live telemetry status (UI updates, latency, network)"),
+            subtitle = xy("UI/s adalah invalidasi tampilan per detik, bukan FPS host. Tampilkan bersama latency, resolusi, codec, relay, dan jaringan.", "UI/s counts display invalidations per second, not host FPS. Show it with latency, resolution, codec, relay, and network."),
             checked = showTelemetryPill,
             onCheckedChange = onShowTelemetryPillChange,
         )
@@ -1584,15 +1589,28 @@ private fun ScreenTab(
                     }
                 }
             }
-            val fpsList = listOf(30, 60, 90, 120)
+            PanelHint(
+                xy(
+                    "Refresh ini meminta mode layar HP yang tersedia; bukan jaminan FPS dari Windows. FPS remote tetap bergantung host, codec, dan jaringan.",
+                    "This requests a supported phone display mode; it does not guarantee Windows FPS. Remote FPS still depends on host, codec, and network.",
+                ),
+            )
+            val refreshRates = listOf(30, 60, 90, 120)
             XySegmented(
-                options = fpsList.map { "$it FPS" },
-                selectedIndex = fpsList.indexOf(pcOptions.pcTargetFps).coerceAtLeast(1),
+                options = refreshRates.map { "$it Hz" },
+                selectedIndex = refreshRates.indexOf(pcOptions.pcTargetFps).coerceAtLeast(1),
                 onSelect = { idx ->
-                    val next = pcOptions.copy(pcTargetFps = fpsList[idx], pcConnectMode = true)
+                    val next = pcOptions.copy(pcTargetFps = refreshRates[idx], pcConnectMode = true)
                     pcOptions = next
                     next.write(context, deviceId)
-                    notice.show(xyNow("Target FPS Koneksi PC: {0} FPS", "PC Connect Target FPS: {0} FPS", fpsList[idx]))
+                    onDisplayRefreshPreferenceChange(refreshRates[idx])
+                    notice.show(
+                        xyNow(
+                            "Permintaan refresh layar HP: {0} Hz; FPS remote tetap bergantung host/jaringan",
+                            "Phone display refresh request: {0} Hz; remote FPS still depends on host/network",
+                            refreshRates[idx],
+                        ),
+                    )
                 },
                 modifier = Modifier.fillMaxWidth(),
             )

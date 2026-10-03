@@ -34,6 +34,7 @@ import id.xydesk.remote.XySessionService
 import id.xydesk.remote.core.ConnectionLog
 import id.xydesk.remote.core.ConnectionProfile
 import id.xydesk.remote.core.RdpOptions
+import id.xydesk.remote.core.RefreshRatePolicy
 import id.xydesk.remote.core.SessionManager
 import id.xydesk.remote.core.SessionState
 import com.freerdp.freerdpcore.utils.ClipboardImageProvider
@@ -281,6 +282,7 @@ class XyDeskSessionActivity : ComponentActivity() {
             ConnectionLog.add("SES: activity created")
             manager = SessionManager(applicationContext)
             controller = SessionSurfaceController(this)
+            controller.onGraphicsInvalidated = manager::recordCoalescedGraphicsInvalidation
             controller.onInputDispatchFailure = { reportInputDispatchFailure() }
             // sink WAJIB sebelum connect — event grafik pertama tidak boleh hilang
             manager.setGraphicsSink(controller)
@@ -304,6 +306,7 @@ class XyDeskSessionActivity : ComponentActivity() {
         ConnectionLog.add("SES: profil ok -> ${profile.host}:${profile.port}")
         sessionId = profile.id
         sessionLabel = profile.label ?: "${profile.host}:${profile.port}"
+        requestPreferredRefreshRate(profile)
 
         hideSystemBars()
 
@@ -362,6 +365,7 @@ class XyDeskSessionActivity : ComponentActivity() {
                     manager = manager,
                     controller = controller,
                     onExit = { finish() },
+                    onDisplayRefreshPreferenceChange = { applyPreferredDisplayRefreshRate(it) },
                 )
             }
         }
@@ -440,6 +444,46 @@ class XyDeskSessionActivity : ComponentActivity() {
         clipboardReader.shutdownNow()
         controller.release()
         manager.release()
+    }
+
+    /**
+     * Ask Android for the handset's best supported display refresh while an
+     * RDP session is foregrounded. This is a preference, not a promise about
+     * the remote host's frame production rate.
+     */
+    private fun requestPreferredRefreshRate(profile: ConnectionProfile) {
+        runCatching {
+            val options = RdpOptions.of(this, profile.id)
+            applyPreferredDisplayRefreshRate(
+                requestedHz = if (options.pcConnectMode) options.pcTargetFps else null,
+            )
+        }.onFailure { error ->
+            Log.w(TAG, "could not read display refresh preference; using system default", error)
+        }
+    }
+
+    @Suppress("DEPRECATION")
+    private fun applyPreferredDisplayRefreshRate(requestedHz: Int?) {
+        runCatching {
+            val display = windowManager.defaultDisplay
+            val currentMode = display.mode
+            val sameResolution = display.supportedModes.filter {
+                it.physicalWidth == currentMode.physicalWidth &&
+                    it.physicalHeight == currentMode.physicalHeight
+            }
+            val modes = sameResolution.ifEmpty { display.supportedModes.toList() }
+            val rates = modes.map { it.refreshRate }
+            val preferred = RefreshRatePolicy.choose(requestedHz, rates)
+                ?: display.refreshRate.takeIf { it.isFinite() && it > 0f }
+                ?: return
+            window.attributes = window.attributes.apply { preferredRefreshRate = preferred }
+            ConnectionLog.add(
+                "SES: local display refresh requested=${requestedHz ?: "max"}Hz " +
+                    "selected=${preferred}Hz supported=${rates.sorted().joinToString()}Hz",
+            )
+        }.onFailure { error ->
+            Log.w(TAG, "display refresh preference unavailable; using system default", error)
+        }
     }
 
     /** Immersive: bar transparan, hide sistem bar (swipe untuk transient). */

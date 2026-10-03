@@ -35,7 +35,9 @@ public class PrintJobMonitor extends FileObserver
 
 	public PrintJobMonitor(Listener listener)
 	{
-		super(new File(WATCH_DIR), CLOSE_WRITE);
+		// The FileObserver(File, int) overload was added in API 29. This
+		// legacy String-path overload exists on our minSdk (24) and earlier.
+		super(WATCH_DIR, CLOSE_WRITE);
 		this.listener = listener;
 	}
 

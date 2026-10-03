@@ -35,6 +35,8 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -42,6 +44,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -131,7 +134,9 @@ fun XyDeskHome(
     LaunchedEffect(dataReady) { if (dataReady) onReady() }
     val scope = rememberCoroutineScope()
     val appPrefs = remember { AppPrefs(context) }
+    var showFunHub by remember { mutableStateOf(appPrefs.showFunHub) }
     var drawerOpen by remember { mutableStateOf(false) }
+    var helpToolsOpen by remember { mutableStateOf(false) }
     var section by remember { mutableStateOf(XySection.PERANGKAT) }
     var route by remember { mutableStateOf<XyRoute>(XyRoute.Devices) }
     var crashLog by remember { mutableStateOf(CrashLog.last(context.applicationContext)) }
@@ -303,6 +308,11 @@ fun XyDeskHome(
                         },
                         onConnect = { connect(it) },
                         onWakeConnect = { wakeAndConnect(it) },
+                        showFunHub = showFunHub,
+                        onShowFunHubChange = { enabled ->
+                            showFunHub = enabled
+                            appPrefs.showFunHub = enabled
+                        },
                         onDelete = { profile -> confirmDeleteDevice = profile },
                         onShowCrash = { showCrash = true },
                         onShowBoot = { showBoot = true },
@@ -313,6 +323,11 @@ fun XyDeskHome(
                         favorites = favorites,
                         onMenu = { drawerOpen = true },
                         appPrefs = appPrefs,
+                        showFunHub = showFunHub,
+                        onShowFunHubChange = { enabled ->
+                            showFunHub = enabled
+                            appPrefs.showFunHub = enabled
+                        },
                         onEditDevice = {
                             route = XyRoute.EditDevice(
                                 it,
@@ -411,48 +426,63 @@ fun XyDeskHome(
                     },
                 )
             }
-            Spacer(Modifier.height(8.dp))
-            XyPillButton(
-                text = xy("Cadangkan / Pulihkan Profil", "Backup / Restore Profiles"),
-                onClick = {
-                    drawerOpen = false
-                    backupJsonInput = exportProfilesJson(context, favorites)
-                    backupModalOpen = true
+            XyRow(
+                title = xy("Alat & bantuan", "Tools & help"),
+                subtitle = xy("Cadangan, pembaruan, dan masukan", "Backup, updates, and feedback"),
+                modifier = Modifier.padding(horizontal = 8.dp),
+                leading = XyIcons.Folder,
+                trailing = {
+                    Text(
+                        if (helpToolsOpen) "−" else "+",
+                        style = MaterialTheme.typography.titleMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
                 },
-                modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp),
-                primary = false,
-                icon = XyIcons.Folder,
-                compact = true,
+                onClick = { helpToolsOpen = !helpToolsOpen },
             )
-            Spacer(Modifier.height(6.dp))
-            XyPillButton(
-                text = xy("Cek Pembaruan & RilisIn Store", "Check Update & RilisIn Store"),
-                onClick = {
-                    drawerOpen = false
-                    updateModalOpen = true
-                    updateStatusText = xyNow("Memeriksa status rilis terbaru dari rdp.xydesk.my.id...", "Checking latest release status from rdp.xydesk.my.id...")
-                    scope.launch {
-                        val status = withContext(Dispatchers.IO) { fetchRemoteReleaseStatus(context) }
-                        updateStatusText = status
-                    }
-                },
-                modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp),
-                primary = false,
-                icon = XyIcons.Shield,
-                compact = true,
-            )
-            Spacer(Modifier.height(6.dp))
-            XyPillButton(
-                text = xy("Masukan & saran", "Feedback & suggestions"),
-                onClick = {
-                    drawerOpen = false
-                    feedbackOpen = true
-                },
-                modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp),
-                primary = false,
-                icon = XyIcons.Info,
-                compact = true,
-            )
+            if (helpToolsOpen) {
+                XyPillButton(
+                    text = xy("Cadangkan / Pulihkan Profil", "Backup / Restore Profiles"),
+                    onClick = {
+                        drawerOpen = false
+                        backupJsonInput = exportProfilesJson(context, favorites)
+                        backupModalOpen = true
+                    },
+                    modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp),
+                    primary = false,
+                    icon = XyIcons.Folder,
+                    compact = true,
+                )
+                Spacer(Modifier.height(6.dp))
+                XyPillButton(
+                    text = xy("Cek Pembaruan & RilisIn Store", "Check Update & RilisIn Store"),
+                    onClick = {
+                        drawerOpen = false
+                        updateModalOpen = true
+                        updateStatusText = xyNow("Memeriksa status rilis terbaru dari rdp.xydesk.my.id...", "Checking latest release status from rdp.xydesk.my.id...")
+                        scope.launch {
+                            val status = withContext(Dispatchers.IO) { fetchRemoteReleaseStatus(context) }
+                            updateStatusText = status
+                        }
+                    },
+                    modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp),
+                    primary = false,
+                    icon = XyIcons.Shield,
+                    compact = true,
+                )
+                Spacer(Modifier.height(6.dp))
+                XyPillButton(
+                    text = xy("Masukan & saran", "Feedback & suggestions"),
+                    onClick = {
+                        drawerOpen = false
+                        feedbackOpen = true
+                    },
+                    modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp),
+                    primary = false,
+                    icon = XyIcons.Info,
+                    compact = true,
+                )
+            }
             Spacer(Modifier.weight(1f))
             Text(
                 "v${appVersion(context)}",
@@ -790,6 +820,8 @@ private fun DevicesScreen(
     onEdit: (ConnectionProfile) -> Unit,
     onConnect: (ConnectionProfile) -> Unit,
     onWakeConnect: (ConnectionProfile) -> Unit,
+    showFunHub: Boolean,
+    onShowFunHubChange: (Boolean) -> Unit,
     onDelete: (ConnectionProfile) -> Unit,
     onShowCrash: () -> Unit,
     onShowBoot: () -> Unit,
@@ -854,33 +886,41 @@ private fun DevicesScreen(
 
             if (favorites.isEmpty()) {
                 Box(Modifier.fillMaxSize().padding(24.dp), contentAlignment = Alignment.Center) {
-                    XyCard(modifier = Modifier.fillMaxWidth()) {
-                        Text(xy("Belum ada perangkat", "No devices yet"), style = MaterialTheme.typography.titleMedium)
-                        Spacer(Modifier.height(6.dp))
-                        Text(
-                            xy(
-                                "Pilih Koneksi PC (ID & Password via XyDeskHost.exe dengan dukungan GPU Gaming) " +
-                                    "atau Koneksi RDP standar lewat IP lokal, domain, maupun Tailscale.",
-                                "Choose PC Connection (ID & Password via XyDeskHost.exe with Gaming GPU support) " +
-                                    "or standard RDP Connection over a local IP, domain, or Tailscale.",
-                            ),
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
-                        Spacer(Modifier.height(16.dp))
-                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                            XyPillButton(
-                                xy("Koneksi PC (ID)", "PC (ID & Pass)"),
-                                onAddPcQuick,
-                                icon = XyIcons.Plus,
-                                modifier = Modifier.weight(1f),
+                    Column(
+                        Modifier.fillMaxSize().verticalScroll(rememberScrollState()),
+                        verticalArrangement = Arrangement.spacedBy(12.dp),
+                    ) {
+                        XyCard(modifier = Modifier.fillMaxWidth()) {
+                            Text(xy("Belum ada perangkat", "No devices yet"), style = MaterialTheme.typography.titleMedium)
+                            Spacer(Modifier.height(6.dp))
+                            Text(
+                                xy(
+                                    "Pilih Koneksi PC (ID & Password via XyDeskHost.exe dengan dukungan GPU Gaming) " +
+                                        "atau Koneksi RDP standar lewat IP lokal, domain, maupun Tailscale.",
+                                    "Choose PC Connection (ID & Password via XyDeskHost.exe with Gaming GPU support) " +
+                                        "or standard RDP Connection over a local IP, domain, or Tailscale.",
+                                ),
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
                             )
-                            XyPillButton(
-                                xy("Koneksi RDP", "Standard RDP"),
-                                onAddRdp,
-                                primary = false,
-                                modifier = Modifier.weight(1f),
-                            )
+                            Spacer(Modifier.height(16.dp))
+                            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                XyPillButton(
+                                    xy("Koneksi PC (ID)", "PC (ID & Pass)"),
+                                    onAddPcQuick,
+                                    icon = XyIcons.Plus,
+                                    modifier = Modifier.weight(1f),
+                                )
+                                XyPillButton(
+                                    xy("Koneksi RDP", "Standard RDP"),
+                                    onAddRdp,
+                                    primary = false,
+                                    modifier = Modifier.weight(1f),
+                                )
+                            }
+                        }
+                        if (showFunHub) {
+                            FunHubCard(onHide = { onShowFunHubChange(false) })
                         }
                     }
                 }
@@ -939,6 +979,9 @@ private fun DevicesScreen(
                             onEdit = { onEdit(profile) },
                             onDelete = { onDelete(profile) },
                         )
+                    }
+                    if (showFunHub) {
+                        item { FunHubCard(onHide = { onShowFunHubChange(false) }) }
                     }
                     item { Spacer(Modifier.height(12.dp)) }
                 }
@@ -1103,7 +1146,7 @@ private fun DeviceCard(
             ) {
                 Text(
                     text = if (rdpOptions.pcConnectMode) {
-                        "DIRECT PC  ·  ${rdpOptions.pcStreamEngine.badge}  ·  ${rdpOptions.pcTargetFps}FPS"
+                        "DIRECT PC  ·  ${rdpOptions.pcStreamEngine.badge}  ·  ${rdpOptions.pcTargetFps}Hz"
                     } else {
                         "RDP DESKTOP  ·  $streamBadge"
                     },
