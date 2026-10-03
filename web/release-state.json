@@ -44,5 +44,11 @@
   "rilisin": {
     "state": "requires-team-credentials",
     "url": "https://rilisin.xyverse.my.id/"
-  }
+  },
+  "minimum_android": {
+    "version": "10",
+    "api": 29,
+    "display": "Android 10 (API 29) or later"
+  },
+  "checksums_url": "https://github.com/xykal/XyDesk-Remote/releases/download/v1.0.0/SHA256SUMS.txt"
 }

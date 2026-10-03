@@ -1,7 +1,7 @@
 @echo off
-title XyDesk Remote Host v0.5.23 - XyVerse Technology Global
+title XyDesk Remote Host v0.5.34 - XyVerse Technology Global
 echo ================================================================
-echo   XyDesk Remote v0.5.23 - Windows PC Host ^& Native QUIC Setup
+echo   XyDesk Remote v0.5.34 - Windows PC Host ^& Native QUIC Setup
 echo   Powered by XyVerse Technology Global
 echo ================================================================
 echo.

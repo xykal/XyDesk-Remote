@@ -4,7 +4,30 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
   <title>Kebijakan Privasi — XyDesk Remote</title>
-  <meta name="description" content="Kebijakan Privasi dan Arsitektur Keamanan Data XyDesk Remote oleh XyVerse Technology Global." />
+  <meta name="description" content="Kebijakan privasi XyDesk Remote: data yang diproses aplikasi, penyimpanan kredensial, izin Android, dan layanan jaringan yang digunakan." />
+  <!-- SEO metadata:start -->
+  <meta name="robots" content="index,follow" />
+  <meta name="author" content="XyVerse Technology Global" />
+  <meta name="theme-color" content="#14161A" />
+  <link rel="canonical" href="https://rdp.xydesk.my.id/privacy.html" />
+  <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+  <meta property="og:site_name" content="XyDesk Remote" />
+  <meta property="og:type" content="website" />
+  <meta property="og:locale" content="id_ID" />
+  <meta property="og:url" content="https://rdp.xydesk.my.id/privacy.html" />
+  <meta property="og:title" content="Kebijakan Privasi — XyDesk Remote" />
+  <meta property="og:description" content="Informasi tentang data, kredensial lokal, izin perangkat, dan koneksi jaringan XyDesk Remote." />
+  <meta property="og:image" content="https://rdp.xydesk.my.id/og-xydesk-remote.png" />
+  <meta property="og:image:type" content="image/png" />
+  <meta property="og:image:width" content="1200" />
+  <meta property="og:image:height" content="630" />
+  <meta property="og:image:alt" content="XyDesk Remote — klien Remote Desktop Android untuk PC Windows" />
+  <meta name="twitter:card" content="summary_large_image" />
+  <meta name="twitter:title" content="Kebijakan Privasi — XyDesk Remote" />
+  <meta name="twitter:description" content="Informasi tentang data, kredensial lokal, izin perangkat, dan koneksi jaringan XyDesk Remote." />
+  <meta name="twitter:image" content="https://rdp.xydesk.my.id/og-xydesk-remote.png" />
+  <!-- SEO metadata:end -->
+
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@500;600;700&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
@@ -153,11 +176,15 @@
       <p class="lead">
         Dokumen ini menjelaskan bagaimana XyDesk Remote menangani konfigurasi koneksi, kredensial, izin perangkat, dan keamanan komunikasi. Diterbitkan oleh <strong>XyVerse Technology Global</strong>.
       </p>
+      <div class="section-card">
+        <h2>Catatan cakupan</h2>
+        <p>Dokumen ini menerangkan perilaku yang dimaksudkan oleh aplikasi, bukan hasil audit keamanan independen. Mode Koneksi PC/Host Agent masih eksperimental dan tidak tercakup oleh pernyataan jaringan RDP standar di bawah. Tinjau kode, izin, firewall, dan endpoint yang digunakan sebelum mengandalkannya.</p>
+      </div>
 
       <div class="section-card">
-        <h2>1. Arsitektur Koneksi Langsung (Zero-Relay)</h2>
+        <h2>1. Mode RDP standar dan jalur jaringan</h2>
         <p>
-          XyDesk Remote beroperasi sebagai klien protokol Remote Desktop (RDP) langsung dari perangkat Android Anda ke alamat host atau RD Gateway yang Anda tentukan sendiri. Aliran layar, input keyboard/mouse, audio, berkas, maupun clipboard tidak pernah melewati atau disimpan di server milik XyVerse Technology Global.
+          Pada mode RDP standar, klien membuka koneksi ke host dan port atau RD Gateway yang Anda masukkan. Jika Anda mengonfigurasi gateway atau tunnel, lalu lintas akan mengikuti jalur tersebut. Jangan menganggap ini sebagai jaminan bahwa seluruh mode aplikasi memakai jalur langsung: perilaku Koneksi PC/Host Agent eksperimental perlu dievaluasi terpisah. Situs ini dan GitHub digunakan untuk distribusi rilis; itu berbeda dari jalur sesi RDP.
         </p>
       </div>
 
@@ -185,7 +212,7 @@
         <h2>4. Penggunaan Izin Perangkat Android</h2>
         <ul>
           <li><strong>Akses Jaringan (`INTERNET`, `ACCESS_NETWORK_STATE`):</strong> Digunakan semata-mata untuk membuka soket TCP/UDP RDP, deteksi profil jaringan lokal, serta pengiriman paket UDP Wake-on-LAN.</li>
-          <li><strong>Layanan Latar Depan (`FOREGROUND_SERVICE`):</strong> Menjaga sesi RDP tetap hidup saat pengguna berpindah aplikasi atau menggunakan mode Jendela Mengambang (PiP).</li>
+          <li><strong>Layanan Latar Depan (`FOREGROUND_SERVICE`):</strong> Digunakan untuk mempertahankan sesi RDP ketika aplikasi berpindah ke latar belakang, sesuai batasan Android.</li>
           <li><strong>Mikrofon (`RECORD_AUDIO` — Opsional):</strong> Hanya diakses apabila pengguna mengaktifkan pengalihan mikrofon pada profil koneksi terkait.</li>
           <li><strong>Penyimpanan Lokal (Opsional):</strong> Hanya diakses apabila pengguna mengaktifkan pengalihan folder Drive 'XyDesk' atau mengirimkan berkas melalui menu Bagikan Android (`ACTION_SEND`).</li>
         </ul>

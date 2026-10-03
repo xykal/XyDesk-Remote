@@ -1,0 +1,38 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "xydesk-remote-web",
+  "main": "./cloudflare/worker.mjs",
+  "compatibility_date": "2026-10-03",
+  "workers_dev": false,
+  "routes": [
+    { "pattern": "rdp.xydesk.my.id", "custom_domain": true }
+  ],
+  "assets": {
+    "directory": "./web",
+    "binding": "ASSETS",
+    "html_handling": "auto-trailing-slash",
+    "not_found_handling": "404-page",
+    "run_worker_first": [
+      "/api/*",
+      "/arm64-v8a.apk",
+      "/armeabi-v7a.apk",
+      "/x86_64.apk",
+      "/SHA256SUMS.txt",
+      "/XyDesk-Remote-Host-Agent-win64.zip",
+      "/XyDeskRemoteHost.exe",
+      "/xydesk_quic.dll",
+      "/xydesk_host_core.dll",
+      "/XyDesk-x64.exe",
+      "/XyDesk-x64.msi",
+      "/XyDesk-arm64-v8a.apk",
+      "/XyDesk-armeabi-v7a.apk",
+      "/XyDesk.apk",
+      "/_qa/*",
+      "/host",
+      "/host.ps1",
+      "/agent.ps1",
+      "/agent.bat",
+      "/XyDeskHost-Setup.bat"
+    ]
+  }
+}
