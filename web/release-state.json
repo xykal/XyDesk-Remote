@@ -2,43 +2,44 @@
   "service": "xydesk-remote",
   "brand": "XyVerse Technology Global",
   "release_state": "published",
-  "release_tag": "v1.0.0",
-  "source_commit": "ae9e431cc8d6ad1820ec852f0928a7d4e237c779",
-  "published_at": "2026-10-03T07:17:21Z",
-  "release_updated_at": "2026-10-03T08:05:17Z",
-  "release_url": "https://github.com/xykal/XyDesk-Remote/releases/tag/v1.0.0",
+  "release_tag": "v1.0.1",
+  "source_commit": "3bc7c0735626c68fcc3fcf118ffbd18b2013b5ae",
+  "published_at": "2026-10-03T16:01:59Z",
+  "release_updated_at": "2026-10-03T16:01:59Z",
+  "release_url": "https://github.com/xykal/XyDesk-Remote/releases/tag/v1.0.1",
   "app_build": {
-    "version": "0.5.34",
-    "version_code": 51
+    "version": "0.5.35",
+    "version_code": 52
   },
   "ci": {
     "workflow": "Build APK",
-    "run_number": 211,
+    "run_number": 214,
     "status": "completed",
     "conclusion": "success",
-    "url": "https://github.com/xykal/XyDesk-Remote/actions/runs/37105854687"
+    "result_scope": "Release APK build, signing, and GitHub publication jobs",
+    "url": "https://github.com/xykal/XyDesk-Remote/actions/runs/37133369522"
   },
   "downloads": [
     {
       "abi": "arm64-v8a",
       "file": "app-arm64-v8a-release.apk",
-      "size_bytes": 86057024,
-      "sha256": "9783913a98ffb3f93a2c62efc559bd7d19b43f6a26a242381a06f0594e37631e",
-      "url": "https://github.com/xykal/XyDesk-Remote/releases/download/v1.0.0/app-arm64-v8a-release.apk"
+      "size_bytes": 84375480,
+      "sha256": "fb84baf78de344d40c7275d02ea35ee0b769c89f9641da2a5c4e856700c92abe",
+      "url": "https://github.com/xykal/XyDesk-Remote/releases/download/v1.0.1/app-arm64-v8a-release.apk"
     },
     {
       "abi": "armeabi-v7a",
       "file": "app-armeabi-v7a-release.apk",
-      "size_bytes": 72038242,
-      "sha256": "dc0aced8cdec4ad2b3810aa4f66c67daf2b32c785040031609ac6cf80e744f79",
-      "url": "https://github.com/xykal/XyDesk-Remote/releases/download/v1.0.0/app-armeabi-v7a-release.apk"
+      "size_bytes": 70373106,
+      "sha256": "3c635fdae6f55a36fa7519d0539936d43c1ec8cfaa74383671ca3ddb579f984d",
+      "url": "https://github.com/xykal/XyDesk-Remote/releases/download/v1.0.1/app-armeabi-v7a-release.apk"
     },
     {
       "abi": "x86_64",
       "file": "app-x86_64-release.apk",
-      "size_bytes": 91455625,
-      "sha256": "07173ebae4b337db32097160ba75e9e993eaeb22483d8d0086202415c008d572",
-      "url": "https://github.com/xykal/XyDesk-Remote/releases/download/v1.0.0/app-x86_64-release.apk"
+      "size_bytes": 89774137,
+      "sha256": "4773aced78b46a06f2a79db639086dcf24daf1717519d750a597646b67bcdb95",
+      "url": "https://github.com/xykal/XyDesk-Remote/releases/download/v1.0.1/app-x86_64-release.apk"
     }
   ],
   "rilisin": {
@@ -46,9 +47,9 @@
     "url": "https://rilisin.xyverse.my.id/"
   },
   "minimum_android": {
-    "version": "10",
-    "api": 29,
-    "display": "Android 10 (API 29) or later"
+    "version": "7.0",
+    "api": 24,
+    "display": "Android 7.0 (API 24) or later"
   },
-  "checksums_url": "https://github.com/xykal/XyDesk-Remote/releases/download/v1.0.0/SHA256SUMS.txt"
+  "checksums_url": "https://github.com/xykal/XyDesk-Remote/releases/download/v1.0.1/SHA256SUMS.txt"
 }
