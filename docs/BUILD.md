@@ -14,7 +14,7 @@ This guide describes the current Android project configuration. The source tree 
 | Android NDK | `29.0.13113456` |
 | CMake | `4.1.2` |
 
-The ABI splits and other Android build settings are in `client/Android/Studio/release.properties`. The app currently targets API 37, has a minimum API level of 29, and builds separate APKs for `armeabi-v7a`, `arm64-v8a`, and `x86_64`.
+The ABI splits and other Android build settings are in `client/Android/Studio/release.properties`. The app targets API 37 and is configured with minimum API 24 (Android 7.0+), which includes Android 16 (API 36). It builds separate APKs for `armeabi-v7a`, `arm64-v8a`, and `x86_64`; the 32-bit ARM split is needed for older devices. This is build configuration, not runtime proof: API 24 and API 36 device/emulator smoke tests are still pending.
 
 ## Local build
 

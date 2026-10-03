@@ -590,7 +590,7 @@
       color: var(--text-dim);
     }
 
-    /* Locked Download Section with Live Countdown on All 3 Download Buttons */
+    /* Direct APK downloads from the public GitHub release */
     .download-shell {
       position: relative;
       border: 1px solid var(--line);
@@ -613,6 +613,20 @@
       color: var(--text-dim);
       max-width: 680px;
       line-height: 1.58;
+    }
+
+    .release-pill {
+      align-self: flex-start;
+      font-size: 11px;
+      font-weight: 600;
+      letter-spacing: 0.05em;
+      text-transform: uppercase;
+      padding: 4px 10px;
+      border-radius: 999px;
+      border: 1px solid var(--line-strong);
+      background: var(--surface-alt);
+      color: var(--text);
+      white-space: nowrap;
     }
 
     .pkg-table {
@@ -654,7 +668,7 @@
       line-height: 1.5;
     }
 
-    .dl-countdown-btn {
+    .apk-download-btn {
       width: 100%;
       display: flex;
       flex-direction: column;
@@ -666,14 +680,20 @@
       border: 1px solid var(--line-strong);
       background: var(--surface-alt);
       color: var(--text);
+      text-decoration: none;
       cursor: pointer;
       transition: background 0.15s ease, border-color 0.15s ease;
       text-align: center;
     }
 
-    .dl-countdown-btn:hover {
+    .apk-download-btn:hover {
       background: var(--surface);
       border-color: var(--text-dim);
+    }
+
+    .apk-download-btn:focus-visible {
+      outline: 2px solid var(--accent);
+      outline-offset: 3px;
     }
 
     .dl-btn-top {
@@ -684,139 +704,11 @@
       color: var(--text-dim);
     }
 
-    .dl-btn-timer {
+    .dl-btn-meta {
       font-size: clamp(12.5px, 1.5vw, 13.5px);
       font-weight: 700;
       letter-spacing: 0.03em;
       color: var(--text);
-    }
-
-    /* Fullscreen Blurred Launching Modal Popup */
-    .launch-backdrop {
-      position: fixed;
-      inset: 0;
-      z-index: 100;
-      background: var(--scrim);
-      backdrop-filter: blur(16px);
-      -webkit-backdrop-filter: blur(16px);
-      display: none;
-      align-items: center;
-      justify-content: center;
-      padding: clamp(12px, 3.5vw, 22px);
-    }
-
-    .launch-backdrop.open {
-      display: flex;
-    }
-
-    .launch-dialog {
-      width: 100%;
-      max-width: 460px;
-      max-height: calc(100dvh - 24px);
-      overflow-y: auto;
-      background: var(--surface);
-      border: 1px solid var(--line-strong);
-      border-radius: 16px;
-      padding: clamp(18px, 4vw, 26px);
-      display: flex;
-      flex-direction: column;
-      gap: clamp(12px, 2.5vw, 16px);
-    }
-
-    .launch-top {
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      gap: 10px;
-    }
-
-    .launch-pill {
-      font-size: 11px;
-      font-weight: 600;
-      letter-spacing: 0.05em;
-      text-transform: uppercase;
-      padding: 4px 10px;
-      border-radius: 999px;
-      border: 1px solid var(--line-strong);
-      background: var(--surface-alt);
-      color: var(--text);
-      white-space: nowrap;
-      flex-shrink: 0;
-    }
-
-    .launch-name {
-      font-size: clamp(19px, 4.5vw, 23px);
-      font-weight: 700;
-      letter-spacing: -0.025em;
-      line-height: 1.15;
-    }
-
-    .launch-sub {
-      font-size: clamp(11.5px, 2.8vw, 12.5px);
-      font-weight: 600;
-      color: var(--text-dim);
-      margin-top: 2px;
-    }
-
-    .modal-body-text {
-      font-size: clamp(12.8px, 3.2vw, 13.8px);
-      line-height: 1.58;
-      color: var(--text-dim);
-    }
-
-    .cd-grid {
-      display: grid;
-      grid-template-columns: repeat(4, minmax(0, 1fr));
-      gap: clamp(6px, 2vw, 10px);
-    }
-
-    .cd-cell {
-      background: var(--bg);
-      border: 1px solid var(--line-strong);
-      border-radius: 10px;
-      padding: clamp(10px, 2.5vw, 14px) 4px;
-      text-align: center;
-      min-width: 0;
-    }
-
-    .cd-val {
-      font-size: clamp(19px, 5vw, 25px);
-      font-weight: 700;
-      letter-spacing: -0.03em;
-      line-height: 1.1;
-    }
-
-    .cd-lbl {
-      font-size: clamp(9.5px, 2.3vw, 10.5px);
-      font-weight: 600;
-      text-transform: uppercase;
-      letter-spacing: 0.06em;
-      color: var(--text-faint);
-      margin-top: 5px;
-    }
-
-    .launch-info-box {
-      background: var(--surface-alt);
-      border: 1px solid var(--line);
-      border-radius: 10px;
-      padding: 12px 14px;
-      font-size: clamp(11.5px, 2.8vw, 12.5px);
-      line-height: 1.5;
-      color: var(--text-dim);
-      display: flex;
-      flex-direction: column;
-      gap: 4px;
-    }
-
-    .modal-actions {
-      display: flex;
-      gap: 8px;
-      flex-wrap: wrap;
-    }
-
-    .modal-actions > * {
-      flex: 1 1 140px;
-      min-height: 40px;
     }
 
     /* Footer */
@@ -942,9 +834,6 @@
     }
 
     @media (max-width: 350px) {
-      .cd-grid {
-        grid-template-columns: repeat(2, minmax(0, 1fr));
-      }
       .mobile-dl-quick {
         display: none;
       }
@@ -961,17 +850,6 @@
       }
       .section {
         padding: 22px 0;
-      }
-      .launch-dialog {
-        max-width: 640px;
-        padding: 14px 18px;
-        gap: 10px;
-      }
-      .cd-cell {
-        padding: 7px 4px;
-      }
-      .cd-val {
-        font-size: 18px;
       }
       .drawer-grid {
         grid-template-columns: repeat(3, minmax(0, 1fr));
@@ -996,7 +874,7 @@
         <span class="brand-tag mono">Ver 1.0.0 · Build 0.5.34</span>
       </a>
       <nav class="nav-row" aria-label="Navigasi Utama">
-        <button type="button" class="pill-btn primary" data-open-launch data-i18n="nav.download">Unduh</button>
+        <a href="#download" class="pill-btn primary" data-i18n="nav.download">Unduh</a>
         <a href="#about-diff" class="pill-btn" data-i18n="nav.about">Tentang &amp; Perbedaan</a>
         <a href="#capabilities" class="pill-btn" data-i18n="nav.cap">Fitur Terbaru</a>
         <a href="#changelog" class="pill-btn" data-i18n="nav.changelog">Changelog</a>
@@ -1007,7 +885,7 @@
         <button type="button" class="pill-btn" id="theme-btn">Gelap</button>
       </nav>
       <div class="mobile-actions">
-        <button type="button" class="pill-btn primary mobile-dl-quick" data-open-launch data-i18n="nav.download">Unduh</button>
+        <a href="#download" class="pill-btn primary mobile-dl-quick" data-i18n="nav.download">Unduh</a>
         <button type="button" class="hamburger-btn" id="hamburger-btn" aria-label="Buka Menu Navigasi" aria-expanded="false" aria-controls="mobile-drawer">
           <svg class="icon-menu" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round">
             <line x1="4" y1="7" x2="20" y2="7" />
@@ -1036,9 +914,9 @@
         <div class="drawer-utils">
           <button type="button" class="pill-btn" id="lang-btn-mobile">Bahasa: ID / EN</button>
           <button type="button" class="pill-btn" id="theme-btn-mobile">Tema: Gelap</button>
-          <button type="button" class="pill-btn primary" style="grid-column: 1 / -1;" data-open-launch data-drawer-close data-i18n="intro.cta.dl">
+          <a href="#download" class="pill-btn primary" style="grid-column: 1 / -1;" data-drawer-close data-i18n="intro.cta.dl">
             Halaman Unduh (Ver 1.0.0)
-          </button>
+          </a>
         </div>
       </div>
     </div>
@@ -1054,9 +932,9 @@
           XyDesk Remote adalah klien Remote Desktop berbasis engine C/JNI FreeRDP 3 + C++17 QUIC yang dimodifikasi khusus untuk Android. Dilengkapi Grid Monitor &amp; Multi-User Auto-Detect, audio OpenSLES 32-buffer stereo unmute ke speaker utama, HUD kontrol vektor yang dapat dirakit sendiri (Custom Preset), serta dua jalur koneksi terpisah: Koneksi PC (10-Digit ID + Native QUIC Host Agent) dan Koneksi RDP penuh.
         </p>
         <div class="intro-actions">
-          <button type="button" class="pill-btn primary lg" data-open-launch data-i18n="intro.cta.dl">
+          <a href="#download" class="pill-btn primary lg" data-i18n="intro.cta.dl">
             Halaman Unduh (Ver 1.0.0)
-          </button>
+          </a>
           <a href="#changelog" class="pill-btn lg" data-i18n="intro.cta.cl">
             Lihat Changelog v0.5.34
           </a>
@@ -1448,7 +1326,7 @@
       </div>
     </section>
 
-    <!-- Locked Download Section -->
+    <!-- Public Download Section -->
     <section class="section" id="download">
       <div class="container">
         <div class="section-head">
@@ -1459,9 +1337,9 @@
         <div class="download-shell">
           <div class="download-head">
             <p class="download-desc" data-i18n="dl.desc">
-              Setiap paket APK ditandatangani dengan kunci rilis resmi dan dipisahkan per arsitektur prosesor (ABI). Jadwal peluncuran telah dipercepat ke hari <strong>Jumat, 2 Oktober 2026</strong> — unduhan terkunci selama hitung mundur <strong>Ver 1.0.0</strong> berlangsung.
+              Rilis publik GitHub v1.0.0 sudah tersedia. Pilih APK sesuai ABI perangkat; unduhan langsung dari aset GitHub Releases resmi. Metadata aplikasi di APK: v0.5.34 (51).
             </p>
-            <span class="launch-pill mono">Launching · Ver 1.0.0</span>
+            <span class="release-pill mono" data-i18n="dl.release">RILIS PUBLIK · v1.0.0</span>
           </div>
 
           <div class="pkg-table">
@@ -1471,13 +1349,13 @@
                 <div class="pkg-sub mono">Utama · 64-bit ARM</div>
               </div>
               <div class="pkg-info" data-i18n="dl.abi1">
-                Perangkat Android 64-bit modern (ARMv8-A · ~80.2 MB · Signed R8 · Build 37)
+                Android 64-bit modern (ARMv8-A · 86.1 MB · Build 0.5.34 (51))
               </div>
               <div>
-                <button type="button" class="dl-countdown-btn" data-open-launch>
-                  <span class="dl-btn-top" data-i18n="dl.btn.lbl">Unduh arm64-v8a · Ver 1.0.0</span>
-                  <span class="dl-btn-timer mono" data-btn-countdown>02H : 00J : 00M : 00D</span>
-                </button>
+                <a class="apk-download-btn" href="https://github.com/xykal/XyDesk-Remote/releases/download/v1.0.0/app-arm64-v8a-release.apk" target="_blank" rel="noopener noreferrer">
+                  <span class="dl-btn-top" data-i18n="dl.btn.lbl">Unduh APK arm64-v8a</span>
+                  <span class="dl-btn-meta mono" data-i18n="dl.btn.meta">Aset GitHub resmi · v1.0.0</span>
+                </a>
               </div>
             </div>
 
@@ -1487,13 +1365,13 @@
                 <div class="pkg-sub mono">Kompatibilitas · 32-bit ARM</div>
               </div>
               <div class="pkg-info" data-i18n="dl.abi2">
-                Perangkat Android 32-bit generasi lama (ARMv7 · ~67.3 MB · Signed R8 · Build 37)
+                Android 32-bit (ARMv7 · 72.0 MB · Build 0.5.34 (51))
               </div>
               <div>
-                <button type="button" class="dl-countdown-btn" data-open-launch>
-                  <span class="dl-btn-top" data-i18n="dl.btn.lbl2">Unduh armeabi-v7a · Ver 1.0.0</span>
-                  <span class="dl-btn-timer mono" data-btn-countdown>02H : 00J : 00M : 00D</span>
-                </button>
+                <a class="apk-download-btn" href="https://github.com/xykal/XyDesk-Remote/releases/download/v1.0.0/app-armeabi-v7a-release.apk" target="_blank" rel="noopener noreferrer">
+                  <span class="dl-btn-top" data-i18n="dl.btn.lbl2">Unduh APK armeabi-v7a</span>
+                  <span class="dl-btn-meta mono" data-i18n="dl.btn.meta">Aset GitHub resmi · v1.0.0</span>
+                </a>
               </div>
             </div>
 
@@ -1503,13 +1381,13 @@
                 <div class="pkg-sub mono">Desktop / Emulator · 64-bit</div>
               </div>
               <div class="pkg-info" data-i18n="dl.abi3">
-                Chromebook, PC Android &amp; Emulator x86_64 (~85.5 MB · Signed R8 · Build 37)
+                Chromebook, PC Android &amp; emulator x86_64 (91.5 MB · Build 0.5.34 (51))
               </div>
               <div>
-                <button type="button" class="dl-countdown-btn" data-open-launch>
-                  <span class="dl-btn-top" data-i18n="dl.btn.lbl3">Unduh x86_64 · Ver 1.0.0</span>
-                  <span class="dl-btn-timer mono" data-btn-countdown>02H : 00J : 00M : 00D</span>
-                </button>
+                <a class="apk-download-btn" href="https://github.com/xykal/XyDesk-Remote/releases/download/v1.0.0/app-x86_64-release.apk" target="_blank" rel="noopener noreferrer">
+                  <span class="dl-btn-top" data-i18n="dl.btn.lbl3">Unduh APK x86_64</span>
+                  <span class="dl-btn-meta mono" data-i18n="dl.btn.meta">Aset GitHub resmi · v1.0.0</span>
+                </a>
               </div>
             </div>
 
@@ -1519,12 +1397,12 @@
                 <div class="pkg-sub mono">rilisin.xyverse.my.id</div>
               </div>
               <div class="pkg-info" data-i18n="dl.rilisin">
-                Distribusi resmi melalui portal ekosistem <strong>Rilisin (rilisin.xyverse.my.id)</strong> oleh XyVerse Technology Global — portal saat ini masih dalam tahap pengembangan dan akan dibuka bersamaan rilis Ver 1.0.0.
+                Portal Rilisin saat ini meminta kredensial tim. Tiga APK publik dapat diunduh lewat GitHub Releases.
               </div>
               <div>
-                <a href="https://rilisin.xyverse.my.id" target="_blank" rel="noopener noreferrer" class="dl-countdown-btn" style="text-decoration:none;">
-                  <span class="dl-btn-top" data-i18n="dl.rilisin.top">Portal Distribusi Rilisin</span>
-                  <span class="dl-btn-timer mono" data-i18n="dl.rilisin.sub">Dalam Pengembangan</span>
+                <a href="https://github.com/xykal/XyDesk-Remote/releases/tag/v1.0.0" target="_blank" rel="noopener noreferrer" class="apk-download-btn">
+                  <span class="dl-btn-top" data-i18n="dl.rilisin.top">Buka GitHub Releases Publik</span>
+                  <span class="dl-btn-meta mono" data-i18n="dl.rilisin.sub">APK publik · tanpa login Rilisin</span>
                 </a>
               </div>
             </div>
@@ -1533,63 +1411,6 @@
       </div>
     </section>
   </main>
-
-  <!-- Full-Screen Blurred Launching Ver 1.0.0 Countdown Modal (Opens Automatically on Page Load) -->
-  <div class="launch-backdrop open" id="launch-modal" role="dialog" aria-modal="true" aria-labelledby="launch-modal-title">
-    <div class="launch-dialog">
-      <div class="launch-top">
-        <div style="display:inline-flex;align-items:center;gap:10px;min-width:0;">
-          <svg viewBox="0 0 48 48" fill="none" aria-hidden="true" style="width:28px;height:28px;flex-shrink:0;">
-            <rect x="6.8" y="13.4" width="34.4" height="20.6" rx="3" stroke="currentColor" stroke-width="2.7" />
-            <line x1="19.5" y1="40.2" x2="28.5" y2="40.2" stroke="currentColor" stroke-width="2.7" stroke-linecap="round" />
-            <line x1="24" y1="34.2" x2="24" y2="40.2" stroke="currentColor" stroke-width="2.7" stroke-linecap="round" />
-            <polygon points="18.6,17.6 18.6,28.4 21.7,25.3 23.9,30.1 26.2,29 24,24.2 28.1,23.8" fill="currentColor" />
-          </svg>
-          <div style="min-width:0;">
-            <div class="launch-name" id="launch-modal-title">XyDesk Remote</div>
-            <div class="launch-sub mono">Launching · Ver 1.0.0</div>
-          </div>
-        </div>
-        <span class="launch-pill mono">Ver 1.0.0</span>
-      </div>
-
-      <p class="modal-body-text" data-i18n="modal.body">
-        Peluncuran resmi dipercepat ke akhir pekan ini (Sabtu). Paket instalasi XyDesk Remote Ver 1.0.0 akan dibuka secara otomatis begitu hitung mundur selesai, serta akan dipublikasikan di <strong>rilisin.xyverse.my.id</strong> (portal masih dalam pengembangan).
-      </p>
-
-      <div class="cd-grid" aria-live="polite">
-        <div class="cd-cell">
-          <div class="cd-val mono" id="cd-days">02</div>
-          <div class="cd-lbl" data-i18n="cd.d">Hari</div>
-        </div>
-        <div class="cd-cell">
-          <div class="cd-val mono" id="cd-hours">00</div>
-          <div class="cd-lbl" data-i18n="cd.h">Jam</div>
-        </div>
-        <div class="cd-cell">
-          <div class="cd-val mono" id="cd-mins">00</div>
-          <div class="cd-lbl" data-i18n="cd.m">Menit</div>
-        </div>
-        <div class="cd-cell">
-          <div class="cd-val mono" id="cd-secs">00</div>
-          <div class="cd-lbl" data-i18n="cd.s">Detik</div>
-        </div>
-      </div>
-
-      <div class="launch-info-box mono">
-        <div id="modal-schedule-line">Jadwal Rilis (Dipercepat): Jumat, 2 Oktober 2026 · 10:00 WIB</div>
-        <div id="modal-status-line" style="color: var(--text-faint);">Build Kandidat Aktif: v0.5.34 (51) · Draft Terkunci</div>
-        <div id="modal-rilisin-line" style="color: var(--text-faint);">Publikasi Store: rilisin.xyverse.my.id (Dalam Pengembangan)</div>
-      </div>
-
-      <div class="modal-actions">
-        <a href="#changelog" class="pill-btn" id="modal-changelog-btn" data-i18n="modal.cl.btn">Lihat Changelog</a>
-        <button type="button" class="pill-btn primary" id="close-launch-modal" data-i18n="modal.close.btn">
-          Tutup Popup
-        </button>
-      </div>
-    </div>
-  </div>
 
   <footer>
     <div class="container footer-inner">
@@ -1610,70 +1431,8 @@
 
   <script>
     (function () {
-      var LAUNCH_TARGET_ISO = "2026-10-03T10:00:00+07:00";
-      var launchTargetMs = new Date(LAUNCH_TARGET_ISO).getTime();
-
-      var modal = document.getElementById("launch-modal");
-      var cdDays = document.getElementById("cd-days");
-      var cdHours = document.getElementById("cd-hours");
-      var cdMins = document.getElementById("cd-mins");
-      var cdSecs = document.getElementById("cd-secs");
-      var btnCountdowns = document.querySelectorAll("[data-btn-countdown]");
       var currentTheme = localStorage.getItem("xydesk_theme") || "dark";
       var currentLang = localStorage.getItem("xydesk_lang") || "id";
-
-      function pad2(n) {
-        return n < 10 ? "0" + n : String(n);
-      }
-
-      function tickCountdown() {
-        var diff = Math.max(0, launchTargetMs - Date.now());
-        var d = Math.floor(diff / 86400000);
-        var h = Math.floor((diff % 86400000) / 3600000);
-        var m = Math.floor((diff % 3600000) / 60000);
-        var s = Math.floor((diff % 60000) / 1000);
-        cdDays.textContent = pad2(d);
-        cdHours.textContent = pad2(h);
-        cdMins.textContent = pad2(m);
-        cdSecs.textContent = pad2(s);
-
-        var inlineStr =
-          currentLang === "en"
-            ? pad2(d) + "D : " + pad2(h) + "H : " + pad2(m) + "M : " + pad2(s) + "S"
-            : pad2(d) + "H : " + pad2(h) + "J : " + pad2(m) + "M : " + pad2(s) + "D";
-        btnCountdowns.forEach(function (el) {
-          el.textContent = inlineStr;
-        });
-      }
-
-      function openModal() {
-        modal.classList.add("open");
-      }
-
-      function closeModal() {
-        modal.classList.remove("open");
-      }
-
-      // Popup muncul otomatis pas awal buka web
-      openModal();
-      tickCountdown();
-      setInterval(tickCountdown, 1000);
-
-      document.querySelectorAll("[data-open-launch]").forEach(function (btn) {
-        btn.addEventListener("click", function (e) {
-          e.preventDefault();
-          openModal();
-        });
-      });
-
-      document.getElementById("close-launch-modal").addEventListener("click", closeModal);
-      var modalClBtn = document.getElementById("modal-changelog-btn");
-      if (modalClBtn) {
-        modalClBtn.addEventListener("click", closeModal);
-      }
-      modal.addEventListener("click", function (e) {
-        if (e.target === modal) closeModal();
-      });
 
       // Mobile Hamburger Drawer
       var hamburgerBtn = document.getElementById("hamburger-btn");
@@ -1713,7 +1472,6 @@
       window.addEventListener("keydown", function (e) {
         if (e.key === "Escape") {
           setDrawerOpen(false);
-          closeModal();
         }
       });
 
@@ -1760,23 +1518,18 @@
         "cl.lead": "Real technical changes built, unit-tested, and cryptographically verified across our release pipeline toward Ver 1.0.0.",
         "dl.kicker": "Application Distribution",
         "dl.title": "Download Android Installation Packages (APK)",
-        "dl.desc": "Each APK package is signed with the official release key and separated by processor architecture (ABI). The official launch has been accelerated to Saturday, October 3, 2026 — downloads remain locked while the Ver 1.0.0 countdown runs.",
-        "dl.abi1": "Modern 64-bit Android devices (ARMv8-A · ~80.2 MB · Signed R8 · Build 37)",
-        "dl.abi2": "Legacy 32-bit Android devices (ARMv7 · ~67.3 MB · Signed R8 · Build 37)",
-        "dl.abi3": "Chromebooks, Android PCs & x86_64 Emulators (~85.5 MB · Signed R8 · Build 37)",
-        "dl.btn.lbl": "Download arm64-v8a · Ver 1.0.0",
-        "dl.btn.lbl2": "Download armeabi-v7a · Ver 1.0.0",
-        "dl.btn.lbl3": "Download x86_64 · Ver 1.0.0",
-        "dl.rilisin": "Official store distribution via Rilisin (rilisin.xyverse.my.id) by XyVerse Technology Global — portal is currently under development and will open alongside Ver 1.0.0.",
-        "dl.rilisin.top": "Rilisin Distribution Portal",
-        "dl.rilisin.sub": "In Development",
-        "modal.body": "The official launch has been moved up to this Saturday. Official XyDesk Remote Ver 1.0.0 packages will unlock automatically when the countdown ends and will also be published on rilisin.xyverse.my.id (currently in development).",
-        "cd.d": "Days",
-        "cd.h": "Hours",
-        "cd.m": "Minutes",
-        "cd.s": "Seconds",
-        "modal.cl.btn": "View Changelog",
-        "modal.close.btn": "Close Popup",
+        "dl.desc": "The public GitHub release v1.0.0 is available. Choose the APK for your device ABI; downloads come directly from official GitHub Release assets. Android package metadata: 0.5.34 (51).",
+        "dl.release": "PUBLIC RELEASE · v1.0.0",
+        "dl.abi1": "Modern 64-bit Android devices (ARMv8-A · 86.1 MB · APK build 0.5.34 (51))",
+        "dl.abi2": "32-bit Android devices (ARMv7 · 72.0 MB · APK build 0.5.34 (51))",
+        "dl.abi3": "Chromebooks, Android PCs & x86_64 emulators (91.5 MB · APK build 0.5.34 (51))",
+        "dl.btn.lbl": "Download arm64-v8a APK",
+        "dl.btn.lbl2": "Download armeabi-v7a APK",
+        "dl.btn.lbl3": "Download x86_64 APK",
+        "dl.btn.meta": "Official GitHub asset · v1.0.0",
+        "dl.rilisin": "The Rilisin portal currently requires team credentials. The three public APKs can be downloaded from GitHub Releases.",
+        "dl.rilisin.top": "Open Public GitHub Release",
+        "dl.rilisin.sub": "Public APKs · no Rilisin login",
         "foot.status": "Status & Health",
         "foot.privacy": "Privacy Policy",
         "foot.terms": "Terms of Service",
@@ -1806,18 +1559,9 @@
             el.textContent = idDefaults[k];
           }
         });
-        document.getElementById("modal-schedule-line").textContent =
-          l === "en"
-            ? "Accelerated Launch: Saturday, Oct 3, 2026 · 10:00 WIB (UTC+7)"
-            : "Jadwal Rilis (Dipercepat): Jumat, 2 Oktober 2026 · 10:00 WIB";
-        document.getElementById("modal-status-line").textContent =
-          l === "en"
-            ? "Active Candidate Build: v0.5.34 (51) · Locked Draft"
-            : "Build Kandidat Aktif: v0.5.34 (51) · Draft Terkunci";
         if (langBtnMobile) {
           langBtnMobile.textContent = l === "en" ? "Language: EN / ID" : "Bahasa: ID / EN";
         }
-        tickCountdown();
         applyTheme(currentTheme);
       }
 

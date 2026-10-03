@@ -241,17 +241,27 @@ class SessionManager(context: Context) {
         lastDispScale = if (options.pcConnectMode) 100 else remoteScale
         val key = "${profile.id}.resolution"
         val stored = if (prefs.contains(key)) prefs.getString(key, null) else null
-        // Model resolusi:
-        //  - null / "automatic" / "smart169" (nilai lama) = Otomatis: ukuran
-        //    16:9 STANDAR terbesar yang muat (maks FHD), bukan tajam-tajaman.
-        //  - "follow" = eksplisit ikuti dimensi layar HP (tanpa /size).
-        //  - selain itu = "WxH" eksplisit (ukuran pilihan user).
-        val resolution = when (stored) {
-            null, "automatic", "smart169" -> SmartResolution.forScreen(appContext).also {
-                ConnectionLog.add("CM: resolusi otomatis (16:9 standar, maks FHD) -> $it")
-            }
-            "follow" -> null
-            else -> stored
+        val metrics = appContext.resources.displayMetrics
+        val resolution = SmartResolution.requestedForSession(
+            storedPreset = stored,
+            isPcConnectMode = options.pcConnectMode,
+            viewportW = metrics.widthPixels,
+            viewportH = metrics.heightPixels,
+        )
+        when {
+            options.pcConnectMode -> ConnectionLog.add(
+                "CM: Koneksi PC mempertahankan resolusi monitor host (tanpa /size)",
+            )
+            stored == null || stored == SmartResolution.AUTOMATIC_PRESET ||
+                stored == SmartResolution.LEGACY_AUTOMATIC_PRESET -> ConnectionLog.add(
+                "CM: resolusi otomatis (standar 720p) -> $resolution",
+            )
+            stored == SmartResolution.FOLLOW_PRESET -> ConnectionLog.add(
+                "CM: resolusi mengikuti viewport HP (tanpa /size)",
+            )
+            stored != null && SmartResolution.parse(stored) == null -> ConnectionLog.add(
+                "CM: preset resolusi tidak valid; fallback otomatis 720p -> $resolution",
+            )
         }
 
         val base = RdpUri.build(profile, options)
@@ -260,12 +270,6 @@ class SessionManager(context: Context) {
             uriBuilder.appendQueryParameter("scale-desktop", remoteScale.toString())
         }
         if (resolution == null) return uriBuilder.build()
-        if (SmartResolution.parse(resolution) == null) {
-            ConnectionLog.add("CM: preset resolusi tidak valid; fallback otomatis 16:9")
-            return uriBuilder
-                .appendQueryParameter("size", SmartResolution.forScreen(appContext))
-                .build()
-        }
         ConnectionLog.add("CM: remote resolution preset=$resolution scale=${remoteScale}%")
         return uriBuilder.appendQueryParameter("size", resolution).build()
     }

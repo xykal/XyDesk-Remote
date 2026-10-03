@@ -50,7 +50,7 @@ Product attribution: **XyVerse Technology Global**. These are proposals for prio
 | 11 | Biometric App-Lock + Panic-Lock (`Win+L` auto-send on phone screen-off or shake) | Automatically lock the remote Windows session if the phone is locked or set down | S | Proposed |
 | 12 | Per-app HUD profile switcher (Coding, Gaming, Office, Video Editing) | Switch complete HUD button sets in 2 taps during a live session without reconnecting | S | Proposed |
 
-## Improvements beyond new features (26)
+## Improvements beyond new features (27)
 
 | # | Improvement | User value | Effort | Status |
 |---:|---|---|:---:|---|
@@ -80,6 +80,7 @@ Product attribution: **XyVerse Technology Global**. These are proposals for prio
 | 24 | Baseline Profile / R8 startup profile generation for Compose session UI | Eliminate first-open Compose jitter when opening the session panel or key picker | M | Proposed |
 | 25 | Strict JNI local-reference and native heap leak sanitizer checks in CI | Prevent long-running RDP sessions from accumulating native memory | M | Proposed |
 | 26 | Deterministic Compose UI screenshot and layout-bounds regression tests | Verify HUD controls, sidebar tabs, and landscape layouts never overlap across screen ratios | M | Proposed |
+| 27 | Android API 24/36 emulator smoke matrix | Prove Android 7 installation, legacy notification paths, and Android 16 session behavior before release | M | Proposed |
 
 ## Scope note
 

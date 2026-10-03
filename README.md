@@ -40,6 +40,8 @@ Laporkan dugaan kerentanan secara privat melalui [GitHub Security Advisories](ht
 
 FreeRDP dilisensikan di bawah Apache-2.0. Atribusi dan rincian perubahan XyDesk tersedia di [`XYDESK-REMOTE-NOTICE.md`](XYDESK-REMOTE-NOTICE.md).
 
+Dibuat oleh xykal — XyVerse Technology Global.
+
 ## English
 
 XyDesk Remote lets you access a Windows PC or server from Android over RDP.
@@ -75,3 +77,5 @@ Report suspected vulnerabilities privately through [GitHub Security Advisories](
 ### License
 
 FreeRDP is licensed under Apache-2.0. XyDesk attribution and modification details are in [`XYDESK-REMOTE-NOTICE.md`](XYDESK-REMOTE-NOTICE.md).
+
+Built by xykal — XyVerse Technology Global.

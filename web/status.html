@@ -4,7 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
   <title>Status &amp; Kesehatan Sistem — XyDesk Remote</title>
-  <meta name="description" content="Pemantauan Status Layanan, Endpoint Kesehatan, dan Pipeline Rilis XyDesk Remote." />
+  <meta name="description" content="Status rilis publik XyDesk Remote, metadata APK, dan hasil CI GitHub Actions." />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@500;600;700&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
@@ -156,7 +156,7 @@
     <div class="container topbar-inner">
       <a href="index.html" style="font-weight: 700; font-size: 16px; letter-spacing: -0.02em;">XyDesk Remote</a>
       <nav class="nav-links" aria-label="Navigasi">
-        <a href="/api/health" class="pill mono">/api/health</a>
+        <a href="release-state.json" class="pill mono">release-state.json</a>
         <a href="host.html" class="pill">PC Host</a>
         <a href="index.html#changelog" class="pill">Changelog</a>
         <a href="index.html" class="pill">Beranda</a>
@@ -174,9 +174,9 @@
       <div class="container drawer-grid">
         <a href="index.html" class="drawer-link"><span>Beranda Utama</span><span>→</span></a>
         <a href="index.html#about-diff" class="drawer-link"><span>Tentang &amp; Perbedaan</span><span>→</span></a>
-        <a href="index.html#changelog" class="drawer-link"><span>Changelog v0.5.29</span><span>→</span></a>
+        <a href="index.html#changelog" class="drawer-link"><span>Changelog v0.5.34</span><span>→</span></a>
         <a href="host.html" class="drawer-link"><span>Setup PC Host</span><span>→</span></a>
-        <a href="/api/health" class="drawer-link mono"><span>/api/health JSON</span><span>→</span></a>
+        <a href="release-state.json" class="drawer-link mono"><span>Metadata Rilis JSON</span><span>→</span></a>
         <a href="licenses.html" class="drawer-link"><span>Lisensi Open Source</span><span>→</span></a>
       </div>
     </div>
@@ -199,7 +199,7 @@
       <div class="meta mono">Pemantauan Infrastruktur &amp; Kesiapan Rilis</div>
       <h1>Status &amp; Kesehatan Sistem</h1>
       <p class="lead">
-        Pemeriksaan langsung komponen portal distribusi, repositori rilis terenkripsi, verifikasi kompilasi CI, dan kelengkapan dokumen pra-peluncuran <strong>XyDesk Remote Ver 1.0.0</strong> (Target Rilis Dipercepat: <strong>Jumat, 2 Oktober 2026 · 10:00 WIB</strong>).
+        Rilis publik XyDesk Remote <strong>v1.0.0</strong> sudah tersedia di GitHub Releases dengan tiga APK ABI. Paket yang terbit memakai metadata aplikasi <strong>0.5.34 (51)</strong>; portal Rilisin masih memerlukan kredensial tim.
       </p>
 
       <div class="status-table">
@@ -213,27 +213,27 @@
         </div>
         <div class="status-row">
           <div>
-            <div class="status-name">Endpoint Kesehatan API (`/api/health`)</div>
-            <div class="status-sub">Pemeriksaan respons JSON real-time</div>
+            <div class="status-name">Metadata Rilis (`release-state.json`)</div>
+            <div class="status-sub">Berkas JSON statis untuk status dan tautan unduhan</div>
           </div>
-          <div class="mono" style="font-size:12px; color:var(--text-faint);">HTTP 200 JSON</div>
-          <div class="status-badge mono" id="api-state">OPERASIONAL</div>
+          <div class="mono" style="font-size:12px; color:var(--text-faint);">Sumber metadata</div>
+          <div class="status-badge mono" id="metadata-state">MEMERIKSA...</div>
         </div>
         <div class="status-row">
           <div>
-            <div class="status-name">Penyimpanan Paket Rilis (Release Vault)</div>
-            <div class="status-sub">3 ABI Signed APK (`arm64-v8a`, `armeabi-v7a`, `x86_64`)</div>
+            <div class="status-name">Unduhan APK Publik</div>
+            <div class="status-sub">3 aset APK tersedia di GitHub Release `v1.0.0`</div>
           </div>
-          <div class="mono" style="font-size:12px; color:var(--text-faint);">v0.5.34 (51) Draft terverifikasi</div>
-          <div class="status-badge mono">DRAFT TERKUNCI</div>
+          <div class="mono" style="font-size:12px; color:var(--text-faint);">Metadata APK 0.5.34 (51)</div>
+          <a class="status-badge mono" href="https://github.com/xykal/XyDesk-Remote/releases/tag/v1.0.0" target="_blank" rel="noopener noreferrer" style="text-decoration:none; color:var(--text);">RILIS PUBLIK</a>
         </div>
         <div class="status-row">
           <div>
-            <div class="status-name">Pipeline CI &amp; Verifikasi Kriptografi APK</div>
-            <div class="status-sub">Kotlin Compile Gate + JVM Unit Tests + R8 `apksigner`</div>
+            <div class="status-name">Pipeline CI Rilis `v1.0.0`</div>
+            <div class="status-sub">Build APK · run #211 · commit `ae9e431`</div>
           </div>
-          <div class="mono" style="font-size:12px; color:var(--text-faint);">Lihat tab Actions (run rilis terbaru)</div>
-          <div class="status-badge mono">LULUS (VERIFIED)</div>
+          <div class="mono" style="font-size:12px; color:var(--text-faint);">Selesai · success</div>
+          <a class="status-badge mono" href="https://github.com/xykal/XyDesk-Remote/actions/runs/37105854687" target="_blank" rel="noopener noreferrer" style="text-decoration:none; color:var(--text);">CI LULUS · #211</a>
         </div>
         <div class="status-row">
           <div>
@@ -245,8 +245,8 @@
         </div>
       </div>
 
-      <div class="meta mono" style="margin-bottom: 8px;">Respons Langsung `/api/health`</div>
-      <div class="json-box mono" id="health-json">Memuat status /api/health...</div>
+      <div class="meta mono" style="margin-bottom: 8px;">Metadata Rilis Statis (`release-state.json`)</div>
+      <div class="json-box mono" id="release-json">Memuat metadata rilis...</div>
     </div>
   </main>
 
@@ -264,29 +264,27 @@
 
   <script>
     (function () {
-      var t0 = performance.now();
-      fetch("/api/health")
-        .then(function (r) {
-          var ms = Math.round(performance.now() - t0);
-          document.getElementById("edge-latency").textContent = "Latensi Edge: " + ms + " ms";
-          return r.json();
+      var startedAt = performance.now();
+      var metadataState = document.getElementById("metadata-state");
+      var metadataBox = document.getElementById("release-json");
+      var latency = document.getElementById("edge-latency");
+      fetch("./release-state.json", { cache: "no-store" })
+        .then(function (response) {
+          if (!response.ok) throw new Error("Metadata tidak tersedia");
+          return response.json();
         })
         .then(function (data) {
-          document.getElementById("health-json").textContent = JSON.stringify(data, null, 2);
+          if (data.release_state !== "published" || !Array.isArray(data.downloads) || data.downloads.length < 3) {
+            throw new Error("Metadata rilis belum lengkap");
+          }
+          latency.textContent = "JSON: " + Math.round(performance.now() - startedAt) + " ms";
+          metadataState.textContent = "VALID · PUBLIK";
+          metadataBox.textContent = JSON.stringify(data, null, 2);
         })
         .catch(function () {
-          var fallback = {
-            status: "operational",
-            service: "xydesk-remote",
-            brand: "XyVerse Technology Global",
-            target_version: "1.0.0",
-            current_build: "0.5.34",
-            version_code: 51,
-            release_state: "draft-locked",
-            launch_target: "2026-10-02T10:00:00+07:00"
-          };
-          document.getElementById("edge-latency").textContent = "Statis Lokal";
-          document.getElementById("health-json").textContent = JSON.stringify(fallback, null, 2);
+          latency.textContent = "Metadata gagal dimuat";
+          metadataState.textContent = "CEK GITHUB";
+          metadataBox.textContent = "release-state.json tidak tersedia atau bukan JSON. Verifikasi rilis dan APK langsung di https://github.com/xykal/XyDesk-Remote/releases/tag/v1.0.0";
         });
     })();
   </script>

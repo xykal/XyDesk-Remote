@@ -39,8 +39,23 @@ Start: 2026-09-28
 - Implemented `v0.5.16` (`VERSION_CODE=33`, [workflow 36640449873](https://github.com/xykal/XyDesk-Remote/actions/runs/36640449873)) and `v0.5.17` (`VERSION_CODE=34`, [workflow 36645417167](https://github.com/xykal/XyDesk-Remote/actions/runs/36645417167)): added `SYSTEM_ALERT_WINDOW` (*Display over other apps* / AppsPerms) declaration and `XyFloatingOverlay` live floating mini-monitor for OEM ROMs that block native PiP; replaced the raw credential form in `AddDeviceScreen` with a collapsible **Account Credential Dropdown** (`Pilih Akun / + Tambah Akun Baru`); increased Home desktop preview height to `212.dp`; added the `+` Bubble Menu (`Koneksi PC [Tahap Pengembangan]` vs `Koneksi RDP`), vendor-specific Host GPU Encoder profiles (`NVIDIA NVENC`, `AMD AMF`, `Intel QuickSync`, `CPU Fallback`), VSYNC dirty-rect coalescing & `batterySaver` frame pacing, and Windows Host helper (`https://rdp.xydesk.my.id/host`).
 - Implemented `v0.5.18` (`VERSION_CODE=35`): fixed `+` (`Koneksi PC` / `Koneksi RDP`) immediate Back navigation when no fields are edited; made `Koneksi PC` completely separate from `Koneksi RDP` (no Windows credentials, no resolution or DPI tweaking, native PC resolution/DPI lock); hardened native `CLIPRDR` (`android_event.c`, `android_cliprdr.c`) and Kotlin clipboard/paste pipelines (`SessionManager`, `XyDeskSessionActivity`, `SessionSurfaceController`) so copying large text/`.txt` files never disconnects the session; fixed modal dialog backdrops (`XyDialog`, `XyOverlay`, `AddDeviceScreen`, `Screens.kt`) so the screen behind a modal never turns solid black; redesigned the session status overlay into a vertical top-to-bottom frameless/backgroundless stack (`FPS`, `Latency`, `Resolusi`, `Encode`, `Relay`, `Network`); added a 1-tap Floating Window (`Jendela Mengambang`) trigger button on the HUD rail and removed the `Settings.ACTION_MANAGE_OVERLAY_PERMISSION` redirect (tries `AppsPerms` overlay types directly + `XyDraggableFloatingMiniWindow` fallback).
 
+## 2026-10-03 — hari kerja ke-3
+- Audit dicatat di `docs/AUDIT-2026-10-03.md`. Mode Otomatis RDP sekarang memilih 1280x720; preset resolusi manual tetap ada, dan PC Connect tidak lagi meminta ukuran virtual pada URI awal.
+- Ditambahkan tes regresi untuk resolusi 720p, mode Follow, preset manual, dan PC Connect. Batas Android diturunkan dari API 29 ke API 24 (Android 7.0+) dengan ABI armeabi-v7a tetap tersedia; pembuatan notification channel dijaga untuk API 26+.
+- Build guide, `SECURITY.md`, README attribution, dan backlog smoke test Android 24/36 diperbarui. `git diff --check` dan pemeriksaan statis konfigurasi lulus; Gradle/unit/native build dan uji perangkat tidak dijalankan lokal.
+- Next: jalankan gate CI lewat PR, lalu uji APK pada Android API 24 dan 36 serta verifikasi teks terhadap host Windows nyata.
 
 
 
 
 
+
+
+
+## 2026-10-03 — tindak lanjut web & rilis publik
+- Audit countdown membuktikan target sudah lewat, tetapi JS hanya menampilkan nol dan tidak pernah mengganti state atau membuka unduhan; modal selalu muncul. Status fallback tertinggal di 2 Oktober dan `/api/health` live mengembalikan HTML landing page, bukan JSON.
+- API GitHub publik mengonfirmasi `v1.0.0` sudah terbit dengan 3 APK ABI. Download page sekarang menautkan langsung aset GitHub; Rilisin ditandai memerlukan kredensial tim. Status page membaca `web/release-state.json`, bukan endpoint health yang tidak tersedia di repo.
+- CI rilis yang sudah terbit lulus: [Build APK run #211](https://github.com/xykal/XyDesk-Remote/actions/runs/37105854687), pada commit `ae9e431`; metadata APK `0.5.34` / `51`. Ini bukan CI untuk branch lokal `2411cac`, dan APK tersebut belum memuat perubahan Android branch ini.
+- `git diff --check`, parsing JSON/HTML, pemeriksaan tautan APK dan state countdown, serta `node --check` script inline lulus. Tidak menjalankan build, compile, atau test suite lokal.
+- Belum push atau deploy. Token yang sempat dilampirkan tidak dipakai karena terekspos. Repo tidak memiliki konfigurasi/source deployment Worker/Vercel; live site baru berubah setelah deploy aman, dan endpoint `/api/health` live masih di luar cakupan source yang tersedia.
+- Next: push branch melalui autentikasi yang sudah dirotasi/aman, pantau CI branch sampai ada URL run, uji API 36 sesuai acceptance, lalu deploy aset web ke host aktif dan verifikasi `release-state.json` + unduhan pada domain live. Putuskan terpisah apakah Worker `/api/health` perlu implementasi JSON.

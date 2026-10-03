@@ -1649,8 +1649,8 @@ private fun ScreenTab(
         )
         PanelHint(
             xy(
-                "Desktop Windows itu paling pas 16:9. \"Otomatis\" selalu menghasilkan 16:9 terbesar yang muat di layar — bukan rasio layar HP.",
-                "Windows desktops fit best at 16:9. \"Automatic\" always picks the largest 16:9 that fits the screen — not the phone ratio.",
+                "Otomatis memakai 1280×720 (720p) agar sesi lebih ringan. Resolusi lain tetap bisa dipilih manual; mode ini tidak mengikuti rasio HP.",
+                "Automatic uses 1280×720 (720p) to keep the session lighter. Other sizes remain available manually; it does not follow the phone ratio.",
             ),
         )
         DisplayPrefs.resolutionGroups.forEach { group ->
@@ -2285,10 +2285,10 @@ private fun MonitorAndUserGridModal(
         MonitorGridItem(
             badge = "MON 1",
             title = xy("Monitor 1 · Utama", "Monitor 1 · Primary"),
-            subtitle = if (cleanRemoteSize.isNotBlank() && cleanRemoteSize != "--") "$cleanRemoteSize · 16:9" else "1920x1080 · 16:9",
+            subtitle = if (cleanRemoteSize.isNotBlank() && cleanRemoteSize != "--") "$cleanRemoteSize · 16:9" else "1280x720 · 16:9",
             value = DisplayPrefs.AUTOMATIC,
             icon = XyIcons.Monitor,
-            active = resolution == DisplayPrefs.AUTOMATIC || resolution == "1920x1080",
+            active = resolution == DisplayPrefs.AUTOMATIC || resolution == "1280x720",
         ),
         MonitorGridItem(
             badge = "MON 2",

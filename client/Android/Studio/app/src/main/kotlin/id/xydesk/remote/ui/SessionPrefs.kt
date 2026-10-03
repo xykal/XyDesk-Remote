@@ -254,26 +254,18 @@ class SessionPrefs(context: Context) {
  */
 object DisplayPrefs {
 
-    /**
-     * "Otomatis" — rasio desktop SELALU 16:9 dan ukurannya ukuran STANDAR
-     * (1280x720 / 1600x900 / 1920x1080): yang terbesar yang muat di layar,
-     * dibatasi FHD. Mode normal — bukan pengejaran resolusi/ketajaman.
-     */
-    const val AUTOMATIC = "automatic"
+    /** Automatic uses the conservative standard 16:9 desktop size, 1280x720. */
+    const val AUTOMATIC = SmartResolution.AUTOMATIC_PRESET
+
+    /** Follow the phone's aspect ratio; intended for fullscreen media, not desktop work. */
+    const val FOLLOW = SmartResolution.FOLLOW_PRESET
+
+    /** Legacy value; treated as [AUTOMATIC] when read. */
+    const val SMART_16_9 = SmartResolution.LEGACY_AUTOMATIC_PRESET
 
     /**
-     * "Ikuti layar HP" — eksplisit pakai dimensi layar HP apa adanya
-     * (rasio 20:9 dst). Untuk video fullscreen/game, bukan kerja desktop.
-     */
-    const val FOLLOW = "follow"
-
-    /** Nilai lama; diperlakukan sama dengan [AUTOMATIC] saat dibaca. */
-    const val SMART_16_9 = "smart169"
-
-    /**
-     * Daftar resolusi untuk UI. Kelompok pertama = pintar (Otomatis 16:9,
-     * Ikuti layar HP); kelompok kedua = ukuran 16:9 standar dengan dimensi
-     * ditulis apa adanya supaya tidak ada lagi tebakan "HD 720 itu berapa?".
+     * UI choices: automatic standard 720p, phone viewport, then explicit
+     * 16:9 sizes so the selected desktop dimensions are never ambiguous.
      */
     val resolutionGroups: List<ResolutionGroup> = listOf(
         ResolutionGroup(
@@ -281,8 +273,8 @@ object DisplayPrefs {
             listOf(
                 ResolutionOption(
                     AUTOMATIC,
-                    "Otomatis — 16:9 standar (maks FHD)",
-                    "Automatic — standard 16:9 (max FHD)",
+                    "Otomatis — Standar 720p (1280×720)",
+                    "Automatic — standard 720p (1280×720)",
                 ),
                 ResolutionOption(
                     FOLLOW,

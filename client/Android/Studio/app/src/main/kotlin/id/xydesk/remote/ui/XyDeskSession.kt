@@ -538,7 +538,7 @@ fun XyDeskSessionScreen(
         kotlinx.coroutines.delay(950)
         if (state !is SessionState.Connected || applyingResolution) return@LaunchedEffect
         when (DisplayPrefs.resolution(context, profile.id)) {
-            // Otomatis = SELALU 16:9 standar PC (tidak menyusut saat keyboard/portrait).
+            // Otomatis uses conservative 720p instead of forcing FHD on landscape phones.
             DisplayPrefs.AUTOMATIC -> {
                 val size = SmartResolution.parse(
                     SmartResolution.forViewport(viewport.width, viewport.height),

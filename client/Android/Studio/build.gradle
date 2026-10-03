@@ -41,7 +41,7 @@ ext {
 
     compileApi = releaseProperties.get('COMPILE_API', 37).toInteger()
     targetApi = releaseProperties.get('TARGET_API', 37).toInteger()
-    minApi = releaseProperties.get('MIN_API', 29).toInteger()
+    minApi = releaseProperties.get('MIN_API', 24).toInteger()
     toolsVersion = releaseProperties.get('TOOLS_VERSION', '37.0.0')
     universal = releaseProperties.get('BUILD_UNIVERSAL', true).toBoolean()
     splitArchs = releaseProperties.get('SPLIT_ARCHITECTURES', 'arm64-v8a;x86_64').split(';')
