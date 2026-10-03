@@ -1,7 +1,7 @@
 # Deskripsi Rilis — XyDesk Remote
 
 Dokumen kerja untuk publikasi (belum diterbitkan; dipakai saat store/portal dibuka).
-Brand: `XyVerse Technology Global`. Versi acuan: `0.5.29 (46)`.
+Brand: `XyVerse Technology Global`. Versi acuan rilis: `0.5.35 (52)` (tag GitHub `v1.0.1`).
 
 ## Identitas
 
@@ -80,6 +80,11 @@ Highlights:
 Note: this is an RDP client. RDP audio and microphone require the Windows host to
 allow audio redirection (`fDisableAudio`/`fDisableAudioCapture` = 0) and the
 Android microphone permission.
+
+## What's new di 0.5.35
+
+- Berbagi jumlah sesi RDP aktif bersifat **opt-in** dan mati secara default. Saat dipilih, aplikasi hanya melaporkan ID acak sesi dan heartbeat selama terhubung; rincian ada di kebijakan privasi.
+- Minimum Android diturunkan ke API 24 (Android 7.0), termasuk dukungan ABI ARM 32-bit.
 
 ## What's new di 0.5.34
 

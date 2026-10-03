@@ -55,10 +55,10 @@
       "@id": "https://rdp.xydesk.my.id/#software",
       "name": "XyDesk Remote",
       "applicationCategory": "UtilitiesApplication",
-      "operatingSystem": "Android 10 and later",
-      "softwareVersion": "0.5.34",
+      "operatingSystem": "Android 7.0 and later",
+      "softwareVersion": "0.5.35",
       "url": "https://rdp.xydesk.my.id/",
-      "downloadUrl": "https://github.com/xykal/XyDesk-Remote/releases/tag/v1.0.0",
+      "downloadUrl": "https://github.com/xykal/XyDesk-Remote/releases/tag/v1.0.1",
       "description": "Klien RDP Android untuk mengakses PC Windows, dengan kontrol sentuh, keyboard, clipboard, audio, dan pilihan monitor.",
       "author": {
         "@id": "https://rdp.xydesk.my.id/#organization"
@@ -1029,7 +1029,7 @@
           </svg>
           <span style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">XyDesk Remote</span>
         </span>
-        <span class="brand-tag mono">Ver 1.0.0 · Build 0.5.34</span>
+        <span class="brand-tag mono">Ver 1.0.1 · Build 0.5.35</span>
       </a>
       <nav class="nav-row" aria-label="Navigasi Utama">
         <a href="#download" class="pill-btn primary" data-i18n="nav.download">Unduh</a>
@@ -1073,7 +1073,7 @@
           <button type="button" class="pill-btn" id="lang-btn-mobile">Bahasa: ID / EN</button>
           <button type="button" class="pill-btn" id="theme-btn-mobile">Tema: Gelap</button>
           <a href="#download" class="pill-btn primary" style="grid-column: 1 / -1;" data-drawer-close data-i18n="intro.cta.dl">
-            Halaman Unduh (Ver 1.0.0)
+            Halaman Unduh (Ver 1.0.1)
           </a>
         </div>
       </div>
@@ -1084,17 +1084,17 @@
     <!-- Editorial Intro -->
     <section class="intro">
       <div class="container">
-        <div class="intro-meta mono" data-i18n="intro.meta">Klien RDP Android · Untuk PC Windows &amp; server · APK v0.5.34 (51)</div>
+        <div class="intro-meta mono" data-i18n="intro.meta">Klien RDP Android · Untuk PC Windows &amp; server · APK v0.5.35 (52)</div>
         <h1 data-i18n="intro.title">Remote Desktop (RDP) untuk Mengakses PC Windows dari Android</h1>
         <p data-i18n="intro.lead">
           Hubungkan perangkat Android ke PC atau server Windows yang kamu miliki atau kelola. XyDesk Remote adalah klien RDP Android berbasis FreeRDP 3, dengan kontrol sentuh, keyboard, clipboard, audio, dan pilihan monitor. Host Agent atau mode Koneksi PC masih eksperimental; untuk RDP standar, aplikasi ini tidak memerlukan Host Agent.
         </p>
         <div class="intro-actions">
           <a href="#download" class="pill-btn primary lg" data-i18n="intro.cta.dl">
-            Halaman Unduh (Ver 1.0.0)
+            Halaman Unduh (Ver 1.0.1)
           </a>
           <a href="#changelog" class="pill-btn lg" data-i18n="intro.cta.cl">
-            Lihat Changelog v0.5.34
+            Lihat Changelog v0.5.35
           </a>
           <a href="host.html" class="pill-btn lg" data-i18n="intro.cta.host">
             Setup XyDesk Host (PC Windows)
@@ -1120,7 +1120,7 @@
           <div class="ledger-cell">
             <div class="ledger-k" data-i18n="led.4.k">Arsitektur Paket</div>
             <div class="ledger-v mono">APK per ABI</div>
-            <div class="ledger-sub">Android 10+ · tiga ABI</div>
+            <div class="ledger-sub">Android 7+ · tiga ABI</div>
           </div>
         </div>
       </div>
@@ -1201,7 +1201,7 @@
     <section class="section" id="capabilities">
       <div class="container">
         <div class="section-head">
-          <div class="section-kicker" data-i18n="cap.kicker">Ringkasan fitur pada APK publik v0.5.34 (51) · Host Agent eksperimental</div>
+          <div class="section-kicker" data-i18n="cap.kicker">Ringkasan fitur pada APK publik v0.5.35 (52) · Host Agent eksperimental</div>
           <h2 class="section-title" data-i18n="cap.title">Kemampuan Sesi, Engine Native &amp; Kontrol</h2>
         </div>
 
@@ -1299,14 +1299,25 @@
           <div class="section-kicker" data-i18n="cl.kicker">Catatan Rilis &amp; Pembaruan Kode</div>
           <h2 class="section-title" data-i18n="cl.title">Changelog XyDesk Remote</h2>
           <p class="section-lead" data-i18n="cl.lead">
-            Riwayat perubahan teknis untuk build aplikasi <strong>v0.5.34 (51)</strong> yang dipublikasikan sebagai rilis GitHub <strong>v1.0.0</strong>. Rilis dan checksum tersedia di halaman distribusi resmi.
+            Riwayat perubahan teknis untuk build aplikasi <strong>v0.5.35 (52)</strong> yang dipublikasikan sebagai rilis GitHub <strong>v1.0.1</strong>. Rilis dan checksum tersedia di halaman distribusi resmi.
           </p>
         </div>
 
         <div class="changelog-list">
           <div class="cl-card">
             <div class="cl-head">
-              <div class="cl-ver mono">v0.5.34 (VERSION_CODE 51) — Build Terbaru</div>
+              <div class="cl-ver mono">v0.5.35 (VERSION_CODE 52) — Build Terbaru</div>
+              <span class="cl-badge mono">3 Oktober 2026 · Sesi Aktif Opt-in &amp; Kompatibilitas Android 7</span>
+            </div>
+            <ul class="arch-list">
+              <li><strong>Statistik sesi RDP aktif (opsional):</strong> fitur mati secara default dan hanya berjalan setelah pengguna mengaktifkannya di Pengaturan &gt; Keamanan. Saat sesi tersambung, aplikasi mengirim UUID acak per sesi dan heartbeat berkala; tidak mengirim alamat PC, profil, kredensial, clipboard, atau isi layar. Lihat <a href="privacy.html">Kebijakan Privasi</a>.</li>
+              <li><strong>Kompatibilitas Android:</strong> minimum API 24 (Android 7.0) dan APK tersedia untuk armeabi-v7a, arm64-v8a, serta x86_64.</li>
+            </ul>
+          </div>
+
+          <div class="cl-card">
+            <div class="cl-head">
+              <div class="cl-ver mono">v0.5.34 (VERSION_CODE 51)</div>
               <span class="cl-badge mono">2 Oktober 2026 · Sisa Permukaan Gelap Disamakan dengan Web</span>
             </div>
             <ul class="arch-list">
@@ -1495,14 +1506,14 @@
         <div class="download-shell">
           <div class="download-head">
             <p class="download-desc" data-i18n="dl.desc">
-              Unduh APK resmi XyDesk Remote. Tag rilis GitHub: v1.0.0; versi aplikasi Android: 0.5.34 (51). APK publik saat ini membutuhkan Android 10 (API 29) atau lebih baru.
+              Unduh APK resmi XyDesk Remote. Tag rilis GitHub: v1.0.1; versi aplikasi Android: 0.5.35 (52). APK publik saat ini membutuhkan Android 7.0 (API 24) atau lebih baru.
             </p>
-            <span class="release-pill mono" data-i18n="dl.release">RILIS PUBLIK · v1.0.0</span>
+            <span class="release-pill mono" data-i18n="dl.release">RILIS PUBLIK · v1.0.1</span>
           </div>
 
           <div class="download-facts" aria-label="Informasi rilis dan kompatibilitas">
-            <p><strong data-i18n="dl.label.version">Versi rilis:</strong> <span data-i18n="dl.version-note">v1.0.0 adalah tag GitHub Release; versi aplikasi Android di dalam APK adalah 0.5.34 (51).</span></p>
-            <p><strong data-i18n="dl.label.compatibility">Kompatibilitas:</strong> <span data-i18n="dl.android-min">APK publik saat ini membutuhkan Android 10 (API 29) atau lebih baru.</span></p>
+            <p><strong data-i18n="dl.label.version">Versi rilis:</strong> <span data-i18n="dl.version-note">v1.0.1 adalah tag GitHub Release; versi aplikasi Android di dalam APK adalah 0.5.35 (52).</span></p>
+            <p><strong data-i18n="dl.label.compatibility">Kompatibilitas:</strong> <span data-i18n="dl.android-min">APK publik saat ini membutuhkan Android 7.0 (API 24) atau lebih baru.</span></p>
             <p><strong data-i18n="dl.label.abi">Pilih ABI:</strong> <span data-i18n="dl.abi-help">arm64-v8a untuk kebanyakan HP modern, armeabi-v7a untuk perangkat ARM 32-bit, dan x86_64 untuk emulator/perangkat Android x86_64.</span></p>
           </div>
 
@@ -1537,7 +1548,7 @@
               <div>
                 <a class="apk-download-btn" href="/arm64-v8a.apk">
                   <span class="dl-btn-top" data-i18n="dl.btn.lbl">Unduh APK arm64-v8a</span>
-                  <span class="dl-btn-meta mono" data-i18n="dl.btn.meta">APK resmi · v0.5.34 (51)</span>
+                  <span class="dl-btn-meta mono" data-i18n="dl.btn.meta">APK resmi · v0.5.35 (52)</span>
                 </a>
               </div>
             </div>
@@ -1553,7 +1564,7 @@
               <div>
                 <a class="apk-download-btn" href="/armeabi-v7a.apk">
                   <span class="dl-btn-top" data-i18n="dl.btn.lbl2">Unduh APK armeabi-v7a</span>
-                  <span class="dl-btn-meta mono" data-i18n="dl.btn.meta">APK resmi · v0.5.34 (51)</span>
+                  <span class="dl-btn-meta mono" data-i18n="dl.btn.meta">APK resmi · v0.5.35 (52)</span>
                 </a>
               </div>
             </div>
@@ -1569,7 +1580,7 @@
               <div>
                 <a class="apk-download-btn" href="/x86_64.apk">
                   <span class="dl-btn-top" data-i18n="dl.btn.lbl3">Unduh APK x86_64</span>
-                  <span class="dl-btn-meta mono" data-i18n="dl.btn.meta">APK resmi · v0.5.34 (51)</span>
+                  <span class="dl-btn-meta mono" data-i18n="dl.btn.meta">APK resmi · v0.5.35 (52)</span>
                 </a>
               </div>
             </div>
@@ -1577,15 +1588,15 @@
             <div class="pkg-row" style="background: var(--surface-alt);">
               <div>
                 <div class="pkg-abi mono" data-i18n="dl.release.source">Sumber resmi</div>
-                <div class="pkg-sub mono" data-i18n="dl.release.source.sub">GitHub · v1.0.0</div>
+                <div class="pkg-sub mono" data-i18n="dl.release.source.sub">GitHub · v1.0.1</div>
               </div>
               <div class="pkg-info" data-i18n="dl.rilisin">
                 Lihat catatan rilis, semua aset unduhan, dan file checksum SHA-256 resmi.
               </div>
               <div class="release-actions">
-                <a href="https://github.com/xykal/XyDesk-Remote/releases/tag/v1.0.0" target="_blank" rel="noopener noreferrer" class="apk-download-btn">
+                <a href="https://github.com/xykal/XyDesk-Remote/releases/tag/v1.0.1" target="_blank" rel="noopener noreferrer" class="apk-download-btn">
                   <span class="dl-btn-top" data-i18n="dl.rilisin.top">Catatan rilis &amp; semua aset</span>
-                  <span class="dl-btn-meta mono" data-i18n="dl.rilisin.sub">GitHub Release · v1.0.0</span>
+                  <span class="dl-btn-meta mono" data-i18n="dl.rilisin.sub">GitHub Release · v1.0.1</span>
                 </a>
                 <a class="checksum-link" href="/SHA256SUMS.txt" data-i18n="dl.checksum">Lihat checksum SHA-256</a>
               </div>
@@ -1775,7 +1786,7 @@
         "nav.licenses": "Licenses",
         "nav.host": "Host Agent (experimental)",
         "nav.download": "Download",
-        "intro.meta": "Android RDP client · Windows PCs and servers · APK 0.5.34 (51)",
+        "intro.meta": "Android RDP client · Windows PCs and servers · APK 0.5.35 (52)",
         "intro.title": "Remote Desktop for Windows PCs, from Android.",
         "intro.lead": "Connect Android to a Windows PC or server you own or administer. XyDesk Remote is an Android RDP client based on FreeRDP 3, with touch controls, keyboard, clipboard, audio, and monitor options. The optional Host Agent / PC-ID mode is experimental; standard RDP does not require the agent.",
         "intro.cta.dl": "Download official APKs",
@@ -1791,28 +1802,28 @@
         "about.kicker": "Understanding the XyDesk Ecosystem",
         "about.title": "What Is XyDesk Remote & How Does It Differ from Standard XyDesk?",
         "about.lead": "Within the XyVerse Technology Global software lineup, Standard XyDesk and XyDesk Remote are engineered for two fundamentally different workflows.",
-        "cap.kicker": "Public APK v0.5.34 (51) feature summary · Host Agent is experimental",
+        "cap.kicker": "Public APK v0.5.35 (52) feature summary · Host Agent is experimental",
         "cap.title": "Session, Native Engine & Control Capabilities",
         "arch.kicker": "Technical Configuration",
         "arch.title": "Streaming, Latency & Security Settings",
         "cl.kicker": "Release Notes & Code Updates",
         "cl.title": "XyDesk Remote Changelog",
-        "cl.lead": "Technical changelog for app build v0.5.34 (51), published as GitHub release v1.0.0. See the official release page for assets and checksums.",
+        "cl.lead": "Technical changelog for app build v0.5.35 (52), published as GitHub release v1.0.1. See the official release page for assets and checksums.",
         "dl.kicker": "Application Distribution",
         "dl.title": "Download Android Installation Packages (APK)",
-        "dl.desc": "Download the official XyDesk Remote APK for your device. GitHub release tag: v1.0.0; Android package version: 0.5.34 (51). The current public APK requires Android 10 (API 29) or later.",
-        "dl.release": "PUBLIC RELEASE · v1.0.0",
-        "dl.version-note": "v1.0.0 is the GitHub release tag; the Android app version inside the APK is 0.5.34 (51).",
+        "dl.desc": "Download the official XyDesk Remote APK for your device. GitHub release tag: v1.0.1; Android package version: 0.5.35 (52). The current public APK requires Android 7.0 (API 24) or later.",
+        "dl.release": "PUBLIC RELEASE · v1.0.1",
+        "dl.version-note": "v1.0.1 is the GitHub release tag; the Android app version inside the APK is 0.5.35 (52).",
         "dl.label.version": "Release version:",
         "dl.label.compatibility": "Compatibility:",
         "dl.label.abi": "Choose an ABI:",
-        "dl.android-min": "The current public APK requires Android 10 (API 29) or later.",
+        "dl.android-min": "The current public APK requires Android 7.0 (API 24) or later.",
         "dl.abi-help": "arm64-v8a for most modern phones, armeabi-v7a for 32-bit ARM devices, and x86_64 for x86_64 Android emulators/devices.",
         "dl.abi1.sub": "Recommended · 64-bit ARM",
         "dl.abi2.sub": "32-bit ARM devices",
         "dl.abi3.sub": "Android emulator / PC · x86_64",
         "dl.release.source": "Official source",
-        "dl.release.source.sub": "GitHub · v1.0.0",
+        "dl.release.source.sub": "GitHub · v1.0.1",
         "dl.checksum": "View SHA-256 checksums",
         "dl.stats.total": "Total APK downloads",
         "dl.stats.scope": "APK download count across all currently available public GitHub releases. Repeat downloads are counted; this is not a unique-user total.",
@@ -1828,10 +1839,10 @@
         "dl.btn.lbl": "Download arm64-v8a APK",
         "dl.btn.lbl2": "Download armeabi-v7a APK",
         "dl.btn.lbl3": "Download x86_64 APK",
-        "dl.btn.meta": "Official APK · 0.5.34 (51)",
+        "dl.btn.meta": "Official APK · 0.5.35 (52)",
         "dl.rilisin": "Need another asset or release notes? Open the public GitHub release. SHA-256 checksums are provided there.",
         "dl.rilisin.top": "Release notes & all assets",
-        "dl.rilisin.sub": "GitHub Release · v1.0.0",
+        "dl.rilisin.sub": "GitHub Release · v1.0.1",
         "foot.status": "Status & Health",
         "foot.privacy": "Privacy Policy",
         "foot.terms": "Terms of Service",

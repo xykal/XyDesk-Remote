@@ -1,11 +1,11 @@
-const RELEASE = "https://github.com/xykal/XyDesk-Remote/releases/download/v1.0.0/";
+const RELEASE = "https://github.com/xykal/XyDesk-Remote/releases/download/v1.0.1/";
 
 const PUBLIC_ASSETS = {
   "SHA256SUMS.txt": `${RELEASE}SHA256SUMS.txt`,
 };
 
-// Keep the current production Worker asset IDs and filename fallback behavior intact.
-// Public XyDesk Remote release assets still use GH_TOKEN so stale IDs resolve by filename.
+// Keep current production asset IDs as fallback; prefer the newest matching release asset.
+// Public XyDesk Remote and legacy release aliases use GH_TOKEN for GitHub asset redirects.
 const QA_ASSETS = {
   "arm64-v8a.apk": { repo: "xykal/XyDesk-Remote", id: 606095803, fileName: "app-arm64-v8a-release.apk" },
   "armeabi-v7a.apk": { repo: "xykal/XyDesk-Remote", id: 606095801, fileName: "app-armeabi-v7a-release.apk" },
@@ -99,7 +99,7 @@ async function healthResponse(request, env) {
   }
 }
 
-// The Android app in the published v0.5.34 build consumes these legacy field names.
+// Android clients consume these legacy status field names.
 // Keep that response shape while replacing the expired countdown with published status.
 async function statusResponse(request, env) {
   try {
@@ -135,34 +135,42 @@ async function redirectLegacyAsset(asset, env) {
     Accept: "application/octet-stream",
     "User-Agent": "XyDesk-Remote-Worker",
   };
+  const metadataHeaders = {
+    Authorization: `token ${env.GH_TOKEN}`,
+    Accept: "application/vnd.github+json",
+    "User-Agent": "XyDesk-Remote-Worker",
+  };
 
-  let response = await fetch(`https://api.github.com/repos/${asset.repo}/releases/assets/${asset.id}`, {
-    headers: authHeaders,
-    redirect: "manual",
-  });
-  let location = response.headers.get("location");
-  if (location) return redirectResponse(location);
-
-  // If GitHub rotated an asset ID, resolve the same filename from recent releases.
-  const releasesResponse = await fetch(`https://api.github.com/repos/${asset.repo}/releases?per_page=3`, {
-    headers: {
-      Authorization: `token ${env.GH_TOKEN}`,
-      Accept: "application/vnd.github+json",
-      "User-Agent": "XyDesk-Remote-Worker",
-    },
-  });
-  if (releasesResponse.ok) {
-    const releases = await releasesResponse.json();
-    for (const release of releases) {
-      const found = (release.assets || []).find((candidate) => candidate.name === asset.fileName);
-      if (!found) continue;
-      response = await fetch(`https://api.github.com/repos/${asset.repo}/releases/assets/${found.id}`, {
-        headers: authHeaders,
-        redirect: "manual",
-      });
-      location = response.headers.get("location");
-      if (location) return redirectResponse(location);
+  // Prefer the matching APK asset from the newest available releases. The IDs
+  // below are only a fallback: GitHub keeps old asset IDs valid after a new APK
+  // is published, so trying the pinned ID first would silently serve an older build.
+  const assetIds = [];
+  try {
+    const releasesResponse = await fetch(`https://api.github.com/repos/${asset.repo}/releases?per_page=10`, {
+      headers: metadataHeaders,
+    });
+    if (releasesResponse.ok) {
+      const releases = await releasesResponse.json();
+      if (Array.isArray(releases)) {
+        for (const release of releases) {
+          if (release.draft) continue;
+          const found = (release.assets || []).find((candidate) => candidate.name === asset.fileName);
+          if (found && Number.isSafeInteger(found.id)) assetIds.push(found.id);
+        }
+      }
     }
+  } catch {
+    // Fall back to the saved asset ID if release metadata is temporarily unavailable.
+  }
+  if (Number.isSafeInteger(asset.id)) assetIds.push(asset.id);
+
+  for (const id of [...new Set(assetIds)]) {
+    const response = await fetch(`https://api.github.com/repos/${asset.repo}/releases/assets/${id}`, {
+      headers: authHeaders,
+      redirect: "manual",
+    });
+    const location = response.headers.get("location");
+    if (location) return redirectResponse(location);
   }
 
   return new Response("Asset stream error", {
