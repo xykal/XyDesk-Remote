@@ -741,6 +741,7 @@ private fun SecuritySection(appPrefs: AppPrefs) {
     var requireDeviceLock by remember { mutableStateOf(appPrefs.requireDeviceLock) }
     var autoLockRemoteOnLeave by remember { mutableStateOf(appPrefs.autoLockRemoteOnLeave) }
     var clearClipboardOnDisconnect by remember { mutableStateOf(appPrefs.clearClipboardOnDisconnect) }
+    var shareActiveSessionStats by remember { mutableStateOf(appPrefs.shareActiveSessionStats) }
     var defaultSecurityProtocol by remember {
         mutableStateOf(
             XySecurityProtocol.entries.getOrElse(appPrefs.defaultSecurityProtocol) { XySecurityProtocol.AUTO }
@@ -806,6 +807,31 @@ private fun SecuritySection(appPrefs: AppPrefs) {
                     clearClipboardOnDisconnect = it
                     appPrefs.clearClipboardOnDisconnect = it
                 },
+            )
+        }
+
+        XySectionLabel(xy("Statistik sesi (opsional)", "Session statistics (optional)"))
+        XyCard {
+            XyToggleRow(
+                title = xy("Bagikan jumlah sesi RDP aktif", "Share active RDP session count"),
+                subtitle = xy(
+                    "Opt-in dan mati secara default. Mulai koneksi berikutnya, hanya ID acak sementara dikirim saat sesi tersambung.",
+                    "Opt-in and off by default. Starting with the next connection, only a temporary random ID is sent while connected.",
+                ),
+                checked = shareActiveSessionStats,
+                onCheckedChange = {
+                    shareActiveSessionStats = it
+                    appPrefs.shareActiveSessionStats = it
+                },
+            )
+            Text(
+                xy(
+                    "Alamat PC, nama profil, username, password, dan clipboard tidak dikirim. Cloudflare tetap memproses metadata jaringan (misalnya alamat IP) saat melayani permintaan. Hitungan publik hanya mencakup sesi opt-in dan merupakan perkiraan; lease dianggap kedaluwarsa setelah 90 detik tanpa heartbeat dan dibersihkan berkala.",
+                    "PC address, profile name, username, password, and clipboard are not sent. Cloudflare still processes network metadata (such as IP address) to serve the request. The public count includes only opted-in sessions and is approximate; a lease expires after 90 seconds without a heartbeat and is cleaned up periodically.",
+                ),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.padding(horizontal = 14.dp, vertical = 4.dp),
             )
         }
 

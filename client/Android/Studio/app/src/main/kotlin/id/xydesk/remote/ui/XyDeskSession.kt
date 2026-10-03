@@ -89,10 +89,16 @@ import id.xydesk.remote.ui.components.XyNoticeHost
 import id.xydesk.remote.ui.components.rememberXyNotice
 import id.xydesk.remote.ui.components.XyPillButton
 import id.xydesk.remote.ui.components.XySpinner
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
+import id.xydesk.remote.privacy.ActiveSessionStatsReporter
+import java.util.UUID
 import kotlin.math.roundToInt
 
 private data class CertPrompt(
@@ -161,6 +167,28 @@ fun XyDeskSessionScreen(
     val state by manager.state.collectAsState(initial = SessionState.Idle)
     val stage by manager.stage.collectAsState(initial = SessionManager.Stage.IDLE)
     val telemetry by manager.telemetry.collectAsState(initial = TelemetrySample.EMPTY)
+
+    // Public activity counting is explicitly opt-in, per connected session, and best-effort.
+    // The server receives only a random session UUID; no host/profile/account details.
+    LaunchedEffect(state is SessionState.Connected, profile.id) {
+        if (state !is SessionState.Connected) return@LaunchedEffect
+        val appPrefs = AppPrefs(context.applicationContext)
+        if (!appPrefs.shareActiveSessionStats) return@LaunchedEffect
+        val statsSessionId = UUID.randomUUID()
+        try {
+            while (isActive && manager.state.value is SessionState.Connected && appPrefs.shareActiveSessionStats) {
+                withContext(Dispatchers.IO) {
+                    ActiveSessionStatsReporter.heartbeat(statsSessionId)
+                }
+                delay(30_000L)
+            }
+        } finally {
+            withContext(NonCancellable + Dispatchers.IO) {
+                ActiveSessionStatsReporter.end(statsSessionId)
+            }
+        }
+    }
+
     val prefs = remember { SessionPrefs(context) }
     val trustStore = remember { CertificateTrustStore(context) }
     val clipboardSyncEnabled = remember(profile.id) {

@@ -749,10 +749,12 @@
       line-height: 1.5;
     }
 
-    .release-stat-details {
+    .release-stat-breakdown {
       display: grid;
-      align-content: center;
-      gap: 10px;
+      gap: 8px;
+      margin-top: 12px;
+      padding-top: 10px;
+      border-top: 1px solid var(--line);
     }
 
     .release-stat-detail {
@@ -770,10 +772,12 @@
       font-size: 14px;
     }
 
-    #download-stats-updated {
+    #download-stats-updated,
+    #active-session-stats-updated {
       color: var(--text-faint);
       font-size: 11px;
       line-height: 1.4;
+      margin-top: 2px;
     }
 
     .release-actions { display: grid; gap: 8px; }
@@ -1502,16 +1506,22 @@
             <p><strong data-i18n="dl.label.abi">Pilih ABI:</strong> <span data-i18n="dl.abi-help">arm64-v8a untuk kebanyakan HP modern, armeabi-v7a untuk perangkat ARM 32-bit, dan x86_64 untuk emulator/perangkat Android x86_64.</span></p>
           </div>
 
-          <div class="release-stats" aria-label="Statistik unduhan APK">
+          <div class="release-stats" aria-label="Statistik unduhan dan sesi">
             <div class="release-stat-card">
               <div class="release-stat-label" data-i18n="dl.stats.total">Total unduhan APK</div>
               <strong class="release-stat-value mono" id="apk-download-total" aria-live="polite">—</strong>
               <p class="release-stat-note" data-i18n="dl.stats.scope">Jumlah unduhan APK dari semua rilis publik GitHub yang masih tersedia. Unduhan ulang ikut terhitung; ini bukan jumlah pengguna unik.</p>
+              <div class="release-stat-breakdown">
+                <div class="release-stat-detail"><span data-i18n="dl.stats.releases">Rilis dengan APK</span><strong id="apk-release-count">—</strong></div>
+                <div class="release-stat-detail"><span data-i18n="dl.stats.files">Berkas APK</span><strong id="apk-asset-count">—</strong></div>
+                <div id="download-stats-updated" aria-live="polite" data-i18n="dl.stats.loading">Memuat statistik dari GitHub Releases…</div>
+              </div>
             </div>
-            <div class="release-stat-card release-stat-details">
-              <div class="release-stat-detail"><span data-i18n="dl.stats.releases">Rilis dengan APK</span><strong id="apk-release-count">—</strong></div>
-              <div class="release-stat-detail"><span data-i18n="dl.stats.files">Berkas APK</span><strong id="apk-asset-count">—</strong></div>
-              <div id="download-stats-updated" aria-live="polite" data-i18n="dl.stats.loading">Memuat statistik dari GitHub Releases…</div>
+            <div class="release-stat-card">
+              <div class="release-stat-label" data-i18n="dl.stats.active">Sesi RDP aktif (opt-in)</div>
+              <strong class="release-stat-value mono" id="active-rdp-session-count" aria-live="polite">—</strong>
+              <p class="release-stat-note" data-i18n="dl.stats.active.scope">Perkiraan sesi dari aplikasi yang memilih berbagi statistik. Bukan jumlah pengguna unik atau semua koneksi RDP.</p>
+              <div id="active-session-stats-updated" aria-live="polite" data-i18n="dl.stats.active.loading">Memuat statistik sesi…</div>
             </div>
           </div>
 
@@ -1609,6 +1619,52 @@
       var currentLang = localStorage.getItem("xydesk_lang") || "id";
       var latestDownloadStats = null;
       var downloadStatsFailed = false;
+      var latestActiveSessionStats = null;
+      var activeSessionStatsFailed = false;
+
+      function renderActiveSessionStats() {
+        var count = document.getElementById("active-rdp-session-count");
+        var updated = document.getElementById("active-session-stats-updated");
+        if (!count || !updated) return;
+        if (!latestActiveSessionStats) {
+          count.textContent = "—";
+          if (activeSessionStatsFailed) {
+            updated.textContent = currentLang === "en"
+              ? "Live session statistics are temporarily unavailable."
+              : "Statistik sesi langsung sementara tidak tersedia.";
+          }
+          return;
+        }
+        count.textContent = new Intl.NumberFormat(currentLang === "en" ? "en-US" : "id-ID")
+          .format(latestActiveSessionStats.active_session_count);
+        var date = new Date(latestActiveSessionStats.checked_at);
+        var dateText = Number.isNaN(date.getTime()) ? "" : date.toLocaleTimeString(
+          currentLang === "en" ? "en-US" : "id-ID",
+          { hour: "2-digit", minute: "2-digit", timeZone: "UTC" }
+        ) + " UTC";
+        updated.textContent = (currentLang === "en" ? "Checked " : "Dicek ") + dateText;
+      }
+
+      function loadActiveSessionStats() {
+        fetch("/api/active-sessions", { headers: { Accept: "application/json" } })
+          .then(function (response) {
+            if (!response.ok) throw new Error("Active session stats request failed");
+            return response.json();
+          })
+          .then(function (data) {
+            if (data.status !== "ok" || !Number.isFinite(data.active_session_count)) {
+              throw new Error("Active session stats unavailable");
+            }
+            latestActiveSessionStats = data;
+            activeSessionStatsFailed = false;
+            renderActiveSessionStats();
+          })
+          .catch(function () {
+            latestActiveSessionStats = null;
+            activeSessionStatsFailed = true;
+            renderActiveSessionStats();
+          });
+      }
 
       function renderDownloadStats() {
         var total = document.getElementById("apk-download-total");
@@ -1763,6 +1819,9 @@
         "dl.stats.releases": "Releases with APKs",
         "dl.stats.files": "APK files counted",
         "dl.stats.loading": "Loading statistics from GitHub Releases…",
+        "dl.stats.active": "Active RDP sessions (opt-in)",
+        "dl.stats.active.scope": "Approximate count of sessions from app users who opted in. Not unique users or every RDP connection.",
+        "dl.stats.active.loading": "Loading live session count…",
         "dl.abi1": "Recommended for most modern 64-bit Android phones and tablets · 86.1 MB",
         "dl.abi2": "For 32-bit ARM Android devices only · 72.0 MB",
         "dl.abi3": "For x86_64 Android emulators or x86_64 Android PCs · 91.5 MB",
@@ -1807,6 +1866,7 @@
         }
         applyTheme(currentTheme);
         renderDownloadStats();
+        renderActiveSessionStats();
       }
 
       themeBtn.addEventListener("click", function () {
@@ -1828,6 +1888,8 @@
 
       applyLang(currentLang);
       loadDownloadStats();
+      loadActiveSessionStats();
+      window.setInterval(loadActiveSessionStats, 30_000);
     })();
   </script>
 </body>

@@ -7,6 +7,14 @@
   "routes": [
     { "pattern": "rdp.xydesk.my.id", "custom_domain": true }
   ],
+  "durable_objects": {
+    "bindings": [
+      { "name": "ACTIVE_SESSIONS", "class_name": "ActiveSessions" }
+    ]
+  },
+  "migrations": [
+    { "tag": "v1", "new_sqlite_classes": ["ActiveSessions"] }
+  ],
   "assets": {
     "directory": "./web",
     "binding": "ASSETS",

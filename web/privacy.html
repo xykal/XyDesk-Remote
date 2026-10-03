@@ -171,7 +171,7 @@
 
   <main>
     <div class="container">
-      <div class="meta mono">Dokumen Kebijakan · Efektif 29 September 2026</div>
+      <div class="meta mono">Dokumen Kebijakan · Diperbarui 3 Oktober 2026</div>
       <h1>Kebijakan Privasi &amp; Keamanan Data</h1>
       <p class="lead">
         Dokumen ini menjelaskan bagaimana XyDesk Remote menangani konfigurasi koneksi, kredensial, izin perangkat, dan keamanan komunikasi. Diterbitkan oleh <strong>XyVerse Technology Global</strong>.
@@ -211,7 +211,7 @@
       <div class="section-card">
         <h2>4. Penggunaan Izin Perangkat Android</h2>
         <ul>
-          <li><strong>Akses Jaringan (`INTERNET`, `ACCESS_NETWORK_STATE`):</strong> Digunakan semata-mata untuk membuka soket TCP/UDP RDP, deteksi profil jaringan lokal, serta pengiriman paket UDP Wake-on-LAN.</li>
+          <li><strong>Akses Jaringan (`INTERNET`, `ACCESS_NETWORK_STATE`):</strong> Digunakan untuk membuka soket TCP/UDP RDP, deteksi profil jaringan lokal, dan Wake-on-LAN. Jika opsi statistik sesi diaktifkan, aplikasi juga mengirim heartbeat HTTPS dengan ID acak sementara saat sesi RDP tersambung.</li>
           <li><strong>Layanan Latar Depan (`FOREGROUND_SERVICE`):</strong> Digunakan untuk mempertahankan sesi RDP ketika aplikasi berpindah ke latar belakang, sesuai batasan Android.</li>
           <li><strong>Mikrofon (`RECORD_AUDIO` — Opsional):</strong> Hanya diakses apabila pengguna mengaktifkan pengalihan mikrofon pada profil koneksi terkait.</li>
           <li><strong>Penyimpanan Lokal (Opsional):</strong> Hanya diakses apabila pengguna mengaktifkan pengalihan folder Drive 'XyDesk' atau mengirimkan berkas melalui menu Bagikan Android (`ACTION_SEND`).</li>
@@ -228,7 +228,7 @@
       <div class="section-card">
         <h2>6. Statistik unduhan situs dan sesi aktif</h2>
         <p>
-          Penghitung unduhan di situs membaca agregat jumlah unduhan aset APK dari GitHub Releases yang masih tersedia. Angka tersebut menghitung unduhan berkas, bukan orang unik, dan bukan jumlah sesi RDP. Aplikasi saat ini tidak mengirim telemetri sesi aktif ke situs; karena itu, jumlah koneksi RDP aktif tidak ditampilkan. Pengukuran sesi di masa depan memerlukan perubahan aplikasi dan pemberitahuan privasi tersendiri. Penyedia hosting tetap dapat memproses metadata permintaan jaringan sesuai kebijakannya.
+          Penghitung unduhan membaca agregat jumlah unduhan aset APK dari GitHub Releases yang masih tersedia. Angka tersebut menghitung unduhan berkas, bukan orang unik. Secara terpisah, penghitung sesi RDP hanya menerima laporan jika pengguna mengaktifkan opsi <strong>Bagikan jumlah sesi RDP aktif</strong> di Pengaturan &gt; Keamanan; opsi ini mati secara default. Saat sesi tersambung, aplikasi mengirim ID UUID acak per sesi dan heartbeat setiap 30 detik. Server menyimpan hash ID serta waktu heartbeat saja, menghapus lease saat sesi berakhir, dan menandai lease kedaluwarsa setelah 90 detik tanpa heartbeat (pembersihan berjalan berkala). Alamat PC, nama profil, username, password, clipboard, dan isi layar tidak dikirim. Cloudflare tetap memproses metadata jaringan seperti alamat IP untuk melayani permintaan; alamat tersebut tidak disimpan oleh penghitung sesi. Angka publik adalah perkiraan sesi yang opt-in, bukan pengguna unik atau seluruh koneksi RDP, dan tidak menyimpan riwayat sesi.
         </p>
       </div>
     </div>

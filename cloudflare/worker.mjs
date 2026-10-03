@@ -27,6 +27,14 @@ const HEADERS = {
   "content-type": "application/json; charset=utf-8",
   "x-content-type-options": "nosniff",
 };
+const ACTIVE_SESSION_TTL_MS = 90_000;
+const ACTIVE_SESSION_MAX = 5_000;
+const ACTIVE_SESSION_ID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+const ACTIVE_SESSION_PREFIX = "session:";
+
+function isJsonContentType(contentType) {
+  return String(contentType || "").split(";", 1)[0].trim().toLowerCase() === "application/json";
+}
 
 function jsonResponse(data, status = 200, requestMethod = "GET", extraHeaders = {}) {
   return new Response(requestMethod === "HEAD" ? null : JSON.stringify(data), {
@@ -54,10 +62,10 @@ function notFound(requestMethod = "GET") {
   });
 }
 
-function methodNotAllowed() {
+function methodNotAllowed(allowed = "GET, HEAD") {
   return new Response("Method Not Allowed", {
     status: 405,
-    headers: { allow: "GET, HEAD", "content-type": "text/plain; charset=utf-8" },
+    headers: { allow: allowed, "content-type": "text/plain; charset=utf-8" },
   });
 }
 
@@ -269,16 +277,228 @@ async function downloadStatsResponse(request, env) {
   }
 }
 
+function durableObjectJson(data, status = 200) {
+  return new Response(JSON.stringify(data), {
+    status,
+    headers: {
+      "cache-control": "no-store",
+      "content-type": "application/json; charset=utf-8",
+      "x-content-type-options": "nosniff",
+    },
+  });
+}
+
+async function hashedSessionKey(sessionId) {
+  const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(sessionId));
+  const hex = Array.from(new Uint8Array(digest), (byte) => byte.toString(16).padStart(2, "0")).join("");
+  return `${ACTIVE_SESSION_PREFIX}${hex}`;
+}
+
+export class ActiveSessions {
+  constructor(state) {
+    this.state = state;
+  }
+
+  async fetch(request) {
+    const path = new URL(request.url).pathname;
+    if (path === "/count" && request.method === "GET") return this.readCount();
+    if (path === "/update" && request.method === "POST") return this.updateLease(request);
+    return durableObjectJson({ status: "not_found" }, 404);
+  }
+
+  async readCount() {
+    try {
+      const countValue = await this.state.storage.get("meta:active-count");
+      const active = Math.max(0, Math.min(ACTIVE_SESSION_MAX, Number(countValue) || 0));
+      await this.ensureCleanupAlarm(active);
+      return durableObjectJson({ status: "ok", active_session_count: active });
+    } catch {
+      return durableObjectJson({ status: "unavailable" }, 503);
+    }
+  }
+
+  async updateLease(request) {
+    const contentType = request.headers.get("content-type") || "";
+    if (!isJsonContentType(contentType)) {
+      return durableObjectJson({ status: "invalid_content_type" }, 415);
+    }
+    const contentLength = Number(request.headers.get("content-length") || 0);
+    if (contentLength > 512) return durableObjectJson({ status: "payload_too_large" }, 413);
+
+    let raw;
+    try {
+      raw = await request.text();
+    } catch {
+      return durableObjectJson({ status: "invalid_request" }, 400);
+    }
+    if (raw.length > 512) return durableObjectJson({ status: "payload_too_large" }, 413);
+
+    let body;
+    try {
+      body = JSON.parse(raw);
+    } catch {
+      return durableObjectJson({ status: "invalid_json" }, 400);
+    }
+    const action = body?.action;
+    const sessionId = body?.session_id;
+    if (!ACTIVE_SESSION_ID_RE.test(String(sessionId || "")) || !["heartbeat", "end"].includes(action)) {
+      return durableObjectJson({ status: "invalid_session_report" }, 400);
+    }
+
+    try {
+      const key = await hashedSessionKey(sessionId);
+      const now = Date.now();
+      const result = await this.state.storage.transaction(async (transaction) => {
+        const lastSeen = await transaction.get(key);
+        let active = Math.max(0, Number(await transaction.get("meta:active-count")) || 0);
+
+        if (action === "end") {
+          if (lastSeen !== undefined) {
+            await transaction.delete(key);
+            active = Math.max(0, active - 1);
+            await transaction.put("meta:active-count", active);
+          }
+          return { active, full: false };
+        }
+
+        if (lastSeen === undefined && active >= ACTIVE_SESSION_MAX) {
+          // Only scan the lease set at capacity; ordinary heartbeats remain O(1).
+          const entries = await transaction.list({ prefix: ACTIVE_SESSION_PREFIX, limit: ACTIVE_SESSION_MAX + 1 });
+          active = 0;
+          for (const [entryKey, seenAt] of entries) {
+            const timestamp = Number(seenAt);
+            if (!Number.isFinite(timestamp) || now - timestamp > ACTIVE_SESSION_TTL_MS) {
+              await transaction.delete(entryKey);
+            } else {
+              active += 1;
+            }
+          }
+          await transaction.put("meta:active-count", active);
+          if (active >= ACTIVE_SESSION_MAX) return { active, full: true };
+        }
+
+        if (lastSeen === undefined) active += 1;
+        await transaction.put(key, now);
+        await transaction.put("meta:active-count", active);
+        return { active, full: false };
+      });
+      await this.ensureCleanupAlarm(result.active);
+      if (result.full) return durableObjectJson({ status: "capacity_reached" }, 429);
+      return durableObjectJson({ status: "ok", active_session_count: result.active });
+    } catch {
+      return durableObjectJson({ status: "unavailable" }, 503);
+    }
+  }
+
+  async ensureCleanupAlarm(activeCount) {
+    const existing = await this.state.storage.getAlarm();
+    if (activeCount > 0 && (existing === null || existing === undefined)) {
+      await this.state.storage.setAlarm(Date.now() + 10_000);
+    } else if (activeCount === 0 && existing !== null && existing !== undefined) {
+      await this.state.storage.deleteAlarm();
+    }
+  }
+
+  async alarm() {
+    const now = Date.now();
+    const active = await this.state.storage.transaction(async (transaction) => {
+      const entries = await transaction.list({ prefix: ACTIVE_SESSION_PREFIX, limit: ACTIVE_SESSION_MAX + 1 });
+      let count = 0;
+      for (const [key, lastSeen] of entries) {
+        const timestamp = Number(lastSeen);
+        if (!Number.isFinite(timestamp) || now - timestamp > ACTIVE_SESSION_TTL_MS) {
+          await transaction.delete(key);
+        } else {
+          count += 1;
+        }
+      }
+      count = Math.min(count, ACTIVE_SESSION_MAX);
+      await transaction.put("meta:active-count", count);
+      return count;
+    });
+    await this.ensureCleanupAlarm(active);
+  }
+}
+
+async function activeSessionsResponse(request, env) {
+  if (!env.ACTIVE_SESSIONS) {
+    return jsonResponse({ status: "unavailable", active_session_count: null }, 503, request.method);
+  }
+  try {
+    const id = env.ACTIVE_SESSIONS.idFromName("xydesk-remote-global");
+    const stub = env.ACTIVE_SESSIONS.get(id);
+    const response = await stub.fetch("https://active-sessions/count");
+    const data = await response.json();
+    return jsonResponse({
+      ...data,
+      scope: "opt-in-client-reported-rdp-sessions",
+      note: "Perkiraan sesi aplikasi yang memilih berbagi statistik; bukan jumlah pengguna unik atau semua koneksi RDP.",
+      checked_at: new Date().toISOString(),
+    }, response.status, request.method, { "cache-control": "no-store" });
+  } catch {
+    return jsonResponse({ status: "unavailable", active_session_count: null }, 503, request.method);
+  }
+}
+
+async function sessionReportResponse(request, env) {
+  if (!env.ACTIVE_SESSIONS) {
+    return jsonResponse({ status: "unavailable" }, 503, request.method);
+  }
+  const contentType = request.headers.get("content-type") || "";
+  if (!isJsonContentType(contentType)) {
+    return jsonResponse({ status: "invalid_content_type" }, 415, request.method);
+  }
+  const contentLength = Number(request.headers.get("content-length") || 0);
+  if (contentLength > 512) return jsonResponse({ status: "payload_too_large" }, 413, request.method);
+
+  let raw;
+  try {
+    raw = await request.text();
+  } catch {
+    return jsonResponse({ status: "invalid_request" }, 400, request.method);
+  }
+  if (raw.length > 512) return jsonResponse({ status: "payload_too_large" }, 413, request.method);
+
+  let body;
+  try {
+    body = JSON.parse(raw);
+  } catch {
+    return jsonResponse({ status: "invalid_json" }, 400, request.method);
+  }
+  if (!ACTIVE_SESSION_ID_RE.test(String(body?.session_id || "")) || !["heartbeat", "end"].includes(body?.action)) {
+    return jsonResponse({ status: "invalid_session_report" }, 400, request.method);
+  }
+
+  try {
+    const id = env.ACTIVE_SESSIONS.idFromName("xydesk-remote-global");
+    const stub = env.ACTIVE_SESSIONS.get(id);
+    const response = await stub.fetch("https://active-sessions/update", {
+      method: "POST",
+      headers: { "content-type": "application/json; charset=utf-8" },
+      body: JSON.stringify({ action: body.action, session_id: body.session_id }),
+    });
+    const data = await response.json();
+    return jsonResponse(data, response.status, request.method, { "cache-control": "no-store" });
+  } catch {
+    return jsonResponse({ status: "unavailable" }, 503, request.method);
+  }
+}
+
 export default {
   async fetch(request, env) {
-    if (request.method !== "GET" && request.method !== "HEAD") return methodNotAllowed();
-
     const url = new URL(request.url);
     const path = url.pathname;
+
+    if (path === "/api/session") {
+      if (request.method !== "POST") return methodNotAllowed("POST");
+      return sessionReportResponse(request, env);
+    }
+    if (request.method !== "GET" && request.method !== "HEAD") return methodNotAllowed();
 
     if (path === "/api/health") return healthResponse(request, env);
     if (path === "/api/status") return statusResponse(request, env);
     if (path === "/api/stats") return downloadStatsResponse(request, env);
+    if (path === "/api/active-sessions") return activeSessionsResponse(request, env);
     if (path.startsWith("/api/")) return jsonResponse({ status: "not_found" }, 404, request.method);
 
     if (path === "/host" || path === "/host.ps1") {
