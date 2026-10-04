@@ -323,18 +323,103 @@ jobs:
           mv app-arm64-v8a-release.apk XyDesk-arm64-v8a.apk
           mv app-x86_64-release.apk XyDesk-x86_64.apk
           ls -lh XyDesk-*.apk
-      - name: Verifikasi signature setiap ABI (apksigner)
+      - name: Verifikasi V1/V2, semua ABI, dan signer yang sama dengan v1.0.2
         working-directory: client/Android/Studio
         run: |
           set -euo pipefail
-          found=0
-          for apk in app/build/outputs/apk/release/*.apk; do
-            [ -f "$apk" ] || continue
-            found=1
-            echo "Verifying $apk"
-            "$ANDROID_HOME/build-tools/37.0.0/apksigner" verify --print-certs "$apk"
+          APK_SIGNER="$ANDROID_HOME/build-tools/37.0.0/apksigner"
+          OUT="app/build/outputs/apk/release"
+          BASELINE_DIR="$(mktemp -d)"
+          REPORT="$OUT/SIGNATURE-VERIFICATION.txt"
+          trap 'rm -rf "$BASELINE_DIR"' EXIT
+          baseline_cert=""
+
+          {
+            echo "XyDesk Remote — APK signer verification"
+            echo "All v1.0.2 public ABI assets are checked against their published SHA-256."
+            echo "All v1.0.3 APKs must verify with V1 + V2 and retain the same signer."
+            echo
+          } > "$REPORT"
+
+          # Cek file persis yang ada di rilis publik v1.0.2, termasuk armv7 yang
+          # dilaporkan MT Manager. Baseline hash diambil dari digest GitHub Releases.
+          baseline_entries=(
+            "armeabi-v7a|https://github.com/xykal/XyDesk-Remote/releases/download/v1.0.2/XyDesk-armeabi-v7a.apk|ebf796a5e1f20b789a2beeda29e8769949ed9793ebce5e4fb6cec2a20f5e02b4"
+            "arm64-v8a|https://github.com/xykal/XyDesk-Remote/releases/download/v1.0.2/XyDesk-arm64-v8a.apk|dad982b13f4c9c42926caf04fb6c5a9ad14cd877c9b9bf90ee5ff93b09f5041d"
+            "x86_64|https://github.com/xykal/XyDesk-Remote/releases/download/v1.0.2/XyDesk-x86_64.apk|4f1a0d3d5de6caa9b2f445269c6e94ba8f07d927f4399e9d30f240fde2908979"
+          )
+          for entry in "${baseline_entries[@]}"; do
+            IFS='|' read -r abi url expected_sha <<< "$entry"
+            apk="$BASELINE_DIR/v1.0.2-$abi.apk"
+            curl --fail --location --retry 3 --retry-delay 2 --silent --show-error "$url" --output "$apk"
+            actual_sha="$(sha256sum "$apk" | awk '{print $1}')"
+            if [ "$actual_sha" != "$expected_sha" ]; then
+              echo "::error::Hash baseline v1.0.2 $abi tidak cocok dengan digest rilis GitHub."
+              exit 1
+            fi
+            set +e
+            baseline_output="$("$APK_SIGNER" verify --verbose --print-certs "$apk" 2>&1)"
+            verify_status=$?
+            set -e
+            printf '%s\n' "--- baseline v1.0.2 $abi (apksigner exit $verify_status) ---" "$baseline_output"
+            baseline_v1="false"
+            baseline_v2="false"
+            grep -Fq 'Verified using v1 scheme (JAR signing): true' <<<"$baseline_output" && baseline_v1="true"
+            grep -Fq 'Verified using v2 scheme (APK Signature Scheme v2): true' <<<"$baseline_output" && baseline_v2="true"
+            if [ "$baseline_v2" != "true" ]; then
+              echo "::error::Baseline v1.0.2 $abi tidak lolos verifikasi V2."
+              exit 1
+            fi
+            if ! grep -Fq 'Number of signers: 1' <<<"$baseline_output"; then
+              echo "::error::Baseline v1.0.2 $abi harus memiliki tepat satu signer."
+              exit 1
+            fi
+            cert="$(printf '%s\n' "$baseline_output" | awk -F': ' '/Signer #1 certificate SHA-256 digest:/ { print tolower($2); exit }')"
+            if [ -z "$cert" ]; then
+              echo "::error::Tidak dapat membaca signer certificate dari baseline $abi."
+              exit 1
+            fi
+            if [ -z "$baseline_cert" ]; then
+              baseline_cert="$cert"
+            elif [ "$cert" != "$baseline_cert" ]; then
+              echo "::error::Sertifikat v1.0.2 berbeda antar-ABI."
+              exit 1
+            fi
+            printf '%s v1.0.2: apksigner-exit=%s, V1=%s, V2=%s, SHA-256=%s\n' \
+              "$abi" "$verify_status" "$baseline_v1" "$baseline_v2" "$actual_sha" >> "$REPORT"
           done
-          [ "$found" -eq 1 ] || { echo "Tidak ada APK release"; exit 1; }
+          printf 'Baseline signer SHA-256: %s\n\n' "$baseline_cert" >> "$REPORT"
+
+          for abi in armeabi-v7a arm64-v8a x86_64; do
+            apk="$OUT/XyDesk-$abi.apk"
+            if [ ! -s "$apk" ]; then
+              echo "::error::APK untuk ABI $abi tidak ditemukan."
+              exit 1
+            fi
+            verification="$("$APK_SIGNER" verify --verbose --print-certs "$apk")"
+            printf '%s\n' "--- v1.0.3 $abi ---" "$verification"
+            if ! grep -Fq 'Verified using v1 scheme (JAR signing): true' <<<"$verification"; then
+              echo "::error::APK $abi tidak lolos verifikasi V1/JAR."
+              exit 1
+            fi
+            if ! grep -Fq 'Verified using v2 scheme (APK Signature Scheme v2): true' <<<"$verification"; then
+              echo "::error::APK $abi tidak lolos verifikasi V2."
+              exit 1
+            fi
+            if ! grep -Fq 'Number of signers: 1' <<<"$verification"; then
+              echo "::error::APK $abi harus memiliki tepat satu signer."
+              exit 1
+            fi
+            cert="$(printf '%s\n' "$verification" | awk -F': ' '/Signer #1 certificate SHA-256 digest:/ { print tolower($2); exit }')"
+            if [ -z "$cert" ] || [ "$cert" != "$baseline_cert" ]; then
+              echo "::error::Signer $abi tidak sama dengan sertifikat v1.0.2."
+              exit 1
+            fi
+            apk_sha="$(sha256sum "$apk" | awk '{print $1}')"
+            printf '%s v1.0.3: PASS (V1 + V2)\n  APK SHA-256: %s\n  Signer SHA-256: %s\n\n' \
+              "$abi" "$apk_sha" "$cert" >> "$REPORT"
+          done
+          cat "$REPORT"
       - name: Build Windows Native C++17 Host Agent & DLLs (xydesk_quic.dll + xydesk_host_core.dll + XyDeskRemoteHost.exe)
         run: |
           set -euo pipefail
@@ -377,6 +462,7 @@ jobs:
             client/Android/Studio/app/build/outputs/apk/release/XyDeskRemoteHost.exe
             client/Android/Studio/app/build/outputs/apk/release/xydesk_quic.dll
             client/Android/Studio/app/build/outputs/apk/release/xydesk_host_core.dll
+            client/Android/Studio/app/build/outputs/apk/release/SIGNATURE-VERIFICATION.txt
           retention-days: 3
       - name: Hapus material signing sementara
         if: always()
@@ -414,20 +500,27 @@ jobs:
             release-apks/XyDeskRemoteHost.exe
             release-apks/xydesk_quic.dll
             release-apks/xydesk_host_core.dll
+            release-apks/SIGNATURE-VERIFICATION.txt
             release-apks/SHA256SUMS.txt
           generate_release_notes: true
-          draft: ${{ !startsWith(github.ref_name, 'v1.') }}
-      - name: Bersihkan artifacts Actions (pertahankan riwayat rilis publik)
+          # Semua tag rilis selalu dibuat sebagai draft untuk diuji pemilik dulu.
+          # Publikasi final dilakukan manual setelah APK draft lolos tes perangkat.
+          draft: true
+      - name: Bersihkan cache, artifacts, dan output sementara Actions
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
           repo="$GITHUB_REPOSITORY"
-          # Jangan menghapus GitHub Releases atau tag lama: penghitung situs
-          # menjumlahkan unduhan dari semua rilis APK publik yang masih tersedia.
+          # Draft release dan tag bukan Actions artifacts; pertahankan keduanya,
+          # juga log/riwayat run untuk audit. Hapus hanya cache/artifact sementara.
           for art_id in $(gh api --paginate "repos/$repo/actions/artifacts" -q '.artifacts[].id'); do
             gh api -X DELETE "repos/$repo/actions/artifacts/$art_id" </dev/null >/dev/null || true
           done
+          for cache_id in $(gh api --paginate "repos/$repo/actions/caches" -q '.actions_caches[].id'); do
+            gh api -X DELETE "repos/$repo/actions/caches/$cache_id" </dev/null >/dev/null || true
+          done
+          rm -rf release-apks
 
   # ------------------------------------------------------------------
   # VIRUSTOTAL: bukti pihak ketiga untuk rilis. Informatif, tidak

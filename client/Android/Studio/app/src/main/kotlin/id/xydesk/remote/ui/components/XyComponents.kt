@@ -130,7 +130,7 @@ fun XyPillButton(
     }
 }
 
-/** Tombol ikon bulat (dipakai di bar sesi). */
+/** Tombol ikon; bisa berupa lingkaran berisi (HUD) atau aksi datar tanpa chip. */
 @Composable
 fun XyIconPill(
     icon: ImageVector,
@@ -138,21 +138,29 @@ fun XyIconPill(
     modifier: Modifier = Modifier,
     size: Dp = 46.dp,
     active: Boolean = false,
+    flat: Boolean = false,
     contentDescription: String? = null,
 ) {
-    // Ikut tema penuh: dulu latarnya selalu gelap sehingga di mode terang
-    // tombolnya jadi pulau gelap dengan ikon gelap (nyaris tidak terbaca).
+    val shape = if (flat) RoundedCornerShape(10.dp) else CircleShape
     val bg = if (active) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surfaceVariant
-    val fg = if (active) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurface
+    val fg = when {
+        flat -> MaterialTheme.colorScheme.onSurfaceVariant
+        active -> MaterialTheme.colorScheme.onPrimary
+        else -> MaterialTheme.colorScheme.onSurface
+    }
     Box(
         modifier = modifier
             .size(size)
-            .clip(CircleShape)
-            .background(bg)
-            .border(
-                1.dp,
-                if (active) Color.Transparent else MaterialTheme.colorScheme.outlineVariant,
-                CircleShape,
+            .clip(shape)
+            .then(
+                if (flat) Modifier
+                else Modifier
+                    .background(bg)
+                    .border(
+                        1.dp,
+                        if (active) Color.Transparent else MaterialTheme.colorScheme.outlineVariant,
+                        shape,
+                    ),
             )
             .clickable(onClick = onClick),
         contentAlignment = Alignment.Center,

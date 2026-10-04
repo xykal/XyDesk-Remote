@@ -1059,6 +1059,8 @@ fun XyDeskSessionScreen(
                 remoteCursor = remoteCursor,
                 zoom = zoom,
                 inputMode = InputMode.entries[inputMode],
+                externalInputDeviceConnected = !isPcConnectMode &&
+                    (context as? XyDeskSessionActivity)?.externalInputDeviceConnected == true,
                 onInputModeChange = { mode ->
                     inputMode = mode.ordinal
                     prefs.inputMode = mode
@@ -1585,7 +1587,7 @@ private fun ReconnectingOverlay(
             .fillMaxWidth()
             .padding(horizontal = 24.dp, vertical = 28.dp)
             .clip(RoundedCornerShape(16.dp))
-            .background(MaterialTheme.colorScheme.surface.copy(alpha = 0.94f))
+            .background(MaterialTheme.colorScheme.surface)
             .border(1.dp, MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(16.dp))
             .padding(18.dp)
             .zIndex(20f),

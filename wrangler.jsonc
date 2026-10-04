@@ -9,11 +9,13 @@
   ],
   "durable_objects": {
     "bindings": [
-      { "name": "ACTIVE_SESSIONS", "class_name": "ActiveSessions" }
+      { "name": "ACTIVE_SESSIONS", "class_name": "ActiveSessions" },
+      { "name": "COMMUNITY_JOKES", "class_name": "CommunityJokes" }
     ]
   },
   "migrations": [
-    { "tag": "v1", "new_sqlite_classes": ["ActiveSessions"] }
+    { "tag": "v1", "new_sqlite_classes": ["ActiveSessions"] },
+    { "tag": "v2", "new_sqlite_classes": ["CommunityJokes"] }
   ],
   "assets": {
     "directory": "./web",

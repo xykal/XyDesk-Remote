@@ -35,6 +35,13 @@ const ACTIVE_SESSION_TTL_MS = 90_000;
 const ACTIVE_SESSION_MAX = 5_000;
 const ACTIVE_SESSION_ID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const ACTIVE_SESSION_PREFIX = "session:";
+const COMMUNITY_CLIENT_ID_RE = ACTIVE_SESSION_ID_RE;
+const COMMUNITY_JOKE_MAX_CHARS = 280;
+const COMMUNITY_JOKE_FEED_SIZE = 20;
+const COMMUNITY_JOKE_MAX_ITEMS = 1_000;
+const COMMUNITY_JOKE_POST_INTERVAL_MS = 60_000;
+const COMMUNITY_JOKE_REPORT_THRESHOLD = 3;
+const COMMUNITY_JOKE_REACTIONS = Object.freeze(["😂", "😭", "💀", "🔥"]);
 
 function isJsonContentType(contentType) {
   return String(contentType || "").split(";", 1)[0].trim().toLowerCase() === "application/json";
@@ -373,10 +380,11 @@ async function downloadStatsResponse(request, env) {
   }
 }
 
-function durableObjectJson(data, status = 200) {
-  return new Response(JSON.stringify(data), {
+function durableObjectJson(data, status = 200, requestMethod = "GET") {
+  return new Response(requestMethod === "HEAD" ? null : JSON.stringify(data), {
     status,
     headers: {
+      "access-control-allow-origin": "*",
       "cache-control": "no-store",
       "content-type": "application/json; charset=utf-8",
       "x-content-type-options": "nosniff",
@@ -388,6 +396,81 @@ async function hashedSessionKey(sessionId) {
   const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(sessionId));
   const hex = Array.from(new Uint8Array(digest), (byte) => byte.toString(16).padStart(2, "0")).join("");
   return `${ACTIVE_SESSION_PREFIX}${hex}`;
+}
+
+async function hashedCommunityClientId(clientId) {
+  const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(clientId));
+  return Array.from(new Uint8Array(digest), (byte) => byte.toString(16).padStart(2, "0")).join("");
+}
+
+function communityJokeListKey(createdAt, id) {
+  return `joke:${String(createdAt).padStart(13, "0")}:${id}`;
+}
+
+function communityJokePublicView(joke, viewerReaction = null) {
+  return {
+    id: joke.id,
+    text: joke.text,
+    created_at: joke.created_at,
+    reactions: Object.fromEntries(COMMUNITY_JOKE_REACTIONS.map((emoji) => [emoji, Math.max(0, Number(joke.reactions?.[emoji]) || 0)])),
+    viewer_reaction: viewerReaction,
+  };
+}
+
+async function readRequestTextLimited(request, maxBytes) {
+  if (!request.body) return { text: "" };
+  const reader = request.body.getReader();
+  const decoder = new TextDecoder();
+  let byteLength = 0;
+  let text = "";
+  try {
+    while (true) {
+      const { value, done } = await reader.read();
+      if (done) break;
+      byteLength += value.byteLength;
+      if (byteLength > maxBytes) {
+        try {
+          await reader.cancel();
+        } catch {
+          // The request is already over the limit; cancellation is best-effort.
+        }
+        return { tooLarge: true };
+      }
+      text += decoder.decode(value, { stream: true });
+    }
+    text += decoder.decode();
+    return { text };
+  } catch {
+    return { invalid: true };
+  } finally {
+    try {
+      reader.releaseLock();
+    } catch {
+      // A failed/cancelled stream may already have released its reader.
+    }
+  }
+}
+
+async function readCommunityJson(request, maxBytes = 2_048) {
+  if (!isJsonContentType(request.headers.get("content-type"))) {
+    return { error: durableObjectJson({ status: "invalid_content_type" }, 415, request.method) };
+  }
+  const contentLength = Number(request.headers.get("content-length") || 0);
+  if (contentLength > maxBytes) {
+    return { error: durableObjectJson({ status: "payload_too_large" }, 413, request.method) };
+  }
+  const bounded = await readRequestTextLimited(request, maxBytes);
+  if (bounded.tooLarge) {
+    return { error: durableObjectJson({ status: "payload_too_large" }, 413, request.method) };
+  }
+  if (bounded.invalid) {
+    return { error: durableObjectJson({ status: "invalid_request" }, 400, request.method) };
+  }
+  try {
+    return { body: JSON.parse(bounded.text) };
+  } catch {
+    return { error: durableObjectJson({ status: "invalid_json" }, 400, request.method) };
+  }
 }
 
 export class ActiveSessions {
@@ -516,6 +599,189 @@ export class ActiveSessions {
   }
 }
 
+export class CommunityJokes {
+  constructor(state) {
+    this.state = state;
+  }
+
+  async fetch(request) {
+    const url = new URL(request.url);
+    const path = url.pathname;
+    if (path === "/feed" && (request.method === "GET" || request.method === "HEAD")) {
+      return this.readFeed(request);
+    }
+    if (path === "/submit" && request.method === "POST") return this.submit(request);
+    const reaction = path.match(/^\/reaction\/([0-9a-f-]{36})$/i);
+    if (reaction && request.method === "POST") return this.react(request, reaction[1]);
+    const report = path.match(/^\/report\/([0-9a-f-]{36})$/i);
+    if (report && request.method === "POST") return this.report(request, report[1]);
+    return durableObjectJson({ status: "not_found" }, 404, request.method);
+  }
+
+  async readFeed(request) {
+    const clientId = request.headers.get("x-xydesk-client-id") || "";
+    if (clientId && !COMMUNITY_CLIENT_ID_RE.test(clientId)) {
+      return durableObjectJson({ status: "invalid_client_id" }, 400, request.method);
+    }
+    try {
+      const clientHash = clientId ? await hashedCommunityClientId(clientId) : null;
+      const entries = await this.state.storage.list({ prefix: "joke:", reverse: true, limit: COMMUNITY_JOKE_MAX_ITEMS });
+      const items = [];
+      for (const [, joke] of entries) {
+        if (!joke || joke.hidden) continue;
+        const viewerReaction = clientHash
+          ? await this.state.storage.get(`joke-reaction:${joke.id}:${clientHash}`) || null
+          : null;
+        items.push(communityJokePublicView(joke, viewerReaction));
+        if (items.length >= COMMUNITY_JOKE_FEED_SIZE) break;
+      }
+      return durableObjectJson({ status: "ok", items }, 200, request.method);
+    } catch {
+      return durableObjectJson({ status: "unavailable" }, 503, request.method);
+    }
+  }
+
+  async submit(request) {
+    const parsed = await readCommunityJson(request);
+    if (parsed.error) return parsed.error;
+    const clientId = parsed.body?.client_id;
+    if (!COMMUNITY_CLIENT_ID_RE.test(String(clientId || ""))) {
+      return durableObjectJson({ status: "invalid_client_id" }, 400, request.method);
+    }
+    if (typeof parsed.body?.text !== "string") {
+      return durableObjectJson({ status: "invalid_text" }, 400, request.method);
+    }
+    const text = parsed.body.text.replace(/\r\n?/g, "\n").replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F]/g, "").trim();
+    const chars = [...text].length;
+    if (chars < 3 || chars > COMMUNITY_JOKE_MAX_CHARS || /(?:https?:\/\/|www\.)/i.test(text)) {
+      return durableObjectJson({ status: "invalid_text", max_chars: COMMUNITY_JOKE_MAX_CHARS }, 400, request.method);
+    }
+
+    try {
+      const clientHash = await hashedCommunityClientId(clientId);
+      const now = Date.now();
+      const outcome = await this.state.storage.transaction(async (transaction) => {
+        const rateKey = `joke-rate:${clientHash}`;
+        const lastPostAt = Number(await transaction.get(rateKey)) || 0;
+        if (now - lastPostAt < COMMUNITY_JOKE_POST_INTERVAL_MS) {
+          return { status: "rate_limited", retry_after_seconds: Math.ceil((COMMUNITY_JOKE_POST_INTERVAL_MS - (now - lastPostAt)) / 1_000) };
+        }
+
+        const id = crypto.randomUUID();
+        const joke = {
+          id,
+          text,
+          created_at: now,
+          reactions: Object.fromEntries(COMMUNITY_JOKE_REACTIONS.map((emoji) => [emoji, 0])),
+          report_count: 0,
+          hidden: false,
+        };
+        const key = communityJokeListKey(now, id);
+        await transaction.put(key, joke);
+        await transaction.put(`joke-id:${id}`, key);
+        await transaction.put(rateKey, now);
+
+        const posts = await transaction.list({ prefix: "joke:", limit: COMMUNITY_JOKE_MAX_ITEMS + 1 });
+        if (posts.size > COMMUNITY_JOKE_MAX_ITEMS) {
+          const oldestKey = posts.keys().next().value;
+          const oldest = posts.get(oldestKey);
+          if (oldest?.id) {
+            await transaction.delete(oldestKey);
+            await transaction.delete(`joke-id:${oldest.id}`);
+            const oldReactions = await transaction.list({ prefix: `joke-reaction:${oldest.id}:`, limit: 1_000 });
+            const oldReports = await transaction.list({ prefix: `joke-report:${oldest.id}:`, limit: 1_000 });
+            for (const reactionKey of oldReactions.keys()) await transaction.delete(reactionKey);
+            for (const reportKey of oldReports.keys()) await transaction.delete(reportKey);
+          }
+        }
+        return { status: "created", joke: communityJokePublicView(joke) };
+      });
+      if (outcome.status === "rate_limited") return durableObjectJson(outcome, 429, request.method);
+      return durableObjectJson(outcome, 201, request.method);
+    } catch {
+      return durableObjectJson({ status: "unavailable" }, 503, request.method);
+    }
+  }
+
+  async react(request, jokeId) {
+    if (!ACTIVE_SESSION_ID_RE.test(jokeId)) {
+      return durableObjectJson({ status: "invalid_joke_id" }, 400, request.method);
+    }
+    const parsed = await readCommunityJson(request, 1_024);
+    if (parsed.error) return parsed.error;
+    const clientId = parsed.body?.client_id;
+    const emoji = parsed.body?.emoji;
+    if (!COMMUNITY_CLIENT_ID_RE.test(String(clientId || "")) || !COMMUNITY_JOKE_REACTIONS.includes(emoji)) {
+      return durableObjectJson({ status: "invalid_reaction" }, 400, request.method);
+    }
+    try {
+      const clientHash = await hashedCommunityClientId(clientId);
+      const outcome = await this.state.storage.transaction(async (transaction) => {
+        const listKey = await transaction.get(`joke-id:${jokeId}`);
+        if (!listKey) return { status: "not_found" };
+        const joke = await transaction.get(listKey);
+        if (!joke || joke.hidden) return { status: "not_found" };
+
+        const reactionKey = `joke-reaction:${jokeId}:${clientHash}`;
+        const previous = await transaction.get(reactionKey);
+        const reactions = { ...joke.reactions };
+        if (previous === emoji) {
+          reactions[emoji] = Math.max(0, (Number(reactions[emoji]) || 0) - 1);
+          await transaction.delete(reactionKey);
+          joke.reactions = reactions;
+          await transaction.put(listKey, joke);
+          return { status: "ok", joke: communityJokePublicView(joke, null) };
+        }
+        if (previous && COMMUNITY_JOKE_REACTIONS.includes(previous)) {
+          reactions[previous] = Math.max(0, (Number(reactions[previous]) || 0) - 1);
+        }
+        reactions[emoji] = (Number(reactions[emoji]) || 0) + 1;
+        joke.reactions = reactions;
+        await transaction.put(reactionKey, emoji);
+        await transaction.put(listKey, joke);
+        return { status: "ok", joke: communityJokePublicView(joke, emoji) };
+      });
+      return durableObjectJson(outcome, outcome.status === "not_found" ? 404 : 200, request.method);
+    } catch {
+      return durableObjectJson({ status: "unavailable" }, 503, request.method);
+    }
+  }
+
+  async report(request, jokeId) {
+    if (!ACTIVE_SESSION_ID_RE.test(jokeId)) {
+      return durableObjectJson({ status: "invalid_joke_id" }, 400, request.method);
+    }
+    const parsed = await readCommunityJson(request, 1_024);
+    if (parsed.error) return parsed.error;
+    const clientId = parsed.body?.client_id;
+    if (!COMMUNITY_CLIENT_ID_RE.test(String(clientId || ""))) {
+      return durableObjectJson({ status: "invalid_client_id" }, 400, request.method);
+    }
+    try {
+      const clientHash = await hashedCommunityClientId(clientId);
+      const outcome = await this.state.storage.transaction(async (transaction) => {
+        const listKey = await transaction.get(`joke-id:${jokeId}`);
+        if (!listKey) return { status: "not_found", hidden: false };
+        const joke = await transaction.get(listKey);
+        if (!joke || joke.hidden) return { status: "not_found", hidden: true };
+
+        const reportKey = `joke-report:${jokeId}:${clientHash}`;
+        const alreadyReported = await transaction.get(reportKey);
+        if (!alreadyReported) {
+          joke.report_count = (Number(joke.report_count) || 0) + 1;
+          if (joke.report_count >= COMMUNITY_JOKE_REPORT_THRESHOLD) joke.hidden = true;
+          await transaction.put(reportKey, Date.now());
+          await transaction.put(listKey, joke);
+        }
+        return { status: alreadyReported ? "already_reported" : "reported", hidden: joke.hidden };
+      });
+      return durableObjectJson(outcome, outcome.status === "not_found" ? 404 : 200, request.method);
+    } catch {
+      return durableObjectJson({ status: "unavailable" }, 503, request.method);
+    }
+  }
+}
+
 async function activeSessionsResponse(request, env) {
   if (!env.ACTIVE_SESSIONS) {
     return jsonResponse({ status: "unavailable", active_session_count: null }, 503, request.method);
@@ -580,6 +846,61 @@ async function sessionReportResponse(request, env) {
   }
 }
 
+async function communityJokesResponse(request, env) {
+  if (!env.COMMUNITY_JOKES) {
+    return jsonResponse({ status: "unavailable" }, 503, request.method);
+  }
+  const url = new URL(request.url);
+  let internal;
+  if (url.pathname === "/api/jokes") {
+    if (request.method === "GET" || request.method === "HEAD") {
+      const clientId = request.headers.get("x-xydesk-client-id") || "";
+      if (clientId && !COMMUNITY_CLIENT_ID_RE.test(clientId)) {
+        return jsonResponse({ status: "invalid_client_id" }, 400, request.method);
+      }
+      internal = new Request("https://community-jokes/feed", {
+        method: request.method,
+        headers: clientId ? { "x-xydesk-client-id": clientId } : {},
+      });
+    } else if (request.method === "POST") {
+      const length = Number(request.headers.get("content-length") || 0);
+      if (length > 2_048) return jsonResponse({ status: "payload_too_large" }, 413, request.method);
+      const bounded = await readRequestTextLimited(request, 2_048);
+      if (bounded.tooLarge) return jsonResponse({ status: "payload_too_large" }, 413, request.method);
+      if (bounded.invalid) return jsonResponse({ status: "invalid_request" }, 400, request.method);
+      internal = new Request("https://community-jokes/submit", {
+        method: "POST",
+        headers: { "content-type": request.headers.get("content-type") || "" },
+        body: bounded.text,
+      });
+    } else {
+      return methodNotAllowed("GET, HEAD, POST");
+    }
+  } else {
+    const match = url.pathname.match(/^\/api\/jokes\/([0-9a-f-]{36})\/(reaction|report)$/i);
+    if (!match || request.method !== "POST") {
+      return match ? methodNotAllowed("POST") : jsonResponse({ status: "not_found" }, 404, request.method);
+    }
+    const length = Number(request.headers.get("content-length") || 0);
+    if (length > 1_024) return jsonResponse({ status: "payload_too_large" }, 413, request.method);
+    const bounded = await readRequestTextLimited(request, 1_024);
+    if (bounded.tooLarge) return jsonResponse({ status: "payload_too_large" }, 413, request.method);
+    if (bounded.invalid) return jsonResponse({ status: "invalid_request" }, 400, request.method);
+    internal = new Request(`https://community-jokes/${match[2]}/${match[1]}`, {
+      method: "POST",
+      headers: { "content-type": request.headers.get("content-type") || "" },
+      body: bounded.text,
+    });
+  }
+
+  try {
+    const id = env.COMMUNITY_JOKES.idFromName("xydesk-community-jokes-v1");
+    return await env.COMMUNITY_JOKES.get(id).fetch(internal);
+  } catch {
+    return jsonResponse({ status: "unavailable" }, 503, request.method);
+  }
+}
+
 export default {
   async fetch(request, env) {
     const url = new URL(request.url);
@@ -588,6 +909,9 @@ export default {
     if (path === "/api/session") {
       if (request.method !== "POST") return methodNotAllowed("POST");
       return sessionReportResponse(request, env);
+    }
+    if (path === "/api/jokes" || path.startsWith("/api/jokes/")) {
+      return communityJokesResponse(request, env);
     }
     if (request.method !== "GET" && request.method !== "HEAD") return methodNotAllowed();
 

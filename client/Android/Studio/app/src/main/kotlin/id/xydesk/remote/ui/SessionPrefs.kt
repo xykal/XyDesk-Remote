@@ -70,6 +70,16 @@ class SessionPrefs(context: Context) {
         get() = HudPlate.entries.getOrElse(input.getInt(KEY_HUD_PLATE, 0)) { HudPlate.DARK }
         set(v) = input.edit().putInt(KEY_HUD_PLATE, v.ordinal).apply()
 
+    /** Transparansi seluruh tombol HUD (0 = transparan, 1 = penuh). */
+    var hudOpacity: Float
+        get() = input.getFloat(KEY_HUD_OPACITY, 0.88f).coerceIn(0f, 1f)
+        set(v) = input.edit().putFloat(KEY_HUD_OPACITY, v.coerceIn(0f, 1f)).apply()
+
+    /** Sembunyikan tombol HUD ketika ada keyboard/mouse/gamepad eksternal. */
+    var autoHideHudOnExternalInput: Boolean
+        get() = input.getBoolean(KEY_AUTO_HIDE_HUD_EXTERNAL, true)
+        set(v) = input.edit().putBoolean(KEY_AUTO_HIDE_HUD_EXTERNAL, v).apply()
+
     var haptics: Boolean
         get() = input.getBoolean(KEY_HAPTICS, true)
         set(v) = input.edit().putBoolean(KEY_HAPTICS, v).apply()
@@ -209,6 +219,13 @@ class SessionPrefs(context: Context) {
         device.edit().putString("$deviceId.hudkeys.custom", HudKey.encode(keys)).apply()
     }
 
+    fun hudButtonsVisible(deviceId: String): Boolean =
+        device.getBoolean("$deviceId.hud-visible", true)
+
+    fun setHudButtonsVisible(deviceId: String, visible: Boolean) {
+        device.edit().putBoolean("$deviceId.hud-visible", visible).apply()
+    }
+
     fun hudProfile(deviceId: String): HudProfilePreset =
         HudProfilePreset.entries.getOrElse(device.getInt("$deviceId.hudprofile", 0)) {
             HudProfilePreset.STANDARD
@@ -227,6 +244,8 @@ class SessionPrefs(context: Context) {
         private const val KEY_AUTO_RECONNECT = "auto_reconnect"
         private const val KEY_HUD_TIP = "hud_tip"
         private const val KEY_HUD_PLATE = "hud_plate"
+        private const val KEY_HUD_OPACITY = "hud_opacity"
+        private const val KEY_AUTO_HIDE_HUD_EXTERNAL = "auto_hide_hud_external"
         private const val KEY_AUTO_FIT = "auto_fit"
         private const val KEY_HAPTICS = "haptics"
         private const val KEY_SCROLL_SPEED = "scroll_speed"

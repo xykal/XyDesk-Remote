@@ -830,6 +830,7 @@ private fun DevicesScreen(
     var searchQuery by remember { mutableStateOf("") }
     var modeFilterIndex by remember { mutableStateOf(0) } // 0 = Semua, 1 = Koneksi PC, 2 = Koneksi RDP
     var showAddBubble by remember { mutableStateOf(false) }
+    var showPcConnectionNotice by remember { mutableStateOf(true) }
 
     Box(Modifier.fillMaxSize()) {
         Column(Modifier.fillMaxSize()) {
@@ -839,6 +840,17 @@ private fun DevicesScreen(
                     onClick = onDismissSharedNotice,
                     container = MaterialTheme.colorScheme.primaryContainer,
                     content = MaterialTheme.colorScheme.onPrimaryContainer,
+                )
+            }
+            if (showPcConnectionNotice) {
+                Banner(
+                    text = xy(
+                        "Koneksi PC langsung masih dalam tahap pengembangan dan terpisah dari RDP. Fitur RDP tetap tersedia.",
+                        "Direct PC connection is still in development and separate from RDP. RDP remains available.",
+                    ),
+                    onClick = { showPcConnectionNotice = false },
+                    container = MaterialTheme.colorScheme.secondaryContainer,
+                    content = MaterialTheme.colorScheme.onSecondaryContainer,
                 )
             }
             if (crashLog != null) {
@@ -1134,28 +1146,6 @@ private fun DeviceCard(
                         ),
                     ),
             )
-            // Badge Arsitektur Koneksi di Pojok Kiri Atas Preview
-            Box(
-                Modifier
-                    .align(Alignment.TopStart)
-                    .padding(12.dp)
-                    .clip(RoundedCornerShape(999.dp))
-                    .background(Color(0xD91A1D23))
-                    .border(1.dp, Color(0xFF3C424A), RoundedCornerShape(999.dp))
-                    .padding(horizontal = 10.dp, vertical = 4.dp),
-            ) {
-                Text(
-                    text = if (rdpOptions.pcConnectMode) {
-                        "DIRECT PC  ·  ${rdpOptions.pcStreamEngine.badge}  ·  ${rdpOptions.pcTargetFps}Hz"
-                    } else {
-                        "RDP DESKTOP  ·  $streamBadge"
-                    },
-                    fontFamily = FontFamily.Monospace,
-                    fontSize = 9.5.sp,
-                    fontWeight = FontWeight.Bold,
-                    color = Color(0xFFE4E7EB),
-                )
-            }
             Column(
                 Modifier
                     .align(Alignment.BottomStart)
@@ -1208,8 +1198,20 @@ private fun DeviceCard(
                 )
             }
             Spacer(Modifier.weight(1f))
-            XyIconPill(XyIcons.Gear, onEdit, size = 40.dp, contentDescription = xy("Pengaturan RDP", "RDP settings"))
-            XyIconPill(XyIcons.Trash, onDelete, size = 40.dp, contentDescription = xy("Hapus", "Delete"))
+            XyIconPill(
+                XyIcons.Sliders,
+                onEdit,
+                size = 40.dp,
+                flat = true,
+                contentDescription = xy("Pengaturan RDP", "RDP settings"),
+            )
+            XyIconPill(
+                XyIcons.Trash,
+                onDelete,
+                size = 40.dp,
+                flat = true,
+                contentDescription = xy("Hapus", "Delete"),
+            )
         }
     }
 }
@@ -1221,7 +1223,7 @@ private fun DesktopTaskbar(modifier: Modifier = Modifier) {
         modifier
             .fillMaxWidth()
             .height(28.dp)
-            .background(Color.Black.copy(alpha = 0.34f))
+            .background(Color(0xFF090B0E))
             .padding(horizontal = 12.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(7.dp),

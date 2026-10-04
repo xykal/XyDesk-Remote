@@ -36,6 +36,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.geometry.Offset
@@ -95,9 +96,8 @@ private enum class PanelTab(val id: String, val en: String) {
  * Model (ronde 8): satu handle di tepi kanan-atas membuka SATU panel bertab —
  * Layar (zoom/resolusi/orientasi), Input (mode/keyboard/clipboard/pointer),
  * Tombol (editor tombol HUD), Sesi (screenshot/putus/info teknis).
- * Rail kanan-bawah tetap: keyboard, home, dan tombol putus yang SEKARANG
- * membuka dialog konfirmasi yang sama dengan panel (dulu rail pakai
- * "2x ketuk" sementara panel pakai dialog — dua aturan untuk satu aksi).
+ * Rail kanan-bawah tetap terlihat untuk keyboard, monitor, putus, dan toggle
+ * visibilitas HUD; auto-hide hanya memengaruhi tombol overlay yang dapat dipindah.
  */
 @Composable
 fun SessionControls(
@@ -113,6 +113,7 @@ fun SessionControls(
     remoteCursor: RemoteCursor? = null,
     zoom: Float = 1f,
     inputMode: InputMode,
+    externalInputDeviceConnected: Boolean = false,
     onInputModeChange: (InputMode) -> Unit,
     keys: List<HudKey>,
     onKeysChange: (List<HudKey>) -> Unit,
@@ -179,6 +180,15 @@ fun SessionControls(
     var haptics by remember { mutableStateOf(prefs.haptics) }
     var autoFit by remember { mutableStateOf(prefs.autoFit) }
     var plate by remember { mutableStateOf(prefs.hudPlate) }
+    var hudOpacity by remember { mutableFloatStateOf(prefs.hudOpacity) }
+    var showHudButtons by remember(deviceId) { mutableStateOf(prefs.hudButtonsVisible(deviceId)) }
+    var autoHideHudOnExternalInput by remember {
+        mutableStateOf(prefs.autoHideHudOnExternalInput)
+    }
+    var forceShowHudForExternalInput by remember(deviceId) { mutableStateOf(false) }
+    val hudAutomaticallyHidden = autoHideHudOnExternalInput && externalInputDeviceConnected &&
+        !forceShowHudForExternalInput
+    val hudButtonsVisibleNow = showHudButtons && !hudAutomaticallyHidden
     var resolution by remember { mutableStateOf(DisplayPrefs.resolution(context, deviceId)) }
     var rotation by remember { mutableStateOf(DisplayPrefs.rotation(context, deviceId)) }
     var custom by remember { mutableStateOf("") }
@@ -193,6 +203,12 @@ fun SessionControls(
     var confirmLockPc by remember { mutableStateOf(false) }
     var confirmResolution by remember { mutableStateOf<String?>(null) }
     var validationAlert by remember { mutableStateOf<Pair<String, String>?>(null) }
+
+    LaunchedEffect(deviceId, externalInputDeviceConnected, autoHideHudOnExternalInput) {
+        if (!externalInputDeviceConnected || !autoHideHudOnExternalInput) {
+            forceShowHudForExternalInput = false
+        }
+    }
 
     val anyOverlayOpen = panelOpen || monitorGridOpen || pickerOpen || editing != null || textOpen || layoutJsonOpen ||
         confirmDeleteKey != null || confirmResetHud || confirmImportLayout != null ||
@@ -322,6 +338,21 @@ fun SessionControls(
         }
     }
 
+    fun toggleHudButtonVisibility() {
+        if (autoHideHudOnExternalInput && externalInputDeviceConnected) {
+            if (hudButtonsVisibleNow) {
+                forceShowHudForExternalInput = false
+            } else {
+                showHudButtons = true
+                prefs.setHudButtonsVisible(deviceId, true)
+                forceShowHudForExternalInput = true
+            }
+        } else {
+            showHudButtons = !showHudButtons
+            prefs.setHudButtonsVisible(deviceId, showHudButtons)
+        }
+    }
+
     fun replace(updated: HudKey) {
         // Keep the editor's live draft in sync with the persisted per-device layout.
         editing = updateHudEditorDraft(editing, updated)
@@ -432,25 +463,30 @@ fun SessionControls(
             )
         }
 
-        // Tombol kontrol: satu-satu, bebas digeser, ukuran & aksi per tombol.
-        HudKeyLayer(
-            keys = keys,
-            mappingMode = mappingMode,
-            plate = plate,
-            latchedKeys = latchedKeyIds,
-            onMove = { id, x, y ->
-                val moved = keys.map { if (it.id == id) it.copy(x = x, y = y) else it }
-                onKeysChange(moved)
-                prefs.setCustomHudKeys(deviceId, moved)
-            },
-            onPhase = { key, phase ->
-                if (phase != HudPhase.UP) haptic()
-                onPhase(key, phase)
-            },
-            scrollSpeed = prefs.scrollSpeed,
-            onScrollUnits = onScrollUnits,
-            onEdit = { editing = it },
-        )
+        // Hanya tombol HUD yang ikut auto-hide/transparansi; pointer, menu, dan rail
+        // (keyboard, monitor, putus, serta toggle HUD) tetap terjangkau.
+        if (hudButtonsVisibleNow) {
+            Box(Modifier.fillMaxSize().alpha(hudOpacity)) {
+                HudKeyLayer(
+                    keys = keys,
+                    mappingMode = mappingMode,
+                    plate = plate,
+                    latchedKeys = latchedKeyIds,
+                    onMove = { id, x, y ->
+                        val moved = keys.map { if (it.id == id) it.copy(x = x, y = y) else it }
+                        onKeysChange(moved)
+                        prefs.setCustomHudKeys(deviceId, moved)
+                    },
+                    onPhase = { key, phase ->
+                        if (phase != HudPhase.UP) haptic()
+                        onPhase(key, phase)
+                    },
+                    scrollSpeed = prefs.scrollSpeed,
+                    onScrollUnits = onScrollUnits,
+                    onEdit = { editing = it },
+                )
+            }
+        }
 
         // Rail tetap disembunyikan saat panel atau mode atur posisi terbuka agar fokus penuh.
         if (!panelOpen && !monitorGridOpen && !mappingMode) {
@@ -461,6 +497,17 @@ fun SessionControls(
                     .zIndex(24f),
                 verticalArrangement = Arrangement.spacedBy(10.dp),
             ) {
+                RailButton(
+                    icon = if (hudButtonsVisibleNow) XyIcons.EyeOff else XyIcons.Eye,
+                    active = !hudButtonsVisibleNow,
+                    description = if (hudButtonsVisibleNow) {
+                        xy("Sembunyikan tombol overlay", "Hide overlay buttons")
+                    } else {
+                        xy("Tampilkan tombol overlay", "Show overlay buttons")
+                    },
+                    plate = plate,
+                    onClick = { toggleHudButtonVisibility() },
+                )
                 RailButton(
                     icon = XyIcons.Keyboard,
                     active = false,
@@ -1449,6 +1496,23 @@ private fun SessionPanel(
                         onResetCluster = onResetCluster,
                         onExportLayoutJson = onExportLayoutJson,
                         onOpenLayoutJson = onOpenLayoutJson,
+                        showHudButtons = showHudButtons,
+                        onShowHudButtonsChange = { visible ->
+                            showHudButtons = visible
+                            prefs.setHudButtonsVisible(deviceId, visible)
+                            if (!visible) forceShowHudForExternalInput = false
+                        },
+                        autoHideHudOnExternalInput = autoHideHudOnExternalInput,
+                        onAutoHideHudOnExternalInputChange = { enabled ->
+                            autoHideHudOnExternalInput = enabled
+                            prefs.autoHideHudOnExternalInput = enabled
+                            if (!enabled) forceShowHudForExternalInput = false
+                        },
+                        hudOpacity = hudOpacity,
+                        onHudOpacityChange = { opacity ->
+                            hudOpacity = opacity.coerceIn(0f, 1f)
+                            prefs.hudOpacity = hudOpacity
+                        },
                     )
 
                     PanelTab.SESSION -> SessionTab(
@@ -1946,7 +2010,46 @@ private fun ButtonsTab(
     onResetCluster: () -> Unit,
     onExportLayoutJson: () -> Unit,
     onOpenLayoutJson: () -> Unit,
+    showHudButtons: Boolean,
+    onShowHudButtonsChange: (Boolean) -> Unit,
+    autoHideHudOnExternalInput: Boolean,
+    onAutoHideHudOnExternalInputChange: (Boolean) -> Unit,
+    hudOpacity: Float,
+    onHudOpacityChange: (Float) -> Unit,
 ) {
+    PanelSection(xy("Tampilan tombol overlay", "Overlay button display")) {
+        XyToggleRow(
+            title = xy("Aktifkan tombol HUD", "Show HUD buttons"),
+            subtitle = xy(
+                "Bisa disembunyikan kapan saja lewat ikon mata di rail sesi.",
+                "You can hide these any time with the eye button on the session rail.",
+            ),
+            checked = showHudButtons,
+            onCheckedChange = onShowHudButtonsChange,
+        )
+        XyToggleRow(
+            title = xy("Sembunyikan otomatis saat input fisik tersambung", "Auto-hide when physical input is connected"),
+            subtitle = xy(
+                "Mendeteksi keyboard, mouse, gamepad, dan D-pad eksternal. Menu, keyboard HP, monitor, dan disconnect tetap terlihat.",
+                "Detects external keyboards, mice, gamepads, and D-pads. Menu, phone keyboard, monitors, and disconnect stay available.",
+            ),
+            checked = autoHideHudOnExternalInput,
+            onCheckedChange = onAutoHideHudOnExternalInputChange,
+        )
+        PanelHint(
+            xy(
+                "Opasitas tombol HUD: {0}% (0% transparan, 100% solid). Hanya tombol overlay berubah; layar remote dan rail tidak terpengaruh.",
+                "HUD button opacity: {0}% (0% transparent, 100% opaque). Only overlay buttons change; the remote screen and rail are unaffected.",
+                (hudOpacity * 100).roundToInt(),
+            ),
+        )
+        XySlider(
+            value = hudOpacity,
+            onValueChange = onHudOpacityChange,
+            valueRange = 0f..1f,
+        )
+    }
+
     PanelSection(xy("Preset Profil HUD", "HUD Profile Presets")) {
         PanelHint(
             xy(

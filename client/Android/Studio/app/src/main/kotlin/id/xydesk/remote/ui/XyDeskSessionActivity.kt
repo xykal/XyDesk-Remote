@@ -8,6 +8,7 @@ import android.hardware.Sensor
 import android.hardware.SensorEvent
 import android.hardware.SensorEventListener
 import android.hardware.SensorManager
+import android.hardware.input.InputManager
 import android.media.AudioManager
 import android.os.Bundle
 import android.view.InputDevice
@@ -22,6 +23,7 @@ import id.xydesk.remote.security.CrashLog
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.OnBackPressedCallback
+import androidx.compose.runtime.mutableStateOf
 import android.Manifest
 import android.content.pm.PackageManager
 import androidx.activity.result.contract.ActivityResultContracts
@@ -86,6 +88,16 @@ class XyDeskSessionActivity : ComponentActivity() {
     var onExternalScrollUnits: ((Int) -> Unit)? = null
     var onExternalMouseClick: ((XyMouseButton, Boolean) -> Unit)? = null
 
+    private val externalInputState = mutableStateOf(false)
+    /** True while a physical keyboard, mouse, gamepad or D-pad is connected. */
+    val externalInputDeviceConnected: Boolean get() = externalInputState.value
+    private var inputManager: InputManager? = null
+    private val inputDeviceListener = object : InputManager.InputDeviceListener {
+        override fun onInputDeviceAdded(deviceId: Int) = refreshExternalInputDeviceState()
+        override fun onInputDeviceRemoved(deviceId: Int) = refreshExternalInputDeviceState()
+        override fun onInputDeviceChanged(deviceId: Int) = refreshExternalInputDeviceState()
+    }
+
     private var sensorManager: SensorManager? = null
     private var gyroSensor: Sensor? = null
     private var gyroActive = false
@@ -134,6 +146,31 @@ class XyDeskSessionActivity : ComponentActivity() {
     fun noteRemoteClipboardImage(bytes: ByteArray) {
         lastSyncedPhoneImageHash = bytes.contentHashCode()
         lastRemoteClipboardAtMs = SystemClock.elapsedRealtime()
+    }
+
+    private fun registerExternalInputMonitor() {
+        val manager = getSystemService(Context.INPUT_SERVICE) as? InputManager ?: return
+        inputManager = manager
+        manager.registerInputDeviceListener(inputDeviceListener, bgHandler)
+        refreshExternalInputDeviceState()
+    }
+
+    private fun refreshExternalInputDeviceState() {
+        val connected = InputDevice.getDeviceIds().any { id ->
+            val device = InputDevice.getDevice(id) ?: return@any false
+            if (device.isVirtual || !device.isExternal) return@any false
+            val sources = device.sources
+            fun supports(mask: Int) = (sources and mask) == mask
+            supports(InputDevice.SOURCE_KEYBOARD) ||
+                supports(InputDevice.SOURCE_MOUSE) ||
+                supports(InputDevice.SOURCE_GAMEPAD) ||
+                supports(InputDevice.SOURCE_JOYSTICK) ||
+                supports(InputDevice.SOURCE_DPAD)
+        }
+        if (externalInputState.value != connected) {
+            externalInputState.value = connected
+            ConnectionLog.add("SES: external input connected=$connected")
+        }
     }
 
     fun setGyroMouseActive(enabled: Boolean) {
@@ -270,6 +307,7 @@ class XyDeskSessionActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        registerExternalInputMonitor()
         volumeControlStream = AudioManager.STREAM_MUSIC
         runCatching {
             val am = getSystemService(AUDIO_SERVICE) as? AudioManager
@@ -424,6 +462,8 @@ class XyDeskSessionActivity : ComponentActivity() {
     }
 
     override fun onDestroy() {
+        inputManager?.unregisterInputDeviceListener(inputDeviceListener)
+        inputManager = null
         super.onDestroy()
         setGyroMouseActive(false)
         sessionId?.let { XySessionRegistry.remove(it) }

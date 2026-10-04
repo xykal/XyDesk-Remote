@@ -389,10 +389,10 @@ private fun GeneralSection(
         XySectionLabel(xy("Beranda", "Home screen"))
         XyCard {
             XyToggleRow(
-                title = xy("Ruang Santai (meme & jokes)", "Fun corner (memes & jokes)"),
+                title = xy("Jokes komunitas", "Community jokes"),
                 subtitle = xy(
-                    "Kartu humor ringan nonpartisan di beranda. Bisa disembunyikan kapan saja.",
-                    "An optional, nonpartisan humor card on the home screen. Hide it any time.",
+                    "Feed jokes anonim di beranda. Bisa disembunyikan kapan saja.",
+                    "An anonymous joke feed on the home screen. Hide it any time.",
                 ),
                 checked = showFunHub,
                 onCheckedChange = onShowFunHubChange,
