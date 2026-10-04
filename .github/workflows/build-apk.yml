@@ -376,10 +376,16 @@ jobs:
           trap 'rm -rf "$BASELINE_DIR"' EXIT
           baseline_cert=""
 
+          release_tag="${GITHUB_REF_NAME:-}"
+          if [[ "$release_tag" != v* ]]; then
+            release_version="$(sed -n 's/^VERSION_NAME=//p' release.properties)"
+            release_tag="v${release_version}"
+          fi
+
           {
             echo "XyDesk Remote — APK signer verification"
             echo "All v1.0.2 public ABI assets are checked against their published SHA-256."
-            echo "All v1.0.4 APKs must verify with V1 + V2 and retain the same signer."
+            echo "All ${release_tag} APKs must verify with V1 + V2 and retain the same signer."
             echo "V1/JAR diuji dengan --min-sdk-version 23: untuk APK minSdk 24+ apksigner"
             echo "melaporkan v1=false walau blok JAR ada, karena platform mengabaikan V1."
             echo
@@ -449,8 +455,8 @@ jobs:
             # memakai skema JAR (minSdk < 24); kalau tidak, apksigner melaporkan
             # v1=false walau blok V1-nya ada dan valid.
             v1_verification="$("$APK_SIGNER" verify --verbose --min-sdk-version 23 "$apk")"
-            printf '%s\n' "--- v1.0.4 $abi (verify utama) ---" "$verification" \
-              "--- v1.0.4 $abi (uji V1/JAR, min-sdk 23) ---" "$v1_verification"
+            printf '%s\n' "--- ${release_tag} $abi (verify utama) ---" "$verification" \
+              "--- ${release_tag} $abi (uji V1/JAR, min-sdk 23) ---" "$v1_verification"
             if ! grep -Fq 'Verified using v1 scheme (JAR signing): true' <<<"$v1_verification"; then
               echo "::error::APK $abi tidak lolos verifikasi V1/JAR."
               exit 1
@@ -469,8 +475,8 @@ jobs:
               exit 1
             fi
             apk_sha="$(sha256sum "$apk" | awk '{print $1}')"
-            printf '%s v1.0.4: PASS (V1 teruji min-sdk 23 + V2)\n  APK SHA-256: %s\n  Signer SHA-256: %s\n\n' \
-              "$abi" "$apk_sha" "$cert" >> "$REPORT"
+            printf '%s %s: PASS (V1 teruji min-sdk 23 + V2)\n  APK SHA-256: %s\n  Signer SHA-256: %s\n\n' \
+              "$abi" "$release_tag" "$apk_sha" "$cert" >> "$REPORT"
           done
           cat "$REPORT"
       - name: Build Windows Native C++17 Host Agent & DLLs (xydesk_quic.dll + xydesk_host_core.dll + XyDeskRemoteHost.exe)
