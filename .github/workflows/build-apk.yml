@@ -323,6 +323,37 @@ jobs:
           mv app-arm64-v8a-release.apk XyDesk-arm64-v8a.apk
           mv app-x86_64-release.apk XyDesk-x86_64.apk
           ls -lh XyDesk-*.apk
+      - name: Tanda tangani ulang APK dengan skema V1 + V2 (deterministik)
+        # AGP 9 mematikan v1 (JAR) saat minSdk >= 24 dan setelan enableV1Signing
+        # di build.gradle tidak cukup. Re-sign di sini memakai keystore yang sama,
+        # jadi verifier pihak ketiga (mis. MT Manager) tetap melihat sertifikat
+        # yang identik dengan rilis v1.0.2.
+        working-directory: client/Android/Studio/app/build/outputs/apk/release
+        env:
+          RELEASE_STORE_FILE: ${{ github.workspace }}/release.keystore
+          RELEASE_KEY_ALIAS: ${{ secrets.RELEASE_KEY_ALIAS }}
+          RELEASE_KEY_PASSWORD: ${{ secrets.RELEASE_KEY_PASSWORD }}
+          RELEASE_STORE_PASSWORD: ${{ secrets.RELEASE_STORE_PASSWORD }}
+        run: |
+          set -euo pipefail
+          APK_SIGNER="$ANDROID_HOME/build-tools/37.0.0/apksigner"
+          for abi in armeabi-v7a arm64-v8a x86_64; do
+            apk="XyDesk-$abi.apk"
+            if [ ! -s "$apk" ]; then
+              echo "::error::$apk tidak ditemukan untuk ditandatangani ulang."
+              exit 1
+            fi
+            "$APK_SIGNER" sign \
+              --ks "$RELEASE_STORE_FILE" \
+              --ks-key-alias "$RELEASE_KEY_ALIAS" \
+              --ks-pass "env:RELEASE_STORE_PASSWORD" \
+              --key-pass "env:RELEASE_KEY_PASSWORD" \
+              --v1-signing-enabled true \
+              --v2-signing-enabled true \
+              --out "$apk.resigned" "$apk"
+            mv "$apk.resigned" "$apk"
+          done
+          ls -lh XyDesk-*.apk
       - name: Verifikasi V1/V2, semua ABI, dan signer yang sama dengan v1.0.2
         working-directory: client/Android/Studio
         run: |
