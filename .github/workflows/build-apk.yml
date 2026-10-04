@@ -374,7 +374,11 @@ jobs:
               echo "::error::Baseline v1.0.2 $abi harus memiliki tepat satu signer."
               exit 1
             fi
-            cert="$(printf '%s\n' "$baseline_output" | awk -F': ' '/Signer #1 certificate SHA-256 digest:/ { print tolower($2); exit }')"
+            # apksigner mencetak "V2 Signer: certificate SHA-256 digest: ..." pada
+            # versi build-tools baru dan "Signer #1 certificate ..." pada versi lama.
+            # Ambil baris mana pun yang memuat sertifikat SHA-256, lalu bersihkan
+            # jadi hex 64 karakter agar perbandingan signer tetap valid.
+            cert="$(printf '%s\n' "$baseline_output" | awk -F': *' '/certificate SHA-256 digest:/ { gsub(/[^0-9a-fA-F]/, "", $NF); print tolower($NF); exit }')"
             if [ -z "$cert" ]; then
               echo "::error::Tidak dapat membaca signer certificate dari baseline $abi."
               exit 1
@@ -410,7 +414,7 @@ jobs:
               echo "::error::APK $abi harus memiliki tepat satu signer."
               exit 1
             fi
-            cert="$(printf '%s\n' "$verification" | awk -F': ' '/Signer #1 certificate SHA-256 digest:/ { print tolower($2); exit }')"
+            cert="$(printf '%s\n' "$verification" | awk -F': *' '/certificate SHA-256 digest:/ { gsub(/[^0-9a-fA-F]/, "", $NF); print tolower($NF); exit }')"
             if [ -z "$cert" ] || [ "$cert" != "$baseline_cert" ]; then
               echo "::error::Signer $abi tidak sama dengan sertifikat v1.0.2."
               exit 1
