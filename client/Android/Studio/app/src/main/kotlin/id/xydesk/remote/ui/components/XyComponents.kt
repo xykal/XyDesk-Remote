@@ -11,6 +11,9 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.interaction.collectIsFocusedAsState
+import androidx.compose.foundation.selection.toggleable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -40,6 +43,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
@@ -58,8 +62,8 @@ import id.xydesk.remote.ui.theme.XyDisplay
 import id.xydesk.remote.ui.theme.XyPill
 
 /**
- * Primitif XyDesk bergaya datar: tanpa kartu atau garis dekoratif.
- * Outline hanya dipakai pada tombol aksi; tidak ada shadow/elevation.
+ * Primitif XyDesk: permukaan rounded dengan garis lembut untuk mengelompokkan
+ * konten. Outline yang lebih tegas tetap dipakai pada input dan kontrol aktif.
  */
 
 @Composable
@@ -68,14 +72,18 @@ fun XyCard(
     padding: Dp = 16.dp,
     content: @Composable ColumnScope.() -> Unit,
 ) {
-    // Content group only: no decorative card fill, outline, or shadow.
+    val shape = RoundedCornerShape(20.dp)
     Column(
-        modifier = modifier.padding(padding),
+        modifier = modifier
+            .clip(shape)
+            .background(MaterialTheme.colorScheme.surface)
+            .border(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.42f), shape)
+            .padding(padding),
         content = content,
     )
 }
 
-/** Tombol aksi bersudut kecil. `primary` = isi penuh; `false` = outline saja. */
+/** Tombol aksi rounded; `primary` = isi penuh; `false` = outline saja. */
 @Composable
 fun XyPillButton(
     text: String,
@@ -137,9 +145,10 @@ fun XyIconPill(
     flat: Boolean = false,
     contentDescription: String? = null,
 ) {
-    val shape = RoundedCornerShape(if (flat) 6.dp else 8.dp)
+    val shape = RoundedCornerShape(16.dp)
     val bg = if (active) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surfaceVariant
     val fg = when {
+        flat && active -> MaterialTheme.colorScheme.primary
         flat -> MaterialTheme.colorScheme.onSurfaceVariant
         active -> MaterialTheme.colorScheme.onPrimary
         else -> MaterialTheme.colorScheme.onSurface
@@ -240,23 +249,29 @@ fun XySwitch(
         if (checked) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurfaceVariant,
         label = "knob",
     )
-    val knobOffset by animateDpAsState(if (checked) 20.dp else 2.dp, label = "knobOffset")
+    val knobOffset by animateDpAsState(if (checked) 23.dp else 3.dp, label = "knobOffset")
     Box(
         modifier = Modifier
-            .size(width = 44.dp, height = 26.dp)
+            .size(width = 46.dp, height = 28.dp)
             .clip(XyPill)
             .background(trackColor)
             .border(
                 1.dp,
-                if (checked) Color.Transparent else MaterialTheme.colorScheme.outline,
+                if (checked) MaterialTheme.colorScheme.primary.copy(alpha = 0.55f)
+                else MaterialTheme.colorScheme.outlineVariant,
                 XyPill,
             )
-            .clickable(enabled = enabled) { onCheckedChange(!checked) },
+            .toggleable(
+                value = checked,
+                enabled = enabled,
+                role = Role.Switch,
+                onValueChange = onCheckedChange,
+            ),
     ) {
         Box(
             modifier = Modifier
                 .padding(start = knobOffset, top = 3.dp)
-                .size(18.dp)
+                .size(20.dp)
                 .clip(CircleShape)
                 .background(knobColor),
         )
@@ -326,7 +341,7 @@ fun XySegmented(
             Box(
                 modifier = Modifier
                     .weight(1f)
-                    .clip(RoundedCornerShape(6.dp))
+                    .clip(RoundedCornerShape(14.dp))
                     .background(if (active) MaterialTheme.colorScheme.primaryContainer else Color.Transparent)
                     .clickable { onSelect(index) }
                     .padding(vertical = 9.dp),
@@ -345,7 +360,7 @@ fun XySegmented(
     }
 }
 
-/** Input teks: label kecil di atas, kotak border hairline, radius kecil. */
+/** Input teks: label kecil, permukaan jelas, outline membesar dan beraksen saat fokus. */
 @Composable
 fun XyField(
     value: String,
@@ -362,6 +377,10 @@ fun XyField(
     // field password di app (perangkat, gateway, NLA) punya perilaku yang
     // sama — dulu password cuma bisa diketik buta.
     var pwVisible by remember { mutableStateOf(false) }
+    val interactionSource = remember { MutableInteractionSource() }
+    val focused by interactionSource.collectIsFocusedAsState()
+    val fieldOutline = if (focused) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outlineVariant
+    val fieldOutlineWidth = if (focused) 1.5.dp else 1.dp
     Column(modifier.fillMaxWidth()) {
         Text(
             label.uppercase(),
@@ -379,6 +398,7 @@ fun XyField(
                 color = MaterialTheme.colorScheme.onSurface,
             ),
             cursorBrush = SolidColor(MaterialTheme.colorScheme.primary),
+            interactionSource = interactionSource,
             visualTransformation = if (isPassword && !pwVisible) PasswordVisualTransformation()
             else VisualTransformation.None,
             keyboardOptions = KeyboardOptions(keyboardType = keyboardType, imeAction = imeAction),
@@ -386,8 +406,11 @@ fun XyField(
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .heightIn(min = 50.dp)
-                        .padding(horizontal = 8.dp, vertical = 4.dp),
+                        .heightIn(min = 52.dp)
+                        .clip(XyPill)
+                        .background(MaterialTheme.colorScheme.surface)
+                        .border(fieldOutlineWidth, fieldOutline, XyPill)
+                        .padding(horizontal = 14.dp, vertical = 6.dp),
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
                     Box(Modifier.weight(1f)) {
@@ -445,7 +468,8 @@ fun XyTopBar(
             XyIconPill(
                 icon = XyIcons.ChevronLeft,
                 onClick = onBack,
-                size = 42.dp,
+                size = 44.dp,
+                flat = true,
                 contentDescription = "Kembali",
             )
         }

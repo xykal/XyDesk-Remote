@@ -119,7 +119,7 @@ fun StatusScreen(
             title = xy("Status", "Status"),
             onBack = onBack,
             actions = {
-                XyIconPill(XyIcons.Info, onShowLog, contentDescription = xy("Log sesi", "Session log"))
+                XyIconPill(XyIcons.Info, onShowLog, flat = true, contentDescription = xy("Log sesi", "Session log"))
             },
         )
         Column(

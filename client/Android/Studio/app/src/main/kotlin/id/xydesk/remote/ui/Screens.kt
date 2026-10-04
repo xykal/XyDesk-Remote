@@ -72,7 +72,7 @@ internal fun SectionScreen(
         XyTopBar(
             title = sectionTitle(section),
             onBack = null,
-            actions = { XyIconPill(XyIcons.Menu, onMenu, contentDescription = "Menu") },
+            actions = { XyIconPill(XyIcons.Menu, onMenu, flat = true, contentDescription = "Menu") },
         )
         when (section) {
             XySection.TAMPILAN -> DisplaySection(favorites, onEditDevice)

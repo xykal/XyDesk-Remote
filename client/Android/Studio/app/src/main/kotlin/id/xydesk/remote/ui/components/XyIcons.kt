@@ -16,8 +16,8 @@ import kotlin.math.sin
  * Ikon XyDesk — set garis 24dp, stroke 1.7, ujung bulat.
  *
  * Digambar sendiri (bukan set bawaan OS/Material) supaya bobot garis dan
- * bentuknya konsisten dengan tipografi app. Semua ikon stroke-only, jadi
- * `Icon(tint = ...)` mewarnainya seragam.
+ * bentuknya konsisten dengan tipografi app. Ikon stroke dan solid tetap
+ * memakai satu tint melalui `Icon(tint = ...)`.
  */
 private fun xyIcon(name: String, block: PathBuilder.() -> Unit): ImageVector =
     ImageVector.Builder(
@@ -121,6 +121,46 @@ object XyIcons {
         moveTo(12f, 3f); lineTo(12f, 21f)
         moveTo(8f, 7f); lineTo(12f, 3f); lineTo(16f, 7f)
         moveTo(8f, 17f); lineTo(12f, 21f); lineTo(16f, 17f)
+    }
+
+    val Music: ImageVector = xyIcon("XyMusic") {
+        moveTo(9f, 17f); lineTo(9f, 5f); lineTo(20f, 3f); lineTo(20f, 15f)
+        moveTo(9f, 8f); lineTo(20f, 6f)
+        moveTo(9f, 16f)
+        curveTo(9f, 18.2f, 7.2f, 20f, 5f, 20f)
+        curveTo(2.8f, 20f, 2f, 18.6f, 3.2f, 17.2f)
+        curveTo(4.4f, 15.8f, 6.8f, 15.2f, 9f, 16f)
+        moveTo(20f, 14f)
+        curveTo(20f, 16.2f, 18.2f, 18f, 16f, 18f)
+        curveTo(13.8f, 18f, 13f, 16.6f, 14.2f, 15.2f)
+        curveTo(15.4f, 13.8f, 17.8f, 13.2f, 20f, 14f)
+    }
+
+    val Play: ImageVector = xySolid("XyPlay") {
+        moveTo(7f, 4.8f); lineTo(19f, 12f); lineTo(7f, 19.2f); close()
+    }
+
+    val Pause: ImageVector = xySolid("XyPause") {
+        moveTo(6f, 5f); lineTo(10f, 5f); lineTo(10f, 19f); lineTo(6f, 19f); close()
+        moveTo(14f, 5f); lineTo(18f, 5f); lineTo(18f, 19f); lineTo(14f, 19f); close()
+    }
+
+    val SkipPrevious: ImageVector = xySolid("XySkipPrevious") {
+        moveTo(5f, 5f); lineTo(8f, 5f); lineTo(8f, 19f); lineTo(5f, 19f); close()
+        moveTo(19f, 5f); lineTo(9f, 12f); lineTo(19f, 19f); close()
+    }
+
+    val SkipNext: ImageVector = xySolid("XySkipNext") {
+        moveTo(16f, 5f); lineTo(19f, 5f); lineTo(19f, 19f); lineTo(16f, 19f); close()
+        moveTo(5f, 5f); lineTo(15f, 12f); lineTo(5f, 19f); close()
+    }
+
+    val ChevronUp: ImageVector = xyIcon("XyChevronUp") {
+        moveTo(5f, 15f); lineTo(12f, 8f); lineTo(19f, 15f)
+    }
+
+    val ChevronDown: ImageVector = xyIcon("XyChevronDown") {
+        moveTo(5f, 9f); lineTo(12f, 16f); lineTo(19f, 9f)
     }
 
     val Swap: ImageVector = xyIcon("XySwap") {

@@ -165,7 +165,11 @@ fun SessionControls(
     val context = LocalContext.current
     val configuration = LocalConfiguration.current
     val view = androidx.compose.ui.platform.LocalView.current
+    val lifecycleOwner = androidx.compose.ui.platform.LocalLifecycleOwner.current
     val prefs = remember { SessionPrefs(context) }
+    val spotifyPlayback by SpotifyMediaBridge.playback.collectAsState()
+    var spotifyExpanded by remember { mutableStateOf(false) }
+    var scrollPillOpen by remember { mutableStateOf(false) }
     var panelOpen by remember { mutableStateOf(false) }
     var monitorGridOpen by remember { mutableStateOf(false) }
     var tab by remember { mutableStateOf(PanelTab.SCREEN) }
@@ -209,6 +213,17 @@ fun SessionControls(
     var confirmResolution by remember { mutableStateOf<String?>(null) }
     var validationAlert by remember { mutableStateOf<Pair<String, String>?>(null) }
 
+    LaunchedEffect(context) { SpotifyMediaBridge.refresh(context) }
+    DisposableEffect(lifecycleOwner, context) {
+        val observer = androidx.lifecycle.LifecycleEventObserver { _, event ->
+            if (event == androidx.lifecycle.Lifecycle.Event.ON_RESUME) {
+                SpotifyMediaBridge.refresh(context)
+            }
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
+    }
+
     LaunchedEffect(deviceId, externalInputDeviceConnected, autoHideHudOnExternalInput) {
         if (!externalInputDeviceConnected || !autoHideHudOnExternalInput) {
             forceShowHudForExternalInput = false
@@ -225,6 +240,7 @@ fun SessionControls(
 
     LaunchedEffect(
         panelOpen, monitorGridOpen, pickerOpen, editing, textOpen, layoutJsonOpen, mappingMode,
+        scrollPillOpen, spotifyExpanded,
         confirmDeleteKey, confirmResetHud, confirmImportLayout, confirmApplyPreset,
         confirmLockPc, confirmResolution, validationAlert,
     ) {
@@ -272,6 +288,14 @@ fun SessionControls(
                 }
                 textOpen -> {
                     textOpen = false
+                    true
+                }
+                spotifyExpanded -> {
+                    spotifyExpanded = false
+                    true
+                }
+                scrollPillOpen -> {
+                    scrollPillOpen = false
                     true
                 }
                 monitorGridOpen -> {
@@ -493,6 +517,35 @@ fun SessionControls(
             }
         }
 
+        if (!panelOpen && !monitorGridOpen && !mappingMode) {
+            SpotifyFloatingPlayer(
+                playback = spotifyPlayback,
+                expanded = spotifyExpanded,
+                onExpand = { spotifyExpanded = true },
+                onMinimize = { spotifyExpanded = false },
+                onTogglePlayback = { SpotifyMediaBridge.playPause() },
+                onPrevious = { SpotifyMediaBridge.previous() },
+                onNext = { SpotifyMediaBridge.next() },
+                onRequestAccess = { openSpotifyNotificationAccess(context) },
+                modifier = Modifier
+                    .align(Alignment.TopStart)
+                    .padding(start = 8.dp, top = 50.dp)
+                    .zIndex(22f),
+            )
+        }
+
+        if (scrollPillOpen && !panelOpen && !monitorGridOpen && !mappingMode) {
+            SessionScrollPill(
+                plate = plate,
+                scrollSpeed = prefs.scrollSpeed,
+                onScrollUnits = onScrollUnits,
+                modifier = Modifier
+                    .align(Alignment.CenterEnd)
+                    .padding(end = 68.dp)
+                    .zIndex(23f),
+            )
+        }
+
         // Rail tetap disembunyikan saat panel atau mode atur posisi terbuka agar fokus penuh.
         if (!panelOpen && !monitorGridOpen && !mappingMode) {
             Column(
@@ -519,6 +572,13 @@ fun SessionControls(
                     description = xy("Buka keyboard HP", "Open phone keyboard"),
                     plate = plate,
                 ) { onOpenKeyboard() }
+                RailButton(
+                    icon = XyIcons.ScrollSlide,
+                    active = scrollPillOpen,
+                    description = xy("Buka kontrol scroll mouse", "Open mouse scroll control"),
+                    plate = plate,
+                    onClick = { scrollPillOpen = !scrollPillOpen },
+                )
                 RailButton(
                     icon = XyIcons.Monitor,
                     active = monitorGridOpen,
@@ -697,7 +757,11 @@ fun SessionControls(
         // ---- handle panel di kanan atas, terpisah dari rail kontrol ----
         if (!panelOpen && !monitorGridOpen && !mappingMode) {
             PanelHandle(
-                onClick = { panelOpen = true },
+                onClick = {
+                    scrollPillOpen = false
+                    spotifyExpanded = false
+                    panelOpen = true
+                },
                 modifier = Modifier
                     .align(Alignment.TopEnd)
                     .padding(top = 12.dp, end = 6.dp),

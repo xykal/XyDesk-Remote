@@ -30,24 +30,24 @@ import id.xydesk.remote.ui.AppPrefs
 // =============================================================
 // XyDesk design tokens.
 //
-// Aturan: netral, kontras tinggi, tanpa glow / gradient atau border dekoratif.
-// Warna dipakai untuk status dan aksi; semua sudut kecil, termasuk tombol.
+// Aturan: permukaan matte dan rounded, kontras tinggi, tanpa glow/gradient.
+// Garis dekoratif dibuat lembut; input, slider, dan switch tetap jelas terbaca.
 // =============================================================
 
 // Tema gelap matte: latar nyaris hitam, permukaan solid, tanpa efek kaca.
 // Perbedaan luminans kecil antarlapisan menjaga hierarki tanpa menambah
 // gradient, blur, atau glow dekoratif. Teks tetap off-white demi kontras.
-val XyBg = Color(0xFF050505)
-val XySurface = Color(0xFF090909)
-val XySurfaceAlt = Color(0xFF111111)
-val XyPrimaryContainer = Color(0xFF171717)
-val XyLine = Color(0xFF242424)
-val XyLineStrong = Color(0xFF343434)
-val XyText = Color(0xFFF1F1F1)
-val XyTextDim = Color(0xFFA6A6A6)
-val XyTextFaint = Color(0xFF777777)
-val XyAccent = Color(0xFFE0E0E0)
-val XyAccentInk = Color(0xFF050505)
+val XyBg = Color(0xFF07060A)
+val XySurface = Color(0xFF0E0D12)
+val XySurfaceAlt = Color(0xFF18161D)
+val XyPrimaryContainer = Color(0xFF272132)
+val XyLine = Color(0xFF2A2730)
+val XyLineStrong = Color(0xFF3C3843)
+val XyText = Color(0xFFF4F2F7)
+val XyTextDim = Color(0xFFB4AFBA)
+val XyTextFaint = Color(0xFF817B88)
+val XyAccent = Color(0xFFD8C9FF)
+val XyAccentInk = Color(0xFF211833)
 val XyOk = Color(0xFF57C08B)
 val XyWarn = Color(0xFFD7A54E)
 val XyDanger = Color(0xFFE0706F)
@@ -78,23 +78,23 @@ val DarkScheme = darkColorScheme(
 )
 
 val LightScheme = lightColorScheme(
-    primary = Color(0xFF14171B),
-    onPrimary = Color(0xFFF7F9FA),
-    primaryContainer = Color(0xFFE7EAEE),
-    onPrimaryContainer = Color(0xFF14171B),
-    secondary = Color(0xFF5B636B),
-    onSecondary = Color(0xFFF7F9FA),
-    secondaryContainer = Color(0xFFE9ECEF),
-    onSecondaryContainer = Color(0xFF14171B),
-    tertiary = Color(0xFF1F7A55),
-    background = Color(0xFFF5F6F8),
-    onBackground = Color(0xFF14171B),
+    primary = Color(0xFF6852A4),
+    onPrimary = Color(0xFFFFFFFF),
+    primaryContainer = Color(0xFFEAE3F8),
+    onPrimaryContainer = Color(0xFF30234C),
+    secondary = Color(0xFF625C6D),
+    onSecondary = Color(0xFFFFFFFF),
+    secondaryContainer = Color(0xFFEDE9F3),
+    onSecondaryContainer = Color(0xFF292532),
+    tertiary = Color(0xFF267554),
+    background = Color(0xFFF8F6FB),
+    onBackground = Color(0xFF201D26),
     surface = Color(0xFFFFFFFF),
-    onSurface = Color(0xFF14171B),
-    surfaceVariant = Color(0xFFEFF1F4),
-    onSurfaceVariant = Color(0xFF5B636B),
-    outline = Color(0xFFDDE1E6),
-    outlineVariant = Color(0xFFC6CCD3),
+    onSurface = Color(0xFF201D26),
+    surfaceVariant = Color(0xFFF0EDF5),
+    onSurfaceVariant = Color(0xFF625C6D),
+    outline = Color(0xFFDED9E7),
+    outlineVariant = Color(0xFFC9C2D4),
     error = Color(0xFFB3261E),
     onError = Color.White,
     errorContainer = Color(0xFFF9DEDC),
@@ -115,14 +115,14 @@ val XyBody = FontFamily(
     Font(R.font.inter, FontWeight.Bold),
 )
 
-/** Sudut kecil dan konsisten; tombol juga memakai radius kotak, bukan kapsul. */
-val XyPill = RoundedCornerShape(8.dp)
+/** Radius lebih ramah sentuh; kontrol pill tetap terbaca sebagai kontrol. */
+val XyPill = RoundedCornerShape(18.dp)
 
 val XyShapes = Shapes(
-    small = RoundedCornerShape(3.dp),
-    medium = RoundedCornerShape(4.dp),
-    large = RoundedCornerShape(6.dp),
-    extraLarge = RoundedCornerShape(8.dp),
+    small = RoundedCornerShape(10.dp),
+    medium = RoundedCornerShape(14.dp),
+    large = RoundedCornerShape(20.dp),
+    extraLarge = RoundedCornerShape(26.dp),
 )
 
 /**

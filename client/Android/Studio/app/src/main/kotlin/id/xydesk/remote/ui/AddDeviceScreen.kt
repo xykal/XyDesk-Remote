@@ -445,6 +445,7 @@ fun AddDeviceScreen(
                     XyIcons.Gear,
                     { showAdvanced = true },
                     active = showAdvanced,
+                    flat = true,
                     contentDescription = xy("Pengaturan lanjutan", "Advanced settings"),
                 )
             },

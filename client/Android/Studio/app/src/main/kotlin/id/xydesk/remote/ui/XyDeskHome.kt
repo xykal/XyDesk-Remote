@@ -920,7 +920,7 @@ private fun DevicesScreen(
                 title = xy("Perangkat", "Devices"),
                 onBack = null,
                 actions = {
-                    XyIconPill(XyIcons.Menu, onMenu, contentDescription = xy("Menu", "Menu"))
+                    XyIconPill(XyIcons.Menu, onMenu, flat = true, contentDescription = xy("Menu", "Menu"))
                     XyIconPill(
                         XyIcons.Plus,
                         { showAddBubble = !showAddBubble },

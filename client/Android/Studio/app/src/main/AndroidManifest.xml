@@ -3,6 +3,11 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
     android:installLocation="auto">
 
+    <!-- Android 11+ package visibility for launching the user's Spotify app. -->
+    <queries>
+        <package android:name="com.spotify.music" />
+    </queries>
+
     <!-- Network/permission requirements are declared by the freeRDPCore
          library manifest (INTERNET, RECORD_AUDIO, CAMERA, ...) and merged
          into this app automatically. -->
@@ -30,6 +35,17 @@
             <property
                 android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
                 android:value="remote desktop session" />
+        </service>
+
+        <!-- Read only Spotify's active media session after the user explicitly enables access. -->
+        <service
+            android:name="id.xydesk.remote.ui.SpotifyNotificationListenerService"
+            android:label="@string/spotify_media_listener_label"
+            android:exported="true"
+            android:permission="android.permission.BIND_NOTIFICATION_LISTENER_SERVICE">
+            <intent-filter>
+                <action android:name="android.service.notification.NotificationListenerService" />
+            </intent-filter>
         </service>
 
         <!-- Launcher: home Compose (daftar perangkat + koneksi + target Share ke PC) -->
