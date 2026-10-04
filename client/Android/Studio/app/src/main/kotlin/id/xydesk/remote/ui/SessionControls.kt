@@ -867,6 +867,23 @@ fun SessionControls(
                     layoutJsonValue = HudKey.exportLayoutJson(keys)
                     layoutJsonOpen = true
                 },
+                showHudButtons = showHudButtons,
+                onShowHudButtonsChange = { visible ->
+                    showHudButtons = visible
+                    prefs.setHudButtonsVisible(deviceId, visible)
+                    if (!visible) forceShowHudForExternalInput = false
+                },
+                autoHideHudOnExternalInput = autoHideHudOnExternalInput,
+                onAutoHideHudOnExternalInputChange = { enabled ->
+                    autoHideHudOnExternalInput = enabled
+                    prefs.autoHideHudOnExternalInput = enabled
+                    if (!enabled) forceShowHudForExternalInput = false
+                },
+                hudOpacity = hudOpacity,
+                onHudOpacityChange = { opacity ->
+                    hudOpacity = opacity.coerceIn(0f, 1f)
+                    prefs.hudOpacity = hudOpacity
+                },
                 // Sesi
                 onScreenshot = onScreenshot,
                 onLockRemotePc = { confirmLockPc = true },
@@ -1350,6 +1367,13 @@ private fun SessionPanel(
     onResetCluster: () -> Unit,
     onExportLayoutJson: () -> Unit,
     onOpenLayoutJson: () -> Unit,
+    // Tombol overlay HUD
+    showHudButtons: Boolean,
+    onShowHudButtonsChange: (Boolean) -> Unit,
+    autoHideHudOnExternalInput: Boolean,
+    onAutoHideHudOnExternalInputChange: (Boolean) -> Unit,
+    hudOpacity: Float,
+    onHudOpacityChange: (Float) -> Unit,
     // Sesi
     onScreenshot: () -> Unit,
     onLockRemotePc: () -> Unit,
@@ -1497,22 +1521,11 @@ private fun SessionPanel(
                         onExportLayoutJson = onExportLayoutJson,
                         onOpenLayoutJson = onOpenLayoutJson,
                         showHudButtons = showHudButtons,
-                        onShowHudButtonsChange = { visible ->
-                            showHudButtons = visible
-                            prefs.setHudButtonsVisible(deviceId, visible)
-                            if (!visible) forceShowHudForExternalInput = false
-                        },
+                        onShowHudButtonsChange = onShowHudButtonsChange,
                         autoHideHudOnExternalInput = autoHideHudOnExternalInput,
-                        onAutoHideHudOnExternalInputChange = { enabled ->
-                            autoHideHudOnExternalInput = enabled
-                            prefs.autoHideHudOnExternalInput = enabled
-                            if (!enabled) forceShowHudForExternalInput = false
-                        },
+                        onAutoHideHudOnExternalInputChange = onAutoHideHudOnExternalInputChange,
                         hudOpacity = hudOpacity,
-                        onHudOpacityChange = { opacity ->
-                            hudOpacity = opacity.coerceIn(0f, 1f)
-                            prefs.hudOpacity = hudOpacity
-                        },
+                        onHudOpacityChange = onHudOpacityChange,
                     )
 
                     PanelTab.SESSION -> SessionTab(
