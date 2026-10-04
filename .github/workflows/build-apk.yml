@@ -350,8 +350,19 @@ jobs:
               --key-pass "env:RELEASE_KEY_PASSWORD" \
               --v1-signing-enabled true \
               --v2-signing-enabled true \
+              --v3-signing-enabled false \
+              --v4-signing-enabled false \
               --out "$apk.resigned" "$apk"
             mv "$apk.resigned" "$apk"
+            # Bukti blok V1/JAR: jarsigner memverifikasi META-INF langsung.
+            # (apksigner verify biasa melaporkan v1=false untuk APK minSdk 24+
+            # walau blok V1 ada, karena platform mengabaikan V1 mulai API 24.)
+            if ! "$JAVA_HOME/bin/jarsigner" -verify -certs "$apk" > "/tmp/jarsigner-$abi.txt" 2>&1; then
+              cat "/tmp/jarsigner-$abi.txt"
+              echo "::error::APK $abi tidak memiliki tanda tangan V1/JAR yang valid."
+              exit 1
+            fi
+            echo "V1/JAR $abi: $(tail -1 "/tmp/jarsigner-$abi.txt")"
           done
           ls -lh XyDesk-*.apk
       - name: Verifikasi V1/V2, semua ABI, dan signer yang sama dengan v1.0.2
@@ -369,6 +380,8 @@ jobs:
             echo "XyDesk Remote — APK signer verification"
             echo "All v1.0.2 public ABI assets are checked against their published SHA-256."
             echo "All v1.0.3 APKs must verify with V1 + V2 and retain the same signer."
+            echo "V1/JAR diuji dengan --min-sdk-version 23: untuk APK minSdk 24+ apksigner"
+            echo "melaporkan v1=false walau blok JAR ada, karena platform mengabaikan V1."
             echo
           } > "$REPORT"
 
@@ -432,8 +445,13 @@ jobs:
               exit 1
             fi
             verification="$("$APK_SIGNER" verify --verbose --print-certs "$apk")"
-            printf '%s\n' "--- v1.0.3 $abi ---" "$verification"
-            if ! grep -Fq 'Verified using v1 scheme (JAR signing): true' <<<"$verification"; then
+            # Untuk V1, verifikasi harus diminta terhadap perangkat yang memang
+            # memakai skema JAR (minSdk < 24); kalau tidak, apksigner melaporkan
+            # v1=false walau blok V1-nya ada dan valid.
+            v1_verification="$("$APK_SIGNER" verify --verbose --min-sdk-version 23 "$apk")"
+            printf '%s\n' "--- v1.0.3 $abi (verify utama) ---" "$verification" \
+              "--- v1.0.3 $abi (uji V1/JAR, min-sdk 23) ---" "$v1_verification"
+            if ! grep -Fq 'Verified using v1 scheme (JAR signing): true' <<<"$v1_verification"; then
               echo "::error::APK $abi tidak lolos verifikasi V1/JAR."
               exit 1
             fi
@@ -451,7 +469,7 @@ jobs:
               exit 1
             fi
             apk_sha="$(sha256sum "$apk" | awk '{print $1}')"
-            printf '%s v1.0.3: PASS (V1 + V2)\n  APK SHA-256: %s\n  Signer SHA-256: %s\n\n' \
+            printf '%s v1.0.3: PASS (V1 teruji min-sdk 23 + V2)\n  APK SHA-256: %s\n  Signer SHA-256: %s\n\n' \
               "$abi" "$apk_sha" "$cert" >> "$REPORT"
           done
           cat "$REPORT"
