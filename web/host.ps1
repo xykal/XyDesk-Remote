@@ -20,4 +20,4 @@ netsh advfirewall firewall add rule name="XyDesk Remote RDP UDP" dir=in action=a
 netsh advfirewall firewall add rule name="XyDesk Remote QUIC UDP" dir=in action=allow protocol=UDP localport=4433 | Out-Null
 Start-Service TermService
 Start-Service Audiosrv
-Write-Host "XyDesk Host v0.5.35 Ready (GPU AVC444 + ClearType + QUIC UDP 4433 Audio/Mic Bridge)"
+Write-Host "XyDesk Host v1.0.2 Ready (GPU AVC444 + ClearType + QUIC UDP 4433 Audio/Mic Bridge)"

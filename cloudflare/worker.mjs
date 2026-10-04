@@ -1,4 +1,6 @@
-const RELEASE = "https://github.com/xykal/XyDesk-Remote/releases/download/v1.0.1/";
+// Pinned fallback only; alias and checksum redirects prefer the current
+// release_tag/downloads from release-state.json (see currentReleaseAssetUrl).
+const RELEASE = "https://github.com/xykal/XyDesk-Remote/releases/download/v1.0.2/";
 
 const PUBLIC_ASSETS = {
   "SHA256SUMS.txt": `${RELEASE}SHA256SUMS.txt`,
@@ -6,10 +8,12 @@ const PUBLIC_ASSETS = {
 
 // Keep current production asset IDs as fallback; prefer the newest matching release asset.
 // Public XyDesk Remote and legacy release aliases use GH_TOKEN for GitHub asset redirects.
+// APK aliases carry `abi` so redirects follow the current release even when the
+// published asset file names change between releases (v1.0.2 renamed them).
 const QA_ASSETS = {
-  "arm64-v8a.apk": { repo: "xykal/XyDesk-Remote", id: 606095803, fileName: "app-arm64-v8a-release.apk" },
-  "armeabi-v7a.apk": { repo: "xykal/XyDesk-Remote", id: 606095801, fileName: "app-armeabi-v7a-release.apk" },
-  "x86_64.apk": { repo: "xykal/XyDesk-Remote", id: 606095795, fileName: "app-x86_64-release.apk" },
+  "arm64-v8a.apk": { repo: "xykal/XyDesk-Remote", id: 606095803, abi: "arm64-v8a", fileName: "XyDesk-arm64-v8a.apk" },
+  "armeabi-v7a.apk": { repo: "xykal/XyDesk-Remote", id: 606095801, abi: "armeabi-v7a", fileName: "XyDesk-armeabi-v7a.apk" },
+  "x86_64.apk": { repo: "xykal/XyDesk-Remote", id: 606095795, abi: "x86_64", fileName: "XyDesk-x86_64.apk" },
   "XyDesk-Remote-Host-Agent-win64.zip": { repo: "xykal/XyDesk-Remote", id: 606095797, fileName: "XyDesk-Remote-Host-Agent-win64.zip" },
   "XyDeskRemoteHost.exe": { repo: "xykal/XyDesk-Remote", id: 606095804, fileName: "XyDeskRemoteHost.exe" },
   "xydesk_quic.dll": { repo: "xykal/XyDesk-Remote", id: 606095799, fileName: "xydesk_quic.dll" },
@@ -110,10 +114,18 @@ async function currentReleaseAssetUrl(asset, request, env) {
   try {
     const state = await getReleaseMetadata(request, env);
     const tag = String(state.release_tag || "");
-    const fileName = String(asset.fileName || "");
-    if (!/^v[0-9A-Za-z._-]{1,80}$/.test(tag) || !/^[A-Za-z0-9._-]{1,160}$/.test(fileName)) return null;
+    if (!/^v[0-9A-Za-z._-]{1,80}$/.test(tag)) return null;
+    // Prefer the downloads entry for this ABI so alias redirects follow the
+    // current release even when published asset file names change; fall back
+    // to matching by file name for host-agent assets that keep stable names.
+    const entries = Array.isArray(state.downloads) ? state.downloads : [];
+    const entry = asset.abi
+      ? entries.find((item) => item?.abi === asset.abi)
+      : entries.find((item) => item?.file === asset.fileName);
+    const fileName = String(entry?.file || asset.fileName || "");
+    if (!/^[A-Za-z0-9._-]{1,160}$/.test(fileName)) return null;
     const expectedPath = `/xykal/XyDesk-Remote/releases/download/${encodeURIComponent(tag)}/${encodeURIComponent(fileName)}`;
-    const configured = (state.downloads || []).find((entry) => entry?.file === fileName)?.url;
+    const configured = entry?.url;
     if (typeof configured === "string") {
       const parsed = new URL(configured);
       if (parsed.origin === "https://github.com" && parsed.pathname === expectedPath) return parsed.href;
@@ -122,6 +134,25 @@ async function currentReleaseAssetUrl(asset, request, env) {
   } catch {
     return null;
   }
+}
+
+// Checksums follow the release recorded in release-state.json; the pinned
+// RELEASE constant is only a last-resort fallback when metadata is broken.
+async function checksumsResponse(request, env) {
+  try {
+    const state = await getReleaseMetadata(request, env);
+    const tag = String(state.release_tag || "");
+    if (/^v[0-9A-Za-z._-]{1,80}$/.test(tag) && typeof state.checksums_url === "string") {
+      const expectedPath = `/xykal/XyDesk-Remote/releases/download/${encodeURIComponent(tag)}/SHA256SUMS.txt`;
+      const parsed = new URL(state.checksums_url);
+      if (parsed.origin === "https://github.com" && parsed.pathname === expectedPath) {
+        return redirectResponse(parsed.href);
+      }
+    }
+  } catch {
+    // Fall through to the pinned fallback below.
+  }
+  return redirectResponse(PUBLIC_ASSETS["SHA256SUMS.txt"]);
 }
 
 async function healthResponse(request, env) {
@@ -580,12 +611,14 @@ export default {
     }
 
     const key = path.slice(1);
+    if (key === "SHA256SUMS.txt") return checksumsResponse(request, env);
     if (PUBLIC_ASSETS[key]) return redirectResponse(PUBLIC_ASSETS[key]);
     if (QA_ASSETS[key]) return redirectLegacyAsset(QA_ASSETS[key], env, request);
 
     const qaPrefix = "/_qa/xykal-qa-latest/";
     if (path.startsWith(qaPrefix)) {
       const qaKey = path.slice(qaPrefix.length);
+      if (qaKey === "SHA256SUMS.txt") return checksumsResponse(request, env);
       if (QA_ASSETS[qaKey]) return redirectLegacyAsset(QA_ASSETS[qaKey], env, request);
       if (PUBLIC_ASSETS[qaKey]) return redirectResponse(PUBLIC_ASSETS[qaKey]);
       return notFound(request.method);

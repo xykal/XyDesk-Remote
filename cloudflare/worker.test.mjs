@@ -7,13 +7,14 @@ const releaseState = {
   service: "xydesk-remote",
   brand: "XyVerse Technology Global",
   release_state: "published",
-  release_tag: "v1.0.1",
-  app_build: { version: "0.5.35", version_code: 52 },
-  release_url: "https://github.com/xykal/XyDesk-Remote/releases/tag/v1.0.1",
+  release_tag: "v1.0.2",
+  app_build: { version: "1.0.2", version_code: 53 },
+  release_url: "https://github.com/xykal/XyDesk-Remote/releases/tag/v1.0.2",
+  checksums_url: "https://github.com/xykal/XyDesk-Remote/releases/download/v1.0.2/SHA256SUMS.txt",
   downloads: [
-    { abi: "arm64-v8a", file: "app-arm64-v8a-release.apk", url: "https://github.com/xykal/XyDesk-Remote/releases/download/v1.0.1/app-arm64-v8a-release.apk" },
-    { abi: "armeabi-v7a", file: "app-armeabi-v7a-release.apk", url: "https://github.com/xykal/XyDesk-Remote/releases/download/v1.0.1/app-armeabi-v7a-release.apk" },
-    { abi: "x86_64", file: "app-x86_64-release.apk", url: "https://github.com/xykal/XyDesk-Remote/releases/download/v1.0.1/app-x86_64-release.apk" },
+    { abi: "arm64-v8a", file: "XyDesk-arm64-v8a.apk", url: "https://github.com/xykal/XyDesk-Remote/releases/download/v1.0.2/XyDesk-arm64-v8a.apk" },
+    { abi: "armeabi-v7a", file: "XyDesk-armeabi-v7a.apk", url: "https://github.com/xykal/XyDesk-Remote/releases/download/v1.0.2/XyDesk-armeabi-v7a.apk" },
+    { abi: "x86_64", file: "XyDesk-x86_64.apk", url: "https://github.com/xykal/XyDesk-Remote/releases/download/v1.0.2/XyDesk-x86_64.apk" },
   ],
 };
 
@@ -44,16 +45,16 @@ test("health endpoint returns JSON derived from release metadata", async () => {
   const body = await response.json();
   assert.equal(body.status, "operational");
   assert.equal(body.release_state, "published");
-  assert.equal(body.current_build, "0.5.35");
+  assert.equal(body.current_build, "1.0.2");
 });
 
 test("mobile release-status API retains legacy fields and reports publication, not countdown", async () => {
   const response = await worker.fetch(new Request("https://rdp.xydesk.my.id/api/status"), envFor());
   assert.equal(response.status, 200);
   const body = await response.json();
-  assert.equal(body.version, "1.0.1");
-  assert.equal(body.qaBuild, "0.5.35");
-  assert.equal(body.qaVersionCode, 52);
+  assert.equal(body.version, "1.0.2");
+  assert.equal(body.qaBuild, "1.0.2");
+  assert.equal(body.qaVersionCode, 53);
   assert.equal(body.status, "published");
   assert.match(body.launchWib, /GitHub Releases/);
   assert.ok(body.storePortal);
@@ -332,7 +333,27 @@ test("current XyDesk Remote APK alias redirects from release-state without a Git
     assert.equal(response.status, 302);
     assert.equal(
       response.headers.get("location"),
-      "https://github.com/xykal/XyDesk-Remote/releases/download/v1.0.1/app-arm64-v8a-release.apk",
+      "https://github.com/xykal/XyDesk-Remote/releases/download/v1.0.2/XyDesk-arm64-v8a.apk",
+    );
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test("APK alias follows the ABI when a release renames its asset files", async () => {
+  // v1.0.2 renamed app-<abi>-release.apk -> XyDesk-<abi>.apk; the alias must
+  // track the current release via abi, not the legacy file name.
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async () => { throw new Error("ABI-matched alias must not call the GitHub API"); };
+  try {
+    const response = await worker.fetch(
+      new Request("https://rdp.xydesk.my.id/x86_64.apk"),
+      envFor(),
+    );
+    assert.equal(response.status, 302);
+    assert.equal(
+      response.headers.get("location"),
+      "https://github.com/xykal/XyDesk-Remote/releases/download/v1.0.2/XyDesk-x86_64.apk",
     );
   } finally {
     globalThis.fetch = originalFetch;
@@ -347,7 +368,7 @@ test("current XyDesk Remote host alias uses the published release tag without a 
   assert.equal(response.status, 302);
   assert.equal(
     response.headers.get("location"),
-    "https://github.com/xykal/XyDesk-Remote/releases/download/v1.0.1/XyDesk-Remote-Host-Agent-win64.zip",
+    "https://github.com/xykal/XyDesk-Remote/releases/download/v1.0.2/XyDesk-Remote-Host-Agent-win64.zip",
   );
 });
 
@@ -419,13 +440,38 @@ test("legacy asset aliases preserve the existing missing-secret 404 behavior", a
   assert.equal(response.status, 404);
 });
 
-test("checksum alias redirects to the official v1.0.1 checksum asset", async () => {
+test("checksum alias redirects to the checksum asset of the current release", async () => {
   const response = await worker.fetch(new Request("https://rdp.xydesk.my.id/SHA256SUMS.txt"), envFor());
   assert.equal(response.status, 302);
   assert.equal(
     response.headers.get("location"),
-    "https://github.com/xykal/XyDesk-Remote/releases/download/v1.0.1/SHA256SUMS.txt",
+    "https://github.com/xykal/XyDesk-Remote/releases/download/v1.0.2/SHA256SUMS.txt",
   );
+});
+
+test("checksum alias falls back to the pinned release URL when metadata omits checksums_url", async () => {
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async () => { throw new Error("checksum fallback must not call the GitHub API"); };
+  const env = envFor();
+  const stateWithoutChecksums = { ...releaseState };
+  delete stateWithoutChecksums.checksums_url;
+  env.ASSETS = {
+    async fetch() {
+      return new Response(JSON.stringify(stateWithoutChecksums), {
+        headers: { "content-type": "application/json; charset=utf-8" },
+      });
+    },
+  };
+  try {
+    const response = await worker.fetch(new Request("https://rdp.xydesk.my.id/SHA256SUMS.txt"), env);
+    assert.equal(response.status, 302);
+    assert.equal(
+      response.headers.get("location"),
+      "https://github.com/xykal/XyDesk-Remote/releases/download/v1.0.2/SHA256SUMS.txt",
+    );
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
 });
 
 test("PowerShell source is downloadable as text and is not executed by the Worker", async () => {
