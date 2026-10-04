@@ -159,10 +159,6 @@ object XyIcons {
         moveTo(5f, 15f); lineTo(12f, 8f); lineTo(19f, 15f)
     }
 
-    val ChevronDown: ImageVector = xyIcon("XyChevronDown") {
-        moveTo(5f, 9f); lineTo(12f, 16f); lineTo(19f, 9f)
-    }
-
     val Swap: ImageVector = xyIcon("XySwap") {
         moveTo(4f, 9f); lineTo(18f, 9f); moveTo(15f, 6f); lineTo(18f, 9f); lineTo(15f, 12f)
         moveTo(20f, 15f); lineTo(6f, 15f); moveTo(9f, 12f); lineTo(6f, 15f); lineTo(9f, 18f)
