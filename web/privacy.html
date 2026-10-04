@@ -171,7 +171,7 @@
 
   <main>
     <div class="container">
-      <div class="meta mono">Dokumen Kebijakan · Diperbarui 3 Oktober 2026</div>
+      <div class="meta mono">Dokumen Kebijakan · Diperbarui 4 Oktober 2026</div>
       <h1>Kebijakan Privasi &amp; Keamanan Data</h1>
       <p class="lead">
         Dokumen ini menjelaskan bagaimana XyDesk Remote menangani konfigurasi koneksi, kredensial, izin perangkat, dan keamanan komunikasi. Diterbitkan oleh <strong>XyVerse Technology Global</strong>.
@@ -211,10 +211,10 @@
       <div class="section-card">
         <h2>4. Penggunaan Izin Perangkat Android</h2>
         <ul>
-          <li><strong>Akses Jaringan (`INTERNET`, `ACCESS_NETWORK_STATE`):</strong> Digunakan untuk membuka soket TCP/UDP RDP, deteksi profil jaringan lokal, dan Wake-on-LAN. Jika opsi statistik sesi diaktifkan, aplikasi juga mengirim heartbeat HTTPS dengan ID acak sementara saat sesi RDP tersambung.</li>
+          <li><strong>Akses Jaringan (`INTERNET`, `ACCESS_NETWORK_STATE`):</strong> Digunakan untuk membuka soket TCP/UDP RDP, deteksi profil jaringan lokal, dan Wake-on-LAN. Penghitung sesi anonim aktif secara default; selama sesi RDP tersambung aplikasi mengirim heartbeat HTTPS dengan ID acak sementara. Fitur ini dapat dimatikan di Pengaturan &gt; Keamanan.</li>
           <li><strong>Layanan Latar Depan (`FOREGROUND_SERVICE`):</strong> Digunakan untuk mempertahankan sesi RDP ketika aplikasi berpindah ke latar belakang, sesuai batasan Android.</li>
           <li><strong>Mikrofon (`RECORD_AUDIO` — Opsional):</strong> Hanya diakses apabila pengguna mengaktifkan pengalihan mikrofon pada profil koneksi terkait.</li>
-          <li><strong>Penyimpanan Lokal (Opsional):</strong> Hanya diakses apabila pengguna mengaktifkan pengalihan folder Drive 'XyDesk' atau mengirimkan berkas melalui menu Bagikan Android (`ACTION_SEND`).</li>
+          <li><strong>Penyimpanan Lokal (Opsional):</strong> Digunakan untuk pengalihan folder Drive 'XyDesk', berkas yang dibagikan lewat Android, dan rekaman MP4 desktop PC remote yang dimulai pengguna. Rekaman hanya berisi frame PC remote (bukan layar HP atau audio), disimpan di `Movies/XyDesk` atau folder aplikasi pada Android versi lama, dan tidak diunggah ke server XyDesk.</li>
         </ul>
       </div>
 
@@ -228,7 +228,7 @@
       <div class="section-card">
         <h2>6. Statistik unduhan situs dan sesi aktif</h2>
         <p>
-          Penghitung unduhan membaca agregat jumlah unduhan aset APK dari GitHub Releases yang masih tersedia. Angka tersebut menghitung unduhan berkas, bukan orang unik. Secara terpisah, penghitung sesi RDP hanya menerima laporan jika pengguna mengaktifkan opsi <strong>Bagikan jumlah sesi RDP aktif</strong> di Pengaturan &gt; Keamanan; opsi ini mati secara default. Saat sesi tersambung, aplikasi mengirim ID UUID acak per sesi dan heartbeat setiap 30 detik. Server menyimpan hash ID serta waktu heartbeat saja, menghapus lease saat sesi berakhir, dan menandai lease kedaluwarsa setelah 90 detik tanpa heartbeat (pembersihan berjalan berkala). Alamat PC, nama profil, username, password, clipboard, dan isi layar tidak dikirim. Cloudflare tetap memproses metadata jaringan seperti alamat IP untuk melayani permintaan; alamat tersebut tidak disimpan oleh penghitung sesi. Angka publik adalah perkiraan sesi yang opt-in, bukan pengguna unik atau seluruh koneksi RDP, dan tidak menyimpan riwayat sesi.
+          Penghitung unduhan membaca agregat jumlah unduhan aset APK dari GitHub Releases yang masih tersedia. Angka tersebut menghitung unduhan berkas, bukan orang unik. Secara terpisah, penghitung sesi RDP anonim aktif secara default dan dapat dimatikan kapan saja melalui sakelar di Pengaturan &gt; Keamanan. Saat sesi tersambung, aplikasi mengirim ID UUID acak baru untuk sesi tersebut dan heartbeat setiap 30 detik. Server menyimpan hash ID serta waktu heartbeat saja, menghapus lease saat sesi berakhir, dan menandai lease kedaluwarsa setelah 90 detik tanpa heartbeat (pembersihan berjalan berkala). Alamat PC, nama profil, username, password, clipboard, dan isi layar tidak dikirim. Cloudflare tetap memproses metadata jaringan seperti alamat IP untuk melayani permintaan; alamat tersebut tidak disimpan oleh penghitung sesi. Angka publik adalah perkiraan sesi klien yang mengirim heartbeat, bukan pengguna unik atau seluruh koneksi RDP, dan tidak menyimpan riwayat sesi.
         </p>
       </div>
     </div>

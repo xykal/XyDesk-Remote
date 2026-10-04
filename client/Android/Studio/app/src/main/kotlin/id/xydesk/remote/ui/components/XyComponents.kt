@@ -58,9 +58,8 @@ import id.xydesk.remote.ui.theme.XyDisplay
 import id.xydesk.remote.ui.theme.XyPill
 
 /**
- * Primitif XyDesk. Semua kontrol digambar sendiri: border hairline,
- * radius kecil untuk panel, pil penuh untuk tombol. Tidak ada shadow,
- * tidak ada elevation, tidak ada gradient dekoratif.
+ * Primitif XyDesk bergaya datar: tanpa kartu atau garis dekoratif.
+ * Outline hanya dipakai pada tombol aksi; tidak ada shadow/elevation.
  */
 
 @Composable
@@ -69,17 +68,14 @@ fun XyCard(
     padding: Dp = 16.dp,
     content: @Composable ColumnScope.() -> Unit,
 ) {
+    // Content group only: no decorative card fill, outline, or shadow.
     Column(
-        modifier = modifier
-            .clip(MaterialTheme.shapes.large)
-            .background(MaterialTheme.colorScheme.surface)
-            .border(1.dp, MaterialTheme.colorScheme.outline, MaterialTheme.shapes.large)
-            .padding(padding),
+        modifier = modifier.padding(padding),
         content = content,
     )
 }
 
-/** Tombol pil. `primary` = isi penuh warna teks; `false` = outline saja. */
+/** Tombol aksi bersudut kecil. `primary` = isi penuh; `false` = outline saja. */
 @Composable
 fun XyPillButton(
     text: String,
@@ -141,7 +137,7 @@ fun XyIconPill(
     flat: Boolean = false,
     contentDescription: String? = null,
 ) {
-    val shape = if (flat) RoundedCornerShape(10.dp) else CircleShape
+    val shape = RoundedCornerShape(if (flat) 6.dp else 8.dp)
     val bg = if (active) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surfaceVariant
     val fg = when {
         flat -> MaterialTheme.colorScheme.onSurfaceVariant
@@ -322,19 +318,16 @@ fun XySegmented(
     modifier: Modifier = Modifier,
 ) {
     Row(
-        modifier = modifier
-            .clip(XyPill)
-            .border(1.dp, MaterialTheme.colorScheme.outline, XyPill)
-            .padding(3.dp),
-        horizontalArrangement = Arrangement.spacedBy(3.dp),
+        modifier = modifier,
+        horizontalArrangement = Arrangement.spacedBy(6.dp),
     ) {
         options.forEachIndexed { index, label ->
             val active = index == selectedIndex
             Box(
                 modifier = Modifier
                     .weight(1f)
-                    .clip(XyPill)
-                    .background(if (active) MaterialTheme.colorScheme.primary else Color.Transparent)
+                    .clip(RoundedCornerShape(6.dp))
+                    .background(if (active) MaterialTheme.colorScheme.primaryContainer else Color.Transparent)
                     .clickable { onSelect(index) }
                     .padding(vertical = 9.dp),
                 contentAlignment = Alignment.Center,
@@ -342,7 +335,7 @@ fun XySegmented(
                 Text(
                     label,
                     style = MaterialTheme.typography.labelMedium,
-                    color = if (active) MaterialTheme.colorScheme.onPrimary
+                    color = if (active) MaterialTheme.colorScheme.onPrimaryContainer
                     else MaterialTheme.colorScheme.onSurfaceVariant,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
@@ -394,10 +387,7 @@ fun XyField(
                     modifier = Modifier
                         .fillMaxWidth()
                         .heightIn(min = 50.dp)
-                        .clip(MaterialTheme.shapes.medium)
-                        .background(MaterialTheme.colorScheme.surface)
-                        .border(1.dp, MaterialTheme.colorScheme.outline, MaterialTheme.shapes.medium)
-                        .padding(horizontal = 14.dp),
+                        .padding(horizontal = 8.dp, vertical = 4.dp),
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
                     Box(Modifier.weight(1f)) {
@@ -550,11 +540,8 @@ fun XyLogo(
 }
 
 /**
- * Shell dialog milik XyDesk.
- *
- * Bukan AlertDialog bawaan: panel bertema dengan border tipis dan radius kecil,
- * tombol pil buatan sendiri, dan scrim yang bisa dimatikan (mis. untuk prompt
- * kredensial/sertifikat yang tidak boleh ditutup begitu saja).
+ * Shell dialog milik XyDesk dengan bidang datar dan tanpa border dekoratif.
+ * Scrim bisa ditutup untuk prompt kredensial/sertifikat yang tidak boleh ditutup begitu saja.
  */
 @Composable
 fun XyOverlay(
@@ -597,9 +584,8 @@ fun XyOverlay(
                 .padding(20.dp)
                 .widthIn(max = maxWidth)
                 .fillMaxWidth()
-                .clip(RoundedCornerShape(14.dp))
+                .clip(RoundedCornerShape(8.dp))
                 .background(MaterialTheme.colorScheme.surface)
-                .border(1.dp, MaterialTheme.colorScheme.outline, RoundedCornerShape(14.dp))
                 .pointerInput(Unit) {}
                 .padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(10.dp),

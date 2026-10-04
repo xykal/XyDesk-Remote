@@ -17,10 +17,12 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.lifecycle.Lifecycle
 import com.freerdp.freerdpcore.services.LibFreeRDP
 import id.xydesk.remote.ui.theme.XyDeskTheme
 import id.xydesk.remote.ui.theme.XyThemeState
@@ -35,8 +37,13 @@ import java.io.File
  * Keamanan, Tentang), serta penerima Share-Sheet Android (ACTION_SEND)
  * yang menaruh file/gambar langsung ke folder drive 'XyDesk'.
  */
+internal const val EXTRA_SKIP_AUTO_RESUME = "id.xydesk.remote.ui.extra.SKIP_AUTO_RESUME"
+
 class XyDeskHomeActivity : ComponentActivity() {
 
+    private val autoResumeSignal = mutableIntStateOf(0)
+    private val skipAutoResumeSignal = mutableIntStateOf(-1)
+    private var skipAutoResumeOnNextResume = false
     private var pendingAuthAction: (() -> Unit)? = null
     private val sharedFileBanner = mutableStateOf<String?>(null)
 
@@ -53,6 +60,7 @@ class XyDeskHomeActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         applyScreenSecurityFlags()
+        markSkipAutoResumeIfNeeded(intent)
         handleIncomingShareIntent(intent)
         setContent {
             XyThemeState.init(AppPrefs(this))
@@ -65,6 +73,9 @@ class XyDeskHomeActivity : ComponentActivity() {
                         onExit = { finish() },
                         onReady = { ready = true },
                         sharedFileNotice = sharedBanner,
+                        autoResumeSignal = autoResumeSignal.intValue,
+                        skipAutoResume = autoResumeSignal.intValue > 0 &&
+                            skipAutoResumeSignal.intValue == autoResumeSignal.intValue,
                         onDismissSharedNotice = { sharedFileBanner.value = null },
                         onAuthenticateConnect = { action -> authenticateBeforeConnect(action) },
                     )
@@ -86,12 +97,32 @@ class XyDeskHomeActivity : ComponentActivity() {
     override fun onResume() {
         super.onResume()
         applyScreenSecurityFlags()
+        autoResumeSignal.intValue += 1
+        if (skipAutoResumeOnNextResume) {
+            skipAutoResumeSignal.intValue = autoResumeSignal.intValue
+            skipAutoResumeOnNextResume = false
+        }
     }
 
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
         setIntent(intent)
+        markSkipAutoResumeIfNeeded(intent)
         handleIncomingShareIntent(intent)
+    }
+
+    private fun markSkipAutoResumeIfNeeded(incoming: Intent) {
+        val isShare = incoming.action == Intent.ACTION_SEND ||
+            incoming.action == Intent.ACTION_SEND_MULTIPLE
+        val shouldSkip = incoming.getBooleanExtra(EXTRA_SKIP_AUTO_RESUME, false) || isShare
+        if (!shouldSkip) return
+        incoming.removeExtra(EXTRA_SKIP_AUTO_RESUME)
+        if (lifecycle.currentState.isAtLeast(Lifecycle.State.RESUMED)) {
+            autoResumeSignal.intValue += 1
+            skipAutoResumeSignal.intValue = autoResumeSignal.intValue
+        } else {
+            skipAutoResumeOnNextResume = true
+        }
     }
 
     private fun applyScreenSecurityFlags() {

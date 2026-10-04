@@ -367,6 +367,7 @@ private fun GeneralSection(
     var defaultAsyncChannels by remember { mutableStateOf(appPrefs.defaultAsyncChannels) }
     var themeMode by remember { mutableIntStateOf(appPrefs.themeMode) }
     var autoDisconnect by remember { mutableStateOf(appPrefs.autoDisconnect) }
+    var autoResumeLastSession by remember { mutableStateOf(appPrefs.autoResumeLastSession) }
     var inputMode by remember { mutableIntStateOf(prefs.inputMode.ordinal) }
     var pointerStyle by remember { mutableIntStateOf(prefs.pointerStyle.ordinal) }
     var pointerSize by remember { mutableStateOf(prefs.pointerSize) }
@@ -424,6 +425,22 @@ private fun GeneralSection(
                 onCheckedChange = {
                     autoDisconnect = it
                     appPrefs.autoDisconnect = it
+                },
+            )
+        }
+
+        XySectionLabel(xy("Sesi terakhir", "Last session"))
+        XyCard {
+            XyToggleRow(
+                title = xy("Lanjutkan sesi terakhir otomatis", "Automatically resume the last session"),
+                subtitle = xy(
+                    "Coba buka profil terakhir dalam 15 menit setelah sesi berakhir tidak sengaja. Password yang tidak tersimpan akan diminta. Putus manual tidak akan tersambung lagi.",
+                    "Reopen the last profile within 15 minutes after an unexpected session close. If its password isn't saved, you'll be prompted. Manual Disconnect will not reconnect.",
+                ),
+                checked = autoResumeLastSession,
+                onCheckedChange = {
+                    autoResumeLastSession = it
+                    appPrefs.autoResumeLastSession = it
                 },
             )
         }
@@ -830,13 +847,13 @@ private fun SecuritySection(appPrefs: AppPrefs) {
             )
         }
 
-        XySectionLabel(xy("Statistik sesi (opsional)", "Session statistics (optional)"))
+        XySectionLabel(xy("Status sesi aktif", "Active session status"))
         XyCard {
             XyToggleRow(
-                title = xy("Bagikan jumlah sesi RDP aktif", "Share active RDP session count"),
+                title = xy("Hitung sesi aktif secara anonim", "Count active sessions anonymously"),
                 subtitle = xy(
-                    "Opt-in dan mati secara default. Mulai koneksi berikutnya, hanya ID acak sementara dikirim saat sesi tersambung.",
-                    "Opt-in and off by default. Starting with the next connection, only a temporary random ID is sent while connected.",
+                    "Aktif otomatis. Matikan sakelar ini kapan saja untuk berhenti mengirim heartbeat sesi.",
+                    "On automatically. Turn this switch off any time to stop sending session heartbeats.",
                 ),
                 checked = shareActiveSessionStats,
                 onCheckedChange = {
@@ -846,8 +863,8 @@ private fun SecuritySection(appPrefs: AppPrefs) {
             )
             Text(
                 xy(
-                    "Alamat PC, nama profil, username, password, dan clipboard tidak dikirim. Cloudflare tetap memproses metadata jaringan (misalnya alamat IP) saat melayani permintaan. Hitungan publik hanya mencakup sesi opt-in dan merupakan perkiraan; lease dianggap kedaluwarsa setelah 90 detik tanpa heartbeat dan dibersihkan berkala.",
-                    "PC address, profile name, username, password, and clipboard are not sent. Cloudflare still processes network metadata (such as IP address) to serve the request. The public count includes only opted-in sessions and is approximate; a lease expires after 90 seconds without a heartbeat and is cleaned up periodically.",
+                    "Yang dikirim hanya ID sesi acak sementara (berbeda untuk tiap koneksi)—bukan alamat PC, profil, username, password, clipboard, atau gambar desktop. Cloudflare tetap memproses metadata jaringan seperti IP. Angka publik adalah perkiraan sesi klien yang mengirim heartbeat, bukan jumlah orang; lease kedaluwarsa setelah 90 detik. Sakelar ini dapat dimatikan kapan saja.",
+                    "Only a temporary random session ID (new for each connection) is sent—not the PC address, profile, username, password, clipboard, or desktop image. Cloudflare still processes network metadata such as IP. The public figure estimates client sessions sending heartbeats, not people; leases expire after 90 seconds. Turn this switch off any time.",
                 ),
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,

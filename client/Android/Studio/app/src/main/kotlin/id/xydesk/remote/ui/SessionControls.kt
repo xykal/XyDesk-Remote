@@ -131,6 +131,11 @@ fun SessionControls(
     onZoomScale: (Float) -> Unit,
     onRemoteDpiChange: (Int) -> Unit,
     onDisplayRefreshPreferenceChange: (Int) -> Unit = {},
+    recordingLabel: String = "Record PC",
+    recordingStatus: String? = null,
+    recordingActionEnabled: Boolean = true,
+    recordingActive: Boolean = false,
+    onToggleRecording: () -> Unit = {},
     onScreenshot: () -> Unit,
     onDisconnect: () -> Unit,
     onPointerVisibilityChange: (Boolean) -> Unit,
@@ -885,6 +890,11 @@ fun SessionControls(
                     prefs.hudOpacity = hudOpacity
                 },
                 // Sesi
+                recordingLabel = recordingLabel,
+                recordingStatus = recordingStatus,
+                recordingActionEnabled = recordingActionEnabled,
+                recordingActive = recordingActive,
+                onToggleRecording = onToggleRecording,
                 onScreenshot = onScreenshot,
                 onLockRemotePc = { confirmLockPc = true },
                 onActivatePrivacyCurtain = {
@@ -1375,6 +1385,11 @@ private fun SessionPanel(
     hudOpacity: Float,
     onHudOpacityChange: (Float) -> Unit,
     // Sesi
+    recordingLabel: String,
+    recordingStatus: String?,
+    recordingActionEnabled: Boolean,
+    recordingActive: Boolean,
+    onToggleRecording: () -> Unit,
     onScreenshot: () -> Unit,
     onLockRemotePc: () -> Unit,
     onActivatePrivacyCurtain: () -> Unit,
@@ -1399,9 +1414,8 @@ private fun SessionPanel(
                 .fillMaxHeight()
                 .widthIn(max = 360.dp)
                 .fillMaxWidth(0.86f)
-                .clip(RoundedCornerShape(topStart = 16.dp, bottomStart = 16.dp))
+                .clip(RoundedCornerShape(topStart = 6.dp, bottomStart = 6.dp))
                 .background(MaterialTheme.colorScheme.surface)
-                .border(1.dp, MaterialTheme.colorScheme.outline, RoundedCornerShape(topStart = 16.dp, bottomStart = 16.dp))
                 .pointerInput(Unit) {}
                 .padding(horizontal = 14.dp, vertical = 12.dp),
             verticalArrangement = Arrangement.spacedBy(10.dp),
@@ -1533,6 +1547,11 @@ private fun SessionPanel(
                         onLockRemotePc = onLockRemotePc,
                         onActivatePrivacyCurtain = onActivatePrivacyCurtain,
                         onDisconnect = onDisconnect,
+                        recordingLabel = recordingLabel,
+                        recordingStatus = recordingStatus,
+                        recordingActionEnabled = recordingActionEnabled,
+                        recordingActive = recordingActive,
+                        onToggleRecording = onToggleRecording,
                         coreInfo = coreInfo,
                         onCopyCoreInfo = onCopyCoreInfo,
                     )
@@ -2180,6 +2199,11 @@ private fun SessionTab(
     onLockRemotePc: () -> Unit,
     onActivatePrivacyCurtain: () -> Unit,
     onDisconnect: () -> Unit,
+    recordingLabel: String,
+    recordingStatus: String?,
+    recordingActionEnabled: Boolean,
+    recordingActive: Boolean,
+    onToggleRecording: () -> Unit,
     coreInfo: List<String>,
     onCopyCoreInfo: () -> Unit,
 ) {
@@ -2206,6 +2230,31 @@ private fun SessionTab(
                 primary = false,
                 compact = true,
                 modifier = Modifier.weight(1f),
+            )
+        }
+    }
+
+    PanelSection(xy("Perekaman lokal · PC ke HP", "Local recording · PC to phone")) {
+        PanelHint(
+            xy(
+                "Hanya frame desktop PC remote yang direkam—bukan layar HP, kontrol, atau audio. MP4 disimpan lokal di Movies/XyDesk. Perekaman diblokir saat FLAG_SECURE aktif.",
+                "Records only frames from the remote PC desktop—not the phone screen, controls, or audio. MP4 is saved locally to Movies/XyDesk. Recording is blocked while FLAG_SECURE is on.",
+            ),
+        )
+        XyPillButton(
+            text = recordingLabel,
+            onClick = onToggleRecording,
+            enabled = recordingActionEnabled,
+            primary = recordingActive,
+            compact = true,
+            modifier = Modifier.fillMaxWidth(),
+        )
+        recordingStatus?.let { status ->
+            Text(
+                status,
+                color = if (recordingActive) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
+                fontSize = 11.sp,
+                lineHeight = 15.sp,
             )
         }
     }
@@ -2282,10 +2331,7 @@ private fun PanelSection(title: String, content: @Composable () -> Unit) {
     Column(
         Modifier
             .fillMaxWidth()
-            .clip(RoundedCornerShape(12.dp))
-            .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.24f))
-            .border(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.55f), RoundedCornerShape(12.dp))
-            .padding(11.dp),
+            .padding(vertical = 6.dp),
         verticalArrangement = Arrangement.spacedBy(8.dp),
     ) {
         Text(

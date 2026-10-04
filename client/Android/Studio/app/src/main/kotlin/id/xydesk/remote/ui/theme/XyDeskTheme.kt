@@ -30,25 +30,24 @@ import id.xydesk.remote.ui.AppPrefs
 // =============================================================
 // XyDesk design tokens.
 //
-// Aturan: netral, kontras tinggi, hairlines, tanpa glow / gradient
-// dekoratif. Warna hanya dipakai untuk status, bukan hiasan. Radius
-// kecil (6-14dp) untuk panel; kontrol utama pakai bentuk pil penuh.
+// Aturan: netral, kontras tinggi, tanpa glow / gradient atau border dekoratif.
+// Warna dipakai untuk status dan aksi; semua sudut kecil, termasuk tombol.
 // =============================================================
 
 // Tema gelap matte: latar nyaris hitam, permukaan solid, tanpa efek kaca.
 // Perbedaan luminans kecil antarlapisan menjaga hierarki tanpa menambah
 // gradient, blur, atau glow dekoratif. Teks tetap off-white demi kontras.
-val XyBg = Color(0xFF090B0E)
-val XySurface = Color(0xFF11151A)
-val XySurfaceAlt = Color(0xFF191E24)
-val XyPrimaryContainer = Color(0xFF20262D)
-val XyLine = Color(0xFF2A3139)
-val XyLineStrong = Color(0xFF3A424B)
-val XyText = Color(0xFFE7EAEE)
-val XyTextDim = Color(0xFFA3ABB4)
-val XyTextFaint = Color(0xFF737C86)
-val XyAccent = Color(0xFFD3D7DC)
-val XyAccentInk = Color(0xFF090B0E)
+val XyBg = Color(0xFF050505)
+val XySurface = Color(0xFF090909)
+val XySurfaceAlt = Color(0xFF111111)
+val XyPrimaryContainer = Color(0xFF171717)
+val XyLine = Color(0xFF242424)
+val XyLineStrong = Color(0xFF343434)
+val XyText = Color(0xFFF1F1F1)
+val XyTextDim = Color(0xFFA6A6A6)
+val XyTextFaint = Color(0xFF777777)
+val XyAccent = Color(0xFFE0E0E0)
+val XyAccentInk = Color(0xFF050505)
 val XyOk = Color(0xFF57C08B)
 val XyWarn = Color(0xFFD7A54E)
 val XyDanger = Color(0xFFE0706F)
@@ -116,14 +115,14 @@ val XyBody = FontFamily(
     Font(R.font.inter, FontWeight.Bold),
 )
 
-/** Panel: radius kecil. Kontrol: [XyPill]. */
-val XyPill = RoundedCornerShape(50)
+/** Sudut kecil dan konsisten; tombol juga memakai radius kotak, bukan kapsul. */
+val XyPill = RoundedCornerShape(8.dp)
 
 val XyShapes = Shapes(
-    small = RoundedCornerShape(6.dp),
-    medium = RoundedCornerShape(10.dp),
-    large = RoundedCornerShape(14.dp),
-    extraLarge = RoundedCornerShape(18.dp),
+    small = RoundedCornerShape(3.dp),
+    medium = RoundedCornerShape(4.dp),
+    large = RoundedCornerShape(6.dp),
+    extraLarge = RoundedCornerShape(8.dp),
 )
 
 /**

@@ -29,6 +29,37 @@ class AppPrefs(context: Context) {
         get() = sp.getBoolean(KEY_KEEP_ALIVE, true)
         set(v) = sp.edit().putBoolean(KEY_KEEP_ALIVE, v).apply()
 
+    /** Reopen the last connected profile once on app return; manual disconnect clears the marker. */
+    var autoResumeLastSession: Boolean
+        get() = sp.getBoolean(KEY_AUTO_RESUME_LAST_SESSION, true)
+        set(v) {
+            val edit = sp.edit().putBoolean(KEY_AUTO_RESUME_LAST_SESSION, v)
+            if (!v) edit.remove(KEY_AUTO_RESUME_PROFILE_ID).remove(KEY_AUTO_RESUME_SAVED_AT)
+            edit.apply()
+        }
+
+    val autoResumeProfileId: String?
+        get() = sp.getString(KEY_AUTO_RESUME_PROFILE_ID, null)
+
+    val autoResumeSavedAtMillis: Long
+        get() = sp.getLong(KEY_AUTO_RESUME_SAVED_AT, 0L)
+
+    /** Stores only the profile identifier and timestamp; no password or credential material. */
+    fun rememberAutoResumeSession(profileId: String) {
+        if (!autoResumeLastSession || profileId.isBlank()) return
+        sp.edit()
+            .putString(KEY_AUTO_RESUME_PROFILE_ID, profileId)
+            .putLong(KEY_AUTO_RESUME_SAVED_AT, System.currentTimeMillis())
+            .apply()
+    }
+
+    /** A deliberate disconnect/cancel must not silently reconnect next time. */
+    fun clearAutoResumeSession(profileId: String? = null) {
+        val savedProfileId = autoResumeProfileId ?: return
+        if (profileId != null && savedProfileId != profileId) return
+        sp.edit().remove(KEY_AUTO_RESUME_PROFILE_ID).remove(KEY_AUTO_RESUME_SAVED_AT).apply()
+    }
+
     // ---- default fitur untuk perangkat BARU (diatur di General) ----
     // Perangkat yang sudah tersimpan tidak ikut berubah: nilainya tetap
     // diatur per perangkat di layar Ubah perangkat.
@@ -107,9 +138,9 @@ class AppPrefs(context: Context) {
         get() = sp.getBoolean(KEY_CLEAR_CLIPBOARD, false)
         set(v) = sp.edit().putBoolean(KEY_CLEAR_CLIPBOARD, v).apply()
 
-    /** Anonymous active-session counting; explicitly opt-in and disabled by default. */
+    /** Anonymous active-session counting; enabled by default and easy to disable. */
     var shareActiveSessionStats: Boolean
-        get() = sp.getBoolean(KEY_SHARE_ACTIVE_SESSION_STATS, false)
+        get() = sp.getBoolean(KEY_SHARE_ACTIVE_SESSION_STATS, true)
         set(v) = sp.edit().putBoolean(KEY_SHARE_ACTIVE_SESSION_STATS, v).apply()
 
     /** Optional home-screen text-meme/joke card; users can hide it from Settings. */
@@ -122,6 +153,10 @@ class AppPrefs(context: Context) {
         private const val KEY_THEME = "theme_mode"
         private const val KEY_BG_DISCONNECT = "bg_disconnect"
         private const val KEY_KEEP_ALIVE = "keep_alive"
+        private const val KEY_AUTO_RESUME_LAST_SESSION = "auto_resume_last_session"
+        private const val KEY_AUTO_RESUME_PROFILE_ID = "auto_resume_profile_id"
+        private const val KEY_AUTO_RESUME_SAVED_AT = "auto_resume_saved_at"
+        const val AUTO_RESUME_WINDOW_MS = 15 * 60_000L
         private const val KEY_FLAG_SECURE = "flag_secure"
         private const val KEY_REQUIRE_LOCK = "require_device_lock"
         private const val KEY_AUTO_LOCK_REMOTE = "auto_lock_remote"

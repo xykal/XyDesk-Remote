@@ -793,8 +793,8 @@ async function activeSessionsResponse(request, env) {
     const data = await response.json();
     return jsonResponse({
       ...data,
-      scope: "opt-in-client-reported-rdp-sessions",
-      note: "Perkiraan sesi aplikasi yang memilih berbagi statistik; bukan jumlah pengguna unik atau semua koneksi RDP.",
+      scope: "client-reported-anonymous-rdp-sessions",
+      note: "Perkiraan sesi aplikasi yang mengirim heartbeat anonim (aktif secara default, dapat dimatikan di aplikasi); bukan jumlah pengguna unik atau semua koneksi RDP.",
       checked_at: new Date().toISOString(),
     }, response.status, request.method, { "cache-control": "no-store" });
   } catch {

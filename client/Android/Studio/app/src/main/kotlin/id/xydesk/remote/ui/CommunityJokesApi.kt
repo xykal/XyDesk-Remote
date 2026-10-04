@@ -64,8 +64,8 @@ internal class CommunityJokesApi(context: Context) {
         val connection = try {
             (URL("$ENDPOINT$path").openConnection() as HttpURLConnection).apply {
                 requestMethod = method
-                connectTimeout = 5_000
-                readTimeout = 5_000
+                connectTimeout = 12_000
+                readTimeout = 12_000
                 setRequestProperty("Accept", "application/json")
                 headers.forEach { (name, value) -> setRequestProperty(name, value) }
                 if (payload != null) {

@@ -223,7 +223,7 @@ test("download stats HEAD request returns headers without a body", async () => {
   }
 });
 
-test("active-session API exposes a fresh opt-in count and marks it non-cacheable", async () => {
+test("active-session API exposes anonymous client-reported count and marks it non-cacheable", async () => {
   const env = envFor({}, {
     ACTIVE_SESSIONS: {
       idFromName(name) { assert.equal(name, "xydesk-remote-global"); return name; },
@@ -243,7 +243,8 @@ test("active-session API exposes a fresh opt-in count and marks it non-cacheable
   assert.equal(response.headers.get("cache-control"), "no-store");
   const body = await response.json();
   assert.equal(body.active_session_count, 3);
-  assert.equal(body.scope, "opt-in-client-reported-rdp-sessions");
+  assert.equal(body.scope, "client-reported-anonymous-rdp-sessions");
+  assert.match(body.note, /aktif secara default/);
   assert.match(body.note, /bukan jumlah pengguna unik/);
 });
 
@@ -348,11 +349,14 @@ test("ActiveSessions leases are hashed, idempotent, endable, and expire", async 
   }
 });
 
-test("Android active-session reporting stays opt-in and sends only a random session ID", async () => {
+test("Android active-session reporting defaults on, remains easy to disable, and sends only a random session ID", async () => {
   const prefs = await readFile(new URL("../client/Android/Studio/app/src/main/kotlin/id/xydesk/remote/ui/AppPrefs.kt", import.meta.url), "utf8");
   const reporter = await readFile(new URL("../client/Android/Studio/app/src/main/kotlin/id/xydesk/remote/privacy/ActiveSessionStatsReporter.kt", import.meta.url), "utf8");
   const session = await readFile(new URL("../client/Android/Studio/app/src/main/kotlin/id/xydesk/remote/ui/XyDeskSession.kt", import.meta.url), "utf8");
-  assert.match(prefs, /getBoolean\(KEY_SHARE_ACTIVE_SESSION_STATS,\s*false\)/);
+  const settings = await readFile(new URL("../client/Android/Studio/app/src/main/kotlin/id/xydesk/remote/ui/Screens.kt", import.meta.url), "utf8");
+  assert.match(prefs, /getBoolean\(KEY_SHARE_ACTIVE_SESSION_STATS,\s*true\)/);
+  assert.match(settings, /appPrefs\.shareActiveSessionStats = it/);
+  assert.match(settings, /Matikan sakelar ini kapan saja/);
   assert.match(session, /if \(!appPrefs\.shareActiveSessionStats\) return@LaunchedEffect/);
   assert.match(reporter, /\.put\("session_id",\s*sessionId\.toString\(\)\)/);
   assert.doesNotMatch(reporter, /\.put\("(?:host|profile|username|password|clipboard)"/i);

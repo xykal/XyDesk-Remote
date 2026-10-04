@@ -164,16 +164,34 @@ fun XyDeskSessionScreen(
     onDisplayRefreshPreferenceChange: (Int) -> Unit,
 ) {
     val context = LocalContext.current
+    val appContext = context.applicationContext
+    val appPrefs = remember(appContext) { AppPrefs(appContext) }
+    fun exitSession() {
+        appPrefs.clearAutoResumeSession(profile.id)
+        onExit()
+    }
+    val remoteRecorder = remember(controller, appContext) {
+        RemoteScreenRecorder(
+            context = appContext,
+            frameProvider = { controller.copyRemoteBitmap() },
+            captureProtected = { appPrefs.flagSecure },
+        )
+    }
+    var recordingState by remember(remoteRecorder) {
+        mutableStateOf<RemoteRecordingState>(RemoteRecordingState.Idle)
+    }
+    DisposableEffect(remoteRecorder) {
+        onDispose { remoteRecorder.close() }
+    }
     val sessionScope = rememberCoroutineScope()
     val state by manager.state.collectAsState(initial = SessionState.Idle)
     val stage by manager.stage.collectAsState(initial = SessionManager.Stage.IDLE)
     val telemetry by manager.telemetry.collectAsState(initial = TelemetrySample.EMPTY)
 
-    // Public activity counting is explicitly opt-in, per connected session, and best-effort.
-    // The server receives only a random session UUID; no host/profile/account details.
+    // Anonymous active-session counting is on by default and can be disabled in Privacy settings.
+    // Best-effort heartbeat uses a fresh random session UUID; no host/profile/account details.
     LaunchedEffect(state is SessionState.Connected, profile.id) {
         if (state !is SessionState.Connected) return@LaunchedEffect
-        val appPrefs = AppPrefs(context.applicationContext)
         if (!appPrefs.shareActiveSessionStats) return@LaunchedEffect
         val statsSessionId = UUID.randomUUID()
         try {
@@ -188,6 +206,9 @@ fun XyDeskSessionScreen(
                 ActiveSessionStatsReporter.end(statsSessionId)
             }
         }
+    }
+    LaunchedEffect(state is SessionState.Connected, remoteRecorder) {
+        if (state !is SessionState.Connected) remoteRecorder.stop()
     }
 
     val prefs = remember { SessionPrefs(context) }
@@ -273,6 +294,7 @@ fun XyDeskSessionScreen(
 
     LaunchedEffect(state) {
         if (state is SessionState.Connected) {
+            appPrefs.rememberAutoResumeSession(profile.id)
             everConnected = true
             reconnectAttempt = 0
             reconnecting = false
@@ -1046,6 +1068,28 @@ fun XyDeskSessionScreen(
         if (connected && !privacyCurtain) {
             val pointerScreen = controller.remoteToScreen(cursor().x, cursor().y)
                 ?: Offset(-1000f, -1000f)
+            val recordingActive = recordingState is RemoteRecordingState.Recording
+            val recordingBusy = recordingState is RemoteRecordingState.Preparing ||
+                recordingState is RemoteRecordingState.Stopping
+            val recordingLabel = when (recordingState) {
+                RemoteRecordingState.Preparing -> xy("Menyiapkan…", "Preparing…")
+                RemoteRecordingState.Stopping -> xy("Menyimpan…", "Saving…")
+                RemoteRecordingState.Recording -> xy("Hentikan & simpan", "Stop & save")
+                else -> xy("Mulai rekam PC", "Record PC")
+            }
+            val recordingStatus = when (val current = recordingState) {
+                RemoteRecordingState.Idle -> null
+                RemoteRecordingState.Preparing -> xy("Menyiapkan encoder video…", "Preparing the video encoder…")
+                RemoteRecordingState.Recording -> xy("Merekam desktop PC · tanpa audio", "Recording the PC desktop · no audio")
+                RemoteRecordingState.Stopping -> xy("Menutup file MP4…", "Finalizing the MP4…")
+                is RemoteRecordingState.Saved -> xy("Tersimpan: {0}", "Saved: {0}", current.location)
+                is RemoteRecordingState.Failed -> when (current.reason) {
+                    "secure" -> xy("Proteksi layar aktif; perekaman diblokir.", "Screen-capture protection is on; recording is blocked.")
+                    "no_frame" -> xy("Frame desktop PC belum siap. Tunggu sampai layar tampil.", "The PC desktop frame is not ready yet. Wait for the remote screen.")
+                    "save" -> xy("MP4 gagal disimpan ke penyimpanan lokal.", "Couldn't save the MP4 to local storage.")
+                    else -> xy("Perekaman gagal. Coba lagi; sebagian perangkat mungkin tidak mendukung encoder ini.", "Recording failed. Retry; this device may not support the required encoder.")
+                }
+            }
             SessionControls(
                 deviceId = profile.id,
                 hostLabel = activeProfile.label ?: "${activeProfile.host}:${activeProfile.port}",
@@ -1108,6 +1152,22 @@ fun XyDeskSessionScreen(
                     }
                 },
                 onDisplayRefreshPreferenceChange = onDisplayRefreshPreferenceChange,
+                recordingLabel = recordingLabel,
+                recordingStatus = recordingStatus,
+                recordingActionEnabled = !recordingBusy,
+                recordingActive = recordingActive,
+                onToggleRecording = {
+                    when {
+                        recordingActive -> remoteRecorder.stop()
+                        recordingBusy -> Unit
+                        else -> {
+                            recordingState = RemoteRecordingState.Preparing
+                            if (!remoteRecorder.start { recordingState = it }) {
+                                recordingState = RemoteRecordingState.Failed("failed")
+                            }
+                        }
+                    }
+                },
                 onScreenshot = {
                     val act = context as? Activity ?: return@SessionControls
                     sessionScope.launch {
@@ -1217,12 +1277,14 @@ fun XyDeskSessionScreen(
                 // Sesi lain: buka home tanpa memutus sesi ini (keep-alive
                 // default menyala, jadi sesi tetap jalan di latar).
                 onOpenHome = {
-                    // Sesi tetap jalan (keep-alive) tapi keyboard HP ditutup
-                    // dulu supaya tidak nyangkut di layar home.
+                    // Sesi tetap jalan di latar, tetapi tidak auto-resume begitu
+                    // pengguna sengaja memilih kembali ke Home.
+                    (context as? XyDeskSessionActivity)?.markIntentionalHomeNavigation()
                     controller.blurInput()
                     runCatching {
                         context.startActivity(
                             android.content.Intent(context, XyDeskHomeActivity::class.java)
+                                .putExtra(EXTRA_SKIP_AUTO_RESUME, true)
                                 .addFlags(
                                     android.content.Intent.FLAG_ACTIVITY_REORDER_TO_FRONT or
                                         android.content.Intent.FLAG_ACTIVITY_NEW_TASK,
@@ -1395,7 +1457,7 @@ fun XyDeskSessionScreen(
                     boundInstance = 0L
                     manager.connect(activeProfile)
                 },
-                onExit = onExit,
+                onExit = ::exitSession,
             )
         }
 
@@ -1437,7 +1499,7 @@ fun XyDeskSessionScreen(
     if (!active && !reconnecting && !applyingResolution && !userDisconnect) err?.let { e ->
         XyOverlay(
             title = xy("Koneksi gagal", "Connection failed"),
-            onDismiss = { onExit() },
+            onDismiss = { exitSession() },
         ) {
             // Penjelasan yang bisa ditindak dulu, pesan mentah di bawahnya
             // supaya laporan bug tetap punya isi teknis.
@@ -1485,7 +1547,7 @@ fun XyDeskSessionScreen(
             )
             XyPillButton(
                 text = xy("Tutup", "Close"),
-                onClick = { onExit() },
+                onClick = { exitSession() },
                 compact = true,
                 modifier = Modifier.fillMaxWidth(),
             )
@@ -1524,12 +1586,14 @@ fun XyDeskSessionScreen(
                 confirmDisconnect = false
                 userDisconnect = true
                 reconnecting = false
+                (context as? XyDeskSessionActivity)?.markExplicitDisconnect(profile.id)
+                appPrefs.clearAutoResumeSession(profile.id)
                 releaseLatchedKeys()
                 if (context.let { runCatching { AppPrefs(it).autoLockRemoteOnLeave }.getOrDefault(false) }) {
                     manager.lockRemoteSession()
                 }
                 manager.disconnect()
-                onExit()
+                exitSession()
             },
             dismissLabel = xy("Batal", "Cancel"),
             onDismiss = { confirmDisconnect = false },
@@ -1547,8 +1611,9 @@ fun XyDeskSessionScreen(
                 confirmCancelConnect = false
                 userDisconnect = true
                 reconnecting = false
+                appPrefs.clearAutoResumeSession(profile.id)
                 manager.cancelConnection()
-                onExit()
+                exitSession()
             },
             dismissLabel = xy("Lanjutkan", "Keep trying"),
             onDismiss = { confirmCancelConnect = false },

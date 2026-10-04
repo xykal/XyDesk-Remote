@@ -19,7 +19,6 @@ import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.foundation.layout.width
 import androidx.compose.ui.zIndex
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -117,6 +116,8 @@ fun XyDeskHome(
     onExit: () -> Unit,
     onReady: () -> Unit = {},
     sharedFileNotice: String? = null,
+    autoResumeSignal: Int = 0,
+    skipAutoResume: Boolean = false,
     onDismissSharedNotice: () -> Unit = {},
     onAuthenticateConnect: (() -> Unit) -> Unit = { it() },
 ) {
@@ -160,6 +161,44 @@ fun XyDeskHome(
             scope.launch { repo.touch(profile) }
             context.startActivity(XyDeskSessionActivity.connectIntent(context, profile))
         }
+    }
+
+    LaunchedEffect(autoResumeSignal, skipAutoResume, dataReady) {
+        if (autoResumeSignal <= 0) return@LaunchedEffect
+        if (skipAutoResume) {
+            // Home navigation and Share are deliberate; consume the marker so a
+            // later lifecycle callback cannot unexpectedly reopen the session.
+            appPrefs.clearAutoResumeSession()
+            return@LaunchedEffect
+        }
+        if (!dataReady) return@LaunchedEffect
+        if (!appPrefs.autoResumeLastSession) {
+            appPrefs.clearAutoResumeSession()
+            return@LaunchedEffect
+        }
+
+        val profileId = appPrefs.autoResumeProfileId
+        val savedAt = appPrefs.autoResumeSavedAtMillis
+        val now = System.currentTimeMillis()
+        if (profileId.isNullOrBlank() || savedAt <= 0L || now < savedAt ||
+            now - savedAt > AppPrefs.AUTO_RESUME_WINDOW_MS
+        ) {
+            appPrefs.clearAutoResumeSession(profileId)
+            return@LaunchedEffect
+        }
+
+        val savedProfiles = favoritesFlow.first()
+        val profile = savedProfiles.firstOrNull { it.id == profileId }
+        if (profile == null) {
+            appPrefs.clearAutoResumeSession(profileId)
+            return@LaunchedEffect
+        }
+
+        // Consume before launching so a failed auth or Activity recreation cannot
+        // create an auto-launch loop. Credentials are loaded only from the vault.
+        appPrefs.clearAutoResumeSession(profileId)
+        val existing = XySessionRegistry.list().firstOrNull { it.id == profileId }
+        if (existing != null) existing.open() else connect(profile)
     }
 
     fun wakeAndConnect(profile: ConnectionProfile) {
@@ -373,13 +412,8 @@ fun XyDeskHome(
             Modifier
                 .width(300.dp)
                 .fillMaxHeight()
-                .clip(RoundedCornerShape(topEnd = 16.dp, bottomEnd = 16.dp))
+                .clip(RoundedCornerShape(topEnd = 6.dp, bottomEnd = 6.dp))
                 .background(MaterialTheme.colorScheme.surface)
-                .border(
-                    1.dp,
-                    MaterialTheme.colorScheme.outline,
-                    RoundedCornerShape(topEnd = 16.dp, bottomEnd = 16.dp),
-                )
                 .pointerInput(Unit) {}
                 .padding(vertical = 16.dp),
         ) {
@@ -1014,9 +1048,8 @@ private fun DevicesScreen(
                     .align(Alignment.TopEnd)
                     .padding(top = 60.dp, end = 16.dp)
                     .width(296.dp)
-                    .clip(RoundedCornerShape(16.dp))
+                    .clip(RoundedCornerShape(8.dp))
                     .background(MaterialTheme.colorScheme.surface)
-                    .border(1.dp, MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(16.dp))
                     .pointerInput(Unit) {}
                     .padding(10.dp)
                     .zIndex(26f),
@@ -1028,65 +1061,38 @@ private fun DevicesScreen(
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
                 )
-                Column(
-                    Modifier
-                        .fillMaxWidth()
-                        .clip(RoundedCornerShape(12.dp))
-                        .background(MaterialTheme.colorScheme.surfaceVariant)
-                        .clickable {
-                            showAddBubble = false
-                            onAddPcQuick()
-                        }
-                        .padding(horizontal = 12.dp, vertical = 10.dp),
-                ) {
-                    Row(
-                        Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically,
-                    ) {
+                XyRow(
+                    title = xy("Koneksi PC (ID & Password)", "PC Connection (ID & Password)"),
+                    subtitle = xy(
+                        "Jalur E2EE + Ultra-Low Latency FPS Gaming (NVIDIA / AMD / Intel GPU)",
+                        "E2EE + Ultra-Low Latency FPS Gaming path (NVIDIA / AMD / Intel GPU)",
+                    ),
+                    modifier = Modifier.padding(horizontal = 2.dp),
+                    trailing = {
                         Text(
-                            xy("Koneksi PC (ID & Password)", "PC Connection (ID & Password)"),
-                            style = MaterialTheme.typography.titleSmall,
-                        )
-                        Text(
-                            xy("Tahap Pengembangan", "Experimental"),
+                            xy("Eksperimental", "Experimental"),
                             style = MaterialTheme.typography.labelSmall,
                             color = MaterialTheme.colorScheme.primary,
+                            maxLines = 1,
                         )
-                    }
-                    Text(
-                        xy(
-                            "Jalur E2EE + Ultra-Low Latency FPS Gaming (NVIDIA / AMD / Intel GPU)",
-                            "E2EE + Ultra-Low Latency FPS Gaming path (NVIDIA / AMD / Intel GPU)",
-                        ),
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                }
-                Column(
-                    Modifier
-                        .fillMaxWidth()
-                        .clip(RoundedCornerShape(12.dp))
-                        .background(MaterialTheme.colorScheme.surfaceVariant)
-                        .clickable {
-                            showAddBubble = false
-                            onAddRdp()
-                        }
-                        .padding(horizontal = 12.dp, vertical = 10.dp),
-                ) {
-                    Text(
-                        xy("Koneksi RDP (Host / IP)", "RDP Connection (Host / IP)"),
-                        style = MaterialTheme.typography.titleSmall,
-                    )
-                    Text(
-                        xy(
-                            "Koneksi langsung lewat IP lokal, domain publik, atau Tailscale",
-                            "Direct connection via local IP, public domain, or Tailscale",
-                        ),
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                }
+                    },
+                    onClick = {
+                        showAddBubble = false
+                        onAddPcQuick()
+                    },
+                )
+                XyRow(
+                    title = xy("Koneksi RDP (Host / IP)", "RDP Connection (Host / IP)"),
+                    subtitle = xy(
+                        "Koneksi langsung lewat IP lokal, domain publik, atau Tailscale",
+                        "Direct connection via local IP, public domain, or Tailscale",
+                    ),
+                    modifier = Modifier.padding(horizontal = 2.dp),
+                    onClick = {
+                        showAddBubble = false
+                        onAddRdp()
+                    },
+                )
             }
         }
     }
@@ -1118,13 +1124,11 @@ private fun DeviceCard(
     val previewSeed = remember(profile.id, profile.label, profile.host) {
         (profile.label ?: profile.host) + "|" + profile.host
     }
-    val shape = MaterialTheme.shapes.large
+    val shape = RoundedCornerShape(6.dp)
     Column(
         Modifier
             .fillMaxWidth()
             .clip(shape)
-            .background(MaterialTheme.colorScheme.surface)
-            .border(1.dp, MaterialTheme.colorScheme.outline, shape)
             .clickable(onClick = onConnect),
     ) {
         // Preview desktop penuh yang lebih tinggi (212.dp) supaya proporsi

@@ -6,7 +6,7 @@ import java.net.URL
 import java.util.UUID
 
 /**
- * Best-effort, opt-in lease reporter for the public active-session counter.
+ * Best-effort, anonymous lease reporter for the default-on, user-disableable session counter.
  * The only application payload is an action and a per-session random UUID.
  * Host/profile/account details are deliberately not accepted by this API.
  */

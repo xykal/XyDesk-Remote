@@ -18,6 +18,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
@@ -33,6 +34,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.input.KeyboardType
@@ -168,6 +170,13 @@ fun AddDeviceScreen(
         mutableStateOf(existing?.username.isNullOrBlank() && baseAccounts.isEmpty())
     }
     var accountDropdownOpen by remember { mutableStateOf(false) }
+    var accountSearch by remember { mutableStateOf("") }
+    val filteredAccounts = remember(allAccounts, accountSearch) {
+        val query = accountSearch.trim()
+        if (query.isEmpty()) allAccounts else allAccounts.filter { account ->
+            "${account.domain} ${account.username}".contains(query, ignoreCase = true)
+        }
+    }
 
     val scope = rememberCoroutineScope()
     val stored = remember(deviceId, existing, initialPcQuickMode) {
@@ -288,6 +297,10 @@ fun AddDeviceScreen(
 
     BackHandler {
         when {
+            accountDropdownOpen -> {
+                accountDropdownOpen = false
+                accountSearch = ""
+            }
             validationPopup != null -> validationPopup = null
             confirmDiscard -> confirmDiscard = false
             else -> requestCancel()
@@ -884,10 +897,12 @@ fun AddDeviceScreen(
                     Box(
                         Modifier
                             .fillMaxWidth()
-                            .clip(MaterialTheme.shapes.medium)
-                            .background(MaterialTheme.colorScheme.surfaceVariant)
-                            .border(1.dp, MaterialTheme.colorScheme.outlineVariant, MaterialTheme.shapes.medium)
-                            .clickable { accountDropdownOpen = !accountDropdownOpen }
+                            .clip(RoundedCornerShape(8.dp))
+                            .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.32f))
+                            .clickable {
+                                accountDropdownOpen = !accountDropdownOpen
+                                accountSearch = ""
+                            }
                             .padding(horizontal = 14.dp, vertical = 12.dp),
                     ) {
                         Row(
@@ -922,115 +937,165 @@ fun AddDeviceScreen(
 
                     if (accountDropdownOpen) {
                         Spacer(Modifier.height(8.dp))
-                        Column(
-                            Modifier
-                                .fillMaxWidth()
-                                .clip(MaterialTheme.shapes.medium)
-                                .background(MaterialTheme.colorScheme.surface)
-                                .border(1.dp, MaterialTheme.colorScheme.outline, MaterialTheme.shapes.medium)
-                                .padding(vertical = 4.dp),
-                        ) {
-                            allAccounts.forEach { acc ->
-                                val itemTitle = if (acc.domain.isNotBlank()) "${acc.domain}\\${acc.username}" else acc.username
-                                val isSelected = acc.username.equals(user, ignoreCase = true) &&
-                                    acc.domain.equals(domain, ignoreCase = true)
-                                Row(
-                                    Modifier
-                                        .fillMaxWidth()
-                                        .clickable {
-                                            user = acc.username
-                                            domain = acc.domain
-                                            if (acc.password.isNotEmpty()) {
-                                                pass = acc.password
-                                                rememberPass = true
+                        Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                            Row(
+                                Modifier.fillMaxWidth().padding(horizontal = 2.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                            ) {
+                                Text(
+                                    xy("Akun tersimpan", "Saved accounts"),
+                                    style = MaterialTheme.typography.labelLarge,
+                                    color = MaterialTheme.colorScheme.onSurface,
+                                )
+                                Text(
+                                    xy("Tutup", "Close"),
+                                    modifier = Modifier.clickable {
+                                        accountDropdownOpen = false
+                                        accountSearch = ""
+                                    }.padding(horizontal = 8.dp, vertical = 8.dp),
+                                    style = MaterialTheme.typography.labelMedium,
+                                    color = MaterialTheme.colorScheme.primary,
+                                )
+                            }
+                            if (allAccounts.size >= 4) {
+                                XyField(
+                                    value = accountSearch,
+                                    onValueChange = { accountSearch = it },
+                                    label = xy("Cari akun", "Search accounts"),
+                                    hint = xy("Username atau domain", "Username or domain"),
+                                )
+                            }
+                            Column(
+                                Modifier
+                                    .fillMaxWidth()
+                                    .heightIn(max = 320.dp)
+                                    .verticalScroll(rememberScrollState())
+                                    .clip(RoundedCornerShape(8.dp))
+                                    .background(MaterialTheme.colorScheme.surface)
+                                    .padding(vertical = 4.dp),
+                            ) {
+                                filteredAccounts.forEach { acc ->
+                                    val itemTitle = if (acc.domain.isNotBlank()) "${acc.domain}\\${acc.username}" else acc.username
+                                    val isSelected = acc.username.equals(user, ignoreCase = true) &&
+                                        acc.domain.equals(domain, ignoreCase = true)
+                                    Row(
+                                        Modifier
+                                            .fillMaxWidth()
+                                            .heightIn(min = 56.dp)
+                                            .clickable {
+                                                user = acc.username
+                                                domain = acc.domain
+                                                if (acc.password.isNotEmpty()) {
+                                                    pass = acc.password
+                                                    rememberPass = true
+                                                }
+                                                accountDropdownOpen = false
+                                                accountSearch = ""
                                             }
-                                            accountDropdownOpen = false
+                                            .padding(horizontal = 14.dp, vertical = 9.dp),
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        horizontalArrangement = Arrangement.SpaceBetween,
+                                    ) {
+                                        Column(Modifier.weight(1f)) {
+                                            Text(
+                                                itemTitle,
+                                                style = MaterialTheme.typography.titleSmall,
+                                                color = if (isSelected) MaterialTheme.colorScheme.primary
+                                                else MaterialTheme.colorScheme.onSurface,
+                                            )
+                                            Text(
+                                                if (acc.password.isNotEmpty()) {
+                                                    xy("Password tersimpan · siap dipakai", "Password saved · ready to use")
+                                                } else {
+                                                    xy("Akun tersimpan", "Saved account")
+                                                },
+                                                style = MaterialTheme.typography.bodySmall,
+                                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                            )
                                         }
-                                        .padding(horizontal = 14.dp, vertical = 10.dp),
-                                    verticalAlignment = Alignment.CenterVertically,
-                                    horizontalArrangement = Arrangement.SpaceBetween,
-                                ) {
-                                    Column(Modifier.weight(1f)) {
-                                        Text(
-                                            itemTitle,
-                                            style = MaterialTheme.typography.titleSmall,
-                                        )
-                                        Text(
-                                            if (acc.password.isNotEmpty()) {
-                                                xy("Akun tersimpan · Password siap pakai", "Saved account · Password ready")
-                                            } else {
-                                                xy("Akun tersimpan", "Saved account")
-                                            },
-                                            style = MaterialTheme.typography.bodySmall,
-                                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                        )
+                                        if (isSelected) {
+                                            Text(
+                                                xy("✓ Dipilih", "✓ Selected"),
+                                                style = MaterialTheme.typography.labelSmall,
+                                                color = MaterialTheme.colorScheme.primary,
+                                                modifier = Modifier.padding(start = 8.dp),
+                                            )
+                                        }
                                     }
-                                    if (isSelected) {
+                                }
+                                if (allAccounts.isNotEmpty() && filteredAccounts.isEmpty()) {
+                                    Text(
+                                        xy("Tidak ada akun yang cocok.", "No matching accounts."),
+                                        modifier = Modifier.padding(horizontal = 14.dp, vertical = 14.dp),
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    )
+                                }
+
+                                if (user.isNotBlank()) {
+                                    Row(
+                                        Modifier
+                                            .fillMaxWidth()
+                                            .heightIn(min = 52.dp)
+                                            .clickable {
+                                                accountDropdownOpen = false
+                                                accountSearch = ""
+                                                showCredentialForm = true
+                                            }
+                                            .padding(horizontal = 14.dp, vertical = 10.dp),
+                                        verticalAlignment = Alignment.CenterVertically,
+                                    ) {
                                         Text(
-                                            xy("Dipilih", "Selected"),
-                                            style = MaterialTheme.typography.labelSmall,
-                                            color = MaterialTheme.colorScheme.primary,
+                                            xy("✎ Ubah detail / password akun ini", "✎ Edit this account"),
+                                            style = MaterialTheme.typography.titleSmall,
                                         )
                                     }
                                 }
-                            }
 
-                            if (user.isNotBlank()) {
                                 Row(
                                     Modifier
                                         .fillMaxWidth()
+                                        .heightIn(min = 52.dp)
                                         .clickable {
+                                            user = ""
+                                            pass = ""
+                                            domain = ""
                                             accountDropdownOpen = false
+                                            accountSearch = ""
                                             showCredentialForm = true
                                         }
                                         .padding(horizontal = 14.dp, vertical = 10.dp),
                                     verticalAlignment = Alignment.CenterVertically,
                                 ) {
                                     Text(
-                                        xy("✎ Ubah Detail / Password Akun Ini", "✎ Edit Current Account / Password"),
+                                        xy("+ Tambah akun baru", "+ Add new account"),
                                         style = MaterialTheme.typography.titleSmall,
+                                        color = MaterialTheme.colorScheme.primary,
                                     )
                                 }
-                            }
 
-                            Row(
-                                Modifier
-                                    .fillMaxWidth()
-                                    .clickable {
-                                        user = ""
-                                        pass = ""
-                                        domain = ""
-                                        accountDropdownOpen = false
-                                        showCredentialForm = true
-                                    }
-                                    .padding(horizontal = 14.dp, vertical = 10.dp),
-                                verticalAlignment = Alignment.CenterVertically,
-                            ) {
-                                Text(
-                                    xy("+ Tambah Akun Baru", "+ Add New Account"),
-                                    style = MaterialTheme.typography.titleSmall,
-                                    color = MaterialTheme.colorScheme.primary,
-                                )
-                            }
-
-                            Row(
-                                Modifier
-                                    .fillMaxWidth()
-                                    .clickable {
-                                        user = ""
-                                        pass = ""
-                                        domain = ""
-                                        accountDropdownOpen = false
-                                        showCredentialForm = false
-                                    }
-                                    .padding(horizontal = 14.dp, vertical = 10.dp),
-                                verticalAlignment = Alignment.CenterVertically,
-                            ) {
-                                Text(
-                                    xy("Tanpa Akun (Tanya saat Connect)", "No Account (Ask on Connect)"),
-                                    style = MaterialTheme.typography.bodySmall,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                )
+                                Row(
+                                    Modifier
+                                        .fillMaxWidth()
+                                        .heightIn(min = 52.dp)
+                                        .clickable {
+                                            user = ""
+                                            pass = ""
+                                            domain = ""
+                                            accountDropdownOpen = false
+                                            accountSearch = ""
+                                            showCredentialForm = false
+                                        }
+                                        .padding(horizontal = 14.dp, vertical = 10.dp),
+                                    verticalAlignment = Alignment.CenterVertically,
+                                ) {
+                                    Text(
+                                        xy("Tanpa akun (tanya saat Connect)", "No account (ask on connect)"),
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    )
+                                }
                             }
                         }
                     }
@@ -1092,6 +1157,7 @@ fun AddDeviceScreen(
                                         if (first.password.isNotEmpty()) pass = first.password
                                     }
                                     showCredentialForm = false
+                                    accountSearch = ""
                                     accountDropdownOpen = true
                                 },
                                 primary = false,
@@ -1108,6 +1174,7 @@ fun AddDeviceScreen(
                                 }
                                 showCredentialForm = false
                                 accountDropdownOpen = false
+                                accountSearch = ""
                             },
                             compact = true,
                             modifier = Modifier.weight(1f),

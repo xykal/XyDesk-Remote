@@ -483,6 +483,28 @@ class SessionSurfaceController(private val activity: Activity) : GraphicsSink {
     fun peekBitmap(): Bitmap? = bitmap
 
     /**
+     * Copy frame desktop remote tanpa menangkap layar HP atau overlay Compose.
+     * Resolusi dibatasi untuk mencegah perekaman membebani memori perangkat.
+     */
+    fun copyRemoteBitmap(maxLongEdge: Int = 1280): Bitmap? {
+        val source = bitmap ?: return null
+        return runCatching {
+            synchronized(source) {
+                if (source.isRecycled) return@synchronized null
+                val limit = maxLongEdge.coerceIn(2, 4096)
+                val scale = minOf(1f, limit.toFloat() / maxOf(source.width, source.height))
+                val width = ((source.width * scale).toInt().coerceAtLeast(2) / 2) * 2
+                val height = ((source.height * scale).toInt().coerceAtLeast(2) / 2) * 2
+                if (width == source.width && height == source.height) {
+                    source.copy(Bitmap.Config.ARGB_8888, false)
+                } else {
+                    Bitmap.createScaledBitmap(source, width, height, true)
+                }
+            }
+        }.getOrNull()
+    }
+
+    /**
      * M2.5 — screenshot surface: copy bitmap -> PNG di
      * `getExternalFilesDir/screenshots/` -> content URI (FileProvider)
      * untuk dibagikan. Return null kalau belum ada frame.

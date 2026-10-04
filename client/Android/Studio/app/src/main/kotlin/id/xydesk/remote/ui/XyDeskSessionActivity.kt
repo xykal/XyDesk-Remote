@@ -63,6 +63,20 @@ class XyDeskSessionActivity : ComponentActivity() {
 
     /** Id profil sesi ini; dipakai untuk melepas diri dari registry sesi. */
     private var sessionId: String? = null
+    private var userNavigatedHome = false
+    private var explicitDisconnect = false
+
+    /** Explicit navigation to Home should not leave a pending auto-resume marker. */
+    fun markIntentionalHomeNavigation() {
+        userNavigatedHome = true
+        sessionId?.let { appPrefs?.clearAutoResumeSession(it) }
+    }
+
+    /** Prevent onStop from restoring a marker after an explicit Disconnect. */
+    fun markExplicitDisconnect(profileId: String) {
+        explicitDisconnect = true
+        appPrefs?.clearAutoResumeSession(profileId)
+    }
 
     /**
      * Label sesi (nama perangkat atau host:port) — dipakai ulang saat service
@@ -121,6 +135,8 @@ class XyDeskSessionActivity : ComponentActivity() {
                 manager.lockRemoteSession()
             }
             Log.i(TAG, "policy background: auto-disconnect (lewat ${BACKGROUND_DISCONNECT_DELAY_MS}ms)")
+            explicitDisconnect = true
+            sessionId?.let { appPrefs?.clearAutoResumeSession(it) }
             manager.disconnect()
         }
     }
@@ -380,6 +396,7 @@ class XyDeskSessionActivity : ComponentActivity() {
                 },
                 kill = {
                     runOnUiThread {
+                        markExplicitDisconnect(profile.id)
                         if (prefs.autoLockRemoteOnLeave) manager.lockRemoteSession()
                         manager.disconnect()
                         finish()
@@ -413,7 +430,10 @@ class XyDeskSessionActivity : ComponentActivity() {
             this,
             object : OnBackPressedCallback(true) {
                 override fun handleOnBackPressed() {
-                    if (backHandler?.invoke() != true) finish()
+                    if (backHandler?.invoke() != true) {
+                        sessionId?.let { appPrefs?.clearAutoResumeSession(it) }
+                        finish()
+                    }
                 }
             }
         )
@@ -448,6 +468,9 @@ class XyDeskSessionActivity : ComponentActivity() {
         super.onStop()
         setGyroMouseActive(false)
         if (manager.state.value !is SessionState.Connected) return
+        if (!userNavigatedHome && !explicitDisconnect) {
+            sessionId?.let { appPrefs?.rememberAutoResumeSession(it) }
+        }
         when {
             // Default: sesi dibiarkan hidup di latar lewat foreground service.
             appPrefs?.keepAlive != false -> {
