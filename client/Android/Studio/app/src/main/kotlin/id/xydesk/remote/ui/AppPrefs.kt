@@ -38,6 +38,11 @@ class AppPrefs(context: Context) {
             edit.apply()
         }
 
+    /** Re-hide system bars after the phone keyboard opens during a session (opt-in). */
+    var keepSystemBarsHiddenWhenKeyboardOpens: Boolean
+        get() = sp.getBoolean(KEY_KEEP_SYSTEM_BARS_HIDDEN_ON_IME, false)
+        set(v) = sp.edit().putBoolean(KEY_KEEP_SYSTEM_BARS_HIDDEN_ON_IME, v).apply()
+
     val autoResumeProfileId: String?
         get() = sp.getString(KEY_AUTO_RESUME_PROFILE_ID, null)
 
@@ -156,6 +161,7 @@ class AppPrefs(context: Context) {
         private const val KEY_AUTO_RESUME_LAST_SESSION = "auto_resume_last_session"
         private const val KEY_AUTO_RESUME_PROFILE_ID = "auto_resume_profile_id"
         private const val KEY_AUTO_RESUME_SAVED_AT = "auto_resume_saved_at"
+        private const val KEY_KEEP_SYSTEM_BARS_HIDDEN_ON_IME = "keep_system_bars_hidden_on_ime"
         const val AUTO_RESUME_WINDOW_MS = 15 * 60_000L
         private const val KEY_FLAG_SECURE = "flag_secure"
         private const val KEY_REQUIRE_LOCK = "require_device_lock"

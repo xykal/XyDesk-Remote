@@ -1,4 +1,4 @@
-name: Bersihkan Actions
+name: Bersihkan Actions artifacts
 
 on:
   workflow_dispatch:
@@ -20,21 +20,13 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
-      - name: Bersihkan run lama, artifacts, dan cache usang
+      - name: Hapus artifacts sementara, pertahankan log dan riwayat run
         env:
           GH_TOKEN: ${{ github.token }}
-          KEEP: '2'
         run: |
           set -eu
           repo="$GITHUB_REPOSITORY"
           for art in $(gh api --paginate "repos/$repo/actions/artifacts" -q '.artifacts[].id'); do
             gh api -X DELETE "repos/$repo/actions/artifacts/$art" </dev/null >/dev/null || true
           done
-          for wf in $(gh api --paginate "repos/$repo/actions/workflows" -q '.workflows[].id'); do
-            for run in $(gh api --paginate "repos/$repo/actions/workflows/$wf/runs?status=completed&per_page=100" \
-              -q '.workflow_runs[].id' | tail -n +"$((KEEP + 1))"); do
-              gh api -X DELETE "repos/$repo/actions/runs/$run" </dev/null >/dev/null || true
-            done
-          done
-          # GitHub Releases dan tag rilis dipertahankan agar penghitung APK
-          # dapat mengagregasi unduhan seluruh rilis publik yang tersedia.
+          # Jangan hapus workflow runs/logs, tag, atau release: semuanya bukti audit dan provenance rilis.

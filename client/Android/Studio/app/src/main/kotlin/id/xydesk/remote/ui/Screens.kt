@@ -368,6 +368,9 @@ private fun GeneralSection(
     var themeMode by remember { mutableIntStateOf(appPrefs.themeMode) }
     var autoDisconnect by remember { mutableStateOf(appPrefs.autoDisconnect) }
     var autoResumeLastSession by remember { mutableStateOf(appPrefs.autoResumeLastSession) }
+    var keepSystemBarsHiddenOnIme by remember {
+        mutableStateOf(appPrefs.keepSystemBarsHiddenWhenKeyboardOpens)
+    }
     var inputMode by remember { mutableIntStateOf(prefs.inputMode.ordinal) }
     var pointerStyle by remember { mutableIntStateOf(prefs.pointerStyle.ordinal) }
     var pointerSize by remember { mutableStateOf(prefs.pointerSize) }
@@ -597,6 +600,19 @@ private fun GeneralSection(
                 subtitle = xy("Taskbar dan tepi desktop selalu ikut kelihatan", "Taskbar and desktop edges always stay visible"),
                 checked = autoFit,
                 onCheckedChange = { autoFit = it; prefs.autoFit = it },
+            )
+            Spacer(Modifier.height(8.dp))
+            XyToggleRow(
+                title = xy("Paksa bar sistem tetap tersembunyi saat mengetik", "Keep system bars hidden while typing"),
+                subtitle = xy(
+                    "Coba sembunyikan kembali status bar/ikon notch saat keyboard HP muncul di sesi. Berguna untuk Android 8+; sistem masih dapat menampilkannya sementara.",
+                    "Re-hide the status bar and notch icons when the phone keyboard opens in a session. Helps on Android 8+; the system may still show them briefly.",
+                ),
+                checked = keepSystemBarsHiddenOnIme,
+                onCheckedChange = {
+                    keepSystemBarsHiddenOnIme = it
+                    appPrefs.keepSystemBarsHiddenWhenKeyboardOpens = it
+                },
             )
         }
 

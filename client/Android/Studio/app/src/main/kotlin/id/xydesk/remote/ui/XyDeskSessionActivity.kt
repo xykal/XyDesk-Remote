@@ -63,6 +63,7 @@ class XyDeskSessionActivity : ComponentActivity() {
 
     /** Id profil sesi ini; dipakai untuk melepas diri dari registry sesi. */
     private var sessionId: String? = null
+    private var sessionImeVisible = false
     private var userNavigatedHome = false
     private var explicitDisconnect = false
 
@@ -454,12 +455,14 @@ class XyDeskSessionActivity : ComponentActivity() {
     override fun onResume() {
         super.onResume()
         applyWindowSecurityFlags()
+        if (sessionImeVisible) scheduleSystemBarsRehide()
         syncPhoneClipboardToRemote()
     }
 
     override fun onWindowFocusChanged(hasFocus: Boolean) {
         super.onWindowFocusChanged(hasFocus)
         if (hasFocus) {
+            if (sessionImeVisible) scheduleSystemBarsRehide()
             syncPhoneClipboardToRemote()
         }
     }
@@ -559,6 +562,25 @@ class XyDeskSessionActivity : ComponentActivity() {
         controller.systemBarsBehavior =
             WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
         controller.hide(WindowInsetsCompat.Type.systemBars())
+    }
+
+    /** Reassert immersive mode after an IME transition on devices that reveal bars while typing. */
+    fun onSessionImeVisibilityChanged(visible: Boolean) {
+        sessionImeVisible = visible
+        if (!visible || appPrefs?.keepSystemBarsHiddenWhenKeyboardOpens != true) return
+        hideSystemBars()
+        scheduleSystemBarsRehide()
+    }
+
+    private fun scheduleSystemBarsRehide() {
+        if (appPrefs?.keepSystemBarsHiddenWhenKeyboardOpens != true) return
+        window.decorView.postDelayed({
+            if (!isFinishing && !isDestroyed && sessionImeVisible &&
+                appPrefs?.keepSystemBarsHiddenWhenKeyboardOpens == true
+            ) {
+                hideSystemBars()
+            }
+        }, 180L)
     }
 
     /**

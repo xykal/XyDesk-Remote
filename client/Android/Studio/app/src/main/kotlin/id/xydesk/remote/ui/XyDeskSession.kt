@@ -476,6 +476,7 @@ fun XyDeskSessionScreen(
             val visible = heightPx > 0
             keyboardShown = visible
             prefs.setKeyboardShown(profile.id, visible)
+            (context as? XyDeskSessionActivity)?.onSessionImeVisibilityChanged(visible)
         }
         controller.onRemoteCursor = { cursor -> remoteCursor = cursor }
         controller.onCursorMoved = { x, y ->
