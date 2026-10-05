@@ -41,7 +41,18 @@ const COMMUNITY_JOKE_FEED_SIZE = 20;
 const COMMUNITY_JOKE_MAX_ITEMS = 1_000;
 const COMMUNITY_JOKE_POST_INTERVAL_MS = 60_000;
 const COMMUNITY_JOKE_REPORT_THRESHOLD = 3;
-const COMMUNITY_JOKE_REACTIONS = Object.freeze(["😂", "😭", "💀", "🔥"]);
+const COMMUNITY_JOKE_REACTIONS = Object.freeze(["😂", "😭", "💀", "🔥", "👍", "❤️", "🎉", "🤔"]);
+const PC_SIGNAL_ROOM_ID_RE = ACTIVE_SESSION_ID_RE;
+const PC_SIGNAL_WAIT_TTL_MS = 10 * 60_000;
+const PC_SIGNAL_ACTIVE_TTL_MS = 30 * 60_000;
+const PC_SIGNAL_EVENT_TTL_MS = 2 * 60_000;
+const PC_SIGNAL_MAX_EVENTS = 128;
+const PC_SIGNAL_MAX_BODY_BYTES = 24_576;
+const PC_SIGNAL_JOIN_CODE_BYTES = 24;
+const PC_SIGNAL_TOKEN_BYTES = 32;
+const PC_SIGNAL_JOIN_FAILURE_LIMIT = 15;
+const PC_SIGNAL_CREATE_PER_IP_PER_HOUR = 5;
+const PC_SIGNAL_TYPES = new Set(["offer", "answer", "candidate", "bye"]);
 
 function isJsonContentType(contentType) {
   return String(contentType || "").split(";", 1)[0].trim().toLowerCase() === "application/json";
@@ -473,6 +484,294 @@ async function readCommunityJson(request, maxBytes = 2_048) {
   }
 }
 
+function randomBase64Url(byteLength) {
+  const bytes = crypto.getRandomValues(new Uint8Array(byteLength));
+  let binary = "";
+  for (const byte of bytes) binary += String.fromCharCode(byte);
+  return btoa(binary).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/g, "");
+}
+
+async function pcSignalSecretHash(secret) {
+  const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(secret));
+  return Array.from(new Uint8Array(digest), (byte) => byte.toString(16).padStart(2, "0")).join("");
+}
+
+function constantTimeStringEqual(left, right) {
+  if (typeof left !== "string" || typeof right !== "string" || left.length !== right.length) return false;
+  let mismatch = 0;
+  for (let index = 0; index < left.length; index += 1) {
+    mismatch |= left.charCodeAt(index) ^ right.charCodeAt(index);
+  }
+  return mismatch === 0;
+}
+
+async function readPcSignalJson(request, maxBytes = PC_SIGNAL_MAX_BODY_BYTES) {
+  if (!isJsonContentType(request.headers.get("content-type"))) {
+    return { error: durableObjectJson({ status: "invalid_content_type" }, 415, request.method) };
+  }
+  const contentLength = Number(request.headers.get("content-length") || 0);
+  if (contentLength > maxBytes) {
+    return { error: durableObjectJson({ status: "payload_too_large" }, 413, request.method) };
+  }
+  const bounded = await readRequestTextLimited(request, maxBytes);
+  if (bounded.tooLarge) {
+    return { error: durableObjectJson({ status: "payload_too_large" }, 413, request.method) };
+  }
+  if (bounded.invalid) {
+    return { error: durableObjectJson({ status: "invalid_request" }, 400, request.method) };
+  }
+  try {
+    return { body: JSON.parse(bounded.text) };
+  } catch {
+    return { error: durableObjectJson({ status: "invalid_json" }, 400, request.method) };
+  }
+}
+
+function validatePcSignalPayload(type, payload) {
+  if (type === "offer" || type === "answer") {
+    return payload && typeof payload === "object" && payload.type === type &&
+      typeof payload.sdp === "string" && payload.sdp.length > 0 && payload.sdp.length <= 20_000;
+  }
+  if (type === "candidate") {
+    if (payload === null) return true;
+    return payload && typeof payload === "object" &&
+      typeof payload.candidate === "string" && payload.candidate.length <= 4_096 &&
+      (payload.sdpMid == null || (typeof payload.sdpMid === "string" && payload.sdpMid.length <= 64)) &&
+      (payload.sdpMLineIndex == null || Number.isSafeInteger(payload.sdpMLineIndex)) &&
+      (payload.usernameFragment == null || (typeof payload.usernameFragment === "string" && payload.usernameFragment.length <= 256));
+  }
+  if (type === "bye") {
+    return payload == null || (payload && typeof payload === "object" &&
+      (payload.reason == null || (typeof payload.reason === "string" && payload.reason.length <= 128)));
+  }
+  return false;
+}
+
+/**
+ * Ephemeral WebRTC rendezvous/signaling room. It relays bounded SDP/ICE JSON only;
+ * media packets never pass through this object. Media encryption is negotiated
+ * peer-to-peer by WebRTC and is not an E2EE claim for the whole XyDesk product.
+ */
+export class PcSignalRoom {
+  constructor(state) {
+    this.state = state;
+  }
+
+  async fetch(request) {
+    const path = new URL(request.url).pathname;
+    if (path === "/limit/create" && request.method === "POST") return this.limitCreate(request);
+    if (path === "/create" && request.method === "POST") return this.createRoom();
+    if (path === "/join" && request.method === "POST") return this.joinRoom(request);
+    if (path === "/signal" && request.method === "GET") return this.readSignals(request);
+    if (path === "/signal" && request.method === "POST") return this.appendSignal(request);
+    return durableObjectJson({ status: "not_found" }, 404, request.method);
+  }
+
+  async limitCreate(request) {
+    const ipHash = request.headers.get("x-xydesk-ip-hash") || "";
+    if (!/^[0-9a-f]{64}$/i.test(ipHash)) {
+      return durableObjectJson({ status: "invalid_request" }, 400, request.method);
+    }
+    const now = Date.now();
+    const outcome = await this.state.storage.transaction(async (transaction) => {
+      const current = await transaction.get("create-limit");
+      const window = current && Number(current.reset_at) > now
+        ? current
+        : { count: 0, reset_at: now + 60 * 60_000 };
+      if (window.count >= PC_SIGNAL_CREATE_PER_IP_PER_HOUR) {
+        return { allowed: false, resetAt: window.reset_at };
+      }
+      window.count += 1;
+      await transaction.put("create-limit", window);
+      return { allowed: true, resetAt: window.reset_at };
+    });
+    await this.state.storage.setAlarm(outcome.resetAt);
+    if (!outcome.allowed) {
+      return durableObjectJson({ status: "rate_limited", retry_after_ms: Math.max(1, outcome.resetAt - now) }, 429, request.method);
+    }
+    return durableObjectJson({ status: "ok" }, 200, request.method);
+  }
+
+  async createRoom() {
+    const now = Date.now();
+    const expiresAt = now + PC_SIGNAL_WAIT_TTL_MS;
+    const hostToken = randomBase64Url(PC_SIGNAL_TOKEN_BYTES);
+    const joinCode = randomBase64Url(PC_SIGNAL_JOIN_CODE_BYTES);
+    const [hostHash, joinHash] = await Promise.all([
+      pcSignalSecretHash(hostToken),
+      pcSignalSecretHash(joinCode),
+    ]);
+    const created = await this.state.storage.transaction(async (transaction) => {
+      const oldMeta = await transaction.get("room:meta");
+      if (oldMeta && Number(oldMeta.expires_at) > now) return false;
+      for (const key of ["room:viewer-token", "room:join-code", "room:events", "room:next-seq", "room:join-failures"]) {
+        await transaction.delete(key);
+      }
+      await transaction.put("room:meta", { created_at: now, expires_at: expiresAt });
+      await transaction.put("room:host-token", hostHash);
+      await transaction.put("room:join-code", joinHash);
+      await transaction.put("room:next-seq", 0);
+      await transaction.put("room:events", []);
+      return true;
+    });
+    if (!created) return durableObjectJson({ status: "room_exists" }, 409);
+    await this.state.storage.setAlarm(expiresAt);
+    return durableObjectJson({ status: "ok", host_token: hostToken, pairing_code: joinCode, expires_at: expiresAt }, 201);
+  }
+
+  async joinRoom(request) {
+    const parsed = await readPcSignalJson(request, 512);
+    if (parsed.error) return parsed.error;
+    const pairingCode = parsed.body?.pairing_code;
+    if (typeof pairingCode !== "string" || !/^[A-Za-z0-9_-]{32}$/.test(pairingCode)) {
+      return durableObjectJson({ status: "invalid_pairing_code" }, 400, request.method);
+    }
+    const viewerToken = randomBase64Url(PC_SIGNAL_TOKEN_BYTES);
+    const suppliedHash = await pcSignalSecretHash(pairingCode);
+    const viewerHash = await pcSignalSecretHash(viewerToken);
+    const now = Date.now();
+    const outcome = await this.state.storage.transaction(async (transaction) => {
+      const meta = await transaction.get("room:meta");
+      if (!meta || Number(meta.expires_at) <= now) return { status: "room_expired" };
+      const failures = await transaction.get("room:join-failures") || { count: 0, since: now };
+      if (now - Number(failures.since) >= PC_SIGNAL_WAIT_TTL_MS) {
+        failures.count = 0;
+        failures.since = now;
+      }
+      if (Number(failures.count) >= PC_SIGNAL_JOIN_FAILURE_LIMIT) return { status: "rate_limited" };
+      const expectedHash = await transaction.get("room:join-code");
+      if (!constantTimeStringEqual(expectedHash || "", suppliedHash)) {
+        failures.count = Number(failures.count) + 1;
+        await transaction.put("room:join-failures", failures);
+        return { status: "invalid_pairing_code" };
+      }
+      if (await transaction.get("room:viewer-token")) return { status: "already_joined" };
+      const nextExpiry = now + PC_SIGNAL_ACTIVE_TTL_MS;
+      meta.expires_at = nextExpiry;
+      await transaction.put("room:meta", meta);
+      await transaction.put("room:viewer-token", viewerHash);
+      await transaction.delete("room:join-code");
+      await transaction.delete("room:join-failures");
+      return { status: "ok", expiresAt: nextExpiry };
+    });
+    if (outcome.status !== "ok") {
+      const statusCode = outcome.status === "room_expired" ? 410 :
+        outcome.status === "rate_limited" ? 429 :
+        outcome.status === "already_joined" ? 409 : 401;
+      return durableObjectJson({ status: outcome.status }, statusCode, request.method);
+    }
+    await this.state.storage.setAlarm(outcome.expiresAt);
+    return durableObjectJson({ status: "ok", viewer_token: viewerToken, expires_at: outcome.expiresAt }, 200, request.method);
+  }
+
+  async authorize(request) {
+    const match = String(request.headers.get("authorization") || "").match(/^Bearer ([A-Za-z0-9_-]{43})$/);
+    if (!match) return null;
+    const suppliedHash = await pcSignalSecretHash(match[1]);
+    const [hostHash, viewerHash] = await Promise.all([
+      this.state.storage.get("room:host-token"),
+      this.state.storage.get("room:viewer-token"),
+    ]);
+    if (constantTimeStringEqual(hostHash || "", suppliedHash)) return "host";
+    if (constantTimeStringEqual(viewerHash || "", suppliedHash)) return "viewer";
+    return null;
+  }
+
+  async activeMeta() {
+    const meta = await this.state.storage.get("room:meta");
+    if (!meta || Number(meta.expires_at) <= Date.now()) return null;
+    return meta;
+  }
+
+  async readSignals(request) {
+    const meta = await this.activeMeta();
+    if (!meta) return durableObjectJson({ status: "room_expired" }, 410, request.method);
+    const role = await this.authorize(request);
+    if (!role) return durableObjectJson({ status: "unauthorized" }, 401, request.method);
+    const url = new URL(request.url);
+    const afterText = url.searchParams.get("after") || "0";
+    if (!/^(0|[1-9][0-9]{0,15})$/.test(afterText)) {
+      return durableObjectJson({ status: "invalid_cursor" }, 400, request.method);
+    }
+    const after = Number(afterText);
+    if (!Number.isSafeInteger(after)) return durableObjectJson({ status: "invalid_cursor" }, 400, request.method);
+    const now = Date.now();
+    const [storedEvents, nextSeq] = await Promise.all([
+      this.state.storage.get("room:events"),
+      this.state.storage.get("room:next-seq"),
+    ]);
+    const events = (Array.isArray(storedEvents) ? storedEvents : [])
+      .filter((event) => now - Number(event.created_at) <= PC_SIGNAL_EVENT_TTL_MS);
+    if (events.length !== (Array.isArray(storedEvents) ? storedEvents.length : 0)) {
+      await this.state.storage.put("room:events", events);
+    }
+    const visible = events.filter((event) => event.seq > after && event.from !== role);
+    const cursor = events.reduce((current, event) => Math.max(current, Number(event.seq) || 0), after);
+    const renewedExpiry = now + PC_SIGNAL_ACTIVE_TTL_MS;
+    meta.expires_at = renewedExpiry;
+    await this.state.storage.put("room:meta", meta);
+    await this.state.storage.setAlarm(renewedExpiry);
+    return durableObjectJson({ status: "ok", role, events: visible, cursor, latest_seq: Number(nextSeq) || 0 }, 200, request.method);
+  }
+
+  async appendSignal(request) {
+    const meta = await this.activeMeta();
+    if (!meta) return durableObjectJson({ status: "room_expired" }, 410, request.method);
+    const role = await this.authorize(request);
+    if (!role) return durableObjectJson({ status: "unauthorized" }, 401, request.method);
+    const parsed = await readPcSignalJson(request, PC_SIGNAL_MAX_BODY_BYTES);
+    if (parsed.error) return parsed.error;
+    const type = parsed.body?.type;
+    const payload = parsed.body?.payload ?? null;
+    if (!PC_SIGNAL_TYPES.has(type) || !validatePcSignalPayload(type, payload)) {
+      return durableObjectJson({ status: "invalid_signal" }, 400, request.method);
+    }
+    const now = Date.now();
+    const outcome = await this.state.storage.transaction(async (transaction) => {
+      const currentMeta = await transaction.get("room:meta");
+      if (!currentMeta || Number(currentMeta.expires_at) <= now) return { status: "room_expired" };
+      const events = (await transaction.get("room:events") || [])
+        .filter((event) => now - Number(event.created_at) <= PC_SIGNAL_EVENT_TTL_MS);
+      if (events.length >= PC_SIGNAL_MAX_EVENTS) return { status: "queue_full" };
+      const nextSeq = (Number(await transaction.get("room:next-seq")) || 0) + 1;
+      const expiresAt = now + PC_SIGNAL_ACTIVE_TTL_MS;
+      events.push({ seq: nextSeq, from: role, type, payload, created_at: now });
+      currentMeta.expires_at = expiresAt;
+      await transaction.put("room:events", events);
+      await transaction.put("room:next-seq", nextSeq);
+      await transaction.put("room:meta", currentMeta);
+      return { status: "ok", seq: nextSeq, expiresAt };
+    });
+    if (outcome.status !== "ok") {
+      const statusCode = outcome.status === "queue_full" ? 429 : 410;
+      return durableObjectJson({ status: outcome.status }, statusCode, request.method);
+    }
+    await this.state.storage.setAlarm(outcome.expiresAt);
+    return durableObjectJson({ status: "ok", seq: outcome.seq }, 201, request.method);
+  }
+
+  async alarm() {
+    const now = Date.now();
+    const meta = await this.state.storage.get("room:meta");
+    if (meta) {
+      if (Number(meta.expires_at) > now) {
+        await this.state.storage.setAlarm(Number(meta.expires_at));
+        return;
+      }
+      for (const key of ["room:meta", "room:host-token", "room:viewer-token", "room:join-code", "room:join-failures", "room:events", "room:next-seq"]) {
+        await this.state.storage.delete(key);
+      }
+    }
+    const createLimit = await this.state.storage.get("create-limit");
+    if (createLimit && Number(createLimit.reset_at) > now) {
+      await this.state.storage.setAlarm(Number(createLimit.reset_at));
+    } else if (createLimit) {
+      await this.state.storage.delete("create-limit");
+      await this.state.storage.deleteAlarm();
+    }
+  }
+}
+
 export class ActiveSessions {
   constructor(state) {
     this.state = state;
@@ -782,6 +1081,77 @@ export class CommunityJokes {
   }
 }
 
+async function pcSignalResponse(request, env) {
+  if (!env.PC_SIGNAL_ROOMS) {
+    return jsonResponse({ status: "unavailable" }, 503, request.method);
+  }
+  const url = new URL(request.url);
+  if (url.pathname === "/api/pc/rooms") {
+    if (request.method !== "POST") return methodNotAllowed("POST");
+    const parsed = await readPcSignalJson(request, 512);
+    if (parsed.error) return parsed.error;
+    if (!parsed.body || typeof parsed.body !== "object" || Array.isArray(parsed.body) || Object.keys(parsed.body).length !== 0) {
+      return jsonResponse({ status: "invalid_request" }, 400, request.method);
+    }
+    const ip = String(request.headers.get("cf-connecting-ip") || "unknown");
+    const ipHash = await pcSignalSecretHash(`xydesk-pc-signal-ip:${ip}`);
+    const limiter = env.PC_SIGNAL_ROOMS.get(env.PC_SIGNAL_ROOMS.idFromName(`quota:${ipHash}`));
+    const limitResponse = await limiter.fetch("https://pc-signal/limit/create", {
+      method: "POST",
+      headers: { "x-xydesk-ip-hash": ipHash },
+    });
+    if (!limitResponse.ok) return jsonResponse(await limitResponse.json(), limitResponse.status, request.method);
+
+    const roomId = crypto.randomUUID();
+    const room = env.PC_SIGNAL_ROOMS.get(env.PC_SIGNAL_ROOMS.idFromName(roomId));
+    const created = await room.fetch("https://pc-signal/create", { method: "POST" });
+    const payload = await created.json();
+    if (!created.ok) return jsonResponse(payload, created.status, request.method);
+    return jsonResponse({ ...payload, room_id: roomId }, created.status, request.method);
+  }
+
+  const match = url.pathname.match(/^\/api\/pc\/rooms\/([0-9a-f-]{36})\/(join|signal)$/i);
+  if (!match || !PC_SIGNAL_ROOM_ID_RE.test(match[1])) {
+    return jsonResponse({ status: "not_found" }, 404, request.method);
+  }
+  const room = env.PC_SIGNAL_ROOMS.get(env.PC_SIGNAL_ROOMS.idFromName(match[1]));
+  if (match[2] === "join") {
+    if (request.method !== "POST") return methodNotAllowed("POST");
+    const bounded = await readRequestTextLimited(request, 512);
+    if (bounded.tooLarge) return jsonResponse({ status: "payload_too_large" }, 413, request.method);
+    if (bounded.invalid) return jsonResponse({ status: "invalid_request" }, 400, request.method);
+    return room.fetch("https://pc-signal/join", {
+      method: "POST",
+      headers: { "content-type": request.headers.get("content-type") || "" },
+      body: bounded.text,
+    });
+  }
+
+  if (request.method === "GET") {
+    const after = url.searchParams.get("after");
+    const internalUrl = new URL("https://pc-signal/signal");
+    if (after !== null) internalUrl.searchParams.set("after", after);
+    return room.fetch(internalUrl, {
+      method: "GET",
+      headers: { authorization: request.headers.get("authorization") || "" },
+    });
+  }
+  if (request.method === "POST") {
+    const bounded = await readRequestTextLimited(request, PC_SIGNAL_MAX_BODY_BYTES);
+    if (bounded.tooLarge) return jsonResponse({ status: "payload_too_large" }, 413, request.method);
+    if (bounded.invalid) return jsonResponse({ status: "invalid_request" }, 400, request.method);
+    return room.fetch("https://pc-signal/signal", {
+      method: "POST",
+      headers: {
+        "authorization": request.headers.get("authorization") || "",
+        "content-type": request.headers.get("content-type") || "",
+      },
+      body: bounded.text,
+    });
+  }
+  return methodNotAllowed("GET, POST");
+}
+
 async function activeSessionsResponse(request, env) {
   if (!env.ACTIVE_SESSIONS) {
     return jsonResponse({ status: "unavailable", active_session_count: null }, 503, request.method);
@@ -906,6 +1276,9 @@ export default {
     const url = new URL(request.url);
     const path = url.pathname;
 
+    if (path === "/api/pc/rooms" || path.startsWith("/api/pc/rooms/")) {
+      return pcSignalResponse(request, env);
+    }
     if (path === "/api/session") {
       if (request.method !== "POST") return methodNotAllowed("POST");
       return sessionReportResponse(request, env);

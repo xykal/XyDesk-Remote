@@ -108,7 +108,7 @@ class SessionManager(context: Context) {
     @Volatile private var activeCodec: String = "H.264 AVC444"
     @Volatile private var activeUdp: Boolean = true
     @Volatile private var activeBpp: Int = 32
-    @Volatile private var activeRelayLabel: String = "Direct UDP"
+    @Volatile private var activeRelayLabel: String = "RDP"
     @Volatile private var activeNetworkLabel: String = "Wi-Fi"
     @Volatile private var activeDynamicResolution: Boolean = true
     @Volatile private var connectedAtMs: Long = 0L
@@ -226,10 +226,10 @@ class SessionManager(context: Context) {
         activeNetworkLabel = detectActiveNetworkLabel()
         val proto = if (options.udpTransport) "UDP" else "TCP"
         activeRelayLabel = when {
-            options.gateway != null && options.gateway.host.isNotBlank() -> "RD Gateway ($proto)"
-            profile.host.startsWith("100.") || profile.host.endsWith(".ts.net", ignoreCase = true) -> "Tailscale ($proto)"
-            options.pcConnectMode -> "Direct QUIC+$proto"
-            else -> "Direct $proto"
+            options.gateway != null && options.gateway.host.isNotBlank() -> "RDP via RD Gateway ($proto)"
+            profile.host.startsWith("100.") || profile.host.endsWith(".ts.net", ignoreCase = true) -> "RDP via Tailscale ($proto)"
+            options.pcConnectMode -> "RDP PC profile ($proto)"
+            else -> "RDP Direct ($proto)"
         }
         if (options.lowBandwidth && !storedOptions.lowBandwidth) {
             ConnectionLog.add("CM: jaringan seluler/terbatas terdeteksi -> otomatis aktifkan lowBandwidth (AVC420)")
@@ -330,8 +330,7 @@ class SessionManager(context: Context) {
                 LibFreeRDP.quicProbeHost(profile.host, 4433, 450)
             }.getOrDefault("")
             if (quicProbe.contains("\"ok\":true")) {
-                ConnectionLog.add("QUIC Native Agent OK: $quicProbe")
-                activeRelayLabel = "Direct QUIC v1 (Native C++)"
+                ConnectionLog.add("QUIC host-agent probe OK (ancillary path; session video remains RDP): $quicProbe")
             }
             val probeStartNs = System.nanoTime()
             val reachable = tcpReachable(profile.host, profile.port, TCP_PROBE_TIMEOUT_MS)

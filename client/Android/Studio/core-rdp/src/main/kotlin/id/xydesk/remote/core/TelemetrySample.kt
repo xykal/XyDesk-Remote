@@ -6,7 +6,8 @@ package id.xydesk.remote.core
  * Dipancarkan [SessionManager.telemetry] tiap 500ms. `fps` = jumlah
  * invalidasi grafik yang sudah dikoaleskan per detik (ekstrapolasi 2x dari
  * window 500ms), bukan FPS yang dijanjikan host RDP.
- * `rttMs` = estimasi latensi TCP round-trip dalam milidetik (`-1` bila belum diukur).
+ * `rttMs` = estimasi reachability RTT host (TCP saat konek, `isReachable` saat sampling),
+ * bukan latensi input-ke-layar; `-1` bila belum diukur.
  */
 data class TelemetrySample(
     val state: SessionState,
@@ -17,7 +18,7 @@ data class TelemetrySample(
     val codecLabel: String = "H.264 AVC444",
     val udpActive: Boolean = true,
     val colorDepth: Int = 32,
-    val relayLabel: String = "Direct UDP",
+    val relayLabel: String = "RDP",
     val networkLabel: String = "Wi-Fi",
 ) {
     companion object {

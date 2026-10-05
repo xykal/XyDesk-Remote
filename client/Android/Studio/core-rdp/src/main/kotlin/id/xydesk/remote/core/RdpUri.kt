@@ -78,7 +78,7 @@ object RdpUri {
 
         // Kanal DISP (Display Control): bikin resolusi remote bisa diubah
         // saat sesi hidup lewat LibFreeRDP.sendMonitorLayout.
-        // Koneksi PC (Direct Stream) mengunci 1:1 ke monitor fisik, tidak memakai DISP.
+        // Profil PC saat ini tetap RDP (/admin); DISP dinonaktifkan, tetapi resolusi monitor host tidak dijamin 1:1.
         if (options.dynamicResolution && !options.pcConnectMode) out += "dynamic-resolution" to ""
 
         // ---- Streaming & Latency CLI flags ----

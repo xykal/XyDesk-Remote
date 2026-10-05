@@ -10,12 +10,14 @@
   "durable_objects": {
     "bindings": [
       { "name": "ACTIVE_SESSIONS", "class_name": "ActiveSessions" },
-      { "name": "COMMUNITY_JOKES", "class_name": "CommunityJokes" }
+      { "name": "COMMUNITY_JOKES", "class_name": "CommunityJokes" },
+      { "name": "PC_SIGNAL_ROOMS", "class_name": "PcSignalRoom" }
     ]
   },
   "migrations": [
     { "tag": "v1", "new_sqlite_classes": ["ActiveSessions"] },
-    { "tag": "v2", "new_sqlite_classes": ["CommunityJokes"] }
+    { "tag": "v2", "new_sqlite_classes": ["CommunityJokes"] },
+    { "tag": "v3", "new_sqlite_classes": ["PcSignalRoom"] }
   ],
   "assets": {
     "directory": "./web",
