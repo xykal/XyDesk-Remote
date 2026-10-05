@@ -78,8 +78,8 @@ fun encodeIpv4ToPcId(ip: String): String? {
 }
 
 /**
- * Parse ID PC (`323-223-5826`, `323 223 5826`, `XY-C0A8-0132`) atau alamat
- * host/IP standar menjadi [RdpEndpoint].
+ * Parse legacy ID PC (IPv4 encoded as decimal/hex) or a host/IP into [RdpEndpoint].
+ * This is a direct address conversion, not a global rendezvous ID or relay lookup.
  */
 fun parsePcIdOrEndpoint(input: String, defaultPort: Int = 3389): RdpEndpoint? {
     val raw = input.trim()

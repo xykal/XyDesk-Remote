@@ -76,6 +76,7 @@ dependencies {
 
     // M1 — modul Kotlin (core sesi, vault, favorites)
     implementation project(':core-rdp')
+    implementation project(':core-pc-stream')
     implementation project(':features-security')
     implementation project(':features-sessions')
 

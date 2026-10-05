@@ -47,10 +47,10 @@ enum class XyStreamProfile(
         "Follow active network detection (full Wi-Fi / cellular saver)",
     ),
     ULTRA_LOW_LATENCY(
-        "Latensi Ultra-Rendah",
-        "AVC420 + async update/channel + matikan efek visual berat untuk respons kilat",
-        "Ultra-Low Latency",
-        "AVC420 + async update/channel + disable heavy visual effects for instant response",
+        "Responsif (preset RDP)",
+        "AVC420, UDP RDP, async update, dan efek desktop minimal; latensi aktual bergantung host dan jaringan.",
+        "Responsive (RDP preset)",
+        "AVC420, RDP UDP, async updates, and minimal desktop effects; actual latency depends on host and network.",
     ),
     BALANCED(
         "Seimbang",
@@ -156,9 +156,8 @@ enum class XyGpuProfile(
 }
 
 /**
- * Mesin Streaming Khusus Mode `Koneksi PC` (Direct PC Stream Foundation).
- * Terpisah penuh dari profil desktop RDP (`XyStreamProfile`) — tidak dipakai
- * pada Koneksi RDP standar.
+ * Preset profil PC (nama tipe dipertahankan untuk kompatibilitas penyimpanan).
+ * Preset ini masih mengatur opsi FreeRDP/RDP; bukan transport stream mandiri.
  */
 enum class XyPcStreamEngine(
     val title: String,
@@ -168,31 +167,31 @@ enum class XyPcStreamEngine(
     val badge: String,
 ) {
     DIRECT_GAME_ULTRA(
-        "Direct Game FPS (Ultra-Low Latency)",
-        "Jalur langsung tanpa antrean desktop, pacing frame instan & input relatif murni",
-        "Direct Game FPS (Ultra-Low Latency)",
-        "Zero-queue direct pipeline, instant frame pacing & pure relative mouse input",
+        "Profil Game (RDP)",
+        "Preset RDP untuk gameplay; stream game mandiri belum tersedia",
+        "Game Profile (RDP)",
+        "RDP tuning preset; standalone game streaming is not available yet",
         "GAME 60/120",
     ),
     DIRECT_STUDIO_444(
-        "Direct Creator 4:4:4 (Presisi Warna 1:1)",
-        "Teks & warna monitor fisik 1:1 tanpa subsampling kroma untuk desain/kode",
-        "Direct Creator 4:4:4 (1:1 Color Precision)",
-        "Uncompressed-like 1:1 physical monitor chroma for design & coding",
+        "Profil Kreator (RDP)",
+        "Preset visual RDP; jalur 4:4:4 mandiri belum tersedia",
+        "Creator Profile (RDP)",
+        "RDP visual preset; a standalone 4:4:4 path is not available yet",
         "4:4:4 STUDIO",
     ),
     DIRECT_CINEMA(
-        "Direct Cinema & Multimedia",
-        "Pacing frame video halus dengan sinkronisasi audio stereo latensi rendah",
-        "Direct Cinema & Multimedia",
-        "Smooth video frame pacing with low-latency stereo audio sync",
+        "Profil Multimedia (RDP)",
+        "Preset multimedia RDP; audio/video memakai jalur RDP yang aktif",
+        "Multimedia Profile (RDP)",
+        "RDP multimedia preset; uses the active RDP audio/video path",
         "CINEMA",
     ),
     DIRECT_LAN_TURBO(
-        "Direct LAN Turbo (Throughput Maksimum)",
-        "Bitrate tinggi tanpa kompresi paket untuk jaringan Wi-Fi 5GHz / Gigabit LAN",
-        "Direct LAN Turbo (Max Throughput)",
-        "High-bitrate uncompressed packet path for 5GHz Wi-Fi / Gigabit LAN",
+        "Profil LAN (RDP)",
+        "Preset RDP untuk LAN; tidak mengubah transport menjadi stream mandiri",
+        "LAN Profile (RDP)",
+        "RDP preset for LAN; does not switch to standalone streaming",
         "LAN TURBO",
     ),
 }
@@ -448,9 +447,8 @@ data class RdpOptions(
     }
 
     /**
-     * Terapkan mesin streaming khusus mode `Koneksi PC` (Direct PC Stream).
-     * Mengunci sesi langsung ke konsol fisik 1:1 dan menonaktifkan fitur-fitur
-     * eksklusif desktop RDP (seperti Dynamic Resolution DISP, Gateway, RemoteApp).
+     * Terapkan preset opsi PC. Saat ini nilainya tetap dipakai oleh jalur FreeRDP/RDP;
+     * fungsi ini tidak membuat sesi streaming PC mandiri.
      */
     fun withPcStreamEngine(engine: XyPcStreamEngine): RdpOptions = when (engine) {
         XyPcStreamEngine.DIRECT_GAME_ULTRA -> copy(

@@ -25,3 +25,8 @@ captures/
 *.keystore
 *.jks
 release-local.properties
+
+# Local secrets
+.env
+.env.*
+!.env.example

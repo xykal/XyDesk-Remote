@@ -116,13 +116,13 @@ val XyBody = FontFamily(
 )
 
 /** Radius lebih ramah sentuh; kontrol pill tetap terbaca sebagai kontrol. */
-val XyPill = RoundedCornerShape(12.dp)
+val XyPill = RoundedCornerShape(18.dp)
 
 val XyShapes = Shapes(
-    small = RoundedCornerShape(6.dp),
-    medium = RoundedCornerShape(10.dp),
-    large = RoundedCornerShape(14.dp),
-    extraLarge = RoundedCornerShape(18.dp),
+    small = RoundedCornerShape(10.dp),
+    medium = RoundedCornerShape(14.dp),
+    large = RoundedCornerShape(20.dp),
+    extraLarge = RoundedCornerShape(26.dp),
 )
 
 /**

@@ -20,6 +20,11 @@
 # Service yang di-bind sistem (manifest-bound; defensive keep)
 -keep class com.freerdp.freerdpcore.presentation.KeyboardAccessibilityService { *; }
 
+# --- WebRTC JNI -------------------------------------------------
+# WebRTC's native library calls Java methods by name and uses these wrappers
+# for JNI callbacks. Keep the API stable under R8 in release builds.
+-keep class org.webrtc.** { *; }
+
 # --- SQLCipher (native) ----------------------------------------
 # AAR sqlcipher-android seharusnya membawa consumer rules;
 # keep di sini defensif untuk R8 full mode.
