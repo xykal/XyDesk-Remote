@@ -55,45 +55,22 @@ internal fun SpotifyFloatingPlayer(
 ) {
     val context = LocalContext.current
     if (!expanded) {
-        Row(
+        // Compact drag-handle style: only a small line is visible until tapped.
+        Box(
             modifier = modifier
-                .widthIn(max = 276.dp)
-                .clip(RoundedCornerShape(22.dp))
-                .background(MaterialTheme.colorScheme.surface.copy(alpha = 0.97f))
-                .border(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.72f), RoundedCornerShape(22.dp))
-                .clickable(onClick = onExpand)
-                .padding(start = 10.dp, end = 8.dp, top = 7.dp, bottom = 7.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(9.dp),
+                .size(width = 72.dp, height = 36.dp)
+                .clickable(
+                    onClickLabel = xyNow("Buka pemutar Spotify", "Open Spotify player"),
+                    onClick = onExpand,
+                ),
+            contentAlignment = Alignment.Center,
         ) {
-            Artwork(playback, Modifier.size(34.dp))
-            Column(Modifier.weight(1f)) {
-                Text(
-                    playback.title ?: "Spotify",
-                    style = MaterialTheme.typography.labelMedium,
-                    color = MaterialTheme.colorScheme.onSurface,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                )
-                Text(
-                    when {
-                        playback.hasActiveSession -> playback.artist ?: xyNow("Sedang diputar di Spotify", "Playing in Spotify")
-                        playback.notificationAccessGranted -> xyNow("Buka Spotify untuk mulai", "Open Spotify to start")
-                        else -> xyNow("Ketuk untuk menghubungkan", "Tap to connect")
-                    },
-                    style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                )
-            }
-            PlayerIconButton(
-                icon = if (playback.isPlaying) XyIcons.Pause else XyIcons.Play,
-                description = if (playback.isPlaying) xyNow("Jeda Spotify", "Pause Spotify")
-                else xyNow("Putar Spotify", "Play Spotify"),
-                enabled = playback.notificationAccessGranted && playback.hasActiveSession,
-                onClick = onTogglePlayback,
-                modifier = Modifier.size(36.dp),
+            Box(
+                Modifier
+                    .width(42.dp)
+                    .height(4.dp)
+                    .clip(CircleShape)
+                    .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.92f)),
             )
         }
     } else {
@@ -105,15 +82,15 @@ internal fun SpotifyFloatingPlayer(
         ) {
             Column(
                 Modifier
-                    .widthIn(min = 248.dp, max = 304.dp)
-                    .clip(RoundedCornerShape(22.dp))
+                    .widthIn(min = 236.dp, max = 280.dp)
+                    .clip(RoundedCornerShape(16.dp))
                     .background(MaterialTheme.colorScheme.surface.copy(alpha = 0.98f))
-                    .border(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.78f), RoundedCornerShape(22.dp))
-                    .padding(14.dp),
-                verticalArrangement = Arrangement.spacedBy(10.dp),
+                    .border(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.68f), RoundedCornerShape(16.dp))
+                    .padding(12.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp),
             ) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    Artwork(playback, Modifier.size(48.dp))
+                    Artwork(playback, Modifier.size(44.dp))
                     Spacer(Modifier.width(10.dp))
                     Column(Modifier.weight(1f)) {
                         Text(
@@ -146,7 +123,7 @@ internal fun SpotifyFloatingPlayer(
                         icon = XyIcons.ChevronUp,
                         description = xyNow("Kecilkan pemutar Spotify", "Minimize Spotify player"),
                         onClick = onMinimize,
-                        modifier = Modifier.size(36.dp),
+                        modifier = Modifier.size(32.dp),
                     )
                 }
 

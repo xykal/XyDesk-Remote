@@ -72,12 +72,12 @@ fun XyCard(
     padding: Dp = 16.dp,
     content: @Composable ColumnScope.() -> Unit,
 ) {
-    val shape = RoundedCornerShape(20.dp)
+    val shape = RoundedCornerShape(14.dp)
     Column(
         modifier = modifier
             .clip(shape)
             .background(MaterialTheme.colorScheme.surface)
-            .border(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.42f), shape)
+            .border(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.24f), shape)
             .padding(padding),
         content = content,
     )
@@ -145,7 +145,7 @@ fun XyIconPill(
     flat: Boolean = false,
     contentDescription: String? = null,
 ) {
-    val shape = RoundedCornerShape(16.dp)
+    val shape = RoundedCornerShape(12.dp)
     val bg = if (active) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surfaceVariant
     val fg = when {
         flat && active -> MaterialTheme.colorScheme.primary
@@ -249,10 +249,10 @@ fun XySwitch(
         if (checked) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurfaceVariant,
         label = "knob",
     )
-    val knobOffset by animateDpAsState(if (checked) 23.dp else 3.dp, label = "knobOffset")
+    val knobOffset by animateDpAsState(if (checked) 20.dp else 2.dp, label = "knobOffset")
     Box(
         modifier = Modifier
-            .size(width = 46.dp, height = 28.dp)
+            .size(width = 44.dp, height = 26.dp)
             .clip(XyPill)
             .background(trackColor)
             .border(
@@ -271,7 +271,7 @@ fun XySwitch(
         Box(
             modifier = Modifier
                 .padding(start = knobOffset, top = 3.dp)
-                .size(20.dp)
+                .size(18.dp)
                 .clip(CircleShape)
                 .background(knobColor),
         )
@@ -341,7 +341,7 @@ fun XySegmented(
             Box(
                 modifier = Modifier
                     .weight(1f)
-                    .clip(RoundedCornerShape(14.dp))
+                    .clip(RoundedCornerShape(10.dp))
                     .background(if (active) MaterialTheme.colorScheme.primaryContainer else Color.Transparent)
                     .clickable { onSelect(index) }
                     .padding(vertical = 9.dp),
@@ -406,11 +406,11 @@ fun XyField(
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .heightIn(min = 52.dp)
+                        .heightIn(min = 50.dp)
                         .clip(XyPill)
                         .background(MaterialTheme.colorScheme.surface)
                         .border(fieldOutlineWidth, fieldOutline, XyPill)
-                        .padding(horizontal = 14.dp, vertical = 6.dp),
+                        .padding(horizontal = 12.dp, vertical = 6.dp),
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
                     Box(Modifier.weight(1f)) {

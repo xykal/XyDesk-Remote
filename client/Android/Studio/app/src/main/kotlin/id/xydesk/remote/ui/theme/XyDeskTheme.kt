@@ -78,23 +78,23 @@ val DarkScheme = darkColorScheme(
 )
 
 val LightScheme = lightColorScheme(
-    primary = Color(0xFF6852A4),
+    primary = Color(0xFF6A6084),
     onPrimary = Color(0xFFFFFFFF),
-    primaryContainer = Color(0xFFEAE3F8),
-    onPrimaryContainer = Color(0xFF30234C),
+    primaryContainer = Color(0xFFECE9F2),
+    onPrimaryContainer = Color(0xFF2F2B39),
     secondary = Color(0xFF625C6D),
     onSecondary = Color(0xFFFFFFFF),
     secondaryContainer = Color(0xFFEDE9F3),
     onSecondaryContainer = Color(0xFF292532),
     tertiary = Color(0xFF267554),
-    background = Color(0xFFF8F6FB),
-    onBackground = Color(0xFF201D26),
+    background = Color(0xFFF8F7FA),
+    onBackground = Color(0xFF211F26),
     surface = Color(0xFFFFFFFF),
     onSurface = Color(0xFF201D26),
-    surfaceVariant = Color(0xFFF0EDF5),
-    onSurfaceVariant = Color(0xFF625C6D),
+    surfaceVariant = Color(0xFFF1EFF4),
+    onSurfaceVariant = Color(0xFF625E68),
     outline = Color(0xFFDED9E7),
-    outlineVariant = Color(0xFFC9C2D4),
+    outlineVariant = Color(0xFFCEC9D4),
     error = Color(0xFFB3261E),
     onError = Color.White,
     errorContainer = Color(0xFFF9DEDC),
@@ -116,13 +116,13 @@ val XyBody = FontFamily(
 )
 
 /** Radius lebih ramah sentuh; kontrol pill tetap terbaca sebagai kontrol. */
-val XyPill = RoundedCornerShape(18.dp)
+val XyPill = RoundedCornerShape(12.dp)
 
 val XyShapes = Shapes(
-    small = RoundedCornerShape(10.dp),
-    medium = RoundedCornerShape(14.dp),
-    large = RoundedCornerShape(20.dp),
-    extraLarge = RoundedCornerShape(26.dp),
+    small = RoundedCornerShape(6.dp),
+    medium = RoundedCornerShape(10.dp),
+    large = RoundedCornerShape(14.dp),
+    extraLarge = RoundedCornerShape(18.dp),
 )
 
 /**

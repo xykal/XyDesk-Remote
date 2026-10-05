@@ -936,6 +936,9 @@ private fun DevicesScreen(
                         Modifier.fillMaxSize().verticalScroll(rememberScrollState()),
                         verticalArrangement = Arrangement.spacedBy(12.dp),
                     ) {
+                        if (showFunHub) {
+                            FunHubCard(onHide = { onShowFunHubChange(false) })
+                        }
                         XyCard(modifier = Modifier.fillMaxWidth()) {
                             Text(xy("Belum ada perangkat", "No devices yet"), style = MaterialTheme.typography.titleMedium)
                             Spacer(Modifier.height(6.dp))
@@ -965,9 +968,6 @@ private fun DevicesScreen(
                                 )
                             }
                         }
-                        if (showFunHub) {
-                            FunHubCard(onHide = { onShowFunHubChange(false) })
-                        }
                     }
                 }
             } else {
@@ -994,6 +994,9 @@ private fun DevicesScreen(
                     verticalArrangement = Arrangement.spacedBy(14.dp),
                 ) {
                     item { LiveSessionsCard() }
+                    if (showFunHub) {
+                        item { FunHubCard(onHide = { onShowFunHubChange(false) }) }
+                    }
                     item {
                         XySegmented(
                             options = listOf(
@@ -1025,9 +1028,6 @@ private fun DevicesScreen(
                             onEdit = { onEdit(profile) },
                             onDelete = { onDelete(profile) },
                         )
-                    }
-                    if (showFunHub) {
-                        item { FunHubCard(onHide = { onShowFunHubChange(false) }) }
                     }
                     item { Spacer(Modifier.height(12.dp)) }
                 }

@@ -528,8 +528,8 @@ fun SessionControls(
                 onNext = { SpotifyMediaBridge.next() },
                 onRequestAccess = { openSpotifyNotificationAccess(context) },
                 modifier = Modifier
-                    .align(Alignment.TopStart)
-                    .padding(start = 8.dp, top = 50.dp)
+                    .align(Alignment.TopCenter)
+                    .padding(top = 10.dp)
                     .zIndex(22f),
             )
         }
@@ -551,10 +551,17 @@ fun SessionControls(
             Column(
                 Modifier
                     .align(Alignment.BottomEnd)
-                    .padding(end = 10.dp, bottom = 80.dp)
+                    .padding(end = 10.dp, bottom = 24.dp)
                     .zIndex(24f),
-                verticalArrangement = Arrangement.spacedBy(10.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp),
             ) {
+                RailButton(
+                    icon = XyIcons.ScrollSlide,
+                    active = scrollPillOpen,
+                    description = xy("Buka kontrol scroll mouse", "Open mouse scroll control"),
+                    plate = plate,
+                    onClick = { scrollPillOpen = !scrollPillOpen },
+                )
                 RailButton(
                     icon = if (hudButtonsVisibleNow) XyIcons.EyeOff else XyIcons.Eye,
                     active = !hudButtonsVisibleNow,
@@ -572,13 +579,6 @@ fun SessionControls(
                     description = xy("Buka keyboard HP", "Open phone keyboard"),
                     plate = plate,
                 ) { onOpenKeyboard() }
-                RailButton(
-                    icon = XyIcons.ScrollSlide,
-                    active = scrollPillOpen,
-                    description = xy("Buka kontrol scroll mouse", "Open mouse scroll control"),
-                    plate = plate,
-                    onClick = { scrollPillOpen = !scrollPillOpen },
-                )
                 RailButton(
                     icon = XyIcons.Monitor,
                     active = monitorGridOpen,
