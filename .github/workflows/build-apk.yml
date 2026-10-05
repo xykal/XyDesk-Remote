@@ -73,9 +73,9 @@ jobs:
             "platform-tools" "platforms;android-37.2" "build-tools;37.0.0"
           echo "ANDROID_HOME=$ANDROID_HOME" >> "$GITHUB_ENV"
           echo "ANDROID_SDK_ROOT=$ANDROID_HOME" >> "$GITHUB_ENV"
-      - name: Unit test JVM (core-rdp + IME + app UI)
+      - name: Unit test JVM (core-rdp + core-pc-stream + IME + app UI)
         working-directory: client/Android/Studio
-        run: ./gradlew --stacktrace --no-daemon :core-rdp:testDebugUnitTest :freeRDPCore:testDebugUnitTest :app:testDebugUnitTest
+        run: ./gradlew --stacktrace --no-daemon :core-rdp:testDebugUnitTest :core-pc-stream:testDebugUnitTest :freeRDPCore:testDebugUnitTest :app:testDebugUnitTest
       - name: Compile Kotlin (app + core-rdp)
         working-directory: client/Android/Studio
         run: ./gradlew --stacktrace --no-daemon :app:compileDebugKotlin
@@ -181,10 +181,10 @@ jobs:
           # pkg-config: disyaratkan ExternalFreeRDP.cmake
           # nasm: OpenH264 mem-compile cpuid.asm untuk target x86/x86_64
           timeout 600 sudo apt-get $APT_OPTS install -y -qq pkg-config nasm
-      - name: Unit test JVM (core-rdp)
+      - name: Unit test JVM (core-rdp + core-pc-stream)
         if: steps.tagcheck.outputs.tagged != 'true'
         working-directory: client/Android/Studio
-        run: ./gradlew --stacktrace --no-daemon :core-rdp:testDebugUnitTest
+        run: ./gradlew --stacktrace --no-daemon :core-rdp:testDebugUnitTest :core-pc-stream:testDebugUnitTest
       - name: Gradle assembleDebug (per ABI)
         if: steps.tagcheck.outputs.tagged != 'true'
         working-directory: client/Android/Studio
