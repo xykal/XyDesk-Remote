@@ -2465,13 +2465,11 @@ private fun PanelSection(
                 letterSpacing = 1.2.sp,
                 fontWeight = FontWeight.SemiBold,
             )
-            // Glyph teks, bukan Icons.*: paket material-icons tidak dipakai di
-            // proyek ini, jadi penanda lipat tidak menambah dependensi.
-            Text(
-                text = if (expanded) "\u2212" else "+",
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                fontSize = 14.sp,
-                fontWeight = FontWeight.Bold,
+            Icon(
+                imageVector = if (expanded) XyIcons.ChevronUp else XyIcons.ChevronDown,
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.size(16.dp),
             )
         }
         AnimatedVisibility(visible = expanded) {
