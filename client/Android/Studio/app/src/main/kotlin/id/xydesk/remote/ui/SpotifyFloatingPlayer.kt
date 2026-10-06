@@ -1,5 +1,7 @@
 package id.xydesk.remote.ui
 
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Brush
 import android.content.Context
 import android.content.Intent
 import android.net.Uri
@@ -80,12 +82,34 @@ internal fun SpotifyFloatingPlayer(
             exit = fadeOut() + scaleOut(targetScale = 0.96f),
             modifier = modifier,
         ) {
+            // Tampilan "liquid glass". Blur latar yang sesungguhnya tidak
+            // dipakai karena dua alasan: Modifier.blur memburamkan kontennya
+            // sendiri (bukan yang di belakangnya), dan backdrop blur tidak
+            // tersedia di atas SurfaceView tempat layar RDP digambar -- selain
+            // itu blur baru ada di API 31 sedangkan minSdk proyek 23.
+            // Jadi efek kacanya dibangun dari lapisan transparan + kilau
+            // vertikal + tepi terang, yang tetap terbaca di atas desktop apa
+            // pun karena tidak bergantung tema.
             Column(
                 Modifier
                     .widthIn(min = 236.dp, max = 280.dp)
-                    .clip(RoundedCornerShape(16.dp))
-                    .background(MaterialTheme.colorScheme.surface.copy(alpha = 0.98f))
-                    .border(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.68f), RoundedCornerShape(16.dp))
+                    .clip(RoundedCornerShape(18.dp))
+                    .background(MaterialTheme.colorScheme.surface.copy(alpha = 0.55f))
+                    .background(
+                        Brush.verticalGradient(
+                            0f to Color.White.copy(alpha = 0.14f),
+                            0.45f to Color.White.copy(alpha = 0.03f),
+                            1f to Color.Black.copy(alpha = 0.07f),
+                        ),
+                    )
+                    .border(
+                        1.dp,
+                        Brush.verticalGradient(
+                            0f to Color.White.copy(alpha = 0.40f),
+                            1f to Color.White.copy(alpha = 0.10f),
+                        ),
+                        RoundedCornerShape(18.dp),
+                    )
                     .padding(12.dp),
                 verticalArrangement = Arrangement.spacedBy(8.dp),
             ) {
@@ -203,7 +227,7 @@ private fun Artwork(playback: SpotifyPlaybackState, modifier: Modifier = Modifie
     Box(
         modifier
             .clip(RoundedCornerShape(12.dp))
-            .background(MaterialTheme.colorScheme.surfaceVariant),
+            .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.55f)),
         contentAlignment = Alignment.Center,
     ) {
         val art = playback.artwork
