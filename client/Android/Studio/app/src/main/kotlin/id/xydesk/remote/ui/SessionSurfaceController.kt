@@ -486,7 +486,7 @@ class SessionSurfaceController(private val activity: Activity) : GraphicsSink {
      * Copy frame desktop remote tanpa menangkap layar HP atau overlay Compose.
      * Resolusi dibatasi untuk mencegah perekaman membebani memori perangkat.
      */
-    fun copyRemoteBitmap(maxLongEdge: Int = 1280): Bitmap? {
+    fun copyRemoteBitmap(maxLongEdge: Int = 1280, mutable: Boolean = false): Bitmap? {
         val source = bitmap ?: return null
         return runCatching {
             synchronized(source) {
@@ -495,10 +495,18 @@ class SessionSurfaceController(private val activity: Activity) : GraphicsSink {
                 val scale = minOf(1f, limit.toFloat() / maxOf(source.width, source.height))
                 val width = ((source.width * scale).toInt().coerceAtLeast(2) / 2) * 2
                 val height = ((source.height * scale).toInt().coerceAtLeast(2) / 2) * 2
-                if (width == source.width && height == source.height) {
-                    source.copy(Bitmap.Config.ARGB_8888, false)
+                val copied = if (width == source.width && height == source.height) {
+                    source.copy(Bitmap.Config.ARGB_8888, mutable)
                 } else {
                     Bitmap.createScaledBitmap(source, width, height, true)
+                }
+                // createScaledBitmap bisa mengembalikan bitmap yang tidak bisa
+                // digambari. Perekaman butuh mutable untuk menimpa kursor ke
+                // frame, jadi disalin ulang hanya kalau memang perlu.
+                if (mutable && copied != null && !copied.isMutable && copied !== source) {
+                    copied.copy(Bitmap.Config.ARGB_8888, true).also { copied.recycle() }
+                } else {
+                    copied
                 }
             }
         }.getOrNull()

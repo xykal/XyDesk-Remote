@@ -1,5 +1,6 @@
 package id.xydesk.remote.ui
 
+import androidx.compose.runtime.SideEffect
 import android.app.Activity
 import android.content.ClipboardManager
 import android.content.Context
@@ -175,11 +176,18 @@ fun XyDeskSessionScreen(
         appPrefs.clearAutoResumeSession(profile.id)
         onExit()
     }
-    val remoteRecorder = remember(controller, appContext) {
+    // Kotak posisi kursor untuk perekaman. Dideklarasikan sebelum remoteRecorder
+    // karena cursorX/cursorY baru tersedia jauh di bawah, sementara provider-nya
+    // harus ada saat perekam dibuat.
+    val pointerBox = remember { RecordingPointerBox() }
+    val remoteRecorder = remember(controller, appContext, pointerBox) {
         RemoteScreenRecorder(
             context = appContext,
-            frameProvider = { controller.copyRemoteBitmap() },
+            // mutable = true supaya kursor bisa digambar ke frame; frame ini
+            // memang salinan baru tiap iterasi, bukan bitmap permukaan langsung.
+            frameProvider = { controller.copyRemoteBitmap(mutable = true) },
             captureProtected = { appPrefs.flagSecure },
+            pointerProvider = { pointerBox.current() },
         )
     }
     var recordingState by remember(remoteRecorder) {
@@ -1091,6 +1099,22 @@ fun XyDeskSessionScreen(
         if (connected && !privacyCurtain) {
             val pointerScreen = controller.remoteToScreen(cursor().x, cursor().y)
                 ?: Offset(-1000f, -1000f)
+            // Perbarui kotak kursor untuk thread perekaman. SideEffect, bukan
+            // assignment langsung di badan komposisi, supaya tidak menulis saat
+            // recomposition dibatalkan.
+            val recordingCursorBitmap = remoteCursor?.bitmap
+            val recordingHotX = remoteCursor?.hotX ?: 0
+            val recordingHotY = remoteCursor?.hotY ?: 0
+            SideEffect {
+                pointerBox.x = cursorX
+                pointerBox.y = cursorY
+                pointerBox.remoteWidth = remoteWidth
+                pointerBox.remoteHeight = remoteHeight
+                pointerBox.cursor = recordingCursorBitmap
+                pointerBox.hotX = recordingHotX
+                pointerBox.hotY = recordingHotY
+                pointerBox.visible = pointerVisible
+            }
             val recordingActive = recordingState is RemoteRecordingState.Recording
             val recordingBusy = recordingState is RemoteRecordingState.Preparing ||
                 recordingState is RemoteRecordingState.Stopping

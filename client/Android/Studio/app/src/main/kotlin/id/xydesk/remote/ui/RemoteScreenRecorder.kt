@@ -1,5 +1,10 @@
 package id.xydesk.remote.ui
 
+import android.graphics.Rect
+import android.graphics.Path
+import android.graphics.Paint
+import android.graphics.Color
+import android.graphics.Canvas
 import android.content.ContentValues
 import android.content.Context
 import android.graphics.Bitmap
@@ -29,10 +34,19 @@ internal class RemoteScreenRecorder(
     context: Context,
     private val frameProvider: () -> Bitmap?,
     private val captureProtected: () -> Boolean,
+    private val pointerProvider: () -> RecordingPointer? = { null },
 ) {
     private val appContext = context.applicationContext
     private val mainHandler = Handler(Looper.getMainLooper())
     private val stopRequested = AtomicBoolean(false)
+
+    private val cursorPaint = Paint(Paint.FILTER_BITMAP_FLAG or Paint.ANTI_ALIAS_FLAG)
+    private val arrowFill = Paint(Paint.ANTI_ALIAS_FLAG).apply { style = Paint.Style.FILL }
+    private val arrowStroke = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        style = Paint.Style.STROKE
+        strokeJoin = Paint.Join.ROUND
+    }
+    private val arrowPath = Path()
 
     @Volatile private var listener: ((RemoteRecordingState) -> Unit)? = null
     @Volatile private var worker: Thread? = null
@@ -73,6 +87,55 @@ internal class RemoteScreenRecorder(
     }
 
     private fun isCaptureProtected(): Boolean = runCatching { captureProtected() }.getOrDefault(true)
+
+    /**
+     * Menggambar kursor desktop remote ke frame sebelum frame dikirim ke
+     * encoder. Frame dari frameProvider adalah salinan baru tiap iterasi, jadi
+     * menggambar di atasnya tidak meninggalkan jejak kursor dari frame
+     * sebelumnya.
+     */
+    private fun drawPointer(frame: Bitmap) {
+        val pointer = pointerProvider() ?: return
+        if (frame.isRecycled || !frame.isMutable) return
+        val scaleX = frame.width.toFloat() / pointer.remoteWidth
+        val scaleY = frame.height.toFloat() / pointer.remoteHeight
+        val left = pointer.x * scaleX
+        val top = pointer.y * scaleY
+        val canvas = runCatching { Canvas(frame) }.getOrNull() ?: return
+        val remoteCursor = pointer.cursor?.takeIf { !it.isRecycled }
+        if (remoteCursor != null) {
+            // Bentuk kursor asli dari server, diskalakan mengikuti frame.
+            val destLeft = left - pointer.hotX * scaleX
+            val destTop = top - pointer.hotY * scaleY
+            val rect = Rect(
+                destLeft.toInt(),
+                destTop.toInt(),
+                (destLeft + remoteCursor.width * scaleX).toInt(),
+                (destTop + remoteCursor.height * scaleY).toInt(),
+            )
+            runCatching { canvas.drawBitmap(remoteCursor, null, rect, cursorPaint) }
+            return
+        }
+        // Server hanya memberi tahu "kursor default" tanpa bitmap, jadi digambar
+        // sebagai panah sederhana supaya posisinya tetap terlihat di rekaman.
+        val size = 18f * minOf(scaleX, scaleY).coerceAtLeast(0.25f)
+        arrowPath.reset()
+        arrowPath.moveTo(left, top)
+        arrowPath.lineTo(left, top + size)
+        arrowPath.lineTo(left + size * 0.42f, top + size * 0.66f)
+        arrowPath.lineTo(left + size * 0.66f, top + size)
+        arrowPath.lineTo(left + size * 0.84f, top + size * 0.9f)
+        arrowPath.lineTo(left + size * 0.58f, top + size * 0.56f)
+        arrowPath.lineTo(left + size * 0.9f, top + size * 0.48f)
+        arrowPath.close()
+        arrowFill.color = Color.WHITE
+        arrowStroke.color = Color.BLACK
+        arrowStroke.strokeWidth = size * 0.12f
+        runCatching {
+            canvas.drawPath(arrowPath, arrowFill)
+            canvas.drawPath(arrowPath, arrowStroke)
+        }
+    }
 
     private fun publish(state: RemoteRecordingState) {
         val current = listener ?: return
@@ -152,6 +215,7 @@ internal class RemoteScreenRecorder(
                     currentFrame = freshFrame
                 }
                 val frame = currentFrame ?: throw NoRemoteFrameException()
+                drawPointer(frame)
                 activeRenderer.draw(frame, System.nanoTime() - startNs)
                 activeDrain.drainAvailable()
                 frameIndex += 1
@@ -558,4 +622,42 @@ internal sealed interface RemoteRecordingState {
     data object Stopping : RemoteRecordingState
     data class Saved(val location: String) : RemoteRecordingState
     data class Failed(val reason: String) : RemoteRecordingState
+}
+
+/** Posisi kursor desktop remote yang perlu digambar ke frame rekaman. */
+internal class RecordingPointer(
+    val x: Float,
+    val y: Float,
+    val remoteWidth: Int,
+    val remoteHeight: Int,
+    val cursor: Bitmap?,
+    val hotX: Int,
+    val hotY: Int,
+    val visible: Boolean,
+)
+
+/**
+ * Kotak berbagi antara komposisi (thread UI) dan thread perekaman.
+ *
+ * Field-nya volatile karena ditulis saat recomposition dan dibaca worker
+ * perekaman setiap frame. Dipakai sebagai kotak, bukan StateFlow, supaya thread
+ * worker tidak perlu bergantung pada runtime Compose.
+ */
+internal class RecordingPointerBox {
+    @Volatile var x = 0f
+    @Volatile var y = 0f
+    @Volatile var remoteWidth = 0
+    @Volatile var remoteHeight = 0
+    @Volatile var cursor: Bitmap? = null
+    @Volatile var hotX = 0
+    @Volatile var hotY = 0
+    @Volatile var visible = false
+
+    fun current(): RecordingPointer? {
+        if (!visible) return null
+        val width = remoteWidth
+        val height = remoteHeight
+        if (width <= 0 || height <= 0) return null
+        return RecordingPointer(x, y, width, height, cursor, hotX, hotY, true)
+    }
 }
