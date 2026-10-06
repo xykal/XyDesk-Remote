@@ -126,7 +126,13 @@ jobs:
           # xydesk_quic.dll, xydesk_host_core.dll, maupun DLL runtime mingw.
           # Exe lama yang bergantung DLL tetap dibangun supaya tidak ada yang
           # rusak sebelum exe tunggal ini terbukti di perangkat nyata.
+          # Dua makro *_EXPORTS wajib ada di sini. CMake mendefinisikannya
+          # otomatis untuk target SHARED (xydesk_quic, xydesk_host_core), tapi
+          # build tunggal ini tidak lewat CMake: tanpa keduanya header memilih
+          # __declspec(dllimport) dan linker gagal dengan
+          # "undefined reference to __imp_xydesk_host_inspect_system".
           x86_64-w64-mingw32-g++ -std=c++17 -O2 \
+            -DXYDESK_QUIC_EXPORTS -DXYDESK_HOST_CORE_EXPORTS \
             host-agent/src/main_host.cpp \
             host-agent/src/xydesk_quic.cpp \
             host-agent/src/xydesk_host_core.cpp \
@@ -546,7 +552,13 @@ jobs:
           # xydesk_quic.dll, xydesk_host_core.dll, maupun DLL runtime mingw.
           # Exe lama yang bergantung DLL tetap dibangun supaya tidak ada yang
           # rusak sebelum exe tunggal ini terbukti di perangkat nyata.
+          # Dua makro *_EXPORTS wajib ada di sini. CMake mendefinisikannya
+          # otomatis untuk target SHARED (xydesk_quic, xydesk_host_core), tapi
+          # build tunggal ini tidak lewat CMake: tanpa keduanya header memilih
+          # __declspec(dllimport) dan linker gagal dengan
+          # "undefined reference to __imp_xydesk_host_inspect_system".
           x86_64-w64-mingw32-g++ -std=c++17 -O2 \
+            -DXYDESK_QUIC_EXPORTS -DXYDESK_HOST_CORE_EXPORTS \
             host-agent/src/main_host.cpp \
             host-agent/src/xydesk_quic.cpp \
             host-agent/src/xydesk_host_core.cpp \
