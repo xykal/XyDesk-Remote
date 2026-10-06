@@ -439,13 +439,6 @@ class XyDeskSessionActivity : ComponentActivity() {
             // warna tetap supaya selalu terbaca.
             XyThemeState.init(appPrefs ?: AppPrefs(this))
             XyDeskTheme(dark = xyDark()) {
-                var virtualPadVisible by remember { mutableStateOf(sessionPrefs.virtualPadEnabled) }
-                var padEditMode by remember { mutableStateOf(false) }
-                var padLayout by remember {
-                    mutableStateOf(XyPadLayout.resolve(sessionPrefs.virtualPadLayout(profile.id)))
-                }
-                var padScale by remember { mutableStateOf(sessionPrefs.virtualPadScale) }
-                var stickModeUi by remember { mutableStateOf(sessionPrefs.virtualPadStickMode) }
                 Box(modifier = Modifier.fillMaxSize()) {
                     XyDeskSessionScreen(
                         profile = profile,
@@ -460,66 +453,6 @@ class XyDeskSessionActivity : ComponentActivity() {
                             sessionPrefs.virtualPadStickMode = next
                         },
                     )
-                    // Saklar pad + mode tata letak di pojok kiri atas. Sengaja bukan
-                    // di tengah-atas: pemutar Spotify mengambang di sana, dan bar
-                    // shoulder yang dulu dipasang di tengah-atas menutupinya.
-                    Row(
-                        modifier = Modifier.align(Alignment.TopStart).padding(12.dp),
-                        horizontalArrangement = Arrangement.spacedBy(8.dp),
-                    ) {
-                        XyPadRoundButton(
-                            label = "PAD",
-                            size = 44.dp,
-                            onPress = { down ->
-                                if (down) {
-                                    virtualPadVisible = !virtualPadVisible
-                                    sessionPrefs.virtualPadEnabled = virtualPadVisible
-                                    if (!virtualPadVisible) {
-                                        padEditMode = false
-                                        releaseVirtualPad()
-                                    }
-                                }
-                            },
-                            onLongPress = {
-                                virtualPadVisible = true
-                                sessionPrefs.virtualPadEnabled = true
-                                padEditMode = true
-                            },
-                        )
-                        if (virtualPadVisible) {
-                            XyPadRoundButton(
-                                label = "\u270E",
-                                size = 44.dp,
-                                onPress = { down -> if (down) padEditMode = !padEditMode },
-                            )
-                        }
-                    }
-                    if (virtualPadVisible) {
-                        XyVirtualGamepadOverlay(
-                            onState = { applyVirtualPadState(it) },
-                            layout = padLayout,
-                            onLayoutChange = { next ->
-                                padLayout = next
-                                sessionPrefs.setVirtualPadLayout(profile.id, next)
-                            },
-                            scale = padScale,
-                            onScaleChange = { next ->
-                                padScale = next
-                                sessionPrefs.virtualPadScale = next
-                            },
-                            editMode = padEditMode,
-                            onExitEdit = { padEditMode = false },
-                            stickMode = stickModeUi,
-                            onStickModeChange = { next ->
-                                stickModeUi = next
-                                // Field di activity ikut diperbarui karena mapper
-                                // dipanggil dari luar komposisi.
-                                this@XyDeskSessionActivity.padStickMode = next
-                                sessionPrefs.virtualPadStickMode = next
-                            },
-                        )
-                    }
-                }
             }
         }
 
@@ -680,13 +613,7 @@ class XyDeskSessionActivity : ComponentActivity() {
         }, 180L)
     }
 
-    private var lastVirtualPadState: XyGamepadState? = null
-
-    /**
-     * State stick HUD terakhir. Sengaja terpisah dari [lastVirtualPadState]
-     * supaya pad virtual lama dan joystick HUD tidak saling menimpa deteksi
-     * tepi tombol arah.
-     */
+    /** State stick HUD terakhir, dipakai mapper untuk mendeteksi tepi tombol arah. */
     private var lastHudStickState: XyGamepadState? = null
 
     /** Tujuan stik kiri gamepad virtual; disinkronkan dari state Compose. */
@@ -744,19 +671,6 @@ class XyDeskSessionActivity : ComponentActivity() {
         )
         XyGamepadActionMapper.apply(state, lastHudStickState, virtualPadOutput, padStickMode)
         lastHudStickState = state
-    }
-
-    /** Terapkan satu snapshot gamepad virtual ke sesi RDP (berbasis selisih state). */
-    private fun applyVirtualPadState(state: XyGamepadState) {
-        XyGamepadActionMapper.apply(state, lastVirtualPadState, virtualPadOutput, padStickMode)
-        lastVirtualPadState = state
-    }
-
-    /** Lepas semua kontrol supaya tidak ada tombol yang tersangkut di host saat pad ditutup. */
-    private fun releaseVirtualPad() {
-        val released = XyGamepadState()
-        XyGamepadActionMapper.apply(released, lastVirtualPadState, virtualPadOutput)
-        lastVirtualPadState = released
     }
 
     /**
