@@ -479,6 +479,16 @@ jobs:
               "$abi" "$release_tag" "$apk_sha" "$cert" >> "$REPORT"
           done
           cat "$REPORT"
+      # Skrip ini sudah ada sejak v1.0.6 tetapi belum pernah dipanggil workflow.
+      # Fungsinya: pastikan tiap APK adalah ZIP utuh dan memuat libcrypto.so ABI-nya.
+      - name: Verifikasi integritas ZIP & libcrypto per ABI
+        working-directory: client/Android/Studio
+        run: |
+          set -euo pipefail
+          python3 "$GITHUB_WORKSPACE/ci/verify_android_apks.py" \
+            app/build/outputs/apk/release/XyDesk-armeabi-v7a.apk \
+            app/build/outputs/apk/release/XyDesk-arm64-v8a.apk \
+            app/build/outputs/apk/release/XyDesk-x86_64.apk
       - name: Build Windows Native C++17 Host Agent & DLLs (xydesk_quic.dll + xydesk_host_core.dll + XyDeskRemoteHost.exe)
         run: |
           set -euo pipefail
@@ -550,6 +560,10 @@ jobs:
           find . -maxdepth 1 -type f ! -name 'SHA256SUMS.txt' -printf '%f\n' | sort |
             while read -r f; do sha256sum "$f"; done > SHA256SUMS.txt
           cat SHA256SUMS.txt
+      # Pastikan tiga sumber kebenaran setuju sebelum aset dipublikasikan:
+      # isi APK, SHA256SUMS.txt, dan hash di SIGNATURE-VERIFICATION.txt.
+      - name: Verifikasi APK = SHA256SUMS = laporan signer
+        run: python3 ci/verify_release_apk_hashes.py release-apks
       - name: Buat GitHub Release (tag v*)
         uses: softprops/action-gh-release@3bb12739c298aeb8a4eeaf626c5b8d85266b0e65 # v2
         with:
