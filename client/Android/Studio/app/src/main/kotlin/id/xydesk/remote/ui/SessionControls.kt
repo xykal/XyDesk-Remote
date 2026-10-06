@@ -67,6 +67,8 @@ import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.input.pointer.pointerInput
 import id.xydesk.remote.core.RdpOptions
 import id.xydesk.remote.core.SmartResolution
+import id.xydesk.remote.ui.components.XyGlassTile
+import id.xydesk.remote.ui.components.XyTileGrid
 import id.xydesk.remote.ui.components.XyDialog
 import id.xydesk.remote.ui.components.XyField
 import id.xydesk.remote.ui.components.XyIcons
@@ -186,6 +188,9 @@ fun SessionControls(
     var panelOpen by remember { mutableStateOf(false) }
     var monitorGridOpen by remember { mutableStateOf(false) }
     var tab by remember { mutableStateOf(PanelTab.SCREEN) }
+    // Kunci seksi yang sedang dibuka di grid drill-in. Di-key pada `tab` supaya
+    // pindah tab otomatis kembali ke daftar kotak, bukan membuka seksi lama.
+    var openSection by remember(tab) { mutableStateOf<String?>(null) }
     var pickerOpen by remember { mutableStateOf(false) }
     var editing by remember { mutableStateOf<HudKey?>(null) }
     var pointerSize by remember { mutableFloatStateOf(prefs.pointerSize) }
@@ -1573,6 +1578,8 @@ private fun SessionPanel(
             ) {
                 when (tab) {
                     PanelTab.SCREEN -> ScreenTab(
+                        openKey = openSection,
+                        onOpenKey = { openSection = it },
                         deviceId = deviceId,
                         remoteSize = remoteSize,
                         zoomPercent = zoomPercent,
@@ -1601,6 +1608,8 @@ private fun SessionPanel(
                     )
 
                     PanelTab.INPUT -> InputTab(
+                        openKey = openSection,
+                        onOpenKey = { openSection = it },
                         inputMode = inputMode,
                         onInputModeChange = onInputModeChange,
                         swapMouseButtons = swapMouseButtons,
@@ -1631,6 +1640,8 @@ private fun SessionPanel(
                     )
 
                     PanelTab.BUTTONS -> ButtonsTab(
+                        openKey = openSection,
+                        onOpenKey = { openSection = it },
                         keys = keys,
                         hudProfile = hudProfile,
                         onSelectHudProfile = onSelectHudProfile,
@@ -1655,6 +1666,8 @@ private fun SessionPanel(
                     )
 
                     PanelTab.SESSION -> SessionTab(
+                        openKey = openSection,
+                        onOpenKey = { openSection = it },
                         onScreenshot = onScreenshot,
                         onLockRemotePc = onLockRemotePc,
                         onActivatePrivacyCurtain = onActivatePrivacyCurtain,
@@ -1704,230 +1717,232 @@ private fun ScreenTab(
     pcConnectMode: Boolean = false,
     notice: XyNoticeState,
 ) {
+    openKey: String?,
+    onOpenKey: (String?) -> Unit,
     val context = LocalContext.current
     var pcOptions by remember(deviceId) { mutableStateOf(RdpOptions.of(context, deviceId)) }
 
-    PanelSection(
-        if (pcConnectMode) xy("Telemetri & Kontrol Monitor Fisik PC", "Live Telemetry & Physical PC Monitor")
-        else xy("Telemetri & Multi-Monitor / Sesi RDP", "Live Telemetry & Multi-Monitor / RDP Sessions"),
-        initiallyExpanded = true,
-    ) {
-        XyToggleRow(
-            title = xy("Status telemetri live (Update UI, Latency, Network)", "Live telemetry status (UI updates, latency, network)"),
-            subtitle = xy("UI/s adalah invalidasi tampilan per detik, bukan FPS host. Tampilkan bersama latency, resolusi, codec, relay, dan jaringan.", "UI/s counts display invalidations per second, not host FPS. Show it with latency, resolution, codec, relay, and network."),
-            checked = showTelemetryPill,
-            onCheckedChange = onShowTelemetryPillChange,
-        )
-        XyPillButton(
-            text = if (pcConnectMode) {
-                xy("Monitor Fisik 1:1 & Mesin Direct Stream", "1:1 Physical Monitor & Direct Stream Engine")
-            } else {
-                xy("Grid Monitor & Sesi Multi-User / Konsol", "Active Monitors & Multi-User / Console Grid")
-            },
-            onClick = onOpenMonitorGrid,
-            icon = XyIcons.DualMonitor,
-            primary = false,
-            compact = true,
-            modifier = Modifier.fillMaxWidth(),
-        )
-    }
-
-    PanelSection(xy("Ukuran tampilan", "Display size")) {
-        PanelHint(
-            xy(
-                "Zoom mengubah besar gambar di layar HP; resolusi di bawah mengubah ukuran desktop remote-nya.",
-                "Zoom changes how big the picture is on the phone; resolution below changes the remote desktop size.",
-            ),
-        )
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            XyPillButton(xy("Perkecil", "Zoom out"), onZoomOut, primary = false, compact = true, modifier = Modifier.weight(1f))
-            XyPillButton(xy("Perbesar", "Zoom in"), onZoomIn, primary = false, compact = true, modifier = Modifier.weight(1f))
-        }
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            XyPillButton(xy("Muat semua", "Fit all"), onFit, primary = false, compact = true, modifier = Modifier.weight(1f))
-            XyPillButton("100%", onZoomActual, primary = false, compact = true, modifier = Modifier.weight(1f))
-        }
-        PanelHint(
-            xy(
-                "Skala lokal {0}% — hanya mengubah tampilan di HP, bukan DPI atau resolusi Windows.",
-                "Local scale {0}% — changes the phone view only, not Windows DPI or remote resolution.",
-                zoomPercent,
-            ),
-        )
-        XySlider(
-            value = zoomPercent.toFloat().coerceIn(10f, 300f),
-            onValueChange = onZoomScale,
-            valueRange = 10f..300f,
-        )
-        XyToggleRow(
-            title = xy("Muat seluruh desktop", "Fit whole desktop"),
-            checked = autoFit,
-            onCheckedChange = onAutoFitChange,
-        )
-    }
-
-    if (pcConnectMode) {
-        PanelSection(xy("Mesin Direct PC Stream (Eksklusif Koneksi PC)", "Direct PC Stream Engine (PC Connect Exclusive)")) {
-            PanelHint(
-                xy(
-                    "Layar Monitor Fisik 1:1 (${remoteSize}): Resolusi, DPI, dan sesi dikunci ke monitor konsol fisik PC. Pengaturan resolusi virtual & multi-user RDP tidak digunakan di mode ini.",
-                    "1:1 Physical Monitor (${remoteSize}): Resolution, DPI, and session are locked to the physical PC console monitor. Virtual RDP resolution & multi-user are disabled in this mode.",
-                ),
+    PanelSectionGrid(openKey = openKey, onOpenKey = onOpenKey) {
+    section("telemetri-kontrol-monitor-fisik-pc",
+            if (pcConnectMode) xy("Telemetri & Kontrol Monitor Fisik PC", "Live Telemetry & Physical PC Monitor")
+            else xy("Telemetri & Multi-Monitor / Sesi RDP", "Live Telemetry & Multi-Monitor / RDP Sessions")) {
+            XyToggleRow(
+                title = xy("Status telemetri live (Update UI, Latency, Network)", "Live telemetry status (UI updates, latency, network)"),
+                subtitle = xy("UI/s adalah invalidasi tampilan per detik, bukan FPS host. Tampilkan bersama latency, resolusi, codec, relay, dan jaringan.", "UI/s counts display invalidations per second, not host FPS. Show it with latency, resolution, codec, relay, and network."),
+                checked = showTelemetryPill,
+                onCheckedChange = onShowTelemetryPillChange,
             )
-            id.xydesk.remote.core.XyPcStreamEngine.entries.chunked(2).forEach { row ->
-                Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                    row.forEach { engine ->
-                        XyPillButton(
-                            text = engine.badge,
-                            onClick = {
-                                val next = pcOptions.withPcStreamEngine(engine)
-                                pcOptions = next
-                                next.write(context, deviceId)
-                                notice.show(
-                                    xyNow(
-                                        "Mesin Direct Stream: {0} disimpan",
-                                        "Direct Stream Engine: {0} saved",
-                                        engine.badge,
-                                    ),
-                                )
-                            },
-                            primary = pcOptions.pcStreamEngine == engine,
-                            compact = true,
-                            modifier = Modifier.weight(1f),
-                        )
-                    }
-                }
-            }
-            PanelHint(
-                xy(
-                    "Refresh ini meminta mode layar HP yang tersedia; bukan jaminan FPS dari Windows. FPS remote tetap bergantung host, codec, dan jaringan.",
-                    "This requests a supported phone display mode; it does not guarantee Windows FPS. Remote FPS still depends on host, codec, and network.",
-                ),
-            )
-            val refreshRates = listOf(30, 60, 90, 120)
-            XySegmented(
-                options = refreshRates.map { "$it Hz" },
-                selectedIndex = refreshRates.indexOf(pcOptions.pcTargetFps).coerceAtLeast(1),
-                onSelect = { idx ->
-                    val next = pcOptions.copy(pcTargetFps = refreshRates[idx], pcConnectMode = true)
-                    pcOptions = next
-                    next.write(context, deviceId)
-                    onDisplayRefreshPreferenceChange(refreshRates[idx])
-                    notice.show(
-                        xyNow(
-                            "Permintaan refresh layar HP: {0} Hz; FPS remote tetap bergantung host/jaringan",
-                            "Phone display refresh request: {0} Hz; remote FPS still depends on host/network",
-                            refreshRates[idx],
-                        ),
-                    )
+            XyPillButton(
+                text = if (pcConnectMode) {
+                    xy("Monitor Fisik 1:1 & Mesin Direct Stream", "1:1 Physical Monitor & Direct Stream Engine")
+                } else {
+                    xy("Grid Monitor & Sesi Multi-User / Konsol", "Active Monitors & Multi-User / Console Grid")
                 },
+                onClick = onOpenMonitorGrid,
+                icon = XyIcons.DualMonitor,
+                primary = false,
+                compact = true,
                 modifier = Modifier.fillMaxWidth(),
             )
         }
-    } else {
-    PanelSection(xy("Skala tampilan Windows (DPI)", "Windows display scale (DPI)")) {
-        PanelHint(
-            xy(
-                "Meminta skala Windows melalui RDP Display Control (DesktopScaleFactor), bukan zoom lokal. Nilai hanya benar-benar berubah jika host Windows menerapkan permintaan ini.",
-                "Requests Windows scaling through RDP Display Control (DesktopScaleFactor), not local zoom. The host must apply the request for the actual scale to change.",
-            ),
-        )
-        PanelHint(
-            xy("Permintaan skala Windows: {0}%", "Requested Windows scale: {0}%", remoteDpi),
-        )
-        if (remoteDpi != 100) {
+
+    section("ukuran-tampilan",xy("Ukuran tampilan", "Display size")) {
             PanelHint(
                 xy(
-                    "Skala selain 100% membuat aplikasi lama di Windows direntangkan bitmap, jadi teksnya bisa terlihat pecah/bergerigi. Pakai 100% kalau mengutamakan teks tajam.",
-                    "Any scale other than 100% makes legacy Windows apps bitmap-stretched, so their text can look broken/jagged. Use 100% when sharp text matters most.",
+                    "Zoom mengubah besar gambar di layar HP; resolusi di bawah mengubah ukuran desktop remote-nya.",
+                    "Zoom changes how big the picture is on the phone; resolution below changes the remote desktop size.",
                 ),
             )
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                XyPillButton(xy("Perkecil", "Zoom out"), onZoomOut, primary = false, compact = true, modifier = Modifier.weight(1f))
+                XyPillButton(xy("Perbesar", "Zoom in"), onZoomIn, primary = false, compact = true, modifier = Modifier.weight(1f))
+            }
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                XyPillButton(xy("Muat semua", "Fit all"), onFit, primary = false, compact = true, modifier = Modifier.weight(1f))
+                XyPillButton("100%", onZoomActual, primary = false, compact = true, modifier = Modifier.weight(1f))
+            }
+            PanelHint(
+                xy(
+                    "Skala lokal {0}% — hanya mengubah tampilan di HP, bukan DPI atau resolusi Windows.",
+                    "Local scale {0}% — changes the phone view only, not Windows DPI or remote resolution.",
+                    zoomPercent,
+                ),
+            )
+            XySlider(
+                value = zoomPercent.toFloat().coerceIn(10f, 300f),
+                onValueChange = onZoomScale,
+                valueRange = 10f..300f,
+            )
+            XyToggleRow(
+                title = xy("Muat seluruh desktop", "Fit whole desktop"),
+                checked = autoFit,
+                onCheckedChange = onAutoFitChange,
+            )
         }
-        val scaleOptions = DisplayPrefs.remoteDpiOptions
-        val selectedScaleIndex = scaleOptions.indexOf(remoteDpi).coerceAtLeast(0)
-        XySlider(
-            value = selectedScaleIndex.toFloat(),
-            onValueChange = { index ->
-                onRemoteDpiChange(scaleOptions[index.toInt().coerceIn(scaleOptions.indices)])
-            },
-            valueRange = 0f..(scaleOptions.lastIndex.toFloat()),
-            steps = (scaleOptions.size - 2).coerceAtLeast(0),
-        )
-        PanelHint(
-            xy(
-                "Permintaan terkirim belum membuktikan Windows menerapkannya; host/kebijakan RDP bisa menolak skala remote.",
-                "A queued request does not confirm Windows applied it; the host or RDP policy may ignore remote scaling.",
-            ),
-        )
-    }
 
-    PanelSection(xy("Resolusi desktop", "Remote desktop resolution")) {
-        // Status sekarang + rasionya — biar user tahu persis desktop-nya
-        // berapa dan berbentuk apa TANPA menebak dari daftar preset.
-        val dims = SmartResolution.parse(remoteSize.replace(" ", ""))
-        val ratio = if (dims != null) SmartResolution.ratioLabel(dims.first, dims.second) else null
-        PanelHint(
-            xy(
-                "Desktop sekarang: {0}{1}",
-                "Desktop now: {0}{1}",
-                remoteSize,
-                if (ratio != null) "  ·  $ratio" else "",
-            ),
-        )
-        PanelHint(
-            xy(
-                "Otomatis memakai 1280×720 (720p) agar sesi lebih ringan. Resolusi lain tetap bisa dipilih manual; mode ini tidak mengikuti rasio HP.",
-                "Automatic uses 1280×720 (720p) to keep the session lighter. Other sizes remain available manually; it does not follow the phone ratio.",
-            ),
-        )
-        DisplayPrefs.resolutionGroups.forEach { group ->
-            Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                group.items.chunked(2).forEach { row ->
+        if (pcConnectMode) {
+            PanelSection(xy("Mesin Direct PC Stream (Eksklusif Koneksi PC)", "Direct PC Stream Engine (PC Connect Exclusive)")) {
+                PanelHint(
+                    xy(
+                        "Layar Monitor Fisik 1:1 (${remoteSize}): Resolusi, DPI, dan sesi dikunci ke monitor konsol fisik PC. Pengaturan resolusi virtual & multi-user RDP tidak digunakan di mode ini.",
+                        "1:1 Physical Monitor (${remoteSize}): Resolution, DPI, and session are locked to the physical PC console monitor. Virtual RDP resolution & multi-user are disabled in this mode.",
+                    ),
+                )
+                id.xydesk.remote.core.XyPcStreamEngine.entries.chunked(2).forEach { row ->
                     Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                        row.forEach { option ->
+                        row.forEach { engine ->
                             XyPillButton(
-                                text = xy(option.id, option.en),
-                                onClick = { onResolution(option.value) },
-                                primary = option.value == resolution,
+                                text = engine.badge,
+                                onClick = {
+                                    val next = pcOptions.withPcStreamEngine(engine)
+                                    pcOptions = next
+                                    next.write(context, deviceId)
+                                    notice.show(
+                                        xyNow(
+                                            "Mesin Direct Stream: {0} disimpan",
+                                            "Direct Stream Engine: {0} saved",
+                                            engine.badge,
+                                        ),
+                                    )
+                                },
+                                primary = pcOptions.pcStreamEngine == engine,
                                 compact = true,
                                 modifier = Modifier.weight(1f),
                             )
                         }
-                        repeat(2 - row.size) { Spacer(Modifier.weight(1f)) }
+                    }
+                }
+                PanelHint(
+                    xy(
+                        "Refresh ini meminta mode layar HP yang tersedia; bukan jaminan FPS dari Windows. FPS remote tetap bergantung host, codec, dan jaringan.",
+                        "This requests a supported phone display mode; it does not guarantee Windows FPS. Remote FPS still depends on host, codec, and network.",
+                    ),
+                )
+                val refreshRates = listOf(30, 60, 90, 120)
+                XySegmented(
+                    options = refreshRates.map { "$it Hz" },
+                    selectedIndex = refreshRates.indexOf(pcOptions.pcTargetFps).coerceAtLeast(1),
+                    onSelect = { idx ->
+                        val next = pcOptions.copy(pcTargetFps = refreshRates[idx], pcConnectMode = true)
+                        pcOptions = next
+                        next.write(context, deviceId)
+                        onDisplayRefreshPreferenceChange(refreshRates[idx])
+                        notice.show(
+                            xyNow(
+                                "Permintaan refresh layar HP: {0} Hz; FPS remote tetap bergantung host/jaringan",
+                                "Phone display refresh request: {0} Hz; remote FPS still depends on host/network",
+                                refreshRates[idx],
+                            ),
+                        )
+                    },
+                    modifier = Modifier.fillMaxWidth(),
+                )
+            }
+        } else {
+    section("skala-tampilan-windows-dpi",xy("Skala tampilan Windows (DPI)", "Windows display scale (DPI)")) {
+            PanelHint(
+                xy(
+                    "Meminta skala Windows melalui RDP Display Control (DesktopScaleFactor), bukan zoom lokal. Nilai hanya benar-benar berubah jika host Windows menerapkan permintaan ini.",
+                    "Requests Windows scaling through RDP Display Control (DesktopScaleFactor), not local zoom. The host must apply the request for the actual scale to change.",
+                ),
+            )
+            PanelHint(
+                xy("Permintaan skala Windows: {0}%", "Requested Windows scale: {0}%", remoteDpi),
+            )
+            if (remoteDpi != 100) {
+                PanelHint(
+                    xy(
+                        "Skala selain 100% membuat aplikasi lama di Windows direntangkan bitmap, jadi teksnya bisa terlihat pecah/bergerigi. Pakai 100% kalau mengutamakan teks tajam.",
+                        "Any scale other than 100% makes legacy Windows apps bitmap-stretched, so their text can look broken/jagged. Use 100% when sharp text matters most.",
+                    ),
+                )
+            }
+            val scaleOptions = DisplayPrefs.remoteDpiOptions
+            val selectedScaleIndex = scaleOptions.indexOf(remoteDpi).coerceAtLeast(0)
+            XySlider(
+                value = selectedScaleIndex.toFloat(),
+                onValueChange = { index ->
+                    onRemoteDpiChange(scaleOptions[index.toInt().coerceIn(scaleOptions.indices)])
+                },
+                valueRange = 0f..(scaleOptions.lastIndex.toFloat()),
+                steps = (scaleOptions.size - 2).coerceAtLeast(0),
+            )
+            PanelHint(
+                xy(
+                    "Permintaan terkirim belum membuktikan Windows menerapkannya; host/kebijakan RDP bisa menolak skala remote.",
+                    "A queued request does not confirm Windows applied it; the host or RDP policy may ignore remote scaling.",
+                ),
+            )
+        }
+
+    section("resolusi-desktop",xy("Resolusi desktop", "Remote desktop resolution")) {
+            // Status sekarang + rasionya — biar user tahu persis desktop-nya
+            // berapa dan berbentuk apa TANPA menebak dari daftar preset.
+            val dims = SmartResolution.parse(remoteSize.replace(" ", ""))
+            val ratio = if (dims != null) SmartResolution.ratioLabel(dims.first, dims.second) else null
+            PanelHint(
+                xy(
+                    "Desktop sekarang: {0}{1}",
+                    "Desktop now: {0}{1}",
+                    remoteSize,
+                    if (ratio != null) "  ·  $ratio" else "",
+                ),
+            )
+            PanelHint(
+                xy(
+                    "Otomatis memakai 1280×720 (720p) agar sesi lebih ringan. Resolusi lain tetap bisa dipilih manual; mode ini tidak mengikuti rasio HP.",
+                    "Automatic uses 1280×720 (720p) to keep the session lighter. Other sizes remain available manually; it does not follow the phone ratio.",
+                ),
+            )
+            DisplayPrefs.resolutionGroups.forEach { group ->
+                Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    group.items.chunked(2).forEach { row ->
+                        Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                            row.forEach { option ->
+                                XyPillButton(
+                                    text = xy(option.id, option.en),
+                                    onClick = { onResolution(option.value) },
+                                    primary = option.value == resolution,
+                                    compact = true,
+                                    modifier = Modifier.weight(1f),
+                                )
+                            }
+                            repeat(2 - row.size) { Spacer(Modifier.weight(1f)) }
+                        }
                     }
                 }
             }
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                XyField(
+                    value = custom,
+                    onValueChange = onCustomChange,
+                    label = xy("Kustom WxH", "Custom WxH"),
+                    hint = xy("mis. 1920x1080", "e.g. 1920x1080"),
+                    modifier = Modifier.weight(1f),
+                )
+                XyPillButton(xy("Pasang", "Apply"), onCustomApply, primary = false, compact = true)
+            }
         }
-        Row(
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
-        ) {
-            XyField(
-                value = custom,
-                onValueChange = onCustomChange,
-                label = xy("Kustom WxH", "Custom WxH"),
-                hint = xy("mis. 1920x1080", "e.g. 1920x1080"),
-                modifier = Modifier.weight(1f),
-            )
-            XyPillButton(xy("Pasang", "Apply"), onCustomApply, primary = false, compact = true)
         }
-    }
-    }
 
-    PanelSection(xy("Orientasi", "Orientation")) {
-        // Dulu label mentah "Auto/Portrait/Landscape" — satu-satunya baris
-        // Inggris di panel Indonesia.
-        val labels = listOf(
-            xy("Otomatis", "Auto"),
-            xy("Potret", "Portrait"),
-            xy("Lanskap", "Landscape"),
-        )
-        XySegmented(
-            options = labels,
-            selectedIndex = DisplayPrefs.rotations.indexOf(rotation).coerceAtLeast(0),
-            onSelect = { onRotation(DisplayPrefs.rotations[it]) },
-            modifier = Modifier.fillMaxWidth(),
-        )
+    section("orientasi",xy("Orientasi", "Orientation")) {
+            // Dulu label mentah "Auto/Portrait/Landscape" — satu-satunya baris
+            // Inggris di panel Indonesia.
+            val labels = listOf(
+                xy("Otomatis", "Auto"),
+                xy("Potret", "Portrait"),
+                xy("Lanskap", "Landscape"),
+            )
+            XySegmented(
+                options = labels,
+                selectedIndex = DisplayPrefs.rotations.indexOf(rotation).coerceAtLeast(0),
+                onSelect = { onRotation(DisplayPrefs.rotations[it]) },
+                modifier = Modifier.fillMaxWidth(),
+            )
+        }
     }
 }
 
@@ -1963,190 +1978,194 @@ private fun InputTab(
     gyroMouseEnabled: Boolean,
     onGyroMouseEnabled: (Boolean) -> Unit,
 ) {
-    PanelSection(xy("Mode input & Klik Mouse", "Input mode & Mouse Click"), initiallyExpanded = true) {
-        XySegmented(
-            options = InputMode.entries.map { xy(it.title, it.titleEn) },
-            selectedIndex = inputMode.ordinal,
-            onSelect = { onInputModeChange(InputMode.entries[it]) },
-            modifier = Modifier.fillMaxWidth(),
-        )
-        PanelHint(xy(InputMode.entries[inputMode.ordinal].detail, InputMode.entries[inputMode.ordinal].detailEn))
-        // Switch Ikon Mouse Kiri <-> Kanan (tanpa bergantung pada teks)
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .clip(RoundedCornerShape(10.dp))
-                .background(
-                    if (swapMouseButtons) MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.45f)
-                    else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f),
-                )
-                .border(
-                    1.dp,
-                    if (swapMouseButtons) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outline,
-                    RoundedCornerShape(10.dp),
-                )
-                .clickable { onSwapMouseButtonsChange(!swapMouseButtons) }
-                .padding(horizontal = 12.dp, vertical = 10.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.SpaceBetween,
-        ) {
+    openKey: String?,
+    onOpenKey: (String?) -> Unit,
+    PanelSectionGrid(openKey = openKey, onOpenKey = onOpenKey) {
+    section("mode-input-klik-mouse",xy("Mode input & Klik Mouse", "Input mode & Mouse Click")) {
+            XySegmented(
+                options = InputMode.entries.map { xy(it.title, it.titleEn) },
+                selectedIndex = inputMode.ordinal,
+                onSelect = { onInputModeChange(InputMode.entries[it]) },
+                modifier = Modifier.fillMaxWidth(),
+            )
+            PanelHint(xy(InputMode.entries[inputMode.ordinal].detail, InputMode.entries[inputMode.ordinal].detailEn))
+            // Switch Ikon Mouse Kiri <-> Kanan (tanpa bergantung pada teks)
             Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(10.dp))
+                    .background(
+                        if (swapMouseButtons) MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.45f)
+                        else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f),
+                    )
+                    .border(
+                        1.dp,
+                        if (swapMouseButtons) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outline,
+                        RoundedCornerShape(10.dp),
+                    )
+                    .clickable { onSwapMouseButtonsChange(!swapMouseButtons) }
+                    .padding(horizontal = 12.dp, vertical = 10.dp),
                 verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(10.dp),
+                horizontalArrangement = Arrangement.SpaceBetween,
             ) {
-                Box(
-                    Modifier
-                        .size(34.dp)
-                        .clip(CircleShape)
-                        .background(MaterialTheme.colorScheme.surface)
-                        .border(1.dp, MaterialTheme.colorScheme.outlineVariant, CircleShape),
-                    contentAlignment = Alignment.Center,
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(10.dp),
                 ) {
+                    Box(
+                        Modifier
+                            .size(34.dp)
+                            .clip(CircleShape)
+                            .background(MaterialTheme.colorScheme.surface)
+                            .border(1.dp, MaterialTheme.colorScheme.outlineVariant, CircleShape),
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        Icon(
+                            if (swapMouseButtons) XyIcons.ClickRight else XyIcons.ClickLeft,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.primary,
+                            modifier = Modifier.size(18.dp),
+                        )
+                    }
                     Icon(
-                        if (swapMouseButtons) XyIcons.ClickRight else XyIcons.ClickLeft,
-                        contentDescription = null,
-                        tint = MaterialTheme.colorScheme.primary,
-                        modifier = Modifier.size(18.dp),
+                        XyIcons.MouseSwap,
+                        contentDescription = xy("Tukar Klik Kiri & Kanan", "Swap Left & Right Click"),
+                        tint = MaterialTheme.colorScheme.onSurface,
+                        modifier = Modifier.size(20.dp),
                     )
+                    Box(
+                        Modifier
+                            .size(34.dp)
+                            .clip(CircleShape)
+                            .background(MaterialTheme.colorScheme.surface)
+                            .border(1.dp, MaterialTheme.colorScheme.outlineVariant, CircleShape),
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        Icon(
+                            if (swapMouseButtons) XyIcons.ClickLeft else XyIcons.ClickRight,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.size(18.dp),
+                        )
+                    }
                 }
-                Icon(
-                    XyIcons.MouseSwap,
-                    contentDescription = xy("Tukar Klik Kiri & Kanan", "Swap Left & Right Click"),
-                    tint = MaterialTheme.colorScheme.onSurface,
-                    modifier = Modifier.size(20.dp),
+                id.xydesk.remote.ui.components.XySwitch(
+                    checked = swapMouseButtons,
+                    onCheckedChange = onSwapMouseButtonsChange,
                 )
-                Box(
-                    Modifier
-                        .size(34.dp)
-                        .clip(CircleShape)
-                        .background(MaterialTheme.colorScheme.surface)
-                        .border(1.dp, MaterialTheme.colorScheme.outlineVariant, CircleShape),
-                    contentAlignment = Alignment.Center,
-                ) {
-                    Icon(
-                        if (swapMouseButtons) XyIcons.ClickLeft else XyIcons.ClickRight,
-                        contentDescription = null,
-                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                        modifier = Modifier.size(18.dp),
-                    )
-                }
             }
-            id.xydesk.remote.ui.components.XySwitch(
-                checked = swapMouseButtons,
-                onCheckedChange = onSwapMouseButtonsChange,
+            XyPillButton(
+                xy("Kirim teks ke remote", "Send text to remote"),
+                onSendTextClick,
+                icon = XyIcons.Keyboard,
+                primary = false,
+                compact = true,
+                modifier = Modifier.fillMaxWidth(),
             )
         }
-        XyPillButton(
-            xy("Kirim teks ke remote", "Send text to remote"),
-            onSendTextClick,
-            icon = XyIcons.Keyboard,
-            primary = false,
-            compact = true,
-            modifier = Modifier.fillMaxWidth(),
-        )
-    }
 
-    PanelSection(xy("Fisika Trackpad & Sensor", "Trackpad Physics & Sensors")) {
-        PanelHint(
-            xy(
-                "Sensitivitas pointer: {0}x",
-                "Pointer sensitivity: {0}x",
-                String.format(java.util.Locale.US, "%.1f", pointerSensitivity),
-            ),
-        )
-        XySlider(
-            value = pointerSensitivity,
-            onValueChange = onPointerSensitivity,
-            valueRange = 0.4f..3.0f,
-        )
-        XyToggleRow(
-            title = xy("Akselerasi pointer dinamis", "Dynamic pointer acceleration"),
-            subtitle = xy("Gerak cepat menjangkau layar jauh, gerak pelan tetap presisi", "Fast swipes cross the screen, slow moves stay pixel-accurate"),
-            checked = pointerAcceleration,
-            onCheckedChange = onPointerAcceleration,
-        )
-        XyToggleRow(
-            title = xy("Inertial scroll (momentum)", "Inertial scroll (momentum)"),
-            subtitle = xy("Gulir dua jari tetap meluncur halus saat dilepas", "Two-finger scroll glides smoothly after release"),
-            checked = inertialScroll,
-            onCheckedChange = onInertialScroll,
-        )
-        XyToggleRow(
-            title = xy("Zona scroll tepi kanan", "Right-edge scroll strip"),
-            subtitle = xy("Usap 1 jari di tepi paling kanan layar untuk roda scroll", "Swipe 1 finger along the right screen edge for mouse wheel"),
-            checked = edgeScrollZone,
-            onCheckedChange = onEdgeScrollZone,
-        )
-        XyToggleRow(
-            title = xy("Dukungan Gamepad & Joystick fisik", "Physical Gamepad & Joystick"),
-            subtitle = xy("Stik kiri gerak kursor, stik kanan scroll, A/B klik kiri/kanan", "Left stick moves pointer, right stick scrolls, A/B left/right click"),
-            checked = gamepadEnabled,
-            onCheckedChange = onGamepadEnabled,
-        )
-        PanelHint(
-            xy(
-                "Mode stick berlaku untuk joystick HUD dan gamepad fisik: POINTER menggerakkan kursor, WASD dan Panah mengirim tombol arah.",
-                "Stick mode applies to the HUD joystick and the physical gamepad: POINTER moves the cursor, WASD and Arrows send direction keys.",
-            ),
-        )
-        XySegmented(
-            options = listOf(xy("Pointer", "Pointer"), xy("WASD", "WASD"), xy("Panah", "Arrows")),
-            selectedIndex = XyStickMode.entries.indexOf(stickMode).coerceAtLeast(0),
-            onSelect = { onStickModeChange(XyStickMode.entries[it]) },
-            modifier = Modifier.fillMaxWidth(),
-        )
-        XyToggleRow(
-            title = xy("Gyro Air-Mouse (sensor gerak HP)", "Gyro Air-Mouse (phone motion)"),
-            subtitle = xy("Arahkan kursor dengan memiringkan HP seperti pointer laser", "Aim the cursor by tilting your phone like a laser pointer"),
-            checked = gyroMouseEnabled,
-            onCheckedChange = onGyroMouseEnabled,
-        )
-    }
-
-    PanelSection(xy("Clipboard otomatis (Teks & Gambar)", "Automatic clipboard (Text & Image)")) {
-        PanelHint(
-            if (clipboardSyncEnabled) {
-                xy(
-                    "Sinkronisasi dua arah aktif otomatis: teks maupun gambar/screenshot yang disalin di PC langsung masuk ke clipboard HP, dan sebaliknya.",
-                    "Two-way sync is active automatically: text and images/screenshots copied on PC go straight to the phone clipboard, and vice versa.",
-                )
-            } else {
-                xy(
-                    "Kanal clipboard mati di pengaturan perangkat. Aktifkan lalu sambungkan ulang untuk sinkronisasi otomatis PC dan HP.",
-                    "Clipboard channel is off in device settings. Enable it and reconnect for automatic PC and phone clipboard sync.",
-                )
-            },
-        )
-        if (clipboardSyncEnabled && !lastClipboard.isNullOrEmpty()) {
+    section("fisika-trackpad-sensor",xy("Fisika Trackpad & Sensor", "Trackpad Physics & Sensors")) {
             PanelHint(
                 xy(
-                    "Status: teks terakhir dari remote sudah tersalin otomatis ke clipboard HP.",
-                    "Status: latest remote text has been automatically copied to the phone clipboard.",
+                    "Sensitivitas pointer: {0}x",
+                    "Pointer sensitivity: {0}x",
+                    String.format(java.util.Locale.US, "%.1f", pointerSensitivity),
                 ),
             )
+            XySlider(
+                value = pointerSensitivity,
+                onValueChange = onPointerSensitivity,
+                valueRange = 0.4f..3.0f,
+            )
+            XyToggleRow(
+                title = xy("Akselerasi pointer dinamis", "Dynamic pointer acceleration"),
+                subtitle = xy("Gerak cepat menjangkau layar jauh, gerak pelan tetap presisi", "Fast swipes cross the screen, slow moves stay pixel-accurate"),
+                checked = pointerAcceleration,
+                onCheckedChange = onPointerAcceleration,
+            )
+            XyToggleRow(
+                title = xy("Inertial scroll (momentum)", "Inertial scroll (momentum)"),
+                subtitle = xy("Gulir dua jari tetap meluncur halus saat dilepas", "Two-finger scroll glides smoothly after release"),
+                checked = inertialScroll,
+                onCheckedChange = onInertialScroll,
+            )
+            XyToggleRow(
+                title = xy("Zona scroll tepi kanan", "Right-edge scroll strip"),
+                subtitle = xy("Usap 1 jari di tepi paling kanan layar untuk roda scroll", "Swipe 1 finger along the right screen edge for mouse wheel"),
+                checked = edgeScrollZone,
+                onCheckedChange = onEdgeScrollZone,
+            )
+            XyToggleRow(
+                title = xy("Dukungan Gamepad & Joystick fisik", "Physical Gamepad & Joystick"),
+                subtitle = xy("Stik kiri gerak kursor, stik kanan scroll, A/B klik kiri/kanan", "Left stick moves pointer, right stick scrolls, A/B left/right click"),
+                checked = gamepadEnabled,
+                onCheckedChange = onGamepadEnabled,
+            )
+            PanelHint(
+                xy(
+                    "Mode stick berlaku untuk joystick HUD dan gamepad fisik: POINTER menggerakkan kursor, WASD dan Panah mengirim tombol arah.",
+                    "Stick mode applies to the HUD joystick and the physical gamepad: POINTER moves the cursor, WASD and Arrows send direction keys.",
+                ),
+            )
+            XySegmented(
+                options = listOf(xy("Pointer", "Pointer"), xy("WASD", "WASD"), xy("Panah", "Arrows")),
+                selectedIndex = XyStickMode.entries.indexOf(stickMode).coerceAtLeast(0),
+                onSelect = { onStickModeChange(XyStickMode.entries[it]) },
+                modifier = Modifier.fillMaxWidth(),
+            )
+            XyToggleRow(
+                title = xy("Gyro Air-Mouse (sensor gerak HP)", "Gyro Air-Mouse (phone motion)"),
+                subtitle = xy("Arahkan kursor dengan memiringkan HP seperti pointer laser", "Aim the cursor by tilting your phone like a laser pointer"),
+                checked = gyroMouseEnabled,
+                onCheckedChange = onGyroMouseEnabled,
+            )
         }
-    }
 
-    PanelSection(xy("Pointer", "Pointer")) {
-        XyToggleRow(
-            title = xy("Tampilkan pointer", "Show pointer"),
-            checked = pointerVisible,
-            onCheckedChange = onPointerVisibilityChange,
-        )
-        PanelHint(
-            xy(
-                "Bentuk pointer mengikuti kursor yang dikirim server (panah, tangan, I-beam).",
-                "Pointer shape follows the cursor sent by the server (arrow, hand, I-beam).",
-            ),
-        )
-        XySegmented(
-            options = PointerStyle.entries.map { xy(it.title, it.titleEn) },
-            selectedIndex = pointerStyle.ordinal,
-            onSelect = { onPointerStyle(PointerStyle.entries[it]) },
-            modifier = Modifier.fillMaxWidth(),
-        )
-        PanelHint(xy("Ukuran pointer: {0} dp", "Pointer size: {0} dp", pointerSize.toInt()))
-        XySlider(value = pointerSize, onValueChange = onPointerSize, valueRange = 10f..52f)
+    section("clipboard-otomatis-teks-gambar",xy("Clipboard otomatis (Teks & Gambar)", "Automatic clipboard (Text & Image)")) {
+            PanelHint(
+                if (clipboardSyncEnabled) {
+                    xy(
+                        "Sinkronisasi dua arah aktif otomatis: teks maupun gambar/screenshot yang disalin di PC langsung masuk ke clipboard HP, dan sebaliknya.",
+                        "Two-way sync is active automatically: text and images/screenshots copied on PC go straight to the phone clipboard, and vice versa.",
+                    )
+                } else {
+                    xy(
+                        "Kanal clipboard mati di pengaturan perangkat. Aktifkan lalu sambungkan ulang untuk sinkronisasi otomatis PC dan HP.",
+                        "Clipboard channel is off in device settings. Enable it and reconnect for automatic PC and phone clipboard sync.",
+                    )
+                },
+            )
+            if (clipboardSyncEnabled && !lastClipboard.isNullOrEmpty()) {
+                PanelHint(
+                    xy(
+                        "Status: teks terakhir dari remote sudah tersalin otomatis ke clipboard HP.",
+                        "Status: latest remote text has been automatically copied to the phone clipboard.",
+                    ),
+                )
+            }
+        }
+
+    section("pointer",xy("Pointer", "Pointer")) {
+            XyToggleRow(
+                title = xy("Tampilkan pointer", "Show pointer"),
+                checked = pointerVisible,
+                onCheckedChange = onPointerVisibilityChange,
+            )
+            PanelHint(
+                xy(
+                    "Bentuk pointer mengikuti kursor yang dikirim server (panah, tangan, I-beam).",
+                    "Pointer shape follows the cursor sent by the server (arrow, hand, I-beam).",
+                ),
+            )
+            XySegmented(
+                options = PointerStyle.entries.map { xy(it.title, it.titleEn) },
+                selectedIndex = pointerStyle.ordinal,
+                onSelect = { onPointerStyle(PointerStyle.entries[it]) },
+                modifier = Modifier.fillMaxWidth(),
+            )
+            PanelHint(xy("Ukuran pointer: {0} dp", "Pointer size: {0} dp", pointerSize.toInt()))
+            XySlider(value = pointerSize, onValueChange = onPointerSize, valueRange = 10f..52f)
+        }
     }
 }
 
@@ -2176,144 +2195,148 @@ private fun ButtonsTab(
     hudOpacity: Float,
     onHudOpacityChange: (Float) -> Unit,
 ) {
-    PanelSection(xy("Tampilan tombol overlay", "Overlay button display"), initiallyExpanded = true) {
-        XyToggleRow(
-            title = xy("Aktifkan tombol HUD", "Show HUD buttons"),
-            subtitle = xy(
-                "Bisa disembunyikan kapan saja lewat ikon mata di rail sesi.",
-                "You can hide these any time with the eye button on the session rail.",
-            ),
-            checked = showHudButtons,
-            onCheckedChange = onShowHudButtonsChange,
-        )
-        XyToggleRow(
-            title = xy("Sembunyikan otomatis saat input fisik tersambung", "Auto-hide when physical input is connected"),
-            subtitle = xy(
-                "Mendeteksi keyboard, mouse, gamepad, dan D-pad eksternal. Menu, keyboard HP, monitor, dan disconnect tetap terlihat.",
-                "Detects external keyboards, mice, gamepads, and D-pads. Menu, phone keyboard, monitors, and disconnect stay available.",
-            ),
-            checked = autoHideHudOnExternalInput,
-            onCheckedChange = onAutoHideHudOnExternalInputChange,
-        )
-        PanelHint(
-            xy(
-                "Opasitas tombol HUD: {0}% (0% transparan, 100% solid). Hanya tombol overlay berubah; layar remote dan rail tidak terpengaruh.",
-                "HUD button opacity: {0}% (0% transparent, 100% opaque). Only overlay buttons change; the remote screen and rail are unaffected.",
-                (hudOpacity * 100).roundToInt(),
-            ),
-        )
-        XySlider(
-            value = hudOpacity,
-            onValueChange = onHudOpacityChange,
-            valueRange = 0f..1f,
-        )
-    }
+    openKey: String?,
+    onOpenKey: (String?) -> Unit,
+    PanelSectionGrid(openKey = openKey, onOpenKey = onOpenKey) {
+    section("tampilan-tombol-overlay",xy("Tampilan tombol overlay", "Overlay button display")) {
+            XyToggleRow(
+                title = xy("Aktifkan tombol HUD", "Show HUD buttons"),
+                subtitle = xy(
+                    "Bisa disembunyikan kapan saja lewat ikon mata di rail sesi.",
+                    "You can hide these any time with the eye button on the session rail.",
+                ),
+                checked = showHudButtons,
+                onCheckedChange = onShowHudButtonsChange,
+            )
+            XyToggleRow(
+                title = xy("Sembunyikan otomatis saat input fisik tersambung", "Auto-hide when physical input is connected"),
+                subtitle = xy(
+                    "Mendeteksi keyboard, mouse, gamepad, dan D-pad eksternal. Menu, keyboard HP, monitor, dan disconnect tetap terlihat.",
+                    "Detects external keyboards, mice, gamepads, and D-pads. Menu, phone keyboard, monitors, and disconnect stay available.",
+                ),
+                checked = autoHideHudOnExternalInput,
+                onCheckedChange = onAutoHideHudOnExternalInputChange,
+            )
+            PanelHint(
+                xy(
+                    "Opasitas tombol HUD: {0}% (0% transparan, 100% solid). Hanya tombol overlay berubah; layar remote dan rail tidak terpengaruh.",
+                    "HUD button opacity: {0}% (0% transparent, 100% opaque). Only overlay buttons change; the remote screen and rail are unaffected.",
+                    (hudOpacity * 100).roundToInt(),
+                ),
+            )
+            XySlider(
+                value = hudOpacity,
+                onValueChange = onHudOpacityChange,
+                valueRange = 0f..1f,
+            )
+        }
 
-    PanelSection(xy("Preset Profil HUD", "HUD Profile Presets")) {
-        PanelHint(
-            xy(
-                "Ganti susunan tombol instan sesuai aktivitas: Standar, Coding/Terminal, Gaming/WASD, Office, atau Desain/Video.",
-                "Switch button layouts instantly by activity: Standard, Coding/Terminal, Gaming/WASD, Office, or Design/Video.",
-            ),
-        )
-        HudProfilePreset.entries.chunked(2).forEach { row ->
-            Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                row.forEach { preset ->
-                    XyPillButton(
-                        text = xy(preset.title, preset.titleEn),
-                        onClick = { onSelectHudProfile(preset) },
-                        primary = preset == hudProfile,
-                        compact = true,
-                        modifier = Modifier.weight(1f),
+    section("preset-profil-hud",xy("Preset Profil HUD", "HUD Profile Presets")) {
+            PanelHint(
+                xy(
+                    "Ganti susunan tombol instan sesuai aktivitas: Standar, Coding/Terminal, Gaming/WASD, Office, atau Desain/Video.",
+                    "Switch button layouts instantly by activity: Standard, Coding/Terminal, Gaming/WASD, Office, or Design/Video.",
+                ),
+            )
+            HudProfilePreset.entries.chunked(2).forEach { row ->
+                Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    row.forEach { preset ->
+                        XyPillButton(
+                            text = xy(preset.title, preset.titleEn),
+                            onClick = { onSelectHudProfile(preset) },
+                            primary = preset == hudProfile,
+                            compact = true,
+                            modifier = Modifier.weight(1f),
+                        )
+                    }
+                    repeat(2 - row.size) { Spacer(Modifier.weight(1f)) }
+                }
+            }
+        }
+
+    section("tombol-kontrol-0",xy("Tombol kontrol ({0})", "Control buttons ({0})", keys.size)) {
+            PanelHint(
+                if (mappingMode) {
+                    xy(
+                        "Mode atur posisi MENYALA: geser tombol ke tempat yang kamu mau, " +
+                            "ketuk tombol untuk ubah aksi/ukuran, atau tekan + Tambah di atas layar.",
+                        "Layout mode is ON: drag buttons where you want them, tap a " +
+                            "button to change its action/size, or press + Add at the top bar.",
+                    )
+                } else {
+                    xy(
+                        "Tekan \"Atur posisi & ukuran\" untuk menggeser tombol atau menambah kontrol dari bar atas (Kombinasi, F1-F12, Single Key, Numpad, Modifier, Mouse).",
+                        "Press \"Edit layout & size\" to drag buttons or add controls from the top bar (Combos, F1-F12, Single Key, Numpad, Modifiers, Mouse).",
+                    )
+                },
+            )
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                XyPillButton(
+                    xy("+ Tambah tombol", "+ Add button"),
+                    onAddKey,
+                    compact = true,
+                    modifier = Modifier.weight(1f),
+                )
+                XyPillButton(
+                    if (mappingMode) xy("Selesai atur", "Done layout") else xy("Atur posisi", "Edit layout"),
+                    { onMappingModeChange(!mappingMode) },
+                    primary = mappingMode,
+                    compact = true,
+                    modifier = Modifier.weight(1f),
+                )
+            }
+            HudLayoutPreview(keys)
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                XyPillButton(
+                    xy("Salin JSON", "Copy JSON"),
+                    onExportLayoutJson,
+                    primary = false,
+                    compact = true,
+                    modifier = Modifier.weight(1f),
+                )
+                XyPillButton(
+                    xy("Impor JSON", "Import JSON"),
+                    onOpenLayoutJson,
+                    primary = false,
+                    compact = true,
+                    modifier = Modifier.weight(1f),
+                )
+            }
+            XyPillButton(
+                xy("Kembalikan bawaan", "Restore default"),
+                onResetCluster,
+                primary = false,
+                compact = true,
+                modifier = Modifier.fillMaxWidth(),
+            )
+            PanelHint(
+                xy(
+                    "Pratinjau di bawah memakai warna tombol sungguhan di atas contoh gambar desktop, jadi hasilnya sama dengan yang tampil saat sesi berjalan.",
+                    "The preview below uses the real button colors over a sample desktop, so it matches what you get during a session.",
+                ),
+            )
+            HudPlatePicker(
+                selected = plate,
+                onSelect = onPlate,
+                modifier = Modifier.fillMaxWidth(),
+            )
+            Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                if (keys.isEmpty()) {
+                    PanelHint(
+                        xy(
+                            "Belum ada tombol. Tekan \"+ Tambah tombol\".",
+                            "No buttons yet. Press \"+ Add button\".",
+                        ),
                     )
                 }
-                repeat(2 - row.size) { Spacer(Modifier.weight(1f)) }
+                keys.forEach { key -> KeyRow(key, onEditKey, onDeleteKey) }
             }
-        }
-    }
-
-    PanelSection(xy("Tombol kontrol ({0})", "Control buttons ({0})", keys.size)) {
-        PanelHint(
-            if (mappingMode) {
-                xy(
-                    "Mode atur posisi MENYALA: geser tombol ke tempat yang kamu mau, " +
-                        "ketuk tombol untuk ubah aksi/ukuran, atau tekan + Tambah di atas layar.",
-                    "Layout mode is ON: drag buttons where you want them, tap a " +
-                        "button to change its action/size, or press + Add at the top bar.",
-                )
-            } else {
-                xy(
-                    "Tekan \"Atur posisi & ukuran\" untuk menggeser tombol atau menambah kontrol dari bar atas (Kombinasi, F1-F12, Single Key, Numpad, Modifier, Mouse).",
-                    "Press \"Edit layout & size\" to drag buttons or add controls from the top bar (Combos, F1-F12, Single Key, Numpad, Modifiers, Mouse).",
-                )
-            },
-        )
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            XyPillButton(
-                xy("+ Tambah tombol", "+ Add button"),
-                onAddKey,
-                compact = true,
-                modifier = Modifier.weight(1f),
-            )
-            XyPillButton(
-                if (mappingMode) xy("Selesai atur", "Done layout") else xy("Atur posisi", "Edit layout"),
-                { onMappingModeChange(!mappingMode) },
-                primary = mappingMode,
-                compact = true,
-                modifier = Modifier.weight(1f),
+            XyToggleRow(
+                title = xy("Getaran saat tombol ditekan", "Haptic feedback on button press"),
+                checked = haptics,
+                onCheckedChange = onHaptics,
             )
         }
-        HudLayoutPreview(keys)
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            XyPillButton(
-                xy("Salin JSON", "Copy JSON"),
-                onExportLayoutJson,
-                primary = false,
-                compact = true,
-                modifier = Modifier.weight(1f),
-            )
-            XyPillButton(
-                xy("Impor JSON", "Import JSON"),
-                onOpenLayoutJson,
-                primary = false,
-                compact = true,
-                modifier = Modifier.weight(1f),
-            )
-        }
-        XyPillButton(
-            xy("Kembalikan bawaan", "Restore default"),
-            onResetCluster,
-            primary = false,
-            compact = true,
-            modifier = Modifier.fillMaxWidth(),
-        )
-        PanelHint(
-            xy(
-                "Pratinjau di bawah memakai warna tombol sungguhan di atas contoh gambar desktop, jadi hasilnya sama dengan yang tampil saat sesi berjalan.",
-                "The preview below uses the real button colors over a sample desktop, so it matches what you get during a session.",
-            ),
-        )
-        HudPlatePicker(
-            selected = plate,
-            onSelect = onPlate,
-            modifier = Modifier.fillMaxWidth(),
-        )
-        Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-            if (keys.isEmpty()) {
-                PanelHint(
-                    xy(
-                        "Belum ada tombol. Tekan \"+ Tambah tombol\".",
-                        "No buttons yet. Press \"+ Add button\".",
-                    ),
-                )
-            }
-            keys.forEach { key -> KeyRow(key, onEditKey, onDeleteKey) }
-        }
-        XyToggleRow(
-            title = xy("Getaran saat tombol ditekan", "Haptic feedback on button press"),
-            checked = haptics,
-            onCheckedChange = onHaptics,
-        )
     }
 }
 
@@ -2333,98 +2356,102 @@ private fun SessionTab(
     coreInfo: List<String>,
     onCopyCoreInfo: () -> Unit,
 ) {
-    PanelSection(xy("Keamanan & Privasi Cepat", "Quick Security & Privacy"), initiallyExpanded = true) {
-        PanelHint(
-            xy(
-                "Kunci sesi Windows dari jarak jauh (Win+L) atau aktifkan Tirai Privasi agar layar HP tertutup gelap sementara.",
-                "Remotely lock the Windows session (Win+L) or activate the Privacy Curtain to black out the phone screen temporarily.",
-            ),
-        )
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            XyPillButton(
-                xy("Kunci PC", "Lock PC"),
-                onLockRemotePc,
-                icon = XyIcons.Lock,
-                primary = false,
-                compact = true,
-                modifier = Modifier.weight(1f),
+    openKey: String?,
+    onOpenKey: (String?) -> Unit,
+    PanelSectionGrid(openKey = openKey, onOpenKey = onOpenKey) {
+    section("keamanan-privasi-cepat",xy("Keamanan & Privasi Cepat", "Quick Security & Privacy")) {
+            PanelHint(
+                xy(
+                    "Kunci sesi Windows dari jarak jauh (Win+L) atau aktifkan Tirai Privasi agar layar HP tertutup gelap sementara.",
+                    "Remotely lock the Windows session (Win+L) or activate the Privacy Curtain to black out the phone screen temporarily.",
+                ),
             )
-            XyPillButton(
-                xy("Tirai Privasi", "Privacy Curtain"),
-                onActivatePrivacyCurtain,
-                icon = XyIcons.EyeOff,
-                primary = false,
-                compact = true,
-                modifier = Modifier.weight(1f),
-            )
-        }
-    }
-
-    PanelSection(xy("Perekaman lokal · PC ke HP", "Local recording · PC to phone")) {
-        PanelHint(
-            xy(
-                "Desktop PC beserta audionya direkam ke satu MP4 di Movies/XyDesk. Layar HP dan kontrol tidak pernah ikut terekam. Kalau penggabungan gagal, video dan audio disimpan sebagai dua file. Perekaman diblokir saat FLAG_SECURE aktif.",
-                "The PC desktop and its audio are recorded into a single MP4 in Movies/XyDesk. The phone screen and controls are never captured. If merging fails, video and audio are saved as two files. Recording is blocked while FLAG_SECURE is on.",
-            ),
-        )
-        XyPillButton(
-            text = recordingLabel,
-            onClick = onToggleRecording,
-            enabled = recordingActionEnabled,
-            primary = recordingActive,
-            compact = true,
-            modifier = Modifier.fillMaxWidth(),
-        )
-        recordingStatus?.let { status ->
-            Text(
-                status,
-                color = if (recordingActive) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
-                fontSize = 11.sp,
-                lineHeight = 15.sp,
-            )
-        }
-    }
-
-    PanelSection(xy("Sesi", "Session")) {
-        PanelHint(
-            xy(
-                "Tombol bulat kanan bawah (ikon power) juga memutus — langsung kembali ke beranda setelah konfirmasi.",
-                "The bottom-right round button (power icon) also disconnects — returns straight to home after confirmation.",
-            ),
-        )
-        XyPillButton(
-            xy("Ambil screenshot", "Take screenshot"),
-            onScreenshot,
-            icon = XyIcons.Shot,
-            primary = false,
-            compact = true,
-            modifier = Modifier.fillMaxWidth(),
-        )
-        XyPillButton(
-            xy("Putuskan sesi", "Disconnect"),
-            onDisconnect,
-            icon = XyIcons.Power,
-            primary = false,
-            compact = true,
-            modifier = Modifier.fillMaxWidth(),
-        )
-    }
-    if (coreInfo.isNotEmpty()) {
-        PanelSection(xy("Info teknis", "Technical info")) {
-            coreInfo.forEach { line ->
-                Text(
-                    line,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    fontSize = 11.sp,
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                XyPillButton(
+                    xy("Kunci PC", "Lock PC"),
+                    onLockRemotePc,
+                    icon = XyIcons.Lock,
+                    primary = false,
+                    compact = true,
+                    modifier = Modifier.weight(1f),
+                )
+                XyPillButton(
+                    xy("Tirai Privasi", "Privacy Curtain"),
+                    onActivatePrivacyCurtain,
+                    icon = XyIcons.EyeOff,
+                    primary = false,
+                    compact = true,
+                    modifier = Modifier.weight(1f),
                 )
             }
+        }
+
+    section("perekaman-lokal-pc-ke-hp",xy("Perekaman lokal · PC ke HP", "Local recording · PC to phone")) {
+            PanelHint(
+                xy(
+                    "Desktop PC beserta audionya direkam ke satu MP4 di Movies/XyDesk. Layar HP dan kontrol tidak pernah ikut terekam. Kalau penggabungan gagal, video dan audio disimpan sebagai dua file. Perekaman diblokir saat FLAG_SECURE aktif.",
+                    "The PC desktop and its audio are recorded into a single MP4 in Movies/XyDesk. The phone screen and controls are never captured. If merging fails, video and audio are saved as two files. Recording is blocked while FLAG_SECURE is on.",
+                ),
+            )
             XyPillButton(
-                xy("Salin info teknis", "Copy technical info"),
-                onCopyCoreInfo,
+                text = recordingLabel,
+                onClick = onToggleRecording,
+                enabled = recordingActionEnabled,
+                primary = recordingActive,
+                compact = true,
+                modifier = Modifier.fillMaxWidth(),
+            )
+            recordingStatus?.let { status ->
+                Text(
+                    status,
+                    color = if (recordingActive) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
+                    fontSize = 11.sp,
+                    lineHeight = 15.sp,
+                )
+            }
+        }
+
+    section("sesi",xy("Sesi", "Session")) {
+            PanelHint(
+                xy(
+                    "Tombol bulat kanan bawah (ikon power) juga memutus — langsung kembali ke beranda setelah konfirmasi.",
+                    "The bottom-right round button (power icon) also disconnects — returns straight to home after confirmation.",
+                ),
+            )
+            XyPillButton(
+                xy("Ambil screenshot", "Take screenshot"),
+                onScreenshot,
+                icon = XyIcons.Shot,
                 primary = false,
                 compact = true,
                 modifier = Modifier.fillMaxWidth(),
             )
+            XyPillButton(
+                xy("Putuskan sesi", "Disconnect"),
+                onDisconnect,
+                icon = XyIcons.Power,
+                primary = false,
+                compact = true,
+                modifier = Modifier.fillMaxWidth(),
+            )
+        }
+        if (coreInfo.isNotEmpty()) {
+            PanelSection(xy("Info teknis", "Technical info")) {
+                coreInfo.forEach { line ->
+                    Text(
+                        line,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        fontSize = 11.sp,
+                    )
+                }
+                XyPillButton(
+                    xy("Salin info teknis", "Copy technical info"),
+                    onCopyCoreInfo,
+                    primary = false,
+                    compact = true,
+                    modifier = Modifier.fillMaxWidth(),
+                )
+            }
         }
     }
 }
@@ -2526,6 +2553,123 @@ private fun panelTabIcon(entry: PanelTab): ImageVector = when (entry) {
     PanelTab.INPUT -> XyIcons.Keyboard
     PanelTab.BUTTONS -> XyIcons.Grid
     PanelTab.SESSION -> XyIcons.Gear
+}
+
+/**
+ * Ikon kotak untuk satu seksi panel. Dicocokkan dari kunci seksi, bukan judul,
+ * supaya perubahan terjemahan judul tidak mengubah ikonnya.
+ */
+private fun panelSectionIcon(key: String): ImageVector = when {
+    key.startsWith("telemetri") -> XyIcons.Monitor
+    key.startsWith("ukuran-tampilan") -> XyIcons.Fit
+    key.startsWith("mesin-direct-pc-stream") -> XyIcons.Terminal
+    key.startsWith("skala-tampilan-windows") -> XyIcons.Windows
+    key.startsWith("resolusi-desktop") -> XyIcons.DualMonitor
+    key.startsWith("orientasi") -> XyIcons.Rotate
+    key.startsWith("mode-input") -> XyIcons.Mouse
+    key.startsWith("fisika-trackpad") -> XyIcons.Sliders
+    key.startsWith("clipboard") -> XyIcons.Copy
+    key.startsWith("pointer") -> XyIcons.Cursor
+    key.startsWith("tampilan-tombol") -> XyIcons.Eye
+    key.startsWith("preset-profil-hud") -> XyIcons.Star
+    key.startsWith("tombol-kontrol") -> XyIcons.Grid
+    key.startsWith("keamanan") -> XyIcons.Shield
+    key.startsWith("perekaman") -> XyIcons.Shot
+    key.startsWith("sesi") -> XyIcons.Power
+    key.startsWith("info-teknis") -> XyIcons.Info
+    else -> XyIcons.ChevronRight
+}
+
+/**
+ * Cakupan pembangun [PanelSectionGrid].
+ *
+ * Seksi direkam sebagai data dulu, tidak langsung digambar. Inilah yang membuat
+ * panel bisa tampil sebagai kotak-kotak: selama belum ada seksi yang dibuka, yang
+ * digambar hanya ikon + judul, jadi satu tab muat tanpa digulir. Isi seksi baru
+ * disusun untuk satu seksi yang sedang terbuka.
+ */
+private class PanelSectionScope {
+    internal class Spec(
+        val key: String,
+        val title: String,
+        val content: @Composable () -> Unit,
+    )
+
+    internal val specs: MutableList<Spec> = mutableListOf()
+
+    /** Rekam satu seksi. [content] belum dijalankan di sini. */
+    fun section(key: String, title: String, content: @Composable () -> Unit) {
+        specs.add(Spec(key, title, content))
+    }
+}
+
+/**
+ * Daftar seksi panel sebagai grid kotak dengan drill-in.
+ *
+ * Menggantikan accordion. Satu tab berisi 3-6 seksi dan tiap seksi memuat banyak
+ * blok penjelasan, jadi accordion pun tetap menuntut scroll. Di sini tab digambar
+ * sebagai dua kolom kotak; mengetuk satu kotak membuka seksi itu penuh lebar
+ * dengan tombol kembali. Seksi bersarang di dalam badan seksi tetap memakai
+ * [PanelSection] biasa.
+ *
+ * [builder] dijalankan tiap komposisi karena judul seksi memakai `xy()` yang
+ * composable dan beberapa seksi bersyarat (`if (pcConnectMode)`). Scope dibuat
+ * baru tiap kali supaya seksi dari komposisi sebelumnya tidak tertinggal.
+ */
+@Composable
+private fun PanelSectionGrid(
+    openKey: String?,
+    onOpenKey: (String?) -> Unit,
+    builder: @Composable PanelSectionScope.() -> Unit,
+) {
+    val scope = PanelSectionScope()
+    scope.builder()
+    val specs = scope.specs
+    if (specs.isEmpty()) return
+    val open = specs.firstOrNull { it.key == openKey }
+    if (open != null) {
+        Column(
+            Modifier.fillMaxWidth(),
+            verticalArrangement = Arrangement.spacedBy(9.dp),
+        ) {
+            Row(
+                Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(10.dp))
+                    .clickable { onOpenKey(null) }
+                    .padding(vertical = 4.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(9.dp),
+            ) {
+                Icon(
+                    imageVector = XyIcons.ChevronLeft,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.size(18.dp),
+                )
+                Text(
+                    xy("Semua seksi", "All sections").uppercase(),
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    fontSize = 10.sp,
+                    letterSpacing = 1.2.sp,
+                    fontWeight = FontWeight.SemiBold,
+                )
+            }
+            PanelSection(open.title, initiallyExpanded = true) { open.content() }
+        }
+        return
+    }
+    XyTileGrid(modifier = Modifier.fillMaxWidth(), columns = 2, spacing = 10.dp) {
+        specs.forEach { spec ->
+            item {
+                XyGlassTile(
+                    icon = panelSectionIcon(spec.key),
+                    title = spec.title,
+                    onClick = { onOpenKey(spec.key) },
+                )
+            }
+        }
+    }
 }
 
 @Composable
