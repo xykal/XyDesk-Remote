@@ -98,6 +98,7 @@ fun HudKeyLayer(
     scrollSpeed: Float,
     onScrollUnits: (Int) -> Unit,
     onEdit: (HudKey) -> Unit,
+    onStickAxis: (HudKey, Float, Float) -> Unit = { _, _, _ -> },
 ) {
     BoxWithConstraints(Modifier.fillMaxSize().zIndex(12f)) {
         val density = LocalDensity.current
@@ -121,6 +122,7 @@ fun HudKeyLayer(
                     scrollSpeed = scrollSpeed,
                     onScrollUnits = onScrollUnits,
                     onEdit = { onEdit(key) },
+                    onStickAxis = { x, y -> onStickAxis(key, x, y) },
                     modifier = Modifier
                         .offset {
                             IntOffset((key.x * maxX).roundToInt(), (key.y * maxY).roundToInt())
@@ -145,6 +147,7 @@ private fun HudKeyButton(
     scrollSpeed: Float,
     onScrollUnits: (Int) -> Unit,
     onEdit: () -> Unit,
+    onStickAxis: (Float, Float) -> Unit = { _, _ -> },
     modifier: Modifier = Modifier,
 ) {
     var pressed by remember(key.id) { mutableStateOf(false) }
@@ -160,8 +163,14 @@ private fun HudKeyButton(
     val latestOnEdit = rememberUpdatedState(onEdit)
     val latestScrollUnits = rememberUpdatedState(onScrollUnits)
     val dragPos = remember(key.id) { mutableStateOf<Offset?>(null) }
+    // Simpangan knob joystick dalam piksel; selalu balik ke (0,0) saat dilepas.
+    val stickOffset = remember(key.id) { mutableStateOf(Offset.Zero) }
 
     val pal = hudPalette(plate)
+    val density = LocalDensity.current
+    val stickRadiusPx = with(density) { (key.size.dp * 0.31f).toPx() }
+    val latestStickRadius = rememberUpdatedState(stickRadiusPx)
+    val latestOnStick = rememberUpdatedState(onStickAxis)
     val ring = when {
         mappingMode -> Color(0xFF83D7FF)
         latched -> Color(0xFFB9F0D9)
@@ -226,6 +235,16 @@ private fun HudKeyButton(
                                 scrollAccumulator.consume(delta.y, scrollSpeed)
                                     .takeIf { it != 0 }
                                     ?.let(latestScrollUnits.value)
+                            } else if (key.kind == HudKind.PAD_STICK) {
+                                val radius = latestStickRadius.value
+                                val next = clampStickOffset(
+                                    stickOffset.value.x + delta.x,
+                                    stickOffset.value.y + delta.y,
+                                    radius,
+                                )
+                                stickOffset.value = Offset(next[0], next[1])
+                                val axis = stickAxis(next[0], next[1], radius)
+                                latestOnStick.value(axis[0], axis[1])
                             }
                             change.consume()
                         }
@@ -233,6 +252,12 @@ private fun HudKeyButton(
 
                     pressed = false
                     dragPos.value = null
+                    // Joystick harus benar-benar netral saat jari lepas, kalau
+                    // tidak kursor remote terus melaju.
+                    if (key.kind == HudKind.PAD_STICK && stickOffset.value != Offset.Zero) {
+                        stickOffset.value = Offset.Zero
+                        latestOnStick.value(0f, 0f)
+                    }
                     if (heldOnPress) latestOnPhase.value(HudPhase.UP)
 
                     // Di mode atur posisi, ketuk = buka editor tombol itu.
@@ -250,7 +275,17 @@ private fun HudKeyButton(
             },
         contentAlignment = Alignment.Center,
     ) {
-        HudKeyGlyph(key, pal.ink)
+        if (key.kind == HudKind.PAD_STICK) {
+            Box(
+                Modifier
+                    .offset { IntOffset(stickOffset.value.x.roundToInt(), stickOffset.value.y.roundToInt()) }
+                    .size(key.size.dp * 0.42f)
+                    .clip(CircleShape)
+                    .background(pal.ink.copy(alpha = 0.8f)),
+            )
+        } else {
+            HudKeyGlyph(key, pal.ink)
+        }
     }
 }
 
@@ -271,6 +306,7 @@ internal fun hudIconFor(
     HudKind.SCROLL_UP -> XyIcons.ScrollUp
     HudKind.SCROLL_DOWN -> XyIcons.ScrollDown
     HudKind.SCROLL_SLIDER -> XyIcons.ScrollSlide
+    HudKind.PAD_STICK -> XyIcons.Sliders
     HudKind.INPUT_SWITCH -> XyIcons.Swap
     HudKind.KEYBOARD -> XyIcons.Keyboard
     HudKind.KEY -> when (keyCode) {

@@ -7,6 +7,7 @@ import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
+import kotlin.math.sqrt
 
 class HudControlMathTest {
     @Test
@@ -203,5 +204,43 @@ class HudControlMathTest {
         assertTrue(hudIconFor(enterKey) != null)
         assertTrue(hudIconFor(upKey) != null)
         assertTrue(HudProfilePreset.entries.contains(HudProfilePreset.CUSTOM))
+    }
+
+    @Test
+    fun stickOffsetIsClampedToTheBaseCircleAndKeepsItsDirection() {
+        val clamped = clampStickOffset(300f, 300f, 50f)
+        val magnitude = sqrt(clamped[0] * clamped[0] + clamped[1] * clamped[1])
+        assertEquals(50f, magnitude, 0.01f)
+        assertEquals("diagonal harus tetap diagonal", clamped[0], clamped[1], 1e-4f)
+
+        val inside = clampStickOffset(10f, -5f, 50f)
+        assertEquals(10f, inside[0], 0f)
+        assertEquals(-5f, inside[1], 0f)
+    }
+
+    @Test
+    fun stickAxisIsNormalizedAndToleratesBadInput() {
+        val full = stickAxis(0f, -500f, 50f)
+        assertEquals(0f, full[0], 1e-4f)
+        assertEquals(-1f, full[1], 1e-4f)
+
+        val zero = stickAxis(0f, 0f, 50f)
+        assertEquals(0f, zero[0], 0f)
+        assertEquals(0f, zero[1], 0f)
+
+        // Radius dan input tidak masuk akal tidak boleh menghasilkan NaN/Infinity,
+        // karena nilai ini diteruskan ke gerak kursor.
+        val bad = stickAxis(Float.NaN, 10f, 0f)
+        assertTrue(bad[0].isFinite())
+        assertTrue(bad[1].isFinite())
+    }
+
+    @Test
+    fun stickGestureMayStartOutsideMappingModeButMouseKeysStillMayNot() {
+        assertTrue(shouldStartHudButtonGesture(40f, 16f, false, HudKind.PAD_STICK))
+        assertTrue(shouldStartHudButtonGesture(40f, 16f, false, HudKind.SCROLL_SLIDER))
+        assertFalse(shouldStartHudButtonGesture(40f, 16f, false, HudKind.MOUSE_LEFT))
+        // Di bawah touch slop belum boleh memulai gestur.
+        assertFalse(shouldStartHudButtonGesture(4f, 16f, false, HudKind.PAD_STICK))
     }
 }

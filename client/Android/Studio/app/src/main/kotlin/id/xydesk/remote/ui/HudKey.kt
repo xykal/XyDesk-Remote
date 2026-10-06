@@ -29,6 +29,7 @@ enum class HudKind(val title: String, val titleEn: String) {
     SCROLL_UP("Scroll naik", "Scroll up"),
     SCROLL_DOWN("Scroll turun", "Scroll down"),
     SCROLL_SLIDER("Geser scroll", "Swipe to scroll"),
+    PAD_STICK("Joystick analog", "Analog stick"),
     INPUT_SWITCH("Ganti mode input", "Switch input mode"),
     KEYBOARD("Buka keyboard", "Show keyboard"),
     KEY("Tombol keyboard", "Keyboard key"),
@@ -388,6 +389,7 @@ object HudKeyCatalog {
         HudKeyOption("Aksi", "Scroll naik", HudKind.SCROLL_UP, labelEn = "Scroll up"),
         HudKeyOption("Aksi", "Scroll turun", HudKind.SCROLL_DOWN, labelEn = "Scroll down"),
         HudKeyOption("Aksi", "Geser scroll", HudKind.SCROLL_SLIDER, labelEn = "Swipe to scroll"),
+        HudKeyOption("Aksi", "Joystick analog", HudKind.PAD_STICK, labelEn = "Analog stick"),
         HudKeyOption("Aksi", "Ganti mode input", HudKind.INPUT_SWITCH, labelEn = "Switch input mode"),
         HudKeyOption(
             "Aksi",

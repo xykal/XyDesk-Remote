@@ -157,6 +157,9 @@ private suspend fun SessionManager.awaitRemoteResolution(
     true
 } ?: false
 
+/** Satuan gerak pointer per defleksi penuh joystick HUD; sama dengan gamepad fisik. */
+private const val HUD_STICK_POINTER_UNITS = 18f
+
 @Composable
 fun XyDeskSessionScreen(
     profile: ConnectionProfile,
@@ -1157,6 +1160,11 @@ fun XyDeskSessionScreen(
                 },
                 onPhase = { key, phase -> handleHudPhase(key, phase) },
                 onScrollUnits = { sendScrollUnits(it) },
+                // Joystick HUD memakai jalur gerak pointer yang sama dengan
+                // trackpad dan gamepad fisik: 18 unit per defleksi penuh.
+                onStickAxis = { x, y ->
+                    if (x != 0f || y != 0f) movePointer(x * HUD_STICK_POINTER_UNITS, y * HUD_STICK_POINTER_UNITS)
+                },
                 onZoomIn = { controller.zoomIn() },
                 onZoomOut = { controller.zoomOut() },
                 onFit = { controller.fitToScreen() },

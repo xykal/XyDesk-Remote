@@ -124,6 +124,8 @@ fun SessionControls(
     onMappingModeChange: (Boolean) -> Unit,
     onPhase: (HudKey, HudPhase) -> Unit,
     onScrollUnits: (Int) -> Unit,
+    /** Sumbu joystick HUD (HudKind.PAD_STICK), -1..1 per sumbu. */
+    onStickAxis: (Float, Float) -> Unit = { _, _ -> },
     onZoomIn: () -> Unit,
     onZoomOut: () -> Unit,
     onFit: () -> Unit,
@@ -513,6 +515,7 @@ fun SessionControls(
                     scrollSpeed = prefs.scrollSpeed,
                     onScrollUnits = onScrollUnits,
                     onEdit = { editing = it },
+                    onStickAxis = { _, x, y -> onStickAxis(x, y) },
                 )
             }
         }

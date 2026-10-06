@@ -70,7 +70,9 @@ internal fun shouldStartHudButtonGesture(
     mappingMode: Boolean,
     kind: HudKind,
 ): Boolean {
-    if (!mappingMode && kind != HudKind.SCROLL_SLIDER) return false
+    // Di luar mode atur posisi, hanya kontrol geser kontinu yang boleh memulai
+    // gestur tarik: slider scroll dan joystick analog.
+    if (!mappingMode && kind != HudKind.SCROLL_SLIDER && kind != HudKind.PAD_STICK) return false
     if (!travelledPx.isFinite() || travelledPx <= 0f) return false
     val threshold = if (touchSlopPx.isFinite() && touchSlopPx > 0f) touchSlopPx else 16f
     return travelledPx > threshold
@@ -127,3 +129,29 @@ internal fun inertialScrollDecayStep(
     return if (kotlin.math.abs(next) < 0.8f) 0f else next
 }
 
+/**
+ * Jepit simpangan joystick ke dalam lingkaran berjari-jari [radiusPx] supaya
+ * knob tidak pernah keluar dari alasnya. Mengembalikan [x, y] dalam piksel.
+ */
+internal fun clampStickOffset(dx: Float, dy: Float, radiusPx: Float): FloatArray {
+    val radius = if (radiusPx.isFinite() && radiusPx > 0f) radiusPx else 1f
+    val safeX = if (dx.isFinite()) dx else 0f
+    val safeY = if (dy.isFinite()) dy else 0f
+    val magnitude = kotlin.math.sqrt(safeX * safeX + safeY * safeY)
+    if (magnitude <= radius || magnitude == 0f) return floatArrayOf(safeX, safeY)
+    val scale = radius / magnitude
+    return floatArrayOf(safeX * scale, safeY * scale)
+}
+
+/**
+ * Normalisasi simpangan joystick ke -1..1 per sumbu. Arah dipertahankan
+ * (tidak menempel ke sumbu) sehingga gerak diagonal tetap diagonal.
+ */
+internal fun stickAxis(dx: Float, dy: Float, radiusPx: Float): FloatArray {
+    val radius = if (radiusPx.isFinite() && radiusPx > 0f) radiusPx else 1f
+    val clamped = clampStickOffset(dx, dy, radiusPx)
+    return floatArrayOf(
+        (clamped[0] / radius).coerceIn(-1f, 1f),
+        (clamped[1] / radius).coerceIn(-1f, 1f),
+    )
+}
