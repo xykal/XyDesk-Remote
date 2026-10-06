@@ -1,5 +1,6 @@
 package id.xydesk.remote.ui
 
+import id.xydesk.remote.core.QuicAudioBridge
 import androidx.compose.runtime.SideEffect
 import android.app.Activity
 import android.content.ClipboardManager
@@ -180,7 +181,18 @@ fun XyDeskSessionScreen(
     // karena cursorX/cursorY baru tersedia jauh di bawah, sementara provider-nya
     // harus ada saat perekam dibuat.
     val pointerBox = remember { RecordingPointerBox() }
-    val remoteRecorder = remember(controller, appContext, pointerBox) {
+    // Audio PC datang dari bridge audio QUIC sebagai PCM16 stereo 24 kHz.
+    // Sadapannya dipasang/dilepas oleh perekam, jadi sesi hanya menjembatani.
+    val recordingAudioSource = remember(manager) {
+        object : RecordingAudioSource {
+            override val sampleRate: Int = QuicAudioBridge.SAMPLE_RATE
+            override val channelCount: Int = QuicAudioBridge.CHANNEL_COUNT
+            override fun attachPcmTap(tap: ((ByteArray, Int, Int) -> Unit)?) {
+                manager.setAudioPcmTap(tap)
+            }
+        }
+    }
+    val remoteRecorder = remember(controller, appContext, pointerBox, recordingAudioSource) {
         RemoteScreenRecorder(
             context = appContext,
             // mutable = true supaya kursor bisa digambar ke frame; frame ini
@@ -191,6 +203,7 @@ fun XyDeskSessionScreen(
             // Gambar frame langsung ke buffer perekam, tanpa salinan bitmap per
             // frame. frameProvider tetap ada sebagai jalur cadangan.
             frameDrawer = { canvas, dest -> controller.drawRemoteFrameInto(canvas, dest) },
+            audioSource = recordingAudioSource,
         )
     }
     var recordingState by remember(remoteRecorder) {

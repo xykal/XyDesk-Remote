@@ -1,5 +1,7 @@
 package id.xydesk.remote.ui
 
+import java.util.concurrent.TimeUnit
+import java.util.concurrent.LinkedBlockingQueue
 import android.graphics.Rect
 import android.graphics.Path
 import android.graphics.Paint
@@ -40,6 +42,8 @@ internal class RemoteScreenRecorder(
      * mengembalikan false, perekam jatuh ke jalur frameProvider (salinan).
      */
     private val frameDrawer: ((Canvas, Rect) -> Boolean)? = null,
+    /** Sumber PCM audio PC. Null berarti merekam video saja. */
+    private val audioSource: RecordingAudioSource? = null,
 ) {
     private val appContext = context.applicationContext
     private val mainHandler = Handler(Looper.getMainLooper())
@@ -54,6 +58,8 @@ internal class RemoteScreenRecorder(
     private val arrowPath = Path()
     private val cursorRect = Rect()
     @Volatile private var drawTargetRef: Bitmap? = null
+    @Volatile private var audioRecorderRef: RemoteAudioRecorder? = null
+    @Volatile private var audioSaved = false
 
     @Volatile private var listener: ((RemoteRecordingState) -> Unit)? = null
     @Volatile private var worker: Thread? = null
@@ -222,6 +228,22 @@ internal class RemoteScreenRecorder(
             val activeDrain = CodecOutputDrain(activeCodec, activeMuxer)
             drain = activeDrain
 
+            // Audio dimulai sebelum loop video supaya keduanya mulai bersamaan.
+            // Kegagalan audio tidak boleh menggagalkan video.
+            audioSaved = false
+            audioRecorderRef = audioSource?.let { source ->
+                runCatching {
+                    val audioFile = File(
+                        outputFile.parentFile,
+                        outputFile.nameWithoutExtension + "-audio.m4a",
+                    )
+                    RemoteAudioRecorder(source.sampleRate, source.channelCount, audioFile).also { recorder ->
+                        recorder.start()
+                        source.attachPcmTap { data, offset, length -> recorder.onPcm(data, offset, length) }
+                    }
+                }.getOrNull()
+            }
+
             publish(RemoteRecordingState.Recording)
             val startNs = System.nanoTime()
             var frameIndex = 0L
@@ -268,7 +290,17 @@ internal class RemoteScreenRecorder(
 
             if (isCaptureProtected()) throw SecureCaptureException()
             val location = try {
-                publishVideo(outputFile)
+                val video = publishVideo(outputFile)
+                val audioFile = File(
+                    outputFile.parentFile,
+                    outputFile.nameWithoutExtension + "-audio.m4a",
+                )
+                if (audioSaved && audioFile.exists() && audioFile.length() > 0) {
+                    val audioLocation = runCatching { publishAudio(audioFile) }.getOrNull()
+                    if (audioLocation != null) "$video + $audioLocation" else video
+                } else {
+                    video
+                }
             } catch (error: Throwable) {
                 throw SaveVideoException(error)
             }
@@ -282,6 +314,14 @@ internal class RemoteScreenRecorder(
             }
             publish(RemoteRecordingState.Failed(reason))
         } finally {
+            // Sadapan dilepas lebih dulu agar tidak ada PCM masuk setelah
+            // perekam audio berhenti.
+            val cleanupAudio = audioRecorderRef
+            audioRecorderRef = null
+            if (cleanupAudio != null) {
+                runCatching { audioSource?.attachPcmTap(null) }
+                audioSaved = runCatching { cleanupAudio.stopAndSave() }.getOrDefault(false)
+            }
             currentFrame?.takeUnless { it.isRecycled }?.recycle()
             runCatching { renderer?.release() }
             runCatching {
@@ -343,6 +383,47 @@ internal class RemoteScreenRecorder(
             throw SaveVideoException(error)
         }
         return "Movies/XyDesk (folder aplikasi)/$fileName"
+    }
+
+    /**
+     * Simpan rekaman audio ke MediaStore. Cermin dari publishVideo, hanya
+     * koleksinya yang berbeda (Music, bukan Movies).
+     */
+    private fun publishAudio(tempFile: File): String {
+        val fileName = "XyDesk-PC-${System.currentTimeMillis()}-audio.m4a"
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            val values = ContentValues().apply {
+                put(MediaStore.MediaColumns.DISPLAY_NAME, fileName)
+                put(MediaStore.MediaColumns.MIME_TYPE, "audio/mp4")
+                put(MediaStore.MediaColumns.RELATIVE_PATH, "${Environment.DIRECTORY_MUSIC}/XyDesk")
+                put(MediaStore.MediaColumns.IS_PENDING, 1)
+            }
+            val resolver = appContext.contentResolver
+            val uri = resolver.insert(MediaStore.Audio.Media.EXTERNAL_CONTENT_URI, values)
+                ?: return "audio gagal disimpan"
+            var completed = false
+            try {
+                val output = resolver.openOutputStream(uri, "w") ?: return "audio gagal disimpan"
+                output.use { stream -> FileInputStream(tempFile).use { input -> input.copyTo(stream) } }
+                val ready = ContentValues().apply { put(MediaStore.MediaColumns.IS_PENDING, 0) }
+                resolver.update(uri, ready, null, null)
+                completed = true
+                return "Music/XyDesk/$fileName"
+            } finally {
+                if (!completed) runCatching { resolver.delete(uri, null, null) }
+            }
+        }
+        val base = appContext.getExternalFilesDir(Environment.DIRECTORY_MUSIC) ?: appContext.filesDir
+        val directory = File(base, "XyDesk")
+        if (!directory.exists() && !directory.mkdirs()) return "audio gagal disimpan"
+        val destination = File(directory, fileName)
+        return try {
+            tempFile.copyTo(destination, overwrite = true)
+            "Music/XyDesk (folder aplikasi)/$fileName"
+        } catch (error: Exception) {
+            destination.delete()
+            "audio gagal disimpan"
+        }
     }
 
     private fun sleepUntil(targetNs: Long) {
@@ -697,5 +778,164 @@ internal class RecordingPointerBox {
         val height = remoteHeight
         if (width <= 0 || height <= 0) return null
         return RecordingPointer(x, y, width, height, cursor, hotX, hotY, true)
+    }
+}
+
+/** Sumber PCM audio PC yang bisa disadap perekaman. */
+internal interface RecordingAudioSource {
+    val sampleRate: Int
+    val channelCount: Int
+    fun attachPcmTap(tap: ((ByteArray, Int, Int) -> Unit)?)
+}
+
+/**
+ * Perekam audio PC (PCM16 -> AAC di .m4a).
+ *
+ * Sengaja jadi file terpisah, bukan track kedua di dalam MP4 video. MediaMuxer
+ * menuntut semua track ditambahkan sebelum start(), jadi menggabungkan berarti
+ * menulis ulang jalur muxer video yang sudah berjalan dan berisiko merusak
+ * rekaman yang sekarang sudah benar. Dipisahkan, jalur video tidak tersentuh
+ * sama sekali: kalau audio gagal, rekaman video tetap utuh.
+ *
+ * PCM disalin per paket karena buffer milik bridge dipakai ulang untuk paket
+ * berikutnya. Antrean bounded: kalau encoder tertinggal, paket tertua dibuang
+ * -- audio sedikit terpotong lebih baik daripada memori membengkak.
+ */
+internal class RemoteAudioRecorder(
+    private val sampleRate: Int,
+    private val channelCount: Int,
+    private val outputFile: File,
+) {
+    private val queue = LinkedBlockingQueue<ByteArray>(MAX_QUEUE_PACKETS)
+    private val stopRequested = AtomicBoolean(false)
+    private val bufferInfo = MediaCodec.BufferInfo()
+    @Volatile private var thread: Thread? = null
+    @Volatile private var trackIndex = -1
+    @Volatile private var muxerStarted = false
+    @Volatile private var saved = false
+
+    fun onPcm(data: ByteArray, offset: Int, length: Int) {
+        if (length <= 0 || stopRequested.get()) return
+        val copy = runCatching { data.copyOfRange(offset, offset + length) }.getOrNull() ?: return
+        while (!queue.offer(copy)) {
+            if (queue.poll() == null) return
+        }
+    }
+
+    fun start() {
+        val worker = Thread({ runLoop() }, "XyDesk-PC-AudioRec")
+        thread = worker
+        worker.start()
+    }
+
+    /** Hentikan dan rapikan. Return true kalau file audio benar-benar tertulis. */
+    fun stopAndSave(): Boolean {
+        stopRequested.set(true)
+        runCatching { thread?.join(JOIN_TIMEOUT_MS) }
+        thread = null
+        return saved
+    }
+
+    private fun runLoop() {
+        val codec = runCatching { MediaCodec.createEncoderByType(AUDIO_MIME) }.getOrNull() ?: return
+        var muxer: MediaMuxer? = null
+        var totalBytes = 0L
+        val bytesPerSecond = (sampleRate.toLong() * channelCount * 2L).coerceAtLeast(1L)
+        try {
+            val format = MediaFormat.createAudioFormat(AUDIO_MIME, sampleRate, channelCount).apply {
+                setInteger(MediaFormat.KEY_AAC_PROFILE, MediaCodecInfo.CodecProfileLevel.AACObjectLC)
+                setInteger(MediaFormat.KEY_BIT_RATE, AUDIO_BIT_RATE)
+                setInteger(MediaFormat.KEY_MAX_INPUT_SIZE, 64 * 1024)
+            }
+            codec.configure(format, null, null, MediaCodec.CONFIGURE_FLAG_ENCODE)
+            muxer = MediaMuxer(outputFile.absolutePath, MediaMuxer.OutputFormat.MUXER_OUTPUT_MPEG_4)
+            codec.start()
+            while (true) {
+                // Kuras keluaran lebih dulu supaya buffer input tidak habis.
+                if (drainOutput(codec, muxer, 0L)) break
+                val pcm = queue.poll(POLL_TIMEOUT_MS, TimeUnit.MILLISECONDS)
+                if (pcm == null) {
+                    if (stopRequested.get()) break
+                    continue
+                }
+                val inIndex = codec.dequeueInputBuffer(INPUT_TIMEOUT_US)
+                if (inIndex < 0) continue
+                val buffer = codec.getInputBuffer(inIndex)
+                if (buffer == null) {
+                    codec.queueInputBuffer(inIndex, 0, 0, 0L, 0)
+                    continue
+                }
+                buffer.clear()
+                buffer.put(pcm)
+                val presentationUs = totalBytes * 1_000_000L / bytesPerSecond
+                totalBytes += pcm.size
+                codec.queueInputBuffer(inIndex, 0, pcm.size, presentationUs, 0)
+            }
+            // EOS untuk encoder audio dikirim lewat buffer input kosong berflag
+            // EOS; signalEndOfInputStream() hanya untuk encoder berbasis surface.
+            val eosIndex = codec.dequeueInputBuffer(INPUT_TIMEOUT_US)
+            if (eosIndex >= 0) {
+                codec.queueInputBuffer(
+                    eosIndex, 0, 0,
+                    totalBytes * 1_000_000L / bytesPerSecond,
+                    MediaCodec.BUFFER_FLAG_END_OF_STREAM,
+                )
+            }
+            var attempts = 0
+            var ended = false
+            while (attempts < MAX_DRAIN_ATTEMPTS && !ended) {
+                ended = drainOutput(codec, muxer, DRAIN_TIMEOUT_US)
+                attempts += 1
+            }
+            if (muxerStarted) {
+                muxer?.stop()
+                saved = true
+            }
+        } catch (_: Throwable) {
+            saved = false
+        } finally {
+            runCatching { codec.stop() }
+            runCatching { codec.release() }
+            if (muxerStarted) runCatching { muxer?.release() }
+            if (!saved) runCatching { outputFile.delete() }
+        }
+    }
+
+    private fun drainOutput(codec: MediaCodec, muxer: MediaMuxer?, timeoutUs: Long): Boolean {
+        val index = codec.dequeueOutputBuffer(bufferInfo, timeoutUs)
+        if (index == MediaCodec.INFO_TRY_AGAIN_LATER) return false
+        if (index == MediaCodec.INFO_OUTPUT_FORMAT_CHANGED) {
+            if (muxer != null && !muxerStarted) {
+                trackIndex = muxer.addTrack(codec.outputFormat)
+                muxer.start()
+                muxerStarted = true
+            }
+            return false
+        }
+        if (index < 0) return false
+        val endOfStream = (bufferInfo.flags and MediaCodec.BUFFER_FLAG_END_OF_STREAM) != 0
+        try {
+            val codecConfig = (bufferInfo.flags and MediaCodec.BUFFER_FLAG_CODEC_CONFIG) != 0
+            if (bufferInfo.size > 0 && !codecConfig && muxerStarted && trackIndex >= 0) {
+                val buffer = codec.getOutputBuffer(index) ?: return endOfStream
+                buffer.position(bufferInfo.offset)
+                buffer.limit(bufferInfo.offset + bufferInfo.size)
+                muxer?.writeSampleData(trackIndex, buffer, bufferInfo)
+            }
+        } finally {
+            codec.releaseOutputBuffer(index, false)
+        }
+        return endOfStream
+    }
+
+    private companion object {
+        const val AUDIO_MIME = "audio/mp4a-latm"
+        const val AUDIO_BIT_RATE = 128_000
+        const val MAX_QUEUE_PACKETS = 96
+        const val POLL_TIMEOUT_MS = 20L
+        const val INPUT_TIMEOUT_US = 10_000L
+        const val DRAIN_TIMEOUT_US = 10_000L
+        const val MAX_DRAIN_ATTEMPTS = 200
+        const val JOIN_TIMEOUT_MS = 3_000L
     }
 }

@@ -115,6 +115,18 @@ class SessionManager(context: Context) {
     @Volatile private var userInitiatedDisconnect: Boolean = false
     @Volatile private var autoReconnectAttempts: Int = 0
     @Volatile private var quicAudioBridge: QuicAudioBridge? = null
+    @Volatile private var pendingAudioTap: ((ByteArray, Int, Int) -> Unit)? = null
+
+    /**
+     * Pasang/lepas sadapan PCM audio PC untuk perekaman.
+     *
+     * Bridge audio baru dibuat saat koneksi siap, jadi permintaannya disimpan
+     * dan dipasang ulang begitu bridge-nya ada.
+     */
+    fun setAudioPcmTap(tap: ((ByteArray, Int, Int) -> Unit)?) {
+        pendingAudioTap = tap
+        quicAudioBridge?.tap = tap
+    }
     /** Status teks bridge audio/mic untuk diagnostik & HUD. */
     @Volatile var audioBridgeState: String = "idle"
         private set
@@ -756,7 +768,12 @@ class SessionManager(context: Context) {
                                 listener?.onAudioBridge(st)
                             },
                             onLevel = { tx, rx -> listener?.onAudioLevel(tx, rx) },
-                        ).also { it.start() }
+                        ).also { bridge ->
+                            // Sadapan dipasang SEBELUM start() supaya paket audio
+                            // pertama tidak terlewat oleh thread penerima.
+                            pendingAudioTap?.let { tap -> bridge.tap = tap }
+                            bridge.start()
+                        }
                     } else {
                         audioBridgeState = "off (audio & mic mati di pengaturan sesi)"
                         listener?.onAudioBridge(audioBridgeState)

@@ -89,6 +89,13 @@ class QuicAudioBridge(
         onStatus("stopped")
     }
 
+    /**
+     * Sadap PCM audio dari PC (PCM16 stereo [SAMPLE_RATE] Hz) untuk perekaman.
+     * Null berarti tidak ada yang merekam.
+     */
+    @Volatile
+    var tap: ((ByteArray, Int, Int) -> Unit)? = null
+
     private fun runLoopbackReceiver() {
         var track: AudioTrack? = null
         try {
@@ -155,7 +162,13 @@ class QuicAudioBridge(
                                     i += 2
                                 }
                                 if (lp > rxPeak) rxPeak = lp
-                                track?.write(rxBuf, 8, len - 8)
+                                val pcmLength = len - 8
+                                // Sadapan untuk perekaman. Dipanggil sebelum
+                                // pemutaran supaya perekam menerima PCM apa pun
+                                // keadaan AudioTrack; kegagalan sadapan tidak
+                                // boleh mengganggu audio yang didengar pengguna.
+                                tap?.let { sink -> runCatching { sink(rxBuf, 8, pcmLength) } }
+                                track?.write(rxBuf, 8, pcmLength)
                             }
                             'S' -> if (rxBuf[3] == 'T'.code.toByte() && len >= 16) {
                                 lastHostMs = now
@@ -302,6 +315,7 @@ class QuicAudioBridge(
     }
 
     companion object {
-        private const val SAMPLE_RATE = 24_000
+        const val SAMPLE_RATE = 24_000
+        const val CHANNEL_COUNT = 2
     }
 }
