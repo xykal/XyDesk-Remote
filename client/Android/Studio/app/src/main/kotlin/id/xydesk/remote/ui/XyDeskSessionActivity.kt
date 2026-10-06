@@ -455,6 +455,10 @@ class XyDeskSessionActivity : ComponentActivity() {
                         onDisplayRefreshPreferenceChange = { applyPreferredDisplayRefreshRate(it) },
                         stickModeProvider = { padStickMode },
                         onStickKeys = { x, y -> applyHudStickAxis(x, y) },
+                        onStickModeChange = { next ->
+                            padStickMode = next
+                            sessionPrefs.virtualPadStickMode = next
+                        },
                     )
                     // Saklar pad + mode tata letak di pojok kiri atas. Sengaja bukan
                     // di tengah-atas: pemutar Spotify mengambang di sana, dan bar

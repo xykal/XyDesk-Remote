@@ -174,6 +174,8 @@ fun XyDeskSessionScreen(
     stickModeProvider: () -> XyStickMode = { XyStickMode.POINTER },
     /** Sumbu stick untuk mode WASD/Panah, nilainya -1..1. */
     onStickKeys: (Float, Float) -> Unit = { _, _ -> },
+    /** Dipanggil saat pengguna memilih mode stick di panel sesi. */
+    onStickModeChange: (XyStickMode) -> Unit = {},
 ) {
     val context = LocalContext.current
     val appContext = context.applicationContext
@@ -1210,6 +1212,8 @@ fun XyDeskSessionScreen(
                 onScrollUnits = { sendScrollUnits(it) },
                 // Joystick HUD memakai jalur gerak pointer yang sama dengan
                 // trackpad dan gamepad fisik: 18 unit per defleksi penuh.
+                stickModeProvider = stickModeProvider,
+                onStickModeChange = onStickModeChange,
                 onStickAxis = { x, y ->
                     // Mode POINTER memakai jalur gerak pointer yang sama dengan
                     // trackpad dan gamepad fisik. Mode WASD/Panah diserahkan ke

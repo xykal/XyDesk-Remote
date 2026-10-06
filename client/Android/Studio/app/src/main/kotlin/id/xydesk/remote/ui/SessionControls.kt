@@ -1,5 +1,6 @@
 package id.xydesk.remote.ui
 
+import id.xydesk.remote.ui.input.XyStickMode
 import androidx.compose.animation.AnimatedVisibility
 import android.os.SystemClock
 import kotlinx.coroutines.delay
@@ -140,6 +141,8 @@ fun SessionControls(
     recordingStatus: String? = null,
     recordingActionEnabled: Boolean = true,
     recordingActive: Boolean = false,
+    stickModeProvider: () -> XyStickMode = { XyStickMode.POINTER },
+    onStickModeChange: (XyStickMode) -> Unit = {},
     onToggleRecording: () -> Unit = {},
     onScreenshot: () -> Unit,
     onDisconnect: () -> Unit,
@@ -187,6 +190,9 @@ fun SessionControls(
     var inertialScroll by remember { mutableStateOf(prefs.inertialScroll) }
     var edgeScrollZone by remember { mutableStateOf(prefs.edgeScrollZone) }
     var gamepadEnabled by remember { mutableStateOf(prefs.gamepadEnabled) }
+    // Mode stick dibaca lewat provider karena nilai sesungguhnya hidup di
+    // activity (dipakai mapper dari luar komposisi), bukan di prefs saja.
+    var stickModeUi by remember { mutableStateOf(stickModeProvider()) }
     var gyroMouseEnabled by remember { mutableStateOf(prefs.gyroMouseEnabled) }
     var showTelemetryPill by remember { mutableStateOf(prefs.showTelemetryPill) }
     var hudProfile by remember(deviceId) { mutableStateOf(prefs.hudProfile(deviceId)) }
@@ -905,6 +911,14 @@ fun SessionControls(
                 onEdgeScrollZone = { edgeScrollZone = it; prefs.edgeScrollZone = it },
                 gamepadEnabled = gamepadEnabled,
                 onGamepadEnabled = { gamepadEnabled = it; prefs.gamepadEnabled = it },
+                stickMode = stickModeUi,
+                onStickModeChange = { next ->
+                    stickModeUi = next
+                    prefs.virtualPadStickMode = next
+                    // Activity ikut diberi tahu karena field padStickMode dibaca
+                    // mapper dari luar komposisi.
+                    onStickModeChange(next)
+                },
                 gyroMouseEnabled = gyroMouseEnabled,
                 onGyroMouseEnabled = {
                     gyroMouseEnabled = it
@@ -1440,6 +1454,8 @@ private fun SessionPanel(
     edgeScrollZone: Boolean,
     onEdgeScrollZone: (Boolean) -> Unit,
     gamepadEnabled: Boolean,
+    stickMode: XyStickMode,
+    onStickModeChange: (XyStickMode) -> Unit,
     onGamepadEnabled: (Boolean) -> Unit,
     gyroMouseEnabled: Boolean,
     onGyroMouseEnabled: (Boolean) -> Unit,
@@ -1606,6 +1622,8 @@ private fun SessionPanel(
                         edgeScrollZone = edgeScrollZone,
                         onEdgeScrollZone = onEdgeScrollZone,
                         gamepadEnabled = gamepadEnabled,
+                        stickMode = stickMode,
+                        onStickModeChange = onStickModeChange,
                         onGamepadEnabled = onGamepadEnabled,
                         gyroMouseEnabled = gyroMouseEnabled,
                         onGyroMouseEnabled = onGyroMouseEnabled,
@@ -1938,6 +1956,8 @@ private fun InputTab(
     edgeScrollZone: Boolean,
     onEdgeScrollZone: (Boolean) -> Unit,
     gamepadEnabled: Boolean,
+    stickMode: XyStickMode,
+    onStickModeChange: (XyStickMode) -> Unit,
     onGamepadEnabled: (Boolean) -> Unit,
     gyroMouseEnabled: Boolean,
     onGyroMouseEnabled: (Boolean) -> Unit,
@@ -2061,6 +2081,18 @@ private fun InputTab(
             subtitle = xy("Stik kiri gerak kursor, stik kanan scroll, A/B klik kiri/kanan", "Left stick moves pointer, right stick scrolls, A/B left/right click"),
             checked = gamepadEnabled,
             onCheckedChange = onGamepadEnabled,
+        )
+        PanelHint(
+            xy(
+                "Mode stick berlaku untuk joystick HUD dan gamepad fisik: POINTER menggerakkan kursor, WASD dan Panah mengirim tombol arah.",
+                "Stick mode applies to the HUD joystick and the physical gamepad: POINTER moves the cursor, WASD and Arrows send direction keys.",
+            ),
+        )
+        XySegmented(
+            options = listOf(xy("Pointer", "Pointer"), xy("WASD", "WASD"), xy("Panah", "Arrows")),
+            selectedIndex = XyStickMode.entries.indexOf(stickMode).coerceAtLeast(0),
+            onSelect = { onStickModeChange(XyStickMode.entries[it]) },
+            modifier = Modifier.fillMaxWidth(),
         )
         XyToggleRow(
             title = xy("Gyro Air-Mouse (sensor gerak HP)", "Gyro Air-Mouse (phone motion)"),
