@@ -41,7 +41,6 @@ internal fun feedbackShareDraft(category: String, message: String): String = bui
 }
 
 /** User-controlled feedback draft. No persistence, logging, or network request. */
-@Composable
 /**
  * Tujuan masukan.
  *
@@ -58,6 +57,7 @@ internal enum class FeedbackDestination {
     COPY,
 }
 
+@Composable
 internal fun FeedbackDialog(
     onDismiss: () -> Unit,
     onSend: (destination: FeedbackDestination, category: String, message: String) -> Unit,

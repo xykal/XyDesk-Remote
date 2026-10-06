@@ -908,7 +908,7 @@ internal class RemoteScreenRecorder(
                 }
                 .any { caps ->
                     caps.isSizeSupported(width, height) &&
-                        caps.areSizeAndRateSupported(width, height, TARGET_FRAME_RATE)
+                        caps.areSizeAndRateSupported(width, height, TARGET_FRAME_RATE.toDouble())
                 }
             if (supported) TARGET_FRAME_RATE else FALLBACK_FRAME_RATE
         }.getOrDefault(FALLBACK_FRAME_RATE)
