@@ -188,9 +188,6 @@ fun SessionControls(
     var panelOpen by remember { mutableStateOf(false) }
     var monitorGridOpen by remember { mutableStateOf(false) }
     var tab by remember { mutableStateOf(PanelTab.SCREEN) }
-    // Kunci seksi yang sedang dibuka di grid drill-in. Di-key pada `tab` supaya
-    // pindah tab otomatis kembali ke daftar kotak, bukan membuka seksi lama.
-    var openSection by remember(tab) { mutableStateOf<String?>(null) }
     var pickerOpen by remember { mutableStateOf(false) }
     var editing by remember { mutableStateOf<HudKey?>(null) }
     var pointerSize by remember { mutableFloatStateOf(prefs.pointerSize) }
@@ -1505,6 +1502,9 @@ private fun SessionPanel(
     coreInfo: List<String>,
     onCopyCoreInfo: () -> Unit,
 ) {
+    // Kunci seksi yang sedang dibuka di grid drill-in. Di-key pada `tab` supaya
+    // pindah tab otomatis kembali ke daftar kotak, bukan membuka seksi lama.
+    var openSection by remember(tab) { mutableStateOf<String?>(null) }
     Box(
         Modifier
             .fillMaxSize()

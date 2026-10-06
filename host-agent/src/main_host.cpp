@@ -7,8 +7,10 @@
 #include <wtsapi32.h>
 #endif
 
+#include <cstdarg>
 #include <cstdio>
 #include <cstring>
+#include <cwchar>
 #include <string>
 #include <vector>
 
@@ -54,9 +56,13 @@ std::wstring fmt(const wchar_t* fmtstr, ...) {
     wchar_t buf[2048];
     va_list ap;
     va_start(ap, fmtstr);
-    _vsnwprintf(buf, 2047, fmtstr, ap);
+    // std::vswprintf, bukan _vsnwprintf: build memakai -std=c++17 yang
+    // menyalakan __STRICT_ANSI__, dan mingw menyembunyikan nama berprefiks
+    // garis bawah ala MSVC di mode itu.
+    int n = std::vswprintf(buf, 2047, fmtstr, ap);
     va_end(ap);
-    buf[2047] = L'\0';
+    if (n < 0) buf[0] = L'\0';
+    buf[2046] = L'\0';
     return std::wstring(buf);
 }
 
