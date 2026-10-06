@@ -1143,7 +1143,7 @@ fun XyDeskSessionScreen(
             val recordingStatus = when (val current = recordingState) {
                 RemoteRecordingState.Idle -> null
                 RemoteRecordingState.Preparing -> xy("Menyiapkan encoder video…", "Preparing the video encoder…")
-                RemoteRecordingState.Recording -> xy("Merekam desktop PC · tanpa audio", "Recording the PC desktop · no audio")
+                RemoteRecordingState.Recording -> xy("Merekam desktop PC + audio PC", "Recording the PC desktop + PC audio")
                 RemoteRecordingState.Stopping -> xy("Menutup file MP4…", "Finalizing the MP4…")
                 is RemoteRecordingState.Saved -> xy("Tersimpan: {0}", "Saved: {0}", current.location)
                 is RemoteRecordingState.Failed -> when (current.reason) {
