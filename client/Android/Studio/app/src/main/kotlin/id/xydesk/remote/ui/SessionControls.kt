@@ -1465,23 +1465,33 @@ private fun SessionPanel(
         Modifier
             .fillMaxSize()
             .zIndex(30f),
-        contentAlignment = Alignment.CenterEnd,
+        contentAlignment = Alignment.Center,
     ) {
+        // Scrim dipertahankan (lebih tipis) karena pemisahan utama sekarang
+        // datang dari blur permukaan remote; di Android < 12 blur tidak jalan
+        // sehingga scrim inilah yang menjaga keterbacaan.
         Box(
             Modifier
                 .fillMaxSize()
-                .background(MaterialTheme.colorScheme.scrim.copy(alpha = 0.62f))
+                .background(MaterialTheme.colorScheme.scrim.copy(alpha = 0.34f))
                 .consumeBackgroundPointer(onClose),
         )
+        // Popup di tengah layar, gaya jendela macOS: sudut membulat, hampir
+        // sepenuh layar, tepi halus.
         Column(
             Modifier
-                .fillMaxHeight()
-                .widthIn(max = 360.dp)
-                .fillMaxWidth(0.86f)
-                .clip(RoundedCornerShape(topStart = 6.dp, bottomStart = 6.dp))
-                .background(MaterialTheme.colorScheme.surface)
+                .fillMaxHeight(0.9f)
+                .fillMaxWidth(0.94f)
+                .widthIn(max = 720.dp)
+                .clip(RoundedCornerShape(22.dp))
+                .background(MaterialTheme.colorScheme.surface.copy(alpha = 0.97f))
+                .border(
+                    1.dp,
+                    MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.6f),
+                    RoundedCornerShape(22.dp),
+                )
                 .pointerInput(Unit) {}
-                .padding(horizontal = 14.dp, vertical = 12.dp),
+                .padding(horizontal = 18.dp, vertical = 14.dp),
             verticalArrangement = Arrangement.spacedBy(10.dp),
         ) {
             Row(

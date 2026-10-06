@@ -2,6 +2,9 @@ package id.xydesk.remote.ui
 
 import android.content.Context
 import id.xydesk.remote.core.SmartResolution
+import id.xydesk.remote.ui.input.XyPadCluster
+import id.xydesk.remote.ui.input.XyPadLayout
+import id.xydesk.remote.ui.input.XyPadPos
 
 /** Cara input di layar sesi. */
 enum class InputMode(val title: String, val titleEn: String, val detail: String, val detailEn: String) {
@@ -144,6 +147,23 @@ class SessionPrefs(context: Context) {
         get() = input.getBoolean(KEY_VIRTUAL_PAD, false)
         set(v) = input.edit().putBoolean(KEY_VIRTUAL_PAD, v).apply()
 
+    /**
+     * Tata letak gamepad virtual per perangkat: posisi tiap klaster dalam
+     * pecahan ukuran layar, supaya pad tidak menutupi overlay lain dan tetap
+     * pas saat orientasi berubah.
+     */
+    fun virtualPadLayout(deviceId: String): Map<XyPadCluster, XyPadPos>? =
+        XyPadLayout.decode(device.getString("$deviceId.padlayout", null))
+
+    fun setVirtualPadLayout(deviceId: String, layout: Map<XyPadCluster, XyPadPos>) {
+        device.edit().putString("$deviceId.padlayout", XyPadLayout.encode(layout)).apply()
+    }
+
+    /** Skala ukuran gamepad virtual (0.7x - 1.4x). */
+    var virtualPadScale: Float
+        get() = input.getFloat(KEY_VIRTUAL_PAD_SCALE, 1f)
+        set(v) = input.edit().putFloat(KEY_VIRTUAL_PAD_SCALE, XyPadLayout.clampScale(v)).apply()
+
     /** Mode Gyro Air-Mouse (miringkan HP untuk menggerakkan kursor). */
     var gyroMouseEnabled: Boolean
         get() = input.getBoolean(KEY_GYRO_MOUSE, false)
@@ -263,6 +283,7 @@ class SessionPrefs(context: Context) {
         private const val KEY_EDGE_SCROLL = "edge_scroll"
         private const val KEY_GAMEPAD = "gamepad_enabled"
         private const val KEY_VIRTUAL_PAD = "virtual_pad_enabled"
+        private const val KEY_VIRTUAL_PAD_SCALE = "virtual_pad_scale"
         private const val KEY_GYRO_MOUSE = "gyro_mouse"
         private const val KEY_TELEMETRY_PILL = "telemetry_pill"
         private const val KEY_SWAP_MOUSE = "swap_mouse_buttons"

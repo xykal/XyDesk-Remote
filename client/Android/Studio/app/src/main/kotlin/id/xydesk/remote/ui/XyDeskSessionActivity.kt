@@ -27,7 +27,9 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.ui.Alignment
@@ -35,6 +37,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import id.xydesk.remote.pcstream.XyGamepadState
 import id.xydesk.remote.ui.input.XyGamepadActionMapper
+import id.xydesk.remote.ui.input.XyPadLayout
 import id.xydesk.remote.ui.input.XyGamepadOutput
 import id.xydesk.remote.ui.input.XyPadKey
 import android.Manifest
@@ -433,6 +436,11 @@ class XyDeskSessionActivity : ComponentActivity() {
             XyThemeState.init(appPrefs ?: AppPrefs(this))
             XyDeskTheme(dark = xyDark()) {
                 var virtualPadVisible by remember { mutableStateOf(sessionPrefs.virtualPadEnabled) }
+                var padEditMode by remember { mutableStateOf(false) }
+                var padLayout by remember {
+                    mutableStateOf(XyPadLayout.resolve(sessionPrefs.virtualPadLayout(profile.id)))
+                }
+                var padScale by remember { mutableStateOf(sessionPrefs.virtualPadScale) }
                 Box(modifier = Modifier.fillMaxSize()) {
                     XyDeskSessionScreen(
                         profile = profile,
@@ -441,21 +449,56 @@ class XyDeskSessionActivity : ComponentActivity() {
                         onExit = { finish() },
                         onDisplayRefreshPreferenceChange = { applyPreferredDisplayRefreshRate(it) },
                     )
-                    // Saklar pad di pojok kiri atas; posisinya menjauh dari HUD rail kanan.
-                    XyPadRoundButton(
-                        label = "PAD",
-                        size = 44.dp,
-                        onPress = { down ->
-                            if (down) {
-                                virtualPadVisible = !virtualPadVisible
-                                sessionPrefs.virtualPadEnabled = virtualPadVisible
-                                if (!virtualPadVisible) releaseVirtualPad()
-                            }
-                        },
+                    // Saklar pad + mode tata letak di pojok kiri atas. Sengaja bukan
+                    // di tengah-atas: pemutar Spotify mengambang di sana, dan bar
+                    // shoulder yang dulu dipasang di tengah-atas menutupinya.
+                    Row(
                         modifier = Modifier.align(Alignment.TopStart).padding(12.dp),
-                    )
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    ) {
+                        XyPadRoundButton(
+                            label = "PAD",
+                            size = 44.dp,
+                            onPress = { down ->
+                                if (down) {
+                                    virtualPadVisible = !virtualPadVisible
+                                    sessionPrefs.virtualPadEnabled = virtualPadVisible
+                                    if (!virtualPadVisible) {
+                                        padEditMode = false
+                                        releaseVirtualPad()
+                                    }
+                                }
+                            },
+                            onLongPress = {
+                                virtualPadVisible = true
+                                sessionPrefs.virtualPadEnabled = true
+                                padEditMode = true
+                            },
+                        )
+                        if (virtualPadVisible) {
+                            XyPadRoundButton(
+                                label = "\u270E",
+                                size = 44.dp,
+                                onPress = { down -> if (down) padEditMode = !padEditMode },
+                            )
+                        }
+                    }
                     if (virtualPadVisible) {
-                        XyVirtualGamepadOverlay(onState = { applyVirtualPadState(it) })
+                        XyVirtualGamepadOverlay(
+                            onState = { applyVirtualPadState(it) },
+                            layout = padLayout,
+                            onLayoutChange = { next ->
+                                padLayout = next
+                                sessionPrefs.setVirtualPadLayout(profile.id, next)
+                            },
+                            scale = padScale,
+                            onScaleChange = { next ->
+                                padScale = next
+                                sessionPrefs.virtualPadScale = next
+                            },
+                            editMode = padEditMode,
+                            onExitEdit = { padEditMode = false },
+                        )
                     }
                 }
             }
