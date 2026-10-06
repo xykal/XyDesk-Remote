@@ -5,6 +5,7 @@ import id.xydesk.remote.core.SmartResolution
 import id.xydesk.remote.ui.input.XyPadCluster
 import id.xydesk.remote.ui.input.XyPadLayout
 import id.xydesk.remote.ui.input.XyPadPos
+import id.xydesk.remote.ui.input.XyStickMode
 
 /** Cara input di layar sesi. */
 enum class InputMode(val title: String, val titleEn: String, val detail: String, val detailEn: String) {
@@ -159,6 +160,16 @@ class SessionPrefs(context: Context) {
         device.edit().putString("$deviceId.padlayout", XyPadLayout.encode(layout)).apply()
     }
 
+    /**
+     * Tujuan stik kiri pada gamepad virtual: kursor, tombol WASD, atau tombol
+     * panah. Disimpan sebagai ordinal [XyStickMode].
+     */
+    var virtualPadStickMode: XyStickMode
+        get() = XyStickMode.entries.getOrElse(input.getInt(KEY_VIRTUAL_PAD_STICK, 0)) {
+            XyStickMode.POINTER
+        }
+        set(v) = input.edit().putInt(KEY_VIRTUAL_PAD_STICK, v.ordinal).apply()
+
     /** Skala ukuran gamepad virtual (0.7x - 1.4x). */
     var virtualPadScale: Float
         get() = input.getFloat(KEY_VIRTUAL_PAD_SCALE, 1f)
@@ -284,6 +295,7 @@ class SessionPrefs(context: Context) {
         private const val KEY_GAMEPAD = "gamepad_enabled"
         private const val KEY_VIRTUAL_PAD = "virtual_pad_enabled"
         private const val KEY_VIRTUAL_PAD_SCALE = "virtual_pad_scale"
+        private const val KEY_VIRTUAL_PAD_STICK = "virtual_pad_stick_mode"
         private const val KEY_GYRO_MOUSE = "gyro_mouse"
         private const val KEY_TELEMETRY_PILL = "telemetry_pill"
         private const val KEY_SWAP_MOUSE = "swap_mouse_buttons"

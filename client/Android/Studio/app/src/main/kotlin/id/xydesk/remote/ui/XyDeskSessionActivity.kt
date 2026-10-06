@@ -38,6 +38,7 @@ import androidx.compose.ui.unit.dp
 import id.xydesk.remote.pcstream.XyGamepadState
 import id.xydesk.remote.ui.input.XyGamepadActionMapper
 import id.xydesk.remote.ui.input.XyPadLayout
+import id.xydesk.remote.ui.input.XyStickMode
 import id.xydesk.remote.ui.input.XyGamepadOutput
 import id.xydesk.remote.ui.input.XyPadKey
 import android.Manifest
@@ -428,6 +429,9 @@ class XyDeskSessionActivity : ComponentActivity() {
         // Di-hoist ke sini: di dalam lambda Compose `this` bisa berarti BoxScope,
         // bukan Context, sehingga SessionPrefs(this) tidak bisa dipakai langsung.
         val sessionPrefs = SessionPrefs(this)
+        // Mode stik dibaca di sini supaya sesi yang langsung memakai pad tanpa
+        // membuka bar edit tetap memakai mode tersimpan, bukan default POINTER.
+        padStickMode = sessionPrefs.virtualPadStickMode
         setContent {
             // Layar sesi ikut setelan tema app (dulu dipaksa gelap, jadi di
             // mode terang panel dan dialog di sini tidak nyambung dengan sisa
@@ -441,6 +445,7 @@ class XyDeskSessionActivity : ComponentActivity() {
                     mutableStateOf(XyPadLayout.resolve(sessionPrefs.virtualPadLayout(profile.id)))
                 }
                 var padScale by remember { mutableStateOf(sessionPrefs.virtualPadScale) }
+                var stickModeUi by remember { mutableStateOf(sessionPrefs.virtualPadStickMode) }
                 Box(modifier = Modifier.fillMaxSize()) {
                     XyDeskSessionScreen(
                         profile = profile,
@@ -498,6 +503,14 @@ class XyDeskSessionActivity : ComponentActivity() {
                             },
                             editMode = padEditMode,
                             onExitEdit = { padEditMode = false },
+                            stickMode = stickModeUi,
+                            onStickModeChange = { next ->
+                                stickModeUi = next
+                                // Field di activity ikut diperbarui karena mapper
+                                // dipanggil dari luar komposisi.
+                                this@XyDeskSessionActivity.padStickMode = next
+                                sessionPrefs.virtualPadStickMode = next
+                            },
                         )
                     }
                 }
@@ -663,6 +676,9 @@ class XyDeskSessionActivity : ComponentActivity() {
 
     private var lastVirtualPadState: XyGamepadState? = null
 
+    /** Tujuan stik kiri gamepad virtual; disinkronkan dari state Compose. */
+    private var padStickMode: XyStickMode = XyStickMode.POINTER
+
     /**
      * Jalur keluar gamepad virtual untuk sesi RDP. Sengaja memakai hook yang sama
      * dengan gamepad fisik (pointer delta, scroll units, klik, tombol virtual)
@@ -691,6 +707,10 @@ class XyDeskSessionActivity : ComponentActivity() {
                     XyPadKey.ARROW_DOWN -> KeyEvent.KEYCODE_DPAD_DOWN
                     XyPadKey.ARROW_LEFT -> KeyEvent.KEYCODE_DPAD_LEFT
                     XyPadKey.ARROW_RIGHT -> KeyEvent.KEYCODE_DPAD_RIGHT
+                    XyPadKey.W -> KeyEvent.KEYCODE_W
+                    XyPadKey.A -> KeyEvent.KEYCODE_A
+                    XyPadKey.S -> KeyEvent.KEYCODE_S
+                    XyPadKey.D -> KeyEvent.KEYCODE_D
                 },
                 down,
             )
@@ -699,7 +719,7 @@ class XyDeskSessionActivity : ComponentActivity() {
 
     /** Terapkan satu snapshot gamepad virtual ke sesi RDP (berbasis selisih state). */
     private fun applyVirtualPadState(state: XyGamepadState) {
-        XyGamepadActionMapper.apply(state, lastVirtualPadState, virtualPadOutput)
+        XyGamepadActionMapper.apply(state, lastVirtualPadState, virtualPadOutput, padStickMode)
         lastVirtualPadState = state
     }
 

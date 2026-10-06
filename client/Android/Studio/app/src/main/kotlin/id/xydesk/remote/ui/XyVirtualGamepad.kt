@@ -40,6 +40,7 @@ import id.xydesk.remote.pcstream.XyVirtualPadTracker
 import id.xydesk.remote.ui.input.XyPadCluster
 import id.xydesk.remote.ui.input.XyPadLayout
 import id.xydesk.remote.ui.input.XyPadPos
+import id.xydesk.remote.ui.input.XyStickMode
 import kotlin.math.min
 import kotlin.math.roundToInt
 import kotlin.math.sqrt
@@ -79,6 +80,8 @@ fun XyVirtualGamepadOverlay(
     onScaleChange: (Float) -> Unit,
     editMode: Boolean,
     onExitEdit: () -> Unit,
+    stickMode: XyStickMode = XyStickMode.POINTER,
+    onStickModeChange: (XyStickMode) -> Unit = {},
     modifier: Modifier = Modifier,
 ) {
     val tracker = remember { XyVirtualPadTracker() }
@@ -171,6 +174,11 @@ fun XyVirtualGamepadOverlay(
                 onScaleChange = onScaleChange,
                 onReset = { onLayoutChange(XyPadLayout.defaults()) },
                 onDone = onExitEdit,
+                stickMode = stickMode,
+                onCycleStickMode = {
+                    val all = XyStickMode.entries
+                    onStickModeChange(all[(stickMode.ordinal + 1) % all.size])
+                },
                 modifier = Modifier.align(Alignment.BottomCenter).padding(bottom = 18.dp),
             )
         }
@@ -193,6 +201,8 @@ private fun XyPadEditBar(
     onScaleChange: (Float) -> Unit,
     onReset: () -> Unit,
     onDone: () -> Unit,
+    stickMode: XyStickMode,
+    onCycleStickMode: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     Row(
@@ -205,12 +215,20 @@ private fun XyPadEditBar(
         horizontalArrangement = Arrangement.spacedBy(8.dp),
     ) {
         Text("Geser klaster", fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        XyEditChip(stickModeLabel(stickMode), onCycleStickMode)
         XyEditChip("−") { onScaleChange(XyPadLayout.clampScale(scale - 0.1f)) }
         Text("${(scale * 100).roundToInt()}%", fontSize = 11.sp)
         XyEditChip("+") { onScaleChange(XyPadLayout.clampScale(scale + 0.1f)) }
         XyEditChip("Reset", onReset)
         XyEditChip("Selesai", onDone)
     }
+}
+
+/** Label ringkas mode stik untuk chip di bar edit. */
+private fun stickModeLabel(mode: XyStickMode): String = when (mode) {
+    XyStickMode.POINTER -> "Stik: Kursor"
+    XyStickMode.WASD -> "Stik: WASD"
+    XyStickMode.ARROWS -> "Stik: Panah"
 }
 
 @Composable
