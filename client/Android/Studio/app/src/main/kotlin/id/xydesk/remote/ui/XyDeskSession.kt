@@ -69,6 +69,8 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.IntSize
+import androidx.compose.ui.draw.BlurredEdgeTreatment
+import androidx.compose.ui.draw.blur
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
@@ -966,7 +968,21 @@ fun XyDeskSessionScreen(
     ) {
         AndroidView(
             factory = { ctx -> controller.buildViewTree(ctx) },
-            modifier = Modifier.fillMaxSize(),
+            modifier = Modifier
+                .fillMaxSize()
+                // Latar ala macOS: permukaan remote diblur selama panel/menu
+                // terbuka. Modifier.blur hanya berjalan di Android 12+ (API 31);
+                // di bawah itu otomatis no-op sehingga scrim panel yang menjaga
+                // kontras. Blur dipasang di surface, bukan di panel, karena
+                // Modifier.blur memblur konten yang ditempeli -- bukan yang ada
+                // di belakangnya.
+                .then(
+                    if (controlsOverlayOpen) {
+                        Modifier.blur(28.dp, BlurredEdgeTreatment.Rectangle)
+                    } else {
+                        Modifier
+                    },
+                ),
         )
 
 
