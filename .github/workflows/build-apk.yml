@@ -281,6 +281,29 @@ jobs:
             echo "Cache .cxx tanpa source ExternalProject -> bersihkan agar superbuild jalan dari nol."
             rm -rf client/Android/Studio/freeRDPCore/.cxx
           fi
+      # Cache native memuat pohon sumber FreeRDP dan ExternalProject SETELAH
+      # patch diterapkan di tempat, sementara langkah di bawah menghapus stamp
+      # supaya build+install selalu diulang — termasuk langkah patch-nya. Pada
+      # cache-hit pertama (run 37539620195, rilis v1.1.0) git menolak dengan
+      # "error: build/platform-android.mk: does not match index" karena working
+      # tree sudah tidak cocok lagi dengan indeks. Kembalikan tiap repo ke
+      # keadaan pristine supaya patch diterapkan ulang dengan bersih, persis
+      # seperti jalur cache-miss yang selama ini berhasil.
+      - name: Segarkan repo git di cache native agar patch bisa diterapkan ulang
+        run: |
+          set -uo pipefail
+          for root in \
+            client/Android/Studio/freeRDPCore/.cxx \
+            client/Android/Studio/freeRDPCore/src/main/cpp/external
+          do
+            [ -d "$root" ] || continue
+            while IFS= read -r gitdir; do
+              repo="${gitdir%/.git}"
+              git -C "$repo" checkout -q -- . 2>/dev/null || true
+              git -C "$repo" clean -fdq 2>/dev/null || true
+              echo "  pristine: $repo"
+            done < <(find "$root" -maxdepth 10 -name .git -print 2>/dev/null)
+          done
       - name: Invalidate FreeRDP stamp so patched C files always rebuild & install
         run: |
           if [ -d "client/Android/Studio/freeRDPCore/.cxx" ]; then
