@@ -1,5 +1,6 @@
 package id.xydesk.remote.ui
 
+import androidx.compose.animation.AnimatedVisibility
 import android.os.SystemClock
 import kotlinx.coroutines.delay
 import androidx.compose.foundation.Canvas
@@ -1690,6 +1691,7 @@ private fun ScreenTab(
     PanelSection(
         if (pcConnectMode) xy("Telemetri & Kontrol Monitor Fisik PC", "Live Telemetry & Physical PC Monitor")
         else xy("Telemetri & Multi-Monitor / Sesi RDP", "Live Telemetry & Multi-Monitor / RDP Sessions"),
+        initiallyExpanded = true,
     ) {
         XyToggleRow(
             title = xy("Status telemetri live (Update UI, Latency, Network)", "Live telemetry status (UI updates, latency, network)"),
@@ -1940,7 +1942,7 @@ private fun InputTab(
     gyroMouseEnabled: Boolean,
     onGyroMouseEnabled: (Boolean) -> Unit,
 ) {
-    PanelSection(xy("Mode input & Klik Mouse", "Input mode & Mouse Click")) {
+    PanelSection(xy("Mode input & Klik Mouse", "Input mode & Mouse Click"), initiallyExpanded = true) {
         XySegmented(
             options = InputMode.entries.map { xy(it.title, it.titleEn) },
             selectedIndex = inputMode.ordinal,
@@ -2141,7 +2143,7 @@ private fun ButtonsTab(
     hudOpacity: Float,
     onHudOpacityChange: (Float) -> Unit,
 ) {
-    PanelSection(xy("Tampilan tombol overlay", "Overlay button display")) {
+    PanelSection(xy("Tampilan tombol overlay", "Overlay button display"), initiallyExpanded = true) {
         XyToggleRow(
             title = xy("Aktifkan tombol HUD", "Show HUD buttons"),
             subtitle = xy(
@@ -2299,7 +2301,7 @@ private fun SessionTab(
     coreInfo: List<String>,
     onCopyCoreInfo: () -> Unit,
 ) {
-    PanelSection(xy("Keamanan & Privasi Cepat", "Quick Security & Privacy")) {
+    PanelSection(xy("Keamanan & Privasi Cepat", "Quick Security & Privacy"), initiallyExpanded = true) {
         PanelHint(
             xy(
                 "Kunci sesi Windows dari jarak jauh (Win+L) atau aktifkan Tirai Privasi agar layar HP tertutup gelap sementara.",
@@ -2419,10 +2421,20 @@ private fun PanelHint(text: String) {
 }
 
 @Composable
-private fun PanelSection(title: String, content: @Composable () -> Unit) {
-    // Setiap seksi digambar sebagai kartu: latar sedikit terangkat, sudut
-    // membulat, dan tepi halus. Satu fungsi ini dipakai 18 seksi di empat tab,
-    // jadi seluruh panel ikut berubah tanpa menyentuh masing-masing tab.
+private fun PanelSection(
+    title: String,
+    initiallyExpanded: Boolean = false,
+    content: @Composable () -> Unit,
+) {
+    // Setiap seksi digambar sebagai kartu yang bisa dilipat. Satu fungsi ini
+    // dipakai 17 seksi di empat tab, jadi seluruh panel ikut berubah tanpa
+    // menyentuh masing-masing tab.
+    //
+    // Alasan accordion: satu tab berisi 3-6 seksi dengan total 24 blok teks
+    // penjelasan, sehingga tidak mungkin semua muat sekaligus di layar HP.
+    // Dengan seksi terlipat jadi judul saja, satu tab muat tanpa scroll;
+    // seksi pertama tiap tab tetap terbuka supaya isinya langsung kelihatan.
+    var expanded by remember(title) { mutableStateOf(initiallyExpanded) }
     Column(
         Modifier
             .fillMaxWidth()
@@ -2436,14 +2448,35 @@ private fun PanelSection(title: String, content: @Composable () -> Unit) {
             .padding(horizontal = 12.dp, vertical = 10.dp),
         verticalArrangement = Arrangement.spacedBy(7.dp),
     ) {
-        Text(
-            title.uppercase(),
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-            fontSize = 10.sp,
-            letterSpacing = 1.2.sp,
-            fontWeight = FontWeight.SemiBold,
-        )
-        content()
+        Row(
+            Modifier
+                .fillMaxWidth()
+                .clip(RoundedCornerShape(8.dp))
+                .clickable { expanded = !expanded }
+                .padding(vertical = 2.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            Text(
+                title.uppercase(),
+                Modifier.weight(1f),
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                fontSize = 10.sp,
+                letterSpacing = 1.2.sp,
+                fontWeight = FontWeight.SemiBold,
+            )
+            // Glyph teks, bukan Icons.*: paket material-icons tidak dipakai di
+            // proyek ini, jadi penanda lipat tidak menambah dependensi.
+            Text(
+                text = if (expanded) "\u2212" else "+",
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                fontSize = 14.sp,
+                fontWeight = FontWeight.Bold,
+            )
+        }
+        AnimatedVisibility(visible = expanded) {
+            Column(verticalArrangement = Arrangement.spacedBy(7.dp)) { content() }
+        }
     }
 }
 
