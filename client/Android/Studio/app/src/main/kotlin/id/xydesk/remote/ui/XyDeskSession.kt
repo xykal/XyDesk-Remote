@@ -1,5 +1,6 @@
 package id.xydesk.remote.ui
 
+import id.xydesk.remote.ui.input.XyStickMode
 import id.xydesk.remote.core.QuicAudioBridge
 import androidx.compose.runtime.SideEffect
 import android.app.Activity
@@ -169,6 +170,10 @@ fun XyDeskSessionScreen(
     controller: SessionSurfaceController,
     onExit: () -> Unit,
     onDisplayRefreshPreferenceChange: (Int) -> Unit,
+    /** Mode stick yang berlaku sekarang; dibaca tiap gerak, bukan saat komposisi. */
+    stickModeProvider: () -> XyStickMode = { XyStickMode.POINTER },
+    /** Sumbu stick untuk mode WASD/Panah, nilainya -1..1. */
+    onStickKeys: (Float, Float) -> Unit = { _, _ -> },
 ) {
     val context = LocalContext.current
     val appContext = context.applicationContext
@@ -1206,7 +1211,20 @@ fun XyDeskSessionScreen(
                 // Joystick HUD memakai jalur gerak pointer yang sama dengan
                 // trackpad dan gamepad fisik: 18 unit per defleksi penuh.
                 onStickAxis = { x, y ->
-                    if (x != 0f || y != 0f) movePointer(x * HUD_STICK_POINTER_UNITS, y * HUD_STICK_POINTER_UNITS)
+                    // Mode POINTER memakai jalur gerak pointer yang sama dengan
+                    // trackpad dan gamepad fisik. Mode WASD/Panah diserahkan ke
+                    // mapper inti lewat onStickKeys supaya joystick HUD dan
+                    // gamepad fisik berperilaku identik.
+                    when (stickModeProvider()) {
+                        XyStickMode.POINTER ->
+                            if (x != 0f || y != 0f) {
+                                movePointer(x * HUD_STICK_POINTER_UNITS, y * HUD_STICK_POINTER_UNITS)
+                            }
+                        // Sengaja tanpa syarat "bukan nol": saat stick kembali ke
+                        // tengah HUD mengirim (0,0), dan itu justru yang dipakai
+                        // mapper untuk melepas tombol arah.
+                        else -> onStickKeys(x, y)
+                    }
                 },
                 onZoomIn = { controller.zoomIn() },
                 onZoomOut = { controller.zoomOut() },

@@ -453,6 +453,8 @@ class XyDeskSessionActivity : ComponentActivity() {
                         controller = controller,
                         onExit = { finish() },
                         onDisplayRefreshPreferenceChange = { applyPreferredDisplayRefreshRate(it) },
+                        stickModeProvider = { padStickMode },
+                        onStickKeys = { x, y -> applyHudStickAxis(x, y) },
                     )
                     // Saklar pad + mode tata letak di pojok kiri atas. Sengaja bukan
                     // di tengah-atas: pemutar Spotify mengambang di sana, dan bar
@@ -676,6 +678,13 @@ class XyDeskSessionActivity : ComponentActivity() {
 
     private var lastVirtualPadState: XyGamepadState? = null
 
+    /**
+     * State stick HUD terakhir. Sengaja terpisah dari [lastVirtualPadState]
+     * supaya pad virtual lama dan joystick HUD tidak saling menimpa deteksi
+     * tepi tombol arah.
+     */
+    private var lastHudStickState: XyGamepadState? = null
+
     /** Tujuan stik kiri gamepad virtual; disinkronkan dari state Compose. */
     private var padStickMode: XyStickMode = XyStickMode.POINTER
 
@@ -715,6 +724,22 @@ class XyDeskSessionActivity : ComponentActivity() {
                 down,
             )
         }
+    }
+
+    /**
+     * Jalankan sumbu joystick HUD lewat mapper inti untuk mode WASD/Panah.
+     *
+     * Sumbu -1..1 diubah ke skala int16 yang sama dengan gamepad fisik, jadi
+     * keduanya melewati logika deadzone, threshold arah, dan deteksi tepi yang
+     * sama. Sumbu (0,0) menghasilkan state kosong, yang melepas tombol arah.
+     */
+    private fun applyHudStickAxis(x: Float, y: Float) {
+        val state = XyGamepadState(
+            leftX = (x.coerceIn(-1f, 1f) * 32_767f).toInt(),
+            leftY = (y.coerceIn(-1f, 1f) * 32_767f).toInt(),
+        )
+        XyGamepadActionMapper.apply(state, lastHudStickState, virtualPadOutput, padStickMode)
+        lastHudStickState = state
     }
 
     /** Terapkan satu snapshot gamepad virtual ke sesi RDP (berbasis selisih state). */
