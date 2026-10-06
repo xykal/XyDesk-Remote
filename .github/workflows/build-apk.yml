@@ -3,7 +3,7 @@ name: Build APK
 # XyDesk Remote — CI/CD
 #  - push ke main        -> compile gate + debug per-ABI (kecuali commit [skip-debug])
 #  - tag v* / manual     -> build RELEASE (R8 + signing resmi, per-ABI) + GitHub Release
-#  - manual (dispatch)   -> build debug atau release
+#  - manual (dispatch)   -> gate saja (default), atau build debug / release
 #
 # Signing key tidak pernah dibuat/diunggah oleh workflow ini. Buat dan simpan
 # keystore di mesin tepercaya; masukkan nilainya ke repository Actions secrets.
@@ -17,8 +17,11 @@ on:
       job:
         description: "Job manual"
         type: choice
-        options: [ debug, release ]
-        default: debug
+        # 'gate' hanya menjalankan gate compile + unit test tanpa merakit APK.
+        # Sebelumnya pilihan hanya debug/release, jadi tidak ada cara meminta
+        # pemeriksaan cepat lewat dispatch ([skip-debug] hanya berlaku untuk push).
+        options: [ gate, debug, release ]
+        default: gate
 
 # Satu run per ref pada satu waktu: push beruntun ke main (atau re-tag)
 # membatalkan run lama, bukan menumpuk runner 20-30 menit.
