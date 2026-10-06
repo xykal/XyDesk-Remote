@@ -794,6 +794,9 @@ fun XyDeskSessionScreen(
     /** Kirim aksi satu tombol HUD (down=true tekan, false lepas). */
     fun runHudKey(key: HudKey, down: Boolean) {
         when (key.kind) {
+            // Sumbu joystick dialirkan lewat onStickAxis saat jari bergerak,
+            // bukan sebagai aksi tekan/lepas, jadi tidak ada yang perlu dikirim.
+            HudKind.PAD_STICK -> Unit
             HudKind.MOUSE_LEFT -> sendButton(XyMouseButton.LEFT, down)
             HudKind.MOUSE_RIGHT -> sendButton(XyMouseButton.RIGHT, down)
             HudKind.MOUSE_MIDDLE -> sendButton(XyMouseButton.MIDDLE, down)

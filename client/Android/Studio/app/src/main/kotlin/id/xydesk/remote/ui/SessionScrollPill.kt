@@ -1,7 +1,7 @@
 package id.xydesk.remote.ui
 
-import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.Spring
+import androidx.compose.animation.core.animate
 import androidx.compose.animation.core.spring
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -20,8 +20,11 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material3.Icon
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.setValue
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -62,7 +65,10 @@ internal fun SessionScrollPill(
     val density = LocalDensity.current
 
     // Simpangan thumb dari tengah, -1 (paling atas) .. 1 (paling bawah).
-    val deflection = remember { Animatable(0f) }
+    // Sengaja memakai state biasa, bukan Animatable: awaitEachGesture berjalan
+    // di AwaitPointerEventScope yang melarang pemanggilan fungsi suspend
+    // seperti Animatable.snapTo.
+    var deflection by remember { mutableFloatStateOf(0f) }
 
     val trackHeight = 96.dp
     val thumbSize = 30.dp
@@ -117,9 +123,7 @@ internal fun SessionScrollPill(
                             }
                             val deltaY = change.position.y - lastY
                             if (deltaY != 0f) {
-                                deflection.snapTo(
-                                    (deflection.value + deltaY / travel).coerceIn(-1f, 1f),
-                                )
+                                deflection = (deflection + deltaY / travel).coerceIn(-1f, 1f)
                                 accumulator.consume(deltaY, scrollSpeed)
                                     .takeIf { it != 0 }
                                     ?.let(latestScroll.value)
@@ -130,13 +134,14 @@ internal fun SessionScrollPill(
                         // Balik sendiri ke tengah, dengan sedikit pantulan agar
                         // terasa seperti tuas fisik.
                         scope.launch {
-                            deflection.animateTo(
+                            animate(
+                                initialValue = deflection,
                                 targetValue = 0f,
                                 animationSpec = spring(
                                     dampingRatio = Spring.DampingRatioMediumBouncy,
                                     stiffness = Spring.StiffnessMediumLow,
                                 ),
-                            )
+                            ) { value, _ -> deflection = value }
                         }
                     }
                 },
@@ -144,7 +149,7 @@ internal fun SessionScrollPill(
         ) {
             Box(
                 Modifier
-                    .offset { IntOffset(0, (deflection.value * maxTravelPx).roundToInt()) }
+                    .offset { IntOffset(0, (deflection * maxTravelPx).roundToInt()) }
                     .size(thumbSize)
                     .clip(CircleShape)
                     .background(palette.ink.copy(alpha = 0.76f))
