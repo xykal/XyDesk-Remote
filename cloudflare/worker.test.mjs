@@ -1,7 +1,25 @@
-import test from "node:test";
+import test, { afterEach, beforeEach } from "node:test";
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
-import worker, { ActiveSessions, CommunityJokes, PcSignalRoom } from "./worker.mjs";
+import worker, {
+  ActiveSessions,
+  CommunityJokes,
+  PcSignalRoom,
+  resetReleaseLookupCache,
+} from "./worker.mjs";
+
+// Suite ini tidak boleh menembak jaringan. Pencarian rilis publik kini
+// memanggil API GitHub, dan hasilnya di-cache di level modul, jadi setiap tes
+// mulai dari cache kosong plus fetch yang gagal. Tes yang perlu respons GitHub
+// mengganti globalThis.fetch sendiri di dalam badannya.
+const offlineFetch = globalThis.fetch;
+beforeEach(() => {
+  resetReleaseLookupCache();
+  globalThis.fetch = async () => new Response("offline", { status: 503 });
+});
+afterEach(() => {
+  globalThis.fetch = offlineFetch;
+});
 
 const releaseState = {
   service: "xydesk-remote",
@@ -696,9 +714,9 @@ test("public joke routes reject bad clients and methods", async () => {
   assert.equal(oversized.status, 413);
 });
 
-test("current XyDesk Remote APK alias redirects from release-state without a GitHub token", async () => {
+test("current XyDesk Remote APK alias tetap jalan tanpa token GitHub saat API gagal", async () => {
   const originalFetch = globalThis.fetch;
-  globalThis.fetch = async () => { throw new Error("current XyDesk Remote alias must not call the GitHub API"); };
+  globalThis.fetch = async () => { throw new Error("GitHub API unavailable"); };
   try {
     const response = await worker.fetch(
       new Request("https://rdp.xydesk.my.id/arm64-v8a.apk"),
@@ -734,7 +752,7 @@ test("APK alias follows the ABI when a release renames its asset files", async (
   }
 });
 
-test("current XyDesk Remote host alias uses the published release tag without a GitHub token", async () => {
+test("host alias pakai tag rilis PUBLIK terakhir, dan fallback ke release-state tanpa token", async () => {
   const response = await worker.fetch(
     new Request("https://rdp.xydesk.my.id/XyDesk-Remote-Host-Agent-win64.zip"),
     envFor(),
@@ -744,6 +762,89 @@ test("current XyDesk Remote host alias uses the published release tag without a 
     response.headers.get("location"),
     "https://github.com/xykal/XyDesk-Remote/releases/download/v1.0.2/XyDesk-Remote-Host-Agent-win64.zip",
   );
+});
+
+test("portal mengikuti rilis PUBLIK terbaru, bukan tag statis di bundle", async () => {
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async (url) => {
+    if (String(url).endsWith("/releases?per_page=20")) {
+      return new Response(JSON.stringify([
+        { tag_name: "v1.0.8", draft: true, prerelease: false, assets: [] },
+        {
+          tag_name: "v1.0.7",
+          draft: false,
+          prerelease: false,
+          published_at: "2026-10-05T00:00:00Z",
+          html_url: "https://github.com/xykal/XyDesk-Remote/releases/tag/v1.0.7",
+          assets: [
+            {
+              name: "XyDesk-Remote-Host-Agent-win64.zip",
+              browser_download_url:
+                "https://github.com/xykal/XyDesk-Remote/releases/download/v1.0.7/XyDesk-Remote-Host-Agent-win64.zip",
+            },
+            {
+              name: "SHA256SUMS.txt",
+              browser_download_url:
+                "https://github.com/xykal/XyDesk-Remote/releases/download/v1.0.7/SHA256SUMS.txt",
+            },
+          ],
+        },
+        { tag_name: "v1.0.2", draft: false, prerelease: false, assets: [] },
+      ]), { headers: { "content-type": "application/json" } });
+    }
+    return new Response("unexpected url", { status: 500 });
+  };
+  try {
+    // v1.0.8 dilewati karena masih draft (asetnya 404 untuk publik).
+    const alias = await worker.fetch(
+      new Request("https://rdp.xydesk.my.id/XyDesk-Remote-Host-Agent-win64.zip"),
+      envFor(),
+    );
+    assert.equal(alias.status, 302);
+    assert.equal(
+      alias.headers.get("location"),
+      "https://github.com/xykal/XyDesk-Remote/releases/download/v1.0.7/XyDesk-Remote-Host-Agent-win64.zip",
+    );
+
+    const checksums = await worker.fetch(
+      new Request("https://rdp.xydesk.my.id/SHA256SUMS.txt"),
+      envFor(),
+    );
+    assert.equal(checksums.status, 302);
+    assert.equal(
+      checksums.headers.get("location"),
+      "https://github.com/xykal/XyDesk-Remote/releases/download/v1.0.7/SHA256SUMS.txt",
+    );
+
+    const health = await worker.fetch(new Request("https://rdp.xydesk.my.id/api/health"), envFor());
+    const body = await health.json();
+    assert.equal(body.version, "v1.0.7");
+    assert.equal(body.qaBuild, "1.0.7");
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test("portal jatuh ke release-state.json saat API GitHub tidak bisa dihubungi", async () => {
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async () => {
+    throw new Error("network down");
+  };
+  try {
+    const alias = await worker.fetch(
+      new Request("https://rdp.xydesk.my.id/arm64-v8a.apk"),
+      envFor(),
+    );
+    assert.equal(alias.status, 302);
+    assert.equal(
+      alias.headers.get("location"),
+      "https://github.com/xykal/XyDesk-Remote/releases/download/v1.0.2/XyDesk-arm64-v8a.apk",
+    );
+    const health = await worker.fetch(new Request("https://rdp.xydesk.my.id/api/health"), envFor());
+    assert.equal((await health.json()).version, "v1.0.2");
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
 });
 
 test("legacy aliases retry GH_PAT when GH_TOKEN is rejected and choose the newest matching release", async () => {

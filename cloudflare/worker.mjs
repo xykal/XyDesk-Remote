@@ -91,11 +91,98 @@ function methodNotAllowed(allowed = "GET, HEAD") {
   });
 }
 
+// Sumber utama metadata rilis adalah rilis PUBLIK terbaru di GitHub; berkas
+// /release-state.json di bundle aset dipakai sebagai fallback kalau API tidak
+// bisa dihubungi. Sebelumnya portal hanya membaca berkas statis itu, sehingga
+// tertahan di v1.0.2 walaupun sudah ada rilis baru.
+const RELEASE_LOOKUP_URL =
+  "https://api.github.com/repos/xykal/XyDesk-Remote/releases?per_page=20";
+const RELEASE_LOOKUP_TTL_MS = 5 * 60 * 1000;
+const RELEASE_TAG_PATTERN = /^v[0-9A-Za-z._-]{1,80}$/;
+let releaseLookupCache = { expiresAt: 0, release: null };
+
+/**
+ * Mengosongkan cache pencarian rilis. Dipakai tes: cache ini hidup di level
+// modul, jadi tanpa reset hasil satu tes akan bocor ke tes berikutnya.
+ */
+export function resetReleaseLookupCache() {
+  releaseLookupCache = { expiresAt: 0, release: null };
+}
+
+async function getLatestPublishedRelease(env) {
+  const now = Date.now();
+  if (now < releaseLookupCache.expiresAt) return releaseLookupCache.release;
+  let release = null;
+  try {
+    // Token dipakai kalau ada (batas laju lebih tinggi); tanpa token helper ini
+    // tetap memanggil API publik. Draft dan prarilis sengaja dilewati: asetnya
+    // tidak bisa diunduh publik, jadi redirect akan berakhir 404.
+    const response = await fetchGithubWithTokenFallback(RELEASE_LOOKUP_URL, env, {
+      accept: "application/vnd.github+json",
+      "user-agent": "xydesk-remote-portal",
+    });
+    if (response.ok) {
+      const list = await response.json();
+      release =
+        (Array.isArray(list) ? list : []).find(
+          (item) =>
+            item &&
+            item.draft === false &&
+            item.prerelease === false &&
+            typeof item.tag_name === "string" &&
+            RELEASE_TAG_PATTERN.test(item.tag_name),
+        ) || null;
+    }
+  } catch {
+    release = null;
+  }
+  releaseLookupCache = { expiresAt: now + RELEASE_LOOKUP_TTL_MS, release };
+  return release;
+}
+
+function releaseStateFromGithub(base, release) {
+  const tag = release.tag_name;
+  const assets = Array.isArray(release.assets) ? release.assets : [];
+  const checksums = assets.find((item) => item?.name === "SHA256SUMS.txt");
+  return {
+    ...base,
+    release_state: "published",
+    release_tag: tag,
+    release_url:
+      typeof release.html_url === "string" && release.html_url
+        ? release.html_url
+        : `https://github.com/xykal/XyDesk-Remote/releases/tag/${encodeURIComponent(tag)}`,
+    published_at: release.published_at || base?.published_at || "",
+    release_updated_at: release.published_at || base?.release_updated_at || "",
+    // Dibangun ulang dari aset rilis ini. Entri downloads lama menunjuk tag
+    // sebelumnya, dan currentReleaseAssetUrl menolak URL yang path-nya tidak
+    // cocok dengan tag aktif.
+    downloads: assets
+      .filter((item) => item && typeof item.name === "string")
+      .map((item) => ({ file: item.name, url: item.browser_download_url })),
+    checksums_url:
+      typeof checksums?.browser_download_url === "string"
+        ? checksums.browser_download_url
+        : base?.checksums_url,
+    // version_code tidak tersedia di API rilis. Memakai angka milik tag lama
+    // akan salah, jadi hanya dipakai kalau tag-nya memang sama.
+    app_build: {
+      version: String(tag).replace(/^v/i, ""),
+      version_code:
+        typeof base?.app_build?.version_code === "number" && base.release_tag === tag
+          ? base.app_build.version_code
+          : 0,
+    },
+  };
+}
+
 async function getReleaseMetadata(request, env) {
   const stateUrl = new URL("/release-state.json", request.url);
   const response = await env.ASSETS.fetch(new Request(stateUrl, { method: "GET" }));
   if (!response.ok) throw new Error("Release metadata unavailable");
-  return response.json();
+  const base = await response.json();
+  const release = await getLatestPublishedRelease(env);
+  return release ? releaseStateFromGithub(base, release) : base;
 }
 
 function githubTokenCandidates(env) {
