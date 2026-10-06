@@ -318,6 +318,10 @@ fun XyDeskHome(
                 .fillMaxSize()
                 .background(MaterialTheme.colorScheme.background),
         ) {
+            // Kolom: konten mendapat sisa tinggi, nav bawah punya tinggi tetap
+            // sehingga tidak menutupi isi layar.
+            Column(Modifier.fillMaxSize()) {
+                Box(Modifier.fillMaxSize().weight(1f)) {
 
             when (val current = route) {
                 is XyRoute.EditDevice -> AddDeviceScreen(
@@ -389,6 +393,21 @@ fun XyDeskHome(
                 }
 
                 XyRoute.Section -> Unit
+            }
+                }
+
+                // Nav bawah disembunyikan saat form tambah/ubah perangkat terbuka
+                // supaya layar itu tetap penuh dan tombol simpan tidak tertutup.
+                if (route !is XyRoute.EditDevice) {
+                    XyBottomNavHairline()
+                    XyBottomNav(
+                        selected = section,
+                        onSelect = {
+                            section = it
+                            route = XyRoute.Devices
+                        },
+                    )
+                }
             }
         }
 
