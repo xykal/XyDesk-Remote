@@ -147,6 +147,22 @@ async function getLatestPublishedRelease(env) {
   return release;
 }
 
+// ABI disimpulkan dari nama aset. releaseStateFromGithub membangun ulang
+// `downloads` dari daftar aset rilis, dan tanpa field `abi` pencarian
+// berdasarkan ABI di currentReleaseAssetUrl selalu gagal lalu jatuh ke nama
+// file yang di-hardcode pada alias. Akibatnya alias /XyDesk-Remote-<abi>.apk
+// mengarah ke berkas yang tidak ada pada rilis yang asetnya bernama
+// XyDesk-<abi>.apk (misalnya v1.0.2) dan berakhir 404.
+const ABI_NAMES = ["arm64-v8a", "armeabi-v7a", "x86_64"];
+
+function abiFromAssetName(name) {
+  const lower = String(name).toLowerCase();
+  for (const abi of ABI_NAMES) {
+    if (lower.includes(abi)) return abi;
+  }
+  return undefined;
+}
+
 function releaseStateFromGithub(base, release) {
   const tag = release.tag_name;
   const assets = Array.isArray(release.assets) ? release.assets : [];
@@ -166,7 +182,7 @@ function releaseStateFromGithub(base, release) {
     // cocok dengan tag aktif.
     downloads: assets
       .filter((item) => item && typeof item.name === "string")
-      .map((item) => ({ file: item.name, url: item.browser_download_url })),
+      .map((item) => ({ abi: abiFromAssetName(item.name), file: item.name, url: item.browser_download_url })),
     checksums_url:
       typeof checksums?.browser_download_url === "string"
         ? checksums.browser_download_url
