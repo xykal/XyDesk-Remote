@@ -54,6 +54,7 @@ internal fun XyProfileScreen(
     appPrefs: AppPrefs,
     deviceCount: Int,
     onShowLog: () -> Unit,
+    onOpenFeedback: () -> Unit,
 ) {
     val context = LocalContext.current
     // BuildConfig tidak dipakai di lapisan UI; versi dibaca dari PackageManager
@@ -184,6 +185,15 @@ internal fun XyProfileScreen(
                     "Last 20 lines of the native boot log.",
                 ),
                 onClick = onShowLog,
+            )
+            XyGlassRow(
+                icon = XyIcons.Heart,
+                title = xy("Masukan & saran", "Feedback & suggestions"),
+                subtitle = xy(
+                    "Bagikan ke aplikasi mana pun, atau salin drafnya.",
+                    "Share to any app, or copy the draft.",
+                ),
+                onClick = onOpenFeedback,
             )
         }
     }

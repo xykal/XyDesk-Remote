@@ -288,20 +288,57 @@ fun XyDeskHome(
         }
     }
 
-    fun shareFeedback(category: String, message: String) {
+    /**
+     * Kirim masukan ke tujuan yang dipilih pengguna.
+     *
+     * Tidak ada tujuan yang di-hardcode ke alamat tertentu: repo ini tidak
+     * menyimpan alamat dukungan, jadi pilihannya adalah pemilih aplikasi
+     * Android (bebas ke aplikasi mana pun) atau salin draf ke clipboard
+     * supaya pengguna menempelkannya sendiri.
+     */
+    fun sendFeedback(destination: FeedbackDestination, category: String, message: String) {
         feedbackOpen = false
         val draft = feedbackShareDraft(category, message)
-        val sendIntent = Intent(Intent.ACTION_SEND).apply {
-            type = "text/plain"
-            putExtra(Intent.EXTRA_SUBJECT, "XyDesk Remote feedback")
-            putExtra(Intent.EXTRA_TEXT, draft)
-        }
-        runCatching {
-            context.startActivity(
-                Intent.createChooser(sendIntent, xyNow("Pilih aplikasi untuk berbagi", "Choose an app to share")),
-            )
-        }.onFailure {
-            notice.show(xyNow("Menu berbagi tidak tersedia", "Share menu is unavailable"))
+        when (destination) {
+            FeedbackDestination.COPY -> {
+                val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as? ClipboardManager
+                if (clipboard == null) {
+                    notice.show(xyNow("Clipboard tidak tersedia", "Clipboard is unavailable"))
+                    return
+                }
+                runCatching {
+                    clipboard.setPrimaryClip(
+                        ClipData.newPlainText("XyDesk Remote feedback", draft),
+                    )
+                }.onSuccess {
+                    notice.show(
+                        xyNow(
+                            "Draf disalin. Tempel ke aplikasi mana pun.",
+                            "Draft copied. Paste it into any app.",
+                        ),
+                    )
+                }.onFailure {
+                    notice.show(xyNow("Gagal menyalin draf", "Could not copy the draft"))
+                }
+            }
+
+            FeedbackDestination.SHARE -> {
+                val sendIntent = Intent(Intent.ACTION_SEND).apply {
+                    type = "text/plain"
+                    putExtra(Intent.EXTRA_SUBJECT, "XyDesk Remote feedback")
+                    putExtra(Intent.EXTRA_TEXT, draft)
+                }
+                runCatching {
+                    context.startActivity(
+                        Intent.createChooser(
+                            sendIntent,
+                            xyNow("Pilih aplikasi untuk berbagi", "Choose an app to share"),
+                        ),
+                    )
+                }.onFailure {
+                    notice.show(xyNow("Menu berbagi tidak tersedia", "Share menu is unavailable"))
+                }
+            }
         }
     }
 
@@ -404,6 +441,7 @@ fun XyDeskHome(
                     appPrefs = appPrefs,
                     deviceCount = favorites.size,
                     onShowLog = { showBoot = true },
+                    onOpenFeedback = { feedbackOpen = true },
                 )
 
                 XyRoute.Section -> Unit
@@ -604,7 +642,7 @@ fun XyDeskHome(
     if (feedbackOpen) {
         FeedbackDialog(
             onDismiss = { feedbackOpen = false },
-            onShare = ::shareFeedback,
+            onSend = ::sendFeedback,
         )
     }
     confirmDeleteDevice?.let { target ->
