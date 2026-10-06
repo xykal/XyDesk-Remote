@@ -120,7 +120,7 @@ jobs:
             host-agent/src/main_host.cpp -Ihost-agent/include \
             -L/tmp/dist-host -lxydesk_quic -lxydesk_host_core \
             -o /tmp/dist-host/XyDeskRemoteHost.exe \
-            -static-libgcc -static-libstdc++ -Wl,-Bstatic -lstdc++ -lpthread -Wl,-Bdynamic
+            -static-libgcc -static-libstdc++ -Wl,-Bstatic -lstdc++ -lpthread -Wl,-Bdynamic -luser32 -lgdi32 -lshell32 -lwtsapi32
           # Exe tunggal mandiri: kedua pustaka dikompilasi langsung ke dalam exe
           # dan runtime mingw diikat statis, jadi hasilnya tidak membutuhkan
           # xydesk_quic.dll, xydesk_host_core.dll, maupun DLL runtime mingw.
@@ -139,7 +139,7 @@ jobs:
             -Ihost-agent/include \
             -o "/tmp/dist-host/XyDeskRemoteHost-Standalone.exe" \
             -static -static-libgcc -static-libstdc++ \
-            -lws2_32 -lole32 -ldxgi -ladvapi32 -liphlpapi -luser32 -lgdi32
+            -lws2_32 -lole32 -ldxgi -ladvapi32 -liphlpapi -luser32 -lgdi32 -lshell32 -lwtsapi32
           ls -lh /tmp/dist-host/
 
   # ------------------------------------------------------------------
@@ -353,10 +353,10 @@ jobs:
         working-directory: client/Android/Studio/app/build/outputs/apk/release
         run: |
           set -euo pipefail
-          mv app-armeabi-v7a-release.apk XyDesk-armeabi-v7a.apk
-          mv app-arm64-v8a-release.apk XyDesk-arm64-v8a.apk
-          mv app-x86_64-release.apk XyDesk-x86_64.apk
-          ls -lh XyDesk-*.apk
+          mv app-armeabi-v7a-release.apk XyDesk-Remote-armeabi-v7a.apk
+          mv app-arm64-v8a-release.apk XyDesk-Remote-arm64-v8a.apk
+          mv app-x86_64-release.apk XyDesk-Remote-x86_64.apk
+          ls -lh XyDesk-Remote-*.apk
       - name: Tanda tangani ulang APK dengan skema V1 + V2 (deterministik)
         # AGP 9 mematikan v1 (JAR) saat minSdk >= 24 dan setelan enableV1Signing
         # di build.gradle tidak cukup. Re-sign di sini memakai keystore yang sama,
@@ -372,7 +372,7 @@ jobs:
           set -euo pipefail
           APK_SIGNER="$ANDROID_HOME/build-tools/37.0.0/apksigner"
           for abi in armeabi-v7a arm64-v8a x86_64; do
-            apk="XyDesk-$abi.apk"
+            apk="XyDesk-Remote-$abi.apk"
             if [ ! -s "$apk" ]; then
               echo "::error::$apk tidak ditemukan untuk ditandatangani ulang."
               exit 1
@@ -398,7 +398,7 @@ jobs:
             fi
             echo "V1/JAR $abi: $(tail -1 "/tmp/jarsigner-$abi.txt")"
           done
-          ls -lh XyDesk-*.apk
+          ls -lh XyDesk-Remote-*.apk
       - name: Verifikasi V1/V2, semua ABI, dan signer yang sama dengan v1.0.2
         working-directory: client/Android/Studio
         run: |
@@ -479,7 +479,7 @@ jobs:
           printf 'Baseline signer SHA-256: %s\n\n' "$baseline_cert" >> "$REPORT"
 
           for abi in armeabi-v7a arm64-v8a x86_64; do
-            apk="$OUT/XyDesk-$abi.apk"
+            apk="$OUT/XyDesk-Remote-$abi.apk"
             if [ ! -s "$apk" ]; then
               echo "::error::APK untuk ABI $abi tidak ditemukan."
               exit 1
@@ -520,9 +520,9 @@ jobs:
         run: |
           set -euo pipefail
           python3 "$GITHUB_WORKSPACE/ci/verify_android_apks.py" \
-            app/build/outputs/apk/release/XyDesk-armeabi-v7a.apk \
-            app/build/outputs/apk/release/XyDesk-arm64-v8a.apk \
-            app/build/outputs/apk/release/XyDesk-x86_64.apk
+            app/build/outputs/apk/release/XyDesk-Remote-armeabi-v7a.apk \
+            app/build/outputs/apk/release/XyDesk-Remote-arm64-v8a.apk \
+            app/build/outputs/apk/release/XyDesk-Remote-x86_64.apk
       - name: Build Windows Native C++17 Host Agent & DLLs (xydesk_quic.dll + xydesk_host_core.dll + XyDeskRemoteHost.exe)
         run: |
           set -euo pipefail
@@ -546,7 +546,7 @@ jobs:
             host-agent/src/main_host.cpp -Ihost-agent/include \
             -L"$STAGE_DIR" -lxydesk_quic -lxydesk_host_core \
             -o "$STAGE_DIR/XyDeskRemoteHost.exe" \
-            -static-libgcc -static-libstdc++ -Wl,-Bstatic -lstdc++ -lpthread -Wl,-Bdynamic
+            -static-libgcc -static-libstdc++ -Wl,-Bstatic -lstdc++ -lpthread -Wl,-Bdynamic -luser32 -lgdi32 -lshell32 -lwtsapi32
           # Exe tunggal mandiri: kedua pustaka dikompilasi langsung ke dalam exe
           # dan runtime mingw diikat statis, jadi hasilnya tidak membutuhkan
           # xydesk_quic.dll, xydesk_host_core.dll, maupun DLL runtime mingw.
@@ -565,7 +565,7 @@ jobs:
             -Ihost-agent/include \
             -o "$STAGE_DIR/XyDeskRemoteHost-Standalone.exe" \
             -static -static-libgcc -static-libstdc++ \
-            -lws2_32 -lole32 -ldxgi -ladvapi32 -liphlpapi -luser32 -lgdi32
+            -lws2_32 -lole32 -ldxgi -ladvapi32 -liphlpapi -luser32 -lgdi32 -lshell32 -lwtsapi32
           rm -f "$STAGE_DIR"/*.a
           cp web/XyDeskHost-Setup.bat "$STAGE_DIR/XyDeskHost-Setup.bat"
           cp web/XyDesk-Remote-Agent-Setup.ps1 "$STAGE_DIR/XyDesk-Remote-Agent-Setup.ps1"

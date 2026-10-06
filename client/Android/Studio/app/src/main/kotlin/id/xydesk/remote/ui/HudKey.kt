@@ -585,7 +585,41 @@ object HudKeyCatalog {
         ),
     )
 
+    /**
+     * Grup Gamepad untuk overlay kontrol.
+     *
+     * Inilah pengganti bagian gamepad yang hilang bersama overlay lama: dulu
+     * D-Pad, A/B/X/Y, dan shoulder hanya bisa didapat dari overlay gamepad
+     * terpisah. Sekarang semuanya pilihan tombol biasa di overlay kontrol, jadi
+     * posisinya bebas diatur seperti tombol lain.
+     *
+     * Sengaja memakai HudKind yang sudah ada (PAD_STICK, KEY, MOUSE_LEFT/RIGHT,
+     * SCROLL_UP/DOWN) alih-alih menambah anggota enum baru: menambah anggota
+     * HudKind memaksa perubahan di empat `when` exhaustive (labelFor, glyph,
+     * hudIconFor, runHudKey) tanpa menambah kemampuan apa pun di sini.
+     *
+     * Penamaan mengikuti pemetaan gamepad fisik di XyGamepadActionMapper
+     * (A = klik kiri, B = klik kanan, X = Enter, Y = Escape, shoulder = satu
+     * takik scroll) supaya pad di layar dan pad Bluetooth berperilaku sama.
+     */
+    val gamepad = listOf(
+        HudKeyOption("Gamepad", "Joystick analog", HudKind.PAD_STICK, labelEn = "Analog stick"),
+        HudKeyOption("Gamepad", "D-Pad \u25b2", HudKind.KEY, KeyEvent.KEYCODE_DPAD_UP, labelEn = "D-Pad Up"),
+        HudKeyOption("Gamepad", "D-Pad \u25bc", HudKind.KEY, KeyEvent.KEYCODE_DPAD_DOWN, labelEn = "D-Pad Down"),
+        HudKeyOption("Gamepad", "D-Pad \u25c0", HudKind.KEY, KeyEvent.KEYCODE_DPAD_LEFT, labelEn = "D-Pad Left"),
+        HudKeyOption("Gamepad", "D-Pad \u25b6", HudKind.KEY, KeyEvent.KEYCODE_DPAD_RIGHT, labelEn = "D-Pad Right"),
+        HudKeyOption("Gamepad", "A \u00b7 Klik kiri", HudKind.MOUSE_LEFT, labelEn = "A \u00b7 Left click"),
+        HudKeyOption("Gamepad", "B \u00b7 Klik kanan", HudKind.MOUSE_RIGHT, labelEn = "B \u00b7 Right click"),
+        HudKeyOption("Gamepad", "X \u00b7 Enter", HudKind.KEY, KeyEvent.KEYCODE_ENTER, labelEn = "X \u00b7 Enter"),
+        HudKeyOption("Gamepad", "Y \u00b7 Esc", HudKind.KEY, KeyEvent.KEYCODE_ESCAPE, labelEn = "Y \u00b7 Escape"),
+        HudKeyOption("Gamepad", "L1 \u00b7 Scroll naik", HudKind.SCROLL_UP, labelEn = "L1 \u00b7 Scroll up"),
+        HudKeyOption("Gamepad", "R1 \u00b7 Scroll turun", HudKind.SCROLL_DOWN, labelEn = "R1 \u00b7 Scroll down"),
+    )
+
     val groups: List<Triple<String, String, List<HudKeyOption>>> = listOf(
+        // Gamepad di urutan pertama: pengguna mengeluh pilihan gamepad hilang,
+        // jadi grup ini yang terbuka saat dialog "Tambah tombol" muncul.
+        Triple("Gamepad", "Gamepad", gamepad),
         Triple("Kombinasi", "Combos", combos),
         Triple("Makro", "Macros", macros),
         Triple("F1 - F12", "F1 - F12", functionKeys),

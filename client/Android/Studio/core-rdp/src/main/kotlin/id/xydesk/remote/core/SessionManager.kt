@@ -366,12 +366,22 @@ class SessionManager(context: Context) {
                     }, 2_000L)
                     return@execute
                 }
+                ConnectionLog.add(
+                    "CM: " + RdpFailure.detailLine(
+                        code = ERROR_UNREACHABLE,
+                        message = "",
+                        instance = 0L,
+                        host = profile.host,
+                        port = profile.port,
+                    )
+                )
                 transition(
                     SessionState.Error(
                         ERROR_UNREACHABLE,
                         "Tidak bisa menghubungi ${profile.host}:${profile.port}. Kemungkinan: " +
                             "RDP nonaktif, firewall memblokir, nama host salah, atau target " +
                             "Windows Home (tidak punya server RDP).",
+                        errorCode = RdpFailure.codeFor(ERROR_UNREACHABLE, ""),
                     )
                 )
                 return@execute
@@ -388,7 +398,23 @@ class SessionManager(context: Context) {
                 ConnectionLog.addThrowable("CM: worker: session.connect EXCEPTION", t)
                 Log.w(TAG, "connect() exception", t)
                 if (isCurrent(inst)) {
-                    transition(SessionState.Error("connect_exception", t.message ?: "exception"))
+                    ConnectionLog.add(
+                        "CM: " + RdpFailure.detailLine(
+                            code = "connect_exception",
+                            message = t.message.orEmpty(),
+                            instance = inst,
+                            host = lastProfile?.host,
+                            port = lastProfile?.port ?: 0,
+                        )
+                    )
+                    transition(
+                        SessionState.Error(
+                            "connect_exception",
+                            t.message ?: "exception",
+                            errorCode = RdpFailure.codeFor("connect_exception", t.message.orEmpty()),
+                            connectionId = inst,
+                        )
+                    )
                     cleanupTerminalSession(inst)
                 }
             }
@@ -654,12 +680,23 @@ class SessionManager(context: Context) {
                 stopWatchdog()
                 ConnectionLog.add("WATCHDOG: koneksi menggantung >${CONNECT_WATCHDOG_MS}ms")
                 runCatching { LibFreeRDP.cancelConnection(inst) }
+                ConnectionLog.add(
+                    "CM: " + RdpFailure.detailLine(
+                        code = "connect_timeout",
+                        message = "",
+                        instance = inst,
+                        host = lastProfile?.host,
+                        port = lastProfile?.port ?: 0,
+                    )
+                )
                 transition(
                     SessionState.Error(
                         "connect_timeout",
                         "Koneksi menggantung lebih dari ${CONNECT_WATCHDOG_MS / 1000} detik. " +
                             "Kemungkinan: firewall memblokir setelah TCP, server lambat, atau " +
                             "NLA/TLS tidak selesai. Tekan Detail untuk log.",
+                        errorCode = RdpFailure.codeFor("connect_timeout", ""),
+                        connectionId = inst,
                     )
                 )
                 ConnectionLog.add("watchdog: instance ditahan sampai callback terminal native")
@@ -816,7 +853,23 @@ class SessionManager(context: Context) {
                 } else {
                     summary
                 }
-                transition(SessionState.Error("connect_failed", msg))
+                ConnectionLog.add(
+                    "CM: " + RdpFailure.detailLine(
+                        code = "connect_failed",
+                        message = nativeDetail,
+                        instance = inst,
+                        host = p?.host,
+                        port = p?.port ?: 0,
+                    )
+                )
+                transition(
+                    SessionState.Error(
+                        "connect_failed",
+                        msg,
+                        errorCode = RdpFailure.codeFor("connect_failed", nativeDetail),
+                        connectionId = inst,
+                    )
+                )
             }
 
             override fun onDisconnected() {

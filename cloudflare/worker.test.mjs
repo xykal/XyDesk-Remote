@@ -752,6 +752,41 @@ test("APK alias follows the ABI when a release renames its asset files", async (
   }
 });
 
+test("alias nama aset XyDesk-Remote-<abi>.apk ikut ABI rilis berjalan", async () => {
+  // Sejak rilis setelah v1.0.2, APK dipublikasikan sebagai
+  // XyDesk-Remote-<abi>.apk. Alias barunya membawa `abi`, jadi seperti alias
+  // shorthand, ia mengikuti rilis berjalan lewat metadata rilis — bukan nama
+  // file yang di-hardcode. Fixture di sini masih v1.0.2 (nama lama), sehingga
+  // yang benar adalah alias baru menunjuk aset v1.0.2 yang nyata.
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async () => { throw new Error("alias ber-abi tidak boleh memanggil API GitHub"); };
+  try {
+    for (const [path, expected] of [
+      [
+        "/XyDesk-Remote-arm64-v8a.apk",
+        "https://github.com/xykal/XyDesk-Remote/releases/download/v1.0.2/XyDesk-arm64-v8a.apk",
+      ],
+      [
+        "/XyDesk-Remote-armeabi-v7a.apk",
+        "https://github.com/xykal/XyDesk-Remote/releases/download/v1.0.2/XyDesk-armeabi-v7a.apk",
+      ],
+      [
+        "/XyDesk-Remote-x86_64.apk",
+        "https://github.com/xykal/XyDesk-Remote/releases/download/v1.0.2/XyDesk-x86_64.apk",
+      ],
+    ]) {
+      const response = await worker.fetch(
+        new Request("https://rdp.xydesk.my.id" + path),
+        envFor(),
+      );
+      assert.equal(response.status, 302, path);
+      assert.equal(response.headers.get("location"), expected, path);
+    }
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
 test("host alias pakai tag rilis PUBLIK terakhir, dan fallback ke release-state tanpa token", async () => {
   const response = await worker.fetch(
     new Request("https://rdp.xydesk.my.id/XyDesk-Remote-Host-Agent-win64.zip"),

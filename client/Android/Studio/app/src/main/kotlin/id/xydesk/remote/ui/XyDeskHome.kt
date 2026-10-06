@@ -103,6 +103,12 @@ private sealed interface XyRoute {
     data object Devices : XyRoute
     data class EditDevice(val profile: ConnectionProfile?, val pcQuickMode: Boolean = false) : XyRoute
     data object Section : XyRoute
+
+    /** Feed komunitas — layar sendiri, dipetakan ke tab nav [XyTab.FEED]. */
+    data object Feed : XyRoute
+
+    /** Dashboard pengaturan — dipetakan ke tab nav [XyTab.PROFILE]. */
+    data object Profile : XyRoute
 }
 
 /**
@@ -135,10 +141,12 @@ fun XyDeskHome(
     LaunchedEffect(dataReady) { if (dataReady) onReady() }
     val scope = rememberCoroutineScope()
     val appPrefs = remember { AppPrefs(context) }
-    var showFunHub by remember { mutableStateOf(appPrefs.showFunHub) }
     var drawerOpen by remember { mutableStateOf(false) }
     var helpToolsOpen by remember { mutableStateOf(false) }
     var section by remember { mutableStateOf(XySection.PERANGKAT) }
+    // Tab nav bawah (3 tujuan). `section` tetap ada karena seksi dibuka dari
+    // drawer maupun dari layar Profil, dan keduanya menggambar SectionScreen.
+    var tab by remember { mutableStateOf(XyTab.HOME) }
     var route by remember { mutableStateOf<XyRoute>(XyRoute.Devices) }
     var crashLog by remember { mutableStateOf(CrashLog.last(context.applicationContext)) }
     var showCrash by remember { mutableStateOf(false) }
@@ -280,20 +288,57 @@ fun XyDeskHome(
         }
     }
 
-    fun shareFeedback(category: String, message: String) {
+    /**
+     * Kirim masukan ke tujuan yang dipilih pengguna.
+     *
+     * Tidak ada tujuan yang di-hardcode ke alamat tertentu: repo ini tidak
+     * menyimpan alamat dukungan, jadi pilihannya adalah pemilih aplikasi
+     * Android (bebas ke aplikasi mana pun) atau salin draf ke clipboard
+     * supaya pengguna menempelkannya sendiri.
+     */
+    fun sendFeedback(destination: FeedbackDestination, category: String, message: String) {
         feedbackOpen = false
         val draft = feedbackShareDraft(category, message)
-        val sendIntent = Intent(Intent.ACTION_SEND).apply {
-            type = "text/plain"
-            putExtra(Intent.EXTRA_SUBJECT, "XyDesk Remote feedback")
-            putExtra(Intent.EXTRA_TEXT, draft)
-        }
-        runCatching {
-            context.startActivity(
-                Intent.createChooser(sendIntent, xyNow("Pilih aplikasi untuk berbagi", "Choose an app to share")),
-            )
-        }.onFailure {
-            notice.show(xyNow("Menu berbagi tidak tersedia", "Share menu is unavailable"))
+        when (destination) {
+            FeedbackDestination.COPY -> {
+                val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as? ClipboardManager
+                if (clipboard == null) {
+                    notice.show(xyNow("Clipboard tidak tersedia", "Clipboard is unavailable"))
+                    return
+                }
+                runCatching {
+                    clipboard.setPrimaryClip(
+                        ClipData.newPlainText("XyDesk Remote feedback", draft),
+                    )
+                }.onSuccess {
+                    notice.show(
+                        xyNow(
+                            "Draf disalin. Tempel ke aplikasi mana pun.",
+                            "Draft copied. Paste it into any app.",
+                        ),
+                    )
+                }.onFailure {
+                    notice.show(xyNow("Gagal menyalin draf", "Could not copy the draft"))
+                }
+            }
+
+            FeedbackDestination.SHARE -> {
+                val sendIntent = Intent(Intent.ACTION_SEND).apply {
+                    type = "text/plain"
+                    putExtra(Intent.EXTRA_SUBJECT, "XyDesk Remote feedback")
+                    putExtra(Intent.EXTRA_TEXT, draft)
+                }
+                runCatching {
+                    context.startActivity(
+                        Intent.createChooser(
+                            sendIntent,
+                            xyNow("Pilih aplikasi untuk berbagi", "Choose an app to share"),
+                        ),
+                    )
+                }.onFailure {
+                    notice.show(xyNow("Menu berbagi tidak tersedia", "Share menu is unavailable"))
+                }
+            }
         }
     }
 
@@ -306,8 +351,11 @@ fun XyDeskHome(
             confirmExitApp -> confirmExitApp = false
             feedbackOpen -> feedbackOpen = false
             drawerOpen -> drawerOpen = false
-            route != XyRoute.Devices -> route = XyRoute.Devices
-            section != XySection.PERANGKAT -> section = XySection.PERANGKAT
+            route != XyRoute.Devices || section != XySection.PERANGKAT -> {
+                route = XyRoute.Devices
+                section = XySection.PERANGKAT
+                tab = XyTab.HOME
+            }
             else -> confirmExitApp = true
         }
     }
@@ -351,11 +399,6 @@ fun XyDeskHome(
                         },
                         onConnect = { connect(it) },
                         onWakeConnect = { wakeAndConnect(it) },
-                        showFunHub = showFunHub,
-                        onShowFunHubChange = { enabled ->
-                            showFunHub = enabled
-                            appPrefs.showFunHub = enabled
-                        },
                         onDelete = { profile -> confirmDeleteDevice = profile },
                         onShowCrash = { showCrash = true },
                         onShowBoot = { showBoot = true },
@@ -366,11 +409,6 @@ fun XyDeskHome(
                         favorites = favorites,
                         onMenu = { drawerOpen = true },
                         appPrefs = appPrefs,
-                        showFunHub = showFunHub,
-                        onShowFunHubChange = { enabled ->
-                            showFunHub = enabled
-                            appPrefs.showFunHub = enabled
-                        },
                         onEditDevice = {
                             route = XyRoute.EditDevice(
                                 it,
@@ -392,6 +430,20 @@ fun XyDeskHome(
                     )
                 }
 
+                XyRoute.Feed -> XyFeedScreen(onMenu = { drawerOpen = true })
+
+                XyRoute.Profile -> XyProfileScreen(
+                    onMenu = { drawerOpen = true },
+                    onOpenSection = {
+                        section = it
+                        route = XyRoute.Devices
+                    },
+                    appPrefs = appPrefs,
+                    deviceCount = favorites.size,
+                    onShowLog = { showBoot = true },
+                    onOpenFeedback = { feedbackOpen = true },
+                )
+
                 XyRoute.Section -> Unit
             }
                 }
@@ -401,10 +453,17 @@ fun XyDeskHome(
                 if (route !is XyRoute.EditDevice) {
                     XyBottomNavHairline()
                     XyBottomNav(
-                        selected = section,
-                        onSelect = {
-                            section = it
-                            route = XyRoute.Devices
+                        selected = tab,
+                        onSelect = { next ->
+                            tab = next
+                            when (next) {
+                                XyTab.HOME -> {
+                                    section = XySection.PERANGKAT
+                                    route = XyRoute.Devices
+                                }
+                                XyTab.FEED -> route = XyRoute.Feed
+                                XyTab.PROFILE -> route = XyRoute.Profile
+                            }
                         },
                     )
                 }
@@ -475,6 +534,9 @@ fun XyDeskHome(
                     onClick = {
                         section = item
                         route = XyRoute.Devices
+                        // Tab ikut menyorot: seksi adalah bagian Profil, kecuali
+                        // Perangkat yang memang isi Beranda.
+                        tab = if (item == XySection.PERANGKAT) XyTab.HOME else XyTab.PROFILE
                         drawerOpen = false
                     },
                 )
@@ -580,7 +642,7 @@ fun XyDeskHome(
     if (feedbackOpen) {
         FeedbackDialog(
             onDismiss = { feedbackOpen = false },
-            onShare = ::shareFeedback,
+            onSend = ::sendFeedback,
         )
     }
     confirmDeleteDevice?.let { target ->
@@ -873,8 +935,6 @@ private fun DevicesScreen(
     onEdit: (ConnectionProfile) -> Unit,
     onConnect: (ConnectionProfile) -> Unit,
     onWakeConnect: (ConnectionProfile) -> Unit,
-    showFunHub: Boolean,
-    onShowFunHubChange: (Boolean) -> Unit,
     onDelete: (ConnectionProfile) -> Unit,
     onShowCrash: () -> Unit,
     onShowBoot: () -> Unit,
@@ -955,9 +1015,6 @@ private fun DevicesScreen(
                         Modifier.fillMaxSize().verticalScroll(rememberScrollState()),
                         verticalArrangement = Arrangement.spacedBy(12.dp),
                     ) {
-                        if (showFunHub) {
-                            FunHubCard(onHide = { onShowFunHubChange(false) })
-                        }
                         XyCard(modifier = Modifier.fillMaxWidth()) {
                             Text(xy("Belum ada perangkat", "No devices yet"), style = MaterialTheme.typography.titleMedium)
                             Spacer(Modifier.height(6.dp))
@@ -1013,9 +1070,6 @@ private fun DevicesScreen(
                     verticalArrangement = Arrangement.spacedBy(14.dp),
                 ) {
                     item { LiveSessionsCard() }
-                    if (showFunHub) {
-                        item { FunHubCard(onHide = { onShowFunHubChange(false) }) }
-                    }
                     item {
                         XySegmented(
                             options = listOf(

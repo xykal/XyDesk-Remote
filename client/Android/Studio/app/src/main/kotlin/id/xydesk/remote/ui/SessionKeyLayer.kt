@@ -460,8 +460,8 @@ fun HudKeyPicker(
                     )
                     Text(
                         xy(
-                            "Pilih dari kategori Kombinasi, F1-F12, Single Key, Numpad, Huruf, Modifier, atau Mouse.",
-                            "Pick from Combos, F1-F12, Single Key, Numpad, Letters, Modifiers, or Mouse.",
+                            "Pilih dari kategori Gamepad, Kombinasi, F1-F12, Single Key, Numpad, Huruf, Modifier, atau Mouse.",
+                            "Pick from Gamepad, Combos, F1-F12, Single Key, Numpad, Letters, Modifiers, or Mouse.",
                         ),
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                         fontSize = 10.5.sp,

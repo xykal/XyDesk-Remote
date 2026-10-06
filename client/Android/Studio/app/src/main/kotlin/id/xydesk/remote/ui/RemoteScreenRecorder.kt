@@ -13,6 +13,7 @@ import android.content.Context
 import android.graphics.Bitmap
 import android.media.MediaCodec
 import android.media.MediaCodecInfo
+import android.media.MediaCodecList
 import android.media.MediaFormat
 import android.media.MediaMuxer
 import android.opengl.EGL14
@@ -187,28 +188,34 @@ internal class RemoteScreenRecorder(
             val outputFile = File(appContext.cacheDir, "xydesk-pc-${System.currentTimeMillis()}.mp4")
             temporaryFile = outputFile
 
-            val format = MediaFormat.createVideoFormat(MIME_TYPE, width, height).apply {
-                setInteger(MediaFormat.KEY_COLOR_FORMAT, MediaCodecInfo.CodecCapabilities.COLOR_FormatSurface)
-                // Dulu: width*height*5 dengan atap 5 Mbps dan 15 fps, sehingga
-                // hasil rekaman desktop terlihat patah-patah dan lembut/blok.
-                setInteger(
-                    MediaFormat.KEY_BIT_RATE,
-                    (width * height * BITS_PER_PIXEL).coerceIn(MIN_BIT_RATE, MAX_BIT_RATE),
-                )
-                setInteger(MediaFormat.KEY_FRAME_RATE, FRAME_RATE)
-                setInteger(MediaFormat.KEY_I_FRAME_INTERVAL, I_FRAME_INTERVAL_SECONDS)
-                // VBR lebih cocok untuk desktop: area statis (teks, jendela diam)
-                // hampir tidak memakai bit, sehingga bit tersisa dipakai untuk
-                // area yang benar-benar bergerak.
-                setInteger(
-                    MediaFormat.KEY_BITRATE_MODE,
-                    MediaCodecInfo.EncoderCapabilities.BITRATE_MODE_VBR,
+            // 60 fps bila encoder perangkat mendukung pada ukuran ini, kalau
+            // tidak 30 fps. Dua lapis pengaman, karena kueri kemampuan saja
+            // tidak cukup: createEncoderByType() bisa memilih codec yang
+            // berbeda dari yang dikueri, jadi configure() yang menolak juga
+            // harus menurunkan frame rate, bukan menggagalkan rekaman.
+            var frameRate = resolveFrameRate(width, height)
+            var activeCodec = MediaCodec.createEncoderByType(MIME_TYPE)
+            val configured = runCatching {
+                activeCodec.configure(
+                    videoFormat(width, height, frameRate),
+                    null,
+                    null,
+                    MediaCodec.CONFIGURE_FLAG_ENCODE,
                 )
             }
-
-            val activeCodec = MediaCodec.createEncoderByType(MIME_TYPE)
+            if (configured.isFailure && frameRate != FALLBACK_FRAME_RATE) {
+                runCatching { activeCodec.release() }
+                frameRate = FALLBACK_FRAME_RATE
+                activeCodec = MediaCodec.createEncoderByType(MIME_TYPE)
+                activeCodec.configure(
+                    videoFormat(width, height, frameRate),
+                    null,
+                    null,
+                    MediaCodec.CONFIGURE_FLAG_ENCODE,
+                )
+            }
+            val frameDurationNs = 1_000_000_000L / frameRate
             codec = activeCodec
-            activeCodec.configure(format, null, null, MediaCodec.CONFIGURE_FLAG_ENCODE)
             val encoderSurface = activeCodec.createInputSurface()
             inputSurface = encoderSurface
             val activeMuxer = MediaMuxer(outputFile.absolutePath, MediaMuxer.OutputFormat.MUXER_OUTPUT_MPEG_4)
@@ -253,7 +260,7 @@ internal class RemoteScreenRecorder(
             var frameIndex = 0L
             while (true) {
                 if (frameIndex > 0) {
-                    val dueNs = startNs + frameIndex * FRAME_DURATION_NS
+                    val dueNs = startNs + frameIndex * frameDurationNs
                     sleepUntil(dueNs)
                 }
                 if (isCaptureProtected()) throw SecureCaptureException()
@@ -845,12 +852,66 @@ internal class RemoteScreenRecorder(
     companion object {
         private const val MIME_TYPE = "video/avc"
         private const val MAX_EDGE = 1280
-        private const val FRAME_RATE = 30
+        // 60 fps adalah target, bukan janji: dipakai hanya bila ada encoder AVC
+        // yang menyatakan mampu pada ukuran rekaman, dan configure() setuju.
+        private const val TARGET_FRAME_RATE = 60
+        private const val FALLBACK_FRAME_RATE = 30
         private const val I_FRAME_INTERVAL_SECONDS = 2
         private const val BITS_PER_PIXEL = 8
         private const val MIN_BIT_RATE = 2_000_000
         private const val MAX_BIT_RATE = 16_000_000
-        private const val FRAME_DURATION_NS = 1_000_000_000L / FRAME_RATE
+
+        /**
+         * Format video untuk satu frame rate tertentu.
+         *
+         * Bitrate diskalakan terhadap 30 fps: pada 60 fps dibutuhkan sekitar dua
+         * kali bit untuk kualitas yang sama. Atap [MAX_BIT_RATE] tetap berlaku
+         * supaya perangkat dengan encoder lemah tidak kewalahan. VBR dipakai
+         * karena cocok untuk desktop — area statis (teks, jendela diam) hampir
+         * tidak memakai bit, jadi sisanya dipakai area yang benar-benar bergerak.
+         */
+        private fun videoFormat(width: Int, height: Int, frameRate: Int): MediaFormat =
+            MediaFormat.createVideoFormat(MIME_TYPE, width, height).apply {
+                setInteger(
+                    MediaFormat.KEY_COLOR_FORMAT,
+                    MediaCodecInfo.CodecCapabilities.COLOR_FormatSurface,
+                )
+                setInteger(
+                    MediaFormat.KEY_BIT_RATE,
+                    (width.toLong() * height * BITS_PER_PIXEL * frameRate / FALLBACK_FRAME_RATE)
+                        .toInt()
+                        .coerceIn(MIN_BIT_RATE, MAX_BIT_RATE),
+                )
+                setInteger(MediaFormat.KEY_FRAME_RATE, frameRate)
+                setInteger(MediaFormat.KEY_I_FRAME_INTERVAL, I_FRAME_INTERVAL_SECONDS)
+                setInteger(
+                    MediaFormat.KEY_BITRATE_MODE,
+                    MediaCodecInfo.EncoderCapabilities.BITRATE_MODE_VBR,
+                )
+            }
+
+        /**
+         * [TARGET_FRAME_RATE] bila ada encoder AVC yang menyatakan mampu pada
+         * ukuran ini, selain itu [FALLBACK_FRAME_RATE].
+         *
+         * Seluruh kueri dibungkus runCatching: beberapa ROM melempar exception
+         * saat menanyakan kemampuan codec, dan itu tidak boleh menggagalkan
+         * rekaman — cukup turun ke 30 fps.
+         */
+        private fun resolveFrameRate(width: Int, height: Int): Int = runCatching {
+            val supported = MediaCodecList(MediaCodecList.REGULAR_CODECS).codecInfos
+                .asSequence()
+                .filter { it.isEncoder }
+                .mapNotNull { info ->
+                    runCatching { info.getCapabilitiesForType(MIME_TYPE) }.getOrNull()
+                        ?.videoCapabilities
+                }
+                .any { caps ->
+                    caps.isSizeSupported(width, height) &&
+                        caps.areSizeAndRateSupported(width, height, TARGET_FRAME_RATE.toDouble())
+                }
+            if (supported) TARGET_FRAME_RATE else FALLBACK_FRAME_RATE
+        }.getOrDefault(FALLBACK_FRAME_RATE)
         private const val SAMPLE_BUFFER_BYTES = 1 shl 20
         private const val DRAIN_TIMEOUT_US = 100_000L
         private const val MAX_DRAIN_ATTEMPTS = 300
