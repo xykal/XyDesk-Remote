@@ -422,6 +422,9 @@ class XyDeskSessionActivity : ComponentActivity() {
             ),
         )
         val deferConnectForPermission = requestRuntimePermissions(profile)
+        // Di-hoist ke sini: di dalam lambda Compose `this` bisa berarti BoxScope,
+        // bukan Context, sehingga SessionPrefs(this) tidak bisa dipakai langsung.
+        val sessionPrefs = SessionPrefs(this)
         setContent {
             // Layar sesi ikut setelan tema app (dulu dipaksa gelap, jadi di
             // mode terang panel dan dialog di sini tidak nyambung dengan sisa
@@ -429,7 +432,7 @@ class XyDeskSessionActivity : ComponentActivity() {
             // warna tetap supaya selalu terbaca.
             XyThemeState.init(appPrefs ?: AppPrefs(this))
             XyDeskTheme(dark = xyDark()) {
-                var virtualPadVisible by remember { mutableStateOf(SessionPrefs(this).virtualPadEnabled) }
+                var virtualPadVisible by remember { mutableStateOf(sessionPrefs.virtualPadEnabled) }
                 Box(modifier = Modifier.fillMaxSize()) {
                     XyDeskSessionScreen(
                         profile = profile,
@@ -445,7 +448,7 @@ class XyDeskSessionActivity : ComponentActivity() {
                         onPress = { down ->
                             if (down) {
                                 virtualPadVisible = !virtualPadVisible
-                                SessionPrefs(this).virtualPadEnabled = virtualPadVisible
+                                sessionPrefs.virtualPadEnabled = virtualPadVisible
                                 if (!virtualPadVisible) releaseVirtualPad()
                             }
                         },
