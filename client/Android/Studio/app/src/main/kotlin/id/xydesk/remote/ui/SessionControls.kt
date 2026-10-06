@@ -1494,8 +1494,8 @@ private fun SessionPanel(
                     RoundedCornerShape(22.dp),
                 )
                 .pointerInput(Unit) {}
-                .padding(horizontal = 18.dp, vertical = 14.dp),
-            verticalArrangement = Arrangement.spacedBy(10.dp),
+                .padding(horizontal = 16.dp, vertical = 12.dp),
+            verticalArrangement = Arrangement.spacedBy(9.dp),
         ) {
             Row(
                 verticalAlignment = Alignment.CenterVertically,
@@ -1536,7 +1536,8 @@ private fun SessionPanel(
                 Modifier
                     .weight(1f)
                     .verticalScroll(tabScroll),
-                verticalArrangement = Arrangement.spacedBy(10.dp),
+                // Jarak antar kartu dirapatkan; kartu kini punya padding sendiri.
+                verticalArrangement = Arrangement.spacedBy(7.dp),
             ) {
                 when (tab) {
                     PanelTab.SCREEN -> ScreenTab(
@@ -2405,11 +2406,21 @@ private fun PanelHint(text: String) {
 
 @Composable
 private fun PanelSection(title: String, content: @Composable () -> Unit) {
+    // Setiap seksi digambar sebagai kartu: latar sedikit terangkat, sudut
+    // membulat, dan tepi halus. Satu fungsi ini dipakai 18 seksi di empat tab,
+    // jadi seluruh panel ikut berubah tanpa menyentuh masing-masing tab.
     Column(
         Modifier
             .fillMaxWidth()
-            .padding(vertical = 6.dp),
-        verticalArrangement = Arrangement.spacedBy(8.dp),
+            .clip(RoundedCornerShape(14.dp))
+            .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.45f))
+            .border(
+                1.dp,
+                MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.6f),
+                RoundedCornerShape(14.dp),
+            )
+            .padding(horizontal = 12.dp, vertical = 10.dp),
+        verticalArrangement = Arrangement.spacedBy(7.dp),
     ) {
         Text(
             title.uppercase(),
