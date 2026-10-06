@@ -141,7 +141,6 @@ fun XyDeskHome(
     LaunchedEffect(dataReady) { if (dataReady) onReady() }
     val scope = rememberCoroutineScope()
     val appPrefs = remember { AppPrefs(context) }
-    var showFunHub by remember { mutableStateOf(appPrefs.showFunHub) }
     var drawerOpen by remember { mutableStateOf(false) }
     var helpToolsOpen by remember { mutableStateOf(false) }
     var section by remember { mutableStateOf(XySection.PERANGKAT) }
@@ -363,11 +362,6 @@ fun XyDeskHome(
                         },
                         onConnect = { connect(it) },
                         onWakeConnect = { wakeAndConnect(it) },
-                        showFunHub = showFunHub,
-                        onShowFunHubChange = { enabled ->
-                            showFunHub = enabled
-                            appPrefs.showFunHub = enabled
-                        },
                         onDelete = { profile -> confirmDeleteDevice = profile },
                         onShowCrash = { showCrash = true },
                         onShowBoot = { showBoot = true },
@@ -378,11 +372,6 @@ fun XyDeskHome(
                         favorites = favorites,
                         onMenu = { drawerOpen = true },
                         appPrefs = appPrefs,
-                        showFunHub = showFunHub,
-                        onShowFunHubChange = { enabled ->
-                            showFunHub = enabled
-                            appPrefs.showFunHub = enabled
-                        },
                         onEditDevice = {
                             route = XyRoute.EditDevice(
                                 it,
@@ -908,8 +897,6 @@ private fun DevicesScreen(
     onEdit: (ConnectionProfile) -> Unit,
     onConnect: (ConnectionProfile) -> Unit,
     onWakeConnect: (ConnectionProfile) -> Unit,
-    showFunHub: Boolean,
-    onShowFunHubChange: (Boolean) -> Unit,
     onDelete: (ConnectionProfile) -> Unit,
     onShowCrash: () -> Unit,
     onShowBoot: () -> Unit,
@@ -990,9 +977,6 @@ private fun DevicesScreen(
                         Modifier.fillMaxSize().verticalScroll(rememberScrollState()),
                         verticalArrangement = Arrangement.spacedBy(12.dp),
                     ) {
-                        if (showFunHub) {
-                            FunHubCard(onHide = { onShowFunHubChange(false) })
-                        }
                         XyCard(modifier = Modifier.fillMaxWidth()) {
                             Text(xy("Belum ada perangkat", "No devices yet"), style = MaterialTheme.typography.titleMedium)
                             Spacer(Modifier.height(6.dp))
@@ -1048,9 +1032,6 @@ private fun DevicesScreen(
                     verticalArrangement = Arrangement.spacedBy(14.dp),
                 ) {
                     item { LiveSessionsCard() }
-                    if (showFunHub) {
-                        item { FunHubCard(onHide = { onShowFunHubChange(false) }) }
-                    }
                     item {
                         XySegmented(
                             options = listOf(

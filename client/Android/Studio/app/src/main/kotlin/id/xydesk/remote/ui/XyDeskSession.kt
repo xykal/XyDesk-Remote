@@ -84,6 +84,7 @@ import id.xydesk.remote.core.CertificateInfo
 import id.xydesk.remote.XySessionService
 import id.xydesk.remote.core.ConnectionLog
 import id.xydesk.remote.core.ConnectionProfile
+import id.xydesk.remote.core.RdpFailure
 import id.xydesk.remote.core.RdpOptions
 import id.xydesk.remote.core.SessionManager
 import id.xydesk.remote.core.SmartResolution
@@ -1588,7 +1589,7 @@ fun XyDeskSessionScreen(
     }
     if (!active && !reconnecting && !applyingResolution && !userDisconnect) err?.let { e ->
         XyOverlay(
-            title = xy("Koneksi gagal", "Connection failed"),
+            title = xy("Tidak dapat tersambung", "Unable to connect"),
             onDismiss = { exitSession() },
         ) {
             // Penjelasan yang bisa ditindak dulu, pesan mentah di bawahnya
@@ -1605,6 +1606,17 @@ fun XyDeskSessionScreen(
             } else {
                 Text(e.message, style = MaterialTheme.typography.bodyMedium)
             }
+            // Baris teknis selalu tampil: kode kategori XyDesk + ID koneksi.
+            // Rujukannya sama persis dengan baris "CM: Kode 0x… · ID koneksi …"
+            // di log, jadi laporan bug bisa dicocokkan tanpa menebak.
+            Spacer(Modifier.height(8.dp))
+            Text(
+                xy("Kode", "Code") + " " + RdpFailure.formatCode(e.errorCode) +
+                    "   ·   " + xy("ID koneksi", "Connection ID") + " " +
+                    RdpFailure.formatConnectionId(e.connectionId),
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 XyPillButton(
                     text = xy("Detail", "Details"),

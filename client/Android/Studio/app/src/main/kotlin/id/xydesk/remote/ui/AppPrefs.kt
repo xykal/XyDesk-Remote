@@ -148,11 +148,6 @@ class AppPrefs(context: Context) {
         get() = sp.getBoolean(KEY_SHARE_ACTIVE_SESSION_STATS, true)
         set(v) = sp.edit().putBoolean(KEY_SHARE_ACTIVE_SESSION_STATS, v).apply()
 
-    /** Optional home-screen text-meme/joke card; users can hide it from Settings. */
-    var showFunHub: Boolean
-        get() = sp.getBoolean(KEY_SHOW_FUN_HUB, true)
-        set(v) = sp.edit().putBoolean(KEY_SHOW_FUN_HUB, v).apply()
-
     companion object {
         private const val NAME = "xydesk.app"
         private const val KEY_THEME = "theme_mode"
@@ -168,6 +163,5 @@ class AppPrefs(context: Context) {
         private const val KEY_AUTO_LOCK_REMOTE = "auto_lock_remote"
         private const val KEY_CLEAR_CLIPBOARD = "clear_clipboard_disconnect"
         private const val KEY_SHARE_ACTIVE_SESSION_STATS = "share_active_session_stats"
-        private const val KEY_SHOW_FUN_HUB = "show_fun_hub"
     }
 }
