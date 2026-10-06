@@ -243,10 +243,22 @@ jobs:
         with:
           path: |
             client/Android/Studio/freeRDPCore/.cxx
+            client/Android/Studio/freeRDPCore/src/main/cpp/external
             $HOME/.gradle/caches
           key: freerdp-native-cxx-v1-${{ hashFiles('client/Android/cmake/**', 'client/Android/Studio/freeRDPCore/src/main/cpp/**', 'channels/rdpsnd/**', 'channels/disp/**', 'channels/client/**', 'channels/cliprdr/**', 'client/common/**', 'libfreerdp/codec/**') }}
           restore-keys: |
             freerdp-native-cxx-v1-
+      # Cache .cxx dan source ExternalProject harus selalu sepasang. Kalau .cxx
+      # dipulihkan tanpa source-nya (mis. cache lama dari sebelum path external
+      # ikut di-cache), step update openh264 gagal dengan
+      # "fatal: not a git repository". Lebih baik build ulang dari nol.
+      - name: Buang cache native bila source ExternalProject tidak ikut terpulihkan
+        run: |
+          EXT="client/Android/Studio/freeRDPCore/src/main/cpp/external"
+          if [ -d "client/Android/Studio/freeRDPCore/.cxx" ] && [ ! -d "$EXT/openh264/.git" ]; then
+            echo "Cache .cxx tanpa source ExternalProject -> bersihkan agar superbuild jalan dari nol."
+            rm -rf client/Android/Studio/freeRDPCore/.cxx
+          fi
       - name: Invalidate FreeRDP stamp so patched C files always rebuild & install
         run: |
           if [ -d "client/Android/Studio/freeRDPCore/.cxx" ]; then
