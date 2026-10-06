@@ -44,7 +44,7 @@ def verify(directory: Path) -> None:
         )
 
     for abi in ABIS:
-        filename = f"XyDesk-{abi}.apk"
+        filename = f"XyDesk-Remote-{abi}.apk"
         apk_path = directory / filename
         if not apk_path.is_file():
             raise SystemExit(f"FAIL: missing {apk_path}")
