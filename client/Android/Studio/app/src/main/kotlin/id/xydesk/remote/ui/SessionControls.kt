@@ -2452,7 +2452,6 @@ private fun PanelHint(text: String) {
     )
 }
 
-@Composable
 /**
  * Tab panel sebagai deretan kotak kaca, bukan strip tersegmentasi.
  *
@@ -2529,6 +2528,7 @@ private fun panelTabIcon(entry: PanelTab): ImageVector = when (entry) {
     PanelTab.SESSION -> XyIcons.Gear
 }
 
+@Composable
 private fun PanelSection(
     title: String,
     initiallyExpanded: Boolean = false,
