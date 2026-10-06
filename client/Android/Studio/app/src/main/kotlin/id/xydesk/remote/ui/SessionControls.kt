@@ -1,5 +1,7 @@
 package id.xydesk.remote.ui
 
+import android.os.SystemClock
+import kotlinx.coroutines.delay
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -518,6 +520,18 @@ fun SessionControls(
                     onStickAxis = { _, x, y -> onStickAxis(x, y) },
                 )
             }
+        }
+
+        // Indikator rekaman sengaja ditaruh DI LUAR syarat !panelOpen: status
+        // "sedang merekam" tidak boleh hilang hanya karena pengguna membuka
+        // menu. Tidak ada clickable, jadi tidak menyerap sentuhan layar remote.
+        if (recordingActive) {
+            RecordingIndicator(
+                modifier = Modifier
+                    .align(Alignment.TopStart)
+                    .padding(start = 10.dp, top = 10.dp)
+                    .zIndex(24f),
+            )
         }
 
         if (!panelOpen && !monitorGridOpen && !mappingMode) {
@@ -3133,5 +3147,59 @@ private fun MonitorAndUserGridModal(
                 )
             }
         }
+    }
+}
+
+/**
+ * Badge "REC" + waktu berjalan selama perekaman aktif.
+ *
+ * Selalu tampil selama [recordingActive] benar, termasuk saat panel atau mode
+ * pemetaan tombol terbuka, supaya pengguna tidak lupa rekaman masih jalan.
+ * Komponen ini hanya digambar saat merekam, jadi `remember` di dalamnya mulai
+ * dari nol tiap sesi rekaman baru.
+ */
+@Composable
+private fun RecordingIndicator(modifier: Modifier = Modifier) {
+    val startedAt = remember { SystemClock.elapsedRealtime() }
+    var elapsedMs by remember { mutableStateOf(0L) }
+    var dotOn by remember { mutableStateOf(true) }
+    LaunchedEffect(Unit) {
+        while (true) {
+            elapsedMs = SystemClock.elapsedRealtime() - startedAt
+            dotOn = !dotOn
+            delay(500L)
+        }
+    }
+    val totalSeconds = elapsedMs / 1000L
+    val clock = "%02d:%02d".format(totalSeconds / 60L, totalSeconds % 60L)
+    Row(
+        modifier
+            .clip(RoundedCornerShape(50))
+            .background(Color.Black.copy(alpha = 0.68f))
+            .padding(horizontal = 10.dp, vertical = 6.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(7.dp),
+    ) {
+        Box(
+            Modifier
+                .size(8.dp)
+                .background(
+                    MaterialTheme.colorScheme.error.copy(alpha = if (dotOn) 1f else 0.25f),
+                    CircleShape,
+                ),
+        )
+        Text(
+            text = "REC",
+            color = Color.White,
+            fontSize = 11.sp,
+            fontWeight = FontWeight.Bold,
+            letterSpacing = 0.8.sp,
+        )
+        Text(
+            text = clock,
+            color = Color.White.copy(alpha = 0.85f),
+            fontSize = 11.sp,
+            fontFeatureSettings = "tnum",
+        )
     }
 }
