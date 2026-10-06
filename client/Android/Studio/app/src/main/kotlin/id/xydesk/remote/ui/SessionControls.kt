@@ -76,6 +76,7 @@ import id.xydesk.remote.ui.components.XyPillButton
 import id.xydesk.remote.ui.components.XySegmented
 import id.xydesk.remote.ui.components.XySlider
 import id.xydesk.remote.ui.components.XyToggleRow
+import id.xydesk.remote.ui.components.xyGlass
 import id.xydesk.remote.ui.theme.XyPill
 import kotlin.math.roundToInt
 
@@ -1517,12 +1518,13 @@ private fun SessionPanel(
                 .fillMaxHeight(0.9f)
                 .fillMaxWidth(0.94f)
                 .widthIn(max = 720.dp)
-                .clip(RoundedCornerShape(22.dp))
-                .background(MaterialTheme.colorScheme.surface.copy(alpha = 0.97f))
-                .border(
-                    1.dp,
-                    MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.6f),
-                    RoundedCornerShape(22.dp),
+                // Gaya kaca yang sama dengan pemutar musik. Opacity dinaikkan
+                // (0.55 * 1.6 = 0.88) karena panel berisi banyak teks; kaca
+                // setipis pemutar akan membuat tulisan sulit dibaca.
+                .xyGlass(
+                    shape = RoundedCornerShape(22.dp),
+                    opacity = 1.6f,
+                    strength = 1f,
                 )
                 .pointerInput(Unit) {}
                 .padding(horizontal = 16.dp, vertical = 12.dp),
@@ -2288,14 +2290,13 @@ private fun ButtonsTab(
         )
         PanelHint(
             xy(
-                "Pelat ikon selalu gelap dan tembus; pilih ketegasan latar atau transparan.",
-                "Icon plates stay dark and translucent; choose the strength or go transparent.",
+                "Pratinjau di bawah memakai warna tombol sungguhan di atas contoh gambar desktop, jadi hasilnya sama dengan yang tampil saat sesi berjalan.",
+                "The preview below uses the real button colors over a sample desktop, so it matches what you get during a session.",
             ),
         )
-        XySegmented(
-            options = HudPlate.entries.map { xy(it.title, it.titleEn) },
-            selectedIndex = plate.ordinal,
-            onSelect = { onPlate(HudPlate.entries[it]) },
+        HudPlatePicker(
+            selected = plate,
+            onSelect = onPlate,
             modifier = Modifier.fillMaxWidth(),
         )
         Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
