@@ -245,9 +245,9 @@ jobs:
             client/Android/Studio/freeRDPCore/.cxx
             client/Android/Studio/freeRDPCore/src/main/cpp/external
             $HOME/.gradle/caches
-          key: freerdp-native-cxx-v1-${{ hashFiles('client/Android/cmake/**', 'client/Android/Studio/freeRDPCore/src/main/cpp/**', 'channels/rdpsnd/**', 'channels/disp/**', 'channels/client/**', 'channels/cliprdr/**', 'client/common/**', 'libfreerdp/codec/**') }}
+          key: freerdp-native-cxx-v2-${{ hashFiles('client/Android/cmake/**', 'client/Android/Studio/freeRDPCore/src/main/cpp/**', 'channels/rdpsnd/**', 'channels/disp/**', 'channels/client/**', 'channels/cliprdr/**', 'client/common/**', 'libfreerdp/codec/**') }}
           restore-keys: |
-            freerdp-native-cxx-v1-
+            freerdp-native-cxx-v2-
       # Cache .cxx dan source ExternalProject harus selalu sepasang. Kalau .cxx
       # dipulihkan tanpa source-nya (mis. cache lama dari sebelum path external
       # ikut di-cache), step update openh264 gagal dengan
