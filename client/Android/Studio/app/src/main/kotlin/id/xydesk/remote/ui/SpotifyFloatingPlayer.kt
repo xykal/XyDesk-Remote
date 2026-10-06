@@ -62,7 +62,7 @@ internal fun SpotifyFloatingPlayer(
             modifier = modifier
                 .size(width = 72.dp, height = 36.dp)
                 .clickable(
-                    onClickLabel = xyNow("Buka pemutar Spotify", "Open Spotify player"),
+                    onClickLabel = xyNow("Buka pemutar musik", "Open music player"),
                     onClick = onExpand,
                 ),
             contentAlignment = Alignment.Center,
@@ -118,14 +118,18 @@ internal fun SpotifyFloatingPlayer(
                     Spacer(Modifier.width(10.dp))
                     Column(Modifier.weight(1f)) {
                         Text(
-                            "SPOTIFY",
+                            // Nama aplikasi sumber, bukan tulisan "SPOTIFY" tetap:
+                            // bridge sekarang menerima pemutar apa pun.
+                            (playback.sourceLabel ?: xyNow("Pemutar", "Player")).uppercase(),
                             style = MaterialTheme.typography.labelSmall,
                             color = MaterialTheme.colorScheme.primary,
                             letterSpacing = 1.1.sp,
                         )
                         Text(
-                            playback.title ?: if (playback.hasActiveSession) "Spotify"
-                            else xyNow("Pemutar musik", "Music player"),
+                            playback.title
+                                ?: if (playback.hasActiveSession) {
+                                    playback.sourceLabel ?: xyNow("Sedang diputar", "Now playing")
+                                } else xyNow("Pemutar musik", "Music player"),
                             style = MaterialTheme.typography.titleSmall,
                             color = MaterialTheme.colorScheme.onSurface,
                             maxLines = 1,
@@ -134,8 +138,8 @@ internal fun SpotifyFloatingPlayer(
                         Text(
                             playback.artist ?: playback.album ?: when {
                                 playback.hasActiveSession -> xyNow("Menunggu info lagu…", "Waiting for track info…")
-                                playback.notificationAccessGranted -> xyNow("Buka Spotify lalu putar lagu", "Open Spotify and start playing")
-                                else -> xyNow("Kontrol Spotify di HP dari sesi ini", "Control phone Spotify from this session")
+                                playback.notificationAccessGranted -> xyNow("Putar lagu dari aplikasi musik mana pun di HP", "Play a song from any music app on your phone")
+                                else -> xyNow("Kontrol pemutar di HP dari sesi ini", "Control the phone player from this session")
                             },
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -145,7 +149,7 @@ internal fun SpotifyFloatingPlayer(
                     }
                     PlayerIconButton(
                         icon = XyIcons.ChevronUp,
-                        description = xyNow("Kecilkan pemutar Spotify", "Minimize Spotify player"),
+                        description = xyNow("Kecilkan pemutar musik", "Minimize music player"),
                         onClick = onMinimize,
                         modifier = Modifier.size(32.dp),
                     )
@@ -154,14 +158,14 @@ internal fun SpotifyFloatingPlayer(
                 if (!playback.notificationAccessGranted) {
                     Text(
                         xyNow(
-                            "Izinkan akses notifikasi Android agar XyDesk bisa membaca info lagu Spotify dan mengirim kontrol putar/jeda. Notifikasi aplikasi lain diabaikan; login dan audio tetap di Spotify.",
-                            "Allow Android notification access so XyDesk can read Spotify track details and send playback controls. Other apps' notifications are ignored; sign-in and audio stay in Spotify.",
+                            "Izinkan akses notifikasi Android agar XyDesk bisa membaca info lagu dan mengirim kontrol putar/jeda. Pemutar apa pun didukung; login dan audio tetap di aplikasi musik itu.",
+                            "Allow Android notification access so XyDesk can read track details and send playback controls. Any music player works; sign-in and audio stay inside that app.",
                         ),
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                     XyPillButton(
-                        text = xyNow("Beri akses Spotify", "Allow Spotify control"),
+                        text = xyNow("Beri akses notifikasi", "Allow notification access"),
                         onClick = onRequestAccess,
                         modifier = Modifier.fillMaxWidth(),
                         icon = XyIcons.Music,
@@ -170,20 +174,24 @@ internal fun SpotifyFloatingPlayer(
                 } else if (!playback.hasActiveSession) {
                     Text(
                         xyNow(
-                            "Belum ada sesi Spotify aktif. Buka Spotify di HP dan mulai putar lagu.",
-                            "No active Spotify session. Open Spotify on your phone and start playing a song.",
+                            "Belum ada musik yang diputar. Putar lagu dari aplikasi musik mana pun di HP, lalu kontrol dari sini.",
+                            "Nothing is playing yet. Start a song in any music app on your phone, then control it from here.",
                         ),
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
-                    XyPillButton(
-                        text = if (isSpotifyInstalled(context)) xyNow("Buka Spotify", "Open Spotify")
-                        else xyNow("Pasang Spotify", "Install Spotify"),
-                        onClick = { openSpotify(context) },
-                        modifier = Modifier.fillMaxWidth(),
-                        icon = XyIcons.Music,
-                        compact = true,
-                    )
+                    // Tombol hanya ditawarkan kalau Spotify memang terpasang.
+                    // Jalur "Pasang Spotify" dibuang: sumbernya tidak lagi
+                    // harus Spotify, jadi XyDesk tidak mendorong satu aplikasi.
+                    if (isSpotifyInstalled(context)) {
+                        XyPillButton(
+                            text = xyNow("Buka Spotify", "Open Spotify"),
+                            onClick = { openSpotify(context) },
+                            modifier = Modifier.fillMaxWidth(),
+                            icon = XyIcons.Music,
+                            compact = true,
+                        )
+                    }
                 } else {
                     Row(
                         modifier = Modifier.fillMaxWidth(),
@@ -211,7 +219,7 @@ internal fun SpotifyFloatingPlayer(
                         )
                     }
                     Text(
-                        xyNow("Audio tetap di Spotify · kontrol dari XyDesk", "Audio stays in Spotify · controls from XyDesk"),
+                        xyNow("Audio tetap di HP · kontrol dari XyDesk", "Audio stays on your phone · controls from XyDesk"),
                         modifier = Modifier.align(Alignment.CenterHorizontally),
                         style = MaterialTheme.typography.labelSmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,

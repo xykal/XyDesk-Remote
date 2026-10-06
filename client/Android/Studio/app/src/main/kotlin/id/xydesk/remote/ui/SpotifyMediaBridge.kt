@@ -29,11 +29,45 @@ internal object SpotifyMediaBridge {
     @Volatile private var activeController: MediaController? = null
     private var activeCallback: MediaController.Callback? = null
     @Volatile private var notificationAccess = false
+    private var refreshRunnable: Runnable? = null
     @Volatile private var appContext: Context? = null
 
     fun hasNotificationAccess(context: Context): Boolean = runCatching {
         NotificationManagerCompat.getEnabledListenerPackages(context).contains(context.packageName)
     }.getOrDefault(false)
+
+    /** Paket aplikasi sumber yang sedang terpasang, untuk listener notifikasi. */
+    fun currentSourcePackage(): String? = activeController?.packageName
+
+    /**
+     * Versi refresh yang ditunda sebentar. Listener notifikasi kini menerima
+     * notifikasi media dari aplikasi mana pun, jadi panggilan bisa beruntun;
+     * tanpa jeda, getActiveSessions() dipanggil berkali-kali untuk satu kejadian.
+     */
+    fun refreshDebounced(context: Context) {
+        val application = context.applicationContext
+        refreshRunnable?.let { mainHandler.removeCallbacks(it) }
+        val task = Runnable {
+            refreshRunnable = null
+            refresh(application)
+        }
+        refreshRunnable = task
+        mainHandler.postDelayed(task, 200L)
+    }
+
+    private fun MediaController.isPlayingNow(): Boolean {
+        val state = playbackState?.state ?: return false
+        return state == PlaybackState.STATE_PLAYING || state == PlaybackState.STATE_BUFFERING
+    }
+
+    private fun sourceLabelFor(packageName: String?): String? {
+        val context = appContext ?: return null
+        val pkg = packageName?.takeIf { it.isNotEmpty() } ?: return null
+        return runCatching {
+            val pm = context.packageManager
+            pm.getApplicationLabel(pm.getApplicationInfo(pkg, 0)).toString()
+        }.getOrNull()?.trim()?.takeIf { it.isNotEmpty() }
+    }
 
     fun refresh(context: Context) {
         val application = context.applicationContext
@@ -50,7 +84,16 @@ internal object SpotifyMediaBridge {
             val manager = application.getSystemService(Context.MEDIA_SESSION_SERVICE) as MediaSessionManager
             val listener = ComponentName(application, SpotifyNotificationListenerService::class.java)
             manager.getActiveSessions(listener)
-                .firstOrNull { it.packageName == SPOTIFY_PACKAGE }
+                .filter { it.packageName != application.packageName }
+                .let { sessions ->
+                    // Sumber mana pun boleh: yang sedang diputar diprioritaskan,
+                    // lalu yang punya metadata, baru sesi pertama yang tersedia.
+                    sessions.firstOrNull { it.isPlayingNow() }
+                        ?: sessions.firstOrNull {
+                            it.metadata?.getString(MediaMetadata.METADATA_KEY_TITLE) != null
+                        }
+                        ?: sessions.firstOrNull()
+                }
         }.onSuccess { attach(it) }
             .onFailure {
                 attach(null)
@@ -127,6 +170,7 @@ internal object SpotifyMediaBridge {
             artist = metadata?.getString(MediaMetadata.METADATA_KEY_ARTIST).cleanMetadata(),
             album = metadata?.getString(MediaMetadata.METADATA_KEY_ALBUM).cleanMetadata(),
             artwork = artwork,
+            sourceLabel = sourceLabelFor(controller.packageName),
         )
     }
 
@@ -153,6 +197,8 @@ internal data class SpotifyPlaybackState(
     val artist: String? = null,
     val album: String? = null,
     val artwork: Bitmap? = null,
+    /** Nama aplikasi sumber, misalnya "Spotify" atau "Poweramp". */
+    val sourceLabel: String? = null,
 )
 
 /** System service used only as the trusted NotificationListener component token. */
@@ -163,15 +209,24 @@ class SpotifyNotificationListenerService : android.service.notification.Notifica
     }
 
     override fun onNotificationPosted(sbn: android.service.notification.StatusBarNotification) {
-        if (sbn.packageName == SpotifyMediaBridge.SPOTIFY_PACKAGE) {
-            SpotifyMediaBridge.refresh(this)
-        }
+        if (isMediaRelated(sbn)) SpotifyMediaBridge.refreshDebounced(this)
     }
 
     override fun onNotificationRemoved(sbn: android.service.notification.StatusBarNotification) {
-        if (sbn.packageName == SpotifyMediaBridge.SPOTIFY_PACKAGE) {
-            SpotifyMediaBridge.refresh(this)
-        }
+        if (isMediaRelated(sbn)) SpotifyMediaBridge.refreshDebounced(this)
+    }
+
+    /**
+     * Notifikasi media dari aplikasi mana pun, atau notifikasi apa pun dari
+     * aplikasi yang sedang jadi sumber. Sebelumnya hanya paket Spotify yang
+     * diterima, jadi pemutar lain tidak pernah terdeteksi.
+     */
+    private fun isMediaRelated(sbn: android.service.notification.StatusBarNotification): Boolean {
+        if (sbn.packageName == SpotifyMediaBridge.currentSourcePackage()) return true
+        return runCatching {
+            sbn.notification?.extras?.getString(android.app.Notification.EXTRA_TEMPLATE) ==
+                "android.app.Notification$MediaStyle"
+        }.getOrDefault(false)
     }
 
     override fun onListenerDisconnected() {
