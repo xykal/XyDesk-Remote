@@ -104,9 +104,21 @@ internal class RemoteScreenRecorder(
 
             val format = MediaFormat.createVideoFormat(MIME_TYPE, width, height).apply {
                 setInteger(MediaFormat.KEY_COLOR_FORMAT, MediaCodecInfo.CodecCapabilities.COLOR_FormatSurface)
-                setInteger(MediaFormat.KEY_BIT_RATE, (width * height * 5).coerceIn(1_500_000, 5_000_000))
+                // Dulu: width*height*5 dengan atap 5 Mbps dan 15 fps, sehingga
+                // hasil rekaman desktop terlihat patah-patah dan lembut/blok.
+                setInteger(
+                    MediaFormat.KEY_BIT_RATE,
+                    (width * height * BITS_PER_PIXEL).coerceIn(MIN_BIT_RATE, MAX_BIT_RATE),
+                )
                 setInteger(MediaFormat.KEY_FRAME_RATE, FRAME_RATE)
-                setInteger(MediaFormat.KEY_I_FRAME_INTERVAL, 2)
+                setInteger(MediaFormat.KEY_I_FRAME_INTERVAL, I_FRAME_INTERVAL_SECONDS)
+                // VBR lebih cocok untuk desktop: area statis (teks, jendela diam)
+                // hampir tidak memakai bit, sehingga bit tersisa dipakai untuk
+                // area yang benar-benar bergerak.
+                setInteger(
+                    MediaFormat.KEY_BITRATE_MODE,
+                    MediaCodecInfo.EncoderCapabilities.BITRATE_MODE_VBR,
+                )
             }
 
             val activeCodec = MediaCodec.createEncoderByType(MIME_TYPE)
@@ -527,7 +539,11 @@ internal class RemoteScreenRecorder(
     companion object {
         private const val MIME_TYPE = "video/avc"
         private const val MAX_EDGE = 1280
-        private const val FRAME_RATE = 15
+        private const val FRAME_RATE = 30
+        private const val I_FRAME_INTERVAL_SECONDS = 2
+        private const val BITS_PER_PIXEL = 8
+        private const val MIN_BIT_RATE = 2_000_000
+        private const val MAX_BIT_RATE = 16_000_000
         private const val FRAME_DURATION_NS = 1_000_000_000L / FRAME_RATE
         private const val DRAIN_TIMEOUT_US = 100_000L
         private const val MAX_DRAIN_ATTEMPTS = 300
