@@ -2331,8 +2331,8 @@ private fun SessionTab(
     PanelSection(xy("Perekaman lokal · PC ke HP", "Local recording · PC to phone")) {
         PanelHint(
             xy(
-                "Frame desktop PC direkam ke MP4 di Movies/XyDesk, dan audio dari PC ke file .m4a terpisah di Music/XyDesk. Layar HP dan kontrol tidak pernah ikut terekam. Perekaman diblokir saat FLAG_SECURE aktif.",
-                "PC desktop frames are recorded to an MP4 in Movies/XyDesk, and PC audio to a separate .m4a in Music/XyDesk. The phone screen and controls are never captured. Recording is blocked while FLAG_SECURE is on.",
+                "Desktop PC beserta audionya direkam ke satu MP4 di Movies/XyDesk. Layar HP dan kontrol tidak pernah ikut terekam. Kalau penggabungan gagal, video dan audio disimpan sebagai dua file. Perekaman diblokir saat FLAG_SECURE aktif.",
+                "The PC desktop and its audio are recorded into a single MP4 in Movies/XyDesk. The phone screen and controls are never captured. If merging fails, video and audio are saved as two files. Recording is blocked while FLAG_SECURE is on.",
             ),
         )
         XyPillButton(

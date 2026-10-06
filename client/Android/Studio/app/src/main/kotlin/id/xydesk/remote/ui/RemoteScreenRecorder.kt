@@ -1,5 +1,6 @@
 package id.xydesk.remote.ui
 
+import android.media.MediaExtractor
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.LinkedBlockingQueue
 import android.graphics.Rect
@@ -60,6 +61,8 @@ internal class RemoteScreenRecorder(
     @Volatile private var drawTargetRef: Bitmap? = null
     @Volatile private var audioRecorderRef: RemoteAudioRecorder? = null
     @Volatile private var audioSaved = false
+    @Volatile private var audioTempRef: File? = null
+    @Volatile private var mergedTempRef: File? = null
 
     @Volatile private var listener: ((RemoteRecordingState) -> Unit)? = null
     @Volatile private var worker: Thread? = null
@@ -237,6 +240,7 @@ internal class RemoteScreenRecorder(
                         outputFile.parentFile,
                         outputFile.nameWithoutExtension + "-audio.m4a",
                     )
+                    audioTempRef = audioFile
                     RemoteAudioRecorder(source.sampleRate, source.channelCount, audioFile).also { recorder ->
                         recorder.start()
                         source.attachPcmTap { data, offset, length -> recorder.onPcm(data, offset, length) }
@@ -290,16 +294,37 @@ internal class RemoteScreenRecorder(
 
             if (isCaptureProtected()) throw SecureCaptureException()
             val location = try {
-                val video = publishVideo(outputFile)
-                val audioFile = File(
-                    outputFile.parentFile,
-                    outputFile.nameWithoutExtension + "-audio.m4a",
-                )
-                if (audioSaved && audioFile.exists() && audioFile.length() > 0) {
-                    val audioLocation = runCatching { publishAudio(audioFile) }.getOrNull()
-                    if (audioLocation != null) "$video + $audioLocation" else video
+                val audioFile = audioTempRef
+                val hasAudio = audioSaved && audioFile != null &&
+                    audioFile.exists() && audioFile.length() > 0
+                // Gabungkan lewat remux SETELAH rekaman selesai, bukan dengan
+                // menambah track ke muxer video yang sedang jalan. MediaMuxer
+                // menuntut semua track ditambahkan sebelum start(), jadi
+                // menggabungkan secara live berarti menulis ulang jalur video
+                // yang sudah benar. Remux hanya menyalin sampel tanpa encode
+                // ulang, dan kalau gagal kita tetap punya dua file yang utuh.
+                val mergedFile = if (hasAudio && audioFile != null) {
+                    File(outputFile.parentFile, outputFile.nameWithoutExtension + "-merged.mp4")
+                } else null
+                val combined = if (mergedFile != null && audioFile != null) {
+                    mergedTempRef = mergedFile
+                    if (muxAudioIntoVideo(outputFile, audioFile, mergedFile)) mergedFile else null
+                } else null
+                if (combined != null) {
+                    val published = publishVideo(combined)
+                    runCatching { combined.delete() }
+                    mergedTempRef = null
+                    runCatching { audioFile?.delete() }
+                    audioTempRef = null
+                    published
                 } else {
-                    video
+                    val video = publishVideo(outputFile)
+                    if (hasAudio && audioFile != null) {
+                        val audioLocation = runCatching { publishAudio(audioFile) }.getOrNull()
+                        if (audioLocation != null) "$video + $audioLocation" else video
+                    } else {
+                        video
+                    }
                 }
             } catch (error: Throwable) {
                 throw SaveVideoException(error)
@@ -341,6 +366,10 @@ internal class RemoteScreenRecorder(
                 runCatching { cleanupMuxer.release() }
             }
             temporaryFile?.let { runCatching { it.delete() } }
+            audioTempRef?.let { runCatching { it.delete() } }
+            audioTempRef = null
+            mergedTempRef?.let { runCatching { it.delete() } }
+            mergedTempRef = null
             synchronized(this) {
                 if (worker === Thread.currentThread()) worker = null
             }
@@ -383,6 +412,90 @@ internal class RemoteScreenRecorder(
             throw SaveVideoException(error)
         }
         return "Movies/XyDesk (folder aplikasi)/$fileName"
+    }
+
+    /**
+     * Gabungkan video dan audio ke satu MP4 dengan menyalin sampel apa adanya
+     * (tanpa encode ulang), diurutkan berdasarkan waktu penyajian supaya kedua
+     * track terselang-seling dengan benar di dalam file.
+     *
+     * Return false kalau salah satu sumber tidak punya track yang diharapkan;
+     * pemanggil lalu memakai dua file terpisah.
+     */
+    private fun muxAudioIntoVideo(videoFile: File, audioFile: File, outputFile: File): Boolean {
+        val videoExtractor = MediaExtractor()
+        val audioExtractor = MediaExtractor()
+        var muxer: MediaMuxer? = null
+        var started = false
+        return try {
+            videoExtractor.setDataSource(videoFile.absolutePath)
+            audioExtractor.setDataSource(audioFile.absolutePath)
+            val videoTrack = selectTrackIndex(videoExtractor, "video/")
+            val audioTrack = selectTrackIndex(audioExtractor, "audio/")
+            if (videoTrack < 0 || audioTrack < 0) return false
+            videoExtractor.selectTrack(videoTrack)
+            audioExtractor.selectTrack(audioTrack)
+            val active = MediaMuxer(outputFile.absolutePath, MediaMuxer.OutputFormat.MUXER_OUTPUT_MPEG_4)
+            muxer = active
+            val outVideo = active.addTrack(videoExtractor.getTrackFormat(videoTrack))
+            val outAudio = active.addTrack(audioExtractor.getTrackFormat(audioTrack))
+            active.start()
+            started = true
+
+            val videoBuffer = ByteBuffer.allocate(SAMPLE_BUFFER_BYTES)
+            val audioBuffer = ByteBuffer.allocate(SAMPLE_BUFFER_BYTES)
+            val videoInfo = MediaCodec.BufferInfo()
+            val audioInfo = MediaCodec.BufferInfo()
+            var videoReady = readSample(videoExtractor, videoBuffer, videoInfo)
+            var audioReady = readSample(audioExtractor, audioBuffer, audioInfo)
+            while (videoReady || audioReady) {
+                val takeVideo = when {
+                    videoReady && audioReady -> videoInfo.presentationTimeUs <= audioInfo.presentationTimeUs
+                    videoReady -> true
+                    else -> false
+                }
+                if (takeVideo) {
+                    videoBuffer.position(0)
+                    videoBuffer.limit(videoInfo.size)
+                    active.writeSampleData(outVideo, videoBuffer, videoInfo)
+                    videoReady = videoExtractor.advance() && readSample(videoExtractor, videoBuffer, videoInfo)
+                } else {
+                    audioBuffer.position(0)
+                    audioBuffer.limit(audioInfo.size)
+                    active.writeSampleData(outAudio, audioBuffer, audioInfo)
+                    audioReady = audioExtractor.advance() && readSample(audioExtractor, audioBuffer, audioInfo)
+                }
+            }
+            true
+        } catch (error: Throwable) {
+            false
+        } finally {
+            if (started) runCatching { muxer?.stop() }
+            runCatching { muxer?.release() }
+            runCatching { videoExtractor.release() }
+            runCatching { audioExtractor.release() }
+        }
+    }
+
+    private fun selectTrackIndex(extractor: MediaExtractor, mimePrefix: String): Int {
+        for (index in 0 until extractor.trackCount) {
+            val mime = extractor.getTrackFormat(index).getString(MediaFormat.KEY_MIME) ?: continue
+            if (mime.startsWith(mimePrefix)) return index
+        }
+        return -1
+    }
+
+    private fun readSample(
+        extractor: MediaExtractor,
+        buffer: ByteBuffer,
+        info: MediaCodec.BufferInfo,
+    ): Boolean {
+        buffer.clear()
+        val size = extractor.readSampleData(buffer, 0)
+        if (size < 0) return false
+        extractor.getSampleInfo(info)
+        info.offset = 0
+        return true
     }
 
     /**
@@ -728,6 +841,7 @@ internal class RemoteScreenRecorder(
         private const val MIN_BIT_RATE = 2_000_000
         private const val MAX_BIT_RATE = 16_000_000
         private const val FRAME_DURATION_NS = 1_000_000_000L / FRAME_RATE
+        private const val SAMPLE_BUFFER_BYTES = 1 shl 20
         private const val DRAIN_TIMEOUT_US = 100_000L
         private const val MAX_DRAIN_ATTEMPTS = 300
     }
