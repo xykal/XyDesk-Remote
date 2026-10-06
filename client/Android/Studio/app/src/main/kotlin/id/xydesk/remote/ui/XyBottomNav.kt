@@ -57,12 +57,15 @@ internal fun XyBottomNav(
     ) {
         XySection.entries.forEach { section ->
             val active = section == selected
+            // sectionTitle() bersifat @Composable, jadi harus dipanggil di sini,
+            // bukan di dalam lambda semantics {} yang bukan composable.
+            val title = sectionTitle(section)
             Column(
                 modifier = Modifier
                     .weight(1f)
                     .fillMaxWidth()
                     .clickable { onSelect(section) }
-                    .semantics { contentDescription = sectionTitle(section) }
+                    .semantics { contentDescription = title }
                     .padding(vertical = 6.dp),
                 horizontalAlignment = Alignment.CenterHorizontally,
                 verticalArrangement = Arrangement.spacedBy(3.dp),
@@ -84,7 +87,7 @@ internal fun XyBottomNav(
                     )
                 }
                 Text(
-                    text = sectionTitle(section),
+                    text = title,
                     color = if (active) ink else ink.copy(alpha = 0.45f),
                     fontSize = 9.sp,
                     fontWeight = if (active) FontWeight.SemiBold else FontWeight.Normal,
