@@ -86,7 +86,7 @@ internal fun SpotifyFloatingPlayer(
             // dipakai karena dua alasan: Modifier.blur memburamkan kontennya
             // sendiri (bukan yang di belakangnya), dan backdrop blur tidak
             // tersedia di atas SurfaceView tempat layar RDP digambar -- selain
-            // itu blur baru ada di API 31 sedangkan minSdk proyek 23.
+            // itu blur baru ada di API 31 sedangkan minSdk proyek 24.
             // Jadi efek kacanya dibangun dari lapisan transparan + kilau
             // vertikal + tepi terang, yang tetap terbaca di atas desktop apa
             // pun karena tidak bergantung tema.
