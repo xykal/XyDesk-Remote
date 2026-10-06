@@ -225,7 +225,7 @@ class SpotifyNotificationListenerService : android.service.notification.Notifica
         if (sbn.packageName == SpotifyMediaBridge.currentSourcePackage()) return true
         return runCatching {
             sbn.notification?.extras?.getString(android.app.Notification.EXTRA_TEMPLATE) ==
-                "android.app.Notification$MediaStyle"
+                "android.app.Notification\$MediaStyle"
         }.getOrDefault(false)
     }
 
