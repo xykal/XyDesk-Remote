@@ -121,6 +121,19 @@ jobs:
             -L/tmp/dist-host -lxydesk_quic -lxydesk_host_core \
             -o /tmp/dist-host/XyDeskRemoteHost.exe \
             -static-libgcc -static-libstdc++ -Wl,-Bstatic -lstdc++ -lpthread -Wl,-Bdynamic
+          # Exe tunggal mandiri: kedua pustaka dikompilasi langsung ke dalam exe
+          # dan runtime mingw diikat statis, jadi hasilnya tidak membutuhkan
+          # xydesk_quic.dll, xydesk_host_core.dll, maupun DLL runtime mingw.
+          # Exe lama yang bergantung DLL tetap dibangun supaya tidak ada yang
+          # rusak sebelum exe tunggal ini terbukti di perangkat nyata.
+          x86_64-w64-mingw32-g++ -std=c++17 -O2 \
+            host-agent/src/main_host.cpp \
+            host-agent/src/xydesk_quic.cpp \
+            host-agent/src/xydesk_host_core.cpp \
+            -Ihost-agent/include \
+            -o "/tmp/dist-host/XyDeskRemoteHost-Standalone.exe" \
+            -static -static-libgcc -static-libstdc++ \
+            -lws2_32 -lole32 -ldxgi -ladvapi32 -liphlpapi -luser32 -lgdi32
           ls -lh /tmp/dist-host/
 
   # ------------------------------------------------------------------
@@ -528,12 +541,26 @@ jobs:
             -L"$STAGE_DIR" -lxydesk_quic -lxydesk_host_core \
             -o "$STAGE_DIR/XyDeskRemoteHost.exe" \
             -static-libgcc -static-libstdc++ -Wl,-Bstatic -lstdc++ -lpthread -Wl,-Bdynamic
+          # Exe tunggal mandiri: kedua pustaka dikompilasi langsung ke dalam exe
+          # dan runtime mingw diikat statis, jadi hasilnya tidak membutuhkan
+          # xydesk_quic.dll, xydesk_host_core.dll, maupun DLL runtime mingw.
+          # Exe lama yang bergantung DLL tetap dibangun supaya tidak ada yang
+          # rusak sebelum exe tunggal ini terbukti di perangkat nyata.
+          x86_64-w64-mingw32-g++ -std=c++17 -O2 \
+            host-agent/src/main_host.cpp \
+            host-agent/src/xydesk_quic.cpp \
+            host-agent/src/xydesk_host_core.cpp \
+            -Ihost-agent/include \
+            -o "$STAGE_DIR/XyDeskRemoteHost-Standalone.exe" \
+            -static -static-libgcc -static-libstdc++ \
+            -lws2_32 -lole32 -ldxgi -ladvapi32 -liphlpapi -luser32 -lgdi32
           rm -f "$STAGE_DIR"/*.a
           cp web/XyDeskHost-Setup.bat "$STAGE_DIR/XyDeskHost-Setup.bat"
           cp web/XyDesk-Remote-Agent-Setup.ps1 "$STAGE_DIR/XyDesk-Remote-Agent-Setup.ps1"
           cp "$STAGE_DIR/xydesk_quic.dll" "$OUT_DIR/xydesk_quic.dll"
           cp "$STAGE_DIR/xydesk_host_core.dll" "$OUT_DIR/xydesk_host_core.dll"
           cp "$STAGE_DIR/XyDeskRemoteHost.exe" "$OUT_DIR/XyDeskRemoteHost.exe"
+          cp "$STAGE_DIR/XyDeskRemoteHost-Standalone.exe" "$OUT_DIR/XyDeskRemoteHost-Standalone.exe"
           (cd "$STAGE_DIR" && zip -q -r "$GITHUB_WORKSPACE/$OUT_DIR/XyDesk-Remote-Host-Agent-win64.zip" .)
           ls -lh "$OUT_DIR"
       - name: Upload signed APKs & Windows Host Agent for publishing
@@ -544,6 +571,7 @@ jobs:
             client/Android/Studio/app/build/outputs/apk/release/*.apk
             client/Android/Studio/app/build/outputs/apk/release/XyDesk-Remote-Host-Agent-win64.zip
             client/Android/Studio/app/build/outputs/apk/release/XyDeskRemoteHost.exe
+            client/Android/Studio/app/build/outputs/apk/release/XyDeskRemoteHost-Standalone.exe
             client/Android/Studio/app/build/outputs/apk/release/xydesk_quic.dll
             client/Android/Studio/app/build/outputs/apk/release/xydesk_host_core.dll
             client/Android/Studio/app/build/outputs/apk/release/SIGNATURE-VERIFICATION.txt
@@ -592,6 +620,7 @@ jobs:
             release-apks/*.apk
             release-apks/XyDesk-Remote-Host-Agent-win64.zip
             release-apks/XyDeskRemoteHost.exe
+            release-apks/XyDeskRemoteHost-Standalone.exe
             release-apks/xydesk_quic.dll
             release-apks/xydesk_host_core.dll
             release-apks/SIGNATURE-VERIFICATION.txt
