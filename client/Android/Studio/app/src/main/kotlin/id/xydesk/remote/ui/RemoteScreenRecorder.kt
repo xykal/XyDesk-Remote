@@ -493,8 +493,18 @@ internal class RemoteScreenRecorder(
         buffer.clear()
         val size = extractor.readSampleData(buffer, 0)
         if (size < 0) return false
-        extractor.getSampleInfo(info)
+        // MediaExtractor tidak punya getSampleInfo(BufferInfo); metadatanya
+        // diambil per properti. SAMPLE_FLAG_SYNC dan BUFFER_FLAG_KEY_FRAME
+        // kebetulan bernilai sama, tapi dipetakan eksplisit supaya tidak
+        // bergantung pada kebetulan itu.
         info.offset = 0
+        info.size = size
+        info.presentationTimeUs = extractor.sampleTime
+        info.flags = if (extractor.sampleFlags and MediaExtractor.SAMPLE_FLAG_SYNC != 0) {
+            MediaCodec.BUFFER_FLAG_KEY_FRAME
+        } else {
+            0
+        }
         return true
     }
 
