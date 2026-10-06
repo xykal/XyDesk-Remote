@@ -1,5 +1,8 @@
 package id.xydesk.remote.ui
 
+import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.Spring
+import androidx.compose.animation.core.spring
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -15,28 +18,34 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Icon
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.rememberUpdatedState
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import id.xydesk.remote.ui.components.XyIcons
 import id.xydesk.remote.ui.theme.XyPill
+import kotlinx.coroutines.launch
+import kotlin.math.roundToInt
 
 /**
- * Compact vertical mouse-wheel control: tap either arrow for one notch, or
- * drag the inner pill to send smooth wheel units to the remote desktop.
+ * Kontrol roda mouse yang ringkas: tap panah untuk satu takik, atau geser thumb
+ * untuk mengirim satuan roda secara halus ke desktop remote.
+ *
+ * Thumb berperilaku seperti tuas pegas, bukan slider: posisinya dinyatakan
+ * sebagai simpangan dari tengah (-1..1) dan **selalu kembali sendiri ke tengah**
+ * begitu jari dilepas, sehingga gesture scroll berikutnya selalu mulai netral
+ * dan tidak perlu menarik thumb balik manual.
  */
 @Composable
 internal fun SessionScrollPill(
@@ -49,20 +58,26 @@ internal fun SessionScrollPill(
     val trackColor = if (plate == HudPlate.NONE) Color(0xA60B0D10) else palette.plate
     val edgeColor = if (plate == HudPlate.NONE) Color(0xBFFFFFFF) else palette.border
     val latestScroll = rememberUpdatedState(onScrollUnits)
-    var thumbFraction by remember { mutableFloatStateOf(0.5f) }
-    val thumbHeight = 28.dp
-    val travel = 92.dp
-    val bodyHeight = 120.dp
+    val scope = rememberCoroutineScope()
+    val density = LocalDensity.current
+
+    // Simpangan thumb dari tengah, -1 (paling atas) .. 1 (paling bawah).
+    val deflection = remember { Animatable(0f) }
+
+    val trackHeight = 96.dp
+    val thumbSize = 30.dp
+    val maxTravelPx = with(density) { (trackHeight - thumbSize).toPx() / 2f }
 
     Column(
         modifier = modifier
-            .width(54.dp)
+            .width(44.dp)
             .clip(XyPill)
             .background(trackColor)
             .border(1.dp, edgeColor, XyPill)
-            .padding(horizontal = 7.dp, vertical = 8.dp)
+            .padding(horizontal = 6.dp, vertical = 6.dp)
             .semantics {
-                contentDescription = xyNow("Kontrol scroll mouse atas dan bawah", "Mouse scroll up and down control")
+                contentDescription =
+                    xyNow("Kontrol scroll mouse atas dan bawah", "Mouse scroll up and down control")
             },
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.spacedBy(4.dp),
@@ -85,16 +100,14 @@ internal fun SessionScrollPill(
         Box(
             Modifier
                 .fillMaxWidth()
-                .height(bodyHeight)
+                .height(trackHeight)
                 .pointerInput(scrollSpeed) {
                     awaitEachGesture {
                         val down = awaitFirstDown(requireUnconsumed = false)
                         down.consume()
-                        val thumbPx = thumbHeight.toPx()
-                        val maxTravel = (size.height - thumbPx).coerceAtLeast(1f)
-                        thumbFraction = ((down.position.y - thumbPx / 2f) / maxTravel).coerceIn(0f, 1f)
-                        var lastY = down.position.y
+                        val travel = maxTravelPx.coerceAtLeast(1f)
                         val accumulator = ScrollWheelAccumulator()
+                        var lastY = down.position.y
                         while (true) {
                             val event = awaitPointerEvent()
                             val change = event.changes.firstOrNull { it.id == down.id } ?: break
@@ -104,7 +117,9 @@ internal fun SessionScrollPill(
                             }
                             val deltaY = change.position.y - lastY
                             if (deltaY != 0f) {
-                                thumbFraction = (thumbFraction + deltaY / maxTravel).coerceIn(0f, 1f)
+                                deflection.snapTo(
+                                    (deflection.value + deltaY / travel).coerceIn(-1f, 1f),
+                                )
                                 accumulator.consume(deltaY, scrollSpeed)
                                     .takeIf { it != 0 }
                                     ?.let(latestScroll.value)
@@ -112,19 +127,28 @@ internal fun SessionScrollPill(
                                 change.consume()
                             }
                         }
+                        // Balik sendiri ke tengah, dengan sedikit pantulan agar
+                        // terasa seperti tuas fisik.
+                        scope.launch {
+                            deflection.animateTo(
+                                targetValue = 0f,
+                                animationSpec = spring(
+                                    dampingRatio = Spring.DampingRatioMediumBouncy,
+                                    stiffness = Spring.StiffnessMediumLow,
+                                ),
+                            )
+                        }
                     }
                 },
+            contentAlignment = Alignment.Center,
         ) {
-            val thumbOffset = travel * thumbFraction
             Box(
                 Modifier
-                    .align(Alignment.TopCenter)
-                    .offset(y = thumbOffset)
-                    .width(12.dp)
-                    .height(thumbHeight)
-                    .clip(RoundedCornerShape(50))
+                    .offset { IntOffset(0, (deflection.value * maxTravelPx).roundToInt()) }
+                    .size(thumbSize)
+                    .clip(CircleShape)
                     .background(palette.ink.copy(alpha = 0.76f))
-                    .border(1.dp, edgeColor.copy(alpha = 0.72f), RoundedCornerShape(50)),
+                    .border(1.dp, edgeColor.copy(alpha = 0.72f), CircleShape),
             )
         }
 

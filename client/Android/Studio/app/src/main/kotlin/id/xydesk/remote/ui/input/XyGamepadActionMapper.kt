@@ -13,6 +13,29 @@ enum class XyPadKey {
     ARROW_DOWN,
     ARROW_LEFT,
     ARROW_RIGHT,
+    W,
+    A,
+    S,
+    D,
+}
+
+/**
+ * Tujuan stik kiri. [POINTER] menggerakkan kursor (perilaku lama), [WASD] dan
+ * [ARROWS] mengirim tombol papan ketik sehingga stik bisa dipakai untuk game
+ * yang tidak menerima gamepad.
+ */
+enum class XyStickMode {
+    POINTER,
+    WASD,
+    ARROWS,
+}
+
+/** Arah digital yang diturunkan dari simpangan stik analog. */
+enum class XyStickDirection {
+    UP,
+    DOWN,
+    LEFT,
+    RIGHT,
 }
 
 /**
@@ -54,6 +77,9 @@ object XyGamepadActionMapper {
     private const val AXIS_DENOMINATOR = 32_767f
     private const val STICK_EPSILON = 1e-3f
 
+    /** Simpangan stik minimum agar arah digital (WASD/panah) aktif. */
+    const val STICK_KEY_THRESHOLD = 0.5f
+
     private val EMPTY = XyGamepadState()
 
     /**
@@ -62,13 +88,34 @@ object XyGamepadActionMapper {
      * Sticks are continuous (like a physical `ACTION_MOVE` stream); buttons and
      * triggers are edge-triggered so holding a control never spams the host.
      */
-    fun apply(state: XyGamepadState, previous: XyGamepadState?, out: XyGamepadOutput) {
+    fun apply(
+        state: XyGamepadState,
+        previous: XyGamepadState?,
+        out: XyGamepadOutput,
+        stickMode: XyStickMode = XyStickMode.POINTER,
+    ) {
         val before = previous ?: EMPTY
 
         val leftX = axis(state.leftX)
         val leftY = axis(state.leftY)
-        if (abs(leftX) > STICK_EPSILON || abs(leftY) > STICK_EPSILON) {
-            out.pointerDelta(leftX * POINTER_UNITS_PER_DEFLECTION, leftY * POINTER_UNITS_PER_DEFLECTION)
+        if (stickMode == XyStickMode.POINTER) {
+            if (abs(leftX) > STICK_EPSILON || abs(leftY) > STICK_EPSILON) {
+                out.pointerDelta(
+                    leftX * POINTER_UNITS_PER_DEFLECTION,
+                    leftY * POINTER_UNITS_PER_DEFLECTION,
+                )
+            }
+        } else {
+            // Mode papan ketik: arah diturunkan dari stik, dikirim sebagai
+            // edge (turun/naik) supaya menahan stik tidak mengulang tombol.
+            val now = directions(leftX, leftY)
+            val was = directions(axis(before.leftX), axis(before.leftY))
+            for (direction in XyStickDirection.entries) {
+                val isDown = direction in now
+                if (isDown != (direction in was)) {
+                    out.key(keyFor(direction, stickMode), isDown)
+                }
+            }
         }
 
         val rightY = axis(state.rightY)
@@ -115,6 +162,27 @@ object XyGamepadActionMapper {
         edge(before.buttons, state.buttons, XyGamepadPacketV1.RIGHT_SHOULDER) { down ->
             if (down) out.scrollUnits(-SHOULDER_SCROLL_UNITS)
         }
+    }
+
+    /**
+     * Arah digital dari stik analog. Ambang [STICK_KEY_THRESHOLD] dipakai agar
+     * simpangan kecil tidak memicu tombol; diagonal menghasilkan dua arah.
+     */
+    fun directions(x: Float, y: Float): Set<XyStickDirection> {
+        val out = mutableSetOf<XyStickDirection>()
+        if (y <= -STICK_KEY_THRESHOLD) out += XyStickDirection.UP
+        if (y >= STICK_KEY_THRESHOLD) out += XyStickDirection.DOWN
+        if (x <= -STICK_KEY_THRESHOLD) out += XyStickDirection.LEFT
+        if (x >= STICK_KEY_THRESHOLD) out += XyStickDirection.RIGHT
+        return out
+    }
+
+    /** Kunci untuk satu arah pada mode stik papan ketik. */
+    fun keyFor(direction: XyStickDirection, mode: XyStickMode): XyPadKey = when (direction) {
+        XyStickDirection.UP -> if (mode == XyStickMode.WASD) XyPadKey.W else XyPadKey.ARROW_UP
+        XyStickDirection.DOWN -> if (mode == XyStickMode.WASD) XyPadKey.S else XyPadKey.ARROW_DOWN
+        XyStickDirection.LEFT -> if (mode == XyStickMode.WASD) XyPadKey.A else XyPadKey.ARROW_LEFT
+        XyStickDirection.RIGHT -> if (mode == XyStickMode.WASD) XyPadKey.D else XyPadKey.ARROW_RIGHT
     }
 
     private fun axis(rawValue: Int): Float = rawValue / AXIS_DENOMINATOR
