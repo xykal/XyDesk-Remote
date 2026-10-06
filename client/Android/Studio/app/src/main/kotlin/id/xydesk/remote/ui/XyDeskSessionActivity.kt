@@ -24,6 +24,19 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.OnBackPressedCallback
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.padding
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.unit.dp
+import id.xydesk.remote.pcstream.XyGamepadState
+import id.xydesk.remote.ui.input.XyGamepadActionMapper
+import id.xydesk.remote.ui.input.XyGamepadOutput
+import id.xydesk.remote.ui.input.XyPadKey
 import android.Manifest
 import android.content.pm.PackageManager
 import androidx.activity.result.contract.ActivityResultContracts
@@ -409,6 +422,9 @@ class XyDeskSessionActivity : ComponentActivity() {
             ),
         )
         val deferConnectForPermission = requestRuntimePermissions(profile)
+        // Di-hoist ke sini: di dalam lambda Compose `this` bisa berarti BoxScope,
+        // bukan Context, sehingga SessionPrefs(this) tidak bisa dipakai langsung.
+        val sessionPrefs = SessionPrefs(this)
         setContent {
             // Layar sesi ikut setelan tema app (dulu dipaksa gelap, jadi di
             // mode terang panel dan dialog di sini tidak nyambung dengan sisa
@@ -416,13 +432,32 @@ class XyDeskSessionActivity : ComponentActivity() {
             // warna tetap supaya selalu terbaca.
             XyThemeState.init(appPrefs ?: AppPrefs(this))
             XyDeskTheme(dark = xyDark()) {
-                XyDeskSessionScreen(
-                    profile = profile,
-                    manager = manager,
-                    controller = controller,
-                    onExit = { finish() },
-                    onDisplayRefreshPreferenceChange = { applyPreferredDisplayRefreshRate(it) },
-                )
+                var virtualPadVisible by remember { mutableStateOf(sessionPrefs.virtualPadEnabled) }
+                Box(modifier = Modifier.fillMaxSize()) {
+                    XyDeskSessionScreen(
+                        profile = profile,
+                        manager = manager,
+                        controller = controller,
+                        onExit = { finish() },
+                        onDisplayRefreshPreferenceChange = { applyPreferredDisplayRefreshRate(it) },
+                    )
+                    // Saklar pad di pojok kiri atas; posisinya menjauh dari HUD rail kanan.
+                    XyPadRoundButton(
+                        label = "PAD",
+                        size = 44.dp,
+                        onPress = { down ->
+                            if (down) {
+                                virtualPadVisible = !virtualPadVisible
+                                sessionPrefs.virtualPadEnabled = virtualPadVisible
+                                if (!virtualPadVisible) releaseVirtualPad()
+                            }
+                        },
+                        modifier = Modifier.align(Alignment.TopStart).padding(12.dp),
+                    )
+                    if (virtualPadVisible) {
+                        XyVirtualGamepadOverlay(onState = { applyVirtualPadState(it) })
+                    }
+                }
             }
         }
 
@@ -581,6 +616,55 @@ class XyDeskSessionActivity : ComponentActivity() {
                 hideSystemBars()
             }
         }, 180L)
+    }
+
+    private var lastVirtualPadState: XyGamepadState? = null
+
+    /**
+     * Jalur keluar gamepad virtual untuk sesi RDP. Sengaja memakai hook yang sama
+     * dengan gamepad fisik (pointer delta, scroll units, klik, tombol virtual)
+     * supaya satu pemetaan berlaku untuk kedua jenis pad.
+     */
+    private val virtualPadOutput = object : XyGamepadOutput {
+        override fun pointerDelta(dx: Float, dy: Float) {
+            onExternalPointerDelta?.invoke(dx, dy)
+        }
+
+        override fun scrollUnits(units: Int) {
+            onExternalScrollUnits?.invoke(units)
+        }
+
+        override fun mouseClick(button: XyMouseButton, down: Boolean) {
+            onExternalMouseClick?.invoke(button, down)
+        }
+
+        override fun key(key: XyPadKey, down: Boolean) {
+            if (!::controller.isInitialized) return
+            controller.sendVirtualKey(
+                when (key) {
+                    XyPadKey.ENTER -> KeyEvent.KEYCODE_ENTER
+                    XyPadKey.ESCAPE -> KeyEvent.KEYCODE_ESCAPE
+                    XyPadKey.ARROW_UP -> KeyEvent.KEYCODE_DPAD_UP
+                    XyPadKey.ARROW_DOWN -> KeyEvent.KEYCODE_DPAD_DOWN
+                    XyPadKey.ARROW_LEFT -> KeyEvent.KEYCODE_DPAD_LEFT
+                    XyPadKey.ARROW_RIGHT -> KeyEvent.KEYCODE_DPAD_RIGHT
+                },
+                down,
+            )
+        }
+    }
+
+    /** Terapkan satu snapshot gamepad virtual ke sesi RDP (berbasis selisih state). */
+    private fun applyVirtualPadState(state: XyGamepadState) {
+        XyGamepadActionMapper.apply(state, lastVirtualPadState, virtualPadOutput)
+        lastVirtualPadState = state
+    }
+
+    /** Lepas semua kontrol supaya tidak ada tombol yang tersangkut di host saat pad ditutup. */
+    private fun releaseVirtualPad() {
+        val released = XyGamepadState()
+        XyGamepadActionMapper.apply(released, lastVirtualPadState, virtualPadOutput)
+        lastVirtualPadState = released
     }
 
     /**

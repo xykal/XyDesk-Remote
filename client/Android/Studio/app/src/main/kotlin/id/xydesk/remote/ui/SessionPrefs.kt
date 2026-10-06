@@ -136,6 +136,14 @@ class SessionPrefs(context: Context) {
         get() = input.getBoolean(KEY_GAMEPAD, true)
         set(v) = input.edit().putBoolean(KEY_GAMEPAD, v).apply()
 
+    /**
+     * Gamepad virtual di layar (joystick + D-pad + tombol). State yang sama juga
+     * bisa dikirim sebagai paket gamepad ke host PC/Game Stream.
+     */
+    var virtualPadEnabled: Boolean
+        get() = input.getBoolean(KEY_VIRTUAL_PAD, false)
+        set(v) = input.edit().putBoolean(KEY_VIRTUAL_PAD, v).apply()
+
     /** Mode Gyro Air-Mouse (miringkan HP untuk menggerakkan kursor). */
     var gyroMouseEnabled: Boolean
         get() = input.getBoolean(KEY_GYRO_MOUSE, false)
@@ -254,6 +262,7 @@ class SessionPrefs(context: Context) {
         private const val KEY_INERTIAL_SCROLL = "inertial_scroll"
         private const val KEY_EDGE_SCROLL = "edge_scroll"
         private const val KEY_GAMEPAD = "gamepad_enabled"
+        private const val KEY_VIRTUAL_PAD = "virtual_pad_enabled"
         private const val KEY_GYRO_MOUSE = "gyro_mouse"
         private const val KEY_TELEMETRY_PILL = "telemetry_pill"
         private const val KEY_SWAP_MOUSE = "swap_mouse_buttons"
