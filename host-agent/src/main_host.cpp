@@ -99,31 +99,40 @@ std::wstring query_input_desktop() {
     return std::wstring(buf.data());
 }
 
-const wchar_t* connect_state_name(WTS_CONNECTSTATE_CLASS s) {
-    switch (s) {
-        case WTSActiveState:       return L"Aktif";
-        case WTSConnectedState:    return L"Terhubung";
-        case WTSConnectQueryState: return L"Menunggu persetujuan";
-        case WTSShadowState:       return L"Shadow";
-        case WTSDisconnectedState: return L"Terputus (sesi masih hidup)";
-        case WTSIdleState:         return L"Idle";
-        case WTSListenState:       return L"Listen";
-        case WTSResetState:        return L"Reset";
-        case WTSDownState:         return L"Down";
-        case WTSInitState:         return L"Init";
-        default:                   return L"Tidak dikenal";
+/**
+ * Nama keadaan sesi Windows.
+ *
+ * Switch memakai angka, bukan enumerator: mingw-w64 menamai anggota
+ * WTS_CONNECTSTATE_CLASS tanpa akhiran "State" (WTSActive, WTSConnected, ...)
+ * sedangkan SDK Microsoft memakai WTSActiveState, WTSConnectedState, ...
+ * Nilai numeriknya identik dan stabil di ABI, jadi angka membuat file ini bisa
+ * dikompilasi oleh kedua header tanpa #ifdef.
+ */
+const wchar_t* connect_state_name(int state) {
+    switch (state) {
+        case 0: return L"Aktif";
+        case 1: return L"Terhubung";
+        case 2: return L"Menunggu persetujuan";
+        case 3: return L"Shadow";
+        case 4: return L"Terputus (sesi masih hidup)";
+        case 5: return L"Idle";
+        case 6: return L"Listen";
+        case 7: return L"Reset";
+        case 8: return L"Down";
+        case 9: return L"Init";
+        default: return L"Tidak dikenal";
     }
 }
 
 std::wstring query_session_state() {
-    PWTS_CONNECTSTATE_CLASS st = nullptr;
+    WTS_CONNECTSTATE_CLASS* st = nullptr;
     DWORD bytes = 0;
     if (!WTSQuerySessionInformationW(WTS_CURRENT_SERVER_HANDLE, WTS_CURRENT_SESSION,
                                      WTSConnectState, reinterpret_cast<LPWSTR*>(&st),
                                      &bytes) || !st) {
         return L"(tidak tersedia)";
     }
-    std::wstring name = connect_state_name(*st);
+    std::wstring name = connect_state_name(static_cast<int>(*st));
     WTSFreeMemory(st);
     return name;
 }
@@ -252,7 +261,10 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
             nid.uID = 1;
             nid.uFlags = NIF_MESSAGE | NIF_ICON | NIF_TIP;
             nid.uCallbackMessage = WM_TRAY;
-            nid.hIcon = LoadIconW(nullptr, IDI_APPLICATION);
+            // Build tidak mendefinisikan UNICODE, jadi IDI_APPLICATION dari <winuser.h>
+            // melebar ke MAKEINTRESOURCEA (char*) dan ditolak oleh API berakhiran W.
+            // 32512 adalah nilai IDI_APPLICATION.
+            nid.hIcon = LoadIconW(nullptr, MAKEINTRESOURCEW(32512));
             wcscpy(nid.szTip, L"XyDesk Remote Host Agent");
             Shell_NotifyIconW(NIM_ADD, &nid);
 
@@ -355,7 +367,8 @@ static int xydesk_host_ui_run(bool quic_running) {
     wc.cbSize = sizeof(wc);
     wc.lpfnWndProc = WndProc;
     wc.hInstance = inst;
-    wc.hCursor = LoadCursorW(nullptr, IDC_ARROW);
+    // Lihat catatan di LoadIconW: IDC_ARROW juga melebar ke bentuk ANSI.
+    wc.hCursor = LoadCursorW(nullptr, MAKEINTRESOURCEW(32512));
     wc.hbrBackground = (HBRUSH)(COLOR_BTNFACE + 1);
     wc.lpszClassName = kClassName;
     if (!RegisterClassExW(&wc)) return -1;
