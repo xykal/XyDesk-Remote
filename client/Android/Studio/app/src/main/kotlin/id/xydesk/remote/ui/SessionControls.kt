@@ -3199,7 +3199,6 @@ private fun RecordingIndicator(modifier: Modifier = Modifier) {
             text = clock,
             color = Color.White.copy(alpha = 0.85f),
             fontSize = 11.sp,
-            fontFeatureSettings = "tnum",
         )
     }
 }
