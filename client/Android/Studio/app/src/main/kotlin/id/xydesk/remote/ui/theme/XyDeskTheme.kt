@@ -30,24 +30,27 @@ import id.xydesk.remote.ui.AppPrefs
 // =============================================================
 // XyDesk design tokens.
 //
-// Aturan: permukaan matte dan rounded, kontras tinggi, tanpa glow/gradient.
+// Aturan: monokrom (hitam-putih), permukaan matte dan rounded, kontras
+// tinggi, tanpa glow/gradient. Warna hanya untuk status (ok/warn/danger).
 // Garis dekoratif dibuat lembut; input, slider, dan switch tetap jelas terbaca.
 // =============================================================
 
 // Tema gelap matte: latar nyaris hitam, permukaan solid, tanpa efek kaca.
 // Perbedaan luminans kecil antarlapisan menjaga hierarki tanpa menambah
 // gradient, blur, atau glow dekoratif. Teks tetap off-white demi kontras.
-val XyBg = Color(0xFF07060A)
-val XySurface = Color(0xFF0E0D12)
-val XySurfaceAlt = Color(0xFF18161D)
-val XyPrimaryContainer = Color(0xFF272132)
-val XyLine = Color(0xFF2A2730)
-val XyLineStrong = Color(0xFF3C3843)
-val XyText = Color(0xFFF4F2F7)
-val XyTextDim = Color(0xFFB4AFBA)
-val XyTextFaint = Color(0xFF817B88)
-val XyAccent = Color(0xFFD8C9FF)
-val XyAccentInk = Color(0xFF211833)
+val XyBg = Color(0xFF08080A)
+val XySurface = Color(0xFF101013)
+val XySurfaceAlt = Color(0xFF1A1A1E)
+val XyPrimaryContainer = Color(0xFF232327)
+val XyLine = Color(0xFF2A2A2E)
+val XyLineStrong = Color(0xFF3C3C42)
+val XyText = Color(0xFFF3F3F5)
+val XyTextDim = Color(0xFFB2B2B8)
+val XyTextFaint = Color(0xFF808086)
+// Aksen monokrom: nyaris putih di tema gelap. Dulu lavender (0xFFD8C9FF);
+// diganti atas permintaan pengguna supaya app hitam-putih seperti semula.
+val XyAccent = Color(0xFFF2F2F4)
+val XyAccentInk = Color(0xFF111114)
 val XyOk = Color(0xFF57C08B)
 val XyWarn = Color(0xFFD7A54E)
 val XyDanger = Color(0xFFE0706F)
@@ -78,23 +81,23 @@ val DarkScheme = darkColorScheme(
 )
 
 val LightScheme = lightColorScheme(
-    primary = Color(0xFF6A6084),
+    primary = Color(0xFF16161A),
     onPrimary = Color(0xFFFFFFFF),
-    primaryContainer = Color(0xFFECE9F2),
-    onPrimaryContainer = Color(0xFF2F2B39),
-    secondary = Color(0xFF625C6D),
+    primaryContainer = Color(0xFFEDEDEF),
+    onPrimaryContainer = Color(0xFF24242A),
+    secondary = Color(0xFF5E5E64),
     onSecondary = Color(0xFFFFFFFF),
-    secondaryContainer = Color(0xFFEDE9F3),
-    onSecondaryContainer = Color(0xFF292532),
+    secondaryContainer = Color(0xFFEDEDEF),
+    onSecondaryContainer = Color(0xFF232328),
     tertiary = Color(0xFF267554),
-    background = Color(0xFFF8F7FA),
-    onBackground = Color(0xFF211F26),
+    background = Color(0xFFF7F7F8),
+    onBackground = Color(0xFF1A1A1D),
     surface = Color(0xFFFFFFFF),
-    onSurface = Color(0xFF201D26),
-    surfaceVariant = Color(0xFFF1EFF4),
-    onSurfaceVariant = Color(0xFF625E68),
-    outline = Color(0xFFDED9E7),
-    outlineVariant = Color(0xFFCEC9D4),
+    onSurface = Color(0xFF1B1B1F),
+    surfaceVariant = Color(0xFFF1F1F3),
+    onSurfaceVariant = Color(0xFF5F5F65),
+    outline = Color(0xFFDDDDDF),
+    outlineVariant = Color(0xFFCECED2),
     error = Color(0xFFB3261E),
     onError = Color.White,
     errorContainer = Color(0xFFF9DEDC),

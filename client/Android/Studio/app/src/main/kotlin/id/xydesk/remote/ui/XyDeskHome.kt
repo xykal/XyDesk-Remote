@@ -103,6 +103,12 @@ private sealed interface XyRoute {
     data object Devices : XyRoute
     data class EditDevice(val profile: ConnectionProfile?, val pcQuickMode: Boolean = false) : XyRoute
     data object Section : XyRoute
+
+    /** Feed komunitas — layar sendiri, dipetakan ke tab nav [XyTab.FEED]. */
+    data object Feed : XyRoute
+
+    /** Dashboard pengaturan — dipetakan ke tab nav [XyTab.PROFILE]. */
+    data object Profile : XyRoute
 }
 
 /**
@@ -139,6 +145,9 @@ fun XyDeskHome(
     var drawerOpen by remember { mutableStateOf(false) }
     var helpToolsOpen by remember { mutableStateOf(false) }
     var section by remember { mutableStateOf(XySection.PERANGKAT) }
+    // Tab nav bawah (3 tujuan). `section` tetap ada karena seksi dibuka dari
+    // drawer maupun dari layar Profil, dan keduanya menggambar SectionScreen.
+    var tab by remember { mutableStateOf(XyTab.HOME) }
     var route by remember { mutableStateOf<XyRoute>(XyRoute.Devices) }
     var crashLog by remember { mutableStateOf(CrashLog.last(context.applicationContext)) }
     var showCrash by remember { mutableStateOf(false) }
@@ -306,8 +315,11 @@ fun XyDeskHome(
             confirmExitApp -> confirmExitApp = false
             feedbackOpen -> feedbackOpen = false
             drawerOpen -> drawerOpen = false
-            route != XyRoute.Devices -> route = XyRoute.Devices
-            section != XySection.PERANGKAT -> section = XySection.PERANGKAT
+            route != XyRoute.Devices || section != XySection.PERANGKAT -> {
+                route = XyRoute.Devices
+                section = XySection.PERANGKAT
+                tab = XyTab.HOME
+            }
             else -> confirmExitApp = true
         }
     }
@@ -392,6 +404,19 @@ fun XyDeskHome(
                     )
                 }
 
+                XyRoute.Feed -> XyFeedScreen(onMenu = { drawerOpen = true })
+
+                XyRoute.Profile -> XyProfileScreen(
+                    onMenu = { drawerOpen = true },
+                    onOpenSection = {
+                        section = it
+                        route = XyRoute.Devices
+                    },
+                    appPrefs = appPrefs,
+                    deviceCount = favorites.size,
+                    onShowLog = { showBoot = true },
+                )
+
                 XyRoute.Section -> Unit
             }
                 }
@@ -401,10 +426,17 @@ fun XyDeskHome(
                 if (route !is XyRoute.EditDevice) {
                     XyBottomNavHairline()
                     XyBottomNav(
-                        selected = section,
-                        onSelect = {
-                            section = it
-                            route = XyRoute.Devices
+                        selected = tab,
+                        onSelect = { next ->
+                            tab = next
+                            when (next) {
+                                XyTab.HOME -> {
+                                    section = XySection.PERANGKAT
+                                    route = XyRoute.Devices
+                                }
+                                XyTab.FEED -> route = XyRoute.Feed
+                                XyTab.PROFILE -> route = XyRoute.Profile
+                            }
                         },
                     )
                 }
@@ -475,6 +507,9 @@ fun XyDeskHome(
                     onClick = {
                         section = item
                         route = XyRoute.Devices
+                        // Tab ikut menyorot: seksi adalah bagian Profil, kecuali
+                        // Perangkat yang memang isi Beranda.
+                        tab = if (item == XySection.PERANGKAT) XyTab.HOME else XyTab.PROFILE
                         drawerOpen = false
                     },
                 )

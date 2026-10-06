@@ -1,5 +1,8 @@
 package id.xydesk.remote.ui
 
+import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.core.animateDpAsState
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -10,11 +13,13 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -28,68 +33,97 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import id.xydesk.remote.ui.components.XyIcons
+import id.xydesk.remote.ui.components.xyGlass
 
 /**
- * Navigasi bawah app, gaya monokrom (hitam-putih) sesuai permintaan pengguna.
+ * Tujuan navigasi bawah.
  *
- * Sengaja memakai `onSurface`/`surface` alih-alih warna aksen supaya tetap
- * hitam-putih di tema terang maupun gelap: item terpilih digambar solid,
- * sisanya redup. Semua seksi drawer ada di sini supaya tidak ada tujuan yang
- * hilang ketika drawer ditutup.
+ * Sengaja hanya **tiga** sesuai permintaan pengguna. Sebelumnya bar ini memuat
+ * enam seksi (`XySection`) sehingga penuh dan tiap item jadi sempit; seksi
+ * lain sekarang hidup di drawer kiri dan di layar Profil.
+ */
+internal enum class XyTab(val title: String, val titleEn: String) {
+    HOME("Beranda", "Home"),
+    FEED("Feed", "Feed"),
+    PROFILE("Profil", "Profile"),
+}
+
+/**
+ * Navigasi bawah app: tiga tujuan, gaya kaca monokrom.
+ *
+ * Warna tetap hitam-putih (`onSurface`/`surface`) alih-alih aksen, mengikuti
+ * permintaan pengguna. Item terpilih digambar sebagai pil berisi; sisanya
+ * redup. Perubahan warna dan ukuran pil dianimasikan supaya perpindahan tab
+ * terasa halus, bukan melompat.
  */
 @Composable
 internal fun XyBottomNav(
-    selected: XySection,
-    onSelect: (XySection) -> Unit,
+    selected: XyTab,
+    onSelect: (XyTab) -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val ink = MaterialTheme.colorScheme.onSurface
-    val barColor = MaterialTheme.colorScheme.surface
 
     Row(
         modifier = modifier
             .fillMaxWidth()
-            .background(barColor)
-            // Garis rambut di atas; pengganti elevation agar tetap datar/hitam-putih.
-            .padding(top = 1.dp)
-            .height(58.dp),
+            // Lapisan kaca tipis: bar menyatu dengan latar tanpa jadi bidang
+            // datar, senada dengan kartu di atasnya.
+            .xyGlass(shape = RoundedCornerShape(topStart = 22.dp, topEnd = 22.dp), strength = 0.8f)
+            .padding(horizontal = 10.dp, vertical = 8.dp),
         verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(6.dp),
     ) {
-        XySection.entries.forEach { section ->
-            val active = section == selected
-            // sectionTitle() bersifat @Composable, jadi harus dipanggil di sini,
-            // bukan di dalam lambda semantics {} yang bukan composable.
-            val title = sectionTitle(section)
+        XyTab.entries.forEach { tab ->
+            val active = tab == selected
+            // xy() bersifat @Composable, jadi harus dipanggil di sini, bukan di
+            // dalam lambda semantics {} yang bukan composable.
+            val title = xy(tab.title, tab.titleEn)
+            val pillWidth by animateDpAsState(
+                targetValue = if (active) 44.dp else 34.dp,
+                animationSpec = tween(durationMillis = 180),
+                label = "navPill",
+            )
+            val pillColor by animateColorAsState(
+                targetValue = if (active) ink else Color.Transparent,
+                animationSpec = tween(durationMillis = 180),
+                label = "navPillColor",
+            )
+            val iconTint by animateColorAsState(
+                targetValue = if (active) MaterialTheme.colorScheme.surface else ink.copy(alpha = 0.42f),
+                animationSpec = tween(durationMillis = 180),
+                label = "navIconTint",
+            )
+
             Column(
                 modifier = Modifier
                     .weight(1f)
-                    .fillMaxWidth()
-                    .clickable { onSelect(section) }
+                    .clip(RoundedCornerShape(16.dp))
+                    .clickable(onClick = { onSelect(tab) })
                     .semantics { contentDescription = title }
-                    .padding(vertical = 6.dp),
+                    .padding(vertical = 4.dp),
                 horizontalAlignment = Alignment.CenterHorizontally,
-                verticalArrangement = Arrangement.spacedBy(3.dp),
+                verticalArrangement = Arrangement.spacedBy(4.dp),
             ) {
                 Box(
                     modifier = Modifier
-                        .size(width = 40.dp, height = 24.dp)
-                        .clip(RoundedCornerShape(12.dp))
-                        .background(
-                            if (active) ink else Color.Transparent,
-                        ),
+                        .width(pillWidth)
+                        .height(26.dp)
+                        .clip(RoundedCornerShape(13.dp))
+                        .background(pillColor),
                     contentAlignment = Alignment.Center,
                 ) {
                     Icon(
-                        bottomNavIcon(section),
+                        tabIcon(tab),
                         contentDescription = null,
-                        tint = if (active) barColor else ink.copy(alpha = 0.45f),
-                        modifier = Modifier.size(16.dp),
+                        tint = iconTint,
+                        modifier = Modifier.size(17.dp),
                     )
                 }
                 Text(
                     text = title,
-                    color = if (active) ink else ink.copy(alpha = 0.45f),
-                    fontSize = 9.sp,
+                    color = if (active) ink else ink.copy(alpha = 0.42f),
+                    fontSize = 10.sp,
                     fontWeight = if (active) FontWeight.SemiBold else FontWeight.Normal,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
@@ -100,20 +134,19 @@ internal fun XyBottomNav(
     }
 }
 
-/**
- * Ikon per seksi. Dipetakan sama persis dengan daftar di drawer supaya satu
- * seksi tidak punya dua ikon berbeda.
- */
-private fun bottomNavIcon(section: XySection): ImageVector = when (section) {
-    XySection.PERANGKAT -> XyIcons.Monitor
-    XySection.TAMPILAN -> XyIcons.Fit
-    XySection.KREDENSIAL -> XyIcons.Lock
-    XySection.UMUM -> XyIcons.Sliders
-    XySection.KEAMANAN -> XyIcons.Shield
-    XySection.TENTANG -> XyIcons.Info
+/** Ikon per tujuan. Tiga saja, jadi tidak ada risiko dua seksi berbagi ikon. */
+private fun tabIcon(tab: XyTab): ImageVector = when (tab) {
+    XyTab.HOME -> XyIcons.Monitor
+    XyTab.FEED -> XyIcons.Users
+    XyTab.PROFILE -> XyIcons.Gear
 }
 
-/** Garis pemisah tipis di atas bar, digambar tanpa elevation. */
+/**
+ * Garis pemisah tipis di atas bar.
+ *
+ * Tetap dipertahankan sebagai penegas batas walaupun bar sudah berkaca: di
+ * tema terang lapisan kaca saja tidak selalu cukup memisahkan isi dari nav.
+ */
 @Composable
 internal fun XyBottomNavHairline(modifier: Modifier = Modifier) {
     Box(

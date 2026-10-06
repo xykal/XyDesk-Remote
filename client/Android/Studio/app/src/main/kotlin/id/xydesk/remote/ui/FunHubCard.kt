@@ -39,7 +39,7 @@ private const val INITIAL_JOKES_VISIBLE = 3
 
 /** Flat home feed for anonymous, shared community jokes. */
 @Composable
-internal fun FunHubCard(onHide: () -> Unit) {
+internal fun FunHubCard(onHide: (() -> Unit)? = null) {
     val context = LocalContext.current
     val api = remember(context) { CommunityJokesApi(context) }
     val scope = rememberCoroutineScope()
@@ -127,12 +127,18 @@ internal fun FunHubCard(onHide: () -> Unit) {
                     style = MaterialTheme.typography.labelMedium,
                     color = MaterialTheme.colorScheme.primary,
                 )
-                Text(
-                    xy("Sembunyikan", "Hide"),
-                    modifier = Modifier.clickable(onClick = onHide).padding(start = 8.dp, top = 2.dp),
-                    style = MaterialTheme.typography.labelMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
+                // Hanya di kartu Beranda. Di layar Feed (tujuan nav sendiri)
+                // onHide bernilai null karena feed bukan kartu opsional.
+                if (onHide != null) {
+                    Text(
+                        xy("Sembunyikan", "Hide"),
+                        modifier = Modifier
+                            .clickable(onClick = onHide)
+                            .padding(start = 8.dp, top = 2.dp),
+                        style = MaterialTheme.typography.labelMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
             }
         }
 
