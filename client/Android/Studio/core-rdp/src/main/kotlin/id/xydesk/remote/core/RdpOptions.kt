@@ -310,8 +310,13 @@ data class RdpOptions(
             h264 = true,
             colorDepth = 32,
             targetFps = 60,
-            asyncUpdate = false,
-            asyncChannels = false,
+            // Dulu false di preset default. Keduanya memisahkan kerja render GDI
+            // dan kanal virtual dari thread jaringan, jadi frame tidak menunggu
+            // antrean jaringan selesai -- murni soal latensi, tanpa mengubah
+            // kualitas gambar. AUTO adalah preset bawaan, jadi menonaktifkannya
+            // berarti mayoritas sesi jalan dengan latensi yang tidak perlu.
+            asyncUpdate = true,
+            asyncChannels = true,
             compressionLevel = 1,
             fontSmoothing = true,
             desktopWallpaper = false,

@@ -105,6 +105,15 @@ class RdpOptionsTest {
 
     @Test
     fun streamProfilePresetsMengaturOpsiPerformaDanCodecDenganBenar() {
+        // AUTO adalah preset bawaan, jadi pipeline async harus ikut nyala:
+        // tanpa itu sesi default menunggu antrean jaringan sebelum merender.
+        val auto = RdpOptions().withStreamProfile(XyStreamProfile.AUTO)
+        assertEquals(XyStreamProfile.AUTO, auto.streamProfile)
+        assertTrue(auto.asyncUpdate)
+        assertTrue(auto.asyncChannels)
+        assertTrue(auto.networkAutoDetect)
+        assertEquals(32, auto.colorDepth)
+
         val ultra = RdpOptions().withStreamProfile(XyStreamProfile.ULTRA_LOW_LATENCY)
         assertEquals(XyStreamProfile.ULTRA_LOW_LATENCY, ultra.streamProfile)
         assertTrue(ultra.lowBandwidth)
