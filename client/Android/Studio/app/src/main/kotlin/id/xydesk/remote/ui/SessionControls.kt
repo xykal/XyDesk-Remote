@@ -79,6 +79,10 @@ import id.xydesk.remote.ui.components.XyToggleRow
 import id.xydesk.remote.ui.components.xyGlass
 import id.xydesk.remote.ui.theme.XyPill
 import kotlin.math.roundToInt
+import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.core.tween
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 
 /**
  * Warna tombol HUD tetap gelap-transparan karena duduk di atas desktop remote;
@@ -1557,12 +1561,7 @@ private fun SessionPanel(
                 PanelChip(xy("Tutup", "Close"), onClose)
             }
 
-            XySegmented(
-                options = PanelTab.entries.map { xy(it.id, it.en) },
-                selectedIndex = tab.ordinal,
-                onSelect = { onTab(PanelTab.entries[it]) },
-                modifier = Modifier.fillMaxWidth(),
-            )
+            PanelTabTiles(tab = tab, onTab = onTab, modifier = Modifier.fillMaxWidth())
 
             val tabScroll = androidx.compose.runtime.key(tab) { rememberScrollState() }
             Column(
@@ -2454,6 +2453,82 @@ private fun PanelHint(text: String) {
 }
 
 @Composable
+/**
+ * Tab panel sebagai deretan kotak kaca, bukan strip tersegmentasi.
+ *
+ * Tinggi dan jejak kakinya sama dengan [XySegmented] yang digantikannya, jadi
+ * isi panel tidak bertambah panjang dan tidak menambah scroll — yang berubah
+ * hanya bentuknya jadi kotak, sesuai permintaan pengguna.
+ */
+@Composable
+private fun PanelTabTiles(
+    tab: PanelTab,
+    onTab: (PanelTab) -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    Row(
+        modifier = modifier,
+        horizontalArrangement = Arrangement.spacedBy(7.dp),
+    ) {
+        PanelTab.entries.forEach { entry ->
+            val active = entry == tab
+            val bg by animateColorAsState(
+                targetValue = if (active) {
+                    MaterialTheme.colorScheme.onSurface
+                } else {
+                    Color.Transparent
+                },
+                animationSpec = tween(durationMillis = 150),
+                label = "panelTabBg",
+            )
+            val fg by animateColorAsState(
+                targetValue = if (active) {
+                    MaterialTheme.colorScheme.surface
+                } else {
+                    MaterialTheme.colorScheme.onSurfaceVariant
+                },
+                animationSpec = tween(durationMillis = 150),
+                label = "panelTabFg",
+            )
+            val label = xy(entry.id, entry.en)
+            Column(
+                modifier = Modifier
+                    .weight(1f)
+                    .xyGlass(shape = RoundedCornerShape(13.dp), strength = 0.9f)
+                    .clip(RoundedCornerShape(13.dp))
+                    .background(bg)
+                    .clickable { onTab(entry) }
+                    .semantics { contentDescription = label }
+                    .padding(vertical = 7.dp),
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.spacedBy(3.dp),
+            ) {
+                Icon(
+                    panelTabIcon(entry),
+                    contentDescription = null,
+                    tint = fg,
+                    modifier = Modifier.size(16.dp),
+                )
+                Text(
+                    label,
+                    color = fg,
+                    fontSize = 10.sp,
+                    fontWeight = if (active) FontWeight.SemiBold else FontWeight.Normal,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+            }
+        }
+    }
+}
+
+private fun panelTabIcon(entry: PanelTab): ImageVector = when (entry) {
+    PanelTab.SCREEN -> XyIcons.Fit
+    PanelTab.INPUT -> XyIcons.Keyboard
+    PanelTab.BUTTONS -> XyIcons.Grid
+    PanelTab.SESSION -> XyIcons.Gear
+}
+
 private fun PanelSection(
     title: String,
     initiallyExpanded: Boolean = false,
@@ -2471,13 +2546,9 @@ private fun PanelSection(
     Column(
         Modifier
             .fillMaxWidth()
-            .clip(RoundedCornerShape(14.dp))
-            .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.45f))
-            .border(
-                1.dp,
-                MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.6f),
-                RoundedCornerShape(14.dp),
-            )
+            // Kartu kaca: satu perubahan di sini mengubah 18 seksi di empat tab,
+            // karena semua seksi digambar lewat fungsi ini.
+            .xyGlass(shape = RoundedCornerShape(14.dp), opacity = 1.25f, strength = 0.9f)
             .padding(horizontal = 12.dp, vertical = 10.dp),
         verticalArrangement = Arrangement.spacedBy(7.dp),
     ) {
