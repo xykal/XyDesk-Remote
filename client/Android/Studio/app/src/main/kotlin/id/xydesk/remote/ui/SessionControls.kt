@@ -1716,9 +1716,9 @@ private fun ScreenTab(
     onOpenMonitorGrid: () -> Unit,
     pcConnectMode: Boolean = false,
     notice: XyNoticeState,
-) {
     openKey: String?,
     onOpenKey: (String?) -> Unit,
+) {
     val context = LocalContext.current
     var pcOptions by remember(deviceId) { mutableStateOf(RdpOptions.of(context, deviceId)) }
 
@@ -1977,9 +1977,9 @@ private fun InputTab(
     onGamepadEnabled: (Boolean) -> Unit,
     gyroMouseEnabled: Boolean,
     onGyroMouseEnabled: (Boolean) -> Unit,
-) {
     openKey: String?,
     onOpenKey: (String?) -> Unit,
+) {
     PanelSectionGrid(openKey = openKey, onOpenKey = onOpenKey) {
     section("mode-input-klik-mouse",xy("Mode input & Klik Mouse", "Input mode & Mouse Click")) {
             XySegmented(
@@ -2194,9 +2194,9 @@ private fun ButtonsTab(
     onAutoHideHudOnExternalInputChange: (Boolean) -> Unit,
     hudOpacity: Float,
     onHudOpacityChange: (Float) -> Unit,
-) {
     openKey: String?,
     onOpenKey: (String?) -> Unit,
+) {
     PanelSectionGrid(openKey = openKey, onOpenKey = onOpenKey) {
     section("tampilan-tombol-overlay",xy("Tampilan tombol overlay", "Overlay button display")) {
             XyToggleRow(
@@ -2355,9 +2355,9 @@ private fun SessionTab(
     onToggleRecording: () -> Unit,
     coreInfo: List<String>,
     onCopyCoreInfo: () -> Unit,
-) {
     openKey: String?,
     onOpenKey: (String?) -> Unit,
+) {
     PanelSectionGrid(openKey = openKey, onOpenKey = onOpenKey) {
     section("keamanan-privasi-cepat",xy("Keamanan & Privasi Cepat", "Quick Security & Privacy")) {
             PanelHint(
