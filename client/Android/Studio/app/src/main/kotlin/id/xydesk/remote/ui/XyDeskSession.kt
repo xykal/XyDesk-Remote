@@ -188,6 +188,9 @@ fun XyDeskSessionScreen(
             frameProvider = { controller.copyRemoteBitmap(mutable = true) },
             captureProtected = { appPrefs.flagSecure },
             pointerProvider = { pointerBox.current() },
+            // Gambar frame langsung ke buffer perekam, tanpa salinan bitmap per
+            // frame. frameProvider tetap ada sebagai jalur cadangan.
+            frameDrawer = { canvas, dest -> controller.drawRemoteFrameInto(canvas, dest) },
         )
     }
     var recordingState by remember(remoteRecorder) {

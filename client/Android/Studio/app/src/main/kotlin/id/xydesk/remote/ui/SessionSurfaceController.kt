@@ -154,6 +154,7 @@ class SessionSurfaceController(private val activity: Activity) : GraphicsSink {
     var onRemoteCursor: ((RemoteCursor) -> Unit)? = null
     @Volatile private var bitmap: Bitmap? = null
     private var remoteCursorBitmap: Bitmap? = null
+    private val remoteFramePaint = android.graphics.Paint(android.graphics.Paint.FILTER_BITMAP_FLAG)
     @Volatile private var viewReady = false
 
     /** Perubahan zoom (pinch/programatik) — dipanggil di main thread. */
@@ -481,6 +482,26 @@ class SessionSurfaceController(private val activity: Activity) : GraphicsSink {
 
     /** Ambil referensi bitmap frame terakhir untuk pratinjau jendela mengambang (PiP overlay). */
     fun peekBitmap(): Bitmap? = bitmap
+
+    /**
+     * Gambar frame desktop terakhir langsung ke canvas milik pemanggil, tanpa
+     * membuat salinan bitmap.
+     *
+     * Dipakai perekaman: jalur lama menyalin bitmap penuh setiap frame (30
+     * alokasi besar per detik), yang menekan GC. Tekanan GC itu sendiri bikin
+     * HP tersendat, dan jeda GC membuat thread perekaman kehilangan jadwal
+     * frame-nya -- jadi rekaman ikut patah walaupun desktop PC lancar.
+     */
+    fun drawRemoteFrameInto(canvas: android.graphics.Canvas, dest: android.graphics.Rect): Boolean {
+        val source = bitmap ?: return false
+        return runCatching {
+            synchronized(source) {
+                if (source.isRecycled) return false
+                canvas.drawBitmap(source, null, dest, remoteFramePaint)
+                true
+            }
+        }.getOrDefault(false)
+    }
 
     /**
      * Copy frame desktop remote tanpa menangkap layar HP atau overlay Compose.

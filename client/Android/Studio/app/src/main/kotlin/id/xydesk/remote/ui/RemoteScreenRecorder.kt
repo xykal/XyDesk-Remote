@@ -35,6 +35,11 @@ internal class RemoteScreenRecorder(
     private val frameProvider: () -> Bitmap?,
     private val captureProtected: () -> Boolean,
     private val pointerProvider: () -> RecordingPointer? = { null },
+    /**
+     * Gambar frame langsung ke canvas perekam tanpa alokasi. Kalau null atau
+     * mengembalikan false, perekam jatuh ke jalur frameProvider (salinan).
+     */
+    private val frameDrawer: ((Canvas, Rect) -> Boolean)? = null,
 ) {
     private val appContext = context.applicationContext
     private val mainHandler = Handler(Looper.getMainLooper())
@@ -47,6 +52,8 @@ internal class RemoteScreenRecorder(
         strokeJoin = Paint.Join.ROUND
     }
     private val arrowPath = Path()
+    private val cursorRect = Rect()
+    @Volatile private var drawTargetRef: Bitmap? = null
 
     @Volatile private var listener: ((RemoteRecordingState) -> Unit)? = null
     @Volatile private var worker: Thread? = null
@@ -63,7 +70,11 @@ internal class RemoteScreenRecorder(
         }
         return try {
             worker = Thread({ recordLoop() }, "XyDesk-PC-Recorder").apply {
-                priority = Thread.NORM_PRIORITY - 1
+                // Di atas normal, bukan di bawah. Thread ini punya tenggat 33ms
+                // per frame; kalau diprioritaskan di bawah thread UI dan decoder,
+                // HP yang sedang sibuk akan membuatnya kehilangan jadwal frame
+                // dan hasil rekaman patah walaupun desktop PC-nya lancar.
+                priority = Thread.NORM_PRIORITY + 1
                 start()
             }
             true
@@ -94,26 +105,28 @@ internal class RemoteScreenRecorder(
      * menggambar di atasnya tidak meninggalkan jejak kursor dari frame
      * sebelumnya.
      */
-    private fun drawPointer(frame: Bitmap) {
+    private fun drawPointer(frame: Bitmap, existingCanvas: Canvas? = null) {
         val pointer = pointerProvider() ?: return
         if (frame.isRecycled || !frame.isMutable) return
         val scaleX = frame.width.toFloat() / pointer.remoteWidth
         val scaleY = frame.height.toFloat() / pointer.remoteHeight
         val left = pointer.x * scaleX
         val top = pointer.y * scaleY
-        val canvas = runCatching { Canvas(frame) }.getOrNull() ?: return
+        // Canvas pakai ulang kalau ada; membuat Canvas baru tiap frame itu
+        // alokasi yang tidak perlu di jalur 30 fps.
+        val canvas = existingCanvas ?: runCatching { Canvas(frame) }.getOrNull() ?: return
         val remoteCursor = pointer.cursor?.takeIf { !it.isRecycled }
         if (remoteCursor != null) {
             // Bentuk kursor asli dari server, diskalakan mengikuti frame.
             val destLeft = left - pointer.hotX * scaleX
             val destTop = top - pointer.hotY * scaleY
-            val rect = Rect(
+            cursorRect.set(
                 destLeft.toInt(),
                 destTop.toInt(),
                 (destLeft + remoteCursor.width * scaleX).toInt(),
                 (destTop + remoteCursor.height * scaleY).toInt(),
             )
-            runCatching { canvas.drawBitmap(remoteCursor, null, rect, cursorPaint) }
+            runCatching { canvas.drawBitmap(remoteCursor, null, cursorRect, cursorPaint) }
             return
         }
         // Server hanya memberi tahu "kursor default" tanpa bitmap, jadi digambar
@@ -193,6 +206,16 @@ internal class RemoteScreenRecorder(
             muxer = activeMuxer
             activeCodec.start()
             codecStarted = true
+            // Buffer yang dipakai ulang setiap frame. Tanpa ini, tiap frame
+            // membuat bitmap penuh baru lalu membuangnya.
+            drawTargetRef = if (frameDrawer != null) {
+                runCatching {
+                    Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888)
+                }.getOrNull()
+            } else null
+            val drawTarget: Bitmap? = drawTargetRef
+            val drawCanvas: Canvas? = drawTarget?.let { Canvas(it) }
+            val frameRect = Rect(0, 0, width, height)
             val activeRenderer = EglInputRenderer(encoderSurface, width, height)
             renderer = activeRenderer
             inputSurface = null // renderer now owns and releases this surface
@@ -209,13 +232,23 @@ internal class RemoteScreenRecorder(
                 }
                 if (isCaptureProtected()) throw SecureCaptureException()
 
-                val freshFrame = frameProvider()
-                if (freshFrame != null && freshFrame !== currentFrame) {
-                    currentFrame?.takeUnless { it.isRecycled }?.recycle()
-                    currentFrame = freshFrame
+                // Jalur cepat: gambar frame langsung ke buffer pakai ulang, jadi
+                // tidak ada bitmap baru per frame. Ukurannya sudah sama dengan
+                // encoder, sehingga renderer tidak perlu menskalakan ulang.
+                val reused = drawCanvas != null && drawTarget != null &&
+                    frameDrawer?.invoke(drawCanvas, frameRect) == true
+                val frame: Bitmap
+                if (reused) {
+                    frame = drawTarget
+                } else {
+                    val freshFrame = frameProvider()
+                    if (freshFrame != null && freshFrame !== currentFrame) {
+                        currentFrame?.takeUnless { it.isRecycled }?.recycle()
+                        currentFrame = freshFrame
+                    }
+                    frame = currentFrame ?: throw NoRemoteFrameException()
                 }
-                val frame = currentFrame ?: throw NoRemoteFrameException()
-                drawPointer(frame)
+                drawPointer(frame, drawCanvas)
                 activeRenderer.draw(frame, System.nanoTime() - startNs)
                 activeDrain.drainAvailable()
                 frameIndex += 1
@@ -251,6 +284,11 @@ internal class RemoteScreenRecorder(
         } finally {
             currentFrame?.takeUnless { it.isRecycled }?.recycle()
             runCatching { renderer?.release() }
+            runCatching {
+                val target = drawTargetRef
+                if (target != null && !target.isRecycled) target.recycle()
+                drawTargetRef = null
+            }
             runCatching { inputSurface?.release() }
             val cleanupCodec = codec
             if (cleanupCodec != null) {
