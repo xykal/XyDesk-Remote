@@ -1,5 +1,7 @@
 package id.xydesk.remote.core
 
+import kotlin.math.roundToInt
+
 /**
  * Penghalus sampel RTT untuk pill telemetri.
  *
@@ -16,6 +18,6 @@ object RttSmoother {
         val s = sampleMs.coerceAtLeast(1)
         if (prev < 0) return s
         val mixed = prev * (1f - ALPHA) + s * ALPHA
-        return mixed.toInt().coerceAtLeast(1)
+        return mixed.roundToInt().coerceAtLeast(1)
     }
 }

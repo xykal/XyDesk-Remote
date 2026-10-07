@@ -12,7 +12,13 @@ class RttSmootherTest {
     @Test
     fun `sampel nol atau negatif dibulatkan ke satu`() {
         assertEquals(1, RttSmoother.next(-1, 0))
-        assertEquals(1, RttSmoother.next(20, -5))
+        assertEquals(1, RttSmoother.next(-1, -5))
+    }
+
+    @Test
+    fun `sampel negatif ikut EMA sebagai satu`() {
+        // 20*0.65 + 1*0.35 = 13.35 -> 13
+        assertEquals(13, RttSmoother.next(20, -5))
     }
 
     @Test
