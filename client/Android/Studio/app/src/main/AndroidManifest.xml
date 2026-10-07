@@ -6,6 +6,12 @@
     <!-- Android 11+ package visibility for launching the user's Spotify app. -->
     <queries>
         <package android:name="com.spotify.music" />
+        <!-- Mulai Android 11 kueri paket disaring: tanpa deklarasi intent ini,
+             daftar pemutar yang membuka pustaka (MediaBrowserService) selalu
+             kosong walau aplikasinya terpasang. -->
+        <intent>
+            <action android:name="android.media.browse.MediaBrowserService" />
+        </intent>
     </queries>
 
     <!-- Network/permission requirements are declared by the freeRDPCore

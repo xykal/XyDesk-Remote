@@ -633,4 +633,99 @@ object XyIcons {
         moveTo(19.5f, 4.5f); lineTo(11.5f, 12.5f)
         moveTo(17f, 14.2f); lineTo(17f, 19f); lineTo(5f, 19f); lineTo(5f, 7f); lineTo(9.8f, 7f)
     }
+
+    // ---- kontrol pemutar musik ----
+
+    /** Acak: dua jalur bersilang. */
+    val Shuffle: ImageVector = xyIcon("XyShuffle") {
+        moveTo(3f, 6.5f); lineTo(7f, 6.5f); lineTo(17f, 17.5f); lineTo(21f, 17.5f)
+        moveTo(3f, 17.5f); lineTo(7f, 17.5f); lineTo(17f, 6.5f); lineTo(21f, 6.5f)
+        moveTo(18.2f, 4.2f); lineTo(21f, 6.5f); lineTo(18.2f, 8.8f)
+        moveTo(18.2f, 15.2f); lineTo(21f, 17.5f); lineTo(18.2f, 19.8f)
+    }
+
+    /** Ulang semua: putaran dengan dua kepala panah. */
+    val Repeat: ImageVector = xyIcon("XyRepeat") {
+        moveTo(6.5f, 7f); lineTo(17.5f, 7f)
+        curveTo(19.4f, 7f, 21f, 8.6f, 21f, 10.5f); lineTo(21f, 12f)
+        moveTo(17.5f, 17f); lineTo(6.5f, 17f)
+        curveTo(4.6f, 17f, 3f, 15.4f, 3f, 13.5f); lineTo(3f, 12f)
+        moveTo(15.2f, 4.6f); lineTo(17.8f, 7f); lineTo(15.2f, 9.4f)
+        moveTo(8.8f, 14.6f); lineTo(6.2f, 17f); lineTo(8.8f, 19.4f)
+    }
+
+    /** Ulang satu lagu: putaran yang sama dengan angka 1 di tengahnya. */
+    val RepeatOne: ImageVector = xyIcon("XyRepeatOne") {
+        moveTo(6.5f, 7f); lineTo(17.5f, 7f)
+        curveTo(19.4f, 7f, 21f, 8.6f, 21f, 10.5f); lineTo(21f, 12f)
+        moveTo(17.5f, 17f); lineTo(6.5f, 17f)
+        curveTo(4.6f, 17f, 3f, 15.4f, 3f, 13.5f); lineTo(3f, 12f)
+        moveTo(15.2f, 4.6f); lineTo(17.8f, 7f); lineTo(15.2f, 9.4f)
+        moveTo(8.8f, 14.6f); lineTo(6.2f, 17f); lineTo(8.8f, 19.4f)
+        moveTo(11.1f, 10.6f); lineTo(12.7f, 9.8f); lineTo(12.7f, 14.6f)
+    }
+
+    /** Antrian lagu: daftar dengan tanda tambah. */
+    val Queue: ImageVector = xyIcon("XyQueue") {
+        moveTo(3.5f, 6.5f); lineTo(15f, 6.5f)
+        moveTo(3.5f, 11f); lineTo(15f, 11f)
+        moveTo(3.5f, 15.5f); lineTo(11.5f, 15.5f)
+        moveTo(17.5f, 14.5f); lineTo(17.5f, 20f)
+        moveTo(14.8f, 17.2f); lineTo(20.2f, 17.2f)
+    }
+
+    /** Mundur cepat 10 detik. */
+    val Rewind: ImageVector = xyIcon("XyRewind") {
+        moveTo(12.5f, 6.5f); lineTo(6.5f, 12f); lineTo(12.5f, 17.5f)
+        moveTo(19f, 6.5f); lineTo(13f, 12f); lineTo(19f, 17.5f)
+    }
+
+    /** Maju cepat 10 detik. */
+    val Forward: ImageVector = xyIcon("XyForward") {
+        moveTo(11.5f, 6.5f); lineTo(17.5f, 12f); lineTo(11.5f, 17.5f)
+        moveTo(5f, 6.5f); lineTo(11f, 12f); lineTo(5f, 17.5f)
+    }
+
+    /** Hentikan pemutaran. */
+    val Stop: ImageVector = xySolid("XyStop") {
+        moveTo(6.5f, 6.5f); lineTo(17.5f, 6.5f); lineTo(17.5f, 17.5f); lineTo(6.5f, 17.5f); close()
+    }
+
+    /** Pustaka: rak berisi tiga media. */
+    val Library: ImageVector = xyIcon("XyLibrary") {
+        moveTo(3.5f, 5.5f); lineTo(8f, 5.5f); lineTo(8f, 19f); lineTo(3.5f, 19f); close()
+        moveTo(10f, 5.5f); lineTo(14f, 5.5f); lineTo(14f, 19f); lineTo(10f, 19f); close()
+        moveTo(16.4f, 6.2f); lineTo(20.2f, 7.2f); lineTo(17.4f, 18.4f); lineTo(16.4f, 6.2f)
+    }
+
+    /** Segarkan daftar. */
+    val Refresh: ImageVector = xyIcon("XyRefresh") {
+        moveTo(19.5f, 8.6f)
+        curveTo(18.1f, 6f, 15.3f, 4.2f, 12f, 4.2f)
+        curveTo(7.7f, 4.2f, 4.2f, 7.7f, 4.2f, 12f)
+        curveTo(4.2f, 16.3f, 7.7f, 19.8f, 12f, 19.8f)
+        curveTo(15.6f, 19.8f, 18.6f, 17.4f, 19.5f, 14.1f)
+        moveTo(19.8f, 4.4f); lineTo(19.8f, 8.7f); lineTo(15.5f, 8.7f)
+    }
+
+    /** Kirim ke PC. */
+    val Upload: ImageVector = xyIcon("XyUpload") {
+        moveTo(12f, 15.5f); lineTo(12f, 4.5f)
+        moveTo(8f, 8.5f); lineTo(12f, 4.5f); lineTo(16f, 8.5f)
+        moveTo(4.5f, 14.5f); lineTo(4.5f, 19.5f); lineTo(19.5f, 19.5f); lineTo(19.5f, 14.5f)
+    }
+
+    /** Simpan dari PC ke HP. */
+    val Download: ImageVector = xyIcon("XyDownload") {
+        moveTo(12f, 4.5f); lineTo(12f, 15.5f)
+        moveTo(8f, 11.5f); lineTo(12f, 15.5f); lineTo(16f, 11.5f)
+        moveTo(4.5f, 14.5f); lineTo(4.5f, 19.5f); lineTo(19.5f, 19.5f); lineTo(19.5f, 14.5f)
+    }
+
+    /** Satu dokumen. */
+    val File: ImageVector = xyIcon("XyFile") {
+        moveTo(6f, 3.5f); lineTo(14f, 3.5f); lineTo(18.5f, 8f); lineTo(18.5f, 20.5f)
+        lineTo(6f, 20.5f); close()
+        moveTo(14f, 3.5f); lineTo(14f, 8f); lineTo(18.5f, 8f)
+    }
 }

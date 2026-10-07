@@ -73,6 +73,11 @@ dependencies {
     // butuh appcompat sendiri untuk AppCompatActivity (versi sama dengan core)
     implementation 'androidx.appcompat:appcompat:1.7.1'
     implementation 'androidx.core:core:1.19.0'
+    // MediaControllerCompat: satu-satunya jalan ke acak & mode ulang.
+    // MediaController framework menyembunyikan getShuffleMode/getRepeatMode
+    // dan setShuffleMode/setRepeatMode (@hide), jadi tanpa library ini dua
+    // kontrol itu tidak bisa dikirim ke pemutar mana pun.
+    implementation 'androidx.media:media:1.7.0'
 
     // M1 — modul Kotlin (core sesi, vault, favorites)
     implementation project(':core-rdp')

@@ -97,6 +97,7 @@ private enum class PanelTab(val id: String, val en: String) {
     SCREEN("Layar", "Screen"),
     INPUT("Input", "Input"),
     BUTTONS("Tombol", "Buttons"),
+    MUSIC("Musik", "Music"),
     SESSION("Sesi", "Session"),
 }
 
@@ -182,6 +183,7 @@ fun SessionControls(
     val lifecycleOwner = androidx.compose.ui.platform.LocalLifecycleOwner.current
     val prefs = remember { SessionPrefs(context) }
     val spotifyPlayback by SpotifyMediaBridge.playback.collectAsState()
+    val spotifyPosition by SpotifyMediaBridge.positionMs.collectAsState()
     var spotifyExpanded by remember { mutableStateOf(false) }
     var scrollPillOpen by remember { mutableStateOf(false) }
     var panelOpen by remember { mutableStateOf(false) }
@@ -553,9 +555,15 @@ fun SessionControls(
                 expanded = spotifyExpanded,
                 onExpand = { spotifyExpanded = true },
                 onMinimize = { spotifyExpanded = false },
+                positionMs = spotifyPosition,
                 onTogglePlayback = { SpotifyMediaBridge.playPause() },
                 onPrevious = { SpotifyMediaBridge.previous() },
                 onNext = { SpotifyMediaBridge.next() },
+                onSeek = { SpotifyMediaBridge.seekTo(it) },
+                onSeekBy = { SpotifyMediaBridge.seekBy(it) },
+                onStop = { SpotifyMediaBridge.stop() },
+                onToggleShuffle = { SpotifyMediaBridge.setShuffle(it) },
+                onCycleRepeat = { SpotifyMediaBridge.cycleRepeat() },
                 onRequestAccess = { openSpotifyNotificationAccess(context) },
                 modifier = Modifier
                     .align(Alignment.TopCenter)
@@ -1664,7 +1672,14 @@ private fun SessionPanel(
                         onHudOpacityChange = onHudOpacityChange,
                     )
 
+                    PanelTab.MUSIC -> MusicTab(
+                        openKey = openSection,
+                        onOpenKey = { openSection = it },
+                    )
+
                     PanelTab.SESSION -> SessionTab(
+                        deviceId = deviceId,
+                        notice = notice,
                         openKey = openSection,
                         onOpenKey = { openSection = it },
                         onScreenshot = onScreenshot,
@@ -2343,6 +2358,8 @@ private fun ButtonsTab(
 
 @Composable
 private fun SessionTab(
+    deviceId: String,
+    notice: id.xydesk.remote.ui.components.XyNoticeState,
     onScreenshot: () -> Unit,
     onLockRemotePc: () -> Unit,
     onActivatePrivacyCurtain: () -> Unit,
@@ -2410,6 +2427,10 @@ private fun SessionTab(
             }
         }
 
+    section("transfer-file",xy("Transfer file HP ↔ PC", "File transfer phone ↔ PC")) {
+            TransferFileSection(deviceId = deviceId, notice = notice)
+        }
+
     section("sesi",xy("Sesi", "Session")) {
             PanelHint(
                 xy(
@@ -2469,7 +2490,7 @@ private fun PanelChip(label: String, onClick: () -> Unit) {
 }
 
 @Composable
-private fun PanelHint(text: String) {
+internal fun PanelHint(text: String) {
     Text(
         text,
         color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -2551,6 +2572,7 @@ private fun panelTabIcon(entry: PanelTab): ImageVector = when (entry) {
     PanelTab.SCREEN -> XyIcons.Fit
     PanelTab.INPUT -> XyIcons.Keyboard
     PanelTab.BUTTONS -> XyIcons.Grid
+    PanelTab.MUSIC -> XyIcons.Music
     PanelTab.SESSION -> XyIcons.Gear
 }
 
@@ -2572,6 +2594,11 @@ private fun panelSectionIcon(key: String): ImageVector = when {
     key.startsWith("tampilan-tombol") -> XyIcons.Eye
     key.startsWith("preset-profil-hud") -> XyIcons.Star
     key.startsWith("tombol-kontrol") -> XyIcons.Grid
+    key.startsWith("sumber-musik") -> XyIcons.Users
+    key.startsWith("kontrol-pemutar") -> XyIcons.Sliders
+    key.startsWith("antrian-musik") -> XyIcons.Queue
+    key.startsWith("pustaka-musik") -> XyIcons.Library
+    key.startsWith("transfer-file") -> XyIcons.Swap
     key.startsWith("keamanan") -> XyIcons.Shield
     key.startsWith("perekaman") -> XyIcons.Shot
     key.startsWith("sesi") -> XyIcons.Power
@@ -2587,7 +2614,7 @@ private fun panelSectionIcon(key: String): ImageVector = when {
  * digambar hanya ikon + judul, jadi satu tab muat tanpa digulir. Isi seksi baru
  * disusun untuk satu seksi yang sedang terbuka.
  */
-private class PanelSectionScope {
+internal class PanelSectionScope {
     internal class Spec(
         val key: String,
         val title: String,
@@ -2616,7 +2643,7 @@ private class PanelSectionScope {
  * baru tiap kali supaya seksi dari komposisi sebelumnya tidak tertinggal.
  */
 @Composable
-private fun PanelSectionGrid(
+internal fun PanelSectionGrid(
     openKey: String?,
     onOpenKey: (String?) -> Unit,
     builder: @Composable PanelSectionScope.() -> Unit,
@@ -2693,7 +2720,7 @@ private fun PanelSectionGrid(
 }
 
 @Composable
-private fun PanelSection(
+internal fun PanelSection(
     title: String,
     initiallyExpanded: Boolean = false,
     content: @Composable () -> Unit,
