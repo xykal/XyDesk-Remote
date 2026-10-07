@@ -30,6 +30,7 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import id.xydesk.remote.ui.components.XyIcons
@@ -65,8 +66,9 @@ internal fun HudPlatePicker(
     onSelect: (HudPlate) -> Unit,
     modifier: Modifier = Modifier,
 ) {
+    Column(modifier = modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(5.dp)) {
     Row(
-        modifier = modifier.fillMaxWidth(),
+        modifier = Modifier.fillMaxWidth(),
         horizontalArrangement = Arrangement.spacedBy(8.dp),
     ) {
         HudPlate.entries.forEach { plate ->
@@ -95,7 +97,7 @@ internal fun HudPlatePicker(
                 Box(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .height(54.dp)
+                        .height(58.dp)
                         .clip(RoundedCornerShape(14.dp))
                         .background(HudPreviewBackdrop)
                         .border(
@@ -105,22 +107,16 @@ internal fun HudPlatePicker(
                         ),
                     contentAlignment = Alignment.Center,
                 ) {
-                    // Tombol contoh: bentuk, tepi, dan warna sama persis dengan
-                    // yang digambar SessionKeyLayer saat sesi berjalan.
-                    Box(
-                        modifier = Modifier
-                            .size(34.dp)
-                            .clip(CircleShape)
-                            .background(palette.plate)
-                            .border(1.dp, palette.border, CircleShape),
-                        contentAlignment = Alignment.Center,
-                    ) {
-                        Icon(
-                            XyIcons.ClickLeft,
-                            contentDescription = null,
-                            tint = palette.ink,
-                            modifier = Modifier.size(16.dp),
-                        )
+                    // Tiga contoh, semuanya membaca hudButtonLook() yang sama
+                    // dengan tombol sungguhan: normal, sedang ditekan, dan
+                    // joystick. Pratinjau lama hanya menggambar satu tombol
+                    // dengan border 1.dp (aslinya 1.2.dp) dan tanpa warna
+                    // tertekan maupun knob joystick, jadi yang terlihat di sini
+                    // tidak sama dengan yang muncul di layar.
+                    Row(horizontalArrangement = Arrangement.spacedBy(5.dp)) {
+                        HudPreviewKey(plate, pressed = false)
+                        HudPreviewKey(plate, pressed = true)
+                        HudPreviewStick(plate)
                     }
                 }
                 Text(
@@ -139,5 +135,67 @@ internal fun HudPlatePicker(
                 )
             }
         }
+    }
+    Text(
+        xy(
+            "Kiri: normal · Tengah: ditekan · Kanan: joystick",
+            "Left: normal · Middle: pressed · Right: joystick",
+        ),
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+        fontSize = 9.5.sp,
+        textAlign = TextAlign.Center,
+        modifier = Modifier.fillMaxWidth(),
+    )
+    }
+}
+
+/** Ukuran contoh tombol di pratinjau. */
+private val HudPreviewKeySize: Dp = 27.dp
+
+/**
+ * Contoh satu tombol HUD di pratinjau.
+ *
+ * Warna pelat, warna tepi, dan tebal tepi diambil dari [hudButtonLook] — fungsi
+ * yang sama yang dipakai [HudKeyButton] saat sesi berjalan — supaya pratinjau
+ * tidak mungkin berbeda dari tombol aslinya.
+ */
+@Composable
+private fun HudPreviewKey(plate: HudPlate, pressed: Boolean) {
+    val look = hudButtonLook(plate, pressed = pressed, latched = false, mappingMode = false)
+    Box(
+        modifier = Modifier
+            .size(HudPreviewKeySize)
+            .clip(CircleShape)
+            .background(look.plateColor)
+            .border(look.ringWidth, look.ringColor, CircleShape),
+        contentAlignment = Alignment.Center,
+    ) {
+        Icon(
+            XyIcons.ClickLeft,
+            contentDescription = null,
+            tint = hudPalette(plate).ink,
+            modifier = Modifier.size(HudPreviewKeySize * 0.47f),
+        )
+    }
+}
+
+/** Contoh joystick: knob memakai [HudStickKnobRatio] yang sama dengan aslinya. */
+@Composable
+private fun HudPreviewStick(plate: HudPlate) {
+    val look = hudButtonLook(plate, pressed = false, latched = false, mappingMode = false)
+    Box(
+        modifier = Modifier
+            .size(HudPreviewKeySize)
+            .clip(CircleShape)
+            .background(look.plateColor)
+            .border(look.ringWidth, look.ringColor, CircleShape),
+        contentAlignment = Alignment.Center,
+    ) {
+        Box(
+            modifier = Modifier
+                .size(HudPreviewKeySize * HudStickKnobRatio)
+                .clip(CircleShape)
+                .background(hudPalette(plate).ink.copy(alpha = 0.8f)),
+        )
     }
 }

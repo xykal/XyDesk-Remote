@@ -614,6 +614,19 @@ object HudKeyCatalog {
         HudKeyOption("Gamepad", "Y \u00b7 Esc", HudKind.KEY, KeyEvent.KEYCODE_ESCAPE, labelEn = "Y \u00b7 Escape"),
         HudKeyOption("Gamepad", "L1 \u00b7 Scroll naik", HudKind.SCROLL_UP, labelEn = "L1 \u00b7 Scroll up"),
         HudKeyOption("Gamepad", "R1 \u00b7 Scroll turun", HudKind.SCROLL_DOWN, labelEn = "R1 \u00b7 Scroll down"),
+        // Melengkapi susunan gamepad sungguhan. Sebelumnya hanya ada stick,
+        // D-Pad, ABXY, dan L1/R1 sehingga tidak ada trigger, tidak ada
+        // Start/Select, dan tidak ada stick kedua. Semua entri baru memakai
+        // HudKind yang sudah ada (KEY dengan kode tombol, MOUSE_MIDDLE,
+        // PAD_STICK) sehingga tidak menambah anggota enum dan tidak merusak
+        // empat `when` exhaustive atas HudKind.
+        HudKeyOption("Gamepad", "Joystick analog 2", HudKind.PAD_STICK, labelEn = "Analog stick 2"),
+        HudKeyOption("Gamepad", "L2 \u00b7 Page Up", HudKind.KEY, KeyEvent.KEYCODE_PAGE_UP, labelEn = "L2 \u00b7 Page Up"),
+        HudKeyOption("Gamepad", "R2 \u00b7 Page Down", HudKind.KEY, KeyEvent.KEYCODE_PAGE_DOWN, labelEn = "R2 \u00b7 Page Down"),
+        HudKeyOption("Gamepad", "L3 \u00b7 Klik tengah", HudKind.MOUSE_MIDDLE, labelEn = "L3 \u00b7 Middle click"),
+        HudKeyOption("Gamepad", "R3 \u00b7 Tab", HudKind.KEY, KeyEvent.KEYCODE_TAB, labelEn = "R3 \u00b7 Tab"),
+        HudKeyOption("Gamepad", "Start \u00b7 Menu", HudKind.KEY, KeyEvent.KEYCODE_MENU, labelEn = "Start \u00b7 Menu"),
+        HudKeyOption("Gamepad", "Select \u00b7 Back", HudKind.KEY, KeyEvent.KEYCODE_BACK, labelEn = "Select \u00b7 Back"),
     )
 
     val groups: List<Triple<String, String, List<HudKeyOption>>> = listOf(

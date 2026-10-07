@@ -46,6 +46,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.IntOffset
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.zIndex
@@ -72,6 +73,49 @@ private val HudInk = Color(0xFFF1F4F6)
 
 /** Warna per rasa latar tombol. */
 data class HudPalette(val border: Color, val ink: Color, val plate: Color)
+
+/**
+ * Rupa tombol HUD yang sudah memperhitungkan keadaan: warna pelat, warna tepi,
+ * dan tebal tepi.
+ *
+ * Satu sumber kebenaran untuk [HudKeyButton] (tombol sungguhan saat sesi) dan
+ * [HudPlatePicker] (pratinjau gaya). Sebelumnya pemilih gaya menggambar ulang
+ * rupa tombol dengan angkanya sendiri — border 1.dp, tanpa warna tertekan, tanpa
+ * knob joystick — sehingga yang terlihat di pemilih tidak sama dengan yang
+ * muncul di layar. Selama kedua tempat membaca fungsi ini, keduanya tidak bisa
+ * berbeda lagi.
+ */
+data class HudButtonLook(
+    val plateColor: Color,
+    val ringColor: Color,
+    val ringWidth: Dp,
+)
+
+fun hudButtonLook(
+    plate: HudPlate,
+    pressed: Boolean,
+    latched: Boolean,
+    mappingMode: Boolean,
+): HudButtonLook {
+    val pal = hudPalette(plate)
+    return HudButtonLook(
+        plateColor = if (pressed || latched) Color(0xE62B624F) else pal.plate,
+        ringColor = when {
+            mappingMode -> Color(0xFF83D7FF)
+            latched -> Color(0xFFB9F0D9)
+            else -> pal.border
+        },
+        ringWidth = if (pressed || latched || mappingMode) 2.dp else 1.2.dp,
+    )
+}
+
+/**
+ * Rasio diameter knob joystick terhadap diameter tombol.
+ *
+ * Berbeda dari radius gerak (`key.size * 0.31f` di [HudKeyButton]): yang satu
+ * ukuran gambar knob, yang lain batas simpangan saat digeser.
+ */
+val HudStickKnobRatio: Float = 0.42f
 
 fun hudPalette(plate: HudPlate): HudPalette = when (plate) {
     HudPlate.NONE -> HudPalette(HudBorder, HudInk, Color.Transparent)
@@ -171,26 +215,14 @@ private fun HudKeyButton(
     val stickRadiusPx = with(density) { (key.size.dp * 0.31f).toPx() }
     val latestStickRadius = rememberUpdatedState(stickRadiusPx)
     val latestOnStick = rememberUpdatedState(onStickAxis)
-    val ring = when {
-        mappingMode -> Color(0xFF83D7FF)
-        latched -> Color(0xFFB9F0D9)
-        else -> pal.border
-    }
-    val circlePlate = when {
-        pressed || latched -> Color(0xE62B624F)
-        else -> pal.plate
-    }
+    val look = hudButtonLook(plate, pressed = pressed, latched = latched, mappingMode = mappingMode)
 
     Box(
         modifier
             .size(key.size.dp)
             .clip(CircleShape)
-            .background(circlePlate)
-            .border(
-                if (pressed || latched || mappingMode) 2.dp else 1.2.dp,
-                ring,
-                CircleShape,
-            )
+            .background(look.plateColor)
+            .border(look.ringWidth, look.ringColor, CircleShape)
             .pointerInput(key.id, mappingMode, key.action, key.kind, key.keyCode, key.shift, key.combo, key.size, plate, scrollSpeed) {
                 awaitEachGesture {
                     val slop = viewConfiguration.touchSlop
@@ -279,7 +311,7 @@ private fun HudKeyButton(
             Box(
                 Modifier
                     .offset { IntOffset(stickOffset.value.x.roundToInt(), stickOffset.value.y.roundToInt()) }
-                    .size(key.size.dp * 0.42f)
+                    .size(key.size.dp * HudStickKnobRatio)
                     .clip(CircleShape)
                     .background(pal.ink.copy(alpha = 0.8f)),
             )
