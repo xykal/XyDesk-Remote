@@ -89,6 +89,7 @@ class XyDeskHomeActivity : ComponentActivity() {
                             onDone = { boot = false },
                         )
                     }
+                    AppChannelGate(onExit = { finish() })
                 }
             }
         }

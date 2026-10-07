@@ -7,6 +7,7 @@ import android.app.PendingIntent
 import android.app.Service
 import android.content.Context
 import android.content.Intent
+import android.graphics.BitmapFactory
 import android.os.Build
 import android.os.IBinder
 import androidx.core.app.NotificationCompat
@@ -34,8 +35,12 @@ class XySessionService : Service() {
 
     override fun onBind(intent: Intent?): IBinder? = null
 
+    /** Kapan sesi dimulai; dipakai kronometer di notifikasi. */
+    private var startedAt = 0L
+
     override fun onCreate() {
         super.onCreate()
+        startedAt = System.currentTimeMillis()
         createChannel()
     }
 
@@ -91,23 +96,73 @@ class XySessionService : Service() {
             Intent(this, XySessionService::class.java).setAction(ACTION_STOP),
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
         )
-        return NotificationCompat.Builder(this, CHANNEL_ID)
+        val host = label ?: "XyDesk Remote"
+        val builder = NotificationCompat.Builder(this, CHANNEL_ID)
             // Ikon app sendiri (mark monokrom) — dulu pakai
             // android.R.drawable.stat_sys_upload_done, ikon sistem panah
             // upload yang tidak ada hubungannya dengan remote desktop.
             .setSmallIcon(id.xydesk.remote.R.drawable.ic_launcher_monochrome)
             .setContentTitle(xyNow("Sesi remote aktif", "Remote session active"))
-            .setContentText(label ?: "XyDesk Remote")
+            .setContentText(host)
+            .setSubText(versionLabel())
             .setContentIntent(open)
             .addAction(0, xyNow("Buka", "Open"), open)
             .addAction(0, xyNow("Putuskan", "Disconnect"), stop)
             .setOngoing(true)
             .setOnlyAlertOnce(true)
+            .setShowWhen(true)
             .setPriority(NotificationCompat.PRIORITY_LOW)
-            .build()
+            .setCategory(NotificationCompat.CATEGORY_SERVICE)
+            .setStyle(NotificationCompat.BigTextStyle().bigText(host))
+
+        // Tampilan penuh warna: hanya berlaku untuk foreground service, dan
+        // service ini memang foreground. Tanpa ini notifikasi memakai kartu
+        // putih/abu bawaan Android yang tidak mirip app sama sekali.
+        builder.setColor(NOTIF_ACCENT)
+            .setColorized(true)
+
+        // Kronometer = lama sesi berjalan, tanpa perlu memperbarui notifikasi.
+        if (startedAt > 0L) {
+            builder.setWhen(startedAt).setUsesChronometer(true)
+        }
+
+        // Ikon besar di sisi kiri. Dipakai PNG (bukan vektor) karena
+        // BitmapFactory tidak membaca drawable vektor.
+        runCatching {
+            BitmapFactory.decodeResource(resources, id.xydesk.remote.R.drawable.xy_mark_white)
+        }.getOrNull()?.let { builder.setLargeIcon(it) }
+
+        // Layar kunci tidak menampilkan host yang sedang disambungkan.
+        builder.setVisibility(NotificationCompat.VISIBILITY_PRIVATE)
+            .setPublicVersion(
+                NotificationCompat.Builder(this, CHANNEL_ID)
+                    .setSmallIcon(id.xydesk.remote.R.drawable.ic_launcher_monochrome)
+                    .setContentTitle(xyNow("Sesi remote aktif", "Remote session active"))
+                    .setContentText("XyDesk Remote")
+                    .setColor(NOTIF_ACCENT)
+                    .setColorized(true)
+                    .build(),
+            )
+
+        return builder.build()
     }
 
+    /** `v1.1.1 (63)` untuk subteks notifikasi; fallback kalau tidak terbaca. */
+    private fun versionLabel(): String = runCatching {
+        val info = packageManager.getPackageInfo(packageName, 0)
+        val code = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+            info.longVersionCode
+        } else {
+            @Suppress("DEPRECATION")
+            info.versionCode.toLong()
+        }
+        "v${info.versionName} ($code)"
+    }.getOrDefault("XyDesk Remote")
+
     companion object {
+        /** Warna aksen monokrom app, dipakai notifikasi berwarna. */
+        private const val NOTIF_ACCENT = 0xFF111114.toInt()
+
         private const val CHANNEL_ID = "xydesk_sesi_aktif"
         private const val NOTIF_ID = 4711
         const val ACTION_STOP = "id.xydesk.remote.action.STOP_SESSION"

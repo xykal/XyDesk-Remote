@@ -163,3 +163,14 @@ Start: 2026-09-28
 ## 2026-10-07 — v1.1.1: draft rilis berisi ronde UI 3-4 + musik penuh + transfer file
 
 - `VERSION_NAME` 1.1.0 → **1.1.1**, `VERSION_CODE` 62 → **63**. Draft `v1.1.0` dibiarkan utuh supaya masih bisa dibandingkan; draft baru dibangun dari `main` yang sudah memuat: panel inline-expand + kaca metalik, paritas preview gamepad + 18 tombol, pil scroll + scroll halus, screenshot ke `Pictures/XyDesk`, kontrol musik penuh + playlist + pustaka, dan panel transfer file HP ↔ PC.
+
+## 2026-10-07 — kanal distribusi, notifikasi sesi, dan README yang dirapikan
+
+- **`ui/AppChannel.kt`** memastikan APK yang berjalan ditandatangani penerbit resmi; kalau tidak, `AppChannelGate` menutup seluruh UI dan hanya menyisakan dua tombol (buka situs resmi / tutup app). Dipasang sebagai anak terakhir `Box` akar di `XyDeskHomeActivity` dan `XyDeskSessionActivity`, `zIndex(100f)`, menyerap semua sentuhan, dan menelan tombol kembali.
+- Aturan amannya: **memblokir hanya bila sidik jari benar-benar terbaca DAN berbeda**. Kalau tidak terbaca sama sekali (ROM aneh, API berubah), app tetap jalan — pengguna sah tidak boleh terkunci karena pembacaan gagal. Sidik jari diverifikasi sendiri dari APK rilis v1.1.1 (`META-INF/XYDESK-R.RSA` → sertifikat `CN=XyDesk Remote Release`, SHA-256 `8429f689…ad219652`), cocok dengan `SIGNATURE-VERIFICATION.txt` yang sudah diterbitkan — jadi nilai itu bukan bocoran baru.
+- Pengecualian debug dibaca dari `ApplicationInfo.FLAG_DEBUGGABLE` APK yang sedang berjalan, bukan konstanta waktu kompilasi, supaya `assembleDebug` di CI dan pengembangan lokal tidak ikut terkunci.
+- **Jujur soal batasnya:** pemeriksaan sisi klien selalu bisa dibongkar orang yang serius. Ini pencegah dan pelindung pengguna (APK modifikasi klien RDP memang vektor pencurian kredensial), bukan DRM yang tidak tembus.
+- Sesuai permintaan, mekanismenya **tidak didokumentasikan** di README/AGENTS — yang disembunyikan adalah penjelasannya, bukan perilakunya: pengguna tetap melihat pesan yang jelas.
+- **Notifikasi sesi dirombak** (`XySessionService`): `setColorized(true)` + warna aksen (hanya berlaku untuk foreground service, jadi kartu bawaan Android yang putih/abu tidak lagi muncul), `largeIcon` dari `xy_mark_white.png` (PNG, bukan vektor — `BitmapFactory` tidak membaca vektor), kronometer lama sesi, subteks versi, `BigTextStyle`, dan `VISIBILITY_PRIVATE` + `publicVersion` supaya host yang sedang disambungkan tidak tampil di layar kunci.
+- **README ditulis ulang**: fokus ke apa fungsi app dan langkah pemakaian (PC → pasang → tambah perangkat → sambungkan → tabel "yang mau dilakukan"), plus fitur terbaru (transfer file, musik, rekaman, gamepad) dan troubleshooting singkat. Dwibahasa dipertahankan.
+- PR #10 (banner v1.0.3) dibiarkan terbuka — asetnya untuk versi yang tidak pernah rilis; penggantinya dibuat tanpa nomor versi supaya cocok untuk rilis mana pun.

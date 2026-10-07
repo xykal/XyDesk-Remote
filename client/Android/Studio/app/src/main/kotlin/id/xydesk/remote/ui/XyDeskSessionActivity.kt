@@ -453,6 +453,7 @@ class XyDeskSessionActivity : ComponentActivity() {
                             sessionPrefs.virtualPadStickMode = next
                         },
                     )
+                    AppChannelGate(onExit = { finish() })
                 }
             }
         }

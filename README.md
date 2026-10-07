@@ -1,81 +1,106 @@
 # XyDesk Remote
 
-**An Android RDP client for Windows and Windows Server.** Connect directly to a host you control—no XyDesk cloud relay or account required.
+Klien RDP Android untuk Windows dan Windows Server. Sambung langsung ke PC milikmu — tanpa relay cloud, tanpa akun.
 
-[Download releases](https://github.com/xykal/XyDesk-Remote/releases) · [Build guide](docs/BUILD.md) · [Security reporting](https://github.com/xykal/XyDesk-Remote/security/advisories/new)
+[**Unduh APK**](https://rdp.xydesk.my.id/) · [Rilis di GitHub](https://github.com/xykal/XyDesk-Remote/releases) · [Panduan build](docs/BUILD.md)
 
-## Bahasa Indonesia
+---
 
-XyDesk Remote membantu kamu mengakses PC atau server Windows dari Android lewat RDP.
+## Apa ini
 
-### Fitur
+XyDesk Remote menampilkan desktop Windows di HP Android-mu lewat protokol RDP, lengkap dengan kontrol mouse, keyboard, dan tombol yang bisa diatur sendiri. Koneksinya peer-to-peer ke host yang kamu tentukan; tidak ada server XyDesk di tengah yang melihat layar atau menyimpan kredensialmu.
 
-- Simpan profil koneksi dan kelola kredensial secara lokal.
-- Pilih mode Trackpad atau sentuh langsung; gunakan gesture mouse dan scroll.
-- Atur tombol HUD, ukuran, aksi, dan posisi sesuai perangkat.
-- Ubah zoom lokal, orientasi, dan resolusi desktop.
-- Gunakan clipboard, audio, dan kanal perangkat yang diaktifkan untuk profil.
-- Verifikasi sertifikat server sebelum mempercayainya.
+**Butuh:** Windows 10/11 Pro, Enterprise, atau Windows Server (versi Home tidak punya RDP server) · Android 7.0 (API 24) ke atas.
 
-### Mulai
+---
 
-1. Aktifkan Remote Desktop pada Windows Pro atau Windows Server.
-2. Pastikan ponsel dapat menjangkau host melalui jaringan tepercaya atau VPN.
-3. Tambahkan alamat host, port, dan akun Windows di aplikasi.
-4. Tinjau fingerprint sertifikat ketika diminta, lalu sambungkan.
+## Langkah demi langkah
 
-Jangan membuka port RDP langsung ke internet tanpa perlindungan jaringan yang memadai. Gunakan VPN atau gateway tepercaya bila akses berasal dari luar jaringan lokal.
+### 1. Siapkan PC Windows
 
-### Build dari source
+1. Buka **Settings → System → Remote Desktop**, nyalakan **Enable Remote Desktop**.
+2. Catat nama PC atau IP lokalnya: **Settings → Network → Properties**, atau jalankan `ipconfig` di Command Prompt.
+3. Pastikan akun Windows-mu punya password. RDP menolak akun tanpa password.
+4. Supaya bisa diakses dari luar rumah, pakai **VPN** (WireGuard/Tailscale/ZeroTier) atau teruskan port 3389 di router. Jangan membuka 3389 langsung ke internet.
 
-Lihat [panduan build](docs/BUILD.md) untuk versi JDK, Android SDK, NDK, dan CMake yang digunakan. GitHub Actions menjalankan pemeriksaan Kotlin dan build APK.
+### 2. Pasang di HP
 
-### Keamanan dan privasi
+1. Unduh APK dari [situs resmi](https://rdp.xydesk.my.id/) — pilih sesuai arsitektur HP:
+   - `arm64-v8a` → hampir semua HP keluaran 2017 ke atas
+   - `armeabi-v7a` → HP lama 32-bit
+   - `x86_64` → emulator atau tablet x86
+2. Buka file APK-nya, izinkan **Install unknown apps** untuk browser/file manager-mu.
+3. Jalankan XyDesk Remote.
 
-Koneksi RDP dibuat langsung ke host yang kamu pilih. Password profil disimpan lokal melalui penyimpanan kredensial terenkripsi Android; jangan cantumkan password di issue, log, screenshot, atau file konfigurasi publik. Log diagnostik dapat memuat alamat host dan metadata sertifikat—samarkan sebelum membagikannya.
+### 3. Tambahkan perangkat
 
-Laporkan dugaan kerentanan secara privat melalui [GitHub Security Advisories](https://github.com/xykal/XyDesk-Remote/security/advisories/new). Jangan menerbitkan detail yang bisa dipakai untuk menyerang pengguna sebelum ada perbaikan.
+1. Ketuk **Tambah perangkat**.
+2. Isi **alamat host** (IP atau nama PC) dan **port** (bawaan `3389`).
+3. Isi **username** dan **password** akun Windows. Password disimpan terenkripsi di HP, tidak dikirim ke mana pun.
+4. Simpan.
 
-### Lisensi
+### 4. Sambungkan
 
-FreeRDP dilisensikan di bawah Apache-2.0. Atribusi dan rincian perubahan XyDesk tersedia di [`XYDESK-REMOTE-NOTICE.md`](XYDESK-REMOTE-NOTICE.md).
+1. Ketuk profil perangkat itu.
+2. Pertama kali, aplikasi menampilkan **fingerprint sertifikat** server. Cocokkan, lalu percayai.
+3. Desktop Windows muncul. Selesai.
+
+### 5. Pakai sesinya
+
+| Yang mau dilakukan | Caranya |
+|---|---|
+| Gerakkan kursor | Mode **Trackpad** (geser di mana saja) atau **sentuh langsung** — ganti di panel **Input** |
+| Klik kanan / tengah | Tombol HUD, atau setel di panel **Tombol** |
+| Keyboard | Ikon keyboard di rail kanan bawah |
+| Salin-tempel teks | Aktif otomatis lewat kanal clipboard |
+| Kirim file ke PC | Panel **Sesi → Transfer file** → *Kirim file ke PC*. Di Windows muncul sebagai drive `XyDesk` (`\\tsclient\XyDesk`) |
+| Ambil file dari PC | Salin file ke drive `XyDesk` di Windows, lalu di HP buka **Transfer file → Segarkan** |
+| Screenshot desktop PC | Panel **Sesi → Ambil screenshot**; tersimpan di `Pictures/XyDesk` |
+| Rekam layar PC | Panel **Sesi → Perekaman**; MP4 720p 60 fps + audio PC di `Movies/XyDesk` |
+| Kontrol musik HP | Tab **Musik** di panel — putar/jeda, geser posisi, acak, ulang, antrian, dan pustaka |
+| Scroll halus | Rail kanan bawah → ikon scroll |
+| Gamepad | Aktifkan di panel **Tombol**; stik + 18 tombol yang bisa dipetakan |
+
+Semua pengaturan ada di satu panel: ketuk **Menu** di dalam sesi. Panelnya bertab — **Layar**, **Input**, **Tombol**, **Musik**, **Sesi** — dan tiap kotak melebar di tempat, tidak pindah halaman.
+
+---
+
+## Fitur
+
+- **Koneksi** — profil tak terbatas, Wake-on-LAN, verifikasi sertifikat, auto-reconnect.
+- **Tampilan** — zoom, orientasi, resolusi desktop, DPI Windows, multi-monitor.
+- **Input** — trackpad atau sentuh langsung, mouse gestures, scroll inertial, gyro-mouse, keyboard eksternal & IME.
+- **Tombol HUD** — susun sendiri ukuran, aksi, dan posisi; preset gamepad; profil bisa diekspor/diimpor.
+- **Media** — kendalikan pemutar musik HP mana pun (Spotify, SoundCloud, YouTube Music, pemutar lokal) dari dalam sesi; audio tetap di HP.
+- **File** — transfer dua arah HP ↔ PC lewat drive yang di-redirect.
+- **Rekam & screenshot** — desktop PC saja; layar HP dan kontrol tidak ikut terekam.
+- **Audio & perangkat** — audio PC ke HP, mikrofon, kamera, clipboard teks & gambar.
+
+---
+
+## Kalau tidak bisa tersambung
+
+- **Timeout** → PC tidur, atau IP salah, atau tidak satu jaringan. Coba `ping <ip-pc>` dari HP.
+- **"CredSSP" / ditolak** → akun tanpa password, atau Remote Desktop belum nyala.
+- **Layar hitam setelah login** → di PC, kunci lalu buka lagi sesinya; atau matikan sementara GPU scheduling.
+- **Lambat** → gunakan kabel/5 GHz, turunkan resolusi di panel **Layar**, dan pastikan transport UDP aktif.
+
+---
+
+## Keamanan
+
+Koneksi RDP berjalan langsung ke host pilihanmu. Password disimpan lewat penyimpanan kredensial terenkripsi Android dan tidak pernah dikirim ke layanan pihak ketiga. Log diagnostik bisa memuat alamat host dan metadata sertifikat — samarkan sebelum dibagikan.
+
+Laporkan celah keamanan secara privat lewat [GitHub Security Advisories](https://github.com/xykal/XyDesk-Remote/security/advisories/new), jangan di issue publik.
+
+---
+
+## Build dari source
+
+Lihat [docs/BUILD.md](docs/BUILD.md) untuk versi JDK, Android SDK, NDK, dan CMake yang dipakai. GitHub Actions menjalankan pemeriksaan Kotlin, unit test JVM, dan build APK per-ABI.
+
+## Lisensi
+
+FreeRDP dilisensikan Apache-2.0. Atribusi dan rincian perubahan XyDesk ada di [`XYDESK-REMOTE-NOTICE.md`](XYDESK-REMOTE-NOTICE.md).
 
 Dibuat oleh xykal — XyVerse Technology Global.
-
-## English
-
-XyDesk Remote lets you access a Windows PC or server from Android over RDP.
-
-### Features
-
-- Save connection profiles and manage credentials locally.
-- Choose Trackpad or direct-touch input, with mouse gestures and scrolling.
-- Customize HUD controls, size, actions, and placement per device.
-- Adjust local zoom, Windows desktop DPI, orientation, and remote desktop resolution separately.
-- Use clipboard, audio, and the device channels enabled for a profile.
-- Review a server certificate before trusting it.
-
-### Get started
-
-1. Enable Remote Desktop on Windows Pro or Windows Server.
-2. Make the host reachable from your phone through a trusted network or VPN.
-3. Add the host address, port, and Windows account in the app.
-4. Review the certificate fingerprint when prompted, then connect.
-
-Do not expose RDP directly to the public internet without appropriate network protections. Use a VPN or trusted gateway for access from outside your local network.
-
-### Build from source
-
-See the [build guide](docs/BUILD.md) for the JDK, Android SDK, NDK, and CMake versions. GitHub Actions runs Kotlin checks and APK builds.
-
-### Security and privacy
-
-RDP connections go directly to the host you select. Profile passwords are stored locally using Android's encrypted credential storage. Never include passwords in issues, logs, screenshots, or public configuration files. Diagnostic logs may contain the host address and certificate metadata; redact them before sharing.
-
-Report suspected vulnerabilities privately through [GitHub Security Advisories](https://github.com/xykal/XyDesk-Remote/security/advisories/new). Avoid publishing exploitable details before a fix is available.
-
-### License
-
-FreeRDP is licensed under Apache-2.0. XyDesk attribution and modification details are in [`XYDESK-REMOTE-NOTICE.md`](XYDESK-REMOTE-NOTICE.md).
-
-Built by xykal — XyVerse Technology Global.
