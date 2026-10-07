@@ -626,7 +626,11 @@ object HudKeyCatalog {
         HudKeyOption("Gamepad", "L3 \u00b7 Klik tengah", HudKind.MOUSE_MIDDLE, labelEn = "L3 \u00b7 Middle click"),
         HudKeyOption("Gamepad", "R3 \u00b7 Tab", HudKind.KEY, KeyEvent.KEYCODE_TAB, labelEn = "R3 \u00b7 Tab"),
         HudKeyOption("Gamepad", "Start \u00b7 Menu", HudKind.KEY, KeyEvent.KEYCODE_MENU, labelEn = "Start \u00b7 Menu"),
-        HudKeyOption("Gamepad", "Select \u00b7 Back", HudKind.KEY, KeyEvent.KEYCODE_BACK, labelEn = "Select \u00b7 Back"),
+        // "Select" memakai Home, bukan Back: KEYCODE_BACK, KEYCODE_HOME, dan
+        // KEYCODE_APP_SWITCH tidak ada di tabel KeyboardMapper (modul vendored
+        // freeRDPCore), jadi tombol yang memakainya akan tampak ada di panel
+        // tetapi tidak mengirim apa-apa ke PC.
+        HudKeyOption("Gamepad", "Select \u00b7 Home", HudKind.KEY, KeyEvent.KEYCODE_MOVE_HOME, labelEn = "Select \u00b7 Home"),
     )
 
     val groups: List<Triple<String, String, List<HudKeyOption>>> = listOf(

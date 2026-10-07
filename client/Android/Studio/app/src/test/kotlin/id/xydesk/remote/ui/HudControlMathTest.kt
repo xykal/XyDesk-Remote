@@ -72,6 +72,15 @@ class HudControlMathTest {
         assertEquals(0x15B, mapper.translateAndroidKeyCode(KeyEvent.KEYCODE_META_LEFT))
         assertEquals(0x15D, mapper.translateAndroidKeyCode(KeyEvent.KEYCODE_MENU))
 
+        // KEYCODE_BACK/HOME/APP_SWITCH TIDAK ada di tabel KeyboardMapper. Tombol
+        // HUD yang memakainya akan tampak ada di panel tetapi tidak mengirim
+        // apa-apa ke PC — itu sebabnya "Select" di katalog gamepad memakai
+        // MOVE_HOME, bukan BACK. Loop katalog di bawah yang menangkap kasusnya;
+        // assertion ini mendokumentasikan penyebabnya supaya tidak diulang.
+        assertEquals(0, mapper.translateAndroidKeyCode(KeyEvent.KEYCODE_BACK))
+        assertEquals(0, mapper.translateAndroidKeyCode(KeyEvent.KEYCODE_HOME))
+        assertNotEquals(0, mapper.translateAndroidKeyCode(KeyEvent.KEYCODE_MOVE_HOME))
+
         HudKeyCatalog.groups.flatMap { it.third }.forEach { option ->
             when (option.kind) {
                 HudKind.KEY -> {
