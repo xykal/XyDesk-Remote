@@ -62,19 +62,48 @@ val XyGlassShape: Shape = RoundedCornerShape(20.dp)
 val XyGlassTileShape: Shape = RoundedCornerShape(16.dp)
 
 /**
- * Kilau vertikal: terang di atas, redup di tengah, sedikit gelap di bawah.
- * Inilah bagian yang membuat permukaan terbaca sebagai kaca, bukan bidang datar.
+ * Kilau metalik hitam-putih.
+ *
+ * Tiga lapis, bukan satu, karena logam dibaca mata dari **pita specular sempit**
+ * di tepi atas yang jatuh cepat — bukan dari gradasi yang merata. Lapisan lama
+ * hanya punya satu gradasi lembut 0 -> 1 sehingga permukaan terlihat seperti
+ * bidang datar yang setengah transparan, bukan kaca/logam.
+ *
+ *   0.00-0.10  pita specular terang (pantulan sumber cahaya di tepi atas)
+ *   0.10-0.34  jatuh cepat ke hampir gelap (badan logam)
+ *   0.62-1.00  bayangan bawah (memberi ketebalan/kedalaman)
  */
 private fun glassSheen(strength: Float): Brush = Brush.verticalGradient(
-    0f to Color.White.copy(alpha = 0.14f * strength),
-    0.45f to Color.White.copy(alpha = 0.03f * strength),
-    1f to Color.Black.copy(alpha = 0.07f * strength),
+    0f to Color.White.copy(alpha = 0.30f * strength),
+    0.10f to Color.White.copy(alpha = 0.15f * strength),
+    0.34f to Color.White.copy(alpha = 0.03f * strength),
+    0.62f to Color.Black.copy(alpha = 0.05f * strength),
+    1f to Color.Black.copy(alpha = 0.17f * strength),
 )
 
-/** Tepi terang: garis rambut yang lebih terlihat di sisi atas. */
-private fun glassEdge(strength: Float): Brush = Brush.verticalGradient(
-    0f to Color.White.copy(alpha = 0.40f * strength),
-    1f to Color.White.copy(alpha = 0.10f * strength),
+/**
+ * Sapuan diagonal: pantulan menyilang khas "liquid glass".
+ *
+ * Sengaja sangat tipis dan sempit (0.28-0.42). Sapuan lebar terbaca sebagai
+ * gradasi biasa; yang sempit terbaca sebagai pantulan pada permukaan lengkung.
+ */
+private fun glassSweep(strength: Float): Brush = Brush.linearGradient(
+    0f to Color.White.copy(alpha = 0f),
+    0.28f to Color.White.copy(alpha = 0.09f * strength),
+    0.42f to Color.White.copy(alpha = 0.02f * strength),
+    1f to Color.White.copy(alpha = 0f),
+)
+
+/**
+ * Bevel logam: terang di kiri-atas, gelap di kanan-bawah.
+ *
+ * Ini pengganti tepi seragam lama. Tepi yang sama terang di sekeliling membuat
+ * permukaan terlihat seperti stiker; bevel asimetris memberi kesan tebal.
+ */
+private fun glassEdge(strength: Float): Brush = Brush.linearGradient(
+    0f to Color.White.copy(alpha = 0.50f * strength),
+    0.5f to Color.White.copy(alpha = 0.13f * strength),
+    1f to Color.Black.copy(alpha = 0.30f * strength),
 )
 
 /**
@@ -92,8 +121,14 @@ fun Modifier.xyGlass(
     edge: Boolean = true,
 ): Modifier = this
     .clip(shape)
-    .background(MaterialTheme.colorScheme.surface.copy(alpha = 0.55f * opacity))
+    // Lapisan 1: badan. 0.62 (dari 0.55) karena logam butuh lebih pekat supaya
+    // pita specular di atasnya punya kontras untuk dibaca.
+    .background(MaterialTheme.colorScheme.surface.copy(alpha = 0.62f * opacity))
+    // Lapisan 2: kilau metalik vertikal.
     .background(glassSheen(strength))
+    // Lapisan 3: sapuan diagonal "liquid glass".
+    .background(glassSweep(strength))
+    // Lapisan 4: bevel asimetris sebagai tepi.
     .then(
         if (edge) Modifier.border(1.dp, glassEdge(strength), shape)
         else Modifier
@@ -137,6 +172,10 @@ fun XyGlassTile(
     selected: Boolean = false,
     enabled: Boolean = true,
     trailing: (@Composable () -> Unit)? = null,
+    // Ubin grid panel memakai 2 baris karena judul seksi ada yang panjang
+    // ("Clipboard otomatis (Teks & Gambar)") dan terpotong di lebar setengah
+    // panel. Nilai bawaan 1 menjaga tampilan ubin dashboard tetap satu baris.
+    titleMaxLines: Int = 1,
 ) {
     val ink = MaterialTheme.colorScheme.onSurface
     // Tekanan tombol dihaluskan; perubahan warna instan terasa kasar di grid.
@@ -195,7 +234,7 @@ fun XyGlassTile(
                 title,
                 style = MaterialTheme.typography.titleSmall,
                 color = if (enabled) ink else ink.copy(alpha = 0.40f),
-                maxLines = 1,
+                maxLines = titleMaxLines,
                 overflow = TextOverflow.Ellipsis,
             )
             if (subtitle != null) {

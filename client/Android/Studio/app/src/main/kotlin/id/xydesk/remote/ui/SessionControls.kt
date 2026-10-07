@@ -68,7 +68,6 @@ import androidx.compose.ui.input.pointer.pointerInput
 import id.xydesk.remote.core.RdpOptions
 import id.xydesk.remote.core.SmartResolution
 import id.xydesk.remote.ui.components.XyGlassTile
-import id.xydesk.remote.ui.components.XyTileGrid
 import id.xydesk.remote.ui.components.XyDialog
 import id.xydesk.remote.ui.components.XyField
 import id.xydesk.remote.ui.components.XyIcons
@@ -2626,47 +2625,68 @@ private fun PanelSectionGrid(
     scope.builder()
     val specs = scope.specs
     if (specs.isEmpty()) return
-    val open = specs.firstOrNull { it.key == openKey }
-    if (open != null) {
-        Column(
-            Modifier.fillMaxWidth(),
-            verticalArrangement = Arrangement.spacedBy(9.dp),
-        ) {
+    // Grid dua kolom, dan seksi yang terbuka MELEBAR TEPAT DI BAWAH barisnya.
+    //
+    // Sebelumnya versi ini memakai drill-in: mengetuk kotak mengganti seluruh
+    // tab dengan satu seksi plus tombol kembali. Pengguna menolaknya —
+    // "lebih gampang malah makin susah" — karena menambah satu lapis ketukan
+    // dan menyembunyikan seksi lain. Di sini satu ketukan langsung membuka isi
+    // di tempat, kotak lain tetap terlihat, dan ketukan kedua menutupnya lagi.
+    Column(
+        Modifier.fillMaxWidth(),
+        verticalArrangement = Arrangement.spacedBy(10.dp),
+    ) {
+        specs.chunked(2).forEach { rowSpecs ->
             Row(
-                Modifier
-                    .fillMaxWidth()
-                    .clip(RoundedCornerShape(10.dp))
-                    .clickable { onOpenKey(null) }
-                    .padding(vertical = 4.dp),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(9.dp),
+                Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(10.dp),
             ) {
-                Icon(
-                    imageVector = XyIcons.ChevronLeft,
-                    contentDescription = null,
-                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.size(18.dp),
-                )
-                Text(
-                    xy("Semua seksi", "All sections").uppercase(),
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    fontSize = 10.sp,
-                    letterSpacing = 1.2.sp,
-                    fontWeight = FontWeight.SemiBold,
-                )
+                rowSpecs.forEach { spec ->
+                    val selected = spec.key == openKey
+                    Box(Modifier.weight(1f)) {
+                        XyGlassTile(
+                            icon = panelSectionIcon(spec.key),
+                            title = spec.title,
+                            onClick = { onOpenKey(if (selected) null else spec.key) },
+                            selected = selected,
+                            titleMaxLines = 2,
+                            trailing = {
+                                Icon(
+                                    imageVector = if (selected) XyIcons.ChevronUp else XyIcons.ChevronDown,
+                                    contentDescription = null,
+                                    tint = if (selected) {
+                                        MaterialTheme.colorScheme.onPrimary
+                                    } else {
+                                        MaterialTheme.colorScheme.onSurfaceVariant
+                                    },
+                                    modifier = Modifier.size(16.dp),
+                                )
+                            },
+                        )
+                    }
+                }
+                // Pengisi baris ganjil: tanpa ini ubin sendirian melebar
+                // sepenuh baris dan grid terlihat berantakan.
+                repeat(2 - rowSpecs.size) { Spacer(Modifier.weight(1f)) }
             }
-            PanelSection(open.title, initiallyExpanded = true) { open.content() }
-        }
-        return
-    }
-    XyTileGrid(modifier = Modifier.fillMaxWidth(), columns = 2, spacing = 10.dp) {
-        specs.forEach { spec ->
-            item {
-                XyGlassTile(
-                    icon = panelSectionIcon(spec.key),
-                    title = spec.title,
-                    onClick = { onOpenKey(spec.key) },
-                )
+            val open = rowSpecs.firstOrNull { it.key == openKey }
+            if (open != null) {
+                Column(
+                    Modifier
+                        .fillMaxWidth()
+                        .xyGlass(shape = RoundedCornerShape(14.dp), opacity = 1.25f, strength = 0.9f)
+                        .padding(horizontal = 12.dp, vertical = 12.dp),
+                    verticalArrangement = Arrangement.spacedBy(7.dp),
+                ) {
+                    Text(
+                        open.title.uppercase(),
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        fontSize = 10.sp,
+                        letterSpacing = 1.2.sp,
+                        fontWeight = FontWeight.SemiBold,
+                    )
+                    open.content()
+                }
             }
         }
     }
