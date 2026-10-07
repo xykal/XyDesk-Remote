@@ -97,7 +97,7 @@ internal object SessionFileTransfer {
         uris.forEach { uri ->
             val info = queryFileInfo(context, uri)
             val wanted = FileTransferPlan.sanitizeFileName(info.first, System.currentTimeMillis())
-            val existing = root.listFiles()?.map { it.name }.orEmpty()
+            val existing = root.dir.listFiles()?.map { it.name }.orEmpty()
             val name = FileTransferPlan.uniqueName(existing, wanted)
             val job = addJob(name, info.second, TransferDirection.TO_PC)
             val ok = runCatching {
@@ -105,7 +105,7 @@ internal object SessionFileTransfer {
                     ?: error("no input stream")
                 input.use { source ->
                     File(root.dir, name).outputStream().use { target ->
-                        copyWithProgress(job, source, target, info.second)
+                        copyWithProgress(job.id, source, target)
                     }
                 }
             }
@@ -186,7 +186,7 @@ internal object SessionFileTransfer {
                 try {
                     val written = resolver.openOutputStream(target)?.use { out ->
                         source.inputStream().use { input ->
-                            copyWithProgress(job, input, out, source.length())
+                            copyWithProgress(job.id, input, out)
                         }
                         true
                     } ?: false
@@ -270,7 +270,6 @@ internal object SessionFileTransfer {
         jobId: Long,
         source: InputStream,
         target: OutputStream,
-        total: Long,
     ) {
         val buffer = ByteArray(BUFFER_SIZE)
         var copied = 0L
