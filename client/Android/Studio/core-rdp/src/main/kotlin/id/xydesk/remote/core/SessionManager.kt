@@ -173,13 +173,18 @@ class SessionManager(context: Context) {
             if (curState is SessionState.Connected && tick % 4 == 0) {
                 activeNetworkLabel = detectActiveNetworkLabel()
                 val p = lastProfile
-                if (p != null && tick % 60 == 0) {
+                if (p != null && tick % 10 == 0) {
                     kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
                         runCatching {
+                            // Probe TCP nyata ke host:port layanan (handshake =
+                            // 1 RTT). `isReachable` dulu jarang berhasil di Android
+                            // tanpa root (ICMP dilarang, fallback port 7 tertutup).
                             val t0 = System.nanoTime()
-                            if (java.net.InetAddress.getByName(p.host).isReachable(750)) {
-                                lastRttMs = ((System.nanoTime() - t0) / 1_000_000L).toInt().coerceAtLeast(1)
+                            java.net.Socket().use { probe ->
+                                probe.connect(java.net.InetSocketAddress(p.host, p.port), 750)
                             }
+                            val sample = ((System.nanoTime() - t0) / 1_000_000L).toInt()
+                            lastRttMs = RttSmoother.next(lastRttMs, sample)
                         }
                     }
                 }

@@ -6,7 +6,8 @@ package id.xydesk.remote.core
  * Dipancarkan [SessionManager.telemetry] tiap 500ms. `fps` = jumlah
  * invalidasi grafik yang sudah dikoaleskan per detik (ekstrapolasi 2x dari
  * window 500ms), bukan FPS yang dijanjikan host RDP.
- * `rttMs` = estimasi reachability RTT host (TCP saat konek, `isReachable` saat sampling),
+ * `rttMs` = RTT TCP live ke host:port layanan (probe handshake tiap 5 detik,
+ * dihaluskan EMA lewat [RttSmoother]; TCP juga dipakai sekali saat konek),
  * bukan latensi input-ke-layar; `-1` bila belum diukur.
  */
 data class TelemetrySample(

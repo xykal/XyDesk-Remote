@@ -8,7 +8,7 @@
   <!-- SEO metadata:start -->
   <meta name="robots" content="index,follow,max-image-preview:large,max-snippet:-1,max-video-preview:-1" />
   <meta name="author" content="XyVerse Technology Global" />
-  <meta name="theme-color" content="#14161A" />
+  <meta name="theme-color" content="#08080A" />
   <link rel="canonical" href="https://rdp.xydesk.my.id/" />
   <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
   <meta property="og:site_name" content="XyDesk Remote" />
@@ -19,8 +19,8 @@
   <meta property="og:description" content="Hubungkan Android ke PC Windows lewat RDP. Unduh APK resmi XyDesk Remote untuk perangkatmu." />
   <meta property="og:image" content="https://rdp.xydesk.my.id/og-xydesk-remote.png" />
   <meta property="og:image:type" content="image/png" />
-  <meta property="og:image:width" content="1200" />
-  <meta property="og:image:height" content="630" />
+  <meta property="og:image:width" content="1024" />
+  <meta property="og:image:height" content="512" />
   <meta property="og:image:alt" content="XyDesk Remote — klien Remote Desktop Android untuk PC Windows" />
   <meta name="twitter:card" content="summary_large_image" />
   <meta name="twitter:title" content="XyDesk Remote — Akses PC Windows dari Android" />
@@ -80,17 +80,17 @@
   <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@500;600;700&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
   <style>
     :root, [data-theme="dark"] {
-      --bg: #14161A;
-      --surface: #1A1D23;
-      --surface-alt: #23272E;
-      --line: #2E333B;
-      --line-strong: #3C424A;
-      --text: #E4E7EB;
-      --text-dim: #9BA2AC;
-      --text-faint: #6F7681;
-      --accent: #D3D7DC;
-      --accent-ink: #14161A;
-      --scrim: rgba(20, 22, 26, 0.78);
+      --bg: #08080A;
+      --surface: #0E0E12;
+      --surface-alt: #15151A;
+      --line: #232329;
+      --line-strong: #34343C;
+      --text: #F2F2F4;
+      --text-dim: #A7A7AF;
+      --text-faint: #7B7B84;
+      --accent: #F2F2F4;
+      --accent-ink: #08080A;
+      --scrim: rgba(8, 8, 10, 0.78);
       --font-sans: "Plus Jakarta Sans", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
       --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
     }
@@ -366,8 +366,34 @@
 
     /* Editorial Intro */
     .intro {
+      position: relative;
       padding: clamp(32px, 6vw, 58px) 0 clamp(30px, 5vw, 46px);
       border-bottom: 1px solid var(--line);
+      overflow: hidden;
+    }
+
+    .intro::before {
+      content: "";
+      position: absolute;
+      inset: 0;
+      background: url("/hero-xydesk.jpg") center 32% / cover no-repeat;
+      opacity: 0.5;
+      pointer-events: none;
+    }
+
+    .intro::after {
+      content: "";
+      position: absolute;
+      inset: 0;
+      background: linear-gradient(180deg, rgba(8, 8, 10, 0.2) 0%, rgba(8, 8, 10, 0.52) 55%, var(--bg) 100%);
+      pointer-events: none;
+    }
+
+    [data-theme="light"] .intro::before { opacity: 0.16; }
+
+    .intro .container {
+      position: relative;
+      z-index: 1;
     }
 
     .intro-meta {
@@ -401,7 +427,53 @@
       align-items: center;
       gap: 10px;
       flex-wrap: wrap;
-      margin-bottom: clamp(26px, 4vw, 38px);
+      margin-bottom: clamp(18px, 3vw, 26px);
+    }
+
+    /* Live stats strip right under the CTA */
+    .hero-stats {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 10px;
+      margin-bottom: clamp(22px, 3.5vw, 32px);
+    }
+
+    .hero-stat {
+      min-width: 0;
+      padding: 14px 16px;
+      border: 1px solid var(--line-strong);
+      border-radius: 14px;
+      background: color-mix(in srgb, var(--surface) 68%, transparent);
+      backdrop-filter: blur(14px);
+      -webkit-backdrop-filter: blur(14px);
+    }
+
+    .hero-stat-label {
+      display: block;
+      font-size: 10.5px;
+      font-weight: 700;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      color: var(--text-dim);
+    }
+
+    .hero-stat-value {
+      display: block;
+      margin: 4px 0 2px;
+      font-size: clamp(22px, 3.4vw, 30px);
+      font-weight: 800;
+      letter-spacing: -0.04em;
+      color: var(--text);
+    }
+
+    .hero-stat-sub {
+      display: block;
+      font-size: 11px;
+      color: var(--text-faint);
+    }
+
+    @media (max-width: 640px) {
+      .hero-stats { grid-template-columns: 1fr; gap: 8px; }
     }
 
     /* Specification Ledger */
@@ -1101,6 +1173,24 @@
           </a>
         </div>
 
+        <div class="hero-stats" aria-label="Statistik langsung XyDesk Remote">
+          <div class="hero-stat">
+            <span class="hero-stat-label" data-i18n="hs.dl">Total Unduhan</span>
+            <strong class="hero-stat-value mono" id="hero-download-total" aria-live="polite">&mdash;</strong>
+            <span class="hero-stat-sub" data-i18n="hs.dl.s">APK &middot; rilis publik GitHub</span>
+          </div>
+          <div class="hero-stat">
+            <span class="hero-stat-label" data-i18n="hs.on">User Online</span>
+            <strong class="hero-stat-value mono" id="hero-online-count" aria-live="polite">&mdash;</strong>
+            <span class="hero-stat-sub" data-i18n="hs.on.s">sesi aktif &middot; heartbeat anonim</span>
+          </div>
+          <div class="hero-stat">
+            <span class="hero-stat-label" data-i18n="hs.rel">Rilis Publik</span>
+            <strong class="hero-stat-value mono" id="hero-release-count" aria-live="polite">&mdash;</strong>
+            <span class="hero-stat-sub" data-i18n="hs.rel.s">versi terbit &middot; draft tidak dihitung</span>
+          </div>
+        </div>
+
         <div class="ledger">
           <div class="ledger-cell">
             <div class="ledger-k" data-i18n="led.1.k">Mesin Protokol</div>
@@ -1661,6 +1751,9 @@
         }
         count.textContent = new Intl.NumberFormat(currentLang === "en" ? "en-US" : "id-ID")
           .format(latestActiveSessionStats.active_session_count);
+        var heroOnline = document.getElementById("hero-online-count");
+        if (heroOnline) heroOnline.textContent = new Intl.NumberFormat(currentLang === "en" ? "en-US" : "id-ID")
+          .format(latestActiveSessionStats.active_session_count);
         var date = new Date(latestActiveSessionStats.checked_at);
         var dateText = Number.isNaN(date.getTime()) ? "" : date.toLocaleTimeString(
           currentLang === "en" ? "en-US" : "id-ID",
@@ -1710,6 +1803,10 @@
         total.textContent = new Intl.NumberFormat(locale).format(latestDownloadStats.total_apk_downloads);
         releaseCount.textContent = new Intl.NumberFormat(locale).format(latestDownloadStats.release_count);
         assetCount.textContent = new Intl.NumberFormat(locale).format(latestDownloadStats.apk_asset_count);
+        var heroTotal = document.getElementById("hero-download-total");
+        if (heroTotal) heroTotal.textContent = new Intl.NumberFormat(locale).format(latestDownloadStats.total_apk_downloads);
+        var heroRel = document.getElementById("hero-release-count");
+        if (heroRel) heroRel.textContent = new Intl.NumberFormat(locale).format(latestDownloadStats.release_count);
         var date = new Date(latestDownloadStats.updated_at);
         var dateText = Number.isNaN(date.getTime()) ? "" : date.toLocaleString(locale, {
           dateStyle: "medium",
@@ -1805,6 +1902,12 @@
         "intro.cta.dl": "Download official APKs",
         "intro.cta.cl": "View changelog",
         "intro.cta.host": "Host Agent (experimental)",
+        "hs.dl": "Total Downloads",
+        "hs.dl.s": "APKs · public GitHub releases",
+        "hs.on": "Users Online",
+        "hs.on.s": "active sessions · anonymous heartbeat",
+        "hs.rel": "Public Releases",
+        "hs.rel.s": "published versions · drafts excluded",
         "led.1.k": "Remote desktop protocol",
         "led.1.s": "FreeRDP 3 · Windows RDP",
         "led.2.k": "Displays & sessions",
