@@ -19,7 +19,13 @@ internal class ScrollWheelAccumulator {
 
 /**
  * Convert touch pixels to high-resolution RDP wheel units. One notch remains
- * 120 units at the default speed; 24-unit batches make the motion less jumpy.
+ * 120 units at the default speed.
+ *
+ * Batch diturunkan dari 24 ke **12 unit** (1/10 takik, dari 1/5) supaya scroll
+ * terasa halus, bukan melompat per seperlima takik. Windows mengakumulasi delta
+ * roda di bawah 120, jadi batch kecil tetap menghasilkan satu takik penuh setelah
+ * lima langkah; yang berubah hanya seberapa sering delta dikirim.
+ *
  * Positive finger movement is down, so it produces negative wheel units.
  */
 internal fun scrollWheelStep(
@@ -27,11 +33,11 @@ internal fun scrollWheelStep(
     remainder: Float,
     speed: Float,
 ): ScrollWheelStep {
-    val safeRemainder = if (remainder.isFinite()) remainder.coerceIn(-23.99f, 23.99f) else 0f
+    val safeRemainder = if (remainder.isFinite()) remainder.coerceIn(-11.99f, 11.99f) else 0f
     val safeDelta = if (deltaY.isFinite()) deltaY.coerceIn(-240f, 240f) else 0f
     val safeSpeed = if (speed.isFinite()) speed.coerceIn(0.4f, 2.5f) else 1f
     val accumulated = safeRemainder - safeDelta * 3f * safeSpeed
-    val units = (accumulated / 24f).toInt() * 24
+    val units = (accumulated / 12f).toInt() * 12
     return ScrollWheelStep(units, accumulated - units)
 }
 

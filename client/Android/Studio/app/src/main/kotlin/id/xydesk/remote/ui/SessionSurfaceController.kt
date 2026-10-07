@@ -8,6 +8,10 @@ import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
 import java.io.File
 import java.io.FileOutputStream
+import android.content.ContentValues
+import android.os.Build
+import android.os.Environment
+import android.provider.MediaStore
 import android.content.Context
 import android.graphics.Bitmap
 import android.graphics.Color
@@ -542,19 +546,62 @@ class SessionSurfaceController(private val activity: Activity) : GraphicsSink {
         val src = bitmap ?: return@withContext null
         val shot = runCatching { synchronized(src) { src.copy(Bitmap.Config.ARGB_8888, false) } }
             .getOrNull() ?: return@withContext null
+        val fileName = "XyDesk-PC-${System.currentTimeMillis()}.png"
         try {
-            val externalFiles = activity.getExternalFilesDir(null) ?: return@withContext null
-            val dir = File(externalFiles, "screenshots")
-            if (!dir.exists() && !dir.mkdirs()) return@withContext null
-            val f = File(dir, "xydesk-${System.currentTimeMillis()}.png")
-            val saved = FileOutputStream(f).use { out ->
-                shot.compress(Bitmap.CompressFormat.PNG, 100, out)
+            // Android 10+ (API 29): simpan ke Pictures/XyDesk lewat MediaStore
+            // supaya screenshot muncul di galeri. Sebelumnya masuk ke
+            // getExternalFilesDir()/screenshots — folder privat app yang tidak
+            // terlihat di galeri dan ikut terhapus saat app di-uninstall.
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                val resolver = activity.contentResolver
+                val values = ContentValues().apply {
+                    put(MediaStore.MediaColumns.DISPLAY_NAME, fileName)
+                    put(MediaStore.MediaColumns.MIME_TYPE, "image/png")
+                    put(
+                        MediaStore.MediaColumns.RELATIVE_PATH,
+                        "${Environment.DIRECTORY_PICTURES}/XyDesk",
+                    )
+                    put(MediaStore.MediaColumns.IS_PENDING, 1)
+                }
+                val uri = resolver.insert(MediaStore.Images.Media.EXTERNAL_CONTENT_URI, values)
+                    ?: return@withContext null
+                var completed = false
+                try {
+                    val written = resolver.openOutputStream(uri)?.use { out ->
+                        shot.compress(Bitmap.CompressFormat.PNG, 100, out)
+                    } ?: false
+                    if (!written) return@withContext null
+                    val ready = ContentValues().apply {
+                        put(MediaStore.MediaColumns.IS_PENDING, 0)
+                    }
+                    check(resolver.update(uri, ready, null, null) > 0) {
+                        "Unable to publish the PNG in MediaStore"
+                    }
+                    completed = true
+                    uri
+                } finally {
+                    // Baris MediaStore yang gagal ditulis harus dihapus, kalau
+                    // tidak galeri berisi entri kosong yang tidak bisa dibuka.
+                    if (!completed) runCatching { resolver.delete(uri, null, null) }
+                }
+            } else {
+                // Android 7-9: manifest tidak meminta WRITE_EXTERNAL_STORAGE,
+                // jadi folder Pictures publik tidak bisa ditulis tanpa menambah
+                // izin lama + permintaan runtime. Tetap di folder app.
+                val externalFiles = activity.getExternalFilesDir(null)
+                    ?: return@withContext null
+                val dir = File(externalFiles, "screenshots")
+                if (!dir.exists() && !dir.mkdirs()) return@withContext null
+                val f = File(dir, fileName)
+                val saved = FileOutputStream(f).use { out ->
+                    shot.compress(Bitmap.CompressFormat.PNG, 100, out)
+                }
+                if (!saved) {
+                    f.delete()
+                    return@withContext null
+                }
+                FileProvider.getUriForFile(activity, "${activity.packageName}.files", f)
             }
-            if (!saved) {
-                f.delete()
-                return@withContext null
-            }
-            FileProvider.getUriForFile(activity, "${activity.packageName}.files", f)
         } catch (t: Throwable) {
             ConnectionLog.addThrowable("SES: screenshot gagal", t)
             null

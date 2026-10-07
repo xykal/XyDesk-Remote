@@ -18,6 +18,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Icon
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -70,17 +71,24 @@ internal fun SessionScrollPill(
     // seperti Animatable.snapTo.
     var deflection by remember { mutableFloatStateOf(0f) }
 
+    // Thumb sengaja berbentuk PIL, bukan lingkaran, dan lebih sempit dari
+    // track. Versi lama memakai lingkaran 30dp di dalam track selebar 32dp
+    // (44dp - padding 2x6dp) sehingga thumb nyaris menyumbat track dan terbaca
+    // sebagai sumbat bulat, bukan tuas. Sekarang 16x36dp dengan sudut 50%,
+    // menyisakan ruang di kiri-kanan supaya jelas bisa digeser.
     val trackHeight = 96.dp
-    val thumbSize = 30.dp
-    val maxTravelPx = with(density) { (trackHeight - thumbSize).toPx() / 2f }
+    val thumbWidth = 16.dp
+    val thumbHeight = 36.dp
+    val thumbShape = RoundedCornerShape(percent = 50)
+    val maxTravelPx = with(density) { (trackHeight - thumbHeight).toPx() / 2f }
 
     Column(
         modifier = modifier
-            .width(44.dp)
+            .width(40.dp)
             .clip(XyPill)
             .background(trackColor)
             .border(1.dp, edgeColor, XyPill)
-            .padding(horizontal = 6.dp, vertical = 6.dp)
+            .padding(horizontal = 5.dp, vertical = 5.dp)
             .semantics {
                 contentDescription =
                     xyNow("Kontrol scroll mouse atas dan bawah", "Mouse scroll up and down control")
@@ -90,7 +98,7 @@ internal fun SessionScrollPill(
     ) {
         Box(
             Modifier
-                .size(28.dp)
+                .size(26.dp)
                 .clip(CircleShape)
                 .clickable { latestScroll.value(120) },
             contentAlignment = Alignment.Center,
@@ -150,16 +158,17 @@ internal fun SessionScrollPill(
             Box(
                 Modifier
                     .offset { IntOffset(0, (deflection * maxTravelPx).roundToInt()) }
-                    .size(thumbSize)
-                    .clip(CircleShape)
+                    .width(thumbWidth)
+                    .height(thumbHeight)
+                    .clip(thumbShape)
                     .background(palette.ink.copy(alpha = 0.76f))
-                    .border(1.dp, edgeColor.copy(alpha = 0.72f), CircleShape),
+                    .border(1.dp, edgeColor.copy(alpha = 0.72f), thumbShape),
             )
         }
 
         Box(
             Modifier
-                .size(28.dp)
+                .size(26.dp)
                 .clip(CircleShape)
                 .clickable { latestScroll.value(-120) },
             contentAlignment = Alignment.Center,

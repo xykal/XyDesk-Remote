@@ -12,12 +12,14 @@ import kotlin.math.sqrt
 class HudControlMathTest {
     @Test
     fun dragScrollAccumulatesSmallMovesAndKeepsWheelDirection() {
-        val first = scrollWheelStep(deltaY = 4f, remainder = 0f, speed = 1f)
+        // deltaY 2px -> 6 unit: masih di bawah satu batch (12), jadi belum
+        // dikirim dan sisanya dibawa ke langkah berikutnya.
+        val first = scrollWheelStep(deltaY = 2f, remainder = 0f, speed = 1f)
         assertEquals(0, first.units)
-        assertEquals(-12f, first.remainder, 0.001f)
+        assertEquals(-6f, first.remainder, 0.001f)
 
-        val second = scrollWheelStep(deltaY = 4f, remainder = first.remainder, speed = 1f)
-        assertEquals(-24, second.units)
+        val second = scrollWheelStep(deltaY = 2f, remainder = first.remainder, speed = 1f)
+        assertEquals(-12, second.units)
         assertEquals(0f, second.remainder, 0.001f)
 
         assertEquals(120, scrollWheelStep(-40f, 0f, 1f).units)
@@ -27,17 +29,17 @@ class HudControlMathTest {
     @Test
     fun accumulatorResetsBetweenGestures() {
         val accumulator = ScrollWheelAccumulator()
-        assertEquals(0, accumulator.consume(4f, 1f))
-        assertEquals(-24, accumulator.consume(4f, 1f))
+        assertEquals(0, accumulator.consume(2f, 1f))
+        assertEquals(-12, accumulator.consume(2f, 1f))
         accumulator.reset()
-        assertEquals(0, accumulator.consume(4f, 1f))
+        assertEquals(0, accumulator.consume(2f, 1f))
     }
 
     @Test
     fun dragScrollBoundsExtremeAndNonFiniteInput() {
         val extreme = scrollWheelStep(Float.MAX_VALUE, 0f, 2.5f)
         assertTrue(extreme.units in -1800..0)
-        assertTrue(extreme.remainder in -24f..24f)
+        assertTrue(extreme.remainder in -12f..12f)
         assertEquals(0, scrollWheelStep(Float.NaN, Float.NaN, Float.NaN).units)
     }
 

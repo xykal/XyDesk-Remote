@@ -1266,6 +1266,12 @@ fun XyDeskSessionScreen(
                             notice.show(xyNow("Screenshot gagal atau surface belum siap", "Screenshot failed or surface is not ready"))
                             return@launch
                         }
+                        notice.show(
+                            xyNow(
+                                "Screenshot disimpan ke Pictures/XyDesk",
+                                "Screenshot saved to Pictures/XyDesk",
+                            ),
+                        )
                         val send = Intent(Intent.ACTION_SEND).apply {
                             type = "image/png"
                             putExtra(Intent.EXTRA_STREAM, uri)
