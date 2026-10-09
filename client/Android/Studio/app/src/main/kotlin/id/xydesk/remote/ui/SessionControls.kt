@@ -2,6 +2,11 @@ package id.xydesk.remote.ui
 
 import id.xydesk.remote.ui.input.XyStickMode
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.animateContentSize
+import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.ui.graphics.TransformOrigin
+import androidx.compose.ui.graphics.graphicsLayer
 import android.os.SystemClock
 import kotlinx.coroutines.delay
 import androidx.compose.foundation.Canvas
@@ -1197,10 +1202,10 @@ private fun LiveTelemetryPill(
 ) {
     val rtt = telemetry.rttMs
     val rttColor = when {
-        rtt <= 0 -> Color(0xFFEAF0F6)
-        rtt < 45 -> Color(0xFF7BF2B3)
-        rtt < 120 -> Color(0xFFFAD075)
-        else -> Color(0xFFFF8A8A)
+        rtt <= 0 -> Color(0xFFF2F2F4)
+        rtt < 45 -> Color(0xFFE4E4E8)
+        rtt < 120 -> Color(0xFFA9A9B0)
+        else -> Color(0xFF7C7C84)
     }
     val textShadow = Shadow(
         color = Color(0xF2000000),
@@ -1208,7 +1213,7 @@ private fun LiveTelemetryPill(
         blurRadius = 3f,
     )
     val labelStyle = TextStyle(
-        color = Color(0xB8DCE6F2),
+        color = Color(0xB8D9D9DE),
         fontSize = 7.sp,
         fontWeight = FontWeight.SemiBold,
         fontFamily = FontFamily.Monospace,
@@ -1217,7 +1222,7 @@ private fun LiveTelemetryPill(
         shadow = textShadow,
     )
     val valueStyle = TextStyle(
-        color = Color(0xFFF4F8FC),
+        color = Color(0xFFF2F2F4),
         fontSize = 8.5.sp,
         fontWeight = FontWeight.Bold,
         fontFamily = FontFamily.Monospace,
@@ -1227,12 +1232,12 @@ private fun LiveTelemetryPill(
     val rttLabel = if (rtt > 0) "${rtt} ms" else "-- ms"
     val resLabel = if (telemetry.width > 0) "${telemetry.width}x${telemetry.height}" else "--"
     val items = listOf(
-        Triple("UI/s", "${telemetry.fps}", Color(0xFFF4F8FC)),
+        Triple("UI/s", "${telemetry.fps}", Color(0xFFF2F2F4)),
         Triple("LATENCY", rttLabel, rttColor),
-        Triple("RESOLUSI", resLabel, Color(0xFFF4F8FC)),
-        Triple("ENCODE", telemetry.codecLabel, Color(0xFFF4F8FC)),
-        Triple("RELAY", telemetry.relayLabel, Color(0xFFF4F8FC)),
-        Triple("NETWORK", telemetry.networkLabel, Color(0xFFF4F8FC)),
+        Triple("RESOLUSI", resLabel, Color(0xFFF2F2F4)),
+        Triple("ENCODE", telemetry.codecLabel, Color(0xFFF2F2F4)),
+        Triple("RELAY", telemetry.relayLabel, Color(0xFFF2F2F4)),
+        Triple("NETWORK", telemetry.networkLabel, Color(0xFFF2F2F4)),
     )
 
     Column(
@@ -1262,10 +1267,10 @@ private fun RailButton(
         Modifier
             .size(44.dp)
             .clip(CircleShape)
-            .background(if (active) Color(0xE6B9EBDD) else pal.plate)
+            .background(if (active) Color(0xE9F2F2F4) else pal.plate)
             .border(
                 if (active) 2.dp else 1.2.dp,
-                if (active) Color(0xFFD9FFF0) else pal.border,
+                if (active) Color(0xFFFFFFFF) else pal.border,
                 CircleShape,
             )
             .clickable(onClick = onClick),
@@ -1274,7 +1279,7 @@ private fun RailButton(
         Icon(
             icon,
             contentDescription = description,
-            tint = if (active) Color(0xFF173C30) else pal.ink,
+            tint = if (active) Color(0xFF0B0B0E) else pal.ink,
             modifier = Modifier.size(20.dp),
         )
     }
@@ -1512,6 +1517,18 @@ private fun SessionPanel(
     // Kunci seksi yang sedang dibuka di grid drill-in. Di-key pada `tab` supaya
     // pindah tab otomatis kembali ke daftar kotak, bukan membuka seksi lama.
     var openSection by remember(tab) { mutableStateOf<String?>(null) }
+    // Panel muncul halus: membesar dari titik handle (kanan-atas) seperti
+    // keluar dari tombolnya, bukan sekadar tampil seketika.
+    var panelShown by remember { mutableStateOf(false) }
+    LaunchedEffect(Unit) { panelShown = true }
+    val panelScale by animateFloatAsState(
+        targetValue = if (panelShown) 1f else 0.9f,
+        animationSpec = tween(240, easing = FastOutSlowInEasing),
+    )
+    val panelAlpha by animateFloatAsState(
+        targetValue = if (panelShown) 1f else 0f,
+        animationSpec = tween(180),
+    )
     Box(
         Modifier
             .fillMaxSize()
@@ -1533,7 +1550,13 @@ private fun SessionPanel(
             Modifier
                 .fillMaxHeight(0.9f)
                 .fillMaxWidth(0.94f)
-                .widthIn(max = 720.dp)
+                .widthIn(max = 760.dp)
+                .graphicsLayer {
+                    scaleX = panelScale
+                    scaleY = panelScale
+                    alpha = panelAlpha
+                    transformOrigin = TransformOrigin(1f, 0f)
+                }
                 // Gaya kaca yang sama dengan pemutar musik. Opacity dinaikkan
                 // (0.55 * 1.6 = 0.88) karena panel berisi banyak teks; kaca
                 // setipis pemutar akan membuat tulisan sulit dibaca.
@@ -1543,8 +1566,8 @@ private fun SessionPanel(
                     strength = 1f,
                 )
                 .pointerInput(Unit) {}
-                .padding(horizontal = 16.dp, vertical = 12.dp),
-            verticalArrangement = Arrangement.spacedBy(9.dp),
+                .padding(horizontal = 20.dp, vertical = 16.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
             Row(
                 verticalAlignment = Alignment.CenterVertically,
@@ -2660,13 +2683,13 @@ internal fun PanelSectionGrid(
     // dan menyembunyikan seksi lain. Di sini satu ketukan langsung membuka isi
     // di tempat, kotak lain tetap terlihat, dan ketukan kedua menutupnya lagi.
     Column(
-        Modifier.fillMaxWidth(),
-        verticalArrangement = Arrangement.spacedBy(10.dp),
+        Modifier.fillMaxWidth().animateContentSize(),
+        verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
         specs.chunked(2).forEach { rowSpecs ->
             Row(
                 Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(10.dp),
+                horizontalArrangement = Arrangement.spacedBy(12.dp),
             ) {
                 rowSpecs.forEach { spec ->
                     val selected = spec.key == openKey
@@ -2702,8 +2725,8 @@ internal fun PanelSectionGrid(
                     Modifier
                         .fillMaxWidth()
                         .xyGlass(shape = RoundedCornerShape(14.dp), opacity = 1.25f, strength = 0.9f)
-                        .padding(horizontal = 12.dp, vertical = 12.dp),
-                    verticalArrangement = Arrangement.spacedBy(7.dp),
+                        .padding(horizontal = 16.dp, vertical = 14.dp),
+                    verticalArrangement = Arrangement.spacedBy(10.dp),
                 ) {
                     Text(
                         open.title.uppercase(),

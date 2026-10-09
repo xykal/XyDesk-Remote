@@ -51,9 +51,9 @@ val XyTextFaint = Color(0xFF808086)
 // diganti atas permintaan pengguna supaya app hitam-putih seperti semula.
 val XyAccent = Color(0xFFF2F2F4)
 val XyAccentInk = Color(0xFF111114)
-val XyOk = Color(0xFF57C08B)
-val XyWarn = Color(0xFFD7A54E)
-val XyDanger = Color(0xFFE0706F)
+val XyOk = Color(0xFFE2E2E6)
+val XyWarn = Color(0xFFA9A9B0)
+val XyDanger = Color(0xFF84848C)
 
 val DarkScheme = darkColorScheme(
     primary = XyAccent,
@@ -75,8 +75,8 @@ val DarkScheme = darkColorScheme(
     outlineVariant = XyLineStrong,
     error = XyDanger,
     onError = XyAccentInk,
-    errorContainer = Color(0xFF3A1D1D),
-    onErrorContainer = Color(0xFFFFDAD8),
+    errorContainer = Color(0xFF2C2C31),
+    onErrorContainer = Color(0xFFE4E4E8),
     scrim = Color(0x47000000),
 )
 
@@ -89,7 +89,7 @@ val LightScheme = lightColorScheme(
     onSecondary = Color(0xFFFFFFFF),
     secondaryContainer = Color(0xFFEDEDEF),
     onSecondaryContainer = Color(0xFF232328),
-    tertiary = Color(0xFF267554),
+    tertiary = Color(0xFF55555B),
     background = Color(0xFFF7F7F8),
     onBackground = Color(0xFF1A1A1D),
     surface = Color(0xFFFFFFFF),
@@ -98,10 +98,10 @@ val LightScheme = lightColorScheme(
     onSurfaceVariant = Color(0xFF5F5F65),
     outline = Color(0xFFDDDDDF),
     outlineVariant = Color(0xFFCECED2),
-    error = Color(0xFFB3261E),
+    error = Color(0xFF4A4A50),
     onError = Color.White,
-    errorContainer = Color(0xFFF9DEDC),
-    onErrorContainer = Color(0xFF410E0B),
+    errorContainer = Color(0xFFE6E6E9),
+    onErrorContainer = Color(0xFF29292D),
     scrim = Color(0x38000000),
 )
 

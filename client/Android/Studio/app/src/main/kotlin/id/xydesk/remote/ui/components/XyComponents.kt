@@ -37,6 +37,13 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.tween
+import androidx.compose.ui.graphics.TransformOrigin
+import androidx.compose.ui.graphics.graphicsLayer
+import kotlinx.coroutines.delay
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -572,9 +579,46 @@ fun XyOverlay(
     title: String,
     modifier: Modifier = Modifier,
     onDismiss: (() -> Unit)? = null,
-    maxWidth: Dp = 380.dp,
+    maxWidth: Dp = 440.dp,
+    origin: Alignment = Alignment.Center,
     content: @Composable ColumnScope.() -> Unit,
 ) {
+    // Muncul & pergi halus: kartu membesar dari titik tombol pemicu (origin)
+    // seperti keluar dari tombolnya; scrim ikut menggelap dan menerang.
+    var shown by remember { mutableStateOf(false) }
+    var leaving by remember { mutableStateOf(false) }
+    LaunchedEffect(Unit) { shown = true }
+    LaunchedEffect(leaving) {
+        if (leaving) {
+            shown = false
+            delay(210)
+            onDismiss?.invoke()
+        }
+    }
+    val cardScale by animateFloatAsState(
+        targetValue = if (shown) 1f else 0.88f,
+        animationSpec = tween(240, easing = FastOutSlowInEasing),
+    )
+    val cardAlpha by animateFloatAsState(
+        targetValue = if (shown) 1f else 0f,
+        animationSpec = tween(170),
+    )
+    val scrimAlpha by animateFloatAsState(
+        targetValue = if (shown) 0.26f else 0f,
+        animationSpec = tween(240),
+    )
+    val popOrigin = when (origin) {
+        Alignment.TopStart -> TransformOrigin(0f, 0f)
+        Alignment.TopCenter -> TransformOrigin(0.5f, 0f)
+        Alignment.TopEnd -> TransformOrigin(1f, 0f)
+        Alignment.BottomStart -> TransformOrigin(0f, 1f)
+        Alignment.BottomCenter -> TransformOrigin(0.5f, 1f)
+        Alignment.BottomEnd -> TransformOrigin(1f, 1f)
+        else -> TransformOrigin(0.5f, 0.5f)
+    }
+    fun requestDismiss() {
+        if (!leaving && onDismiss != null) leaving = true
+    }
     Box(
         Modifier.fillMaxSize().zIndex(50f),
         contentAlignment = Alignment.Center,
@@ -582,7 +626,7 @@ fun XyOverlay(
         Box(
             Modifier
                 .fillMaxSize()
-                .background(Color(0x42000000))
+                .background(Color.Black.copy(alpha = scrimAlpha))
                 .pointerInput(onDismiss) {
                     awaitEachGesture {
                         val down = awaitFirstDown(requireUnconsumed = false)
@@ -599,20 +643,26 @@ fun XyOverlay(
                             }
                             if (event.changes.none { it.pressed }) break
                         }
-                        if (!moved) onDismiss?.invoke()
+                        if (!moved) requestDismiss()
                     }
                 },
         )
         Column(
             modifier
-                .padding(20.dp)
+                .padding(24.dp)
                 .widthIn(max = maxWidth)
                 .fillMaxWidth()
-                .clip(RoundedCornerShape(8.dp))
+                .graphicsLayer {
+                    scaleX = cardScale
+                    scaleY = cardScale
+                    alpha = cardAlpha
+                    transformOrigin = popOrigin
+                }
+                .clip(RoundedCornerShape(16.dp))
                 .background(MaterialTheme.colorScheme.surface)
                 .pointerInput(Unit) {}
-                .padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(10.dp),
+                .padding(20.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
             Text(
                 title.uppercase(),
@@ -642,7 +692,7 @@ fun XyDialog(
             Column(
                 Modifier
                     .fillMaxWidth()
-                    .heightIn(max = 380.dp)
+                    .heightIn(max = 420.dp)
                     .verticalScroll(rememberScrollState()),
             ) {
                 body.lineSequence().forEach { line ->
@@ -658,7 +708,7 @@ fun XyDialog(
             Column(
                 Modifier
                     .fillMaxWidth()
-                    .heightIn(max = 380.dp)
+                    .heightIn(max = 420.dp)
                     .verticalScroll(rememberScrollState()),
             ) {
                 Text(
