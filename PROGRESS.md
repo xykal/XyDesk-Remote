@@ -213,3 +213,10 @@ Start: 2026-09-28
 - **Menu panel lebih bersih:** tiap tab kini hanya menampilkan seksi inti; 6 seksi jarang dipakai pindah ke ubin "Lanjutan (N seksi lagi)" yang bisa dibuka/tutup di tempat.
 - **Musik online (SoundCloud):** pencarian + pemutaran trek publik langsung di app — scraper `client_id` ala pemutar sumber terbuka, endpoint api-v2, stream progresif MP3; pemutar bawaan `MediaPlayer` + MediaSessionCompat + notifikasi MediaStyle (kontrol kunci layar). UI di pemutar mengambang sesi (dan tab Musik bila diaktifkan lagi). Parser murni + 9 uji unit (`org.json` ditambahkan khusus test).
 - **Fitur khas: Riwayat clipboard** — 10 teks terakhir yang disalin di HP, persisten, ketuk untuk menyalin ulang (kanal clipboard sesi meneruskannya ke PC otomatis), hapus per entri atau semua.
+
+## Ronde 9 — persiapan review live (2026-10-10)
+- **PR #10 DITUTUP** (review): banner ungu + glow neon melanggar aturan monokrom ronde 6 dan berlabel versi kedaluwarsa "v1.0.3"; tidak ada kode yang merujuk asetnya. Alasan ditulis sebagai komentar PR.
+- **Statistik:** label "UI/s" diganti **FPS** (laju penyegaran tampilan app) hanya di UI app; portal tidak disentuh.
+- **Editor kontrol lebih lengkap:** tombol kombinasi kini bisa diracik bebas (Ctrl/Shift/Alt/Win dicampur + tombol utama dari huruf/F/angka/simbol/numpad, label otomatis); tombol KEY bisa ganti tombol utama langsung dari editor.
+- **Codec & koneksi lemah:** dijawab — encode bukan cuma AVC420: preset stream (Otomatis/Responsif AVC420/Seimbang AVC444/Visual Tajam/Hemat Kuota/Kustom) sudah ada di pengaturan perangkat + deteksi seluler otomatis; telemetri menampilkan codec aktif.
+- **Versi 1.1.3 (65):** build berikutnya release-draft resmi (workflow memaksa draft:true), bukan debug.

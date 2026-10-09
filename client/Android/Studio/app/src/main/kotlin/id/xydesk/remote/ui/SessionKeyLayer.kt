@@ -771,6 +771,84 @@ fun HudKeyEditor(
                         onCheckedChange = { onChange(key.copy(macroSendEnter = it)) },
                     )
                 }
+                if (key.kind == HudKind.COMBO || key.kind == HudKind.KEY) {
+                    Text(
+                        xy("Kombinasi bebas", "Custom combination"),
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        fontSize = 11.sp,
+                        fontWeight = FontWeight.SemiBold,
+                    )
+                    if (key.kind == HudKind.COMBO) {
+                        // Empat modifier bisa dicampur bebas dengan tombol utama.
+                        val modifiers = listOf(
+                            android.view.KeyEvent.KEYCODE_CTRL_LEFT to "Ctrl",
+                            android.view.KeyEvent.KEYCODE_SHIFT_LEFT to "Shift",
+                            android.view.KeyEvent.KEYCODE_ALT_LEFT to "Alt",
+                            android.view.KeyEvent.KEYCODE_META_LEFT to "Win",
+                        )
+                        modifiers.forEach { (code, name) ->
+                            id.xydesk.remote.ui.components.XyToggleRow(
+                                title = name,
+                                checked = key.combo.contains(code),
+                                onCheckedChange = { on ->
+                                    val mods = key.combo
+                                        .filter { HudKey.isModifierKeyCode(it) }
+                                        .toMutableList()
+                                    if (on && !mods.contains(code)) mods.add(code)
+                                    if (!on) mods.remove(code)
+                                    val main = key.combo.lastOrNull {
+                                        !HudKey.isModifierKeyCode(it)
+                                    } ?: android.view.KeyEvent.KEYCODE_A
+                                    applyCustomCombo(key, onChange, mods, main)
+                                },
+                            )
+                        }
+                    }
+                    val mainCode = if (key.kind == HudKind.COMBO) {
+                        key.combo.lastOrNull { !HudKey.isModifierKeyCode(it) }
+                    } else {
+                        key.keyCode
+                    }
+                    Text(
+                        xy(
+                            "Tombol utama: {0}",
+                            "Main key: {0}",
+                            HudKeyCatalog.keyName(mainCode ?: 0),
+                        ),
+                        color = MaterialTheme.colorScheme.onSurface,
+                        fontSize = 11.sp,
+                    )
+                    Row(
+                        Modifier
+                            .fillMaxWidth()
+                            .horizontalScroll(rememberScrollState()),
+                        horizontalArrangement = Arrangement.spacedBy(6.dp),
+                    ) {
+                        HudKeyCatalog.comboMainKeys.forEach { opt ->
+                            ComboKeyChip(
+                                label = opt.label,
+                                selected = opt.keyCode == mainCode,
+                                onClick = {
+                                    if (key.kind == HudKind.COMBO) {
+                                        applyCustomCombo(
+                                            key,
+                                            onChange,
+                                            key.combo.filter { HudKey.isModifierKeyCode(it) },
+                                            opt.keyCode,
+                                        )
+                                    } else {
+                                        onChange(
+                                            key.copy(
+                                                keyCode = opt.keyCode,
+                                                label = opt.label.take(10),
+                                            ),
+                                        )
+                                    }
+                                },
+                            )
+                        }
+                    }
+                }
                 Text(xy("Cara pakai", "How it works"), color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 11.sp)
                 val supportedActions = HudKey.allowedActions(key.kind)
                 val selectedAction = supportedActions.indexOf(key.action).coerceAtLeast(0)
@@ -971,4 +1049,41 @@ fun HudLayoutPreview(keys: List<HudKey>, modifier: Modifier = Modifier) {
             }
         }
     }
+}
+
+/** Susun ulang kombinasi: modifier bebas + satu tombol utama, label ikut. */
+private fun applyCustomCombo(
+    key: HudKey,
+    onChange: (HudKey) -> Unit,
+    mods: List<Int>,
+    main: Int,
+) {
+    val label = (mods.map { HudKeyCatalog.keyName(it) } + HudKeyCatalog.keyName(main))
+        .joinToString("+")
+    onChange(key.copy(combo = mods + main, label = label.take(10)))
+}
+
+/** Chip kecil pemilih tombol utama di editor kombinasi. */
+@Composable
+private fun ComboKeyChip(label: String, selected: Boolean, onClick: () -> Unit) {
+    Text(
+        label,
+        color = if (selected) {
+            MaterialTheme.colorScheme.onPrimary
+        } else {
+            MaterialTheme.colorScheme.onSurface
+        },
+        fontSize = 11.sp,
+        modifier = Modifier
+            .clip(RoundedCornerShape(9.dp))
+            .background(
+                if (selected) {
+                    MaterialTheme.colorScheme.primary
+                } else {
+                    MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f)
+                },
+            )
+            .clickable(onClick = onClick)
+            .padding(horizontal = 10.dp, vertical = 6.dp),
+    )
 }

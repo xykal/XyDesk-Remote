@@ -1232,7 +1232,7 @@ private fun LiveTelemetryPill(
     val rttLabel = if (rtt > 0) "${rtt} ms" else "-- ms"
     val resLabel = if (telemetry.width > 0) "${telemetry.width}x${telemetry.height}" else "--"
     val items = listOf(
-        Triple("UI/s", "${telemetry.fps}", Color(0xFFF2F2F4)),
+        Triple("FPS", "${telemetry.fps}", Color(0xFFF2F2F4)),
         Triple("LATENCY", rttLabel, rttColor),
         Triple("RESOLUSI", resLabel, Color(0xFFF2F2F4)),
         Triple("ENCODE", telemetry.codecLabel, Color(0xFFF2F2F4)),
@@ -1763,7 +1763,7 @@ private fun ScreenTab(
     ) {
             XyToggleRow(
                 title = xy("Status telemetri live (Update UI, Latency, Network)", "Live telemetry status (UI updates, latency, network)"),
-                subtitle = xy("UI/s adalah invalidasi tampilan per detik, bukan FPS host. Tampilkan bersama latency, resolusi, codec, relay, dan jaringan.", "UI/s counts display invalidations per second, not host FPS. Show it with latency, resolution, codec, relay, and network."),
+                subtitle = xy("FPS adalah laju penyegaran tampilan app (frame per detik yang digambar di HP). Tampilkan bersama latency, resolusi, codec, relay, dan jaringan.", "FPS is the app display refresh rate (frames per second drawn on the phone). Show it with latency, resolution, codec, relay, and network."),
                 checked = showTelemetryPill,
                 onCheckedChange = onShowTelemetryPillChange,
             )

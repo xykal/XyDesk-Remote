@@ -510,6 +510,24 @@ object HudKeyCatalog {
 
     val singleKeys = general + arrows + topNumbers + symbols
 
+    /** Pilihan tombol utama untuk pembuat kombinasi bebas di editor. */
+    val comboMainKeys: List<HudKeyOption> = letters + functionKeys + singleKeys + numpad
+
+    private val keyNames: Map<Int, String> by lazy {
+        (singleKeys + functionKeys + letters + numpad)
+            .filter { it.kind == HudKind.KEY }
+            .associate { it.keyCode to it.label }
+    }
+
+    /** Nama mudah baca untuk satu keyCode; dipakai editor kombinasi. */
+    fun keyName(code: Int): String = when (code) {
+        android.view.KeyEvent.KEYCODE_CTRL_LEFT, android.view.KeyEvent.KEYCODE_CTRL_RIGHT -> "Ctrl"
+        android.view.KeyEvent.KEYCODE_SHIFT_LEFT, android.view.KeyEvent.KEYCODE_SHIFT_RIGHT -> "Shift"
+        android.view.KeyEvent.KEYCODE_ALT_LEFT, android.view.KeyEvent.KEYCODE_ALT_RIGHT -> "Alt"
+        android.view.KeyEvent.KEYCODE_META_LEFT, android.view.KeyEvent.KEYCODE_META_RIGHT -> "Win"
+        else -> keyNames[code] ?: "Key"
+    }
+
     val combos = listOf(
         HudKeyOption("Kombinasi", "Ctrl+C", HudKind.COMBO, combo = listOf(CTRL, KeyEvent.KEYCODE_C)),
         HudKeyOption("Kombinasi", "Ctrl+V", HudKind.COMBO, combo = listOf(CTRL, KeyEvent.KEYCODE_V)),
