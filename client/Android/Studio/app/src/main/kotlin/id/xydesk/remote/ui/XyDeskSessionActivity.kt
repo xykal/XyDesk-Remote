@@ -45,6 +45,7 @@ import android.Manifest
 import android.content.pm.PackageManager
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.core.content.ContextCompat
+import androidx.core.view.ViewCompat
 import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.WindowInsetsControllerCompat
@@ -341,6 +342,7 @@ class XyDeskSessionActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        installSystemBarsWatch()
         registerExternalInputMonitor()
         volumeControlStream = AudioManager.STREAM_MUSIC
         runCatching {
@@ -487,14 +489,17 @@ class XyDeskSessionActivity : ComponentActivity() {
     override fun onResume() {
         super.onResume()
         applyWindowSecurityFlags()
-        if (sessionImeVisible) scheduleSystemBarsRehide()
+        hideSystemBars()
         syncPhoneClipboardToRemote()
     }
 
     override fun onWindowFocusChanged(hasFocus: Boolean) {
         super.onWindowFocusChanged(hasFocus)
         if (hasFocus) {
-            if (sessionImeVisible) scheduleSystemBarsRehide()
+            // Balik fokus (shade ditutup, balik dari recents) = paksa immersive
+            // lagi; beberapa OEM membiarkan bar tetap tampil sesudah shade.
+            hideSystemBars()
+            scheduleForceRehide()
             syncPhoneClipboardToRemote()
         }
     }
@@ -613,6 +618,39 @@ class XyDeskSessionActivity : ComponentActivity() {
                 hideSystemBars()
             }
         }, 180L)
+    }
+
+    /**
+     * Pengawas insets untuk OEM yang membandel: sesudah notification shade
+     * ditutup (ataugesture notch), sebagian perangkat membiarkan status bar
+     * tetap tampil walau behavior sudah transient. Di sini insets dibaca:
+     * kalau bar terlihat padahal activity sedang memegang focus, sembunyikan
+     * paksa sesudah jeda singkat. Saat shade benar-benar terbuka activity
+     * kehilangan focus, jadi kita tidak melawan swipe pengguna.
+     */
+    private var barsRehidePending = false
+
+    private fun installSystemBarsWatch() {
+        val decor = window.decorView
+        ViewCompat.setOnApplyWindowInsetsListener(decor) { v, insets ->
+            val visible = insets.isVisible(WindowInsetsCompat.Type.statusBars()) ||
+                insets.isVisible(WindowInsetsCompat.Type.navigationBars())
+            if (visible && v.hasWindowFocus() && !isFinishing && !isDestroyed) {
+                scheduleForceRehide()
+            }
+            ViewCompat.onApplyWindowInsets(v, insets)
+        }
+    }
+
+    private fun scheduleForceRehide() {
+        if (barsRehidePending) return
+        barsRehidePending = true
+        window.decorView.postDelayed({
+            barsRehidePending = false
+            if (!isFinishing && !isDestroyed && window.decorView.hasWindowFocus()) {
+                hideSystemBars()
+            }
+        }, 700L)
     }
 
     /** State stick HUD terakhir, dipakai mapper untuk mendeteksi tepi tombol arah. */

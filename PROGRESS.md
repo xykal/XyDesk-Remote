@@ -200,3 +200,7 @@ Start: 2026-09-28
 - **Stik bisa dibaca:** knob joystick HUD kini menampilkan label arah sesuai mode (W/A/S/D atau panah) di tepinya.
 - **Rounded full:** sudut ubin kaca 14→20, overlay 16→24, panel 22→28.
 - **Ditunda (butuh keputusan/log):** host agent 1-exe + stream mandiri; sumber musik online (SoundCloud/yt-dlp — perlu metode yang aman & legal); keluhan install Android 7/16 dan crash transfer file butuh teks error/logcat persis dari tester.
+
+## Ronde 8 — paksa sembunyikan status bar (keluhan tester)
+- Masalah: di beberapa HP, sesudah notification shade ditarik lalu dilepas, status bar (jam/baterai) tetap tampil dan tidak sembunyi lagi.
+- Perbaikan di `XyDeskSessionActivity`: `onResume` & `onWindowFocusChanged(true)` kini selalu memanggil `hideSystemBars()`; tambahan `installSystemBarsWatch()` — listener `WindowInsetsCompat` yang mendeteksi bar terlihat saat activity memegang fokus lalu menjadwalkan sembunyi paksa 700 ms (tidak melawan saat shade benar-benar terbuka karena fokus lepas).
