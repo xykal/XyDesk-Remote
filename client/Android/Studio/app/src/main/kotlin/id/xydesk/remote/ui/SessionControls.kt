@@ -1755,9 +1755,12 @@ private fun ScreenTab(
     var pcOptions by remember(deviceId) { mutableStateOf(RdpOptions.of(context, deviceId)) }
 
     PanelSectionGrid(openKey = openKey, onOpenKey = onOpenKey) {
-    section("telemetri-kontrol-monitor-fisik-pc", advanced = true,
-            if (pcConnectMode) xy("Telemetri & Kontrol Monitor Fisik PC", "Live Telemetry & Physical PC Monitor")
-            else xy("Telemetri & Multi-Monitor / Sesi RDP", "Live Telemetry & Multi-Monitor / RDP Sessions")) {
+    section(
+        "telemetri-kontrol-monitor-fisik-pc",
+        if (pcConnectMode) xy("Telemetri & Kontrol Monitor Fisik PC", "Live Telemetry & Physical PC Monitor")
+        else xy("Telemetri & Multi-Monitor / Sesi RDP", "Live Telemetry & Multi-Monitor / RDP Sessions"),
+        advanced = true,
+    ) {
             XyToggleRow(
                 title = xy("Status telemetri live (Update UI, Latency, Network)", "Live telemetry status (UI updates, latency, network)"),
                 subtitle = xy("UI/s adalah invalidasi tampilan per detik, bukan FPS host. Tampilkan bersama latency, resolusi, codec, relay, dan jaringan.", "UI/s counts display invalidations per second, not host FPS. Show it with latency, resolution, codec, relay, and network."),

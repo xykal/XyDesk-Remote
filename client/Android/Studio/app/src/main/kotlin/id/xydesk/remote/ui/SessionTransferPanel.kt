@@ -120,6 +120,7 @@ internal fun TransferFileSection(deviceId: String, notice: XyNoticeState) {
                 ),
             )
         }
+        Unit
     }
 
     Column(verticalArrangement = Arrangement.spacedBy(7.dp)) {
