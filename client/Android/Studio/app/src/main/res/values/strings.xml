@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">XyDesk Remote</string>
+    <string name="spotify_media_listener_label">Spotify media controls for XyDesk</string>
+</resources>

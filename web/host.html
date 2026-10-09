@@ -1,0 +1,279 @@
+<!doctype html>
+<html lang="id" data-theme="dark">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+  <title>XyDesk Host Setup — Panduan Windows (Eksperimental)</title>
+  <meta name="description" content="Panduan opsional untuk menyiapkan PC Windows bagi XyDesk Remote. Host Agent masih eksperimental; baca risiko RDP dan periksa skrip sebelum dijalankan." />
+  <!-- SEO metadata:start -->
+  <meta name="robots" content="index,follow,max-image-preview:large,max-snippet:-1,max-video-preview:-1" />
+  <meta name="author" content="XyVerse Technology Global" />
+  <meta name="theme-color" content="#14161A" />
+  <link rel="canonical" href="https://rdp.xydesk.my.id/host.html" />
+  <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+  <meta property="og:site_name" content="XyDesk Remote" />
+  <meta property="og:type" content="website" />
+  <meta property="og:locale" content="id_ID" />
+  <meta property="og:url" content="https://rdp.xydesk.my.id/host.html" />
+  <meta property="og:title" content="Panduan XyDesk Host untuk Windows" />
+  <meta property="og:description" content="Host Agent bersifat eksperimental. Pelajari persyaratan, unduh paket resmi, dan periksa skrip sebelum menjalankannya." />
+  <meta property="og:image" content="https://rdp.xydesk.my.id/og-xydesk-remote.png" />
+  <meta property="og:image:type" content="image/png" />
+  <meta property="og:image:width" content="1200" />
+  <meta property="og:image:height" content="630" />
+  <meta property="og:image:alt" content="XyDesk Remote — klien Remote Desktop Android untuk PC Windows" />
+  <meta name="twitter:card" content="summary_large_image" />
+  <meta name="twitter:title" content="Panduan XyDesk Host untuk Windows" />
+  <meta name="twitter:description" content="Host Agent bersifat eksperimental. Pelajari persyaratan, unduh paket resmi, dan periksa skrip sebelum menjalankannya." />
+  <meta name="twitter:image" content="https://rdp.xydesk.my.id/og-xydesk-remote.png" />
+  <!-- SEO metadata:end -->
+
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@500;600;700&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+  <style>
+    :root {
+      --bg: #14161A;
+      --surface: #1A1D23;
+      --surface-alt: #23272E;
+      --line: #2E333B;
+      --line-strong: #3C424A;
+      --text: #E4E7EB;
+      --text-dim: #9BA2AC;
+      --text-faint: #6F7681;
+      --font-sans: "Plus Jakarta Sans", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: var(--font-sans);
+      line-height: 1.62;
+      min-height: 100vh;
+      min-height: 100dvh;
+      display: flex;
+      flex-direction: column;
+      overflow-x: hidden;
+      -webkit-font-smoothing: antialiased;
+    }
+    a { color: inherit; text-decoration: none; }
+    button { font-family: inherit; }
+    .mono { font-family: var(--font-mono); font-feature-settings: "tnum" on, "zero" on; }
+    .container {
+      width: 100%;
+      max-width: 920px;
+      margin: 0 auto;
+      padding-left: max(clamp(14px, 4vw, 24px), env(safe-area-inset-left));
+      padding-right: max(clamp(14px, 4vw, 24px), env(safe-area-inset-right));
+    }
+    .topbar { border-bottom: 1px solid var(--line); background: var(--bg); position: sticky; top: 0; z-index: 60; }
+    .topbar-inner { min-height: 58px; padding: 8px 0; display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+    .nav-links { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+    .hamburger-btn {
+      display: none;
+      align-items: center;
+      justify-content: center;
+      width: 38px;
+      height: 38px;
+      border-radius: 10px;
+      border: 1px solid var(--line-strong);
+      background: var(--surface);
+      color: var(--text);
+      cursor: pointer;
+    }
+    .hamburger-btn svg { width: 19px; height: 19px; }
+    .hamburger-btn .icon-close { display: none; }
+    .hamburger-btn[aria-expanded="true"] .icon-menu { display: none; }
+    .hamburger-btn[aria-expanded="true"] .icon-close { display: block; }
+    .mobile-drawer {
+      display: none;
+      border-top: 1px solid var(--line);
+      background: var(--surface);
+      padding: 12px 0 14px;
+    }
+    .mobile-drawer.open { display: block; }
+    .drawer-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+    .drawer-link {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      min-height: 40px;
+      padding: 8px 12px;
+      border-radius: 10px;
+      border: 1px solid var(--line);
+      background: var(--bg);
+      font-size: 12.8px;
+      font-weight: 600;
+    }
+    .pill {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      padding: 8px 15px;
+      border-radius: 999px;
+      border: 1px solid var(--line-strong);
+      background: var(--surface-alt);
+      color: var(--text);
+      font-size: clamp(12px, 1.5vw, 13px);
+      font-weight: 600;
+      cursor: pointer;
+    }
+    .pill.primary { background: var(--text); color: var(--bg); border-color: var(--text); }
+    main { padding: clamp(24px, 5vw, 46px) 0; flex: 1; }
+    .meta { font-size: clamp(10.5px, 1.4vw, 11.5px); font-weight: 600; color: var(--text-faint); text-transform: uppercase; letter-spacing: 0.06em; margin-bottom: 8px; }
+    h1 { font-size: clamp(21px, 4vw, 30px); font-weight: 700; letter-spacing: -0.025em; line-height: 1.2; margin-bottom: 12px; }
+    .lead { font-size: clamp(13.5px, 1.7vw, 15px); color: var(--text-dim); margin-bottom: 24px; line-height: 1.65; }
+    .card {
+      background: var(--surface);
+      border: 1px solid var(--line);
+      border-radius: 14px;
+      padding: clamp(15px, 3vw, 22px);
+      margin-bottom: 16px;
+    }
+    .card h2 { font-size: clamp(14.8px, 2vw, 16.5px); font-weight: 700; letter-spacing: -0.015em; margin-bottom: 8px; }
+    .card p, .card li { font-size: clamp(12.8px, 1.5vw, 14px); color: var(--text-dim); line-height: 1.6; overflow-wrap: anywhere; }
+    .card ul { padding-left: 18px; margin-top: 8px; display: flex; flex-direction: column; gap: 7px; }
+    .code-box {
+      background: var(--bg);
+      border: 1px solid var(--line);
+      border-radius: 9px;
+      padding: 12px 14px;
+      font-size: clamp(11.8px, 1.5vw, 13px);
+      margin: 12px 0;
+      overflow-x: auto;
+      white-space: nowrap;
+    }
+    footer { border-top: 1px solid var(--line); padding: 24px 0; font-size: 12px; color: var(--text-faint); }
+    .footer-inner { display: flex; justify-content: space-between; flex-wrap: wrap; gap: 12px; }
+    @media (max-width: 720px) {
+      .nav-links { display: none; }
+      .hamburger-btn { display: inline-flex; }
+    }
+    @media (max-width: 540px) {
+      .pill.primary { width: 100%; }
+      .drawer-grid { grid-template-columns: 1fr; }
+      .footer-inner { flex-direction: column; align-items: flex-start; }
+    }
+    .safety-callout {
+      margin: 16px 0 18px;
+      padding: 14px 16px;
+      border: 1px solid var(--line-strong);
+      border-left: 3px solid #D3D7DC;
+      border-radius: 12px;
+      background: var(--surface-alt);
+      color: var(--text-dim);
+      font-size: 13px;
+      line-height: 1.65;
+    }
+    .safety-callout strong { color: var(--text); }
+  </style>
+</head>
+<body>
+  <header class="topbar">
+    <div class="container topbar-inner">
+      <a href="index.html" style="font-weight: 700; font-size: 16px; letter-spacing: -0.02em;">XyDesk Remote</a>
+      <nav class="nav-links" aria-label="Navigasi">
+        <a href="index.html#about-diff" class="pill">Perbedaan XyDesk</a>
+        <a href="index.html#changelog" class="pill">Changelog</a>
+        <a href="status.html" class="pill">Status Sistem</a>
+        <a href="index.html" class="pill">Beranda</a>
+      </nav>
+      <button type="button" class="hamburger-btn" id="hamburger-btn" aria-label="Buka Menu" aria-expanded="false">
+        <svg class="icon-menu" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round">
+          <line x1="4" y1="7" x2="20" y2="7" /><line x1="4" y1="12" x2="20" y2="12" /><line x1="4" y1="17" x2="20" y2="17" />
+        </svg>
+        <svg class="icon-close" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round">
+          <line x1="6" y1="6" x2="18" y2="18" /><line x1="18" y1="6" x2="6" y2="18" />
+        </svg>
+      </button>
+    </div>
+    <div class="mobile-drawer" id="mobile-drawer">
+      <div class="container drawer-grid">
+        <a href="index.html" class="drawer-link"><span>Beranda Utama</span><span>→</span></a>
+        <a href="index.html#about-diff" class="drawer-link"><span>Tentang &amp; Perbedaan</span><span>→</span></a>
+        <a href="index.html#changelog" class="drawer-link"><span>Changelog v0.5.29</span><span>→</span></a>
+        <a href="status.html" class="drawer-link"><span>Status Sistem</span><span>→</span></a>
+        <a href="privacy.html" class="drawer-link"><span>Kebijakan Privasi</span><span>→</span></a>
+        <a href="licenses.html" class="drawer-link"><span>Lisensi Open Source</span><span>→</span></a>
+      </div>
+    </div>
+  </header>
+  <script>
+    (function(){
+      var b = document.getElementById("hamburger-btn"), d = document.getElementById("mobile-drawer");
+      if (b && d) {
+        b.addEventListener("click", function(){
+          var open = b.getAttribute("aria-expanded") === "true";
+          b.setAttribute("aria-expanded", open ? "false" : "true");
+          d.classList.toggle("open", !open);
+        });
+      }
+    })();
+  </script>
+
+  <main>
+    <div class="container">
+      <div class="meta mono">Windows Host Helper · Experimental · Opsional</div>
+      <h1>XyDesk Host Agent untuk Windows</h1>
+      <p class="lead">
+        Host Agent Windows adalah <strong>opsi eksperimental</strong> untuk mode Koneksi PC. Untuk koneksi RDP standar, aplikasi Android tidak memerlukan Host Agent; gunakan alamat, port, dan akun Windows melalui mode RDP.
+      </p>
+      <div class="safety-callout" role="note">
+        <strong>Perhatian sebelum instalasi:</strong> skrip setup mengubah pengaturan Remote Desktop dan Windows Firewall, serta meminta hak Administrator. Gunakan hanya pada PC yang kamu miliki atau kelola. Jangan membuka port RDP 3389 atau QUIC 4433 ke internet publik; gunakan VPN/Tailscale atau pembatasan alamat tepercaya, lalu tinjau aturan firewall sebelum melanjutkan.
+      </div>
+
+      <div class="card">
+        <h2>Paket Windows x64 — Host Agent Eksperimental</h2>
+        <p>
+          Arsip rilis publik berisi <code>XyDeskRemoteHost.exe</code>, <code>xydesk_quic.dll</code>, dan <code>xydesk_host_core.dll</code>. Ini adalah komponen opsional; paket Windows ini bukan syarat untuk memakai koneksi RDP biasa. Lihat <a href="https://github.com/xykal/XyDesk-Remote/releases/tag/v1.0.2" target="_blank" rel="noopener noreferrer" style="text-decoration:underline;text-underline-offset:3px;">catatan rilis resmi</a> dan <a href="/SHA256SUMS.txt" style="text-decoration:underline;text-underline-offset:3px;">checksum SHA-256</a> sebelum memasang.
+        </p>
+        <div style="margin-top: 14px; display: flex; gap: 10px; flex-wrap: wrap;">
+          <a href="/XyDesk-Remote-Host-Agent-win64.zip" download="XyDesk-Remote-Host-Agent-win64.zip" class="pill primary">
+            Unduh XyDesk-Remote-Host-Agent-win64.zip (C++17 Native + .dll)
+          </a>
+          <a href="/XyDeskHost-Setup.bat" download="XyDeskHost-Setup.bat" class="pill">
+            Unduh XyDeskHost-Setup.bat Saja
+          </a>
+        </div>
+      </div>
+
+      <div class="card">
+        <h2>Unduh dan tinjau skrip terlebih dahulu</h2>
+        <p>Jangan jalankan skrip dari URL dengan <code>| iex</code>. Simpan file dan baca isinya terlebih dahulu. <a href="https://github.com/xykal/XyDesk-Remote/blob/main/web/host.ps1" target="_blank" rel="noopener noreferrer" style="text-decoration:underline;text-underline-offset:3px;">Bandingkan sumber PowerShell di repositori GitHub</a>. File <code>SHA256SUMS.txt</code> rilis mencakup arsip/biner host, bukan skrip ini; hash yang dicetak di bawah hanya catatan lokal, bukan bukti autentisitas.</p>
+        <div class="code-box mono" id="ps-cmd">$script = "$env:TEMP\xydesk-host.ps1"; Invoke-WebRequest -UseBasicParsing "https://rdp.xydesk.my.id/host.ps1" -OutFile $script; Get-FileHash $script -Algorithm SHA256; notepad $script</div>
+        <div style="margin-top:12px;display:flex;gap:10px;flex-wrap:wrap;align-items:center;">
+          <button type="button" class="pill" id="copy-btn">Salin perintah unduh</button>
+          <a class="pill" href="/host.ps1" download="xydesk-host.ps1">Unduh skrip tanpa menjalankannya</a>
+        </div>
+      </div>
+
+      <div class="card">
+        <h2>Roadmap — belum termasuk dalam rilis publik</h2>
+        <p>Daftar berikut adalah sasaran pengembangan, bukan jaminan fitur yang tersedia di APK atau Host Agent publik saat ini. Validasi kompatibilitas, keamanan, dan performa masih diperlukan sebelum dianggap siap produksi.</p>
+        <ul>
+          <li><strong>Validasi pemakaian GPU:</strong> Pastikan host Windows benar-benar memilih encoder hardware yang didukung, ukur kualitas/performa per vendor, dan bedakan pengaturan kebijakan RDP dari encoding yang telah terbukti berjalan.</li>
+          <li><strong>Aliran layar melalui QUIC:</strong> Arsip publik menyertakan komponen Host Agent/QUIC, tetapi keberadaan binary tidak membuktikan pipeline tangkap-layar-ke-video end-to-end, performa tertentu, atau ketiadaan relay.</li>
+          <li><strong>Input mouse relatif untuk game:</strong> Uji integrasi `RawInput`/`SendInput` dan perilaku kursor pada host nyata sebelum memasarkan mode ini untuk game FPS.</li>
+          <li><strong>Rencana keamanan:</strong> threat model, peninjauan independen, dan evaluasi perlindungan end-to-end masih diperlukan. Rilis publik saat ini tidak diklaim memiliki E2EE untuk mode Koneksi PC; NLA/TLS pada RDP standar bukan hal yang sama dengan E2EE.</li>
+        </ul>
+      </div>
+    </div>
+  </main>
+
+  <footer>
+    <div class="container footer-inner">
+      <div><strong>XyDesk Remote</strong> · Powered by <span>XyVerse Technology Global</span></div>
+      <div><a href="index.html">Beranda</a> · <a href="status.html">Status Sistem</a></div>
+    </div>
+  </footer>
+
+  <script>
+    document.getElementById("copy-btn").addEventListener("click", function () {
+      var cmd = document.getElementById("ps-cmd").textContent;
+      if (navigator.clipboard) navigator.clipboard.writeText(cmd);
+      this.textContent = "Tersalin ke Clipboard";
+    });
+  </script>
+</body>
+</html>

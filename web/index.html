@@ -1,0 +1,2037 @@
+<!doctype html>
+<html lang="id" data-theme="dark">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+  <title>XyDesk Remote — Remote Desktop RDP Android untuk Windows</title>
+  <meta name="description" content="Klien RDP Android untuk mengakses PC Windows: kontrol sentuh, keyboard, clipboard, audio, dan multi-monitor. Unduh APK resmi sesuai ABI perangkat." />
+  <!-- SEO metadata:start -->
+  <meta name="robots" content="index,follow,max-image-preview:large,max-snippet:-1,max-video-preview:-1" />
+  <meta name="author" content="XyVerse Technology Global" />
+  <meta name="theme-color" content="#08080A" />
+  <link rel="canonical" href="https://rdp.xydesk.my.id/" />
+  <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+  <meta property="og:site_name" content="XyDesk Remote" />
+  <meta property="og:type" content="website" />
+  <meta property="og:locale" content="id_ID" />
+  <meta property="og:url" content="https://rdp.xydesk.my.id/" />
+  <meta property="og:title" content="XyDesk Remote — Akses PC Windows dari Android" />
+  <meta property="og:description" content="Hubungkan Android ke PC Windows lewat RDP. Unduh APK resmi XyDesk Remote untuk perangkatmu." />
+  <meta property="og:image" content="https://rdp.xydesk.my.id/og-xydesk-remote.png" />
+  <meta property="og:image:type" content="image/png" />
+  <meta property="og:image:width" content="1024" />
+  <meta property="og:image:height" content="512" />
+  <meta property="og:image:alt" content="XyDesk Remote — klien Remote Desktop Android untuk PC Windows" />
+  <meta name="twitter:card" content="summary_large_image" />
+  <meta name="twitter:title" content="XyDesk Remote — Akses PC Windows dari Android" />
+  <meta name="twitter:description" content="Hubungkan Android ke PC Windows lewat RDP. Unduh APK resmi XyDesk Remote untuk perangkatmu." />
+  <meta name="twitter:image" content="https://rdp.xydesk.my.id/og-xydesk-remote.png" />
+  <!-- SEO metadata:end -->
+  <script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@graph": [
+    {
+      "@type": "Organization",
+      "@id": "https://rdp.xydesk.my.id/#organization",
+      "name": "XyVerse Technology Global",
+      "url": "https://rdp.xydesk.my.id/",
+      "sameAs": [
+        "https://github.com/xykal/XyDesk-Remote"
+      ]
+    },
+    {
+      "@type": "WebSite",
+      "@id": "https://rdp.xydesk.my.id/#website",
+      "url": "https://rdp.xydesk.my.id/",
+      "name": "XyDesk Remote",
+      "inLanguage": "id-ID",
+      "publisher": {
+        "@id": "https://rdp.xydesk.my.id/#organization"
+      }
+    },
+    {
+      "@type": "SoftwareApplication",
+      "@id": "https://rdp.xydesk.my.id/#software",
+      "name": "XyDesk Remote",
+      "applicationCategory": "UtilitiesApplication",
+      "operatingSystem": "Android 7.0 and later",
+      "softwareVersion": "1.1.2",
+      "url": "https://rdp.xydesk.my.id/",
+      "downloadUrl": "https://github.com/xykal/XyDesk-Remote/releases/tag/v1.1.2",
+      "description": "Klien RDP Android untuk mengakses PC Windows, dengan kontrol sentuh, keyboard, clipboard, audio, dan pilihan monitor.",
+      "author": {
+        "@id": "https://rdp.xydesk.my.id/#organization"
+      },
+      "featureList": [
+        "Remote Desktop Protocol (RDP)",
+        "Kontrol sentuh dan keyboard",
+        "Clipboard dua arah",
+        "Pengalihan audio RDP",
+        "Pilihan multi-monitor"
+      ]
+    }
+  ]
+}
+  </script>
+
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@500;600;700&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+  <style>
+    :root, [data-theme="dark"] {
+      --bg: #08080A;
+      --surface: #0E0E12;
+      --surface-alt: #15151A;
+      --line: #232329;
+      --line-strong: #34343C;
+      --text: #F2F2F4;
+      --text-dim: #A7A7AF;
+      --text-faint: #7B7B84;
+      --accent: #F2F2F4;
+      --accent-ink: #08080A;
+      --scrim: rgba(8, 8, 10, 0.78);
+      --font-sans: "Plus Jakarta Sans", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+    }
+
+    [data-theme="light"] {
+      --bg: #F2F3F5;
+      --surface: #FAFAFB;
+      --surface-alt: #E7EAEE;
+      --line: #D6DAE0;
+      --line-strong: #B6BCC5;
+      --text: #1B1D21;
+      --text-dim: #4B515A;
+      --text-faint: #6E757F;
+      --accent: #23262C;
+      --accent-ink: #F2F3F5;
+      --scrim: rgba(20, 22, 26, 0.55);
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    html {
+      scroll-behavior: smooth;
+      background: var(--bg);
+      color: var(--text);
+      font-family: var(--font-sans);
+      font-size: 16px;
+      line-height: 1.6;
+      -webkit-font-smoothing: antialiased;
+      -moz-osx-font-smoothing: grayscale;
+      text-rendering: optimizeLegibility;
+    }
+
+    body {
+      background: var(--bg);
+      color: var(--text);
+      min-height: 100vh;
+      min-height: 100dvh;
+      display: flex;
+      flex-direction: column;
+      overflow-x: hidden;
+    }
+
+    a {
+      color: inherit;
+      text-decoration: none;
+    }
+
+    button {
+      font-family: inherit;
+    }
+
+    .mono {
+      font-family: var(--font-mono);
+      font-feature-settings: "tnum" on, "zero" on;
+    }
+
+    .container {
+      width: 100%;
+      max-width: 1120px;
+      margin: 0 auto;
+      padding-left: max(clamp(14px, 4vw, 28px), env(safe-area-inset-left));
+      padding-right: max(clamp(14px, 4vw, 28px), env(safe-area-inset-right));
+    }
+
+    /* Topbar & Mobile Hamburger Drawer */
+    .topbar {
+      position: sticky;
+      top: 0;
+      z-index: 60;
+      background: var(--bg);
+      border-bottom: 1px solid var(--line);
+    }
+
+    .topbar-inner {
+      min-height: 60px;
+      padding: 8px 0;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+    }
+
+    .brand {
+      display: inline-flex;
+      align-items: center;
+      gap: 9px;
+      font-weight: 700;
+      font-size: clamp(14.5px, 2vw, 17px);
+      letter-spacing: -0.025em;
+      min-width: 0;
+      flex-shrink: 1;
+    }
+
+    .brand svg {
+      width: 25px;
+      height: 25px;
+      flex-shrink: 0;
+    }
+
+    .brand-tag {
+      font-size: 10.5px;
+      font-weight: 600;
+      color: var(--text-faint);
+      padding: 2px 8px;
+      border: 1px solid var(--line);
+      border-radius: 999px;
+      white-space: nowrap;
+      flex-shrink: 0;
+    }
+
+    .nav-row {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      flex-wrap: nowrap;
+    }
+
+    .mobile-actions {
+      display: none;
+      align-items: center;
+      gap: 6px;
+      flex-shrink: 0;
+    }
+
+    .hamburger-btn {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 38px;
+      height: 38px;
+      border-radius: 10px;
+      border: 1px solid var(--line-strong);
+      background: var(--surface);
+      color: var(--text);
+      cursor: pointer;
+      flex-shrink: 0;
+      transition: background-color 0.14s ease, border-color 0.14s ease;
+    }
+
+    .hamburger-btn:hover {
+      background: var(--surface-alt);
+    }
+
+    .hamburger-btn svg {
+      width: 19px;
+      height: 19px;
+    }
+
+    .hamburger-btn .icon-close {
+      display: none;
+    }
+
+    .hamburger-btn[aria-expanded="true"] .icon-menu {
+      display: none;
+    }
+
+    .hamburger-btn[aria-expanded="true"] .icon-close {
+      display: block;
+    }
+
+    .drawer-scrim {
+      position: fixed;
+      inset: 0;
+      z-index: 50;
+      background: var(--scrim);
+      backdrop-filter: blur(6px);
+      -webkit-backdrop-filter: blur(6px);
+      display: none;
+    }
+
+    .drawer-scrim.open {
+      display: block;
+    }
+
+    .mobile-drawer {
+      display: none;
+      border-top: 1px solid var(--line);
+      background: var(--surface);
+      padding: 14px 0 16px;
+      max-height: calc(100dvh - 60px);
+      overflow-y: auto;
+    }
+
+    .mobile-drawer.open {
+      display: block;
+    }
+
+    .drawer-grid {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 8px;
+      margin-bottom: 10px;
+    }
+
+    .drawer-link {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+      min-height: 42px;
+      padding: 9px 12px;
+      border-radius: 10px;
+      border: 1px solid var(--line);
+      background: var(--bg);
+      color: var(--text);
+      font-size: 12.8px;
+      font-weight: 600;
+      line-height: 1.3;
+      min-width: 0;
+      overflow-wrap: anywhere;
+    }
+
+    .drawer-link:hover,
+    .drawer-link:active {
+      background: var(--surface-alt);
+      border-color: var(--line-strong);
+    }
+
+    .drawer-utils {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 8px;
+      padding-top: 10px;
+      border-top: 1px solid var(--line);
+    }
+
+    .pill-btn {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 6px;
+      min-height: 36px;
+      padding: 6px 13px;
+      border-radius: 999px;
+      border: 1px solid var(--line);
+      background: transparent;
+      color: var(--text);
+      font-size: clamp(12px, 1.4vw, 13px);
+      font-weight: 600;
+      letter-spacing: -0.01em;
+      white-space: nowrap;
+      cursor: pointer;
+      user-select: none;
+      flex-shrink: 0;
+      transition: background-color 0.14s ease, border-color 0.14s ease, opacity 0.14s ease;
+    }
+
+    .pill-btn:hover {
+      background: var(--surface-alt);
+      border-color: var(--line-strong);
+    }
+
+    .pill-btn.primary {
+      background: var(--accent);
+      color: var(--accent-ink);
+      border-color: var(--accent);
+    }
+
+    .pill-btn.primary:hover {
+      opacity: 0.9;
+      background: var(--accent);
+    }
+
+    .pill-btn.lg {
+      min-height: 44px;
+      padding: 10px 18px;
+      font-size: clamp(13px, 1.6vw, 14px);
+    }
+
+    /* Editorial Intro */
+    .intro {
+      position: relative;
+      padding: clamp(32px, 6vw, 58px) 0 clamp(30px, 5vw, 46px);
+      border-bottom: 1px solid var(--line);
+      overflow: hidden;
+    }
+
+    .intro::before {
+      content: "";
+      position: absolute;
+      inset: 0;
+      background: url("/hero-xydesk.jpg") center 32% / cover no-repeat;
+      opacity: 0.5;
+      pointer-events: none;
+    }
+
+    .intro::after {
+      content: "";
+      position: absolute;
+      inset: 0;
+      background: linear-gradient(180deg, rgba(8, 8, 10, 0.2) 0%, rgba(8, 8, 10, 0.52) 55%, var(--bg) 100%);
+      pointer-events: none;
+    }
+
+    [data-theme="light"] .intro::before { opacity: 0.16; }
+
+    .intro .container {
+      position: relative;
+      z-index: 1;
+    }
+
+    .intro-meta {
+      font-size: clamp(11px, 1.3vw, 12px);
+      font-weight: 600;
+      color: var(--text-faint);
+      letter-spacing: 0.05em;
+      text-transform: uppercase;
+      margin-bottom: 12px;
+    }
+
+    .intro h1 {
+      font-size: clamp(24px, 4.2vw, 42px);
+      font-weight: 700;
+      letter-spacing: -0.03em;
+      line-height: 1.18;
+      max-width: 820px;
+      margin-bottom: 14px;
+    }
+
+    .intro p {
+      font-size: clamp(14px, 1.8vw, 16px);
+      line-height: 1.65;
+      color: var(--text-dim);
+      max-width: 740px;
+      margin-bottom: 24px;
+    }
+
+    .intro-actions {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      flex-wrap: wrap;
+      margin-bottom: clamp(18px, 3vw, 26px);
+    }
+
+    /* Live stats strip right under the CTA */
+    .hero-stats {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 10px;
+      margin-bottom: clamp(22px, 3.5vw, 32px);
+    }
+
+    .hero-stat {
+      min-width: 0;
+      padding: 14px 16px;
+      border: 1px solid var(--line-strong);
+      border-radius: 14px;
+      background: color-mix(in srgb, var(--surface) 68%, transparent);
+      backdrop-filter: blur(14px);
+      -webkit-backdrop-filter: blur(14px);
+    }
+
+    .hero-stat-label {
+      display: block;
+      font-size: 10.5px;
+      font-weight: 700;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      color: var(--text-dim);
+    }
+
+    .hero-stat-value {
+      display: block;
+      margin: 4px 0 2px;
+      font-size: clamp(22px, 3.4vw, 30px);
+      font-weight: 800;
+      letter-spacing: -0.04em;
+      color: var(--text);
+    }
+
+    .hero-stat-sub {
+      display: block;
+      font-size: 11px;
+      color: var(--text-faint);
+    }
+
+    @media (max-width: 640px) {
+      .hero-stats { grid-template-columns: 1fr; gap: 8px; }
+    }
+
+    /* Specification Ledger */
+    .ledger {
+      display: grid;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      border: 1px solid var(--line);
+      border-radius: 14px;
+      background: var(--surface);
+      overflow: hidden;
+    }
+
+    .ledger-cell {
+      padding: clamp(14px, 2vw, 18px);
+      border-right: 1px solid var(--line);
+      min-width: 0;
+    }
+
+    .ledger-cell:last-child {
+      border-right: none;
+    }
+
+    .ledger-k {
+      font-size: 11px;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      color: var(--text-faint);
+      margin-bottom: 5px;
+    }
+
+    .ledger-v {
+      font-size: clamp(13.5px, 1.6vw, 15px);
+      font-weight: 700;
+      letter-spacing: -0.02em;
+      word-break: break-word;
+    }
+
+    .ledger-sub {
+      font-size: 12px;
+      color: var(--text-dim);
+      margin-top: 3px;
+      line-height: 1.45;
+      word-break: break-word;
+    }
+
+    /* Sections */
+    .section {
+      padding: clamp(34px, 5vw, 52px) 0;
+      border-bottom: 1px solid var(--line);
+    }
+
+    .section-head {
+      margin-bottom: clamp(18px, 3vw, 26px);
+    }
+
+    .section-kicker {
+      font-size: 11px;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      color: var(--text-faint);
+      margin-bottom: 6px;
+    }
+
+    .section-title {
+      font-size: clamp(19px, 2.8vw, 24px);
+      font-weight: 700;
+      letter-spacing: -0.025em;
+      line-height: 1.25;
+    }
+
+    .section-lead {
+      font-size: clamp(13.5px, 1.55vw, 15px);
+      color: var(--text-dim);
+      max-width: 780px;
+      margin-top: 8px;
+      line-height: 1.62;
+    }
+
+    /* Comparison Table (XyDesk Biasa vs XyDesk Remote) */
+    .diff-table {
+      margin-top: 18px;
+      border: 1px solid var(--line);
+      border-radius: 14px;
+      background: var(--surface);
+      overflow: hidden;
+    }
+
+    .diff-row {
+      display: grid;
+      grid-template-columns: 200px minmax(0, 1fr) minmax(0, 1.15fr);
+      gap: 16px;
+      padding: clamp(13px, 2vw, 16px) clamp(15px, 2.2vw, 20px);
+      border-bottom: 1px solid var(--line);
+      align-items: baseline;
+    }
+
+    .diff-row.head {
+      background: var(--surface-alt);
+      font-size: 11.5px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      color: var(--text-faint);
+    }
+
+    .diff-row:last-child {
+      border-bottom: none;
+    }
+
+    .diff-aspect {
+      font-size: clamp(13px, 1.45vw, 14px);
+      font-weight: 700;
+      color: var(--text);
+    }
+
+    .diff-std {
+      font-size: clamp(12.5px, 1.4vw, 13.5px);
+      color: var(--text-faint);
+      line-height: 1.55;
+    }
+
+    .diff-rem {
+      font-size: clamp(12.8px, 1.45vw, 13.8px);
+      color: var(--text);
+      line-height: 1.55;
+      font-weight: 500;
+    }
+
+    /* Structured Capability Table */
+    .cap-table {
+      border: 1px solid var(--line);
+      border-radius: 14px;
+      background: var(--surface);
+      overflow: hidden;
+    }
+
+    .cap-row {
+      display: grid;
+      grid-template-columns: 240px minmax(0, 1fr) 170px;
+      gap: 16px;
+      padding: clamp(14px, 2vw, 17px) clamp(16px, 2.2vw, 20px);
+      border-bottom: 1px solid var(--line);
+      align-items: baseline;
+    }
+
+    .cap-row:last-child {
+      border-bottom: none;
+    }
+
+    .cap-name {
+      font-size: clamp(13.5px, 1.5vw, 14.5px);
+      font-weight: 700;
+      letter-spacing: -0.01em;
+    }
+
+    .cap-desc {
+      font-size: clamp(13px, 1.45vw, 14px);
+      color: var(--text-dim);
+      line-height: 1.58;
+    }
+
+    .cap-spec {
+      font-size: 11.5px;
+      font-weight: 600;
+      color: var(--text-faint);
+      text-align: right;
+      white-space: nowrap;
+    }
+
+    /* Architecture Split */
+    .arch-split {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 16px;
+    }
+
+    .arch-box {
+      background: var(--surface);
+      border: 1px solid var(--line);
+      border-radius: 14px;
+      padding: clamp(18px, 2.5vw, 22px);
+    }
+
+    .arch-box h3 {
+      font-size: clamp(14.5px, 1.7vw, 16px);
+      font-weight: 700;
+      letter-spacing: -0.015em;
+      margin-bottom: 12px;
+    }
+
+    .arch-list {
+      list-style: none;
+      display: flex;
+      flex-direction: column;
+      gap: 9px;
+    }
+
+    .arch-list li {
+      font-size: clamp(12.8px, 1.4vw, 13.8px);
+      line-height: 1.58;
+      color: var(--text-dim);
+      padding-left: 16px;
+      position: relative;
+    }
+
+    .arch-list li::before {
+      content: "—";
+      position: absolute;
+      left: 0;
+      color: var(--text-faint);
+    }
+
+    /* Changelog Section */
+    .changelog-list {
+      display: flex;
+      flex-direction: column;
+      gap: 14px;
+    }
+
+    .cl-card {
+      background: var(--surface);
+      border: 1px solid var(--line);
+      border-radius: 14px;
+      padding: clamp(16px, 2.4vw, 22px);
+    }
+
+    .cl-head {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+      flex-wrap: wrap;
+      margin-bottom: 10px;
+      padding-bottom: 10px;
+      border-bottom: 1px solid var(--line);
+    }
+
+    .cl-ver {
+      font-size: clamp(14.5px, 1.7vw, 16px);
+      font-weight: 700;
+      letter-spacing: -0.015em;
+    }
+
+    .cl-badge {
+      font-size: 11px;
+      font-weight: 600;
+      padding: 3px 9px;
+      border-radius: 999px;
+      border: 1px solid var(--line-strong);
+      background: var(--surface-alt);
+      color: var(--text-dim);
+    }
+
+    /* Direct APK downloads from the public GitHub release */
+    .download-shell {
+      position: relative;
+      border: 1px solid var(--line);
+      border-radius: 14px;
+      background: var(--surface);
+      padding: clamp(16px, 3vw, 24px);
+      overflow: hidden;
+    }
+
+    .download-head {
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: 12px;
+      flex-wrap: wrap;
+    }
+
+    .download-desc {
+      font-size: clamp(13px, 1.45vw, 14px);
+      color: var(--text-dim);
+      max-width: 680px;
+      line-height: 1.58;
+    }
+
+    .release-pill {
+      align-self: flex-start;
+      font-size: 11px;
+      font-weight: 600;
+      letter-spacing: 0.05em;
+      text-transform: uppercase;
+      padding: 4px 10px;
+      border-radius: 999px;
+      border: 1px solid var(--line-strong);
+      background: var(--surface-alt);
+      color: var(--text);
+      white-space: nowrap;
+    }
+
+    .download-facts {
+      display: grid;
+      gap: 7px;
+      margin-top: 18px;
+      padding: 14px 16px;
+      border: 1px solid var(--line);
+      border-radius: 12px;
+      background: color-mix(in srgb, var(--surface-alt) 55%, transparent);
+      color: var(--text-dim);
+      font-size: 13px;
+      line-height: 1.55;
+    }
+    .download-facts strong { color: var(--text); }
+
+    .release-stats {
+      display: grid;
+      grid-template-columns: minmax(0, 1.15fr) minmax(220px, 0.85fr);
+      gap: 12px;
+      margin-top: 14px;
+    }
+
+    .release-stat-card {
+      min-width: 0;
+      padding: 16px 18px;
+      border: 1px solid var(--line);
+      border-radius: 12px;
+      background: var(--surface-alt);
+    }
+
+    .release-stat-label {
+      color: var(--text-dim);
+      font-size: 11px;
+      font-weight: 700;
+      letter-spacing: 0.07em;
+      text-transform: uppercase;
+    }
+
+    .release-stat-value {
+      display: block;
+      margin: 3px 0 5px;
+      color: var(--text);
+      font-size: clamp(28px, 5vw, 38px);
+      font-weight: 800;
+      letter-spacing: -0.05em;
+      line-height: 1.15;
+    }
+
+    .release-stat-note {
+      color: var(--text-dim);
+      font-size: 12px;
+      line-height: 1.5;
+    }
+
+    .release-stat-breakdown {
+      display: grid;
+      gap: 8px;
+      margin-top: 12px;
+      padding-top: 10px;
+      border-top: 1px solid var(--line);
+    }
+
+    .release-stat-detail {
+      display: flex;
+      align-items: baseline;
+      justify-content: space-between;
+      gap: 12px;
+      color: var(--text-dim);
+      font-size: 12px;
+    }
+
+    .release-stat-detail strong {
+      color: var(--text);
+      font-family: var(--font-mono);
+      font-size: 14px;
+    }
+
+    #download-stats-updated,
+    #active-session-stats-updated {
+      color: var(--text-faint);
+      font-size: 11px;
+      line-height: 1.4;
+      margin-top: 2px;
+    }
+
+    .release-actions { display: grid; gap: 8px; }
+    .checksum-link { font-size: 12px; color: var(--text-dim); text-align: center; text-decoration: underline; text-underline-offset: 3px; }
+    .checksum-link:hover { color: var(--text); }
+
+    .pkg-table {
+      margin-top: 16px;
+      border: 1px solid var(--line);
+      border-radius: 12px;
+      overflow: hidden;
+      background: var(--bg);
+    }
+
+    .pkg-row {
+      display: grid;
+      grid-template-columns: 165px minmax(0, 1fr) 260px;
+      gap: 16px;
+      padding: clamp(15px, 2.2vw, 18px) clamp(16px, 2.4vw, 20px);
+      border-bottom: 1px solid var(--line);
+      align-items: center;
+    }
+
+    .pkg-row:last-child {
+      border-bottom: none;
+    }
+
+    .pkg-abi {
+      font-weight: 700;
+      font-size: clamp(14px, 1.6vw, 15px);
+      letter-spacing: -0.01em;
+    }
+
+    .pkg-sub {
+      font-size: 11.5px;
+      color: var(--text-faint);
+      margin-top: 2px;
+    }
+
+    .pkg-info {
+      font-size: clamp(12.8px, 1.4vw, 13.5px);
+      color: var(--text-dim);
+      line-height: 1.5;
+    }
+
+    .apk-download-btn {
+      width: 100%;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 4px;
+      padding: 11px 14px;
+      border-radius: 10px;
+      border: 1px solid var(--line-strong);
+      background: var(--surface-alt);
+      color: var(--text);
+      text-decoration: none;
+      cursor: pointer;
+      transition: background 0.15s ease, border-color 0.15s ease;
+      text-align: center;
+    }
+
+    .apk-download-btn:hover {
+      background: var(--surface);
+      border-color: var(--text-dim);
+    }
+
+    .apk-download-btn:focus-visible {
+      outline: 2px solid var(--accent);
+      outline-offset: 3px;
+    }
+
+    .dl-btn-top {
+      font-size: 10.5px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      color: var(--text-dim);
+    }
+
+    .dl-btn-meta {
+      font-size: clamp(12.5px, 1.5vw, 13.5px);
+      font-weight: 700;
+      letter-spacing: 0.03em;
+      color: var(--text);
+    }
+
+    /* Footer */
+    footer {
+      margin-top: auto;
+      padding: clamp(22px, 4vw, 30px) 0;
+      font-size: 12px;
+      color: var(--text-faint);
+    }
+
+    .footer-inner {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      flex-wrap: wrap;
+      gap: 12px;
+    }
+
+    .footer-nav {
+      display: flex;
+      gap: 14px;
+      flex-wrap: wrap;
+    }
+
+    .footer-nav a:hover {
+      color: var(--text);
+    }
+
+    /* Responsive Breakpoints Across All Devices, Resolutions & Aspect Ratios */
+    @media (min-width: 1520px) {
+      .container {
+        max-width: 1240px;
+      }
+    }
+
+    @media (max-width: 980px) {
+      .nav-row {
+        display: none;
+      }
+      .mobile-actions {
+        display: inline-flex;
+      }
+    }
+
+    @media (max-width: 860px) {
+      .ledger {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+      }
+      .ledger-cell:nth-child(2) {
+        border-right: none;
+      }
+      .ledger-cell:nth-child(1),
+      .ledger-cell:nth-child(2) {
+        border-bottom: 1px solid var(--line);
+      }
+      .diff-row {
+        grid-template-columns: 1fr;
+        gap: 6px;
+      }
+      .diff-row.head {
+        display: none;
+      }
+      .diff-std::before {
+        content: "XyDesk Biasa: ";
+        font-weight: 700;
+        color: var(--text-dim);
+      }
+      .diff-rem::before {
+        content: "XyDesk Remote: ";
+        font-weight: 700;
+        color: var(--text);
+      }
+      .cap-row {
+        grid-template-columns: 1fr;
+        gap: 5px;
+      }
+      .cap-spec {
+        text-align: left;
+        margin-top: 2px;
+      }
+      .pkg-row {
+        grid-template-columns: 1fr;
+        gap: 10px;
+      }
+      .arch-split {
+        grid-template-columns: 1fr;
+        gap: 12px;
+      }
+    }
+
+    @media (max-width: 640px) {
+      .release-stats {
+        grid-template-columns: 1fr;
+      }
+      .brand-tag {
+        display: none;
+      }
+      .intro-actions {
+        display: grid;
+        grid-template-columns: 1fr;
+        gap: 8px;
+      }
+      .intro-actions .pill-btn {
+        width: 100%;
+      }
+      .footer-inner {
+        flex-direction: column;
+        align-items: flex-start;
+      }
+    }
+
+    @media (max-width: 460px) {
+      .drawer-grid {
+        grid-template-columns: 1fr;
+      }
+      .ledger {
+        grid-template-columns: 1fr;
+      }
+      .ledger-cell {
+        border-right: none !important;
+        border-bottom: 1px solid var(--line);
+      }
+      .ledger-cell:last-child {
+        border-bottom: none;
+      }
+    }
+
+    @media (max-width: 350px) {
+      .mobile-dl-quick {
+        display: none;
+      }
+    }
+
+    /* Landscape Phones & Compact Short Aspect Ratios (19.5:9 / 20:9 Horizontal) */
+    @media (max-height: 540px) and (orientation: landscape) {
+      .topbar-inner {
+        min-height: 48px;
+        padding: 4px 0;
+      }
+      .intro {
+        padding: 20px 0 18px;
+      }
+      .section {
+        padding: 22px 0;
+      }
+      .drawer-grid {
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="drawer-scrim" id="drawer-scrim" aria-hidden="true"></div>
+  <header class="topbar">
+    <div class="container topbar-inner">
+      <a href="#top" class="brand">
+        <span class="brand-left" style="display:inline-flex;align-items:center;gap:9px;min-width:0;">
+          <svg viewBox="0 0 48 48" fill="none" aria-hidden="true">
+            <rect x="6.8" y="13.4" width="34.4" height="20.6" rx="3" stroke="currentColor" stroke-width="2.7" />
+            <line x1="19.5" y1="40.2" x2="28.5" y2="40.2" stroke="currentColor" stroke-width="2.7" stroke-linecap="round" />
+            <line x1="24" y1="34.2" x2="24" y2="40.2" stroke="currentColor" stroke-width="2.7" stroke-linecap="round" />
+            <polygon points="18.6,17.6 18.6,28.4 21.7,25.3 23.9,30.1 26.2,29 24,24.2 28.1,23.8" fill="currentColor" />
+          </svg>
+          <span style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">XyDesk Remote</span>
+        </span>
+        <span class="brand-tag mono">Ver 1.0.2 (53)</span>
+      </a>
+      <nav class="nav-row" aria-label="Navigasi Utama">
+        <a href="#download" class="pill-btn primary" data-i18n="nav.download">Unduh</a>
+        <a href="#about-diff" class="pill-btn" data-i18n="nav.about">Tentang &amp; Perbedaan</a>
+        <a href="#capabilities" class="pill-btn" data-i18n="nav.cap">Fitur Terbaru</a>
+        <a href="#changelog" class="pill-btn" data-i18n="nav.changelog">Changelog</a>
+        <a href="host.html" class="pill-btn" data-i18n="nav.host">Host Agent (Eksperimental)</a>
+        <a href="status.html" class="pill-btn" data-i18n="nav.status">Status Sistem</a>
+        <a href="licenses.html" class="pill-btn" data-i18n="nav.licenses">Lisensi</a>
+        <button type="button" class="pill-btn" id="lang-btn">ID / EN</button>
+        <button type="button" class="pill-btn" id="theme-btn">Gelap</button>
+      </nav>
+      <div class="mobile-actions">
+        <a href="#download" class="pill-btn primary mobile-dl-quick" data-i18n="nav.download">Unduh</a>
+        <button type="button" class="hamburger-btn" id="hamburger-btn" aria-label="Buka Menu Navigasi" aria-expanded="false" aria-controls="mobile-drawer">
+          <svg class="icon-menu" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round">
+            <line x1="4" y1="7" x2="20" y2="7" />
+            <line x1="4" y1="12" x2="20" y2="12" />
+            <line x1="4" y1="17" x2="20" y2="17" />
+          </svg>
+          <svg class="icon-close" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round">
+            <line x1="6" y1="6" x2="18" y2="18" />
+            <line x1="18" y1="6" x2="6" y2="18" />
+          </svg>
+        </button>
+      </div>
+    </div>
+    <div class="mobile-drawer" id="mobile-drawer" aria-label="Menu Mobile">
+      <div class="container">
+        <div class="drawer-grid">
+          <a href="#about-diff" class="drawer-link" data-drawer-close><span data-i18n="nav.about">Tentang &amp; Perbedaan</span><span>→</span></a>
+          <a href="#capabilities" class="drawer-link" data-drawer-close><span data-i18n="nav.cap">Fitur Terbaru</span><span>→</span></a>
+          <a href="#architecture" class="drawer-link" data-drawer-close><span>Arsitektur &amp; Keamanan</span><span>→</span></a>
+          <a href="#changelog" class="drawer-link" data-drawer-close><span data-i18n="nav.changelog">Changelog</span><span>→</span></a>
+          <a href="host.html" class="drawer-link"><span data-i18n="nav.host">Host Agent (Eksperimental)</span><span>→</span></a>
+          <a href="status.html" class="drawer-link"><span data-i18n="nav.status">Status Sistem</span><span>→</span></a>
+          <a href="privacy.html" class="drawer-link"><span data-i18n="foot.privacy">Kebijakan Privasi</span><span>→</span></a>
+          <a href="licenses.html" class="drawer-link"><span data-i18n="nav.licenses">Lisensi</span><span>→</span></a>
+        </div>
+        <div class="drawer-utils">
+          <button type="button" class="pill-btn" id="lang-btn-mobile">Bahasa: ID / EN</button>
+          <button type="button" class="pill-btn" id="theme-btn-mobile">Tema: Gelap</button>
+          <a href="#download" class="pill-btn primary" style="grid-column: 1 / -1;" data-drawer-close data-i18n="intro.cta.dl">
+            Halaman Unduh (v1.1.2)
+          </a>
+        </div>
+      </div>
+    </div>
+  </header>
+
+  <main id="top">
+    <!-- Editorial Intro -->
+    <section class="intro">
+      <div class="container">
+        <div class="intro-meta mono" data-i18n="intro.meta">Klien RDP Android · Untuk PC Windows &amp; server · APK v1.1.2 (64)</div>
+        <h1 data-i18n="intro.title">Remote Desktop (RDP) untuk Mengakses PC Windows dari Android</h1>
+        <p data-i18n="intro.lead">
+          Hubungkan perangkat Android ke PC atau server Windows yang kamu miliki atau kelola. XyDesk Remote adalah klien RDP Android berbasis FreeRDP 3, dengan kontrol sentuh, keyboard, clipboard, audio, dan pilihan monitor. Host Agent atau mode Koneksi PC masih eksperimental; untuk RDP standar, aplikasi ini tidak memerlukan Host Agent.
+        </p>
+        <div class="intro-actions">
+          <a href="#download" class="pill-btn primary lg" data-i18n="intro.cta.dl">
+            Halaman Unduh (v1.1.2)
+          </a>
+          <a href="#changelog" class="pill-btn lg" data-i18n="intro.cta.cl">
+            Lihat Changelog v1.1.2
+          </a>
+          <a href="host.html" class="pill-btn lg" data-i18n="intro.cta.host">
+            Setup XyDesk Host (PC Windows)
+          </a>
+        </div>
+
+        <div class="hero-stats" aria-label="Statistik langsung XyDesk Remote">
+          <div class="hero-stat">
+            <span class="hero-stat-label" data-i18n="hs.dl">Total Unduhan</span>
+            <strong class="hero-stat-value mono" id="hero-download-total" aria-live="polite">&mdash;</strong>
+            <span class="hero-stat-sub" data-i18n="hs.dl.s">APK &middot; rilis publik GitHub</span>
+          </div>
+          <div class="hero-stat">
+            <span class="hero-stat-label" data-i18n="hs.on">User Online</span>
+            <strong class="hero-stat-value mono" id="hero-online-count" aria-live="polite">&mdash;</strong>
+            <span class="hero-stat-sub" data-i18n="hs.on.s">sesi aktif &middot; heartbeat anonim</span>
+          </div>
+          <div class="hero-stat">
+            <span class="hero-stat-label" data-i18n="hs.rel">Rilis Publik</span>
+            <strong class="hero-stat-value mono" id="hero-release-count" aria-live="polite">&mdash;</strong>
+            <span class="hero-stat-sub" data-i18n="hs.rel.s">versi terbit &middot; draft tidak dihitung</span>
+          </div>
+        </div>
+
+        <div class="ledger">
+          <div class="ledger-cell">
+            <div class="ledger-k" data-i18n="led.1.k">Mesin Protokol</div>
+            <div class="ledger-v mono">FreeRDP 3 · NLA / RDP</div>
+            <div class="ledger-sub" data-i18n="led.1.s">RDP · koneksi Windows</div>
+          </div>
+          <div class="ledger-cell">
+            <div class="ledger-k" data-i18n="led.2.k">Multi-Layar &amp; Sesi</div>
+            <div class="ledger-v mono">Multi-monitor</div>
+            <div class="ledger-sub" data-i18n="led.2.s">Pilih layar &amp; resolusi</div>
+          </div>
+          <div class="ledger-cell">
+            <div class="ledger-k" data-i18n="led.3.k">Kontrol Layar Sentuh</div>
+            <div class="ledger-v mono">Touch · keyboard · mouse</div>
+            <div class="ledger-sub" data-i18n="led.3.s">Kontrol sentuh &amp; keyboard</div>
+          </div>
+          <div class="ledger-cell">
+            <div class="ledger-k" data-i18n="led.4.k">Arsitektur Paket</div>
+            <div class="ledger-v mono">APK per ABI</div>
+            <div class="ledger-sub">Android 7+ · tiga ABI</div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- What is XyDesk Remote & Difference from Regular XyDesk -->
+    <section class="section" id="about-diff">
+      <div class="container">
+        <div class="section-head">
+          <div class="section-kicker" data-i18n="about.kicker">Mengenal Ekosistem XyDesk</div>
+          <h2 class="section-title" data-i18n="about.title">Apa Itu XyDesk Remote &amp; Perbedaannya dengan XyDesk Biasa?</h2>
+          <p class="section-lead" data-i18n="about.lead">
+            Di dalam lini perangkat lunak XyVerse Technology Global, <strong>XyDesk Biasa (Reguler)</strong> dan <strong>XyDesk Remote</strong> dibangun untuk dua skenario penggunaan yang berbeda secara fundamental.
+          </p>
+        </div>
+
+        <div class="arch-split" style="margin-bottom: 18px;">
+          <div class="arch-box">
+            <h3 data-i18n="about.rem.t">Apa Itu XyDesk Remote?</h3>
+            <ul class="arch-list">
+              <li data-i18n="about.rem.1"><strong>Klien Akses Desktop Jarak Jauh Native:</strong> Aplikasi Android yang terhubung langsung ke PC atau Server Windows melalui protokol RDP native (FreeRDP 3 C/JNI) maupun agen pendamping <code>XyDeskHost</code>.</li>
+              <li data-i18n="about.rem.2"><strong>Grafis &amp; Audio melalui RDP:</strong> Menampilkan sesi desktop dan audio yang disediakan host Windows melalui FreeRDP. Codec, frame rate, dan akselerasi perangkat keras bergantung pada host, jaringan, dan negosiasi RDP; situs ini tidak menjamin 60 FPS atau GPU encoder tertentu.</li>
+              <li data-i18n="about.rem.3"><strong>Translasi Input Mobile-ke-Desktop:</strong> Mengubah layar sentuh Android menjadi trackpad presisi, sakelar klik kiri/kanan, gyro air-mouse, serta tombol HUD melingkar berikon vektor yang dapat dirakit sendiri.</li>
+            </ul>
+          </div>
+
+          <div class="arch-box">
+            <h3 data-i18n="about.std.t">Apa Bedanya dengan XyDesk Biasa?</h3>
+            <ul class="arch-list">
+              <li data-i18n="about.std.1"><strong>Lingkup Kerja Lokal vs Jarak Jauh:</strong> XyDesk biasa berfokus pada manajemen ruang kerja, panel utilitas, dan produktivitas lokal di perangkat itu sendiri, tanpa modul transmisi layar lintas jaringan.</li>
+              <li data-i18n="about.std.2"><strong>Manajemen Sesi Multi-User &amp; Multi-Monitor:</strong> Hanya XyDesk Remote yang memiliki Grid Auto-Detect untuk berpindah antar-monitor fisik/virtual PC (Monitor 1, QHD, Span 21:9) dan berpindah antara Sesi Konsol Fisik (<code>/admin</code>) dengan Sesi User RDP secara live.</li>
+              <li data-i18n="about.std.3"><strong>Keamanan Kredensial &amp; Jaringan Server:</strong> XyDesk Remote menyertakan brankas kredensial AES-256-GCM di Android Keystore, dukungan RD Gateway, SSH Tunneling, Restricted Admin, serta Wake-on-LAN.</li>
+            </ul>
+          </div>
+        </div>
+
+        <div class="diff-table">
+          <div class="diff-row head mono">
+            <div>Aspek Teknis</div>
+            <div>XyDesk Biasa (Reguler)</div>
+            <div>XyDesk Remote (Android RDP &amp; Host)</div>
+          </div>
+          <div class="diff-row">
+            <div class="diff-aspect" data-i18n="df.1.a">Fungsi Utama</div>
+            <div class="diff-std" data-i18n="df.1.s">Manajemen meja kerja &amp; utilitas produktivitas lokal pada perangkat utama.</div>
+            <div class="diff-rem" data-i18n="df.1.r">Kendali penuh PC &amp; Server Windows jarak jauh secara real-time dari perangkat Android.</div>
+          </div>
+          <div class="diff-row">
+            <div class="diff-aspect" data-i18n="df.2.a">Mesin Inti (Core Engine)</div>
+            <div class="diff-std" data-i18n="df.2.s">Runtime aplikasi antarmuka lokal standar tanpa protokol remote display.</div>
+            <div class="diff-rem" data-i18n="df.2.r">Engine C/JNI FreeRDP 3 yang dimodifikasi (FastPath Input/Output, PointerCache 128, FrameMarker).</div>
+          </div>
+          <div class="diff-row">
+            <div class="diff-aspect" data-i18n="df.3.a">Mode Koneksi</div>
+            <div class="diff-std" data-i18n="df.3.s">Berjalan langsung di perangkat lokal tanpa autentikasi host jarak jauh.</div>
+            <div class="diff-rem" data-i18n="df.3.r">2 Mode Terpisah: <strong>Koneksi PC</strong> (10-Digit ID &amp; Password) dan <strong>Koneksi RDP Penuh</strong> (IP/Host, Domain, Gateway, WoL).</div>
+          </div>
+          <div class="diff-row">
+            <div class="diff-aspect" data-i18n="df.4.a">Multi-Monitor &amp; Multi-User</div>
+            <div class="diff-std" data-i18n="df.4.s">Mengikuti satu layar perangkat tempat aplikasi dibuka.</div>
+            <div class="diff-rem" data-i18n="df.4.r">Tombol <strong>Grid Monitor &amp; User Aktif (Auto-Detect)</strong> untuk pindah Monitor 1/2/Span dan pindah Konsol (<code>/admin</code>) vs Sesi User saat sesi aktif.</div>
+          </div>
+          <div class="diff-row">
+            <div class="diff-aspect" data-i18n="df.5.a">Sistem Input &amp; HUD</div>
+            <div class="diff-std" data-i18n="df.5.s">Navigasi sentuh atau kursor standar sistem operasi.</div>
+            <div class="diff-rem" data-i18n="df.5.r">HUD tombol vektor ringkas (<code>34dp–54dp</code>), Preset <strong>Kustom (Buat Sendiri)</strong>, Tukar Klik Kiri⇄Kanan, Trackpad inersia, dan Gyro Mouse.</div>
+          </div>
+          <div class="diff-row">
+            <div class="diff-aspect" data-i18n="df.6.a">Pipeline Audio &amp; Clipboard</div>
+            <div class="diff-std" data-i18n="df.6.s">Menggunakan pemutar media dan papan klip lokal perangkat.</div>
+            <div class="diff-rem" data-i18n="df.6.r">Audio OpenSLES 8-buffer dengan batas antrean 35ms bebas delay + Sinkronisasi Clipboard 2 arah otomatis (anti-disconnect hingga 256 KB).</div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Real Capabilities Table (Updated for v0.5.19) -->
+    <section class="section" id="capabilities">
+      <div class="container">
+        <div class="section-head">
+          <div class="section-kicker" data-i18n="cap.kicker">Ringkasan fitur pada APK publik v1.1.2 (64) · Host Agent eksperimental</div>
+          <h2 class="section-title" data-i18n="cap.title">Kemampuan Sesi, Engine Native &amp; Kontrol</h2>
+        </div>
+
+        <div class="cap-table">
+          <div class="cap-row">
+            <div class="cap-name" data-i18n="c1.n">Grid Monitor &amp; Sesi User Aktif</div>
+            <div class="cap-desc" data-i18n="c1.d">Tombol ikon Monitor tepat di atas tombol Putuskan membuka Grid Auto-Detect untuk berpindah layar (Monitor 1 Utama, Monitor 2 QHD 2560x1440, Dual-Monitor Span 21:9, Viewport HP) sekaligus berpindah antara Sesi Konsol Fisik (/admin) dan Sesi User RDP / Multi-Akun secara langsung di tengah sesi.</div>
+            <div class="cap-spec mono">Auto-Detect Grid</div>
+          </div>
+          <div class="cap-row">
+            <div class="cap-name" data-i18n="c2.n">Modifikasi FreeRDP 3 Native &amp; Audio</div>
+            <div class="cap-desc" data-i18n="c2.d">Jembatan JNI C mengaktifkan FastPathInput/Output, ExtendedMouse, HorizontalWheel, UnicodeInput, SupportMonitorLayoutPdu (dengan dimensi fisik mm MS-RDPEDISP), serta tuning audio OpenSLES 8-buffer dengan batas tunggu 35ms agar suara bebas lag menumpuk.</div>
+            <div class="cap-spec mono">FastPath + OpenSLES</div>
+          </div>
+          <div class="cap-row">
+            <div class="cap-name" data-i18n="c3.n">HUD Ikon Vektor &amp; Preset Kustom</div>
+            <div class="cap-desc" data-i18n="c3.d">Seluruh tombol kontrol yang memiliki simbol memakai ikon vektor presisi (termasuk tombol Windows/Win, Klik Kiri/Tengah/Kanan, Tukar Klik, Panah, Enter, Backspace, Tab, Space, Shift, Menu, PrtSc). Ukuran tombol preset diperkecil (34dp–54dp) dengan dukungan profil Kustom (Buat Sendiri) + ekspor/impor JSON.</div>
+            <div class="cap-spec mono">6 Preset + Custom</div>
+          </div>
+          <div class="cap-row">
+            <div class="cap-name" data-i18n="c4.n">Sakelar Klik Kiri ⇄ Kanan</div>
+            <div class="cap-desc" data-i18n="c4.d">Fitur tukar fungsi klik mouse kiri dan kanan berbasis UI ikon di panel Input maupun sebagai tombol HUD langsung di layar, memudahkan operasi satu tangan atau pengguna kidal.</div>
+            <div class="cap-spec mono">Mouse L/R Swap</div>
+          </div>
+          <div class="cap-row">
+            <div class="cap-name" data-i18n="c5.n">Telemetri Vertikal Ringkas</div>
+            <div class="cap-desc" data-i18n="c5.d">Statistik sesi real-time di pojok kiri atas tanpa latar penghalang (FPS, PING, RES, ENC, RLY, NET) dengan ukuran ringkas dan nilai metrik tersusun rapi tepat di bawah labelnya.</div>
+            <div class="cap-spec mono">Stacked Telemetry</div>
+          </div>
+          <div class="cap-row">
+            <div class="cap-name" data-i18n="c6.n">Clipboard Dua Arah Anti-Disconnect</div>
+            <div class="cap-desc" data-i18n="c6.d">Sinkronisasi clipboard otomatis antara HP dan PC untuk teks panjang (.txt) maupun gambar bitmap dengan penjaga paket 256 KB, tanpa menyembunyikan bar clipboard bawaan keyboard HP.</div>
+            <div class="cap-spec mono">CLIPRDR Guard</div>
+          </div>
+          <div class="cap-row">
+            <div class="cap-name" data-i18n="c7.n">Koneksi PC vs Koneksi RDP</div>
+            <div class="cap-desc" data-i18n="c7.d">Memisahkan mode Koneksi PC (ID &amp; Password, eksperimental) dari Koneksi RDP standar. Opsi/hasil akselerasi GPU pada Host Agent bergantung pada dukungan host dan belum merupakan jaminan performa; koneksi RDP biasa tidak memerlukan agent.</div>
+            <div class="cap-spec mono">Dual Connect Mode</div>
+          </div>
+          <div class="cap-row">
+            <div class="cap-name" data-i18n="c8.n">Fisika Trackpad, Gyro &amp; Gamepad</div>
+            <div class="cap-desc" data-i18n="c8.d">Kurva akselerasi pointer, momentum gulir dua jari (inertial scroll), zona gulir tepi kanan (edge scroll), dukungan pengontrol Bluetooth/USB HID, serta mode Gyro Air-Mouse.</div>
+            <div class="cap-spec mono">Trackpad + Gyro</div>
+          </div>
+          <div class="cap-row">
+            <div class="cap-name" data-i18n="c9.n">Share-Sheet ke Drive &amp; Wake-on-LAN</div>
+            <div class="cap-desc" data-i18n="c9.d">Kirim berkas langsung dari menu Bagikan Android ke folder drive 'XyDesk' di PC (RDPDR), serta bangunkan PC dari jarak jauh menggunakan Magic Packet UDP disertai pemantau kesiapan port.</div>
+            <div class="cap-spec mono">RDPDR + WoL</div>
+          </div>
+          <div class="cap-row">
+            <div class="cap-name" data-i18n="c10.n">Putus Sesi Instan &amp; Tirai Privasi</div>
+            <div class="cap-desc" data-i18n="c10.d">Konfirmasi putuskan sesi langsung mengembalikan pengguna ke Beranda tanpa tertahan di dialog coba lagi, dilengkapi fitur Tirai Privasi layar gelap dan penguncian sesi PC (Win+L).</div>
+            <div class="cap-spec mono">Clean Disconnect</div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Streaming, Latency & Security Architecture -->
+    <section class="section" id="architecture">
+      <div class="container">
+        <div class="section-head">
+          <div class="section-kicker" data-i18n="arch.kicker">Konfigurasi Teknis</div>
+          <h2 class="section-title" data-i18n="arch.title">Pengaturan Streaming, Latensi &amp; Keamanan</h2>
+        </div>
+
+        <div class="arch-split">
+          <div class="arch-box">
+            <h3 data-i18n="arch.stream.t">Pipeline Streaming &amp; Optimasi Latensi</h3>
+            <ul class="arch-list">
+              <li data-i18n="arch.s1">Aplikasi menyediakan pilihan profil jaringan/visual. Codec, frame rate, akselerasi GPU, dan latensi nyata bergantung pada host serta jaringan; tidak ada jaminan FPS atau latensi tertentu.</li>
+              <li data-i18n="arch.s2">Pemisahan antrean render layar (`+async-update`), kanal virtual asinkron (`+async-channels`), Frame Marker command, dan VSYNC dirty-rect coalescing hemat baterai.</li>
+              <li data-i18n="arch.s3">Pilihan kedalaman warna 32-bit, 24-bit, atau 16-bit serta pengaturan tingkat kompresi aliran data (Level 0, 1, 2).</li>
+              <li data-i18n="arch.s4">Kontrol penuh bendera pengalaman visual Windows: ClearType Font Smoothing, Desktop Composition (Aero), Wallpaper, Tema, dan Tarik Jendela.</li>
+            </ul>
+          </div>
+
+          <div class="arch-box">
+            <h3 data-i18n="arch.sec.t">Keamanan Protokol &amp; Perlindungan Perangkat</h3>
+            <ul class="arch-list">
+              <li data-i18n="arch.k1">Pemilihan protokol autentikasi per perangkat: Otomatis, NLA (CredSSP Wajib), TLS Standar, atau RDP Klasik.</li>
+              <li data-i18n="arch.k2">Konfigurasi tingkat kebijakan keamanan cipher OpenSSL TLS (`seclevel` 0, 1, atau 2) serta dukungan RD Gateway dan SSH Port Forwarding.</li>
+              <li data-i18n="arch.k3">Dukungan sesi konsol fisik (`/admin`) dan mode `/restricted-admin` untuk mencegah pengiriman kredensial teks biasa ke host.</li>
+              <li data-i18n="arch.k4">Opsi proteksi tangkapan layar (`FLAG_SECURE`), verifikasi kunci layar/biometrik HP sebelum terhubung, kunci PC otomatis saat keluar, dan pembersihan clipboard saat putus.</li>
+            </ul>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Changelog Section -->
+    <section class="section" id="changelog">
+      <div class="container">
+        <div class="section-head">
+          <div class="section-kicker" data-i18n="cl.kicker">Catatan Rilis &amp; Pembaruan Kode</div>
+          <h2 class="section-title" data-i18n="cl.title">Changelog XyDesk Remote</h2>
+          <p class="section-lead" data-i18n="cl.lead">
+            Riwayat perubahan teknis untuk build aplikasi <strong>v1.1.2 (64)</strong> yang dipublikasikan sebagai rilis GitHub <strong>v1.1.2</strong>. Rilis dan checksum tersedia di halaman distribusi resmi.
+          </p>
+        </div>
+
+        <div class="changelog-list">
+          <div class="cl-card">
+            <div class="cl-head">
+              <div class="cl-ver mono">v1.1.2 (VERSION_CODE 64) — Build Terbaru</div>
+              <span class="cl-badge mono">9 Oktober 2026 · Notifikasi Custom, Telemetri Live, UI Monokrom Lega</span>
+            </div>
+            <ul class="arch-list">
+              <li><strong>Notifikasi sesi custom:</strong> kartu layanan foreground bergaya aplikasi (bukan bawaan Android) dengan subteks versi, kronometer durasi sesi, dan aksi berhenti; nama host PC disembunyikan pada versi publik notifikasi di layar kunci.</li>
+              <li><strong>Telemetri latensi live:</strong> pill LATENCY kini mengukur RTT lewat probe TCP nyata ke host:port layanan tiap 5 detik dan dihaluskan (EMA) — tidak lagi membeku pada nilai awal koneksi.</li>
+              <li><strong>UI monokrom &amp; lebih lega:</strong> warna semantik, pill telemetri, dan tab aktif jadi grayscale metalik; padding/spasi overlay, panel, grid, dan dialog dinaikkan; seluruh ukuran berbasis dp/weight sehingga cocok di semua kepadatan layar.</li>
+              <li><strong>Popup halus:</strong> overlay dan panel sesi muncul membesar dari titik tombol pemicunya (transform origin), dan seksi grid yang terbuka melar mulus di tempat (<code>animateContentSize</code>).</li>
+              <li><strong>Fitur draft v1.1.0–v1.1.1 ikut terbit perdana:</strong> tab musik (kontrol penuh + antrian + pustaka perangkat), transfer file dua arah via drive redirection, rekaman 720p 60 fps dengan audio PC, tangkapan layar ke Pictures, log kegagalan koneksi berbahasa Indonesia, gamepad HUD 18 tombol, dan pill scroll.</li>
+            </ul>
+          </div>
+
+          <div class="cl-card">
+            <div class="cl-head">
+              <div class="cl-ver mono">v1.0.2 (VERSION_CODE 53)</div>
+              <span class="cl-badge mono">4 Oktober 2026 · Perbaikan Startup Android 8 &amp; Penyederhanaan UI</span>
+            </div>
+            <ul class="arch-list">
+              <li><strong>Perbaikan crash startup Android 8 (<code>PrintJobMonitor.java</code>):</strong> overload <code>FileObserver(File, int)</code> hanya tersedia mulai API 29, sehingga perangkat Android 7–9 (mis. Oppo A3s/ColorOS) crash saat aplikasi dibuka. Pemantau tugas print kini memakai overload <code>FileObserver(String, int)</code> yang kompatibel dengan API 24+; guard <code>MotionEvent.getClassification()</code> API 29 dipertahankan sebagai pengaman tambahan.</li>
+              <li><strong>Opsi refresh 30/60/90/120 Hz:</strong> pilihan refresh kini meminta mode panel Android yang benar-benar didukung, termasuk saat mode PC Connect diubah di dalam sesi. Catatan: HUD mengukur invalidasi UI terkoaleskan, bukan FPS host — tidak dapat melampaui panel 60 Hz atau memaksa FPS host/jaringan.</li>
+              <li><strong>Penyederhanaan antarmuka:</strong> Backup/Update/Feedback dikelompokkan di drawer menjadi "Alat &amp; Bantuan"; beranda menambah "Ruang Santai" opsional (meme teks/jokes satire nonpartisan) yang dapat disembunyikan dari Pengaturan.</li>
+              <li><strong>Nama aset rilis distandarkan:</strong> APK dipublikasikan sebagai <code>XyDesk-Remote-armeabi-v7a.apk</code>, <code>XyDesk-Remote-arm64-v8a.apk</code>, dan <code>XyDesk-Remote-x86_64.apk</code> sesuai ABI, dengan <code>SHA256SUMS.txt</code> untuk verifikasi. Rilis v1.0.2 dan yang lebih lama masih memakai nama <code>XyDesk-&lt;abi&gt;.apk</code>; tautan pendek per ABI mengikuti rilis berjalan sehingga kedua nama tetap berfungsi.</li>
+            </ul>
+          </div>
+
+          <div class="cl-card">
+            <div class="cl-head">
+              <div class="cl-ver mono">v0.5.35 (VERSION_CODE 52)</div>
+              <span class="cl-badge mono">3 Oktober 2026 · Sesi Aktif Opt-in &amp; Kompatibilitas Android 7</span>
+            </div>
+            <ul class="arch-list">
+              <li><strong>Statistik sesi RDP aktif (opsional):</strong> fitur mati secara default dan hanya berjalan setelah pengguna mengaktifkannya di Pengaturan &gt; Keamanan. Saat sesi tersambung, aplikasi mengirim UUID acak per sesi dan heartbeat berkala; tidak mengirim alamat PC, profil, kredensial, clipboard, atau isi layar. Lihat <a href="privacy.html">Kebijakan Privasi</a>.</li>
+              <li><strong>Kompatibilitas Android:</strong> minimum API 24 (Android 7.0) dan APK tersedia untuk armeabi-v7a, arm64-v8a, serta x86_64.</li>
+            </ul>
+          </div>
+
+          <div class="cl-card">
+            <div class="cl-head">
+              <div class="cl-ver mono">v0.5.34 (VERSION_CODE 51)</div>
+              <span class="cl-badge mono">2 Oktober 2026 · Sisa Permukaan Gelap Disamakan dengan Web</span>
+            </div>
+            <ul class="arch-list">
+              <li><strong>Toast/notifikasi (<code>XyNotice.kt</code>):</strong> pelat hitam pekat dengan garis putih diganti token tema — latar <code>--surface-alt</code>, garis <code>--line-strong</code>, teks <code>--text</code>. Ini permukaan yang paling sering kelihatan dan sebelumnya masih menyalahi aturan "tanpa hitam pekat/putih murni".</li>
+              <li><strong>Latar jendela &amp; splash (<code>themes.xml</code>):</strong> <code>android:windowBackground</code> kini arang <code>#14161A</code>, jadi tidak ada kilatan putih sebelum Compose menggambar dan splash menyatu dengan tema gelap.</li>
+              <li><strong>Mark ikon peluncur:</strong> putih murni diganti off-white <code>#E4E7EB</code> — sama persis dengan mark di favicon web.</li>
+              <li><strong>Label status di layar sesi</strong> ikut memakai warna teks tema, bukan nilai lepas.</li>
+            </ul>
+          </div>
+
+          <div class="cl-card">
+            <div class="cl-head">
+              <div class="cl-ver mono">v0.5.33 (VERSION_CODE 50)</div>
+              <span class="cl-badge mono">2 Oktober 2026 · Mode Normal: Resolusi Otomatis 16:9 Standar (Maks FHD)</span>
+            </div>
+            <ul class="arch-list">
+              <li><strong>Resolusi Otomatis kembali normal (<code>SmartResolution.kt</code>):</strong> mode Otomatis kini memilih <strong>ukuran 16:9 standar</strong> terbesar yang muat — 1280x720 / 1600x900 / 1920x1080 — dengan batas atas FHD. Resolusi hasil hitungan layar (1080x606 dan sejenisnya) dihapus; ukuran desktop tidak lagi berubah-ubah mengikuti orientasi.</li>
+              <li><strong>Eksperimen ketajaman dicabut (<code>SessionManager.kt</code>):</strong> ClearType tidak lagi dimatikan otomatis dan tidak ada lagi penyesuaian font smoothing diam-diam. Setelan tampilan mengikuti apa yang user pilih, apa adanya.</li>
+              <li><strong>Label &amp; dialog dibuat netral (<code>SessionPrefs.kt</code>, <code>SessionControls.kt</code>):</strong> opsi Otomatis ditulis "16:9 standar (maks FHD)", dan peringatan "resolusi bukan 1:1" di dialog ubah resolusi dihapus.</li>
+              <li><strong>Pilihan manual tetap utuh:</strong> "Ikuti layar HP" dan daftar 16:9 tetap (HD 720, 900p, FHD, QHD, 4K) tersedia kalau memang mau dipaksa — tapi bukan lagi bawaan.</li>
+              <li><strong>Tema gelap APK disamakan dengan situs (<code>XyDeskTheme.kt</code>):</strong> palet mode gelap kini memakai token yang sama dengan halaman web — arang <code>#14161A</code>, permukaan <code>#1A1D23</code>, garis <code>#2E333B</code>, teks <code>#E4E7EB</code>, aksen perak <code>#D3D7DC</code>. Hitam pekat dan putih murni dihapus, jadi tampilan aplikasi dan portal konsisten dan tidak menyilaukan. Ikon peluncur ikut memakai latar <code>#14161A</code>.</li>
+            </ul>
+          </div>
+
+          <div class="cl-card">
+            <div class="cl-head">
+              <div class="cl-ver mono">v0.5.32 (VERSION_CODE 49)</div>
+              <span class="cl-badge mono">2 Oktober 2026 · ClearType Otomatis Mati Saat Desktop Diperkecil (Anti Teks Bergerigi)</span>
+            </div>
+            <ul class="arch-list">
+              <li><strong>ClearType vs resample (<code>SessionManager.kt</code> + <code>SmartResolution.kt</code>):</strong> ClearType adalah <em>antialias subpiksel</em> — benar hanya kalau desktop digambar 1:1. Begitu desktop 1920x1080 dipasang di layar HP 1080 lebar, HP memperkecil ~0,56x dan tepi huruf berubah jadi bercak warna/bergerigi. Ini yang membuat teks terasa "terlalu tajam sampai pecah" pada mode HD/FHD. Sekarang kalau resolusi pilihan user bukan 1:1, font smoothing ClearType <strong>dimatikan otomatis untuk sesi itu</strong> (Windows memakai antialias abu-abu yang jauh lebih tahan diperkecil), dan dicatat di log diagnostik.</li>
+              <li><strong>Kapan tetap memakai ClearType:</strong> mode <em>Otomatis</em> dan <em>Ikuti layar HP</em> selalu 1:1, jadi ClearType tetap aktif di sana — itu jalur paling tajam.</li>
+              <li><strong>Peringatan sebelum menerapkan:</strong> dialog ubah resolusi kini memberi tahu kalau ukuran yang dipilih bukan 1:1 dengan layar, sebelum user menekan Terapkan.</li>
+            </ul>
+          </div>
+
+          <div class="cl-card">
+            <div class="cl-head">
+              <div class="cl-ver mono">v0.5.31 (VERSION_CODE 48)</div>
+              <span class="cl-badge mono">1 Oktober 2026 · Resolusi Otomatis Kembali 1:1 dengan Layar (Teks Tajam)</span>
+            </div>
+            <ul class="arch-list">
+              <li><strong>Akar "teks pecah" yang sebenarnya (<code>SmartResolution.kt</code>):</strong> Sejak v0.5.22 mode <em>Otomatis</em> memilih salah satu ukuran 16:9 standar (1280x720 / 1920x1080 / dst) alih-alih menyesuaikan layar HP. Akibatnya desktop remote tidak pernah sama dengan layar HP lalu <em>di-resample</em> oleh HP — dan resampling itulah yang menghilangkan ketajaman ClearType. Sekarang <em>Otomatis</em> kembali memakai 16:9 yang <strong>pas 1:1</strong> dengan layar (portrait 1080x2400 → 1080x606, landscape 2400x1080 → 1920x1080), jadi piksel remote tidak disentuh ulang oleh HP.</li>
+              <li><strong>Kenapa ubah resolusi dari dalam sesi tidak menolong:</strong> daftar resolusi hanya berisi ukuran standar, dan live-resize DISP memilih dari daftar yang sama sehingga tetap tidak pernah pas dengan layar. Setelah v0.5.31 live-resize ikut memakai perhitungan 1:1 yang sama.</li>
+              <li><strong>Konsisten dengan v0.5.30:</strong> codec RFX-Progressive (lossy) tetap mati, penskalaan Windows default tetap 100%, mipmap trilinear tetap mati. Ketiganya penyumbang kekaburan teks; 1:1 melengkapinya.</li>
+            </ul>
+          </div>
+
+          <div class="cl-card">
+            <div class="cl-head">
+              <div class="cl-ver mono">v0.5.30 (VERSION_CODE 47)</div>
+              <span class="cl-badge mono">1 Oktober 2026 · Mencabut Tiga Penyebab Teks Pecah (RFX-Progressive, Skala 125%, Mipmap)</span>
+            </div>
+            <ul class="arch-list">
+              <li><strong>Codec RFX-Progressive dicabut (<code>cmdline.c</code> &amp; <code>android_freerdp.c</code>):</strong> Sejak v0.5.23 klien menyalakan <code>RemoteFxCodec</code> + <code>GfxProgressiveV2</code> dan menyebutnya <em>lossless text tile encoding</em> — label itu salah. RFX dan RFX-Progressive adalah codec <strong>lossy</strong>: server mengirim versi resolusi rendah lalu memperhalus bertahap, dan kalau refinement tidak selesai (HP sibuk, link lambat) teks Windows tampak pecah serta bertahan sampai sesi ditutup. Sekarang kedua flag itu <code>FALSE</code>; jalur teks kembali ke <code>AVC444</code> (4:4:4, chroma penuh sehingga ClearType utuh) dan fallback bitmap/RFX apa adanya.</li>
+              <li><strong>Skala Windows default kembali 100% (<code>SessionPrefs.kt</code>, <code>SessionManager.kt</code>):</strong> <code>/scale-desktop:125</code> yang dipaksakan sejak v0.5.23 membuat aplikasi Windows yang tidak DPI-aware <em>direntangkan bitmap</em> oleh Windows, sehingga teksnya bergerigi — dan tidak bisa dibetulkan dari dalam sesi karena klien meminta 125% lagi setiap konek/resize. Default kini 100% (tanpa penskalaan host); pilihan skala lain tetap ada di panel sesi, lengkap dengan peringatan teks.</li>
+              <li><strong>Mipmap trilinear dimatikan (<code>SessionSurfaceController.kt</code>):</strong> Pada skala non-bulat, mip level yang dipilih GPU ikut menurunkan resolusi <em>stroke</em> huruf tipis sehingga teks tampak pecah. Kembali ke filter bilinear (<code>isFilterBitmap</code>) yang sudah cukup untuk diperkecil/diperbesar.</li>
+              <li><strong>Kebijakan font smoothing host dibetulkan (<code>xydesk_host_core.cpp</code>):</strong> Nilai <code>fAllowFontAntiAlias</code> yang ditulis agen <strong>bukan</strong> kunci kebijakan yang dibaca Windows (tidak berefek apa pun). Diganti ke nama resmi <code>fNoFontSmoothing = 0</code> (kebijakan “Do not allow font smoothing”) plus <code>AllowFontAntiAlias = 1</code> di <code>WinStations\RDP-Tcp</code>, jadi ClearType benar-benar diizinkan pada sesi remote.</li>
+            </ul>
+          </div>
+
+          <div class="cl-card">
+            <div class="cl-head">
+              <div class="cl-ver mono">v0.5.29 (VERSION_CODE 46)</div>
+              <span class="cl-badge mono">1 Oktober 2026 · Perbaikan Disconnect Saat Copy Terminal/Screenshot &amp; Auto-Reconnect Data Seluler</span>
+            </div>
+            <ul class="arch-list">
+              <li><strong>Perbaikan Bug Fatal Multi-Chunk <code>CLIPRDR</code> (<code>channels/client/addin.c</code> &amp; <code>cliprdr_main.c</code>):</strong> Memperbaiki bug di <code>channel_client_post_message</code> di mana <code>Stream_New(nullptr, dataLength)</code> mengalokasikan ukuran chunk pertama (<code>1600</code> byte) alih-alih <code>totalLength</code>, lalu saat kapasitas stream berlipat ganda pada chunk ke-2+, pengecekan <code>Stream_Capacity(data_in) != Stream_GetPosition(data_in)</code> di <code>CHANNEL_FLAG_LAST</code> selalu gagal dan memanggil <code>setChannelError</code> yang memutus sesi RDP seketika saat menyalin teks panjang di Console/Terminal atau mengambil Screenshot.</li>
+              <li><strong>Prioritas <code>CF_DIB</code> Screenshot, Proteksi Echo Clipboard 2 Detik &amp; Batas Gambar (<code>android_cliprdr.c</code> &amp; <code>XyDeskSessionActivity.kt</code>):</strong> Memprioritaskan <code>CF_DIB</code> di atas <code>CF_DIBV5</code> agar screenshot PC dapat dikonversi penuh oleh synthesizer PNG WinPR, mengabaikan <code>CB_RESPONSE_FAIL</code> dari delayed-rendering Console Windows, menambahkan <em>cooldown</em> anti-echo 2 detik + normalisasi CRLF, dan membatasi ukuran PDU gambar <code>CLIPRDR</code> agar screenshot layar HP tidak membanjiri <code>termsrv</code>.</li>
+              <li><strong>Ketahanan Sinyal Data Seluler (<code>TCP_USER_TIMEOUT</code> 45s) &amp; Dual-Layer Auto-Reconnect (<code>android_freerdp.c</code>, <code>client.c</code>, <code>SessionManager.kt</code>):</strong> Menaikkan <code>FreeRDP_TcpAckTimeout</code> dari 9 detik menjadi 45 detik dan <code>TcpKeepAlive</code> menjadi 20s + 6x5s agar hilangnya sinyal data seluler sesaat tidak memutus soket TCP; mengaktifkan <code>FreeRDP_AutoReconnectionEnabled</code> (25x retry tiap 1,5 detik) ditambah auto-reconnect tingkat <code>SessionManager</code> hingga 6x saat jaringan berpindah.</li>
+            </ul>
+          </div>
+
+          <div class="cl-card">
+            <div class="cl-head">
+              <div class="cl-ver mono">v0.5.23 (VERSION_CODE 40)</div>
+              <span class="cl-badge mono">30 September 2026 · Perbaikan Teks Pecah/Bergerigi Native C &amp; C++17 QUIC Host Agent (.dll)</span>
+            </div>
+            <ul class="arch-list">
+              <li><strong>Perbaikan Akar Masalah Teks Pecah/Bergerigi di Native FreeRDP C (<code>cmdline.c</code> &amp; <code>android_freerdp.c</code>):</strong> Memperbaiki bug urutan evaluasi argumen FreeRDP di mana <code>/network:...</code> dievaluasi secara alfabetis <em>setelah</em> <code>+fonts</code> dan <code>+aero</code> lalu memanggil <code>freerdp_apply_connection_type</code> yang diam-diam me-<em>reset</em> <code>FreeRDP_AllowFontSmoothing = FALSE</code> (<code>PERF_DISABLE_FONT_SMOOTHING</code>) dan mematikan ClearType di Windows PC. Kini <code>AllowFontSmoothing</code> dan <code>AllowDesktopComposition</code> dikunci aktif bersama <code>RemoteFxCodec</code> + <code>GfxProgressiveV2</code> (<em>lossless text tile encoding</em>) serta sinkronisasi <code>freerdp_performance_flags_make</code>. <strong>Koreksi (v0.5.30):</strong> label <em>lossless text tile encoding</em> di sini keliru — RFX/RFX-Progressive adalah codec lossy dan pemakaiannya dicabut pada v0.5.30.</li>
+              <li><strong>Trilinear Mipmap Downscaling (<code>setHasMipMap(true)</code>) &amp; Skala Default 125% DPI:</strong> Mengaktifkan <em>hardware trilinear mipmap</em> pada bitmap <code>SessionSurfaceController</code> agar <em>stroke</em> huruf tipis 1-piksel dari <code>1920x1080</code> tidak pecah saat diperkecil ke layar HP, meng-<em>upgrade</em> preset <code>DIRECT_GAME_ULTRA</code> ke 32-bit warna penuh + ClearType (migrasi otomatis <code>clarity_v2</code>), dan menyertakan <code>/scale-desktop:125</code> sejak jabat tangan awal <code>CS_CORE</code>.</li>
+              <li><strong>Perbaikan PDU <code>MonitorLayout</code> (<code>disp_main.c</code>):</strong> Menambahkan penjaga <code>disp-&gt;MaxNumMonitors == 0</code> dan melakukan <em>clamping</em> <code>NumMonitors</code> <strong>sebelum</strong> menghitung <code>header.length</code> agar server Windows tidak pernah memutus koneksi karena ketidakcocokan panjang paket <code>DISP</code>.</li>
+              <li><strong>Engine Native C++17 QUIC Client (<code>libxydesk-quic.so</code>) &amp; Windows Host Agent (<code>xydesk_quic.dll</code> + <code>xydesk_host_core.dll</code> + <code>XyDeskRemoteHost.exe</code>):</strong> Membangun pustaka C++17 native di Android dan Windows untuk penemuan instan UDP QUIC v1 RFC 9000 pada port <code>4433</code>, deteksi adapter GPU DXGI (<code>NVENC</code>/<code>AMF</code>/<code>QSV</code>), dan konfigurasi otomatis kebijakan Windows AVC 4:4:4 + ClearType + Multi-Session.</li>
+            </ul>
+          </div>
+
+          <div class="cl-card">
+            <div class="cl-head">
+              <div class="cl-ver mono">v0.5.22 (VERSION_CODE 39)</div>
+              <span class="cl-badge mono">30 September 2026 · Ketajaman Piksel/Teks &amp; Stabilitas Sesi Anti-Disconnect</span>
+            </div>
+            <ul class="arch-list">
+              <li><strong>Ketajaman Teks Windows (ClearType <code>+fonts</code> Default &amp; Bilinear Filtering):</strong> Mengaktifkan <code>fontSmoothing = true</code> (<code>+fonts</code>) secara bawaan di semua profil <code>RdpOptions</code>, mengunci surface Android ke 32-bit <code>ARGB_8888</code> penuh, dan mengaktifkan <em>bilinear filtering</em> + <em>anti-aliasing</em> pada <code>SessionView</code> agar huruf Windows tidak lagi burik/bergerigi saat di-<em>scale</em>.</li>
+              <li><strong>Resolusi 16:9 Standar PC di Mode Portrait &amp; Deteksi Jaringan Cerdas:</strong> Memperbaiki <code>SmartResolution.forViewport</code> agar menjaga resolusi 16:9 standar PC (<code>1920x1080</code> / <code>1280x720</code>) tanpa menyusut ke <code>1080x606</code> saat HP vertikal, serta mencegah Wi-Fi hotspot berkecepatan tinggi ter-<em>downgrade</em> paksa ke <code>broadband-low</code> / <code>AVC420</code>.</li>
+              <li><strong>Stabilitas Kanal <code>DISP</code>, Debounce DPI Slider &amp; Penghapusan Banjir Socket Port 3389:</strong> Menambahkan proteksi <em>settle window</em> 900ms &amp; deduplikasi pada <code>resizeRemote</code> (mencegah PDU <code>MonitorLayout</code> 16-byte cacat saat awal <code>Connected</code> maupun saat keyboard muncul), men-<em>debounce</em> slider DPI, menghentikan paksaan <code>disconnect()</code> di mode <code>/admin</code>, menonaktifkan <em>silent disconnect</em> pada <em>long-press</em> tombol Back, dan menghapus pembukaan socket TCP mentah ke port 3389 tiap 2 detik di <code>telemetry</code>.</li>
+            </ul>
+          </div>
+
+          <div class="cl-card">
+            <div class="cl-head">
+              <div class="cl-ver mono">v0.5.21 (VERSION_CODE 38)</div>
+              <span class="cl-badge mono">30 September 2026 · Pemisahan Mesin Direct PC &amp; Multi-User</span>
+            </div>
+            <ul class="arch-list">
+              <li><strong>Pemisahan Arsitektur Streaming <code>Koneksi PC</code> vs <code>Koneksi RDP</code>:</strong> Memisahkan penuh fitur dan pipeline streaming antara <strong>Koneksi PC</strong> (khusus Direct PC Stream Engine: <code>Direct Game FPS 60/120</code>, <code>Direct Creator 4:4:4</code>, <code>Direct Cinema</code>, <code>Direct LAN Turbo</code>, penguncian FPS <code>30/60/90/120</code>, slider Bitrate <code>5–80 Mbps</code>, dan binding hardware GPU <code>NVENC/AMF/QSV</code>) dan <strong>Koneksi RDP</strong> (khusus Virtual Desktop Resolution, Dynamic Channel <code>DISP</code>, Multi-User/Konsol, Drive Bersama <code>RDPDR</code>, dan <code>RD Gateway</code>).</li>
+              <li><strong>Perbaikan Perpindahan Multi-User &amp; Konsol Runner (<code>/admin</code>):</strong> Memperbaiki perpindahan antara <strong>Konsol Runner / Admin (<code>runneradmin</code> · <code>/admin</code>)</strong> dan <strong>Sesi Virtual Multi-User (<code>XyDesk</code>)</strong> agar memperbarui <em>flag</em> <code>/admin</code> sekaligus akun target secara atomik, disertai pembukaan kebijakan <code>fSingleSessionPerUser = 0</code> pada <code>XyDeskHost-Setup.bat</code> dan <code>host.ps1</code>.</li>
+              <li><strong>Redesain <em>Splash Screen</em> Dual-Engine &amp; Filter Beranda:</strong> Memperbarui <code>Splash.kt</code> dengan animasi orbit presisi, indikator tahap muat engine native, dan kartu arsitektur ganda; menambahkan filter tab (<code>Semua</code>, <code>Koneksi PC</code>, <code>Koneksi RDP</code>) serta <em>badge</em> engine pada setiap kartu perangkat di Beranda.</li>
+              <li><strong>Auto-Scanner PC di Wi-Fi (LAN), Mouse OTG/Bluetooth, Cadangan JSON &amp; Cek Update:</strong> Menambahkan pemindai otomatis subnet lokal (<code>LanScanner.kt</code>) untuk mendeteksi ID PC 10-digit dan IP:3389 dalam 1 ketukan, dukungan hover &amp; <em>scroll wheel</em> mouse fisik di mode Trackpad/Direct, fitur ekspor/impor profil JSON, serta pemeriksa pembaruan terhubung ke <code>rdp.xydesk.my.id</code> dan <code>rilisin.xyverse.my.id</code>.</li>
+            </ul>
+          </div>
+
+          <div class="cl-card">
+            <div class="cl-head">
+              <div class="cl-ver mono">v0.5.20 (VERSION_CODE 37)</div>
+              <span class="cl-badge mono">30 September 2026 · Perbaikan Audio PC</span>
+            </div>
+            <ul class="arch-list">
+              <li><strong>Perbaikan Pipeline Suara PC (OpenSLES Unmute &amp; Media Routing):</strong> Memperbaiki bug di mana <code>rdpsnd_opensles.c</code> menginisialisasi volume awal <code>0</code> sehingga <code>rdpsnd_opensles_open</code> langsung memanggil <code>android_SetOutputMute(..., true)</code> (membisukan suara PC saat sesi dibuka). Kini volume awal diinisialisasi penuh (<code>0xFFFFFFFF</code>) dengan kurva atenuasi <code>-4000 mB</code> yang natural di telinga.</li>
+              <li><strong>Routing ke Speaker Utama (<code>SL_ANDROID_STREAM_MEDIA</code>) &amp; Tombol Volume Fisik:</strong> Mengubah tipe aliran OpenSLES di <code>opensl_io.c</code> ke <code>SL_ANDROID_STREAM_MEDIA</code> serta mengikat <code>volumeControlStream = STREAM_MUSIC</code> di <code>XyDeskSessionActivity</code> agar suara PC keluar jernih lewat speaker utama/headset Bluetooth dan tombol volume HP langsung mengatur suara PC.</li>
+              <li><strong>Stream Tetap Hidup Saat <code>SNDC_CLOSE</code> &amp; Antrean 32-Buffer Anti-Putus:</strong> Menjaga stream OpenSLES tetap hidup lintas paket <code>SNDC_CLOSE</code> agar ekor suara tidak terpotong, mengganti <code>WaitForSingleObject</code> pada event antrean yang salah dengan sinkronisasi antrean 32-buffer + <em>rollback</em> otomatis jika <code>Enqueue</code> gagal, serta memastikan kompilasi ulang CMake via <code>BUILD_ALWAYS ON</code>.</li>
+              <li><strong>Kebijakan Audio Host Windows Otomatis:</strong> Memperbarui <code>XyDeskHost-Setup.bat</code> dan <code>host.ps1</code> untuk membuka kunci kebijakan pengalihan audio RDP Windows (<code>fDisableAudio=0</code>, <code>fDisableAudioCapture=0</code>) serta menyalakan layanan <code>Audiosrv</code>.</li>
+            </ul>
+          </div>
+
+          <div class="cl-card">
+            <div class="cl-head">
+              <div class="cl-ver mono">v0.5.19 (VERSION_CODE 36)</div>
+              <span class="cl-badge mono">30 September 2026 · Terverifikasi</span>
+            </div>
+            <ul class="arch-list">
+              <li><strong>Grid Monitor &amp; Sesi User Aktif (Auto-Detect):</strong> Menambahkan tombol ikon Monitor tepat di atas tombol Putuskan (Disconnect) pada rail dan sidebar untuk membuka grid perpindahan layar aktif (Monitor 1 Utama, Monitor 2 QHD 2560x1440, Dual-Monitor Span 21:9, Viewport HP) serta perpindahan live antara Sesi Konsol Fisik (<code>/admin</code>) dan Sesi User RDP / Multi-Akun Tersimpan.</li>
+              <li><strong>Optimasi Engine FreeRDP Native C &amp; MS-RDPEDISP:</strong> Mengaktifkan <code>FastPathInput</code>, <code>FastPathOutput</code>, <code>HasExtendedMouseEvent</code>, <code>HasHorizontalWheel</code>, <code>UnicodeInput</code>, <code>SupportMonitorLayoutPdu</code>, <code>SurfaceFrameMarkerEnabled</code>, dan <code>PointerCacheSize=128</code> di <code>android_freerdp.c</code>, ditambah perhitungan otomatis dimensi fisik monitor (<code>PhysicalWidth</code> &amp; <code>PhysicalHeight</code> 10–1000 mm) di <code>android_disp.c</code>.</li>
+              <li><strong>Penyetelan Audio OpenSLES Low-Latency:</strong> Mencegah <em>double-open</em> stream pada <code>rdpsnd_opensles.c</code>, menurunkan antrean dari 20 menjadi 8 buffer, dan mengganti penantian tak terbatas pada <code>opensl_io.c</code> dengan <em>bounded wait</em> 35ms agar audio real-time tidak menumpuk delay.</li>
+              <li><strong>HUD Kontrol Full Ikon Vektor, Ukuran Ringkas &amp; Preset Kustom:</strong> Mengganti teks tombol HUD dengan ikon vektor presisi (termasuk ikon Windows untuk tombol <code>Win</code>, siluet mouse klik kiri/tengah/kanan, panah, Enter, Backspace, Tab, Space, Shift, Menu, PrtSc), memperkecil ukuran tombol preset ke rentang <code>34dp–54dp</code> (bawaan <code>46dp</code>), serta menghadirkan opsi preset <strong>Kustom (Buat Sendiri)</strong>.</li>
+              <li><strong>Sakelar Tukar Klik Kiri ⇄ Kanan &amp; Revisi Telemetri Pojok Kiri:</strong> Menambahkan switch berikon untuk menukar klik mouse kiri dan kanan di tab Input maupun tombol HUD; memperkecil statistik pojok kiri atas tanpa latar dengan nilai metrik tersusun rapi di bawah labelnya.</li>
+              <li><strong>Perbaikan Alur Putuskan Sesi, Revisi Splash Screen &amp; Penghapusan PiP:</strong> Konfirmasi Putuskan Sesi kini langsung keluar ke Beranda tanpa memunculkan modal "Coba lagi"; menghapus fitur Floating Window/PiP beserta izin overlay; serta memperbarui tampilan <em>Splash Screen</em> dengan emblem vektor dual-monitor.</li>
+            </ul>
+          </div>
+
+          <div class="cl-card">
+            <div class="cl-head">
+              <div class="cl-ver mono">v0.5.18 (VERSION_CODE 35)</div>
+              <span class="cl-badge mono">Pemisahan Mode Koneksi &amp; Profil GPU</span>
+            </div>
+            <ul class="arch-list">
+              <li><strong>Pemisahan Murni Koneksi PC vs Koneksi RDP:</strong> Menyembunyikan opsi kredensial akun Windows serta pengaturan resolusi/DPI pada mode Koneksi PC (ID &amp; Password) agar tetap ringkas.</li>
+              <li><strong>Deteksi &amp; Profil Encoder GPU Host:</strong> Menambahkan dukungan profil encoder hardware <strong>NVIDIA NVENC</strong>, <strong>AMD AMF</strong>, dan <strong>Intel QuickSync (QSV)</strong> beserta skrip otomatis <code>XyDeskHost-Setup.bat</code> untuk PC Windows.</li>
+              <li><strong>Telemetri Sesi Vertikal 6 Metrik:</strong> Menyusun indikator <code>FPS</code>, <code>Latency</code>, <code>Resolusi</code>, <code>Encode</code>, <code>Relay</code>, dan <code>Network</code> (Wi-Fi/Seluler) secara vertikal tanpa blok pill.</li>
+            </ul>
+          </div>
+
+          <div class="cl-card">
+            <div class="cl-head">
+              <div class="cl-ver mono">v0.5.17 (VERSION_CODE 34)</div>
+              <span class="cl-badge mono">Clipboard Dua Arah &amp; Input IME</span>
+            </div>
+            <ul class="arch-list">
+              <li><strong>Sinkronisasi Clipboard Otomatis Anti-Disconnect:</strong> Menyinkronkan teks dan gambar secara otomatis antara HP dan PC dengan batas aman 256 KB per pengiriman sehingga salin-tempel file <code>.txt</code> panjang tidak memutus sesi RDP.</li>
+              <li><strong>Dukungan Penuh Bilah Clipboard Keyboard HP:</strong> Menghapus pembatasan variasi password pada <code>SessionView</code> sehingga bilah clipboard bawaan Gboard dan Samsung Keyboard selalu dapat digunakan di dalam sesi.</li>
+              <li><strong>Konsistensi Dark UI &amp; Modal Validasi:</strong> Menyeragamkan tema gelap di seluruh layar dan menambahkan dialog konfirmasi pada setiap aksi kritis tanpa membuat latar belakang sesi menjadi hitam pekat.</li>
+            </ul>
+          </div>
+
+          <div class="cl-card">
+            <div class="cl-head">
+              <div class="cl-ver mono">v0.5.16 &amp; Fondasi Awal (VERSION_CODE 1–33)</div>
+              <span class="cl-badge mono">Arsitektur Inti FreeRDP 3</span>
+            </div>
+            <ul class="arch-list">
+              <li><strong>Integrasi Engine FreeRDP 3 Native (ARM64, ARMv7, x86_64):</strong> Kompilasi CMake superbuild dengan dukungan <code>OpenH264</code>, <code>FFmpeg</code>, <code>Opus</code>, <code>OpenSSL 3</code>, dan dekoder hardware <code>MediaCodec</code>.</li>
+              <li><strong>Keamanan Android Keystore &amp; Sesi Latar:</strong> Penyimpanan sandi terenkripsi AES-256-GCM, <em>Certificate Trust Store</em> (TOFU), layanan latar <em>Foreground Service</em> multi-sesi, pengalihan penyimpanan <code>RDPDR</code>, dan <em>Wake-on-LAN</em>.</li>
+            </ul>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Public Download Section -->
+    <section class="section" id="download">
+      <div class="container">
+        <div class="section-head">
+          <div class="section-kicker" data-i18n="dl.kicker">Distribusi Aplikasi</div>
+          <h2 class="section-title" data-i18n="dl.title">Unduh Paket Instalasi Android (APK)</h2>
+        </div>
+
+        <div class="download-shell">
+          <div class="download-head">
+            <p class="download-desc" data-i18n="dl.desc">
+              Unduh APK resmi XyDesk Remote. Tag rilis GitHub: v1.1.2; versi aplikasi Android: 1.1.2 (64). APK publik saat ini membutuhkan Android 7.0 (API 24) atau lebih baru.
+            </p>
+            <span class="release-pill mono" data-i18n="dl.release">RILIS PUBLIK · v1.1.2</span>
+          </div>
+
+          <div class="download-facts" aria-label="Informasi rilis dan kompatibilitas">
+            <p><strong data-i18n="dl.label.version">Versi rilis:</strong> <span data-i18n="dl.version-note">v1.1.2 adalah tag GitHub Release; versi aplikasi Android di dalam APK adalah 1.1.2 (64).</span></p>
+            <p><strong data-i18n="dl.label.compatibility">Kompatibilitas:</strong> <span data-i18n="dl.android-min">APK publik saat ini membutuhkan Android 7.0 (API 24) atau lebih baru.</span></p>
+            <p><strong data-i18n="dl.label.abi">Pilih ABI:</strong> <span data-i18n="dl.abi-help">arm64-v8a untuk kebanyakan HP modern, armeabi-v7a untuk perangkat ARM 32-bit, dan x86_64 untuk emulator/perangkat Android x86_64.</span></p>
+          </div>
+
+          <div class="release-stats" aria-label="Statistik unduhan dan sesi">
+            <div class="release-stat-card">
+              <div class="release-stat-label" data-i18n="dl.stats.total">Total unduhan APK</div>
+              <strong class="release-stat-value mono" id="apk-download-total" aria-live="polite">—</strong>
+              <p class="release-stat-note" data-i18n="dl.stats.scope">Jumlah unduhan APK dari semua rilis publik GitHub yang masih tersedia. Unduhan ulang ikut terhitung; ini bukan jumlah pengguna unik.</p>
+              <div class="release-stat-breakdown">
+                <div class="release-stat-detail"><span data-i18n="dl.stats.releases">Rilis dengan APK</span><strong id="apk-release-count">—</strong></div>
+                <div class="release-stat-detail"><span data-i18n="dl.stats.files">Berkas APK</span><strong id="apk-asset-count">—</strong></div>
+                <div id="download-stats-updated" aria-live="polite" data-i18n="dl.stats.loading">Memuat statistik dari GitHub Releases…</div>
+              </div>
+            </div>
+            <div class="release-stat-card">
+              <div class="release-stat-label" data-i18n="dl.stats.active">Sesi RDP aktif (anonim)</div>
+              <strong class="release-stat-value mono" id="active-rdp-session-count" aria-live="polite">—</strong>
+              <p class="release-stat-note" data-i18n="dl.stats.active.scope">Perkiraan sesi yang mengirim heartbeat anonim; aktif otomatis dan dapat dimatikan di Pengaturan. Bukan jumlah pengguna unik atau semua koneksi RDP.</p>
+              <div id="active-session-stats-updated" aria-live="polite" data-i18n="dl.stats.active.loading">Memuat statistik sesi…</div>
+            </div>
+          </div>
+
+          <div class="pkg-table">
+            <div class="pkg-row">
+              <div>
+                <div class="pkg-abi mono">arm64-v8a</div>
+                <div class="pkg-sub mono" data-i18n="dl.abi1.sub">Disarankan · ARM 64-bit</div>
+              </div>
+              <div class="pkg-info" data-i18n="dl.abi1">
+                Kebanyakan ponsel dan tablet Android 64-bit modern · 84.4 MB
+              </div>
+              <div>
+                <a class="apk-download-btn" href="/arm64-v8a.apk">
+                  <span class="dl-btn-top" data-i18n="dl.btn.lbl">Unduh APK arm64-v8a</span>
+                  <span class="dl-btn-meta mono" data-i18n="dl.btn.meta">APK resmi · v1.1.2 (64)</span>
+                </a>
+              </div>
+            </div>
+
+            <div class="pkg-row">
+              <div>
+                <div class="pkg-abi mono">armeabi-v7a</div>
+                <div class="pkg-sub mono" data-i18n="dl.abi2.sub">Perangkat ARM 32-bit</div>
+              </div>
+              <div class="pkg-info" data-i18n="dl.abi2">
+                Hanya untuk perangkat Android ARM 32-bit · 70.4 MB
+              </div>
+              <div>
+                <a class="apk-download-btn" href="/armeabi-v7a.apk">
+                  <span class="dl-btn-top" data-i18n="dl.btn.lbl2">Unduh APK armeabi-v7a</span>
+                  <span class="dl-btn-meta mono" data-i18n="dl.btn.meta">APK resmi · v1.1.2 (64)</span>
+                </a>
+              </div>
+            </div>
+
+            <div class="pkg-row">
+              <div>
+                <div class="pkg-abi mono">x86_64</div>
+                <div class="pkg-sub mono" data-i18n="dl.abi3.sub">Emulator / PC Android · x86_64</div>
+              </div>
+              <div class="pkg-info" data-i18n="dl.abi3">
+                Untuk emulator atau PC Android berbasis x86_64 · 89.8 MB
+              </div>
+              <div>
+                <a class="apk-download-btn" href="/x86_64.apk">
+                  <span class="dl-btn-top" data-i18n="dl.btn.lbl3">Unduh APK x86_64</span>
+                  <span class="dl-btn-meta mono" data-i18n="dl.btn.meta">APK resmi · v1.1.2 (64)</span>
+                </a>
+              </div>
+            </div>
+
+            <div class="pkg-row" style="background: var(--surface-alt);">
+              <div>
+                <div class="pkg-abi mono" data-i18n="dl.release.source">Sumber resmi</div>
+                <div class="pkg-sub mono" data-i18n="dl.release.source.sub">GitHub · v1.1.2</div>
+              </div>
+              <div class="pkg-info" data-i18n="dl.rilisin">
+                Lihat catatan rilis, semua aset unduhan, dan file checksum SHA-256 resmi.
+              </div>
+              <div class="release-actions">
+                <a href="https://github.com/xykal/XyDesk-Remote/releases/tag/v1.1.2" target="_blank" rel="noopener noreferrer" class="apk-download-btn">
+                  <span class="dl-btn-top" data-i18n="dl.rilisin.top">Catatan rilis &amp; semua aset</span>
+                  <span class="dl-btn-meta mono" data-i18n="dl.rilisin.sub">GitHub Release · v1.1.2</span>
+                </a>
+                <a class="checksum-link" href="/SHA256SUMS.txt" data-i18n="dl.checksum">Lihat checksum SHA-256</a>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <footer>
+    <div class="container footer-inner">
+      <div>
+        <strong>XyDesk Remote</strong> · Powered by <span>XyVerse Technology Global</span>
+      </div>
+      <div class="footer-nav">
+        <a href="#about-diff">Perbedaan XyDesk</a>
+        <a href="#changelog">Changelog</a>
+        <a href="host.html" data-i18n="nav.host">Host Agent (Eksperimental)</a>
+        <a href="status.html" data-i18n="foot.status">Status &amp; Kesehatan</a>
+        <a href="privacy.html" data-i18n="foot.privacy">Kebijakan Privasi</a>
+        <a href="terms.html" data-i18n="foot.terms">Ketentuan Layanan</a>
+        <a href="licenses.html" data-i18n="foot.licenses">Lisensi Open Source</a>
+      </div>
+    </div>
+  </footer>
+
+  <script>
+    (function () {
+      var currentTheme = localStorage.getItem("xydesk_theme") || "dark";
+      var currentLang = localStorage.getItem("xydesk_lang") || "id";
+      var latestDownloadStats = null;
+      var downloadStatsFailed = false;
+      var latestActiveSessionStats = null;
+      var activeSessionStatsFailed = false;
+
+      function renderActiveSessionStats() {
+        var count = document.getElementById("active-rdp-session-count");
+        var updated = document.getElementById("active-session-stats-updated");
+        if (!count || !updated) return;
+        if (!latestActiveSessionStats) {
+          count.textContent = "—";
+          if (activeSessionStatsFailed) {
+            updated.textContent = currentLang === "en"
+              ? "Live session statistics are temporarily unavailable."
+              : "Statistik sesi langsung sementara tidak tersedia.";
+          }
+          return;
+        }
+        count.textContent = new Intl.NumberFormat(currentLang === "en" ? "en-US" : "id-ID")
+          .format(latestActiveSessionStats.active_session_count);
+        var heroOnline = document.getElementById("hero-online-count");
+        if (heroOnline) heroOnline.textContent = new Intl.NumberFormat(currentLang === "en" ? "en-US" : "id-ID")
+          .format(latestActiveSessionStats.active_session_count);
+        var date = new Date(latestActiveSessionStats.checked_at);
+        var dateText = Number.isNaN(date.getTime()) ? "" : date.toLocaleTimeString(
+          currentLang === "en" ? "en-US" : "id-ID",
+          { hour: "2-digit", minute: "2-digit", timeZone: "UTC" }
+        ) + " UTC";
+        updated.textContent = (currentLang === "en" ? "Checked " : "Dicek ") + dateText;
+      }
+
+      function loadActiveSessionStats() {
+        fetch("/api/active-sessions", { headers: { Accept: "application/json" } })
+          .then(function (response) {
+            if (!response.ok) throw new Error("Active session stats request failed");
+            return response.json();
+          })
+          .then(function (data) {
+            if (data.status !== "ok" || !Number.isFinite(data.active_session_count)) {
+              throw new Error("Active session stats unavailable");
+            }
+            latestActiveSessionStats = data;
+            activeSessionStatsFailed = false;
+            renderActiveSessionStats();
+          })
+          .catch(function () {
+            latestActiveSessionStats = null;
+            activeSessionStatsFailed = true;
+            renderActiveSessionStats();
+          });
+      }
+
+      function renderDownloadStats() {
+        var total = document.getElementById("apk-download-total");
+        var releaseCount = document.getElementById("apk-release-count");
+        var assetCount = document.getElementById("apk-asset-count");
+        var updated = document.getElementById("download-stats-updated");
+        if (!total || !releaseCount || !assetCount || !updated) return;
+
+        if (!latestDownloadStats) {
+          if (downloadStatsFailed) {
+            updated.textContent = currentLang === "en"
+              ? "Download statistics are temporarily unavailable."
+              : "Statistik unduhan sementara tidak tersedia.";
+          }
+          return;
+        }
+
+        var locale = currentLang === "en" ? "en-US" : "id-ID";
+        total.textContent = new Intl.NumberFormat(locale).format(latestDownloadStats.total_apk_downloads);
+        releaseCount.textContent = new Intl.NumberFormat(locale).format(latestDownloadStats.release_count);
+        assetCount.textContent = new Intl.NumberFormat(locale).format(latestDownloadStats.apk_asset_count);
+        var heroTotal = document.getElementById("hero-download-total");
+        if (heroTotal) heroTotal.textContent = new Intl.NumberFormat(locale).format(latestDownloadStats.total_apk_downloads);
+        var heroRel = document.getElementById("hero-release-count");
+        if (heroRel) heroRel.textContent = new Intl.NumberFormat(locale).format(latestDownloadStats.release_count);
+        var date = new Date(latestDownloadStats.updated_at);
+        var dateText = Number.isNaN(date.getTime()) ? "" : date.toLocaleString(locale, {
+          dateStyle: "medium",
+          timeStyle: "short",
+          timeZone: "UTC"
+        }) + " UTC";
+        updated.textContent = (currentLang === "en" ? "Updated " : "Diperbarui ") + dateText;
+      }
+
+      function loadDownloadStats() {
+        fetch("/api/stats", { headers: { Accept: "application/json" } })
+          .then(function (response) {
+            if (!response.ok) throw new Error("Download stats request failed");
+            return response.json();
+          })
+          .then(function (data) {
+            if (data.status !== "ok" || !Number.isFinite(data.total_apk_downloads)) {
+              throw new Error("Invalid download stats response");
+            }
+            latestDownloadStats = data;
+            downloadStatsFailed = false;
+            renderDownloadStats();
+          })
+          .catch(function () {
+            downloadStatsFailed = true;
+            renderDownloadStats();
+          });
+      }
+
+      // Mobile Hamburger Drawer
+      var hamburgerBtn = document.getElementById("hamburger-btn");
+      var mobileDrawer = document.getElementById("mobile-drawer");
+      var drawerScrim = document.getElementById("drawer-scrim");
+
+      function setDrawerOpen(isOpen) {
+        if (!hamburgerBtn || !mobileDrawer || !drawerScrim) return;
+        hamburgerBtn.setAttribute("aria-expanded", isOpen ? "true" : "false");
+        mobileDrawer.classList.toggle("open", isOpen);
+        drawerScrim.classList.toggle("open", isOpen);
+      }
+
+      if (hamburgerBtn) {
+        hamburgerBtn.addEventListener("click", function () {
+          var isOpen = hamburgerBtn.getAttribute("aria-expanded") === "true";
+          setDrawerOpen(!isOpen);
+        });
+      }
+
+      if (drawerScrim) {
+        drawerScrim.addEventListener("click", function () {
+          setDrawerOpen(false);
+        });
+      }
+
+      document.querySelectorAll("[data-drawer-close]").forEach(function (el) {
+        el.addEventListener("click", function () {
+          setDrawerOpen(false);
+        });
+      });
+
+      window.addEventListener("resize", function () {
+        if (window.innerWidth > 980) setDrawerOpen(false);
+      });
+
+      window.addEventListener("keydown", function (e) {
+        if (e.key === "Escape") {
+          setDrawerOpen(false);
+        }
+      });
+
+      // Theme & Language
+      var themeBtn = document.getElementById("theme-btn");
+      var langBtn = document.getElementById("lang-btn");
+      var themeBtnMobile = document.getElementById("theme-btn-mobile");
+      var langBtnMobile = document.getElementById("lang-btn-mobile");
+
+      var idDefaults = {};
+      document.querySelectorAll("[data-i18n]").forEach(function (el) {
+        idDefaults[el.getAttribute("data-i18n")] = el.textContent;
+      });
+
+      var enDict = {
+        "nav.about": "About & Comparison",
+        "nav.cap": "Latest Features",
+        "nav.changelog": "Changelog",
+        "nav.status": "System Status",
+        "nav.licenses": "Licenses",
+        "nav.host": "Host Agent (experimental)",
+        "nav.download": "Download",
+        "intro.meta": "Android RDP client · Windows PCs and servers · APK 1.1.2 (64)",
+        "intro.title": "Remote Desktop for Windows PCs, from Android.",
+        "intro.lead": "Connect Android to a Windows PC or server you own or administer. XyDesk Remote is an Android RDP client based on FreeRDP 3, with touch controls, keyboard, clipboard, audio, and monitor options. The optional Host Agent / PC-ID mode is experimental; standard RDP does not require the agent.",
+        "intro.cta.dl": "Download official APKs",
+        "intro.cta.cl": "View changelog",
+        "intro.cta.host": "Host Agent (experimental)",
+        "hs.dl": "Total Downloads",
+        "hs.dl.s": "APKs · public GitHub releases",
+        "hs.on": "Users Online",
+        "hs.on.s": "active sessions · anonymous heartbeat",
+        "hs.rel": "Public Releases",
+        "hs.rel.s": "published versions · drafts excluded",
+        "led.1.k": "Remote desktop protocol",
+        "led.1.s": "FreeRDP 3 · Windows RDP",
+        "led.2.k": "Displays & sessions",
+        "led.2.s": "Multi-monitor · resolution options",
+        "led.3.k": "Controls",
+        "led.3.s": "Touch · keyboard · trackpad",
+        "led.4.k": "Public release",
+        "about.kicker": "Understanding the XyDesk Ecosystem",
+        "about.title": "What Is XyDesk Remote & How Does It Differ from Standard XyDesk?",
+        "about.lead": "Within the XyVerse Technology Global software lineup, Standard XyDesk and XyDesk Remote are engineered for two fundamentally different workflows.",
+        "cap.kicker": "Public APK v1.1.2 (64) feature summary · Host Agent is experimental",
+        "cap.title": "Session, Native Engine & Control Capabilities",
+        "arch.kicker": "Technical Configuration",
+        "arch.title": "Streaming, Latency & Security Settings",
+        "cl.kicker": "Release Notes & Code Updates",
+        "cl.title": "XyDesk Remote Changelog",
+        "cl.lead": "Technical changelog for app build v1.1.2 (64), published as GitHub release v1.1.2. See the official release page for assets and checksums.",
+        "dl.kicker": "Application Distribution",
+        "dl.title": "Download Android Installation Packages (APK)",
+        "dl.desc": "Download the official XyDesk Remote APK for your device. GitHub release tag: v1.1.2; Android package version: 1.1.2 (64). The current public APK requires Android 7.0 (API 24) or later.",
+        "dl.release": "PUBLIC RELEASE · v1.1.2",
+        "dl.version-note": "v1.1.2 is the GitHub release tag; the Android app version inside the APK is 1.1.2 (64).",
+        "dl.label.version": "Release version:",
+        "dl.label.compatibility": "Compatibility:",
+        "dl.label.abi": "Choose an ABI:",
+        "dl.android-min": "The current public APK requires Android 7.0 (API 24) or later.",
+        "dl.abi-help": "arm64-v8a for most modern phones, armeabi-v7a for 32-bit ARM devices, and x86_64 for x86_64 Android emulators/devices.",
+        "dl.abi1.sub": "Recommended · 64-bit ARM",
+        "dl.abi2.sub": "32-bit ARM devices",
+        "dl.abi3.sub": "Android emulator / PC · x86_64",
+        "dl.release.source": "Official source",
+        "dl.release.source.sub": "GitHub · v1.1.2",
+        "dl.checksum": "View SHA-256 checksums",
+        "dl.stats.total": "Total APK downloads",
+        "dl.stats.scope": "APK download count across all currently available public GitHub releases. Repeat downloads are counted; this is not a unique-user total.",
+        "dl.stats.releases": "Releases with APKs",
+        "dl.stats.files": "APK files counted",
+        "dl.stats.loading": "Loading statistics from GitHub Releases…",
+        "dl.stats.active": "Active RDP sessions (anonymous)",
+        "dl.stats.active.scope": "Approximate sessions reporting anonymous heartbeats; on by default and can be disabled in app settings. Not unique users or every RDP connection.",
+        "dl.stats.active.loading": "Loading live session count…",
+        "dl.abi1": "Recommended for most modern 64-bit Android phones and tablets · 84.4 MB",
+        "dl.abi2": "For 32-bit ARM Android devices only · 70.4 MB",
+        "dl.abi3": "For x86_64 Android emulators or x86_64 Android PCs · 89.8 MB",
+        "dl.btn.lbl": "Download arm64-v8a APK",
+        "dl.btn.lbl2": "Download armeabi-v7a APK",
+        "dl.btn.lbl3": "Download x86_64 APK",
+        "dl.btn.meta": "Official APK · 1.1.2 (64)",
+        "dl.rilisin": "Need another asset or release notes? Open the public GitHub release. SHA-256 checksums are provided there.",
+        "dl.rilisin.top": "Release notes & all assets",
+        "dl.rilisin.sub": "GitHub Release · v1.1.2",
+        "foot.status": "Status & Health",
+        "foot.privacy": "Privacy Policy",
+        "foot.terms": "Terms of Service",
+        "foot.licenses": "Open Source Licenses"
+      };
+
+      function applyTheme(t) {
+        currentTheme = t;
+        document.documentElement.setAttribute("data-theme", t);
+        localStorage.setItem("xydesk_theme", t);
+        var label = t === "dark" ? (currentLang === "id" ? "Gelap" : "Dark") : (currentLang === "id" ? "Terang" : "Light");
+        themeBtn.textContent = label;
+        if (themeBtnMobile) {
+          themeBtnMobile.textContent = (currentLang === "id" ? "Tema: " : "Theme: ") + label;
+        }
+      }
+
+      function applyLang(l) {
+        currentLang = l;
+        localStorage.setItem("xydesk_lang", l);
+        document.documentElement.setAttribute("lang", l);
+        document.querySelectorAll("[data-i18n]").forEach(function (el) {
+          var k = el.getAttribute("data-i18n");
+          if (l === "en" && enDict[k]) {
+            el.textContent = enDict[k];
+          } else if (idDefaults[k]) {
+            el.textContent = idDefaults[k];
+          }
+        });
+        if (langBtnMobile) {
+          langBtnMobile.textContent = l === "en" ? "Language: EN / ID" : "Bahasa: ID / EN";
+        }
+        applyTheme(currentTheme);
+        renderDownloadStats();
+        renderActiveSessionStats();
+      }
+
+      themeBtn.addEventListener("click", function () {
+        applyTheme(currentTheme === "dark" ? "light" : "dark");
+      });
+      langBtn.addEventListener("click", function () {
+        applyLang(currentLang === "id" ? "en" : "id");
+      });
+      if (themeBtnMobile) {
+        themeBtnMobile.addEventListener("click", function () {
+          applyTheme(currentTheme === "dark" ? "light" : "dark");
+        });
+      }
+      if (langBtnMobile) {
+        langBtnMobile.addEventListener("click", function () {
+          applyLang(currentLang === "id" ? "en" : "id");
+        });
+      }
+
+      applyLang(currentLang);
+      loadDownloadStats();
+      loadActiveSessionStats();
+      window.setInterval(loadActiveSessionStats, 30_000);
+    })();
+  </script>
+</body>
+</html>

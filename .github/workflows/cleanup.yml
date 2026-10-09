@@ -1,0 +1,32 @@
+name: Bersihkan Actions artifacts
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: '17 3 * * *'
+  workflow_run:
+    workflows: ['Build APK']
+    types: [completed]
+
+permissions:
+  actions: write
+
+concurrency:
+  group: cleanup
+  cancel-in-progress: false
+
+jobs:
+  prune:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Hapus artifacts sementara, pertahankan log dan riwayat run
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -eu
+          repo="$GITHUB_REPOSITORY"
+          for art in $(gh api --paginate "repos/$repo/actions/artifacts" -q '.artifacts[].id'); do
+            gh api -X DELETE "repos/$repo/actions/artifacts/$art" </dev/null >/dev/null || true
+          done
+          # Jangan hapus workflow runs/logs, tag, atau release: semuanya bukti audit dan provenance rilis.
