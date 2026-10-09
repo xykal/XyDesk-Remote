@@ -189,7 +189,7 @@ test("download stats sum APK asset counts across all available releases only", a
     assert.equal(body.total_apk_downloads, 85);
     assert.equal(body.apk_asset_count, 4);
     assert.equal(body.release_count, 2);
-    assert.match(body.note, /bukan jumlah pengguna unik/);
+    assert.match(body.note, /pengunduh unik pertama/);
     assert.equal(requestedUrl, "https://api.github.com/repos/xykal/XyDesk-Remote/releases?per_page=100&page=1");
     assert.equal(authorization, "Bearer test-token");
   } finally {

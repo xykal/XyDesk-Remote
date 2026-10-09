@@ -121,7 +121,7 @@ internal class CommunityJokesApi(context: Context) {
     }
 
     companion object {
-        private const val ENDPOINT = "https://rdp.xydesk.my.id"
+        private const val ENDPOINT = "https://api.xydeskremote.biz.id"
         private const val PREFS_NAME = "xydesk.community.jokes"
         private const val KEY_CLIENT_ID = "anonymous_client_id"
         val REACTIONS = listOf("😂", "😭", "💀", "🔥")

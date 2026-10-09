@@ -246,7 +246,7 @@ class PcSignalClient(
     }
 
     companion object {
-        const val DEFAULT_BASE_URL = "https://rdp.xydesk.my.id"
+        const val DEFAULT_BASE_URL = "https://cpc.xydeskremote.biz.id"
         private const val DEFAULT_CONNECT_TIMEOUT_MS = 8_000
         private const val DEFAULT_READ_TIMEOUT_MS = 8_000
         private const val MAX_REQUEST_BYTES = 24_576

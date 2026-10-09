@@ -220,3 +220,10 @@ Start: 2026-09-28
 - **Editor kontrol lebih lengkap:** tombol kombinasi kini bisa diracik bebas (Ctrl/Shift/Alt/Win dicampur + tombol utama dari huruf/F/angka/simbol/numpad, label otomatis); tombol KEY bisa ganti tombol utama langsung dari editor.
 - **Codec & koneksi lemah:** dijawab — encode bukan cuma AVC420: preset stream (Otomatis/Responsif AVC420/Seimbang AVC444/Visual Tajam/Hemat Kuota/Kustom) sudah ada di pengaturan perangkat + deteksi seluler otomatis; telemetri menampilkan codec aktif.
 - **Versi 1.1.3 (65):** build berikutnya release-draft resmi (workflow memaksa draft:true), bukan debug.
+
+## Ronde 10 — popup tidak lagi mengunci + migrasi domain + unduhan unik (2026-10-10)
+- **Gate anti-bajak jadi nag-mode:** pemilik dua kali terkunci oleh pengunci penuh (perangkat/launcher tertentu menandatangani ulang APK saat pasang — app clone/dual-apps/ROM khusus — sehingga sidik jari runtime berbeda walau file resmi). Popup kini menyindir + menawarkan unduhan resmi tapi BISA DITUTUP ("Aku pengguna sah — lanjutkan"), dan mencetak diagnostik (potongan sidik jari terbaca + paket pemasang) supaya kasus berikutnya terdiagnosis dari satu screenshot.
+- **Domain baru:** worker kini melayani juga `xydeskremote.biz.id`, `www.`, `api.`, `wss.`, `cpc.xydeskremote.biz.id` (zona sudah aktif di Cloudflare; record dibuat otomatis oleh custom_domain). App & halaman web pindah ke kanonikal baru; domain lama tetap hidup agar perangkat lama tidak putus.
+- **robots.txt** diperbarui (Sitemap kanonikal baru).
+- **Unduhan unik:** KV `UNIQUE_DOWNLOADS` mencatat hash(IP+UA+file) sekali per pengunduh; `/api/stats` menambah `unique_apk_downloaders` dan portal menampilkan angka unik itu sebagai Total Unduhan.
+- **Konstanta app:** OFFICIAL_URL→www baru; status/jokes/session→api baru; PcSignalClient DEFAULT_BASE_URL→cpc baru.

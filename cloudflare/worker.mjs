@@ -329,6 +329,36 @@ async function statusResponse(request, env) {
   }
 }
 
+/**
+ * Hitung pengunduh unik: hash(IP + User-Agent + file) disimpan di KV sekali;
+ * unduhan berulang dari sumber yang sama tidak menambah total. Statistik
+ * tidak boleh pernah menghalangi unduhan, jadi semua kegagalan ditelan.
+ */
+async function recordUniqueDownload(env, request, fileName) {
+  const kv = env.UNIQUE_DOWNLOADS;
+  if (!kv) return;
+  try {
+    const ip = String(request.headers.get("cf-connecting-ip") || "unknown").toLowerCase();
+    const ua = String(request.headers.get("user-agent") || "unknown").toLowerCase();
+    const digest = await crypto.subtle.digest(
+      "SHA-256",
+      new TextEncoder().encode(`${ip}|${ua}|${fileName}`),
+    );
+    const hex = [...new Uint8Array(digest)]
+      .map((b) => b.toString(16).padStart(2, "0"))
+      .join("");
+    const key = `dl:${fileName}:${hex}`;
+    if (await kv.get(key)) return;
+    await kv.put(key, String(Date.now()), {
+      expirationTtl: 60 * 60 * 24 * 365 * 5,
+    });
+    const current = Number(await kv.get("dl:total")) || 0;
+    await kv.put("dl:total", String(current + 1));
+  } catch {
+    // Statistik belaka: kegagalan KV tidak boleh memutus unduhan.
+  }
+}
+
 async function redirectLegacyAsset(asset, env, request) {
   if (!asset) {
     return new Response("Not Found", {
@@ -340,6 +370,10 @@ async function redirectLegacyAsset(asset, env, request) {
   // Current XyDesk Remote downloads already have a validated official URL in
   // release-state.json. Use it directly so public APK links do not depend on a
   // long-lived GitHub API token or its rate limit.
+  if (asset.repo === "xykal/XyDesk-Remote" && String(asset.fileName || "").endsWith(".apk")) {
+    await recordUniqueDownload(env, request, asset.fileName);
+  }
+
   const currentUrl = await currentReleaseAssetUrl(asset, request, env);
   if (currentUrl) return redirectResponse(currentUrl);
 
@@ -468,14 +502,21 @@ async function downloadStatsResponse(request, env) {
         })),
     );
     const releaseTags = new Set(apkAssets.map((asset) => asset.tag).filter(Boolean));
+    let uniqueApkDownloaders = null;
+    try {
+      uniqueApkDownloaders = Number(await env.UNIQUE_DOWNLOADS?.get("dl:total")) || 0;
+    } catch {
+      uniqueApkDownloaders = null;
+    }
     const body = {
+      unique_apk_downloaders: uniqueApkDownloaders,
       status: "ok",
       scope: "available-public-releases",
       total_apk_downloads: apkAssets.reduce((sum, asset) => sum + asset.downloads, 0),
       apk_asset_count: apkAssets.length,
       release_count: releaseTags.size,
       source: "GitHub Releases API",
-      note: "Jumlah unduhan aset APK pada rilis yang masih tersedia, bukan jumlah pengguna unik. Unduhan ulang dihitung lagi.",
+      note: "unique_apk_downloaders = pengunduh unik pertama (unduhan ulang tidak dihitung); total_apk_downloads = unduhan mentah GitHub untuk rilis yang masih tersedia.",
       updated_at: new Date().toISOString(),
     };
     const response = jsonResponse(body, 200, "GET", {

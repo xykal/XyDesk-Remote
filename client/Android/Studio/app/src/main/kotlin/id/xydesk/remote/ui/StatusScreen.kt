@@ -241,4 +241,4 @@ private fun copyToClipboard(context: Context, text: String) {
     cm.setPrimaryClip(ClipData.newPlainText("XyDesk Remote diagnostics", text))
 }
 
-private const val PORTAL_STATUS_URL = "https://rdp.xydesk.my.id/api/status"
+private const val PORTAL_STATUS_URL = "https://api.xydeskremote.biz.id/api/status"

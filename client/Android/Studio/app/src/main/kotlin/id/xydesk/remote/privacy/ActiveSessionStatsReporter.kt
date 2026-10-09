@@ -11,7 +11,7 @@ import java.util.UUID
  * Host/profile/account details are deliberately not accepted by this API.
  */
 internal object ActiveSessionStatsReporter {
-    private const val ENDPOINT = "https://rdp.xydesk.my.id/api/session"
+    private const val ENDPOINT = "https://api.xydeskremote.biz.id/api/session"
 
     fun heartbeat(sessionId: UUID): Boolean = send("heartbeat", sessionId)
 

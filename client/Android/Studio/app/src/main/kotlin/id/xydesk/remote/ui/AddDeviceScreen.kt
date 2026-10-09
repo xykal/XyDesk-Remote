@@ -622,7 +622,7 @@ fun AddDeviceScreen(
                         XyPillButton(
                             text = xy("Salin Perintah Setup PC", "Copy PC Setup Command"),
                             onClick = {
-                                val cmd = "irm https://rdp.xydesk.my.id/host | iex"
+                                val cmd = "irm https://www.xydeskremote.biz.id/host | iex"
                                 val cm = context.getSystemService(Context.CLIPBOARD_SERVICE) as? ClipboardManager
                                 cm?.setPrimaryClip(ClipData.newPlainText("xydesk-host-cmd", cmd))
                                 XyNoticeBus.post(
@@ -640,7 +640,7 @@ fun AddDeviceScreen(
                             onClick = {
                                 runCatching {
                                     context.startActivity(
-                                        Intent(Intent.ACTION_VIEW, Uri.parse("https://rdp.xydesk.my.id/host")),
+                                        Intent(Intent.ACTION_VIEW, Uri.parse("https://www.xydeskremote.biz.id/host")),
                                     )
                                 }
                             },

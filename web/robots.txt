@@ -2,4 +2,4 @@ User-agent: *
 Allow: /
 Disallow: /api/
 Disallow: /_qa/
-Sitemap: https://rdp.xydesk.my.id/sitemap.xml
+Sitemap: https://www.xydeskremote.biz.id/sitemap.xml

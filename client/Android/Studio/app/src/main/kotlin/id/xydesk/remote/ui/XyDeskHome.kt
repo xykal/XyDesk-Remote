@@ -574,7 +574,7 @@ fun XyDeskHome(
                     onClick = {
                         drawerOpen = false
                         updateModalOpen = true
-                        updateStatusText = xyNow("Memeriksa status rilis terbaru dari rdp.xydesk.my.id...", "Checking latest release status from rdp.xydesk.my.id...")
+                        updateStatusText = xyNow("Memeriksa status rilis terbaru dari www.xydeskremote.biz.id...", "Checking latest release status from www.xydeskremote.biz.id...")
                         scope.launch {
                             val status = withContext(Dispatchers.IO) { fetchRemoteReleaseStatus(context) }
                             updateStatusText = status
@@ -810,10 +810,10 @@ fun XyDeskHome(
             )
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 XyPillButton(
-                    text = xy("Portal rdp.xydesk.my.id", "rdp.xydesk.my.id Portal"),
+                    text = xy("Portal www.xydeskremote.biz.id", "www.xydeskremote.biz.id Portal"),
                     onClick = {
                         runCatching {
-                            context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse("https://rdp.xydesk.my.id")))
+                            context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse("https://www.xydeskremote.biz.id")))
                         }
                     },
                     compact = true,
@@ -1399,7 +1399,7 @@ private fun importProfilesJson(raw: String): List<Pair<ConnectionProfile, Boolea
 private fun fetchRemoteReleaseStatus(context: Context): String {
     val current = appVersion(context)
     return runCatching {
-        val conn = (java.net.URL("https://rdp.xydesk.my.id/api/status").openConnection() as java.net.HttpURLConnection).apply {
+        val conn = (java.net.URL("https://api.xydeskremote.biz.id/api/status").openConnection() as java.net.HttpURLConnection).apply {
             connectTimeout = 5000
             readTimeout = 5000
             requestMethod = "GET"
@@ -1417,8 +1417,8 @@ private fun fetchRemoteReleaseStatus(context: Context): String {
         )
     }.getOrElse {
         xyNow(
-            "Versi terpasang: v{0} · Kunjungi rdp.xydesk.my.id atau rilisin.xyverse.my.id untuk informasi rilis terbaru.",
-            "Installed version: v{0} · Visit rdp.xydesk.my.id or rilisin.xyverse.my.id for the latest release info.",
+            "Versi terpasang: v{0} · Kunjungi www.xydeskremote.biz.id atau rilisin.xyverse.my.id untuk informasi rilis terbaru.",
+            "Installed version: v{0} · Visit www.xydeskremote.biz.id or rilisin.xyverse.my.id for the latest release info.",
             current,
         )
     }

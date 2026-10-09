@@ -21,6 +21,9 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.setValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -50,7 +53,7 @@ import java.security.MessageDigest
 internal object AppChannel {
 
     /** Sumber unduhan resmi. */
-    const val OFFICIAL_URL = "https://rdp.xydesk.my.id/"
+    const val OFFICIAL_URL = "https://www.xydeskremote.biz.id/"
 
     /**
      * True kalau build ini resmi (atau kalau statusnya tidak bisa dipastikan).
@@ -93,14 +96,44 @@ internal object AppChannel {
     private fun sha256(input: ByteArray): ByteArray? = runCatching {
         MessageDigest.getInstance("SHA-256").digest(input)
     }.getOrNull()
+
+    /**
+     * String diagnostik untuk tangkapan layar: potongan sidik jari yang
+     * terbaca di perangkat + sumber pemasangan. Bukan data pribadi.
+     */
+    fun diagnostics(context: Context): Triple<String, String, String> {
+        val fp = signerFingerprint(context)?.joinToString("") { b ->
+            (b.toInt() and 0xFF).toString(16).padStart(2, '0')
+        } ?: "tidak-terbaca"
+        val installer = runCatching {
+            val pm = context.packageManager
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+                pm.getInstallSourceInfo(context.packageName).installingPackageName
+            } else {
+                @Suppress("DEPRECATION")
+                pm.getInstallerPackageName(context.packageName)
+            }
+        }.getOrNull() ?: "tidak-diketahui"
+        return Triple(fp.take(12), installer, MARK_HEAD)
+    }
+
+    private val MARK_HEAD: String by lazy {
+        SignerMark.MARK.take(6).joinToString("") { (it and 0xFF).toString(16).padStart(2, '0') }
+    }
 }
 
 /**
- * Penutup aplikasi untuk build yang tidak resmi.
+ * Peringatan kanal distribusi untuk build yang tidak resmi.
  *
- * Digambar paling atas dan menyerap semua sentuhan, jadi tidak ada jalan masuk
- * ke layar mana pun. Satu-satunya aksi yang tersedia adalah membuka situs
- * resmi atau menutup aplikasi.
+ * PELAJARAN 2026-10-10: versi pengunci penuh dua kali mengenai pengguna sah —
+ * perangkat/launcher tertentu (app clone, dual apps, alat mod, ROM khusus)
+ * menandatangani ulang APK saat pasang, sehingga sidik jari runtime berbeda
+ * walau file aslinya resmi. Mengunci app tidak bisa membedakan bajakan dari
+ * kasus itu, dan pemilik malah terkunci dari app-nya sendiri.
+ *
+ * Aturan baru: peringatan ini MENYINDIR tapi bisa ditutup; app tetap jalan.
+ * Kartu juga mencetak diagnostik (sidik jari yang terbaca + sumber pemasangan)
+ * supaya satu tangkapan layar cukup untuk mengejar kasus berikutnya.
  */
 @Composable
 internal fun AppChannelGate(
@@ -109,18 +142,23 @@ internal fun AppChannelGate(
 ) {
     val context = LocalContext.current
     val blocked = remember { !AppChannel.official(context) }
-    if (!blocked) return
+    var dismissed by remember { mutableStateOf(false) }
+    if (!blocked || dismissed) return
 
-    // Tombol kembali ditelan: kalau tidak, satu ketukan kembali melewati
-    // penutup ini dan masuk ke layar di bawahnya.
-    BackHandler { }
+    val diag = remember { AppChannel.diagnostics(context) }
+    val diagText = xy(
+        "Diagnostik: sidik jari {0}… · pemasang {1} · resmi {2}…",
+        "Diag: fingerprint {0}… · installer {1} · official {2}…",
+        diag.first,
+        diag.second,
+        diag.third,
+    )
 
     Box(
         modifier
             .fillMaxSize()
             .zIndex(100f)
-            .background(XyGateBackground)
-            // Menyerap seluruh sentuhan, termasuk yang jatuh di luar kartu.
+            .background(XyGateBackground.copy(alpha = 0.86f))
             .pointerInput(Unit) {},
         contentAlignment = Alignment.Center,
     ) {
@@ -150,12 +188,19 @@ internal fun AppChannelGate(
             )
             Text(
                 xy(
-                    "JANGAN GITU ATUH. Build ini bukan keluaran resmi XyDesk — sudah gratis, dibajak pula. Padahal tinggal unduh yang asli. Sekalian lebih aman: build modifikasi bisa ikut membawa pulang password PC-mu.",
-                    "COME ON NOW. This build is not an official XyDesk release — it is already free, and it still got pirated. Just download the real one. It is also safer: a modified build can walk away with your PC password.",
+                    "JANGAN GITU ATUH. Build ini tidak terbaca sebagai keluaran resmi XyDesk — sudah gratis, dibajak pula. Padahal tinggal unduh yang asli. Sekalian lebih aman: build modifikasi bisa ikut membawa pulang password PC-mu. Kalau kamu yakin ini build asli (mis. dipasang lewat app clone/ROM khusus), tutup peringatan ini dan app tetap jalan.",
+                    "COME ON NOW. This build does not read as an official XyDesk release — it is already free, and it still got pirated. Just download the real one; it is safer too. If you are sure this is genuine (e.g. installed via app clone / custom ROM), dismiss this warning and the app keeps working.",
                 ),
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 fontSize = 12.sp,
                 lineHeight = 18.sp,
+                textAlign = TextAlign.Center,
+            )
+            Text(
+                diagText,
+                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.75f),
+                fontSize = 9.sp,
+                lineHeight = 13.sp,
                 textAlign = TextAlign.Center,
             )
             XyPillButton(
@@ -169,6 +214,12 @@ internal fun AppChannelGate(
                     }
                 },
                 icon = XyIcons.Download,
+                modifier = Modifier.fillMaxWidth(),
+            )
+            XyPillButton(
+                text = xy("Aku pengguna sah — lanjutkan", "I'm a legit user — continue"),
+                onClick = { dismissed = true },
+                primary = false,
                 modifier = Modifier.fillMaxWidth(),
             )
             XyPillButton(

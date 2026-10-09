@@ -15,7 +15,7 @@
 
 param(
     [switch]$VirtualAudio,
-    [string]$BaseUrl = "https://rdp.xydesk.my.id",
+    [string]$BaseUrl = "https://www.xydeskremote.biz.id",
     [string]$InstallDir = "C:\XyDesk-Remote-Host",
     [switch]$NoRun
 )

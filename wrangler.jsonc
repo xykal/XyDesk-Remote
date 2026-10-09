@@ -5,7 +5,15 @@
   "compatibility_date": "2026-10-03",
   "workers_dev": false,
   "routes": [
-    { "pattern": "rdp.xydesk.my.id", "custom_domain": true }
+    { "pattern": "rdp.xydesk.my.id", "custom_domain": true },
+    { "pattern": "xydeskremote.biz.id", "custom_domain": true },
+    { "pattern": "www.xydeskremote.biz.id", "custom_domain": true },
+    { "pattern": "api.xydeskremote.biz.id", "custom_domain": true },
+    { "pattern": "wss.xydeskremote.biz.id", "custom_domain": true },
+    { "pattern": "cpc.xydeskremote.biz.id", "custom_domain": true }
+  ],
+  "kv_namespaces": [
+    { "binding": "UNIQUE_DOWNLOADS", "id": "909d51530b7d4e6b8ada61ec59a3e3d3" }
   ],
   "durable_objects": {
     "bindings": [
