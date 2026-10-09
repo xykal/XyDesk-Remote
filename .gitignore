@@ -30,3 +30,10 @@ release-local.properties
 .env
 .env.*
 !.env.example
+
+# artefak toolchain lokal — jangan pernah masuk repo
+kotlinc.zip
+/k/
+/out/
+junit.jar
+hamcrest.jar

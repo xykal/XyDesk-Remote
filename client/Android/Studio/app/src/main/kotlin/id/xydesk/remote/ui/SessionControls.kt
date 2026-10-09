@@ -102,7 +102,6 @@ private enum class PanelTab(val id: String, val en: String) {
     SCREEN("Layar", "Screen"),
     INPUT("Input", "Input"),
     BUTTONS("Tombol", "Buttons"),
-    MUSIC("Musik", "Music"),
     SESSION("Sesi", "Session"),
 }
 
@@ -538,6 +537,7 @@ fun SessionControls(
                     onScrollUnits = onScrollUnits,
                     onEdit = { editing = it },
                     onStickAxis = { _, x, y -> onStickAxis(x, y) },
+                    stickMode = stickModeUi,
                 )
             }
         }
@@ -1561,7 +1561,7 @@ private fun SessionPanel(
                 // (0.55 * 1.6 = 0.88) karena panel berisi banyak teks; kaca
                 // setipis pemutar akan membuat tulisan sulit dibaca.
                 .xyGlass(
-                    shape = RoundedCornerShape(22.dp),
+                    shape = RoundedCornerShape(28.dp),
                     opacity = 1.6f,
                     strength = 1f,
                 )
@@ -1693,11 +1693,6 @@ private fun SessionPanel(
                         onAutoHideHudOnExternalInputChange = onAutoHideHudOnExternalInputChange,
                         hudOpacity = hudOpacity,
                         onHudOpacityChange = onHudOpacityChange,
-                    )
-
-                    PanelTab.MUSIC -> MusicTab(
-                        openKey = openSection,
-                        onOpenKey = { openSection = it },
                     )
 
                     PanelTab.SESSION -> SessionTab(
@@ -2595,7 +2590,6 @@ private fun panelTabIcon(entry: PanelTab): ImageVector = when (entry) {
     PanelTab.SCREEN -> XyIcons.Fit
     PanelTab.INPUT -> XyIcons.Keyboard
     PanelTab.BUTTONS -> XyIcons.Grid
-    PanelTab.MUSIC -> XyIcons.Music
     PanelTab.SESSION -> XyIcons.Gear
 }
 

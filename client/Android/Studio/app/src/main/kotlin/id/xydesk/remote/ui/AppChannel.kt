@@ -53,18 +53,6 @@ internal object AppChannel {
     const val OFFICIAL_URL = "https://rdp.xydesk.my.id/"
 
     /**
-     * Sidik jari SHA-256 sertifikat penerbit, disimpan terurai.
-     * Diambil dari sertifikat rilis yang sama dengan yang dilaporkan
-     * `SIGNATURE-VERIFICATION.txt` di setiap rilis.
-     */
-    private val MARK = intArrayOf(
-        0x84, 0x29, 0xF6, 0x89, 0xE7, 0xC3, 0xC6, 0x0A,
-        0xA4, 0x4C, 0xB9, 0x24, 0x20, 0x6D, 0x56, 0xD5,
-        0xA2, 0xDC, 0xCB, 0xD6, 0xC8, 0x8C, 0xB9, 0x00,
-        0x83, 0x5C, 0x19, 0x01, 0xAD, 0x21, 0x96, 0x52,
-    )
-
-    /**
      * True kalau build ini resmi (atau kalau statusnya tidak bisa dipastikan).
      *
      * Build debug dikecualikan supaya pengembangan lokal dan job CI `assembleDebug`
@@ -74,10 +62,9 @@ internal object AppChannel {
     fun official(context: Context): Boolean {
         if (isDebuggable(context)) return true
         val actual = signerFingerprint(context) ?: return true
-        if (actual.size != MARK.size) return true
-        var diff = 0
-        for (i in MARK.indices) diff = diff or (actual[i].toInt() xor MARK[i])
-        return diff == 0
+        if (actual.size != SignerMark.MARK.size) return true
+        // Pembanding murni (byte dibaca tanpa tanda) — lihat SignerMark.
+        return SignerMark.matches(actual)
     }
 
     private fun isDebuggable(context: Context): Boolean = runCatching {

@@ -193,6 +193,10 @@ Start: 2026-09-28
 - **Lebih lega:** padding/spasi dinaikkan di overlay (16→20, sudut 8→16, maxWidth 380→440), panel (16/12→20/16, spacedBy 9→12, maxWidth 720→760), grid seksi (10→12, isi 12→16/14, 7→10), dialog heightIn 380→420.
 - **DPI:** semua ukuran dp/sp (density-independent); pill telemetri kolom vertikal sehingga tidak overflow di layar sempit; panel/overlay berbasis weight/fillMax+widthIn sehingga mengikuti lebar layar.
 
-## Rilis resmi v1.1.2 (2026-10-09)
-- Atas konfirmasi pengguna ("lanjut release resmi"), draft v1.1.2 dipublikasikan.
-- Portal disinkronkan dulu: `release-state.json` → v1.1.2 (nama aset `XyDesk-Remote-<abi>.apk`, sha256 dari `SHA256SUMS.txt`), semua label versi di `index.html` (intro, CTA, seksi unduh, kicker, ld+json, kamus EN) → 1.1.2 (64), kartu changelog v1.1.2 baru di atas (tanpa menyebut mekanisme keamanan, sesuai aturan "tanpa penjelasan").
+## Ronde 7 — penarikan v1.1.2 + perbaikan kritis (2026-10-09)
+- **Release v1.1.2 DIHAPUS** atas perintah pengguna (bug blocker): popup anti-bajak muncul justru pada build resmi. Akar: pembanding sidik jari memakai `byte.toInt()` yang memperluas tanda (0x84 → 0xFFFFFF84) sehingga XOR tidak pernah 0. Logika diekstrak ke `SignerMark` (murni) + `SignerMarkTest` (4 uji, dijalankan lokal OK) — uji ini gagal pada kode lama.
+- **Insiden revert shallow:** `git revert` pada clone `--depth 1` yang parentnya tidak ada menganggap parent = pohon kosong → commit revert menghapus SELURUH repo dan sempat ter-push + ter-deploy. Dipulihkan lewat revert-of-revert, lalu portal dikembalikan bedah ke keadaan v1.0.2 (`git checkout bc08999 -- web PROGRESS.md`). Aturan baru: jangan pernah `git revert` commit yang parentnya shallow; `fetch --depth` dulu.
+- **Panel lebih fokus:** tab MUSIK dikeluarkan dari panel sesi (pemutar punya popup terapung sendiri yang lengkap); `MusicTab` dibiarkan untuk pemutar terapung.
+- **Stik bisa dibaca:** knob joystick HUD kini menampilkan label arah sesuai mode (W/A/S/D atau panah) di tepinya.
+- **Rounded full:** sudut ubin kaca 14→20, overlay 16→24, panel 22→28.
+- **Ditunda (butuh keputusan/log):** host agent 1-exe + stream mandiri; sumber musik online (SoundCloud/yt-dlp — perlu metode yang aman & legal); keluhan install Android 7/16 dan crash transfer file butuh teks error/logcat persis dari tester.

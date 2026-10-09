@@ -348,7 +348,7 @@ fun XySegmented(
             Box(
                 modifier = Modifier
                     .weight(1f)
-                    .clip(RoundedCornerShape(14.dp))
+                    .clip(RoundedCornerShape(20.dp))
                     .background(if (active) MaterialTheme.colorScheme.primaryContainer else Color.Transparent)
                     .clickable { onSelect(index) }
                     .padding(vertical = 9.dp),
@@ -658,7 +658,7 @@ fun XyOverlay(
                     alpha = cardAlpha
                     transformOrigin = popOrigin
                 }
-                .clip(RoundedCornerShape(16.dp))
+                .clip(RoundedCornerShape(24.dp))
                 .background(MaterialTheme.colorScheme.surface)
                 .pointerInput(Unit) {}
                 .padding(20.dp),

@@ -1,5 +1,11 @@
 package id.xydesk.remote.ui
 
+import androidx.compose.foundation.layout.padding
+import androidx.compose.material3.Text
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.sp
+import id.xydesk.remote.ui.input.XyStickMode
+
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -143,6 +149,7 @@ fun HudKeyLayer(
     onScrollUnits: (Int) -> Unit,
     onEdit: (HudKey) -> Unit,
     onStickAxis: (HudKey, Float, Float) -> Unit = { _, _, _ -> },
+    stickMode: XyStickMode = XyStickMode.POINTER,
 ) {
     BoxWithConstraints(Modifier.fillMaxSize().zIndex(12f)) {
         val density = LocalDensity.current
@@ -167,6 +174,7 @@ fun HudKeyLayer(
                     onScrollUnits = onScrollUnits,
                     onEdit = { onEdit(key) },
                     onStickAxis = { x, y -> onStickAxis(key, x, y) },
+                    stickMode = stickMode,
                     modifier = Modifier
                         .offset {
                             IntOffset((key.x * maxX).roundToInt(), (key.y * maxY).roundToInt())
@@ -192,6 +200,7 @@ private fun HudKeyButton(
     onScrollUnits: (Int) -> Unit,
     onEdit: () -> Unit,
     onStickAxis: (Float, Float) -> Unit = { _, _ -> },
+    stickMode: XyStickMode = XyStickMode.POINTER,
     modifier: Modifier = Modifier,
 ) {
     var pressed by remember(key.id) { mutableStateOf(false) }
@@ -308,6 +317,32 @@ private fun HudKeyButton(
         contentAlignment = Alignment.Center,
     ) {
         if (key.kind == HudKind.PAD_STICK) {
+            // Label arah di tepi stik sesuai mode: WASD / panah, supaya
+            // kelihatan langsung stiknya mengendalikan apa.
+            val glyphs = when (stickMode) {
+                XyStickMode.WASD -> listOf(
+                    "W" to Alignment.TopCenter, "D" to Alignment.CenterEnd,
+                    "S" to Alignment.BottomCenter, "A" to Alignment.CenterStart,
+                )
+                XyStickMode.ARROWS -> listOf(
+                    "↑" to Alignment.TopCenter, "→" to Alignment.CenterEnd,
+                    "↓" to Alignment.BottomCenter, "←" to Alignment.CenterStart,
+                )
+                else -> emptyList()
+            }
+            if (glyphs.isNotEmpty()) {
+                Box(Modifier.fillMaxSize().padding(3.dp)) {
+                    glyphs.forEach { (g, align) ->
+                        Text(
+                            g,
+                            modifier = Modifier.align(align),
+                            color = pal.ink.copy(alpha = 0.55f),
+                            fontSize = 8.sp,
+                            fontWeight = FontWeight.SemiBold,
+                        )
+                    }
+                }
+            }
             Box(
                 Modifier
                     .offset { IntOffset(stickOffset.value.x.roundToInt(), stickOffset.value.y.roundToInt()) }
