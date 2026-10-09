@@ -76,13 +76,13 @@ fun XyWallpaper(
             val h = size.height
             when (wall) {
                 XyWall.WIN11 -> {
-                    // Fotonya digambar di luar Canvas (lihat Image di bawah) —
-                    // di sini hanya penajam kontras supaya teks tetap terbaca
-                    // di atas area terang wallpaper.
+                    // Fotonya digambar di luar Canvas (lihat Image di atas) —
+                    // scrim tipis hanya untuk menjaga teks terbaca; sengaja
+                    // ringan supaya wallpaper tidak lagi terlihat hitam.
                     drawRect(
                         Brush.verticalGradient(
                             colors = listOf(
-                                Color(0x59000000), Color(0x26000000), Color(0x8C000000),
+                                Color(0x33000000), Color(0x14000000), Color(0x66000000),
                             ),
                         )
                     )
@@ -91,21 +91,21 @@ fun XyWallpaper(
                 XyWall.WIN10 -> {
                     drawRect(
                         Brush.linearGradient(
-                            colors = listOf(Color(0xFF0A1622), Color(0xFF071019), Color(0xFF02070C)),
+                            colors = listOf(Color(0xFF17364F), Color(0xFF10283C), Color(0xFF0C1D2C)),
                             start = Offset(0f, 0f),
                             end = Offset(w * 0.6f, h),
                         )
                     )
                     drawRect(
                         Brush.linearGradient(
-                            colors = listOf(Color(0xFF1D4F7A), Color(0x00090F16)),
+                            colors = listOf(Color(0xFF2E79B8), Color(0x00153248)),
                             start = Offset(0f, 0f),
                             end = Offset(w * 0.75f, h * 0.9f),
                         )
                     )
                     drawOval(
                         Brush.radialGradient(
-                            colors = listOf(Color(0xFF2F7FB8), Color(0x00000000)),
+                            colors = listOf(Color(0xFF55A8DC), Color(0x00000000)),
                             center = Offset(w * 0.3f, h * 0.3f),
                             radius = h * 0.55f,
                         ),
@@ -148,14 +148,14 @@ fun XyWallpaper(
                 XyWall.NEUTRAL -> {
                     drawRect(
                         Brush.linearGradient(
-                            colors = listOf(Color(0xFF15181C), Color(0xFF0A0C0F)),
+                            colors = listOf(Color(0xFF262C33), Color(0xFF171C22)),
                             start = Offset(0f, 0f),
                             end = Offset(w, h),
                         )
                     )
                     drawOval(
                         Brush.radialGradient(
-                            colors = listOf(Color(0xFF2A3038), Color(0x00000000)),
+                            colors = listOf(Color(0xFF424A54), Color(0x00000000)),
                             center = Offset(w * 0.4f, h * 0.3f),
                             radius = h * 0.6f,
                         ),

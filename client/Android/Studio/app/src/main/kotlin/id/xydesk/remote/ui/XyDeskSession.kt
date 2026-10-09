@@ -318,6 +318,9 @@ fun XyDeskSessionScreen(
     var cursorX by remember { mutableFloatStateOf(0f) }
     var cursorY by remember { mutableFloatStateOf(0f) }
     var cursorInit by remember { mutableStateOf(false) }
+    // Perataan delta kursor antar-frame (EMA) — lihat smoothPointerDelta.
+    var smoothPrevDx by remember { mutableFloatStateOf(Float.NaN) }
+    var smoothPrevDy by remember { mutableFloatStateOf(Float.NaN) }
     var applyingResolution by remember { mutableStateOf(false) }
     // Sesi pernah tersambung? Dipakai auto-reconnect: koneksi yang putus
     // sendiri disambung ulang, tapi kegagalan sambung awal tidak diulang.
@@ -765,9 +768,20 @@ fun XyDeskSessionScreen(
     }
 
     fun movePointer(dxScreen: Float, dyScreen: Float) {
-        val (scaledDx, scaledDy) = applyTrackpadDelta(
+        // Ratakan dulu supaya sapuan di game tidak patah-patah ("muter-muter"),
+        // baru terapkan sensitivitas/akselerasi seperti biasa.
+        val (flatDx, flatDy) = smoothPointerDelta(
+            prevDx = smoothPrevDx,
+            prevDy = smoothPrevDy,
             dx = dxScreen,
             dy = dyScreen,
+            alpha = 0.45f,
+        )
+        smoothPrevDx = flatDx
+        smoothPrevDy = flatDy
+        val (scaledDx, scaledDy) = applyTrackpadDelta(
+            dx = flatDx,
+            dy = flatDy,
             sensitivity = prefs.pointerSensitivity,
             acceleration = prefs.pointerAcceleration,
         )

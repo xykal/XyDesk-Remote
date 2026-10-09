@@ -69,29 +69,57 @@ internal fun TransferFileSection(deviceId: String, notice: XyNoticeState) {
     ) { uris ->
         if (uris.isEmpty()) return@rememberLauncherForActivityResult
         scope.launch {
-            val sent = SessionFileTransfer.sendToPc(context, uris)
-            incoming = SessionFileTransfer.listIncoming(context)
-            notice.show(
-                if (sent > 0) {
+            // Semua langkah dibungkus: provider nakal atau izin yang dicabut di
+            // tengah jalan tidak boleh mematikan aplikasi (keluhan "apk terhenti").
+            val result = runCatching {
+                val sent = SessionFileTransfer.sendToPc(context, uris)
+                val listed = runCatching { SessionFileTransfer.listIncoming(context) }
+                    .getOrDefault(incoming)
+                sent to listed
+            }
+            result.onSuccess { (sent, listed) ->
+                incoming = listed
+                notice.show(
+                    if (sent > 0) {
+                        xyNow(
+                            "{0} file siap di folder bersama. Di PC buka {1}.",
+                            "{0} file(s) are in the shared folder. On the PC open {1}.",
+                            sent,
+                            root?.remoteHint ?: "\\\\tsclient\\XyDesk",
+                        )
+                    } else {
+                        xyNow(
+                            "Tidak ada file yang berhasil disalin. Lihat catatan di bawah.",
+                            "No file could be copied. See the log below.",
+                        )
+                    },
+                )
+            }
+            result.onFailure { t ->
+                notice.show(
                     xyNow(
-                        "{0} file siap di folder bersama. Di PC buka {1}.",
-                        "{0} file(s) are in the shared folder. On the PC open {1}.",
-                        sent,
-                        root?.remoteHint ?: "\\\\tsclient\\XyDesk",
-                    )
-                } else {
-                    xyNow(
-                        "Tidak ada file yang berhasil disalin. Lihat catatan di bawah.",
-                        "No file could be copied. See the log below.",
-                    )
-                },
-            )
+                        "Transfer terhenti: {0}",
+                        "Transfer stopped: {0}",
+                        t.message ?: t.javaClass.simpleName,
+                    ),
+                )
+            }
         }
     }
 
     val refreshIncoming = {
-        root = SessionFileTransfer.transferRoot(context)
-        incoming = SessionFileTransfer.listIncoming(context)
+        runCatching {
+            root = SessionFileTransfer.transferRoot(context)
+            incoming = SessionFileTransfer.listIncoming(context)
+        }.onFailure { t ->
+            notice.show(
+                xyNow(
+                    "Tidak bisa membaca folder bersama: {0}",
+                    "Could not read the shared folder: {0}",
+                    t.message ?: t.javaClass.simpleName,
+                ),
+            )
+        }
     }
 
     Column(verticalArrangement = Arrangement.spacedBy(7.dp)) {

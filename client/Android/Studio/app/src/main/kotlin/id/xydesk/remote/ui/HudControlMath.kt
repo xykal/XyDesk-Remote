@@ -109,6 +109,26 @@ internal fun applyTrackpadDelta(
 }
 
 /**
+ * Haluskan delta gerakan kursor antar-frame dengan exponential moving average.
+ * Sapuan jari mengirim banyak delta kecil yang kasar; tanpa perataan kursor
+ * terasa "muter-muter" di dalam game. [alpha] tinggi = responsif (0 = kaku,
+ * 1 = tanpa perataan). Delta pertama (prevDx/prevDy NaN) dilewatkan apa
+ * adanya supaya tidak ada jeda di awal gestur.
+ */
+internal fun smoothPointerDelta(
+    prevDx: Float,
+    prevDy: Float,
+    dx: Float,
+    dy: Float,
+    alpha: Float,
+): Pair<Float, Float> {
+    if (!dx.isFinite() || !dy.isFinite()) return 0f to 0f
+    if (!prevDx.isFinite() || !prevDy.isFinite()) return dx to dy
+    val a = if (alpha.isFinite()) alpha.coerceIn(0.15f, 1f) else 0.45f
+    return (prevDx + (dx - prevDx) * a) to (prevDy + (dy - prevDy) * a)
+}
+
+/**
  * Deteksi apakah titik sentuh awal berada di jalur scroll tepi kanan layar
  * (Edge-Scroll ala touchpad laptop).
  */

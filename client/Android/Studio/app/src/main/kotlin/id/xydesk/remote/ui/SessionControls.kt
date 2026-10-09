@@ -1755,7 +1755,7 @@ private fun ScreenTab(
     var pcOptions by remember(deviceId) { mutableStateOf(RdpOptions.of(context, deviceId)) }
 
     PanelSectionGrid(openKey = openKey, onOpenKey = onOpenKey) {
-    section("telemetri-kontrol-monitor-fisik-pc",
+    section("telemetri-kontrol-monitor-fisik-pc", advanced = true,
             if (pcConnectMode) xy("Telemetri & Kontrol Monitor Fisik PC", "Live Telemetry & Physical PC Monitor")
             else xy("Telemetri & Multi-Monitor / Sesi RDP", "Live Telemetry & Multi-Monitor / RDP Sessions")) {
             XyToggleRow(
@@ -1871,7 +1871,7 @@ private fun ScreenTab(
                 )
             }
         } else {
-    section("skala-tampilan-windows-dpi",xy("Skala tampilan Windows (DPI)", "Windows display scale (DPI)")) {
+    section("skala-tampilan-windows-dpi",xy("Skala tampilan Windows (DPI)", "Windows display scale (DPI)"), advanced = true) {
             PanelHint(
                 xy(
                     "Meminta skala Windows melalui RDP Display Control (DesktopScaleFactor), bukan zoom lokal. Nilai hanya benar-benar berubah jika host Windows menerapkan permintaan ini.",
@@ -2096,7 +2096,7 @@ private fun InputTab(
             )
         }
 
-    section("fisika-trackpad-sensor",xy("Fisika Trackpad & Sensor", "Trackpad Physics & Sensors")) {
+    section("fisika-trackpad-sensor",xy("Fisika Trackpad & Sensor", "Trackpad Physics & Sensors"), advanced = true) {
             PanelHint(
                 xy(
                     "Sensitivitas pointer: {0}x",
@@ -2153,7 +2153,7 @@ private fun InputTab(
             )
         }
 
-    section("clipboard-otomatis-teks-gambar",xy("Clipboard otomatis (Teks & Gambar)", "Automatic clipboard (Text & Image)")) {
+    section("clipboard-otomatis-teks-gambar",xy("Clipboard otomatis (Teks & Gambar)", "Automatic clipboard (Text & Image)"), advanced = true) {
             PanelHint(
                 if (clipboardSyncEnabled) {
                     xy(
@@ -2230,7 +2230,7 @@ private fun ButtonsTab(
     onOpenKey: (String?) -> Unit,
 ) {
     PanelSectionGrid(openKey = openKey, onOpenKey = onOpenKey) {
-    section("tampilan-tombol-overlay",xy("Tampilan tombol overlay", "Overlay button display")) {
+    section("tampilan-tombol-overlay",xy("Tampilan tombol overlay", "Overlay button display"), advanced = true) {
             XyToggleRow(
                 title = xy("Aktifkan tombol HUD", "Show HUD buttons"),
                 subtitle = xy(
@@ -2420,7 +2420,7 @@ private fun SessionTab(
             }
         }
 
-    section("perekaman-lokal-pc-ke-hp",xy("Perekaman lokal · PC ke HP", "Local recording · PC to phone")) {
+    section("perekaman-lokal-pc-ke-hp",xy("Perekaman lokal · PC ke HP", "Local recording · PC to phone"), advanced = true) {
             PanelHint(
                 xy(
                     "Desktop PC beserta audionya direkam ke satu MP4 di Movies/XyDesk. Layar HP dan kontrol tidak pernah ikut terekam. Kalau penggabungan gagal, video dan audio disimpan sebagai dua file. Perekaman diblokir saat FLAG_SECURE aktif.",
@@ -2635,14 +2635,24 @@ internal class PanelSectionScope {
     internal class Spec(
         val key: String,
         val title: String,
+        val advanced: Boolean = false,
         val content: @Composable () -> Unit,
     )
 
     internal val specs: MutableList<Spec> = mutableListOf()
 
-    /** Rekam satu seksi. [content] belum dijalankan di sini. */
-    fun section(key: String, title: String, content: @Composable () -> Unit) {
-        specs.add(Spec(key, title, content))
+    /**
+     * Rekam satu seksi. [content] belum dijalankan di sini.
+     * [advanced] = seksi jarang dipakai; disembunyikan di balik ubin
+     * "Lanjutan" supaya menu utama tetap pendek dan bersih.
+     */
+    fun section(
+        key: String,
+        title: String,
+        advanced: Boolean = false,
+        content: @Composable () -> Unit,
+    ) {
+        specs.add(Spec(key, title, advanced, content))
     }
 }
 
@@ -2667,7 +2677,13 @@ internal fun PanelSectionGrid(
 ) {
     val scope = PanelSectionScope()
     scope.builder()
-    val specs = scope.specs
+    val allSpecs = scope.specs
+    if (allSpecs.isEmpty()) return
+    // Menu utama hanya seksi inti; seksi lanjutan muncul setelah ubin
+    // "Lanjutan" diketuk supaya tiap tab singkat dilihat sekilas.
+    val advancedCount = allSpecs.count { it.advanced }
+    var showAdvanced by remember { mutableStateOf(false) }
+    val specs = if (showAdvanced) allSpecs else allSpecs.filter { !it.advanced }
     if (specs.isEmpty()) return
     // Grid dua kolom, dan seksi yang terbuka MELEBAR TEPAT DI BAWAH barisnya.
     //
@@ -2732,6 +2748,36 @@ internal fun PanelSectionGrid(
                     open.content()
                 }
             }
+        }
+        if (advancedCount > 0) {
+            XyGlassTile(
+                icon = XyIcons.Sliders,
+                title = if (showAdvanced) {
+                    xy("Sembunyikan seksi lanjutan", "Hide advanced sections")
+                } else {
+                    xy(
+                        "Lanjutan ({0} seksi lagi)",
+                        "Advanced ({0} more sections)",
+                        advancedCount,
+                    )
+                },
+                onClick = {
+                    showAdvanced = !showAdvanced
+                    // Seksi lanjutan yang sedang terbuka ikut tertutup supaya
+                    // isi yang disembunyikan tidak menggantung tanpa ubinnya.
+                    if (!showAdvanced) onOpenKey(null)
+                },
+                selected = false,
+                titleMaxLines = 1,
+                trailing = {
+                    Icon(
+                        imageVector = if (showAdvanced) XyIcons.ChevronUp else XyIcons.ChevronDown,
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.size(16.dp),
+                    )
+                },
+            )
         }
     }
 }

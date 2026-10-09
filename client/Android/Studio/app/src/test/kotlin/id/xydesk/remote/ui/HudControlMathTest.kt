@@ -254,4 +254,40 @@ class HudControlMathTest {
         // Di bawah touch slop belum boleh memulai gestur.
         assertFalse(shouldStartHudButtonGesture(4f, 16f, false, HudKind.PAD_STICK))
     }
+
+    @Test
+    fun `delta pertama lewat tanpa perataan`() {
+        val (dx, dy) = smoothPointerDelta(
+            prevDx = Float.NaN,
+            prevDy = Float.NaN,
+            dx = 42f,
+            dy = -9f,
+            alpha = 0.45f,
+        )
+        assertEquals(42f, dx, 1e-4f)
+        assertEquals(-9f, dy, 1e-4f)
+    }
+
+    @Test
+    fun `perataan menarik delta ke arah nilai sekarang secara proporsional`() {
+        val (dx, dy) = smoothPointerDelta(0f, 0f, 10f, 20f, 0.5f)
+        assertEquals(5f, dx, 1e-4f)
+        assertEquals(10f, dy, 1e-4f)
+    }
+
+    @Test
+    fun `alpha dijepit ke rentang aman`() {
+        val stiff = smoothPointerDelta(0f, 0f, 100f, 100f, 0f)
+        assertTrue(stiff.first >= 0f && stiff.first <= 100f)
+        val loose = smoothPointerDelta(0f, 0f, 100f, 100f, 5f)
+        assertEquals(100f, loose.first, 1e-3f)
+        assertEquals(100f, loose.second, 1e-3f)
+    }
+
+    @Test
+    fun `delta tak berhingga dinetralkan`() {
+        val (dx, dy) = smoothPointerDelta(3f, 3f, Float.POSITIVE_INFINITY, Float.NaN, 0.45f)
+        assertEquals(0f, dx, 1e-4f)
+        assertEquals(0f, dy, 1e-4f)
+    }
 }
