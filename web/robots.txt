@@ -1,5 +1,0 @@
-User-agent: *
-Allow: /
-Disallow: /api/
-Disallow: /_qa/
-Sitemap: https://rdp.xydesk.my.id/sitemap.xml

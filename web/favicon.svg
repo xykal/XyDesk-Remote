@@ -1,6 +1,0 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48" role="img" aria-label="XyDesk Remote">
-  <rect width="48" height="48" rx="11" fill="#14161A"/>
-  <rect x="6.8" y="9.4" width="34.4" height="25.2" rx="3.2" fill="none" stroke="#E4E7EB" stroke-width="2.7"/>
-  <path d="M19.5 40.2h9M24 34.8v5.4" fill="none" stroke="#E4E7EB" stroke-width="2.7" stroke-linecap="round"/>
-  <path d="M18.6 14.8v13.8l3.8-3.7 2.7 6 3-1.4-2.8-6.1 5.4-.4z" fill="#E4E7EB"/>
-</svg>
