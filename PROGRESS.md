@@ -192,3 +192,7 @@ Start: 2026-09-28
 - **Popup halus:** `XyOverlay` kini animasi masuk/keluar (scale 0.88→1 + fade, scrim menggelap) dengan `origin` = posisi tombol pemicu (TransformOrigin); `SessionPanel` membesar dari handle kanan-atas; seksi grid melar mulus via `animateContentSize`.
 - **Lebih lega:** padding/spasi dinaikkan di overlay (16→20, sudut 8→16, maxWidth 380→440), panel (16/12→20/16, spacedBy 9→12, maxWidth 720→760), grid seksi (10→12, isi 12→16/14, 7→10), dialog heightIn 380→420.
 - **DPI:** semua ukuran dp/sp (density-independent); pill telemetri kolom vertikal sehingga tidak overflow di layar sempit; panel/overlay berbasis weight/fillMax+widthIn sehingga mengikuti lebar layar.
+
+## Rilis resmi v1.1.2 (2026-10-09)
+- Atas konfirmasi pengguna ("lanjut release resmi"), draft v1.1.2 dipublikasikan.
+- Portal disinkronkan dulu: `release-state.json` → v1.1.2 (nama aset `XyDesk-Remote-<abi>.apk`, sha256 dari `SHA256SUMS.txt`), semua label versi di `index.html` (intro, CTA, seksi unduh, kicker, ld+json, kamus EN) → 1.1.2 (64), kartu changelog v1.1.2 baru di atas (tanpa menyebut mekanisme keamanan, sesuai aturan "tanpa penjelasan").
