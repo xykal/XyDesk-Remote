@@ -2175,6 +2175,7 @@ private fun InputTab(
                     ),
                 )
             }
+            ClipboardHistoryBlock(clipboardSyncEnabled = clipboardSyncEnabled)
         }
 
     section("pointer",xy("Pointer", "Pointer")) {
@@ -3590,4 +3591,117 @@ private fun RecordingIndicator(modifier: Modifier = Modifier) {
             fontSize = 11.sp,
         )
     }
+}
+
+/**
+ * Riwayat clipboard: 10 teks terakhir yang disalin di HP. Ketuk satu entri
+ * untuk menyalinnya ulang; bila kanal clipboard sesi aktif, sinkronisasi
+ * otomatis yang sudah ada langsung meneruskannya ke PC.
+ */
+@Composable
+private fun ClipboardHistoryBlock(clipboardSyncEnabled: Boolean) {
+    val context = LocalContext.current
+    val history by ClipboardHistory.entries.collectAsState()
+    LaunchedEffect(Unit) { ClipboardHistory.load(context) }
+    var feedback by remember { mutableStateOf<String?>(null) }
+
+    Text(
+        xy("Riwayat clipboard", "Clipboard history").uppercase(),
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+        fontSize = 10.sp,
+        letterSpacing = 1.2.sp,
+        fontWeight = FontWeight.SemiBold,
+    )
+    if (history.isEmpty()) {
+        Text(
+            xy(
+                "Belum ada yang tersalin. Salin teks di HP atau di PC, lalu daftar ini terisi sendiri (maksimal 10 entri terakhir).",
+                "Nothing copied yet. Copy text on the phone or the PC and this list fills itself (last 10 entries).",
+            ),
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            fontSize = 11.sp,
+            lineHeight = 15.sp,
+        )
+        return
+    }
+    Column(
+        Modifier
+            .fillMaxWidth()
+            .heightIn(max = 220.dp)
+            .verticalScroll(rememberScrollState()),
+        verticalArrangement = Arrangement.spacedBy(2.dp),
+    ) {
+        history.forEach { entry ->
+            Row(
+                Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(9.dp))
+                    .clickable {
+                        val ok = ClipboardHistory.copyToPhone(context, entry)
+                        feedback = when {
+                            !ok -> xyNow(
+                                "Tidak bisa menyalin ke clipboard HP.",
+                                "Could not copy to the phone clipboard.",
+                            )
+                            clipboardSyncEnabled -> xyNow(
+                                "Disalin — otomatis diteruskan ke PC.",
+                                "Copied — forwarded to the PC automatically.",
+                            )
+                            else -> xyNow(
+                                "Disalin ke clipboard HP.",
+                                "Copied to the phone clipboard.",
+                            )
+                        }
+                    }
+                    .padding(vertical = 7.dp, horizontal = 6.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                Column(Modifier.weight(1f)) {
+                    Text(
+                        entry.text,
+                        color = MaterialTheme.colorScheme.onSurface,
+                        fontSize = 11.sp,
+                        maxLines = 2,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                    Text(
+                        xy(
+                            "{0} karakter",
+                            "{0} characters",
+                            entry.text.length,
+                        ),
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        fontSize = 9.sp,
+                    )
+                }
+                XyPillButton(
+                    "\u2715",
+                    {
+                        ClipboardHistory.remove(context, entry.id)
+                        feedback = null
+                    },
+                    primary = false,
+                    compact = true,
+                )
+            }
+        }
+    }
+    feedback?.let { message ->
+        Text(
+            message,
+            color = MaterialTheme.colorScheme.primary,
+            fontSize = 10.sp,
+        )
+    }
+    XyPillButton(
+        xy("Hapus semua riwayat", "Clear all history"),
+        {
+            ClipboardHistory.clear(context)
+            feedback = null
+        },
+        primary = false,
+        compact = true,
+        modifier = Modifier.fillMaxWidth(),
+    )
 }

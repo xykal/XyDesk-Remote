@@ -389,7 +389,13 @@ class XyDeskSessionActivity : ComponentActivity() {
         clipboardSyncEnabled = runCatching { RdpOptions.of(this, profile.id).clipboard }
             .getOrDefault(false)
         val cm = getSystemService(CLIPBOARD_SERVICE) as ClipboardManager
+        ClipboardHistory.load(this)
         val listener = ClipboardManager.OnPrimaryClipChangedListener {
+            // Catat dulu ke riwayat (app di depan, clipboard boleh dibaca),
+            // lalu teruskan ke sinkronisasi remote seperti biasa.
+            runCatching {
+                cm.primaryClip?.getItemAt(0)?.coerceToText(this)?.toString()
+            }.getOrNull()?.let { ClipboardHistory.record(this, it) }
             syncPhoneClipboardToRemote()
         }
         clipListener = listener

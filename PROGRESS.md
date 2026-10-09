@@ -204,3 +204,12 @@ Start: 2026-09-28
 ## Ronde 8 — paksa sembunyikan status bar (keluhan tester)
 - Masalah: di beberapa HP, sesudah notification shade ditarik lalu dilepas, status bar (jam/baterai) tetap tampil dan tidak sembunyi lagi.
 - Perbaikan di `XyDeskSessionActivity`: `onResume` & `onWindowFocusChanged(true)` kini selalu memanggil `hideSystemBars()`; tambahan `installSystemBarsWatch()` — listener `WindowInsetsCompat` yang mendeteksi bar terlihat saat activity memegang fokus lalu menjadwalkan sembunyi paksa 700 ms (tidak melawan saat shade benar-benar terbuka karena fokus lepas).
+
+## Ronde 7b — mode tuntas: fitur & perbaikan besar (2026-10-09)
+- **Transfer file anti-crash:** callback picker & tombol Segarkan di `SessionTransferPanel` kini membungkus seluruh alur dengan `runCatching`; kegagalan provider/izin muncul sebagai pesan, bukan mematikan app.
+- **Kursor lebih halus:** `smoothPointerDelta` (EMA, fungsi murni + 4 uji unit) dipasang di `movePointer` sebelum sensitivitas/akselerasi — keluhan sapuan "muter-muter" di game.
+- **Preset "Gamepad Lengkap":** satu ketuk memberi dua stik analog, D-Pad, A/B/X/Y, L1/R1/L2/R2, Start & Select (dipetakan sama dengan gamepad fisik). Anggota enum ditambahkan DI AKHIR supaya ordinal profil tersimpan tidak bergeser.
+- **Wallpaper tidak lagi hitam:** scrim Win11 diringankan (0x59/0x26/0x8C → 0x33/0x14/0x66), gradien Win10 & Netral dinaikkan ke biru/graft yang terbaca.
+- **Menu panel lebih bersih:** tiap tab kini hanya menampilkan seksi inti; 6 seksi jarang dipakai pindah ke ubin "Lanjutan (N seksi lagi)" yang bisa dibuka/tutup di tempat.
+- **Musik online (SoundCloud):** pencarian + pemutaran trek publik langsung di app — scraper `client_id` ala pemutar sumber terbuka, endpoint api-v2, stream progresif MP3; pemutar bawaan `MediaPlayer` + MediaSessionCompat + notifikasi MediaStyle (kontrol kunci layar). UI di pemutar mengambang sesi (dan tab Musik bila diaktifkan lagi). Parser murni + 9 uji unit (`org.json` ditambahkan khusus test).
+- **Fitur khas: Riwayat clipboard** — 10 teks terakhir yang disalin di HP, persisten, ketuk untuk menyalin ulang (kanal clipboard sesi meneruskannya ke PC otomatis), hapus per entri atau semua.

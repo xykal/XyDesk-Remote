@@ -15,6 +15,8 @@ import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.layout.Arrangement
@@ -23,6 +25,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -136,7 +139,11 @@ internal fun SpotifyFloatingPlayer(
                         ),
                         RoundedCornerShape(18.dp),
                     )
-                    .padding(12.dp),
+                    .padding(12.dp)
+                    // Musik online menambah isi; popup tidak boleh lebih tinggi
+                    // dari layar — sisanya digulir.
+                    .heightIn(max = 560.dp)
+                    .verticalScroll(rememberScrollState()),
                 verticalArrangement = Arrangement.spacedBy(8.dp),
             ) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
@@ -240,6 +247,16 @@ internal fun SpotifyFloatingPlayer(
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                 }
+
+                // Musik online bawaan (SoundCloud): selalu tersedia, tidak
+                // bergantung aplikasi musik lain yang terpasang di HP.
+                Text(
+                    xy("Musik online (SoundCloud)", "Online music (SoundCloud)").uppercase(),
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    letterSpacing = 1.1.sp,
+                )
+                OnlineMusicSection()
             }
         }
     }

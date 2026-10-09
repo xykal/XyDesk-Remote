@@ -95,4 +95,7 @@ dependencies {
     implementation 'androidx.activity:activity-compose:1.13.0'
 
     testImplementation 'junit:junit:4.13.2'
+    // org.json dipakai parser SoundCloud; Android menyediakannya saat runtime,
+    // unit test JVM membutuhkannya eksplisit.
+    testImplementation 'org.json:json:20240303'
 }

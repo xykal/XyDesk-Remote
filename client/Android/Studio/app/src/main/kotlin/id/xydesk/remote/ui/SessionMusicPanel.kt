@@ -32,6 +32,17 @@ import androidx.compose.ui.unit.sp
 import androidx.compose.ui.platform.LocalContext
 import id.xydesk.remote.ui.components.XyIcons
 import id.xydesk.remote.ui.components.XyPillButton
+import id.xydesk.remote.ui.components.xyGlass
+import androidx.compose.foundation.text.BasicTextField
+import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.input.ImeAction
+import kotlinx.coroutines.launch
 
 /**
  * Tab Musik di panel sesi: sumber, kontrol penuh, antrian, dan pustaka.
@@ -127,6 +138,10 @@ internal fun MusicTab(
                     )
                 }
             }
+        }
+
+        section("musik-online", xy("Musik online (SoundCloud)", "Online music (SoundCloud)")) {
+            OnlineMusicSection()
         }
 
         section("kontrol-pemutar", xy("Kontrol penuh", "Full control")) {
@@ -510,4 +525,246 @@ private fun LibraryRow(entry: MediaLibraryEntry, onClick: () -> Unit) {
             )
         }
     }
+}
+
+/**
+ * Blok musik online (SoundCloud): pencarian, hasil, dan pemutar bawaan.
+ * Dipakai panel musik (bila tab-nya aktif) dan pemutar mengambang sesi.
+ */
+@Composable
+internal fun OnlineMusicSection() {
+    val context = LocalContext.current
+    val online by OnlineMusicPlayer.state.collectAsState()
+    val scope = rememberCoroutineScope()
+    var scQuery by remember { mutableStateOf("") }
+    var scResults by remember { mutableStateOf<List<ScTrack>>(emptyList()) }
+    var scSearching by remember { mutableStateOf(false) }
+    var scSearched by remember { mutableStateOf(false) }
+
+    PanelHint(
+        xy(
+            "Cari dan putar trek publik SoundCloud langsung di dalam XyDesk — tanpa login dan tanpa aplikasi tambahan. Pemutarnya milik XyDesk sendiri, jadi tetap jalan saat panel ditutup.",
+            "Search and play public SoundCloud tracks right inside XyDesk — no sign-in, no extra app. XyDesk's own player keeps going after the panel closes.",
+        ),
+    )
+    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        Box(
+            Modifier
+                .weight(1f)
+                .heightIn(min = 40.dp)
+                .xyGlass(shape = RoundedCornerShape(12.dp), opacity = 1.1f, strength = 0.8f)
+                .padding(horizontal = 12.dp, vertical = 10.dp),
+            contentAlignment = Alignment.CenterStart,
+        ) {
+            if (scQuery.isEmpty()) {
+                Text(
+                    xy("Cari lagu, artis…", "Search songs, artists…"),
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    fontSize = 12.sp,
+                )
+            }
+            BasicTextField(
+                value = scQuery,
+                onValueChange = { scQuery = it },
+                modifier = Modifier.fillMaxWidth(),
+                textStyle = TextStyle(
+                    color = MaterialTheme.colorScheme.onSurface,
+                    fontSize = 12.sp,
+                ),
+                cursorBrush = SolidColor(MaterialTheme.colorScheme.primary),
+                keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
+                singleLine = true,
+            )
+        }
+        XyPillButton(
+            xy("Cari", "Search"),
+            {
+                val q = scQuery.trim()
+                if (q.isNotEmpty() && !scSearching) {
+                    scSearching = true
+                    scope.launch {
+                        scResults = SoundCloudClient.search(q)
+                        scSearching = false
+                        scSearched = true
+                    }
+                }
+            },
+            icon = XyIcons.Search,
+            primary = false,
+            compact = true,
+            enabled = !scSearching,
+        )
+    }
+    if (scSearching) {
+        Text(
+            xy("Mencari…", "Searching…"),
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            fontSize = 11.sp,
+        )
+    } else if (scSearched && scResults.isEmpty()) {
+        Text(
+            xy(
+                "Tidak ada hasil atau jaringan sedang bermasalah. Coba kata kunci lain.",
+                "No results or the network is having trouble. Try a different keyword.",
+            ),
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            fontSize = 11.sp,
+        )
+    }
+    if (scResults.isNotEmpty()) {
+        Column(
+            Modifier
+                .fillMaxWidth()
+                .heightIn(max = 260.dp)
+                .verticalScroll(rememberScrollState()),
+            verticalArrangement = Arrangement.spacedBy(4.dp),
+        ) {
+            scResults.forEachIndexed { index, track ->
+                ScResultRow(
+                    track = track,
+                    active = online.current?.id == track.id,
+                    onClick = {
+                        OnlineMusicPlayer.playQueue(context, scResults, index)
+                    },
+                )
+            }
+        }
+        Text(
+            xy("{0} hasil", "{0} results", scResults.size),
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            fontSize = 10.sp,
+        )
+    }
+    online.current?.let { track ->
+        Text(
+            xy("Sedang diputar", "Now playing").uppercase(),
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            fontSize = 10.sp,
+            letterSpacing = 1.2.sp,
+            fontWeight = FontWeight.SemiBold,
+        )
+        Text(
+            track.title,
+            color = MaterialTheme.colorScheme.onSurface,
+            fontSize = 13.sp,
+            fontWeight = FontWeight.SemiBold,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+        )
+        Text(
+            listOfNotNull(
+                track.artist.ifBlank { null },
+                xyNow(
+                    "{0} / {1}",
+                    "{0} / {1}",
+                    formatTrackMs(online.positionMs),
+                    formatTrackMs(track.durationMs),
+                ),
+            ).joinToString(" · "),
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            fontSize = 11.sp,
+        )
+        when (online.status) {
+            OnlineMusicPlayer.Status.LOADING -> Text(
+                xy("Memuat stream…", "Loading stream…"),
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                fontSize = 11.sp,
+            )
+            OnlineMusicPlayer.Status.ERROR -> Text(
+                online.message ?: xy("Pemutaran gagal.", "Playback failed."),
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                fontSize = 11.sp,
+            )
+            else -> Unit
+        }
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            XyPillButton(
+                "\u25c0\u25c0",
+                { OnlineMusicPlayer.previous() },
+                primary = false,
+                compact = true,
+                modifier = Modifier.weight(1f),
+            )
+            XyPillButton(
+                if (online.status == OnlineMusicPlayer.Status.PLAYING) {
+                    xy("Jeda", "Pause")
+                } else {
+                    xy("Putar", "Play")
+                },
+                { OnlineMusicPlayer.toggle() },
+                icon = XyIcons.Music,
+                primary = false,
+                compact = true,
+                modifier = Modifier.weight(1f),
+            )
+            XyPillButton(
+                "\u25b6\u25b6",
+                { OnlineMusicPlayer.next() },
+                primary = false,
+                compact = true,
+                modifier = Modifier.weight(1f),
+            )
+        }
+    }
+}
+
+/** Baris hasil pencarian SoundCloud; ketuk = putar dari trek itu. */
+@Composable
+private fun ScResultRow(track: ScTrack, active: Boolean, onClick: () -> Unit) {
+    Row(
+        Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(9.dp))
+            .clickable(onClick = onClick)
+            .padding(vertical = 6.dp, horizontal = 4.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        Icon(
+            if (active) XyIcons.Play else XyIcons.Music,
+            contentDescription = null,
+            tint = if (active) {
+                MaterialTheme.colorScheme.primary
+            } else {
+                MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
+            },
+            modifier = Modifier.size(14.dp),
+        )
+        Column(Modifier.weight(1f)) {
+            Text(
+                track.title,
+                color = if (active) {
+                    MaterialTheme.colorScheme.primary
+                } else {
+                    MaterialTheme.colorScheme.onSurface
+                },
+                fontSize = 12.sp,
+                fontWeight = if (active) FontWeight.SemiBold else FontWeight.Normal,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+            val subtitle = listOf(
+                track.artist.takeIf { it.isNotBlank() },
+                track.durationMs.takeIf { it > 0 }?.let { formatTrackMs(it) },
+            ).filterNotNull().joinToString(" · ")
+            if (subtitle.isNotEmpty()) {
+                Text(
+                    subtitle,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    fontSize = 10.sp,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+            }
+        }
+    }
+}
+
+/** m:dtk untuk durasi trek; "?:??" untuk nilai tak dikenal. */
+private fun formatTrackMs(ms: Long): String {
+    if (ms <= 0L) return "0:00"
+    val totalSeconds = ms / 1000L
+    val minutes = totalSeconds / 60L
+    val seconds = totalSeconds % 60L
+    return "%d:%02d".format(minutes, seconds)
 }

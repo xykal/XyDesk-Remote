@@ -1407,6 +1407,8 @@ fun XyDeskSessionScreen(
                 // tidak ada di pemetaan tombol HUD.
                 onSendText = { manager.sendText(it) },
                 onSendRemoteClipboardText = { text ->
+                    // Kiriman manual juga masuk riwayat clipboard.
+                    ClipboardHistory.record(context, text)
                     clipboardSyncEnabled && manager.sendClipboardData(text)
                 },
                 activeUsername = activeProfile.username,
