@@ -922,6 +922,7 @@ fun HudKeyEditor(
                             }
                         }
                     }
+                }
                 Text(xy("Cara pakai", "How it works"), color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 11.sp)
                 val supportedActions = HudKey.allowedActions(key.kind)
                 val selectedAction = supportedActions.indexOf(key.action).coerceAtLeast(0)

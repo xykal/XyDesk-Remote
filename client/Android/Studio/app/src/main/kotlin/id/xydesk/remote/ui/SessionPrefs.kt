@@ -164,6 +164,11 @@ class SessionPrefs(context: Context) {
      * Tujuan stik kiri pada gamepad virtual: kursor, tombol WASD, atau tombol
      * panah. Disimpan sebagai ordinal [XyStickMode].
      */
+
+    /** Varian menu sesi: popup tengah (default) atau drawer samping. */
+    var menuDrawer: Boolean
+        get() = input.getBoolean(KEY_MENU_DRAWER, false)
+        set(v) = input.edit().putBoolean(KEY_MENU_DRAWER, v).apply()
     var virtualPadStickMode: XyStickMode
         get() = XyStickMode.entries.getOrElse(input.getInt(KEY_VIRTUAL_PAD_STICK, XyStickMode.WASD.ordinal)) {
             XyStickMode.WASD
@@ -295,7 +300,8 @@ class SessionPrefs(context: Context) {
         private const val KEY_GAMEPAD = "gamepad_enabled"
         private const val KEY_VIRTUAL_PAD = "virtual_pad_enabled"
         private const val KEY_VIRTUAL_PAD_SCALE = "virtual_pad_scale"
-        private const val KEY_VIRTUAL_PAD_STICK = "virtual_pad_stick_mode_v2" // v2: default pindah ke WASD (pemilik: stik mouse membingungkan)
+        private const val KEY_VIRTUAL_PAD_STICK = "virtual_pad_stick_mode_v2"
+        private const val KEY_MENU_DRAWER = "menu_drawer" // v2: default pindah ke WASD (pemilik: stik mouse membingungkan)
         private const val KEY_GYRO_MOUSE = "gyro_mouse"
         private const val KEY_TELEMETRY_PILL = "telemetry_pill"
         private const val KEY_SWAP_MOUSE = "swap_mouse_buttons"
