@@ -232,3 +232,7 @@ Start: 2026-09-28
 - **Fitur "RDP Gratis 6 Jam"** di layar perangkat: unlock = 1 iklan rewarded AdMob (unit milik pemilik) + gabung saluran; lalu tempel PAT GitHub (disimpan TERENKRIPSI di CredentialVault AES-256-GCM); dashboard per-user: fork template `xykal/XyRDP` ke akun pengguna, enable workflow via API, dispatch sesi (akses=keduanya: RustDesk + tunnel IP tanpa Tailscale), polling `out/rdp-status.json` branch `status`, tampil alamat host:port + selftest/uji-luar + cadangan RustDesk/Tailscale, salin, lalu buka formulir koneksi RDP biasa. Tidak ada akun pusat — semua di akun pengguna masing-masing.
 - Parser status murni + 3 uji unit.
 - Masuk lewat baris "RDP Gratis 6 Jam" di bubble tambah perangkat.
+
+## Rilis v1.1.4 (66) — build untuk live review (2026-10-10)
+- Berisi: gate nag-mode + diagnostik, create-RDP XyRDP + AdMob unlock, domain biz.id, unduhan unik, musik online, riwayat clipboard, gamepad lengkap, editor kombinasi bebas, FPS, smoothing, wallpaper, menu inti.
+- Dibangun hanya setelah konfirmasi eksplisit pemilik ("gasken").
