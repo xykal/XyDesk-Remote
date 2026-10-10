@@ -245,3 +245,9 @@ Start: 2026-09-28
 - Diagnostik tetap dicetak di kartu: sidik jari runtime + pemasang. Kalau sidik jari
   != 8429f689… berarti perangkat menandatangani ulang saat pasang (app clone/dual
   apps/ROM) — bukan file APK-nya yang salah.
+
+## Wallpaper layar sesi tidak lagi hitam (2026-10-10)
+- Keluhan pemilik: "wallpaper hitam". Akar masalah: ConnectingScreen dan
+  DisconnectedScreen menggambar wallpaper dengan lapisan dim 0.78/0.84
+  (hampir pekat). Ditipiskan ke 0.35/0.40 — wallpaper terbaca jelas,
+  teks putih tetap kontras.

@@ -1830,7 +1830,7 @@ private fun ConnectingScreen(
 
     Box(Modifier.fillMaxSize()) {
         // Blur layar penuh berbiaya tinggi di HP kelas menengah -> pakai dim saja.
-        XyWallpaper(wall, blurRadius = 0.dp, dim = 0.78f)
+        XyWallpaper(wall, blurRadius = 0.dp, dim = 0.35f)
         Column(
             Modifier
                 .fillMaxSize()
@@ -1904,7 +1904,7 @@ private fun DisconnectedScreen(
     onExit: () -> Unit,
 ) {
     Box(Modifier.fillMaxSize()) {
-        XyWallpaper(wall, blurRadius = 0.dp, dim = 0.84f)
+        XyWallpaper(wall, blurRadius = 0.dp, dim = 0.40f)
         Column(
             Modifier.fillMaxSize().padding(32.dp),
             verticalArrangement = Arrangement.Center,
