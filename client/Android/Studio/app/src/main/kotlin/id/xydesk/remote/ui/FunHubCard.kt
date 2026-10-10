@@ -44,12 +44,16 @@ internal fun FunHubCard(onHide: (() -> Unit)? = null) {
     val api = remember(context) { CommunityJokesApi(context) }
     val scope = rememberCoroutineScope()
 
-    var jokes by remember { mutableStateOf<List<CommunityJoke>>(emptyList()) }
+    // Cache-first (permintaan pemilik: buka feed langsung ada isinya, tidak
+    // ada layar "Memuat…"): cache lokal dirender dulu, jaringan menyegar di
+    // belakang layar.
+    var jokes by remember(api) { mutableStateOf(api.cachedFeed()) }
     var draft by remember { mutableStateOf("") }
     var refreshing by remember { mutableStateOf(false) }
     var refreshKey by remember { mutableIntStateOf(0) }
     var submitting by remember { mutableStateOf(false) }
     var activeReactionId by remember { mutableStateOf<String?>(null) }
+    var commentingId by remember { mutableStateOf<String?>(null) }
     var reporting by remember { mutableStateOf(false) }
     var reportTarget by remember { mutableStateOf<CommunityJoke?>(null) }
     var reportedIds by remember { mutableStateOf(emptySet<String>()) }
@@ -79,17 +83,26 @@ internal fun FunHubCard(onHide: (() -> Unit)? = null) {
     }
 
     fun updateJoke(updated: CommunityJoke) {
-        jokes = jokes.map { if (it.id == updated.id) updated else it }
+        jokes = jokes.map { old ->
+            if (old.id != updated.id) return@map old
+            // Respons reaksi tidak memuat komentar; jangan sampai hilang.
+            updated.copy(
+                comments = updated.comments.ifEmpty { old.comments },
+                commentsTotal = maxOf(updated.commentsTotal, old.commentsTotal),
+            )
+        }
     }
 
     LaunchedEffect(api, refreshKey) {
-        refreshing = true
+        refreshing = jokes.isEmpty()
         feedError = null
         try {
-            jokes = api.latest()
+            val fresh = api.latest()
+            jokes = fresh
+            api.cacheFeed(fresh)
             showAll = false
         } catch (error: Exception) {
-            feedError = showCommunityError(error, loadingFeed = true)
+            if (jokes.isEmpty()) feedError = showCommunityError(error, loadingFeed = true)
         } finally {
             refreshing = false
         }
@@ -198,6 +211,29 @@ internal fun FunHubCard(onHide: (() -> Unit)? = null) {
                                 }
                             },
                             onReport = { reportTarget = joke },
+                            isCommentBusy = commentingId == joke.id,
+                            onComment = { text ->
+                                if (commentingId == null) {
+                                    scope.launch {
+                                        commentingId = joke.id
+                                        feedMessage = null
+                                        try {
+                                            val posted = api.comment(joke.id, text)
+                                            updateJoke(
+                                                joke.copy(
+                                                    comments = (listOf(posted) + joke.comments).take(5),
+                                                    commentsTotal = joke.commentsTotal + 1,
+                                                ),
+                                            )
+                                        } catch (error: Exception) {
+                                            feedMessage = showCommunityError(error)
+                                            feedMessageIsError = true
+                                        } finally {
+                                            commentingId = null
+                                        }
+                                    }
+                                }
+                            },
                         )
                     }
                     if (jokes.size > INITIAL_JOKES_VISIBLE) {
@@ -403,7 +439,33 @@ private fun CommunityJokeItem(
     alreadyReported: Boolean,
     onReact: (String) -> Unit,
     onReport: () -> Unit,
+    isCommentBusy: Boolean = false,
+    onComment: (String) -> Unit = {},
 ) {
+    var pickerOpen by remember(joke.id) { mutableStateOf(false) }
+    var commentsOpen by remember(joke.id) { mutableStateOf(false) }
+    var commentDraft by remember(joke.id) { mutableStateOf("") }
+
+    @Composable
+    fun ReactionChip(emoji: String) {
+        val selected = joke.viewerReaction == emoji
+        val count = joke.reactions[emoji] ?: 0
+        Row(
+            modifier = Modifier
+                .clickable(enabled = !isReactionBusy) { onReact(emoji) }
+                .padding(horizontal = 3.dp, vertical = 5.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Text(
+                "$emoji $count",
+                style = MaterialTheme.typography.labelSmall,
+                color = if (selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
+                fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Normal,
+                maxLines = 1,
+            )
+        }
+    }
+
     Column(
         modifier = Modifier
             .fillMaxWidth()
@@ -411,39 +473,65 @@ private fun CommunityJokeItem(
         verticalArrangement = Arrangement.spacedBy(8.dp),
     ) {
         Text(joke.text, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurface)
+
+        // Reaksi cepat + tombol "+" untuk 24 emoji (grid 8x3, tanpa scroll).
         Row(
             modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(6.dp),
+            horizontalArrangement = Arrangement.spacedBy(4.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            CommunityJokesApi.REACTIONS.forEach { emoji ->
-                val selected = joke.viewerReaction == emoji
-                Row(
-                    modifier = Modifier
-                        .clickable(enabled = !isReactionBusy) { onReact(emoji) }
-                        .padding(horizontal = 3.dp, vertical = 5.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    Text(
-                        "$emoji ${joke.reactions[emoji] ?: 0}",
-                        style = MaterialTheme.typography.labelSmall,
-                        color = if (selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
-                        fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Normal,
-                        maxLines = 1,
-                    )
+            CommunityJokesApi.QUICK_REACTIONS.forEach { emoji -> ReactionChip(emoji) }
+            Text(
+                if (pickerOpen) "−" else "+",
+                modifier = Modifier
+                    .clickable(enabled = !isReactionBusy) { pickerOpen = !pickerOpen }
+                    .padding(horizontal = 8.dp, vertical = 4.dp),
+                style = MaterialTheme.typography.labelLarge,
+                fontWeight = FontWeight.Bold,
+                color = MaterialTheme.colorScheme.primary,
+            )
+        }
+        if (pickerOpen) {
+            Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                CommunityJokesApi.REACTIONS.chunked(8).forEach { rowEmojis ->
+                    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceEvenly) {
+                        rowEmojis.forEach { emoji ->
+                            Text(
+                                emoji,
+                                modifier = Modifier
+                                    .clickable(enabled = !isReactionBusy) {
+                                        onReact(emoji)
+                                        pickerOpen = false
+                                    }
+                                    .padding(vertical = 4.dp),
+                                style = MaterialTheme.typography.titleMedium,
+                            )
+                        }
+                    }
                 }
             }
         }
+
         Row(
             modifier = Modifier.fillMaxWidth(),
             verticalAlignment = Alignment.CenterVertically,
         ) {
             Text(
-                xy("Anonim", "Anonymous"),
+                joke.authorName ?: xy("Anonim", "Anonymous"),
                 style = MaterialTheme.typography.labelSmall,
+                fontWeight = FontWeight.SemiBold,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
             Spacer(Modifier.width(10.dp))
+            Text(
+                xy("Komentar ({0})", "Comments ({0})", joke.commentsTotal),
+                modifier = Modifier
+                    .clickable { commentsOpen = !commentsOpen }
+                    .padding(horizontal = 4.dp, vertical = 3.dp),
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.primary,
+            )
+            Spacer(Modifier.width(6.dp))
             Text(
                 if (alreadyReported) xy("Dilaporkan", "Reported") else xy("Laporkan", "Report"),
                 modifier = if (alreadyReported) Modifier else Modifier
@@ -452,6 +540,64 @@ private fun CommunityJokeItem(
                 style = MaterialTheme.typography.labelSmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
+        }
+
+        if (commentsOpen) {
+            Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                if (joke.comments.isEmpty()) {
+                    Text(
+                        xy("Belum ada komentar. Jadilah yang pertama.", "No comments yet. Be the first."),
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+                joke.comments.forEach { c ->
+                    Column {
+                        Text(
+                            c.name ?: xy("Anonim", "Anonymous"),
+                            style = MaterialTheme.typography.labelSmall,
+                            fontWeight = FontWeight.SemiBold,
+                            color = MaterialTheme.colorScheme.primary,
+                        )
+                        Text(c.text, style = MaterialTheme.typography.bodySmall)
+                    }
+                }
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    BasicTextField(
+                        value = commentDraft,
+                        onValueChange = { if (it.codePointCount(0, it.length) <= 140) commentDraft = it },
+                        modifier = Modifier.weight(1f),
+                        textStyle = TextStyle(
+                            color = MaterialTheme.colorScheme.onSurface,
+                            fontSize = MaterialTheme.typography.bodySmall.fontSize,
+                        ),
+                        cursorBrush = SolidColor(MaterialTheme.colorScheme.primary),
+                        maxLines = 2,
+                        decorationBox = { inner ->
+                            if (commentDraft.isEmpty()) {
+                                Text(
+                                    xy("Tulis komentar…", "Write a comment…"),
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                )
+                            }
+                            inner()
+                        },
+                    )
+                    XyPillButton(
+                        text = if (isCommentBusy) "…" else xy("Kirim", "Send"),
+                        onClick = {
+                            val clean = commentDraft.trim()
+                            if (clean.isNotEmpty() && !isCommentBusy) {
+                                onComment(clean)
+                                commentDraft = ""
+                            }
+                        },
+                        enabled = commentDraft.trim().isNotEmpty() && !isCommentBusy,
+                        compact = true,
+                    )
+                }
+            }
         }
     }
 }

@@ -29,12 +29,31 @@ internal class CommunityJokesApi(context: Context) {
     }
 
     suspend fun submit(text: String): CommunityJoke = withContext(Dispatchers.IO) {
-        val body = request(
-            method = "POST",
-            path = "/api/jokes",
-            payload = JSONObject().put("client_id", clientId).put("text", text),
-        )
+        val payload = JSONObject().put("client_id", clientId).put("text", text)
+        displayName()?.let { payload.put("display_name", it) }
+        val body = request(method = "POST", path = "/api/jokes", payload = payload)
         parseJoke(body.optJSONObject("joke") ?: error("Missing submitted joke"))
+    }
+
+    suspend fun comment(jokeId: String, text: String): JokeComment = withContext(Dispatchers.IO) {
+        val payload = JSONObject().put("client_id", clientId).put("text", text)
+        displayName()?.let { payload.put("display_name", it) }
+        val body = request(method = "POST", path = "/api/jokes/$jokeId/comment", payload = payload)
+        val c = body.optJSONObject("comment") ?: error("Missing comment")
+        JokeComment(
+            id = c.optString("id"),
+            name = c.optString("name").takeIf { it.isNotBlank() },
+            text = c.optString("text"),
+            createdAtMillis = c.optLong("created_at", 0L),
+        )
+    }
+
+    /** Nama tampilan server (dipulihkan setelah pasang ulang bila ID dipulihkan). */
+    suspend fun fetchServerDisplayName(): String? = withContext(Dispatchers.IO) {
+        runCatching {
+            val body = request(method = "GET", path = "/api/jokes/me", headers = mapOf("X-XyDesk-Client-ID" to clientId))
+            body.optString("display_name").takeIf { it.isNotBlank() }
+        }.getOrNull()
     }
 
     suspend fun react(jokeId: String, emoji: String): CommunityJoke = withContext(Dispatchers.IO) {
@@ -100,14 +119,110 @@ internal class CommunityJokesApi(context: Context) {
 
     private fun parseJoke(value: JSONObject): CommunityJoke {
         val rawReactions = value.optJSONObject("reactions") ?: JSONObject()
-        val reactions = REACTIONS.associateWith { emoji -> rawReactions.optInt(emoji, 0).coerceAtLeast(0) }
+        val reactions = buildMap {
+            REACTIONS.forEach { emoji -> put(emoji, rawReactions.optInt(emoji, 0).coerceAtLeast(0)) }
+            // Emoji di luar daftar (mis. dari klien masa depan) tetap ditampilkan.
+            rawReactions.keys().forEach { emoji ->
+                if (emoji !in this) put(emoji, rawReactions.optInt(emoji, 0).coerceAtLeast(0))
+            }
+        }
+        val rawComments = value.optJSONArray("comments") ?: JSONArray()
+        val comments = buildList(rawComments.length()) {
+            for (i in 0 until rawComments.length()) {
+                rawComments.optJSONObject(i)?.let { c ->
+                    add(
+                        JokeComment(
+                            id = c.optString("id"),
+                            name = c.optString("name").takeIf { it.isNotBlank() },
+                            text = c.optString("text"),
+                            createdAtMillis = c.optLong("created_at", 0L),
+                        ),
+                    )
+                }
+            }
+        }
         return CommunityJoke(
             id = value.optString("id"),
             text = value.optString("text"),
             createdAtMillis = value.optLong("created_at", 0L),
             reactions = reactions,
             viewerReaction = value.optString("viewer_reaction").takeIf { it in REACTIONS },
+            authorName = value.optString("author_name").takeIf { it.isNotBlank() },
+            commentsTotal = value.optInt("comments_total", 0),
+            comments = comments,
         )
+    }
+
+    // ---- akun komunitas ringan (guest) -------------------------------------
+    private val prefs by lazy { appContext.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE) }
+
+    /** ID ramah pengguna, contoh: XY-7F3A9C. Turunan stabil dari client id. */
+    fun friendlyAccountId(): String = "XY-" + clientId.replace("-", "").take(6).uppercase()
+
+    fun displayName(): String? = prefs.getString(KEY_DISPLAY_NAME, null)?.takeIf { it.isNotBlank() }
+
+    fun setDisplayNameLocally(name: String?) {
+        prefs.edit().putString(KEY_DISPLAY_NAME, name?.trim()?.takeIf { it.isNotBlank() }).apply()
+    }
+
+    suspend fun setDisplayName(name: String): Boolean = withContext(Dispatchers.IO) {
+        val clean = name.trim().take(24)
+        if (clean.isEmpty()) return@withContext false
+        val ok = runCatching {
+            request(
+                method = "PUT",
+                path = "/api/jokes/me",
+                payload = JSONObject().put("client_id", clientId).put("display_name", clean),
+            )
+        }.isSuccess
+        if (ok) setDisplayNameLocally(clean)
+        ok
+    }
+
+    /** Kode pemulihan = client id penuh; dipakai setelah pasang ulang. */
+    fun restoreCode(): String = clientId
+
+    fun restoreClientId(code: String): Boolean {
+        val clean = code.trim()
+        if (runCatching { UUID.fromString(clean) }.isFailure) return false
+        prefs.edit().putString(KEY_CLIENT_ID, clean).apply()
+        return true
+    }
+
+    // ---- cache feed: buka tab tanpa layar "Memuat…" ------------------------
+    fun cachedFeed(): List<CommunityJoke> = runCatching {
+        val raw = prefs.getString(KEY_FEED_CACHE, null) ?: return@runCatching emptyList()
+        val arr = JSONArray(raw)
+        buildList(arr.length()) {
+            for (i in 0 until arr.length()) arr.optJSONObject(i)?.let { add(parseJoke(it)) }
+        }
+    }.getOrDefault(emptyList())
+
+    fun cacheFeed(items: List<CommunityJoke>) {
+        val arr = JSONArray()
+        items.take(20).forEach { j ->
+            arr.put(
+                JSONObject().apply {
+                    put("id", j.id)
+                    put("text", j.text)
+                    put("created_at", j.createdAtMillis)
+                    put("author_name", j.authorName)
+                    put("comments_total", j.commentsTotal)
+                    val reactions = JSONObject()
+                    j.reactions.forEach { (e, n) -> reactions.put(e, n) }
+                    put("reactions", reactions)
+                    j.viewerReaction?.let { put("viewer_reaction", it) }
+                    val comments = JSONArray()
+                    j.comments.forEach { c ->
+                        comments.put(JSONObject().apply {
+                            put("id", c.id); put("name", c.name); put("text", c.text); put("created_at", c.createdAtMillis)
+                        })
+                    }
+                    put("comments", comments)
+                },
+            )
+        }
+        prefs.edit().putString(KEY_FEED_CACHE, arr.toString()).apply()
     }
 
     private fun loadOrCreateClientId(): String {
@@ -124,9 +239,24 @@ internal class CommunityJokesApi(context: Context) {
         private const val ENDPOINT = "https://api.xydeskremote.biz.id"
         private const val PREFS_NAME = "xydesk.community.jokes"
         private const val KEY_CLIENT_ID = "anonymous_client_id"
-        val REACTIONS = listOf("😂", "😭", "💀", "🔥")
+        private const val KEY_DISPLAY_NAME = "display_name"
+        private const val KEY_FEED_CACHE = "feed_cache_v1"
+        // Harus sama dengan COMMUNITY_JOKE_REACTIONS di worker.
+        val REACTIONS = listOf(
+            "😂", "😭", "💀", "🔥", "👍", "👎", "❤️", "🎉",
+            "🤔", "😍", "🥳", "😎", "🙏", "👏", "💯", "🤣",
+            "😡", "😱", "🥶", "🤯", "😴", "🍿", "⚡", "🏆",
+        )
+        val QUICK_REACTIONS = listOf("😂", "💀", "🔥", "👍", "❤️", "🎉")
     }
 }
+
+internal data class JokeComment(
+    val id: String,
+    val name: String?,
+    val text: String,
+    val createdAtMillis: Long,
+)
 
 internal data class CommunityJoke(
     val id: String,
@@ -134,6 +264,9 @@ internal data class CommunityJoke(
     val createdAtMillis: Long,
     val reactions: Map<String, Int>,
     val viewerReaction: String?,
+    val authorName: String? = null,
+    val commentsTotal: Int = 0,
+    val comments: List<JokeComment> = emptyList(),
 )
 
 internal class CommunityJokesException(val reason: String) : Exception(reason)

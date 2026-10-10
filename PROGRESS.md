@@ -288,3 +288,17 @@ Keluhan pemilik setelah uji v1.1.6 dan semua jawabannya:
    Pustaka + backend SoundCloud yang sudah tersambung tetap.
 9. Teks panel dipangkas (subtitle gamepad, hint kirim teks, dll).
 CATATAN: build/tag DITAHAN — menunggu konfirmasi pemilik.
+
+## Ronde 14 — akun komunitas + feed lengkap (2026-10-10)
+- Worker: reaksi diperluas 8 -> 24 emoji (superset lama), komentar per post
+  (maks 50, 5 terbaru ikut di feed), display name per pemasangan (rute /me
+  GET/PUT + /api/jokes/me), author_name + comments_total di payload feed,
+  prune ikut membersihkan komentar. 42 test hijau.
+- App: CommunityJokesApi (komentar, /me, nama tampilan, ID ramah XY-XXXXXX,
+  kode pemulihan = client id, cache feed lokal), FunHubCard cache-first
+  (tanpa layar "Memuat…"), reaksi cepat 6 + tombol "+" grid 24 emoji tanpa
+  scroll, UI komentar (buka/tulis/kirim), nama author tampil.
+- Profil: kartu akun — tamu otomatis ber-ID, login GitHub (PAT RDP Gratis)
+  otomatis jadi nama, nama bisa dikustom (maks 24), salin kode pemulihan,
+  pulihkan akun setelah pasang ulang (nama lama ikut kembali dari server).
+CATATAN: build/tag tetap DITAHAN menunggu konfirmasi.

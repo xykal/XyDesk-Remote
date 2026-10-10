@@ -48,7 +48,15 @@ const COMMUNITY_JOKE_FEED_SIZE = 20;
 const COMMUNITY_JOKE_MAX_ITEMS = 1_000;
 const COMMUNITY_JOKE_POST_INTERVAL_MS = 60_000;
 const COMMUNITY_JOKE_REPORT_THRESHOLD = 3;
-const COMMUNITY_JOKE_REACTIONS = Object.freeze(["😂", "😭", "💀", "🔥", "👍", "❤️", "🎉", "🤔"]);
+// Set reaksi diperluas (permintaan pemilik 2026-10-10: tombol "+" dengan
+// lebih banyak emoji). Superset dari 8 emoji lama supaya hitungan reaksi
+// postingan lama tetap terbaca.
+const COMMUNITY_JOKE_REACTIONS = Object.freeze(["😂", "😭", "💀", "🔥", "👍", "👎", "❤️", "🎉", "🤔", "😍", "🥳", "😎", "🙏", "👏", "💯", "🤣", "😡", "😱", "🥶", "🤯", "😴", "🍿", "⚡", "🏆"]);
+const COMMUNITY_COMMENT_MAX_CHARS = 140;
+const COMMUNITY_COMMENT_INTERVAL_MS = 20_000;
+const COMMUNITY_COMMENT_MAX_PER_JOKE = 50;
+const COMMUNITY_COMMENT_FEED_SIZE = 5;
+const COMMUNITY_DISPLAY_NAME_MAX_CHARS = 24;
 const PC_SIGNAL_ROOM_ID_RE = ACTIVE_SESSION_ID_RE;
 const PC_SIGNAL_WAIT_TTL_MS = 10 * 60_000;
 const PC_SIGNAL_ACTIVE_TTL_MS = 30 * 60_000;
@@ -565,17 +573,38 @@ async function hashedCommunityClientId(clientId) {
   return Array.from(new Uint8Array(digest), (byte) => byte.toString(16).padStart(2, "0")).join("");
 }
 
+function sanitizeCommunityDisplayName(value) {
+  if (typeof value !== "string") return null;
+  const clean = value.replace(/[\u0000-\u001F\u007F]/g, "").replace(/\s+/g, " ").trim();
+  const chars = [...clean];
+  if (chars.length < 1 || chars.length > COMMUNITY_DISPLAY_NAME_MAX_CHARS) return null;
+  if (/(?:https?:\/\/|www\.)/i.test(clean)) return null;
+  return chars.join("");
+}
+
 function communityJokeListKey(createdAt, id) {
   return `joke:${String(createdAt).padStart(13, "0")}:${id}`;
 }
 
-function communityJokePublicView(joke, viewerReaction = null) {
+function communityCommentPublicView(comment) {
+  return {
+    id: comment.id,
+    name: comment.name || null,
+    text: comment.text,
+    created_at: comment.created_at,
+  };
+}
+
+function communityJokePublicView(joke, viewerReaction = null, comments = null) {
   return {
     id: joke.id,
     text: joke.text,
     created_at: joke.created_at,
+    author_name: joke.author_name || null,
     reactions: Object.fromEntries(COMMUNITY_JOKE_REACTIONS.map((emoji) => [emoji, Math.max(0, Number(joke.reactions?.[emoji]) || 0)])),
     viewer_reaction: viewerReaction,
+    comments_total: Math.max(0, Number(joke.comment_count) || 0),
+    comments: comments || [],
   };
 }
 
@@ -1065,6 +1094,10 @@ export class CommunityJokes {
     if (reaction && request.method === "POST") return this.react(request, reaction[1]);
     const report = path.match(/^\/report\/([0-9a-f-]{36})$/i);
     if (report && request.method === "POST") return this.report(request, report[1]);
+    const comment = path.match(/^\/comment\/([0-9a-f-]{36})$/i);
+    if (comment && request.method === "POST") return this.comment(request, comment[1]);
+    if (path === "/me" && request.method === "GET") return this.me(request);
+    if (path === "/me" && request.method === "PUT") return this.setMe(request);
     return durableObjectJson({ status: "not_found" }, 404, request.method);
   }
 
@@ -1082,7 +1115,13 @@ export class CommunityJokes {
         const viewerReaction = clientHash
           ? await this.state.storage.get(`joke-reaction:${joke.id}:${clientHash}`) || null
           : null;
-        items.push(communityJokePublicView(joke, viewerReaction));
+        const commentEntries = await this.state.storage.list({
+          prefix: `joke-comments:${joke.id}:`,
+          reverse: true,
+          limit: COMMUNITY_COMMENT_FEED_SIZE,
+        });
+        const comments = Array.from(commentEntries.values()).map(communityCommentPublicView);
+        items.push(communityJokePublicView(joke, viewerReaction, comments));
         if (items.length >= COMMUNITY_JOKE_FEED_SIZE) break;
       }
       return durableObjectJson({ status: "ok", items }, 200, request.method);
@@ -1118,11 +1157,16 @@ export class CommunityJokes {
         }
 
         const id = crypto.randomUUID();
+        const displayName = sanitizeCommunityDisplayName(parsed.body?.display_name);
+        const storedName = displayName || await transaction.get(`account-name:${clientHash}`) || null;
+        if (displayName) await transaction.put(`account-name:${clientHash}`, displayName);
         const joke = {
           id,
           text,
           created_at: now,
+          author_name: storedName,
           reactions: Object.fromEntries(COMMUNITY_JOKE_REACTIONS.map((emoji) => [emoji, 0])),
+          comment_count: 0,
           report_count: 0,
           hidden: false,
         };
@@ -1140,7 +1184,9 @@ export class CommunityJokes {
             await transaction.delete(`joke-id:${oldest.id}`);
             const oldReactions = await transaction.list({ prefix: `joke-reaction:${oldest.id}:`, limit: 1_000 });
             const oldReports = await transaction.list({ prefix: `joke-report:${oldest.id}:`, limit: 1_000 });
+            const oldComments = await transaction.list({ prefix: `joke-comments:${oldest.id}:`, limit: 1_000 });
             for (const reactionKey of oldReactions.keys()) await transaction.delete(reactionKey);
+            for (const commentKey of oldComments.keys()) await transaction.delete(commentKey);
             for (const reportKey of oldReports.keys()) await transaction.delete(reportKey);
           }
         }
@@ -1192,6 +1238,99 @@ export class CommunityJokes {
         return { status: "ok", joke: communityJokePublicView(joke, emoji) };
       });
       return durableObjectJson(outcome, outcome.status === "not_found" ? 404 : 200, request.method);
+    } catch {
+      return durableObjectJson({ status: "unavailable" }, 503, request.method);
+    }
+  }
+
+  async comment(request, jokeId) {
+    if (!ACTIVE_SESSION_ID_RE.test(jokeId)) {
+      return durableObjectJson({ status: "invalid_joke_id" }, 400, request.method);
+    }
+    const parsed = await readCommunityJson(request);
+    if (parsed.error) return parsed.error;
+    const clientId = parsed.body?.client_id;
+    if (!COMMUNITY_CLIENT_ID_RE.test(String(clientId || ""))) {
+      return durableObjectJson({ status: "invalid_client_id" }, 400, request.method);
+    }
+    if (typeof parsed.body?.text !== "string") {
+      return durableObjectJson({ status: "invalid_text" }, 400, request.method);
+    }
+    const text = parsed.body.text.replace(/\r\n?/g, "\n").replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F]/g, "").trim();
+    const chars = [...text].length;
+    if (chars < 1 || chars > COMMUNITY_COMMENT_MAX_CHARS || /(?:https?:\/\/|www\.)/i.test(text)) {
+      return durableObjectJson({ status: "invalid_text", max_chars: COMMUNITY_COMMENT_MAX_CHARS }, 400, request.method);
+    }
+    try {
+      const clientHash = await hashedCommunityClientId(clientId);
+      const now = Date.now();
+      const outcome = await this.state.storage.transaction(async (transaction) => {
+        const rateKey = `comment-rate:${clientHash}`;
+        const lastAt = Number(await transaction.get(rateKey)) || 0;
+        if (now - lastAt < COMMUNITY_COMMENT_INTERVAL_MS) {
+          return { status: "rate_limited", retry_after_seconds: Math.ceil((COMMUNITY_COMMENT_INTERVAL_MS - (now - lastAt)) / 1_000) };
+        }
+        const listKey = await transaction.get(`joke-id:${jokeId}`);
+        if (!listKey) return { status: "not_found" };
+        const joke = await transaction.get(listKey);
+        if (!joke || joke.hidden) return { status: "not_found" };
+
+        const requestedName = sanitizeCommunityDisplayName(parsed.body?.display_name);
+        const name = requestedName || await transaction.get(`account-name:${clientHash}`) || null;
+        if (requestedName) await transaction.put(`account-name:${clientHash}`, requestedName);
+
+        const id = crypto.randomUUID();
+        const comment = { id, joke_id: jokeId, name, text, created_at: now };
+        await transaction.put(`joke-comments:${jokeId}:${String(now).padStart(13, "0")}:${id}`, comment);
+        await transaction.put(rateKey, now);
+
+        // Batasi komentar per post: buang yang paling tua bila melewati batas.
+        const all = await transaction.list({ prefix: `joke-comments:${jokeId}:` });
+        const names = Array.from(all.keys());
+        if (names.length > COMMUNITY_COMMENT_MAX_PER_JOKE) {
+          for (const name of names.slice(0, names.length - COMMUNITY_COMMENT_MAX_PER_JOKE)) {
+            await transaction.delete(name);
+          }
+        }
+        joke.comment_count = Math.min(names.length, COMMUNITY_COMMENT_MAX_PER_JOKE);
+        await transaction.put(listKey, joke);
+        return { status: "ok", comment: communityCommentPublicView(comment), comments_total: joke.comment_count };
+      });
+      return durableObjectJson(outcome, outcome.status === "not_found" ? 404 : outcome.status === "rate_limited" ? 429 : 201, request.method);
+    } catch {
+      return durableObjectJson({ status: "unavailable" }, 503, request.method);
+    }
+  }
+
+  async me(request) {
+    const clientId = request.headers.get("x-xydesk-client-id") || "";
+    if (!COMMUNITY_CLIENT_ID_RE.test(clientId)) {
+      return durableObjectJson({ status: "invalid_client_id" }, 400, request.method);
+    }
+    try {
+      const clientHash = await hashedCommunityClientId(clientId);
+      const displayName = await this.state.storage.get(`account-name:${clientHash}`) || null;
+      return durableObjectJson({ status: "ok", display_name: displayName }, 200, request.method);
+    } catch {
+      return durableObjectJson({ status: "unavailable" }, 503, request.method);
+    }
+  }
+
+  async setMe(request) {
+    const parsed = await readCommunityJson(request, 1_024);
+    if (parsed.error) return parsed.error;
+    const clientId = parsed.body?.client_id;
+    if (!COMMUNITY_CLIENT_ID_RE.test(String(clientId || ""))) {
+      return durableObjectJson({ status: "invalid_client_id" }, 400, request.method);
+    }
+    const displayName = sanitizeCommunityDisplayName(parsed.body?.display_name);
+    if (!displayName) {
+      return durableObjectJson({ status: "invalid_display_name", max_chars: COMMUNITY_DISPLAY_NAME_MAX_CHARS }, 400, request.method);
+    }
+    try {
+      const clientHash = await hashedCommunityClientId(clientId);
+      await this.state.storage.put(`account-name:${clientHash}`, displayName);
+      return durableObjectJson({ status: "ok", display_name: displayName }, 200, request.method);
     } catch {
       return durableObjectJson({ status: "unavailable" }, 503, request.method);
     }
@@ -1397,8 +1536,30 @@ async function communityJokesResponse(request, env) {
     } else {
       return methodNotAllowed("GET, HEAD, POST");
     }
+  } else if (url.pathname === "/api/jokes/me") {
+    // Profil komunitas ringan: nama tampilan per pemasangan anonim.
+    if (request.method === "GET" || request.method === "HEAD") {
+      const clientId = request.headers.get("x-xydesk-client-id") || "";
+      internal = new Request("https://community-jokes/me", {
+        method: request.method,
+        headers: clientId ? { "x-xydesk-client-id": clientId } : {},
+      });
+    } else if (request.method === "PUT") {
+      const length = Number(request.headers.get("content-length") || 0);
+      if (length > 1_024) return jsonResponse({ status: "payload_too_large" }, 413, request.method);
+      const bounded = await readRequestTextLimited(request, 1_024);
+      if (bounded.tooLarge) return jsonResponse({ status: "payload_too_large" }, 413, request.method);
+      if (bounded.invalid) return jsonResponse({ status: "invalid_request" }, 400, request.method);
+      internal = new Request("https://community-jokes/me", {
+        method: "PUT",
+        headers: { "content-type": request.headers.get("content-type") || "" },
+        body: bounded.text,
+      });
+    } else {
+      return methodNotAllowed("GET, HEAD, PUT");
+    }
   } else {
-    const match = url.pathname.match(/^\/api\/jokes\/([0-9a-f-]{36})\/(reaction|report)$/i);
+    const match = url.pathname.match(/^\/api\/jokes\/([0-9a-f-]{36})\/(reaction|report|comment)$/i);
     if (!match || request.method !== "POST") {
       return match ? methodNotAllowed("POST") : jsonResponse({ status: "not_found" }, 404, request.method);
     }

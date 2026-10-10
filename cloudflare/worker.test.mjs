@@ -1076,3 +1076,84 @@ test("mutating HTTP methods are rejected", async () => {
   assert.equal(response.status, 405);
   assert.equal(response.headers.get("allow"), "GET, HEAD");
 });
+
+test("community comments attach to a joke, show in feed, and carry display names", async () => {
+  const { object } = communityJokesObject();
+  const env = jokesEnv(object);
+  const author = "00000000-0000-4000-8000-000000000021";
+  const commenter = "00000000-0000-4000-8000-000000000022";
+  const submit = await worker.fetch(new Request("https://rdp.xydesk.my.id/api/jokes", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ client_id: author, text: "Ping 200ms di data seluler, semangat.", display_name: "Budi Seluler" }),
+  }), env);
+  assert.equal(submit.status, 201);
+  const posted = await submit.json();
+  assert.equal(posted.joke.author_name, "Budi Seluler");
+  assert.equal(posted.joke.comments_total, 0);
+
+  const comment = await worker.fetch(new Request(`https://rdp.xydesk.my.id/api/jokes/${posted.joke.id}/comment`, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ client_id: commenter, text: "Sabar bang, namanya juga 4G.", display_name: "Tamu 4G" }),
+  }), env);
+  assert.equal(comment.status, 201);
+  const commented = await comment.json();
+  assert.equal(commented.comment.name, "Tamu 4G");
+  assert.equal(commented.comments_total, 1);
+
+  const feed = await worker.fetch(new Request("https://rdp.xydesk.my.id/api/jokes", {
+    headers: { "x-xydesk-client-id": author },
+  }), env);
+  const body = await feed.json();
+  assert.equal(body.items[0].author_name, "Budi Seluler");
+  assert.equal(body.items[0].comments_total, 1);
+  assert.equal(body.items[0].comments[0].text, "Sabar bang, namanya juga 4G.");
+  assert.equal(body.items[0].comments[0].name, "Tamu 4G");
+
+  const tooLong = await worker.fetch(new Request(`https://rdp.xydesk.my.id/api/jokes/${posted.joke.id}/comment`, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ client_id: commenter, text: "x".repeat(141) }),
+  }), env);
+  assert.equal(tooLong.status, 400);
+});
+
+test("expanded reaction set accepts new emoji and /me stores display names", async () => {
+  const { object } = communityJokesObject();
+  const env = jokesEnv(object);
+  const clientId = "00000000-0000-4000-8000-000000000031";
+  const submit = await worker.fetch(new Request("https://rdp.xydesk.my.id/api/jokes", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ client_id: clientId, text: "Emoji baru masuk bro." }),
+  }), env);
+  const posted = await (await submit.json()).joke;
+
+  const trophy = await worker.fetch(new Request(`https://rdp.xydesk.my.id/api/jokes/${posted.id}/reaction`, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ client_id: clientId, emoji: "🏆" }),
+  }), env);
+  assert.equal(trophy.status, 200);
+  const reacted = await trophy.json();
+  assert.equal(reacted.joke.reactions["🏆"], 1);
+
+  const putMe = await object.fetch(new Request("https://community-jokes/me", {
+    method: "PUT",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ client_id: clientId, display_name: "xy-772727 fan" }),
+  }));
+  assert.equal(putMe.status, 200);
+  const getMe = await object.fetch(new Request("https://community-jokes/me", {
+    headers: { "x-xydesk-client-id": clientId },
+  }));
+  assert.equal((await getMe.json()).display_name, "xy-772727 fan");
+
+  const badMe = await object.fetch(new Request("https://community-jokes/me", {
+    method: "PUT",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ client_id: clientId, display_name: "https://spam.link" }),
+  }));
+  assert.equal(badMe.status, 400);
+});
