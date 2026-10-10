@@ -49,6 +49,11 @@ fun RdpFreeScreen(onBack: () -> Unit, onConnect: (ConnectionProfile) -> Unit) {
     var confirmAction by remember { mutableStateOf<String?>(null) }
     var stopRunId by remember { mutableStateOf<Long?>(null) }
 
+    fun openBrowser(url: String) {
+        runCatching { context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url))) }
+            .onFailure { message = "Browser tidak tersedia" }
+    }
+
     suspend fun load() {
         status = api.status()
         if (inputs == null) {
@@ -64,7 +69,13 @@ fun RdpFreeScreen(onBack: () -> Unit, onConnect: (ConnectionProfile) -> Unit) {
         if (e is CancellationException) throw e
         message = e.message ?: "Koneksi RdpFree gagal. Coba lagi."
         status = null // Never connect using a stale address after an API error.
-        if (e is RdpFreeApi.ApiException && e.status == 401) connected = false
+        if (e is RdpFreeApi.ApiException && e.status == 401) {
+            vault.remove(RdpFreeApi.VAULT_KEY)
+            connected = false
+            inputs = null
+            password = ""
+            message += " Buka panduan repo, lalu buat token perangkat baru."
+        }
     }
 
     LaunchedEffect(connected) {
@@ -86,6 +97,15 @@ fun RdpFreeScreen(onBack: () -> Unit, onConnect: (ConnectionProfile) -> Unit) {
                 when (action) {
                     "start" -> { api.start(); message = "Workflow dikirim. Tunggu status berikutnya." }
                     "stop" -> { api.stop(stopRunId ?: throw IllegalStateException("Run tidak tersedia")); message = "Permintaan stop dikirim." }
+                    "replace" -> {
+                        vault.remove(RdpFreeApi.VAULT_KEY)
+                        connected = false
+                        status = null
+                        inputs = null
+                        password = ""
+                        microphone = false
+                        message = "Token lokal dilepas. Token lama belum dicabut di server; kelola melalui menu XyDesk website. Tempel token baru untuk repo yang dipilih."
+                    }
                     "revoke" -> {
                         api.revoke()
                         vault.remove(RdpFreeApi.VAULT_KEY)
@@ -96,7 +116,7 @@ fun RdpFreeScreen(onBack: () -> Unit, onConnect: (ConnectionProfile) -> Unit) {
                         message = "Akses perangkat dicabut."
                     }
                 }
-                if (action != "revoke") load()
+                if (action != "revoke" && action != "replace") load()
             } catch (e: Exception) { error(e) } finally { busy = false }
         }
     }
@@ -111,12 +131,19 @@ fun RdpFreeScreen(onBack: () -> Unit, onConnect: (ConnectionProfile) -> Unit) {
             if (message.isNotBlank()) Text(message, color = MaterialTheme.colorScheme.primary)
             if (!connected) {
                 XyCard(Modifier.fillMaxWidth()) {
-                    Text("Hubungkan perangkat", style = MaterialTheme.typography.titleMedium)
-                    Text("Buat token dari menu XyDesk di website. Jangan masukkan password admin atau token GitHub.")
+                    Text("Hubungkan repo, lalu aplikasi", style = MaterialTheme.typography.titleMedium)
+                    RdpFreeApi.ONBOARDING_STEPS.forEachIndexed { index, step ->
+                        Spacer(Modifier.height(8.dp))
+                        Text("${index + 1}. $step")
+                    }
+                    Text("Install GitHub App berarti memberikan izin repository di GitHub, bukan memasang APK. Login saja belum memberi akses repo.")
+                    Spacer(Modifier.height(12.dp))
+                    XyPillButton("Mulai / lanjut panduan repo", { openBrowser(RdpFreeApi.CONNECTION_URL) }, primary = true)
+                    Spacer(Modifier.height(12.dp))
+                    Text("Sudah selesai setup? Buat token di menu XyDesk website. Jangan masukkan password admin atau token GitHub.")
                     Spacer(Modifier.height(12.dp))
                     XyPillButton("Buka halaman token", {
-                        runCatching { context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(RdpFreeApi.DEVICES_URL))) }
-                            .onFailure { message = "Browser tidak tersedia" }
+                        openBrowser(RdpFreeApi.DEVICES_URL)
                     }, primary = false)
                     Spacer(Modifier.height(12.dp))
                     XyField(tokenInput, { tokenInput = it.take(100) }, "Token perangkat", isPassword = true)
@@ -204,6 +231,16 @@ fun RdpFreeScreen(onBack: () -> Unit, onConnect: (ConnectionProfile) -> Unit) {
                         }, enabled = !busy && password.isNotBlank())
                     }
                 }
+                XyCard(Modifier.fillMaxWidth()) {
+                    Text("Kelola repository", style = MaterialTheme.typography.titleMedium)
+                    Text("Token ini tetap terikat repo saat dibuat. Setelah ganti repo, buat token baru. Hapus repo hanya melalui browser pemilik dengan konfirmasi, bukan lewat token aplikasi.")
+                    Spacer(Modifier.height(12.dp))
+                    XyPillButton("Panduan / pilih / hapus repo", { openBrowser(RdpFreeApi.CONNECTION_URL) }, primary = false)
+                    Spacer(Modifier.height(8.dp))
+                    XyPillButton("Setup Tailscale & password", { openBrowser(RdpFreeApi.SETUP_URL) }, primary = false)
+                    Spacer(Modifier.height(8.dp))
+                    XyPillButton("Ganti token perangkat", { confirmAction = "replace" }, primary = false, enabled = !busy)
+                }
                 XyPillButton("Cabut akses perangkat", { confirmAction = "revoke" }, primary = false, enabled = !busy)
             }
             Text("Credit: KallAncrit", style = MaterialTheme.typography.labelSmall)
@@ -222,10 +259,11 @@ fun RdpFreeScreen(onBack: () -> Unit, onConnect: (ConnectionProfile) -> Unit) {
     }
     confirmAction?.let { action ->
         XyDialog(
-            title = when (action) { "start" -> "Mulai RDP?"; "stop" -> "Hentikan RDP?"; else -> "Cabut token perangkat?" },
+            title = when (action) { "start" -> "Mulai RDP?"; "stop" -> "Hentikan RDP?"; "replace" -> "Ganti token perangkat?"; else -> "Cabut token perangkat?" },
             body = when (action) {
                 "start" -> "Menggunakan pengaturan tersimpan dan kuota GitHub Actions. Jangan kirim ulang jika koneksi terputus; periksa status dahulu."
                 "stop" -> "Sesi aktif akan dihentikan. Simpan pekerjaan terlebih dahulu."
+                "replace" -> "Hanya melepas token dari HP ini. Tidak menghapus repo, tidak menghentikan sesi, dan tidak mencabut token di server. Buat token baru setelah memilih repo di website."
                 else -> "Aplikasi ini tidak bisa mengontrol repository sampai token baru dipasang."
             },
             confirmLabel = "Lanjutkan", onConfirm = { confirmAction = null; operate(action) },

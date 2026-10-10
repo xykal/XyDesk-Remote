@@ -65,6 +65,14 @@ class RdpFreeApi(private val token: () -> String?) {
 
     companion object {
         const val BASE_URL = "https://rdpfree.projectkal.my.id/api/v1"
+        const val CONNECTION_URL = "https://rdpfree.projectkal.my.id/dashboard/connection"
+        const val SETUP_URL = "https://rdpfree.projectkal.my.id/dashboard/setup"
+        val ONBOARDING_STEPS = listOf(
+            "Buat repo dari template di GitHub (isi nama repo, lalu Create repository).",
+            "Kembali ke dashboard: Repo saya sudah dibuat → Izinkan akses repository. Pilih Only select repositories dan centang repo tadi.",
+            "Pilih repo di dashboard, lalu isi Tailscale auth key dan password RDP pada Setup.",
+            "Buka menu XyDesk di website, buat token perangkat, lalu tempel token di aplikasi ini.",
+        )
         const val DEVICES_URL = "https://rdpfree.projectkal.my.id/dashboard/devices"
         const val VAULT_KEY = "rdpfree-api-device-v1"
         val TOKEN_PATTERN = Regex("^rdf_[A-Za-z0-9_-]{43}$")
