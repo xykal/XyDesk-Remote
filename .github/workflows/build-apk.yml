@@ -457,7 +457,7 @@ jobs:
             fi
             echo "V1/JAR $abi: $(tail -1 "/tmp/jarsigner-$abi.txt")"
           done
-          ls -lh XyDesk-Remote-*.apk
+          ls -lh XyDesk-Remote*.apk
       - name: Verifikasi V1/V2, semua ABI, dan signer yang sama dengan v1.0.2
         working-directory: client/Android/Studio
         run: |
