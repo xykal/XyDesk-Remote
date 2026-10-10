@@ -53,7 +53,7 @@ typedef struct
 	                                                  ACaptureRequest**);
 	camera_status_t (*fn_Device_createCaptureSession)(ACameraDevice*,
 	                                                  const ACaptureSessionOutputContainer*,
-	                                                  const ACaptureSession_stateCallbacks*,
+	                                                  const ACameraCaptureSession_stateCallbacks*,
 	                                                  ACameraCaptureSession**);
 	camera_status_t (*fn_Session_setRepeatingRequest)(ACameraCaptureSession*,
 	                                                  ACameraCaptureSession_captureCallbacks*, int,
