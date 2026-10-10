@@ -331,3 +331,11 @@ CATATAN: build/tag tetap DITAHAN menunggu konfirmasi.
 - Web: favicon/logo baru, meta keywords, OG 1200x630, polesan responsif
   (fluid type, hover lift, focus-visible, reduced motion), sitemap lastmod baru.
 CATATAN: build APK tetap DITAHAN menunggu konfirmasi.
+
+## Ronde 17 — input fisik & anti mouse-double (2026-10-10)
+- Engine input fisik SUDAH ada: keyboard OTG/BT (jalur InputSink), mouse
+  (hover/click/scroll di SessionView), gamepad (dispatchKeyEvent +
+  dispatchGenericMotionEvent), deteksi perangkat + banner.
+- "Mouse double" = dua kursor: overlay kursor lokal app + kursor remote di
+  stream saat mouse fisik terpasang. FIX: state externalMouseConnectedState;
+  overlay pointer disembunyikan otomatis saat mouse eksternal terdeteksi.

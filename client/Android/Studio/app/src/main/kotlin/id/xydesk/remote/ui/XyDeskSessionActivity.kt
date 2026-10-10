@@ -124,6 +124,11 @@ class XyDeskSessionActivity : ComponentActivity() {
     private val externalInputState = mutableStateOf(false)
     /** True while a physical keyboard, mouse, gamepad or D-pad is connected. */
     val externalInputDeviceConnected: Boolean get() = externalInputState.value
+
+    /** Mouse fisik (OTG/Bluetooth) terpasang — kursor lokal overlay disembunyikan
+     *  karena kursor remote sudah terlihat di stream (anti "mouse double"). */
+    private val externalMouseState = mutableStateOf(false)
+    val externalMouseConnectedState: androidx.compose.runtime.State<Boolean> get() = externalMouseState
     private var inputManager: InputManager? = null
     private val inputDeviceListener = object : InputManager.InputDeviceListener {
         override fun onInputDeviceAdded(deviceId: Int) = refreshExternalInputDeviceState()
@@ -191,6 +196,15 @@ class XyDeskSessionActivity : ComponentActivity() {
     }
 
     private fun refreshExternalInputDeviceState() {
+        val mouseConnected = InputDevice.getDeviceIds().any { id ->
+            val device = InputDevice.getDevice(id) ?: return@any false
+            if (device.isVirtual || !device.isExternal) return@any false
+            (device.sources and InputDevice.SOURCE_MOUSE) == InputDevice.SOURCE_MOUSE
+        }
+        if (externalMouseState.value != mouseConnected) {
+            externalMouseState.value = mouseConnected
+            ConnectionLog.add("SES: external mouse connected=$mouseConnected")
+        }
         val connected = InputDevice.getDeviceIds().any { id ->
             val device = InputDevice.getDevice(id) ?: return@any false
             if (device.isVirtual || !device.isExternal) return@any false

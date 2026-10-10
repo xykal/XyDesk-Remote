@@ -273,6 +273,14 @@ fun XyDeskSessionScreen(
     var boundInstance by remember { mutableStateOf(0L) }
     var inputMode by remember { mutableIntStateOf(prefs.inputMode.ordinal) }
     var pointerVisible by remember { mutableStateOf(true) }
+    // Kursor overlay disembunyikan saat mouse fisik terpasang: kursor remote
+    // sudah tampil di stream — dua kursor sekaligus terlihat seperti bug
+    // "mouse double" yang dilaporkan penguji.
+    val extMouseState = remember {
+        (context as? XyDeskSessionActivity)?.externalMouseConnectedState
+            ?: mutableStateOf(false)
+    }
+    val extMouseConnected by extMouseState
     // Keyboard HP (IME) — satu-satunya keyboard. Board keyboard virtual dan
     // toolbar di atas keyboard sudah dihapus dari produk (ronde 5).
     var keyboardShown by remember(profile.id) { mutableStateOf(prefs.keyboardShown(profile.id)) }
@@ -1176,7 +1184,8 @@ fun XyDeskSessionScreen(
                 remoteDpi = remoteDpi,
                 telemetry = telemetry,
                 pointerScreen = pointerScreen,
-                pointerVisible = pointerVisible && InputMode.entries[inputMode] == InputMode.TRACKPAD,
+                pointerVisible = pointerVisible && InputMode.entries[inputMode] == InputMode.TRACKPAD &&
+                    !extMouseConnected,
                 remoteCursor = remoteCursor,
                 zoom = zoom,
                 inputMode = InputMode.entries[inputMode],
