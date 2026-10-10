@@ -402,6 +402,16 @@ jobs:
           mv app-arm64-v8a-release.apk XyDesk-Remote-arm64-v8a.apk
           mv app-x86_64-release.apk XyDesk-Remote-x86_64.apk
           ls -lh XyDesk-Remote-*.apk
+      - name: Nama akhir APK untuk user (32bit/64bit)
+        working-directory: client/Android/Studio/app/build/outputs/apk/release
+        run: |
+          set -euo pipefail
+          # Nama internal per-ABI dipakai sampai verifikasi tanda tangan selesai;
+          # nama yang dipublikasikan mengikuti bit arsitektur yang mudah dipahami.
+          mv XyDesk-Remote-armeabi-v7a.apk XyDesk-Remote32bit.apk
+          mv XyDesk-Remote-arm64-v8a.apk XyDesk-Remote64bit.apk
+          mv XyDesk-Remote-x86_64.apk XyDesk-Remote64bit-x86.apk
+          ls -lh XyDesk-Remote*.apk
       - name: Tanda tangani ulang APK dengan skema V1 + V2 (deterministik)
         # AGP 9 mematikan v1 (JAR) saat minSdk >= 24 dan setelan enableV1Signing
         # di build.gradle tidak cukup. Re-sign di sini memakai keystore yang sama,
@@ -566,16 +576,6 @@ jobs:
               "$abi" "$release_tag" "$apk_sha" "$cert" >> "$REPORT"
           done
           cat "$REPORT"
-      - name: Nama akhir APK untuk user (32bit/64bit)
-        working-directory: client/Android/Studio/app/build/outputs/apk/release
-        run: |
-          set -euo pipefail
-          # Nama internal per-ABI dipakai sampai verifikasi tanda tangan selesai;
-          # nama yang dipublikasikan mengikuti bit arsitektur yang mudah dipahami.
-          mv XyDesk-Remote-armeabi-v7a.apk XyDesk-Remote32bit.apk
-          mv XyDesk-Remote-arm64-v8a.apk XyDesk-Remote64bit.apk
-          mv XyDesk-Remote-x86_64.apk XyDesk-Remote64bit-x86.apk
-          ls -lh XyDesk-Remote*.apk
       # Skrip ini sudah ada sejak v1.0.6 tetapi belum pernah dipanggil workflow.
       # Fungsinya: pastikan tiap APK adalah ZIP utuh dan memuat libcrypto.so ABI-nya.
       - name: Verifikasi integritas ZIP & libcrypto per ABI
