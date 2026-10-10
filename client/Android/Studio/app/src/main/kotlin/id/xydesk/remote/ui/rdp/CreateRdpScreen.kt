@@ -39,7 +39,7 @@ import com.google.android.gms.ads.rewarded.RewardedAdLoadCallback
 import id.xydesk.remote.security.CredentialVault
 import id.xydesk.remote.ui.components.XyPillButton
 import id.xydesk.remote.ui.components.XyField
-import id.xydesk.remote.ui.xy
+import id.xydesk.remote.ui.xyNow
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
@@ -123,16 +123,16 @@ internal fun CreateRdpScreen(
     ) {
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             Text(
-                xy("RDP GRATIS 6 JAM", "FREE 6-HOUR RDP"),
+                xyNow("RDP GRATIS 6 JAM", "FREE 6-HOUR RDP"),
                 color = MaterialTheme.colorScheme.onSurface,
                 fontSize = 16.sp,
                 fontWeight = FontWeight.Bold,
                 modifier = Modifier.weight(1f),
             )
-            XyPillButton(xy("Tutup", "Close"), onDismiss, primary = false, compact = true)
+            XyPillButton(xyNow("Tutup", "Close"), onDismiss, primary = false, compact = true)
         }
         Text(
-            xy(
+            xyNow(
                 "Buat PC Windows 6 jam lewat GitHub Actions milikmu sendiri: app membantu fork template XyRDP ke akun GitHub-mu, menyalakan workflow, dan membaca alamat sesi. Semua berjalan di akunmu — bukan akun XyDesk.",
                 "Spin up a 6-hour Windows PC through your own GitHub Actions: the app helps fork the XyRDP template into your GitHub account, enable the workflow, and read the session address. Everything runs on your account — not XyDesk's.",
             ),
@@ -146,7 +146,7 @@ internal fun CreateRdpScreen(
 
         if (step == "unlock") {
             Text(
-                xy("BUKA FITUR (sekali saja)", "UNLOCK (one time)"),
+                xyNow("BUKA FITUR (sekali saja)", "UNLOCK (one time)"),
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 fontSize = 10.sp,
                 letterSpacing = 1.2.sp,
@@ -154,17 +154,17 @@ internal fun CreateRdpScreen(
             )
             XyPillButton(
                 if (unlock.adWatched) {
-                    xy("Iklan sudah ditonton ✓", "Ad already watched ✓")
+                    xyNow("Iklan sudah ditonton ✓", "Ad already watched ✓")
                 } else if (adReady) {
-                    xy("Nonton iklan (1x)", "Watch ad (1x)")
+                    xyNow("Nonton iklan (1x)", "Watch ad (1x)")
                 } else {
-                    xy("Memuat iklan…", "Loading ad…")
+                    xyNow("Memuat iklan…", "Loading ad…")
                 },
                 {
                     val activity = context as? Activity
                     val ad = rewarded
                     if (activity == null || ad == null) {
-                        say(xy("Iklan belum siap; coba sebentar lagi.", "Ad not ready yet; try again shortly."))
+                        say(xyNow("Iklan belum siap; coba sebentar lagi.", "Ad not ready yet; try again shortly."))
                         return@XyPillButton
                     }
                     ad.fullScreenContentCallback = object : FullScreenContentCallback() {
@@ -192,7 +192,7 @@ internal fun CreateRdpScreen(
                         activity,
                         OnUserEarnedRewardListener {
                             unlock.adWatched = true
-                            say(xy("Terima kasih! Syarat iklan selesai.", "Thanks! Ad requirement done."))
+                            say(xyNow("Terima kasih! Syarat iklan selesai.", "Thanks! Ad requirement done."))
                         },
                     )
                 },
@@ -203,9 +203,9 @@ internal fun CreateRdpScreen(
             )
             XyPillButton(
                 if (unlock.joined) {
-                    xy("Sudah gabung saluran ✓", "Already joined ✓")
+                    xyNow("Sudah gabung saluran ✓", "Already joined ✓")
                 } else {
-                    xy("Gabung saluran / grup", "Join channel / group")
+                    xyNow("Gabung saluran / grup", "Join channel / group")
                 },
                 {
                     runCatching {
@@ -215,7 +215,7 @@ internal fun CreateRdpScreen(
                         )
                     }
                     unlock.joined = true
-                    say(xy("Anggap join — selamat datang!", "Consider yourself joined — welcome!"))
+                    say(xyNow("Anggap join — selamat datang!", "Consider yourself joined — welcome!"))
                 },
                 primary = false,
                 compact = true,
@@ -224,7 +224,7 @@ internal fun CreateRdpScreen(
             )
             if (unlock.unlocked) {
                 XyPillButton(
-                    xy("Lanjut: hubungkan akun GitHub", "Continue: link GitHub account"),
+                    xyNow("Lanjut: hubungkan akun GitHub", "Continue: link GitHub account"),
                     { step = "dash" },
                     primary = true,
                     compact = true,
@@ -241,7 +241,7 @@ internal fun CreateRdpScreen(
                 onSay = ::say,
                 onLoggedIn = { name ->
                     login = name
-                    say(xy("Halo {0}! Fork siap dipakai.", "Hello {0}! Your fork is ready.", name))
+                    say(xyNow("Halo {0}! Fork siap dipakai.", "Hello {0}! Your fork is ready.", name))
                 },
             )
         }
@@ -264,7 +264,7 @@ internal fun CreateRdpScreen(
                 onCopy = { text ->
                     val cm = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
                     cm.setPrimaryClip(ClipData.newPlainText("XyDesk RDP", text))
-                    say(xy("Disalin: {0}", "Copied: {0}", text))
+                    say(xyNow("Disalin: {0}", "Copied: {0}", text))
                 },
                 onOpenAddDevice = onOpenAddDevice,
             )
@@ -285,14 +285,14 @@ private fun GitHubLoginBlock(
     var pat by remember { mutableStateOf("") }
 
     Text(
-        xy("AKUN GITHUB-MU", "YOUR GITHUB ACCOUNT"),
+        xyNow("AKUN GITHUB-MU", "YOUR GITHUB ACCOUNT"),
         color = MaterialTheme.colorScheme.onSurfaceVariant,
         fontSize = 10.sp,
         letterSpacing = 1.2.sp,
         fontWeight = FontWeight.SemiBold,
     )
     Text(
-        xy(
+        xyNow(
             "Buat Personal Access Token (classic) dengan scope repo + workflow di github.com/settings/tokens, lalu tempel di sini. Token disimpan TERENKRIPSI di HP-mu dan hanya dipakai untuk memanggil API GitHub atas nama kamu.",
             "Create a Personal Access Token (classic) with repo + workflow scopes at github.com/settings/tokens, then paste it here. The token is stored ENCRYPTED on your phone and only used to call the GitHub API on your behalf.",
         ),
@@ -303,11 +303,11 @@ private fun GitHubLoginBlock(
     XyField(
         value = pat,
         onValueChange = { pat = it },
-        label = xy("Token (ghp_…)", "Token (ghp_…)"),
+        label = xyNow("Token (ghp_…)", "Token (ghp_…)"),
     )
     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
         XyPillButton(
-            xy("Buat token", "Create token"),
+            xyNow("Buat token", "Create token"),
             {
                 runCatching {
                     context.startActivity(
@@ -321,10 +321,10 @@ private fun GitHubLoginBlock(
             modifier = Modifier.weight(1f),
         )
         XyPillButton(
-            xy("Simpan & masuk", "Save & sign in"),
+            xyNow("Simpan & masuk", "Save & sign in"),
             {
                 if (pat.isBlank()) {
-                    onSay(xy("Tempel token dulu.", "Paste your token first."))
+                    onSay(xyNow("Tempel token dulu.", "Paste your token first."))
                     return@XyPillButton
                 }
                 onBusy(true)
@@ -332,7 +332,7 @@ private fun GitHubLoginBlock(
                     val name = XyRdpClient.whoami(pat.trim())
                     onBusy(false)
                     if (name == null) {
-                        onSay(xy("Token ditolak GitHub. Cek scope repo+workflow.", "GitHub rejected the token. Check repo+workflow scopes."))
+                        onSay(xyNow("Token ditolak GitHub. Cek scope repo+workflow.", "GitHub rejected the token. Check repo+workflow scopes."))
                     } else {
                         vault.put(XyRdpConfig.VAULT_PAT_ID, pat.trim())
                         onLoggedIn(name)
@@ -367,14 +367,14 @@ private fun DashboardBlock(
     val forkRepo = "$login/${XyRdpConfig.FORK_REPO_NAME}"
 
     Text(
-        xy("DASBOARD {0}", "{0}'S DASHBOARD", login.uppercase()),
+        xyNow("DASBOARD {0}", "{0}'S DASHBOARD", login.uppercase()),
         color = MaterialTheme.colorScheme.onSurfaceVariant,
         fontSize = 10.sp,
         letterSpacing = 1.2.sp,
         fontWeight = FontWeight.SemiBold,
     )
     Text(
-        xy(
+        xyNow(
             "Alamat sesi adalah IP publik tunnel (bore/ngrok) + port — TIDAK butuh Tailscale di HP. RustDesk ditampilkan sebagai cadangan.",
             "The session address is a public tunnel IP (bore/ngrok) + port — no Tailscale needed on the phone. RustDesk is shown as a fallback.",
         ),
@@ -385,7 +385,7 @@ private fun DashboardBlock(
 
     run?.let { r ->
         Text(
-            xy(
+            xyNow(
                 "Run #{0}: {1}{2}",
                 "Run #{0}: {1}{2}",
                 r.number,
@@ -400,7 +400,7 @@ private fun DashboardBlock(
     access?.let { a ->
         if (a.tunnelAddress.isNotBlank() && a.tunnelPort > 0) {
             Text(
-                xy("Alamat sesi (IP, tanpa Tailscale): {0}", "Session address (IP, no Tailscale): {0}", a.tunnelAddress),
+                xyNow("Alamat sesi (IP, tanpa Tailscale): {0}", "Session address (IP, no Tailscale): {0}", a.tunnelAddress),
                 color = MaterialTheme.colorScheme.onSurface,
                 fontSize = 13.sp,
                 fontWeight = FontWeight.SemiBold,
@@ -413,7 +413,7 @@ private fun DashboardBlock(
                 Text(health, color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 10.sp)
             }
             XyPillButton(
-                xy("Salin host:port", "Copy host:port"),
+                xyNow("Salin host:port", "Copy host:port"),
                 { onCopy(a.tunnelAddress) },
                 primary = false,
                 compact = true,
@@ -421,14 +421,14 @@ private fun DashboardBlock(
             )
         } else if (a.tailscaleIp.isNotBlank()) {
             Text(
-                xy("Tunnel belum siap; Tailscale: {0}:3389", "Tunnel not ready; Tailscale: {0}:3389", a.tailscaleIp),
+                xyNow("Tunnel belum siap; Tailscale: {0}:3389", "Tunnel not ready; Tailscale: {0}:3389", a.tailscaleIp),
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 fontSize = 11.sp,
             )
         }
         if (a.rustdeskId.isNotBlank()) {
             Text(
-                xy("Cadangan RustDesk ID: {0}", "RustDesk ID fallback: {0}", a.rustdeskId),
+                xyNow("Cadangan RustDesk ID: {0}", "RustDesk ID fallback: {0}", a.rustdeskId),
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 fontSize = 10.sp,
             )
@@ -437,23 +437,23 @@ private fun DashboardBlock(
 
     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
         XyPillButton(
-            xy("Siapkan fork", "Prepare fork"),
+            xyNow("Siapkan fork", "Prepare fork"),
             {
                 onBusy(true)
                 scope.launch {
                     val exists = XyRdpClient.forkExists(token, login)
                     if (!exists && !XyRdpClient.createFork(token)) {
                         onBusy(false)
-                        onSay(xy("Gagal membuat fork. Cek token/scope.", "Could not create the fork. Check token/scopes."))
+                        onSay(xyNow("Gagal membuat fork. Cek token/scope.", "Could not create the fork. Check token/scopes."))
                         return@launch
                     }
                     val enabled = XyRdpClient.enableWorkflow(token, login)
                     onBusy(false)
                     onSay(
                         if (enabled) {
-                            xy("Fork siap & workflow aktif.", "Fork ready & workflow enabled.")
+                            xyNow("Fork siap & workflow aktif.", "Fork ready & workflow enabled.")
                         } else {
-                            xy(
+                            xyNow(
                                 "Fork ada, tapi workflow belum aktif — buka tab Actions di fork-mu sekali lalu 'Enable'.",
                                 "Fork exists but workflow is not enabled — open the Actions tab on your fork once and tap 'Enable'.",
                             )
@@ -467,7 +467,7 @@ private fun DashboardBlock(
             modifier = Modifier.weight(1f),
         )
         XyPillButton(
-            xy("Mulai sesi 6 jam", "Start 6-hour session"),
+            xyNow("Mulai sesi 6 jam", "Start 6-hour session"),
             {
                 onBusy(true)
                 scope.launch {
@@ -475,9 +475,9 @@ private fun DashboardBlock(
                     onBusy(false)
                     onSay(
                         if (ok) {
-                            xy("Sesi dimulai! Status muncul otomatis di sini (±2-4 menit).", "Session started! Status appears here automatically (±2-4 min).")
+                            xyNow("Sesi dimulai! Status muncul otomatis di sini (±2-4 menit).", "Session started! Status appears here automatically (±2-4 min).")
                         } else {
-                            xy("Gagal trigger workflow — pastikan workflow aktif & set secret RDP_PASSWORD dulu.", "Failed to trigger the workflow — make sure it is enabled and set the RDP_PASSWORD secret first.")
+                            xyNow("Gagal trigger workflow — pastikan workflow aktif & set secret RDP_PASSWORD dulu.", "Failed to trigger the workflow — make sure it is enabled and set the RDP_PASSWORD secret first.")
                         },
                     )
                 }
@@ -489,9 +489,9 @@ private fun DashboardBlock(
         )
     }
     XyPillButton(
-        xy("Set secret RDP_PASSWORD", "Set RDP_PASSWORD secret"),
+        xyNow("Set secret RDP_PASSWORD", "Set RDP_PASSWORD secret"),
         {
-            onSay(xy("Buka halaman secrets fork-mu, tambah RDP_PASSWORD (min 8 karakter).", "Open your fork's secrets page and add RDP_PASSWORD (min 8 chars)."))
+            onSay(xyNow("Buka halaman secrets fork-mu, tambah RDP_PASSWORD (min 8 karakter).", "Open your fork's secrets page and add RDP_PASSWORD (min 8 chars)."))
         },
         primary = false,
         compact = true,
@@ -499,7 +499,7 @@ private fun DashboardBlock(
     )
 
     Text(
-        xy("SAMBUNG LEWAT XYDESK", "CONNECT VIA XYDESK"),
+        xyNow("SAMBUNG LEWAT XYDESK", "CONNECT VIA XYDESK"),
         color = MaterialTheme.colorScheme.onSurfaceVariant,
         fontSize = 10.sp,
         letterSpacing = 1.2.sp,
@@ -508,17 +508,17 @@ private fun DashboardBlock(
     XyField(
         value = user,
         onValueChange = onUser,
-        label = xy("Username Windows", "Windows username"),
+        label = xyNow("Username Windows", "Windows username"),
     )
     XyPillButton(
-        xy("Buka formulir koneksi", "Open connection form"),
+        xyNow("Buka formulir koneksi", "Open connection form"),
         onOpenAddDevice,
         primary = false,
         compact = true,
         modifier = Modifier.fillMaxWidth(),
     )
     Text(
-        xy(
+        xyNow(
             "Isi Host & Port dari alamat sesi di atas, username '{0}', dan password = secret RDP_PASSWORD-mu. Layar hitam sesaat wajar saat VM menyiapkan desktop; bila bertahan, pakai jalur RustDesk.",
             "Fill Host & Port from the session address above, username '{0}', and password = your RDP_PASSWORD secret. A brief black screen is normal while the VM prepares the desktop; if it persists, use the RustDesk path.",
             user,
