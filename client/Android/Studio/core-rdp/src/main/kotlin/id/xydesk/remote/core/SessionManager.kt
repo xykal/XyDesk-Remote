@@ -230,7 +230,7 @@ class SessionManager(context: Context) {
 
     private fun sessionUri(profile: ConnectionProfile): android.net.Uri {
         val storedOptions = RdpOptions.of(appContext, profile.id)
-        val options = storedOptions.resolveForActiveNetwork(appContext)
+        val options = storedOptions.resolveForActiveNetwork(appContext).forSessionProfile(profile)
         activeCodec = options.activeCodecLabel()
         activeUdp = options.udpTransport
         activeBpp = options.colorDepth
@@ -254,7 +254,7 @@ class SessionManager(context: Context) {
         ConnectionLog.add(
             "CM: opsi sesi profile=${options.streamProfile.name} audio=${options.audioMode.name} " +
                 "mic=${options.microphone} clip=${options.clipboard} drive=${options.localDrive} " +
-                "udp=${options.udpTransport} lowbw=${options.lowBandwidth} h264=${options.h264} " +
+                "udp=${options.udpTransport} lowbw=${options.lowBandwidth} h264=${options.h264} wallpaper=${options.desktopWallpaper} " +
                 "bpp=${options.colorDepth} sec=${options.securityProtocol.name} gateway=${options.gateway?.id ?: "-"}"
         )
         val prefs = appContext.getSharedPreferences("xydesk.remote.display", Context.MODE_PRIVATE)
