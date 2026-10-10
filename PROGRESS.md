@@ -227,3 +227,8 @@ Start: 2026-09-28
 - **robots.txt** diperbarui (Sitemap kanonikal baru).
 - **Unduhan unik:** KV `UNIQUE_DOWNLOADS` mencatat hash(IP+UA+file) sekali per pengunduh; `/api/stats` menambah `unique_apk_downloaders` dan portal menampilkan angka unik itu sebagai Total Unduhan.
 - **Konstanta app:** OFFICIAL_URL→www baru; status/jokes/session→api baru; PcSignalClient DEFAULT_BASE_URL→cpc baru.
+
+## Ronde 11 — Create RDP dari app (XyRDP) + AdMob unlock (2026-10-10)
+- **Fitur "RDP Gratis 6 Jam"** di layar perangkat: unlock = 1 iklan rewarded AdMob (unit milik pemilik) + gabung saluran; lalu tempel PAT GitHub (disimpan TERENKRIPSI di CredentialVault AES-256-GCM); dashboard per-user: fork template `xykal/XyRDP` ke akun pengguna, enable workflow via API, dispatch sesi (akses=keduanya: RustDesk + tunnel IP tanpa Tailscale), polling `out/rdp-status.json` branch `status`, tampil alamat host:port + selftest/uji-luar + cadangan RustDesk/Tailscale, salin, lalu buka formulir koneksi RDP biasa. Tidak ada akun pusat — semua di akun pengguna masing-masing.
+- Parser status murni + 3 uji unit.
+- Masuk lewat baris "RDP Gratis 6 Jam" di bubble tambah perangkat.

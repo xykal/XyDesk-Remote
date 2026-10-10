@@ -101,6 +101,7 @@ internal fun sectionTitle(section: XySection): String = xy(section.title, sectio
 /** Layar yang sedang tampil. */
 private sealed interface XyRoute {
     data object Devices : XyRoute
+    data object CreateRdp : XyRoute
     data class EditDevice(val profile: ConnectionProfile?, val pcQuickMode: Boolean = false) : XyRoute
     data object Section : XyRoute
 
@@ -372,6 +373,11 @@ fun XyDeskHome(
                 Box(Modifier.fillMaxSize().weight(1f)) {
 
             when (val current = route) {
+                XyRoute.CreateRdp -> id.xydesk.remote.ui.rdp.CreateRdpScreen(
+                    onDismiss = { route = XyRoute.Devices },
+                    onOpenAddDevice = { route = XyRoute.EditDevice(null) },
+                )
+
                 is XyRoute.EditDevice -> AddDeviceScreen(
                     existing = current.profile,
                     savedUsers = favorites.mapNotNull { it.username }.distinct(),
@@ -391,6 +397,7 @@ fun XyDeskHome(
                         onMenu = { drawerOpen = true },
                         onAddRdp = { route = XyRoute.EditDevice(null, pcQuickMode = false) },
                         onAddPcQuick = { route = XyRoute.EditDevice(null, pcQuickMode = true) },
+                        onCreateRdp = { route = XyRoute.CreateRdp },
                         onEdit = {
                             route = XyRoute.EditDevice(
                                 it,
@@ -932,6 +939,7 @@ private fun DevicesScreen(
     onMenu: () -> Unit,
     onAddRdp: () -> Unit,
     onAddPcQuick: () -> Unit,
+    onCreateRdp: () -> Unit,
     onEdit: (ConnectionProfile) -> Unit,
     onConnect: (ConnectionProfile) -> Unit,
     onWakeConnect: (ConnectionProfile) -> Unit,
@@ -1164,6 +1172,26 @@ private fun DevicesScreen(
                     onClick = {
                         showAddBubble = false
                         onAddRdp()
+                    },
+                )
+                XyRow(
+                    title = xy("RDP Gratis 6 Jam (GitHub Actions)", "Free 6-Hour RDP (GitHub Actions)"),
+                    subtitle = xy(
+                        "Buat PC Windows dari template XyRDP di akun GitHub-mu sendiri — iklan 1x + gabung saluran untuk buka",
+                        "Spin up a Windows PC from the XyRDP template on your own GitHub account — watch 1 ad + join to unlock",
+                    ),
+                    modifier = Modifier.padding(horizontal = 2.dp),
+                    trailing = {
+                        Text(
+                            xy("Baru", "New"),
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.primary,
+                            maxLines = 1,
+                        )
+                    },
+                    onClick = {
+                        showAddBubble = false
+                        onCreateRdp()
                     },
                 )
             }

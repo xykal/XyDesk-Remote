@@ -78,6 +78,8 @@ dependencies {
     // dan setShuffleMode/setRepeatMode (@hide), jadi tanpa library ini dua
     // kontrol itu tidak bisa dikirim ke pemutar mana pun.
     implementation 'androidx.media:media:1.7.0'
+    // Iklan rewarded untuk buka fitur RDP Gratis (create-RDP dari app).
+    implementation 'com.google.android.gms:play-services-ads:23.6.0'
 
     // M1 — modul Kotlin (core sesi, vault, favorites)
     implementation project(':core-rdp')

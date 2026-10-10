@@ -27,6 +27,10 @@
 
     <application
         android:name="id.xydesk.remote.XyApp"
+        <!-- AdMob: wajib untuk play-services-ads (fitur RDP Gratis). -->
+        <meta-data
+            android:name="com.google.android.gms.ads.APPLICATION_ID"
+            android:value="ca-app-pub-7140410806476728~5239237352" />
         android:icon="@mipmap/ic_launcher"
         android:label="@string/app_name"
         android:allowBackup="false"
