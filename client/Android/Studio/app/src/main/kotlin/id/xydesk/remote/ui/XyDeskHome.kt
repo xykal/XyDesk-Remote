@@ -375,9 +375,9 @@ fun XyDeskHome(
                 Box(Modifier.fillMaxSize().weight(1f)) {
 
             when (val current = route) {
-                XyRoute.CreateRdp -> id.xydesk.remote.ui.rdp.CreateRdpScreen(
-                    onDismiss = { route = XyRoute.Devices },
-                    onOpenAddDevice = { route = XyRoute.EditDevice(null) },
+                XyRoute.CreateRdp -> RdpFreeScreen(
+                    onBack = { route = XyRoute.Devices },
+                    onConnect = { connect(it) },
                 )
 
                 is XyRoute.EditDevice -> AddDeviceScreen(
@@ -1105,7 +1105,7 @@ private fun DevicesScreen(
                                 }
                                 Column(Modifier.weight(1f)) {
                                     Text(
-                                        xy("RDP Gratis 6 Jam", "Free 6-Hour RDP"),
+                                        xy("RdpFree", "RdpFree"),
                                         style = MaterialTheme.typography.titleSmall,
                                     )
                                     Text(
