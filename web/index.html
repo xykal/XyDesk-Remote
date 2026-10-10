@@ -10,7 +10,9 @@
   <meta name="author" content="XyVerse Technology Global" />
   <meta name="theme-color" content="#08080A" />
   <link rel="canonical" href="https://www.xydeskremote.biz.id/" />
-  <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+  <link rel="icon" type="image/png" href="/favicon.png" />
+  <link rel="apple-touch-icon" href="/favicon.png" />
+  <meta name="keywords" content="remote desktop android, rdp android, remote pc dari hp, remote windows dari android, aplikasi rdp gratis, remote desktop tanpa pc gaming, xydesk, xydesk remote, rdp github actions, remote desktop e2ee, kontrol pc dari hp" />
   <meta property="og:site_name" content="XyDesk Remote" />
   <meta property="og:type" content="website" />
   <meta property="og:locale" content="id_ID" />
@@ -19,8 +21,8 @@
   <meta property="og:description" content="Hubungkan Android ke PC Windows lewat RDP. Unduh APK resmi XyDesk Remote untuk perangkatmu." />
   <meta property="og:image" content="https://www.xydeskremote.biz.id/og-xydesk-remote.png" />
   <meta property="og:image:type" content="image/png" />
-  <meta property="og:image:width" content="1024" />
-  <meta property="og:image:height" content="512" />
+  <meta property="og:image:width" content="1200" />
+  <meta property="og:image:height" content="630" />
   <meta property="og:image:alt" content="XyDesk Remote — klien Remote Desktop Android untuk PC Windows" />
   <meta name="twitter:card" content="summary_large_image" />
   <meta name="twitter:title" content="XyDesk Remote — Akses PC Windows dari Android" />
@@ -1085,6 +1087,34 @@
         grid-template-columns: repeat(3, minmax(0, 1fr));
       }
     }
+
+    /* Polesan 2026-10-10: super-responsif & halus. */
+    html { font-size: clamp(15px, 14.5px + 0.35vw, 17px); }
+    .container { padding-inline: clamp(14px, 4vw, 32px); }
+    a:focus-visible, button:focus-visible, .pill-btn:focus-visible {
+      outline: 2px solid var(--line-strong);
+      outline-offset: 3px;
+      border-radius: 10px;
+    }
+    .card, .section .grid > * {
+      transition: transform .18s ease, border-color .18s ease, box-shadow .18s ease;
+    }
+    @media (hover:hover) {
+      .card:hover, .section .grid > *:hover {
+        transform: translateY(-3px);
+        border-color: var(--line-strong);
+        box-shadow: 0 14px 34px rgba(0,0,0,.38);
+      }
+    }
+    section[id] { scroll-margin-top: 84px; }
+    @media (max-width: 480px) {
+      .brand-left span { font-size: 15px; }
+      .brand-tag { display: none; }
+    }
+    @media (prefers-reduced-motion: reduce) {
+      html { scroll-behavior: auto; }
+      *, *::before, *::after { animation-duration: .01ms !important; transition-duration: .01ms !important; }
+    }
   </style>
 </head>
 <body>
@@ -1093,12 +1123,7 @@
     <div class="container topbar-inner">
       <a href="#top" class="brand">
         <span class="brand-left" style="display:inline-flex;align-items:center;gap:9px;min-width:0;">
-          <svg viewBox="0 0 48 48" fill="none" aria-hidden="true">
-            <rect x="6.8" y="13.4" width="34.4" height="20.6" rx="3" stroke="currentColor" stroke-width="2.7" />
-            <line x1="19.5" y1="40.2" x2="28.5" y2="40.2" stroke="currentColor" stroke-width="2.7" stroke-linecap="round" />
-            <line x1="24" y1="34.2" x2="24" y2="40.2" stroke="currentColor" stroke-width="2.7" stroke-linecap="round" />
-            <polygon points="18.6,17.6 18.6,28.4 21.7,25.3 23.9,30.1 26.2,29 24,24.2 28.1,23.8" fill="currentColor" />
-          </svg>
+          <img src="/favicon.png" alt="Logo XyDesk Remote" style="width:30px;height:30px;border-radius:8px;flex:none;" />
           <span style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">XyDesk Remote</span>
         </span>
         <span class="brand-tag mono">Ver 1.0.2 (53)</span>

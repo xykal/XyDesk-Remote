@@ -196,6 +196,7 @@ fun SessionControls(
     var panelOpen by remember { mutableStateOf(false) }
     var monitorGridOpen by remember { mutableStateOf(false) }
     var railMenuOpen by remember { mutableStateOf(false) }
+    var drawerMode by remember { mutableStateOf(prefs.menuDrawer) }
     var tab by remember { mutableStateOf(PanelTab.SCREEN) }
     var pickerOpen by remember { mutableStateOf(false) }
     var editing by remember { mutableStateOf<HudKey?>(null) }
@@ -894,6 +895,11 @@ fun SessionControls(
 
         if (panelOpen) {
             SessionPanel(
+                drawerMode = drawerMode,
+                onDrawerModeChange = { v ->
+                    drawerMode = v
+                    prefs.menuDrawer = v
+                },
                 deviceId = deviceId,
                 hostLabel = hostLabel,
                 statusText = statusText,
@@ -1494,6 +1500,8 @@ private fun XyPointer(
 
 @Composable
 private fun SessionPanel(
+    drawerMode: Boolean = false,
+    onDrawerModeChange: (Boolean) -> Unit = {},
     deviceId: String,
     hostLabel: String,
     statusText: String,
@@ -1608,7 +1616,7 @@ private fun SessionPanel(
         Modifier
             .fillMaxSize()
             .zIndex(30f),
-        contentAlignment = Alignment.Center,
+        contentAlignment = if (drawerMode) Alignment.CenterEnd else Alignment.Center,
     ) {
         // Scrim dipertahankan (lebih tipis) karena pemisahan utama sekarang
         // datang dari blur permukaan remote; di Android < 12 blur tidak jalan
@@ -1619,13 +1627,20 @@ private fun SessionPanel(
                 .background(MaterialTheme.colorScheme.scrim.copy(alpha = 0.34f))
                 .consumeBackgroundPointer(onClose),
         )
-        // Popup di tengah layar, gaya jendela macOS: sudut membulat, hampir
-        // sepenuh layar, tepi halus.
+        // Dua varian menu (permintaan pemilik 2026-10-10): popup tengah gaya
+        // jendela, atau drawer menempel sisi kanan setinggi layar.
         Column(
-            Modifier
-                .fillMaxHeight(0.9f)
-                .fillMaxWidth(0.94f)
-                .widthIn(max = 760.dp)
+            if (drawerMode) {
+                Modifier
+                    .fillMaxHeight()
+                    .fillMaxWidth(0.92f)
+                    .widthIn(max = 380.dp)
+            } else {
+                Modifier
+                    .fillMaxHeight(0.9f)
+                    .fillMaxWidth(0.94f)
+                    .widthIn(max = 760.dp)
+            }
                 .graphicsLayer {
                     scaleX = panelScale
                     scaleY = panelScale
@@ -1636,7 +1651,11 @@ private fun SessionPanel(
                 // (0.55 * 1.6 = 0.88) karena panel berisi banyak teks; kaca
                 // setipis pemutar akan membuat tulisan sulit dibaca.
                 .xyGlass(
-                    shape = RoundedCornerShape(28.dp),
+                    shape = if (drawerMode) {
+                        RoundedCornerShape(topStart = 28.dp, bottomStart = 28.dp)
+                    } else {
+                        RoundedCornerShape(28.dp)
+                    },
                     opacity = 1.6f,
                     strength = 1f,
                 )
@@ -1668,6 +1687,10 @@ private fun SessionPanel(
                 if (tab == PanelTab.BUTTONS) {
                     PanelChip(xy("+ Tombol", "+ Add"), onAddKey)
                 }
+                PanelChip(
+                    if (drawerMode) xy("Popup", "Popup") else xy("Drawer", "Drawer"),
+                    { onDrawerModeChange(!drawerMode) },
+                )
                 PanelChip(xy("Tutup", "Close"), onClose)
             }
 
@@ -1854,188 +1877,6 @@ private fun ScreenTab(
                 compact = true,
                 modifier = Modifier.fillMaxWidth(),
             )
-        }
-
-    section("ukuran-tampilan",xy("Ukuran tampilan", "Display size")) {
-            PanelHint(
-                xy(
-                    "Zoom mengubah besar gambar di layar HP; resolusi di bawah mengubah ukuran desktop remote-nya.",
-                    "Zoom changes how big the picture is on the phone; resolution below changes the remote desktop size.",
-                ),
-            )
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                XyPillButton(xy("Perkecil", "Zoom out"), onZoomOut, primary = false, compact = true, modifier = Modifier.weight(1f))
-                XyPillButton(xy("Perbesar", "Zoom in"), onZoomIn, primary = false, compact = true, modifier = Modifier.weight(1f))
-            }
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                XyPillButton(xy("Muat semua", "Fit all"), onFit, primary = false, compact = true, modifier = Modifier.weight(1f))
-                XyPillButton("100%", onZoomActual, primary = false, compact = true, modifier = Modifier.weight(1f))
-            }
-            PanelHint(
-                xy(
-                    "Skala lokal {0}% — hanya mengubah tampilan di HP, bukan DPI atau resolusi Windows.",
-                    "Local scale {0}% — changes the phone view only, not Windows DPI or remote resolution.",
-                    zoomPercent,
-                ),
-            )
-            XySlider(
-                value = zoomPercent.toFloat().coerceIn(10f, 300f),
-                onValueChange = onZoomScale,
-                valueRange = 10f..300f,
-            )
-            XyToggleRow(
-                title = xy("Muat seluruh desktop", "Fit whole desktop"),
-                checked = autoFit,
-                onCheckedChange = onAutoFitChange,
-            )
-        }
-
-        if (pcConnectMode) {
-            PanelSection(xy("Mesin Direct PC Stream (Eksklusif Koneksi PC)", "Direct PC Stream Engine (PC Connect Exclusive)")) {
-                PanelHint(
-                    xy(
-                        "Layar Monitor Fisik 1:1 (${remoteSize}): Resolusi, DPI, dan sesi dikunci ke monitor konsol fisik PC. Pengaturan resolusi virtual & multi-user RDP tidak digunakan di mode ini.",
-                        "1:1 Physical Monitor (${remoteSize}): Resolution, DPI, and session are locked to the physical PC console monitor. Virtual RDP resolution & multi-user are disabled in this mode.",
-                    ),
-                )
-                id.xydesk.remote.core.XyPcStreamEngine.entries.chunked(2).forEach { row ->
-                    Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                        row.forEach { engine ->
-                            XyPillButton(
-                                text = engine.badge,
-                                onClick = {
-                                    val next = pcOptions.withPcStreamEngine(engine)
-                                    pcOptions = next
-                                    next.write(context, deviceId)
-                                    notice.show(
-                                        xyNow(
-                                            "Mesin Direct Stream: {0} disimpan",
-                                            "Direct Stream Engine: {0} saved",
-                                            engine.badge,
-                                        ),
-                                    )
-                                },
-                                primary = pcOptions.pcStreamEngine == engine,
-                                compact = true,
-                                modifier = Modifier.weight(1f),
-                            )
-                        }
-                    }
-                }
-                PanelHint(
-                    xy(
-                        "Refresh ini meminta mode layar HP yang tersedia; bukan jaminan FPS dari Windows. FPS remote tetap bergantung host, codec, dan jaringan.",
-                        "This requests a supported phone display mode; it does not guarantee Windows FPS. Remote FPS still depends on host, codec, and network.",
-                    ),
-                )
-                val refreshRates = listOf(30, 60, 90, 120)
-                XySegmented(
-                    options = refreshRates.map { "$it Hz" },
-                    selectedIndex = refreshRates.indexOf(pcOptions.pcTargetFps).coerceAtLeast(1),
-                    onSelect = { idx ->
-                        val next = pcOptions.copy(pcTargetFps = refreshRates[idx], pcConnectMode = true)
-                        pcOptions = next
-                        next.write(context, deviceId)
-                        onDisplayRefreshPreferenceChange(refreshRates[idx])
-                        notice.show(
-                            xyNow(
-                                "Permintaan refresh layar HP: {0} Hz; FPS remote tetap bergantung host/jaringan",
-                                "Phone display refresh request: {0} Hz; remote FPS still depends on host/network",
-                                refreshRates[idx],
-                            ),
-                        )
-                    },
-                    modifier = Modifier.fillMaxWidth(),
-                )
-            }
-        } else {
-    section("skala-tampilan-windows-dpi",xy("Skala tampilan Windows (DPI)", "Windows display scale (DPI)"), advanced = true) {
-            PanelHint(
-                xy(
-                    "Meminta skala Windows melalui RDP Display Control (DesktopScaleFactor), bukan zoom lokal. Nilai hanya benar-benar berubah jika host Windows menerapkan permintaan ini.",
-                    "Requests Windows scaling through RDP Display Control (DesktopScaleFactor), not local zoom. The host must apply the request for the actual scale to change.",
-                ),
-            )
-            PanelHint(
-                xy("Permintaan skala Windows: {0}%", "Requested Windows scale: {0}%", remoteDpi),
-            )
-            if (remoteDpi != 100) {
-                PanelHint(
-                    xy(
-                        "Skala selain 100% membuat aplikasi lama di Windows direntangkan bitmap, jadi teksnya bisa terlihat pecah/bergerigi. Pakai 100% kalau mengutamakan teks tajam.",
-                        "Any scale other than 100% makes legacy Windows apps bitmap-stretched, so their text can look broken/jagged. Use 100% when sharp text matters most.",
-                    ),
-                )
-            }
-            val scaleOptions = DisplayPrefs.remoteDpiOptions
-            val selectedScaleIndex = scaleOptions.indexOf(remoteDpi).coerceAtLeast(0)
-            XySlider(
-                value = selectedScaleIndex.toFloat(),
-                onValueChange = { index ->
-                    onRemoteDpiChange(scaleOptions[index.toInt().coerceIn(scaleOptions.indices)])
-                },
-                valueRange = 0f..(scaleOptions.lastIndex.toFloat()),
-                steps = (scaleOptions.size - 2).coerceAtLeast(0),
-            )
-            PanelHint(
-                xy(
-                    "Permintaan terkirim belum membuktikan Windows menerapkannya; host/kebijakan RDP bisa menolak skala remote.",
-                    "A queued request does not confirm Windows applied it; the host or RDP policy may ignore remote scaling.",
-                ),
-            )
-        }
-
-    section("resolusi-desktop",xy("Resolusi desktop", "Remote desktop resolution")) {
-            // Status sekarang + rasionya — biar user tahu persis desktop-nya
-            // berapa dan berbentuk apa TANPA menebak dari daftar preset.
-            val dims = SmartResolution.parse(remoteSize.replace(" ", ""))
-            val ratio = if (dims != null) SmartResolution.ratioLabel(dims.first, dims.second) else null
-            PanelHint(
-                xy(
-                    "Desktop sekarang: {0}{1}",
-                    "Desktop now: {0}{1}",
-                    remoteSize,
-                    if (ratio != null) "  ·  $ratio" else "",
-                ),
-            )
-            PanelHint(
-                xy(
-                    "Otomatis memakai 1280×720 (720p) agar sesi lebih ringan. Resolusi lain tetap bisa dipilih manual; mode ini tidak mengikuti rasio HP.",
-                    "Automatic uses 1280×720 (720p) to keep the session lighter. Other sizes remain available manually; it does not follow the phone ratio.",
-                ),
-            )
-            DisplayPrefs.resolutionGroups.forEach { group ->
-                Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                    group.items.chunked(2).forEach { row ->
-                        Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                            row.forEach { option ->
-                                XyPillButton(
-                                    text = xy(option.id, option.en),
-                                    onClick = { onResolution(option.value) },
-                                    primary = option.value == resolution,
-                                    compact = true,
-                                    modifier = Modifier.weight(1f),
-                                )
-                            }
-                            repeat(2 - row.size) { Spacer(Modifier.weight(1f)) }
-                        }
-                    }
-                }
-            }
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-            ) {
-                XyField(
-                    value = custom,
-                    onValueChange = onCustomChange,
-                    label = xy("Kustom WxH", "Custom WxH"),
-                    hint = xy("mis. 1920x1080", "e.g. 1920x1080"),
-                    modifier = Modifier.weight(1f),
-                )
-                XyPillButton(xy("Pasang", "Apply"), onCustomApply, primary = false, compact = true)
-            }
-        }
         }
 
     section("orientasi",xy("Orientasi", "Orientation")) {

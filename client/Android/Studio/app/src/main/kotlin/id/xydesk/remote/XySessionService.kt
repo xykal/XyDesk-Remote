@@ -4,6 +4,7 @@ import android.app.Notification
 import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.app.PendingIntent
+import id.xydesk.remote.ui.SpotifyMediaBridge
 import android.app.Service
 import android.content.Context
 import android.content.Intent
@@ -58,6 +59,23 @@ class XySessionService : Service() {
                 return START_NOT_STICKY
             }
 
+            // Tombol notifikasi tambahan (permintaan pemilik 2026-10-10):
+            // Beranda tanpa memutus sesi + jeda/putar musik dari notifikasi.
+            ACTION_HOME -> {
+                runCatching {
+                    startActivity(
+                        Intent(this, XyDeskHomeActivity::class.java)
+                            .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),
+                    )
+                }
+                return START_NOT_STICKY
+            }
+
+            ACTION_MUSIC -> {
+                runCatching { SpotifyMediaBridge.playPause() }
+                return START_NOT_STICKY
+            }
+
             else -> {
                 startForeground(NOTIF_ID, buildNotification(intent?.getStringExtra(EXTRA_LABEL)))
                 return START_NOT_STICKY
@@ -96,6 +114,18 @@ class XySessionService : Service() {
             Intent(this, XySessionService::class.java).setAction(ACTION_STOP),
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
         )
+        val home = PendingIntent.getService(
+            this,
+            2,
+            Intent(this, XySessionService::class.java).setAction(ACTION_HOME),
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
+        )
+        val music = PendingIntent.getService(
+            this,
+            3,
+            Intent(this, XySessionService::class.java).setAction(ACTION_MUSIC),
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
+        )
         val host = label ?: "XyDesk Remote"
         val builder = NotificationCompat.Builder(this, CHANNEL_ID)
             // Ikon app sendiri (mark monokrom) — dulu pakai
@@ -107,6 +137,8 @@ class XySessionService : Service() {
             .setSubText(versionLabel())
             .setContentIntent(open)
             .addAction(0, xyNow("Buka", "Open"), open)
+            .addAction(0, xyNow("Beranda", "Home"), home)
+            .addAction(0, xyNow("Musik", "Music"), music)
             .addAction(0, xyNow("Putuskan", "Disconnect"), stop)
             .setOngoing(true)
             .setOnlyAlertOnce(true)
@@ -167,6 +199,8 @@ class XySessionService : Service() {
         private const val NOTIF_ID = 4711
         const val ACTION_STOP = "id.xydesk.remote.action.STOP_SESSION"
         const val ACTION_PING = "id.xydesk.remote.action.PING_SESSION"
+        const val ACTION_HOME = "id.xydesk.remote.action.GO_HOME"
+        const val ACTION_MUSIC = "id.xydesk.remote.action.MUSIC_TOGGLE"
         private const val EXTRA_LABEL = "label"
 
         /** Mulai/perbarui service. Aman dipanggil berulang. */

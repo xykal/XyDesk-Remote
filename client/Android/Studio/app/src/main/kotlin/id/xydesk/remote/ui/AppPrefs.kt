@@ -25,6 +25,11 @@ class AppPrefs(context: Context) {
      * notifikasi). Default ON: RDP itu pekerjaan yang sedang dilihat user,
      * bukan proses yang boleh diputus Android begitu layar dialihkan.
      */
+    /** Varian menu sesi: popup tengah (default) atau drawer samping. */
+    var menuDrawer: Boolean
+        get() = sp.getBoolean("menu_drawer", false)
+        set(v) = sp.edit().putBoolean("menu_drawer", v).apply()
+
     var keepAlive: Boolean
         get() = sp.getBoolean(KEY_KEEP_ALIVE, true)
         set(v) = sp.edit().putBoolean(KEY_KEEP_ALIVE, v).apply()

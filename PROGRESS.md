@@ -315,3 +315,19 @@ CATATAN: build/tag tetap DITAHAN menunggu konfirmasi.
 - SoundCloud: tetap memakai client_id web + api-v2 (sudah tersambung, tanpa
   akun). Skrip sc-api-auth.mjs = registrasi aplikasi OAuth resmi; tidak
   dibutuhkan untuk pemutaran trek publik.
+
+## Ronde 16 — logo baru, SEO, menu drawer, combo bebas, notif tombol (2026-10-10)
+- Logo pemilik (monitor+kursor+tap) dipakai di SEMUA: adaptive icon foreground,
+  legacy mipmap per density, monochrome notifikasi, freeRDPCore notif, web
+  favicon + OG image 1200x630; warna latar adaptive = #10041A.
+- Tiga seksi "visual Windows" (ukuran tampilan, skala DPI, resolusi) DIHAPUS
+  dari panel sesi atas permintaan pemilik (diduga biang wallpaper hitam).
+- Notifikasi sesi: tombol jadi 4 — Buka, Beranda (tanpa putus), Musik
+  (play/pause), Putuskan.
+- Menu sesi 2 varian: popup tengah / drawer samping (chip toggle di header
+  panel, tersimpan di AppPrefs.menuDrawer).
+- Editor kombinasi BEBAS: 2-5 tombol apa saja (modifier+huruf+F+numpad) bebas
+  urutan; chip terpilih bisa dihapus.
+- Web: favicon/logo baru, meta keywords, OG 1200x630, polesan responsif
+  (fluid type, hover lift, focus-visible, reduced motion), sitemap lastmod baru.
+CATATAN: build APK tetap DITAHAN menunggu konfirmasi.
