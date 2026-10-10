@@ -301,12 +301,12 @@ object XyIcons {
             close()
             // Dua tombol kanan.
             moveTo(14.65f, 8.6f)
-            arcToRelative(0.85f, 0.85f, 0f, 1f, 0f, 1.7f, 0f)
-            arcToRelative(0.85f, 0.85f, 0f, 1f, 0f, -1.7f, 0f)
+            arcToRelative(0.85f, 0.85f, 0f, true, false, 1.7f, 0f)
+            arcToRelative(0.85f, 0.85f, 0f, true, false, -1.7f, 0f)
             close()
             moveTo(16.35f, 10.9f)
-            arcToRelative(0.85f, 0.85f, 0f, 1f, 0f, 1.7f, 0f)
-            arcToRelative(0.85f, 0.85f, 0f, 1f, 0f, -1.7f, 0f)
+            arcToRelative(0.85f, 0.85f, 0f, true, false, 1.7f, 0f)
+            arcToRelative(0.85f, 0.85f, 0f, true, false, -1.7f, 0f)
             close()
         },
     )
