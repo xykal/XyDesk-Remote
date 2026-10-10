@@ -359,3 +359,6 @@ CATATAN: build APK tetap DITAHAN menunggu konfirmasi.
 - EXE gabungan/UI/streaming sendiri: sudah ada sejak dulu (main_host Win32
   UI + tray, XyDeskRemoteHost-Standalone.exe single-binary, xydesk_quic
   streaming + core-pc-stream di Android) — rilis = uji perangkat nyata.
+- Fix minSdk 23 native: rdpecam NDK Camera2 (API 24+) kini dimuat runtime
+  lewat dlopen (camera2ndk_dyn.h); link langsung camera2ndk/mediandk
+  dihapus; kanal mati aman di perangkat Android 6.

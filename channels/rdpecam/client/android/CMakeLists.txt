@@ -21,7 +21,14 @@ if(ANDROID)
 
   set(${MODULE_PREFIX}_SRCS camera_android.c)
 
-  set(${MODULE_PREFIX}_LIBS winpr freerdp camera2ndk mediandk)
+  # libcamera2ndk/libmediandk hanya ada mulai API 24; build minSdk 23 tidak
+  # boleh meng-link langsung. Deklarasi tipe dipaksa terlihat lewat makro
+  # __ANDROID_API__ per-TU, dan seluruh fungsi dimuat runtime via dlopen di
+  # camera2ndk_dyn.h (kanal mati aman di perangkat API 23).
+  set_source_files_properties(camera_android.c PROPERTIES
+                              COMPILE_DEFINITIONS "__ANDROID_API__=24")
+
+  set(${MODULE_PREFIX}_LIBS winpr freerdp)
 
   include_directories(..)
 

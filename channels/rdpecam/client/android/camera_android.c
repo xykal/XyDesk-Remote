@@ -22,12 +22,7 @@
 
 #include <winpr/wtypes.h>
 
-#include <camera/NdkCameraDevice.h>
-#include <camera/NdkCameraManager.h>
-#include <camera/NdkCameraMetadata.h>
-#include <camera/NdkCameraCaptureSession.h>
-#include <media/NdkImage.h>
-#include <media/NdkImageReader.h>
+#include "camera2ndk_dyn.h"
 
 #include "../camera.h"
 
@@ -813,6 +808,10 @@ FREERDP_ENTRY_POINT(UINT VCAPITYPE android_freerdp_rdpecam_client_subsystem_entr
     PFREERDP_CAMERA_HAL_ENTRY_POINTS pEntryPoints))
 {
 	WINPR_ASSERT(pEntryPoints);
+
+	/* Perangkat API 23: libcamera2ndk tidak ada — matikan kanal dengan aman. */
+	if (xy_cam2_load() != 0)
+		return ERROR_INTERNAL_ERROR;
 
 	CamAndroidHal* hal = (CamAndroidHal*)calloc(1, sizeof(CamAndroidHal));
 	if (!hal)
