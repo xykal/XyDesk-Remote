@@ -63,10 +63,26 @@ jobs:
         with:
           distribution: temurin
           java-version: "21"
+          # Cache dependensi + wrapper Gradle antar-run (permintaan pemilik
+          # 2026-10-10: build harus lebih cepat, cache yang penting disimpan).
+          cache: gradle
+      - name: Cache Android SDK gate (platform & build-tools)
+        uses: actions/cache@caa296126883cff596d87d8935842f9db880ef25 # v5
+        with:
+          path: $HOME/android-sdk
+          key: android-sdk-gate-platforms-37.2-bt37.0.0
       - name: Install Android SDK (tanpa NDK & CMake)
         run: |
           set -eux
           export ANDROID_HOME="$HOME/android-sdk"
+          if [ -x "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" ] && \
+             [ -d "$ANDROID_HOME/platforms/android-37.2" ] && \
+             [ -d "$ANDROID_HOME/build-tools/37.0.0" ]; then
+            echo "SDK dipulihkan dari cache — tidak perlu unduh ulang."
+            echo "ANDROID_HOME=$ANDROID_HOME" >> "$GITHUB_ENV"
+            echo "ANDROID_SDK_ROOT=$ANDROID_HOME" >> "$GITHUB_ENV"
+            exit 0
+          fi
           mkdir -p "$ANDROID_HOME/cmdline-tools"
           wget -q https://dl.google.com/android/repository/commandlinetools-linux-11076708_latest.zip -O /tmp/clt.zip
           unzip -q /tmp/clt.zip -d "$ANDROID_HOME/cmdline-tools"
@@ -78,10 +94,10 @@ jobs:
           echo "ANDROID_SDK_ROOT=$ANDROID_HOME" >> "$GITHUB_ENV"
       - name: Unit test JVM (core-rdp + core-pc-stream + IME + app UI)
         working-directory: client/Android/Studio
-        run: ./gradlew --stacktrace --no-daemon :core-rdp:testDebugUnitTest :core-pc-stream:testDebugUnitTest :freeRDPCore:testDebugUnitTest :app:testDebugUnitTest
+        run: ./gradlew --stacktrace --no-daemon --build-cache :core-rdp:testDebugUnitTest :core-pc-stream:testDebugUnitTest :freeRDPCore:testDebugUnitTest :app:testDebugUnitTest
       - name: Compile Kotlin (app + core-rdp)
         working-directory: client/Android/Studio
-        run: ./gradlew --stacktrace --no-daemon :app:compileDebugKotlin
+        run: ./gradlew --stacktrace --no-daemon --build-cache :app:compileDebugKotlin
       - name: Compile Windows Native C++17 Host Agent & DLLs (mingw-w64)
         run: |
           # apt di runner kadang menggantung tanpa batas waktu -> pasang timeout + retry
@@ -169,6 +185,9 @@ jobs:
         with:
           distribution: temurin
           java-version: "21"
+          # Cache dependensi + wrapper Gradle antar-run (permintaan pemilik
+          # 2026-10-10: build harus lebih cepat, cache yang penting disimpan).
+          cache: gradle
         if: steps.tagcheck.outputs.tagged != 'true'
       - name: Cache Android SDK (NDK & CMake)
         uses: actions/cache@caa296126883cff596d87d8935842f9db880ef25 # v5
@@ -206,11 +225,11 @@ jobs:
       - name: Unit test JVM (core-rdp + core-pc-stream)
         if: steps.tagcheck.outputs.tagged != 'true'
         working-directory: client/Android/Studio
-        run: ./gradlew --stacktrace --no-daemon :core-rdp:testDebugUnitTest :core-pc-stream:testDebugUnitTest
+        run: ./gradlew --stacktrace --no-daemon --build-cache :core-rdp:testDebugUnitTest :core-pc-stream:testDebugUnitTest
       - name: Gradle assembleDebug (per ABI)
         if: steps.tagcheck.outputs.tagged != 'true'
         working-directory: client/Android/Studio
-        run: ./gradlew --stacktrace --no-daemon assembleDebug
+        run: ./gradlew --stacktrace --no-daemon --build-cache assembleDebug
       - name: List build outputs
         if: steps.tagcheck.outputs.tagged != 'true'
         working-directory: client/Android/Studio
@@ -253,6 +272,9 @@ jobs:
         with:
           distribution: temurin
           java-version: "21"
+          # Cache dependensi + wrapper Gradle antar-run (permintaan pemilik
+          # 2026-10-10: build harus lebih cepat, cache yang penting disimpan).
+          cache: gradle
       - name: Cache Android SDK (NDK & CMake)
         uses: actions/cache@caa296126883cff596d87d8935842f9db880ef25 # v5
         with:
@@ -363,7 +385,7 @@ jobs:
           RELEASE_KEY_ALIAS: ${{ secrets.RELEASE_KEY_ALIAS }}
           RELEASE_KEY_PASSWORD: ${{ secrets.RELEASE_KEY_PASSWORD }}
           RELEASE_STORE_PASSWORD: ${{ secrets.RELEASE_STORE_PASSWORD }}
-        run: ./gradlew --stacktrace --no-daemon :app:compileReleaseKotlin
+        run: ./gradlew --stacktrace --no-daemon --build-cache :app:compileReleaseKotlin
       - name: Gradle assembleRelease (R8 + signed, per ABI)
         working-directory: client/Android/Studio
         env:
@@ -371,7 +393,7 @@ jobs:
           RELEASE_KEY_ALIAS: ${{ secrets.RELEASE_KEY_ALIAS }}
           RELEASE_KEY_PASSWORD: ${{ secrets.RELEASE_KEY_PASSWORD }}
           RELEASE_STORE_PASSWORD: ${{ secrets.RELEASE_STORE_PASSWORD }}
-        run: ./gradlew --stacktrace --no-daemon assembleRelease
+        run: ./gradlew --stacktrace --no-daemon --build-cache assembleRelease
       - name: Namai APK berdasarkan ABI Android
         working-directory: client/Android/Studio/app/build/outputs/apk/release
         run: |
