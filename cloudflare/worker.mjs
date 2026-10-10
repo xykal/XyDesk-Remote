@@ -163,10 +163,23 @@ async function getLatestPublishedRelease(env) {
 // XyDesk-<abi>.apk (misalnya v1.0.2) dan berakhir 404.
 const ABI_NAMES = ["arm64-v8a", "armeabi-v7a", "x86_64"];
 
+// Sejak v1.1.8 aset rilis memakai nama bit (XyDesk-Remote32bit.apk /
+// XyDesk-Remote64bit.apk / XyDesk-Remote64bit-x86.apk) tanpa token ABI. Alias
+// harus tetap mengikuti rilis berjalan, jadi nama bit dipetakan balik ke ABI.
+const BIT_NAMES = [
+  ["xydesk-remote64bit-x86", "x86_64"],
+  ["xydesk-remote32bit", "armeabi-v7a"],
+  ["xydesk-remote64bit", "arm64-v8a"],
+];
+
 function abiFromAssetName(name) {
   const lower = String(name).toLowerCase();
   for (const abi of ABI_NAMES) {
     if (lower.includes(abi)) return abi;
+  }
+  // 64bit-x86 dicek sebelum 64bit agar tidak tertukar jadi arm64.
+  for (const [token, abi] of BIT_NAMES) {
+    if (lower.includes(token)) return abi;
   }
   return undefined;
 }

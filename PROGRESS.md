@@ -339,3 +339,23 @@ CATATAN: build APK tetap DITAHAN menunggu konfirmasi.
 - "Mouse double" = dua kursor: overlay kursor lokal app + kursor remote di
   stream saat mouse fisik terpasang. FIX: state externalMouseConnectedState;
   overlay pointer disembunyikan otomatis saat mouse eksternal terdeteksi.
+
+## Ronde 18 — GAS rilis (2026-10-10)
+- MIN_API 23 (Android 6) — semua API 26+ sudah di-guard; compile/target 37
+  (Android 16) tetap.
+- Versi 1.1.8 (code 69).
+- Nama aset rilis: XyDesk-Remote32bit.apk / XyDesk-Remote64bit.apk /
+  XyDesk-Remote64bit-x86.apk; workflow rename setelah verifikasi tanda
+  tangan; ci/verify_release_apk_hashes.py & alias worker mengikuti nama baru
+  (BIT_NAMES, urutan 64bit-x86 dicek lebih dulu).
+- CreateRdpScreen.kt dead code dihapus (digantikan RdpFreeScreen);
+  res/drawable-nodpi/xy_mark_black.png tak terpakai dihapus.
+- OG banner baru 1200x630: gradient radial, orbs bokeh, streaks, partikel,
+  cincin glow, logo transparan, tipografi dua warna, pill domain.
+- Web: popup hitung mundur "Rilis Update Besok" — efek shine, orbs pulse,
+  partikel melayang, kartu glow, countdown jam/menit/detik, target tetap
+  2026-10-11T09:00+07:00, dismissal persist di localStorage, hormat
+  prefers-reduced-motion.
+- EXE gabungan/UI/streaming sendiri: sudah ada sejak dulu (main_host Win32
+  UI + tray, XyDeskRemoteHost-Standalone.exe single-binary, xydesk_quic
+  streaming + core-pc-stream di Android) — rilis = uji perangkat nyata.

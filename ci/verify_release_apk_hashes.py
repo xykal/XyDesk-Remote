@@ -43,8 +43,14 @@ def verify(directory: Path) -> None:
             f"found {', '.join(sorted(reported)) or 'none'}"
         )
 
+    # Sejak v1.1.8 nama aset memakai bit arsitektur, bukan nama ABI.
+    NAMES = {
+        "armeabi-v7a": "XyDesk-Remote32bit.apk",
+        "arm64-v8a": "XyDesk-Remote64bit.apk",
+        "x86_64": "XyDesk-Remote64bit-x86.apk",
+    }
     for abi in ABIS:
-        filename = f"XyDesk-Remote-{abi}.apk"
+        filename = NAMES[abi]
         apk_path = directory / filename
         if not apk_path.is_file():
             raise SystemExit(f"FAIL: missing {apk_path}")

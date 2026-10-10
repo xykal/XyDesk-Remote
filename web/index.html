@@ -1428,7 +1428,7 @@
               <li><strong>Perbaikan crash startup Android 8 (<code>PrintJobMonitor.java</code>):</strong> overload <code>FileObserver(File, int)</code> hanya tersedia mulai API 29, sehingga perangkat Android 7–9 (mis. Oppo A3s/ColorOS) crash saat aplikasi dibuka. Pemantau tugas print kini memakai overload <code>FileObserver(String, int)</code> yang kompatibel dengan API 24+; guard <code>MotionEvent.getClassification()</code> API 29 dipertahankan sebagai pengaman tambahan.</li>
               <li><strong>Opsi refresh 30/60/90/120 Hz:</strong> pilihan refresh kini meminta mode panel Android yang benar-benar didukung, termasuk saat mode PC Connect diubah di dalam sesi. Catatan: HUD mengukur invalidasi UI terkoaleskan, bukan FPS host — tidak dapat melampaui panel 60 Hz atau memaksa FPS host/jaringan.</li>
               <li><strong>Penyederhanaan antarmuka:</strong> Backup/Update/Feedback dikelompokkan di drawer menjadi "Alat &amp; Bantuan"; beranda menambah "Ruang Santai" opsional (meme teks/jokes satire nonpartisan) yang dapat disembunyikan dari Pengaturan.</li>
-              <li><strong>Nama aset rilis distandarkan:</strong> APK dipublikasikan sebagai <code>XyDesk-Remote-armeabi-v7a.apk</code>, <code>XyDesk-Remote-arm64-v8a.apk</code>, dan <code>XyDesk-Remote-x86_64.apk</code> sesuai ABI, dengan <code>SHA256SUMS.txt</code> untuk verifikasi. Rilis v1.0.2 dan yang lebih lama masih memakai nama <code>XyDesk-&lt;abi&gt;.apk</code>; tautan pendek per ABI mengikuti rilis berjalan sehingga kedua nama tetap berfungsi.</li>
+              <li><strong>Nama aset rilis distandarkan:</strong> APK dipublikasikan sebagai <code>XyDesk-Remote32bit.apk</code> (armeabi-v7a), <code>XyDesk-Remote64bit.apk</code> (arm64-v8a), dan <code>XyDesk-Remote64bit-x86.apk</code> (x86_64), dengan <code>SHA256SUMS.txt</code> untuk verifikasi. Rilis v1.1.7 dan yang lebih lama memakai nama <code>XyDesk-Remote-&lt;abi&gt;.apk</code>; v1.0.2 memakai <code>XyDesk-&lt;abi&gt;.apk</code>; tautan pendek per ABI mengikuti rilis berjalan sehingga semua nama tetap berfungsi.</li>
             </ul>
           </div>
 
@@ -2048,5 +2048,100 @@
       window.setInterval(loadActiveSessionStats, 30_000);
     })();
   </script>
+<!-- ══ Popup hitung mundur rilis ══ -->
+<style>
+  #xyCdWrap{position:fixed;inset:0;z-index:9999;display:flex;align-items:center;justify-content:center;
+    background:rgba(6,3,16,.72);backdrop-filter:blur(6px);-webkit-backdrop-filter:blur(6px);
+    opacity:0;pointer-events:none;transition:opacity .45s ease}
+  #xyCdWrap.show{opacity:1;pointer-events:auto}
+  #xyCdWrap .fl{position:absolute;border-radius:50%;filter:blur(1px);opacity:.7;animation:xyfloat 7s ease-in-out infinite}
+  @keyframes xyfloat{0%,100%{transform:translateY(0) rotate(0deg)}50%{transform:translateY(-26px) rotate(8deg)}}
+  #xyCdCard{position:relative;width:min(560px,92vw);border-radius:22px;overflow:hidden;
+    background:linear-gradient(160deg,#16092e 0%,#0b0418 55%,#120a26 100%);
+    box-shadow:0 30px 80px rgba(0,0,0,.6),0 0 0 1px rgba(150,110,255,.28),0 0 60px rgba(120,80,255,.25);
+    padding:34px 30px 28px;text-align:center;animation:xyin .5s cubic-bezier(.2,.9,.3,1.2)}
+  @keyframes xyin{from{transform:scale(.86) translateY(26px);opacity:0}to{transform:none;opacity:1}}
+  #xyCdCard::before{content:"";position:absolute;top:-60%;left:-40%;width:60%;height:120%;
+    background:linear-gradient(100deg,transparent,rgba(255,255,255,.14),transparent);
+    transform:rotate(8deg);animation:xyshine 3.2s ease-in-out infinite}
+  @keyframes xyshine{0%{left:-60%}60%,100%{left:130%}}
+  #xyCdCard .badge{display:inline-block;font:600 12px/1 'Segoe UI',system-ui,sans-serif;letter-spacing:2px;
+    color:#d9c9ff;background:rgba(120,80,255,.18);border:1px solid rgba(150,110,255,.5);
+    padding:7px 14px;border-radius:999px;margin-bottom:14px;text-transform:uppercase}
+  #xyCdCard h2{margin:0 0 6px;font:800 30px/1.15 'Segoe UI',system-ui,sans-serif;color:#fff}
+  #xyCdCard h2 em{font-style:normal;background:linear-gradient(90deg,#b78cff,#7fd4ff);
+    -webkit-background-clip:text;background-clip:text;color:transparent}
+  #xyCdCard p{margin:0 0 20px;font:400 14px/1.5 'Segoe UI',system-ui,sans-serif;color:#b9b3cc}
+  .xyCdRow{display:flex;gap:12px;justify-content:center;margin-bottom:22px}
+  .xyCdBox{min-width:78px;padding:12px 8px;border-radius:14px;background:rgba(255,255,255,.05);
+    border:1px solid rgba(150,110,255,.35);position:relative;overflow:hidden}
+  .xyCdBox::after{content:"";position:absolute;inset:0;background:linear-gradient(180deg,rgba(150,110,255,.14),transparent 60%)}
+  .xyCdNum{font:800 32px/1 'Segoe UI',system-ui,sans-serif;color:#fff;display:block;
+    text-shadow:0 0 18px rgba(150,110,255,.8);font-variant-numeric:tabular-nums}
+  .xyCdBox small{font:600 10px/1 'Segoe UI',system-ui,sans-serif;letter-spacing:1.5px;color:#9d8fd0;text-transform:uppercase}
+  .xyCdBtn{cursor:pointer;border:0;border-radius:12px;padding:13px 26px;margin:0 6px;
+    font:700 15px 'Segoe UI',system-ui,sans-serif;transition:transform .15s,box-shadow .15s}
+  .xyCdBtn:hover{transform:translateY(-2px)}
+  #xyCdGo{background:linear-gradient(90deg,#8b5cf6,#6d28d9);color:#fff;box-shadow:0 8px 24px rgba(120,70,255,.45)}
+  #xyCdClose{background:rgba(255,255,255,.08);color:#cfc8e2;border:1px solid rgba(255,255,255,.14)}
+  #xyCdX{position:absolute;top:12px;right:12px;width:30px;height:30px;border-radius:50%;border:0;cursor:pointer;
+    background:rgba(255,255,255,.08);color:#cfc8e2;font-size:15px;line-height:1;transition:background .15s}
+  #xyCdX:hover{background:rgba(255,255,255,.18)}
+  .xyOrb{position:absolute;border-radius:50%;pointer-events:none;filter:blur(30px);opacity:.5;animation:xypulse 5s ease-in-out infinite}
+  @keyframes xypulse{0%,100%{transform:scale(1);opacity:.4}50%{transform:scale(1.25);opacity:.65}}
+  @media (prefers-reduced-motion:reduce){#xyCdWrap *{animation:none!important;transition:none!important}}
+</style>
+<div id="xyCdWrap" role="dialog" aria-modal="true" aria-labelledby="xyCdTitle">
+  <span class="fl" style="width:10px;height:10px;left:12%;top:20%;background:#8b5cf6;animation-delay:0s"></span>
+  <span class="fl" style="width:6px;height:6px;left:22%;top:70%;background:#7fd4ff;animation-delay:1.2s"></span>
+  <span class="fl" style="width:12px;height:12px;left:80%;top:24%;background:#e879f9;animation-delay:.6s"></span>
+  <span class="fl" style="width:8px;height:8px;left:88%;top:64%;background:#8b5cf6;animation-delay:2s"></span>
+  <span class="fl" style="width:7px;height:7px;left:60%;top:12%;background:#7fd4ff;animation-delay:1.6s"></span>
+  <div id="xyCdCard">
+    <span class="xyOrb" style="width:140px;height:140px;left:-40px;top:-40px;background:#7c3aed"></span>
+    <span class="xyOrb" style="width:120px;height:120px;right:-30px;bottom:-30px;background:#2563eb"></span>
+    <button id="xyCdX" aria-label="Tutup">×</button>
+    <span class="badge">Segera hadir</span>
+    <h2 id="xyCdTitle">Rilis Update <em>Besok</em> 🚀</h2>
+    <p>Versi terbaru XyDesk Remote sebentar lagi. Hitung mundur menuju peluncuran — siapkan perangkatmu!</p>
+    <div class="xyCdRow" id="xyCdRow">
+      <div class="xyCdBox"><span class="xyCdNum" id="xyCdH">00</span><small>Jam</small></div>
+      <div class="xyCdBox"><span class="xyCdNum" id="xyCdM">00</span><small>Menit</small></div>
+      <div class="xyCdBox"><span class="xyCdNum" id="xyCdS">00</span><small>Detik</small></div>
+    </div>
+    <div>
+      <button class="xyCdBtn" id="xyCdGo">Ingatkan Saya</button>
+      <button class="xyCdBtn" id="xyCdClose">Nanti Saja</button>
+    </div>
+  </div>
+</div>
+<script>
+(function(){
+  var KEY='xyCdDismissed';
+  // Target rilis: besok 09:00 WIB. Setelah lewat, popup tidak muncul lagi.
+  // Tanggal rilis tetap: 11 Okt 2026 09:00 WIB — popup berhenti setelahnya.
+  var target=new Date('2026-10-11T09:00:00+07:00');
+  var wrap=document.getElementById('xyCdWrap');
+  if(localStorage.getItem(KEY))return;
+  function pad(n){return String(n).padStart(2,'0')}
+  function tick(){
+    var diff=target-Date.now();
+    if(diff<=0){localStorage.setItem(KEY,'1');wrap.classList.remove('show');return;}
+    var h=Math.floor(diff/3600000),m=Math.floor(diff%3600000/60000),s=Math.floor(diff%60000/1000);
+    document.getElementById('xyCdH').textContent=pad(h);
+    document.getElementById('xyCdM').textContent=pad(m);
+    document.getElementById('xyCdS').textContent=pad(s);
+  }
+  tick(); setInterval(tick,1000);
+  // Muncul setelah halaman settle biar tidak ganggu first paint.
+  setTimeout(function(){wrap.classList.add('show')},900);
+  function dismiss(){localStorage.setItem(KEY,'1');wrap.classList.remove('show')}
+  document.getElementById('xyCdClose').onclick=dismiss;
+  document.getElementById('xyCdX').onclick=dismiss;
+  document.getElementById('xyCdGo').onclick=function(){
+    var d=document.getElementById('download'); if(d)d.scrollIntoView({behavior:'smooth'}); dismiss();
+  };
+})();
+</script>
 </body>
 </html>
