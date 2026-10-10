@@ -9,12 +9,22 @@ from pathlib import Path
 
 ABIS = ("armeabi-v7a", "arm64-v8a", "x86_64")
 
+# Sejak v1.1.8 nama aset memakai bit arsitektur tanpa token ABI.
+BIT_NAMES = {
+    "XyDesk-Remote32bit.apk": "armeabi-v7a",
+    "XyDesk-Remote64bit.apk": "arm64-v8a",
+    "XyDesk-Remote64bit-x86.apk": "x86_64",
+}
+
 
 def verify(path: Path) -> None:
-    abi_matches = [abi for abi in ABIS if abi in path.name]
-    if len(abi_matches) != 1:
-        raise SystemExit(f"FAIL: cannot determine a single Android ABI from {path.name}")
-    abi = abi_matches[0]
+    if path.name in BIT_NAMES:
+        abi = BIT_NAMES[path.name]
+    else:
+        abi_matches = [abi for abi in ABIS if abi in path.name]
+        if len(abi_matches) != 1:
+            raise SystemExit(f"FAIL: cannot determine a single Android ABI from {path.name}")
+        abi = abi_matches[0]
     required_library = f"lib/{abi}/libcrypto.so"
 
     try:
