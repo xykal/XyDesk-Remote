@@ -787,7 +787,7 @@ class SessionManager(context: Context) {
                     // kanal RDP (rdpsnd), jadi bridge hanya mengantar suara di mode
                     // "Audio di PC" (REMOTE).
                     val speakerOn = opts.quicAudio && opts.audioMode == XyAudioMode.REMOTE
-                    val micOn = opts.microphone
+                    val micOn = opts.usesQuicMicrophone()
                     if (speakerOn || micOn) {
                         audioBridgeState = "start…"
                         listener?.onAudioBridge(audioBridgeState)

@@ -7,12 +7,15 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
+import androidx.compose.material3.Switch
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.Lifecycle
 import id.xydesk.remote.core.ConnectionProfile
+import id.xydesk.remote.core.RdpOptions
+import id.xydesk.remote.core.forRdpFree
 import id.xydesk.remote.rdpfree.RdpFreeApi
 import id.xydesk.remote.rdpfree.RdpFreeStatus
 import id.xydesk.remote.security.CredentialVault
@@ -35,6 +38,7 @@ fun RdpFreeScreen(onBack: () -> Unit, onConnect: (ConnectionProfile) -> Unit) {
     var connected by remember { mutableStateOf(vault.has(RdpFreeApi.VAULT_KEY)) }
     var tokenInput by remember { mutableStateOf("") }
     var password by remember { mutableStateOf("") }
+    var microphone by remember { mutableStateOf(false) }
     var status by remember { mutableStateOf<RdpFreeStatus?>(null) }
     var inputs by remember { mutableStateOf<JSONObject?>(null) }
     var durations by remember { mutableStateOf<List<String>>(emptyList()) }
@@ -174,6 +178,12 @@ fun RdpFreeScreen(onBack: () -> Unit, onConnect: (ConnectionProfile) -> Unit) {
                         Text("${connection.username} · ${connection.transport}")
                         if (connection.transport == "tailscale") Text("Pastikan Tailscale di HP terhubung ke jaringan yang sama.")
                         Spacer(Modifier.height(12.dp))
+                        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                            Text("Input mikrofon", modifier = Modifier.weight(1f))
+                            Switch(checked = microphone, onCheckedChange = { microphone = it }, enabled = !busy)
+                        }
+                        Text("Opsional: Android meminta izin mikrofon saat tersambung. Uji Windows Sound > Input, bukan hanya speaker. Wallpaper desktop aktif.")
+                        Spacer(Modifier.height(12.dp))
                         XyField(password, { password = it }, "Password RDP_PASSWORD", isPassword = true)
                         Text("Password tidak dibaca dari GitHub dan tidak disimpan otomatis.")
                         Spacer(Modifier.height(12.dp))
@@ -183,7 +193,10 @@ fun RdpFreeScreen(onBack: () -> Unit, onConnect: (ConnectionProfile) -> Unit) {
                                 try {
                                     val fresh = api.status().connection ?: throw IllegalStateException("Sesi tidak lagi siap")
                                     val profile = ConnectionProfile(host = fresh.host, port = fresh.port,
-                                        username = fresh.username, password = password, label = "RdpFree")
+                                        username = fresh.username, password = password, label = "RdpFree",
+                                        key = "rdpfree:${status?.repo ?: fresh.host}")
+                                    check(fresh.transport == "tailscale") { "Perbarui sesi ke Tailscale terlebih dahulu" }
+                                    RdpOptions.of(context, profile.id).forRdpFree(microphone).write(context, profile.id)
                                     password = ""
                                     onConnect(profile)
                                 } catch (e: Exception) { error(e) } finally { busy = false }

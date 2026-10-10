@@ -104,3 +104,7 @@ Lihat [docs/BUILD.md](docs/BUILD.md) untuk versi JDK, Android SDK, NDK, dan CMak
 FreeRDP dilisensikan Apache-2.0. Atribusi dan rincian perubahan XyDesk ada di [`XYDESK-REMOTE-NOTICE.md`](XYDESK-REMOTE-NOTICE.md).
 
 Dibuat oleh xykal — XyVerse Technology Global.
+
+### RdpFree media profile
+
+RdpFree connections use standard RDP speaker playback and an explicit microphone opt-in; Android runtime microphone permission is still required. Desktop wallpaper is enabled for this profile. The optional UDP audio bridge is disabled on RdpFree profiles, and disabled bridges no longer start a second microphone capture. Other connection profiles retain their own options. The host must allow RDP audio capture and wallpaper. Configuration tests do not replace Windows/Android recording or game compatibility tests.
