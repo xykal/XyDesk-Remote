@@ -236,3 +236,12 @@ Start: 2026-09-28
 ## Rilis v1.1.4 (66) — build untuk live review (2026-10-10)
 - Berisi: gate nag-mode + diagnostik, create-RDP XyRDP + AdMob unlock, domain biz.id, unduhan unik, musik online, riwayat clipboard, gamepad lengkap, editor kombinasi bebas, FPS, smoothing, wallpaper, menu inti.
 - Dibangun hanya setelah konfirmasi eksplisit pemilik ("gasken").
+
+## v1.1.5 (67) — nag kanal ditutup permanen (2026-10-10)
+- PENYEBAB keluhan pemilik: keputusan "Aku pengguna sah — lanjutkan" hanya disimpan
+  di memori (remember), jadi nag muncul lagi setiap buka app walau sudah ditutup.
+- PERBAIKAN: keputusan disimpan permanen di SharedPreferences ("xydesk.channel").
+  Sekali ditutup, tidak pernah muncul lagi (kecuali data app dihapus).
+- Diagnostik tetap dicetak di kartu: sidik jari runtime + pemasang. Kalau sidik jari
+  != 8429f689… berarti perangkat menandatangani ulang saat pasang (app clone/dual
+  apps/ROM) — bukan file APK-nya yang salah.

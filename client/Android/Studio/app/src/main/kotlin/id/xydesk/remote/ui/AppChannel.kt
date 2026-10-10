@@ -142,7 +142,11 @@ internal fun AppChannelGate(
 ) {
     val context = LocalContext.current
     val blocked = remember { !AppChannel.official(context) }
-    var dismissed by remember { mutableStateOf(false) }
+    // PENGAJARAN 2026-10-10 (putaran dua): penutupan dulu hanya di memori
+    // sehingga nag muncul lagi tiap buka app. Sekarang keputusan pengguna
+    // disimpan permanen di SharedPreferences — tutup sekali, selesai.
+    val prefs = remember { context.getSharedPreferences("xydesk.channel", Context.MODE_PRIVATE) }
+    var dismissed by remember { mutableStateOf(prefs.getBoolean(KEY_DISMISSED, false)) }
     if (!blocked || dismissed) return
 
     val diag = remember { AppChannel.diagnostics(context) }
@@ -218,7 +222,10 @@ internal fun AppChannelGate(
             )
             XyPillButton(
                 text = xy("Aku pengguna sah — lanjutkan", "I'm a legit user — continue"),
-                onClick = { dismissed = true },
+                onClick = {
+                    prefs.edit().putBoolean(KEY_DISMISSED, true).apply()
+                    dismissed = true
+                },
                 primary = false,
                 modifier = Modifier.fillMaxWidth(),
             )
@@ -231,6 +238,9 @@ internal fun AppChannelGate(
         }
     }
 }
+
+/** Kunci penyimpanan keputusan menutup peringatan kanal. */
+private const val KEY_DISMISSED = "warn_dismissed"
 
 /** Latar penutup. Tidak transparan supaya layar di bawahnya tidak terbaca. */
 private val XyGateBackground = androidx.compose.ui.graphics.Color(0xFF08080A)
