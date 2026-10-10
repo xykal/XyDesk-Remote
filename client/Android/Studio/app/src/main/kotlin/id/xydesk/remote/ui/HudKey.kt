@@ -104,6 +104,12 @@ data class HudKey(
     val macroText: String = "",
     /** Kirim tombol Enter otomatis sesudah [macroText] selesai diketik. */
     val macroSendEnter: Boolean = true,
+    /**
+     * Tombol milik preset Gamepad: dirender dengan rupa khusus gamepad
+     * (permintaan pemilik 2026-10-10 — kontrol gamepad tidak boleh memakai
+     * rupa tombol overlay biasa).
+     */
+    val pad: Boolean = false,
 ) {
     fun toJson(): JSONObject = JSONObject().apply {
         put("id", id)
@@ -120,6 +126,7 @@ data class HudKey(
             put("macroText", macroText)
             put("macroEnter", macroSendEnter)
         }
+        if (pad) put("pad", true)
     }
 
     companion object {
@@ -148,6 +155,7 @@ data class HudKey(
                 size = o.optDouble("size", 46.0).toFloat().coerceIn(MIN_SIZE, MAX_SIZE),
                 macroText = o.optString("macroText", ""),
                 macroSendEnter = o.optBoolean("macroEnter", true),
+                pad = o.optBoolean("pad", false),
             )
         }
 
@@ -249,22 +257,22 @@ data class HudKey(
                 HudProfilePreset.FULLPAD -> listOf(
                     // Stik & D-Pad kiri, ABXY & stik kanan, shoulder di atas —
                     // susunan gamepad sungguhan tanpa perlu menyusun manual.
-                    HudKey("f_lstick", HudKind.PAD_STICK, "L", x = 0.06f, y = 0.68f, size = d),
-                    HudKey("f_dpad_up", HudKind.KEY, "\u25b2", keyCode = KeyEvent.KEYCODE_DPAD_UP, x = 0.08f, y = 0.26f, size = s),
-                    HudKey("f_dpad_down", HudKind.KEY, "\u25bc", keyCode = KeyEvent.KEYCODE_DPAD_DOWN, x = 0.08f, y = 0.42f, size = s),
-                    HudKey("f_dpad_left", HudKind.KEY, "\u25c0", keyCode = KeyEvent.KEYCODE_DPAD_LEFT, x = 0.02f, y = 0.34f, size = s),
-                    HudKey("f_dpad_right", HudKind.KEY, "\u25b6", keyCode = KeyEvent.KEYCODE_DPAD_RIGHT, x = 0.14f, y = 0.34f, size = s),
-                    HudKey("f_l1", HudKind.SCROLL_UP, "L1", x = 0.02f, y = 0.12f, size = s),
-                    HudKey("f_l2", HudKind.KEY, "L2", keyCode = KeyEvent.KEYCODE_PAGE_UP, x = 0.12f, y = 0.12f, size = s),
-                    HudKey("f_select", HudKind.KEY, "Select", keyCode = KeyEvent.KEYCODE_MOVE_HOME, x = 0.40f, y = 0.12f, size = s),
-                    HudKey("f_start", HudKind.KEY, "Start", keyCode = KeyEvent.KEYCODE_MENU, x = 0.52f, y = 0.12f, size = s),
-                    HudKey("f_r2", HudKind.KEY, "R2", keyCode = KeyEvent.KEYCODE_PAGE_DOWN, x = 0.80f, y = 0.12f, size = s),
-                    HudKey("f_r1", HudKind.SCROLL_DOWN, "R1", x = 0.90f, y = 0.12f, size = s),
-                    HudKey("f_x", HudKind.KEY, "X", keyCode = KeyEvent.KEYCODE_ENTER, x = 0.86f, y = 0.32f, size = s),
-                    HudKey("f_y", HudKind.KEY, "Y", keyCode = KeyEvent.KEYCODE_ESCAPE, x = 0.80f, y = 0.40f, size = s),
-                    HudKey("f_a", HudKind.MOUSE_LEFT, "A", action = HudAction.TAP, x = 0.92f, y = 0.40f, size = s),
-                    HudKey("f_b", HudKind.MOUSE_RIGHT, "B", x = 0.86f, y = 0.48f, size = s),
-                    HudKey("f_rstick", HudKind.PAD_STICK, "R", x = 0.88f, y = 0.68f, size = d),
+                    HudKey("f_lstick", HudKind.PAD_STICK, "L", x = 0.06f, y = 0.68f, size = d, pad = true),
+                    HudKey("f_dpad_up", HudKind.KEY, "\u25b2", keyCode = KeyEvent.KEYCODE_DPAD_UP, x = 0.08f, y = 0.26f, size = s, pad = true),
+                    HudKey("f_dpad_down", HudKind.KEY, "\u25bc", keyCode = KeyEvent.KEYCODE_DPAD_DOWN, x = 0.08f, y = 0.42f, size = s, pad = true),
+                    HudKey("f_dpad_left", HudKind.KEY, "\u25c0", keyCode = KeyEvent.KEYCODE_DPAD_LEFT, x = 0.02f, y = 0.34f, size = s, pad = true),
+                    HudKey("f_dpad_right", HudKind.KEY, "\u25b6", keyCode = KeyEvent.KEYCODE_DPAD_RIGHT, x = 0.14f, y = 0.34f, size = s, pad = true),
+                    HudKey("f_l1", HudKind.SCROLL_UP, "L1", x = 0.02f, y = 0.12f, size = s, pad = true),
+                    HudKey("f_l2", HudKind.KEY, "L2", keyCode = KeyEvent.KEYCODE_PAGE_UP, x = 0.12f, y = 0.12f, size = s, pad = true),
+                    HudKey("f_select", HudKind.KEY, "Select", keyCode = KeyEvent.KEYCODE_MOVE_HOME, x = 0.40f, y = 0.12f, size = s, pad = true),
+                    HudKey("f_start", HudKind.KEY, "Start", keyCode = KeyEvent.KEYCODE_MENU, x = 0.52f, y = 0.12f, size = s, pad = true),
+                    HudKey("f_r2", HudKind.KEY, "R2", keyCode = KeyEvent.KEYCODE_PAGE_DOWN, x = 0.80f, y = 0.12f, size = s, pad = true),
+                    HudKey("f_r1", HudKind.SCROLL_DOWN, "R1", x = 0.90f, y = 0.12f, size = s, pad = true),
+                    HudKey("f_x", HudKind.KEY, "X", keyCode = KeyEvent.KEYCODE_ENTER, x = 0.86f, y = 0.32f, size = s, pad = true),
+                    HudKey("f_y", HudKind.KEY, "Y", keyCode = KeyEvent.KEYCODE_ESCAPE, x = 0.80f, y = 0.40f, size = s, pad = true),
+                    HudKey("f_a", HudKind.MOUSE_LEFT, "A", action = HudAction.TAP, x = 0.92f, y = 0.40f, size = s, pad = true),
+                    HudKey("f_b", HudKind.MOUSE_RIGHT, "B", x = 0.86f, y = 0.48f, size = s, pad = true),
+                    HudKey("f_rstick", HudKind.PAD_STICK, "R", x = 0.88f, y = 0.68f, size = d, pad = true),
                 )
             }
             return list

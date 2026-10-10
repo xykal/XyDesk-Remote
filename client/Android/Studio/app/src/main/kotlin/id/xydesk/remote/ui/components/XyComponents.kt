@@ -257,6 +257,13 @@ fun XySwitch(
         label = "knob",
     )
     val knobOffset by animateDpAsState(if (checked) 23.dp else 3.dp, label = "knobOffset")
+    // Area sentuh diperbesar (52x38) tanpa mengubah visual track 46x28:
+    // pemilik mengeluh toggle kurang presisi saat ditekan.
+    Box(
+        modifier = Modifier
+            .size(width = 52.dp, height = 38.dp),
+        contentAlignment = Alignment.Center,
+    ) {
     Box(
         modifier = Modifier
             .size(width = 46.dp, height = 28.dp)
@@ -282,6 +289,7 @@ fun XySwitch(
                 .clip(CircleShape)
                 .background(knobColor),
         )
+    }
     }
 }
 

@@ -141,6 +141,8 @@ fun SessionControls(
     onScrollUnits: (Int) -> Unit,
     /** Sumbu joystick HUD (HudKind.PAD_STICK), -1..1 per sumbu. */
     onStickAxis: (Float, Float) -> Unit = { _, _ -> },
+    /** Stik KANAN preset gamepad selalu jadi pointer, apa pun mode stik. */
+    onStickPointer: (Float, Float) -> Unit = { _, _ -> },
     onZoomIn: () -> Unit,
     onZoomOut: () -> Unit,
     onFit: () -> Unit,
@@ -157,6 +159,7 @@ fun SessionControls(
     onToggleRecording: () -> Unit = {},
     onScreenshot: () -> Unit,
     onDisconnect: () -> Unit,
+    onGoHome: () -> Unit = {},
     onPointerVisibilityChange: (Boolean) -> Unit,
     onResetCluster: () -> Unit,
     onRotationChange: (String) -> Unit,
@@ -192,6 +195,7 @@ fun SessionControls(
     var scrollPillOpen by remember { mutableStateOf(false) }
     var panelOpen by remember { mutableStateOf(false) }
     var monitorGridOpen by remember { mutableStateOf(false) }
+    var railMenuOpen by remember { mutableStateOf(false) }
     var tab by remember { mutableStateOf(PanelTab.SCREEN) }
     var pickerOpen by remember { mutableStateOf(false) }
     var editing by remember { mutableStateOf<HudKey?>(null) }
@@ -536,7 +540,15 @@ fun SessionControls(
                     scrollSpeed = prefs.scrollSpeed,
                     onScrollUnits = onScrollUnits,
                     onEdit = { editing = it },
-                    onStickAxis = { _, x, y -> onStickAxis(x, y) },
+                    onStickAxis = { stickKey, x, y ->
+                        // Stik kanan gamepad = mouse (permintaan pemilik:
+                        // "analog kok cuma wasd"); stik kiri ikut mode.
+                        if (stickKey.pad && stickKey.label == "R") {
+                            if (x != 0f || y != 0f) onStickPointer(x, y)
+                        } else {
+                            onStickAxis(x, y)
+                        }
+                    },
                     stickMode = stickModeUi,
                 )
             }
@@ -589,32 +601,72 @@ fun SessionControls(
             )
         }
 
-        // Rail tetap disembunyikan saat panel atau mode atur posisi terbuka agar fokus penuh.
+        // Rail diminimalkan atas permintaan pemilik (2026-10-10): hanya dua
+        // tombol tetap — pembuka menu bubble (panah atas) dan keyboard di
+        // paling bawah. Sisanya pindah ke dalam bubble popup.
         if (!panelOpen && !monitorGridOpen && !mappingMode) {
             Column(
                 Modifier
                     .align(Alignment.BottomEnd)
                     .padding(end = 10.dp, bottom = 24.dp)
                     .zIndex(24f),
+                horizontalAlignment = Alignment.End,
                 verticalArrangement = Arrangement.spacedBy(8.dp),
             ) {
+                if (railMenuOpen) {
+                    Column(
+                        Modifier
+                            .xyGlass(shape = RoundedCornerShape(18.dp))
+                            .padding(8.dp),
+                        verticalArrangement = Arrangement.spacedBy(2.dp),
+                    ) {
+                        RailMenuItem(
+                            icon = XyIcons.ScrollSlide,
+                            label = xy("Kontrol scroll", "Scroll control"),
+                            active = scrollPillOpen,
+                        ) {
+                            scrollPillOpen = !scrollPillOpen
+                        }
+                        RailMenuItem(
+                            icon = if (hudButtonsVisibleNow) XyIcons.EyeOff else XyIcons.Eye,
+                            label = if (hudButtonsVisibleNow) {
+                                xy("Sembunyikan overlay", "Hide overlay")
+                            } else {
+                                xy("Tampilkan overlay", "Show overlay")
+                            },
+                        ) {
+                            toggleHudButtonVisibility()
+                        }
+                        RailMenuItem(
+                            icon = XyIcons.Monitor,
+                            label = xy("Monitor & sesi", "Monitors & sessions"),
+                        ) {
+                            railMenuOpen = false
+                            monitorGridOpen = true
+                        }
+                        RailMenuItem(
+                            icon = XyIcons.Home,
+                            label = xy("Ke beranda (sesi tetap jalan)", "Go home (session stays alive)"),
+                        ) {
+                            railMenuOpen = false
+                            onGoHome()
+                        }
+                        RailMenuItem(
+                            icon = XyIcons.Power,
+                            label = xy("Putuskan sesi", "Disconnect"),
+                            danger = true,
+                        ) {
+                            railMenuOpen = false
+                            onDisconnect()
+                        }
+                    }
+                }
                 RailButton(
-                    icon = XyIcons.ScrollSlide,
-                    active = scrollPillOpen,
-                    description = xy("Buka kontrol scroll mouse", "Open mouse scroll control"),
+                    icon = if (railMenuOpen) XyIcons.ChevronDown else XyIcons.ChevronUp,
+                    active = railMenuOpen,
+                    description = xy("Menu sesi", "Session menu"),
                     plate = plate,
-                    onClick = { scrollPillOpen = !scrollPillOpen },
-                )
-                RailButton(
-                    icon = if (hudButtonsVisibleNow) XyIcons.EyeOff else XyIcons.Eye,
-                    active = !hudButtonsVisibleNow,
-                    description = if (hudButtonsVisibleNow) {
-                        xy("Sembunyikan tombol overlay", "Hide overlay buttons")
-                    } else {
-                        xy("Tampilkan tombol overlay", "Show overlay buttons")
-                    },
-                    plate = plate,
-                    onClick = { toggleHudButtonVisibility() },
+                    onClick = { railMenuOpen = !railMenuOpen },
                 )
                 RailButton(
                     icon = XyIcons.Keyboard,
@@ -622,18 +674,6 @@ fun SessionControls(
                     description = xy("Buka keyboard HP", "Open phone keyboard"),
                     plate = plate,
                 ) { onOpenKeyboard() }
-                RailButton(
-                    icon = XyIcons.Monitor,
-                    active = monitorGridOpen,
-                    description = xy("Grid Monitor & Sesi User Aktif", "Active Monitors & User Sessions Grid"),
-                    plate = plate,
-                ) { monitorGridOpen = true }
-                RailButton(
-                    icon = XyIcons.Power,
-                    active = false,
-                    description = xy("Putuskan sesi", "Disconnect"),
-                    plate = plate,
-                ) { onDisconnect() }
             }
         }
 
@@ -652,8 +692,8 @@ fun SessionControls(
             XyOverlay(title = xy("Kirim teks", "Send text"), onDismiss = { textOpen = false }) {
                 Text(
                     xy(
-                        "Ketik ke remote mengirim sebagai tombol. Untuk menu Paste Windows, pakai Kirim sebagai clipboard Windows; kanal clipboard harus aktif.",
-                        "Type to remote sends keystrokes. For the Windows Paste menu, use Send as Windows clipboard; clipboard channel must be enabled.",
+                        "Dikirim sebagai ketikan. Pakai 'Kirim sebagai clipboard' untuk Paste di Windows.",
+                        "Sent as keystrokes. Use 'Send as clipboard' for Windows Paste.",
                     ),
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     fontSize = 11.sp,
@@ -1281,6 +1321,41 @@ private fun RailButton(
             contentDescription = description,
             tint = if (active) Color(0xFF0B0B0E) else pal.ink,
             modifier = Modifier.size(20.dp),
+        )
+    }
+}
+
+@Composable
+private fun RailMenuItem(
+    icon: ImageVector,
+    label: String,
+    active: Boolean = false,
+    danger: Boolean = false,
+    onClick: () -> Unit,
+) {
+    val ink = MaterialTheme.colorScheme.onSurface
+    Row(
+        Modifier
+            .clip(RoundedCornerShape(12.dp))
+            .clickable(onClick = onClick)
+            .padding(horizontal = 12.dp, vertical = 9.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(10.dp),
+    ) {
+        Icon(
+            icon,
+            contentDescription = null,
+            tint = if (danger) MaterialTheme.colorScheme.error else ink,
+            modifier = Modifier.size(17.dp),
+        )
+        Text(
+            label,
+            style = MaterialTheme.typography.labelLarge,
+            color = when {
+                danger -> MaterialTheme.colorScheme.error
+                active -> MaterialTheme.colorScheme.primary
+                else -> ink
+            },
         )
     }
 }
@@ -2132,14 +2207,14 @@ private fun InputTab(
             )
             XyToggleRow(
                 title = xy("Dukungan Gamepad & Joystick fisik", "Physical Gamepad & Joystick"),
-                subtitle = xy("Stik kiri gerak kursor, stik kanan scroll, A/B klik kiri/kanan", "Left stick moves pointer, right stick scrolls, A/B left/right click"),
+                subtitle = xy("Stik kiri WASD, stik kanan mouse, A/B klik", "Left stick WASD, right stick mouse, A/B click"),
                 checked = gamepadEnabled,
                 onCheckedChange = onGamepadEnabled,
             )
             PanelHint(
                 xy(
-                    "Mode stick berlaku untuk joystick HUD dan gamepad fisik: POINTER menggerakkan kursor, WASD dan Panah mengirim tombol arah.",
-                    "Stick mode applies to the HUD joystick and the physical gamepad: POINTER moves the cursor, WASD and Arrows send direction keys.",
+                    "Mode stik kiri: Pointer = kursor, WASD/Panah = tombol arah. Stik kanan gamepad selalu kursor.",
+                    "Left stick mode: Pointer = cursor, WASD/Arrows = keys. The gamepad's right stick is always the cursor.",
                 ),
             )
             XySegmented(

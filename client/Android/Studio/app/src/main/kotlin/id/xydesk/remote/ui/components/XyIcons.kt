@@ -311,6 +311,13 @@ object XyIcons {
         },
     )
 
+    /** Rumah: kembali ke beranda. */
+    val Home: ImageVector = xyIcon("XyHome") {
+        moveTo(4f, 11f); lineTo(12f, 4f); lineTo(20f, 11f)
+        moveTo(6.5f, 9.5f); lineTo(6.5f, 19f); lineTo(17.5f, 19f); lineTo(17.5f, 9.5f)
+        moveTo(10f, 19f); lineTo(10f, 14f); lineTo(14f, 14f); lineTo(14f, 19f)
+    }
+
     val Lock: ImageVector = xyIcon("XyLock") {
         moveTo(5.5f, 10.5f); lineTo(18.5f, 10.5f); lineTo(18.5f, 20f); lineTo(5.5f, 20f); close()
         moveTo(8.5f, 10.5f); lineTo(8.5f, 7.5f)

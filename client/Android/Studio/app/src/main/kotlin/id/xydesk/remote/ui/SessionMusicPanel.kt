@@ -33,6 +33,7 @@ import androidx.compose.ui.platform.LocalContext
 import id.xydesk.remote.ui.components.XyIcons
 import id.xydesk.remote.ui.components.XyPillButton
 import id.xydesk.remote.ui.components.xyGlass
+import id.xydesk.remote.ui.components.xyPurpleGlass
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.runtime.mutableStateOf
@@ -552,7 +553,7 @@ internal fun OnlineMusicSection() {
             Modifier
                 .weight(1f)
                 .heightIn(min = 40.dp)
-                .xyGlass(shape = RoundedCornerShape(12.dp), opacity = 1.1f, strength = 0.8f)
+                .xyPurpleGlass(RoundedCornerShape(12.dp))
                 .padding(horizontal = 12.dp, vertical = 10.dp),
             contentAlignment = Alignment.CenterStart,
         ) {

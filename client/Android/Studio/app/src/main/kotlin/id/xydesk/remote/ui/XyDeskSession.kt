@@ -1221,6 +1221,11 @@ fun XyDeskSessionScreen(
                 // trackpad dan gamepad fisik: 18 unit per defleksi penuh.
                 stickModeProvider = stickModeProvider,
                 onStickModeChange = onStickModeChange,
+                onStickPointer = { x, y ->
+                    if (x != 0f || y != 0f) {
+                        movePointer(x * HUD_STICK_POINTER_UNITS, y * HUD_STICK_POINTER_UNITS)
+                    }
+                },
                 onStickAxis = { x, y ->
                     // Mode POINTER memakai jalur gerak pointer yang sama dengan
                     // trackpad dan gamepad fisik. Mode WASD/Panah diserahkan ke
@@ -1296,6 +1301,12 @@ fun XyDeskSessionScreen(
                     // bisa dibatalkan. Kalau flag-nya nyala padahal user batal,
                     // auto-reconnect mati permanen untuk putusan koneksi asli.
                     confirmDisconnect = true
+                },
+                onGoHome = {
+                    // Ke beranda TANPA memutus sesi: activity hanya dipindah ke
+                    // belakang, koneksi + service tetap hidup; buka lagi dari
+                    // kartu "Sesi aktif" di beranda atau notifikasi.
+                    (context as? Activity)?.moveTaskToBack(true)
                 },
                 onPointerVisibilityChange = { pointerVisible = it },
                 onResetCluster = {

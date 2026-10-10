@@ -24,6 +24,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.graphics.vector.ImageVector
@@ -83,6 +84,44 @@ fun Modifier.xyGlass(
     .then(
         if (edge) Modifier.border(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.45f), shape)
         else Modifier
+    )
+
+/**
+ * Liquid glass UNGU glossy — PENGECUALIAN resmi aturan matte.
+ *
+ * Permintaan pemilik 2026-10-10: seluruh app matte, TAPI pemutar musik
+ * harus tetap bergaya liquid glass ungu yang mengilap. Kilau vertikal,
+ * sapuan diagonal, dan bevel tepi dihidupkan kembali khusus di sini.
+ */
+@Composable
+fun Modifier.xyPurpleGlass(shape: Shape = XyGlassShape): Modifier = this
+    .clip(shape)
+    .background(Color(0xEB2C1647))
+    .background(
+        Brush.verticalGradient(
+            0f to Color.White.copy(alpha = 0.30f),
+            0.10f to Color.White.copy(alpha = 0.14f),
+            0.34f to Color.White.copy(alpha = 0.03f),
+            0.62f to Color.Black.copy(alpha = 0.08f),
+            1f to Color.Black.copy(alpha = 0.22f),
+        ),
+    )
+    .background(
+        Brush.linearGradient(
+            0f to Color.White.copy(alpha = 0f),
+            0.28f to Color(0x40C9A6FF),
+            0.42f to Color.White.copy(alpha = 0.03f),
+            1f to Color.White.copy(alpha = 0f),
+        ),
+    )
+    .border(
+        1.dp,
+        Brush.linearGradient(
+            0f to Color.White.copy(alpha = 0.55f),
+            0.5f to Color(0x66B388FF),
+            1f to Color.Black.copy(alpha = 0.30f),
+        ),
+        shape,
     )
 
 /**

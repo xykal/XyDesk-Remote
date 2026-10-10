@@ -337,7 +337,7 @@ object OnlineMusicPlayer {
         }
         val playing = s.status == Status.PLAYING
         val builder = NotificationCompat.Builder(ctx, CHANNEL_ID)
-            .setSmallIcon(R.mipmap.ic_launcher)
+            .setSmallIcon(R.drawable.ic_launcher_monochrome)
             .setContentTitle(track.title)
             .setContentText(track.artist.ifBlank { "SoundCloud" })
             .setOnlyAlertOnce(true)

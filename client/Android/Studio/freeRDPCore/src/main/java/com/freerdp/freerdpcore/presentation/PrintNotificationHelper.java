@@ -67,7 +67,7 @@ public class PrintNotificationHelper
 		    PendingIntent.FLAG_IMMUTABLE | PendingIntent.FLAG_UPDATE_CURRENT);
 
 		Notification notif = new NotificationCompat.Builder(ctx, CHANNEL_ID)
-		                         .setSmallIcon(android.R.drawable.ic_dialog_info)
+		                         .setSmallIcon(com.freerdp.freerdpcore.R.drawable.xydesk_notif)
 		                         .setContentTitle(ctx.getString(R.string.print_notif_title))
 		                         .setContentText(pdfFile.getName())
 		                         .setContentIntent(openIntent)

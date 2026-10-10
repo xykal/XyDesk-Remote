@@ -268,3 +268,23 @@ Keluhan pemilik setelah uji v1.1.6 dan semua jawabannya:
    sudut atas membulat) dan L2/R2 jadi trigger (tinggi, sudut bawah membulat).
 6. "Fitur create-RDP mana?" -> kartu tetap "RDP Gratis 6 Jam" di puncak daftar
    perangkat (sebelumnya tersembunyi di dalam bubble "+").
+
+## Ronde 13 — UI bersih, gamepad mandiri, musik ungu, rail minim (2026-10-10)
+1. Unlock RDP Gratis sementara = gabung saluran saja (iklan AdMob belum mengisi;
+   adWatched tetap tersimpan untuk diaktifkan lagi nanti).
+2. Toggle: area sentuh 52x38dp (track tetap 46x28) — lebih presisi.
+3. Notifikasi print FreeRDP + pemutar musik kini berlogo XyDesk (xydesk_notif /
+   ic_launcher_monochrome), bukan ikon sistem/pengembang lain.
+4. Seksi "Tampilan" (setting resolusi/orientasi/skala per perangkat) dibuang dari
+   drawer — kebanyakan settingan bikin bingung; pengaturan tetap ada di panel sesi.
+5. Rail sesi diminimalkan: hanya panah-atas (bubble popup: scroll, overlay,
+   monitor, BERANDA, putuskan) + keyboard di paling bawah.
+6. "Ke beranda" baru: sesi TIDAK diputus (moveTaskToBack), buka lagi dari kartu
+   Sesi aktif/notifikasi.
+7. Gamepad preset kini rupa sendiri (pelat gelap solid khas gamepad, bukan rupa
+   overlay), stik kiri WASD berlabel + diagonal, stik kanan = mouse.
+8. Musik: liquid glass UNGU glossy dipertahankan sebagai pengecualian resmi
+   (xyPurpleGlass) di pemutar mengambang + kartu pencarian; tab Player/Antrian/
+   Pustaka + backend SoundCloud yang sudah tersambung tetap.
+9. Teks panel dipangkas (subtitle gamepad, hint kirim teks, dll).
+CATATAN: build/tag DITAHAN — menunggu konfirmasi pemilik.

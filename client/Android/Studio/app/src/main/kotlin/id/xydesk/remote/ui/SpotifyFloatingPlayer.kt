@@ -1,5 +1,7 @@
 package id.xydesk.remote.ui
 
+import id.xydesk.remote.ui.components.xyPurpleGlass
+
 import androidx.compose.ui.graphics.Color
 import android.content.Context
 import android.content.Intent
@@ -119,15 +121,7 @@ internal fun SpotifyFloatingPlayer(
             Column(
                 Modifier
                     .widthIn(min = 252.dp, max = 304.dp)
-                    .clip(RoundedCornerShape(18.dp))
-                    // Matte tanpa kilau: permintaan pemilik 2026-10-10
-                    // (gaya kaca dibuang dari seluruh app).
-                    .background(MaterialTheme.colorScheme.surface.copy(alpha = 0.97f))
-                    .border(
-                        1.dp,
-                        MaterialTheme.colorScheme.outline.copy(alpha = 0.45f),
-                        RoundedCornerShape(18.dp),
-                    )
+                    .xyPurpleGlass(RoundedCornerShape(18.dp))
                     .padding(12.dp)
                     // Musik online menambah isi; popup tidak boleh lebih tinggi
                     // dari layar — sisanya digulir.

@@ -19,7 +19,10 @@ internal class XyRdpUnlock(context: Context) {
         get() = sp.getBoolean(KEY_JOIN, false)
         set(v) = sp.edit().putBoolean(KEY_JOIN, v).apply()
 
-    val unlocked: Boolean get() = adWatched && joined
+    // 2026-10-10: iklan AdMob belum mengisi (belum live) atas laporan pemilik —
+    // syarat buka SEMENTARA cukup gabung saluran. adWatched tetap disimpan
+    // supaya bisa diaktifkan lagi tanpa migrasi saat AdMob sudah jalan.
+    val unlocked: Boolean get() = joined
 
     companion object {
         private const val KEY_AD = "unlock_ad_watched"

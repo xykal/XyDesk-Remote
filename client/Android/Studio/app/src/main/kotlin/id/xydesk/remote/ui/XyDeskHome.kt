@@ -522,7 +522,7 @@ fun XyDeskHome(
             Spacer(Modifier.height(14.dp))
             XyDivider()
             Spacer(Modifier.height(8.dp))
-            XySection.entries.forEach { item ->
+            XySection.entries.filter { it != XySection.TAMPILAN }.forEach { item ->
                 XyRow(
                     // Dulu title mentah (Indonesia saja) — drawer satu-satunya
                     // tempat yang tidak ikut bahasa. Sekarang dua bahasa.

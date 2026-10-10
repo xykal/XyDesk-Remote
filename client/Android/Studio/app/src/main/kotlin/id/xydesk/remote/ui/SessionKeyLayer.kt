@@ -222,7 +222,20 @@ private fun HudKeyButton(
     val stickRadiusPx = with(density) { (key.size.dp * 0.31f).toPx() }
     val latestStickRadius = rememberUpdatedState(stickRadiusPx)
     val latestOnStick = rememberUpdatedState(onStickAxis)
-    val look = hudButtonLook(plate, pressed = pressed, latched = latched, mappingMode = mappingMode)
+    val lookBase = hudButtonLook(plate, pressed = pressed, latched = latched, mappingMode = mappingMode)
+    // Rupa KHUSUS gamepad (permintaan pemilik 2026-10-10): tombol preset
+    // gamepad tidak lagi memakai pelat milik kontrol overlay — warnanya
+    // sendiri, tegas, tidak tergantung pilihan gaya pelat.
+    val look = if (key.pad) {
+        HudButtonLook(
+            plateColor = if (pressed || latched) Color(0xFF32323C) else Color(0xF20D0D11),
+            ringColor = if (mappingMode) Color(0xFF83D7FF) else Color(0x59FFFFFF),
+            ringWidth = if (pressed || latched || mappingMode) 2.dp else 1.dp,
+        )
+    } else {
+        lookBase
+    }
+    val padInk = Color(0xFFF2F4F6)
 
     // PERMINTAAN PEMILIK 2026-10-10: L1/R1 harus berbentuk shoulder/bumper
     // kontroler (lebar-pendek, sudut atas membulat besar) dan L2/R2 berbentuk
@@ -347,8 +360,9 @@ private fun HudKeyButton(
     ) {
         if (key.kind == HudKind.PAD_STICK) {
             // Label arah di tepi stik sesuai mode: WASD / panah, supaya
-            // kelihatan langsung stiknya mengendalikan apa.
-            val glyphs = when (stickMode) {
+            // kelihatan langsung stiknya mengendalikan apa. Stik kanan
+            // gamepad selalu mouse — tidak diberi label arah papan ketik.
+            val glyphs = if (key.pad && key.label == "R") emptyList() else when (stickMode) {
                 XyStickMode.WASD -> listOf(
                     "W" to Alignment.TopCenter, "D" to Alignment.CenterEnd,
                     "S" to Alignment.BottomCenter, "A" to Alignment.CenterStart,
@@ -377,10 +391,10 @@ private fun HudKeyButton(
                     .offset { IntOffset(stickOffset.value.x.roundToInt(), stickOffset.value.y.roundToInt()) }
                     .size(key.size.dp * HudStickKnobRatio)
                     .clip(CircleShape)
-                    .background(pal.ink.copy(alpha = 0.8f)),
+                    .background((if (key.pad) padInk else pal.ink).copy(alpha = 0.85f)),
             )
         } else {
-            HudKeyGlyph(key, pal.ink)
+            HudKeyGlyph(key, if (key.pad) padInk else pal.ink)
         }
     }
 }

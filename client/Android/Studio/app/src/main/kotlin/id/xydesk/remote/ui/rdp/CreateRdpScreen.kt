@@ -70,28 +70,8 @@ internal fun CreateRdpScreen(
     var user by remember { mutableStateOf("runner") }
     var password by remember { mutableStateOf("") }
 
-    // ---- iklan rewarded
-    var rewarded by remember { mutableStateOf<RewardedAd?>(null) }
-    var adReady by remember { mutableStateOf(false) }
-    LaunchedEffect(Unit) {
-        MobileAds.initialize(context) {}
-        RewardedAd.load(
-            context,
-            XyRdpConfig.ADMOB_REWARDED_UNIT,
-            AdRequest.Builder().build(),
-            object : RewardedAdLoadCallback() {
-                override fun onAdLoaded(ad: RewardedAd) {
-                    rewarded = ad
-                    adReady = true
-                }
-
-                override fun onAdFailedToLoad(error: LoadAdError) {
-                    rewarded = null
-                    adReady = false
-                }
-            },
-        )
-    }
+    // Iklan rewarded DINONAKTIFKAN sementara (AdMob belum mengisi);
+    // buka fitur cukup gabung saluran. Lihat XyRdpUnlock.
 
     // ---- polling status saat sesi berjalan
     LaunchedEffect(login, step) {
@@ -146,60 +126,11 @@ internal fun CreateRdpScreen(
 
         if (step == "unlock") {
             Text(
-                xyNow("BUKA FITUR (sekali saja)", "UNLOCK (one time)"),
+                xyNow("GABUNG SALURAN UNTUK BUKA (sekali saja)", "JOIN THE CHANNEL TO UNLOCK (one time)"),
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 fontSize = 10.sp,
                 letterSpacing = 1.2.sp,
                 fontWeight = FontWeight.SemiBold,
-            )
-            XyPillButton(
-                if (unlock.adWatched) {
-                    xyNow("Iklan sudah ditonton ✓", "Ad already watched ✓")
-                } else if (adReady) {
-                    xyNow("Nonton iklan (1x)", "Watch ad (1x)")
-                } else {
-                    xyNow("Memuat iklan…", "Loading ad…")
-                },
-                {
-                    val activity = context as? Activity
-                    val ad = rewarded
-                    if (activity == null || ad == null) {
-                        say(xyNow("Iklan belum siap; coba sebentar lagi.", "Ad not ready yet; try again shortly."))
-                        return@XyPillButton
-                    }
-                    ad.fullScreenContentCallback = object : FullScreenContentCallback() {
-                        override fun onAdDismissedFullScreenContent() {
-                            rewarded = null
-                            adReady = false
-                            RewardedAd.load(
-                                context,
-                                XyRdpConfig.ADMOB_REWARDED_UNIT,
-                                AdRequest.Builder().build(),
-                                object : RewardedAdLoadCallback() {
-                                    override fun onAdLoaded(loaded: RewardedAd) {
-                                        rewarded = loaded
-                                        adReady = true
-                                    }
-
-                                    override fun onAdFailedToLoad(e: LoadAdError) {
-                                        adReady = false
-                                    }
-                                },
-                            )
-                        }
-                    }
-                    ad.show(
-                        activity,
-                        OnUserEarnedRewardListener {
-                            unlock.adWatched = true
-                            say(xyNow("Terima kasih! Syarat iklan selesai.", "Thanks! Ad requirement done."))
-                        },
-                    )
-                },
-                primary = false,
-                compact = true,
-                enabled = !unlock.adWatched,
-                modifier = Modifier.fillMaxWidth(),
             )
             XyPillButton(
                 if (unlock.joined) {
