@@ -417,7 +417,11 @@ jobs:
           set -euo pipefail
           APK_SIGNER="$ANDROID_HOME/build-tools/37.0.0/apksigner"
           for abi in armeabi-v7a arm64-v8a x86_64; do
-            apk="XyDesk-Remote-$abi.apk"
+            case "$abi" in
+              armeabi-v7a) apk="XyDesk-Remote32bit.apk" ;;
+              arm64-v8a)   apk="XyDesk-Remote64bit.apk" ;;
+              *)           apk="XyDesk-Remote64bit-x86.apk" ;;
+            esac
             if [ ! -s "$apk" ]; then
               echo "::error::$apk tidak ditemukan untuk ditandatangani ulang."
               exit 1
@@ -524,7 +528,11 @@ jobs:
           printf 'Baseline signer SHA-256: %s\n\n' "$baseline_cert" >> "$REPORT"
 
           for abi in armeabi-v7a arm64-v8a x86_64; do
-            apk="$OUT/XyDesk-Remote-$abi.apk"
+            case "$abi" in
+              armeabi-v7a) apk="$OUT/XyDesk-Remote32bit.apk" ;;
+              arm64-v8a)   apk="$OUT/XyDesk-Remote64bit.apk" ;;
+              *)           apk="$OUT/XyDesk-Remote64bit-x86.apk" ;;
+            esac
             if [ ! -s "$apk" ]; then
               echo "::error::APK untuk ABI $abi tidak ditemukan."
               exit 1
