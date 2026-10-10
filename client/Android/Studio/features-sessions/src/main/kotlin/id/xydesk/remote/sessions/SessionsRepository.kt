@@ -26,7 +26,13 @@ class SessionsRepository(context: Context) {
                     host = e.host,
                     port = e.port,
                     username = e.username,
-                    password = if (e.rememberPassword) vault.get(e.id) else null,
+                    password = if (e.rememberPassword) {
+                        vault.get(e.id)
+                    } else {
+                        null
+                    } ?: vault.get(
+                        CredentialVault.hostCredKey(e.host, e.port, e.username.orEmpty()),
+                    ),
                     domain = e.domain,
                     label = e.label,
                     // id baris = kunci tetap perangkat (data lama tetap host:port)
@@ -47,6 +53,14 @@ class SessionsRepository(context: Context) {
         val oldPassword = if (shouldRemember) vault.get(profile.id) else null
         val vaultSaved = shouldRemember && vault.put(profile.id, pass!!)
         val persistedRememberPassword = shouldRemember && vaultSaved
+        // Ingatan per host: koneksi BARU ke host+user yang sama langsung
+        // terisi tanpa input ulang (permintaan pemilik 2026-10-10).
+        if (!pass.isNullOrEmpty()) {
+            vault.put(
+                CredentialVault.hostCredKey(profile.host, profile.port, profile.username.orEmpty()),
+                pass,
+            )
+        }
         try {
             dao.upsert(
                 FavoriteEntity(

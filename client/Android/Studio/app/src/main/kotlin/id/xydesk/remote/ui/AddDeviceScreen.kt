@@ -26,6 +26,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -131,12 +132,27 @@ fun AddDeviceScreen(
     var pass by remember {
         mutableStateOf(
             existing?.password
-                ?: existing?.let { vault.get(it.id) }.orEmpty(),
+                ?: existing?.let {
+                    vault.get(it.id)
+                        ?: vault.get(CredentialVault.hostCredKey(it.host, it.port, it.username.orEmpty()))
+                }.orEmpty(),
         )
     }
     var domain by remember { mutableStateOf(existing?.domain.orEmpty()) }
     var rememberPass by remember { mutableStateOf(existing?.password?.isNotEmpty() ?: true) }
     var error by remember { mutableStateOf<String?>(null) }
+
+    // Isi otomatis password bila host+user pernah dipakai (kredensial
+    // tersimpan per host — tidak perlu input ulang tiap add koneksi).
+    LaunchedEffect(host, user) {
+        if (pass.isNotEmpty()) return@LaunchedEffect
+        val ep = parseRdpEndpoint(host) ?: return@LaunchedEffect
+        val stored = vault.get(CredentialVault.hostCredKey(ep.host, ep.port, user))
+        if (!stored.isNullOrEmpty()) {
+            pass = stored
+            rememberPass = true
+        }
+    }
 
     val baseAccounts = remember(savedProfiles, savedUsers, existing) {
         val list = mutableListOf<SavedAccountOption>()

@@ -302,3 +302,16 @@ CATATAN: build/tag DITAHAN — menunggu konfirmasi pemilik.
   otomatis jadi nama, nama bisa dikustom (maks 24), salin kode pemulihan,
   pulihkan akun setelah pasang ulang (nama lama ikut kembali dari server).
 CATATAN: build/tag tetap DITAHAN menunggu konfirmasi.
+
+## Ronde 15 — kredensial diingat per host (2026-10-10)
+- Permintaan pemilik: sekali input password untuk satu host, koneksi berikutnya
+  ke host+user yang sama otomatis terisi; hilang hanya jika data app dihapus /
+  app di-uninstall.
+- CredentialVault.hostCredKey(host, port, user) = kunci baru "hostcred:...".
+- SessionsRepository: setiap simpan dengan password ikut menulis hostcred;
+  load fallback ke hostcred bila password per-id tidak ada.
+- AddDeviceScreen: prefill saat edit + auto-isi saat host/user diketik dan
+  cocok dengan kredensial tersimpan.
+- SoundCloud: tetap memakai client_id web + api-v2 (sudah tersambung, tanpa
+  akun). Skrip sc-api-auth.mjs = registrasi aplikasi OAuth resmi; tidak
+  dibutuhkan untuk pemutaran trek publik.

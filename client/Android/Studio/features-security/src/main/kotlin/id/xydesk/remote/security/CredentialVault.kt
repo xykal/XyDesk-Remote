@@ -97,6 +97,17 @@ class CredentialVault(context: Context) {
     }
 
     companion object {
+        /**
+         * Kunci kredensial per host+port+username (bukan per profil).
+         *
+         * Permintaan pemilik 2026-10-10: sekali password dimasukkan untuk satu
+         * host, koneksi berikutnya ke host yang sama tidak perlu input ulang.
+         * Data tetap lokal terenkripsi — hilang hanya bila data app dihapus
+         * atau app di-uninstall.
+         */
+        fun hostCredKey(host: String, port: Int, user: String): String =
+            "hostcred:" + host.trim().lowercase() + ":" + port + ":" + user.trim().lowercase()
+
         private const val TAG = "CredentialVault"
         private const val ANDROID_KEYSTORE = "AndroidKeyStore"
         private const val MASTER_ALIAS = "xydesk_cred_vault_v1"
