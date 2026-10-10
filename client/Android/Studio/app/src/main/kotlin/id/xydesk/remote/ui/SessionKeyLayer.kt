@@ -26,6 +26,8 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.CornerSize
+import androidx.compose.ui.graphics.Shape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Icon
@@ -222,12 +224,43 @@ private fun HudKeyButton(
     val latestOnStick = rememberUpdatedState(onStickAxis)
     val look = hudButtonLook(plate, pressed = pressed, latched = latched, mappingMode = mappingMode)
 
+    // PERMINTAAN PEMILIK 2026-10-10: L1/R1 harus berbentuk shoulder/bumper
+    // kontroler (lebar-pendek, sudut atas membulat besar) dan L2/R2 berbentuk
+    // trigger (tinggi, sudut bawah membulat) — bukan lingkaran seragam.
+    val isBumper = key.label.equals("L1", ignoreCase = true) || key.label.equals("R1", ignoreCase = true)
+    val isTrigger = key.label.equals("L2", ignoreCase = true) || key.label.equals("R2", ignoreCase = true)
+    val plateW = when {
+        isBumper -> key.size.dp * 1.55f
+        isTrigger -> key.size.dp * 0.92f
+        else -> key.size.dp
+    }
+    val plateH = when {
+        isBumper -> key.size.dp * 0.62f
+        isTrigger -> key.size.dp * 1.3f
+        else -> key.size.dp
+    }
+    val plateShape: Shape = when {
+        isBumper -> RoundedCornerShape(
+            topStart = CornerSize(percent = 48),
+            topEnd = CornerSize(percent = 48),
+            bottomStart = CornerSize(percent = 22),
+            bottomEnd = CornerSize(percent = 22),
+        )
+        isTrigger -> RoundedCornerShape(
+            topStart = CornerSize(percent = 26),
+            topEnd = CornerSize(percent = 26),
+            bottomStart = CornerSize(percent = 46),
+            bottomEnd = CornerSize(percent = 46),
+        )
+        else -> CircleShape
+    }
+
     Box(
         modifier
-            .size(key.size.dp)
-            .clip(CircleShape)
+            .size(plateW, plateH)
+            .clip(plateShape)
             .background(look.plateColor)
-            .border(look.ringWidth, look.ringColor, CircleShape)
+            .border(look.ringWidth, look.ringColor, plateShape)
             .pointerInput(key.id, mappingMode, key.action, key.kind, key.keyCode, key.shift, key.combo, key.size, plate, scrollSpeed) {
                 awaitEachGesture {
                     val slop = viewConfiguration.touchSlop
@@ -369,7 +402,7 @@ internal fun hudIconFor(
     HudKind.SCROLL_UP -> XyIcons.ScrollUp
     HudKind.SCROLL_DOWN -> XyIcons.ScrollDown
     HudKind.SCROLL_SLIDER -> XyIcons.ScrollSlide
-    HudKind.PAD_STICK -> XyIcons.Sliders
+    HudKind.PAD_STICK -> XyIcons.Gamepad
     HudKind.INPUT_SWITCH -> XyIcons.Swap
     HudKind.KEYBOARD -> XyIcons.Keyboard
     HudKind.KEY -> when (keyCode) {

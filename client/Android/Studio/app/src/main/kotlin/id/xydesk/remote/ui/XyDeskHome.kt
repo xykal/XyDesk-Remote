@@ -37,6 +37,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -73,6 +74,7 @@ import id.xydesk.remote.ui.components.XyNoticeHost
 import id.xydesk.remote.ui.components.XyOverlay
 import id.xydesk.remote.ui.components.rememberXyNotice
 import id.xydesk.remote.ui.components.XyLogo
+import id.xydesk.remote.ui.components.XyGlassCard
 import id.xydesk.remote.ui.components.XyPillButton
 import id.xydesk.remote.ui.components.XyRow
 import id.xydesk.remote.ui.components.XySectionLabel
@@ -1078,6 +1080,51 @@ private fun DevicesScreen(
                     verticalArrangement = Arrangement.spacedBy(14.dp),
                 ) {
                     item { LiveSessionsCard() }
+                    item {
+                        // Pemilik tidak menemukan fitur create-RDP (2026-10-10) —
+                        // sebelumnya hanya muncul di dalam bubble "+". Sekarang
+                        // ada kartu tetap di puncak daftar perangkat.
+                        XyGlassCard(modifier = Modifier.fillMaxWidth(), padding = 14.dp) {
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(12.dp),
+                            ) {
+                                Box(
+                                    Modifier
+                                        .size(40.dp)
+                                        .clip(RoundedCornerShape(12.dp))
+                                        .background(MaterialTheme.colorScheme.onSurface.copy(alpha = 0.08f)),
+                                    contentAlignment = Alignment.Center,
+                                ) {
+                                    Icon(
+                                        XyIcons.Monitor,
+                                        contentDescription = null,
+                                        tint = MaterialTheme.colorScheme.onSurface,
+                                        modifier = Modifier.size(20.dp),
+                                    )
+                                }
+                                Column(Modifier.weight(1f)) {
+                                    Text(
+                                        xy("RDP Gratis 6 Jam", "Free 6-Hour RDP"),
+                                        style = MaterialTheme.typography.titleSmall,
+                                    )
+                                    Text(
+                                        xy(
+                                            "PC Windows dari akun GitHub-mu sendiri — tanpa Tailscale",
+                                            "Windows PC from your own GitHub account — no Tailscale needed",
+                                        ),
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    )
+                                }
+                                XyPillButton(
+                                    text = xy("Buat", "Create"),
+                                    onClick = onCreateRdp,
+                                    modifier = Modifier.height(36.dp),
+                                )
+                            }
+                        }
+                    }
                     item {
                         XySegmented(
                             options = listOf(

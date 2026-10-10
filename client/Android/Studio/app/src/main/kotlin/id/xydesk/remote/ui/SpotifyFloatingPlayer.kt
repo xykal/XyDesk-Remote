@@ -120,23 +120,12 @@ internal fun SpotifyFloatingPlayer(
                 Modifier
                     .widthIn(min = 252.dp, max = 304.dp)
                     .clip(RoundedCornerShape(18.dp))
-                    .background(MaterialTheme.colorScheme.surface.copy(alpha = 0.62f))
-                    .background(
-                        androidx.compose.ui.graphics.Brush.verticalGradient(
-                            0f to Color.White.copy(alpha = 0.30f),
-                            0.10f to Color.White.copy(alpha = 0.15f),
-                            0.34f to Color.White.copy(alpha = 0.03f),
-                            0.62f to Color.Black.copy(alpha = 0.05f),
-                            1f to Color.Black.copy(alpha = 0.17f),
-                        ),
-                    )
+                    // Matte tanpa kilau: permintaan pemilik 2026-10-10
+                    // (gaya kaca dibuang dari seluruh app).
+                    .background(MaterialTheme.colorScheme.surface.copy(alpha = 0.97f))
                     .border(
                         1.dp,
-                        androidx.compose.ui.graphics.Brush.verticalGradient(
-                            0f to Color.White.copy(alpha = 0.50f),
-                            0.5f to Color.White.copy(alpha = 0.13f),
-                            1f to Color.Black.copy(alpha = 0.30f),
-                        ),
+                        MaterialTheme.colorScheme.outline.copy(alpha = 0.45f),
                         RoundedCornerShape(18.dp),
                     )
                     .padding(12.dp)

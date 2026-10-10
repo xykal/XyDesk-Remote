@@ -165,8 +165,8 @@ class SessionPrefs(context: Context) {
      * panah. Disimpan sebagai ordinal [XyStickMode].
      */
     var virtualPadStickMode: XyStickMode
-        get() = XyStickMode.entries.getOrElse(input.getInt(KEY_VIRTUAL_PAD_STICK, 0)) {
-            XyStickMode.POINTER
+        get() = XyStickMode.entries.getOrElse(input.getInt(KEY_VIRTUAL_PAD_STICK, XyStickMode.WASD.ordinal)) {
+            XyStickMode.WASD
         }
         set(v) = input.edit().putInt(KEY_VIRTUAL_PAD_STICK, v.ordinal).apply()
 
@@ -295,7 +295,7 @@ class SessionPrefs(context: Context) {
         private const val KEY_GAMEPAD = "gamepad_enabled"
         private const val KEY_VIRTUAL_PAD = "virtual_pad_enabled"
         private const val KEY_VIRTUAL_PAD_SCALE = "virtual_pad_scale"
-        private const val KEY_VIRTUAL_PAD_STICK = "virtual_pad_stick_mode"
+        private const val KEY_VIRTUAL_PAD_STICK = "virtual_pad_stick_mode_v2" // v2: default pindah ke WASD (pemilik: stik mouse membingungkan)
         private const val KEY_GYRO_MOUSE = "gyro_mouse"
         private const val KEY_TELEMETRY_PILL = "telemetry_pill"
         private const val KEY_SWAP_MOUSE = "swap_mouse_buttons"

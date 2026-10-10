@@ -72,8 +72,6 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.IntSize
-import androidx.compose.ui.draw.BlurredEdgeTreatment
-import androidx.compose.ui.draw.blur
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
@@ -1028,13 +1026,7 @@ fun XyDeskSessionScreen(
                 // kontras. Blur dipasang di surface, bukan di panel, karena
                 // Modifier.blur memblur konten yang ditempeli -- bukan yang ada
                 // di belakangnya.
-                .then(
-                    if (controlsOverlayOpen) {
-                        Modifier.blur(28.dp, BlurredEdgeTreatment.Rectangle)
-                    } else {
-                        Modifier
-                    },
-                ),
+,
         )
 
 

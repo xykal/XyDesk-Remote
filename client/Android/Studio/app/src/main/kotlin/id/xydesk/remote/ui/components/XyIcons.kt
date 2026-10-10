@@ -270,6 +270,47 @@ object XyIcons {
         moveTo(11f, 17f); lineTo(11f, 17.01f)
     }
 
+    /**
+     * Gamepad: kontroler digambar sendiri (permintaan pemilik 2026-10-10 —
+     * jangan pakai ikon punya orang). Badan + dua grip digaris, D-Pad dan dua
+     * tombol kanan diisi.
+     */
+    val Gamepad: ImageVector = xyTwoPath(
+        "XyGamepad",
+        outline = {
+            moveTo(8f, 5.5f)
+            lineTo(16f, 5.5f)
+            curveTo(17.6f, 5.5f, 18.6f, 6.3f, 19.2f, 7.7f)
+            lineTo(21.1f, 12.7f)
+            curveTo(21.7f, 14.5f, 20.5f, 16.2f, 18.7f, 16.2f)
+            curveTo(17.6f, 16.2f, 16.9f, 15.7f, 16.4f, 14.9f)
+            lineTo(15.6f, 13.5f)
+            lineTo(8.4f, 13.5f)
+            lineTo(7.6f, 14.9f)
+            curveTo(7.1f, 15.7f, 6.4f, 16.2f, 5.3f, 16.2f)
+            curveTo(3.5f, 16.2f, 2.3f, 14.5f, 2.9f, 12.7f)
+            lineTo(4.8f, 7.7f)
+            curveTo(5.4f, 6.3f, 6.4f, 5.5f, 8f, 5.5f)
+            close()
+        },
+        solid = {
+            // D-Pad kiri.
+            moveTo(6.9f, 8.2f); lineTo(8.1f, 8.2f); lineTo(8.1f, 9.2f); lineTo(9.1f, 9.2f)
+            lineTo(9.1f, 10.4f); lineTo(8.1f, 10.4f); lineTo(8.1f, 11.4f); lineTo(6.9f, 11.4f)
+            lineTo(6.9f, 10.4f); lineTo(5.9f, 10.4f); lineTo(5.9f, 9.2f); lineTo(6.9f, 9.2f)
+            close()
+            // Dua tombol kanan.
+            moveTo(14.65f, 8.6f)
+            arcToRelative(0.85f, 0.85f, 0f, 1f, 0f, 1.7f, 0f)
+            arcToRelative(0.85f, 0.85f, 0f, 1f, 0f, -1.7f, 0f)
+            close()
+            moveTo(16.35f, 10.9f)
+            arcToRelative(0.85f, 0.85f, 0f, 1f, 0f, 1.7f, 0f)
+            arcToRelative(0.85f, 0.85f, 0f, 1f, 0f, -1.7f, 0f)
+            close()
+        },
+    )
+
     val Lock: ImageVector = xyIcon("XyLock") {
         moveTo(5.5f, 10.5f); lineTo(18.5f, 10.5f); lineTo(18.5f, 20f); lineTo(5.5f, 20f); close()
         moveTo(8.5f, 10.5f); lineTo(8.5f, 7.5f)

@@ -24,7 +24,6 @@ import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.graphics.vector.ImageVector
@@ -62,57 +61,16 @@ val XyGlassShape: Shape = RoundedCornerShape(20.dp)
 val XyGlassTileShape: Shape = RoundedCornerShape(16.dp)
 
 /**
- * Kilau metalik hitam-putih.
+ * Permukaan datar (matte) XyDesk.
  *
- * Tiga lapis, bukan satu, karena logam dibaca mata dari **pita specular sempit**
- * di tepi atas yang jatuh cepat — bukan dari gradasi yang merata. Lapisan lama
- * hanya punya satu gradasi lembut 0 -> 1 sehingga permukaan terlihat seperti
- * bidang datar yang setengah transparan, bukan kaca/logam.
- *
- *   0.00-0.10  pita specular terang (pantulan sumber cahaya di tepi atas)
- *   0.10-0.34  jatuh cepat ke hampir gelap (badan logam)
- *   0.62-1.00  bayangan bawah (memberi ketebalan/kedalaman)
+ * SEJARAH 2026-10-10: pemilik meminta gaya kaca/liquid glass DIBUANG TOTAL —
+ * kilau, sapuan diagonal, dan bevel membuat tampilan "pusing" dan tidak
+ * cocok. Semua permukaan kini matte: warna solid hampir pekat + garis tepi
+ * tipis satu warna. Nama fungsi tetap [xyGlass] supaya puluhan pemanggil lama
+ * tidak perlu diubah; [opacity] masih berpengaruh, [strength] diabaikan
+ * (dipertahankan hanya untuk kompatibilitas tanda tangan).
  */
-private fun glassSheen(strength: Float): Brush = Brush.verticalGradient(
-    0f to Color.White.copy(alpha = 0.30f * strength),
-    0.10f to Color.White.copy(alpha = 0.15f * strength),
-    0.34f to Color.White.copy(alpha = 0.03f * strength),
-    0.62f to Color.Black.copy(alpha = 0.05f * strength),
-    1f to Color.Black.copy(alpha = 0.17f * strength),
-)
-
-/**
- * Sapuan diagonal: pantulan menyilang khas "liquid glass".
- *
- * Sengaja sangat tipis dan sempit (0.28-0.42). Sapuan lebar terbaca sebagai
- * gradasi biasa; yang sempit terbaca sebagai pantulan pada permukaan lengkung.
- */
-private fun glassSweep(strength: Float): Brush = Brush.linearGradient(
-    0f to Color.White.copy(alpha = 0f),
-    0.28f to Color.White.copy(alpha = 0.09f * strength),
-    0.42f to Color.White.copy(alpha = 0.02f * strength),
-    1f to Color.White.copy(alpha = 0f),
-)
-
-/**
- * Bevel logam: terang di kiri-atas, gelap di kanan-bawah.
- *
- * Ini pengganti tepi seragam lama. Tepi yang sama terang di sekeliling membuat
- * permukaan terlihat seperti stiker; bevel asimetris memberi kesan tebal.
- */
-private fun glassEdge(strength: Float): Brush = Brush.linearGradient(
-    0f to Color.White.copy(alpha = 0.50f * strength),
-    0.5f to Color.White.copy(alpha = 0.13f * strength),
-    1f to Color.Black.copy(alpha = 0.30f * strength),
-)
-
-/**
- * Menempelkan tampilan kaca ke permukaan apa pun.
- *
- * [opacity] mengatur kepekatan lapisan permukaan: 1.0 = seperti pemutar musik
- * (0.55), nilai lebih tinggi dipakai di atas latar polos agar teks lebih
- * terbaca. [strength] menyetel intensitas kilau dan tepi secara bersamaan.
- */
+@Suppress("UNUSED_PARAMETER")
 @Composable
 fun Modifier.xyGlass(
     shape: Shape = XyGlassShape,
@@ -121,16 +79,9 @@ fun Modifier.xyGlass(
     edge: Boolean = true,
 ): Modifier = this
     .clip(shape)
-    // Lapisan 1: badan. 0.62 (dari 0.55) karena logam butuh lebih pekat supaya
-    // pita specular di atasnya punya kontras untuk dibaca.
-    .background(MaterialTheme.colorScheme.surface.copy(alpha = 0.62f * opacity))
-    // Lapisan 2: kilau metalik vertikal.
-    .background(glassSheen(strength))
-    // Lapisan 3: sapuan diagonal "liquid glass".
-    .background(glassSweep(strength))
-    // Lapisan 4: bevel asimetris sebagai tepi.
+    .background(MaterialTheme.colorScheme.surface.copy(alpha = (0.97f * opacity).coerceIn(0f, 1f)))
     .then(
-        if (edge) Modifier.border(1.dp, glassEdge(strength), shape)
+        if (edge) Modifier.border(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.45f), shape)
         else Modifier
     )
 
@@ -198,7 +149,7 @@ fun XyGlassTile(
         label = "tileIconBox",
     )
     val pad by animateDpAsState(
-        targetValue = if (selected) 13.dp else 14.dp,
+        targetValue = if (selected) 9.dp else 10.dp,
         animationSpec = tween(durationMillis = 140),
         label = "tilePad",
     )
@@ -210,12 +161,12 @@ fun XyGlassTile(
             .semantics { contentDescription = title }
             .padding(pad),
         verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(11.dp),
+        horizontalArrangement = Arrangement.spacedBy(9.dp),
     ) {
         Box(
             modifier = Modifier
-                .size(38.dp)
-                .clip(RoundedCornerShape(12.dp))
+                .size(30.dp)
+                .clip(RoundedCornerShape(10.dp))
                 .background(iconBox),
             contentAlignment = Alignment.Center,
         ) {
@@ -223,7 +174,7 @@ fun XyGlassTile(
                 icon,
                 contentDescription = null,
                 tint = iconTint,
-                modifier = Modifier.size(19.dp),
+                modifier = Modifier.size(16.dp),
             )
         }
         Column(
@@ -323,7 +274,7 @@ fun XyGlassRow(
         modifier = modifier
             .xyGlass(shape = RoundedCornerShape(16.dp))
             .clickable(onClick = onClick)
-            .padding(horizontal = 14.dp, vertical = 12.dp),
+            .padding(horizontal = 12.dp, vertical = 9.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(12.dp),
     ) {

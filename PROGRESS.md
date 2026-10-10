@@ -251,3 +251,20 @@ Start: 2026-09-28
   DisconnectedScreen menggambar wallpaper dengan lapisan dim 0.78/0.84
   (hampir pekat). Ditipiskan ke 0.35/0.40 — wallpaper terbaca jelas,
   teks putih tetap kontras.
+
+## Ronde 12 — UI matte total + gamepad WASD + panel lega (2026-10-10)
+Keluhan pemilik setelah uji v1.1.6 dan semua jawabannya:
+1. "Jangan pakai glassmorphism/liquid glass, bikin pusing" -> xyGlass ditulis ulang
+   jadi permukaan matte (solid 0.97 + tepi 1dp), kilau/sapuan/bevel dihapus;
+   popup musik ikut diratakan; blur permukaan saat panel terbuka dihapus.
+2. "Popup menu sesak" -> ubin panel dikecilkan (padding 14->10, ikon 38->30,
+   jarak 11->9; baris daftar 12/9).
+3. "Joystick kok gerakin mouse? mana tulisan WASD?" -> default stick mode pindah
+   POINTER -> WASD (kunci SP di-v2 supaya instalasi lama ikut pindah); huruf
+   W/A/S/D di tepi stik sudah otomatis tampil di mode WASD.
+4. "Ikon gamepad jangan punya orang" -> XyIcons.Gamepad digambar sendiri
+   (badan+grip+D-Pad+2 tombol), dipakai untuk kontrol joystick.
+5. "R1/R2 dll bikin kayak di stick" -> pelat L1/R1 jadi bentuk bumper (lebar,
+   sudut atas membulat) dan L2/R2 jadi trigger (tinggi, sudut bawah membulat).
+6. "Fitur create-RDP mana?" -> kartu tetap "RDP Gratis 6 Jam" di puncak daftar
+   perangkat (sebelumnya tersembunyi di dalam bubble "+").
