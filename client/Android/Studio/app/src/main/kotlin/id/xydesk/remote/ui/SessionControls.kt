@@ -53,6 +53,7 @@ import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.Shadow
@@ -1663,6 +1664,11 @@ private fun SessionPanel(
         targetValue = if (panelShown) 1f else 0f,
         animationSpec = tween(180),
     )
+    val panelShape = if (drawerMode) {
+        RoundedCornerShape(topStart = 28.dp, bottomStart = 28.dp)
+    } else {
+        RoundedCornerShape(28.dp)
+    }
     Box(
         Modifier
             .fillMaxSize()
@@ -1708,14 +1714,34 @@ private fun SessionPanel(
                 // (0.55 * 1.6 = 0.88) karena panel berisi banyak teks; kaca
                 // setipis pemutar akan membuat tulisan sulit dibaca.
                 .xyGlass(
-                    shape = if (drawerMode) {
-                        RoundedCornerShape(topStart = 28.dp, bottomStart = 28.dp)
-                    } else {
-                        RoundedCornerShape(28.dp)
-                    },
+                    shape = panelShape,
                     opacity = 1.6f,
                     strength = 1f,
                 )
+                // Kilau atas (gloss) tipis biar panel terasa premium tanpa
+                // mengorbankan keterbacaan (permintaan pemilik 2026-10-12).
+                .background(
+                    brush = Brush.verticalGradient(
+                        0f to MaterialTheme.colorScheme.primary.copy(alpha = 0.16f),
+                        0.10f to Color.Transparent,
+                    ),
+                    shape = panelShape,
+                )
+                // Sidebar: aksen garis cahaya di tepi kiri penanda sisi.
+                .then(
+                    if (drawerMode) {
+                        Modifier.background(
+                            brush = Brush.horizontalGradient(
+                                0f to MaterialTheme.colorScheme.primary.copy(alpha = 0.30f),
+                                0.03f to Color.Transparent,
+                            ),
+                            shape = panelShape,
+                        )
+                    } else {
+                        Modifier
+                    },
+                )
+                .border(1.3.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.45f), panelShape)
                 .pointerInput(Unit) {}
                 .padding(horizontal = 20.dp, vertical = 16.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp),
