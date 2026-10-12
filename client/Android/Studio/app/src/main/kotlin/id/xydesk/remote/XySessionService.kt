@@ -4,7 +4,6 @@ import android.app.Notification
 import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.app.PendingIntent
-import id.xydesk.remote.ui.SpotifyMediaBridge
 import android.app.Service
 import android.content.Context
 import android.content.Intent
@@ -72,11 +71,6 @@ class XySessionService : Service() {
                 return START_NOT_STICKY
             }
 
-            ACTION_MUSIC -> {
-                runCatching { SpotifyMediaBridge.playPause() }
-                return START_NOT_STICKY
-            }
-
             else -> {
                 startForeground(NOTIF_ID, buildNotification(intent?.getStringExtra(EXTRA_LABEL)))
                 return START_NOT_STICKY
@@ -121,12 +115,6 @@ class XySessionService : Service() {
             Intent(this, XySessionService::class.java).setAction(ACTION_HOME),
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
         )
-        val music = PendingIntent.getService(
-            this,
-            3,
-            Intent(this, XySessionService::class.java).setAction(ACTION_MUSIC),
-            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
-        )
         val host = label ?: "XyDesk Remote"
         val prefs = AppPrefs(this)
         val builder = NotificationCompat.Builder(this, CHANNEL_ID)
@@ -138,11 +126,28 @@ class XySessionService : Service() {
             .setContentText(host)
             .setSubText(versionLabel())
             .setContentIntent(open)
-            .addAction(0, xyNow("Buka", "Open"), open)
-        if (prefs.notifHomeButton) builder.addAction(0, xyNow("Beranda", "Home"), home)
-        if (prefs.notifMusicButton) builder.addAction(0, xyNow("Musik", "Music"), music)
+            // Ikon aksi pakai vektor khusus, bukan 0 (yang di sebagian HP
+            // dirender jadi logo app — laporan pemilik 2026-10-12). Total aksi
+            // dijaga maksimal 3: Android menyembunyikan aksi ke-4, dan dulu
+            // "Putuskan" yang kena sembunyi.
+            .addAction(
+                id.xydesk.remote.R.drawable.ic_notif_open,
+                xyNow("Buka", "Open"),
+                open,
+            )
+        if (prefs.notifHomeButton) {
+            builder.addAction(
+                id.xydesk.remote.R.drawable.ic_notif_home,
+                xyNow("Beranda", "Home"),
+                home,
+            )
+        }
         builder
-            .addAction(0, xyNow("Putuskan", "Disconnect"), stop)
+            .addAction(
+                id.xydesk.remote.R.drawable.ic_notif_disconnect,
+                xyNow("Putuskan", "Disconnect"),
+                stop,
+            )
             .setOngoing(true)
             .setOnlyAlertOnce(true)
             .setShowWhen(true)
@@ -203,7 +208,6 @@ class XySessionService : Service() {
         const val ACTION_STOP = "id.xydesk.remote.action.STOP_SESSION"
         const val ACTION_PING = "id.xydesk.remote.action.PING_SESSION"
         const val ACTION_HOME = "id.xydesk.remote.action.GO_HOME"
-        const val ACTION_MUSIC = "id.xydesk.remote.action.MUSIC_TOGGLE"
         private const val EXTRA_LABEL = "label"
 
         /** Mulai/perbarui service. Aman dipanggil berulang. */

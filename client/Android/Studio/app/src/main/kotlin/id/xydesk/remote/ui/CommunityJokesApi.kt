@@ -10,7 +10,15 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 
 /** Public, account-free community jokes API. Only a random install ID is sent for spam/reaction limits. */
-internal class CommunityJokesApi(context: Context) {
+internal /**
+ * `JSONObject.optString` mengembalikan STRING "null" untuk nilai JSON null
+ * (jebakan klasik Android) — laporan pemilik 2026-10-12: nama profil muncul
+ * sebagai "null". Helper ini mengembalikan null sungguhan.
+ */
+private fun org.json.JSONObject.strOrNull(key: String): String? =
+    if (isNull(key)) null else optString(key).takeIf { it.isNotBlank() }
+
+class CommunityJokesApi(context: Context) {
     private val appContext = context.applicationContext
     private val clientId: String by lazy { loadOrCreateClientId() }
 
@@ -48,7 +56,7 @@ internal class CommunityJokesApi(context: Context) {
         val c = body.optJSONObject("comment") ?: error("Missing comment")
         JokeComment(
             id = c.optString("id"),
-            name = c.optString("name").takeIf { it.isNotBlank() },
+            name = c.strOrNull("name"),
             text = c.optString("text"),
             createdAtMillis = c.optLong("created_at", 0L),
         )
@@ -58,7 +66,7 @@ internal class CommunityJokesApi(context: Context) {
     suspend fun fetchServerDisplayName(): String? = withContext(Dispatchers.IO) {
         runCatching {
             val body = request(method = "GET", path = "/api/jokes/me", headers = mapOf("X-XyDesk-Client-ID" to clientId))
-            body.optString("display_name").takeIf { it.isNotBlank() }
+            body.strOrNull("display_name")
         }.getOrNull()
     }
 
@@ -123,7 +131,7 @@ internal class CommunityJokesApi(context: Context) {
             .put("avatar", android.util.Base64.encodeToString(bytes, android.util.Base64.NO_WRAP))
             .put("avatar_mime", mime)
         val body = request(method = "PUT", path = "/api/jokes/me", payload = payload)
-        body.optString("avatar_url").takeIf { it.isNotBlank() }
+        body.strOrNull("avatar_url")
     }
 
     suspend fun report(jokeId: String): Boolean = withContext(Dispatchers.IO) {
@@ -194,7 +202,7 @@ internal class CommunityJokesApi(context: Context) {
                     add(
                         JokeComment(
                             id = c.optString("id"),
-                            name = c.optString("name").takeIf { it.isNotBlank() },
+                            name = c.strOrNull("name"),
                             text = c.optString("text"),
                             createdAtMillis = c.optLong("created_at", 0L),
                         ),
@@ -208,7 +216,7 @@ internal class CommunityJokesApi(context: Context) {
             createdAtMillis = value.optLong("created_at", 0L),
             reactions = reactions,
             viewerReaction = value.optString("viewer_reaction").takeIf { it in REACTIONS },
-            authorName = value.optString("author_name").takeIf { it.isNotBlank() },
+            authorName = value.strOrNull("author_name"),
             commentsTotal = value.optInt("comments_total", 0),
             comments = comments,
             editedAtMillis = value.optLong("edited_at", 0L),

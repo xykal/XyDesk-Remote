@@ -1658,10 +1658,14 @@ private fun SessionPanel(
         // jendela, atau drawer menempel sisi kanan setinggi layar.
         Column(
             if (drawerMode) {
+                // Sidebar kanan sungguhan (laporan pemilik 2026-10-12): dulu
+                // 0.92f hampir menutup seluruh layar sehingga terasa seperti
+                // popup yang digeser ke kanan. Sekarang ramping, menempel tepi
+                // kanan, setinggi layar.
                 Modifier
                     .fillMaxHeight()
-                    .fillMaxWidth(0.92f)
-                    .widthIn(max = 380.dp)
+                    .fillMaxWidth(0.76f)
+                    .widthIn(min = 280.dp, max = 360.dp)
             } else {
                 Modifier
                     // Popup diperluas atas permintaan pemilik ("masih kurang"):
@@ -2105,7 +2109,6 @@ private fun InputTab(
         val notifContext = androidx.compose.ui.platform.LocalContext.current
         val notifPrefs = remember { AppPrefs(notifContext) }
         var notifHome by remember { mutableStateOf(notifPrefs.notifHomeButton) }
-        var notifMusic by remember { mutableStateOf(notifPrefs.notifMusicButton) }
         fun refreshNotif() {
             runCatching {
                 notifContext.startService(
@@ -2118,12 +2121,6 @@ private fun InputTab(
             subtitle = xy("Kembali ke beranda tanpa memutus sesi", "Return home without disconnecting"),
             checked = notifHome,
             onCheckedChange = { v -> notifHome = v; notifPrefs.notifHomeButton = v; refreshNotif() },
-        )
-        XyToggleRow(
-            title = xy("Tombol \"Musik\" di notifikasi", "\"Music\" button in notification"),
-            subtitle = xy("Jeda/putar musik dari notifikasi", "Play/pause music from the notification"),
-            checked = notifMusic,
-            onCheckedChange = { v -> notifMusic = v; notifPrefs.notifMusicButton = v; refreshNotif() },
         )
     }
 
