@@ -63,6 +63,11 @@ internal fun XyProfileScreen(
     onOpenFeedback: () -> Unit,
 ) {
     val context = LocalContext.current
+    val profileScope = androidx.compose.runtime.rememberCoroutineScope()
+    // Cek pembaruan manual dari Profil (melengkapi cek otomatis 12 jam di Beranda).
+    var updateChecking by remember { mutableStateOf(false) }
+    var updateMessage by remember { mutableStateOf<String?>(null) }
+    var updateAvailable by remember { mutableStateOf<AppUpdateInfo?>(null) }
     // BuildConfig tidak dipakai di lapisan UI; versi dibaca dari PackageManager
     // supaya tetap benar tanpa menambah konfigurasi build.
     val versionName = remember(context) {
@@ -204,7 +209,81 @@ internal fun XyProfileScreen(
                 ),
                 onClick = onOpenFeedback,
             )
+            XyGlassRow(
+                icon = XyIcons.Refresh,
+                title = if (updateChecking) xy("Memeriksa…", "Checking…")
+                else xy("Cek pembaruan", "Check for updates"),
+                subtitle = xy(
+                    "Bandingkan versi app dengan rilis terbaru di portal.",
+                    "Compare the app version with the latest portal release.",
+                ),
+                onClick = {
+                    if (!updateChecking) {
+                        profileScope.launch {
+                            updateChecking = true
+                            updateMessage = null
+                            updateAvailable = null
+                            val info = AppUpdate.fetch()
+                            val current = runCatching {
+                                context.packageManager
+                                    .getPackageInfo(context.packageName, 0).versionName
+                            }.getOrNull()
+                            updateChecking = false
+                            if (info == null || current == null) {
+                                updateMessage = xyNow(
+                                    "Gagal menghubungi portal. Coba lagi.",
+                                    "Could not reach the portal. Try again.",
+                                )
+                            } else if (AppUpdate.isNewer(info.version, current)) {
+                                updateAvailable = info
+                            } else {
+                                updateMessage = xyNow(
+                                    "Kamu sudah pakai versi terbaru ($current).",
+                                    "You're already on the latest version ($current).",
+                                )
+                            }
+                        }
+                    }
+                },
+            )
         }
+    }
+
+    updateMessage?.let { msg ->
+        XyDialog(
+            title = xy("Pembaruan", "Updates"),
+            body = msg,
+            confirmLabel = xy("Tutup", "Close"),
+            onConfirm = { updateMessage = null },
+            onDismiss = { updateMessage = null },
+        )
+    }
+    updateAvailable?.let { info ->
+        XyDialog(
+            title = xy("Versi {0} tersedia", "Version {0} available", info.version),
+            body = if (info.changelog.isBlank()) {
+                xy("Pembaruan baru siap diunduh.", "A new update is ready to download.")
+            } else {
+                info.changelog.take(600)
+            },
+            confirmLabel = xy("Unduh sekarang", "Download now"),
+            onConfirm = {
+                runCatching {
+                    context.startActivity(
+                        android.content.Intent(
+                            android.content.Intent.ACTION_VIEW,
+                            android.net.Uri.parse(
+                                if (info.url.isNotBlank()) info.url
+                                else "https://www.xydeskremote.biz.id/",
+                            ),
+                        ),
+                    )
+                }
+                updateAvailable = null
+            },
+            dismissLabel = xy("Nanti", "Later"),
+            onDismiss = { updateAvailable = null },
+        )
     }
 }
 

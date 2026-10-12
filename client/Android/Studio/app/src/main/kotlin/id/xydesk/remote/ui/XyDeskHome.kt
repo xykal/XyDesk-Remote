@@ -657,7 +657,7 @@ fun XyDeskHome(
             appendLine("=== LOG APP (xydesk-boot.log) ===")
             append(bootTail.joinToString("\n"))
         }
-        InfoDialog(
+        LogSheet(
             title = xy("Log sesi terakhir", "Last session log"),
             body = body,
             onDismiss = { showBoot = false },

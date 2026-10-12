@@ -680,6 +680,13 @@ private fun CommunityJokeItem(
                 fontWeight = FontWeight.SemiBold,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
+            feedTimeAgo(joke.createdAtMillis).takeIf { it.isNotEmpty() }?.let { ago ->
+                Text(
+                    " · $ago",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
             if (joke.editedAtMillis > 0) {
                 Text(
                     xy(" · diedit", " · edited"),
@@ -837,5 +844,31 @@ private fun FeedBinaryImage(path: String, modifier: Modifier = Modifier, round: 
             modifier = modifier.clip(if (round) CircleShape else RoundedCornerShape(12.dp)),
             contentScale = if (round) ContentScale.Crop else ContentScale.FillWidth,
         )
+    }
+}
+
+/**
+ * Label waktu relatif postingan feed: baru saja / X mnt / X jam / kemarin /
+ * tanggal pendek. Tanpa ini feed terasa mati — tidak ada rasa kronologi
+ * (laporan pemilik 2026-10-12: "feed masih kureng").
+ */
+internal fun feedTimeAgo(millis: Long): String {
+    if (millis <= 0L) return ""
+    val diff = System.currentTimeMillis() - millis
+    if (diff < 0L) return ""
+    val id = java.util.Locale.getDefault().language.startsWith("id")
+    return when {
+        diff < 60_000L -> if (id) "baru saja" else "just now"
+        diff < 3_600_000L -> {
+            val m = diff / 60_000L
+            if (id) "$m mnt lalu" else "${m}m ago"
+        }
+        diff < 86_400_000L -> {
+            val h = diff / 3_600_000L
+            if (id) "$h jam lalu" else "${h}h ago"
+        }
+        diff < 172_800_000L -> if (id) "kemarin" else "yesterday"
+        else -> java.text.SimpleDateFormat("d MMM", java.util.Locale.getDefault())
+            .format(java.util.Date(millis))
     }
 }
