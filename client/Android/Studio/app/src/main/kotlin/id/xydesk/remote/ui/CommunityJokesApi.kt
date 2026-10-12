@@ -10,7 +10,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 
 /** Public, account-free community jokes API. Only a random install ID is sent for spam/reaction limits. */
-internal /**
+/**
  * `JSONObject.optString` mengembalikan STRING "null" untuk nilai JSON null
  * (jebakan klasik Android) — laporan pemilik 2026-10-12: nama profil muncul
  * sebagai "null". Helper ini mengembalikan null sungguhan.
@@ -18,7 +18,7 @@ internal /**
 private fun org.json.JSONObject.strOrNull(key: String): String? =
     if (isNull(key)) null else optString(key).takeIf { it.isNotBlank() }
 
-class CommunityJokesApi(context: Context) {
+internal class CommunityJokesApi(context: Context) {
     private val appContext = context.applicationContext
     private val clientId: String by lazy { loadOrCreateClientId() }
 
