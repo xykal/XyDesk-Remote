@@ -443,7 +443,10 @@ jobs:
               --key-pass "env:RELEASE_KEY_PASSWORD" \
               --v1-signing-enabled true \
               --v2-signing-enabled true \
-              --v3-signing-enabled false \
+              # V3 diaktifkan (2026-10-12): perangkat lama tetap memakai
+              # V1/V2, Android modern memverifikasi blok V3 — sinyal integritas
+              # lebih kuat. V4 tetap mati (butuh berkas .idsig terpisah).
+              --v3-signing-enabled true \
               --v4-signing-enabled false \
               --out "$apk.resigned" "$apk"
             mv "$apk.resigned" "$apk"
