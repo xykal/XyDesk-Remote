@@ -156,6 +156,21 @@ fun XyDeskHome(
     val bootTail = remember { ConnectionLog.tailFromFile(context.applicationContext, 20) }
     var showBoot by remember { mutableStateOf(false) }
     var feedbackOpen by remember { mutableStateOf(false) }
+    // Pembaruan app: cek maksimal 12 jam sekali; dialog muncul bila portal
+    // melaporkan versi lebih baru yang belum dilewati user.
+    var updateInfo by remember { mutableStateOf<AppUpdateInfo?>(null) }
+    LaunchedEffect(Unit) {
+        val now = System.currentTimeMillis()
+        if (now - appPrefs.lastUpdateCheckAt < 12 * 3_600_000L) return@LaunchedEffect
+        appPrefs.lastUpdateCheckAt = now
+        val info = AppUpdate.fetch() ?: return@LaunchedEffect
+        val current = runCatching {
+            context.packageManager.getPackageInfo(context.packageName, 0).versionName
+        }.getOrNull() ?: return@LaunchedEffect
+        if (AppUpdate.isNewer(info.version, current) && appPrefs.updateSkipVersion != info.version) {
+            updateInfo = info
+        }
+    }
     var backupModalOpen by remember { mutableStateOf(false) }
     var backupJsonInput by remember { mutableStateOf("") }
     var confirmRestoreProfiles by remember { mutableStateOf<List<Pair<ConnectionProfile, Boolean>>?>(null) }
@@ -675,6 +690,62 @@ fun XyDeskHome(
             dismissLabel = xy("Batal", "Cancel"),
             onDismiss = { confirmDeleteDevice = null },
         )
+    }
+    updateInfo?.let { info ->
+        XyOverlay(
+            title = xy("Versi {0} tersedia", "Version {0} available", info.version),
+            onDismiss = { updateInfo = null },
+        ) {
+            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                Text(
+                    if (info.changelog.isBlank()) {
+                        xy("Pembaruan baru siap diunduh.", "A new update is ready to download.")
+                    } else {
+                        info.changelog.take(600)
+                    },
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                XyPillButton(
+                    text = xy("Unduh sekarang", "Download now"),
+                    onClick = {
+                        runCatching {
+                            context.startActivity(
+                                android.content.Intent(
+                                    android.content.Intent.ACTION_VIEW,
+                                    android.net.Uri.parse(
+                                        if (info.url.isNotBlank()) info.url
+                                        else "https://www.xydeskremote.biz.id/",
+                                    ),
+                                ),
+                            )
+                        }
+                        updateInfo = null
+                    },
+                    compact = true,
+                    modifier = Modifier.fillMaxWidth(),
+                )
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    XyPillButton(
+                        text = xy("Nanti", "Later"),
+                        onClick = { updateInfo = null },
+                        primary = false,
+                        compact = true,
+                        modifier = Modifier.weight(1f),
+                    )
+                    XyPillButton(
+                        text = xy("Lewati versi ini", "Skip this version"),
+                        onClick = {
+                            appPrefs.updateSkipVersion = info.version
+                            updateInfo = null
+                        },
+                        primary = false,
+                        compact = true,
+                        modifier = Modifier.weight(1f),
+                    )
+                }
+            }
+        }
     }
     wolWaitingProfile?.let { target ->
         XyDialog(

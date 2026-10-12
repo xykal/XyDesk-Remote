@@ -34,6 +34,15 @@ class AppPrefs(context: Context) {
         get() = sp.getBoolean(KEY_KEEP_ALIVE, true)
         set(v) = sp.edit().putBoolean(KEY_KEEP_ALIVE, v).apply()
 
+    /** Pemeriksaan pembaruan: maksimum sekali per 12 jam + versi yang dilewati. */
+    var lastUpdateCheckAt: Long
+        get() = sp.getLong("last_update_check_at", 0L)
+        set(v) = sp.edit().putLong("last_update_check_at", v).apply()
+
+    var updateSkipVersion: String
+        get() = sp.getString("update_skip_version", "") ?: ""
+        set(v) = sp.edit().putString("update_skip_version", v).apply()
+
     /** Tombol aksi notifikasi sesi dapat dikustom (permintaan pemilik). */
     var notifHomeButton: Boolean
         get() = sp.getBoolean("notif_home_button", true)

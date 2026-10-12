@@ -1246,3 +1246,42 @@ test("feed attachment foto/stiker, edit & hapus milik sendiri, avatar profil", a
   const attGone = await worker.fetch(new Request(`https://rdp.xydesk.my.id${posted.attachment.url}`), env);
   assert.equal(attGone.status, 404);
 });
+
+test("update-check API reports the newest published tag with changelog excerpt", async () => {
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async (input) => {
+    const url = String(input?.url || input);
+    if (url.includes("api.github.com")) {
+      return new Response(
+        JSON.stringify([
+          {
+            tag_name: "v9.9.9",
+            html_url: "https://github.com/xykal/XyDesk-Remote/releases/tag/v9.9.9",
+            published_at: "2026-10-12T00:00:00Z",
+            draft: false,
+            prerelease: false,
+            body: "## v9.9.9\n- fitur baru mantap\n\n## v9.9.8\n- versi lama",
+            assets: [],
+          },
+        ]),
+        { status: 200, headers: { "content-type": "application/json" } },
+      );
+    }
+    return originalFetch(input);
+  };
+  try {
+    const response = await worker.fetch(
+      new Request("https://rdp.xydesk.my.id/api/update-check"),
+      envFor(),
+    );
+    assert.equal(response.status, 200);
+    const body = await response.json();
+    assert.equal(body.status, "ok");
+    assert.equal(body.version, "9.9.9");
+    assert.equal(body.tag, "v9.9.9");
+    assert.match(body.changelog, /fitur baru mantap/);
+    assert.ok(!body.changelog.includes("versi lama"));
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});

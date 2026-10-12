@@ -1736,6 +1736,39 @@ async function serveCommunityBinary(request, env, url) {
   }
 }
 
+// Pemeriksaan pembaruan untuk app: tag rilis publik terbaru + ringkasan
+// changelog. App membandingkan versinya sendiri dengan `version` di sini.
+async function updateCheckResponse(request, env) {
+  try {
+    const release = await getLatestPublishedRelease(env);
+    if (!release) return jsonResponse({ status: "unavailable" }, 503, request.method);
+    const tag = String(release.tag_name || "");
+    if (!RELEASE_TAG_PATTERN.test(tag)) {
+      return jsonResponse({ status: "unavailable" }, 503, request.method);
+    }
+    const body = String(release.body || "");
+    // Ambil bagian changelog versi terbaru saja (sampai heading versi berikut).
+    const excerpt = body.split(/\n## /)[0].replace(/^## .*\n/, "").trim().slice(0, 2000);
+    return jsonResponse(
+      {
+        status: "ok",
+        tag,
+        version: tag.replace(/^v/i, ""),
+        url:
+          typeof release.html_url === "string" && release.html_url
+            ? release.html_url
+            : `https://github.com/xykal/XyDesk-Remote/releases/tag/${encodeURIComponent(tag)}`,
+        published_at: release.published_at || "",
+        changelog: excerpt,
+      },
+      200,
+      request.method,
+    );
+  } catch {
+    return jsonResponse({ status: "unavailable" }, 503, request.method);
+  }
+}
+
 async function communityJokesResponse(request, env) {
   if (!env.COMMUNITY_JOKES) {
     return jsonResponse({ status: "unavailable" }, 503, request.method);
@@ -1836,6 +1869,7 @@ export default {
     if (path === "/api/health") return healthResponse(request, env);
     if (path === "/api/status") return statusResponse(request, env);
     if (path === "/api/stats") return downloadStatsResponse(request, env);
+    if (path === "/api/update-check") return updateCheckResponse(request, env);
     if (path === "/api/active-sessions") return activeSessionsResponse(request, env);
     if (path.startsWith("/api/")) return jsonResponse({ status: "not_found" }, 404, request.method);
 
