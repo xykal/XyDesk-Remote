@@ -290,4 +290,64 @@ class HudControlMathTest {
         assertEquals(0f, dx, 1e-4f)
         assertEquals(0f, dy, 1e-4f)
     }
+
+    @Test
+    fun snapRoundsPositionToNearestGridLine() {
+        val out = snapHudPosition(
+            xPx = 103f, yPx = 55f, wPx = 60f, hPx = 60f,
+            maxX = 900f, maxY = 500f,
+            others = emptyList(),
+            gridPx = 24f, magnetPx = 10f,
+        )
+        assertEquals(96f, out[0], 0.001f)
+        assertEquals(48f, out[1], 0.001f)
+    }
+
+    @Test
+    fun snapMagnetsToOtherButtonCenterOverGrid() {
+        val other = floatArrayOf(200f, 100f, 60f, 60f)
+        val out = snapHudPosition(
+            xPx = 206f, yPx = 97f, wPx = 60f, hPx = 60f,
+            maxX = 900f, maxY = 500f,
+            others = listOf(other),
+            gridPx = 24f, magnetPx = 10f,
+        )
+        assertEquals(200f, out[0], 0.001f)
+        assertEquals(100f, out[1], 0.001f)
+    }
+
+    @Test
+    fun snapClampsToScreenBounds() {
+        val out = snapHudPosition(
+            xPx = -5f, yPx = 600f, wPx = 60f, hPx = 60f,
+            maxX = 900f, maxY = 500f,
+            others = emptyList(),
+            gridPx = 24f, magnetPx = 10f,
+        )
+        assertEquals(0f, out[0], 0.001f)
+        assertEquals(500f, out[1], 0.001f)
+    }
+
+    @Test
+    fun guidesAppearOnlyWhenEdgesAlign() {
+        val other = floatArrayOf(200f, 100f, 60f, 60f)
+        val aligned = hudAlignmentGuides(200f, 300f, 60f, 60f, listOf(other), magnetPx = 10f)
+        assertTrue(aligned.any { it.vertical })
+        assertTrue(aligned.none { !it.vertical })
+        val far = hudAlignmentGuides(500f, 300f, 60f, 60f, listOf(other), magnetPx = 10f)
+        assertTrue(far.isEmpty())
+    }
+
+    @Test
+    fun plateSizesFollowControllerShapes() {
+        val bumper = HudKey(id = "b", kind = HudKind.KEY, label = "L1")
+        val (bw, bh) = hudPlateSizeDp(bumper)
+        assertTrue(bw > bh)
+        val trigger = HudKey(id = "t", kind = HudKind.KEY, label = "R2")
+        val (tw, th) = hudPlateSizeDp(trigger)
+        assertTrue(th > tw)
+        val normal = HudKey(id = "n", kind = HudKind.KEY, label = "A")
+        val (nw, nh) = hudPlateSizeDp(normal)
+        assertEquals(nw, nh, 0.001f)
+    }
 }

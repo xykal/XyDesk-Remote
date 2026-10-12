@@ -154,11 +154,28 @@ fun HudKeyLayer(
         val widthPx = constraints.maxWidth.toFloat()
         val heightPx = constraints.maxHeight.toFloat()
 
+        // Id + posisi live (fraksi) tombol yang sedang digeser; dipakai untuk
+        // menggambar garis bantu sejajar selama mode atur letak.
+        var dragLive by remember { mutableStateOf<Triple<String, Float, Float>?>(null) }
+
+        fun rectsFor(excludeId: String): List<FloatArray> = keys
+            .filter { it.id != excludeId }
+            .map { other ->
+                val (wDp, hDp) = hudPlateSizeDp(other)
+                val w = with(density) { wDp.dp.toPx() }
+                val h = with(density) { hDp.dp.toPx() }
+                val spanPx = with(density) { other.size.dp.toPx() }
+                val ox = (widthPx - spanPx).coerceAtLeast(1f)
+                val oy = (heightPx - spanPx).coerceAtLeast(1f)
+                floatArrayOf(other.x * ox, other.y * oy, w, h)
+            }
+
         keys.forEach { key ->
             androidx.compose.runtime.key(key.id) {
                 val sizePx = with(density) { key.size.dp.toPx() }
                 val maxX = (widthPx - sizePx).coerceAtLeast(1f)
                 val maxY = (heightPx - sizePx).coerceAtLeast(1f)
+                val otherRects = remember(keys, widthPx, heightPx, density) { rectsFor(key.id) }
                 HudKeyButton(
                     key = key,
                     mappingMode = mappingMode,
@@ -166,6 +183,10 @@ fun HudKeyLayer(
                     latched = (key.action == HudAction.TOGGLE || key.action == HudAction.ONE_SHOT) && key.id in latchedKeys,
                     maxX = maxX,
                     maxY = maxY,
+                    otherRects = otherRects,
+                    onDragState = { active, x, y ->
+                        dragLive = if (active) Triple(key.id, x, y) else null
+                    },
                     onDrag = { x, y -> onMove(key.id, x, y) },
                     onPhase = { phase -> onPhase(key, phase) },
                     scrollSpeed = scrollSpeed,
@@ -179,6 +200,53 @@ fun HudKeyLayer(
                         }
                         .zIndex(12f),
                 )
+            }
+        }
+
+        // Garis bantu sejajar: garis ungu putus-putus muncul saat tombol yang
+        // digeser menyentuh tepi/tengah tombol lain (permintaan pemilik
+        // 2026-10-12 — layout grid + alignment guides).
+        val live = dragLive
+        val dragged = live?.let { state -> keys.firstOrNull { it.id == state.first } }
+        if (mappingMode && live != null && dragged != null) {
+            val plateSize = hudPlateSizeDp(dragged)
+            val wPx = with(density) { plateSize.first.dp.toPx() }
+            val hPx = with(density) { plateSize.second.dp.toPx() }
+            val spanPx = with(density) { dragged.size.dp.toPx() }
+            val guideMagnet = with(density) { HUD_SNAP_MAGNET_DP.dp.toPx() }
+            val guides = hudAlignmentGuides(
+                live.second * (widthPx - spanPx).coerceAtLeast(1f),
+                live.third * (heightPx - spanPx).coerceAtLeast(1f),
+                wPx,
+                hPx,
+                rectsFor(dragged.id),
+                guideMagnet,
+            )
+            val guideColor = MaterialTheme.colorScheme.primary
+            androidx.compose.foundation.Canvas(Modifier.fillMaxSize().zIndex(14f)) {
+                val stroke = androidx.compose.ui.graphics.drawscope.Stroke(
+                    width = 2f,
+                    pathEffect = androidx.compose.ui.graphics.PathEffect.dashPathEffect(
+                        floatArrayOf(14f, 10f),
+                    ),
+                )
+                for (g in guides) {
+                    if (g.vertical) {
+                        drawLine(
+                            guideColor.copy(alpha = 0.9f),
+                            Offset(g.positionPx, 0f),
+                            Offset(g.positionPx, size.height.toFloat()),
+                            stroke,
+                        )
+                    } else {
+                        drawLine(
+                            guideColor.copy(alpha = 0.9f),
+                            Offset(0f, g.positionPx),
+                            Offset(size.width.toFloat(), g.positionPx),
+                            stroke,
+                        )
+                    }
+                }
             }
         }
     }
@@ -197,6 +265,8 @@ private fun HudKeyButton(
     scrollSpeed: Float,
     onScrollUnits: (Int) -> Unit,
     onEdit: () -> Unit,
+    otherRects: List<FloatArray> = emptyList(),
+    onDragState: (Boolean, Float, Float) -> Unit = { _, _, _ -> },
     onStickAxis: (Float, Float) -> Unit = { _, _ -> },
     stickMode: XyStickMode = XyStickMode.POINTER,
     modifier: Modifier = Modifier,
@@ -213,6 +283,8 @@ private fun HudKeyButton(
     val latestOnPhase = rememberUpdatedState(onPhase)
     val latestOnEdit = rememberUpdatedState(onEdit)
     val latestScrollUnits = rememberUpdatedState(onScrollUnits)
+    val latestOthers = rememberUpdatedState(otherRects)
+    val latestDragState = rememberUpdatedState(onDragState)
     val dragPos = remember(key.id) { mutableStateOf<Offset?>(null) }
     // Simpangan knob joystick dalam piksel; selalu balik ke (0,0) saat dilepas.
     val stickOffset = remember(key.id) { mutableStateOf(Offset.Zero) }
@@ -242,16 +314,9 @@ private fun HudKeyButton(
     // trigger (tinggi, sudut bawah membulat) — bukan lingkaran seragam.
     val isBumper = key.label.equals("L1", ignoreCase = true) || key.label.equals("R1", ignoreCase = true)
     val isTrigger = key.label.equals("L2", ignoreCase = true) || key.label.equals("R2", ignoreCase = true)
-    val plateW = when {
-        isBumper -> key.size.dp * 1.55f
-        isTrigger -> key.size.dp * 0.92f
-        else -> key.size.dp
-    }
-    val plateH = when {
-        isBumper -> key.size.dp * 0.62f
-        isTrigger -> key.size.dp * 1.3f
-        else -> key.size.dp
-    }
+    val plateSizeDp = hudPlateSizeDp(key)
+    val plateW = plateSizeDp.first.dp
+    val plateH = plateSizeDp.second.dp
     val plateShape: Shape = when {
         isBumper -> RoundedCornerShape(
             topStart = CornerSize(percent = 48),
@@ -310,10 +375,30 @@ private fun HudKeyButton(
                             if (mappingMode) {
                                 val base = dragPos.value
                                     ?: Offset(latest.value.x, latest.value.y)
-                                val nx = (base.x + delta.x / latestMaxX.value).coerceIn(0f, 1f)
-                                val ny = (base.y + delta.y / latestMaxY.value).coerceIn(0f, 1f)
+                                val mx = latestMaxX.value
+                                val my = latestMaxY.value
+                                var nx = (base.x + delta.x / mx).coerceIn(0f, 1f)
+                                var ny = (base.y + delta.y / my).coerceIn(0f, 1f)
+                                // Snap grid + magnet sejajar supaya susunan
+                                // tombol tetap rapi (2026-10-12).
+                                val gridPx = with(density) { HUD_SNAP_GRID_DP.dp.toPx() }
+                                val magnetPx = with(density) { HUD_SNAP_MAGNET_DP.dp.toPx() }
+                                val snapped = snapHudPosition(
+                                    nx * mx,
+                                    ny * my,
+                                    size.width.toFloat(),
+                                    size.height.toFloat(),
+                                    mx,
+                                    my,
+                                    latestOthers.value,
+                                    gridPx,
+                                    magnetPx,
+                                )
+                                nx = snapped[0] / mx
+                                ny = snapped[1] / my
                                 dragPos.value = Offset(nx, ny)
                                 latestOnDrag.value(nx, ny)
+                                latestDragState.value(true, nx, ny)
                             } else if (key.kind == HudKind.SCROLL_SLIDER) {
                                 scrollAccumulator.consume(delta.y, scrollSpeed)
                                     .takeIf { it != 0 }
@@ -335,6 +420,7 @@ private fun HudKeyButton(
 
                     pressed = false
                     dragPos.value = null
+                    latestDragState.value(false, 0f, 0f)
                     // Joystick harus benar-benar netral saat jari lepas, kalau
                     // tidak kursor remote terus melaju.
                     if (key.kind == HudKind.PAD_STICK && stickOffset.value != Offset.Zero) {

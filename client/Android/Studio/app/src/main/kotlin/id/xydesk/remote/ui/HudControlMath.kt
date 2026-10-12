@@ -181,3 +181,118 @@ internal fun stickAxis(dx: Float, dy: Float, radiusPx: Float): FloatArray {
         (clamped[1] / radius).coerceIn(-1f, 1f),
     )
 }
+
+/**
+ * Ukuran pelat (dp) sesuai bentuk tombol: bumper L1/R1 lebar-pendek, trigger
+ * L2/R2 tinggi-sempit, lainnya lingkaran berdiameter [HudKey.size]. Perender
+ * dan perhitungan snap tata letak memakai helper ini supaya geometrinya sama.
+ */
+internal fun hudPlateSizeDp(key: HudKey): Pair<Float, Float> {
+    val isBumper = key.label.equals("L1", ignoreCase = true) || key.label.equals("R1", ignoreCase = true)
+    val isTrigger = key.label.equals("L2", ignoreCase = true) || key.label.equals("R2", ignoreCase = true)
+    return when {
+        isBumper -> key.size * 1.55f to key.size * 0.62f
+        isTrigger -> key.size * 0.92f to key.size * 1.3f
+        else -> key.size to key.size
+    }
+}
+
+/** Langkah grid (dp) saat posisi tombol ditempelkan di mode atur tata letak. */
+internal const val HUD_SNAP_GRID_DP = 12f
+
+/** Jarak maksimum (dp) tepi tombol menempel ke tepi/tengah tombol lain. */
+internal const val HUD_SNAP_MAGNET_DP = 10f
+
+/** Satu garis bantu sejajar (ungu, putus-putus) di mode atur letak, dalam px. */
+internal data class HudGuideLine(val vertical: Boolean, val positionPx: Float)
+
+private fun hudEdgeCandidates(startPx: Float, sizePx: Float): FloatArray =
+    floatArrayOf(startPx, startPx + sizePx / 2f, startPx + sizePx)
+
+private fun hudWithin(value: Float, target: Float, limit: Float): Boolean {
+    val d = target - value
+    return (if (d < 0f) -d else d) <= limit
+}
+
+/**
+ * Tempel posisi kiri-atas tombol (px) yang sedang digeser: menempel ke
+ * tepi/tengah tombol lain bila cukup dekat (magnet), selain itu dibulatkan ke
+ * garis grid terdekat. Hasil dijepit ke rentang [maxX]/[maxY]. [others] berisi
+ * geometri tombol lain dalam bentuk [x, y, w, h] piksel.
+ */
+internal fun snapHudPosition(
+    xPx: Float,
+    yPx: Float,
+    wPx: Float,
+    hPx: Float,
+    maxX: Float,
+    maxY: Float,
+    others: List<FloatArray>,
+    gridPx: Float,
+    magnetPx: Float,
+): FloatArray {
+    var bestX: Float? = null
+    var bestXDist = magnetPx
+    var bestY: Float? = null
+    var bestYDist = magnetPx
+    for (o in others) {
+        if (o.size < 4) continue
+        for (t in hudEdgeCandidates(xPx, wPx)) {
+            for (line in hudEdgeCandidates(o[0], o[2])) {
+                val shift = line - t
+                val dist = if (shift < 0f) -shift else shift
+                if (dist < bestXDist) {
+                    bestXDist = dist
+                    bestX = xPx + shift
+                }
+            }
+        }
+        for (t in hudEdgeCandidates(yPx, hPx)) {
+            for (line in hudEdgeCandidates(o[1], o[3])) {
+                val shift = line - t
+                val dist = if (shift < 0f) -shift else shift
+                if (dist < bestYDist) {
+                    bestYDist = dist
+                    bestY = yPx + shift
+                }
+            }
+        }
+    }
+    val grid = if (gridPx.isFinite() && gridPx > 0f) gridPx else 1f
+    val nx = bestX ?: (kotlin.math.round(xPx / grid) * grid)
+    val ny = bestY ?: (kotlin.math.round(yPx / grid) * grid)
+    return floatArrayOf(nx.coerceIn(0f, maxX), ny.coerceIn(0f, maxY))
+}
+
+/**
+ * Garis bantu sejajar untuk tombol yang sedang digeser, memakai kriteria yang
+ * sama dengan [snapHudPosition]: satu garis untuk setiap tepi/tengah tombol
+ * lain yang sedang disentuh tombol yang digeser.
+ */
+internal fun hudAlignmentGuides(
+    xPx: Float,
+    yPx: Float,
+    wPx: Float,
+    hPx: Float,
+    others: List<FloatArray>,
+    magnetPx: Float,
+): List<HudGuideLine> {
+    val guides = mutableListOf<HudGuideLine>()
+    fun add(vertical: Boolean, positionPx: Float) {
+        if (guides.none { it.vertical == vertical && kotlin.math.abs(it.positionPx - positionPx) < 1f }) {
+            guides.add(HudGuideLine(vertical, positionPx))
+        }
+    }
+    val tx = hudEdgeCandidates(xPx, wPx)
+    val ty = hudEdgeCandidates(yPx, hPx)
+    for (o in others) {
+        if (o.size < 4) continue
+        for (line in hudEdgeCandidates(o[0], o[2])) {
+            if (tx.any { hudWithin(it, line, magnetPx) }) add(vertical = true, positionPx = line)
+        }
+        for (line in hudEdgeCandidates(o[1], o[3])) {
+            if (ty.any { hudWithin(it, line, magnetPx) }) add(vertical = false, positionPx = line)
+        }
+    }
+    return guides
+}
