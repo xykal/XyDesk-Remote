@@ -25,6 +25,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -515,7 +517,32 @@ private fun CommunityAccountCard() {
             title = xy("Login pakai GitHub", "Sign in with GitHub"),
             onDismiss = { if (!githubBusy) githubOpen = false },
         ) {
-            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+            if (GITHUB_OAUTH_CLIENT_ID.isNotBlank()) {
+                GitHubDeviceFlowPanel(
+                    onCancel = { githubOpen = false },
+                    onSuccess = { token, user ->
+                        val saved = runCatching {
+                            id.xydesk.remote.security.CredentialVault(context.applicationContext)
+                                .put(id.xydesk.remote.ui.rdp.XyRdpConfig.VAULT_PAT_ID, token)
+                        }.getOrDefault(false)
+                        if (saved) {
+                            githubUser = user
+                            githubOpen = false
+                            if (api.displayName() == null) {
+                                runCatching { api.setDisplayName(user) }
+                                name = api.displayName() ?: user
+                            }
+                            message = xyNow("Masuk sebagai $user.", "Signed in as $user.")
+                        } else {
+                            message = xyNow(
+                                "Keystore tidak tersedia di perangkat ini.",
+                                "Keystore unavailable on this device.",
+                            )
+                        }
+                    },
+                    onError = { message = it },
+                )
+            } else Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
                 Text(
                     xy(
                         "Buat Personal Access Token (scope: read:user) di GitHub, tempel di sini. " +
@@ -610,5 +637,188 @@ private fun CommunityAccountCard() {
                 }
             }
         }
+    }
+}
+
+/**
+ * Client ID OAuth App GitHub untuk login Device Flow (tanpa tempel token —
+ * user cukup mengetik kode 8 karakter di github.com/login/device).
+ *
+ * KOSONG = mode Personal Access Token lama. Untuk mengaktifkan: buat OAuth
+ * App di GitHub (Settings → Developer settings → OAuth Apps), tidak perlu
+ * secret/redirect, lalu tempel Client ID-nya di sini.
+ */
+private const val GITHUB_OAUTH_CLIENT_ID = ""
+
+private suspend fun githubDeviceStart(clientId: String): org.json.JSONObject? =
+    kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+        runCatching {
+            val body = "client_id=" + java.net.URLEncoder.encode(clientId, "UTF-8") +
+                "&scope=read:user"
+            val conn = java.net.URL("https://github.com/login/device/code")
+                .openConnection() as java.net.HttpURLConnection
+            conn.requestMethod = "POST"
+            conn.doOutput = true
+            conn.connectTimeout = 15_000
+            conn.readTimeout = 15_000
+            conn.setRequestProperty("Accept", "application/json")
+            conn.setRequestProperty("Content-Type", "application/x-www-form-urlencoded")
+            conn.outputStream.use { it.write(body.toByteArray()) }
+            if (conn.responseCode !in 200..299) return@runCatching null
+            org.json.JSONObject(conn.inputStream.bufferedReader().readText())
+        }.getOrNull()
+    }
+
+private suspend fun githubDevicePoll(clientId: String, deviceCode: String): org.json.JSONObject? =
+    kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+        runCatching {
+            val body = "client_id=" + java.net.URLEncoder.encode(clientId, "UTF-8") +
+                "&device_code=" + java.net.URLEncoder.encode(deviceCode, "UTF-8") +
+                "&grant_type=" + java.net.URLEncoder.encode(
+                    "urn:ietf:params:oauth:grant-type:device_code",
+                    "UTF-8",
+                )
+            val conn = java.net.URL("https://github.com/login/oauth/access_token")
+                .openConnection() as java.net.HttpURLConnection
+            conn.requestMethod = "POST"
+            conn.doOutput = true
+            conn.connectTimeout = 15_000
+            conn.readTimeout = 15_000
+            conn.setRequestProperty("Accept", "application/json")
+            conn.setRequestProperty("Content-Type", "application/x-www-form-urlencoded")
+            conn.outputStream.use { it.write(body.toByteArray()) }
+            if (conn.responseCode !in 200..299) return@runCatching null
+            org.json.JSONObject(conn.inputStream.bufferedReader().readText())
+        }.getOrNull()
+    }
+
+/**
+ * Login GitHub Device Flow: tampilkan kode sekali pakai, buka
+ * github.com/login/device, lalu jajak akses sampai user menyetujui.
+ */
+@Composable
+private fun GitHubDeviceFlowPanel(
+    onCancel: () -> Unit,
+    onSuccess: (token: String, user: String) -> Unit,
+    onError: (String) -> Unit,
+) {
+    var busy by remember { mutableStateOf(true) }
+    var userCode by remember { mutableStateOf("") }
+    var verifyUri by remember { mutableStateOf("https://github.com/login/device") }
+    var statusText by remember { mutableStateOf("") }
+    val context = LocalContext.current
+
+    androidx.compose.runtime.LaunchedEffect(Unit) {
+        busy = true
+        val start = githubDeviceStart(GITHUB_OAUTH_CLIENT_ID)
+        if (start == null) {
+            busy = false
+            statusText = xyNow(
+                "Gagal menghubungi GitHub. Coba lagi.",
+                "Could not reach GitHub. Try again.",
+            )
+            return@LaunchedEffect
+        }
+        userCode = start.optString("user_code", "")
+        verifyUri = start.optString("verification_uri", "https://github.com/login/device")
+        val intervalMs = ((start.optInt("interval", 5) + 2).coerceIn(5, 30)) * 1000L
+        val deviceCode = start.optString("device_code", "")
+        val deadline = System.currentTimeMillis() + start.optInt("expires_in", 900) * 1000L
+        busy = false
+        while (System.currentTimeMillis() < deadline) {
+            kotlinx.coroutines.delay(intervalMs)
+            val poll = githubDevicePoll(GITHUB_OAUTH_CLIENT_ID, deviceCode) ?: continue
+            if (poll.optString("access_token").isNotEmpty()) {
+                busy = true
+                val token = poll.optString("access_token")
+                val user = id.xydesk.remote.ui.rdp.XyRdpClient.whoami(token)
+                busy = false
+                if (user != null) onSuccess(token, user)
+                else {
+                    onError(
+                        xyNow(
+                            "Login gagal: profil tidak terbaca.",
+                            "Sign-in failed: profile unreadable.",
+                        ),
+                    )
+                }
+                return@LaunchedEffect
+            }
+            when (poll.optString("error", "")) {
+                "expired_token" -> {
+                    statusText = xyNow(
+                        "Kode kedaluwarsa — buka ulang dialog login.",
+                        "Code expired — reopen the sign-in dialog.",
+                    )
+                    return@LaunchedEffect
+                }
+                "access_denied" -> {
+                    statusText = xyNow(
+                        "Login ditolak di GitHub.",
+                        "Sign-in denied on GitHub.",
+                    )
+                    return@LaunchedEffect
+                }
+                else -> Unit // authorization_pending / slow_down → terus jajak
+            }
+        }
+    }
+
+    Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+        Text(
+            xy(
+                "Tanpa tempel token: ketik kode ini di github.com/login/device lalu setujui akses. " +
+                    "XyDesk hanya meminta izin baca profil (nama tampilanmu).",
+                "No token pasting: type this code at github.com/login/device and approve. " +
+                    "XyDesk only asks for read-profile permission (your display name).",
+            ),
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        Box(
+            Modifier
+                .fillMaxWidth()
+                .clip(RoundedCornerShape(12.dp))
+                .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f))
+                .padding(vertical = 14.dp),
+            contentAlignment = Alignment.Center,
+        ) {
+            Text(
+                if (busy && userCode.isEmpty()) "…" else userCode,
+                style = MaterialTheme.typography.titleLarge,
+                fontWeight = FontWeight.Bold,
+                color = MaterialTheme.colorScheme.onSurface,
+                letterSpacing = 3.sp,
+            )
+        }
+        XyPillButton(
+            text = xy("Buka github.com/login/device", "Open github.com/login/device"),
+            onClick = {
+                runCatching {
+                    context.startActivity(
+                        android.content.Intent(
+                            android.content.Intent.ACTION_VIEW,
+                            android.net.Uri.parse(verifyUri),
+                        ),
+                    )
+                }
+            },
+            primary = false,
+            compact = true,
+        )
+        if (statusText.isNotEmpty()) {
+            Text(
+                statusText,
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.primary,
+            )
+        }
+        XyPillButton(
+            text = xy("Tutup", "Close"),
+            onClick = onCancel,
+            primary = false,
+            compact = true,
+            enabled = !busy,
+        )
     }
 }
