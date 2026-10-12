@@ -1747,10 +1747,11 @@ async function updateCheckResponse(request, env) {
       return jsonResponse({ status: "unavailable" }, 503, request.method);
     }
     const body = String(release.body || "");
-    // Ambil SEKSI versi terbaru: body rilis = seluruh CHANGELOG (header "# ..."
-    // lalu "## vX.Y.Z" per versi). sections[1] adalah blok versi teratas.
-    const sections = body.split(/\n## /);
-    const excerpt = (sections.length > 1 ? sections[1] : sections[0]).trim().slice(0, 2000);
+    // Body rilis = seluruh CHANGELOG: header "# ..." (opsional) lalu blok
+    // "## vX.Y.Z" per versi. Ambil blok pertama yang diawali pola versi.
+    const sections = body.split(/\n## |^## /);
+    const latest = sections.find((part) => /^v?\d+\.\d+/.test(part.trim())) || sections[0] || "";
+    const excerpt = latest.trim().slice(0, 2000);
     return jsonResponse(
       {
         status: "ok",
