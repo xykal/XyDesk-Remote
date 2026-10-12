@@ -1268,6 +1268,8 @@ private fun applyCustomCombo(
 private fun ComboKeyChip(label: String, selected: Boolean, onClick: () -> Unit) {
     Text(
         label,
+        maxLines = 1,
+        overflow = TextOverflow.Ellipsis,
         color = if (selected) {
             MaterialTheme.colorScheme.onPrimary
         } else {

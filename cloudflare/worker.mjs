@@ -21,6 +21,11 @@ const QA_ASSETS = {
   "XyDesk-Remote-arm64-v8a.apk": { repo: "xykal/XyDesk-Remote", id: 606095803, abi: "arm64-v8a", fileName: "XyDesk-Remote-arm64-v8a.apk" },
   "XyDesk-Remote-armeabi-v7a.apk": { repo: "xykal/XyDesk-Remote", id: 606095801, abi: "armeabi-v7a", fileName: "XyDesk-Remote-armeabi-v7a.apk" },
   "XyDesk-Remote-x86_64.apk": { repo: "xykal/XyDesk-Remote", id: 606095795, abi: "x86_64", fileName: "XyDesk-Remote-x86_64.apk" },
+  // APK universal (semua ABI satu berkas) — baru ada sejak BUILD_UNIVERSAL=true;
+  // tanpa `id` fallback, redirect sepenuhnya mengikuti rilis aktif.
+  "universal.apk": { repo: "xykal/XyDesk-Remote", abi: "universal", fileName: "XyDesk-RemoteUniversal.apk" },
+  "XyDesk-Remote-universal.apk": { repo: "xykal/XyDesk-Remote", abi: "universal", fileName: "XyDesk-RemoteUniversal.apk" },
+  "XyDesk-RemoteUniversal.apk": { repo: "xykal/XyDesk-Remote", abi: "universal", fileName: "XyDesk-RemoteUniversal.apk" },
   "XyDesk-Remote-Host-Agent-win64.zip": { repo: "xykal/XyDesk-Remote", id: 606095797, fileName: "XyDesk-Remote-Host-Agent-win64.zip" },
   "XyDeskRemoteHost.exe": { repo: "xykal/XyDesk-Remote", id: 606095804, fileName: "XyDeskRemoteHost.exe" },
   "xydesk_quic.dll": { repo: "xykal/XyDesk-Remote", id: 606095799, fileName: "xydesk_quic.dll" },
@@ -179,6 +184,8 @@ const BIT_NAMES = [
 
 function abiFromAssetName(name) {
   const lower = String(name).toLowerCase();
+  // Universal dicek paling awal: namanya tidak memuat token ABI mana pun.
+  if (lower.includes("universal")) return "universal";
   for (const abi of ABI_NAMES) {
     if (lower.includes(abi)) return abi;
   }

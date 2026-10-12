@@ -915,7 +915,39 @@
       text-align: center;
     }
 
-    .apk-download-btn:hover {
+    /* Mesin deteksi ABI: tombol/kartu yang cocok dengan perangkat pengunjung
+       ditandai badge + outline agar tidak salah unduh (2026-10-12). */
+.intro-direct-dl {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-top: 14px;
+}
+.abi-badge {
+  display: inline-block;
+  margin-left: 8px;
+  padding: 2px 9px;
+  border-radius: 999px;
+  background: #8b5cf6;
+  color: #fff;
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.3px;
+  vertical-align: middle;
+  white-space: nowrap;
+}
+[data-abi-slot].abi-recommended {
+  outline: 2px solid #8b5cf6;
+  outline-offset: 2px;
+  box-shadow: 0 0 18px rgba(139, 92, 246, 0.45);
+}
+.abi-status {
+  margin-top: 12px;
+  font-size: 12.5px;
+  opacity: 0.85;
+}
+
+.apk-download-btn:hover {
       background: var(--surface);
       border-color: var(--text-dim);
     }
@@ -1197,6 +1229,18 @@
             Setup XyDesk Host (PC Windows)
           </a>
         </div>
+        <div class="intro-direct-dl" role="group" aria-label="Unduhan langsung APK per ABI">
+          <a class="pill-btn primary" data-abi-slot="arm64-v8a" href="/arm64-v8a.apk">
+            <span data-i18n="dl.cta.64">Unduh 64-bit (arm64-v8a)</span><span class="abi-badge" hidden data-i18n="dl.badge.you">Perangkatmu</span>
+          </a>
+          <a class="pill-btn" data-abi-slot="armeabi-v7a" href="/armeabi-v7a.apk">
+            <span data-i18n="dl.cta.32">Unduh 32-bit (armeabi-v7a)</span><span class="abi-badge" hidden data-i18n="dl.badge.you">Perangkatmu</span>
+          </a>
+          <a class="pill-btn" data-abi-slot="universal" href="/universal.apk">
+            <span data-i18n="dl.cta.uni">Unduh Universal (semua ABI)</span><span class="abi-badge" hidden data-i18n="dl.badge.you">Perangkatmu</span>
+          </a>
+        </div>
+        <p class="abi-status mono" id="abi-status" aria-live="polite" data-i18n="dl.status.detecting">Mendeteksi arsitektur perangkat…</p>
 
         <div class="hero-stats" aria-label="Statistik langsung XyDesk Remote">
           <div class="hero-stat">
@@ -1665,9 +1709,9 @@
           </div>
 
           <div class="pkg-table">
-            <div class="pkg-row">
+            <div class="pkg-row" data-abi-slot="arm64-v8a">
               <div>
-                <div class="pkg-abi mono">arm64-v8a</div>
+                <div class="pkg-abi mono">arm64-v8a <span class="abi-badge" hidden data-i18n="dl.badge.you">Perangkatmu</span></div>
                 <div class="pkg-sub mono" data-i18n="dl.abi1.sub">Disarankan · ARM 64-bit</div>
               </div>
               <div class="pkg-info" data-i18n="dl.abi1">
@@ -1681,9 +1725,9 @@
               </div>
             </div>
 
-            <div class="pkg-row">
+            <div class="pkg-row" data-abi-slot="armeabi-v7a">
               <div>
-                <div class="pkg-abi mono">armeabi-v7a</div>
+                <div class="pkg-abi mono">armeabi-v7a <span class="abi-badge" hidden data-i18n="dl.badge.you">Perangkatmu</span></div>
                 <div class="pkg-sub mono" data-i18n="dl.abi2.sub">Perangkat ARM 32-bit</div>
               </div>
               <div class="pkg-info" data-i18n="dl.abi2">
@@ -1697,9 +1741,9 @@
               </div>
             </div>
 
-            <div class="pkg-row">
+            <div class="pkg-row" data-abi-slot="x86_64">
               <div>
-                <div class="pkg-abi mono">x86_64</div>
+                <div class="pkg-abi mono">x86_64 <span class="abi-badge" hidden data-i18n="dl.badge.you">Perangkatmu</span></div>
                 <div class="pkg-sub mono" data-i18n="dl.abi3.sub">Emulator / PC Android · x86_64</div>
               </div>
               <div class="pkg-info" data-i18n="dl.abi3">
@@ -1709,6 +1753,22 @@
                 <a class="apk-download-btn" href="/x86_64.apk">
                   <span class="dl-btn-top" data-i18n="dl.btn.lbl3">Unduh APK x86_64</span>
                   <span class="dl-btn-meta mono" data-i18n="dl.btn.meta">APK resmi · v1.0.2 (53)</span>
+                </a>
+              </div>
+            </div>
+
+            <div class="pkg-row" data-abi-slot="universal">
+              <div>
+                <div class="pkg-abi mono">universal <span class="abi-badge" hidden data-i18n="dl.badge.you">Perangkatmu</span></div>
+                <div class="pkg-sub mono" data-i18n="dl.abiU.sub">Semua ABI · paling aman</div>
+              </div>
+              <div class="pkg-info" data-i18n="dl.abiU">
+                Satu APK untuk semua perangkat Android (armeabi-v7a + arm64-v8a + x86_64). Ukurannya lebih besar, tapi tidak mungkin salah pilih.
+              </div>
+              <div>
+                <a class="apk-download-btn" href="/universal.apk">
+                  <span class="dl-btn-top" data-i18n="dl.btn.lblU">Unduh APK Universal</span>
+                  <span class="dl-btn-meta mono" data-i18n="dl.btn.metaU">APK resmi · semua ABI</span>
                 </a>
               </div>
             </div>
@@ -1984,6 +2044,18 @@
         "dl.btn.lbl": "Download arm64-v8a APK",
         "dl.btn.lbl2": "Download armeabi-v7a APK",
         "dl.btn.lbl3": "Download x86_64 APK",
+        "dl.btn.lblU": "Download Universal APK",
+        "dl.btn.metaU": "Official APK · all ABIs",
+        "dl.abiU.sub": "All ABIs · safest pick",
+        "dl.abiU": "One APK for every Android device (armeabi-v7a + arm64-v8a + x86_64). Bigger file, but impossible to pick wrong.",
+        "dl.badge.you": "Your device",
+        "dl.cta.64": "Download 64-bit (arm64-v8a)",
+        "dl.cta.32": "Download 32-bit (armeabi-v7a)",
+        "dl.cta.uni": "Download Universal (all ABIs)",
+        "dl.status.detecting": "Detecting your device architecture…",
+        "dl.status.detected": "Your device was detected as ABI {abi} — the matching button is highlighted.",
+        "dl.status.universal": "Architecture could not be detected — the safest choice is the Universal APK.",
+        "dl.status.desktop": "This looks like a desktop browser — on Android, the right APK will be highlighted automatically.",
         "dl.btn.meta": "Official APK · 1.0.2 (53)",
         "dl.rilisin": "Need another asset or release notes? Open the public GitHub release. SHA-256 checksums are provided there.",
         "dl.rilisin.top": "Release notes & all assets",
@@ -2171,5 +2243,64 @@
   };
 })();
 </script>
+  <script>
+    // Mesin deteksi ABI (2026-10-12): memakai Client Hints (architecture +
+    // bitness) di Chromium/Android; fallback ke Universal untuk Android yang
+    // arsitekturnya tidak terbaca, sehingga pengunjung tidak salah unduh APK.
+    (function () {
+      "use strict";
+      var detected = null; // arm64-v8a | armeabi-v7a | x86_64 | universal | desktop
+      var STATUS = {
+        id: {
+          detecting: "Mendeteksi arsitektur perangkat…",
+          detected: "Perangkatmu terdeteksi: {abi} — tombol yang cocok sudah ditandai.",
+          universal: "Arsitektur tidak bisa dideteksi otomatis — pilihan paling aman: APK Universal.",
+          desktop: "Sepertinya kamu memakai browser desktop — buka di HP Android, APK yang cocok akan ditandai otomatis."
+        },
+        en: {
+          detecting: "Detecting your device architecture…",
+          detected: "Your device was detected as {abi} — the matching button is highlighted.",
+          universal: "Architecture could not be detected — the safest choice is the Universal APK.",
+          desktop: "This looks like a desktop browser — open this page on Android and the right APK will be highlighted."
+        }
+      };
+      function render() {
+        var lang = (document.documentElement.getAttribute("lang") || "id") === "en" ? "en" : "id";
+        document.querySelectorAll("[data-abi-slot]").forEach(function (el) {
+          var match = !!detected && detected !== "desktop" && el.getAttribute("data-abi-slot") === detected;
+          el.classList.toggle("abi-recommended", match);
+          var badge = el.querySelector(".abi-badge");
+          if (badge) badge.hidden = !match;
+        });
+        var status = document.getElementById("abi-status");
+        if (!status) return;
+        var t = STATUS[lang];
+        if (detected === null) status.textContent = t.detecting;
+        else if (detected === "desktop") status.textContent = t.desktop;
+        else if (detected === "universal") status.textContent = t.universal;
+        else status.textContent = t.detected.replace("{abi}", detected);
+      }
+      function detect() {
+        var isAndroidUA = /Android/i.test(navigator.userAgent || "");
+        if (navigator.userAgentData && typeof navigator.userAgentData.getHighEntropyValues === "function") {
+          return navigator.userAgentData
+            .getHighEntropyValues(["platform", "architecture", "bitness"])
+            .then(function (ua) {
+              var android = ua.platform === "Android" || isAndroidUA;
+              if (android && ua.architecture === "arm") return ua.bitness === "32" ? "armeabi-v7a" : "arm64-v8a";
+              if (android && ua.architecture === "x86") return ua.bitness === "32" ? "universal" : "x86_64";
+              return isAndroidUA ? "universal" : "desktop";
+            })
+            .catch(function () { return isAndroidUA ? "universal" : "desktop"; });
+        }
+        return Promise.resolve(isAndroidUA ? "universal" : "desktop");
+      }
+      detect().then(function (abi) { detected = abi; render(); });
+      // Bahasa bisa diganti lewat tombol lang; observer ini memastikan teks
+      // status ikut ter-render ulang dengan bahasa aktif (applyLang jalan
+      // sinkron lebih dulu, observer menyusul di microtask).
+      new MutationObserver(render).observe(document.documentElement, { attributes: true, attributeFilter: ["lang"] });
+    })();
+  </script>
 </body>
 </html>

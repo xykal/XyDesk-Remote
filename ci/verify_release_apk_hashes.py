@@ -8,9 +8,9 @@ import re
 import sys
 from pathlib import Path
 
-ABIS = ("armeabi-v7a", "arm64-v8a", "x86_64")
+ABIS = ("armeabi-v7a", "arm64-v8a", "x86_64", "universal")
 REPORT_ENTRY = re.compile(
-    r"(?m)^(?P<abi>armeabi-v7a|arm64-v8a|x86_64)\s+v[^:\s]+:\s+PASS[^\r\n]*"
+    r"(?m)^(?P<abi>armeabi-v7a|arm64-v8a|x86_64|universal)\s+v[^:\s]+:\s+PASS[^\r\n]*"
     r"\r?\n[ \t]+APK SHA-256:\s*(?P<sha>[0-9a-f]{64})[ \t]*$"
 )
 
@@ -48,6 +48,7 @@ def verify(directory: Path) -> None:
         "armeabi-v7a": "XyDesk-Remote32bit.apk",
         "arm64-v8a": "XyDesk-Remote64bit.apk",
         "x86_64": "XyDesk-Remote64bit-x86.apk",
+        "universal": "XyDesk-RemoteUniversal.apk",
     }
     for abi in ABIS:
         filename = NAMES[abi]

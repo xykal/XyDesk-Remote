@@ -2,6 +2,7 @@ package id.xydesk.remote.ui.components
 
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.animateDpAsState
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
@@ -120,6 +121,9 @@ fun XyPillButton(
                 else Modifier.border(1.dp, MaterialTheme.colorScheme.outline, XyPill)
             )
             .clickable(enabled = enabled, onClick = onClick)
+            // Tinggi sentuh minimum: di DPI kecil/font besar padding saja tidak
+            // cukup — tombol harus tetap >= 40dp agar konsisten di semua layar.
+            .heightIn(min = if (compact) 40.dp else 44.dp)
             .padding(
                 horizontal = if (compact) 16.dp else 20.dp,
                 vertical = if (compact) 9.dp else 13.dp,

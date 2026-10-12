@@ -401,6 +401,10 @@ jobs:
           mv app-armeabi-v7a-release.apk XyDesk-Remote-armeabi-v7a.apk
           mv app-arm64-v8a-release.apk XyDesk-Remote-arm64-v8a.apk
           mv app-x86_64-release.apk XyDesk-Remote-x86_64.apk
+          # Universal (semua ABI dalam satu APK) — dibangun sejak BUILD_UNIVERSAL=true.
+          if [ -f app-universal-release.apk ]; then
+            mv app-universal-release.apk XyDesk-Remote-universal.apk
+          fi
           ls -lh XyDesk-Remote-*.apk
       - name: Nama akhir APK untuk user (32bit/64bit)
         working-directory: client/Android/Studio/app/build/outputs/apk/release
@@ -411,6 +415,9 @@ jobs:
           mv XyDesk-Remote-armeabi-v7a.apk XyDesk-Remote32bit.apk
           mv XyDesk-Remote-arm64-v8a.apk XyDesk-Remote64bit.apk
           mv XyDesk-Remote-x86_64.apk XyDesk-Remote64bit-x86.apk
+          if [ -f XyDesk-Remote-universal.apk ]; then
+            mv XyDesk-Remote-universal.apk XyDesk-RemoteUniversal.apk
+          fi
           ls -lh XyDesk-Remote*.apk
       - name: Tanda tangani ulang APK dengan skema V1 + V2 (deterministik)
         # AGP 9 mematikan v1 (JAR) saat minSdk >= 24 dan setelan enableV1Signing
@@ -426,12 +433,17 @@ jobs:
         run: |
           set -euo pipefail
           APK_SIGNER="$ANDROID_HOME/build-tools/37.0.0/apksigner"
-          for abi in armeabi-v7a arm64-v8a x86_64; do
+          for abi in armeabi-v7a arm64-v8a x86_64 universal; do
             case "$abi" in
               armeabi-v7a) apk="XyDesk-Remote32bit.apk" ;;
               arm64-v8a)   apk="XyDesk-Remote64bit.apk" ;;
+              universal)   apk="XyDesk-RemoteUniversal.apk" ;;
               *)           apk="XyDesk-Remote64bit-x86.apk" ;;
             esac
+            if [ "$abi" = "universal" ] && [ ! -f "$apk" ]; then
+              echo "Universal APK tidak dibangun (BUILD_UNIVERSAL=false) — dilewati."
+              continue
+            fi
             if [ ! -s "$apk" ]; then
               echo "::error::$apk tidak ditemukan untuk ditandatangani ulang."
               exit 1
@@ -542,12 +554,17 @@ jobs:
           done
           printf 'Baseline signer SHA-256: %s\n\n' "$baseline_cert" >> "$REPORT"
 
-          for abi in armeabi-v7a arm64-v8a x86_64; do
+          for abi in armeabi-v7a arm64-v8a x86_64 universal; do
             case "$abi" in
               armeabi-v7a) apk="$OUT/XyDesk-Remote32bit.apk" ;;
               arm64-v8a)   apk="$OUT/XyDesk-Remote64bit.apk" ;;
+              universal)   apk="$OUT/XyDesk-RemoteUniversal.apk" ;;
               *)           apk="$OUT/XyDesk-Remote64bit-x86.apk" ;;
             esac
+            if [ "$abi" = "universal" ] && [ ! -f "$apk" ]; then
+              echo "Universal APK tidak ada — verifikasi dilewati."
+              continue
+            fi
             if [ ! -s "$apk" ]; then
               echo "::error::APK untuk ABI $abi tidak ditemukan."
               exit 1
@@ -590,7 +607,8 @@ jobs:
           python3 "$GITHUB_WORKSPACE/ci/verify_android_apks.py" \
             app/build/outputs/apk/release/XyDesk-Remote32bit.apk \
             app/build/outputs/apk/release/XyDesk-Remote64bit.apk \
-            app/build/outputs/apk/release/XyDesk-Remote64bit-x86.apk
+            app/build/outputs/apk/release/XyDesk-Remote64bit-x86.apk \
+            app/build/outputs/apk/release/XyDesk-RemoteUniversal.apk
       - name: Build Windows Native C++17 Host Agent & DLLs (xydesk_quic.dll + xydesk_host_core.dll + XyDeskRemoteHost.exe)
         run: |
           set -euo pipefail

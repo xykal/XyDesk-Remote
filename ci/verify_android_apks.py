@@ -17,28 +17,34 @@ BIT_NAMES = {
 }
 
 
+UNIVERSAL_NAME = "XyDesk-RemoteUniversal.apk"
+
+
 def verify(path: Path) -> None:
-    if path.name in BIT_NAMES:
-        abi = BIT_NAMES[path.name]
+    if path.name == UNIVERSAL_NAME:
+        # APK universal memuat SEMUA ABI sekaligus.
+        required_libraries = [f"lib/{abi}/libcrypto.so" for abi in ABIS]
+    elif path.name in BIT_NAMES:
+        required_libraries = [f"lib/{BIT_NAMES[path.name]}/libcrypto.so"]
     else:
         abi_matches = [abi for abi in ABIS if abi in path.name]
         if len(abi_matches) != 1:
             raise SystemExit(f"FAIL: cannot determine a single Android ABI from {path.name}")
-        abi = abi_matches[0]
-    required_library = f"lib/{abi}/libcrypto.so"
+        required_libraries = [f"lib/{abi_matches[0]}/libcrypto.so"]
 
     try:
         with zipfile.ZipFile(path) as apk:
             names = set(apk.namelist())
-            if required_library not in names:
-                raise SystemExit(f"FAIL: {path}: missing {required_library}")
+            for required_library in required_libraries:
+                if required_library not in names:
+                    raise SystemExit(f"FAIL: {path}: missing {required_library}")
             bad_entry = apk.testzip()
             if bad_entry is not None:
                 raise SystemExit(f"FAIL: {path}: ZIP CRC/decompression error in {bad_entry}")
     except (OSError, zipfile.BadZipFile) as error:
         raise SystemExit(f"FAIL: {path}: invalid APK/ZIP: {error}") from error
 
-    print(f"PASS: {path}: every ZIP entry verified; {required_library} present")
+    print(f"PASS: {path}: every ZIP entry verified; {', '.join(required_libraries)} present")
 
 
 def main() -> None:
