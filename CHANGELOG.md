@@ -3,6 +3,20 @@
 Semua perubahan sejak rilis publik v1.0.2 sampai v1.1.8.
 Format: versi (kode) — tanggal — poin perubahan.
 
+## v1.1.9
+- Login GitHub tanpa token: OAuth Device Flow (ketik kode 8 karakter di github.com/login/device).
+- Tata letak kontrol: snap grid 12dp + magnet sejajar + garis bantu ungu saat geser tombol (HUD & gamepad).
+- Turbo tombol HUD: tahan = ketik berulang otomatis (opsi per tombol, 0,1 detik).
+- Salin tombol di editor tata letak (duplikat cepat).
+- Notifikasi sesi: ikon aksi khusus (bukan logo), tombol Musik dihapus, tombol Putuskan kini selalu tampil (batas 3 aksi Android).
+- Perbaikan "Kembali ke beranda": membuka Beranda app, bukan menutup app ke desktop HP; sesi tetap hidup.
+- Perbaikan nama profil/author komentar yang tampil sebagai "null".
+- Sidebar kanan dirampingkan (76%, maks 360dp) — kini benar-benar sidebar, bukan popup.
+- Pill telemetri: kolom TRANSPORT (UDP/TCP).
+- Ikon adaptif diperbaiki: logo di zona aman 45% — tidak terpotong masker lagi.
+- Keamanan instalasi: penandatanganan APK kini V1+V2+V3.
+- Popup hitung mundur web berhenti bersih setelah waktu rilis lewat.
+
 ## v1.1.8 (69) — 2026-10-12
 - **Dukungan Android 6–16**: minSdk 23 (Android 6.0), compile/target API 37 (Android 16). Kanal kamera NDK kini dimuat runtime (dlopen) sehingga perangkat Android 6 tetap jalan; kamera redirect aktif di API 24+.
 - **Nama APK baru**: `XyDesk-Remote32bit.apk` (armeabi-v7a), `XyDesk-Remote64bit.apk` (arm64-v8a), `XyDesk-Remote64bit-x86.apk` (x86_64) — pipeline tanda tangan, verifikasi hash, dan alias unduhan web mengikuti.

@@ -2162,7 +2162,7 @@
   }
   tick(); setInterval(tick,1000);
   // Muncul setelah halaman settle biar tidak ganggu first paint.
-  setTimeout(function(){wrap.classList.add('show')},900);
+  setTimeout(function(){ if(target-Date.now()>0 && !localStorage.getItem(KEY)) wrap.classList.add('show'); },900);
   function dismiss(){localStorage.setItem(KEY,'1');wrap.classList.remove('show')}
   document.getElementById('xyCdClose').onclick=dismiss;
   document.getElementById('xyCdX').onclick=dismiss;
