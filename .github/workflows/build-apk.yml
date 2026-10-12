@@ -436,6 +436,11 @@ jobs:
               echo "::error::$apk tidak ditemukan untuk ditandatangani ulang."
               exit 1
             fi
+            # V3 diaktifkan (2026-10-12): perangkat lama tetap memakai V1/V2,
+            # Android modern memverifikasi blok V3 — sinyal integritas lebih
+            # kuat. V4 tetap mati (butuh berkas .idsig terpisah).
+            # CATATAN: jangan menaruh komentar DI DALAM baris sign \ — shell
+            # memutus kontinuitas dan apksigner kehilangan input APK.
             "$APK_SIGNER" sign \
               --ks "$RELEASE_STORE_FILE" \
               --ks-key-alias "$RELEASE_KEY_ALIAS" \
@@ -443,9 +448,6 @@ jobs:
               --key-pass "env:RELEASE_KEY_PASSWORD" \
               --v1-signing-enabled true \
               --v2-signing-enabled true \
-              # V3 diaktifkan (2026-10-12): perangkat lama tetap memakai
-              # V1/V2, Android modern memverifikasi blok V3 — sinyal integritas
-              # lebih kuat. V4 tetap mati (butuh berkas .idsig terpisah).
               --v3-signing-enabled true \
               --v4-signing-enabled false \
               --out "$apk.resigned" "$apk"
