@@ -3,6 +3,16 @@
 Semua perubahan sejak rilis publik v1.0.2 sampai v1.1.8.
 Format: versi (kode) — tanggal — poin perubahan.
 
+## v1.1.10
+- Anti-blackscreen: watchdog mendeteksi sesi tersambung tanpa gambar (~6 detik) lalu mencoba ulang sekali dengan grafis kompatibel (H264 mati, warna 16-bit); setelan disimpan per perangkat dan otomatis kembali ke kualitas penuh setelah normal.
+- Keyboard virtual super lengkap untuk kontrol kustom: kombinasi tombol bebas sampai 24 langkah (Esc, F1–F12, simbol, navigasi, numpad) — chip urutan bisa dihapus satu per satu.
+- Panel sesi lebih premium: popup dan sidebar dapat gloss tepi atas, border glow, dan aksen cahaya tepi kiri sidebar.
+- Feed: waktu relatif ("baru saja", "5 mnt lalu", "kemarin").
+- Log sesi terakhir: penampil log berwarna per tingkat (error merah, peringatan kuning, sukses hijau).
+- Profil: tombol "Cek pembaruan" manual tanpa menunggu cek otomatis 12 jam.
+- APK Universal baru (semua ABI dalam satu berkas) + tombol unduh langsung 64-bit/32-bit/Universal di situs dengan deteksi arsitektur perangkat otomatis.
+- Konsistensi UI lintas DPI: tinggi sentuh tombol minimum 40dp, teks tombol/chip tidak lagi meluber di layar kecil atau font besar.
+
 ## v1.1.9
 - Login GitHub tanpa token: OAuth Device Flow (ketik kode 8 karakter di github.com/login/device).
 - Tata letak kontrol: snap grid 12dp + magnet sejajar + garis bantu ungu saat geser tombol (HUD & gamepad).
