@@ -686,6 +686,25 @@ data class RdpOptions(
             editor.apply()
         }
 
+        /**
+         * Anti-layar-hitam (2026-10-12): watchdog sesi menandai perangkat yang
+         * pernah tersambung tanpa satu frame pun; koneksi berikutnya memakai
+         * grafis kompatibel (H.264/GFX mati, warna 16-bit). Tanda dihapus lagi
+         * begitu frame terlihat normal.
+         */
+        fun graphicsFallback(context: Context, deviceId: String): Boolean =
+            context.applicationContext
+                .getSharedPreferences(FILE, Context.MODE_PRIVATE)
+                .getBoolean("$deviceId.gfx_fallback", false)
+
+        fun setGraphicsFallback(context: Context, deviceId: String, enabled: Boolean) {
+            context.applicationContext
+                .getSharedPreferences(FILE, Context.MODE_PRIVATE)
+                .edit()
+                .putBoolean("$deviceId.gfx_fallback", enabled)
+                .apply()
+        }
+
         fun of(context: Context, deviceId: String): RdpOptions {
             val sp = context.applicationContext
                 .getSharedPreferences(FILE, Context.MODE_PRIVATE)

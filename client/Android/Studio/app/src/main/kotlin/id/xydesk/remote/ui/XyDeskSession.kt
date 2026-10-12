@@ -336,6 +336,12 @@ fun XyDeskSessionScreen(
     /** Batas akhir jendela retry (epoch ms); 0 = belum putus. */
     var reconnectDeadlineAt by remember { mutableStateOf(0L) }
     var reconnectWindowDone by remember { mutableStateOf(false) }
+    // Anti-layar-hitam (2026-10-12): bila tersambung tapi tidak ada satu frame
+    // pun selama ~6 detik, sambung ulang otomatis dengan grafis kompatibel
+    // (H.264/GFX mati, warna 16-bit) — sekali saja per sesi.
+    var blackScreenChecked by remember { mutableStateOf(false) }
+    var connectedSinceMs by remember { mutableStateOf(0L) }
+    var zeroFrameStreak by remember { mutableIntStateOf(0) }
     var waitingForNativeRelease by remember { mutableStateOf(false) }
     var userDisconnect by remember { mutableStateOf(false) }
     /** Clipboard terakhir yang datang dari remote (tombol "tempel ke HP"). */
@@ -407,6 +413,40 @@ fun XyDeskSessionScreen(
                 boundInstance = 0L
                 manager.connect(activeProfile)
             }
+        }
+    }
+
+    LaunchedEffect(state, telemetry.fps) {
+        if (state is SessionState.Connected) {
+            if (connectedSinceMs == 0L) connectedSinceMs = System.currentTimeMillis()
+            if (telemetry.fps > 0) {
+                // Frame normal: pulihkan grafis penuh bila sebelumnya fallback.
+                zeroFrameStreak = 0
+                if (id.xydesk.remote.core.RdpOptions.graphicsFallback(context, profile.id)) {
+                    id.xydesk.remote.core.RdpOptions.setGraphicsFallback(context, profile.id, false)
+                }
+                blackScreenChecked = false
+            } else if (System.currentTimeMillis() - connectedSinceMs > 4_000L) {
+                zeroFrameStreak++
+                // Telemetri 500 ms: 12 sampel tanpa frame = ~6 detik gelap.
+                if (zeroFrameStreak >= 12 && !blackScreenChecked && !userDisconnect) {
+                    blackScreenChecked = true
+                    id.xydesk.remote.core.RdpOptions.setGraphicsFallback(context, profile.id, true)
+                    notice.show(
+                        xyNow(
+                            "Layar hitam terdeteksi — menyambung ulang dengan grafis kompatibel.",
+                            "Black screen detected — reconnecting with compatible graphics.",
+                        ),
+                    )
+                    boundInstance = 0L
+                    manager.disconnect()
+                    kotlinx.coroutines.delay(1_200)
+                    if (!userDisconnect) manager.connect(activeProfile)
+                }
+            }
+        } else {
+            connectedSinceMs = 0L
+            zeroFrameStreak = 0
         }
     }
 

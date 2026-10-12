@@ -229,7 +229,13 @@ class SessionManager(context: Context) {
     }.getOrDefault("Wi-Fi")
 
     private fun sessionUri(profile: ConnectionProfile): android.net.Uri {
-        val storedOptions = RdpOptions.of(appContext, profile.id)
+        val storedOptions = RdpOptions.of(appContext, profile.id).let { base ->
+            if (RdpOptions.graphicsFallback(appContext, profile.id)) {
+                base.copy(h264 = false, colorDepth = 16)
+            } else {
+                base
+            }
+        }
         val options = storedOptions.resolveForActiveNetwork(appContext).forSessionProfile(profile)
         activeCodec = options.activeCodecLabel()
         activeUdp = options.udpTransport

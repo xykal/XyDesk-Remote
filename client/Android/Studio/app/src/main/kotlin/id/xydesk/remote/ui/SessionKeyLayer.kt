@@ -810,6 +810,7 @@ fun HudKeyEditor(
     onDuplicate: ((HudKey) -> Unit)? = null,
 ) {
     var rePick by remember { mutableStateOf(false) }
+    var vkOpen by remember { mutableStateOf(false) }
 
     BoxWithConstraints(
         Modifier
@@ -943,8 +944,8 @@ fun HudKeyEditor(
 
                         Text(
                             xy(
-                                "Terpilih {0}/5 — ketuk chip di bawah untuk hapus/tambah",
-                                "Picked {0}/5 — tap chips below to remove/add",
+                                "Terpilih {0} — chip cepat di bawah, atau keyboard virtual untuk kombinasi bebas",
+                                "Picked {0} — quick chips below, or the virtual keyboard for any combination",
                                 key.combo.size,
                             ),
                             color = MaterialTheme.colorScheme.onSurface,
@@ -980,12 +981,19 @@ fun HudKeyEditor(
                                     onClick = {
                                         when {
                                             key.combo.contains(code) -> applyCombo(key.combo - code)
-                                            key.combo.size < 5 -> applyCombo(key.combo + code)
+                                            key.combo.size < MAX_COMBO_STEPS -> applyCombo(key.combo + code)
                                         }
                                     },
                                 )
                             }
                         }
+                        XyPillButton(
+                            xy("Buka keyboard virtual lengkap", "Open full virtual keyboard"),
+                            { vkOpen = true },
+                            primary = false,
+                            compact = true,
+                            modifier = Modifier.fillMaxWidth(),
+                        )
                     } else {
                         val mainCode = key.keyCode
                         Text(
@@ -1081,6 +1089,18 @@ fun HudKeyEditor(
                 )
             }
         }
+    }
+
+    if (vkOpen) {
+        VirtualKeyPicker(
+            initial = key.combo,
+            onConfirm = { codes ->
+                val label = codes.joinToString("+") { virtualKeyLabel(it) }
+                onChange(key.copy(combo = codes, label = label.take(12)))
+                vkOpen = false
+            },
+            onDismiss = { vkOpen = false },
+        )
     }
 
     if (rePick) {
