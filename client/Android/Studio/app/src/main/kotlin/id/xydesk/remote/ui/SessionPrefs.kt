@@ -105,6 +105,15 @@ class SessionPrefs(context: Context) {
         get() = input.getBoolean(KEY_AUTO_RECONNECT, true)
         set(v) = input.edit().putBoolean(KEY_AUTO_RECONNECT, v).apply()
 
+    /**
+     * Jendela waktu (jam) retry otomatis setelah putus: 1, 6, atau 24.
+     * Permintaan pemilik 2026-10-12: jangan berhenti cepat — tetap mencoba
+     * berjam-jam (termasuk saat app ditinggal), baru berhenti di ujung jendela.
+     */
+    var autoReconnectHours: Int
+        get() = input.getInt("auto_reconnect_hours", 6).let { if (it == 1 || it == 6 || it == 24) it else 6 }
+        set(v) = input.edit().putInt("auto_reconnect_hours", v.coerceIn(1, 24)).apply()
+
     /** Petunjuk pertama dipakai sekali saja: jelaskan cara memindah tombol. */
     var hudTipShown: Boolean
         get() = input.getBoolean(KEY_HUD_TIP, false)

@@ -2129,6 +2129,49 @@ private fun InputTab(
             )
         }
 
+    section("jendela-sambung-ulang", xy("Jendela sambung ulang", "Auto-reconnect window"), advanced = true) {
+        PanelHint(
+            xy(
+                "Setelah koneksi putus, XyDesk terus mencoba menyambung ulang selama jendela ini — termasuk saat app ditinggal di latar. Lewat dari jendela, retry berhenti sendiri dan layar putus muncul.",
+                "After a disconnect, XyDesk keeps retrying for this window — including while the app is backgrounded. Past the window, retries stop and the disconnect screen appears.",
+            ),
+        )
+        var windowHours by remember { mutableStateOf(prefs.autoReconnectHours) }
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            listOf(1, 6, 24).forEach { hours ->
+                val active = windowHours == hours
+                Box(
+                    Modifier
+                        .weight(1f)
+                        .clip(RoundedCornerShape(10.dp))
+                        .background(
+                            if (active) MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.5f)
+                            else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.25f),
+                        )
+                        .border(
+                            if (active) 1.4.dp else 1.dp,
+                            if (active) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outline,
+                            RoundedCornerShape(10.dp),
+                        )
+                        .clickable {
+                            windowHours = hours
+                            prefs.autoReconnectHours = hours
+                        }
+                        .padding(vertical = 10.dp),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Text(
+                        xy("{0} jam", "{0} h", hours),
+                        color = if (active) MaterialTheme.colorScheme.onSurface
+                        else MaterialTheme.colorScheme.onSurfaceVariant,
+                        fontSize = 12.sp,
+                        fontWeight = FontWeight.SemiBold,
+                    )
+                }
+            }
+        }
+    }
+
     section("tombol-notifikasi-kustom", xy("Tombol notifikasi sesi", "Session notification buttons"), advanced = true) {
         val notifContext = androidx.compose.ui.platform.LocalContext.current
         val notifPrefs = remember { AppPrefs(notifContext) }

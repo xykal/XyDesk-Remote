@@ -333,6 +333,9 @@ fun XyDeskSessionScreen(
     var everConnected by remember { mutableStateOf(false) }
     var reconnectAttempt by remember { mutableIntStateOf(0) }
     var reconnecting by remember { mutableStateOf(false) }
+    /** Batas akhir jendela retry (epoch ms); 0 = belum putus. */
+    var reconnectDeadlineAt by remember { mutableStateOf(0L) }
+    var reconnectWindowDone by remember { mutableStateOf(false) }
     var waitingForNativeRelease by remember { mutableStateOf(false) }
     var userDisconnect by remember { mutableStateOf(false) }
     /** Clipboard terakhir yang datang dari remote (tombol "tempel ke HP"). */
@@ -344,6 +347,8 @@ fun XyDeskSessionScreen(
             everConnected = true
             reconnectAttempt = 0
             reconnecting = false
+            reconnectDeadlineAt = 0L
+            reconnectWindowDone = false
         }
     }
 
@@ -366,6 +371,18 @@ fun XyDeskSessionScreen(
                 reconnecting = false
                 waitingForNativeRelease = false
             }
+            return@LaunchedEffect
+        }
+        // Jendela retry (permintaan pemilik 2026-10-12): terus mencoba 1/6/24
+        // jam sejak putus pertama — termasuk saat app ditinggal di latar —
+        // lalu berhenti sendiri supaya tidak menguras baterai selamanya.
+        val nowMs = System.currentTimeMillis()
+        if (reconnectDeadlineAt == 0L) {
+            reconnectDeadlineAt = nowMs + prefs.autoReconnectHours * 3_600_000L
+        }
+        if (nowMs > reconnectDeadlineAt) {
+            reconnecting = false
+            reconnectWindowDone = true
             return@LaunchedEffect
         }
         reconnecting = true
@@ -1611,6 +1628,7 @@ fun XyDeskSessionScreen(
                 attempt = reconnectAttempt,
                 waitingForNativeRelease = waitingForNativeRelease,
                 onStop = { confirmCancelConnect = true },
+                windowHours = prefs.autoReconnectHours,
             )
         }
 
@@ -1823,6 +1841,7 @@ private fun ReconnectingOverlay(
     attempt: Int,
     waitingForNativeRelease: Boolean,
     onStop: () -> Unit,
+    windowHours: Int = 6,
 ) {
     Column(
         Modifier
@@ -1841,6 +1860,16 @@ private fun ReconnectingOverlay(
             xy("Jaringan terputus sementara", "Temporary network interruption"),
             color = MaterialTheme.colorScheme.onSurface,
             style = MaterialTheme.typography.titleSmall,
+            textAlign = TextAlign.Center,
+        )
+        Text(
+            xy(
+                "Sambung ulang otomatis aktif selama {0} jam — termasuk saat app ditinggal. Jendela bisa diubah di Pengaturan sesi.",
+                "Auto-reconnect stays active for {0} h — even with the app backgrounded. Change the window in Session settings.",
+                windowHours,
+            ),
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            style = MaterialTheme.typography.labelSmall,
             textAlign = TextAlign.Center,
         )
         Text(
