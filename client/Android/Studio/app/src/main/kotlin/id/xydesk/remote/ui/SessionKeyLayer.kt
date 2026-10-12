@@ -224,11 +224,8 @@ fun HudKeyLayer(
             )
             val guideColor = MaterialTheme.colorScheme.primary
             androidx.compose.foundation.Canvas(Modifier.fillMaxSize().zIndex(14f)) {
-                val stroke = androidx.compose.ui.graphics.drawscope.Stroke(
-                    width = 2f,
-                    pathEffect = androidx.compose.ui.graphics.PathEffect.dashPathEffect(
-                        floatArrayOf(14f, 10f),
-                    ),
+                val dash = androidx.compose.ui.graphics.PathEffect.dashPathEffect(
+                    floatArrayOf(14f, 10f),
                 )
                 for (g in guides) {
                     if (g.vertical) {
@@ -236,14 +233,16 @@ fun HudKeyLayer(
                             guideColor.copy(alpha = 0.9f),
                             Offset(g.positionPx, 0f),
                             Offset(g.positionPx, size.height.toFloat()),
-                            stroke,
+                            strokeWidth = 2f,
+                            pathEffect = dash,
                         )
                     } else {
                         drawLine(
                             guideColor.copy(alpha = 0.9f),
                             Offset(0f, g.positionPx),
                             Offset(size.width.toFloat(), g.positionPx),
-                            stroke,
+                            strokeWidth = 2f,
+                            pathEffect = dash,
                         )
                     }
                 }
