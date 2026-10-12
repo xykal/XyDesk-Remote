@@ -2130,13 +2130,15 @@ private fun InputTab(
         }
 
     section("jendela-sambung-ulang", xy("Jendela sambung ulang", "Auto-reconnect window"), advanced = true) {
+        val reconnContext = androidx.compose.ui.platform.LocalContext.current
+        val reconnPrefs = remember { SessionPrefs(reconnContext) }
         PanelHint(
             xy(
                 "Setelah koneksi putus, XyDesk terus mencoba menyambung ulang selama jendela ini — termasuk saat app ditinggal di latar. Lewat dari jendela, retry berhenti sendiri dan layar putus muncul.",
                 "After a disconnect, XyDesk keeps retrying for this window — including while the app is backgrounded. Past the window, retries stop and the disconnect screen appears.",
             ),
         )
-        var windowHours by remember { mutableStateOf(prefs.autoReconnectHours) }
+        var windowHours by remember { mutableStateOf(reconnPrefs.autoReconnectHours) }
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             listOf(1, 6, 24).forEach { hours ->
                 val active = windowHours == hours
@@ -2155,7 +2157,7 @@ private fun InputTab(
                         )
                         .clickable {
                             windowHours = hours
-                            prefs.autoReconnectHours = hours
+                            reconnPrefs.autoReconnectHours = hours
                         }
                         .padding(vertical = 10.dp),
                     contentAlignment = Alignment.Center,
