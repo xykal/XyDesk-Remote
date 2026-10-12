@@ -362,3 +362,14 @@ CATATAN: build APK tetap DITAHAN menunggu konfirmasi.
 - Fix minSdk 23 native: rdpecam NDK Camera2 (API 24+) kini dimuat runtime
   lewat dlopen (camera2ndk_dyn.h); link langsung camera2ndk/mediandk
   dihapus; kanal mati aman di perangkat Android 6.
+
+## Ronde 20 — Layout grid, turbo, telemetri (2026-10-12)
+- Editor tata letak HUD/gamepad: snap grid 12dp + magnet sejajar ke tepi/tengah
+  tombol lain + garis bantu ungu putus-putus saat digeser (HudControlMath:
+  snapHudPosition/hudAlignmentGuides/hudPlateSizeDp, + unit test).
+- Turbo tombol HUD: opsi "tahan = ketik berulang" (KEY/COMBO/MACRO, 100ms),
+  ikut tersimpan di JSON layout.
+- Pill telemetri: kolom TRANSPORT (UDP putih / TCP kuning).
+- XyPadLayout dikonfirmasi kode lawas tak terpakai (gamepad = HudKey pad=true)
+  — snap cukup di HudKeyLayer.
+- Tanpa build/tag sesuai instruksi pemilik; hanya gate compile.
