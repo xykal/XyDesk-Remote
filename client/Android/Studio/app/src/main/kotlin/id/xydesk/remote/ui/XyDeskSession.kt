@@ -1346,10 +1346,17 @@ fun XyDeskSessionScreen(
                     confirmDisconnect = true
                 },
                 onGoHome = {
-                    // Ke beranda TANPA memutus sesi: activity hanya dipindah ke
-                    // belakang, koneksi + service tetap hidup; buka lagi dari
-                    // kartu "Sesi aktif" di beranda atau notifikasi.
-                    (context as? Activity)?.moveTaskToBack(true)
+                    // Ke beranda TANPA memutus sesi (laporan pemilik
+                    // 2026-10-12: moveTaskToBack malah menutup app ke desktop
+                    // HP). Beranda app diangkat ke depan task; activity sesi
+                    // tetap hidup di bawahnya sehingga koneksi + service jalan
+                    // terus. Buka lagi dari kartu "Sesi aktif" / notifikasi.
+                    runCatching {
+                        context.startActivity(
+                            Intent(context, XyDeskHomeActivity::class.java)
+                                .addFlags(Intent.FLAG_ACTIVITY_REORDER_TO_FRONT),
+                        )
+                    }
                 },
                 onPointerVisibilityChange = { pointerVisible = it },
                 onResetCluster = {
