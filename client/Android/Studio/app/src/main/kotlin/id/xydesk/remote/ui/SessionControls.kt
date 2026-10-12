@@ -1116,6 +1116,30 @@ fun SessionControls(
                 confirmDeleteKey = key
             },
             onDismiss = { editing = null },
+            onDuplicate = { source ->
+                if (keys.size >= 36) {
+                    notice.show(xyNow("Maksimal 36 tombol HUD", "Maximum 36 HUD buttons"))
+                } else {
+                    val salinan = source.copy(
+                        id = "k${java.util.UUID.randomUUID()}",
+                        x = (source.x + 0.06f).coerceIn(0f, 1f),
+                        y = (source.y + 0.06f).coerceIn(0f, 1f),
+                    )
+                    val updatedKeys = keys + salinan
+                    onKeysChange(updatedKeys)
+                    prefs.setCustomHudKeys(deviceId, updatedKeys)
+                    hudProfile = HudProfilePreset.CUSTOM
+                    prefs.setHudProfile(deviceId, HudProfilePreset.CUSTOM)
+                    editing = salinan
+                    notice.show(
+                        xyNow(
+                            "Tombol \"{0}\" disalin — geser ke posisi yang kamu mau.",
+                            "Button \"{0}\" duplicated — drag it into position.",
+                            salinan.label,
+                        ),
+                    )
+                }
+            },
         )
     }
 

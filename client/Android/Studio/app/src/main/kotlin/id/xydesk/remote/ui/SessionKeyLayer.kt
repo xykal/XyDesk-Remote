@@ -807,6 +807,7 @@ fun HudKeyEditor(
     onChange: (HudKey) -> Unit,
     onDelete: () -> Unit,
     onDismiss: () -> Unit,
+    onDuplicate: ((HudKey) -> Unit)? = null,
 ) {
     var rePick by remember { mutableStateOf(false) }
 
@@ -1052,6 +1053,15 @@ fun HudKeyEditor(
                     ),
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     fontSize = 10.5.sp,
+                )
+            }
+            if (onDuplicate != null) {
+                XyPillButton(
+                    xy("Salin tombol ini", "Duplicate this button"),
+                    { onDuplicate(key) },
+                    primary = false,
+                    compact = true,
+                    modifier = Modifier.fillMaxWidth(),
                 )
             }
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
