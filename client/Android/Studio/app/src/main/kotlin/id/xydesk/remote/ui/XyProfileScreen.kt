@@ -29,6 +29,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import id.xydesk.remote.ui.components.XyDialog
 import id.xydesk.remote.ui.components.XyGlassCard
 import id.xydesk.remote.ui.components.XyGlassRow
 import id.xydesk.remote.ui.components.XyGlassSectionLabel
