@@ -1304,6 +1304,13 @@ private fun LiveTelemetryPill(
         Triple("ENCODE", telemetry.codecLabel, Color(0xFFF2F2F4)),
         Triple("RELAY", telemetry.relayLabel, Color(0xFFF2F2F4)),
         Triple("NETWORK", telemetry.networkLabel, Color(0xFFF2F2F4)),
+        // Transport sesi aktif: UDP (cepat) atau TCP (fallback aman). Kuning
+        // saat TCP supaya langsung kelihatan kenapa sesi terasa berat.
+        Triple(
+            "TRANSPORT",
+            if (telemetry.udpActive) "UDP" else "TCP",
+            if (telemetry.udpActive) Color(0xFFF2F2F4) else Color(0xFFE8C468),
+        ),
     )
 
     Column(

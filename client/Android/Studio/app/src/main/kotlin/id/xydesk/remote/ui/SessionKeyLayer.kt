@@ -890,6 +890,17 @@ fun HudKeyEditor(
                     onValueChange = { onChange(key.copy(label = it.take(10))) },
                     label = xy("Label tombol (maks 10 huruf)", "Button label (max 10 chars)"),
                 )
+                if (key.kind == HudKind.KEY || key.kind == HudKind.COMBO || key.kind == HudKind.MACRO) {
+                    id.xydesk.remote.ui.components.XyToggleRow(
+                        title = xy("Turbo — tahan = ketik berulang", "Turbo — hold to auto-repeat"),
+                        subtitle = xy(
+                            "Selama tombol ditahan, aksinya dikirim berulang tiap 0,1 detik.",
+                            "While held, the action repeats every 0.1s.",
+                        ),
+                        checked = key.turbo,
+                        onCheckedChange = { onChange(key.copy(turbo = it)) },
+                    )
+                }
                 if (key.kind == HudKind.MACRO) {
                     XyField(
                         value = key.macroText,

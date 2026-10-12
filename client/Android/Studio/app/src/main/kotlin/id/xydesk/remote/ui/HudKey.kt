@@ -110,6 +110,12 @@ data class HudKey(
      * rupa tombol overlay biasa).
      */
     val pad: Boolean = false,
+    /**
+     * Turbo: selama tombol DITAHAN, aksi tombol diketik berulang otomatis
+     * (tiap [HUD_TURBO_INTERVAL_MS] ms). Berguna untuk game dan tombol yang
+     * memang harus dipencet terus-menerus (permintaan pemilik 2026-10-12).
+     */
+    val turbo: Boolean = false,
 ) {
     fun toJson(): JSONObject = JSONObject().apply {
         put("id", id)
@@ -127,6 +133,7 @@ data class HudKey(
             put("macroEnter", macroSendEnter)
         }
         if (pad) put("pad", true)
+        if (turbo) put("turbo", true)
     }
 
     companion object {
@@ -156,6 +163,7 @@ data class HudKey(
                 macroText = o.optString("macroText", ""),
                 macroSendEnter = o.optBoolean("macroEnter", true),
                 pad = o.optBoolean("pad", false),
+                turbo = o.optBoolean("turbo", false),
             )
         }
 

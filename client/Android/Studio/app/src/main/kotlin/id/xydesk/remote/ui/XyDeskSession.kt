@@ -972,15 +972,45 @@ fun XyDeskSessionScreen(
         else -> false
     }
 
+    // Turbo: job pengulang per tombol HUD. Dimulai saat tombol ditahan,
+    // dibatalkan saat dilepas / toggle mati / layar sesi ditutup.
+    val hudTurboJobs = remember { mutableStateMapOf<String, kotlinx.coroutines.Job>() }
+
+    fun updateHudTurbo(key: HudKey, active: Boolean) {
+        if (!key.turbo || !active) {
+            hudTurboJobs.remove(key.id)?.cancel()
+            return
+        }
+        if (hudTurboJobs[key.id]?.isActive == true) return
+        hudTurboJobs[key.id] = sessionScope.launch {
+            while (isActive) {
+                delay(HUD_TURBO_INTERVAL_MS)
+                runHudKey(key, true)
+                runHudKey(key, false)
+            }
+        }
+    }
+
+    androidx.compose.runtime.DisposableEffect(Unit) {
+        onDispose {
+            hudTurboJobs.values.forEach { it.cancel() }
+            hudTurboJobs.clear()
+        }
+    }
+
     fun handleHudPhase(key: HudKey, phase: HudPhase) {
         when (key.action) {
-            HudAction.HOLD -> runHudKey(key, phase == HudPhase.DOWN)
+            HudAction.HOLD -> {
+                runHudKey(key, phase == HudPhase.DOWN)
+                updateHudTurbo(key, phase == HudPhase.DOWN)
+            }
 
             HudAction.TOGGLE -> {
                 if (phase != HudPhase.TAP) return
                 val on = latchedKeys[key.id] == true
                 oneShotKeys.remove(key.id)
                 latchedKeys[key.id] = !on
+                if (on) updateHudTurbo(key, false)
                 runHudKey(key, !on)
                 syncHudModifierState()
             }
@@ -1001,8 +1031,12 @@ fun XyDeskSessionScreen(
             }
 
             HudAction.TAP -> when (phase) {
-                HudPhase.DOWN -> runHudKey(key, true)
+                HudPhase.DOWN -> {
+                    runHudKey(key, true)
+                    updateHudTurbo(key, true)
+                }
                 HudPhase.UP -> {
+                    updateHudTurbo(key, false)
                     runHudKey(key, false)
                     if (shouldConsumeOneShotAfter(key)) consumeOneShotKeys()
                 }
@@ -2295,4 +2329,5 @@ private fun NlaDialog(
     }
 }
 
-
+/** Jeda antar-ulangan tombol HUD berturbo (ms). */
+private const val HUD_TURBO_INTERVAL_MS = 100L
