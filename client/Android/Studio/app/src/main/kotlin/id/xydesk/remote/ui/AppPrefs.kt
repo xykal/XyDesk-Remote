@@ -34,6 +34,11 @@ class AppPrefs(context: Context) {
         get() = sp.getBoolean(KEY_KEEP_ALIVE, true)
         set(v) = sp.edit().putBoolean(KEY_KEEP_ALIVE, v).apply()
 
+    /** Tampilan daftar perangkat: false = list, true = grid 2 kolom. */
+    var deviceGridMode: Boolean
+        get() = sp.getBoolean("device_grid_mode", false)
+        set(v) = sp.edit().putBoolean("device_grid_mode", v).apply()
+
     /** Pemeriksaan pembaruan: maksimum sekali per 12 jam + versi yang dilewati. */
     var lastUpdateCheckAt: Long
         get() = sp.getLong("last_update_check_at", 0L)

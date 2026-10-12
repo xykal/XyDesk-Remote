@@ -85,3 +85,24 @@ Product attribution: **XyVerse Technology Global**. These are proposals for prio
 ## Scope note
 
 Prioritize proposals with kall before implementing unrelated work. Existing user-approved work may proceed independently; this list does not imply approval for all twenty items.
+
+## Ronde berikut: Engine Direct PC Stream (WebRTC) — status & rencana
+Audit 2026-10-12:
+- SIAP (library, belum dipakai UI): `core-pc-stream` — `PcStreamViewer`
+  (WebRTC viewer, direct-ICE + STUN publik, TANPA TURN), `PcSignalClient`
+  (room pairing via worker), `XyVirtualPad`/`XyGamepadPacket`/gamepad sink.
+- SIAP (server): DO `PcSignalRoom` + `/api/pc/rooms` (role HOST/VIEWER,
+  pairing code sekali pakai, bearer ephemeral).
+- BELUM ADA (host): `host-agent` (XyDeskRemoteHost.exe) TIDAK punya peer
+  WebRTC/signaling — `xydesk_quic.dll` = protokol UDP custom (discovery +
+  audio loopback), bukan QUIC/WebRTC.
+Ronde native (butuh build + uji Windows nyata):
+1. Integrasikan libdatachannel (atau libwebrtc) ke host-agent via vcpkg;
+   peer video H.264 (DXGI capture) + DataChannel input.
+2. Host join room sebagai HOST (HTTPS + WS ke api.xydeskremote.biz.id),
+   tampilkan pairing code di tray.
+3. App: layar "Direct Stream" — masukkan kode → PcSignalClient →
+   PcStreamViewer render ke SurfaceViewRenderer; fallback RDP bila gagal.
+4. TURN server (coturn di VPS) sebelum publik — direct-ICE saja akan gagal
+   di jaringan CGNAT/simetris.
+5. Uji: latency, warna 4:4:4, gamepad virtual, reconnect.

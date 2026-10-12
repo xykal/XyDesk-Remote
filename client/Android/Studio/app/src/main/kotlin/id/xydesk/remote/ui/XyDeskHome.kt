@@ -1023,6 +1023,8 @@ private fun DevicesScreen(
     val context = LocalContext.current
     var searchQuery by remember { mutableStateOf("") }
     var modeFilterIndex by remember { mutableStateOf(0) } // 0 = Semua, 1 = Koneksi PC, 2 = Koneksi RDP
+    val devicesPrefs = remember { AppPrefs(context) }
+    var gridMode by remember { mutableStateOf(devicesPrefs.deviceGridMode) }
     var showAddBubble by remember { mutableStateOf(false) }
     var showPcConnectionNotice by remember { mutableStateOf(true) }
 
@@ -1080,6 +1082,16 @@ private fun DevicesScreen(
                 title = xy("Perangkat", "Devices"),
                 onBack = null,
                 actions = {
+                    XyIconPill(
+                        XyIcons.Grid,
+                        {
+                            gridMode = !gridMode
+                            devicesPrefs.deviceGridMode = gridMode
+                        },
+                        active = gridMode,
+                        flat = true,
+                        contentDescription = xy("Tampilan grid / list", "Grid / list view"),
+                    )
                     XyIconPill(XyIcons.Menu, onMenu, flat = true, contentDescription = xy("Menu", "Menu"))
                     XyIconPill(
                         XyIcons.Plus,
@@ -1219,14 +1231,38 @@ private fun DevicesScreen(
                             )
                         }
                     }
-                    items(filteredFavorites, key = { it.id }) { profile ->
-                        DeviceCard(
-                            profile = profile,
-                            onConnect = { onConnect(profile) },
-                            onWakeConnect = { onWakeConnect(profile) },
-                            onEdit = { onEdit(profile) },
-                            onDelete = { onDelete(profile) },
-                        )
+                    if (gridMode) {
+                        // Grid 2 kolom: kartu dibungkus Box ber-weight supaya
+                        // lebarnya adil; baris ganjil ditutup spacer.
+                        items(filteredFavorites.chunked(2), key = { row -> row.first().id }) { row ->
+                            Row(
+                                Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.spacedBy(10.dp),
+                            ) {
+                                row.forEach { profile ->
+                                    Box(Modifier.weight(1f)) {
+                                        DeviceCard(
+                                            profile = profile,
+                                            onConnect = { onConnect(profile) },
+                                            onWakeConnect = { onWakeConnect(profile) },
+                                            onEdit = { onEdit(profile) },
+                                            onDelete = { onDelete(profile) },
+                                        )
+                                    }
+                                }
+                                if (row.size == 1) Spacer(Modifier.weight(1f))
+                            }
+                        }
+                    } else {
+                        items(filteredFavorites, key = { it.id }) { profile ->
+                            DeviceCard(
+                                profile = profile,
+                                onConnect = { onConnect(profile) },
+                                onWakeConnect = { onWakeConnect(profile) },
+                                onEdit = { onEdit(profile) },
+                                onDelete = { onDelete(profile) },
+                            )
+                        }
                     }
                     item { Spacer(Modifier.height(12.dp)) }
                 }
