@@ -55,14 +55,14 @@ class XyPadLayoutTest {
     }
 
     @Test
-    fun defaultTopBarDoesNotCollideWithTheCenteredSpotifyPlayer() {
-        // Pemutar Spotify mengambang di tengah-atas: kira-kira 240dp lebar,
+    fun defaultTopBarDoesNotCollideWithTheCenteredOverlay() {
+        // Elemen mengambang di tengah-atas (dulu pemutar musik): kira-kira 240dp lebar,
         // dipusatkan, mulai ~10dp dari atas.
         val bar = XyPadLayout.defaults().getValue(XyPadCluster.TOP_BAR)
         val (bx, by) = XyPadLayout.topLeftPx(bar, w, h, 620f, 110f)
         val spotifyX = w / 2f - 360f
         val overlaps = XyPadLayout.overlaps(bx, by, 620f, 110f, spotifyX, 30f, 720f, 110f)
-        assertFalse("TOP_BAR menutupi pemutar Spotify", overlaps)
+        assertFalse("TOP_BAR menutupi overlay tengah", overlaps)
     }
 
     @Test
