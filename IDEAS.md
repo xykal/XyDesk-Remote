@@ -106,3 +106,16 @@ Ronde native (butuh build + uji Windows nyata):
 4. TURN server (coturn di VPS) sebelum publik — direct-ICE saja akan gagal
    di jaringan CGNAT/simetris.
 5. Uji: latency, warna 4:4:4, gamepad virtual, reconnect.
+
+
+## Relative mouse (ronde native — siap dieksekusi)
+
+Riset 2026-10-13 (kode sudah dipetakan, tinggal implementasi):
+
+- **API FreeRDP 3 tersedia**: `freerdp_input_send_rel_mouse_event(rdpInput*, UINT16 flags, INT16 xDelta, INT16 yDelta)` di `include/freerdp/input.h:121`.
+- **Pola wajib**: ikuti antrian event yang ada (thread-safe), JANGAN panggil input langsung dari thread UI:
+  1. `android_event.c/h`: tipe event baru `ANDROID_EVENT_CURSOR_REL` (dx, dy, flags) + `android_event_cursor_rel_new()`.
+  2. `android_freerdp.c`: JNI `Java_com_freerdp_freerdpcore_services_LibFreeRDP_freerdp_1send_1rel_1cursor_1event` (pola identik `freerdp_1send_1cursor_1event` baris ~1162) + proses di loop event → `freerdp_input_send_rel_mouse_event`.
+  3. `LibFreeRDP.java`: `private static native boolean freerdp_send_rel_cursor_event(long inst, int dx, int dy, int flags)` + wrapper publik (pola baris 163/665).
+  4. Kotlin app: preferensi per-profil "Mouse relatif (game/CAD)" + controller mengirim delta gerak sentuh, bukan koordinat absolut; scroll pakai `PTR_FLAGS_WHEEL` tetap jalan.
+- **Verifikasi**: gate TIDAK mengompilasi native — uji nyata = build release (tag) lalu tes di PC (gerak kamera game/FPS sebagai kasus uji).
