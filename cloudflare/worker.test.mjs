@@ -895,6 +895,44 @@ test("alias universal.apk mengikuti rilis aktif yang memuat XyDesk-RemoteUnivers
   }
 });
 
+test("universal.apk fallback ke arm64-v8a saat rilis aktif tidak punya aset universal", async () => {
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async (url) => {
+    if (String(url).startsWith("https://api.github.com/repos/xykal/XyDesk-Remote/releases")) {
+      const asset = (name) => ({
+        name,
+        browser_download_url: `https://github.com/xykal/XyDesk-Remote/releases/download/v1.0.2/${name}`,
+      });
+      return new Response(JSON.stringify([{
+        tag_name: "v1.0.2",
+        html_url: "https://github.com/xykal/XyDesk-Remote/releases/tag/v1.0.2",
+        published_at: "2026-10-03T20:22:09Z",
+        draft: false,
+        prerelease: false,
+        assets: [
+          asset("XyDesk-arm64-v8a.apk"),
+          asset("XyDesk-armeabi-v7a.apk"),
+          asset("XyDesk-x86_64.apk"),
+        ],
+      }]), { status: 200, headers: { "content-type": "application/json" } });
+    }
+    return new Response("offline", { status: 503 });
+  };
+  try {
+    const response = await worker.fetch(
+      new Request("https://rdp.xydesk.my.id/universal.apk"),
+      envFor(),
+    );
+    assert.equal(response.status, 302);
+    assert.equal(
+      response.headers.get("location"),
+      "https://github.com/xykal/XyDesk-Remote/releases/download/v1.0.2/XyDesk-arm64-v8a.apk",
+    );
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
 test("host alias pakai tag rilis PUBLIK terakhir, dan fallback ke release-state tanpa token", async () => {
   const response = await worker.fetch(
     new Request("https://rdp.xydesk.my.id/XyDesk-Remote-Host-Agent-win64.zip"),

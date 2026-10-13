@@ -280,9 +280,15 @@ async function currentReleaseAssetUrl(asset, request, env) {
     // current release even when published asset file names change; fall back
     // to matching by file name for host-agent assets that keep stable names.
     const entries = Array.isArray(state.downloads) ? state.downloads : [];
-    const entry = asset.abi
+    let entry = asset.abi
       ? entries.find((item) => item?.abi === asset.abi)
       : entries.find((item) => item?.file === asset.fileName);
+    // Rilis lama (<= v1.1.8) tidak punya aset universal. Alih-alih 302 ke
+    // berkas yang tidak ada (404 di GitHub), universal jatuh ke arm64-v8a —
+    // APK yang benar untuk mayoritas perangkat modern.
+    if (!entry && asset.abi === "universal") {
+      entry = entries.find((item) => item?.abi === "arm64-v8a");
+    }
     const fileName = String(entry?.file || asset.fileName || "");
     if (!/^[A-Za-z0-9._-]{1,160}$/.test(fileName)) return null;
     const expectedPath = `/xykal/XyDesk-Remote/releases/download/${encodeURIComponent(tag)}/${encodeURIComponent(fileName)}`;
