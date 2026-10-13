@@ -263,7 +263,7 @@ internal fun FunHubCard(
                     }
                 }
                 val filteredJokes = authorFilter
-                    ?.let { who -> jokes.filter { (it.authorName ?: xy("Anonim", "Anonymous")) == who } }
+                    ?.let { who -> jokes.filter { (it.authorName ?: xyNow("Anonim", "Anonymous")) == who } }
                     ?: jokes
                 val visibleJokes = if (showAll || authorFilter != null) {
                     filteredJokes
@@ -747,7 +747,7 @@ private fun CommunityJokeItem(
             Text(
                 joke.authorName ?: xy("Anonim", "Anonymous"),
                 modifier = Modifier
-                    .clickable { onAuthorClick(joke.authorName ?: xy("Anonim", "Anonymous")) }
+                    .clickable { onAuthorClick(joke.authorName ?: xyNow("Anonim", "Anonymous")) }
                     .padding(vertical = 2.dp),
                 style = MaterialTheme.typography.labelSmall,
                 fontWeight = FontWeight.SemiBold,

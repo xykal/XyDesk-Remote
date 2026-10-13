@@ -348,10 +348,10 @@ private fun CloudSyncCard() {
                             try {
                                 val at = CloudSync.upload(context)
                                 stampPrefs.edit().putString("cloud_sync_last", at).apply()
-                                message = xy("Cadangan berhasil diunggah.", "Backup uploaded.")
+                                message = xyNow("Cadangan berhasil diunggah.", "Backup uploaded.")
                                 isError = false
                             } catch (error: Exception) {
-                                message = xy("Gagal mengunggah. Periksa jaringan.", "Upload failed. Check your connection.")
+                                message = xyNow("Gagal mengunggah. Periksa jaringan.", "Upload failed. Check your connection.")
                                 isError = true
                             } finally {
                                 busy = false
@@ -395,18 +395,18 @@ private fun CloudSyncCard() {
                     try {
                         val blob = CloudSync.download(context)
                         if (blob == null) {
-                            message = xy("Belum ada cadangan di cloud untuk akun ini.", "No cloud backup found for this account.")
+                            message = xyNow("Belum ada cadangan di cloud untuk akun ini.", "No cloud backup found for this account.")
                             isError = true
                         } else {
                             val count = CloudSync.restore(context, blob)
-                            message = xy(
+                            message = xyNow(
                                 "$count setelan dipulihkan. Buka ulang aplikasi agar semuanya terpakai.",
                                 "$count values restored. Reopen the app to apply everything.",
                             )
                             isError = false
                         }
                     } catch (error: Exception) {
-                        message = xy("Gagal memulihkan. Periksa jaringan.", "Restore failed. Check your connection.")
+                        message = xyNow("Gagal memulihkan. Periksa jaringan.", "Restore failed. Check your connection.")
                         isError = true
                     } finally {
                         busy = false
