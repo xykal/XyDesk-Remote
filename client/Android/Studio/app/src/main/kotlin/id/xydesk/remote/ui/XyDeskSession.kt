@@ -607,8 +607,16 @@ fun XyDeskSessionScreen(
             state is SessionState.Disconnecting
         XySessionRegistry.setActive(profile.id, active)
         if (active) manager.instance().takeIf { it != 0L }?.let(controller::setInstance)
-        if (state is SessionState.Connected) {
-            XySessionService.start(context, label)
+        if (active) {
+            // Notifikasi menyala sejak fase menyambung dan mengikuti status:
+            // connected / connecting / reconnecting (revisi 2026-10-13).
+            val status = when (state) {
+                is SessionState.Connected -> XySessionService.STATUS_CONNECTED
+                is SessionState.Connecting, is SessionState.Authenticating ->
+                    XySessionService.STATUS_CONNECTING
+                else -> XySessionService.STATUS_RECONNECTING
+            }
+            XySessionService.start(context, label, status = status)
         } else if (XySessionRegistry.activeCount() == 0) {
             XySessionService.stop(context)
         }

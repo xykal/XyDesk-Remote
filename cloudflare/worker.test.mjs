@@ -720,7 +720,8 @@ test("public joke routes reject bad clients and methods", async () => {
   assert.equal(wrongMethod.headers.get("allow"), "GET, HEAD, POST");
   const oversized = await worker.fetch(new Request("https://rdp.xydesk.my.id/api/jokes", {
     method: "POST", headers: { "content-type": "application/json" },
-    body: JSON.stringify({ client_id: "00000000-0000-4000-8000-000000000051", text: "x".repeat(3_000) }),
+    // Batas body naik ke 2,4MB (lampiran base64); 413 harus tetap muncul di atasnya.
+    body: JSON.stringify({ client_id: "00000000-0000-4000-8000-000000000051", text: "x".repeat(2_500_000) }),
   }), env);
   assert.equal(oversized.status, 413);
 });

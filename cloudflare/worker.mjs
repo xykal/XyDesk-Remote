@@ -49,7 +49,7 @@ const ACTIVE_SESSION_ID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-
 const ACTIVE_SESSION_PREFIX = "session:";
 const COMMUNITY_CLIENT_ID_RE = ACTIVE_SESSION_ID_RE;
 const COMMUNITY_JOKE_MAX_CHARS = 280;
-const COMMUNITY_ATTACHMENT_MAX_BYTES = 500_000; // foto/stiker webp/gif di feed
+const COMMUNITY_ATTACHMENT_MAX_BYTES = 1_500_000; // foto/stiker webp/gif di feed
 const COMMUNITY_AVATAR_MAX_BYTES = 200_000;
 const COMMUNITY_ATTACHMENT_MIMES = Object.freeze([
   "image/webp", "image/gif", "image/png", "image/jpeg",
@@ -1199,7 +1199,9 @@ export class CommunityJokes {
   }
 
   async submit(request) {
-    const parsed = await readCommunityJson(request);
+    // Lampiran base64 bisa ~2MB; dengan batas default 2KB postingan bergambar
+    // selalu ditolak 413 (akar bug "foto/stiker/GIF belum bisa").
+    const parsed = await readCommunityJson(request, 2_400_000);
     if (parsed.error) return parsed.error;
     const clientId = parsed.body?.client_id;
     if (!COMMUNITY_CLIENT_ID_RE.test(String(clientId || ""))) {
@@ -1291,7 +1293,7 @@ export class CommunityJokes {
   }
 
   async edit(request, jokeId) {
-    const parsed = await readCommunityJson(request, 1_600_000);
+    const parsed = await readCommunityJson(request, 2_400_000);
     if (parsed.error) return parsed.error;
     const clientId = parsed.body?.client_id;
     if (!COMMUNITY_CLIENT_ID_RE.test(String(clientId || ""))) {
@@ -1512,7 +1514,7 @@ export class CommunityJokes {
   }
 
   async setMe(request) {
-    const parsed = await readCommunityJson(request, 1_600_000);
+    const parsed = await readCommunityJson(request, 2_400_000);
     if (parsed.error) return parsed.error;
     const clientId = parsed.body?.client_id;
     if (!COMMUNITY_CLIENT_ID_RE.test(String(clientId || ""))) {

@@ -83,8 +83,8 @@ internal fun FunHubCard(onHide: (() -> Unit)? = null) {
                 val att = encodePickedFeedImage(context, uri)
                 if (att == null) {
                     formMessage = xyNow(
-                        "Gambar tidak didukung atau melebihi 500KB.",
-                        "Image unsupported or over 500KB.",
+                        "Gambar tidak didukung atau melebihi 1,5MB.",
+                        "Image unsupported or over 1.5MB.",
                     )
                     formMessageIsError = true
                 } else {
@@ -624,6 +624,7 @@ private fun CommunityJokeItem(
         joke.attachmentUrl?.let { url ->
             FeedBinaryImage(
                 path = url,
+                mime = joke.attachmentMime,
                 modifier = Modifier.fillMaxWidth().heightIn(max = 320.dp),
             )
         }
@@ -791,17 +792,24 @@ private fun CommunityJokeItem(
 
 private val COMMUNITY_LINK_PATTERN = Regex("(?:https?://|www\\.)", RegexOption.IGNORE_CASE)
 
-/** Kompres gambar pilihan jadi stiker webp/gif ≤500KB untuk lampiran feed. */
+/**
+ * Kompres gambar pilihan jadi stiker webp/gif ≤1,5MB untuk lampiran feed.
+ * Batas lama 500KB menolak kebanyakan foto/GIF HP mentah-mentah sehingga
+ * fitur terasa "belum bisa" (laporan pemilik 2026-10-13). GIF kini lolos apa
+ * adanya sampai 1,5MB; gambar lain dikompres bertahap (kualitas turun dulu,
+ * baru dimensi) sampai muat.
+ */
 private fun encodePickedFeedImage(context: android.content.Context, uri: android.net.Uri): FeedAttachment? {
+    val limit = 1_500_000
     return runCatching {
         val resolver = context.contentResolver
         val type = resolver.getType(uri).orEmpty()
         val raw = resolver.openInputStream(uri)?.use { it.readBytes() } ?: return null
-        if (type == "image/gif" && raw.size <= 500_000) return FeedAttachment("image/gif", raw)
+        if (type == "image/gif" && raw.size <= limit) return FeedAttachment("image/gif", raw)
         val src = android.graphics.BitmapFactory.decodeByteArray(raw, 0, raw.size) ?: return null
-        val maxSide = 720
+        val maxSide = 1080
         val scale = minOf(1f, maxSide / maxOf(src.width, src.height).toFloat())
-        val out = if (scale < 1f) {
+        var out = if (scale < 1f) {
             android.graphics.Bitmap.createScaledBitmap(
                 src,
                 (src.width * scale).toInt().coerceAtLeast(1),
@@ -811,39 +819,89 @@ private fun encodePickedFeedImage(context: android.content.Context, uri: android
         } else {
             src
         }
-        val stream = java.io.ByteArrayOutputStream()
         val fmt = if (android.os.Build.VERSION.SDK_INT >= 30) {
             android.graphics.Bitmap.CompressFormat.WEBP_LOSSY
         } else {
             @Suppress("DEPRECATION")
             android.graphics.Bitmap.CompressFormat.WEBP
         }
-        out.compress(fmt, 82, stream)
-        val bytes = stream.toByteArray()
-        if (bytes.isEmpty() || bytes.size > 500_000) null else FeedAttachment("image/webp", bytes)
+        var bytes = ByteArray(0)
+        var quality = 85
+        var guard = 0
+        while (guard++ < 8) {
+            val stream = java.io.ByteArrayOutputStream()
+            out.compress(fmt, quality, stream)
+            bytes = stream.toByteArray()
+            if (bytes.size <= limit) break
+            if (quality > 45) {
+                quality -= 20
+            } else {
+                out = android.graphics.Bitmap.createScaledBitmap(
+                    out,
+                    (out.width * 0.7f).toInt().coerceAtLeast(1),
+                    (out.height * 0.7f).toInt().coerceAtLeast(1),
+                    true,
+                )
+            }
+        }
+        if (bytes.isEmpty() || bytes.size > limit) null else FeedAttachment("image/webp", bytes)
     }.getOrNull()
 }
 
 /** Gambar biner feed (lampiran postingan / avatar) — dimuat async dari worker. */
 @Composable
-private fun FeedBinaryImage(path: String, modifier: Modifier = Modifier, round: Boolean = false) {
+private fun FeedBinaryImage(
+    path: String,
+    modifier: Modifier = Modifier,
+    round: Boolean = false,
+    mime: String? = null,
+) {
     val context = androidx.compose.ui.platform.LocalContext.current
-    var bitmap by remember(path) { mutableStateOf<android.graphics.Bitmap?>(null) }
+    var bytes by remember(path) { mutableStateOf<ByteArray?>(null) }
     androidx.compose.runtime.LaunchedEffect(path) {
-        bitmap = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
-            runCatching {
-                val bytes = CommunityJokesApi(context).fetchBinary(path)
-                android.graphics.BitmapFactory.decodeByteArray(bytes, 0, bytes.size)
-            }.getOrNull()
+        bytes = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+            runCatching { CommunityJokesApi(context).fetchBinary(path) }.getOrNull()
         }
     }
-    bitmap?.let { bmp ->
-        Image(
-            bitmap = bmp.asImageBitmap(),
-            contentDescription = null,
-            modifier = modifier.clip(if (round) CircleShape else RoundedCornerShape(12.dp)),
-            contentScale = if (round) ContentScale.Crop else ContentScale.FillWidth,
+    val data = bytes
+    val shape = if (round) CircleShape else RoundedCornerShape(12.dp)
+    // GIF dianimasikan lewat AnimatedImageDrawable (API 28+); di bawah itu,
+    // dan untuk webp/foto, tetap bitmap statis seperti sebelumnya.
+    if (mime == "image/gif" &&
+        android.os.Build.VERSION.SDK_INT >= 28 &&
+        data != null && data.isNotEmpty()
+    ) {
+        androidx.compose.ui.viewinterop.AndroidView(
+            factory = { ctx ->
+                android.widget.ImageView(ctx).apply {
+                    scaleType = android.widget.ImageView.ScaleType.FIT_CENTER
+                    adjustViewBounds = true
+                }
+            },
+            update = { view ->
+                runCatching {
+                    val source = android.graphics.ImageDecoder.createSource(
+                        java.nio.ByteBuffer.wrap(data),
+                    )
+                    val drawable = android.graphics.ImageDecoder.decodeDrawable(source)
+                    view.setImageDrawable(drawable)
+                    (drawable as? android.graphics.drawable.AnimatedImageDrawable)?.start()
+                }
+            },
+            modifier = modifier.clip(shape),
         )
+    } else {
+        val bmp = remember(data) {
+            data?.let { android.graphics.BitmapFactory.decodeByteArray(it, 0, it.size) }
+        }
+        bmp?.let {
+            Image(
+                bitmap = it.asImageBitmap(),
+                contentDescription = null,
+                modifier = modifier.clip(shape),
+                contentScale = if (round) ContentScale.Crop else ContentScale.FillWidth,
+            )
+        }
     }
 }
 

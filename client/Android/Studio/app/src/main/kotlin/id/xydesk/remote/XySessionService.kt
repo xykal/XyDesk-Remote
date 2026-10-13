@@ -39,6 +39,11 @@ class XySessionService : Service() {
     /** Kapan sesi dimulai; dipakai kronometer di notifikasi. */
     private var startedAt = 0L
 
+    // Status terakhir (connected/connecting/reconnecting) — notifikasi ikut
+    // merefleksikan keadaan sesi, bukan cuma "aktif" statis (revisi 2026-10-13).
+    private var lastLabel: String? = null
+    private var lastStatus: String = STATUS_CONNECTED
+
     override fun onCreate() {
         super.onCreate()
         startedAt = System.currentTimeMillis()
@@ -46,6 +51,8 @@ class XySessionService : Service() {
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
+        intent?.getStringExtra(EXTRA_LABEL)?.let { lastLabel = it }
+        intent?.getStringExtra(EXTRA_STATUS)?.let { lastStatus = it }
         when (intent?.action) {
             ACTION_STOP -> {
                 if (XySessionRegistry.count() == 0) stopSelf()
@@ -115,14 +122,20 @@ class XySessionService : Service() {
             Intent(this, XySessionService::class.java).setAction(ACTION_HOME),
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
         )
-        val host = label ?: "XyDesk Remote"
+        val host = label ?: lastLabel ?: "XyDesk Remote"
         val prefs = AppPrefs(this)
         val builder = NotificationCompat.Builder(this, CHANNEL_ID)
             // Ikon app sendiri (mark monokrom) — dulu pakai
             // android.R.drawable.stat_sys_upload_done, ikon sistem panah
             // upload yang tidak ada hubungannya dengan remote desktop.
             .setSmallIcon(id.xydesk.remote.R.drawable.ic_launcher_monochrome)
-            .setContentTitle(xyNow("Sesi remote aktif", "Remote session active"))
+            .setContentTitle(
+                when (lastStatus) {
+                    STATUS_CONNECTING -> xyNow("Menyambungkan…", "Connecting…")
+                    STATUS_RECONNECTING -> xyNow("Menyambungkan ulang…", "Reconnecting…")
+                    else -> xyNow("Sesi remote aktif", "Remote session active")
+                },
+            )
             .setContentText(host)
             .setSubText(versionLabel())
             .setContentIntent(open)
@@ -153,11 +166,26 @@ class XySessionService : Service() {
             .setShowWhen(true)
             .setPriority(NotificationCompat.PRIORITY_LOW)
             .setCategory(NotificationCompat.CATEGORY_SERVICE)
-            .setStyle(NotificationCompat.BigTextStyle().bigText(host))
+            .setStyle(
+                NotificationCompat.BigTextStyle().bigText(
+                    when (lastStatus) {
+                        STATUS_CONNECTING -> xyNow("Menghubungkan ke ", "Connecting to ") + host + "…"
+                        STATUS_RECONNECTING -> xyNow("Koneksi terputus — mencoba menyambung ulang ke ", "Connection lost — retrying ") + host + "…"
+                        else -> xyNow("Terhubung ke ", "Connected to ") + host
+                    },
+                ),
+            )
 
         // Tampilan penuh warna: hanya berlaku untuk foreground service, dan
         // service ini memang foreground. Tanpa ini notifikasi memakai kartu
         // putih/abu bawaan Android yang tidak mirip app sama sekali.
+        // Progress tak tentu selama menyambung/menyambung ulang; hilang saat
+        // tersambung. setOnlyAlertOnce menjaga pembaruan ini tanpa bunyi.
+        if (lastStatus == STATUS_CONNECTED) {
+            builder.setProgress(0, 0, false)
+        } else {
+            builder.setProgress(0, 0, true)
+        }
         builder.setColor(NOTIF_ACCENT)
             .setColorized(true)
 
@@ -209,11 +237,21 @@ class XySessionService : Service() {
         const val ACTION_PING = "id.xydesk.remote.action.PING_SESSION"
         const val ACTION_HOME = "id.xydesk.remote.action.GO_HOME"
         private const val EXTRA_LABEL = "label"
+        private const val EXTRA_STATUS = "status"
+        const val STATUS_CONNECTED = "connected"
+        const val STATUS_CONNECTING = "connecting"
+        const val STATUS_RECONNECTING = "reconnecting"
 
         /** Mulai/perbarui service. Aman dipanggil berulang. */
-        fun start(context: Context, label: String?, ping: Boolean = false) {
+        fun start(
+            context: Context,
+            label: String?,
+            ping: Boolean = false,
+            status: String = STATUS_CONNECTED,
+        ) {
             val intent = Intent(context, XySessionService::class.java).apply {
                 putExtra(EXTRA_LABEL, label)
+                putExtra(EXTRA_STATUS, status)
                 if (ping) action = ACTION_PING
             }
             runCatching {
