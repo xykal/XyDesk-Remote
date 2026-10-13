@@ -1,6 +1,12 @@
 package id.xydesk.remote.ui
 
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.foundation.gestures.rememberTransformableState
+import androidx.compose.foundation.gestures.transformable
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -48,7 +54,11 @@ private const val INITIAL_JOKES_VISIBLE = 3
 
 /** Flat home feed for anonymous, shared community jokes. */
 @Composable
-internal fun FunHubCard(onHide: (() -> Unit)? = null) {
+internal fun FunHubCard(
+    onHide: (() -> Unit)? = null,
+    refreshSignal: Int = 0,
+    onBusyChange: ((Boolean) -> Unit)? = null,
+) {
     val context = LocalContext.current
     val api = remember(context) { CommunityJokesApi(context) }
     val scope = rememberCoroutineScope()
@@ -59,6 +69,8 @@ internal fun FunHubCard(onHide: (() -> Unit)? = null) {
     var jokes by remember(api) { mutableStateOf(api.cachedFeed()) }
     var draft by remember { mutableStateOf("") }
     var refreshing by remember { mutableStateOf(false) }
+    // Lampiran yang dibuka fullscreen (url ke mime) — pemutar zoom sederhana.
+    var fullscreenImage by remember { mutableStateOf<Pair<String, String?>?>(null) }
     var refreshKey by remember { mutableIntStateOf(0) }
     var submitting by remember { mutableStateOf(false) }
     var activeReactionId by remember { mutableStateOf<String?>(null) }
@@ -126,8 +138,10 @@ internal fun FunHubCard(onHide: (() -> Unit)? = null) {
         }
     }
 
-    LaunchedEffect(api, refreshKey) {
-        refreshing = jokes.isEmpty()
+    LaunchedEffect(refreshing) { onBusyChange?.invoke(refreshing) }
+
+    LaunchedEffect(api, refreshKey, refreshSignal) {
+        refreshing = jokes.isEmpty() || refreshSignal > 0
         feedError = null
         try {
             val fresh = api.latest()
@@ -226,6 +240,7 @@ internal fun FunHubCard(onHide: (() -> Unit)? = null) {
                     visibleJokes.forEach { joke ->
                         CommunityJokeItem(
                             joke = joke,
+                            onImageClick = { url, mime -> fullscreenImage = url to mime },
                             isReactionBusy = activeReactionId == joke.id,
                             alreadyReported = joke.id in reportedIds,
                             onReact = { emoji ->
@@ -283,6 +298,17 @@ internal fun FunHubCard(onHide: (() -> Unit)? = null) {
                         )
                     }
                 }
+            }
+        }
+
+        fullscreenImage?.let { (url, mime) ->
+            androidx.compose.ui.window.Dialog(
+                onDismissRequest = { fullscreenImage = null },
+                properties = androidx.compose.ui.window.DialogProperties(
+                    usePlatformDefaultWidth = false,
+                ),
+            ) {
+                FeedImageViewer(url = url, mime = mime, onDismiss = { fullscreenImage = null })
             }
         }
 
@@ -579,6 +605,7 @@ private fun CommunityJokeInput(
 @Composable
 private fun CommunityJokeItem(
     joke: CommunityJoke,
+    onImageClick: (String, String?) -> Unit,
     isReactionBusy: Boolean,
     alreadyReported: Boolean,
     onReact: (String) -> Unit,
@@ -625,7 +652,10 @@ private fun CommunityJokeItem(
             FeedBinaryImage(
                 path = url,
                 mime = joke.attachmentMime,
-                modifier = Modifier.fillMaxWidth().heightIn(max = 320.dp),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .heightIn(max = 320.dp)
+                    .clickable { onImageClick(url, joke.attachmentMime) },
             )
         }
 
@@ -855,6 +885,7 @@ private fun FeedBinaryImage(
     modifier: Modifier = Modifier,
     round: Boolean = false,
     mime: String? = null,
+    fit: Boolean = false,
 ) {
     val context = androidx.compose.ui.platform.LocalContext.current
     var bytes by remember(path) { mutableStateOf<ByteArray?>(null) }
@@ -899,9 +930,70 @@ private fun FeedBinaryImage(
                 bitmap = it.asImageBitmap(),
                 contentDescription = null,
                 modifier = modifier.clip(shape),
-                contentScale = if (round) ContentScale.Crop else ContentScale.FillWidth,
+                contentScale = when {
+                    round -> ContentScale.Crop
+                    fit -> ContentScale.Fit
+                    else -> ContentScale.FillWidth
+                },
             )
         }
+    }
+}
+
+/**
+ * Penampil lampiran feed fullscreen: cubit untuk zoom (1x–5x), ketuk dua kali
+ * untuk zoom/reset, ketuk sekali untuk menutup. Dialog dengan
+ * `usePlatformDefaultWidth = false` membuatnya benar-benar seluas layar,
+ * bukan sekadar overlay di dalam kartu feed.
+ */
+@Composable
+private fun FeedImageViewer(url: String, mime: String?, onDismiss: () -> Unit) {
+    var scale by remember { mutableStateOf(1f) }
+    var offset by remember { mutableStateOf(androidx.compose.ui.geometry.Offset.Zero) }
+    val transformState = androidx.compose.foundation.gestures.rememberTransformableState { zoomChange, panChange, _ ->
+        scale = (scale * zoomChange).coerceIn(1f, 5f)
+        offset = if (scale > 1f) offset + panChange else androidx.compose.ui.geometry.Offset.Zero
+    }
+    Box(
+        Modifier
+            .fillMaxSize()
+            .background(androidx.compose.ui.graphics.Color.Black)
+            .pointerInput(Unit) {
+                androidx.compose.foundation.gestures.detectTapGestures(
+                    onTap = { onDismiss() },
+                    onDoubleTap = {
+                        if (scale > 1f) {
+                            scale = 1f
+                            offset = androidx.compose.ui.geometry.Offset.Zero
+                        } else {
+                            scale = 2.5f
+                        }
+                    },
+                )
+            },
+    ) {
+        FeedBinaryImage(
+            path = url,
+            mime = mime,
+            fit = true,
+            modifier = Modifier
+                .fillMaxSize()
+                .graphicsLayer {
+                    scaleX = scale
+                    scaleY = scale
+                    translationX = offset.x
+                    translationY = offset.y
+                }
+                .transformable(transformState),
+        )
+        Text(
+            xy("Ketuk untuk tutup · ketuk dua kali / cubit untuk zoom", "Tap to close · double-tap / pinch to zoom"),
+            modifier = Modifier
+                .align(Alignment.BottomCenter)
+                .padding(bottom = 26.dp),
+            style = MaterialTheme.typography.labelSmall,
+            color = androidx.compose.ui.graphics.Color.White.copy(alpha = 0.72f),
+        )
     }
 }
 
