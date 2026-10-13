@@ -1,5 +1,6 @@
 package id.xydesk.remote.ui
 
+import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.gestures.rememberTransformableState
@@ -952,7 +953,7 @@ private fun FeedBinaryImage(
 private fun FeedImageViewer(url: String, mime: String?, onDismiss: () -> Unit) {
     var scale by remember { mutableStateOf(1f) }
     var offset by remember { mutableStateOf(androidx.compose.ui.geometry.Offset.Zero) }
-    val transformState = androidx.compose.foundation.gestures.rememberTransformableState { zoomChange, panChange, _ ->
+    val transformState = rememberTransformableState { zoomChange, panChange, _ ->
         scale = (scale * zoomChange).coerceIn(1f, 5f)
         offset = if (scale > 1f) offset + panChange else androidx.compose.ui.geometry.Offset.Zero
     }
@@ -961,7 +962,7 @@ private fun FeedImageViewer(url: String, mime: String?, onDismiss: () -> Unit) {
             .fillMaxSize()
             .background(androidx.compose.ui.graphics.Color.Black)
             .pointerInput(Unit) {
-                androidx.compose.foundation.gestures.detectTapGestures(
+                detectTapGestures(
                     onTap = { onDismiss() },
                     onDoubleTap = {
                         if (scale > 1f) {
