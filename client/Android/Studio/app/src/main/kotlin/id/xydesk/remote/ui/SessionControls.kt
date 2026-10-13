@@ -1910,7 +1910,7 @@ private fun ScreenTab(
     ) {
             XyToggleRow(
                 title = xy("Status telemetri live (Update UI, Latency, Network)", "Live telemetry status (UI updates, latency, network)"),
-                subtitle = xy("FPS adalah laju penyegaran tampilan app (frame per detik yang digambar di HP). Tampilkan bersama latency, resolusi, codec, relay, dan jaringan.", "FPS is the app display refresh rate (frames per second drawn on the phone). Show it with latency, resolution, codec, relay, and network."),
+                subtitle = xy("FPS = frame per detik di layar HP, tampil bersama latency & resolusi.", "FPS is the app display refresh rate (frames per second drawn on the phone). Show it with latency, resolution, codec, relay, and network."),
                 checked = showTelemetryPill,
                 onCheckedChange = onShowTelemetryPillChange,
             )
@@ -2126,8 +2126,8 @@ private fun InputTab(
         val reconnPrefs = remember { SessionPrefs(reconnContext) }
         PanelHint(
             xy(
-                "Setelah koneksi putus, XyDesk terus mencoba menyambung ulang selama jendela ini — termasuk saat app ditinggal di latar. Lewat dari jendela, retry berhenti sendiri dan layar putus muncul.",
-                "After a disconnect, XyDesk keeps retrying for this window — including while the app is backgrounded. Past the window, retries stop and the disconnect screen appears.",
+                "XyDesk mencoba sambung ulang selama durasi ini, termasuk di latar. Setelah lewat, retry berhenti.",
+                "XyDesk keeps retrying for this window, even in background. After it ends, retries stop.",
             ),
         )
         var windowHours by remember { mutableStateOf(reconnPrefs.autoReconnectHours) }
@@ -2456,8 +2456,8 @@ private fun SessionTab(
     section("perekaman-lokal-pc-ke-hp",xy("Perekaman lokal · PC ke HP", "Local recording · PC to phone"), advanced = true) {
             PanelHint(
                 xy(
-                    "Desktop PC beserta audionya direkam ke satu MP4 di Movies/XyDesk. Layar HP dan kontrol tidak pernah ikut terekam. Kalau penggabungan gagal, video dan audio disimpan sebagai dua file. Perekaman diblokir saat FLAG_SECURE aktif.",
-                    "The PC desktop and its audio are recorded into a single MP4 in Movies/XyDesk. The phone screen and controls are never captured. If merging fails, video and audio are saved as two files. Recording is blocked while FLAG_SECURE is on.",
+                    "Desktop PC + audio direkam ke MP4 di Movies/XyDesk. Layar HP tidak pernah ikut terekam.",
+                    "PC desktop + audio are recorded to one MP4 in Movies/XyDesk. Your phone screen is never captured.",
                 ),
             )
             XyPillButton(

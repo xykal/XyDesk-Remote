@@ -146,6 +146,7 @@ internal fun FunHubCard(
     LaunchedEffect(refreshing) { onBusyChange?.invoke(refreshing) }
 
     LaunchedEffect(api, refreshKey, refreshSignal) {
+        feedImageCache.evictAll()
         refreshing = jokes.isEmpty() || refreshSignal > 0
         feedError = null
         try {
@@ -922,6 +923,15 @@ private fun encodePickedFeedImage(context: android.content.Context, uri: android
 
 /** Gambar biner feed (lampiran postingan / avatar) — dimuat async dari worker. */
 @Composable
+/**
+ * Cache byte lampiran/avatar feed di memori (maks 4MB) — tanpa ini setiap
+ * scroll balik mengunduh ulang gambar yang sama (boros kuota & lambat).
+ * Dikosongkan tiap feed dimuat ulang agar lampiran yang diedit ikut segar.
+ */
+private val feedImageCache = object : android.util.LruCache<String, ByteArray>(4 * 1024 * 1024) {
+    override fun sizeOf(key: String, value: ByteArray): Int = value.size
+}
+
 private fun FeedBinaryImage(
     path: String,
     modifier: Modifier = Modifier,
@@ -932,9 +942,11 @@ private fun FeedBinaryImage(
     val context = androidx.compose.ui.platform.LocalContext.current
     var bytes by remember(path) { mutableStateOf<ByteArray?>(null) }
     androidx.compose.runtime.LaunchedEffect(path) {
-        bytes = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
-            runCatching { CommunityJokesApi(context).fetchBinary(path) }.getOrNull()
-        }
+        bytes = feedImageCache.get(path)
+            ?: kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+                runCatching { CommunityJokesApi(context).fetchBinary(path) }.getOrNull()
+                    ?.also { feedImageCache.put(path, it) }
+            }
     }
     val data = bytes
     val shape = if (round) CircleShape else RoundedCornerShape(12.dp)

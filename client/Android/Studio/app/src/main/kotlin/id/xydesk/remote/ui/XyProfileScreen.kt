@@ -325,8 +325,8 @@ private fun CloudSyncCard() {
             )
             Text(
                 xy(
-                    "Cadangkan setelan, tata letak, dan kontrol kustom ke cloud. Kata sandi, sertifikat, dan token TIDAK pernah diunggah. Setelah pasang ulang: masukkan kode pemulihan, lalu ketuk \"Pulihkan dari Cloud\".",
-                    "Back up settings, layouts, and custom controls to the cloud. Passwords, certificates, and tokens are NEVER uploaded. After reinstalling: enter your recovery code, then tap \"Restore from cloud\".",
+                    "Setelan & kontrol dicadangkan tanpa kata sandi/token. Habis pasang ulang? Pakai kode pemulihan lalu ketuk \"Pulihkan dari Cloud\".",
+                    "Settings & controls backed up without passwords/tokens. After reinstalling, enter your recovery code and tap \"Restore from cloud\".",
                 ),
                 style = MaterialTheme.typography.labelSmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
