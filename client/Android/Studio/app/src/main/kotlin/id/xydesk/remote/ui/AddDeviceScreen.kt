@@ -331,7 +331,7 @@ fun AddDeviceScreen(
             // ID global tidak berisi alamat — selesaikan dulu lewat relay.
             relayResolving = true
             scope.launch {
-                val relay = runCatching { CommunityJokesApi.pcRelayResolve(host.trim()) }.getOrNull()
+                val relay = runCatching { CommunityJokesApi(context).pcRelayResolve(host.trim()) }.getOrNull()
                 relayResolving = false
                 val arr = relay?.optJSONArray("candidates")
                 if (arr == null || arr.length() == 0) {
