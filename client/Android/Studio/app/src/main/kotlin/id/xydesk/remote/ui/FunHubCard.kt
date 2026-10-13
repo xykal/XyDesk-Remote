@@ -921,8 +921,6 @@ private fun encodePickedFeedImage(context: android.content.Context, uri: android
     }.getOrNull()
 }
 
-/** Gambar biner feed (lampiran postingan / avatar) — dimuat async dari worker. */
-@Composable
 /**
  * Cache byte lampiran/avatar feed di memori (maks 4MB) — tanpa ini setiap
  * scroll balik mengunduh ulang gambar yang sama (boros kuota & lambat).
@@ -932,6 +930,8 @@ private val feedImageCache = object : android.util.LruCache<String, ByteArray>(4
     override fun sizeOf(key: String, value: ByteArray): Int = value.size
 }
 
+/** Gambar biner feed (lampiran postingan / avatar) — dimuat async dari worker. */
+@Composable
 private fun FeedBinaryImage(
     path: String,
     modifier: Modifier = Modifier,
