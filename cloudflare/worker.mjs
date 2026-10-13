@@ -1686,6 +1686,133 @@ async function activeSessionsResponse(request, env) {
 // pasang ulang + restore = setelan kembali.
 const ACCOUNT_SETTINGS_MAX_BYTES = 262_144;
 
+// ---------------------------------------------------------------------------
+// Relay direktori ID PC global (Tahap ② "Koneksi PC nyata"):
+//  - Host agent POST heartbeat tiap 60 detik: {id: "XY"+8 hex, hostname,
+//    rdp_port, tailnet?}. Rekaman KV berumur 300 detik (TTL) sehingga PC yang
+//    mati otomatis hilang dari direktori.
+//  - HP GET ?id=XY… → kandidat alamat (IP publik hasil CF-Connecting-IP +
+//    tailnet opsional). IP privat/CGNAT tidak ditawarkan sebagai kandidat.
+//  - Resolve dibatasi 30/menit per IP sumber: ID hanya 32-bit, tanpa batas
+//    laju seluruh ruang ID bisa dipetakan penyerang.
+//  - Catatan jujur: KV eventually-consistent — registrasi PERTAMA sebuah PC
+//    bisa butuh beberapa detik sampai terlihat di semua edge; heartbeat
+//    berikutnya membuat rekaman tersebar normal.
+// ---------------------------------------------------------------------------
+const PC_RELAY_ID_RE = /^XY[0-9A-F]{8}$/;
+const PC_RELAY_TTL_SECONDS = 300;
+const PC_RELAY_RESOLVE_LIMIT_PER_MINUTE = 30;
+
+function isPrivateAddress(ip) {
+  if (typeof ip !== "string") return true;
+  if (ip.includes(":")) return false; // IPv4 saja yang difilter di sini
+  const parts = ip.split(".").map((p) => Number(p));
+  if (parts.length !== 4 || parts.some((p) => !Number.isInteger(p) || p < 0 || p > 255)) return true;
+  const [a, b] = parts;
+  return a === 10 || a === 127 || (a === 192 && b === 168) || (a === 172 && b >= 16 && b <= 31) ||
+    (a === 169 && b === 254) || (a === 100 && b >= 64 && b <= 127);
+}
+
+async function pcRelayResponse(request, env) {
+  const kv = env.UNIQUE_DOWNLOADS;
+  if (!kv) return jsonResponse({ status: "unavailable" }, 503, request.method);
+  const url = new URL(request.url);
+
+  if (request.method === "GET" || request.method === "HEAD") {
+    const id = (url.searchParams.get("id") || "").toUpperCase();
+    if (!PC_RELAY_ID_RE.test(id)) return jsonResponse({ status: "invalid_id" }, 400, request.method);
+    const ip = String(request.headers.get("cf-connecting-ip") || "unknown");
+    const ipHash = await pcSignalSecretHash(`xydesk-pc-relay-ip:${ip}`);
+    const minute = Math.floor(Date.now() / 60000);
+    const rlKey = `xy-pc-relay-rl:${ipHash}:${minute}`;
+    const seen = Number(await kv.get(rlKey)) || 0;
+    if (seen >= PC_RELAY_RESOLVE_LIMIT_PER_MINUTE) {
+      return jsonResponse({ status: "rate_limited" }, 429, request.method);
+    }
+    await kv.put(rlKey, String(seen + 1), { expirationTtl: 120 });
+    // cacheTtl kecil: KV default meng-cache hasil (termasuk miss) 60 detik di
+    // edge; registrasi perdana PC harus terlihat secepat mungkin oleh HP.
+    const raw = await kv.get(`xy-pc-relay:${id}`, { cacheTtl: 10 });
+    if (raw === null) return jsonResponse({ status: "not_found" }, 404, request.method);
+    let rec;
+    try {
+      rec = JSON.parse(raw);
+    } catch {
+      return jsonResponse({ status: "not_found" }, 404, request.method);
+    }
+    const candidates = [];
+    if (rec.public_ip && !isPrivateAddress(rec.public_ip)) {
+      candidates.push({ host: rec.public_ip, port: rec.rdp_port, kind: "public" });
+    }
+    if (rec.tailnet) candidates.push({ host: rec.tailnet, port: rec.rdp_port, kind: "tailnet" });
+    return jsonResponse(
+      { status: "ok", id, hostname: rec.hostname || "", candidates, updated_at: rec.updated_at },
+      200,
+      request.method,
+      { "cache-control": "no-store" },
+    );
+  }
+
+  if (request.method === "POST") {
+    if (!isJsonContentType(request.headers.get("content-type"))) {
+      return jsonResponse({ status: "invalid_content_type" }, 415, request.method);
+    }
+    const bounded = await readRequestTextLimited(request, 1024);
+    if (bounded.tooLarge) return jsonResponse({ status: "payload_too_large" }, 413, request.method);
+    if (bounded.invalid) return jsonResponse({ status: "invalid_request" }, 400, request.method);
+    let body;
+    try {
+      body = JSON.parse(bounded.text);
+    } catch {
+      return jsonResponse({ status: "invalid_json" }, 400, request.method);
+    }
+    const id = String(body?.id || "").toUpperCase();
+    if (!PC_RELAY_ID_RE.test(id)) return jsonResponse({ status: "invalid_id" }, 400, request.method);
+    const hostname = typeof body?.hostname === "string" ? body.hostname.slice(0, 128) : "";
+    const rdpPort = Number(body?.rdp_port);
+    if (!Number.isInteger(rdpPort) || rdpPort < 1 || rdpPort > 65535) {
+      return jsonResponse({ status: "invalid_port" }, 400, request.method);
+    }
+    const tailnet = typeof body?.tailnet === "string" ? body.tailnet.trim().toLowerCase() : "";
+    if (tailnet.length > 253 || !/^[a-z0-9.-]*$/.test(tailnet)) {
+      return jsonResponse({ status: "invalid_tailnet" }, 400, request.method);
+    }
+    const key = `xy-pc-relay:${id}`;
+    const prevRaw = await kv.get(key);
+    if (prevRaw !== null) {
+      try {
+        const prev = JSON.parse(prevRaw);
+        // Hemat kuota tulis KV: heartbeat < 20 detik dari yang terakhir di-skip.
+        if (Date.now() - Date.parse(prev.updated_at || "") < 20000) {
+          return jsonResponse(
+            { status: "ok", updated_at: prev.updated_at, throttled: true },
+            200,
+            request.method,
+            { "cache-control": "no-store" },
+          );
+        }
+      } catch {
+        // rekaman rusak — timpa saja
+      }
+    }
+    const updatedAt = new Date().toISOString();
+    await kv.put(
+      key,
+      JSON.stringify({
+        hostname,
+        rdp_port: rdpPort,
+        public_ip: String(request.headers.get("cf-connecting-ip") || ""),
+        tailnet: tailnet || null,
+        updated_at: updatedAt,
+      }),
+      { expirationTtl: PC_RELAY_TTL_SECONDS },
+    );
+    return jsonResponse({ status: "ok", updated_at: updatedAt }, 200, request.method, { "cache-control": "no-store" });
+  }
+
+  return methodNotAllowed("GET, POST");
+}
+
 async function accountSettingsResponse(request, env) {
   const kv = env.UNIQUE_DOWNLOADS;
   if (!kv) return jsonResponse({ status: "unavailable" }, 503, request.method);
@@ -1936,6 +2063,9 @@ export default {
 
     if (path === "/api/pc/rooms" || path.startsWith("/api/pc/rooms/")) {
       return pcSignalResponse(request, env);
+    }
+    if (path === "/api/pc/relay") {
+      return pcRelayResponse(request, env);
     }
     if (path === "/api/session") {
       if (request.method !== "POST") return methodNotAllowed("POST");

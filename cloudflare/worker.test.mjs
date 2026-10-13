@@ -902,6 +902,103 @@ test("cloud sync setelan: PUT lalu GET per ID akun, tolak ID/blob tidak valid", 
   assert.equal(badBlob.status, 400);
 });
 
+test("relay ID PC: heartbeat, resolve kandidat, throttle, filter IP privat, rate-limit", async () => {
+  const kv = mockKv();
+  const env = envFor({}, { UNIQUE_DOWNLOADS: kv });
+  const id = "XY1A2B3C4D";
+
+  const missing = await worker.fetch(
+    new Request(`https://api.xydeskremote.biz.id/api/pc/relay?id=${id}`, {
+      headers: { "cf-connecting-ip": "203.0.113.9" },
+    }),
+    env,
+  );
+  assert.equal(missing.status, 404);
+
+  const reg = await worker.fetch(
+    new Request("https://api.xydeskremote.biz.id/api/pc/relay", {
+      method: "POST",
+      headers: { "content-type": "application/json", "cf-connecting-ip": "198.51.100.7" },
+      body: JSON.stringify({ id, hostname: "PC-GAMING", rdp_port: 3389, tailnet: "pc-gaming.tailnet.ts.net" }),
+    }),
+    env,
+  );
+  assert.equal(reg.status, 200);
+
+  const res = await worker.fetch(
+    new Request(`https://api.xydeskremote.biz.id/api/pc/relay?id=${id}`, {
+      headers: { "cf-connecting-ip": "203.0.113.9" },
+    }),
+    env,
+  );
+  assert.equal(res.status, 200);
+  const body = await res.json();
+  assert.equal(body.hostname, "PC-GAMING");
+  assert.equal(body.candidates.length, 2);
+  assert.equal(body.candidates[0].host, "198.51.100.7");
+  assert.equal(body.candidates[0].kind, "public");
+  assert.equal(body.candidates[1].kind, "tailnet");
+
+  const reg2 = await worker.fetch(
+    new Request("https://api.xydeskremote.biz.id/api/pc/relay", {
+      method: "POST",
+      headers: { "content-type": "application/json", "cf-connecting-ip": "198.51.100.7" },
+      body: JSON.stringify({ id, hostname: "PC-GAMING", rdp_port: 3389 }),
+    }),
+    env,
+  );
+  assert.equal(reg2.status, 200);
+  assert.equal((await reg2.json()).throttled, true);
+
+  const badId = await worker.fetch(
+    new Request("https://api.xydeskremote.biz.id/api/pc/relay?id=123-456-7890"),
+    env,
+  );
+  assert.equal(badId.status, 400);
+
+  const badPort = await worker.fetch(
+    new Request("https://api.xydeskremote.biz.id/api/pc/relay", {
+      method: "POST",
+      headers: { "content-type": "application/json", "cf-connecting-ip": "198.51.100.7" },
+      body: JSON.stringify({ id: "XY00000002", hostname: "h", rdp_port: 70000 }),
+    }),
+    env,
+  );
+  assert.equal(badPort.status, 400);
+
+  const kvPriv = mockKv();
+  const envPriv = envFor({}, { UNIQUE_DOWNLOADS: kvPriv });
+  await worker.fetch(
+    new Request("https://api.xydeskremote.biz.id/api/pc/relay", {
+      method: "POST",
+      headers: { "content-type": "application/json", "cf-connecting-ip": "192.168.1.50" },
+      body: JSON.stringify({ id: "XY00000001", hostname: "h", rdp_port: 3390 }),
+    }),
+    envPriv,
+  );
+  const resPriv = await worker.fetch(
+    new Request("https://api.xydeskremote.biz.id/api/pc/relay?id=XY00000001", {
+      headers: { "cf-connecting-ip": "203.0.113.9" },
+    }),
+    envPriv,
+  );
+  assert.equal(resPriv.status, 200);
+  assert.equal((await resPriv.json()).candidates.length, 0);
+
+  const kvRl = mockKv();
+  const envRl = envFor({}, { UNIQUE_DOWNLOADS: kvRl });
+  let last;
+  for (let i = 0; i < 31; i++) {
+    last = await worker.fetch(
+      new Request("https://api.xydeskremote.biz.id/api/pc/relay?id=XY1A2B3C4D", {
+        headers: { "cf-connecting-ip": "203.0.113.9" },
+      }),
+      envRl,
+    );
+  }
+  assert.equal(last.status, 429);
+});
+
 test("alias universal.apk mengikuti rilis aktif yang memuat XyDesk-RemoteUniversal.apk", async () => {
   const originalFetch = globalThis.fetch;
   globalThis.fetch = async (url) => {

@@ -78,6 +78,17 @@ fun encodeIpv4ToPcId(ip: String): String? {
 }
 
 /**
+ * ID PC global format relay: `XY` + 8 heksadesimal (hash MachineGuid PC).
+ * Berbeda dari ID 10 digit (encode IPv4 LAN): ID global TIDAK berisi alamat —
+ * diselesaikan lewat direktori relay worker (lihat /api/pc/relay).
+ */
+fun isGlobalPcId(input: String): Boolean {
+    val compact = input.trim().uppercase()
+    if (compact.length != 10 || !compact.startsWith("XY")) return false
+    return compact.substring(2).all { it in '0'..'9' || it in 'A'..'F' }
+}
+
+/**
  * Parse legacy ID PC (IPv4 encoded as decimal/hex) or a host/IP into [RdpEndpoint].
  * This is a direct address conversion, not a global rendezvous ID or relay lookup.
  */

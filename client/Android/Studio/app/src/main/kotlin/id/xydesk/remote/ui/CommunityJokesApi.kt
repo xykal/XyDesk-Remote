@@ -47,6 +47,14 @@ internal class CommunityJokesApi(context: Context) {
         request(method = "GET", path = "/api/account/settings?id=$clientId")
     }
 
+    /**
+     * Resolve ID PC global (XY+8 hex) lewat direktori relay. Null bila PC
+     * tidak terdaftar/offline (404) atau jaringan gagal.
+     */
+    suspend fun pcRelayResolve(globalId: String): JSONObject? = withContext(Dispatchers.IO) {
+        runCatching { request(method = "GET", path = "/api/pc/relay?id=$globalId") }.getOrNull()
+    }
+
     suspend fun submit(text: String, attachment: FeedAttachment? = null): CommunityJoke = withContext(Dispatchers.IO) {
         val attachmentJson = attachment?.let { att ->
             JSONObject()

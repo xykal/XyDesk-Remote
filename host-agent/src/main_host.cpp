@@ -4,6 +4,7 @@
 #ifdef _WIN32
 #include <windows.h>
 #include <shellapi.h>
+#include <winhttp.h>
 #include <wtsapi32.h>
 #endif
 
@@ -23,6 +24,127 @@
 
 static XyQuicHostMetadata g_meta{};
 static int g_quic_rc = 0;
+
+// ---------------------------------------------------------------------------
+// Relay direktori ID PC global (Tahap ② koneksi PC nyata):
+// ID global = "XY" + 8 hex FNV-1a(MachineGuid) — stabil lintas reboot, beda
+// antar mesin, dan TIDAK mengode IP (beda dari ID PC 10 digit lama yang hanya
+// berlaku satu LAN). Heartbeat WinHTTP POST ke worker /api/pc/relay tiap 60
+// detik; rekaman worker ber-TTL 300 detik sehingga PC mati hilang sendiri.
+// Kode relay ditaruh di exe (bukan DLL baru) mengikuti alasan kode UI di atas.
+// ---------------------------------------------------------------------------
+static char g_global_id[16] = {0};
+
+#ifdef _WIN32
+namespace {
+
+std::wstring machine_guid() {
+    wchar_t buf[128] = {0};
+    DWORD size = sizeof(buf);
+    const LONG rc = RegGetValueW(HKEY_LOCAL_MACHINE,
+                                 L"SOFTWARE\\Microsoft\\Cryptography",
+                                 L"MachineGuid", RRF_RT_REG_SZ, nullptr, buf, &size);
+    if (rc != ERROR_SUCCESS) return std::wstring();
+    return std::wstring(buf);
+}
+
+std::string hostname_ascii() {
+    char buf[256] = {0};
+    DWORD size = sizeof(buf);
+    if (GetComputerNameA(buf, &size)) return std::string(buf);
+    return "xydesk-host";
+}
+
+uint32_t fnv1a32(const std::string& text) {
+    uint64_t hash = 1469598103934665603ull;
+    for (const unsigned char c : text) {
+        hash ^= c;
+        hash *= 1099511628211ull;
+    }
+    return (uint32_t)(hash & 0xFFFFFFFFu);
+}
+
+bool relay_post_heartbeat(const std::string& body) {
+    bool ok = false;
+    HINTERNET session = WinHttpOpen(L"XyDeskHost/1.1", WINHTTP_ACCESS_TYPE_AUTOMATIC_PROXY,
+                                    WINHTTP_NO_PROXY_NAME, WINHTTP_NO_PROXY_BYPASS, 0);
+    if (!session) return false;
+    WinHttpSetTimeouts(session, 10000, 10000, 10000, 15000);
+    HINTERNET connect =
+        WinHttpConnect(session, L"api.xydeskremote.biz.id", INTERNET_DEFAULT_HTTPS_PORT, 0);
+    HINTERNET request = nullptr;
+    if (connect) {
+        request = WinHttpOpenRequest(connect, L"POST", L"/api/pc/relay", nullptr,
+                                     WINHTTP_NO_REFERER, WINHTTP_DEFAULT_ACCEPT_TYPES,
+                                     WINHTTP_FLAG_SECURE);
+    }
+    if (request) {
+        const wchar_t* headers = L"Content-Type: application/json\r\n";
+        if (WinHttpSendRequest(request, headers, (DWORD)-1, (LPVOID)body.data(),
+                               (DWORD)body.size(), (DWORD)body.size(), 0) &&
+            WinHttpReceiveResponse(request, nullptr)) {
+            DWORD status = 0;
+            DWORD statusSize = sizeof(status);
+            if (WinHttpQueryHeaders(request,
+                                    WINHTTP_QUERY_STATUS_CODE | WINHTTP_QUERY_FLAG_NUMBER,
+                                    WINHTTP_HEADER_NAME_BY_INDEX, &status, &statusSize,
+                                    WINHTTP_NO_HEADER_INDEX) &&
+                (status == 200 || status == 429)) {
+                ok = true;  // 429 = throttle tulis worker; heartbeat berikutnya menyusul
+            }
+        }
+    }
+    if (request) WinHttpCloseHandle(request);
+    if (connect) WinHttpCloseHandle(connect);
+    WinHttpCloseHandle(session);
+    return ok;
+}
+
+DWORD WINAPI relay_heartbeat_thread(LPVOID) {
+    for (;;) {
+        char body[512];
+        snprintf(body, sizeof(body), "{\"id\":\"%s\",\"hostname\":\"%s\",\"rdp_port\":%u}",
+                 g_global_id, g_meta.hostname, (unsigned)g_meta.rdp_port);
+        relay_post_heartbeat(body);
+        Sleep(60000);
+    }
+    return 0;
+}
+
+}  // namespace
+#endif  // _WIN32
+
+const char* xydesk_global_pc_id() {
+    if (g_global_id[0] != '\0') return g_global_id;
+    std::string seed;
+#ifdef _WIN32
+    const std::wstring guid = machine_guid();
+    if (!guid.empty()) {
+        const int n = WideCharToMultiByte(CP_UTF8, 0, guid.c_str(), (int)guid.size(), nullptr, 0,
+                                          nullptr, nullptr);
+        seed.resize((size_t)n);
+        WideCharToMultiByte(CP_UTF8, 0, guid.c_str(), (int)guid.size(), &seed[0], n, nullptr,
+                            nullptr);
+    }
+#endif
+    if (seed.empty()) {
+#ifdef _WIN32
+        seed = hostname_ascii();
+#else
+        seed = "xydesk-host";
+#endif
+    }
+    snprintf(g_global_id, sizeof(g_global_id), "XY%08X", fnv1a32(seed));
+    return g_global_id;
+}
+
+static void xydesk_relay_start() {
+#ifdef _WIN32
+    if (xydesk_global_pc_id()[0] == '\0') return;
+    HANDLE thread = CreateThread(nullptr, 0, relay_heartbeat_thread, nullptr, 0, nullptr);
+    if (thread) CloseHandle(thread);
+#endif
+}
 
 #ifdef _WIN32
 namespace {
@@ -245,12 +367,14 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
                 L"IPv4 LAN   : %s   (RDP :%u · QUIC UDP :%u)\r\n"
                 L"GPU        : %s [%s]\r\n"
                 L"ID PC      : %s\r\n"
+                L"ID Global  : %s  (relay \u2014 bisa dari luar LAN)\r\n"
                 L"Core/QUIC  : %s / %s",
                 to_wide(g_meta.hostname).c_str(),
                 to_wide(g_meta.primary_ip).c_str(),
                 (unsigned)g_meta.rdp_port, (unsigned)g_meta.quic_port,
                 to_wide(g_meta.gpu_name).c_str(), to_wide(g_meta.gpu_encoder).c_str(),
                 to_wide(g_meta.pc_id).c_str(),
+                to_wide(xydesk_global_pc_id()).c_str(),
                 to_wide(xydesk_host_core_version()).c_str(),
                 to_wide(xydesk_quic_dll_version()).c_str());
             set_text(st->info, info);
@@ -427,7 +551,8 @@ int main(int argc, char** argv) {
            g_meta.primary_ip, g_meta.rdp_port, g_meta.quic_port);
     printf("  GPU Adapter : %s [%s · AVC 4:4:4 + ClearType Ready]\n",
            g_meta.gpu_name, g_meta.gpu_encoder);
-    printf("  ID PC (10d) : %s\n", g_meta.pc_id);
+    printf("  ID PC (10d) : %s   (LAN saja)\n", g_meta.pc_id);
+    printf("  ID Global   : %s   (relay — konek dari luar LAN)\n", xydesk_global_pc_id());
     printf("================================================================\n");
 
     if (setup_only) {
@@ -445,6 +570,10 @@ int main(int argc, char** argv) {
         printf("        atau masukkan ID PC: %s\n", g_meta.pc_id);
         printf("        Tekan Ctrl+C untuk keluar.\n");
     }
+
+    xydesk_relay_start();
+    printf("[READY] Relay heartbeat aktif — ID Global %s terdaftar di direktori.\n",
+           g_global_id);
 
 #ifdef _WIN32
     if (!no_ui) {

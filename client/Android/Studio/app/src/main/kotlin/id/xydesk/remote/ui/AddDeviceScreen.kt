@@ -44,6 +44,8 @@ import com.freerdp.freerdpcore.services.LibFreeRDP
 import id.xydesk.remote.core.ConnectionProfile
 import id.xydesk.remote.core.DiscoveredPcHost
 import id.xydesk.remote.core.LanScanner
+import id.xydesk.remote.core.RdpEndpoint
+import id.xydesk.remote.core.isGlobalPcId
 import id.xydesk.remote.core.RdpOptions
 import id.xydesk.remote.core.WakeOnLan
 import id.xydesk.remote.core.XyGpuProfile
@@ -271,6 +273,7 @@ fun AddDeviceScreen(
     var validationPopup by remember { mutableStateOf<String?>(null) }
     var lanScanModalOpen by remember { mutableStateOf(false) }
     var lanScanning by remember { mutableStateOf(false) }
+    var relayResolving by remember { mutableStateOf(false) }
     var lanFoundHosts by remember { mutableStateOf<List<DiscoveredPcHost>>(emptyList()) }
     var lanSelfIp by remember { mutableStateOf<String?>(null) }
 
@@ -323,8 +326,29 @@ fun AddDeviceScreen(
         }
     }
 
-    fun submit(connect: Boolean) {
-        val endpoint = parsePcIdOrEndpoint(host)
+    fun submit(connect: Boolean, resolved: RdpEndpoint? = null) {
+        if (resolved == null && isGlobalPcId(host)) {
+            // ID global tidak berisi alamat — selesaikan dulu lewat relay.
+            relayResolving = true
+            scope.launch {
+                val relay = runCatching { CommunityJokesApi.pcRelayResolve(host.trim()) }.getOrNull()
+                relayResolving = false
+                val arr = relay?.optJSONArray("candidates")
+                if (arr == null || arr.length() == 0) {
+                    val msg = xyNow(
+                        "ID Global tidak ditemukan di relay — pastikan Host Agent di PC berjalan dan online.",
+                        "Global ID not found in relay — make sure the Host Agent on the PC is running and online.",
+                    )
+                    error = msg
+                    validationPopup = msg
+                    return@launch
+                }
+                val cand = arr.getJSONObject(0)
+                submit(connect, RdpEndpoint(cand.getString("host"), cand.optInt("port", 3389)))
+            }
+            return
+        }
+        val endpoint = resolved ?: parsePcIdOrEndpoint(host)
         if (host.isBlank()) {
             val msg = if (isPcQuickMode) {
                 xyNow("ID PC atau alamat host wajib diisi.", "PC ID or host address is required.")
@@ -1894,14 +1918,16 @@ fun AddDeviceScreen(
             horizontalArrangement = Arrangement.spacedBy(10.dp),
         ) {
             XyPillButton(
-                text = xy("Simpan", "Save"),
+                text = if (relayResolving) xy("Mencari PC…", "Finding PC…") else xy("Simpan", "Save"),
                 onClick = { submit(false) },
                 primary = false,
+                enabled = !relayResolving,
                 modifier = Modifier.weight(1f),
             )
             XyPillButton(
-                text = xy("Simpan & connect", "Save & connect"),
+                text = if (relayResolving) xy("Mencari PC…", "Finding PC…") else xy("Simpan & connect", "Save & connect"),
                 onClick = { submit(true) },
+                enabled = !relayResolving,
                 modifier = Modifier.weight(1.4f),
             )
         }
