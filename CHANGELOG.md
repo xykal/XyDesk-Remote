@@ -3,6 +3,15 @@
 Semua perubahan sejak rilis publik v1.0.2 sampai v1.1.8.
 Format: versi (kode) — tanggal — poin perubahan.
 
+## v1.1.11
+- Lampiran feed akhirnya terkirim: akar bugnya batas body server 2KB yang menolak semua postingan bergambar; kini sampai 1,5MB (foto/stiker/GIF).
+- GIF di feed benar-benar animasi (Android 9+), bukan frame pertama lagi.
+- Ketuk lampiran feed = penampil fullscreen: cubit zoom 1–5x, ketuk dua kali zoom/reset, ketuk tutup.
+- Layar Feed: tarik ke bawah untuk muat ulang (pull-to-refresh).
+- Notifikasi sesi sadar status: "Menyambungkan…" / "Sesi remote aktif" / "Menyambungkan ulang…" + progress saat belum tersambung.
+- Musik dihapus total dari aplikasi (pemutar, panel, bridge Spotify, SoundCloud, pustaka media) — APK lebih ringan.
+- Kompresi gambar kiriman lebih pintar: kualitas turun bertahap lalu dimensi, foto besar tetap muat.
+
 ## v1.1.10
 - Anti-blackscreen: watchdog mendeteksi sesi tersambung tanpa gambar (~6 detik) lalu mencoba ulang sekali dengan grafis kompatibel (H264 mati, warna 16-bit); setelan disimpan per perangkat dan otomatis kembali ke kualitas penuh setelah normal.
 - Keyboard virtual super lengkap untuk kontrol kustom: kombinasi tombol bebas sampai 24 langkah (Esc, F1–F12, simbol, navigasi, numpad) — chip urutan bisa dihapus satu per satu.
