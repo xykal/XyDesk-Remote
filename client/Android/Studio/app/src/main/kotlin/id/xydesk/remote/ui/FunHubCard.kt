@@ -74,6 +74,8 @@ internal fun FunHubCard(
     var refreshing by remember { mutableStateOf(false) }
     // Lampiran yang dibuka fullscreen (url ke mime) — pemutar zoom sederhana.
     var fullscreenImage by remember { mutableStateOf<Pair<String, String?>?>(null) }
+    // "Profil bisa di-view": ketuk nama penulis = saring feed ke postingannya.
+    var authorFilter by remember { mutableStateOf<String?>(null) }
     var refreshKey by remember { mutableIntStateOf(0) }
     var submitting by remember { mutableStateOf(false) }
     var activeReactionId by remember { mutableStateOf<String?>(null) }
@@ -238,12 +240,45 @@ internal fun FunHubCard(
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
             else -> {
-                val visibleJokes = if (showAll) jokes else jokes.take(INITIAL_JOKES_VISIBLE)
+                authorFilter?.let { who ->
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(6.dp),
+                    ) {
+                        Text(
+                            xy("Postingan oleh ", "Posts by ") + who,
+                            style = MaterialTheme.typography.labelMedium,
+                            fontWeight = FontWeight.SemiBold,
+                            color = MaterialTheme.colorScheme.primary,
+                        )
+                        Text(
+                            "✕",
+                            modifier = Modifier.clickable {
+                                authorFilter = null
+                            }.padding(horizontal = 6.dp, vertical = 2.dp),
+                            style = MaterialTheme.typography.labelMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                }
+                val filteredJokes = authorFilter
+                    ?.let { who -> jokes.filter { (it.authorName ?: xy("Anonim", "Anonymous")) == who } }
+                    ?: jokes
+                val visibleJokes = if (showAll || authorFilter != null) {
+                    filteredJokes
+                } else {
+                    filteredJokes.take(INITIAL_JOKES_VISIBLE)
+                }
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     visibleJokes.forEach { joke ->
                         CommunityJokeItem(
                             joke = joke,
                             onImageClick = { url, mime -> fullscreenImage = url to mime },
+                            onAuthorClick = { name ->
+                                authorFilter = name
+                                showAll = true
+                            },
                             isReactionBusy = activeReactionId == joke.id,
                             alreadyReported = joke.id in reportedIds,
                             onReact = { emoji ->
@@ -609,6 +644,7 @@ private fun CommunityJokeInput(
 private fun CommunityJokeItem(
     joke: CommunityJoke,
     onImageClick: (String, String?) -> Unit,
+    onAuthorClick: (String) -> Unit,
     isReactionBusy: Boolean,
     alreadyReported: Boolean,
     onReact: (String) -> Unit,
@@ -710,9 +746,12 @@ private fun CommunityJokeItem(
             }
             Text(
                 joke.authorName ?: xy("Anonim", "Anonymous"),
+                modifier = Modifier
+                    .clickable { onAuthorClick(joke.authorName ?: xy("Anonim", "Anonymous")) }
+                    .padding(vertical = 2.dp),
                 style = MaterialTheme.typography.labelSmall,
                 fontWeight = FontWeight.SemiBold,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                color = MaterialTheme.colorScheme.primary,
             )
             feedTimeAgo(joke.createdAtMillis).takeIf { it.isNotEmpty() }?.let { ago ->
                 Text(

@@ -853,6 +853,55 @@ test("alias XyDesk-Remote-<abi>.apk menunjuk berkas nyata saat metadata dari Git
   }
 });
 
+test("cloud sync setelan: PUT lalu GET per ID akun, tolak ID/blob tidak valid", async () => {
+  const store = new Map();
+  const kv = {
+    async get(key) { return store.has(key) ? store.get(key) : null; },
+    async put(key, value) { store.set(key, String(value)); },
+    async delete(key) { store.delete(key); },
+  };
+  const env = envFor({}, { UNIQUE_DOWNLOADS: kv });
+  const id = "00000000-0000-4000-8000-00000000abcd";
+
+  const missing = await worker.fetch(
+    new Request(`https://rdp.xydesk.my.id/api/account/settings?id=${id}`),
+    env,
+  );
+  assert.equal(missing.status, 404);
+
+  const put = await worker.fetch(new Request("https://rdp.xydesk.my.id/api/account/settings", {
+    method: "PUT",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ id, blob: JSON.stringify({ hud: { size: 44 }, prefs: { theme: "dark" } }) }),
+  }), env);
+  assert.equal(put.status, 200);
+  const putBody = await put.json();
+  assert.equal(putBody.status, "ok");
+  assert.ok(putBody.updated_at);
+
+  const get = await worker.fetch(
+    new Request(`https://rdp.xydesk.my.id/api/account/settings?id=${id}`),
+    env,
+  );
+  assert.equal(get.status, 200);
+  const getBody = await get.json();
+  assert.equal(JSON.parse(getBody.blob).prefs.theme, "dark");
+
+  const badId = await worker.fetch(new Request("https://rdp.xydesk.my.id/api/account/settings", {
+    method: "PUT",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ id: "bukan-uuid", blob: "{}" }),
+  }), env);
+  assert.equal(badId.status, 400);
+
+  const badBlob = await worker.fetch(new Request("https://rdp.xydesk.my.id/api/account/settings", {
+    method: "PUT",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ id, blob: "" }),
+  }), env);
+  assert.equal(badBlob.status, 400);
+});
+
 test("alias universal.apk mengikuti rilis aktif yang memuat XyDesk-RemoteUniversal.apk", async () => {
   const originalFetch = globalThis.fetch;
   globalThis.fetch = async (url) => {

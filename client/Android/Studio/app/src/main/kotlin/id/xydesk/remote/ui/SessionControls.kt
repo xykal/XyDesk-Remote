@@ -1623,6 +1623,12 @@ private fun SessionPanel(
         targetValue = if (panelShown) 1f else 0f,
         animationSpec = tween(180),
     )
+    // Varian sidebar: meluncur masuk dari tepi kanan seperti versi awal
+    // (permintaan pemilik 2026-10-13), bukan cuma memudar di tempat.
+    val panelSlide by animateFloatAsState(
+        targetValue = if (panelShown) 0f else 1f,
+        animationSpec = tween(280, easing = FastOutSlowInEasing),
+    )
     val panelShape = if (drawerMode) {
         RoundedCornerShape(topStart = 28.dp, bottomStart = 28.dp)
     } else {
@@ -1668,8 +1674,9 @@ private fun SessionPanel(
                     scaleY = panelScale
                     alpha = panelAlpha
                     transformOrigin = TransformOrigin(1f, 0f)
+                    if (drawerMode) translationX = panelSlide * size.width
                 }
-                // Gaya kaca yang sama dengan pemutar musik. Opacity dinaikkan
+                // Gaya kaca panel sesi. Opacity dinaikkan
                 // (0.55 * 1.6 = 0.88) karena panel berisi banyak teks; kaca
                 // setipis pemutar akan membuat tulisan sulit dibaca.
                 .xyGlass(

@@ -36,6 +36,17 @@ internal class CommunityJokesApi(context: Context) {
         }
     }
 
+    /** Cloud sync setelan: unggah blob (lihat [CloudSync]). */
+    suspend fun accountSettingsPut(blob: String): JSONObject = withContext(Dispatchers.IO) {
+        val payload = JSONObject().put("id", clientId).put("blob", blob)
+        request(method = "PUT", path = "/api/account/settings", payload = payload)
+    }
+
+    /** Cloud sync setelan: unduh blob; melempar CommunityJokesException bila belum ada. */
+    suspend fun accountSettingsGet(): JSONObject = withContext(Dispatchers.IO) {
+        request(method = "GET", path = "/api/account/settings?id=$clientId")
+    }
+
     suspend fun submit(text: String, attachment: FeedAttachment? = null): CommunityJoke = withContext(Dispatchers.IO) {
         val attachmentJson = attachment?.let { att ->
             JSONObject()

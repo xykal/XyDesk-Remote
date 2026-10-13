@@ -1679,6 +1679,68 @@ async function activeSessionsResponse(request, env) {
   }
 }
 
+// Cloud sync setelan & kontrol kustom (permintaan pemilik sejak 2026-10,
+// dieksekusi 2026-10-13). Blob JSON disetel aplikasi; TIDAK boleh memuat
+// kredensial (kata sandi/token disaring di sisi app). Disimpan di KV dengan
+// kunci per ID akun anonim; kode pemulihan memulihkan ID yang sama sehingga
+// pasang ulang + restore = setelan kembali.
+const ACCOUNT_SETTINGS_MAX_BYTES = 262_144;
+
+async function accountSettingsResponse(request, env) {
+  const kv = env.UNIQUE_DOWNLOADS;
+  if (!kv) return jsonResponse({ status: "unavailable" }, 503, request.method);
+  const url = new URL(request.url);
+
+  if (request.method === "GET" || request.method === "HEAD") {
+    const id = url.searchParams.get("id") || "";
+    if (!COMMUNITY_CLIENT_ID_RE.test(id)) {
+      return jsonResponse({ status: "invalid_id" }, 400, request.method);
+    }
+    const blob = await kv.get(`xy-settings:${id}`);
+    if (blob === null) return jsonResponse({ status: "not_found" }, 404, request.method);
+    const updatedAt = (await kv.get(`xy-settings-meta:${id}`)) || "";
+    return jsonResponse(
+      { status: "ok", blob, updated_at: updatedAt },
+      200,
+      request.method,
+      { "cache-control": "no-store" },
+    );
+  }
+
+  if (request.method === "PUT" || request.method === "POST") {
+    if (!isJsonContentType(request.headers.get("content-type"))) {
+      return jsonResponse({ status: "invalid_content_type" }, 415, request.method);
+    }
+    const length = Number(request.headers.get("content-length") || 0);
+    if (length > ACCOUNT_SETTINGS_MAX_BYTES) {
+      return jsonResponse({ status: "payload_too_large" }, 413, request.method);
+    }
+    const bounded = await readRequestTextLimited(request, ACCOUNT_SETTINGS_MAX_BYTES);
+    if (bounded.tooLarge) return jsonResponse({ status: "payload_too_large" }, 413, request.method);
+    if (bounded.invalid) return jsonResponse({ status: "invalid_request" }, 400, request.method);
+    let body;
+    try {
+      body = JSON.parse(bounded.text);
+    } catch {
+      return jsonResponse({ status: "invalid_json" }, 400, request.method);
+    }
+    const id = String(body?.id || "");
+    if (!COMMUNITY_CLIENT_ID_RE.test(id)) {
+      return jsonResponse({ status: "invalid_id" }, 400, request.method);
+    }
+    const blob = typeof body?.blob === "string" ? body.blob : null;
+    if (blob === null || blob.length === 0 || blob.length > ACCOUNT_SETTINGS_MAX_BYTES) {
+      return jsonResponse({ status: "invalid_blob" }, 400, request.method);
+    }
+    const updatedAt = new Date().toISOString();
+    await kv.put(`xy-settings:${id}`, blob);
+    await kv.put(`xy-settings-meta:${id}`, updatedAt);
+    return jsonResponse({ status: "ok", updated_at: updatedAt }, 200, request.method, { "cache-control": "no-store" });
+  }
+
+  return methodNotAllowed("GET, PUT, POST");
+}
+
 async function sessionReportResponse(request, env) {
   if (!env.ACTIVE_SESSIONS) {
     return jsonResponse({ status: "unavailable" }, 503, request.method);
@@ -1881,6 +1943,9 @@ export default {
     }
     if (path === "/api/jokes" || path.startsWith("/api/jokes/")) {
       return communityJokesResponse(request, env);
+    }
+    if (path === "/api/account/settings") {
+      return accountSettingsResponse(request, env);
     }
     if (request.method !== "GET" && request.method !== "HEAD") return methodNotAllowed();
 

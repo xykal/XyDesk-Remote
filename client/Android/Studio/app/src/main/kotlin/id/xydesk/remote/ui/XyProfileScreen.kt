@@ -102,6 +102,7 @@ internal fun XyProfileScreen(
         ) {
             // ---- akun komunitas (guest / GitHub) ----
             CommunityAccountCard()
+            CloudSyncCard()
 
             // ---- identitas app ----
             XyGlassCard(padding = 16.dp) {
@@ -296,6 +297,126 @@ private fun sectionIcon(section: XySection): ImageVector = when (section) {
     XySection.UMUM -> XyIcons.Sliders
     XySection.KEAMANAN -> XyIcons.Shield
     XySection.TENTANG -> XyIcons.Info
+}
+
+/**
+ * Kartu cadangan cloud untuk setelan & kontrol kustom (permintaan pemilik:
+ * setelan bertahan melewati pasang ulang — pulihkan akun lewat kode
+ * pemulihan, lalu "Pulihkan dari Cloud"). Kata sandi, sertifikat, token, dan
+ * riwayat clipboard tidak pernah ikut diunggah (lihat [CloudSync]).
+ */
+@Composable
+private fun CloudSyncCard() {
+    val context = LocalContext.current
+    val scope = androidx.compose.runtime.rememberCoroutineScope()
+    var busy by remember { mutableStateOf(false) }
+    var message by remember { mutableStateOf<String?>(null) }
+    var isError by remember { mutableStateOf(false) }
+    var confirmRestore by remember { mutableStateOf(false) }
+    val stampPrefs = remember {
+        context.getSharedPreferences("xydesk.app", android.content.Context.MODE_PRIVATE)
+    }
+
+    XyGlassCard(padding = 14.dp) {
+        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Text(
+                xy("Sinkron Cloud", "Cloud sync"),
+                style = MaterialTheme.typography.titleSmall,
+            )
+            Text(
+                xy(
+                    "Cadangkan setelan, tata letak, dan kontrol kustom ke cloud. Kata sandi, sertifikat, dan token TIDAK pernah diunggah. Setelah pasang ulang: masukkan kode pemulihan, lalu ketuk \"Pulihkan dari Cloud\".",
+                    "Back up settings, layouts, and custom controls to the cloud. Passwords, certificates, and tokens are NEVER uploaded. After reinstalling: enter your recovery code, then tap \"Restore from cloud\".",
+                ),
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            stampPrefs.getString("cloud_sync_last", null)?.let { stamp ->
+                Text(
+                    xy("Sinkron terakhir: ", "Last sync: ") + stamp,
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.primary,
+                )
+            }
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                XyPillButton(
+                    text = if (busy) xy("Memproses…", "Working…") else xy("Unggah sekarang", "Upload now"),
+                    onClick = {
+                        scope.launch {
+                            busy = true
+                            message = null
+                            try {
+                                val at = CloudSync.upload(context)
+                                stampPrefs.edit().putString("cloud_sync_last", at).apply()
+                                message = xy("Cadangan berhasil diunggah.", "Backup uploaded.")
+                                isError = false
+                            } catch (error: Exception) {
+                                message = xy("Gagal mengunggah. Periksa jaringan.", "Upload failed. Check your connection.")
+                                isError = true
+                            } finally {
+                                busy = false
+                            }
+                        }
+                    },
+                    compact = true,
+                    enabled = !busy,
+                )
+                XyPillButton(
+                    text = xy("Pulihkan dari Cloud", "Restore from cloud"),
+                    onClick = { confirmRestore = true },
+                    primary = false,
+                    compact = true,
+                    enabled = !busy,
+                )
+            }
+            message?.let {
+                Text(
+                    it,
+                    style = MaterialTheme.typography.labelSmall,
+                    color = if (isError) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+        }
+    }
+
+    if (confirmRestore) {
+        XyDialog(
+            title = xy("Pulihkan setelan?", "Restore settings?"),
+            body = xy(
+                "Setelan dan kontrol lokal akan diganti dengan cadangan cloud. Sesi yang berjalan perlu dibuka ulang.",
+                "Local settings and controls will be replaced with the cloud backup. Open sessions must be reopened.",
+            ),
+            confirmLabel = xy("Pulihkan", "Restore"),
+            onConfirm = {
+                confirmRestore = false
+                scope.launch {
+                    busy = true
+                    message = null
+                    try {
+                        val blob = CloudSync.download(context)
+                        if (blob == null) {
+                            message = xy("Belum ada cadangan di cloud untuk akun ini.", "No cloud backup found for this account.")
+                            isError = true
+                        } else {
+                            val count = CloudSync.restore(context, blob)
+                            message = xy(
+                                "$count setelan dipulihkan. Buka ulang aplikasi agar semuanya terpakai.",
+                                "$count values restored. Reopen the app to apply everything.",
+                            )
+                            isError = false
+                        }
+                    } catch (error: Exception) {
+                        message = xy("Gagal memulihkan. Periksa jaringan.", "Restore failed. Check your connection.")
+                        isError = true
+                    } finally {
+                        busy = false
+                    }
+                }
+            },
+            dismissLabel = xy("Batal", "Cancel"),
+            onDismiss = { confirmRestore = false },
+        )
+    }
 }
 
 /**
