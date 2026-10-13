@@ -75,6 +75,39 @@ BOOL android_push_event(freerdp* inst, ANDROID_EVENT* event)
 		}
 	}
 
+	/* Relative (raw-input) moves merge with adjacent relative moves only: the
+	 * deltas add up (saturating) instead of replacing coordinates, so FPS
+	 * camera sweeps keep their total travel even when the queue backs up. */
+	if (event->type == EVENT_TYPE_CURSOR_REL && queue->count > 0)
+	{
+		ANDROID_EVENT_CURSOR_REL* incoming = (ANDROID_EVENT_CURSOR_REL*)event;
+		if (incoming->flags == PTR_FLAGS_MOVE)
+		{
+			const size_t tail = ((size_t)queue->head + (size_t)queue->count - 1u) %
+			                    (size_t)queue->size;
+			ANDROID_EVENT* last = queue->events[tail];
+			if (last && last->type == EVENT_TYPE_CURSOR_REL)
+			{
+				ANDROID_EVENT_CURSOR_REL* previous = (ANDROID_EVENT_CURSOR_REL*)last;
+				if (previous->flags == PTR_FLAGS_MOVE)
+				{
+					const int sum_x = (int)previous->dx + (int)incoming->dx;
+					const int sum_y = (int)previous->dy + (int)incoming->dy;
+					success = SetEvent(queue->isSet);
+					if (success)
+					{
+						previous->dx =
+						    (INT16)(sum_x > SHRT_MAX ? SHRT_MAX : (sum_x < SHRT_MIN ? SHRT_MIN : sum_x));
+						previous->dy =
+						    (INT16)(sum_y > SHRT_MAX ? SHRT_MAX : (sum_y < SHRT_MIN ? SHRT_MIN : sum_y));
+						android_event_free(event);
+					}
+					goto finish;
+				}
+			}
+		}
+	}
+
 	if (queue->count >= queue->size)
 	{
 		size_t new_size = (size_t)queue->size;
@@ -180,6 +213,15 @@ static BOOL android_process_event(ANDROID_EVENT_QUEUE* queue, freerdp* inst)
 
 				rc = freerdp_input_send_mouse_event(context->input, cursor_event->flags,
 				                                    cursor_event->x, cursor_event->y);
+			}
+			break;
+
+			case EVENT_TYPE_CURSOR_REL:
+			{
+				ANDROID_EVENT_CURSOR_REL* rel_event = (ANDROID_EVENT_CURSOR_REL*)event;
+
+				rc = freerdp_input_send_rel_mouse_event(context->input, rel_event->flags,
+				                                      rel_event->dx, rel_event->dy);
 			}
 			break;
 
@@ -320,6 +362,26 @@ ANDROID_EVENT_CURSOR* android_event_cursor_new(UINT16 flags, UINT16 x, UINT16 y)
 }
 
 static void android_event_cursor_free(ANDROID_EVENT_CURSOR* event)
+{
+	free(event);
+}
+
+ANDROID_EVENT_CURSOR_REL* android_event_cursor_rel_new(UINT16 flags, INT16 dx, INT16 dy)
+{
+	ANDROID_EVENT_CURSOR_REL* event;
+	event = (ANDROID_EVENT_CURSOR_REL*)calloc(1, sizeof(ANDROID_EVENT_CURSOR_REL));
+
+	if (!event)
+		return nullptr;
+
+	event->type = EVENT_TYPE_CURSOR_REL;
+	event->flags = flags;
+	event->dx = dx;
+	event->dy = dy;
+	return event;
+}
+
+static void android_event_cursor_rel_free(ANDROID_EVENT_CURSOR_REL* event)
 {
 	free(event);
 }
@@ -501,6 +563,10 @@ void android_event_free(ANDROID_EVENT* event)
 
 		case EVENT_TYPE_CURSOR:
 			android_event_cursor_free((ANDROID_EVENT_CURSOR*)event);
+			break;
+
+		case EVENT_TYPE_CURSOR_REL:
+			android_event_cursor_rel_free((ANDROID_EVENT_CURSOR_REL*)event);
 			break;
 
 		case EVENT_TYPE_DISCONNECT:

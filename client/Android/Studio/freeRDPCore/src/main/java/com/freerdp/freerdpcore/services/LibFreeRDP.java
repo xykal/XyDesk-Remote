@@ -161,6 +161,7 @@ public class LibFreeRDP
 	                                                      int width, int height);
 
 	private static native boolean freerdp_send_cursor_event(long inst, int x, int y, int flags);
+	private static native boolean freerdp_send_rel_cursor_event(long inst, int dx, int dy, int flags);
 
 	private static native boolean freerdp_send_key_event(long inst, int keycode, boolean down);
 
@@ -665,6 +666,15 @@ public class LibFreeRDP
 	public static boolean sendCursorEvent(long inst, int x, int y, int flags)
 	{
 		return freerdp_send_cursor_event(inst, x, y, flags);
+	}
+
+	/**
+	 * Relative (raw-input) pointer event: deltas instead of absolute coordinates.
+	 * Used by "Mouse relatif (game/CAD)" so FPS camera movement works.
+	 */
+	public static boolean sendRelCursorEvent(long inst, int dx, int dy, int flags)
+	{
+		return freerdp_send_rel_cursor_event(inst, dx, dy, flags);
 	}
 
 	public static boolean sendKeyEvent(long inst, int keycode, boolean down)

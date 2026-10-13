@@ -530,6 +530,12 @@ class SessionManager(context: Context) {
         return LibFreeRDP.sendCursorEvent(inst, x, y, flags)
     }
 
+    /** Delta relatif (raw input) — mouse game/CAD; lihat opsi rawInputMouse. */
+    fun sendRelCursorEvent(dx: Int, dy: Int, flags: Int): Boolean {
+        val inst = core?.getInstance() ?: return false
+        return LibFreeRDP.sendRelCursorEvent(inst, dx, dy, flags)
+    }
+
     fun sendKeyEvent(keycode: Int, down: Boolean): Boolean {
         val inst = core?.getInstance() ?: return false
         return LibFreeRDP.sendKeyEvent(inst, keycode, down)

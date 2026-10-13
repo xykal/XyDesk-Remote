@@ -655,6 +655,16 @@ fun XyDeskSessionScreen(
         }.getOrDefault(false)
     }
 
+    // Mouse relatif (raw input): hanya untuk mode Koneksi PC (Direct Stream)
+    // dengan opsi per-perangkat aktif. RDP biasa tetap absolut supaya pointer
+    // desktop normal tidak berubah perilaku.
+    val relMouseEnabled = remember(profile.id) {
+        runCatching {
+            val o = RdpOptions.of(context, profile.id)
+            o.pcConnectMode && o.rawInputMouse
+        }.getOrDefault(false)
+    }
+
     // Restore remote DPI on each new native instance, and apply user changes
     // through DISP without touching the local zoom slider.
     LaunchedEffect(state, boundInstance, remoteDpi, pendingResize, telemetry.width, telemetry.height) {
@@ -829,6 +839,11 @@ fun XyDeskSessionScreen(
             reportInputDispatchFailure()
         }
     }
+    fun sendRelCursorEvent(dx: Int, dy: Int, flags: Int) {
+        if (!manager.sendRelCursorEvent(dx, dy, flags) && state is SessionState.Connected) {
+            reportInputDispatchFailure()
+        }
+    }
     fun cursor(): Offset {
         if (!cursorInit) {
             cursorInit = true
@@ -859,6 +874,16 @@ fun XyDeskSessionScreen(
         val scale = if (zoom > 0.05f) zoom else 1f
         cursorX = (cursorX + scaledDx / scale).coerceIn(0f, remoteWidth.toFloat())
         cursorY = (cursorY + scaledDy / scale).coerceIn(0f, remoteHeight.toFloat())
+        if (relMouseEnabled) {
+            // Delta dikirim apa adanya (dijepit rentang INT16); kursor virtual
+            // lokal tetap bergerak supaya reticle di layar mengikuti jari.
+            sendRelCursorEvent(
+                (scaledDx / scale).roundToInt().coerceIn(-32768, 32767),
+                (scaledDy / scale).roundToInt().coerceIn(-32768, 32767),
+                Mouse.getMoveEvent(),
+            )
+            return
+        }
         val c = cursor()
         sendCursorEvent(c.x.roundToInt(), c.y.roundToInt(), Mouse.getMoveEvent())
     }
@@ -876,6 +901,12 @@ fun XyDeskSessionScreen(
             XyMouseButton.LEFT -> Mouse.getLeftButtonEvent(context, down)
             XyMouseButton.RIGHT -> Mouse.getRightButtonEvent(context, down)
             XyMouseButton.MIDDLE -> Mouse.getMiddleButtonEvent(down)
+        }
+        if (relMouseEnabled) {
+            // Bit tombol sama persis untuk event relatif (BUTTON1=0x1000 dst);
+            // delta nol agar kursor OS di PC tidak dilompatkan.
+            sendRelCursorEvent(0, 0, flags)
+            return
         }
         sendCursorEvent(c.x.roundToInt(), c.y.roundToInt(), flags)
     }
