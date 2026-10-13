@@ -3,6 +3,13 @@
 Semua perubahan sejak rilis publik v1.0.2 sampai v1.1.8.
 Format: versi (kode) — tanggal — poin perubahan.
 
+## v1.1.12
+- Sinkron Cloud: setelan & kontrol kustom dicadangkan ke akun GitHub lo (kata sandi/token TIDAK pernah ikut) — habis pasang ulang tinggal pakai kode pemulihan lalu "Pulihkan dari Cloud".
+- Drawer kontrol sesi kini meluncur masuk dari tepi kanan (bukan muncul mendadak).
+- Feed: ketuk nama penulis = lihat semua postingannya, dengan chip filter sekali ketuk untuk keluar.
+- Feed: gambar lampiran/avatar di-cache di memori — scroll balik tampil instan, nggak unduh ulang (hemat kuota).
+- Semua teks UI dipangkas ringkas — nggak ada lagi penjelasan berbaris-baris di panel.
+
 ## v1.1.11
 - Lampiran feed akhirnya terkirim: akar bugnya batas body server 2KB yang menolak semua postingan bergambar; kini sampai 1,5MB (foto/stiker/GIF).
 - GIF di feed benar-benar animasi (Android 9+), bukan frame pertama lagi.
