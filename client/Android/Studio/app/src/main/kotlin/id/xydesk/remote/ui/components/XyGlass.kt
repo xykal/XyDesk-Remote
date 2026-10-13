@@ -38,7 +38,7 @@ import androidx.compose.ui.unit.dp
 /**
  * Primitif "liquid glass" XyDesk.
  *
- * Gayanya diambil dari pemutar musik mengambang ([id.xydesk.remote.ui.SpotifyFloatingPlayer])
+ * Gayanya diambil dari pemutar mengambang lawas (kini sudah dihapus).
  * atas permintaan pengguna, lalu diangkat ke sini supaya seluruh app memakai
  * satu bahasa visual yang sama.
  *

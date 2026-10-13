@@ -67,7 +67,7 @@ class XySessionService : Service() {
             }
 
             // Tombol notifikasi tambahan (permintaan pemilik 2026-10-10):
-            // Beranda tanpa memutus sesi + jeda/putar musik dari notifikasi.
+            // Beranda tanpa memutus sesi.
             ACTION_HOME -> {
                 runCatching {
                     startActivity(

@@ -51,7 +51,7 @@ import id.xydesk.remote.ui.theme.XyThemeState
  *
  * Enam seksi yang dulu berdesakan di nav bawah sekarang jadi ubin di grid,
  * dikelompokkan dengan judul seksi supaya hierarkinya jelas tanpa perlu
- * menggulir jauh. Gaya kartunya sama dengan pemutar musik (lihat `XyGlass`),
+ * menggulir jauh. Gaya kartunya memakai `XyGlass`,
  * sesuai permintaan pengguna agar seluruh app satu bahasa visual.
  */
 @Composable

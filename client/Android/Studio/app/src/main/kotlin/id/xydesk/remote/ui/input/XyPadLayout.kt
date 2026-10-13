@@ -27,7 +27,7 @@ object XyPadLayout {
 
     /**
      * Posisi bawaan. Sengaja menjauhi overlay lain di layar sesi:
-     * pemutar Spotify mengambang di tengah-atas, HUD rail default di kanan
+     * indikator status di tengah-atas, HUD rail default di kanan
      * (x≈0.78, y≈0.42), dan pill scroll di tengah-kanan.
      */
     fun defaults(): Map<XyPadCluster, XyPadPos> =

@@ -192,11 +192,7 @@ fun SessionControls(
     val context = LocalContext.current
     val configuration = LocalConfiguration.current
     val view = androidx.compose.ui.platform.LocalView.current
-    val lifecycleOwner = androidx.compose.ui.platform.LocalLifecycleOwner.current
     val prefs = remember { SessionPrefs(context) }
-    val spotifyPlayback by SpotifyMediaBridge.playback.collectAsState()
-    val spotifyPosition by SpotifyMediaBridge.positionMs.collectAsState()
-    var spotifyExpanded by remember { mutableStateOf(false) }
     var scrollPillOpen by remember { mutableStateOf(false) }
     var panelOpen by remember { mutableStateOf(false) }
     var monitorGridOpen by remember { mutableStateOf(false) }
@@ -246,16 +242,7 @@ fun SessionControls(
     var confirmResolution by remember { mutableStateOf<String?>(null) }
     var validationAlert by remember { mutableStateOf<Pair<String, String>?>(null) }
 
-    LaunchedEffect(context) { SpotifyMediaBridge.refresh(context) }
-    DisposableEffect(lifecycleOwner, context) {
-        val observer = androidx.lifecycle.LifecycleEventObserver { _, event ->
-            if (event == androidx.lifecycle.Lifecycle.Event.ON_RESUME) {
-                SpotifyMediaBridge.refresh(context)
-            }
-        }
-        lifecycleOwner.lifecycle.addObserver(observer)
-        onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
-    }
+
 
     LaunchedEffect(deviceId, externalInputDeviceConnected, autoHideHudOnExternalInput) {
         if (!externalInputDeviceConnected || !autoHideHudOnExternalInput) {
@@ -273,7 +260,7 @@ fun SessionControls(
 
     LaunchedEffect(
         panelOpen, monitorGridOpen, pickerOpen, editing, textOpen, layoutJsonOpen, mappingMode,
-        scrollPillOpen, spotifyExpanded,
+        scrollPillOpen,
         confirmDeleteKey, confirmResetHud, confirmImportLayout, confirmApplyPreset,
         confirmLockPc, confirmResolution, validationAlert,
     ) {
@@ -321,10 +308,6 @@ fun SessionControls(
                 }
                 textOpen -> {
                     textOpen = false
-                    true
-                }
-                spotifyExpanded -> {
-                    spotifyExpanded = false
                     true
                 }
                 scrollPillOpen -> {
@@ -569,29 +552,6 @@ fun SessionControls(
                     .align(Alignment.TopStart)
                     .padding(start = 10.dp, top = 10.dp)
                     .zIndex(24f),
-            )
-        }
-
-        if (!panelOpen && !monitorGridOpen && !mappingMode) {
-            SpotifyFloatingPlayer(
-                playback = spotifyPlayback,
-                expanded = spotifyExpanded,
-                onExpand = { spotifyExpanded = true },
-                onMinimize = { spotifyExpanded = false },
-                positionMs = spotifyPosition,
-                onTogglePlayback = { SpotifyMediaBridge.playPause() },
-                onPrevious = { SpotifyMediaBridge.previous() },
-                onNext = { SpotifyMediaBridge.next() },
-                onSeek = { SpotifyMediaBridge.seekTo(it) },
-                onSeekBy = { SpotifyMediaBridge.seekBy(it) },
-                onStop = { SpotifyMediaBridge.stop() },
-                onToggleShuffle = { SpotifyMediaBridge.setShuffle(it) },
-                onCycleRepeat = { SpotifyMediaBridge.cycleRepeat() },
-                onRequestAccess = { openSpotifyNotificationAccess(context) },
-                modifier = Modifier
-                    .align(Alignment.TopCenter)
-                    .padding(top = 10.dp)
-                    .zIndex(22f),
             )
         }
 
@@ -864,7 +824,6 @@ fun SessionControls(
             PanelHandle(
                 onClick = {
                     scrollPillOpen = false
-                    spotifyExpanded = false
                     panelOpen = true
                 },
                 modifier = Modifier

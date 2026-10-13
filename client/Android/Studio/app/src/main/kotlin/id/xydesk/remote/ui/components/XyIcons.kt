@@ -123,18 +123,6 @@ object XyIcons {
         moveTo(8f, 17f); lineTo(12f, 21f); lineTo(16f, 17f)
     }
 
-    val Music: ImageVector = xyIcon("XyMusic") {
-        moveTo(9f, 17f); lineTo(9f, 5f); lineTo(20f, 3f); lineTo(20f, 15f)
-        moveTo(9f, 8f); lineTo(20f, 6f)
-        moveTo(9f, 16f)
-        curveTo(9f, 18.2f, 7.2f, 20f, 5f, 20f)
-        curveTo(2.8f, 20f, 2f, 18.6f, 3.2f, 17.2f)
-        curveTo(4.4f, 15.8f, 6.8f, 15.2f, 9f, 16f)
-        moveTo(20f, 14f)
-        curveTo(20f, 16.2f, 18.2f, 18f, 16f, 18f)
-        curveTo(13.8f, 18f, 13f, 16.6f, 14.2f, 15.2f)
-        curveTo(15.4f, 13.8f, 17.8f, 13.2f, 20f, 14f)
-    }
 
     val Play: ImageVector = xySolid("XyPlay") {
         moveTo(7f, 4.8f); lineTo(19f, 12f); lineTo(7f, 19.2f); close()
