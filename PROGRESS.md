@@ -435,3 +435,30 @@ CATATAN: build APK tetap DITAHAN menunggu konfirmasi.
   batch, rata-rata/puncak antrean + reset jendela, EMA lintas snapshot,
   penanda batch 0 dilewati).
 - TANPA build APK sesuai instruksi pemilik; hanya gate compile + unit test.
+
+## Ronde 27 — Tahap 3a (issue #12): codec protokol `input` host XyDesk (2026-10-14)
+- Audit lintas repo menemukan arsitektur sebenarnya: host streaming produksi
+  adalah XyDesk (repo saudara, Rust) — sudah punya injeksi XInput/ViGEm
+  (host/src/xinput.rs), signaling WebSocket signal.xydesk.my.id (docs/
+  PROTOCOL.md), dan klien referensi android-native. Prototype PC-stream di
+  repo ini (XYGP 28 byte + channel `xydesk-control-v1` + Worker /api/pc/rooms)
+  TIDAK pernah dipakai host mana pun dan layoutnya beda dari host produksi.
+- Keputusan arah (sesuai opsi issue #12 "komponen yang bisa dipakai bersama"):
+  XyDesk-Remote menjadi klien KEDUA bagi host XyDesk yang sudah berjalan —
+  mengikuti protokol host yang terdokumentasi, tanpa mengubah kontrak lintas
+  repo. Prototype XYGP tetap dorman (tidak dihapus) sampai jalur ini terbukti.
+- Baru: XyHostInputCodec (core-pc-stream, murni Kotlin) — codec biner data
+  channel `input` host: 14 opcode (MOUSE_MOVE_REL/ABS, MOUSE_BUTTON, SCROLL,
+  KEY, TEXT, DISPLAY_SELECT, CLIPBOARD_SET/REQ, VIDEO_QUALITY/BITRATE/
+  RESOLUTION/FPS, GAMEPAD). Event generasi pertama dipadding 8 byte sesuai
+  dokumen host; event modern panjang persis; GAMEPAD = 13 byte (opcode +
+  laporan XUSB 12 byte) — bit tombol XyGamepadPacketV1 terverifikasi identik
+  XInput jadi XyGamepadState dikonversi 1:1. Teks dipotong di 4096 unit
+  UTF-16 tanpa membelah pasangan surrogate (meniru text_batches host).
+  Dekoder cermin mengembalikan null untuk pesan rusak (host membuang diam-diam).
+- +21 unit test XyHostInputCodecTest termasuk vektor emas byte-level per
+  opcode (dikunci terhadap layout input.rs), round-trip semua event, validasi
+  rentang, dan pasangan surrogate di batas potong.
+- Tahap berikutnya (3b): klien signaling hub (docs/PROTOCOL.md) + layar sesi
+  PC-stream (pairing PIN, renderer video, overlay kontrol) di atas codec ini.
+- TANPA build APK sesuai instruksi pemilik; hanya gate compile + unit test.
