@@ -411,3 +411,27 @@ CATATAN: build APK tetap DITAHAN menunggu konfirmasi.
 - 48 test Worker lulus lokal (node --test). TANPA deploy Worker (manual-only
   via workflow_dispatch DEPLOY) dan TANPA build APK sesuai instruksi pemilik:
   build menyusul setelah semua tahap selesai.
+
+## Ronde 26 — Tahap 2 (issue #15 B.6): instrumentasi latensi pipeline frame (2026-10-14)
+- Tahap pengukuran SEBELUM optimasi, sesuai catatan issue: ukur dulu, baru
+  putuskan apa yang dioptimasi. Semua di Kotlin, TANPA perubahan native
+  (hook JNI waktu decode native menyusul sebagai tahap berikutnya).
+- Kelas baru FramePipelineStats (core-rdp, murni + jam disuntik, thread-safe,
+  EMA alpha 0.35 seperti RttSmoother) mengukur tiga hal:
+  (1) interval antar onGraphicsUpdate di thread RDP (pacing/jitter host),
+  (2) latensi pipeline update pertama batch -> flush ke SessionView di main
+  thread (termasuk antrean coalescing dirty-rect), (3) kedalaman antrean
+  coalescing: rata-rata + puncak update per flush (>1 = UI tertinggal).
+  Durasi salin piksel updateGraphics dicatat sebagai proksi beban frame HP.
+- TelemetrySample +5 field; SessionManager.frameStats dibaca flow telemetry
+  tiap 500ms; SessionSurfaceController mencatat (batchStartNs/pendingUpdates
+  di bawah dirtyLock, waktu salin pakai System.nanoTime hanya saat statistik
+  terpasang); XyDeskSessionActivity menghubungkan controller <-> manager.
+- Pill telemetri +2 baris: PIPELINE (ms; putih <1 vsync, kuning <2, oranye
+  lebih) dan ANTREAN "rata-rata / puncak" (kuning saat puncak >1). "Salin
+  info teknis" kini menyertakan RTT + interval + latensi pipeline + salin
+  frame + antrean supaya laporan bug latensi langsung bisa dianalisis.
+- +8 unit test FramePipelineStatsTest (interval EMA, salin sub-ms, latensi
+  batch, rata-rata/puncak antrean + reset jendela, EMA lintas snapshot,
+  penanda batch 0 dilewati).
+- TANPA build APK sesuai instruksi pemilik; hanya gate compile + unit test.

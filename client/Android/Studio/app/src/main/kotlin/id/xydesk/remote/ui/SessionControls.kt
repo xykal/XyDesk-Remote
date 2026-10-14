@@ -340,8 +340,19 @@ fun SessionControls(
 
     fun copyCoreInfo() {
         val cm = context.getSystemService(Context.CLIPBOARD_SERVICE) as? ClipboardManager
+        // Laporan teknis pakai label netral bahasa supaya lampiran bug report
+        // konsisten; metrik pipeline frame menyertai RTT agar laporan latensi
+        // bisa langsung dipakai untuk optimasi (issue #15 B.6).
+        val lines = coreInfo.toMutableList()
+        if (telemetry.rttMs > 0) lines += "RTT jaringan: ${telemetry.rttMs} ms"
+        if (telemetry.frameIntervalMs > 0) lines += "Interval update: ${telemetry.frameIntervalMs} ms"
+        if (telemetry.pipelineLatencyMs > 0) lines += "Latensi pipeline (update->gambar): ${telemetry.pipelineLatencyMs} ms"
+        if (telemetry.frameCopyMs >= 0f) lines += "Salin frame: %.1f ms".format(telemetry.frameCopyMs)
+        if (telemetry.queueDepth > 0f) {
+            lines += "Antrean flush: rata-rata %.1f, puncak %d".format(telemetry.queueDepth, telemetry.queuePeak)
+        }
         cm?.setPrimaryClip(
-            ClipData.newPlainText("XyDesk Remote", coreInfo.joinToString("\n"))
+            ClipData.newPlainText("XyDesk Remote", lines.joinToString("\n"))
         )
         notice.show(xyNow("Info teknis tersalin", "Technical info copied"))
     }
@@ -1281,10 +1292,31 @@ private fun LiveTelemetryPill(
     )
     val rttLabel = if (rtt > 0) "${rtt} ms" else "-- ms"
     val resLabel = if (telemetry.width > 0) "${telemetry.width}x${telemetry.height}" else "--"
+    // Latensi pipeline sisi HP: tibanya frame di thread RDP sampai digambar.
+    // Hijau muda = di bawah satu vsync (~16 ms), kuning = 1-2 vsync, oranye
+    // = lebih lambat — antrean coalescing menumpuk dan terasa jank.
+    val pipeline = telemetry.pipelineLatencyMs
+    val pipelineColor = when {
+        pipeline <= 0 -> Color(0xFFF2F2F4)
+        pipeline < 17 -> Color(0xFFE4E4E8)
+        pipeline < 34 -> Color(0xFFE8C468)
+        else -> Color(0xFFE88E58)
+    }
+    val pipelineLabel = if (pipeline > 0) "$pipeline ms" else "-- ms"
+    // Antrean coalescing: "rata-rata / puncak" update per flush. Puncak > 1
+    // berarti beberapa frame digabung (UI tertinggal) — disorot kuning.
+    val queueColor = if (telemetry.queuePeak > 1) Color(0xFFE8C468) else Color(0xFFF2F2F4)
+    val queueLabel = if (telemetry.queueDepth > 0f) {
+        "%.1f / %d".format(telemetry.queueDepth, telemetry.queuePeak)
+    } else {
+        "--"
+    }
     val items = listOf(
         Triple("FPS", "${telemetry.fps}", Color(0xFFF2F2F4)),
         Triple("LATENCY", rttLabel, rttColor),
         Triple("RESOLUSI", resLabel, Color(0xFFF2F2F4)),
+        Triple("PIPELINE", pipelineLabel, pipelineColor),
+        Triple("ANTREAN", queueLabel, queueColor),
         Triple("ENCODE", telemetry.codecLabel, Color(0xFFF2F2F4)),
         Triple("RELAY", telemetry.relayLabel, Color(0xFFF2F2F4)),
         Triple("NETWORK", telemetry.networkLabel, Color(0xFFF2F2F4)),

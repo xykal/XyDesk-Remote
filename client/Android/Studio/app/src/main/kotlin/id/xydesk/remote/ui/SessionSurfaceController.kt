@@ -36,6 +36,7 @@ import com.freerdp.freerdpcore.presentation.SessionInputManager
 import com.freerdp.freerdpcore.presentation.SessionView
 import com.freerdp.freerdpcore.presentation.TouchPointerView
 import com.freerdp.freerdpcore.services.LibFreeRDP
+import id.xydesk.remote.core.FramePipelineStats
 import id.xydesk.remote.core.GraphicsSink
 
 /**
@@ -104,11 +105,26 @@ class SessionSurfaceController(private val activity: Activity) : GraphicsSink {
     private val pendingDirtyRect = Rect()
     private var hasPendingDirty = false
     private var flushScheduled = false
+
+    /**
+     * Statistik pipeline frame sisi HP (issue #15 B.6). Di-set activity
+     * sebelum koneksi dimulai (`manager.frameStats`); null = tanpa ukur.
+     */
+    @Volatile var frameStats: FramePipelineStats? = null
+
+    // Metadata batch yang sedang menumpuk di antrean coalescing (dirtyLock):
+    // waktu tiba update PERTAMA batch (untuk latensi update->flush) dan
+    // jumlah update yang sudah tergabung (kedalaman antrean saat flush).
+    private var batchStartNs = 0L
+    private var pendingUpdates = 0
+
     private val flushDirtyRunnable = Runnable {
         val left: Int
         val top: Int
         val right: Int
         val bottom: Int
+        val startNs: Long
+        val updates: Int
         synchronized(dirtyLock) {
             flushScheduled = false
             if (!hasPendingDirty) return@Runnable
@@ -118,10 +134,15 @@ class SessionSurfaceController(private val activity: Activity) : GraphicsSink {
             bottom = pendingDirtyRect.bottom
             pendingDirtyRect.setEmpty()
             hasPendingDirty = false
+            startNs = batchStartNs
+            batchStartNs = 0L
+            updates = pendingUpdates
+            pendingUpdates = 0
         }
         val sv = sessionView ?: return@Runnable
         sv.addInvalidRegion(Rect(left, top, right, bottom))
         sv.invalidateRegion()
+        frameStats?.recordFlush(startNs, updates)
         onGraphicsInvalidated?.invoke()
     }
 
@@ -642,16 +663,26 @@ class SessionSurfaceController(private val activity: Activity) : GraphicsSink {
         val right = (x.toLong() + width).coerceIn(0L, bm.width.toLong()).toInt()
         val bottom = (y.toLong() + height).coerceIn(0L, bm.height.toLong()).toInt()
         if (left >= right || top >= bottom) return
+        // Durasi salin piksel diukur hanya kalau statistik dipasang —
+        // System.nanoTime() dua kali per frame itu murah, tapi tidak perlu
+        // dibayar kalau tidak ada yang membaca.
+        val stats = frameStats
+        val copyStartNs = if (stats != null) System.nanoTime() else 0L
         synchronized(bm) {
             LibFreeRDP.updateGraphics(i, bm, left, top, right - left, bottom - top)
         }
+        val copyDurationNs = if (stats != null) System.nanoTime() - copyStartNs else 0L
+        stats?.recordUpdate(copyDurationNs)
         val shouldSchedule: Boolean
         synchronized(dirtyLock) {
             if (!hasPendingDirty) {
                 pendingDirtyRect.set(left, top, right, bottom)
                 hasPendingDirty = true
+                batchStartNs = System.nanoTime()
+                pendingUpdates = 1
             } else {
                 pendingDirtyRect.union(left, top, right, bottom)
+                pendingUpdates += 1
             }
             shouldSchedule = !flushScheduled
             if (shouldSchedule) flushScheduled = true

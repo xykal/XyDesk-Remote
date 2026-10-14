@@ -21,6 +21,17 @@ data class TelemetrySample(
     val colorDepth: Int = 32,
     val relayLabel: String = "RDP",
     val networkLabel: String = "Wi-Fi",
+    // Statistik pipeline frame sisi HP (FramePipelineStats, issue #15 B.6).
+    /** Jarak antar onGraphicsUpdate rata-rata EMA (ms); -1 = belum ada. */
+    val frameIntervalMs: Int = -1,
+    /** Latensi update pertama batch -> flush ke layar (ms); -1 = belum ada. */
+    val pipelineLatencyMs: Int = -1,
+    /** Durasi salin piksel updateGraphics per update EMA (ms); -1 = belum ada. */
+    val frameCopyMs: Float = -1f,
+    /** Rata-rata update per flush (antrean coalescing); -1 = belum ada flush. */
+    val queueDepth: Float = -1f,
+    /** Puncak update per flush sejak sampel sebelumnya; 0 = belum ada flush. */
+    val queuePeak: Int = 0,
 ) {
     companion object {
         val EMPTY = TelemetrySample(SessionState.Idle, 0, 0, 0)

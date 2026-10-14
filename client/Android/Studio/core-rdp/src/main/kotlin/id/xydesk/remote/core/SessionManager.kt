@@ -154,6 +154,13 @@ class SessionManager(context: Context) {
         frameCounter.incrementAndGet()
     }
 
+    /**
+     * Statistik pipeline frame sisi HP (issue #15 B.6). Diisi oleh
+     * `SessionSurfaceController` lewat property `frameStats`; dibaca flow
+     * [telemetry] untuk pill telemetri & info teknis.
+     */
+    val frameStats = FramePipelineStats()
+
     /** Instance native sesi aktif, 0L jika tidak ada. */
     fun instance(): Long = core?.getInstance() ?: 0L
 
@@ -192,6 +199,7 @@ class SessionManager(context: Context) {
             tick++
             val frames = frameCounter.getAndSet(0)
             val r = resolution
+            val pipeline = frameStats.snapshot()
             emit(
                 TelemetrySample(
                     state = curState,
@@ -204,6 +212,11 @@ class SessionManager(context: Context) {
                     colorDepth = activeBpp,
                     relayLabel = activeRelayLabel,
                     networkLabel = activeNetworkLabel,
+                    frameIntervalMs = pipeline.updateIntervalMs,
+                    pipelineLatencyMs = pipeline.pipelineLatencyMs,
+                    frameCopyMs = pipeline.frameCopyMs,
+                    queueDepth = pipeline.queueDepth,
+                    queuePeak = pipeline.queuePeak,
                 ),
             )
             delay(TELEMETRY_INTERVAL_MS)

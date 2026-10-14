@@ -371,6 +371,9 @@ class XyDeskSessionActivity : ComponentActivity() {
             manager = SessionManager(applicationContext)
             controller = SessionSurfaceController(this)
             controller.onGraphicsInvalidated = manager::recordCoalescedGraphicsInvalidation
+            // Statistik pipeline frame (issue #15 B.6): controller mencatat,
+            // manager membacanya lewat flow telemetry.
+            controller.frameStats = manager.frameStats
             controller.onInputDispatchFailure = { reportInputDispatchFailure() }
             // sink WAJIB sebelum connect — event grafik pertama tidak boleh hilang
             manager.setGraphicsSink(controller)
