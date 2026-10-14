@@ -68,7 +68,7 @@ class XyHubOkHttpTransport(
     override fun close(code: Int, reason: String): Boolean = webSocket?.close(code, reason) ?: false
 
     companion object {
-        private const val DEFAULT_CONNECT_TIMEOUT_MS = 8_000
-        private const val DEFAULT_PING_INTERVAL_MS = 20_000
+        private const val DEFAULT_CONNECT_TIMEOUT_MS: Long = 8_000
+        private const val DEFAULT_PING_INTERVAL_MS: Long = 20_000
     }
 }

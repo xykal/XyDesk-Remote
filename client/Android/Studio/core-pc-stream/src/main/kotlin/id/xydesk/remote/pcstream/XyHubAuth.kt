@@ -232,6 +232,9 @@ class XyHubAuth(
         optString(key).takeIf { it.isNotBlank() && it != "null" }
             ?: throw XyHubAuthException("Field respons hub wajib hilang: $key")
 
+    private fun JSONObject.optionalString(key: String): String? =
+        optString(key).takeIf { it.isNotBlank() && it != "null" }
+
     private fun urlEncode(value: String): String =
         URLEncoder.encode(value, StandardCharsets.UTF_8.name())
 
