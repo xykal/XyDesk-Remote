@@ -155,7 +155,7 @@ class XyHubSignalingSessionTest {
 
         transport.simulateText("""{"type":"bye","from":"$hostId"}""")
 
-        assertEquals(1, listener.hostByes)
+        assertEquals(1, listener.hostByes.size)
         assertEquals(XyHubSessionState.CLOSED, session.state)
         assertEquals(1000, transport.closeCode)
         assertEquals("host-bye", transport.closeReason)
