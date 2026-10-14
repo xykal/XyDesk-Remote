@@ -669,3 +669,14 @@ bisa meminta mode VDD dari dalam sesi** — hanya via CLI/panel lokal.
   roundtrip + tolak out-of-range); tombol **VD** di bar kontrol PC-stream →
   dialog preset (720p60..4K60) → kirim; `onHostText` mem-parse balasan
   `virtualDisplay` → notice 6 detik di atas layar.
+
+## Ronde 33 (hasil akhir)
+
+- CI XDR **461✅** (fix: `0x80.toByte()` di test byteArrayOf).
+- Host Check ✅ di branch (fmt+clippy Linux, clippy Windows) setelah fix arm
+  exhaustive `inject` untuk `VirtualDisplay` (bukan injeksi → `true`).
+- **PR xykal/XyDesk#182 MERGED** (merge commit 7e27245) — opcode 0x10
+  VIRTUAL_DISPLAY resmi jadi kontrak dua sisi. Komentar koordinasi #181:
+  6176562679.
+- Catatan rilis: tombol VD klien TIDAK ada di v1.1.13 (dibuat setelah
+  rilis) — masuk build berikutnya.
