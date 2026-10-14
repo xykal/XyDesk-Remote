@@ -3026,6 +3026,7 @@ private fun MonitorAndUserGridModal(
         MonitorGridItem(
             badge = "VIEW",
             title = xy("Layar Penuh HP", "Phone Native View"),
+            subtitle = xy("Ikuti Viewport", "Follow Viewport"),
             value = DisplayPrefs.FOLLOW,
             icon = XyIcons.Fit,
             active = resolution == DisplayPrefs.FOLLOW,
