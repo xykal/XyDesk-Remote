@@ -107,7 +107,7 @@ class XyHubStreamViewer(
     }
 
     /** Mulai onboarding + pairing + negosiasi media. Sekali per viewer. */
-    fun start(hostId: String, pin: String, name: String?, refreshToken: String? = null) {
+    suspend fun start(hostId: String, pin: String, name: String?, refreshToken: String? = null) {
         check(started.compareAndSet(false, true)) { "Viewer sudah pernah start" }
         check(!closed.get()) { "Viewer sudah ditutup" }
         this.hostId = XyHubIds.requireHostId(hostId)
