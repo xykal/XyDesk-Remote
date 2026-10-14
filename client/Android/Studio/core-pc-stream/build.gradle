@@ -26,6 +26,9 @@ dependencies {
     // Pinned Android WebRTC SDK; standard codecs remain available for codec fallback.
     implementation 'io.github.webrtc-sdk:android:150.7871.01'
     implementation 'org.jetbrains.kotlinx:kotlinx-coroutines-core:1.11.0'
+    // WebSocket produksi untuk hub signaling (XyHubOkHttpTransport); sama seperti
+    // klien referensi XyDesk (net/Api.kt). JAR murni — tetap jalan di unit test JVM.
+    implementation 'com.squareup.okhttp3:okhttp:4.12.0'
 
     testImplementation 'junit:junit:4.13.2'
     testImplementation 'org.json:json:20250517'

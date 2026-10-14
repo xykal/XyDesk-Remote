@@ -506,3 +506,45 @@ CATATAN: build APK tetap DITAHAN menunggu konfirmasi.
 - Tahap berikutnya (3c): UI sesi (pairing PIN -> video -> overlay) dialirkan ke
   XyHostInputCodec via XyHubSignalClient + implementasi transport OkHttp.
 - TANPA build APK sesuai instruksi pemilik; hanya gate compile + unit test.
+
+## Ronde 29 — Tahap 3c bagian 1 (issue #12): transport produksi + TURN + orkestrator sesi (2026-10-14)
+- Kontrak 3c dirampungkan dari sumber: RtcSession.kt (klien referensi
+  android-native) — channel `input` dibuat `DataChannel.Init()` default
+  (ordered/reliable, bukan unordered seperti prototype), transceiver video
+  RECV_ONLY + mic track SEND_RECV nonaktif, STUN stun.cloudflare.com:3478
+  ditambah TURN dari Api.turnIce; worker.js — Origin hanya diperiksa untuk
+  browser (native tanpa Origin diizinkan), /turn-ice?id=&role=client&token=
+  memakai token perangkat sama seperti /ws, respons {iceServers:[{urls:string|
+  array, username?, credential?}], ttl} dan 503 turn-not-configured berarti
+  lanjut STUN saja.
+- Dep baru core-pc-stream: okhttp 4.12.0 (klien WS yang sama dipakai app
+  referensi; JAR murni, tetap jalan di unit test JVM).
+- Baru XyHubOkHttpTransport: bungkus tipis OkHttp WebSocket — tanpa header
+  Origin, pingInterval 20 detik (OkHttp otomatis membalas ping level WS hub
+  hibernation), onClosing membalas close agar jabat tangan RFC 6455 selesai,
+  satu instance satu siklus koneksi sesuai kontrak XyHubTransport.
+- XyHubAuth: + XyHubIceServer (credential di-redact dari toString) +
+  turnIceServers() — 503/5xx → daftar kosong (TURN opsional, seperti klien
+  referensi), 403/429 → XyHubHttpException; urls string/array keduanya
+  didukung; kini mengimplementasikan interface XyHubOnboarding agar sesi
+  bisa diuji dengan onboarding palsu.
+- Baru XyHubSignalingSession: orkestrator penuh jalur produksi —
+  guestLogin(refresh?) → signalToken → turnIceServers (gagal → lanjut STUN,
+  detail "turn-unavailable") → buildWebSocketUrl → connect → hello otomatis
+  → welcome → pair otomatis → pair-response. Penolakan (PIN salah,
+  peer-offline) TIDAK menutup sesi: pair() ulang tanpa onboarding ulang; rem
+  anti-penebak pair-terkunci dilaporkan dengan retry_in; answer/ice/bye host
+  diteruskan ke listener media; bye host menutup signaling (close 1000
+  "host-bye"); guestRefreshToken tersimpan untuk pembaruan sesi. Tidak
+  menyentuh WebRTC — wiring media menyusul di atasnya (3c-2).
+- +24 unit test JVM: XyHubOkHttpTransportTest lawan server WS stub in-process
+  (jabat tangan Upgrade diverifikasi — path+query, header WS, ABSEN Origin;
+  frame teks dua arah termasuk unmasking frame klien; close dari kedua arah
+  dengan balasan otomatis), XyHubSignalingSessionTest (jalur bahagia, refresh,
+  PIN salah ulang, rem 300 dtk, peer-offline, onboarding gagal, TURN 403
+  lanjut, media diteruskan, bye menutup, start dua kali, stop), XyHubAuthTest
+  +3 untuk /turn-ice (kredensial urls array+string, 503 kosong, 403 lempar).
+- Berikutnya (3c-2): wiring WebRTC (PeerConnection + transceiver + channel
+  `input` → XyHostInputCodec) di atas XyHubSignalingSession, lalu UI sesi
+  (pairing PIN → video → overlay XyPad).
+- TANPA build APK sesuai instruksi pemilik; hanya gate compile + unit test.

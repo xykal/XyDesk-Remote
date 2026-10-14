@@ -35,6 +35,19 @@ class XyHubHttpException(
 class XyHubAuthException(message: String) : IOException(message)
 
 /**
+ * Satu ICE server dari `/turn-ice` (TURN ber-TTL / STUN tambahan).
+ * [credential] rahasia — [toString] sengaja tidak membocorkannya.
+ */
+data class XyHubIceServer(
+    val urls: List<String>,
+    val username: String?,
+    val credential: String?,
+) {
+    override fun toString(): String =
+        "XyHubIceServer(urls=$urls, username=$username, credential=[redacted])"
+}
+
+/**
  * Onboarding klien hub signaling (`cloudflare/src/worker.js`):
  *
  * ```text
@@ -55,7 +68,7 @@ class XyHubAuth(
     baseUrl: String = DEFAULT_BASE_URL,
     private val connectTimeoutMs: Int = DEFAULT_CONNECT_TIMEOUT_MS,
     private val readTimeoutMs: Int = DEFAULT_READ_TIMEOUT_MS,
-) {
+) : XyHubOnboarding {
     private val baseUrl: String = normalizeBaseUrl(baseUrl)
 
     init {
@@ -67,7 +80,7 @@ class XyHubAuth(
      * Ambil (atau perbarui lewat [refreshToken]) sesi guest.
      * Rate limit per-IP di server: 429 membawa `retry_in`.
      */
-    suspend fun guestLogin(refreshToken: String? = null): XyHubGuestSession = withContext(Dispatchers.IO) {
+    override suspend fun guestLogin(refreshToken: String?): XyHubGuestSession = withContext(Dispatchers.IO) {
         val body = JSONObject()
         if (!refreshToken.isNullOrBlank()) body.put("refresh", refreshToken)
         val response = parseJson(request("POST", "/auth/guest", body))
@@ -80,7 +93,7 @@ class XyHubAuth(
     }
 
     /** Tukar [sessionToken] (JWT guest) dengan tiket WebSocket untuk [deviceId]. */
-    suspend fun signalToken(sessionToken: String, deviceId: String): String = withContext(Dispatchers.IO) {
+    override suspend fun signalToken(sessionToken: String, deviceId: String): String = withContext(Dispatchers.IO) {
         require(sessionToken.isNotBlank()) { "Token sesi kosong" }
         XyHubIds.requireClientId(deviceId)
         val path = "/signal-token?id=" + urlEncode(deviceId)
@@ -92,8 +105,58 @@ class XyHubAuth(
         ticket
     }
 
+    /**
+     * Kredensial TURN/STUN tambahan dari `/turn-ice?id=&role=client&token=`
+     * (token perangkat sama seperti saat connect `/ws` — klien tidak boleh
+     * memegang ADMIN_SECRET). TURN opsional: 503 (belum dikonfigurasi /
+     * otorisasi sedang gangguan) dan 5xx lain mengembalikan daftar kosong
+     * supaya media tetap bisa jalan dengan STUN, seperti klien referensi.
+     */
+    override suspend fun turnIceServers(deviceId: String, ticket: String): List<XyHubIceServer> =
+        withContext(Dispatchers.IO) {
+            XyHubIds.requireClientId(deviceId)
+            require(ticket.isNotBlank()) { "Tiket kosong" }
+            val path = "/turn-ice?id=" + urlEncode(deviceId) +
+                "&role=client&token=" + urlEncode(ticket)
+            val responseText = try {
+                request("GET", path)
+            } catch (failure: XyHubHttpException) {
+                if (failure.httpStatus == 503 || failure.httpStatus >= 500) {
+                    return@withContext emptyList()
+                }
+                throw failure
+            }
+            val root = parseJson(responseText)
+            val servers = root.optJSONArray("iceServers") ?: return@withContext emptyList()
+            buildList(servers.length()) {
+                for (index in 0 until servers.length()) {
+                    val entry = servers.optJSONObject(index) ?: continue
+                    val urls = entry.hubIceUrls()
+                    if (urls.isEmpty()) continue
+                    add(
+                        XyHubIceServer(
+                            urls = urls,
+                            username = entry.optionalString("username"),
+                            credential = entry.optionalString("credential"),
+                        ),
+                    )
+                }
+            }
+        }
+
+    /** `urls` di `/turn-ice` bisa string tunggal atau array (bentuk Cloudflare). */
+    private fun JSONObject.hubIceUrls(): List<String> = when (val raw = opt("urls")) {
+        is String -> if (raw.isBlank()) emptyList() else listOf(raw)
+        is org.json.JSONArray -> buildList(raw.length()) {
+            for (index in 0 until raw.length()) {
+                raw.optString(index).takeIf { it.isNotBlank() && it != "null" }?.let { add(it) }
+            }
+        }
+        else -> emptyList()
+    }
+
     /** URL WebSocket `/ws` siap dibuka [XyHubSignalClient]. */
-    fun buildWebSocketUrl(deviceId: String, ticket: String): String {
+    override fun buildWebSocketUrl(deviceId: String, ticket: String): String {
         XyHubIds.requireClientId(deviceId)
         require(ticket.isNotBlank()) { "Tiket kosong" }
         val base = URI(baseUrl)

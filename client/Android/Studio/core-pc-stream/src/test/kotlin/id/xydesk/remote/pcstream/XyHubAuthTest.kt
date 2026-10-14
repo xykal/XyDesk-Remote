@@ -59,6 +59,14 @@ class XyHubAuthTest {
                     "v2.eyJhbGciOiJIUzI1NiJ9.ticket",
                 )
 
+                method == "GET" && path == "/turn-ice" -> StubResponse(
+                    200,
+                    """{"iceServers":[
+                        {"urls":["turn:turn.example.com:3478","turn:turn.example.com:443?transport=tcp"],"username":"user","credential":"pass"},
+                        {"urls":"stun:stun.cloudflare.com:3478"}
+                    ],"ttl":86400,"degraded":false}""",
+                )
+
                 else -> StubResponse(404, """{"error":"not_found"}""")
             }
         }
@@ -176,6 +184,55 @@ class XyHubAuthTest {
         assertThrows(XyHubAuthException::class.java) {
             runBlocking { auth.signalToken(guestToken, "xyr-0a1b2c3d4e5f") }
         }
+    }
+
+    @Test
+    fun turnIceMengembalikanServerDenganKredensial() = runBlocking {
+        val deviceId = "xyr-0a1b2c3d4e5f"
+        val servers = auth.turnIceServers(deviceId, "v2.tiket.abc")
+
+        assertEquals(2, servers.size)
+        assertEquals(
+            listOf("turn:turn.example.com:3478", "turn:turn.example.com:443?transport=tcp"),
+            servers[0].urls,
+        )
+        assertEquals("user", servers[0].username)
+        assertEquals("pass", servers[0].credential)
+        assertEquals(listOf("stun:stun.cloudflare.com:3478"), servers[1].urls)
+        assertNull(servers[1].username)
+        assertFalse(servers[0].toString().contains("pass"))
+
+        val request = observedRequests.single()
+        assertEquals("GET", request.method)
+        assertEquals("/turn-ice", request.path)
+        assertEquals(deviceId, request.query["id"])
+        assertEquals("client", request.query["role"])
+        assertEquals("v2.tiket.abc", request.query["token"])
+    }
+
+    @Test
+    fun turnIceBelumDikonfigurasiMenjadiDaftarKosong() {
+        server.route = { method, path, _, _, _ ->
+            if (method == "GET" && path == "/turn-ice") StubResponse(503, """{"error":"turn-not-configured"}""")
+            else StubResponse(404, "{}")
+        }
+        val servers = runBlocking { auth.turnIceServers("xyr-0a1b2c3d4e5f", "v2.t") }
+        assertTrue(servers.isEmpty())
+    }
+
+    @Test
+    fun turnIceDitolak403Lempar() {
+        server.route = { method, path, _, _, _ ->
+            if (method == "GET" && path == "/turn-ice") {
+                StubResponse(403, """{"error":"turn-forbidden","reason":"ticket-invalid"}""")
+            } else {
+                StubResponse(404, "{}")
+            }
+        }
+        val error = assertThrows(XyHubHttpException::class.java) {
+            runBlocking { auth.turnIceServers("xyr-0a1b2c3d4e5f", "v2.t") }
+        }
+        assertEquals(403, error.httpStatus)
     }
 
     @Test
