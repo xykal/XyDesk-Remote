@@ -579,3 +579,29 @@ CATATAN: build APK tetap DITAHAN menunggu konfirmasi.
   setelan app (XyDeskTheme); manifest mendaftarkan activity dengan pola
   configChanges sama seperti sesi RDP.
 - TANPA build APK sesuai instruksi pemilik; hanya gate compile + unit test.
+
+## Ronde 31 — dock melayang + diagnosis install + koordinasi virtual display
+
+- **Bottom nav jadi dock melayang** (`XyBottomNav.kt` ditulis ulang): kapsul
+  rounded 30dp melayang dengan margin 20dp samping / 12dp bawah, hormati
+  gesture bar (`navigationBarsPadding`), bayangan lembut 16dp, pil aktif
+  berisi ikon+label (label expand/shrink), ikon aktif scale 1.14 dengan pegas
+  memantul (magnify ala dock macOS). `XyBottomNavHairline` dihapus (fungsi +
+  call site `XyDeskHome.kt`) — kapsul sudah dipisah bayangan, garis tidak
+  relevan lagi. Konten tetap `weight(1f)` di atas nav sehingga tidak tertutup.
+- **Diagnosis "APK tidak valid"** (tanpa perubahan kode — CI sudah benar):
+  rilis di-re-sign apksigner **v1+v2+v3** (v4 sengaja off, tak perlu untuk
+  sideload). Penyebab riil di sisi user: signature mismatch (wajib uninstall
+  versi lama), salah ABI (32bit=armv7, 64bit=arm64, **64bit-x86=x86_64 untuk
+  cloud PC China/emulator**), Play Protect/ROM China memblokir sideload,
+  unduhan korup (cek SHA-256), Android < 6 (minSdk 23).
+- **FreeRDP tuning**: dievaluasi — `RdpUri` sudah mengirim setting performa
+  inti (UDP/multitransport, gfx AVC444/AVC420, async-update/channels,
+  compression, network auto-detect, sound quality high, dynamic resolution).
+  Flag cache tambahan (bitmap/glyph/offscreen) **sengaja tidak ditambahkan**:
+  nama flag CLI native tidak bisa diverifikasi di sandbox dan flag yang tidak
+  dikenal membuat FreeRDP menolak koneksi — lebih aman diuji manual saat
+  build akhir.
+- **Koordinasi host**: issue [XyDesk#181](https://github.com/xykal/XyDesk/issues/181)
+  (label `koordinasi`) — Virtual Display Adapter IddCx untuk cloud PC/VPS
+  headless (QianPC dll), ala StarDesk/Parsec VDD.

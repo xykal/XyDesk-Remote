@@ -1,34 +1,41 @@
 package id.xydesk.remote.ui
 
+import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.animateDpAsState
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
+import androidx.compose.animation.expandHorizontally
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.shrinkHorizontally
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -49,12 +56,19 @@ internal enum class XyTab(val title: String, val titleEn: String) {
 }
 
 /**
- * Navigasi bawah app: tiga tujuan, gaya kaca monokrom.
+ * Dock bawah melayang — gaya macOS dock / iOS tab bar modern.
  *
- * Warna tetap hitam-putih (`onSurface`/`surface`) alih-alih aksen, mengikuti
- * permintaan pengguna. Item terpilih digambar sebagai pil berisi; sisanya
- * redup. Perubahan warna dan ukuran pil dianimasikan supaya perpindahan tab
- * terasa halus, bukan melompat.
+ * Perubahan dari bar lama (menempel penuh di dasar layar):
+ *  - kapsul melayang dengan margin samping + bawah dan bayangan lembut,
+ *    tidak lagi menutupi tepi layar;
+ *  - menghormati gesture bar sistem ([navigationBarsPadding]);
+ *  - item aktif menjadi pil berisi ikon + label (label menyusut masuk/keluar),
+ *    item non-aktif hanya ikon — seperti tab bar iPadOS;
+ *  - ikon aktif membesar sedikit dengan pegas memantul (magnify ala dock macOS).
+ *
+ * Warna tetap hitam-putih monokrom (`onSurface`/`surface`) sesuai arah desain
+ * app; pil aktif memakai tinta gelap dengan isi terang di tema gelap dan
+ * sebaliknya di tema terang.
  */
 @Composable
 internal fun XyBottomNav(
@@ -64,71 +78,107 @@ internal fun XyBottomNav(
 ) {
     val ink = MaterialTheme.colorScheme.onSurface
 
-    Row(
+    Box(
         modifier = modifier
             .fillMaxWidth()
-            // Lapisan kaca tipis: bar menyatu dengan latar tanpa jadi bidang
-            // datar, senada dengan kartu di atasnya.
-            .xyGlass(shape = RoundedCornerShape(topStart = 22.dp, topEnd = 22.dp), strength = 0.8f)
-            .padding(horizontal = 10.dp, vertical = 8.dp),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(6.dp),
+            .navigationBarsPadding()
+            .padding(horizontal = 20.dp, vertical = 12.dp),
     ) {
-        XyTab.entries.forEach { tab ->
-            val active = tab == selected
-            // xy() bersifat @Composable, jadi harus dipanggil di sini, bukan di
-            // dalam lambda semantics {} yang bukan composable.
-            val title = xy(tab.title, tab.titleEn)
-            val pillWidth by animateDpAsState(
-                targetValue = if (active) 44.dp else 34.dp,
-                animationSpec = tween(durationMillis = 180),
-                label = "navPill",
-            )
-            val pillColor by animateColorAsState(
-                targetValue = if (active) ink else Color.Transparent,
-                animationSpec = tween(durationMillis = 180),
-                label = "navPillColor",
-            )
-            val iconTint by animateColorAsState(
-                targetValue = if (active) MaterialTheme.colorScheme.surface else ink.copy(alpha = 0.42f),
-                animationSpec = tween(durationMillis = 180),
-                label = "navIconTint",
-            )
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                // Bayangan lembut di bawah kapsul supaya "melayang" terbaca
+                // di latar tema terang maupun gelap.
+                .shadow(
+                    elevation = 16.dp,
+                    shape = RoundedCornerShape(30.dp),
+                    ambientColor = Color.Black.copy(alpha = 0.18f),
+                    spotColor = Color.Black.copy(alpha = 0.22f),
+                )
+                .xyGlass(shape = RoundedCornerShape(30.dp), opacity = 0.94f)
+                .padding(horizontal = 10.dp, vertical = 8.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(4.dp),
+        ) {
+            XyTab.entries.forEach { tab ->
+                val active = tab == selected
+                // xy() bersifat @Composable, jadi harus dipanggil di sini, bukan di
+                // dalam lambda semantics {} yang bukan composable.
+                val title = xy(tab.title, tab.titleEn)
+                val pillColor by animateColorAsState(
+                    targetValue = if (active) ink else Color.Transparent,
+                    animationSpec = tween(durationMillis = 200),
+                    label = "navPillColor",
+                )
+                val iconTint by animateColorAsState(
+                    targetValue = if (active) MaterialTheme.colorScheme.surface else ink.copy(alpha = 0.45f),
+                    animationSpec = tween(durationMillis = 200),
+                    label = "navIconTint",
+                )
+                val labelColor by animateColorAsState(
+                    targetValue = if (active) MaterialTheme.colorScheme.surface else Color.Transparent,
+                    animationSpec = tween(durationMillis = 200),
+                    label = "navLabelColor",
+                )
+                // Magnify dock macOS: ikon aktif membesar dengan pegas memantul.
+                val iconScale by animateFloatAsState(
+                    targetValue = if (active) 1.14f else 1f,
+                    animationSpec = spring(
+                        dampingRatio = Spring.DampingRatioMediumBouncy,
+                        stiffness = Spring.StiffnessMediumLow,
+                    ),
+                    label = "navIconScale",
+                )
+                val pillHPadding by animateDpAsState(
+                    targetValue = if (active) 16.dp else 0.dp,
+                    animationSpec = tween(durationMillis = 200),
+                    label = "navPillPad",
+                )
 
-            Column(
-                modifier = Modifier
-                    .weight(1f)
-                    .clip(RoundedCornerShape(16.dp))
-                    .clickable(onClick = { onSelect(tab) })
-                    .semantics { contentDescription = title }
-                    .padding(vertical = 4.dp),
-                horizontalAlignment = Alignment.CenterHorizontally,
-                verticalArrangement = Arrangement.spacedBy(4.dp),
-            ) {
                 Box(
                     modifier = Modifier
-                        .width(pillWidth)
-                        .height(26.dp)
-                        .clip(RoundedCornerShape(13.dp))
-                        .background(pillColor),
+                        .weight(1f)
+                        .clip(RoundedCornerShape(20.dp))
+                        .clickable(onClick = { onSelect(tab) })
+                        .semantics { contentDescription = title }
+                        .padding(vertical = 2.dp),
                     contentAlignment = Alignment.Center,
                 ) {
-                    Icon(
-                        tabIcon(tab),
-                        contentDescription = null,
-                        tint = iconTint,
-                        modifier = Modifier.size(17.dp),
-                    )
+                    Row(
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(20.dp))
+                            .background(pillColor)
+                            .padding(horizontal = pillHPadding, vertical = 9.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(7.dp),
+                    ) {
+                        Icon(
+                            tabIcon(tab),
+                            contentDescription = null,
+                            tint = iconTint,
+                            modifier = Modifier
+                                .size(20.dp)
+                                .graphicsLayer {
+                                    scaleX = iconScale
+                                    scaleY = iconScale
+                                },
+                        )
+                        AnimatedVisibility(
+                            visible = active,
+                            enter = expandHorizontally() + fadeIn(),
+                            exit = shrinkHorizontally() + fadeOut(),
+                        ) {
+                            Text(
+                                text = title,
+                                color = labelColor,
+                                fontSize = 12.sp,
+                                fontWeight = FontWeight.SemiBold,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
+                            )
+                        }
+                    }
                 }
-                Text(
-                    text = title,
-                    color = if (active) ink else ink.copy(alpha = 0.42f),
-                    fontSize = 10.sp,
-                    fontWeight = if (active) FontWeight.SemiBold else FontWeight.Normal,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                    textAlign = TextAlign.Center,
-                )
             }
         }
     }
@@ -139,20 +189,4 @@ private fun tabIcon(tab: XyTab): ImageVector = when (tab) {
     XyTab.HOME -> XyIcons.Monitor
     XyTab.FEED -> XyIcons.Users
     XyTab.PROFILE -> XyIcons.Gear
-}
-
-/**
- * Garis pemisah tipis di atas bar.
- *
- * Tetap dipertahankan sebagai penegas batas walaupun bar sudah berkaca: di
- * tema terang lapisan kaca saja tidak selalu cukup memisahkan isi dari nav.
- */
-@Composable
-internal fun XyBottomNavHairline(modifier: Modifier = Modifier) {
-    Box(
-        modifier
-            .fillMaxWidth()
-            .height(1.dp)
-            .background(MaterialTheme.colorScheme.onSurface.copy(alpha = 0.12f)),
-    )
 }

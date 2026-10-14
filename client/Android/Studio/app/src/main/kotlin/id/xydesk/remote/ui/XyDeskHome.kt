@@ -476,7 +476,8 @@ fun XyDeskHome(
                 // Nav bawah disembunyikan saat form tambah/ubah perangkat terbuka
                 // supaya layar itu tetap penuh dan tombol simpan tidak tertutup.
                 if (route !is XyRoute.EditDevice) {
-                    XyBottomNavHairline()
+                    // Dock melayang (macOS/iOS style): tanpa garis pemisah lagi —
+                    // kapsulnya sudah dipisahkan bayangan dari konten.
                     XyBottomNav(
                         selected = tab,
                         onSelect = { next ->
