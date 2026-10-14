@@ -605,3 +605,25 @@ CATATAN: build APK tetap DITAHAN menunggu konfirmasi.
 - **Koordinasi host**: issue [XyDesk#181](https://github.com/xykal/XyDesk/issues/181)
   (label `koordinasi`) — Virtual Display Adapter IddCx untuk cloud PC/VPS
   headless (QianPC dll), ala StarDesk/Parsec VDD.
+
+## Ronde 32 — wiring XyPad → gamepad opcode 0x0E (3c tuntas)
+
+- **`PcStreamPadOverlay.kt` (baru, 420 baris)**: virtual pad on-screen untuk
+  sesi PC Stream — 5 klaster (TOP_BAR pill LT/LB/ST/BK/RB/RT/☰/×, D-pad,
+  stik kiri, stik kanan, ABXY) posisinya via `XyPadLayout` (pecahan layar),
+  tersimpan per host di `SessionPrefs.virtualPadLayout`. Mode atur (☰)
+  mematikan input sesaat supaya klaster bisa digeser drag; posisi disimpan
+  saat mode ditutup. Stik: knob kembali ke pusat saat lepas; **Y di-flip di
+  `PadStick`** (layar y+ = bawah → XUSB y+ = atas, konfirmasi via
+  `host/src/input.rs` + `xinput.rs`: laporan diteruskan apa adanya ke
+  ViGEm). Snapshot state penuh tiap perubahan (`consumeDirty`), state netral
+  dikirim saat overlay ditutup/dihancurkan supaya host melepas tombol.
+- **`PcStreamSessionActivity.kt`**: property `activeHostId` (kunci prefs
+  layout), tombol `PAD` di bar kontrol, overlay ditampilkan di atas
+  touchpad; kirim `XyHostInputCodec.gamepad(state)` (opcode 0x0E, 13 byte)
+  lewat `sendInputPacket` hanya saat channel `input` terbuka.
+- **Kontrak diverifikasi ke host**: `xykal/XyDesk` `host/src/input.rs`
+  (decode 0x0E → `xinput::submit`) + `xinput.rs` (ViGEm/physical) — layout
+  byte identik dengan `XyHostInputCodec` (vektor emas test host: buttons
+  0x1000, lt 0, rt 255, lx 32767, ly -1).
+- Dependabot: **tidak ada PR terbuka** di XyDesk maupun XyDesk-Remote.

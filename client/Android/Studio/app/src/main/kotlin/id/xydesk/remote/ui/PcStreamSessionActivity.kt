@@ -68,13 +68,17 @@ import org.webrtc.SurfaceViewRenderer
  * layar pairing (ID host 9 digit + PIN 6 digit) → video WebRTC + overlay
  * input dasar (touchpad mouse, strip scroll, keyboard teks, keyboard fisik).
  *
- * Overlay masih fondasi fungsional — tata letak virtual pad menyusul
- * revisi UI (issue #12 tahap 3c). Seluruh wiring media ada di
- * [XyHubStreamViewer]; activity hanya memegang lifecycle + state Compose.
+ * Overlay: touchpad mouse, strip scroll, keyboard teks, keyboard fisik, dan
+ * virtual pad on-screen (opcode 0x0E → ViGEmBus di host; lihat
+ * [PcStreamPadOverlay]). Seluruh wiring media ada di [XyHubStreamViewer];
+ * activity hanya memegang lifecycle + state Compose.
  */
 class PcStreamSessionActivity : ComponentActivity() {
     private var viewer: XyHubStreamViewer? = null
     private var eglBase: EglBase? = null
+
+    /** ID host sesi berjalan — kunci penyimpanan tata letak virtual pad. */
+    private var activeHostId: String = ""
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
 
     // Viewer memanggil listener-nya di thread utama — state Compose aman langsung.
@@ -132,6 +136,7 @@ class PcStreamSessionActivity : ComponentActivity() {
             return
         }
         started.value = true
+        activeHostId = hostId
         val egl = EglBase.create()
         eglBase = egl
         val streamViewer = XyHubStreamViewer(this, egl.eglBaseContext, viewerListener)
@@ -373,6 +378,7 @@ class PcStreamSessionActivity : ComponentActivity() {
     private fun VideoStage() {
         val activity = this
         var showTextDialog by remember { mutableStateOf(false) }
+        var padOpen by remember { mutableStateOf(false) }
         Box(modifier = Modifier.fillMaxSize().background(Color.Black)) {
             val egl = eglBase
             if (egl != null) {
@@ -471,6 +477,12 @@ class PcStreamSessionActivity : ComponentActivity() {
                         button = XyHostMouseButton.RIGHT,
                     )
                     XyPillButton(
+                        text = xy("PAD", "PAD"),
+                        onClick = { padOpen = !padOpen },
+                        primary = false,
+                        compact = true,
+                    )
+                    XyPillButton(
                         text = xy("TEKS", "TEXT"),
                         onClick = { showTextDialog = true },
                         primary = false,
@@ -486,6 +498,19 @@ class PcStreamSessionActivity : ComponentActivity() {
                         compact = true,
                     )
                 }
+            }
+
+            if (padOpen) {
+                PcStreamPadOverlay(
+                    prefs = remember { SessionPrefs(activity) },
+                    deviceId = activeHostId,
+                    onSend = { state ->
+                        if (inputOpen.value) {
+                            viewer?.sendInputPacket(XyHostInputCodec.gamepad(state))
+                        }
+                    },
+                    onClose = { padOpen = false },
+                )
             }
 
             if (showTextDialog) {
