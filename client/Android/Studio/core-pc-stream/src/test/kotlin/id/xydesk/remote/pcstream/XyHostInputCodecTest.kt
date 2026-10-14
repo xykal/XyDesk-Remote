@@ -295,7 +295,7 @@ class XyHostInputCodecTest {
     fun `decode virtual display roundtrip`() {
         val decoded = XyHostInputCodec.decode(XyHostInputCodec.virtualDisplay(2560, 1440, 144, 1))
         assertEquals(XyHostInputEvent.VirtualDisplay(2560, 1440, 144, 1), decoded)
-        assertNull(XyHostInputCodec.decode(byteArrayOf(0x10, 0x80, 0x07))) // payload terpotong
+        assertNull(XyHostInputCodec.decode(byteArrayOf(0x10, 0x80.toByte(), 0x07))) // payload terpotong
     }
 
     @Test
