@@ -17,9 +17,9 @@ class XyHostInputCodecTest {
 
     @Test
     fun `mouse move rel 8 byte dengan padding nol`() {
-        // dx=300 (0x012C -> 2C 01), dy=-300 (0xFD54 -> 54 FD)
+        // dx=300 (0x012C -> 2C 01), dy=-300 (0xFED4 -> D4 FE)
         assertArrayEquals(
-            byteArrayOf(0x01, 0x2C, 0x01, 0x54, 0xFD.toByte(), 0, 0, 0),
+            byteArrayOf(0x01, 0x2C, 0x01, 0xD4.toByte(), 0xFE.toByte(), 0, 0, 0),
             XyHostInputCodec.mouseMoveRel(300, -300),
         )
     }
