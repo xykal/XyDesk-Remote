@@ -548,3 +548,34 @@ CATATAN: build APK tetap DITAHAN menunggu konfirmasi.
   `input` → XyHostInputCodec) di atas XyHubSignalingSession, lalu UI sesi
   (pairing PIN → video → overlay XyPad).
 - TANPA build APK sesuai instruksi pemilik; hanya gate compile + unit test.
+
+## Ronde 30 — Tahap 3c bagian 2 (issue #12): wiring WebRTC + UI sesi PC-stream (2026-10-14)
+- XyHubStreamViewer (core-pc-stream): endpoint media produksi di atas
+  XyHubSignalingSession — PeerConnection UNIFIED_PLAN (video RECV_ONLY +
+  mic track "xy-mic" SEND_RECV nonaktif, susunan transceiver meniru klien
+  referensi RtcSession.kt supaya offer berbentuk sama di mata host),
+  channel `input` dengan DataChannel.Init() default (ordered/reliable sesuai
+  dekoder host input.rs), ICE STUN cloudflare + TURN dari /turn-ice, kandidat
+  remote di-buffer sampai answer diterapkan, pesan teks host (meta) diteruskan,
+  seluruh callback listener di-post ke thread utama. sendInputPacket() satu
+  pintu untuk semua opcode XyHostInputCodec. Stop: bye ke host → tutup
+  signaling → dispose WebRTC. Inisialisasi native sekali per proses
+  (XyHubWebRtc). Tidak diuji JVM (WebRTC native) — tipis di atas komponen
+  teruji, mengikuti pola PcStreamViewer.
+- Dep: webrtc-sdk kini `api` (tipe WebRTC muncul di API publik modul — app
+  perlu SurfaceViewRenderer/EglBase/VideoTrack).
+- UI app: PcStreamSessionActivity — layar pairing (ID host 9 digit + PIN
+  6 digit, filter digit; status per state sesi; penolakan PIN bisa diulang
+  tanpa onboarding ulang via retryPair; rem anti-penebak menampilkan sisa
+  waktu) → layar video (SurfaceViewRenderer di AndroidView + sink dikelola
+  viewer) + overlay input dasar: area sentuh = touchpad (geser kursor, tap
+  klik kiri, double-tap klik ganda, tekan-tahan klik kanan), strip scroll
+  kanan (satuan WHEEL_DELTA 120), tombol mouse tekan-tahan, dialog kirim
+  teks (opcode TEXT), keyboard fisik → Windows Virtual-Key (huruf/angka/
+  enter/backspace/delete/esc/tab/panah/spasi). Overlay = fondasi fungsional
+  menunggu revisi UI pemilik; wiring virtual pad XyPad menyusul.
+- Entry point: baris baru "PC Stream — Host XyDesk (ID & PIN)" di bubble
+  pemilih jenis koneksi (DevicesScreen) → langsung buka activity; tema ikut
+  setelan app (XyDeskTheme); manifest mendaftarkan activity dengan pola
+  configChanges sama seperti sesi RDP.
+- TANPA build APK sesuai instruksi pemilik; hanya gate compile + unit test.

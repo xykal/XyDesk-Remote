@@ -65,6 +65,15 @@
             android:windowSoftInputMode="adjustNothing"
             android:configChanges="orientation|keyboardHidden|screenSize|smallestScreenSize|density|screenLayout" />
 
+        <!-- Sesi PC-stream produksi (host XyDesk via hub signaling). -->
+        <activity
+            android:name="id.xydesk.remote.ui.PcStreamSessionActivity"
+            android:exported="false"
+            android:label="Sesi PC Stream"
+            android:theme="@style/Theme.XyDeskHome"
+            android:windowSoftInputMode="adjustNothing"
+            android:configChanges="orientation|keyboardHidden|screenSize|smallestScreenSize|density|screenLayout" />
+
         <!-- FileProvider buat share screenshot -->
         <provider
             android:name="androidx.core.content.FileProvider"

@@ -414,6 +414,7 @@ fun XyDeskHome(
                         onMenu = { drawerOpen = true },
                         onAddRdp = { route = XyRoute.EditDevice(null, pcQuickMode = false) },
                         onAddPcQuick = { route = XyRoute.EditDevice(null, pcQuickMode = true) },
+                        onOpenPcStream = { context.startActivity(PcStreamSessionActivity.intent(context)) },
                         onCreateRdp = { route = XyRoute.CreateRdp },
                         onEdit = {
                             route = XyRoute.EditDevice(
@@ -1012,6 +1013,7 @@ private fun DevicesScreen(
     onMenu: () -> Unit,
     onAddRdp: () -> Unit,
     onAddPcQuick: () -> Unit,
+    onOpenPcStream: () -> Unit,
     onCreateRdp: () -> Unit,
     onEdit: (ConnectionProfile) -> Unit,
     onConnect: (ConnectionProfile) -> Unit,
@@ -1314,6 +1316,26 @@ private fun DevicesScreen(
                     onClick = {
                         showAddBubble = false
                         onAddPcQuick()
+                    },
+                )
+                XyRow(
+                    title = xy("PC Stream — Host XyDesk (ID & PIN)", "PC Stream — XyDesk Host (ID & PIN)"),
+                    subtitle = xy(
+                        "Sambung ke host XyDesk produksi lewat hub signaling: ID host 9 digit + PIN 6 digit",
+                        "Connect to a production XyDesk host via the signaling hub: 9-digit host ID + 6-digit PIN",
+                    ),
+                    modifier = Modifier.padding(horizontal = 2.dp),
+                    trailing = {
+                        Text(
+                            xy("Baru", "New"),
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.primary,
+                            maxLines = 1,
+                        )
+                    },
+                    onClick = {
+                        showAddBubble = false
+                        onOpenPcStream()
                     },
                 )
                 XyRow(
