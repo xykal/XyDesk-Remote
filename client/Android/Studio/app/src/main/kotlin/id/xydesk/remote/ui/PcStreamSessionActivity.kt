@@ -88,6 +88,9 @@ class PcStreamSessionActivity : ComponentActivity() {
     private val failure = mutableStateOf<String?>(null)
     private val started = mutableStateOf(false)
 
+    /** Sesi jalan sudah tidak bisa diulang lagi (gagal/ditutup) — teks dirender di Compose. */
+    private val sessionEnded = mutableStateOf(false)
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
@@ -124,7 +127,7 @@ class PcStreamSessionActivity : ComponentActivity() {
                 runCatching { viewer?.retryPair(pin, deviceName()) }
                     .onFailure { failure.value = it.message }
             } else {
-                failure.value = xy("Sesi sudah berakhir — tutup dan buka lagi.", "Session already ended — close and reopen.")
+                sessionEnded.value = true
             }
             return
         }
@@ -331,6 +334,17 @@ class PcStreamSessionActivity : ComponentActivity() {
                     color = MaterialTheme.colorScheme.error,
                 )
             }
+            if (sessionEnded.value) {
+                Spacer(Modifier.height(6.dp))
+                Text(
+                    xy(
+                        "Sesi sudah berakhir — tutup dan buka lagi.",
+                        "Session already ended — close and reopen.",
+                    ),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.error,
+                )
+            }
             Spacer(Modifier.height(18.dp))
             XyPillButton(
                 text = xy("Kembali", "Back"),
@@ -342,6 +356,7 @@ class PcStreamSessionActivity : ComponentActivity() {
         }
     }
 
+    @Composable
     private fun stateLabel(state: XyHubSessionState): String = when (state) {
         XyHubSessionState.AUTHENTICATING -> xy("Masuk sebagai tamu…", "Signing in as guest…")
         XyHubSessionState.CONNECTING -> xy("Menyambung ke hub signaling…", "Connecting to signaling hub…")
