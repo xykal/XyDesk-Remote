@@ -56,12 +56,11 @@ XyDesk Remote menampilkan desktop Windows di HP Android-mu lewat protokol RDP, l
 | Kirim file ke PC | Panel **Sesi → Transfer file** → *Kirim file ke PC*. Di Windows muncul sebagai drive `XyDesk` (`\\tsclient\XyDesk`) |
 | Ambil file dari PC | Salin file ke drive `XyDesk` di Windows, lalu di HP buka **Transfer file → Segarkan** |
 | Screenshot desktop PC | Panel **Sesi → Ambil screenshot**; tersimpan di `Pictures/XyDesk` |
-| Rekam layar PC | Panel **Sesi → Perekaman**; MP4 720p 60 fps + audio PC di `Movies/XyDesk` |
-| Kontrol musik HP | Tab **Musik** di panel — putar/jeda, geser posisi, acak, ulang, antrian, dan pustaka |
+| Rekam layar PC | Panel **Sesi → Perekaman**; MP4 720p 60 fps + audio PC, kursor PC ikut terekam, di `Movies/XyDesk` |
 | Scroll halus | Rail kanan bawah → ikon scroll |
 | Gamepad | Aktifkan di panel **Tombol**; stik + 18 tombol yang bisa dipetakan |
 
-Semua pengaturan ada di satu panel: ketuk **Menu** di dalam sesi. Panelnya bertab — **Layar**, **Input**, **Tombol**, **Musik**, **Sesi** — dan tiap kotak melebar di tempat, tidak pindah halaman.
+Semua pengaturan ada di satu panel: ketuk **Menu** di dalam sesi. Panelnya bertab — **Layar**, **Input**, **Tombol**, **Sesi** — dan tiap kotak melebar di tempat, tidak pindah halaman.
 
 ---
 

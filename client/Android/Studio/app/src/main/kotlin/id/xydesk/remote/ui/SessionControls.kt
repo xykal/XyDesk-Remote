@@ -2644,10 +2644,6 @@ private fun panelSectionIcon(key: String): ImageVector = when {
     key.startsWith("tampilan-tombol") -> XyIcons.Eye
     key.startsWith("preset-profil-hud") -> XyIcons.Star
     key.startsWith("tombol-kontrol") -> XyIcons.Grid
-    key.startsWith("sumber-musik") -> XyIcons.Users
-    key.startsWith("kontrol-pemutar") -> XyIcons.Sliders
-    key.startsWith("antrian-musik") -> XyIcons.Queue
-    key.startsWith("pustaka-musik") -> XyIcons.Library
     key.startsWith("transfer-file") -> XyIcons.Swap
     key.startsWith("keamanan") -> XyIcons.Shield
     key.startsWith("perekaman") -> XyIcons.Shot

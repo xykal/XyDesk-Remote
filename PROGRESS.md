@@ -373,3 +373,23 @@ CATATAN: build APK tetap DITAHAN menunggu konfirmasi.
 - XyPadLayout dikonfirmasi kode lawas tak terpakai (gamepad = HudKey pad=true)
   — snap cukup di HudKeyLayer.
 - Tanpa build/tag sesuai instruksi pemilik; hanya gate compile.
+
+## Ronde 24 — Sapu bersih sisa kode musik + verifikasi rekaman audio+kursor (2026-10-14)
+- Audit permintaan pemilik: (1) rekaman PC + audio & kursor, (2) player musik
+  dihapus. Dua-duanya sudah dikerjakan sebelumnya: rekaman audio+kursor
+  ter-wire penuh (QuicAudioBridge.tap -> SessionManager.setAudioPcmTap ->
+  RemoteAudioRecorder; pointerBox di-update tiap frame; commits 12db8a5,
+  1b78190, 6e36e05), musik dihapus total 2026-10-13 (5d2cc5a). Tersisa
+  jejak mati yang this-pass bersihkan:
+- Dihapus: 4 cabang ikon seksi mati di SessionControls (sumber-musik,
+  kontrol-pemutar, antrian-musik, pustaka-musik); 8 ikon XyIcons tanpa
+  pemakaian (Shuffle, Repeat, RepeatOne, Queue, Rewind, Forward, Stop,
+  Library); Modifier.xyPurpleGlass (dibuat khusus pemutar musik, 0
+  pemakaian); komentar basi XyGlass; variabel spotifyX di XyPadLayoutTest
+  -> centerTopX. Refresh/Users/Sliders dipertahankan (masih dipakai).
+- README: baris "Kontrol musik HP" + bullet Media dihapus; daftar tab panel
+  dikoreksi jadi Layar/Input/Tombol/Sesi; baris perekaman kini menyebut
+  audio PC + kursor ikut terekam.
+- Tanpa build/tag; hanya gate compile. Issue #15 B.1 (player musik) dan
+  B.3 (rekaman) ditutup lewat komentar issue — B.1 selesai lewat keputusan
+  penghapusan, B.3 sudah implement.
