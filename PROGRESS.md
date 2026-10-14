@@ -462,3 +462,47 @@ CATATAN: build APK tetap DITAHAN menunggu konfirmasi.
 - Tahap berikutnya (3b): klien signaling hub (docs/PROTOCOL.md) + layar sesi
   PC-stream (pairing PIN, renderer video, overlay kontrol) di atas codec ini.
 - TANPA build APK sesuai instruksi pemilik; hanya gate compile + unit test.
+
+## Ronde 28 — Tahap 3b (issue #12): klien signaling hub produksi (2026-10-14)
+- Eksplorasi lintas repo selesai; kontrak lengkap dibaca dari sumber (bukan
+  hanya docs): worker.js (/ws /signal-token /host-token /issue, CORS, Origin),
+  bound_ticket.js (tiket v2 terikat deviceId+role client, 5 menit), authstore.js
+  (POST /auth/guest -> {token, refresh, guest:true}, JWT guest 15 menit,
+  rate-limit 429 + retry_in), hub.js 1-474 (hello/welcome, relay dari selalu
+  ditimpa server, relayAllowed per arah: pair/offer client->host,
+  pair-response/answer host->client, ice/bye/error dua arah; presence maks 50
+  dengan jawaban online:[...]; ping -> pong level aplikasi; PAIR_BRAKE rem
+  anti-penebak pair-terkunci + retry_in; satu host satu client, ikatan dari
+  answer host), dan klien referensi android-native net/Signaling.kt (token via
+  query param /ws, bukan header).
+- Jalur token CLIENT (yang dulu misteri) kini jelas: guest login ->
+  POST /auth/guest {refresh?} -> JWT -> GET /signal-token?id=<deviceId>
+  (Bearer) -> tiket "v2." 5 menit -> GET /ws?id&role=client&token. Login penuh
+  OTP/Google tidak diperlukan untuk klien remote.
+- Baru di core-pc-stream (3 file, tanpa dependensi baru — org.json +
+  HttpURLConnection seperti PcSignalClient):
+  - XyHubMessages.kt: XyHubOutbound (hello/pair/offer/ice/bye/list/presence/
+    ping/pong, encode org.json) + XyHubInbound terketik (welcome/
+    pair-response/answer/ice/bye/error/presence/devices/ping/pong/unknown) +
+    XyHubIds (host = 9 digit sesuai /host-token, client = [A-Za-z0-9_-]{3,64}
+    sesuai worker.js, generateClientId "xyr-"+12 hex) + XyHubProtocol.parseInbound
+    yang tangguh (kawat rusak -> null, bukan crash thread transport; tipe masa
+    depan -> Unknown).
+  - XyHubAuth.kt: guestLogin (baru/perbarui via refresh; toString merahasiakan
+    token), signalToken (GET + Bearer; validasi "v2."; 429 membawa retry_in),
+    buildWebSocketUrl (https->wss, http-loopback->ws), normalizeBaseUrl
+    ketat ala PcSignalClient.
+  - XyHubSignalClient.kt: mesin status IDLE->CONNECTING->REGISTERED->CLOSED/
+    FAILED di atas XyHubTransport (interface tunggal-sambungan; implementasi
+    produksi OkHttp ditambah di app pada tahap UI). Hello otomatis saat onOpen,
+    relay ditolak sebelum welcome (cermin "hello wajib sebelum relay"), ping
+    dibalas pong otomatis, semua transisi lewat satu kunci (callback datang
+    dari thread transport).
+- +39 unit test JVM (XyHubMessagesTest vektor emas format kawat dua arah +
+  escape; XyHubAuthTest lawan stub ServerSocket dengan query-string, termasuk
+  429/retry_in, 401, tiket tak dikenali, validasi baseUrl; XyHubSignalClientTest
+  transport palsu: siklus penuh, auto-pong, penerusan terketik, frame rusak
+  tidak fatal, close 1000/"selesai", pemotongan presence 50).
+- Tahap berikutnya (3c): UI sesi (pairing PIN -> video -> overlay) dialirkan ke
+  XyHostInputCodec via XyHubSignalClient + implementasi transport OkHttp.
+- TANPA build APK sesuai instruksi pemilik; hanya gate compile + unit test.
