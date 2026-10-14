@@ -627,3 +627,21 @@ CATATAN: build APK tetap DITAHAN menunggu konfirmasi.
   byte identik dengan `XyHostInputCodec` (vektor emas test host: buttons
   0x1000, lt 0, rt 255, lx 32767, ly -1).
 - Dependabot: **tidak ada PR terbuka** di XyDesk maupun XyDesk-Remote.
+
+## Ronde 32 (lanjutan) — rilis v1.1.13 + deploy Worker produksi
+
+- **Dependabot**: tidak ada PR terbuka di XyDesk maupun XyDesk-Remote (dicek
+  via API) — tidak ada yang perlu di-merge.
+- **Rilis**: `VERSION_NAME=1.1.13(74)` → gate CI 456✅ → tag `v1.1.13`
+  (commit e261480) → CI 457✅ build RELEASE (R8 + signing v1+v2+v3) →
+  draft 11 aset → **publish** dengan catatan rilis lengkap (termasuk catatan
+  uninstall-dulu + pilihan ABI untuk cloud PC x86_64):
+  https://github.com/xykal/XyDesk-Remote/releases/tag/v1.1.13
+- **Worker produksi** `xydesk-remote-web` ter-deploy 2× (kode+assets, lalu
+  release-state baru) ke 6 domain: rdp.xydesk.my.id, xydeskremote.biz.id,
+  www/api/wss/cpc.xydeskremote.biz.id — Durable Object `PcSignalRoom`
+  (signaling PC Stream) aktif. Live release-state = v1.1.13(74).
+  Deploy pakai wrangler 4.151.0 + Node 22 (tarball /tmp — sandbox hanya
+  Node 20; wrangler terbaru menuntut ≥22).
+- Draft lama v1.1.12 dibiarkan utuh (belum dipublikasikan; bisa dihapus
+  manual karena isinya subset v1.1.13).
