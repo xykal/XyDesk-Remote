@@ -393,3 +393,21 @@ CATATAN: build APK tetap DITAHAN menunggu konfirmasi.
 - Tanpa build/tag; hanya gate compile. Issue #15 B.1 (player musik) dan
   B.3 (rekaman) ditutup lewat komentar issue — B.1 selesai lewat keputusan
   penghapusan, B.3 sudah implement.
+
+## Ronde 25 — Tahap 1 (issue #15 B.4): sinkronkan portal web ke rilis publik terbaru (2026-10-14)
+- Rilis publik terbaru yang bisa ditaut = v1.1.8 (v1.1.12 masih DRAFT, asetnya
+  404 untuk publik). Worker live sebenarnya sudah dinamis (API GitHub rilis
+  terpublikasi, cache 5 menit) — yang diperbaiki adalah fallback + teks statis:
+- release-state.json (fallback saat API GitHub tidak bisa dihubungi): v1.0.2 ->
+  v1.1.8 lengkap (tag, SHA sumber 853d01b, published_at, app_build 1.1.8/69,
+  8 aset dengan sha256 dari API GitHub, checksums_url v1.1.8, minimum_android
+  6.0/API 23 sesuai minSdk 23 sejak v1.1.8).
+- host.html: tautan catatan rilis v1.0.2 -> v1.1.8.
+- index.html: "Android 7+ · tiga ABI" -> "Android 6+"; ukuran kartu APK basi
+  (84.4/70.4/89.8 MB = ukuran v1.0.2) -> ukuran v1.1.8 (99.0/79.5/108.3 MB,
+  ID+EN); default i18n versi pra-render dinamis v1.0.2 (53) -> v1.1.8 (69).
+- Blok ci di release-state.json kini jujur: tidak ada run CI tag terpisah yang
+  tercatat untuk v1.1.8, tautan menunjuk halaman rilisnya.
+- 48 test Worker lulus lokal (node --test). TANPA deploy Worker (manual-only
+  via workflow_dispatch DEPLOY) dan TANPA build APK sesuai instruksi pemilik:
+  build menyusul setelah semua tahap selesai.
