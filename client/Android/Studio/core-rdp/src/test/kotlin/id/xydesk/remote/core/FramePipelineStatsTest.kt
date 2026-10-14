@@ -106,10 +106,10 @@ class FramePipelineStatsTest {
 
         nowMs = 2_000
         stats.recordUpdate(0)
-        nowMs = 2_020
+        nowMs = 2_030
         stats.recordFlush(2_000 * 1_000_000L, 1)
-        // EMA dari 10 dan 20: 10*0.65 + 20*0.35 = 13.
-        assertEquals(13, stats.snapshot().pipelineLatencyMs)
+        // EMA dari 10 dan 30: 10*0.65 + 30*0.35 = 6.5 + 10.5 = 17.
+        assertEquals(17, stats.snapshot().pipelineLatencyMs)
     }
 
     @Test

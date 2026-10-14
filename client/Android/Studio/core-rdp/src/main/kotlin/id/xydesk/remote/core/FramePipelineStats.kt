@@ -43,6 +43,10 @@ class FramePipelineStats(private val clock: () -> Long = { System.nanoTime() }) 
 
     private var lastArrivalNs = 0L
 
+    // Boolean terpisah, bukan sentinel lastArrivalNs == 0: jam boleh mulai
+    // dari nol, jadi "pernah tiba" tidak bisa disimpulkan dari nilainya.
+    private var hasArrival = false
+
     /**
      * Catat satu update yang tiba di thread RDP.
      *
@@ -52,10 +56,11 @@ class FramePipelineStats(private val clock: () -> Long = { System.nanoTime() }) 
     @Synchronized
     fun recordUpdate(copyDurationNs: Long) {
         val now = clock()
-        if (lastArrivalNs != 0L) {
+        if (hasArrival) {
             intervalMs = emaMs(intervalMs, now - lastArrivalNs)
         }
         lastArrivalNs = now
+        hasArrival = true
         if (copyDurationNs > 0L) {
             copyMs = emaMs(copyMs, copyDurationNs)
         }
