@@ -98,7 +98,7 @@ class XyHubAuthTest {
 
     @Test
     fun guestLoginRateLimitedMembawaRetryIn() {
-        server.route = { _, path, _, _ ->
+        server.route = { _, path, _, _, _ ->
             if (path == "/auth/guest") StubResponse(429, """{"error":"rate-limited","retry_in":42}""")
             else StubResponse(404, "{}")
         }
@@ -111,7 +111,7 @@ class XyHubAuthTest {
 
     @Test
     fun guestLoginResponsTanpaFieldWajibDitolak() {
-        server.route = { _, path, _, _ ->
+        server.route = { _, path, _, _, _ ->
             if (path == "/auth/guest") StubResponse(200, """{"guest":true}""")
             else StubResponse(404, "{}")
         }
@@ -122,7 +122,7 @@ class XyHubAuthTest {
 
     @Test
     fun guestLoginBukanGuestDitolak() {
-        server.route = { _, path, _, _ ->
+        server.route = { _, path, _, _, _ ->
             if (path == "/auth/guest") StubResponse(200, """{"token":"a","refresh":"b","guest":false}""")
             else StubResponse(404, "{}")
         }
@@ -147,7 +147,7 @@ class XyHubAuthTest {
 
     @Test
     fun signalTokenMenolak401() {
-        server.route = { method, path, _, _ ->
+        server.route = { method, path, _, _, _ ->
             if (method == "GET" && path == "/signal-token") StubResponse(401, "unauthorized")
             else StubResponse(404, "{}")
         }
@@ -169,7 +169,7 @@ class XyHubAuthTest {
 
     @Test
     fun signalTokenMenolakTiketTakDikenali() {
-        server.route = { method, path, _, _ ->
+        server.route = { method, path, _, _, _ ->
             if (method == "GET" && path == "/signal-token") StubResponse(200, "<html>gateway error</html>")
             else StubResponse(404, "{}")
         }
