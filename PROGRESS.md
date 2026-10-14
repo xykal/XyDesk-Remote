@@ -645,3 +645,27 @@ CATATAN: build APK tetap DITAHAN menunggu konfirmasi.
   Node 20; wrangler terbaru menuntut ≥22).
 - Draft lama v1.1.12 dibiarkan utuh (belum dipublikasikan; bisa dihapus
   manual karena isinya subset v1.1.13).
+
+## Ronde 33 — opcode 0x10 VIRTUAL_DISPLAY (XyDesk#181 tahap 1)
+
+Investigasi repo host menemukan infrastruktur VDD **sudah lengkap** di
+`xykal/XyDesk` (`virtual_display.rs`: deteksi adapter, matriks 720p..8K
+30..240Hz, EDID kustom XYD, sync option.txt/vdd_settings.xml, install via
+xydesk-vdd-ctl, `set_virtual_display_mode`; `packaging/windows/drivers/`
+berisi IddSampleDriver + vdd_ctl). Gap sebenarnya: **klien remote tidak
+bisa meminta mode VDD dari dalam sesi** — hanya via CLI/panel lokal.
+
+- **Host (PR xykal/XyDesk#182, branch feat/virtual-display-opcode)**:
+  opcode baru `0x10 VIRTUAL_DISPLAY w:u16le h:u16le hz:u8 count:u8` (7 byte,
+  hz 0=60, count 0=1) → `input.rs` tag+enum+decode+test vektor;
+  `input_dispatch.rs` handler spawn_blocking → `set_virtual_display_mode`,
+  balasan JSON `{"type":"virtualDisplay","status":"applied|notInstalled|
+  error",...}` + meta baru + keyframe saat sukses; PROTOCOL.md seksi baru.
+  **Kebijakan keamanan: tidak memasang driver dari sesi remote** (UAC lokal;
+  belum terpasang → status `notInstalled`). rustfmt diverifikasi lokal
+  (rustup + rustfmt di sandbox).
+- **Klien (repo ini)**: `XyHostInputCodec.virtualDisplay(w,h,hz,count)` +
+  decoder `XyHostInputEvent.VirtualDisplay` + 3 test (layout LE 7 byte,
+  roundtrip + tolak out-of-range); tombol **VD** di bar kontrol PC-stream →
+  dialog preset (720p60..4K60) → kirim; `onHostText` mem-parse balasan
+  `virtualDisplay` → notice 6 detik di atas layar.

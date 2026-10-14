@@ -31,6 +31,9 @@ import java.nio.ByteOrder
  * 0x0C VIDEO_RESOLUTION mode:u8                — 2 byte (0=720p 1=1080p 2=native)
  * 0x0E GAMEPAD         XUSB report 12 byte     — 13 byte total
  * 0x0F VIDEO_FPS       fps:u8                  — 2 byte (30 atau 60)
+ * 0x10 VIRTUAL_DISPLAY w:u16le h:u16le hz:u8    — 7 byte (mode Virtual Display
+ *                     count:u8                    Adapter; host tidak memasang
+ *                                                 driver dari sesi remote)
  * ```
  *
  * Murni (tanpa Android/WebRTC) supaya byte-layout-nya bisa dibekukan lewat
@@ -53,9 +56,13 @@ object XyHostInputCodec {
     const val TAG_VIDEO_RESOLUTION: Int = 0x0C
     const val TAG_GAMEPAD: Int = 0x0E
     const val TAG_VIDEO_FPS: Int = 0x0F
+    const val TAG_VIRTUAL_DISPLAY: Int = 0x10
 
     /** Panjang pesan event generasi pertama (dokumen host: "8 byte tetap"). */
     private const val FIXED_EVENT_BYTES = 8
+
+    /** Total byte pesan virtual display: opcode + w/h u16le + hz + count. */
+    const val VIRTUAL_DISPLAY_BYTES = 7
 
     /** Total byte pesan gamepad: opcode + laporan XUSB 12 byte. */
     const val GAMEPAD_MESSAGE_BYTES = 13
@@ -154,6 +161,26 @@ object XyHostInputCodec {
     }
 
     /**
+     * Minta host mengaktifkan/mengubah mode Virtual Display Adapter (opcode
+     * `0x10`, 7 byte) untuk mesin headless: `w:u16le h:u16le hz:u8 count:u8`.
+     * Host hanya mengubah mode bila adapter sudah terpasang — memasang driver
+     * butuh UAC lokal; status dikembalikan lewat teks `virtualDisplay`.
+     */
+    fun virtualDisplay(width: Int, height: Int, refreshHz: Int = 60, count: Int = 1): ByteArray {
+        require(width in 640..7680) { "width must be 640..7680" }
+        require(height in 480..4320) { "height must be 480..4320" }
+        require(refreshHz in 24..240) { "refresh must be 24..240 Hz" }
+        require(count in 1..4) { "count must be 1..4" }
+        return ByteBuffer.allocate(VIRTUAL_DISPLAY_BYTES).order(ByteOrder.LITTLE_ENDIAN).apply {
+            put(TAG_VIRTUAL_DISPLAY.toByte())
+            putShort(width.toShort())
+            putShort(height.toShort())
+            put(refreshHz.toByte())
+            put(count.toByte())
+        }.array()
+    }
+
+    /**
      * Laporan gamepad: opcode `0x0E` + laporan XUSB 12 byte. [XyGamepadState]
      * sudah memakai bit tombol XInput, jadi tidak ada pemetaan ulang — hanya
      * re-ensapsulasi dari format XYGP 28 byte ke laporan XUSB host.
@@ -244,6 +271,14 @@ object XyHostInputCodec {
             } else null
             TAG_VIDEO_FPS -> if (data.size >= 2) {
                 XyHostInputEvent.VideoFps(data[1].toInt() and 0xFF)
+            } else null
+            TAG_VIRTUAL_DISPLAY -> if (data.size >= VIRTUAL_DISPLAY_BYTES) {
+                XyHostInputEvent.VirtualDisplay(
+                    width = le16(1),
+                    height = le16(3),
+                    refreshHz = data[5].toInt() and 0xFF,
+                    count = data[6].toInt() and 0xFF,
+                )
             } else null
             else -> null
         }
@@ -337,6 +372,12 @@ sealed class XyHostInputEvent {
     data class ClipboardSet(val value: String) : XyHostInputEvent()
     object ClipboardRequest : XyHostInputEvent()
     data class VideoQuality(val code: Int) : XyHostInputEvent()
+    data class VirtualDisplay(
+        val width: Int,
+        val height: Int,
+        val refreshHz: Int,
+        val count: Int,
+    ) : XyHostInputEvent()
     data class VideoBitrate(val mbps: Int) : XyHostInputEvent()
     data class VideoResolution(val code: Int) : XyHostInputEvent()
     data class Gamepad(val state: XyGamepadState) : XyHostInputEvent()

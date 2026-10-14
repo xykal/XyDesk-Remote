@@ -280,6 +280,32 @@ class XyHostInputCodecTest {
         assertTrue(clamped.none { Character.isHighSurrogate(it) })
     }
 
+    @Test
+    fun `virtual display 7 byte little endian`() {
+        val packet = XyHostInputCodec.virtualDisplay(1920, 1080, 120, 2)
+        assertEquals(7, packet.size)
+        assertEquals(0x10, packet[0].toInt() and 0xFF)
+        assertEquals(1920, (packet[1].toInt() and 0xFF) or ((packet[2].toInt() and 0xFF) shl 8))
+        assertEquals(1080, (packet[3].toInt() and 0xFF) or ((packet[4].toInt() and 0xFF) shl 8))
+        assertEquals(120, packet[5].toInt() and 0xFF)
+        assertEquals(2, packet[6].toInt() and 0xFF)
+    }
+
+    @Test
+    fun `decode virtual display roundtrip`() {
+        val decoded = XyHostInputCodec.decode(XyHostInputCodec.virtualDisplay(2560, 1440, 144, 1))
+        assertEquals(XyHostInputEvent.VirtualDisplay(2560, 1440, 144, 1), decoded)
+        assertNull(XyHostInputCodec.decode(byteArrayOf(0x10, 0x80, 0x07))) // payload terpotong
+    }
+
+    @Test
+    fun `virtual display menolak nilai di luar jangkauan`() {
+        assertThrows<IllegalArgumentException> { XyHostInputCodec.virtualDisplay(100, 1080) }
+        assertThrows<IllegalArgumentException> { XyHostInputCodec.virtualDisplay(1920, 100) }
+        assertThrows<IllegalArgumentException> { XyHostInputCodec.virtualDisplay(1920, 1080, 300) }
+        assertThrows<IllegalArgumentException> { XyHostInputCodec.virtualDisplay(1920, 1080, 60, 5) }
+    }
+
     private inline fun <reified T : Throwable> assertThrows(block: () -> Unit) {
         try {
             block()

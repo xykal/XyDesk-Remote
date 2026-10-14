@@ -32,6 +32,7 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -58,8 +59,10 @@ import id.xydesk.remote.ui.theme.XyThemeState
 import id.xydesk.remote.ui.theme.xyDark
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.launch
+import org.json.JSONObject
 import org.webrtc.EglBase
 import org.webrtc.SurfaceViewRenderer
 
@@ -94,6 +97,9 @@ class PcStreamSessionActivity : ComponentActivity() {
 
     /** Sesi jalan sudah tidak bisa diulang lagi (gagal/ditutup) — teks dirender di Compose. */
     private val sessionEnded = mutableStateOf(false)
+
+    /** Notifikasi sekali-lihat dari host (mis. status Virtual Display). */
+    private val hostNotice = mutableStateOf<String?>(null)
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -181,7 +187,19 @@ class PcStreamSessionActivity : ComponentActivity() {
             mediaConnected.value = connected
         }
 
-        override fun onHostText(text: String) = Unit
+        override fun onHostText(text: String) {
+            // Balasan status host berupa teks JSON. Saat ini hanya
+            // `virtualDisplay` yang ditangani; meta/cursor menyusul revisi
+            // UI pemilik. Teks non-JSON diabaikan diam-diam.
+            val json = runCatching { JSONObject(text) }.getOrNull() ?: return
+            if (json.optString("type") != "virtualDisplay") return
+            hostNotice.value = when (json.optString("status")) {
+                "applied" -> "VD " + json.optInt("width") + "×" + json.optInt("height") +
+                    "@" + json.optInt("hz") + "Hz ✓"
+                "notInstalled" -> "VD: adapter belum terpasang di host (pasang via panel host)"
+                else -> "VD: " + json.optString("detail").ifBlank { "gagal" }
+            }
+        }
 
         override fun onViewerFailure(error: Throwable) {
             failure.value = error.message ?: error.javaClass.simpleName
@@ -379,6 +397,7 @@ class PcStreamSessionActivity : ComponentActivity() {
         val activity = this
         var showTextDialog by remember { mutableStateOf(false) }
         var padOpen by remember { mutableStateOf(false) }
+        var showVdDialog by remember { mutableStateOf(false) }
         Box(modifier = Modifier.fillMaxSize().background(Color.Black)) {
             val egl = eglBase
             if (egl != null) {
@@ -483,6 +502,12 @@ class PcStreamSessionActivity : ComponentActivity() {
                         compact = true,
                     )
                     XyPillButton(
+                        text = "VD",
+                        onClick = { showVdDialog = true },
+                        primary = false,
+                        compact = true,
+                    )
+                    XyPillButton(
                         text = xy("TEKS", "TEXT"),
                         onClick = { showTextDialog = true },
                         primary = false,
@@ -498,6 +523,33 @@ class PcStreamSessionActivity : ComponentActivity() {
                         compact = true,
                     )
                 }
+            }
+
+            hostNotice.value?.let { notice ->
+                LaunchedEffect(notice) {
+                    delay(6000)
+                    if (hostNotice.value == notice) hostNotice.value = null
+                }
+                Text(
+                    text = notice,
+                    modifier = Modifier
+                        .align(Alignment.TopCenter)
+                        .padding(top = 12.dp)
+                        .background(Color(0x99000000), RoundedCornerShape(8.dp))
+                        .padding(horizontal = 12.dp, vertical = 6.dp),
+                    color = Color.White,
+                    style = MaterialTheme.typography.labelSmall,
+                )
+            }
+
+            if (showVdDialog) {
+                VirtualDisplayDialog(
+                    onPick = { w, h, hz ->
+                        showVdDialog = false
+                        viewer?.sendInputPacket(XyHostInputCodec.virtualDisplay(w, h, hz, 1))
+                    },
+                    onDismiss = { showVdDialog = false },
+                )
             }
 
             if (padOpen) {
@@ -567,6 +619,47 @@ class PcStreamSessionActivity : ComponentActivity() {
             },
             dismissButton = {
                 TextButton(onClick = onCancel) { Text(xy("Batal", "Cancel")) }
+            },
+        )
+    }
+
+    /**
+     * Pilih mode Virtual Display Adapter host (opcode `0x10`) — untuk mesin
+     * headless (cloud PC / VPS) yang tidak punya monitor fisik. Preset
+     * sengaja sedikit dan mengikuti matriks resmi host; status balasan
+     * host muncul sebagai notice di atas layar. Driver tidak dipasang dari
+     * sesi remote — bila belum terpasang, host menjawab `notInstalled`.
+     */
+    @Composable
+    private fun VirtualDisplayDialog(
+        onPick: (width: Int, height: Int, hz: Int) -> Unit,
+        onDismiss: () -> Unit,
+    ) {
+        val presets = remember {
+            listOf(
+                Triple(1280, 720, 60),
+                Triple(1920, 1080, 60),
+                Triple(1920, 1080, 120),
+                Triple(2560, 1440, 60),
+                Triple(2560, 1440, 144),
+                Triple(3840, 2160, 60),
+            )
+        }
+        AlertDialog(
+            onDismissRequest = onDismiss,
+            title = { Text(xy("Virtual Display", "Virtual Display")) },
+            text = {
+                Column {
+                    presets.forEach { (w, h, hz) ->
+                        TextButton(onClick = { onPick(w, h, hz) }) {
+                            Text("${w}×${h} · ${hz}Hz")
+                        }
+                    }
+                }
+            },
+            confirmButton = {},
+            dismissButton = {
+                TextButton(onClick = onDismiss) { Text(xy("Tutup", "Close")) }
             },
         )
     }
