@@ -330,8 +330,10 @@ class XyHubOkHttpTransportTest {
                 "Upgrade: websocket\r\n" +
                 "Connection: Upgrade\r\n" +
                 "Sec-WebSocket-Accept: $accept\r\n\r\n"
-            output.write(response.toByteArray(StandardCharsets.US_ASCII))
-            output.flush()
+            val stream = client.getOutputStream()
+            output = stream
+            stream.write(response.toByteArray(StandardCharsets.US_ASCII))
+            stream.flush()
             handshakeDone.countDown()
 
             // ── Loop frame klien (selalu ter-mask) ──

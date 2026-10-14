@@ -136,7 +136,7 @@ class XyHubSignalingSessionTest {
         transport.simulateText("""{"type":"pair-response","from":"$hostId","accepted":true}""")
 
         assertEquals(XyHubSessionState.PAIRED, session.state)
-        assertEquals(listOf(hostId to emptyList()), listener.accepted)
+        assertEquals(listOf(hostId to emptyList<XyHubIceServer>()), listener.accepted)
         // Detail "turn-unavailable" pernah tercatat.
         assertTrue(listener.states.any { it.second == "turn-unavailable" })
     }
