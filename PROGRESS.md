@@ -712,3 +712,53 @@ bisa meminta mode VDD dari dalam sesi** — hanya via CLI/panel lokal.
   ronde 33 ada di remote — pulihkan via fetch + `git reset origin/main`
   (working tree utuh, 10 file revisi ini satu-satunya diff). `core.fileMode
   false` supaya exec-bit upstream tak ikut ter-commit.
+
+## Ronde 35 — driver XyDeskVDD milik sendiri (issue XyDesk#181)
+
+"Gas semua, sertifikat belakangan, SmartScreen gpp" — driver display
+virtual IddCx UMDF2 milik XyDesk sendiri, bukan lagi biner pinjam MTT/ge9.
+
+Semua di repo saudara `xykal/XyDesk` (PR #183 + #184 #185 #187 #188 #189
+#190 #191 #192, semua merge-commit ke main):
+
+- **A. Source** `packaging/windows/vdd-src/XyDeskVDD/`: fork ge9/
+  IddSampleDriver (MIT), EDID sample diganti EDID XYD 256-byte (identik
+  `build_xydesk_edid()` host, checksum dihitung ulang); `loadOptions()`
+  bool + dua path `C:\XyDeskVDD\option.txt` → fallback warisan
+  `C:\IddSampleDriver\option.txt`; INF tulis ulang UTF-8 CRLF (HWID
+  `Root\XyDeskVDD`, service/UMDF structure persis asli, DestinationDirs
+  `12,UMDF`, `UmdfExtensions=IddCx0102`).
+- **B. Dist** `packaging/windows/drivers/XyDeskVDD/`: install.bat (jalur
+  utama `xydesk-vdd-ctl install --dir` → fallback certutil+pnputil+
+  SetupAPI XyPnp), uninstall.bat (remove-device + delete-driver DriverStore
+  + hapus cer by subject), option.txt, vdd_settings.xml, README.txt.
+- **C. Workflow `vdd-build.yml`** dispatch-only: `windows-2022`, WDK
+  10.0.22621 via wdksetup resmi fwlink 2249371 (winget tidak ada di runner
+  Server; choco WDK tertinggal 19041 = mismatch SDK), msbuild
+  `/p:SignMode=Off /p:WindowsTargetPlatformVersion=10.0.22621.0` — cat
+  tetap di-generate package targets (inf2cat manual tidak perlu), lalu
+  New-SelfSignedCertificate `CN=XyDeskVDD Code Signing` + signtool SHA256
+  (dll + cat), artifact `XyDeskVDD-driver-win64`. **Pelajaran PowerShell**:
+  em-dash UTF-8 tanpa BOM = parse error di PS 5.1 (script PS = ASCII
+  saja); `.FullName` di variabel string = kosong diam-diam.
+- **Biner rilis pertama** (run 38647763444) di-commit ke dist: DLL 109440
+  byte + cat + cer + INF stamped (`DriverVer 10/14/2026,22.32.22.280`).
+  Cat meng-hash INF+DLL → jangan edit INF dist terpisah dari cat.
+- **D. Host Rust**: `locate_vdd_ctl`/`locate_install_bat` prioritas
+  `drivers\XyDeskVDD\` (+ PF path); `sync_host_driver_configs` tulis
+  option.txt ke `C:\XyDeskVDD` juga.
+- **E. `install-all-drivers.bat`**: XyDeskVDD dulu, IddSampleDriver hanya
+  fallback bila biner XyDeskVDD tidak ada.
+- **F. Auto-ensure headless**: `input_dispatch::serve` spawn_blocking
+  `ensure_display()` sekali di awal sesi — best-effort, TANPA install/UAC
+  dari sesi remote.
+- **G. `xydesk_vdd_ctl.cpp`**: `cmdInstall` kenal XyDeskVDD.inf prioritas
+  pertama; `locateDriverDir` + kandidat `drivers\XyDeskVDD`; `writeDriverConfigs`
+  buat+ACL `C:\XyDeskVDD` dan tulis option.txt ke 3 lokasi.
+- Host Check 38643928278 hijau (fmt+clippy Linux, cargo check Windows) —
+  2 iterasi: `let_underscore_future` di spawn_blocking → panggil tanpa
+  `let`; rustfmt pecah chain join.
+
+Bundling host otomatis (build.yml step copy `packaging/windows/drivers/*`
+sudah ada). Yang belum: uji manual di mesin Windows nyata + sertifikat
+code signing Microsoft/EV (diterima self-signed dulu).
