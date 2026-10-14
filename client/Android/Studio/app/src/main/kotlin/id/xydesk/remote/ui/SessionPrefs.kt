@@ -11,13 +11,13 @@ import id.xydesk.remote.ui.input.XyStickMode
 enum class InputMode(val title: String, val titleEn: String, val detail: String, val detailEn: String) {
     TRACKPAD(
         "Trackpad", "Trackpad",
-        "1 jari: geser pointer, ketuk = kiri, tahan lalu geser = drag kiri. 2 jari: geser = scroll, ketuk = kanan, tahan lalu geser = drag kanan.",
-        "1 finger: move pointer, tap = left click, hold then drag = left-drag. 2 fingers: swipe = scroll, tap = right click, hold then drag = right-drag.",
+        "1 jari = gerak/klik kiri · 2 jari = scroll/klik kanan",
+        "1 finger = move/left click · 2 fingers = scroll/right click",
     ),
     DIRECT(
         "Sentuh langsung", "Direct touch",
-        "Sentuh langsung di titik yang dituju",
-        "Touch the exact point you want to hit",
+        "Ketuk langsung titik di layar remote",
+        "Tap the exact point on the remote screen",
     ),
 }
 
@@ -162,11 +162,16 @@ class SessionPrefs(context: Context) {
      * pecahan ukuran layar, supaya pad tidak menutupi overlay lain dan tetap
      * pas saat orientasi berubah.
      */
-    fun virtualPadLayout(deviceId: String): Map<XyPadCluster, XyPadPos>? =
-        XyPadLayout.decode(device.getString("$deviceId.padlayout", null))
+    fun virtualPadLayout(deviceId: String): Map<XyPadCluster, XyPadPos>? {
+        XyPadLayout.decode(input.getString(KEY_PAD_LAYOUT, null))?.let { return it }
+        // Migrasi dari penyimpanan per-perangkat lama (kontrol kini global).
+        val legacy = device.getString("$deviceId.padlayout", null) ?: return null
+        input.edit().putString(KEY_PAD_LAYOUT, legacy).apply()
+        return XyPadLayout.decode(legacy)
+    }
 
     fun setVirtualPadLayout(deviceId: String, layout: Map<XyPadCluster, XyPadPos>) {
-        device.edit().putString("$deviceId.padlayout", XyPadLayout.encode(layout)).apply()
+        input.edit().putString(KEY_PAD_LAYOUT, XyPadLayout.encode(layout)).apply()
     }
 
     /**
@@ -245,52 +250,91 @@ class SessionPrefs(context: Context) {
 
     /**
      * Tombol HUD sesi (bulat): satu tombol = satu aksi.
-     * Disimpan per perangkat karena posisi layer bergantung ukuran layar.
+     *
+     * Ronde 34 (permintaan pemilik): penyimpanan kini **global** — kontrol
+     * yang diatur di satu koneksi langsung dipakai semua koneksi, termasuk
+     * RDP yang baru ditambah, tanpa atur ulang. [deviceId] tetap diterima
+     * hanya sebagai kunci migrasi: nilai per-perangkat lama dipindah ke
+     * kunci global saat pertama kali dibaca.
      */
     fun hudKeys(deviceId: String): List<HudKey> {
-        HudKey.decode(device.getString("$deviceId.hudkeys", null))?.let { return it }
+        HudKey.decode(input.getString(KEY_HUD_KEYS, null))?.let { return it }
+        // Migrasi dari penyimpanan per-perangkat lama.
+        HudKey.decode(device.getString("$deviceId.hudkeys", null))?.let {
+            input.edit().putString(KEY_HUD_KEYS, HudKey.encode(it)).apply()
+            return it
+        }
         // Belum pernah diubah: susun set bawaan, tapi hormati preferensi lama
         // (toggle cluster ronde 2) supaya tombol yang sengaja dimatikan user
         // tidak muncul lagi begitu model tombol baru dipakai.
         var keys = HudKey.defaults(hudButtonSize)
         if (!showLeft) keys = keys.filterNot { it.id == "kiri" }
         if (!showRight) keys = keys.filterNot { it.id == "kanan" }
-        if (!showMiddle) keys = keys.filterNot { it.id == "tengah" }
         if (!showScroll) keys = keys.filterNot { it.id == "naik" || it.id == "turun" }
-        if (!showSwitch) keys = keys.filterNot { it.id == "switch" }
         return keys
     }
 
     fun setHudKeys(deviceId: String, keys: List<HudKey>) {
-        device.edit().putString("$deviceId.hudkeys", HudKey.encode(keys)).apply()
+        input.edit().putString(KEY_HUD_KEYS, HudKey.encode(keys)).apply()
     }
 
-    fun customHudKeys(deviceId: String): List<HudKey>? =
-        HudKey.decode(device.getString("$deviceId.hudkeys.custom", null))
+    fun customHudKeys(deviceId: String): List<HudKey>? {
+        input.getString(KEY_HUD_CUSTOM, null)?.let { return HudKey.decode(it) }
+        // Migrasi dari penyimpanan per-perangkat lama.
+        val legacy = device.getString("$deviceId.hudkeys.custom", null) ?: return null
+        input.edit().putString(KEY_HUD_CUSTOM, legacy).apply()
+        return HudKey.decode(legacy)
+    }
 
     fun setCustomHudKeys(deviceId: String, keys: List<HudKey>) {
-        device.edit().putString("$deviceId.hudkeys.custom", HudKey.encode(keys)).apply()
+        input.edit().putString(KEY_HUD_CUSTOM, HudKey.encode(keys)).apply()
     }
 
-    fun hudButtonsVisible(deviceId: String): Boolean =
-        device.getBoolean("$deviceId.hud-visible", true)
+    fun hudButtonsVisible(deviceId: String): Boolean {
+        if (input.contains(KEY_HUD_VISIBLE)) return input.getBoolean(KEY_HUD_VISIBLE, true)
+        // Migrasi dari penyimpanan per-perangkat lama.
+        val legacyKey = "$deviceId.hud-visible"
+        if (device.contains(legacyKey)) {
+            val legacy = device.getBoolean(legacyKey, true)
+            input.edit().putBoolean(KEY_HUD_VISIBLE, legacy).apply()
+            return legacy
+        }
+        return true
+    }
 
     fun setHudButtonsVisible(deviceId: String, visible: Boolean) {
-        device.edit().putBoolean("$deviceId.hud-visible", visible).apply()
+        input.edit().putBoolean(KEY_HUD_VISIBLE, visible).apply()
     }
 
-    fun hudProfile(deviceId: String): HudProfilePreset =
-        HudProfilePreset.entries.getOrElse(device.getInt("$deviceId.hudprofile", 0)) {
-            HudProfilePreset.STANDARD
+    fun hudProfile(deviceId: String): HudProfilePreset {
+        if (input.contains(KEY_HUD_PROFILE)) {
+            return HudProfilePreset.entries.getOrElse(input.getInt(KEY_HUD_PROFILE, 0)) {
+                HudProfilePreset.STANDARD
+            }
         }
+        // Migrasi dari penyimpanan per-perangkat lama.
+        val legacyKey = "$deviceId.hudprofile"
+        if (device.contains(legacyKey)) {
+            val legacy = device.getInt(legacyKey, 0)
+            input.edit().putInt(KEY_HUD_PROFILE, legacy).apply()
+            return HudProfilePreset.entries.getOrElse(legacy) { HudProfilePreset.STANDARD }
+        }
+        return HudProfilePreset.STANDARD
+    }
 
     fun setHudProfile(deviceId: String, preset: HudProfilePreset) {
-        device.edit().putInt("$deviceId.hudprofile", preset.ordinal).apply()
+        input.edit().putInt(KEY_HUD_PROFILE, preset.ordinal).apply()
     }
 
     companion object {
         private const val INPUT_FILE = "xydesk.input"
         private const val DEVICE_FILE = "xydesk.session"
+        // Kontrol sesi global (ronde 34): sekali atur, dipakai semua koneksi.
+        private const val KEY_HUD_KEYS = "hudkeys"
+        private const val KEY_HUD_CUSTOM = "hudkeys.custom"
+        private const val KEY_HUD_VISIBLE = "hud-visible"
+        private const val KEY_HUD_PROFILE = "hudprofile"
+        private const val KEY_PAD_LAYOUT = "padlayout"
         private const val KEY_INPUT_MODE = "input_mode"
         private const val KEY_POINTER_STYLE = "pointer_style"
         private const val KEY_POINTER_SIZE = "pointer_size"

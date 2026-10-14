@@ -569,7 +569,6 @@ fun XyDeskHome(
             }
             XyRow(
                 title = xy("Alat & bantuan", "Tools & help"),
-                subtitle = xy("Cadangan, pembaruan, dan masukan", "Backup, updates, and feedback"),
                 modifier = Modifier.padding(horizontal = 8.dp),
                 leading = XyIcons.Folder,
                 trailing = {
@@ -1043,10 +1042,7 @@ private fun DevicesScreen(
             }
             if (showPcConnectionNotice) {
                 Banner(
-                    text = xy(
-                        "Koneksi PC langsung masih dalam tahap pengembangan dan terpisah dari RDP. Fitur RDP tetap tersedia.",
-                        "Direct PC connection is still in development and separate from RDP. RDP remains available.",
-                    ),
+                    text = xy("Koneksi PC masih beta — RDP tetap tersedia.", "PC connection is beta — RDP still works."),
                     onClick = { showPcConnectionNotice = false },
                     container = MaterialTheme.colorScheme.secondaryContainer,
                     content = MaterialTheme.colorScheme.onSecondaryContainer,
@@ -1116,10 +1112,8 @@ private fun DevicesScreen(
                             Spacer(Modifier.height(6.dp))
                             Text(
                                 xy(
-                                    "Pilih Koneksi PC (ID & Password via XyDeskHost.exe dengan dukungan GPU Gaming) " +
-                                        "atau Koneksi RDP standar lewat IP lokal, domain, maupun Tailscale.",
-                                    "Choose PC Connection (ID & Password via XyDeskHost.exe with Gaming GPU support) " +
-                                        "or standard RDP Connection over a local IP, domain, or Tailscale.",
+                                    "Tambahkan Koneksi PC, PC Stream, atau RDP untuk mulai.",
+                                    "Add a PC, PC Stream, or RDP connection to get started.",
                                 ),
                                 style = MaterialTheme.typography.bodyMedium,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -1264,6 +1258,7 @@ private fun DevicesScreen(
                                 onWakeConnect = { onWakeConnect(profile) },
                                 onEdit = { onEdit(profile) },
                                 onDelete = { onDelete(profile) },
+                                compact = true,
                             )
                         }
                     }
@@ -1301,10 +1296,6 @@ private fun DevicesScreen(
                 )
                 XyRow(
                     title = xy("Koneksi PC (ID & Password)", "PC Connection (ID & Password)"),
-                    subtitle = xy(
-                        "Jalur E2EE + Ultra-Low Latency FPS Gaming (NVIDIA / AMD / Intel GPU)",
-                        "E2EE + Ultra-Low Latency FPS Gaming path (NVIDIA / AMD / Intel GPU)",
-                    ),
                     modifier = Modifier.padding(horizontal = 2.dp),
                     trailing = {
                         Text(
@@ -1321,10 +1312,6 @@ private fun DevicesScreen(
                 )
                 XyRow(
                     title = xy("PC Stream — Host XyDesk (ID & PIN)", "PC Stream — XyDesk Host (ID & PIN)"),
-                    subtitle = xy(
-                        "Sambung ke host XyDesk produksi lewat hub signaling: ID host 9 digit + PIN 6 digit",
-                        "Connect to a production XyDesk host via the signaling hub: 9-digit host ID + 6-digit PIN",
-                    ),
                     modifier = Modifier.padding(horizontal = 2.dp),
                     trailing = {
                         Text(
@@ -1341,10 +1328,6 @@ private fun DevicesScreen(
                 )
                 XyRow(
                     title = xy("Koneksi RDP (Host / IP)", "RDP Connection (Host / IP)"),
-                    subtitle = xy(
-                        "Koneksi langsung lewat IP lokal, domain publik, atau Tailscale",
-                        "Direct connection via local IP, public domain, or Tailscale",
-                    ),
                     modifier = Modifier.padding(horizontal = 2.dp),
                     onClick = {
                         showAddBubble = false
@@ -1353,10 +1336,6 @@ private fun DevicesScreen(
                 )
                 XyRow(
                     title = xy("RDP Gratis 6 Jam (GitHub Actions)", "Free 6-Hour RDP (GitHub Actions)"),
-                    subtitle = xy(
-                        "Buat PC Windows dari template XyRDP di akun GitHub-mu sendiri — iklan 1x + gabung saluran untuk buka",
-                        "Spin up a Windows PC from the XyRDP template on your own GitHub account — watch 1 ad + join to unlock",
-                    ),
                     modifier = Modifier.padding(horizontal = 2.dp),
                     trailing = {
                         Text(
@@ -1383,6 +1362,7 @@ private fun DeviceCard(
     onWakeConnect: () -> Unit,
     onEdit: () -> Unit,
     onDelete: () -> Unit,
+    compact: Boolean = false,
 ) {
     val context = LocalContext.current
     val rdpOptions = remember(profile.id) { RdpOptions.of(context, profile.id) }
@@ -1403,6 +1383,77 @@ private fun DeviceCard(
         (profile.label ?: profile.host) + "|" + profile.host
     }
     val shape = RoundedCornerShape(6.dp)
+    // Baris keterangan dipakai kartu grid (overlay) dan list (compact).
+    val detailLine = if (rdpOptions.pcConnectMode) {
+        buildString {
+            append(xy("Koneksi PC", "Connect PC"))
+            append("  ·  ")
+            append(profile.host)
+            append("  ·  ")
+            append(rdpOptions.activeCodecLabel())
+        }
+    } else {
+        buildString {
+            append(profile.host).append(':').append(profile.port)
+            if (!profile.username.isNullOrBlank()) append("  ·  ").append(profile.username)
+            append("  ·  ").append(streamBadge)
+            if (rdpOptions.consoleAdmin) append("  ·  Admin")
+        }
+    }
+    if (compact) {
+        // Mode list (permintaan pemilik): bar ramping — preview kecil di kiri,
+        // nama + keterangan di kanan, aksi berupa ikon.
+        Row(
+            Modifier
+                .fillMaxWidth()
+                .clip(shape)
+                .clickable(onClick = onConnect)
+                .padding(horizontal = 10.dp, vertical = 8.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
+        ) {
+            Box(
+                Modifier
+                    .size(width = 104.dp, height = 64.dp)
+                    .clip(RoundedCornerShape(4.dp)),
+            ) {
+                DevicePreviewArt(seed = previewSeed, os = wall)
+            }
+            Column(Modifier.weight(1f)) {
+                Text(
+                    profile.label ?: profile.host,
+                    style = MaterialTheme.typography.titleSmall,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+                Text(
+                    detailLine,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+            }
+            if (hasWol) {
+                XyPillButton(xy("WoL", "WoL"), onWakeConnect, primary = false, compact = true)
+            }
+            XyIconPill(
+                XyIcons.Sliders,
+                onEdit,
+                size = 34.dp,
+                flat = true,
+                contentDescription = xy("Pengaturan RDP", "RDP settings"),
+            )
+            XyIconPill(
+                XyIcons.Trash,
+                onDelete,
+                size = 34.dp,
+                flat = true,
+                contentDescription = xy("Hapus", "Delete"),
+            )
+        }
+        return
+    }
     Column(
         Modifier
             .fillMaxWidth()
@@ -1441,22 +1492,7 @@ private fun DeviceCard(
                     overflow = TextOverflow.Ellipsis,
                 )
                 Text(
-                    if (rdpOptions.pcConnectMode) {
-                        buildString {
-                            append(xy("Koneksi PC", "Connect PC"))
-                            append("  ·  ")
-                            append(profile.host)
-                            append("  ·  ")
-                            append(rdpOptions.activeCodecLabel())
-                        }
-                    } else {
-                        buildString {
-                            append(profile.host).append(':').append(profile.port)
-                            if (!profile.username.isNullOrBlank()) append("  ·  ").append(profile.username)
-                            append("  ·  ").append(streamBadge)
-                            if (rdpOptions.consoleAdmin) append("  ·  Admin")
-                        }
-                    },
+                    detailLine,
                     style = MaterialTheme.typography.bodySmall,
                     color = Color.White.copy(alpha = 0.82f),
                     maxLines = 1,

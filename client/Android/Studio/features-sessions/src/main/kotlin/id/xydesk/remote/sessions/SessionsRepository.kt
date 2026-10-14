@@ -61,6 +61,14 @@ class SessionsRepository(context: Context) {
                 pass,
             )
         }
+        // Kredensial global terakhir (ronde 34): prefill untuk koneksi baru
+        // ke host apapun — username selalu; password hanya bila diingat.
+        profile.username?.takeIf { it.isNotBlank() }?.let {
+            vault.put(CredentialVault.LAST_USERNAME_KEY, it)
+        }
+        if (shouldRemember) {
+            vault.put(CredentialVault.LAST_PASSWORD_KEY, pass!!)
+        }
         try {
             dao.upsert(
                 FavoriteEntity(

@@ -680,3 +680,35 @@ bisa meminta mode VDD dari dalam sesi** — hanya via CLI/panel lokal.
   6176562679.
 - Catatan rilis: tombol VD klien TIDAK ada di v1.1.13 (dibuat setelah
   rilis) — masuk build berikutnya.
+
+## Ronde 34 — revisi UI pemilik: list/grid, bersih-bersih teks, kontrol global
+
+- **List perangkat dua bentuk** (permintaan pemilik): grid tetap kartu besar
+  (preview desktop 212dp); mode list kini bar ramping — preview kecil
+  (104×64dp) di kiri, nama + keterangan 1 baris, aksi ikon (WoL/atur/hapus).
+  `DeviceCard` ber-param `compact`; toggle grid/list yang sudah ada yang
+  memilih bentuk.
+- **Bersih-bersih teks**: 60 `subtitle` penjelasan dihapus dari 6 layar
+  (Screens, AddDeviceScreen, SessionControls, XyProfileScreen,
+  SessionKeyLayer, XyDeskHome) — judul saja; yang dipertahankan: "Ingat
+  password" (info keamanan AES-GCM), detail aksi tombol HUD (memang
+  penjelas pilihan), dan 1 baris cara seret cluster. Paragraf panjang card
+  dihapus (Streaming & Latensi, Masalah koneksi, Tombol bawaan); banner
+  "Koneksi PC beta" + empty state dipendekkan; detail InputMode dipendek
+  jadi 1 baris.
+- **Kontrol sesi GLOBAL** (SessionPrefs): `hudKeys`/`customHudKeys`/
+  `hudButtonsVisible`/`hudProfile`/`virtualPadLayout` pindah ke store global
+  `xydesk.input` — atur sekali, semua koneksi (termasuk RDP baru) ikut;
+  nilai per-perangkat lama dimigrasi otomatis saat pertama dibaca.
+  Toggle settings "Tombol tengah"/"Tombol ganti mode input" dihapus (tak
+  berlaku lagi).
+- **Default HUD baru**: klik kiri, klik kanan, scroll naik, scroll turun,
+  Copy (Ctrl+C), Paste (Ctrl+V) — tengah & tombol mode dibuang dari preset
+  awal (ronde 34, permintaan pemilik).
+- **Kredensial global**: `CredentialVault.LAST_USERNAME_KEY/LAST_PASSWORD_KEY`
+  — username selalu, password saat "ingat"; AddDeviceScreen prefill urutan:
+  profil lama → ingatan per host → kredensial global terakhir.
+- **Insiden git**: HEAD lokal tertinggal ronde 32 (snapshot) padahal commit
+  ronde 33 ada di remote — pulihkan via fetch + `git reset origin/main`
+  (working tree utuh, 10 file revisi ini satu-satunya diff). `core.fileMode
+  false` supaya exec-bit upstream tak ikut ter-commit.

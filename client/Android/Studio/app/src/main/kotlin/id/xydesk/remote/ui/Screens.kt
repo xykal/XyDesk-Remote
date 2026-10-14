@@ -292,7 +292,6 @@ private fun CredentialsSection(
         XyCard {
             XyRow(
                 title = xy("Hapus semua kredensial & perangkat", "Delete all credentials and devices"),
-                subtitle = xy("Vault dikosongkan dan daftar perangkat dibersihkan", "Vault cleared and device list wiped"),
                 leading = XyIcons.Trash,
                 onClick = { confirmClear = true },
             )
@@ -375,9 +374,7 @@ private fun GeneralSection(
     var lang by remember { mutableStateOf(LangPrefs.current()) }
     var showLeft by remember { mutableStateOf(prefs.showLeft) }
     var showRight by remember { mutableStateOf(prefs.showRight) }
-    var showMiddle by remember { mutableStateOf(prefs.showMiddle) }
     var showScroll by remember { mutableStateOf(prefs.showScroll) }
-    var showSwitch by remember { mutableStateOf(prefs.showSwitch) }
 
     Column(
         Modifier
@@ -403,10 +400,6 @@ private fun GeneralSection(
             Spacer(Modifier.height(6.dp))
             XyToggleRow(
                 title = xy("Putuskan sesi saat app ke background", "Disconnect when app goes background"),
-                subtitle = xy(
-                    "Cegah sesi menggantung saat HP dipakai untuk hal lain",
-                    "Avoid a dangling session while the phone does something else",
-                ),
                 checked = autoDisconnect,
                 onCheckedChange = {
                     autoDisconnect = it
@@ -419,10 +412,6 @@ private fun GeneralSection(
         XyCard {
             XyToggleRow(
                 title = xy("Lanjutkan sesi terakhir otomatis", "Automatically resume the last session"),
-                subtitle = xy(
-                    "Coba buka profil terakhir dalam 15 menit setelah sesi berakhir tidak sengaja. Password yang tidak tersimpan akan diminta. Putus manual tidak akan tersambung lagi.",
-                    "Reopen the last profile within 15 minutes after an unexpected session close. If its password isn't saved, you'll be prompted. Manual Disconnect will not reconnect.",
-                ),
                 checked = autoResumeLastSession,
                 onCheckedChange = {
                     autoResumeLastSession = it
@@ -495,7 +484,6 @@ private fun GeneralSection(
             )
             XyToggleRow(
                 title = xy("Getaran saat tombol ditekan", "Haptic feedback on button press"),
-                subtitle = xy("Haptic halus di cluster mouse dan keyboard", "Subtle haptics on the mouse cluster and keyboard"),
                 checked = haptics,
                 onCheckedChange = {
                     haptics = it
@@ -506,24 +494,7 @@ private fun GeneralSection(
 
         XySectionLabel(xy("Tombol HUD", "HUD buttons"))
         XyCard {
-            Text(
-                xy(
-                    "Setiap tombol di layar sesi berdiri sendiri: bulat, ukurannya " +
-                        "bisa diatur, dan aksinya dipilih per tombol " +
-                        "(sekali klik / tahan / toggle). Geser tombol hanya saat " +
-                        "mode \"Atur posisi\" menyala, supaya tidak kepencet waktu dipakai. " +
-                        "Tombol bawaan di bawah ini menentukan set awal untuk perangkat " +
-                        "yang belum pernah diubah.",
-                    "Every on-screen button stands alone: round, resizable, and " +
-                        "with its own action (single tap / " +
-                        "hold / toggle). Dragging only works while \"Edit layout\" is on, " +
-                        "so buttons cannot move by accident while you use them. The " +
-                        "defaults below seed devices that were never customised.",
-                ),
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-            XyToggleRow(
+                        XyToggleRow(
                 title = xy("Tombol kiri", "Left button"),
                 checked = showLeft,
                 onCheckedChange = { showLeft = it; prefs.showLeft = it },
@@ -534,23 +505,9 @@ private fun GeneralSection(
                 onCheckedChange = { showRight = it; prefs.showRight = it },
             )
             XyToggleRow(
-                title = xy("Tombol tengah", "Middle button"),
-                checked = showMiddle,
-                onCheckedChange = { showMiddle = it; prefs.showMiddle = it },
-            )
-            XyToggleRow(
                 title = xy("Scroll atas/bawah", "Scroll up/down"),
                 checked = showScroll,
                 onCheckedChange = { showScroll = it; prefs.showScroll = it },
-            )
-            XyToggleRow(
-                title = xy("Tombol ganti mode input", "Input-mode switch button"),
-                subtitle = xy(
-                    "Pindah trackpad <-> sentuh langsung dari layar sesi",
-                    "Switch trackpad <-> direct touch from the session screen",
-                ),
-                checked = showSwitch,
-                onCheckedChange = { showSwitch = it; prefs.showSwitch = it },
             )
             Spacer(Modifier.height(6.dp))
             Text(
@@ -580,17 +537,12 @@ private fun GeneralSection(
             Spacer(Modifier.height(8.dp))
             XyToggleRow(
                 title = xy("Muat seluruh desktop (fit)", "Fit whole desktop"),
-                subtitle = xy("Taskbar dan tepi desktop selalu ikut kelihatan", "Taskbar and desktop edges always stay visible"),
                 checked = autoFit,
                 onCheckedChange = { autoFit = it; prefs.autoFit = it },
             )
             Spacer(Modifier.height(8.dp))
             XyToggleRow(
                 title = xy("Paksa bar sistem tetap tersembunyi saat mengetik", "Keep system bars hidden while typing"),
-                subtitle = xy(
-                    "Coba sembunyikan kembali status bar/ikon notch saat keyboard HP muncul di sesi. Berguna untuk Android 8+; sistem masih dapat menampilkannya sementara.",
-                    "Re-hide the status bar and notch icons when the phone keyboard opens in a session. Helps on Android 8+; the system may still show them briefly.",
-                ),
                 checked = keepSystemBarsHiddenOnIme,
                 onCheckedChange = {
                     keepSystemBarsHiddenOnIme = it
@@ -644,18 +596,7 @@ private fun GeneralSection(
 
         XySectionLabel(xy("Streaming & Latensi (default perangkat baru)", "Streaming & Latency (new device defaults)"))
         XyCard {
-            Text(
-                xy(
-                    "Nilai ini dipakai saat menambah perangkat baru. Perangkat yang " +
-                        "sudah ada tetap diatur sendiri di layar Ubah perangkat.",
-                    "These values are used when adding a new device. Existing devices " +
-                        "keep their own settings on the Edit device screen.",
-                ),
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-            Spacer(Modifier.height(6.dp))
-            Text(xy("Profil streaming default", "Default streaming profile"), style = MaterialTheme.typography.titleSmall)
+                                    Text(xy("Profil streaming default", "Default streaming profile"), style = MaterialTheme.typography.titleSmall)
             Spacer(Modifier.height(6.dp))
             val streamOptions = listOf(
                 XyStreamProfile.AUTO,
@@ -684,37 +625,31 @@ private fun GeneralSection(
             }
             XyToggleRow(
                 title = xy("Transport UDP (RDP-UDP + FEC)", "UDP transport (RDP-UDP + FEC)"),
-                subtitle = xy("Jalur UDP multitransport untuk gerakan mulus", "Multitransport UDP channel for smoother motion"),
                 checked = defaultUdp,
                 onCheckedChange = { defaultUdp = it; appPrefs.defaultUdp = it },
             )
             XyToggleRow(
                 title = xy("Deteksi bandwidth otomatis", "Automatic bandwidth detection"),
-                subtitle = xy("Kualitas mengikuti kondisi jaringan secara dinamis", "Quality adapts dynamically to network conditions"),
                 checked = defaultNetAuto,
                 onCheckedChange = { defaultNetAuto = it; appPrefs.defaultNetAuto = it },
             )
             XyToggleRow(
                 title = xy("H.264 / RemoteFX (GFX)", "H.264 / RemoteFX (GFX)"),
-                subtitle = xy("Akselerasi hardware H.264 untuk video & animasi 60 FPS", "H.264 hardware acceleration for 60 FPS video & motion"),
                 checked = defaultH264,
                 onCheckedChange = { defaultH264 = it; appPrefs.defaultH264 = it },
             )
             XyToggleRow(
                 title = xy("Async Frame Update (+async-update)", "Async Frame Update (+async-update)"),
-                subtitle = xy("Render layar mandiri tanpa menunggu antrean input", "Decouple frame rendering from input queue"),
                 checked = defaultAsyncUpdate,
                 onCheckedChange = { defaultAsyncUpdate = it; appPrefs.defaultAsyncUpdate = it },
             )
             XyToggleRow(
                 title = xy("Async Input & Channels (+async-channels)", "Async Input & Channels (+async-channels)"),
-                subtitle = xy("Proses input & kanal di thread terpisah agar responsif", "Process input & channels on dedicated threads"),
                 checked = defaultAsyncChannels,
                 onCheckedChange = { defaultAsyncChannels = it; appPrefs.defaultAsyncChannels = it },
             )
             XyToggleRow(
                 title = xy("Resolusi dinamis", "Dynamic resolution"),
-                subtitle = xy("Desktop remote bisa diubah saat sesi hidup (kanal DISP)", "Change remote desktop size live (DISP channel)"),
                 checked = defaultDynRes,
                 onCheckedChange = { defaultDynRes = it; appPrefs.defaultDynamicResolution = it },
             )
@@ -725,7 +660,6 @@ private fun GeneralSection(
             )
             XyToggleRow(
                 title = xy("Penyimpanan lokal (drive)", "Local storage (drive)"),
-                subtitle = xy("Folder Download HP muncul sebagai drive di remote", "Phone storage shows up as a remote drive"),
                 checked = defaultDrive,
                 onCheckedChange = { defaultDrive = it; appPrefs.defaultLocalDrive = it },
             )
@@ -733,18 +667,7 @@ private fun GeneralSection(
 
         XySectionLabel(xy("Masalah koneksi", "Connection issues"))
         XyCard {
-            Text(
-                xy(
-                    "Audio, mikrofon, clipboard, drive, kamera, dan gateway diatur " +
-                        "per perangkat di layar Tambah/Ubah perangkat.",
-                    "Audio, microphone, clipboard, drive, camera and gateway are set " +
-                        "per device on the Add/Edit device screen.",
-                ),
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-            Spacer(Modifier.height(10.dp))
-            Text(
+                                    Text(
                 xy("Inti: {0}", "Core: {0}", coreBuildInfo()),
                 style = MaterialTheme.typography.bodySmall,
             )
@@ -798,10 +721,6 @@ private fun SecuritySection(appPrefs: AppPrefs) {
         XyCard {
             XyToggleRow(
                 title = xy("Proteksi tangkapan layar (FLAG_SECURE)", "Screen capture protection (FLAG_SECURE)"),
-                subtitle = xy(
-                    "Sembunyikan pratinjau layar PC di recent apps Android & cegah perekaman layar pihak ketiga",
-                    "Hide the PC preview in Android recents & block third-party screen recording",
-                ),
                 checked = screenCaptureProtection,
                 onCheckedChange = {
                     screenCaptureProtection = it
@@ -810,10 +729,6 @@ private fun SecuritySection(appPrefs: AppPrefs) {
             )
             XyToggleRow(
                 title = xy("Wajib autentikasi perangkat (Biometrik / PIN)", "Require device lock (Biometric / PIN)"),
-                subtitle = xy(
-                    "Minta sidik jari, wajah, atau PIN HP sebelum membuka koneksi remote",
-                    "Prompt for phone fingerprint, face, or PIN before launching a remote session",
-                ),
                 checked = requireDeviceLock,
                 onCheckedChange = {
                     requireDeviceLock = it
@@ -822,10 +737,6 @@ private fun SecuritySection(appPrefs: AppPrefs) {
             )
             XyToggleRow(
                 title = xy("Kunci PC otomatis saat sesi selesai (Win+L)", "Auto-lock PC on session exit (Win+L)"),
-                subtitle = xy(
-                    "Kirim perintah kunci layar Windows otomatis sesaat sebelum memutus koneksi",
-                    "Automatically send Windows lock screen command right before disconnecting",
-                ),
                 checked = autoLockRemoteOnLeave,
                 onCheckedChange = {
                     autoLockRemoteOnLeave = it
@@ -834,10 +745,6 @@ private fun SecuritySection(appPrefs: AppPrefs) {
             )
             XyToggleRow(
                 title = xy("Bersihkan clipboard HP saat putus", "Clear phone clipboard on disconnect"),
-                subtitle = xy(
-                    "Hapus sisa teks/gambar dari sesi remote di clipboard HP setelah sesi ditutup",
-                    "Wipe synced text/images from the phone clipboard after the session closes",
-                ),
                 checked = clearClipboardOnDisconnect,
                 onCheckedChange = {
                     clearClipboardOnDisconnect = it
@@ -850,10 +757,6 @@ private fun SecuritySection(appPrefs: AppPrefs) {
         XyCard {
             XyToggleRow(
                 title = xy("Hitung sesi aktif secara anonim", "Count active sessions anonymously"),
-                subtitle = xy(
-                    "Aktif otomatis. Matikan sakelar ini kapan saja untuk berhenti mengirim heartbeat sesi.",
-                    "On automatically. Turn this switch off any time to stop sending session heartbeats.",
-                ),
                 checked = shareActiveSessionStats,
                 onCheckedChange = {
                     shareActiveSessionStats = it
@@ -1092,10 +995,6 @@ private fun AboutSection() {
             )
             XyRow(
                 title = t("about.developer"),
-                subtitle = xy(
-                    "Didukung oleh ${AppBrand.PUBLISHER}",
-                    "Powered by ${AppBrand.PUBLISHER}",
-                ),
             )
         }
 

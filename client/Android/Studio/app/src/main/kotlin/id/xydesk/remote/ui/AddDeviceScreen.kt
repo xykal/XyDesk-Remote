@@ -128,8 +128,13 @@ fun AddDeviceScreen(
     var host by remember(existing) {
         mutableStateOf(existing?.let { formatRdpEndpoint(it.host, it.port) }.orEmpty())
     }
+    // Prefill kredensial: profil lama -> ingatan per host -> kredensial
+    // global terakhir (ronde 34: sekali "ingat", semua koneksi baru terisi).
     var user by remember {
-        mutableStateOf(existing?.username.orEmpty())
+        mutableStateOf(
+            existing?.username
+                ?: vault.get(CredentialVault.LAST_USERNAME_KEY).orEmpty(),
+        )
     }
     var pass by remember {
         mutableStateOf(
@@ -137,7 +142,9 @@ fun AddDeviceScreen(
                 ?: existing?.let {
                     vault.get(it.id)
                         ?: vault.get(CredentialVault.hostCredKey(it.host, it.port, it.username.orEmpty()))
-                }.orEmpty(),
+                }
+                ?: vault.get(CredentialVault.LAST_PASSWORD_KEY)
+                ?: "",
         )
     }
     var domain by remember { mutableStateOf(existing?.domain.orEmpty()) }
@@ -859,50 +866,30 @@ fun AddDeviceScreen(
                 XyCard {
                     XyToggleRow(
                         title = xy("Mouse Relatif RawInput (Rotasi 360° Game FPS)", "RawInput Relative Mouse (360° FPS Camera)"),
-                        subtitle = xy(
-                            "Kirim delta pergerakan mouse murni tanpa batas tepi layar untuk game shooter/3D",
-                            "Send pure relative mouse deltas without screen-edge clamping for shooter/3D games",
-                        ),
                         checked = options.rawInputMouse,
                         onCheckedChange = { options = options.copy(rawInputMouse = it) },
                         leading = XyIcons.Sliders,
                     )
                     XyToggleRow(
                         title = xy("Transport QUIC / UDP Datagram (Zero HoL Blocking)", "QUIC / UDP Datagram Transport (Zero HoL Blocking)"),
-                        subtitle = xy(
-                            "Prioritaskan frame terbaru tanpa antrean TCP yang menahan paket saat jitter",
-                            "Prioritize newest frames without TCP head-of-line blocking during jitter",
-                        ),
                         checked = options.udpTransport,
                         onCheckedChange = { options = options.copy(udpTransport = it) },
                         leading = XyIcons.Wifi,
                     )
                     XyToggleRow(
                         title = xy("Audio Real-Time Latensi Rendah", "Low-Latency Real-Time Audio"),
-                        subtitle = xy(
-                            "Streaming suara game & desktop langsung ke HP",
-                            "Stream game and desktop audio directly to your phone",
-                        ),
                         checked = audioIndex == 0,
                         onCheckedChange = { audioIndex = if (it) 0 else 2 },
                         leading = XyIcons.Mic,
                     )
                     XyToggleRow(
                         title = xy("Clipboard Otomatis (Anti-Putus Teks Panjang)", "Auto Clipboard (Long-Text Anti-Disconnect)"),
-                        subtitle = xy(
-                            "Sinkronisasi teks & gambar otomatis dengan proteksi ukuran buffer aman",
-                            "Two-way text & image sync with safe buffer ceiling protection",
-                        ),
                         checked = options.clipboard,
                         onCheckedChange = { options = options.copy(clipboard = it) },
                         leading = XyIcons.Clip,
                     )
                     XyToggleRow(
                         title = xy("Mode Hemat Baterai & Suhu Dingin (VSYNC Pacing)", "Battery Saver & Cool Thermal Mode (VSYNC Pacing)"),
-                        subtitle = xy(
-                            "Gabungkan burst update per siklus layar agar HP tetap dingin dan irit baterai",
-                            "Coalesce pixel bursts per VSYNC cycle to keep the phone cool and save battery",
-                        ),
                         checked = options.batterySaver,
                         onCheckedChange = { options = options.copy(batterySaver = it) },
                         leading = XyIcons.Sliders,
@@ -1379,7 +1366,6 @@ fun AddDeviceScreen(
                 )
                 XyToggleRow(
                     title = xy("Mikrofon", "Microphone"),
-                    subtitle = xy("Kirim audio HP ke remote (butuh izin mikrofon)", "Send phone audio to remote (needs mic permission)"),
                     checked = options.microphone,
                     onCheckedChange = { options = options.copy(microphone = it) },
                     leading = XyIcons.Mic,
@@ -1404,14 +1390,12 @@ fun AddDeviceScreen(
                         ) { options = options.copy(micGateDb = it.toInt()) }
                         XyToggleRow(
                             title = xy("Noise suppression", "Noise suppression"),
-                            subtitle = xy("High-pass + expander buang desis/AC/angin", "High-pass + expander kills hiss, AC hum, wind"),
                             checked = options.micNoiseSuppression,
                             onCheckedChange = { options = options.copy(micNoiseSuppression = it) },
                             leading = XyIcons.Mic,
                         )
                         XyToggleRow(
                             title = xy("Auto gain (AGC)", "Auto gain (AGC)"),
-                            subtitle = xy("Level mic HP disamakan otomatis saat bicara", "Phone mic level auto-levelled while talking"),
                             checked = options.micAgc,
                             onCheckedChange = { options = options.copy(micAgc = it) },
                             leading = XyIcons.Mic,
@@ -1430,14 +1414,12 @@ fun AddDeviceScreen(
                 }
                 XyToggleRow(
                     title = xy("Clipboard", "Clipboard"),
-                    subtitle = xy("Copy-paste dua arah", "Two-way copy-paste"),
                     checked = options.clipboard,
                     onCheckedChange = { options = options.copy(clipboard = it) },
                     leading = XyIcons.Clip,
                 )
                 XyToggleRow(
                     title = xy("Penyimpanan lokal", "Local storage"),
-                    subtitle = xy("Folder HP muncul sebagai drive 'XyDesk' di PC remote", "Phone folder appears as the 'XyDesk' drive on the remote PC"),
                     checked = options.localDrive,
                     onCheckedChange = { options = options.copy(localDrive = it) },
                     leading = XyIcons.Folder,
@@ -1447,7 +1429,6 @@ fun AddDeviceScreen(
                 }
                 XyToggleRow(
                     title = xy("Kamera", "Camera"),
-                    subtitle = xy("Kamera HP sebagai webcam remote (kalau didukung server)", "Phone camera as remote webcam (if the server supports it)"),
                     checked = options.camera,
                     onCheckedChange = { options = options.copy(camera = it) },
                     leading = XyIcons.Shot,
@@ -1503,30 +1484,18 @@ fun AddDeviceScreen(
                 Spacer(Modifier.height(8.dp))
                 XyToggleRow(
                     title = xy("Mode Hemat Baterai & Suhu Dingin (VSYNC Pacing)", "Battery Saver & Cool Thermal Mode (VSYNC Pacing)"),
-                    subtitle = xy(
-                        "Gabungkan burst update piksel per siklus layar agar HP tidak cepat panas dan hemat baterai",
-                        "Coalesce pixel burst updates per screen cycle to keep the phone cool and save battery",
-                    ),
                     checked = options.batterySaver,
                     onCheckedChange = { options = options.copy(batterySaver = it) },
                     leading = XyIcons.Sliders,
                 )
                 XyToggleRow(
                     title = xy("Transport UDP (RDP-UDP + FEC)", "UDP transport (RDP-UDP + FEC)"),
-                    subtitle = xy(
-                        "RDP-UDP + FEC; lebih halus untuk gerakan cepat, butuh dukungan server",
-                        "RDP-UDP + FEC; smoother fast motion, needs server support",
-                    ),
                     checked = options.udpTransport,
                     onCheckedChange = { options = options.copy(udpTransport = it) },
                     leading = XyIcons.Wifi,
                 )
                 XyToggleRow(
                     title = xy("Deteksi bandwidth otomatis", "Automatic bandwidth detection"),
-                    subtitle = xy(
-                        "Profil otomatis FreeRDP mengikuti kondisi jaringan",
-                        "FreeRDP auto profile adapts to network conditions",
-                    ),
                     checked = options.networkAutoDetect,
                     onCheckedChange = {
                         options = options.copy(networkAutoDetect = it, streamProfile = XyStreamProfile.CUSTOM)
@@ -1536,10 +1505,6 @@ fun AddDeviceScreen(
                 )
                 XyToggleRow(
                     title = xy("Jaringan terbatas (broadband-low / AVC420)", "Low-bandwidth mode (broadband-low / AVC420)"),
-                    subtitle = xy(
-                        "Pakai profil broadband-low + AVC420 untuk koneksi seluler/hemat",
-                        "Use broadband-low + AVC420 hints for cellular/metered connections",
-                    ),
                     checked = options.lowBandwidth,
                     onCheckedChange = {
                         options = options.copy(lowBandwidth = it, streamProfile = XyStreamProfile.CUSTOM)
@@ -1548,10 +1513,6 @@ fun AddDeviceScreen(
                 )
                 XyToggleRow(
                     title = xy("H.264 / RemoteFX (GFX)", "H.264 / RemoteFX (GFX)"),
-                    subtitle = xy(
-                        "Akselerasi hardware H.264 (AVC444 di jaringan normal, AVC420 di mode hemat)",
-                        "H.264 hardware acceleration (AVC444 on normal links, AVC420 in low-bandwidth)",
-                    ),
                     checked = options.h264,
                     onCheckedChange = {
                         options = options.copy(h264 = it, streamProfile = XyStreamProfile.CUSTOM)
@@ -1560,10 +1521,6 @@ fun AddDeviceScreen(
                 )
                 XyToggleRow(
                     title = xy("Async Frame Update (+async-update)", "Async Frame Update (+async-update)"),
-                    subtitle = xy(
-                        "Render layar tidak menahan antrean input untuk respons maksimal",
-                        "Decouple frame rendering from input queue for maximum responsiveness",
-                    ),
                     checked = options.asyncUpdate,
                     onCheckedChange = {
                         options = options.copy(asyncUpdate = it, streamProfile = XyStreamProfile.CUSTOM)
@@ -1571,10 +1528,6 @@ fun AddDeviceScreen(
                 )
                 XyToggleRow(
                     title = xy("Async Input & Channels (+async-channels)", "Async Input & Channels (+async-channels)"),
-                    subtitle = xy(
-                        "Proses kanal input, audio, dan clipboard di thread mandiri",
-                        "Process input, audio, and clipboard channels on dedicated threads",
-                    ),
                     checked = options.asyncChannels,
                     onCheckedChange = {
                         options = options.copy(asyncChannels = it, streamProfile = XyStreamProfile.CUSTOM)
@@ -1666,20 +1619,12 @@ fun AddDeviceScreen(
                 Spacer(Modifier.height(6.dp))
                 XyToggleRow(
                     title = xy("Sesi Konsol / Admin (/admin)", "Console / Admin Session (/admin)"),
-                    subtitle = xy(
-                        "Masuk ke sesi konsol fisik atau sesi administrator Windows Server",
-                        "Connect to the physical console or Windows Server administrator session",
-                    ),
                     checked = options.consoleAdmin,
                     onCheckedChange = { options = options.copy(consoleAdmin = it) },
                     leading = XyIcons.Lock,
                 )
                 XyToggleRow(
                     title = xy("Mode Restricted Admin (/restricted-admin)", "Restricted Admin Mode (/restricted-admin)"),
-                    subtitle = xy(
-                        "Login NLA tanpa menyerahkan kredensial plaintext ke host remote (anti pass-the-hash)",
-                        "Authenticate via NLA without sending plaintext credentials to the remote host",
-                    ),
                     checked = options.restrictedAdmin,
                     onCheckedChange = { options = options.copy(restrictedAdmin = it) },
                     leading = XyIcons.Lock,
@@ -1857,7 +1802,6 @@ fun AddDeviceScreen(
             XyCard {
                 XyToggleRow(
                     title = xy("Lewat RDP Gateway", "Use RDP Gateway"),
-                    subtitle = xy("RD Gateway untuk jaringan kantor / tanpa port langsung", "RD Gateway for office networks / no direct port"),
                     checked = gatewayOn,
                     onCheckedChange = { gatewayOn = it },
                     leading = XyIcons.Lock,

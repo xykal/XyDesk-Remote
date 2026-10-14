@@ -183,17 +183,23 @@ data class HudKey(
             }.getOrNull()
         }
 
-        /** Set awal ringkas; jarak baris aman juga di layar landscape pendek. */
+        /**
+         * Set awal (permintaan pemilik ronde 34): klik kiri, klik kanan,
+         * scroll naik, scroll turun, copy, paste — selebihnya pengguna
+         * menambah sendiri lewat editor HUD.
+         */
         fun defaults(size: Float = DEFAULT_SIZE): List<HudKey> {
             val diameter = size.coerceIn(MIN_SIZE, 54f)
+            val small = (diameter * 0.88f).coerceIn(MIN_SIZE, 48f)
+            val ctrl = KeyEvent.KEYCODE_CTRL_LEFT
             return listOf(
-                HudKey("kiri", HudKind.MOUSE_LEFT, "Kiri", x = 0.05f, y = 0.84f),
-                HudKey("kanan", HudKind.MOUSE_RIGHT, "Kanan", x = 0.16f, y = 0.84f),
-                HudKey("tengah", HudKind.MOUSE_MIDDLE, "Tengah", x = 0.27f, y = 0.84f),
-                HudKey("naik", HudKind.SCROLL_UP, "Naik", x = 0.05f, y = 0.70f),
-                HudKey("turun", HudKind.SCROLL_DOWN, "Turun", x = 0.16f, y = 0.70f),
-                HudKey("switch", HudKind.INPUT_SWITCH, "Mode", x = 0.27f, y = 0.70f),
-            ).map { it.copy(size = diameter) }
+                HudKey("kiri", HudKind.MOUSE_LEFT, "Kiri", x = 0.05f, y = 0.84f, size = diameter),
+                HudKey("kanan", HudKind.MOUSE_RIGHT, "Kanan", x = 0.16f, y = 0.84f, size = diameter),
+                HudKey("naik", HudKind.SCROLL_UP, "Naik", x = 0.05f, y = 0.70f, size = small),
+                HudKey("turun", HudKind.SCROLL_DOWN, "Turun", x = 0.16f, y = 0.70f, size = small),
+                HudKey("copy", HudKind.COMBO, "Copy", combo = listOf(ctrl, KeyEvent.KEYCODE_C), x = 0.05f, y = 0.56f, size = small),
+                HudKey("paste", HudKind.COMBO, "Paste", combo = listOf(ctrl, KeyEvent.KEYCODE_V), x = 0.16f, y = 0.56f, size = small),
+            )
         }
 
         /** Hasilkan set tombol siap pakai berdasarkan [HudProfilePreset] dengan ukuran ringkas. */

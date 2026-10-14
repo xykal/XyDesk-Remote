@@ -1942,7 +1942,6 @@ private fun ScreenTab(
     ) {
             XyToggleRow(
                 title = xy("Status telemetri live (Update UI, Latency, Network)", "Live telemetry status (UI updates, latency, network)"),
-                subtitle = xy("FPS = frame per detik di layar HP, tampil bersama latency & resolusi.", "FPS is the app display refresh rate (frames per second drawn on the phone). Show it with latency, resolution, codec, relay, and network."),
                 checked = showTelemetryPill,
                 onCheckedChange = onShowTelemetryPillChange,
             )
@@ -2111,25 +2110,21 @@ private fun InputTab(
             )
             XyToggleRow(
                 title = xy("Akselerasi pointer dinamis", "Dynamic pointer acceleration"),
-                subtitle = xy("Gerak cepat menjangkau layar jauh, gerak pelan tetap presisi", "Fast swipes cross the screen, slow moves stay pixel-accurate"),
                 checked = pointerAcceleration,
                 onCheckedChange = onPointerAcceleration,
             )
             XyToggleRow(
                 title = xy("Inertial scroll (momentum)", "Inertial scroll (momentum)"),
-                subtitle = xy("Gulir dua jari tetap meluncur halus saat dilepas", "Two-finger scroll glides smoothly after release"),
                 checked = inertialScroll,
                 onCheckedChange = onInertialScroll,
             )
             XyToggleRow(
                 title = xy("Zona scroll tepi kanan", "Right-edge scroll strip"),
-                subtitle = xy("Usap 1 jari di tepi paling kanan layar untuk roda scroll", "Swipe 1 finger along the right screen edge for mouse wheel"),
                 checked = edgeScrollZone,
                 onCheckedChange = onEdgeScrollZone,
             )
             XyToggleRow(
                 title = xy("Dukungan Gamepad & Joystick fisik", "Physical Gamepad & Joystick"),
-                subtitle = xy("Stik kiri WASD, stik kanan mouse, A/B klik", "Left stick WASD, right stick mouse, A/B click"),
                 checked = gamepadEnabled,
                 onCheckedChange = onGamepadEnabled,
             )
@@ -2147,7 +2142,6 @@ private fun InputTab(
             )
             XyToggleRow(
                 title = xy("Gyro Air-Mouse (sensor gerak HP)", "Gyro Air-Mouse (phone motion)"),
-                subtitle = xy("Arahkan kursor dengan memiringkan HP seperti pointer laser", "Aim the cursor by tilting your phone like a laser pointer"),
                 checked = gyroMouseEnabled,
                 onCheckedChange = onGyroMouseEnabled,
             )
@@ -2211,7 +2205,6 @@ private fun InputTab(
         }
         XyToggleRow(
             title = xy("Tombol \"Beranda\" di notifikasi", "\"Home\" button in notification"),
-            subtitle = xy("Kembali ke beranda tanpa memutus sesi", "Return home without disconnecting"),
             checked = notifHome,
             onCheckedChange = { v -> notifHome = v; notifPrefs.notifHomeButton = v; refreshNotif() },
         )
@@ -2298,19 +2291,11 @@ private fun ButtonsTab(
     section("tampilan-tombol-overlay",xy("Tampilan tombol overlay", "Overlay button display"), advanced = true) {
             XyToggleRow(
                 title = xy("Aktifkan tombol HUD", "Show HUD buttons"),
-                subtitle = xy(
-                    "Bisa disembunyikan kapan saja lewat ikon mata di rail sesi.",
-                    "You can hide these any time with the eye button on the session rail.",
-                ),
                 checked = showHudButtons,
                 onCheckedChange = onShowHudButtonsChange,
             )
             XyToggleRow(
                 title = xy("Sembunyikan otomatis saat input fisik tersambung", "Auto-hide when physical input is connected"),
-                subtitle = xy(
-                    "Mendeteksi keyboard, mouse, gamepad, dan D-pad eksternal. Menu, keyboard HP, monitor, dan disconnect tetap terlihat.",
-                    "Detects external keyboards, mice, gamepads, and D-pads. Menu, phone keyboard, monitors, and disconnect stay available.",
-                ),
                 checked = autoHideHudOnExternalInput,
                 onCheckedChange = onAutoHideHudOnExternalInputChange,
             )
@@ -3041,7 +3026,6 @@ private fun MonitorAndUserGridModal(
         MonitorGridItem(
             badge = "VIEW",
             title = xy("Layar Penuh HP", "Phone Native View"),
-            subtitle = xy("Ikuti Viewport", "Follow Viewport"),
             value = DisplayPrefs.FOLLOW,
             icon = XyIcons.Fit,
             active = resolution == DisplayPrefs.FOLLOW,

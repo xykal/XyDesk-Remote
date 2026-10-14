@@ -196,29 +196,17 @@ internal fun XyProfileScreen(
             XyGlassRow(
                 icon = XyIcons.Terminal,
                 title = xy("Log koneksi", "Connection log"),
-                subtitle = xy(
-                    "20 baris terakhir dari log boot native.",
-                    "Last 20 lines of the native boot log.",
-                ),
                 onClick = onShowLog,
             )
             XyGlassRow(
                 icon = XyIcons.Heart,
                 title = xy("Masukan & saran", "Feedback & suggestions"),
-                subtitle = xy(
-                    "Bagikan ke aplikasi mana pun, atau salin drafnya.",
-                    "Share to any app, or copy the draft.",
-                ),
                 onClick = onOpenFeedback,
             )
             XyGlassRow(
                 icon = XyIcons.Refresh,
                 title = if (updateChecking) xy("Memeriksa…", "Checking…")
                 else xy("Cek pembaruan", "Check for updates"),
-                subtitle = xy(
-                    "Bandingkan versi app dengan rilis terbaru di portal.",
-                    "Compare the app version with the latest portal release.",
-                ),
                 onClick = {
                     if (!updateChecking) {
                         profileScope.launch {

@@ -108,6 +108,15 @@ class CredentialVault(context: Context) {
         fun hostCredKey(host: String, port: Int, user: String): String =
             "hostcred:" + host.trim().lowercase() + ":" + port + ":" + user.trim().lowercase()
 
+        /**
+         * Kredensial "terakhir dipakai" global (permintaan pemilik ronde 34):
+         * sekali user mencentang ingat password, koneksi baru ke host APAPUN
+         * langsung terisi prefilled — tidak perlu mengetik ulang. Sama
+         * terenkripsi seperti kredensial lain di vault ini.
+         */
+        const val LAST_USERNAME_KEY = "lastcred:username"
+        const val LAST_PASSWORD_KEY = "lastcred:password"
+
         private const val TAG = "CredentialVault"
         private const val ANDROID_KEYSTORE = "AndroidKeyStore"
         private const val MASTER_ALIAS = "xydesk_cred_vault_v1"
