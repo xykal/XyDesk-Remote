@@ -59,12 +59,15 @@ import id.xydesk.remote.ui.theme.XyThemeState
 import id.xydesk.remote.ui.theme.xyDark
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.launch
 import org.json.JSONObject
 import org.webrtc.EglBase
 import org.webrtc.SurfaceViewRenderer
+import org.webrtc.VideoFrame
+import org.webrtc.VideoSink
 
 /**
  * Sesi PC-stream produksi (host XyDesk via hub `signal.xydesk.my.id`):
@@ -101,6 +104,32 @@ class PcStreamSessionActivity : ComponentActivity() {
     /** Notifikasi sekali-lihat dari host (mis. status Virtual Display). */
     private val hostNotice = mutableStateOf<String?>(null)
 
+    // ── Anti-black-screen (laporan pemilik 2026-10-15) ────────────────────────
+    // "Koneksi menggantung → layar hitam": ICE bisa CONNECTED + track siap
+    // tapi host tidak pernah mengirim frame (encoder gagal / PC headless tanpa
+    // virtual display). Sebelumnya UI diam saja — sekarang ada watchdog
+    // frame-pertama dan hint dari telemetry `capture` yang dikirim host tiap
+    // detik lewat channel input (meta JSON).
+
+    /** Frame pertama dari host sudah sampai ke renderer. */
+    @Volatile private var firstFrameSeen = false
+
+    /** Watchdog: true = track siap tapi tidak ada frame dalam batas waktu. */
+    private val noVideoSignal = mutableStateOf(false)
+
+    /** Penyebab dari host (meta.capture.state / backend / blackFrames). */
+    private val hostCaptureHint = mutableStateOf<String?>(null)
+
+    private var firstFrameWatchdog: Job? = null
+
+    /** Pairing tidak dijawab host dalam batas waktu (watchdog signaling). */
+    private val pairingTimedOut = mutableStateOf(false)
+    private var pairingWatchdog: Job? = null
+
+    /** Kredensial sesi terakhir (in-memory saja) untuk tombol sambung ulang. */
+    private var lastHostId: String = ""
+    private var lastPin: String = ""
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
@@ -134,6 +163,7 @@ class PcStreamSessionActivity : ComponentActivity() {
             val current = sessionState.value
             val retryable = current == XyHubSessionState.REGISTERED || current == XyHubSessionState.PAIRING
             if (retryable) {
+                pairingTimedOut.value = false
                 runCatching { viewer?.retryPair(pin, deviceName()) }
                     .onFailure { failure.value = it.message }
             } else {
@@ -143,6 +173,8 @@ class PcStreamSessionActivity : ComponentActivity() {
         }
         started.value = true
         activeHostId = hostId
+        lastHostId = hostId
+        lastPin = pin
         val egl = EglBase.create()
         eglBase = egl
         val streamViewer = XyHubStreamViewer(this, egl.eglBaseContext, viewerListener)
@@ -160,6 +192,15 @@ class PcStreamSessionActivity : ComponentActivity() {
         override fun onViewerState(state: XyHubSessionState, detail: String?) {
             sessionState.value = state
             stateDetail.value = detail
+            when (state) {
+                XyHubSessionState.PAIRING -> armPairingWatchdog()
+                XyHubSessionState.PAIRED,
+                XyHubSessionState.FAILED,
+                XyHubSessionState.CLOSED,
+                XyHubSessionState.REGISTERED,
+                -> disarmPairingWatchdog()
+                else -> Unit
+            }
         }
 
         override fun onPairAccepted(hostId: String) {
@@ -177,6 +218,7 @@ class PcStreamSessionActivity : ComponentActivity() {
 
         override fun onVideoTrack(track: org.webrtc.VideoTrack?) {
             videoReady.value = track != null
+            if (track != null) armFirstFrameWatchdog() else disarmFirstFrameWatchdog()
         }
 
         override fun onInputChannelOpen(open: Boolean) {
@@ -188,16 +230,20 @@ class PcStreamSessionActivity : ComponentActivity() {
         }
 
         override fun onHostText(text: String) {
-            // Balasan status host berupa teks JSON. Saat ini hanya
-            // `virtualDisplay` yang ditangani; meta/cursor menyusul revisi
-            // UI pemilik. Teks non-JSON diabaikan diam-diam.
+            // Balasan status host berupa teks JSON. `virtualDisplay` = balasan
+            // dialog VD; `meta` = telemetry tiap detik (dipakai untuk hint
+            // anti-black-screen). Teks non-JSON diabaikan diam-diam.
             val json = runCatching { JSONObject(text) }.getOrNull() ?: return
-            if (json.optString("type") != "virtualDisplay") return
-            hostNotice.value = when (json.optString("status")) {
-                "applied" -> "VD " + json.optInt("width") + "×" + json.optInt("height") +
-                    "@" + json.optInt("hz") + "Hz ✓"
-                "notInstalled" -> "VD: adapter belum terpasang di host (pasang via panel host)"
-                else -> "VD: " + json.optString("detail").ifBlank { "gagal" }
+            when (json.optString("type")) {
+                "virtualDisplay" -> {
+                    hostNotice.value = when (json.optString("status")) {
+                        "applied" -> "VD " + json.optInt("width") + "×" + json.optInt("height") +
+                            "@" + json.optInt("hz") + "Hz ✓"
+                        "notInstalled" -> "VD: adapter belum terpasang di host (pasang via panel host)"
+                        else -> "VD: " + json.optString("detail").ifBlank { "gagal" }
+                    }
+                }
+                "meta" -> updateCaptureHint(json.optJSONObject("capture"))
             }
         }
 
@@ -207,6 +253,122 @@ class PcStreamSessionActivity : ComponentActivity() {
 
         override fun onSignalingClosed(code: Int, reason: String) {
             if (videoReady.value) finish()
+        }
+    }
+
+    // ── Anti-black-screen helpers ──────────────────────────────────────────
+
+    /** Mulai hitung mundur frame pertama; lewat batas = anggap tanpa sinyal. */
+    private fun armFirstFrameWatchdog() {
+        firstFrameSeen = false
+        noVideoSignal.value = false
+        firstFrameWatchdog?.cancel()
+        firstFrameWatchdog = scope.launch {
+            delay(FIRST_FRAME_TIMEOUT_MS)
+            if (!firstFrameSeen) noVideoSignal.value = true
+        }
+    }
+
+    private fun disarmFirstFrameWatchdog() {
+        firstFrameWatchdog?.cancel()
+        firstFrameWatchdog = null
+        firstFrameSeen = false
+        noVideoSignal.value = false
+    }
+
+    /** Host tidak menjawab pairing (offline/busuk) → beri tahu + tombol hidup lagi. */
+    private fun armPairingWatchdog() {
+        pairingTimedOut.value = false
+        pairingWatchdog?.cancel()
+        pairingWatchdog = scope.launch {
+            delay(PAIRING_TIMEOUT_MS)
+            if (sessionState.value == XyHubSessionState.PAIRING) {
+                pairingTimedOut.value = true
+            }
+        }
+    }
+
+    private fun disarmPairingWatchdog() {
+        pairingWatchdog?.cancel()
+        pairingWatchdog = null
+        pairingTimedOut.value = false
+    }
+
+    /** Telemetry `capture` dari meta host (tiap detik) → hint penyebab. */
+    private fun updateCaptureHint(capture: JSONObject?) {
+        if (capture == null) return
+        val frames = capture.optInt("framesCaptured", -1)
+        val state = capture.optString("state")
+        when {
+            frames > 0 -> {
+                hostCaptureHint.value = null
+                // Meta tiap detik = jalur cadangan kalau gate sink terlewat.
+                firstFrameSeen = true
+                noVideoSignal.value = false
+            }
+            state == "backend-error" -> hostCaptureHint.value = xy(
+                "Host: capture gagal (" + capture.optString("backend").ifBlank { "?" } + ")",
+                "Host: capture failed (" + capture.optString("backend").ifBlank { "?" } + ")",
+            )
+            state == "armed-no-frame" -> hostCaptureHint.value = xy(
+                "Host: siap menangkap tapi 0 frame — coba pasang virtual display (tombol VD)",
+                "Host: armed but 0 frames — try the virtual display (VD button)",
+            )
+            state == "idle" && videoReady.value -> hostCaptureHint.value = xy(
+                "Host: capture belum aktif",
+                "Host: capture not active yet",
+            )
+        }
+        if (capture.optBoolean("blackFrames", false)) {
+            hostCaptureHint.value = xy(
+                "Host: frame hitam terdeteksi (desktop mungkin kosong/terkunci)",
+                "Host: black frames detected (desktop may be empty/locked)",
+            )
+        }
+    }
+
+    /**
+     * Pasang renderer sebagai sink lewat gate penanda frame pertama —
+     * dipanggil dari factory AndroidView (VideoStage).
+     */
+    fun attachSessionSink(renderer: VideoSink) {
+        viewer?.setVideoSink(object : VideoSink {
+            override fun onFrame(frame: VideoFrame) {
+                if (!firstFrameSeen) {
+                    firstFrameSeen = true
+                    noVideoSignal.value = false
+                    firstFrameWatchdog?.cancel()
+                }
+                renderer.onFrame(frame)
+            }
+        })
+    }
+
+    /** Tutup sesi saat ini dan mulai ulang dengan kredensial terakhir. */
+    private fun restartSession() {
+        viewer?.close()
+        viewer = null
+        runCatching { eglBase?.release() }
+        eglBase = null
+        disarmFirstFrameWatchdog()
+        disarmPairingWatchdog()
+        hostCaptureHint.value = null
+        sessionState.value = null
+        stateDetail.value = null
+        pairRejected.value = null
+        pairBlockedSeconds.value = null
+        videoReady.value = false
+        inputOpen.value = false
+        mediaConnected.value = false
+        failure.value = null
+        sessionEnded.value = false
+        started.value = false
+        val hostId = lastHostId
+        val pin = lastPin
+        if (hostId.length == 9 && pin.length == 6) {
+            startSession(hostId, pin)
+        } else {
+            sessionEnded.value = true
         }
     }
 
@@ -263,9 +425,11 @@ class PcStreamSessionActivity : ComponentActivity() {
         var pin by remember { mutableStateOf("") }
         val scroll = rememberScrollState()
         val state = sessionState.value
-        val busy = state == XyHubSessionState.AUTHENTICATING ||
+        // pairingTimedOut: pairing menggantung — tombol Coba Lagi boleh dipakai
+        // (retryPair tidak butuh onboarding ulang).
+        val busy = (state == XyHubSessionState.AUTHENTICATING ||
             state == XyHubSessionState.CONNECTING ||
-            state == XyHubSessionState.PAIRING
+            state == XyHubSessionState.PAIRING) && !pairingTimedOut.value
 
         Column(
             modifier = Modifier
@@ -316,6 +480,7 @@ class PcStreamSessionActivity : ComponentActivity() {
                     failure.value = null
                     pairRejected.value = null
                     pairBlockedSeconds.value = null
+                    pairingTimedOut.value = false
                     startSession(hostId, pin)
                 },
                 enabled = hostId.length == 9 && pin.length == 6 && !busy,
@@ -334,6 +499,17 @@ class PcStreamSessionActivity : ComponentActivity() {
                 Spacer(Modifier.height(6.dp))
                 Text(
                     xy("Pairing ditolak: ", "Pairing rejected: ") + (reason.ifBlank { "-" }),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.error,
+                )
+            }
+            if (pairingTimedOut.value) {
+                Spacer(Modifier.height(6.dp))
+                Text(
+                    xy(
+                        "Host tidak merespons pairing. Pastikan aplikasi host XyDesk aktif di PC, lalu coba lagi.",
+                        "Host is not responding to pairing. Make sure the XyDesk host app is running on the PC, then try again.",
+                    ),
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.error,
                 )
@@ -408,7 +584,7 @@ class PcStreamSessionActivity : ComponentActivity() {
                             init(egl.eglBaseContext, null)
                             setMirror(false)
                             setEnableHardwareScaler(true)
-                            activity.viewer?.setVideoSink(this)
+                            activity.attachSessionSink(this)
                         }
                     },
                     onRelease = { renderer ->
@@ -476,6 +652,7 @@ class PcStreamSessionActivity : ComponentActivity() {
                     text = buildString {
                         append(
                             when {
+                                noVideoSignal.value -> xy("TANPA GAMBAR", "NO VIDEO")
                                 mediaConnected.value -> xy("TERHUBUNG", "CONNECTED")
                                 videoReady.value -> xy("MENGHUBUNGKAN…", "CONNECTING…")
                                 else -> xy("MENUNGGU…", "WAITING…")
@@ -519,6 +696,44 @@ class PcStreamSessionActivity : ComponentActivity() {
                             viewer?.stop()
                             finish()
                         },
+                        primary = false,
+                        compact = true,
+                    )
+                }
+            }
+
+            // Anti-black-screen: track siap tapi frame tidak pernah datang.
+            if (noVideoSignal.value) {
+                Column(
+                    modifier = Modifier
+                        .align(Alignment.Center)
+                        .background(Color(0xCC000000), RoundedCornerShape(14.dp))
+                        .padding(horizontal = 22.dp, vertical = 18.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                ) {
+                    Text(
+                        xy(
+                            "Tidak ada gambar dari host",
+                            "No video from host",
+                        ),
+                        style = MaterialTheme.typography.titleSmall,
+                        color = Color.White,
+                    )
+                    Spacer(Modifier.height(4.dp))
+                    Text(
+                        hostCaptureHint.value ?: xy(
+                            "Koneksi tersambung tetapi frame tidak pernah sampai. " +
+                                "Biasanya encoder host gagal atau PC headless tanpa virtual display.",
+                            "Connection is up but frames never arrive. Usually the host encoder " +
+                                "failed, or a headless PC without virtual display.",
+                        ),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = Color(0xFFBDBDBD),
+                    )
+                    Spacer(Modifier.height(12.dp))
+                    XyPillButton(
+                        text = xy("SAMBUNG ULANG", "RECONNECT"),
+                        onClick = { restartSession() },
                         primary = false,
                         compact = true,
                     )
@@ -672,6 +887,12 @@ class PcStreamSessionActivity : ComponentActivity() {
     companion object {
         /** Satu langkah roda = 1 unit WHEEL_DELTA (120) di codec. */
         private const val SCROLL_UNIT = 120
+
+        /** Batas tunggu frame pertama (ms) sebelum UI menyatakan tanpa sinyal. */
+        private const val FIRST_FRAME_TIMEOUT_MS = 15_000L
+
+        /** Batas tunggu jawaban pairing dari host (ms). */
+        private const val PAIRING_TIMEOUT_MS = 25_000L
 
         // Subset Windows Virtual-Key yang dipetakan dari keyCode Android.
         private const val VK_BACK = 0x08

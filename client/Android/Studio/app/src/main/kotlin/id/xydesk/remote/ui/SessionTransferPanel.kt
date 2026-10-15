@@ -382,11 +382,14 @@ private fun ProgressBar(fraction: Float) {
             .clip(RoundedCornerShape(2.dp))
             .background(track),
     ) {
-        // weight 0f valid: bar kosong saat progres masih nol.
+        // JANGAN pakai weight() di sini: weight(0f) melempar
+        // IllegalArgumentException "invalid weight; must be greater than zero"
+        // saat progress masih 0 (transfer baru mulai) — crash produksi
+        // 2026-10-11 & 2026-10-15. fillMaxWidth(0f) valid: bar kosong.
         Box(
             Modifier
                 .fillMaxHeight()
-                .weight(fraction.coerceIn(0f, 1f))
+                .fillMaxWidth(fraction.coerceIn(0f, 1f))
                 .background(fill),
         )
     }
