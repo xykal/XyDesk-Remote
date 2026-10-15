@@ -167,11 +167,11 @@
 <body>
   <header class="topbar">
     <div class="container topbar-inner">
-      <a href="index.html" style="font-weight: 700; font-size: 16px; letter-spacing: -0.02em;">XyDesk Remote</a>
+      <a href="https://www.xydeskremote.biz.id/" style="font-weight: 700; font-size: 16px; letter-spacing: -0.02em;">XyDesk Remote</a>
       <nav class="nav-links" aria-label="Navigasi">
-        <a href="index.html#download" class="pill primary" data-i18n="nav.dl">Unduh</a>
-        <a href="index.html" class="pill optional" data-i18n="nav.home">Beranda</a>
-        <a href="status.html" class="pill optional" data-i18n="nav.status">Status</a>
+        <a href="https://www.xydeskremote.biz.id/#download" class="pill primary" data-i18n="nav.dl">Unduh</a>
+        <a href="https://www.xydeskremote.biz.id/" class="pill optional" data-i18n="nav.home">Beranda</a>
+        <a href="https://www.xydeskremote.biz.id/status.html" class="pill optional" data-i18n="nav.status">Status</a>
         <button type="button" class="pill" id="lang-btn">ID / EN</button>
       </nav>
     </div>
@@ -185,6 +185,11 @@
         Ketemu bug, punya ide, atau cuma mau tanya? Tulis di sini — founder/dev XyDesk Remote
         membalas langsung di papan ini. Nggak perlu login, cukup nama panggilan kalau mau.
       </p>
+
+      <div class="card" style="border-left: 3px solid var(--warn);">
+        <h2 data-i18n="tips.title">⚡ Biar cepet dibales</h2>
+        <p data-i18n="tips.body">Laporan bug: tulis tipe HP + versi Android + langkah apa aja sebelum kena bug (contoh: "Redmi 9, Android 10, connect via RDP terus layar hitam"). Saran fitur: ceritain mau dipakai buat apa. Makin jelas, makin cepet masuk update! 🚀</p>
+      </div>
 
       <div class="card">
         <h2 data-i18n="form.title">Tulis laporan / saran kamu</h2>
@@ -207,7 +212,8 @@
 
       <details class="card dev-box" id="dev-box">
         <summary data-i18n="dev.title">🔧 Mode Dev / Founder</summary>
-        <p data-i18n="dev.desc">Tempel token staff untuk membalas sebagai tim, ubah status thread, dan sembunyikan spam.</p>
+        <p data-i18n="dev.desc">Staff token = kode rahasia khusus founder &amp; developer XyDesk. Isinya bukan user biasa ya — user cukup tulis laporan di form atas.</p>
+        <p data-i18n="dev.desc2">Kalau lo punya token: balasan lo muncul berbadge "XyDesk Team", bisa ubah status thread (Terbuka → Dikerjakan → Selesai), dan sembunyikan spam. Token didapat dari founder, simpan di browser aja.</p>
         <input type="text" id="dev-token" placeholder="staff token" autocomplete="off" />
         <div class="form-actions">
           <button type="button" class="pill" id="dev-save" data-i18n="dev.save">Simpan token</button>
@@ -234,7 +240,7 @@
   <footer>
     <div class="container footer-inner">
       <div><strong>XyDesk Remote</strong> · Powered by <span>XyVerse Technology Global</span></div>
-      <div><a href="index.html" data-i18n="nav.home">Beranda</a> · <a href="status.html" data-i18n="nav.status">Status</a></div>
+      <div><a href="https://www.xydeskremote.biz.id/" data-i18n="nav.home">Beranda</a> · <a href="https://www.xydeskremote.biz.id/status.html" data-i18n="nav.status">Status</a></div>
     </div>
   </footer>
 
@@ -248,6 +254,8 @@
           "nav.dl": "Download", "nav.home": "Home", "nav.status": "Status",
           "title": "Report bugs & share ideas",
           "lead": "Found a bug, have an idea, or just want to ask? Post it here — the XyDesk Remote founder/dev replies directly on this board. No login needed, just a nickname if you want.",
+          "tips.title": "⚡ For faster replies",
+          "tips.body": "Bug report: write your phone model + Android version + the steps before the bug hit (e.g. \"Redmi 9, Android 10, connected via RDP then black screen\"). Feature idea: tell us what you'd use it for. The clearer, the faster it ships! 🚀",
           "form.title": "Write your report / idea",
           "form.name": "Nickname (optional)", "form.namePh": "e.g. SpeedyGonzales",
           "form.type": "Type",
@@ -259,7 +267,8 @@
           "form.err": "Failed to send. Try again.",
           "form.empty": "Write something first ya 😅",
           "dev.title": "🔧 Dev / Founder mode",
-          "dev.desc": "Paste the staff token to reply as the team, change thread status, and hide spam.",
+          "dev.desc": "Staff token = secret code for the XyDesk founder & developers only. Regular users don't need this — just post from the form above.",
+          "dev.desc2": "If you have a token: your replies get the \"XyDesk Team\" badge, you can change thread status (Open → In progress → Done) and hide spam. Get it from the founder, keep it in your browser.",
           "dev.save": "Save token", "dev.clear": "Clear",
           "dev.note": "The token is stored only in your browser (localStorage). Staff replies get the \"XyDesk Team\" badge automatically.",
           "dev.saved": "Token saved. You're in staff mode. 🫡",
@@ -282,7 +291,40 @@
       var ID = {
         "nav.dl": "Unduh", "nav.home": "Beranda", "nav.status": "Status",
         "title": "Lapor bug & kasih saran",
-        "form.title": "Tulis laporan / saran kamu", "list.title": "Papan balasan"
+        "lead": "Ketemu bug, punya ide, atau cuma mau tanya? Tulis di sini — founder/dev XyDesk Remote membalas langsung di papan ini. Nggak perlu login, cukup nama panggilan kalau mau.",
+        "tips.title": "⚡ Biar cepet dibales",
+        "tips.body": "Laporan bug: tulis tipe HP + versi Android + langkah apa aja sebelum kena bug (contoh: \"Redmi 9, Android 10, connect via RDP terus layar hitam\"). Saran fitur: ceritain mau dipakai buat apa. Makin jelas, makin cepet masuk update! 🚀",
+        "form.title": "Tulis laporan / saran kamu",
+        "form.name": "Nama panggilan (opsional)", "form.namePh": "Misal: Bang Jago",
+        "form.type": "Jenis",
+        "type.bug": "🐛 Bug", "type.idea": "💡 Saran", "type.question": "❓ Tanya", "type.other": "💬 Lainnya",
+        "form.text": "Ceritain dong",
+        "form.textPh": "Bug: apa yang terjadi, di layar mana, HP + versi Android. Saran: fitur apa yang kamu mau.",
+        "form.send": "Kirim 🚀",
+        "form.sent": "Terkirim! Udah nongol di papan bawah. ✅",
+        "form.rate": "Dikit-dikit santai bre — coba lagi bentar lagi.",
+        "form.err": "Gagal kirim. Coba lagi ya.",
+        "form.empty": "Isi dulu dong minimal pesannya 😅",
+        "dev.title": "🔧 Mode Dev / Founder",
+        "dev.desc": "Staff token = kode rahasia khusus founder & developer XyDesk. Isinya bukan user biasa ya — user cukup tulis laporan di form atas.",
+        "dev.desc2": "Kalau lo punya token: balasan lo muncul berbadge \"XyDesk Team\", bisa ubah status thread (Terbuka → Dikerjakan → Selesai), dan sembunyikan spam. Token didapat dari founder, simpan di browser aja.",
+        "dev.save": "Simpan token", "dev.clear": "Hapus",
+        "dev.note": "Token disimpan cuma di browser kamu (localStorage). Nggak dikirim ke mana-mana selain buat verifikasi.",
+        "dev.saved": "Token tersimpan. Mode staff aktif. 🫡",
+        "dev.cleared": "Token dihapus.",
+        "list.title": "Papan balasan",
+        "filter.all": "Semua",
+        "list.refresh": "↻ Segarkan",
+        "list.loading": "Memuat…",
+        "list.empty": "Belum ada apa-apa. Jadilah yang pertama!",
+        "list.err": "Gagal memuat papan. Pencet segarkan.",
+        "thread.reply": "Balas", "thread.hide": "Sembunyikan",
+        "thread.replies": "balasan", "thread.noreplies": "Belum ada balasan — bakal dibales tim.",
+        "reply.ph": "Tulis balasan…", "reply.send": "Balas",
+        "status.open": "Terbuka", "status.progress": "Dikerjakan", "status.done": "Selesai",
+        "status.label": "Status:",
+        "anon": "Anonim", "team": "XyDesk Team",
+        "justnow": "baru saja", "m": " mnt lalu", "h": " jam lalu", "d": " hr lalu"
       };
       var lang = "id";
       function t(key) {

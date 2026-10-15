@@ -38,6 +38,8 @@
     "not_found_handling": "404-page",
     "run_worker_first": [
       "/api/*",
+      "/",
+      "/index.html",
       "/arm64-v8a.apk",
       "/armeabi-v7a.apk",
       "/x86_64.apk",
