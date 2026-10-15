@@ -851,3 +851,27 @@ ditahan; gate debug jalan.
 - Gate: 38680420983 merah (`ModalBottomSheet` = API experimental Material3,
   perlu OptIn) → fix `@OptIn(ExperimentalMaterial3Api::class)` di kedua sheet →
   38680642830 hijau (c43e602). Rilis tetap ditahan ([skip-debug]).
+
+## Ronde 37 — GAS: rilis v1.1.14(75) + deploy Worker + web
+
+"Kalo selesai udh semuanya, gas aja" — seluruh rantai rilis dijalankan.
+
+- **Versi**: `VERSION_NAME=1.1.14(75)` (`ab9491d`), gate hijau (run 38681318244).
+- **Rilis**: tag `v1.1.14` → CI 38681666768 RELEASE sukses (~32 mnt, R8 +
+  signing v1+v2+v3) → 11 aset draft → **publish** dengan catatan lengkap:
+  https://github.com/xykal/XyDesk-Remote/releases/tag/v1.1.14
+- **Worker produksi** `xydesk-remote-web` versi `ca12b70f-589a-4b57-b2b2-35c3d0c83132`
+  ter-deploy (kode r37 + 21 aset web) ke 6 domain (rdp.xydesk.my.id,
+  xydeskremote.biz.id + www/api/wss/cpc). Wrangler 4.151.0 + Node 22.14 di /tmp.
+- **Live diverifikasi**:
+  - `/release-state.json` = v1.1.14(75); `/api/health` = v1.1.14; alias
+    `/arm64-v8a.apk` dst → 302 ke aset v1.1.14 yang benar.
+  - `/abi` (halaman engine ABI baru) 200 dengan engine
+    getHighEntropyValues + fallback UA; index live memuat menu popup
+    (`menu-btn`/`menu-pop`) + link ABI.
+  - **Uji end-to-end hapus komentar di produksi**: post QA → komentar oleh
+    klien lain → hapus oleh bukan penulis = **403** → hapus oleh penulis =
+    **deleted** → post QA dibersihkan. `is_own` terlihat di feed.
+- Draft v1.1.12 lama dibiarkan utuh (bisa dihapus manual, isinya subset).
+- Yang belum: uji runtime di HP nyata untuk fitur r37 (bottom sheet feed,
+  popup kredensial, layar black-screen fatal).
