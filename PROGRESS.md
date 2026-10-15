@@ -913,3 +913,36 @@ plus info WhatsApp 2 bahasa.
     (Build APK + Web Worker checks).
 - Token staff disimpan di `.env` (FEEDBACK_STAFF_TOKEN) untuk sesi berikutnya;
   diberikan ke pemilik lewat chat untuk dipakai di Mode Dev halaman.
+
+## Ronde 39 — splash logo XyVerse + identitas feed awet reinstall
+
+Permintaan pemilik 2026-10-15: splash pakai logo pengembang (XyVerse), logo
+push pakai logo XyDesk Remote, dan postingan feed harus bisa dihapus.
+
+- **Splash** (`Splash.kt`): logo utama XyDesk Remote tetap di tengah; footer
+  teks "XyVerse Technology Global" diganti **logo XyVerse resmi** dari brand
+  kit (Google Drive `XYVERSE_BRAND_KIT_FILE_ID` → `secrets/XyVerse_Brand_Kit.zip`,
+  `01_logo_utama/logo_utama_horizontal_transparan_{putih,hitam}.png` di-resize
+  1160×344 → `drawable-nodpi/xyverse_logo_h_{white,black}.png`) dengan caption
+  "Pengembang · Developer". Brand kit zip kini tersimpan di `~/secrets/`.
+- **Logo notifikasi/push**: sudah benar sejak ronde sebelumnya — small icon
+  `ic_launcher_monochrome` + large icon `xy_mark_white` (logo XyDesk Remote),
+  tidak ada yang perlu diubah untuk notifikasi sesi.
+- **Hapus postingan feed — akar masalah**: tombol Hapus hanya muncul untuk
+  postingan milik sendiri (`is_own` dari client ID anonim). Setelah
+  uninstall-install ulang, client ID baru → semua postingan lama tidak lagi
+  dianggap milik sendiri. Fix:
+  - `CloudSync`: prefs `xydesk.community.jokes` ikut dicadangkan
+    (kecuali `feed_cache_v1` yang besar) → setelah pasang ulang + Pulihkan
+    dari Cloud, identitas feed lama kembali otomatis.
+  - `CommunityJokesApi.clientId` jadi getter dinamis (SharedPreferences
+    memory-cached) → setelah restore, instance API langsung memakai ID lama
+    tanpa restart.
+  - Pesan restore kini menyebut akun feed ikut pulih.
+  - Jalur manual yang sudah ada: kode pemulihan akun feed (= client ID) bisa
+    ditempel di kartu akun komunitas untuk memulihkan identitas lama tanpa
+    cloud.
+- Catatan: semua ini masuk build BERIKUTNYA (v1.1.15+); di v1.1.14 yang
+  terpasang sekarang, identitas lama hanya bisa kembali lewat kode pemulihan
+  feed (kalau pernah disalin sebelum uninstall).
+- Gate: 38692294340 hijau (41d22da). Rilis tetap menunggu perintah.
