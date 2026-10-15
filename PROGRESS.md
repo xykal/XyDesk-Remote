@@ -946,3 +946,17 @@ push pakai logo XyDesk Remote, dan postingan feed harus bisa dihapus.
   terpasang sekarang, identitas lama hanya bisa kembali lewat kode pemulihan
   feed (kalau pernah disalin sebelum uninstall).
 - Gate: 38692294340 hijau (41d22da). Rilis tetap menunggu perintah.
+
+## Ronde 39 — GAS: rilis v1.1.15(76)
+
+"gas update terbarunya bre" — seluruh rantai rilis dijalankan.
+
+- **Versi**: `VERSION_NAME=1.1.15(76)` (`1711348`), gate hijau (38727949640).
+- **Rilis**: tag `v1.1.15` → CI 38728330885 RELEASE sukses → 11 aset draft →
+  **publish**: https://github.com/xykal/XyDesk-Remote/releases/tag/v1.1.15
+- **Worker** versi `a10afba6` ter-deploy (8 domain) dengan release-state
+  v1.1.15(76). Live diverifikasi: /release-state.json = v1.1.15(76),
+  /api/health = v1.1.15, alias APK 302 → aset v1.1.15.
+- Catatan rilis menegaskan: dari v1.1.13/1.1.14 update langsung tanpa
+  uninstall; hanya build pra-v1.1.13 perlu uninstall sekali (signature).
+- Draft v1.1.12 lama masih utuh (bisa dihapus manual).
