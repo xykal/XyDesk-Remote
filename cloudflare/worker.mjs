@@ -2024,6 +2024,254 @@ async function updateCheckResponse(request, env) {
   }
 }
 
+// ============================================================
+// Feedback board: laporan bug / saran / pertanyaan dari user,
+// dibalas oleh founder/dev (permintaan pemilik 2026-10-15).
+// Domain: report.xydeskremote.biz.id / ask.xydeskremote.biz.id.
+// Identitas user = client ID anonim (seperti feed komunitas);
+// balasan staff ditandai lewat header internal yang hanya bisa
+// disuntikkan oleh worker luar setelah verifikasi token rahasia.
+// ============================================================
+const FEEDBACK_TYPES = new Set(["bug", "idea", "question", "other"]);
+const FEEDBACK_STATUSES = new Set(["open", "progress", "done"]);
+const FEEDBACK_TEXT_MAX_CHARS = 2000;
+const FEEDBACK_REPLY_MAX_CHARS = 1000;
+const FEEDBACK_NAME_MAX_CHARS = 30;
+const FEEDBACK_MAX_ITEMS = 400;
+const FEEDBACK_MAX_REPLIES = 60;
+const FEEDBACK_SUBMIT_INTERVAL_MS = 30_000;
+const FEEDBACK_REPLY_INTERVAL_MS = 10_000;
+
+function sanitizeFeedbackText(value, maxChars) {
+  if (typeof value !== "string") return null;
+  const clean = value.replace(/\r\n?/g, "\n").replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F]/g, "").trim();
+  const chars = [...clean];
+  if (chars.length < 1 || chars.length > maxChars) return null;
+  return chars.join("");
+}
+
+function sanitizeFeedbackName(value) {
+  if (typeof value !== "string") return null;
+  const clean = value.replace(/[\u0000-\u001F\u007F]/g, "").replace(/\s+/g, " ").trim();
+  const chars = [...clean];
+  if (chars.length < 1 || chars.length > FEEDBACK_NAME_MAX_CHARS) return null;
+  return chars.join("");
+}
+
+function feedbackPublicView(entry, replies) {
+  return {
+    id: entry.id,
+    created_at: entry.created_at,
+    name: entry.name || null,
+    type: entry.type,
+    text: entry.text,
+    status: entry.status,
+    reply_count: replies.length,
+    last_activity: entry.last_activity || entry.created_at,
+    replies,
+  };
+}
+
+function feedbackReplyPublicView(reply) {
+  return {
+    id: reply.id,
+    name: reply.staff ? "XyDesk Team" : (reply.name || null),
+    text: reply.text,
+    staff: Boolean(reply.staff),
+    created_at: reply.created_at,
+  };
+}
+
+export class FeedbackBoard {
+  constructor(state, env) {
+    this.state = state;
+    this.env = env;
+  }
+
+  async fetch(request) {
+    const url = new URL(request.url);
+    const path = url.pathname;
+    const staff = request.headers.get("x-xydesk-verified-staff") === "1";
+    if (path === "/list" && (request.method === "GET" || request.method === "HEAD")) {
+      return this.list(request);
+    }
+    if (path === "/submit" && request.method === "POST") return this.submit(request);
+    const reply = path.match(/^\/reply\/([0-9a-f-]{36})$/i);
+    if (reply && request.method === "POST") return this.reply(request, reply[1], staff);
+    const status = path.match(/^\/status\/([0-9a-f-]{36})$/i);
+    if (status && request.method === "POST") return this.setStatus(request, status[1], staff);
+    const hide = path.match(/^\/hide\/([0-9a-f-]{36})$/i);
+    if (hide && request.method === "POST") return this.hide(request, hide[1], staff);
+    return durableObjectJson({ status: "not_found" }, 404, request.method);
+  }
+
+  async list(request) {
+    try {
+      const entries = await this.state.storage.list({ prefix: "fb:", limit: FEEDBACK_MAX_ITEMS, reverse: true });
+      const items = [];
+      for (const [key, entry] of entries) {
+        if (!entry || entry.hidden) continue;
+        const replyEntries = await this.state.storage.list({ prefix: `fb-reply:${entry.id}:`, limit: FEEDBACK_MAX_REPLIES });
+        const replies = Array.from(replyEntries.values())
+          .sort((a, b) => (a.created_at || 0) - (b.created_at || 0))
+          .map(feedbackReplyPublicView);
+        items.push(feedbackPublicView(entry, replies));
+        if (items.length >= 50) break;
+      }
+      return durableObjectJson({ status: "ok", items }, 200, request.method);
+    } catch {
+      return durableObjectJson({ status: "unavailable" }, 503, request.method);
+    }
+  }
+
+  async submit(request) {
+    const parsed = await readCommunityJson(request, 8_192);
+    if (parsed.error) return parsed.error;
+    const clientId = parsed.body?.client_id;
+    if (!COMMUNITY_CLIENT_ID_RE.test(String(clientId || ""))) {
+      return durableObjectJson({ status: "invalid_client_id" }, 400, request.method);
+    }
+    const type = String(parsed.body?.type || "");
+    if (!FEEDBACK_TYPES.has(type)) {
+      return durableObjectJson({ status: "invalid_type" }, 400, request.method);
+    }
+    const text = sanitizeFeedbackText(parsed.body?.text, FEEDBACK_TEXT_MAX_CHARS);
+    if (!text) {
+      return durableObjectJson({ status: "invalid_text", max_chars: FEEDBACK_TEXT_MAX_CHARS }, 400, request.method);
+    }
+    const name = sanitizeFeedbackName(parsed.body?.name);
+    try {
+      const clientHash = await hashedCommunityClientId(clientId);
+      const now = Date.now();
+      const outcome = await this.state.storage.transaction(async (transaction) => {
+        const rateKey = `fb-rate:${clientHash}`;
+        const lastAt = Number(await transaction.get(rateKey)) || 0;
+        if (now - lastAt < FEEDBACK_SUBMIT_INTERVAL_MS) {
+          return { status: "rate_limited", retry_after_seconds: Math.ceil((FEEDBACK_SUBMIT_INTERVAL_MS - (now - lastAt)) / 1_000) };
+        }
+        const id = crypto.randomUUID();
+        const entry = { id, created_at: now, last_activity: now, name, type, text, status: "open", hidden: false };
+        await transaction.put(`fb:${String(now).padStart(13, "0")}:${id}`, entry);
+        await transaction.put(`fb-id:${id}`, `fb:${String(now).padStart(13, "0")}:${id}`);
+        await transaction.put(rateKey, now);
+        // Batasi jumlah thread: buang yang paling tua beserta balasannya.
+        const all = await transaction.list({ prefix: "fb:", limit: FEEDBACK_MAX_ITEMS + 50 });
+        const keys = Array.from(all.keys()).sort();
+        if (keys.length > FEEDBACK_MAX_ITEMS) {
+          for (const oldKey of keys.slice(0, keys.length - FEEDBACK_MAX_ITEMS)) {
+            const old = all.get(oldKey);
+            await transaction.delete(oldKey);
+            if (old?.id) {
+              await transaction.delete(`fb-id:${old.id}`);
+              const replies = await transaction.list({ prefix: `fb-reply:${old.id}:`, limit: 1_000 });
+              for (const k of replies.keys()) await transaction.delete(k);
+            }
+          }
+        }
+        return { status: "created", item: feedbackPublicView(entry, []) };
+      });
+      if (outcome.status === "rate_limited") return durableObjectJson(outcome, 429, request.method);
+      return durableObjectJson(outcome, 201, request.method);
+    } catch {
+      return durableObjectJson({ status: "unavailable" }, 503, request.method);
+    }
+  }
+
+  async reply(request, feedbackId, staff) {
+    if (!ACTIVE_SESSION_ID_RE.test(feedbackId)) {
+      return durableObjectJson({ status: "invalid_feedback_id" }, 400, request.method);
+    }
+    const parsed = await readCommunityJson(request, 4_096);
+    if (parsed.error) return parsed.error;
+    const clientId = parsed.body?.client_id;
+    if (!COMMUNITY_CLIENT_ID_RE.test(String(clientId || ""))) {
+      return durableObjectJson({ status: "invalid_client_id" }, 400, request.method);
+    }
+    const text = sanitizeFeedbackText(parsed.body?.text, FEEDBACK_REPLY_MAX_CHARS);
+    if (!text) {
+      return durableObjectJson({ status: "invalid_text", max_chars: FEEDBACK_REPLY_MAX_CHARS }, 400, request.method);
+    }
+    const name = sanitizeFeedbackName(parsed.body?.name);
+    try {
+      const clientHash = await hashedCommunityClientId(clientId);
+      const now = Date.now();
+      const outcome = await this.state.storage.transaction(async (transaction) => {
+        const rateKey = `fb-reply-rate:${clientHash}`;
+        const lastAt = Number(await transaction.get(rateKey)) || 0;
+        if (!staff && now - lastAt < FEEDBACK_REPLY_INTERVAL_MS) {
+          return { status: "rate_limited", retry_after_seconds: Math.ceil((FEEDBACK_REPLY_INTERVAL_MS - (now - lastAt)) / 1_000) };
+        }
+        const key = await transaction.get(`fb-id:${feedbackId}`);
+        if (!key) return { status: "not_found" };
+        const entry = await transaction.get(key);
+        if (!entry || entry.hidden) return { status: "not_found" };
+        const id = crypto.randomUUID();
+        const reply = { id, feedback_id: feedbackId, name, text, staff, created_at: now };
+        await transaction.put(`fb-reply:${feedbackId}:${String(now).padStart(13, "0")}:${id}`, reply);
+        await transaction.put(rateKey, now);
+        entry.last_activity = now;
+        await transaction.put(key, entry);
+        return { status: "created", reply: feedbackReplyPublicView(reply) };
+      });
+      if (outcome.status === "not_found") return durableObjectJson(outcome, 404, request.method);
+      if (outcome.status === "rate_limited") return durableObjectJson(outcome, 429, request.method);
+      return durableObjectJson(outcome, 201, request.method);
+    } catch {
+      return durableObjectJson({ status: "unavailable" }, 503, request.method);
+    }
+  }
+
+  async setStatus(request, feedbackId, staff) {
+    if (!staff) return durableObjectJson({ status: "forbidden" }, 403, request.method);
+    if (!ACTIVE_SESSION_ID_RE.test(feedbackId)) {
+      return durableObjectJson({ status: "invalid_feedback_id" }, 400, request.method);
+    }
+    const parsed = await readCommunityJson(request, 512);
+    if (parsed.error) return parsed.error;
+    const status = String(parsed.body?.status || "");
+    if (!FEEDBACK_STATUSES.has(status)) {
+      return durableObjectJson({ status: "invalid_status" }, 400, request.method);
+    }
+    try {
+      const outcome = await this.state.storage.transaction(async (transaction) => {
+        const key = await transaction.get(`fb-id:${feedbackId}`);
+        if (!key) return { status: "not_found" };
+        const entry = await transaction.get(key);
+        if (!entry || entry.hidden) return { status: "not_found" };
+        entry.status = status;
+        await transaction.put(key, entry);
+        return { status: "ok", item_status: status };
+      });
+      if (outcome.status === "not_found") return durableObjectJson(outcome, 404, request.method);
+      return durableObjectJson(outcome, 200, request.method);
+    } catch {
+      return durableObjectJson({ status: "unavailable" }, 503, request.method);
+    }
+  }
+
+  async hide(request, feedbackId, staff) {
+    if (!staff) return durableObjectJson({ status: "forbidden" }, 403, request.method);
+    if (!ACTIVE_SESSION_ID_RE.test(feedbackId)) {
+      return durableObjectJson({ status: "invalid_feedback_id" }, 400, request.method);
+    }
+    try {
+      const outcome = await this.state.storage.transaction(async (transaction) => {
+        const key = await transaction.get(`fb-id:${feedbackId}`);
+        if (!key) return { status: "not_found" };
+        const entry = await transaction.get(key);
+        if (!entry) return { status: "not_found" };
+        entry.hidden = true;
+        await transaction.put(key, entry);
+        return { status: "hidden" };
+      });
+      if (outcome.status === "not_found") return durableObjectJson(outcome, 404, request.method);
+      return durableObjectJson(outcome, 200, request.method);
+    } catch {
+      return durableObjectJson({ status: "unavailable" }, 503, request.method);
+    }
+  }
+}
+
 async function communityJokesResponse(request, env) {
   if (!env.COMMUNITY_JOKES) {
     return jsonResponse({ status: "unavailable" }, 503, request.method);
@@ -2104,6 +2352,57 @@ async function communityJokesResponse(request, env) {
   }
 }
 
+async function feedbackResponse(request, env) {
+  if (!env.FEEDBACK_BOARD) {
+    return jsonResponse({ status: "unavailable" }, 503, request.method);
+  }
+  const url = new URL(request.url);
+  // Token staff diverifikasi di tepi ini; DO hanya menerima flag internal
+  // yang tidak bisa dipalsukan dari luar (DO tidak terekspos publik).
+  const staffToken = request.headers.get("x-xydesk-staff-token") || "";
+  const staffVerified = Boolean(env.FEEDBACK_STAFF_TOKEN && staffToken && staffToken === env.FEEDBACK_STAFF_TOKEN);
+  const staffHeader = staffVerified ? { "x-xydesk-verified-staff": "1" } : {};
+
+  let internal;
+  if (url.pathname === "/api/feedback" && (request.method === "GET" || request.method === "HEAD")) {
+    internal = new Request("https://feedback-board/list", { method: request.method, headers: { ...staffHeader } });
+  } else if (url.pathname === "/api/feedback" && request.method === "POST") {
+    const length = Number(request.headers.get("content-length") || 0);
+    if (length > 9_216) return jsonResponse({ status: "payload_too_large" }, 413, request.method);
+    const bounded = await readRequestTextLimited(request, 9_216);
+    if (bounded.tooLarge) return jsonResponse({ status: "payload_too_large" }, 413, request.method);
+    if (bounded.invalid) return jsonResponse({ status: "invalid_request" }, 400, request.method);
+    internal = new Request("https://feedback-board/submit", {
+      method: "POST",
+      headers: { "content-type": request.headers.get("content-type") || "", ...staffHeader },
+      body: bounded.text,
+    });
+  } else {
+    const match = url.pathname.match(/^\/api\/feedback\/([0-9a-f-]{36})\/(reply|status|hide)$/i);
+    if (!match || request.method !== "POST") {
+      return match ? methodNotAllowed("POST") : jsonResponse({ status: "not_found" }, 404, request.method);
+    }
+    const cap = match[2] === "reply" ? 5_120 : 1_024;
+    const length = Number(request.headers.get("content-length") || 0);
+    if (length > cap) return jsonResponse({ status: "payload_too_large" }, 413, request.method);
+    const bounded = await readRequestTextLimited(request, cap);
+    if (bounded.tooLarge) return jsonResponse({ status: "payload_too_large" }, 413, request.method);
+    if (bounded.invalid) return jsonResponse({ status: "invalid_request" }, 400, request.method);
+    internal = new Request(`https://feedback-board/${match[2]}/${match[1]}`, {
+      method: "POST",
+      headers: { "content-type": request.headers.get("content-type") || "", ...staffHeader },
+      body: bounded.text,
+    });
+  }
+
+  try {
+    const id = env.FEEDBACK_BOARD.idFromName("xydesk-feedback-board-v1");
+    return await env.FEEDBACK_BOARD.get(id).fetch(internal);
+  } catch {
+    return jsonResponse({ status: "unavailable" }, 503, request.method);
+  }
+}
+
 export default {
   async fetch(request, env) {
     const url = new URL(request.url);
@@ -2121,6 +2420,9 @@ export default {
     }
     if (path === "/api/jokes" || path.startsWith("/api/jokes/")) {
       return communityJokesResponse(request, env);
+    }
+    if (path === "/api/feedback" || path.startsWith("/api/feedback/")) {
+      return feedbackResponse(request, env);
     }
     if (path === "/api/account/settings") {
       return accountSettingsResponse(request, env);
@@ -2159,6 +2461,13 @@ export default {
       if (QA_ASSETS[qaKey]) return redirectLegacyAsset(QA_ASSETS[qaKey], env, request);
       if (PUBLIC_ASSETS[qaKey]) return redirectResponse(PUBLIC_ASSETS[qaKey]);
       return notFound(request.method);
+    }
+
+    // Domain khusus papan umpan balik: root-nya adalah feedback.html.
+    const host = url.hostname;
+    if ((host === "report.xydeskremote.biz.id" || host === "ask.xydeskremote.biz.id") &&
+        (path === "/" || path === "/index.html")) {
+      return env.ASSETS.fetch(new Request(new URL("/feedback.html", request.url), request));
     }
 
     return env.ASSETS.fetch(request);

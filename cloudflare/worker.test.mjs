@@ -4,6 +4,7 @@ import { readFile } from "node:fs/promises";
 import worker, {
   ActiveSessions,
   CommunityJokes,
+  FeedbackBoard,
   PcSignalRoom,
   resetReleaseLookupCache,
 } from "./worker.mjs";
@@ -1572,4 +1573,127 @@ test("update-check API reports the newest published tag with changelog excerpt",
   } finally {
     globalThis.fetch = originalFetch;
   }
+});
+
+test("feedback board: submit, list, reply, staff-only status & hide", async () => {
+  const records = new Map();
+  const storage = {
+    async get(key) { return records.get(key); },
+    async put(key, value) { records.set(key, value); },
+    async delete(key) { return records.delete(key); },
+    async list({ prefix = "", limit = Infinity, reverse = false } = {}) {
+      let entries = [...records].filter(([key]) => key.startsWith(prefix)).sort(([a], [b]) => a.localeCompare(b));
+      if (reverse) entries = entries.reverse();
+      return new Map(entries.slice(0, limit));
+    },
+    async transaction(callback) {
+      const transaction = {
+        async get(key) { return records.get(key); },
+        async put(key, value) { records.set(key, value); },
+        async delete(key) { return records.delete(key); },
+        async list(options) { return storage.list(options); },
+      };
+      return callback(transaction);
+    },
+  };
+  const board = new FeedbackBoard({ storage }, {});
+  const env = envFor({}, {
+    FEEDBACK_BOARD: {
+      idFromName(name) { assert.equal(name, "xydesk-feedback-board-v1"); return name; },
+      get(id) {
+        assert.equal(id, "xydesk-feedback-board-v1");
+        return { fetch: (request) => board.fetch(request) };
+      },
+    },
+  });
+
+  const user = "00000000-0000-4000-8000-000000000771";
+  const submit = await worker.fetch(new Request("https://www.xydeskremote.biz.id/api/feedback", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ client_id: user, type: "bug", text: "Keyboard aneh di Android 15.", name: "Bang Jago" }),
+  }), env);
+  assert.equal(submit.status, 201);
+  const posted = await submit.json();
+  assert.equal(posted.item.type, "bug");
+  assert.equal(posted.item.status, "open");
+  const fbId = posted.item.id;
+
+  const list = await worker.fetch(new Request("https://www.xydeskremote.biz.id/api/feedback"), env);
+  const listBody = await list.json();
+  assert.equal(list.status, 200);
+  assert.equal(listBody.items.length, 1);
+  assert.equal(listBody.items[0].name, "Bang Jago");
+
+  const reply = await worker.fetch(new Request(`https://www.xydeskremote.biz.id/api/feedback/${fbId}/reply`, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ client_id: user, text: "Fixnya udah jalan, tunggu rilis ya." }),
+  }), env);
+  assert.equal(reply.status, 201);
+  const replied = await reply.json();
+  assert.equal(replied.reply.staff, false);
+
+  // Tanpa token staff: status & hide harus 403.
+  const badStatus = await worker.fetch(new Request(`https://www.xydeskremote.biz.id/api/feedback/${fbId}/status`, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ status: "progress" }),
+  }), env);
+  assert.equal(badStatus.status, 403);
+  const badHide = await worker.fetch(new Request(`https://www.xydeskremote.biz.id/api/feedback/${fbId}/hide`, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({}),
+  }), env);
+  assert.equal(badHide.status, 403);
+
+  // Balasan staff: token benar -> badge staff + status bisa diubah.
+  const staffEnv = envFor({}, {
+    FEEDBACK_STAFF_TOKEN: "test-staff-token",
+    FEEDBACK_BOARD: {
+      idFromName(name) { return name; },
+      get() { return { fetch: (request) => board.fetch(request) }; },
+    },
+  });
+  const staffReply = await worker.fetch(new Request(`https://www.xydeskremote.biz.id/api/feedback/${fbId}/reply`, {
+    method: "POST",
+    headers: { "content-type": "application/json", "x-xydesk-staff-token": "test-staff-token" },
+    body: JSON.stringify({ client_id: user, text: "Sudah kami perbaiki di v1.1.14, coba update ya." }),
+  }), staffEnv);
+  assert.equal(staffReply.status, 201);
+  const staffBody = await staffReply.json();
+  assert.equal(staffBody.reply.staff, true);
+  assert.equal(staffBody.reply.name, "XyDesk Team");
+
+  const setStatus = await worker.fetch(new Request(`https://www.xydeskremote.biz.id/api/feedback/${fbId}/status`, {
+    method: "POST",
+    headers: { "content-type": "application/json", "x-xydesk-staff-token": "test-staff-token" },
+    body: JSON.stringify({ status: "done" }),
+  }), staffEnv);
+  assert.equal(setStatus.status, 200);
+
+  const list2 = await worker.fetch(new Request("https://www.xydeskremote.biz.id/api/feedback"), env);
+  const list2Body = await list2.json();
+  assert.equal(list2Body.items[0].status, "done");
+  assert.equal(list2Body.items[0].reply_count, 2);
+
+  // Hide staff -> hilang dari list.
+  const hide = await worker.fetch(new Request(`https://www.xydeskremote.biz.id/api/feedback/${fbId}/hide`, {
+    method: "POST",
+    headers: { "content-type": "application/json", "x-xydesk-staff-token": "test-staff-token" },
+    body: JSON.stringify({}),
+  }), staffEnv);
+  assert.equal(hide.status, 200);
+  const list3 = await worker.fetch(new Request("https://www.xydeskremote.biz.id/api/feedback"), env);
+  const list3Body = await list3.json();
+  assert.equal(list3Body.items.length, 0);
+
+  // Rate limit submit (30 dtk).
+  const spam = await worker.fetch(new Request("https://www.xydeskremote.biz.id/api/feedback", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ client_id: user, type: "idea", text: "spam" }),
+  }), env);
+  assert.equal(spam.status, 429);
 });

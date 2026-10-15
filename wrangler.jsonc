@@ -10,7 +10,9 @@
     { "pattern": "www.xydeskremote.biz.id", "custom_domain": true },
     { "pattern": "api.xydeskremote.biz.id", "custom_domain": true },
     { "pattern": "wss.xydeskremote.biz.id", "custom_domain": true },
-    { "pattern": "cpc.xydeskremote.biz.id", "custom_domain": true }
+    { "pattern": "cpc.xydeskremote.biz.id", "custom_domain": true },
+    { "pattern": "report.xydeskremote.biz.id", "custom_domain": true },
+    { "pattern": "ask.xydeskremote.biz.id", "custom_domain": true }
   ],
   "kv_namespaces": [
     { "binding": "UNIQUE_DOWNLOADS", "id": "909d51530b7d4e6b8ada61ec59a3e3d3" }
@@ -19,13 +21,15 @@
     "bindings": [
       { "name": "ACTIVE_SESSIONS", "class_name": "ActiveSessions" },
       { "name": "COMMUNITY_JOKES", "class_name": "CommunityJokes" },
-      { "name": "PC_SIGNAL_ROOMS", "class_name": "PcSignalRoom" }
+      { "name": "PC_SIGNAL_ROOMS", "class_name": "PcSignalRoom" },
+      { "name": "FEEDBACK_BOARD", "class_name": "FeedbackBoard" }
     ]
   },
   "migrations": [
     { "tag": "v1", "new_sqlite_classes": ["ActiveSessions"] },
     { "tag": "v2", "new_sqlite_classes": ["CommunityJokes"] },
-    { "tag": "v3", "new_sqlite_classes": ["PcSignalRoom"] }
+    { "tag": "v3", "new_sqlite_classes": ["PcSignalRoom"] },
+    { "tag": "v4", "new_sqlite_classes": ["FeedbackBoard"] }
   ],
   "assets": {
     "directory": "./web",
