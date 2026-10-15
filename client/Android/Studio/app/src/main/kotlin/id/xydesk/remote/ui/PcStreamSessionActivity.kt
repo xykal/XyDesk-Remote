@@ -306,21 +306,21 @@ class PcStreamSessionActivity : ComponentActivity() {
                 firstFrameSeen = true
                 noVideoSignal.value = false
             }
-            state == "backend-error" -> hostCaptureHint.value = xy(
+            state == "backend-error" -> hostCaptureHint.value = xyNow(
                 "Host: capture gagal (" + capture.optString("backend").ifBlank { "?" } + ")",
                 "Host: capture failed (" + capture.optString("backend").ifBlank { "?" } + ")",
             )
-            state == "armed-no-frame" -> hostCaptureHint.value = xy(
+            state == "armed-no-frame" -> hostCaptureHint.value = xyNow(
                 "Host: siap menangkap tapi 0 frame — coba pasang virtual display (tombol VD)",
                 "Host: armed but 0 frames — try the virtual display (VD button)",
             )
-            state == "idle" && videoReady.value -> hostCaptureHint.value = xy(
+            state == "idle" && videoReady.value -> hostCaptureHint.value = xyNow(
                 "Host: capture belum aktif",
                 "Host: capture not active yet",
             )
         }
         if (capture.optBoolean("blackFrames", false)) {
-            hostCaptureHint.value = xy(
+            hostCaptureHint.value = xyNow(
                 "Host: frame hitam terdeteksi (desktop mungkin kosong/terkunci)",
                 "Host: black frames detected (desktop may be empty/locked)",
             )
