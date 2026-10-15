@@ -848,3 +848,6 @@ ditahan; gate debug jalan.
   check_panel_shape.py (bukti piksel). Yang di repo ini (`host-agent`
   XyDesk-Remote) masih panel Win32 klasik sederhana (STATIC/BUTTON/EDIT + tray)
   — jalan, tapi bukan yang modern.
+- Gate: 38680420983 merah (`ModalBottomSheet` = API experimental Material3,
+  perlu OptIn) → fix `@OptIn(ExperimentalMaterial3Api::class)` di kedua sheet →
+  38680642830 hijau (c43e602). Rilis tetap ditahan ([skip-debug]).
