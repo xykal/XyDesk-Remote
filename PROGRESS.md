@@ -762,3 +762,31 @@ Semua di repo saudara `xykal/XyDesk` (PR #183 + #184 #185 #187 #188 #189
 Bundling host otomatis (build.yml step copy `packaging/windows/drivers/*`
 sudah ada). Yang belum: uji manual di mesin Windows nyata + sertifikat
 code signing Microsoft/EV (diterima self-signed dulu).
+
+## Ronde 36 — fix crash produksi + anti-black-screen (belum dirilis)
+
+Laporan pemilik 2026-10-15: crash `invalid weight; must be greater than zero`
+(produksi 10-11 & 10-15, dua build beda) + "koneksi suka menggantung alhasil
+blackscreen". Build rilis DITAHAN atas permintaan (gate debug tetap jalan).
+
+- **Crash weight(0f)**: `SessionTransferPanel.ProgressBar` memakai
+  `weight(fraction)` — `weight(0f)` saat doneBytes=0 (awal transfer) melempar
+  IllegalArgumentException di Choreographer.doFrame. Komentar lama "weight 0f
+  valid" salah. Fix: `fillMaxWidth(fraction)` (valid untuk 0). Pelajaran:
+  `RowScope.weight()` menuntut > 0 — fraksi dinamis pakai `fillMaxWidth`.
+- **Anti-black-screen PC stream** (`PcStreamSessionActivity`):
+  - Watchdog frame pertama 15 dtk (sink gate menandai frame; meta tiap detik
+    jadi jalur cadangan) → overlay "Tidak ada gambar dari host" + tombol
+    SAMBUNG ULANG (restart sesi, kredensial in-memory saja).
+  - `onHostText` kini membaca `meta.capture` host: hint penyebab spesifik
+    (backend-error / armed-no-frame / idle / blackFrames) — telemetry ini
+    sudah dikirim host tiap detik tapi klien sebelumnya mengabaikannya.
+  - Watchdog pairing 25 dtk: host diam → pesan jelas + tombol Coba Lagi
+    hidup (retryPair tanpa onboarding ulang).
+  - Bar status: indikator TANPA GAMBAR.
+- Gate: 38677381455 merah (xy() @Composable dari fungsi biasa di
+  updateCaptureHint) → fix xyNow → 38677646510 hijau (b705df0).
+- Insiden .git antar-sesi lagi: HEAD lokal balik ke ronde 32 padahal remote
+  sudah 9d0817d — pulih dengan re-add remote (config tidak persisten) +
+  fetch + `git reset origin/main`; diff bersih 2 file, tidak ada pekerjaan
+  yang hilang.
