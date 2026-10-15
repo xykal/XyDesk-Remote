@@ -23,10 +23,14 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.lifecycleScope
 import com.freerdp.freerdpcore.services.LibFreeRDP
+import id.xydesk.remote.sessions.SessionsRepository
 import id.xydesk.remote.ui.theme.XyDeskTheme
 import id.xydesk.remote.ui.theme.XyThemeState
 import id.xydesk.remote.ui.theme.xyDark
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.launch
 import java.io.File
 
 /**
@@ -38,6 +42,12 @@ import java.io.File
  * yang menaruh file/gambar langsung ke folder drive 'XyDesk'.
  */
 internal const val EXTRA_SKIP_AUTO_RESUME = "id.xydesk.remote.ui.extra.SKIP_AUTO_RESUME"
+
+/** Extra dari widget quick-connect: id perangkat (ConnectionProfile.id) yang mau langsung disambung. */
+internal const val EXTRA_CONNECT_PROFILE_ID = "id.xydesk.remote.ui.extra.CONNECT_PROFILE_ID"
+
+/** Extra pendamping: appWidgetId asal (buat log/debug widget). */
+internal const val EXTRA_CONNECT_WIDGET_ID = "id.xydesk.remote.ui.extra.CONNECT_WIDGET_ID"
 
 class XyDeskHomeActivity : ComponentActivity() {
 
@@ -62,6 +72,7 @@ class XyDeskHomeActivity : ComponentActivity() {
         applyScreenSecurityFlags()
         markSkipAutoResumeIfNeeded(intent)
         handleIncomingShareIntent(intent)
+        handleWidgetConnectIntent(intent)
         setContent {
             XyThemeState.init(AppPrefs(this))
             XyDeskTheme(dark = xyDark()) {
@@ -110,6 +121,33 @@ class XyDeskHomeActivity : ComponentActivity() {
         setIntent(intent)
         markSkipAutoResumeIfNeeded(intent)
         handleIncomingShareIntent(intent)
+        handleWidgetConnectIntent(intent)
+    }
+
+    /**
+     * Tap widget quick-connect: buka home sambil langsung menyambung ke
+     * perangkat pilihan. Jalur autentikasi (kunci perangkat) tetap sama
+     * seperti connect dari daftar perangkat.
+     */
+    private fun handleWidgetConnectIntent(incoming: Intent?) {
+        val profileId = incoming?.getStringExtra(EXTRA_CONNECT_PROFILE_ID) ?: return
+        incoming.removeExtra(EXTRA_CONNECT_PROFILE_ID)
+        incoming.action = Intent.ACTION_MAIN
+        lifecycleScope.launch {
+            val profile = runCatching {
+                SessionsRepository(applicationContext).favorites().first()
+            }.getOrDefault(emptyList()).firstOrNull { it.id == profileId }
+            if (profile == null) {
+                sharedFileBanner.value = xyNow(
+                    "Perangkat widget tidak ditemukan — sudah dihapus?",
+                    "Widget device not found — was it deleted?",
+                )
+                return@launch
+            }
+            authenticateBeforeConnect {
+                startActivity(XyDeskSessionActivity.connectIntent(this@XyDeskHomeActivity, profile))
+            }
+        }
     }
 
     private fun markSkipAutoResumeIfNeeded(incoming: Intent) {

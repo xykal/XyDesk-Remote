@@ -74,6 +74,27 @@
             android:windowSoftInputMode="adjustNothing"
             android:configChanges="orientation|keyboardHidden|screenSize|smallestScreenSize|density|screenLayout" />
 
+        <!-- Konfigurasi widget quick-connect: dipanggil launcher saat widget
+             dipasang, karena itu harus exported. -->
+        <activity
+            android:name="id.xydesk.remote.ui.XyWidgetConfigActivity"
+            android:exported="true"
+            android:label="Pilih Perangkat Widget"
+            android:theme="@style/Theme.XyDeskHome" />
+
+        <!-- Widget quick-connect homescreen: satu tap = langsung connect. -->
+        <receiver
+            android:name="id.xydesk.remote.ui.XyQuickConnectWidgetProvider"
+            android:exported="false"
+            android:label="XyDesk Quick Connect">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/widget_quick_connect_info" />
+        </receiver>
+
         <!-- FileProvider buat share screenshot -->
         <provider
             android:name="androidx.core.content.FileProvider"

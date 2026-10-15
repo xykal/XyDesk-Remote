@@ -44,6 +44,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
+import androidx.lifecycle.Lifecycle
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -365,6 +366,43 @@ fun XyDeskSessionScreen(
             reconnectDeadlineAt = 0L
             reconnectWindowDone = false
         }
+    }
+
+    // Notifikasi koneksi putus tak terduga (backlog 2026-10-15): saat sesi
+    // yang tadinya tersambung mati sendiri (bukan user disconnect, bukan
+    // sedang retry/ubah-resolusi) DAN app sedang di background, kasih tahu
+    // user lewat notif — di foreground layar status sudah jelas.
+    val sessionLifecycleOwner = androidx.compose.ui.platform.LocalLifecycleOwner.current
+    var finalDropped by remember { mutableStateOf(false) }
+    LaunchedEffect(state, everConnected, userDisconnect, applyingResolution, reconnecting) {
+        val dropped = everConnected && !userDisconnect && !applyingResolution && !reconnecting &&
+            (state is SessionState.Disconnected || state is SessionState.Error)
+        finalDropped = dropped
+        val resumed = sessionLifecycleOwner.lifecycle.currentState.isAtLeast(Lifecycle.State.RESUMED)
+        val nm = context.getSystemService(Context.NOTIFICATION_SERVICE) as? android.app.NotificationManager
+        if (nm == null) return@LaunchedEffect
+        if (dropped && !resumed) {
+            postDisconnectNotification(context, profile.label ?: profile.host)
+        } else if (!dropped) {
+            nm.cancel(DISCONNECT_NOTIF_ID)
+        }
+    }
+    DisposableEffect(sessionLifecycleOwner) {
+        val observer = androidx.lifecycle.LifecycleEventObserver { _, event ->
+            val nm = context.getSystemService(Context.NOTIFICATION_SERVICE) as? android.app.NotificationManager ?: return@LifecycleEventObserver
+            when (event) {
+                Lifecycle.Event.ON_RESUME -> nm.cancel(DISCONNECT_NOTIF_ID)
+                // Baru pindah ke background saat sesi sudah mati final → tetap
+                // kasih tahu. Kecuali activity memang sedang ditutup (user
+                // sudah melihat layar status lalu back).
+                Lifecycle.Event.ON_PAUSE -> if (finalDropped && (context as? Activity)?.isFinishing != true) {
+                    postDisconnectNotification(context, profile.label ?: profile.host)
+                }
+                else -> {}
+            }
+        }
+        sessionLifecycleOwner.lifecycle.addObserver(observer)
+        onDispose { sessionLifecycleOwner.lifecycle.removeObserver(observer) }
     }
 
     // Jangan akhiri UI sesi saat transport terputus sementara. Tetap di layar,

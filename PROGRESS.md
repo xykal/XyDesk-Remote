@@ -960,3 +960,39 @@ push pakai logo XyDesk Remote, dan postingan feed harus bisa dihapus.
 - Catatan rilis menegaskan: dari v1.1.13/1.1.14 update langsung tanpa
   uninstall; hanya build pra-v1.1.13 perlu uninstall sekali (signature).
 - Draft v1.1.12 lama masih utuh (bisa dihapus manual).
+
+## Ronde 40 — widget quick-connect + notifikasi koneksi putus
+
+"lanjut" setelah v1.1.15 → backlog info WA v4. Dua fitur Android dikerjakan.
+
+**Widget Quick Connect (homescreen, 1-tap connect):**
+- `XyQuickConnectWidgetProvider` (RemoteViews klasik, tanpa Glance): receiver
+  APPWIDGET_UPDATE, label perangkat dari prefs `xydesk.widgets` (mapping
+  appWidgetId → profileId + label), tap → PendingIntent ke HomeActivity
+  dengan `EXTRA_CONNECT_PROFILE_ID`.
+- `XyWidgetConfigActivity` (exported, dipanggil launcher saat widget dipasang):
+  daftar favorit Compose → pilih perangkat → simpan mapping → render widget
+  → RESULT_OK. Tidak ada perangkat = pesan arahan buka app dulu.
+- `HomeActivity.handleWidgetConnectIntent` (onCreate + onNewIntent): load
+  profil by id dari SessionsRepository → `authenticateBeforeConnect` (jalur
+  kunci perangkat sama seperti connect normal) →
+  `XyDeskSessionActivity.connectIntent`. Perangkat sudah dihapus → banner.
+- Layout `widget_quick_connect.xml` + bg `widget_quick_connect_bg.xml` (kartu
+  gelap sudut bulat) + `xml/widget_quick_connect_info.xml` (4×1 cell,
+  resizeMode horizontal). Manifest: activity + receiver + meta-data.
+
+**Notifikasi koneksi putus tak terduga (backlog):**
+- `DisconnectNotifier.kt`: channel `xydesk.disconnect` (IMPORTANCE_DEFAULT),
+  notif id 2001, tap → buka app (SKIP_AUTO_RESUME), ikon & pola sama seperti
+  notif sesi XySessionService (monochrome + xy_mark_white).
+- `XyDeskSessionScreen`: post notif HANYA kalau sesi tadinya connected lalu
+  mati final (Disconnected/Error) BUKAN karena user disconnect, bukan sedang
+  auto-reconnect/ubah-resolusi, DAN app sedang background (lifecycle < RESUMED
+  atau ON_PAUSE). ON_RESUME → notif dibatalkan; back dari layar status
+  (isFinishing) tidak memicu notif.
+
+Housekeeping: HEAD sandbox tertinggal ronde 32 + remote hilang → fetch +
+reset index ke origin/main (225db88) + restore exec-bit file script; hanya
+perubahan ronde 40 yang tersisa di working tree.
+
+Rilis menunggu perintah pemilik (kandidat v1.1.16).

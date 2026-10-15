@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Deskripsi widget quick-connect: 4×1 cell, konfigurasi pilih perangkat saat pasang. -->
+<appwidget-provider xmlns:android="http://schemas.android.com/apk/res/android"
+    android:configure="id.xydesk.remote.ui.XyWidgetConfigActivity"
+    android:initialLayout="@layout/widget_quick_connect"
+    android:minWidth="250dp"
+    android:minHeight="56dp"
+    android:resizeMode="horizontal"
+    android:targetCellWidth="4"
+    android:targetCellHeight="1"
+    android:updatePeriodMillis="0"
+    android:widgetCategory="home_screen" />
