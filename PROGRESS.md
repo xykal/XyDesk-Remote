@@ -875,3 +875,41 @@ ditahan; gate debug jalan.
 - Draft v1.1.12 lama dibiarkan utuh (bisa dihapus manual, isinya subset).
 - Yang belum: uji runtime di HP nyata untuk fitur r37 (bottom sheet feed,
   popup kredensial, layar black-screen fatal).
+
+## Ronde 38 — bersih-bersih + papan umpan balik report/ask.xydeskremote.biz.id
+
+Permintaan pemilik 2026-10-15: bersihkan workspace, bikin halaman web
+report/bug/saran dengan domain sendiri (user posting, founder/dev membalas),
+plus info WhatsApp 2 bahasa.
+
+- **Bersih-bersih**: .git lokal ke-reset lagi ke ronde 32 (antara-turn) —
+  dipulihkan dengan prosedur standar; konten 100% sinkron origin/main. Sisa
+  diff hanya noise mode-bit file script (diabaikan). Workspace lain sudah
+  bersih (2 repo + uploads kosong).
+- **Papan umpan balik** (feedback board):
+  - Durable Object baru `FeedbackBoard` (migration v4, binding
+    `FEEDBACK_BOARD`): thread {type bug/idea/question/other, text ≤2000,
+    nama opsional, status open/progress/done, hidden}, balasan ≤1000 dengan
+    flag staff, rate limit 30s submit / 10s reply, maks 400 thread + 60
+    balasan (prune terlama).
+  - API: GET/POST `/api/feedback`, POST `/api/feedback/<id>/{reply,status,hide}`.
+    Auth staff = header `x-xydesk-staff-token` diverifikasi di tepi worker
+    (secret `FEEDBACK_STAFF_TOKEN`), lalu disuntik sebagai flag internal yang
+    tidak bisa dipalsukan dari luar. Status & hide staff-only (403).
+  - Halaman `web/feedback.html` (bilingual ID/EN via toggle): form + filter
+    tipe + thread expand + balasan + "Mode Dev/Founder" (token disimpan di
+    localStorage) → balasan berbadge "XyDesk Team", ubah status, sembunyikan
+    spam. Escape semua teks user (XSS-safe).
+  - **Domain baru**: `report.xydeskremote.biz.id` + alias
+    `ask.xydeskremote.biz.id` (custom domain worker; root di-rewrite ke
+    feedback.html). Navigasi semua halaman (menu popup index, drawer index/
+    host/status/abi) + sitemap menautkan papan ini.
+  - Test baru (submit/list/reply/403 non-staff/staff reply+status+hide/rate
+    limit) → 50/50 hijau. Catatan insiden: secret pertama ter-upload kosong
+    (baris .env menempel tanpa newline) → forbidden; .env diperbaiki + secret
+    di-set ulang.
+  - Deploy `30a867f9` (8 domain) + secret. **E2E produksi lulus**: staff
+    reply "XyDesk Team" ✓, status progress ✓, hide ✓. CI d65ae16 hijau
+    (Build APK + Web Worker checks).
+- Token staff disimpan di `.env` (FEEDBACK_STAFF_TOKEN) untuk sesi berikutnya;
+  diberikan ke pemilik lewat chat untuk dipakai di Mode Dev halaman.
