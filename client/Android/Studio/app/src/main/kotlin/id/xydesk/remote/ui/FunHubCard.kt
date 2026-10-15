@@ -853,6 +853,7 @@ private fun CommunityJokeItem(
  * di bawah. Draft direset per postingan. Komentar milik sendiri bisa dihapus
  * langsung dari list (butuh worker r37 yang menyimpan author_hash).
  */
+@OptIn(androidx.compose.material3.ExperimentalMaterial3Api::class)
 @Composable
 private fun CommentsBottomSheet(
     joke: CommunityJoke,
@@ -963,6 +964,7 @@ private fun CommentsBottomSheet(
 }
 
 /** Bottom sheet aksi postingan: edit/hapus (milik sendiri) + laporkan. */
+@OptIn(androidx.compose.material3.ExperimentalMaterial3Api::class)
 @Composable
 private fun ActionsBottomSheet(
     joke: CommunityJoke,
