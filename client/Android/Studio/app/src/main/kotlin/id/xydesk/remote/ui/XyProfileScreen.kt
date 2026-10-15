@@ -374,8 +374,10 @@ private fun CloudSyncCard() {
                         } else {
                             val count = CloudSync.restore(context, blob)
                             message = xyNow(
-                                "$count setelan dipulihkan. Buka ulang aplikasi agar semuanya terpakai.",
-                                "$count values restored. Reopen the app to apply everything.",
+                                "$count setelan dipulihkan, termasuk akun feed-mu — postingan lama bisa diedit/dihapus lagi. " +
+                                    "Buka ulang aplikasi agar semuanya terpakai.",
+                                "$count values restored, including your feed account — old posts can be edited/deleted again. " +
+                                    "Reopen the app to apply everything.",
                             )
                             isError = false
                         }

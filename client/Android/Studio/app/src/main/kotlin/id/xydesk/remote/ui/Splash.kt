@@ -8,6 +8,7 @@ import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -132,16 +133,31 @@ fun XySplashScreen(
                 .alpha(alpha)
                 .scale(scale),
         )
-        Text(
-            text = "XyVerse Technology Global",
+        // Logo pengembang (permintaan pemilik 2026-10-15): XyVerse Technology
+        // Global tampil sebagai logo resmi brand kit, bukan teks footer.
+        Column(
             modifier = Modifier
                 .align(Alignment.BottomCenter)
-                .padding(bottom = 14.dp),
-            color = if (dark) Color.White.copy(alpha = 0.72f) else Color(0xFF14161A).copy(alpha = 0.72f),
-            style = MaterialTheme.typography.labelSmall,
-            letterSpacing = 0.8.sp,
-            textAlign = TextAlign.Center,
-        )
+                .padding(bottom = 20.dp)
+                .alpha(alpha),
+            horizontalAlignment = Alignment.CenterHorizontally,
+        ) {
+            Text(
+                text = "Pengembang · Developer",
+                color = if (dark) Color.White.copy(alpha = 0.45f) else Color(0xFF14161A).copy(alpha = 0.45f),
+                style = MaterialTheme.typography.labelSmall,
+                letterSpacing = 0.8.sp,
+                textAlign = TextAlign.Center,
+            )
+            Image(
+                painter = painterResource(
+                    if (dark) R.drawable.xyverse_logo_h_white else R.drawable.xyverse_logo_h_black,
+                ),
+                contentDescription = "XyVerse Technology Global",
+                contentScale = ContentScale.Fit,
+                modifier = Modifier.size(width = 168.dp, height = 50.dp),
+            )
+        }
     }
 }
 

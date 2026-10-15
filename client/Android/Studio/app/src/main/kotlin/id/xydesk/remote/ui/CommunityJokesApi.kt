@@ -20,7 +20,10 @@ private fun org.json.JSONObject.strOrNull(key: String): String? =
 
 internal class CommunityJokesApi(context: Context) {
     private val appContext = context.applicationContext
-    private val clientId: String by lazy { loadOrCreateClientId() }
+    // Getter dinamis (bukan lazy val): setelah "Pulihkan dari Cloud" menulis
+    // client ID lama ke prefs, instance API yang sudah ada langsung memakai
+    // identitas lama tanpa perlu restart app.
+    private val clientId: String get() = loadOrCreateClientId()
 
     suspend fun latest(): List<CommunityJoke> = withContext(Dispatchers.IO) {
         val body = request(

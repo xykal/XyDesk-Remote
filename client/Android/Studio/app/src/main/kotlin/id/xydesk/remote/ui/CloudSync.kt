@@ -34,7 +34,15 @@ object CloudSync {
         "xydesk.user",
         "xydesk.domain",
         "xydesk.rdp.options",
+        // Identitas feed komunitas (client ID anonim) ikut dicadangkan supaya
+        // setelah pasang ulang + Pulihkan dari Cloud, postingan & komentar lama
+        // tetap dikenali sebagai milik sendiri dan bisa diedit/dihapus
+        // (permintaan pemilik 2026-10-15). Cache feed dikecualikan (besar).
+        "xydesk.community.jokes",
     )
+
+    /** Kunci prefs yang tidak ikut dicadangkan walau file-nya disinkronkan. */
+    private val EXCLUDED_KEYS = setOf("feed_cache_v1")
 
     private val SENSITIVE_PARTS = listOf("pass", "token", "secret", "pat", "cookie", "oauth", "auth", "credential")
 
@@ -50,7 +58,7 @@ object CloudSync {
             val prefs = context.applicationContext.getSharedPreferences(name, Context.MODE_PRIVATE)
             val obj = JSONObject()
             for ((key, value) in prefs.all) {
-                if (isSensitive(key)) continue
+                if (isSensitive(key) || key in EXCLUDED_KEYS) continue
                 val tagged = when (value) {
                     is String -> JSONObject().put("t", "s").put("v", value)
                     is Int -> JSONObject().put("t", "i").put("v", value)
@@ -82,7 +90,7 @@ object CloudSync {
             val keys = obj.keys()
             while (keys.hasNext()) {
                 val key = keys.next()
-                if (isSensitive(key)) continue
+                if (isSensitive(key) || key in EXCLUDED_KEYS) continue
                 val tagged = obj.optJSONObject(key) ?: continue
                 when (tagged.optString("t")) {
                     "s" -> editor.putString(key, tagged.optString("v"))
