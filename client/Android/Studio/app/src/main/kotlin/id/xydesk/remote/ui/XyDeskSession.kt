@@ -342,6 +342,15 @@ fun XyDeskSessionScreen(
     var blackScreenChecked by remember { mutableStateOf(false) }
     var connectedSinceMs by remember { mutableStateOf(0L) }
     var zeroFrameStreak by remember { mutableIntStateOf(0) }
+    // Anti-black-screen (laporan pemilik 2026-10-15): fallback grafis
+    // kompatibel bisa ikut hitam — sebelumnya cek kedua diblokir
+    // blackScreenChecked sehingga layar diam hitam selamanya. Sekarang
+    // maksimal 2x reconnect otomatis, lalu layar status jelas.
+    var blackScreenReconnects by remember(profile.id) { mutableIntStateOf(0) }
+    var blackScreenFatal by remember { mutableStateOf(false) }
+    /** Popup ubah username/password setelah error kredensial. */
+    var credentialRetry by remember { mutableStateOf(false) }
+    val sessionsRepo = remember(context) { id.xydesk.remote.sessions.SessionsRepository(context) }
     var waitingForNativeRelease by remember { mutableStateOf(false) }
     var userDisconnect by remember { mutableStateOf(false) }
     /** Clipboard terakhir yang datang dari remote (tombol "tempel ke HP"). */
@@ -422,6 +431,7 @@ fun XyDeskSessionScreen(
             if (telemetry.fps > 0) {
                 // Frame normal: pulihkan grafis penuh bila sebelumnya fallback.
                 zeroFrameStreak = 0
+                blackScreenFatal = false
                 if (id.xydesk.remote.core.RdpOptions.graphicsFallback(context, profile.id)) {
                     id.xydesk.remote.core.RdpOptions.setGraphicsFallback(context, profile.id, false)
                 }
@@ -431,17 +441,28 @@ fun XyDeskSessionScreen(
                 // Telemetri 500 ms: 12 sampel tanpa frame = ~6 detik gelap.
                 if (zeroFrameStreak >= 12 && !blackScreenChecked && !userDisconnect) {
                     blackScreenChecked = true
-                    id.xydesk.remote.core.RdpOptions.setGraphicsFallback(context, profile.id, true)
-                    notice.show(
-                        xyNow(
-                            "Layar hitam terdeteksi — menyambung ulang dengan grafis kompatibel.",
-                            "Black screen detected — reconnecting with compatible graphics.",
-                        ),
-                    )
-                    boundInstance = 0L
-                    manager.disconnect()
-                    kotlinx.coroutines.delay(1_200)
-                    if (!userDisconnect) manager.connect(activeProfile)
+                    if (blackScreenReconnects < 2) {
+                        blackScreenReconnects++
+                        // Reset penanda supaya siklus deteksi berjalan lagi pada
+                        // koneksi pengganti; bila masih gelap, sampel kedua
+                        // akan memicu reconnect/fatal berikutnya.
+                        blackScreenChecked = false
+                        id.xydesk.remote.core.RdpOptions.setGraphicsFallback(context, profile.id, true)
+                        notice.show(
+                            xyNow(
+                                "Layar hitam terdeteksi — menyambung ulang dengan grafis kompatibel.",
+                                "Black screen detected — reconnecting with compatible graphics.",
+                            ),
+                        )
+                        boundInstance = 0L
+                        manager.disconnect()
+                        kotlinx.coroutines.delay(1_200)
+                        if (!userDisconnect) manager.connect(activeProfile)
+                    } else {
+                        // Fallback pun tetap gelap: berhenti reconnect diam-diam
+                        // dan tunjukkan layar status + pilihan ke pengguna.
+                        blackScreenFatal = true
+                    }
                 }
             }
         } else {
@@ -1724,6 +1745,62 @@ fun XyDeskSessionScreen(
             )
         }
 
+        // Anti-black-screen: koneksi hidup tapi 2x reconnect fallback tetap
+        // tanpa frame — jangan biarkan layar hitam diam-diam.
+        if (blackScreenFatal && state is SessionState.Connected) {
+            Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                XyWallpaper(wall, blurRadius = 0.dp, dim = 0.55f)
+                Column(
+                    Modifier
+                        .padding(horizontal = 28.dp)
+                        .clip(RoundedCornerShape(18.dp))
+                        .background(MaterialTheme.colorScheme.surface.copy(alpha = 0.97f))
+                        .padding(22.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                ) {
+                    Text(
+                        xy("Layar tetap hitam", "Screen stays black"),
+                        style = MaterialTheme.typography.titleMedium,
+                        color = MaterialTheme.colorScheme.onSurface,
+                    )
+                    Spacer(Modifier.height(6.dp))
+                    Text(
+                        xy(
+                            "Terhubung ke PC tetapi tidak ada pembaruan gambar setelah 2x coba ulang " +
+                                "dengan grafis kompatibel. Biasanya sesi Windows belum siap, layar terkunci, " +
+                                "atau driver grafis host bermasalah.",
+                            "Connected to the PC but no picture updates after 2 retries with compatible " +
+                                "graphics. Usually the Windows session is not ready, the screen is locked, " +
+                                "or the host graphics driver is misbehaving.",
+                        ),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+                    )
+                    Spacer(Modifier.height(14.dp))
+                    XyPillButton(
+                        text = xy("Coba lagi", "Try again"),
+                        onClick = {
+                            blackScreenFatal = false
+                            blackScreenReconnects = 0
+                            blackScreenChecked = false
+                            boundInstance = 0L
+                            manager.disconnect()
+                        },
+                        compact = true,
+                        modifier = Modifier.fillMaxWidth(),
+                    )
+                    XyPillButton(
+                        text = xy("Keluar sesi", "Exit session"),
+                        onClick = ::exitSession,
+                        primary = false,
+                        compact = true,
+                        modifier = Modifier.fillMaxWidth(),
+                    )
+                }
+            }
+        }
+
         if ((state is SessionState.Disconnected || state is SessionState.Disconnecting) && applyingResolution) {
             Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                 Text(
@@ -1759,9 +1836,34 @@ fun XyDeskSessionScreen(
             nlaPrompt = null
         }
     }
+    if (credentialRetry && err != null) {
+        CredentialsRetryDialog(
+            initialUser = activeProfile.username.orEmpty(),
+            initialDomain = activeProfile.domain.orEmpty(),
+            hostLabel = activeProfile.label ?: activeProfile.host,
+            onConfirm = { user, domain, pass, remember ->
+                credentialRetry = false
+                val updated = activeProfile.copy(
+                    username = user.ifBlank { null },
+                    domain = domain.ifBlank { null },
+                    password = pass,
+                )
+                activeProfile = updated
+                sessionScope.launch {
+                    runCatching { sessionsRepo.save(updated, remember) }
+                }
+                boundInstance = 0L
+                manager.connect(updated)
+            },
+            onCancel = { credentialRetry = false },
+        )
+    }
     if (!active && !reconnecting && !applyingResolution && !userDisconnect) err?.let { e ->
         XyOverlay(
-            title = xy("Tidak dapat tersambung", "Unable to connect"),
+            // Judul singkat-jelas (mis. "Password salah"); penjelasan panjang
+            // di badan dialog (permintaan pemilik 2026-10-15).
+            title = xy(RdpErrors.shortTitle(e.code, e.message).first,
+                RdpErrors.shortTitle(e.code, e.message).second),
             onDismiss = { exitSession() },
         ) {
             // Penjelasan yang bisa ditindak dulu, pesan mentah di bawahnya
@@ -1807,6 +1909,17 @@ fun XyDeskSessionScreen(
                     primary = false,
                     compact = true,
                     modifier = Modifier.weight(1f),
+                )
+            }
+            // Kredensial salah → popup ubah username & password langsung
+            // (permintaan pemilik 2026-10-15), lalu sambung ulang otomatis.
+            if (RdpErrors.isCredentialError(e.code, e.message)) {
+                XyPillButton(
+                    text = xy("Ubah username & password", "Change username & password"),
+                    onClick = { credentialRetry = true },
+                    primary = false,
+                    compact = true,
+                    modifier = Modifier.fillMaxWidth(),
                 )
             }
             XyPillButton(
@@ -2436,6 +2549,74 @@ private fun NlaDialog(
             XyPillButton(
                 text = xy("Batal", "Cancel"),
                 onClick = { onReply(null, null, null) },
+                primary = false,
+                compact = true,
+                modifier = Modifier.weight(1f),
+            )
+        }
+    }
+}
+
+/**
+ * Popup ubah username & password setelah "Username atau password salah"
+ * (permintaan pemilik 2026-10-15). Prefill dari profil aktif; opsi ingat
+ * password menyimpan ke vault lewat SessionsRepository.save.
+ */
+@Composable
+private fun CredentialsRetryDialog(
+    initialUser: String,
+    initialDomain: String,
+    hostLabel: String,
+    onConfirm: (user: String, domain: String, password: String, rememberPassword: Boolean) -> Unit,
+    onCancel: () -> Unit,
+) {
+    var user by remember { mutableStateOf(initialUser) }
+    var domain by remember { mutableStateOf(initialDomain) }
+    var pass by remember { mutableStateOf("") }
+    var rememberPass by remember { mutableStateOf(true) }
+    XyOverlay(title = xy("Ubah kredensial", "Change credentials"), onDismiss = null) {
+        Text(
+            hostLabel,
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        XyField(value = user, onValueChange = { user = it }, label = xy("Username", "Username"))
+        XyField(
+            value = domain,
+            onValueChange = { domain = it },
+            label = xy("Domain (opsional)", "Domain (optional)"),
+        )
+        XyField(
+            value = pass,
+            onValueChange = { pass = it },
+            label = xy("Password", "Password"),
+            isPassword = true,
+            imeAction = ImeAction.Done,
+        )
+        androidx.compose.foundation.layout.Row(
+            verticalAlignment = androidx.compose.ui.Alignment.CenterVertically,
+        ) {
+            androidx.compose.material3.Checkbox(
+                checked = rememberPass,
+                onCheckedChange = { rememberPass = it },
+            )
+            Text(
+                xy("Ingat password", "Remember password"),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            XyPillButton(
+                text = xy("Simpan & sambung", "Save & connect"),
+                onClick = { onConfirm(user, domain, pass, rememberPass) },
+                enabled = user.isNotEmpty() && pass.isNotEmpty(),
+                compact = true,
+                modifier = Modifier.weight(1f),
+            )
+            XyPillButton(
+                text = xy("Batal", "Cancel"),
+                onClick = onCancel,
                 primary = false,
                 compact = true,
                 modifier = Modifier.weight(1f),

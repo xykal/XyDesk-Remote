@@ -1,0 +1,448 @@
+<!doctype html>
+<html lang="id" data-theme="dark">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+  <title>Cek APK untuk HP-mu — Deteksi Arsitektur XyDesk Remote</title>
+  <meta name="description" content="Deteksi otomatis arsitektur CPU HP Android kamu (arm64-v8a, armeabi-v7a, atau x86_64) dan dapatkan tautan APK XyDesk Remote yang tepat, plus varian universal sebagai cadangan." />
+  <!-- SEO metadata:start -->
+  <meta name="robots" content="index,follow,max-image-preview:large,max-snippet:-1,max-video-preview:-1" />
+  <meta name="author" content="XyVerse Technology Global" />
+  <meta name="theme-color" content="#14161A" />
+  <link rel="canonical" href="https://www.xydeskremote.biz.id/abi.html" />
+  <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+  <meta property="og:site_name" content="XyDesk Remote" />
+  <meta property="og:type" content="website" />
+  <meta property="og:locale" content="id_ID" />
+  <meta property="og:url" content="https://www.xydeskremote.biz.id/abi.html" />
+  <meta property="og:title" content="Cek APK untuk HP-mu — XyDesk Remote" />
+  <meta property="og:description" content="Deteksi arsitektur HP secara otomatis dan unduh APK XyDesk Remote yang tepat (arm64-v8a, armeabi-v7a, x86_64, atau universal)." />
+  <meta property="og:image" content="https://www.xydeskremote.biz.id/og-xydesk-remote.png" />
+  <meta property="og:image:type" content="image/png" />
+  <meta property="og:image:width" content="1200" />
+  <meta property="og:image:height" content="630" />
+  <meta property="og:image:alt" content="XyDesk Remote — klien Remote Desktop Android untuk PC Windows" />
+  <meta name="twitter:card" content="summary_large_image" />
+  <meta name="twitter:title" content="Cek APK untuk HP-mu — XyDesk Remote" />
+  <meta name="twitter:description" content="Deteksi arsitektur HP secara otomatis dan unduh APK XyDesk Remote yang tepat." />
+  <meta name="twitter:image" content="https://www.xydeskremote.biz.id/og-xydesk-remote.png" />
+  <!-- SEO metadata:end -->
+
+  <style>
+    :root {
+      --bg: #14161A;
+      --surface: #1A1D23;
+      --surface-alt: #23272E;
+      --line: #2E333B;
+      --line-strong: #3C424A;
+      --text: #E4E7EB;
+      --text-dim: #9BA2AC;
+      --text-faint: #6F7681;
+      --ok: #6BCB77;
+      --warn: #E8B84B;
+      --font-sans: "Plus Jakarta Sans", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      --font-mono: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: var(--font-sans);
+      line-height: 1.62;
+      min-height: 100vh;
+      min-height: 100dvh;
+      display: flex;
+      flex-direction: column;
+      overflow-x: hidden;
+      -webkit-font-smoothing: antialiased;
+    }
+    a { color: inherit; text-decoration: none; }
+    button { font-family: inherit; }
+    .mono { font-family: var(--font-mono); font-feature-settings: "tnum" on, "zero" on; }
+    .container {
+      width: 100%;
+      max-width: 920px;
+      margin: 0 auto;
+      padding-left: max(clamp(14px, 4vw, 24px), env(safe-area-inset-left));
+      padding-right: max(clamp(14px, 4vw, 24px), env(safe-area-inset-right));
+    }
+    .topbar { border-bottom: 1px solid var(--line); background: var(--bg); position: sticky; top: 0; z-index: 60; }
+    .topbar-inner { min-height: 58px; padding: 8px 0; display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+    .nav-links { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+    .hamburger-btn {
+      display: none;
+      align-items: center;
+      justify-content: center;
+      width: 38px; height: 38px;
+      border-radius: 10px;
+      border: 1px solid var(--line-strong);
+      background: var(--surface);
+      color: var(--text);
+      cursor: pointer;
+    }
+    .hamburger-btn svg { width: 19px; height: 19px; }
+    .hamburger-btn .icon-close { display: none; }
+    .hamburger-btn[aria-expanded="true"] .icon-menu { display: none; }
+    .hamburger-btn[aria-expanded="true"] .icon-close { display: block; }
+    .mobile-drawer { display: none; border-top: 1px solid var(--line); background: var(--surface); padding: 12px 0 14px; }
+    .mobile-drawer.open { display: block; }
+    .drawer-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+    .drawer-link {
+      display: flex; align-items: center; justify-content: space-between;
+      min-height: 40px; padding: 8px 12px;
+      border-radius: 10px; border: 1px solid var(--line);
+      background: var(--bg);
+      font-size: 12.8px; font-weight: 600;
+    }
+    .pill {
+      display: inline-flex; align-items: center; justify-content: center;
+      padding: 8px 15px; border-radius: 999px;
+      border: 1px solid var(--line-strong);
+      background: var(--surface-alt);
+      color: var(--text);
+      font-size: clamp(12px, 1.5vw, 13px);
+      font-weight: 600;
+      cursor: pointer;
+    }
+    .pill.primary { background: var(--text); color: var(--bg); border-color: var(--text); }
+    main { padding: clamp(24px, 5vw, 46px) 0; flex: 1; }
+    .meta { font-size: clamp(10.5px, 1.4vw, 11.5px); font-weight: 600; color: var(--text-faint); text-transform: uppercase; letter-spacing: 0.06em; margin-bottom: 8px; }
+    h1 { font-size: clamp(21px, 4vw, 30px); font-weight: 700; letter-spacing: -0.025em; line-height: 1.2; margin-bottom: 12px; }
+    .lead { font-size: clamp(13.5px, 1.7vw, 15px); color: var(--text-dim); margin-bottom: 24px; line-height: 1.65; }
+    .card {
+      background: var(--surface);
+      border: 1px solid var(--line);
+      border-radius: 14px;
+      padding: clamp(15px, 3vw, 22px);
+      margin-bottom: 16px;
+    }
+    .card h2 { font-size: clamp(14.8px, 2vw, 16.5px); font-weight: 700; letter-spacing: -0.015em; margin-bottom: 8px; }
+    .card p, .card li { font-size: clamp(12.8px, 1.5vw, 14px); color: var(--text-dim); line-height: 1.6; overflow-wrap: anywhere; }
+    .card ul { padding-left: 18px; margin-top: 8px; display: flex; flex-direction: column; gap: 7px; }
+    footer { border-top: 1px solid var(--line); padding: 24px 0; font-size: 12px; color: var(--text-faint); }
+    .footer-inner { display: flex; justify-content: space-between; flex-wrap: wrap; gap: 12px; }
+    @media (max-width: 720px) {
+      .nav-links { display: none; }
+      .hamburger-btn { display: inline-flex; }
+    }
+    @media (max-width: 540px) {
+      .pill.primary { width: 100%; }
+      .drawer-grid { grid-template-columns: 1fr; }
+      .footer-inner { flex-direction: column; align-items: flex-start; }
+    }
+
+    /* ---- Engine hasil deteksi ---- */
+    #detect-state { min-height: 120px; }
+    .spinner {
+      width: 26px; height: 26px;
+      border: 3px solid var(--line-strong);
+      border-top-color: var(--text);
+      border-radius: 50%;
+      margin: 6px auto 12px;
+      animation: spin 0.9s linear infinite;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    .verdict-abi {
+      display: inline-block;
+      font-family: var(--font-mono);
+      font-size: clamp(20px, 4vw, 30px);
+      font-weight: 700;
+      letter-spacing: -0.01em;
+      padding: 4px 14px;
+      border: 1px solid var(--line-strong);
+      border-radius: 12px;
+      background: var(--bg);
+      margin: 6px 0 10px;
+    }
+    .verdict-note { color: var(--text-dim); font-size: clamp(12.5px, 1.5vw, 13.5px); margin-bottom: 14px; }
+    .verdict-note .src { color: var(--text-faint); font-size: 11.5px; display: block; margin-top: 4px; }
+    .badge { display: inline-block; font-size: 11px; font-weight: 700; border-radius: 999px; padding: 2px 10px; border: 1px solid var(--line-strong); margin-left: 8px; vertical-align: middle; }
+    .badge.ok { color: var(--ok); border-color: var(--ok); }
+    .badge.warn { color: var(--warn); border-color: var(--warn); }
+    .dl-main { display: flex; gap: 10px; flex-wrap: wrap; margin-top: 6px; }
+    .abi-table { width: 100%; border-collapse: collapse; margin-top: 10px; font-size: clamp(12px, 1.5vw, 13px); }
+    .abi-table th, .abi-table td { text-align: left; padding: 9px 10px; border-bottom: 1px solid var(--line); }
+    .abi-table th { color: var(--text-faint); font-size: 11px; text-transform: uppercase; letter-spacing: 0.05em; }
+    .abi-table td { color: var(--text-dim); }
+    .abi-table td:first-child { color: var(--text); font-weight: 600; font-family: var(--font-mono); font-size: 12.5px; }
+    .abi-table a { text-decoration: underline; text-underline-offset: 3px; }
+  </style>
+</head>
+<body>
+  <header class="topbar">
+    <div class="container topbar-inner">
+      <a href="index.html" style="font-weight: 700; font-size: 16px; letter-spacing: -0.02em;">XyDesk Remote</a>
+      <nav class="nav-links" aria-label="Navigasi">
+        <a href="index.html#download" class="pill primary">Unduh</a>
+        <a href="index.html#changelog" class="pill">Changelog</a>
+        <a href="status.html" class="pill">Status Sistem</a>
+        <a href="index.html" class="pill">Beranda</a>
+      </nav>
+      <button type="button" class="hamburger-btn" id="hamburger-btn" aria-label="Buka Menu" aria-expanded="false">
+        <svg class="icon-menu" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round">
+          <line x1="4" y1="7" x2="20" y2="7" /><line x1="4" y1="12" x2="20" y2="12" /><line x1="4" y1="17" x2="20" y2="17" />
+        </svg>
+        <svg class="icon-close" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round">
+          <line x1="6" y1="6" x2="18" y2="18" /><line x1="18" y1="6" x2="6" y2="18" />
+        </svg>
+      </button>
+    </div>
+    <div class="mobile-drawer" id="mobile-drawer">
+      <div class="container drawer-grid">
+        <a href="index.html" class="drawer-link"><span>Beranda Utama</span><span>→</span></a>
+        <a href="index.html#download" class="drawer-link"><span>Unduh APK</span><span>→</span></a>
+        <a href="status.html" class="drawer-link"><span>Status Sistem</span><span>→</span></a>
+        <a href="host.html" class="drawer-link"><span>Host Agent</span><span>→</span></a>
+        <a href="privacy.html" class="drawer-link"><span>Kebijakan Privasi</span><span>→</span></a>
+        <a href="licenses.html" class="drawer-link"><span>Lisensi Open Source</span><span>→</span></a>
+      </div>
+    </div>
+  </header>
+  <script>
+    (function () {
+      var b = document.getElementById("hamburger-btn"), d = document.getElementById("mobile-drawer");
+      if (b && d) {
+        b.addEventListener("click", function () {
+          var open = b.getAttribute("aria-expanded") === "true";
+          b.setAttribute("aria-expanded", open ? "false" : "true");
+          d.classList.toggle("open", !open);
+        });
+      }
+    })();
+  </script>
+
+  <main>
+    <div class="container">
+      <div class="meta mono">APK Picker · Deteksi Perangkat</div>
+      <h1>Cek APK yang tepat untuk HP-mu</h1>
+      <p class="lead">
+        XyDesk Remote tersedia dalam beberapa varian sesuai arsitektur CPU. Halaman ini mendeteksi
+        arsitektur HP kamu secara otomatis lalu menyarankan APK yang paling pas. Tidak ada data
+        yang dikirim ke mana pun — deteksi berjalan sepenuhnya di browser.
+      </p>
+
+      <div class="card" id="detect-card">
+        <h2>Hasil deteksi</h2>
+        <div id="detect-state">
+          <div class="spinner" role="status" aria-label="Memeriksa perangkat"></div>
+          <p style="text-align:center;color:var(--text-dim);">Memeriksa perangkat…</p>
+        </div>
+        <div id="detect-result" hidden>
+          <div class="verdict-abi" id="verdict-abi">—</div>
+          <div class="verdict-note" id="verdict-note"></div>
+          <div class="dl-main" id="verdict-actions"></div>
+        </div>
+      </div>
+
+      <div class="card">
+        <h2>Semua varian APK</h2>
+        <p>Deteksi otomatis umumnya akurat, tetapi kalau ragu: varian <strong>universal</strong> selalu berjalan di HP Android apa pun (ukurannya lebih besar), atau cek arsitektur secara manual lewat aplikasi info-CPU (mis. CPU-Z, DevCheck) di kolom "ABI".</p>
+        <table class="abi-table" id="abi-table">
+          <thead>
+            <tr><th scope="col">ABI</th><th scope="col">Cocok untuk</th><th scope="col">Ukuran</th><th scope="col">Unduh</th></tr>
+          </thead>
+          <tbody>
+            <tr data-abi="arm64-v8a">
+              <td>arm64-v8a</td>
+              <td>HP Android 64-bit (2016+, mayoritas)</td>
+              <td class="size mono">—</td>
+              <td><a href="https://github.com/xykal/XyDesk-Remote/releases/download/v1.1.13/XyDesk-Remote64bit.apk">APK 64-bit (ARM)</a></td>
+            </tr>
+            <tr data-abi="armeabi-v7a">
+              <td>armeabi-v7a</td>
+              <td>HP Android 32-bit lawas</td>
+              <td class="size mono">—</td>
+              <td><a href="https://github.com/xykal/XyDesk-Remote/releases/download/v1.1.13/XyDesk-Remote32bit.apk">APK 32-bit (ARM)</a></td>
+            </tr>
+            <tr data-abi="x86_64">
+              <td>x86_64</td>
+              <td>HP/emulator Intel 64-bit (jarang)</td>
+              <td class="size mono">—</td>
+              <td><a href="https://github.com/xykal/XyDesk-Remote/releases/download/v1.1.13/XyDesk-Remote64bit-x86.apk">APK 64-bit (x86)</a></td>
+            </tr>
+            <tr data-abi="universal">
+              <td>universal</td>
+              <td>Semua HP Android (paling aman, paling besar)</td>
+              <td class="size mono">—</td>
+              <td><a href="https://github.com/xykal/XyDesk-Remote/releases/download/v1.1.13/XyDesk-RemoteUniversal.apk">APK Universal</a></td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      <div class="card">
+        <h2>Cara deteksi bekerja</h2>
+        <ul>
+          <li><strong>User-Agent Client Hints (utama):</strong> browser Chromium modern (Chrome, Edge, Brave, Samsung Internet) menyediakan <code>getHighEntropyValues("architecture")</code> yang melaporkan arsitektur CPU asli secara akurat.</li>
+          <li><strong>Teks User-Agent (cadangan):</strong> untuk browser tanpa Client Hints (Firefox, browser lama), arsitektur diperkirakan dari pola <code>arm64/aarch64</code> atau <code>x86_64</code> di teks User-Agent. Pada Firefox Android versi baru, UA hanya menulis "Android" tanpa arsitektur — halaman ini lalu menyarankan pemeriksaan manual.</li>
+          <li><strong>Bukan Android:</strong> kalau halaman dibuka dari iOS atau desktop, tidak ada APK yang dipasang di situ — semua varian tetap ditampilkan supaya bisa dikirim/unduh untuk HP lain.</li>
+        </ul>
+      </div>
+    </div>
+  </main>
+
+  <footer>
+    <div class="container footer-inner">
+      <div><strong>XyDesk Remote</strong> · Powered by <span>XyVerse Technology Global</span></div>
+      <div><a href="index.html">Beranda</a> · <a href="status.html">Status Sistem</a></div>
+    </div>
+  </footer>
+
+  <script>
+    (function () {
+      "use strict";
+
+      // URL & ukuran fallback (rilis v1.1.13) — dipakai kalau fetch release-state.json gagal.
+      var FALLBACK = {
+        "arm64-v8a": { url: "https://github.com/xykal/XyDesk-Remote/releases/download/v1.1.13/XyDesk-Remote64bit.apk", size: 99220480, label: "XyDesk-Remote64bit.apk" },
+        "armeabi-v7a": { url: "https://github.com/xykal/XyDesk-Remote/releases/download/v1.1.13/XyDesk-Remote32bit.apk", size: 79731772, label: "XyDesk-Remote32bit.apk" },
+        "x86_64": { url: "https://github.com/xykal/XyDesk-Remote/releases/download/v1.1.13/XyDesk-Remote64bit-x86.apk", size: 108485542, label: "XyDesk-Remote64bit-x86.apk" },
+        "universal": { url: "https://github.com/xykal/XyDesk-Remote/releases/download/v1.1.13/XyDesk-RemoteUniversal.apk", size: 289832511, label: "XyDesk-RemoteUniversal.apk" }
+      };
+      var links = JSON.parse(JSON.stringify(FALLBACK));
+
+      function fmtSize(bytes) {
+        if (!bytes || bytes <= 0) return "—";
+        return (bytes / (1024 * 1024)).toFixed(1) + " MB";
+      }
+
+      // Isi kolom ukuran + segarkan tautan dari release-state.json (best effort).
+      function applyLinks() {
+        document.querySelectorAll("#abi-table tbody tr").forEach(function (row) {
+          var abi = row.getAttribute("data-abi");
+          var info = links[abi];
+          if (!info) return;
+          var sizeCell = row.querySelector(".size");
+          if (sizeCell) sizeCell.textContent = fmtSize(info.size);
+          var link = row.querySelector("a");
+          if (link) { link.href = info.url; link.textContent = info.label; }
+        });
+      }
+
+      function loadReleaseState() {
+        if (!window.fetch) { applyLinks(); return; }
+        fetch("/release-state.json", { cache: "no-store" })
+          .then(function (r) { return r.ok ? r.json() : null; })
+          .then(function (data) {
+            if (!data || !Array.isArray(data.downloads)) return;
+            var map = {};
+            data.downloads.forEach(function (d) { map[d.file] = d; });
+            Object.keys(FALLBACK).forEach(function (abi) {
+              var d = map[FALLBACK[abi].label];
+              if (d && d.url) links[abi] = { url: d.url, size: d.size_bytes || FALLBACK[abi].size, label: FALLBACK[abi].label };
+            });
+            applyLinks();
+          })
+          .catch(function () { /* fallback tetap */ });
+      }
+
+      // ---- Engine deteksi ABI ----
+      function detectFromHints(hints) {
+        var arch = String(hints.architecture || "").toLowerCase();
+        var bits = String(hints.bitness || "");
+        var platform = String(hints.platform || "").toLowerCase();
+        if (arch === "arm") return bits === "32" ? "armeabi-v7a" : "arm64-v8a";
+        if (arch === "x86") return bits === "32" ? null : "x86_64"; // APK x86 32-bit tidak tersedia
+        return null;
+      }
+
+      function detectFromUA(ua) {
+        var isAndroid = /android/i.test(ua);
+        if (!isAndroid) return { abi: null, notAndroid: true };
+        if (/arm64|aarch64/i.test(ua)) return { abi: "arm64-v8a" };
+        if (/x86_64|amd64|x64/i.test(ua)) return { abi: "x86_64" };
+        if (/armv7|armv8l|armv6|\barm\b/i.test(ua)) return { abi: "armeabi-v7a" };
+        // UA modern (mis. Firefox) hanya menulis "Android; versi" tanpa arsitektur.
+        return { abi: null, vague: true };
+      }
+
+      function renderVerdict(result) {
+        var stateEl = document.getElementById("detect-state");
+        var resEl = document.getElementById("detect-result");
+        var abiEl = document.getElementById("verdict-abi");
+        var noteEl = document.getElementById("verdict-note");
+        var actEl = document.getElementById("verdict-actions");
+        if (!stateEl || !resEl) return;
+        stateEl.hidden = true;
+        resEl.hidden = false;
+
+        var abi = result.abi;
+        abiEl.textContent = abi || "?";
+
+        // Catatan + badge kepercayaan
+        var note = "";
+        var badge = "";
+        if (result.source === "hints") {
+          badge = '<span class="badge ok">terdeteksi pasti</span>';
+          note = "Arsitektur CPU HP-mu terbaca langsung dari browser (User-Agent Client Hints).";
+        } else if (result.source === "ua") {
+          badge = '<span class="badge ok">terdeteksi</span>';
+          note = "Arsitektur diperkirakan dari teks User-Agent browser-mu.";
+        } else if (result.vague) {
+          badge = '<span class="badge warn">perlu cek manual</span>';
+          note = "Browser-mu tidak melaporkan arsitektur CPU. Hampir semua HP Android sejak 2016 adalah 64-bit — kalau HP-mu tergolong baru, pakai APK 64-bit (ARM); kalau ragu, pakai universal, atau cek ABI lewat aplikasi info-CPU.";
+        } else if (result.notAndroid) {
+          badge = '<span class="badge warn">bukan perangkat Android</span>';
+          note = "Halaman ini dibuka bukan dari HP Android. Pilih varian di tabel bawah sesuai HP tujuan — mayoritas HP Android modern memakai arm64-v8a.";
+        } else if (result.noX86) {
+          badge = '<span class="badge warn">x86 32-bit</span>';
+          note = "Perangkatmu terbaca x86 32-bit. Tidak ada APK khusus untuk ABI ini — pakai varian universal.";
+        }
+        noteEl.innerHTML = note + '<span class="src">Deteksi berjalan lokal di browser; tidak ada data yang dikirim.</span>' + badge;
+
+        // Tombol unduhan
+        actEl.innerHTML = "";
+        function addBtn(href, text, primary) {
+          var a = document.createElement("a");
+          a.href = href;
+          a.className = "pill" + (primary ? " primary" : "");
+          a.textContent = text;
+          actEl.appendChild(a);
+        }
+        if (abi && links[abi]) {
+          addBtn(links[abi].url, "Unduh " + links[abi].label + " (" + fmtSize(links[abi].size) + ")", true);
+          if (abi !== "universal") addBtn(links.universal.url, "Cadangan: universal (" + fmtSize(links.universal.size) + ")");
+        } else {
+          addBtn(links.universal.url, "Unduh APK Universal (" + fmtSize(links.universal.size) + ")", true);
+        }
+      }
+
+      function run() {
+        applyLinks();
+        loadReleaseState();
+
+        var ua = navigator.userAgent || "";
+        var uad = navigator.userAgentData;
+
+        if (uad && typeof uad.getHighEntropyValues === "function") {
+          uad.getHighEntropyValues(["architecture", "bitness", "platform"])
+            .then(function (hints) {
+              var abi = detectFromHints(hints);
+              if (abi) {
+                renderVerdict({ abi: abi, source: "hints" });
+              } else if (String(hints.architecture || "").toLowerCase() === "x86") {
+                renderVerdict({ abi: null, noX86: true });
+              } else {
+                var r = detectFromUA(ua);
+                if (r.abi) renderVerdict({ abi: r.abi, source: "ua" });
+                else renderVerdict(r);
+              }
+            })
+            .catch(function () {
+              var r = detectFromUA(ua);
+              if (r.abi) renderVerdict({ abi: r.abi, source: "ua" });
+              else renderVerdict(r);
+            });
+          return;
+        }
+
+        var r = detectFromUA(ua);
+        if (r.abi) renderVerdict({ abi: r.abi, source: "ua" });
+        else renderVerdict(r);
+      }
+
+      run();
+    })();
+  </script>
+</body>
+</html>

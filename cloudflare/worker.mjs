@@ -617,12 +617,13 @@ function communityJokeListKey(createdAt, id) {
   return `joke:${String(createdAt).padStart(13, "0")}:${id}`;
 }
 
-function communityCommentPublicView(comment) {
+function communityCommentPublicView(comment, viewerHash = null) {
   return {
     id: comment.id,
     name: comment.name || null,
     text: comment.text,
     created_at: comment.created_at,
+    is_own: Boolean(viewerHash && comment.author_hash && comment.author_hash === viewerHash),
   };
 }
 
@@ -1152,6 +1153,8 @@ export class CommunityJokes {
     if (report && request.method === "POST") return this.report(request, report[1]);
     const comment = path.match(/^\/comment\/([0-9a-f-]{36})$/i);
     if (comment && request.method === "POST") return this.comment(request, comment[1]);
+    const commentDel = path.match(/^\/comment-delete\/([0-9a-f-]{36})$/i);
+    if (commentDel && request.method === "POST") return this.deleteComment(request, commentDel[1]);
     const edit = path.match(/^\/edit\/([0-9a-f-]{36})$/i);
     if (edit && request.method === "POST") return this.edit(request, edit[1]);
     const del = path.match(/^\/delete\/([0-9a-f-]{36})$/i);
@@ -1180,7 +1183,7 @@ export class CommunityJokes {
           reverse: true,
           limit: COMMUNITY_COMMENT_FEED_SIZE,
         });
-        const comments = Array.from(commentEntries.values()).map(communityCommentPublicView);
+        const comments = Array.from(commentEntries.values()).map((c) => communityCommentPublicView(c, clientHash));
         const isOwn = Boolean(clientHash && joke.author_hash === clientHash);
         let avatarUrl = null;
         if (joke.author_hash && this.kv) {
@@ -1435,6 +1438,51 @@ export class CommunityJokes {
     }
   }
 
+  // Hapus komentar milik sendiri (permintaan pemilik 2026-10-15: hapus
+  // komentar via bottom sheet ala TikTok). Komentar lama tanpa author_hash
+  // tidak bisa dihapus.
+  async deleteComment(request, jokeId) {
+    if (!ACTIVE_SESSION_ID_RE.test(jokeId)) {
+      return durableObjectJson({ status: "invalid_joke_id" }, 400, request.method);
+    }
+    const parsed = await readCommunityJson(request, 1_024);
+    if (parsed.error) return parsed.error;
+    const clientId = parsed.body?.client_id;
+    if (!COMMUNITY_CLIENT_ID_RE.test(String(clientId || ""))) {
+      return durableObjectJson({ status: "invalid_client_id" }, 400, request.method);
+    }
+    const commentId = String(parsed.body?.comment_id || "");
+    if (!ACTIVE_SESSION_ID_RE.test(commentId)) {
+      return durableObjectJson({ status: "invalid_comment_id" }, 400, request.method);
+    }
+    try {
+      const clientHash = await hashedCommunityClientId(clientId);
+      const outcome = await this.state.storage.transaction(async (transaction) => {
+        const listKey = await transaction.get(`joke-id:${jokeId}`);
+        if (!listKey) return { status: "not_found" };
+        const joke = await transaction.get(listKey);
+        if (!joke || joke.hidden) return { status: "not_found" };
+        const entries = await transaction.list({ prefix: `joke-comments:${jokeId}:`, limit: 1_000 });
+        let targetKey = null;
+        for (const [key, value] of entries) {
+          if (value?.id === commentId) { targetKey = key; break; }
+        }
+        if (!targetKey) return { status: "not_found" };
+        const stored = entries.get(targetKey);
+        if (!stored?.author_hash || stored.author_hash !== clientHash) return { status: "forbidden" };
+        await transaction.delete(targetKey);
+        joke.comment_count = Math.max(0, (Number(joke.comment_count) || 0) - 1);
+        await transaction.put(listKey, joke);
+        return { status: "deleted", comments_total: joke.comment_count };
+      });
+      if (outcome.status === "not_found") return durableObjectJson(outcome, 404, request.method);
+      if (outcome.status === "forbidden") return durableObjectJson(outcome, 403, request.method);
+      return durableObjectJson(outcome, 200, request.method);
+    } catch {
+      return durableObjectJson({ status: "unavailable" }, 503, request.method);
+    }
+  }
+
   async comment(request, jokeId) {
     if (!ACTIVE_SESSION_ID_RE.test(jokeId)) {
       return durableObjectJson({ status: "invalid_joke_id" }, 400, request.method);
@@ -1472,7 +1520,7 @@ export class CommunityJokes {
         if (requestedName) await transaction.put(`account-name:${clientHash}`, requestedName);
 
         const id = crypto.randomUUID();
-        const comment = { id, joke_id: jokeId, name, text, created_at: now };
+        const comment = { id, joke_id: jokeId, name, text, created_at: now, author_hash: clientHash };
         await transaction.put(`joke-comments:${jokeId}:${String(now).padStart(13, "0")}:${id}`, comment);
         await transaction.put(rateKey, now);
 
@@ -1486,7 +1534,7 @@ export class CommunityJokes {
         }
         joke.comment_count = Math.min(names.length, COMMUNITY_COMMENT_MAX_PER_JOKE);
         await transaction.put(listKey, joke);
-        return { status: "ok", comment: communityCommentPublicView(comment), comments_total: joke.comment_count };
+        return { status: "ok", comment: communityCommentPublicView(comment, clientHash), comments_total: joke.comment_count };
       });
       return durableObjectJson(outcome, outcome.status === "not_found" ? 404 : outcome.status === "rate_limited" ? 429 : 201, request.method);
     } catch {
@@ -2031,7 +2079,7 @@ async function communityJokesResponse(request, env) {
   } else if (url.pathname.match(/^\/api\/jokes\/(attachment|avatar)\//i)) {
     return serveCommunityBinary(request, env, url);
   } else {
-    const match = url.pathname.match(/^\/api\/jokes\/([0-9a-f-]{36})\/(reaction|report|comment|edit|delete)$/i);
+    const match = url.pathname.match(/^\/api\/jokes\/([0-9a-f-]{36})\/(reaction|report|comment-delete|comment|edit|delete)$/i);
     if (!match || request.method !== "POST") {
       return match ? methodNotAllowed("POST") : jsonResponse({ status: "not_found" }, 404, request.method);
     }

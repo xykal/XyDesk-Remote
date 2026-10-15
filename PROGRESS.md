@@ -790,3 +790,61 @@ blackscreen". Build rilis DITAHAN atas permintaan (gate debug tetap jalan).
   sudah 9d0817d — pulih dengan re-add remote (config tidak persisten) +
   fetch + `git reset origin/main`; diff bersih 2 file, tidak ada pekerjaan
   yang hilang.
+
+## Ronde 37 — RDP anti-black-screen tahap 2, log singkat, kredensial, feed bottom sheet, web
+
+Permintaan pemilik 2026-10-15 (9 item, "UI harus bersih"). Build rilis tetap
+ditahan; gate debug jalan.
+
+- **RDP blackscreen tahap 2** (`XyDeskSession`): jalur lama cuma cek sekali
+  (`blackScreenChecked`) sehingga bila grafis fallback ikut hitam, layar diam
+  gelap selamanya. Kini maksimal 2x reconnect otomatis (`blackScreenReconnects`,
+  reset penanda tiap reconnect supaya siklus deteksi hidup), lalu
+  `blackScreenFatal` → layar status jelas: "Layar tetap hitam" + penjelasan
+  singkat + tombol Coba lagi / Keluar sesi. fps>0 memulihkan grafis penuh dan
+  menghapus status fatal.
+- **Log error singkat & jelas** (`RdpErrors.shortTitle`): judul satu baris —
+  "Password salah", "Username atau password salah" (FreeRDP tidak membedakan
+  keduanya), "Host tidak menjawab", "Host tidak ditemukan", "Koneksi kehabisan
+  waktu", "Sertifikat/TLS gagal", "Akun terkunci", "Password kedaluwarsa",
+  "Ditolak server", "Gagal koneksi". Judul overlay error RDP kini memakai ini;
+  hint panjang tetap jadi badan + Detail.
+- **Popup ubah kredensial**: `RdpErrors.isCredentialError` → tombol "Ubah
+  username & password" di overlay error → `CredentialsRetryDialog` (prefill
+  dari profil, domain opsional, ingat password) → simpan lewat
+  SessionsRepository.save → sambung ulang otomatis.
+- **Profil lebih clean + cepat**: kartu identitas app (logo/versi) diturunkan
+  jadi footer ringkas satu baris; decode avatar pindah ke background thread
+  (LaunchedEffect + Dispatchers.IO) sehingga layar profil terbuka seketika.
+- **Feed ala TikTok** (`FunHubCard` + worker):
+  - Komentar kini di `ModalBottomSheet`: daftar komentar (LazyColumn, waktu
+    relatif) + kolom tulis menempel di bawah; dibuka ulang tiap mau komen.
+  - Aksi postingan (edit/hapus/laporkan) dipadatkan jadi satu titik "···" di
+    kartu → bottom sheet aksi. Konfirmasi hapus postingan tetap dialog (aman
+    dari salah ketuk).
+  - **Hapus komentar sendiri**: worker menyimpan `author_hash` per komentar,
+    view mengirim `is_own`, endpoint baru POST `/api/jokes/<id>/comment-delete`
+    (403 untuk bukan penulis, decrement count). Routing outer worker diperluas.
+  - Test baru: delete hanya oleh penulis + flag is_own; 49/49 hijau.
+  - Bonus: `web-checks` lama merah karena assert teks "Matikan sakelar" tidak
+    cocok lagi dengan teks Screens.kt → disesuaikan ("Sakelar ini dapat
+    dimatikan kapan saja"); worker-tests hijau lagi.
+- **Web — menu popup & drawer**: nav desktop diringkas jadi Unduh + tombol
+  "Menu ▾" (popup dropdown: Cek APK, Tentang, Fitur, Changelog, Host Agent,
+  Status, Lisensi) + lang/theme; drawer mobile dapat link "Cek APK untuk HP-mu"
+  paling atas; host.html/status.html juga dapat link ABI (nav + drawer).
+- **Web — engine cek ABI per HP** (`abi.html`, baru): deteksi via
+  `userAgentData.getHighEntropyValues("architecture"/"bitness")` dengan fallback
+  parse UA (arm64/aarch64, armv7, x86_64); penanganan jujur untuk UA modern
+  tanpa arsitektur (Firefox) → saran manual, x86 32-bit → universal, non-Android
+  → info; badge kepercayaan; tombol unduh ABI yang cocok + cadangan universal;
+  tabel semua varian + ukuran (di-refresh dari release-state.json, fallback
+  hard-coded v1.1.13). Deteksi 100% lokal di browser. sitemap.xml ditambah.
+- **UI host modern?** (pertanyaan pemilik): sudah ada — panel native di repo
+  saudara `xykal/XyDesk` `packaging/native-host/main.cpp` (≈3.8k baris):
+  jendela berlapis WS_EX_LAYERED + UpdateLayeredWindow, sudut membulat radius
+  kustom + bayangan lembut (bukan kotak Win32), tombol hover/pressed/disabled,
+  onboarding/session view/updater — diuji CI lewat native-panel-layout-test +
+  check_panel_shape.py (bukti piksel). Yang di repo ini (`host-agent`
+  XyDesk-Remote) masih panel Win32 klasik sederhana (STATIC/BUTTON/EDIT + tray)
+  — jalan, tapi bukan yang modern.

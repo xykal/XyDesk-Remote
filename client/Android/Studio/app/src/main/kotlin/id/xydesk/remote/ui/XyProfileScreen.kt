@@ -5,6 +5,8 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
@@ -42,7 +44,6 @@ import id.xydesk.remote.ui.components.XyPillButton
 import id.xydesk.remote.ui.components.XySegmented
 import id.xydesk.remote.ui.components.XyTileGrid
 import id.xydesk.remote.ui.components.XyTopBar
-import id.xydesk.remote.ui.components.XyWordmark
 import kotlinx.coroutines.launch
 import id.xydesk.remote.ui.theme.XyThemeState
 
@@ -103,44 +104,6 @@ internal fun XyProfileScreen(
             // ---- akun komunitas (guest / GitHub) ----
             CommunityAccountCard()
             CloudSyncCard()
-
-            // ---- identitas app ----
-            XyGlassCard(padding = 16.dp) {
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(12.dp),
-                ) {
-                    Box(
-                        Modifier
-                            .size(46.dp)
-                            .clip(RoundedCornerShape(14.dp))
-                            .background(MaterialTheme.colorScheme.onSurface.copy(alpha = 0.08f)),
-                        contentAlignment = Alignment.Center,
-                    ) {
-                        XyLogo(modifier = Modifier.size(26.dp))
-                    }
-                    Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
-                        XyWordmark(fontSize = 20.sp)
-                        Text(
-                            buildString {
-                                append(xy("Versi", "Version"))
-                                append(" ")
-                                append(versionName ?: "-")
-                                append("  ·  ")
-                                append(
-                                    xy(
-                                        "{0} perangkat tersimpan",
-                                        "{0} saved devices",
-                                        deviceCount,
-                                    ),
-                                )
-                            },
-                            style = MaterialTheme.typography.labelSmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
-                    }
-                }
-            }
 
             // ---- seksi sebagai grid kartu ----
             XyGlassSectionLabel(xy("Pengaturan", "Settings"))
@@ -236,6 +199,29 @@ internal fun XyProfileScreen(
                     }
                 },
             )
+
+            // ---- identitas app: footer ringkas, bukan kartu (rapi & clean) ----
+            Row(
+                Modifier
+                    .fillMaxWidth()
+                    .padding(top = 6.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.Center,
+            ) {
+                XyLogo(modifier = Modifier.size(18.dp))
+                Spacer(Modifier.width(8.dp))
+                Text(
+                    buildString {
+                        append(xy("Versi", "Version"))
+                        append(" ")
+                        append(versionName ?: "-")
+                        append("  ·  ")
+                        append(xy("{0} perangkat tersimpan", "{0} saved devices", deviceCount))
+                    },
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
         }
     }
 
@@ -431,14 +417,18 @@ private fun CommunityAccountCard() {
 
     // Foto profil: cache lokal + unggah ke worker biar muncul di feed.
     val avatarFile = remember { java.io.File(context.filesDir, "xy_avatar.webp") }
-    var avatarBitmap by remember {
-        mutableStateOf(
+    // Decode avatar di background (bukan di composition) supaya layar profil
+    // terasa terbuka seketika walau file avatar ada.
+    var avatarBitmap by remember { mutableStateOf<android.graphics.Bitmap?>(null) }
+    androidx.compose.runtime.LaunchedEffect(avatarFile) {
+        val bmp = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
             runCatching {
                 if (avatarFile.exists()) {
                     android.graphics.BitmapFactory.decodeFile(avatarFile.absolutePath)
                 } else null
-            }.getOrNull(),
-        )
+            }.getOrNull()
+        }
+        avatarBitmap = bmp
     }
     var avatarBusy by remember { mutableStateOf(false) }
     var githubPatDraft by remember { mutableStateOf("") }

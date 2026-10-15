@@ -214,6 +214,37 @@
       flex-wrap: nowrap;
     }
 
+    /* Menu popup desktop (revisi navigasi r37) */
+    .menu-wrap { position: relative; }
+    .menu-caret { font-size: 10px; margin-left: 5px; opacity: 0.85; }
+    .menu-pop {
+      position: absolute;
+      top: calc(100% + 8px);
+      right: 0;
+      min-width: 240px;
+      padding: 6px;
+      background: var(--surface);
+      border: 1px solid var(--line-strong);
+      border-radius: 12px;
+      box-shadow: 0 16px 38px rgba(0, 0, 0, 0.35);
+      display: none;
+      flex-direction: column;
+      gap: 2px;
+      z-index: 80;
+    }
+    .menu-pop.open { display: flex; }
+    .menu-item {
+      padding: 9px 12px;
+      border-radius: 8px;
+      font-size: 13px;
+      font-weight: 600;
+      color: var(--text);
+      white-space: nowrap;
+      text-align: left;
+      background: none;
+    }
+    .menu-item:hover { background: var(--surface-alt); }
+
     .mobile-actions {
       display: none;
       align-items: center;
@@ -1162,12 +1193,20 @@
       </a>
       <nav class="nav-row" aria-label="Navigasi Utama">
         <a href="#download" class="pill-btn primary" data-i18n="nav.download">Unduh</a>
-        <a href="#about-diff" class="pill-btn" data-i18n="nav.about">Tentang &amp; Perbedaan</a>
-        <a href="#capabilities" class="pill-btn" data-i18n="nav.cap">Fitur Terbaru</a>
-        <a href="#changelog" class="pill-btn" data-i18n="nav.changelog">Changelog</a>
-        <a href="host.html" class="pill-btn" data-i18n="nav.host">Host Agent (Eksperimental)</a>
-        <a href="status.html" class="pill-btn" data-i18n="nav.status">Status Sistem</a>
-        <a href="licenses.html" class="pill-btn" data-i18n="nav.licenses">Lisensi</a>
+        <div class="menu-wrap">
+          <button type="button" class="pill-btn" id="menu-btn" aria-haspopup="true" aria-expanded="false" aria-controls="menu-pop">
+            <span data-i18n="nav.menu">Menu</span><span class="menu-caret" aria-hidden="true">▾</span>
+          </button>
+          <div class="menu-pop" id="menu-pop" role="menu">
+            <a href="abi.html" class="menu-item" role="menuitem"><span data-i18n="nav.abi">Cek APK untuk HP-mu</span></a>
+            <a href="#about-diff" class="menu-item" role="menuitem" data-i18n="nav.about">Tentang &amp; Perbedaan</a>
+            <a href="#capabilities" class="menu-item" role="menuitem" data-i18n="nav.cap">Fitur Terbaru</a>
+            <a href="#changelog" class="menu-item" role="menuitem" data-i18n="nav.changelog">Changelog</a>
+            <a href="host.html" class="menu-item" role="menuitem" data-i18n="nav.host">Host Agent (Eksperimental)</a>
+            <a href="status.html" class="menu-item" role="menuitem" data-i18n="nav.status">Status Sistem</a>
+            <a href="licenses.html" class="menu-item" role="menuitem" data-i18n="nav.licenses">Lisensi</a>
+          </div>
+        </div>
         <button type="button" class="pill-btn" id="lang-btn">ID / EN</button>
         <button type="button" class="pill-btn" id="theme-btn">Gelap</button>
       </nav>
@@ -1189,6 +1228,7 @@
     <div class="mobile-drawer" id="mobile-drawer" aria-label="Menu Mobile">
       <div class="container">
         <div class="drawer-grid">
+          <a href="abi.html" class="drawer-link"><span data-i18n="nav.abi">Cek APK untuk HP-mu</span><span>→</span></a>
           <a href="#about-diff" class="drawer-link" data-drawer-close><span data-i18n="nav.about">Tentang &amp; Perbedaan</span><span>→</span></a>
           <a href="#capabilities" class="drawer-link" data-drawer-close><span data-i18n="nav.cap">Fitur Terbaru</span><span>→</span></a>
           <a href="#architecture" class="drawer-link" data-drawer-close><span>Arsitektur &amp; Keamanan</span><span>→</span></a>
@@ -1925,6 +1965,31 @@
           });
       }
 
+      // Menu popup desktop
+      var menuBtn = document.getElementById("menu-btn");
+      var menuPop = document.getElementById("menu-pop");
+      function closeMenuPop() {
+        if (!menuPop || !menuBtn) return;
+        menuPop.classList.remove("open");
+        menuBtn.setAttribute("aria-expanded", "false");
+      }
+      if (menuBtn && menuPop) {
+        menuBtn.addEventListener("click", function (e) {
+          e.stopPropagation();
+          var open = menuPop.classList.toggle("open");
+          menuBtn.setAttribute("aria-expanded", open ? "true" : "false");
+        });
+        menuPop.addEventListener("click", function (e) {
+          if (e.target.closest("a")) closeMenuPop();
+        });
+        document.addEventListener("click", function (e) {
+          if (!e.target.closest(".menu-wrap")) closeMenuPop();
+        });
+        document.addEventListener("keydown", function (e) {
+          if (e.key === "Escape") closeMenuPop();
+        });
+      }
+
       // Mobile Hamburger Drawer
       var hamburgerBtn = document.getElementById("hamburger-btn");
       var mobileDrawer = document.getElementById("mobile-drawer");
@@ -1985,6 +2050,8 @@
         "nav.licenses": "Licenses",
         "nav.host": "Host Agent (experimental)",
         "nav.download": "Download",
+        "nav.menu": "Menu",
+        "nav.abi": "Check APK for your phone",
         "intro.meta": "Android RDP client · Windows PCs and servers · APK 1.1.8 (69)",
         "intro.title": "Remote Desktop for Windows PCs, from Android.",
         "intro.lead": "Connect Android to a Windows PC or server you own or administer. XyDesk Remote is an Android RDP client based on FreeRDP 3, with touch controls, keyboard, clipboard, audio, and monitor options. The optional Host Agent / PC-ID mode is experimental; standard RDP does not require the agent.",

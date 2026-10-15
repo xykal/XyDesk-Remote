@@ -78,7 +78,15 @@ internal class CommunityJokesApi(context: Context) {
             name = c.strOrNull("name"),
             text = c.optString("text"),
             createdAtMillis = c.optLong("created_at", 0L),
+            isOwn = true,
         )
+    }
+
+    /** Hapus komentar sendiri (butuh worker r37 dengan author_hash). */
+    suspend fun deleteComment(jokeId: String, commentId: String): Int = withContext(Dispatchers.IO) {
+        val payload = JSONObject().put("client_id", clientId).put("comment_id", commentId)
+        val body = request(method = "POST", path = "/api/jokes/$jokeId/comment-delete", payload = payload)
+        body.optInt("comments_total", 0)
     }
 
     /** Nama tampilan server (dipulihkan setelah pasang ulang bila ID dipulihkan). */
@@ -224,6 +232,7 @@ internal class CommunityJokesApi(context: Context) {
                             name = c.strOrNull("name"),
                             text = c.optString("text"),
                             createdAtMillis = c.optLong("created_at", 0L),
+                            isOwn = c.optBoolean("is_own", false),
                         ),
                     )
                 }
@@ -352,6 +361,8 @@ internal data class JokeComment(
     val name: String?,
     val text: String,
     val createdAtMillis: Long,
+    /** Komentar milik pengguna ini (untuk tombol hapus di bottom sheet). */
+    val isOwn: Boolean = false,
 )
 
 internal data class FeedAttachment(

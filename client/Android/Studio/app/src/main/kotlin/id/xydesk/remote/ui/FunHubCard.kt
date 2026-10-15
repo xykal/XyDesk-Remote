@@ -2,6 +2,8 @@ package id.xydesk.remote.ui
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.gestures.rememberTransformableState
 import androidx.compose.foundation.gestures.transformable
@@ -92,6 +94,11 @@ internal fun FunHubCard(
     var editRemoveAttachment by remember { mutableStateOf(false) }
     var deleteTarget by remember { mutableStateOf<CommunityJoke?>(null) }
     var deleting by remember { mutableStateOf(false) }
+    // Bottom sheet komentar ala TikTok + sheet aksi postingan (permintaan
+    // pemilik 2026-10-15: list komentar & hapus/komentar lewat bottom sheet).
+    var commentsTarget by remember { mutableStateOf<CommunityJoke?>(null) }
+    var actionsTarget by remember { mutableStateOf<CommunityJoke?>(null) }
+    var deletingCommentId by remember { mutableStateOf<String?>(null) }
     val pickVisual = rememberLauncherForActivityResult(
         ActivityResultContracts.GetContent(),
     ) { uri ->
@@ -281,7 +288,6 @@ internal fun FunHubCard(
                                 showAll = true
                             },
                             isReactionBusy = activeReactionId == joke.id,
-                            alreadyReported = joke.id in reportedIds,
                             onReact = { emoji ->
                                 if (activeReactionId == null) {
                                     scope.launch {
@@ -298,30 +304,8 @@ internal fun FunHubCard(
                                     }
                                 }
                             },
-                            onReport = { reportTarget = joke },
-                            isCommentBusy = commentingId == joke.id,
-                            onComment = { text ->
-                                if (commentingId == null) {
-                                    scope.launch {
-                                        commentingId = joke.id
-                                        feedMessage = null
-                                        try {
-                                            val posted = api.comment(joke.id, text)
-                                            updateJoke(
-                                                joke.copy(
-                                                    comments = (listOf(posted) + joke.comments).take(5),
-                                                    commentsTotal = joke.commentsTotal + 1,
-                                                ),
-                                            )
-                                        } catch (error: Exception) {
-                                            feedMessage = showCommunityError(error)
-                                            feedMessageIsError = true
-                                        } finally {
-                                            commentingId = null
-                                        }
-                                    }
-                                }
-                            },
+                            onOpenComments = { commentsTarget = joke },
+                            onOpenActions = { actionsTarget = joke },
                         )
                     }
                     if (jokes.size > INITIAL_JOKES_VISIBLE) {
@@ -500,6 +484,83 @@ internal fun FunHubCard(
         }
     }
 
+    // Bottom sheet komentar ala TikTok: list + input menempel di bawah,
+    // dibuka ulang tiap mau berkomentar (permintaan pemilik 2026-10-15).
+    commentsTarget?.let { target ->
+        val current = jokes.firstOrNull { it.id == target.id } ?: target
+        CommentsBottomSheet(
+            joke = current,
+            isSending = commentingId == current.id,
+            deletingCommentId = deletingCommentId,
+            onSend = { text ->
+                if (commentingId == null) {
+                    scope.launch {
+                        commentingId = current.id
+                        feedMessage = null
+                        try {
+                            val posted = api.comment(current.id, text)
+                            val updated = current.copy(
+                                comments = listOf(posted) + current.comments,
+                                commentsTotal = current.commentsTotal + 1,
+                            )
+                            jokes = jokes.map { old -> if (old.id == updated.id) updated else old }
+                            commentsTarget = updated
+                        } catch (error: Exception) {
+                            feedMessage = showCommunityError(error)
+                            feedMessageIsError = true
+                        } finally {
+                            commentingId = null
+                        }
+                    }
+                }
+            },
+            onDeleteComment = { comment ->
+                if (deletingCommentId == null) {
+                    scope.launch {
+                        deletingCommentId = comment.id
+                        feedMessage = null
+                        try {
+                            api.deleteComment(current.id, comment.id)
+                            val updated = current.copy(
+                                comments = current.comments.filter { it.id != comment.id },
+                                commentsTotal = maxOf(0, current.commentsTotal - 1),
+                            )
+                            jokes = jokes.map { old -> if (old.id == updated.id) updated else old }
+                            commentsTarget = updated
+                        } catch (error: Exception) {
+                            feedMessage = showCommunityError(error)
+                            feedMessageIsError = true
+                        } finally {
+                            deletingCommentId = null
+                        }
+                    }
+                }
+            },
+            onDismiss = { commentsTarget = null },
+        )
+    }
+
+    // Bottom sheet aksi postingan: edit / hapus / laporkan dari satu titik "···".
+    actionsTarget?.let { target ->
+        ActionsBottomSheet(
+            joke = target,
+            alreadyReported = target.id in reportedIds,
+            onEdit = {
+                actionsTarget = null
+                editingJoke = target
+            },
+            onDelete = {
+                actionsTarget = null
+                deleteTarget = target
+            },
+            onReport = {
+                actionsTarget = null
+                reportTarget = target
+            },
+            onDismiss = { actionsTarget = null },
+        )
+    }
+
     deleteTarget?.let { target ->
         XyOverlay(
             title = xy("Hapus postingan?", "Delete post?"),
@@ -647,17 +708,11 @@ private fun CommunityJokeItem(
     onImageClick: (String, String?) -> Unit,
     onAuthorClick: (String) -> Unit,
     isReactionBusy: Boolean,
-    alreadyReported: Boolean,
     onReact: (String) -> Unit,
-    onReport: () -> Unit,
-    isCommentBusy: Boolean = false,
-    onComment: (String) -> Unit = {},
-    onEdit: (() -> Unit)? = null,
-    onDelete: (() -> Unit)? = null,
+    onOpenComments: () -> Unit,
+    onOpenActions: () -> Unit,
 ) {
     var pickerOpen by remember(joke.id) { mutableStateOf(false) }
-    var commentsOpen by remember(joke.id) { mutableStateOf(false) }
-    var commentDraft by remember(joke.id) { mutableStateOf("") }
 
     @Composable
     fun ReactionChip(emoji: String) {
@@ -772,92 +827,201 @@ private fun CommunityJokeItem(
             Text(
                 xy("Komentar ({0})", "Comments ({0})", joke.commentsTotal),
                 modifier = Modifier
-                    .clickable { commentsOpen = !commentsOpen }
+                    .clickable(onClick = onOpenComments)
                     .padding(horizontal = 4.dp, vertical = 3.dp),
                 style = MaterialTheme.typography.labelSmall,
                 color = MaterialTheme.colorScheme.primary,
             )
-            Spacer(Modifier.width(6.dp))
+            // Semua aksi (edit/hapus/laporkan) kini di bottom sheet — kartu
+            // tetap bersih, cukup satu titik "···".
+            Spacer(Modifier.weight(1f))
             Text(
-                if (alreadyReported) xy("Dilaporkan", "Reported") else xy("Laporkan", "Report"),
-                modifier = if (alreadyReported) Modifier else Modifier
-                    .clickable(onClick = onReport)
-                    .padding(horizontal = 4.dp, vertical = 3.dp),
-                style = MaterialTheme.typography.labelSmall,
+                "···",
+                modifier = Modifier
+                    .clickable(onClick = onOpenActions)
+                    .padding(horizontal = 6.dp, vertical = 3.dp),
+                style = MaterialTheme.typography.labelLarge,
+                fontWeight = FontWeight.Bold,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
-            if (onEdit != null) {
-                Spacer(Modifier.weight(1f))
-                Text(
-                    xy("Edit", "Edit"),
-                    modifier = Modifier.clickable(onClick = onEdit).padding(horizontal = 4.dp, vertical = 3.dp),
-                    style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.primary,
-                )
-                Text(
-                    xy("Hapus", "Delete"),
-                    modifier = Modifier.clickable(onClick = { onDelete?.invoke() }).padding(horizontal = 4.dp, vertical = 3.dp),
-                    style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.error,
-                )
-            }
         }
+    }
+}
 
-        if (commentsOpen) {
-            Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+/**
+ * Bottom sheet komentar ala TikTok: daftar komentar + kolom tulis menempel
+ * di bawah. Draft direset per postingan. Komentar milik sendiri bisa dihapus
+ * langsung dari list (butuh worker r37 yang menyimpan author_hash).
+ */
+@Composable
+private fun CommentsBottomSheet(
+    joke: CommunityJoke,
+    isSending: Boolean,
+    deletingCommentId: String?,
+    onSend: (String) -> Unit,
+    onDeleteComment: (JokeComment) -> Unit,
+    onDismiss: () -> Unit,
+) {
+    var draft by remember(joke.id) { mutableStateOf("") }
+    androidx.compose.material3.ModalBottomSheet(onDismissRequest = onDismiss) {
+        Column(
+            Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 16.dp)
+                .padding(bottom = 12.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            Text(
+                xy("{0} komentar", "{0} comments", joke.commentsTotal),
+                style = MaterialTheme.typography.titleSmall,
+                color = MaterialTheme.colorScheme.onSurface,
+            )
+            LazyColumn(
+                Modifier
+                    .fillMaxWidth()
+                    .heightIn(max = 360.dp),
+                verticalArrangement = Arrangement.spacedBy(10.dp),
+            ) {
                 if (joke.comments.isEmpty()) {
-                    Text(
-                        xy("Belum ada komentar. Jadilah yang pertama.", "No comments yet. Be the first."),
-                        style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                }
-                joke.comments.forEach { c ->
-                    Column {
+                    item {
                         Text(
-                            c.name ?: xy("Anonim", "Anonymous"),
-                            style = MaterialTheme.typography.labelSmall,
-                            fontWeight = FontWeight.SemiBold,
-                            color = MaterialTheme.colorScheme.primary,
+                            xy("Belum ada komentar. Jadilah yang pertama.", "No comments yet. Be the first."),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
-                        Text(c.text, style = MaterialTheme.typography.bodySmall)
                     }
                 }
-                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    BasicTextField(
-                        value = commentDraft,
-                        onValueChange = { if (it.codePointCount(0, it.length) <= 140) commentDraft = it },
-                        modifier = Modifier.weight(1f),
-                        textStyle = TextStyle(
-                            color = MaterialTheme.colorScheme.onSurface,
-                            fontSize = MaterialTheme.typography.bodySmall.fontSize,
-                        ),
-                        cursorBrush = SolidColor(MaterialTheme.colorScheme.primary),
-                        maxLines = 2,
-                        decorationBox = { inner ->
-                            if (commentDraft.isEmpty()) {
+                items(joke.comments, key = { it.id }) { c ->
+                    Column(verticalArrangement = Arrangement.spacedBy(1.dp)) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Text(
+                                c.name ?: xy("Anonim", "Anonymous"),
+                                style = MaterialTheme.typography.labelSmall,
+                                fontWeight = FontWeight.SemiBold,
+                                color = MaterialTheme.colorScheme.primary,
+                            )
+                            feedTimeAgo(c.createdAtMillis).takeIf { it.isNotEmpty() }?.let { ago ->
                                 Text(
-                                    xy("Tulis komentar…", "Write a comment…"),
-                                    style = MaterialTheme.typography.bodySmall,
+                                    " · $ago",
+                                    style = MaterialTheme.typography.labelSmall,
                                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                                 )
                             }
-                            inner()
-                        },
-                    )
-                    XyPillButton(
-                        text = if (isCommentBusy) "…" else xy("Kirim", "Send"),
-                        onClick = {
-                            val clean = commentDraft.trim()
-                            if (clean.isNotEmpty() && !isCommentBusy) {
-                                onComment(clean)
-                                commentDraft = ""
+                            Spacer(Modifier.weight(1f))
+                            if (c.isOwn) {
+                                Text(
+                                    if (deletingCommentId == c.id) "…" else xy("Hapus", "Delete"),
+                                    modifier = Modifier
+                                        .clickable(enabled = deletingCommentId == null) { onDeleteComment(c) }
+                                        .padding(horizontal = 4.dp, vertical = 2.dp),
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = MaterialTheme.colorScheme.error,
+                                )
                             }
-                        },
-                        enabled = commentDraft.trim().isNotEmpty() && !isCommentBusy,
-                        compact = true,
-                    )
+                        }
+                        Text(c.text, style = MaterialTheme.typography.bodySmall)
+                    }
                 }
+            }
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                BasicTextField(
+                    value = draft,
+                    onValueChange = { if (it.codePointCount(0, it.length) <= 140) draft = it },
+                    modifier = Modifier.weight(1f),
+                    textStyle = TextStyle(
+                        color = MaterialTheme.colorScheme.onSurface,
+                        fontSize = MaterialTheme.typography.bodySmall.fontSize,
+                    ),
+                    cursorBrush = SolidColor(MaterialTheme.colorScheme.primary),
+                    maxLines = 3,
+                    decorationBox = { inner ->
+                        if (draft.isEmpty()) {
+                            Text(
+                                xy("Tulis komentar…", "Write a comment…"),
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        }
+                        inner()
+                    },
+                )
+                XyPillButton(
+                    text = if (isSending) "…" else xy("Kirim", "Send"),
+                    onClick = {
+                        val clean = draft.trim()
+                        if (clean.isNotEmpty() && !isSending) {
+                            onSend(clean)
+                            draft = ""
+                        }
+                    },
+                    enabled = draft.trim().isNotEmpty() && !isSending,
+                    compact = true,
+                )
+            }
+        }
+    }
+}
+
+/** Bottom sheet aksi postingan: edit/hapus (milik sendiri) + laporkan. */
+@Composable
+private fun ActionsBottomSheet(
+    joke: CommunityJoke,
+    alreadyReported: Boolean,
+    onEdit: () -> Unit,
+    onDelete: () -> Unit,
+    onReport: () -> Unit,
+    onDismiss: () -> Unit,
+) {
+    androidx.compose.material3.ModalBottomSheet(onDismissRequest = onDismiss) {
+        Column(
+            Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 16.dp)
+                .padding(bottom = 16.dp),
+            verticalArrangement = Arrangement.spacedBy(2.dp),
+        ) {
+            if (joke.isOwn) {
+                Text(
+                    xy("Edit postingan", "Edit post"),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(10.dp))
+                        .clickable(onClick = onEdit)
+                        .padding(horizontal = 12.dp, vertical = 13.dp),
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurface,
+                )
+                Text(
+                    xy("Hapus postingan", "Delete post"),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(10.dp))
+                        .clickable(onClick = onDelete)
+                        .padding(horizontal = 12.dp, vertical = 13.dp),
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.error,
+                )
+            }
+            if (alreadyReported) {
+                Text(
+                    xy("Sudah dilaporkan", "Already reported"),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 12.dp, vertical = 13.dp),
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            } else {
+                Text(
+                    xy("Laporkan", "Report"),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(10.dp))
+                        .clickable(onClick = onReport)
+                        .padding(horizontal = 12.dp, vertical = 13.dp),
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurface,
+                )
             }
         }
     }

@@ -563,7 +563,7 @@ test("Android active-session reporting defaults on, remains easy to disable, and
   const settings = await readFile(new URL("../client/Android/Studio/app/src/main/kotlin/id/xydesk/remote/ui/Screens.kt", import.meta.url), "utf8");
   assert.match(prefs, /getBoolean\(KEY_SHARE_ACTIVE_SESSION_STATS,\s*true\)/);
   assert.match(settings, /appPrefs\.shareActiveSessionStats = it/);
-  assert.match(settings, /Matikan sakelar ini kapan saja/);
+  assert.match(settings, /Sakelar ini dapat dimatikan kapan saja/);
   assert.match(session, /if \(!appPrefs\.shareActiveSessionStats\) return@LaunchedEffect/);
   assert.match(reporter, /\.put\("session_id",\s*sessionId\.toString\(\)\)/);
   assert.doesNotMatch(reporter, /\.put\("(?:host|profile|username|password|clipboard)"/i);
@@ -1356,6 +1356,66 @@ test("community comments attach to a joke, show in feed, and carry display names
     body: JSON.stringify({ client_id: commenter, text: "x".repeat(141) }),
   }), env);
   assert.equal(tooLong.status, 400);
+});
+
+test("community comment delete: only the author, is_own flag in feed", async () => {
+  const { object } = communityJokesObject();
+  const env = jokesEnv(object);
+  const author = "00000000-0000-4000-8000-000000000031";
+  const commenter = "00000000-0000-4000-8000-000000000032";
+  const submit = await worker.fetch(new Request("https://rdp.xydesk.my.id/api/jokes", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ client_id: author, text: "Kabel UTP vs WiFi round 2." }),
+  }), env);
+  const posted = await submit.json();
+
+  const comment = await worker.fetch(new Request(`https://rdp.xydesk.my.id/api/jokes/${posted.joke.id}/comment`, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ client_id: commenter, text: "WiFi menang kalau kabelnya ketinggalan." }),
+  }), env);
+  const commented = await comment.json();
+  const commentId = commented.comment.id;
+
+  // is_own: komentar sendiri terlihat sebagai milik sendiri.
+  const feedOwn = await worker.fetch(new Request("https://rdp.xydesk.my.id/api/jokes", {
+    headers: { "x-xydesk-client-id": commenter },
+  }), env);
+  const ownBody = await feedOwn.json();
+  assert.equal(ownBody.items[0].comments[0].is_own, true);
+
+  const feedOther = await worker.fetch(new Request("https://rdp.xydesk.my.id/api/jokes", {
+    headers: { "x-xydesk-client-id": author },
+  }), env);
+  const otherBody = await feedOther.json();
+  assert.equal(otherBody.items[0].comments[0].is_own, false);
+
+  // Orang lain tidak boleh hapus.
+  const forbidden = await worker.fetch(new Request(`https://rdp.xydesk.my.id/api/jokes/${posted.joke.id}/comment-delete`, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ client_id: author, comment_id: commentId }),
+  }), env);
+  assert.equal(forbidden.status, 403);
+
+  // Penulis komentar boleh hapus.
+  const deleted = await worker.fetch(new Request(`https://rdp.xydesk.my.id/api/jokes/${posted.joke.id}/comment-delete`, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ client_id: commenter, comment_id: commentId }),
+  }), env);
+  assert.equal(deleted.status, 200);
+  const deletedBody = await deleted.json();
+  assert.equal(deletedBody.comments_total, 0);
+
+  // Hapus kedua kali → not found.
+  const gone = await worker.fetch(new Request(`https://rdp.xydesk.my.id/api/jokes/${posted.joke.id}/comment-delete`, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ client_id: commenter, comment_id: commentId }),
+  }), env);
+  assert.equal(gone.status, 404);
 });
 
 test("expanded reaction set accepts new emoji and /me stores display names", async () => {

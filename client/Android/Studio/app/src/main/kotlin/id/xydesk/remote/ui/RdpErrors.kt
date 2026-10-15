@@ -7,6 +7,45 @@ package id.xydesk.remote.ui
  */
 internal object RdpErrors {
 
+    /**
+     * Judul singkat untuk log/tampilan error (permintaan pemilik 2026-10-15:
+     * "log lebih jelas, singkat tapi jelas — Username salah, password salah,
+     * gagal koneksi, dst"). Penjelasan panjang tetap dari [hint].
+     */
+    fun shortTitle(code: String, message: String): Pair<String, String> {
+        val m = message.lowercase()
+        return when {
+            code == "unreachable" -> Pair("Host tidak menjawab", "Host unreachable")
+            code == "connect_timeout" -> Pair("Koneksi kehabisan waktu", "Connection timed out")
+            code == "connect_failed" && (m.contains("wrong password") || m.contains("password supplied")) ->
+                Pair("Password salah", "Wrong password")
+            code == "connect_failed" && m.contains("account locked") -> Pair("Akun terkunci", "Account locked")
+            code == "connect_failed" && m.contains("password") &&
+                (m.contains("expired") || m.contains("must be changed")) ->
+                Pair("Password kedaluwarsa", "Password expired")
+            code == "connect_failed" && (m.contains("certificate") || m.contains("tls") || m.contains("ssl")) ->
+                Pair("Sertifikat/TLS gagal", "Certificate/TLS failed")
+            code == "connect_failed" && (m.contains("dns") || m.contains("could not be resolved") ||
+                m.contains("host name was not found")) ->
+                Pair("Host tidak ditemukan", "Host not found")
+            code == "connect_failed" && (m.contains("logon failed") || m.contains("logon failure") ||
+                m.contains("authentication")) ->
+                Pair("Username atau password salah", "Wrong username or password")
+            code == "connect_failed" && m.contains("server denied") -> Pair("Ditolak server", "Denied by server")
+            code == "connect_failed" || code == "connect_exception" -> Pair("Gagal koneksi", "Connection failed")
+            else -> Pair("Koneksi gagal", "Connection error")
+        }
+    }
+
+    /** True bila kegagalan berkaitan kredensial → tawarkan ubah username/password. */
+    fun isCredentialError(code: String, message: String): Boolean {
+        val m = message.lowercase()
+        return (code == "connect_failed" || code == "connect_timeout") &&
+            (m.contains("wrong password") || m.contains("password supplied") ||
+                m.contains("logon failed") || m.contains("logon failure") ||
+                m.contains("authentication") || m.contains("credentials"))
+    }
+
     /** Balikan pas (Indonesia, English), atau null bila tidak ada detail native. */
     fun hint(code: String, message: String): Pair<String, String>? {
         val m = message.lowercase()
