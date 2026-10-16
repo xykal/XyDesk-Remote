@@ -52,7 +52,10 @@ import id.xydesk.remote.ui.components.XyTopBar
 import id.xydesk.remote.ui.rdp.XyRdpAccess
 import id.xydesk.remote.ui.rdp.XyRdpClient
 import id.xydesk.remote.ui.rdp.XyRdpConfig
+import id.xydesk.remote.ui.rdp.XyRdpPhase
 import id.xydesk.remote.ui.rdp.XyRdpRun
+import id.xydesk.remote.ui.rdp.XyRdpSetupStatus
+import id.xydesk.remote.ui.rdp.XyRdpValidatedSession
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -61,11 +64,9 @@ import org.json.JSONObject
 /**
  * Layar "Buat RDP" — RDP gratis dari GitHub Actions milik akun sendiri.
  *
- * Ronde 46: sepenuhnya NATIVE via GitHub API (fork template XyRDP → dispatch
- * workflow → baca status dari branch `status`) — TANPA web perantara, tanpa
- * device token server. Login pakai GitHub device flow (OAuth), PAT disimpan
- * terenkripsi di CredentialVault. Statistik live (RAM/disk/CPU/uptime)
- * diterbitkan workflow tiap 60 detik ke status JSON.
+ * Ronde 46–48: sepenuhnya NATIVE via GitHub API (fork template XyRDP → sinkron
+ * upstream → cek Secrets & Actions → dispatch workflow → validasi silang
+ * `run` + `jobs/steps` + `rdp-status.json` di branch `status`).
  */
 @Composable
 fun RdpFreeScreen(onBack: () -> Unit, onConnect: (ConnectionProfile) -> Unit) {
@@ -78,6 +79,7 @@ fun RdpFreeScreen(onBack: () -> Unit, onConnect: (ConnectionProfile) -> Unit) {
     var login by remember { mutableStateOf<String?>(null) }
     var loginDialog by remember { mutableStateOf(false) }
     var forkReady by remember { mutableStateOf(false) }
+    var setupStatus by remember { mutableStateOf<XyRdpSetupStatus?>(null) }
     var busy by remember { mutableStateOf(false) }
     var message by remember { mutableStateOf("") }
 
@@ -85,13 +87,16 @@ fun RdpFreeScreen(onBack: () -> Unit, onConnect: (ConnectionProfile) -> Unit) {
     var hostname by remember { mutableStateOf(prefs.getString("hostname", "rdpfree") ?: "rdpfree") }
     var rdpUser by remember { mutableStateOf(prefs.getString("rdp_user", "xyadmin") ?: "xyadmin") }
     var akses by remember { mutableStateOf(prefs.getString("akses", "tailscale") ?: "tailscale") }
+    var portmapHost by remember { mutableStateOf(prefs.getString("portmap_host", "") ?: "") }
+    var portmapPort by remember { mutableStateOf(prefs.getString("portmap_port", "") ?: "") }
     var storageBoost by remember { mutableStateOf(prefs.getString("storage_boost", "tidak") ?: "tidak") }
     var debloat by remember { mutableStateOf(prefs.getString("debloat", "ringan") ?: "ringan") }
-    var microphone by remember { mutableStateOf(false) }
+    var microphone by remember { mutableStateOf(true) }
     var password by remember { mutableStateOf("") }
 
-    var run by remember { mutableStateOf<XyRdpRun?>(null) }
-    var access by remember { mutableStateOf<XyRdpAccess?>(null) }
+    var validatedSession by remember { mutableStateOf<XyRdpValidatedSession?>(null) }
+    var nowTickMillis by remember { mutableStateOf(System.currentTimeMillis()) }
+    var showStepsDetail by remember { mutableStateOf(false) }
     var chooseDuration by remember { mutableStateOf(false) }
     var chooseAkses by remember { mutableStateOf(false) }
     var confirmAction by remember { mutableStateOf<String?>(null) }
@@ -107,6 +112,8 @@ fun RdpFreeScreen(onBack: () -> Unit, onConnect: (ConnectionProfile) -> Unit) {
             .putString("hostname", hostname)
             .putString("rdp_user", rdpUser)
             .putString("akses", akses)
+            .putString("portmap_host", portmapHost)
+            .putString("portmap_port", portmapPort)
             .putString("storage_boost", storageBoost)
             .putString("debloat", debloat)
             .apply()
@@ -115,6 +122,18 @@ fun RdpFreeScreen(onBack: () -> Unit, onConnect: (ConnectionProfile) -> Unit) {
     fun error(e: Exception) {
         if (e is CancellationException) throw e
         message = e.message ?: "Operasi GitHub gagal. Coba lagi."
+    }
+
+    suspend fun refreshAll(tok: String, user: String) {
+        val setup = XyRdpClient.inspectSetup(tok, user, akses)
+        setupStatus = setup
+        forkReady = setup.forkExists
+        if (setup.forkExists) {
+            validatedSession = XyRdpClient.pollValidatedSession(tok, user)
+            nowTickMillis = System.currentTimeMillis()
+        } else {
+            validatedSession = null
+        }
     }
 
     // Token tersimpan → whoami → invalid dibuang.
@@ -132,22 +151,31 @@ fun RdpFreeScreen(onBack: () -> Unit, onConnect: (ConnectionProfile) -> Unit) {
         }
     }
 
-    LaunchedEffect(token, login) {
+    LaunchedEffect(token, login, akses) {
         if (token == null || login == null) return@LaunchedEffect
-        forkReady = XyRdpClient.forkExists(token!!, login!!)
+        refreshAll(token!!, login!!)
     }
 
-    // Polling status + run terbaru tiap 15 detik (statistik live ikut ke sini).
+    // Detak 1 detik untuk hitung mundur sisa waktu live saat sesi aktif.
+    LaunchedEffect(validatedSession?.isVerifiedLive) {
+        if (validatedSession?.isVerifiedLive == true) {
+            while (true) {
+                delay(1000)
+                nowTickMillis = System.currentTimeMillis()
+            }
+        }
+    }
+
+    // Polling status + validasi silang run/steps/branch status tiap 8 detik.
     // Berhenti poll saat layar di belakang supaya baterai + kuota API aman.
     val owner = LocalLifecycleOwner.current
     LaunchedEffect(token, login) {
         if (token == null || login == null) return@LaunchedEffect
         while (true) {
             if (owner.lifecycle.currentState.isAtLeast(Lifecycle.State.STARTED) && !busy) {
-                run = XyRdpClient.latestRun(token!!, login!!)
-                access = XyRdpClient.access(token!!, login!!)
+                refreshAll(token!!, login!!)
             }
-            delay(15000)
+            delay(8000)
         }
     }
 
@@ -164,6 +192,7 @@ fun RdpFreeScreen(onBack: () -> Unit, onConnect: (ConnectionProfile) -> Unit) {
                             message = "Fork repo XyRDP dulu (tombol di atas)."
                             return@launch
                         }
+                        XyRdpClient.syncForkWithUpstream(tok, user)
                         XyRdpClient.enableWorkflow(tok, user)
                         val inputs = JSONObject().apply {
                             put("durasi_menit", duration)
@@ -172,18 +201,28 @@ fun RdpFreeScreen(onBack: () -> Unit, onConnect: (ConnectionProfile) -> Unit) {
                             put("akses", akses)
                             put("storage_boost", storageBoost)
                             put("debloat", debloat)
+                            put("xydesk", "ya")
+                            put("microphone", if (microphone) "ya" else "tidak")
+                            if (akses == "portmap") {
+                                if (portmapHost.isNotBlank()) put("portmap_host", portmapHost.trim())
+                                if (portmapPort.isNotBlank()) put("portmap_port", portmapPort.trim())
+                            }
                         }
                         if (XyRdpClient.dispatch(tok, user, inputs)) {
                             saveSettings()
-                            message = "Workflow dikirim — sesi sedang disiapkan."
+                            message = "Workflow dikirim ke GitHub Actions — memantau progres tahap demi tahap…"
+                            delay(2500)
+                            refreshAll(tok, user)
                         } else {
-                            message = "Gagal mengirim workflow. Cek kuota Actions / run yang masih aktif."
+                            message = "Gagal mengirim workflow. Cek izin token (`repo` + `workflow`) atau kuota Actions."
                         }
                     }
                     "stop" -> {
-                        val id = XyRdpClient.latestRunId(tok, user)
+                        val id = validatedSession?.run?.id ?: XyRdpClient.latestRunId(tok, user)
                         if (id != null && XyRdpClient.cancelRun(tok, user, id)) {
-                            message = "Permintaan stop dikirim."
+                            message = "Permintaan stop dikirim ke Run #$id."
+                            delay(2000)
+                            refreshAll(tok, user)
                         } else {
                             message = "Tidak ada run aktif untuk dihentikan."
                         }
@@ -194,8 +233,8 @@ fun RdpFreeScreen(onBack: () -> Unit, onConnect: (ConnectionProfile) -> Unit) {
                         login = null
                         saveVerifiedGitHubLogin(context, null)
                         forkReady = false
-                        run = null
-                        access = null
+                        setupStatus = null
+                        validatedSession = null
                         message = "GitHub terputus dari app."
                     }
                 }
@@ -234,14 +273,14 @@ fun RdpFreeScreen(onBack: () -> Unit, onConnect: (ConnectionProfile) -> Unit) {
                     Spacer(Modifier.height(6.dp))
                     Text(
                         "Login dengan akun GitHub-mu. App otomatis menyiapkan repo template XyRDP, " +
-                            "lalu kamu bisa mulai sesi Windows RDP langsung dari sini — lengkap dengan " +
-                            "statistik RAM, disk, CPU, dan sisa waktu. Tanpa web perantara, tanpa token server.",
+                            "memvalidasi sesi & tahapan workflow secara real-time, lalu menampilkan " +
+                            "monitor RAM, disk, CPU, dan sisa waktu. Tanpa web perantara, tanpa token server.",
                     )
                     Spacer(Modifier.height(12.dp))
                     XyPillButton("Login GitHub", { loginDialog = true }, primary = true, enabled = !busy)
                 }
             } else {
-                XySectionLabel("Akun GitHub")
+                XySectionLabel("Akun GitHub & Status Repo")
                 XyCard(Modifier.fillMaxWidth()) {
                     Row(
                         verticalAlignment = Alignment.CenterVertically,
@@ -260,8 +299,38 @@ fun RdpFreeScreen(onBack: () -> Unit, onConnect: (ConnectionProfile) -> Unit) {
                         )
                         Spacer(Modifier.height(6.dp))
                     }
-                    Text("Repo: $login/${XyRdpConfig.FORK_REPO_NAME} · ${if (forkReady) "siap" else "belum di-fork"}")
-                    Spacer(Modifier.height(12.dp))
+                    val wfTxt = when {
+                        !forkReady -> "belum di-fork"
+                        setupStatus?.workflowActive == true -> "workflow aktif"
+                        else -> "workflow perlu diaktifkan"
+                    }
+                    Text("Repo: $login/${XyRdpConfig.FORK_REPO_NAME} · $wfTxt")
+                    setupStatus?.let { st ->
+                        if (st.forkExists) {
+                            Spacer(Modifier.height(4.dp))
+                            if (st.missingSecrets.isEmpty()) {
+                                Text(
+                                    "✓ Secrets wajib lengkap (RDP_PASSWORD & ${if (akses == "portmap") "PORTMAP_OVPN_CONFIG" else "TAILSCALE_AUTH_KEY"})",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = MaterialTheme.colorScheme.primary,
+                                )
+                            } else {
+                                Text(
+                                    "⚠ Secret GitHub belum diisi: ${st.missingSecrets.joinToString(", ")}. Isi dulu di halaman Secrets repo agar workflow tidak langsung gagal.",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = MaterialTheme.colorScheme.error,
+                                )
+                                Spacer(Modifier.height(6.dp))
+                                XyPillButton(
+                                    "Buka Pengaturan Secrets di GitHub ↗",
+                                    { openBrowser("https://github.com/$login/${XyRdpConfig.FORK_REPO_NAME}/settings/secrets/actions") },
+                                    primary = false,
+                                    enabled = !busy,
+                                )
+                            }
+                        }
+                    }
+                    Spacer(Modifier.height(10.dp))
                     if (!forkReady) {
                         XyPillButton(
                             "Fork template XyRDP",
@@ -270,9 +339,10 @@ fun RdpFreeScreen(onBack: () -> Unit, onConnect: (ConnectionProfile) -> Unit) {
                                 scope.launch {
                                     try {
                                         if (XyRdpClient.createFork(token!!)) {
+                                            delay(2000)
                                             XyRdpClient.enableWorkflow(token!!, login!!)
-                                            forkReady = XyRdpClient.forkExists(token!!, login!!)
-                                            message = if (forkReady) "Fork siap." else "Fork sedang dibuat — tunggu sebentar lalu tekan lagi."
+                                            refreshAll(token!!, login!!)
+                                            message = if (forkReady) "Fork siap & workflow diaktifkan." else "Fork sedang dibuat — tunggu sebentar lalu tekan Periksa Ulang."
                                         } else {
                                             message = "Fork gagal — cek koneksi/kuota GitHub."
                                         }
@@ -282,9 +352,42 @@ fun RdpFreeScreen(onBack: () -> Unit, onConnect: (ConnectionProfile) -> Unit) {
                             primary = true,
                             enabled = !busy,
                         )
+                    } else {
+                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            Box(Modifier.weight(1f)) {
+                                XyPillButton(
+                                    "Sinkronkan Fork",
+                                    {
+                                        busy = true
+                                        scope.launch {
+                                            try {
+                                                val okSync = XyRdpClient.syncForkWithUpstream(token!!, login!!)
+                                                XyRdpClient.enableWorkflow(token!!, login!!)
+                                                refreshAll(token!!, login!!)
+                                                message = if (okSync) {
+                                                    "Fork disinkronkan dengan template xykal/XyRDP terbaru."
+                                                } else {
+                                                    "Status fork diperbarui."
+                                                }
+                                            } catch (e: Exception) { error(e) } finally { busy = false }
+                                        }
+                                    },
+                                    primary = false,
+                                    enabled = !busy,
+                                    modifier = Modifier.fillMaxWidth(),
+                                )
+                            }
+                            Box(Modifier.weight(1f)) {
+                                XyPillButton(
+                                    "Keluar GitHub",
+                                    { confirmAction = "logout" },
+                                    primary = false,
+                                    enabled = !busy,
+                                    modifier = Modifier.fillMaxWidth(),
+                                )
+                            }
+                        }
                     }
-                    Spacer(Modifier.height(6.dp))
-                    XyPillButton("Keluar GitHub", { confirmAction = "logout" }, primary = false, enabled = !busy)
                 }
 
                 if (forkReady) {
@@ -297,6 +400,12 @@ fun RdpFreeScreen(onBack: () -> Unit, onConnect: (ConnectionProfile) -> Unit) {
                         XyField(rdpUser, { rdpUser = it.take(20) }, "Username RDP")
                         Spacer(Modifier.height(8.dp))
                         XyPillButton("Akses: $akses", { chooseAkses = true }, primary = false, enabled = !busy)
+                        if (akses == "portmap") {
+                            Spacer(Modifier.height(8.dp))
+                            XyField(portmapHost, { portmapHost = it.take(120) }, "Hostname publik Portmap (tanpa tcp://)")
+                            Spacer(Modifier.height(8.dp))
+                            XyField(portmapPort, { portmapPort = it.filter { c -> c.isDigit() }.take(5) }, "Port publik Portmap (1–65535)")
+                        }
                         Spacer(Modifier.height(8.dp))
                         XyPillButton(
                             "Storage boost: $storageBoost",
@@ -313,30 +422,125 @@ fun RdpFreeScreen(onBack: () -> Unit, onConnect: (ConnectionProfile) -> Unit) {
                         )
                     }
 
-                    XySectionLabel("Sesi")
+                    // ---- Sesi & Validasi Otoritatif ----
+                    XySectionLabel("Sesi & Validasi")
                     XyCard(Modifier.fillMaxWidth()) {
-                        run?.let { r ->
+                        val vs = validatedSession
+                        val r = vs?.run
+                        Text(
+                            text = vs?.phaseLabel ?: "Memeriksa status sesi…",
+                            style = MaterialTheme.typography.titleSmall,
+                            color = when (vs?.phase) {
+                                XyRdpPhase.READY -> MaterialTheme.colorScheme.primary
+                                XyRdpPhase.FAILED -> MaterialTheme.colorScheme.error
+                                else -> MaterialTheme.colorScheme.onSurface
+                            },
+                        )
+                        if (r != null) {
+                            Spacer(Modifier.height(4.dp))
                             Text(
-                                "Run #${r.number}: ${r.status}${r.conclusion?.let { " · $it" } ?: ""}",
-                                style = MaterialTheme.typography.titleSmall,
+                                "Run #${r.number} (ID ${r.id}): ${r.status}${r.conclusion?.let { " · $it" } ?: ""}",
+                                style = MaterialTheme.typography.bodySmall,
                             )
-                            Spacer(Modifier.height(6.dp))
                         }
-                        access?.let { a ->
-                            Text("Status: ${if (a.active) "AKTIF" else "nonaktif"}")
-                            if (a.expiresAt.isNotBlank()) Text("Berakhir (UTC): ${a.expiresAt}")
-                            if (a.tunnelAddress.isNotBlank()) Text("Koneksi: ${a.tunnelAddress}")
-                            if (a.tailscaleIp.isNotBlank()) Text("Tailscale: ${a.tailscaleIp}:3389")
-                            if (a.rustdeskId.isNotBlank()) Text("RustDesk: ${a.rustdeskId}")
-                        } ?: Text("Belum ada status sesi — mulai sesi dulu.")
+                        vs?.validationNote?.let { note ->
+                            Spacer(Modifier.height(4.dp))
+                            Text(
+                                note,
+                                style = MaterialTheme.typography.labelSmall,
+                                color = if (vs.isVerifiedLive) MaterialTheme.colorScheme.primary
+                                else MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        }
+
+                        // Progres tahapan workflow (saat PREPARING / FAILED / READY)
+                        vs?.progress?.let { prog ->
+                            if (prog.totalSteps > 0) {
+                                Spacer(Modifier.height(8.dp))
+                                StatBar(
+                                    "Progres Tahap Workflow",
+                                    "${prog.completedSteps} / ${prog.totalSteps} tahap",
+                                    fraction(prog.completedSteps.toDouble(), prog.totalSteps.toDouble()),
+                                )
+                                prog.currentStep?.let { cur ->
+                                    Spacer(Modifier.height(4.dp))
+                                    Text(
+                                        "⟳ Sedang berjalan: $cur",
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = MaterialTheme.colorScheme.primary,
+                                    )
+                                }
+                                prog.failedStep?.let { fail ->
+                                    Spacer(Modifier.height(4.dp))
+                                    Text(
+                                        "✕ Tahap gagal: $fail",
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = MaterialTheme.colorScheme.error,
+                                    )
+                                }
+                                Spacer(Modifier.height(6.dp))
+                                XyPillButton(
+                                    if (showStepsDetail) "Sembunyikan rincian tahap" else "Lihat rincian tahap (${prog.completedSteps}/${prog.totalSteps})",
+                                    { showStepsDetail = !showStepsDetail },
+                                    primary = false,
+                                )
+                                if (showStepsDetail) {
+                                    Spacer(Modifier.height(6.dp))
+                                    prog.steps.forEachIndexed { idx, (sName, sState) ->
+                                        val icon = when (sState) {
+                                            "success" -> "✓"
+                                            "in_progress" -> "⟳"
+                                            "failure", "timed_out" -> "✕"
+                                            "skipped" -> "–"
+                                            else -> "·"
+                                        }
+                                        Text(
+                                            "${idx + 1}. $icon $sName ($sState)",
+                                            style = MaterialTheme.typography.labelSmall,
+                                            color = when (sState) {
+                                                "failure", "timed_out" -> MaterialTheme.colorScheme.error
+                                                "in_progress" -> MaterialTheme.colorScheme.primary
+                                                else -> MaterialTheme.colorScheme.onSurfaceVariant
+                                            },
+                                        )
+                                    }
+                                }
+                            }
+                        }
+
+                        // Hitung mundur live & informasi endpoint saat sesi aktif
+                        val liveAccess = vs?.access
+                        if (vs?.isVerifiedLive == true && liveAccess != null) {
+                            Spacer(Modifier.height(8.dp))
+                            val remSec = if (liveAccess.expiresAtMillis > nowTickMillis) {
+                                ((liveAccess.expiresAtMillis - nowTickMillis) / 1000L).coerceAtLeast(0L)
+                            } else 0L
+                            val hh = remSec / 3600L
+                            val mm = (remSec % 3600L) / 60L
+                            val ss = remSec % 60L
+                            Text(
+                                "Sisa waktu aktif: %02d:%02d:%02d".format(hh, mm, ss),
+                                style = MaterialTheme.typography.titleMedium,
+                                color = MaterialTheme.colorScheme.primary,
+                            )
+                            Text("Hostname: ${liveAccess.hostname} (${liveAccess.osName})")
+                            Text("Endpoint tervalidasi: ${vs.validatedHost}:${vs.validatedPort} (${vs.validatedTransport})")
+                            if (liveAccess.expiresAt.isNotBlank()) {
+                                Text("Berakhir (UTC): ${liveAccess.expiresAt}")
+                            }
+                        }
+
                         Spacer(Modifier.height(12.dp))
+                        val isRunningOrQueued = vs?.phase == XyRdpPhase.PREPARING ||
+                            vs?.phase == XyRdpPhase.QUEUED ||
+                            vs?.phase == XyRdpPhase.READY
                         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                             Box(Modifier.weight(1f)) {
                                 XyPillButton(
                                     "Mulai RDP",
                                     { confirmAction = "start" },
                                     primary = true,
-                                    enabled = !busy,
+                                    enabled = !busy && !isRunningOrQueued,
                                     modifier = Modifier.fillMaxWidth(),
                                 )
                             }
@@ -345,35 +549,81 @@ fun RdpFreeScreen(onBack: () -> Unit, onConnect: (ConnectionProfile) -> Unit) {
                                     "Stop",
                                     { confirmAction = "stop" },
                                     primary = false,
-                                    enabled = !busy,
+                                    enabled = !busy && isRunningOrQueued,
                                     modifier = Modifier.fillMaxWidth(),
                                 )
                             }
                         }
+                        Spacer(Modifier.height(8.dp))
+                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            Box(Modifier.weight(1f)) {
+                                XyPillButton(
+                                    "Periksa Ulang",
+                                    {
+                                        scope.launch {
+                                            busy = true
+                                            try {
+                                                refreshAll(token!!, login!!)
+                                                message = "Status sesi & monitor diperbarui."
+                                            } catch (e: Exception) { error(e) } finally { busy = false }
+                                        }
+                                    },
+                                    primary = false,
+                                    enabled = !busy,
+                                    modifier = Modifier.fillMaxWidth(),
+                                )
+                            }
+                            if (r?.url?.isNotBlank() == true) {
+                                Box(Modifier.weight(1f)) {
+                                    XyPillButton(
+                                        "Log GitHub ↗",
+                                        { openBrowser(r.url) },
+                                        primary = false,
+                                        enabled = !busy,
+                                        modifier = Modifier.fillMaxWidth(),
+                                    )
+                                }
+                            }
+                        }
                     }
 
-                    // ---- Statistik live ----
-                    access?.stats?.let { st ->
-                        XySectionLabel("Statistik live")
+                    // ---- Monitor & Statistik Live ----
+                    val liveAcc = validatedSession?.access
+                    if (liveAcc != null) {
+                        XySectionLabel("Monitor & Statistik Live")
                         XyCard(Modifier.fillMaxWidth()) {
-                            StatBar(
-                                "RAM",
-                                "${"%.1f".format(st.ramUsedGb)} / ${"%.1f".format(st.ramTotalGb)} GB",
-                                fraction(st.ramUsedGb, st.ramTotalGb),
-                            )
-                            Spacer(Modifier.height(8.dp))
-                            StatBar(
-                                "Disk C:",
-                                "bebas ${"%.1f".format(st.diskFreeGb)} / ${"%.1f".format(st.diskTotalGb)} GB",
-                                1f - fraction(st.diskFreeGb, st.diskTotalGb),
-                            )
-                            Spacer(Modifier.height(8.dp))
-                            StatBar("CPU", "${st.cpuPercent}%", (st.cpuPercent / 100f).coerceIn(0f, 1f))
-                            Spacer(Modifier.height(8.dp))
-                            Text("Uptime: ${st.uptimeMinutes / 60}j ${st.uptimeMinutes % 60}m")
-                            if (st.updatedAt.isNotBlank()) {
+                            val st = liveAcc.stats
+                            if (st != null && st.ramTotalGb > 0.0) {
+                                StatBar(
+                                    "RAM",
+                                    "${"%.1f".format(st.ramUsedGb)} / ${"%.1f".format(st.ramTotalGb)} GB",
+                                    fraction(st.ramUsedGb, st.ramTotalGb),
+                                )
+                                Spacer(Modifier.height(8.dp))
+                                StatBar(
+                                    "Disk C:",
+                                    "bebas ${"%.1f".format(st.diskFreeGb)} / ${"%.1f".format(st.diskTotalGb)} GB",
+                                    1f - fraction(st.diskFreeGb, st.diskTotalGb),
+                                )
+                                Spacer(Modifier.height(8.dp))
+                                StatBar("CPU", "${st.cpuPercent}%", (st.cpuPercent / 100f).coerceIn(0f, 1f))
+                                Spacer(Modifier.height(8.dp))
+                                Text("Uptime sesi: ${st.uptimeMinutes / 60}j ${st.uptimeMinutes % 60}m")
+                                if (st.updatedAt.isNotBlank()) {
+                                    Text(
+                                        "Diperbarui: ${st.updatedAt.take(19).replace('T', ' ')} UTC",
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    )
+                                }
+                            } else {
                                 Text(
-                                    "Diperbarui: ${st.updatedAt.take(19).replace('T', ' ')} UTC",
+                                    "Spesifikasi Runner: ${liveAcc.initialCpuThreads} vCPU · RAM ${"%.1f".format(liveAcc.initialRamGb)} GB · Disk bebas awal ${"%.1f".format(liveAcc.initialDiskFreeGb)} GB",
+                                    style = MaterialTheme.typography.bodySmall,
+                                )
+                                Spacer(Modifier.height(4.dp))
+                                Text(
+                                    "Menunggu detak telemetri 60 detik pertama dari loop keepalive…",
                                     style = MaterialTheme.typography.labelSmall,
                                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                                 )
@@ -382,13 +632,17 @@ fun RdpFreeScreen(onBack: () -> Unit, onConnect: (ConnectionProfile) -> Unit) {
                     }
 
                     // ---- Connect ----
-                    access?.takeIf { it.active && it.tunnelHost.isNotBlank() }?.let { a ->
+                    val vsReady = validatedSession?.takeIf { it.isVerifiedLive && !it.validatedHost.isNullOrBlank() }
+                    if (vsReady != null && vsReady.access != null) {
+                        val a = vsReady.access
+                        val hostToConnect = vsReady.validatedHost!!
+                        val portToConnect = vsReady.validatedPort
                         XySectionLabel("Hubungkan")
                         XyCard(Modifier.fillMaxWidth()) {
-                            Text("${a.tunnelHost}:${a.tunnelPort}", style = MaterialTheme.typography.titleMedium)
-                            Text("Username: ${a.rdpUser} · ${a.mode}")
-                            if (a.mode == "tailscale") {
-                                Text("Pastikan Tailscale di HP terhubung ke tailnet yang sama.")
+                            Text("$hostToConnect:$portToConnect", style = MaterialTheme.typography.titleMedium)
+                            Text("Username: ${a.rdpUser} · Mode: ${vsReady.validatedTransport ?: a.mode}")
+                            if ((vsReady.validatedTransport ?: a.mode) == "tailscale") {
+                                Text("Pastikan aplikasi Tailscale di HP sudah ON dan login ke tailnet yang sama.")
                             }
                             Spacer(Modifier.height(8.dp))
                             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
@@ -398,26 +652,27 @@ fun RdpFreeScreen(onBack: () -> Unit, onConnect: (ConnectionProfile) -> Unit) {
                             Spacer(Modifier.height(8.dp))
                             XyField(password, { password = it }, "Password RDP_PASSWORD", isPassword = true)
                             Text(
-                                "Password tidak pernah bisa dibaca dari GitHub — isi manual.",
+                                "Password tidak pernah bisa dibaca dari GitHub — masukkan sesuai secret RDP_PASSWORD milikmu.",
                                 style = MaterialTheme.typography.labelSmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                             )
                             Spacer(Modifier.height(8.dp))
                             XyPillButton(
-                                "Hubungkan RDP",
+                                "Hubungkan RDP (120 FPS Ready)",
                                 {
                                     busy = true
                                     scope.launch {
                                         try {
-                                            val fresh = XyRdpClient.access(token!!, login!!)
-                                                ?: throw IllegalStateException("Sesi tidak lagi siap")
-                                            check(fresh.active && fresh.tunnelHost.isNotBlank()) { "Sesi tidak lagi siap" }
+                                            val fresh = XyRdpClient.pollValidatedSession(token!!, login!!)
+                                            check(fresh.isVerifiedLive && !fresh.validatedHost.isNullOrBlank()) {
+                                                "Sesi tidak lagi aktif di GitHub Actions"
+                                            }
                                             val profile = ConnectionProfile(
-                                                host = fresh.tunnelHost,
-                                                port = fresh.tunnelPort,
-                                                username = fresh.rdpUser,
+                                                host = fresh.validatedHost,
+                                                port = fresh.validatedPort,
+                                                username = fresh.access?.rdpUser ?: a.rdpUser,
                                                 password = password,
-                                                label = "XyRDP",
+                                                label = "XyRDP (${fresh.access?.hostname ?: "Cloud"})",
                                                 key = "xyrdp:${login}",
                                             )
                                             RdpOptions.of(context, profile.id).forRdpFree(microphone).write(context, profile.id)

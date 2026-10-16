@@ -765,6 +765,309 @@ void MicRenderThread() {
     }
     CoUninitialize();
 }
+
+// ---------------------------------------------------------------------------
+// Engine Input Game FPS (XYI1) & Streaming Konsol Mandiri (XYV1) di UDP :4433
+// Berjalan langsung di sesi konsol fisik Windows (SM_REMOTESESSION == 0)
+// tanpa melewati termsrv.dll / protokol RDP.
+// ---------------------------------------------------------------------------
+
+std::mutex g_video_mutex;
+sockaddr_in g_video_sub_addr{};
+uint64_t g_video_sub_until_ms = 0;
+int g_video_target_fps = 60;
+int g_video_jpeg_quality = 72;
+int g_video_scale_pct = 85;
+std::thread g_video_worker;
+
+void HandleRawInputPacket(const uint8_t* rx, int n, const sockaddr_in& peer, int peer_len) {
+    if (n < 12) return;
+    const uint8_t cmd = rx[4];
+    int16_t arg1 = 0;
+    int16_t arg2 = 0;
+    memcpy(&arg1, rx + 6, sizeof(int16_t));
+    memcpy(&arg2, rx + 8, sizeof(int16_t));
+
+    if (cmd == 0x01) {
+        // CMD_MOUSE_REL: mickeys relatif murni (tanpa MOUSEEVENTF_ABSOLUTE)
+        INPUT inp{};
+        inp.type = INPUT_MOUSE;
+        inp.mi.dx = static_cast<LONG>(arg1);
+        inp.mi.dy = static_cast<LONG>(arg2);
+        inp.mi.dwFlags = MOUSEEVENTF_MOVE;
+        SendInput(1, &inp, sizeof(INPUT));
+    } else if (cmd == 0x06) {
+        // CMD_MOUSE_ABS: koordinat absolut ternormalisasi 0..65535
+        const uint16_t xNorm = static_cast<uint16_t>(arg1);
+        const uint16_t yNorm = static_cast<uint16_t>(arg2);
+        INPUT inp{};
+        inp.type = INPUT_MOUSE;
+        inp.mi.dx = static_cast<LONG>(xNorm);
+        inp.mi.dy = static_cast<LONG>(yNorm);
+        inp.mi.dwFlags = MOUSEEVENTF_MOVE | MOUSEEVENTF_ABSOLUTE;
+        SendInput(1, &inp, sizeof(INPUT));
+    } else if (cmd == 0x02) {
+        // CMD_MOUSE_BTN: 0=kiri, 1=kanan, 2=tengah, 3=x1, 4=x2
+        const uint8_t btn = rx[5];
+        const bool down = (arg1 != 0);
+        INPUT inp{};
+        inp.type = INPUT_MOUSE;
+        switch (btn) {
+            case 0: inp.mi.dwFlags = down ? MOUSEEVENTF_LEFTDOWN : MOUSEEVENTF_LEFTUP; break;
+            case 1: inp.mi.dwFlags = down ? MOUSEEVENTF_RIGHTDOWN : MOUSEEVENTF_RIGHTUP; break;
+            case 2: inp.mi.dwFlags = down ? MOUSEEVENTF_MIDDLEDOWN : MOUSEEVENTF_MIDDLEUP; break;
+            case 3:
+                inp.mi.dwFlags = down ? MOUSEEVENTF_XDOWN : MOUSEEVENTF_XUP;
+                inp.mi.mouseData = XBUTTON1;
+                break;
+            case 4:
+                inp.mi.dwFlags = down ? MOUSEEVENTF_XDOWN : MOUSEEVENTF_XUP;
+                inp.mi.mouseData = XBUTTON2;
+                break;
+            default: break;
+        }
+        if (inp.mi.dwFlags != 0) {
+            SendInput(1, &inp, sizeof(INPUT));
+        }
+    } else if (cmd == 0x03) {
+        // CMD_MOUSE_WHEEL
+        INPUT inp{};
+        inp.type = INPUT_MOUSE;
+        inp.mi.dwFlags = MOUSEEVENTF_WHEEL;
+        inp.mi.mouseData = static_cast<DWORD>(arg1);
+        SendInput(1, &inp, sizeof(INPUT));
+    } else if (cmd == 0x04) {
+        // CMD_KEY_VK
+        const bool down = (rx[5] != 0);
+        const uint16_t vk = static_cast<uint16_t>(arg1);
+        uint16_t scan = static_cast<uint16_t>(arg2);
+        if (scan == 0 && vk != 0) {
+            scan = static_cast<uint16_t>(MapVirtualKeyA(vk, MAPVK_VK_TO_VSC));
+        }
+        INPUT inp{};
+        inp.type = INPUT_KEYBOARD;
+        inp.ki.wVk = vk;
+        inp.ki.wScan = scan;
+        inp.ki.dwFlags = down ? 0 : KEYEVENTF_KEYUP;
+        SendInput(1, &inp, sizeof(INPUT));
+    }
+
+    static uint64_t last_ack_ms = 0;
+    const uint64_t now_ms = GetTickCount64();
+    if (cmd == 0x05 || (now_ms - last_ack_ms >= 250)) {
+        last_ack_ms = now_ms;
+        const bool is_console = (GetSystemMetrics(SM_REMOTESESSION) == 0);
+        const uint8_t ack[5] = {
+            'X', 'Y', 'I', 'A',
+            static_cast<uint8_t>(0x01u | (is_console ? 0x02u : 0x00u)),
+        };
+        sendto(g_sock, reinterpret_cast<const char*>(ack), sizeof(ack), 0,
+               reinterpret_cast<const sockaddr*>(&peer), peer_len);
+    }
+    g_packets_served.fetch_add(1);
+}
+
+// Deklarasi minimal Flat GDI+ API supaya kompilasi mingw-w64 bebas konflik header.
+struct GdiplusStartupInputFlat {
+    UINT32 GdiplusVersion;
+    void* DebugEventCallback;
+    BOOL SuppressBackgroundThread;
+    BOOL SuppressExternalCodecs;
+};
+struct EncoderParameterFlat {
+    GUID Guid;
+    ULONG NumberOfValues;
+    ULONG Type;
+    void* Value;
+};
+struct EncoderParametersFlat {
+    UINT Count;
+    EncoderParameterFlat Parameter[1];
+};
+typedef int (WINAPI* PFN_GdiplusStartup)(ULONG_PTR*, const GdiplusStartupInputFlat*, void*);
+typedef void (WINAPI* PFN_GdiplusShutdown)(ULONG_PTR);
+typedef int (WINAPI* PFN_GdipCreateBitmapFromHBITMAP)(HBITMAP, HPALETTE, void**);
+typedef int (WINAPI* PFN_GdipSaveImageToStream)(void*, IStream*, const CLSID*, const EncoderParametersFlat*);
+typedef int (WINAPI* PFN_GdipDisposeImage)(void*);
+
+// CLSID encoder JPEG bawaan Windows GDI+: {557CF401-1A04-11D3-9A73-0000F81EF32E}
+static const CLSID kClsidJpegEncoder = {
+    0x557cf401, 0x1a04, 0x11d3, {0x9a, 0x73, 0x00, 0x00, 0xf8, 0x1e, 0xf3, 0x2e}};
+// GUID EncoderQuality: {1D5BE4B5-FA4A-452D-9CDD-5DB35105E7EB}
+static const GUID kGuidEncoderQuality = {
+    0x1d5be4b5, 0xfa4a, 0x452d, {0x9c, 0xdd, 0x5d, 0xb3, 0x51, 0x05, 0xe7, 0xeb}};
+
+void ConsoleVideoCaptureThread() {
+    CoInitializeEx(nullptr, COINIT_MULTITHREADED);
+    HMODULE hGdip = LoadLibraryW(L"gdiplus.dll");
+    if (!hGdip) {
+        CoUninitialize();
+        return;
+    }
+    auto fnStartup = reinterpret_cast<PFN_GdiplusStartup>(
+        reinterpret_cast<void*>(GetProcAddress(hGdip, "GdiplusStartup")));
+    auto fnShutdown = reinterpret_cast<PFN_GdiplusShutdown>(
+        reinterpret_cast<void*>(GetProcAddress(hGdip, "GdiplusShutdown")));
+    auto fnCreateBmp = reinterpret_cast<PFN_GdipCreateBitmapFromHBITMAP>(
+        reinterpret_cast<void*>(GetProcAddress(hGdip, "GdipCreateBitmapFromHBITMAP")));
+    auto fnSaveStream = reinterpret_cast<PFN_GdipSaveImageToStream>(
+        reinterpret_cast<void*>(GetProcAddress(hGdip, "GdipSaveImageToStream")));
+    auto fnDispose = reinterpret_cast<PFN_GdipDisposeImage>(
+        reinterpret_cast<void*>(GetProcAddress(hGdip, "GdipDisposeImage")));
+
+    if (!fnStartup || !fnShutdown || !fnCreateBmp || !fnSaveStream || !fnDispose) {
+        FreeLibrary(hGdip);
+        CoUninitialize();
+        return;
+    }
+
+    ULONG_PTR gdipToken = 0;
+    GdiplusStartupInputFlat input{1, nullptr, FALSE, FALSE};
+    if (fnStartup(&gdipToken, &input, nullptr) != 0) {
+        FreeLibrary(hGdip);
+        CoUninitialize();
+        return;
+    }
+
+    uint16_t frame_id = 0;
+    uint64_t fps_window_start = GetTickCount64();
+    uint32_t frames_in_window = 0;
+    uint8_t measured_fps = 60;
+
+    while (g_running.load()) {
+        sockaddr_in sub_addr{};
+        int target_fps = 60;
+        int quality = 72;
+        int scale_pct = 85;
+        {
+            std::lock_guard<std::mutex> lk(g_video_mutex);
+            if (GetTickCount64() >= g_video_sub_until_ms) {
+                Sleep(40);
+                continue;
+            }
+            sub_addr = g_video_sub_addr;
+            target_fps = g_video_target_fps;
+            quality = g_video_jpeg_quality;
+            scale_pct = g_video_scale_pct;
+        }
+
+        const uint64_t t0 = GetTickCount64();
+        const int srcW = GetSystemMetrics(SM_CXSCREEN);
+        const int srcH = GetSystemMetrics(SM_CYSCREEN);
+        if (srcW <= 0 || srcH <= 0) {
+            Sleep(30);
+            continue;
+        }
+        const int dstW = std::max(320, ((srcW * scale_pct) / 100) & ~1);
+        const int dstH = std::max(240, ((srcH * scale_pct) / 100) & ~1);
+
+        HDC hScreen = GetDC(nullptr);
+        if (!hScreen) {
+            Sleep(15);
+            continue;
+        }
+        HDC hMem = CreateCompatibleDC(hScreen);
+        HBITMAP hBmp = CreateCompatibleBitmap(hScreen, dstW, dstH);
+        HGDIOBJ hOld = SelectObject(hMem, hBmp);
+
+        if (dstW == srcW && dstH == srcH) {
+            BitBlt(hMem, 0, 0, dstW, dstH, hScreen, 0, 0, SRCCOPY);
+        } else {
+            SetStretchBltMode(hMem, COLORONCOLOR);
+            StretchBlt(hMem, 0, 0, dstW, dstH, hScreen, 0, 0, srcW, srcH, SRCCOPY);
+        }
+
+        // Gambar kursor fisik di atas frame supaya tetap terlihat saat mode konsol
+        CURSORINFO ci{};
+        ci.cbSize = sizeof(ci);
+        if (GetCursorInfo(&ci) && (ci.flags & CURSOR_SHOWING)) {
+            const int cx = (ci.ptScreenPos.x * dstW) / srcW;
+            const int cy = (ci.ptScreenPos.y * dstH) / srcH;
+            DrawIconEx(hMem, cx, cy, ci.hCursor, 0, 0, 0, nullptr, DI_NORMAL);
+        }
+
+        SelectObject(hMem, hOld);
+        DeleteDC(hMem);
+        ReleaseDC(nullptr, hScreen);
+
+        void* gpBitmap = nullptr;
+        if (fnCreateBmp(hBmp, nullptr, &gpBitmap) == 0 && gpBitmap) {
+            IStream* stream = nullptr;
+            if (SUCCEEDED(CreateStreamOnHGlobal(nullptr, TRUE, &stream)) && stream) {
+                ULONG qVal = static_cast<ULONG>(std::clamp(quality, 35, 92));
+                EncoderParametersFlat encParams{};
+                encParams.Count = 1;
+                encParams.Parameter[0].Guid = kGuidEncoderQuality;
+                encParams.Parameter[0].NumberOfValues = 1;
+                encParams.Parameter[0].Type = 4; // EncoderParameterValueTypeLong
+                encParams.Parameter[0].Value = &qVal;
+
+                if (fnSaveStream(gpBitmap, stream, &kClsidJpegEncoder, &encParams) == 0) {
+                    HGLOBAL hGlobal = nullptr;
+                    if (SUCCEEDED(GetHGlobalFromStream(stream, &hGlobal)) && hGlobal) {
+                        const SIZE_T totalBytes = GlobalSize(hGlobal);
+                        const auto* jpgPtr = static_cast<const uint8_t*>(GlobalLock(hGlobal));
+                        if (jpgPtr && totalBytes > 0 && totalBytes <= 300 * 1024) {
+                            constexpr size_t kChunkPayload = 1360;
+                            const uint16_t chunkCount = static_cast<uint16_t>(
+                                (totalBytes + kChunkPayload - 1) / kChunkPayload);
+                            const bool isConsole = (GetSystemMetrics(SM_REMOTESESSION) == 0);
+                            const uint8_t flags = static_cast<uint8_t>(isConsole ? 0x01u : 0x00u) | 0x02u;
+                            const uint16_t fid = ++frame_id;
+                            const uint16_t w16 = static_cast<uint16_t>(srcW);
+                            const uint16_t h16 = static_cast<uint16_t>(srcH);
+
+                            frames_in_window++;
+                            const uint64_t now = GetTickCount64();
+                            if (now - fps_window_start >= 1000) {
+                                measured_fps = static_cast<uint8_t>(std::min<uint32_t>(120u, frames_in_window));
+                                frames_in_window = 0;
+                                fps_window_start = now;
+                            }
+
+                            uint8_t pkt[16 + kChunkPayload];
+                            pkt[0] = 'X';
+                            pkt[1] = 'Y';
+                            pkt[2] = 'V';
+                            pkt[3] = '1';
+                            memcpy(pkt + 4, &fid, 2);
+                            memcpy(pkt + 8, &chunkCount, 2);
+                            memcpy(pkt + 10, &w16, 2);
+                            memcpy(pkt + 12, &h16, 2);
+                            pkt[14] = flags;
+                            pkt[15] = measured_fps;
+
+                            for (uint16_t c = 0; c < chunkCount && g_sock != INVALID_SOCKET; ++c) {
+                                const size_t off = static_cast<size_t>(c) * kChunkPayload;
+                                const size_t rem = std::min(kChunkPayload, static_cast<size_t>(totalBytes) - off);
+                                memcpy(pkt + 6, &c, 2);
+                                memcpy(pkt + 16, jpgPtr + off, rem);
+                                sendto(g_sock, reinterpret_cast<const char*>(pkt),
+                                       static_cast<int>(16 + rem), 0,
+                                       reinterpret_cast<const sockaddr*>(&sub_addr), sizeof(sub_addr));
+                            }
+                            g_packets_served.fetch_add(chunkCount);
+                        }
+                        if (jpgPtr) GlobalUnlock(hGlobal);
+                    }
+                }
+                stream->Release();
+            }
+            fnDispose(gpBitmap);
+        }
+        DeleteObject(hBmp);
+
+        const uint64_t elapsed = GetTickCount64() - t0;
+        const uint64_t budget = static_cast<uint64_t>(std::max(8, 1000 / std::max(15, target_fps)));
+        if (elapsed < budget) {
+            Sleep(static_cast<DWORD>(budget - elapsed));
+        }
+    }
+
+    fnShutdown(gdipToken);
+    FreeLibrary(hGdip);
+    CoUninitialize();
+}
 #endif
 
 
@@ -795,6 +1098,24 @@ void QuicServerLoop() {
             uint8_t rx[1500] = {};
             int n = recvfrom(g_sock, reinterpret_cast<char*>(rx), sizeof(rx), 0,
                              reinterpret_cast<sockaddr*>(&peer), &peer_len);
+            if (n >= 12 && memcmp(rx, "XYI1", 4) == 0) {
+                HandleRawInputPacket(rx, n, peer, peer_len);
+                continue;
+            }
+            if (n >= 8 && memcmp(rx, "XYV1", 4) == 0) {
+                std::lock_guard<std::mutex> lk(g_video_mutex);
+                if (rx[4] != 0) {
+                    g_video_sub_addr = peer;
+                    g_video_sub_until_ms = GetTickCount64() + 5000;
+                    g_video_target_fps = std::clamp<int>(rx[5], 15, 120);
+                    g_video_jpeg_quality = std::clamp<int>(rx[6], 35, 92);
+                    g_video_scale_pct = std::clamp<int>(rx[7], 40, 100);
+                } else {
+                    g_video_sub_until_ms = 0;
+                }
+                g_packets_served.fetch_add(1);
+                continue;
+            }
             if (n >= 8 && memcmp(rx, kAudioSubMagic, std::min<size_t>(n, sizeof(kAudioSubMagic) - 1)) == 0) {
                 std::lock_guard<std::mutex> lk(g_sub_mutex);
                 g_audio_sub_addr = peer;
@@ -822,6 +1143,26 @@ void QuicServerLoop() {
                 }
                 continue;
             }
+            if (n >= static_cast<int>(sizeof(kDiscoverMagic) - 1) &&
+                memcmp(rx, kDiscoverMagic, sizeof(kDiscoverMagic) - 1) == 0) {
+                char json[384] = {};
+                const int jlen = snprintf(
+                    json, sizeof(json),
+                    "{\"proto\":\"XYDESK-QUIC-1\",\"pc_id\":\"%s\",\"hostname\":\"%s\","
+                    "\"ip\":\"%s\",\"gpu\":\"%s\",\"encoder\":\"%s\",\"rdp_port\":%u,"
+                    "\"quic_port\":%u,\"max_fps\":%u,\"console_stream\":true}",
+                    g_meta.pc_id, g_meta.hostname, g_meta.primary_ip,
+                    g_meta.gpu_name, g_meta.gpu_encoder,
+                    static_cast<unsigned>(g_meta.rdp_port),
+                    static_cast<unsigned>(g_meta.quic_port),
+                    static_cast<unsigned>(g_meta.max_fps));
+                if (jlen > 0) {
+                    sendto(g_sock, json, jlen, 0,
+                           reinterpret_cast<const sockaddr*>(&peer), peer_len);
+                    g_packets_served.fetch_add(1);
+                }
+                continue;
+            }
             if (n >= 24 && (rx[0] & 0xC0) == 0xC0) {
                 const char* payload = reinterpret_cast<const char*>(rx + 24);
                 const size_t payload_len = static_cast<size_t>(n - 24);
@@ -845,7 +1186,7 @@ void QuicServerLoop() {
 }  // namespace
 
 extern "C" XYDESK_QUIC_API const char* xydesk_quic_dll_version(void) {
-    return "xydesk_quic.dll v0.5.26 (Native C++17 · QUIC v1 + WASAPI Loopback/Mic Bridge · auto endpoint pick)";
+    return "xydesk_quic.dll v0.5.31 (Native C++17 · Console Stream XYV1 + RawInput XYI1 120Hz + WASAPI Audio)";
 }
 
 extern "C" XYDESK_QUIC_API int xydesk_quic_server_start(const XyQuicHostMetadata* meta) {
@@ -868,6 +1209,8 @@ extern "C" XYDESK_QUIC_API int xydesk_quic_server_start(const XyQuicHostMetadata
     }
     BOOL reuse = TRUE;
     setsockopt(g_sock, SOL_SOCKET, SO_REUSEADDR, reinterpret_cast<const char*>(&reuse), sizeof(reuse));
+    int sndbuf = 2 * 1024 * 1024;
+    setsockopt(g_sock, SOL_SOCKET, SO_SNDBUF, reinterpret_cast<const char*>(&sndbuf), sizeof(sndbuf));
 
     sockaddr_in bind_addr{};
     bind_addr.sin_family = AF_INET;
@@ -882,6 +1225,7 @@ extern "C" XYDESK_QUIC_API int xydesk_quic_server_start(const XyQuicHostMetadata
     g_worker = std::thread(QuicServerLoop);
     g_audio_worker = std::thread(AudioLoopbackThread);
     g_mic_worker = std::thread(MicRenderThread);
+    g_video_worker = std::thread(ConsoleVideoCaptureThread);
     return 0;
 #else
     return -1;
@@ -900,6 +1244,7 @@ extern "C" XYDESK_QUIC_API void xydesk_quic_server_stop(void) {
     if (g_audio_worker.joinable()) g_audio_worker.join();
     if (g_mic_worker.joinable()) g_mic_worker.join();
 #ifdef _WIN32
+    if (g_video_worker.joinable()) g_video_worker.join();
     WSACleanup();
 #endif
 }

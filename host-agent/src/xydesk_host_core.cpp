@@ -147,7 +147,43 @@ extern "C" XYDESK_CORE_API int xydesk_host_apply_windows_policies(void) {
     // jadi tulisannya tidak berefek apa pun. 0 = font smoothing/ClearType boleh.
     WriteRegDword(HKEY_LOCAL_MACHINE, ts_pol, "fNoFontSmoothing", 0);
     WriteRegDword(HKEY_LOCAL_MACHINE, ts_pol, "fAllowDesktopComposition", 1);
-    WriteRegDword(HKEY_LOCAL_MACHINE, ts_pol, "DWMFRAMEINTERVAL", 15);
+    WriteRegDword(HKEY_LOCAL_MACHINE, ts_pol, "DWMFRAMEINTERVAL", 8);
+    WriteRegDword(HKEY_LOCAL_MACHINE, ts_pol, "Smoothening", 0);
+    WriteRegDword(HKEY_LOCAL_MACHINE, ts_pol, "RemoteFXCompressionAlgorithm", 0);
+    WriteRegDword(HKEY_LOCAL_MACHINE, ts_pol, "EnableFrameBufferRedirects", 1);
+    WriteRegDword(HKEY_LOCAL_MACHINE, ts_pol, "MaxCompressionLevel", 1);
+    WriteRegDword(HKEY_LOCAL_MACHINE,
+                  "SYSTEM\\CurrentControlSet\\Control\\Terminal Server\\WinStations",
+                  "DWMFRAMEINTERVAL", 8);
+
+    // 2b. MMCSS Gaming Priority & Disable Network Throttling + TCP Nagle (TCPNoDelay)
+    const char* mm_sys = "SOFTWARE\\Microsoft\\Windows NT\\CurrentVersion\\Multimedia\\SystemProfile";
+    const char* mm_games = "SOFTWARE\\Microsoft\\Windows NT\\CurrentVersion\\Multimedia\\SystemProfile\\Tasks\\Games";
+    WriteRegDword(HKEY_LOCAL_MACHINE, mm_sys, "NetworkThrottlingIndex", 0xFFFFFFFFu);
+    WriteRegDword(HKEY_LOCAL_MACHINE, mm_sys, "SystemResponsiveness", 10);
+    WriteRegDword(HKEY_LOCAL_MACHINE, mm_games, "GPU Priority", 8);
+    WriteRegDword(HKEY_LOCAL_MACHINE, mm_games, "Priority", 6);
+    WriteRegDword(HKEY_LOCAL_MACHINE, mm_games, "Clock Rate", 10000);
+
+    HKEY hIfaces = nullptr;
+    if (RegOpenKeyExA(HKEY_LOCAL_MACHINE,
+                      "SYSTEM\\CurrentControlSet\\Services\\Tcpip\\Parameters\\Interfaces",
+                      0, KEY_READ, &hIfaces) == ERROR_SUCCESS) {
+        char subName[256] = {};
+        DWORD idx = 0;
+        DWORD nameLen = sizeof(subName);
+        while (RegEnumKeyExA(hIfaces, idx++, subName, &nameLen,
+                             nullptr, nullptr, nullptr, nullptr) == ERROR_SUCCESS) {
+            char fullPath[512] = {};
+            snprintf(fullPath, sizeof(fullPath),
+                     "SYSTEM\\CurrentControlSet\\Services\\Tcpip\\Parameters\\Interfaces\\%s",
+                     subName);
+            WriteRegDword(HKEY_LOCAL_MACHINE, fullPath, "TcpAckFrequency", 1);
+            WriteRegDword(HKEY_LOCAL_MACHINE, fullPath, "TCPNoDelay", 1);
+            nameLen = sizeof(subName);
+        }
+        RegCloseKey(hIfaces);
+    }
 
     // 3. Enable ClearType Smooth Fonts on the active Windows session
     SystemParametersInfoA(SPI_SETFONTSMOOTHING, TRUE, nullptr, SPIF_UPDATEINIFILE | SPIF_SENDCHANGE);

@@ -82,7 +82,7 @@ object RdpUri {
             if (options.videoRemoting) out += "video" to ""
         }
         if (options.frameAck in 1..10) out += "frame-ack" to options.frameAck.toString()
-        if (options.responsiveLoopMs in 10..1000) {
+        if (options.responsiveLoopMs in 1..1000) {
             out += "max-loop-time" to options.responsiveLoopMs.toString()
         }
 

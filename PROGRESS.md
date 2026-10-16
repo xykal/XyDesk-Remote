@@ -1445,3 +1445,18 @@ Tiga permintaan pemilik ditangani tuntas:
 - [ ] Badge `👑 FOUNDER` emas berkilau tampil otomatis untuk akun GitHub `xykal` di Profil, Buat RDP, Feed/Komentar, dan Chat Global
 - [ ] Layar Log XyDesk (dan tombol Detail saat gagal koneksi) menampilkan langkah bernomor 1 per 1 tanpa blok log FreeRDP terpisah
 
+## Ronde 51 — Sinkronisasi XyRDP, Validasi Monitor & Sesi, Mode Game FPS 120Hz 360°, & Engine Konsol Non-RDP `SM_REMOTESESSION=0` (2026-10-16)
+1. **Sinkronisasi Penuh `xykal/XyRDP` ↔ `XyDesk-Remote` & Validasi Monitor/Sesi Nyata**:
+   - `publish-status.ps1` di `XyRDP` kini menulis ke `rdp-status.json` sekaligus `out/rdp-status.json` di branch `status`; `setup-akses.ps1` dan `setup-portmap.ps1` menyertakan blok `akses.tunnel` standar untuk semua mode transport (`tailscale`, `portmap`, `tunnel`).
+   - `XyRdpClient.kt` dan `RdpFreeScreen.kt` diperbarui dengan `inspectSetup`, `syncForkWithUpstream` (`/merge-upstream`), `pollValidatedSession`, dan `evaluateSession` yang memvalidasi silang `run.id`, step workflow GitHub Actions, `expires_at`, serta kesegaran `heartbeat_at`.
+   - Tab **Monitor & Sesi** kini menampilkan progress bar tahapan workflow live, hitung mundur sisa waktu per detik (`HH:MM:SS`), serta telemetri runner nyata (`RAM`, `Disk C:`, `CPU %`, `Uptime`).
+2. **Upgrade Koneksi RDP & Koneksi PC untuk Game FPS (120 FPS · Ultra-Low Latency · 360° RawInput Aim)**:
+   - Menghapus delay buatan 150 ms pada `SessionInputManager.java` (`sendDelayedMoveEvent` kini langsung mengirim event tanpa menunda/membuang 3 dari 4 sampel sentuh).
+   - Membuka batas `targetFps` hingga `120 Hz` di `RdpOptions.kt`, menurunkan batas `responsiveLoopMs` ke `1..1000 ms` (`2 ms` pada `ULTRA_LOW_LATENCY` & `DIRECT_GAME_ULTRA`), serta mengunci `preferredDisplayModeId` + `preferredRefreshRate` di `XyDeskSessionActivity.kt` & `PcStreamSessionActivity.kt`.
+   - Menambahkan **`XyRawGameInputBridge.kt`** (`XYI1` via UDP `:4433`) + toggle **Mode Game FPS (120Hz · Rotasi 360° RawInput)** + crosshair tengah presisi di `XyDeskSession.kt` dan `SessionControls.kt`.
+3. **Engine Streaming Konsol Mandiri Non-RDP (`SM_REMOTESESSION = 0`) di `XyDeskRemoteHost-Standalone.exe` & `PcStreamSessionActivity.kt`**:
+   - `host-agent/src/xydesk_host_core.cpp` membuka `DWMFRAMEINTERVAL = 8` (125 FPS), `TcpAckFrequency = 1` / `TCPNoDelay = 1` di semua interface jaringan, dan prioritas MMCSS `Games` (`GPU Priority = 8`).
+   - `host-agent/src/xydesk_quic.cpp` dilengkapi handler input hardware `XYI1` (`SendInput` `MOUSEEVENTF_MOVE` relatif murni tanpa `MOUSEEVENTF_ABSOLUTE`) dan engine capture layar konsol fisik `XYV1` (`SM_REMOTESESSION == 0`, JPEG GDI+ in-memory berkecepatan tinggi di UDP `:4433`).
+   - `PcStreamSessionActivity.kt` & `XyDirectConsoleStreamClient.kt` menyediakan mode **Konsol UDP :4433 (Non-RDP)** dengan pemindai otomatis PC di LAN/Tailscale serta overlay kombat FPS (`FPS 360°`, `TEMBAK LMB`, `SCOPE RMB`, `WASD`, `SHIFT`, `CTRL`, `SPACE`, `R`).
+
+

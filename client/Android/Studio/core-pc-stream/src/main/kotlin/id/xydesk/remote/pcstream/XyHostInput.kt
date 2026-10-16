@@ -154,9 +154,11 @@ object XyHostInputCodec {
     fun videoResolution(mode: XyHostVideoResolution): ByteArray =
         exact(TAG_VIDEO_RESOLUTION) { put(mode.code.toByte()) }
 
-    /** Batas FPS (hanya 30 atau 60). */
+    /** Batas FPS (30, 60, 90, atau 120). */
     fun videoFps(fps: Int): ByteArray {
-        require(fps == 30 || fps == 60) { "fps must be 30 or 60" }
+        require(fps == 30 || fps == 60 || fps == 90 || fps == 120) {
+            "fps must be 30, 60, 90, or 120"
+        }
         return exact(TAG_VIDEO_FPS) { put(fps.toByte()) }
     }
 

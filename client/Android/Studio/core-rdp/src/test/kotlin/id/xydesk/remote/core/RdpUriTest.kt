@@ -290,7 +290,7 @@ class RdpUriTest {
 
     @Test
     fun nilaiLoopDanFrameAckDiluarRangeDitikam() {
-        val opts = RdpOptions(frameAck = 99, responsiveLoopMs = 5)
+        val opts = RdpOptions(frameAck = 99, responsiveLoopMs = 2000)
         val p = params(simple(), opts)
         assertFalse(p.containsKey("frame-ack"))
         assertFalse(p.containsKey("max-loop-time"))

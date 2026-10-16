@@ -718,15 +718,30 @@ fun XyDeskSessionScreen(
         }.getOrDefault(false)
     }
 
-    // Mouse relatif (raw input): hanya untuk mode Koneksi PC (Direct Stream)
-    // dengan opsi per-perangkat aktif. RDP biasa tetap absolut supaya pointer
-    // desktop normal tidak berubah perilaku.
-    val relMouseEnabled = remember(profile.id) {
-        runCatching {
-            val o = RdpOptions.of(context, profile.id)
-            o.pcConnectMode && o.rawInputMouse
-        }.getOrDefault(false)
+    // Jembatan UDP :4433 untuk injeksi SendInput(MOUSEEVENTF_MOVE) hardware
+    // relatif (<1 ms) ke XyDeskRemoteHost-Standalone.exe maupun daemon XyRDP.
+    val rawInputBridge = remember(activeProfile.host) {
+        id.xydesk.remote.core.XyRawGameInputBridge(host = activeProfile.host, port = 4433)
     }
+    DisposableEffect(rawInputBridge) {
+        rawInputBridge.start()
+        onDispose { rawInputBridge.stop() }
+    }
+
+    // Mode Game FPS (Mouse Relatif RawInput 360°): aktif otomatis pada profil
+    // Koneksi PC atau profil Ultra-Low Latency, dan bisa dinyalakan/dimatikan
+    // langsung kapan saja dari panel Input sesi RDP maupun Koneksi PC.
+    var relMouseEnabled by remember(profile.id) {
+        mutableStateOf(
+            runCatching {
+                val o = RdpOptions.of(context, profile.id)
+                (o.pcConnectMode && o.rawInputMouse) ||
+                    (o.streamProfile == id.xydesk.remote.core.XyStreamProfile.ULTRA_LOW_LATENCY && o.rawInputMouse)
+            }.getOrDefault(false),
+        )
+    }
+    var fpsAnchorX by remember { mutableFloatStateOf(640f) }
+    var fpsAnchorY by remember { mutableFloatStateOf(360f) }
 
     // Restore remote DPI on each new native instance, and apply user changes
     // through DISP without touching the local zoom slider.
@@ -932,14 +947,14 @@ fun XyDeskSessionScreen(
     }
 
     fun movePointer(dxScreen: Float, dyScreen: Float) {
-        // Ratakan dulu supaya sapuan di game tidak patah-patah ("muter-muter"),
-        // baru terapkan sensitivitas/akselerasi seperti biasa.
+        // Saat Mode Game FPS (relMouseEnabled) aktif, gunakan alpha=0.90f supaya
+        // flick-shot 1:1 instan tanpa jeda smoothing; mode desktop biasa pakai 0.45f.
         val (flatDx, flatDy) = smoothPointerDelta(
             prevDx = smoothPrevDx,
             prevDy = smoothPrevDy,
             dx = dxScreen,
             dy = dyScreen,
-            alpha = 0.45f,
+            alpha = if (relMouseEnabled) 0.90f else 0.45f,
         )
         smoothPrevDx = flatDx
         smoothPrevDy = flatDy
@@ -947,21 +962,42 @@ fun XyDeskSessionScreen(
             dx = flatDx,
             dy = flatDy,
             sensitivity = prefs.pointerSensitivity,
-            acceleration = prefs.pointerAcceleration,
+            acceleration = if (relMouseEnabled) false else prefs.pointerAcceleration,
         )
         val scale = if (zoom > 0.05f) zoom else 1f
-        cursorX = (cursorX + scaledDx / scale).coerceIn(0f, remoteWidth.toFloat())
-        cursorY = (cursorY + scaledDy / scale).coerceIn(0f, remoteHeight.toFloat())
         if (relMouseEnabled) {
-            // Delta dikirim apa adanya (dijepit rentang INT16); kursor virtual
-            // lokal tetap bergerak supaya reticle di layar mengikuti jari.
-            sendRelCursorEvent(
-                (scaledDx / scale).roundToInt().coerceIn(-32768, 32767),
-                (scaledDy / scale).roundToInt().coerceIn(-32768, 32767),
-                Mouse.getMoveEvent(),
-            )
+            cursorX = remoteWidth / 2f
+            cursorY = remoteHeight / 2f
+            val relDx = (scaledDx / scale).roundToInt().coerceIn(-32768, 32767)
+            val relDy = (scaledDy / scale).roundToInt().coerceIn(-32768, 32767)
+            if (relDx == 0 && relDy == 0) return
+            if (rawInputBridge.isAlive) {
+                // Jalur utama: UDP :4433 XYI1 -> SendInput(MOUSEEVENTF_MOVE) di PC (<1 ms).
+                rawInputBridge.sendMouseRel(relDx, relDy)
+                sendRelCursorEvent(relDx, relDy, Mouse.getMoveEvent())
+                return
+            }
+            // Fallback bila UDP :4433 tertutup (mis. tunnel TCP murni):
+            // kirim event relatif FreeRDP + gerak kursor berjangkar tengah yang
+            // otomatis memantul ke tengah sebelum menyentuh tepi layar.
+            sendRelCursorEvent(relDx, relDy, Mouse.getMoveEvent())
+            val w = remoteWidth.toFloat().coerceAtLeast(320f)
+            val h = remoteHeight.toFloat().coerceAtLeast(240f)
+            val marginX = w * 0.14f
+            val marginY = h * 0.14f
+            var nextX = fpsAnchorX + relDx
+            var nextY = fpsAnchorY + relDy
+            if (nextX < marginX || nextX > (w - marginX) || nextY < marginY || nextY > (h - marginY)) {
+                nextX = (w / 2f) + relDx.toFloat().coerceIn(-marginX, marginX)
+                nextY = (h / 2f) + relDy.toFloat().coerceIn(-marginY, marginY)
+            }
+            fpsAnchorX = nextX.coerceIn(1f, w - 1f)
+            fpsAnchorY = nextY.coerceIn(1f, h - 1f)
+            sendCursorEvent(fpsAnchorX.roundToInt(), fpsAnchorY.roundToInt(), Mouse.getMoveEvent())
             return
         }
+        cursorX = (cursorX + scaledDx / scale).coerceIn(0f, remoteWidth.toFloat())
+        cursorY = (cursorY + scaledDy / scale).coerceIn(0f, remoteHeight.toFloat())
         val c = cursor()
         sendCursorEvent(c.x.roundToInt(), c.y.roundToInt(), Mouse.getMoveEvent())
     }
@@ -981,9 +1017,20 @@ fun XyDeskSessionScreen(
             XyMouseButton.MIDDLE -> Mouse.getMiddleButtonEvent(down)
         }
         if (relMouseEnabled) {
-            // Bit tombol sama persis untuk event relatif (BUTTON1=0x1000 dst);
-            // delta nol agar kursor OS di PC tidak dilompatkan.
-            sendRelCursorEvent(0, 0, flags)
+            if (rawInputBridge.isAlive) {
+                val btnCode = when (effectiveButton) {
+                    XyMouseButton.LEFT -> 0
+                    XyMouseButton.RIGHT -> 1
+                    XyMouseButton.MIDDLE -> 2
+                }
+                rawInputBridge.sendMouseButton(btnCode, down)
+                return
+            }
+            // Jangan hanya memanggil sendRelCursorEvent(0,0,flags) karena server
+            // RDP Windows standar tanpa FreeRDP_HasRelativeMouseEvent akan membuangnya.
+            val ax = fpsAnchorX.roundToInt().coerceIn(0, remoteWidth)
+            val ay = fpsAnchorY.roundToInt().coerceIn(0, remoteHeight)
+            sendCursorEvent(ax, ay, flags)
             return
         }
         sendCursorEvent(c.x.roundToInt(), c.y.roundToInt(), flags)
@@ -1286,11 +1333,13 @@ fun XyDeskSessionScreen(
             )
         }
 
-        if (connected && !privacyCurtain && !mappingMode && !controlsOverlayOpen && InputMode.entries[inputMode] == InputMode.TRACKPAD) {
+        if (connected && !privacyCurtain && !mappingMode && !controlsOverlayOpen &&
+            (InputMode.entries[inputMode] == InputMode.TRACKPAD || relMouseEnabled)
+        ) {
             Box(
                 Modifier
                     .fillMaxSize()
-                    .pointerInput(zoom, remoteWidth, remoteHeight) {
+                    .pointerInput(zoom, remoteWidth, remoteHeight, relMouseEnabled) {
                         awaitPointerEventScope {
                             var lastMousePos: Offset? = null
                             while (true) {
@@ -1733,9 +1782,66 @@ fun XyDeskSessionScreen(
                 },
                 onOverlayActiveChange = { controlsOverlayOpen = it },
                 onRegisterBackHandler = { controlsBackHandler = it },
+                fpsGameMode = relMouseEnabled,
+                rawInputUdpAlive = rawInputBridge.isAlive,
+                onFpsGameModeChange = { enabled ->
+                    relMouseEnabled = enabled
+                    if (enabled) {
+                        fpsAnchorX = remoteWidth / 2f
+                        fpsAnchorY = remoteHeight / 2f
+                        cursorX = fpsAnchorX
+                        cursorY = fpsAnchorY
+                        onDisplayRefreshPreferenceChange(120)
+                        onStickModeChange(XyStickMode.WASD)
+                    }
+                    runCatching {
+                        val opts = RdpOptions.of(context, activeProfile.id)
+                        opts.copy(rawInputMouse = enabled).write(context, activeProfile.id)
+                    }
+                    notice.show(
+                        if (enabled) {
+                            if (rawInputBridge.isAlive) {
+                                xyNow(
+                                    "Mode Game FPS 120Hz Aktif · RawInput UDP :4433 (<1 ms · 360° Aim)",
+                                    "120Hz FPS Game Mode Active · UDP :4433 RawInput (<1 ms · 360° Aim)",
+                                )
+                            } else {
+                                xyNow(
+                                    "Mode Game FPS 120Hz Aktif · Mouse Relatif 360°",
+                                    "120Hz FPS Game Mode Active · 360° Relative Mouse",
+                                )
+                            }
+                        } else {
+                            xyNow("Mode Game FPS dimatikan (Kursor Desktop Normal)", "FPS Game Mode disabled (Normal Desktop Cursor)")
+                        },
+                    )
+                },
                 coreInfo = coreInfo,
                 notice = notice,
             )
+
+            // Crosshair tengah presisi saat Mode Game FPS 360° aktif
+            if (relMouseEnabled && !controlsOverlayOpen && !mappingMode) {
+                Box(
+                    modifier = Modifier
+                        .align(Alignment.Center)
+                        .size(18.dp),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Box(
+                        Modifier
+                            .width(12.dp)
+                            .height(1.5.dp)
+                            .background(Color(0xCC3DD68C)),
+                    )
+                    Box(
+                        Modifier
+                            .width(1.5.dp)
+                            .height(12.dp)
+                            .background(Color(0xCC3DD68C)),
+                    )
+                }
+            }
 
             // Pesan app sendiri (bukan Toast bawaan Android) — satu bahasa
             // visual dengan panel, ikut tema.

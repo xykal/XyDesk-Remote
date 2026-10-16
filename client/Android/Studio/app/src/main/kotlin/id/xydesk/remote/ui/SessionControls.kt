@@ -186,6 +186,9 @@ fun SessionControls(
     onGyroMouseChanged: (Boolean) -> Unit = {},
     onOverlayActiveChange: (Boolean) -> Unit = {},
     onRegisterBackHandler: ((() -> Boolean)?) -> Unit = {},
+    fpsGameMode: Boolean = false,
+    rawInputUdpAlive: Boolean = false,
+    onFpsGameModeChange: (Boolean) -> Unit = {},
     coreInfo: List<String> = emptyList(),
     notice: XyNoticeState,
 ) {
@@ -981,6 +984,9 @@ fun SessionControls(
                     prefs.gyroMouseEnabled = it
                     onGyroMouseChanged(it)
                 },
+                fpsGameMode = fpsGameMode,
+                rawInputUdpAlive = rawInputUdpAlive,
+                onFpsGameModeChange = onFpsGameModeChange,
                 // Tombol
                 keys = keys,
                 hudProfile = hudProfile,
@@ -1604,6 +1610,9 @@ private fun SessionPanel(
     onGamepadEnabled: (Boolean) -> Unit,
     gyroMouseEnabled: Boolean,
     onGyroMouseEnabled: (Boolean) -> Unit,
+    fpsGameMode: Boolean = false,
+    rawInputUdpAlive: Boolean = false,
+    onFpsGameModeChange: (Boolean) -> Unit = {},
     // Tombol
     keys: List<HudKey>,
     hudProfile: HudProfilePreset,
@@ -1846,6 +1855,9 @@ private fun SessionPanel(
                         onGamepadEnabled = onGamepadEnabled,
                         gyroMouseEnabled = gyroMouseEnabled,
                         onGyroMouseEnabled = onGyroMouseEnabled,
+                        fpsGameMode = fpsGameMode,
+                        rawInputUdpAlive = rawInputUdpAlive,
+                        onFpsGameModeChange = onFpsGameModeChange,
                     )
 
                     PanelTab.BUTTONS -> ButtonsTab(
@@ -2008,11 +2020,39 @@ private fun InputTab(
     onGamepadEnabled: (Boolean) -> Unit,
     gyroMouseEnabled: Boolean,
     onGyroMouseEnabled: (Boolean) -> Unit,
+    fpsGameMode: Boolean = false,
+    rawInputUdpAlive: Boolean = false,
+    onFpsGameModeChange: (Boolean) -> Unit = {},
     openKey: String?,
     onOpenKey: (String?) -> Unit,
 ) {
     PanelSectionGrid(openKey = openKey, onOpenKey = onOpenKey) {
     section("mode-input-klik-mouse",xy("Mode input & Klik Mouse", "Input mode & Mouse Click")) {
+            XyToggleRow(
+                title = xy("Mode Game FPS (120Hz · Rotasi 360° RawInput)", "FPS Game Mode (120Hz · 360° RawInput Aim)"),
+                checked = fpsGameMode,
+                onCheckedChange = onFpsGameModeChange,
+            )
+            PanelHint(
+                if (fpsGameMode) {
+                    if (rawInputUdpAlive) {
+                        xy(
+                            "AKTIF: Injeksi SendInput(MOUSEEVENTF_MOVE) via UDP :4433 (<1 ms) + Crosshair Tengah + 120Hz.",
+                            "ACTIVE: Hardware SendInput(MOUSEEVENTF_MOVE) via UDP :4433 (<1 ms) + Center Crosshair + 120Hz.",
+                        )
+                    } else {
+                        xy(
+                            "AKTIF: Rotasi Kamera 360° Relative Delta + Crosshair Tengah + Layar 120Hz.",
+                            "ACTIVE: 360° Relative Delta Camera Aim + Center Crosshair + 120Hz Display.",
+                        )
+                    }
+                } else {
+                    xy(
+                        "Nyalakan saat masuk match FPS (CS2, GTA/SAMP, Valorant, COD, Roblox) agar kamera berputar 360° tanpa mentok layar.",
+                        "Enable inside FPS matches (CS2, GTA/SAMP, Valorant, COD, Roblox) for 360° camera rotation without screen-edge lock.",
+                    )
+                },
+            )
             XySegmented(
                 options = InputMode.entries.map { xy(it.title, it.titleEn) },
                 selectedIndex = inputMode.ordinal,

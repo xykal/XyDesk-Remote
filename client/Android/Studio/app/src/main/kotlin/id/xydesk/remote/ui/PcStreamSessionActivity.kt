@@ -2,13 +2,17 @@ package id.xydesk.remote.ui
 
 import android.content.Context
 import android.content.Intent
+import android.graphics.Bitmap
 import android.os.Build
 import android.os.Bundle
 import android.view.KeyEvent
 import android.view.WindowManager
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.gestures.detectVerticalDragGestures
@@ -22,8 +26,10 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AlertDialog
@@ -34,19 +40,28 @@ import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.text.font.FontFamily
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.WindowInsetsControllerCompat
+import id.xydesk.remote.core.RefreshRatePolicy
+import id.xydesk.remote.core.XyDirectConsoleStreamClient
 import id.xydesk.remote.pcstream.XyHostInputCodec
 import id.xydesk.remote.pcstream.XyHostMouseButton
 import id.xydesk.remote.pcstream.XyHubSessionState
@@ -54,34 +69,38 @@ import id.xydesk.remote.pcstream.XyHubStreamViewer
 import id.xydesk.remote.ui.components.XyField
 import id.xydesk.remote.ui.components.XyIcons
 import id.xydesk.remote.ui.components.XyPillButton
+import id.xydesk.remote.ui.components.XySegmented
 import id.xydesk.remote.ui.theme.XyDeskTheme
 import id.xydesk.remote.ui.theme.XyThemeState
 import id.xydesk.remote.ui.theme.xyDark
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
-import kotlinx.coroutines.delay
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import org.json.JSONObject
 import org.webrtc.EglBase
 import org.webrtc.SurfaceViewRenderer
 import org.webrtc.VideoFrame
 import org.webrtc.VideoSink
+import kotlin.math.abs
+import kotlin.math.roundToInt
 
 /**
- * Sesi PC-stream produksi (host XyDesk via hub `signal.xydesk.my.id`):
- * layar pairing (ID host 9 digit + PIN 6 digit) → video WebRTC + overlay
- * input dasar (touchpad mouse, strip scroll, keyboard teks, keyboard fisik).
- *
- * Overlay: touchpad mouse, strip scroll, keyboard teks, keyboard fisik, dan
- * virtual pad on-screen (opcode 0x0E → ViGEmBus di host; lihat
- * [PcStreamPadOverlay]). Seluruh wiring media ada di [XyHubStreamViewer];
- * activity hanya memegang lifecycle + state Compose.
+ * Sesi PC-stream produksi XyDesk dengan 2 engine terintegrasi:
+ *  1) **Engine Konsol Mandiri (`XYV1` + `XYA1` + `XYI1` via UDP :4433)**:
+ *     Terhubung langsung ke `XyDeskRemoteHost-Standalone.exe` di sesi konsol
+ *     fisik Windows (`SM_REMOTESESSION == 0`, bebas deteksi RDP anti-cheat)
+ *     dengan injeksi hardware `SendInput(MOUSEEVENTF_MOVE)` 120Hz untuk Game FPS.
+ *  2) **Hub WebRTC (`signal.xydesk.my.id`)**:
+ *     Pairing ID host 9 digit + PIN 6 digit → video WebRTC + DataChannel `input`.
  */
 class PcStreamSessionActivity : ComponentActivity() {
     private var viewer: XyHubStreamViewer? = null
     private var eglBase: EglBase? = null
+    private var directClient: XyDirectConsoleStreamClient? = null
 
     /** ID host sesi berjalan — kunci penyimpanan tata letak virtual pad. */
     private var activeHostId: String = ""
@@ -98,18 +117,23 @@ class PcStreamSessionActivity : ComponentActivity() {
     private val failure = mutableStateOf<String?>(null)
     private val started = mutableStateOf(false)
 
+    // State khusus Engine Konsol Mandiri UDP :4433 (SM_REMOTESESSION == 0)
+    private val directModeActive = mutableStateOf(false)
+    private val directFrame = mutableStateOf<Bitmap?>(null)
+    private val directStatus = mutableStateOf<String?>(null)
+    private val directHostFps = mutableIntStateOf(0)
+    private val directNonRdpVerified = mutableStateOf(false)
+    private val discoveredHosts = mutableStateOf<List<XyDirectConsoleStreamClient.DiscoveredHost>>(emptyList())
+    private val scanningLan = mutableStateOf(false)
+
+    // Mode Game FPS (120Hz + Rotasi 360° RawInput + Tombol Tembak/Scope/WASD)
+    private val fpsGameMode = mutableStateOf(true)
+
     /** Sesi jalan sudah tidak bisa diulang lagi (gagal/ditutup) — teks dirender di Compose. */
     private val sessionEnded = mutableStateOf(false)
 
     /** Notifikasi sekali-lihat dari host (mis. status Virtual Display). */
     private val hostNotice = mutableStateOf<String?>(null)
-
-    // ── Anti-black-screen (laporan pemilik 2026-10-15) ────────────────────────
-    // "Koneksi menggantung → layar hitam": ICE bisa CONNECTED + track siap
-    // tapi host tidak pernah mengirim frame (encoder gagal / PC headless tanpa
-    // virtual display). Sebelumnya UI diam saja — sekarang ada watchdog
-    // frame-pertama dan hint dari telemetry `capture` yang dikirim host tiap
-    // detik lewat channel input (meta JSON).
 
     /** Frame pertama dari host sudah sampai ke renderer. */
     @Volatile private var firstFrameSeen = false
@@ -129,16 +153,19 @@ class PcStreamSessionActivity : ComponentActivity() {
     /** Kredensial sesi terakhir (in-memory saja) untuk tombol sambung ulang. */
     private var lastHostId: String = ""
     private var lastPin: String = ""
+    private var lastDirectIp: String = ""
+    private var lastDirectPort: Int = 4433
+    private var lastDirectFps: Int = 120
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+        applyPreferredDisplayRefreshRate(120)
         WindowCompat.setDecorFitsSystemWindows(window, false)
         val controller = WindowInsetsControllerCompat(window, window.decorView)
         controller.systemBarsBehavior = WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
         controller.hide(WindowInsetsCompat.Type.systemBars())
         setContent {
-            // Ikut setelan tema app seperti layar sesi RDP (XyDeskSessionActivity).
             XyThemeState.init(AppPrefs(this))
             XyDeskTheme(dark = xyDark()) {
                 Surface(modifier = Modifier.fillMaxSize(), color = Color.Black) {
@@ -148,18 +175,100 @@ class PcStreamSessionActivity : ComponentActivity() {
         }
     }
 
+    @Suppress("DEPRECATION")
+    private fun applyPreferredDisplayRefreshRate(requestedHz: Int) {
+        runCatching {
+            val display = windowManager.defaultDisplay
+            val currentMode = display.mode
+            val sameResolution = display.supportedModes.filter {
+                it.physicalWidth == currentMode.physicalWidth &&
+                    it.physicalHeight == currentMode.physicalHeight
+            }
+            val modes = sameResolution.ifEmpty { display.supportedModes.toList() }
+            val rates = modes.map { it.refreshRate }
+            val preferred = RefreshRatePolicy.choose(requestedHz, rates)
+                ?: display.refreshRate.takeIf { it.isFinite() && it > 0f }
+                ?: return
+            val bestMode = modes.minByOrNull { abs(it.refreshRate - preferred) }
+            window.attributes = window.attributes.apply {
+                preferredRefreshRate = preferred
+                if (bestMode != null) {
+                    preferredDisplayModeId = bestMode.modeId
+                }
+            }
+        }
+    }
+
     override fun onDestroy() {
         super.onDestroy()
+        directClient?.close()
+        directClient = null
         viewer?.close()
         viewer = null
         runCatching { eglBase?.release() }
         eglBase = null
     }
 
+    private fun startDirectConsoleSession(hostIp: String, port: Int = 4433, targetFps: Int = 120) {
+        val cleanIp = hostIp.trim()
+        if (cleanIp.isEmpty()) return
+        directClient?.close()
+        directClient = null
+        lastDirectIp = cleanIp
+        lastDirectPort = port
+        lastDirectFps = targetFps
+        activeHostId = cleanIp
+        directModeActive.value = true
+        videoReady.value = true
+        inputOpen.value = true
+        mediaConnected.value = false
+        noVideoSignal.value = false
+        firstFrameSeen = false
+        applyPreferredDisplayRefreshRate(targetFps)
+
+        val client = XyDirectConsoleStreamClient(
+            host = cleanIp,
+            port = port,
+            targetFps = targetFps,
+            jpegQuality = 72,
+            scalePct = 85,
+            enableAudio = true,
+            onFrame = { bmp, _, _, hostFps, nonRdp ->
+                if (!firstFrameSeen) {
+                    firstFrameSeen = true
+                    noVideoSignal.value = false
+                    mediaConnected.value = true
+                    firstFrameWatchdog?.cancel()
+                }
+                directFrame.value = bmp
+                directHostFps.intValue = hostFps
+                directNonRdpVerified.value = nonRdp
+            },
+            onState = { connected, detail ->
+                directStatus.value = detail
+                if (connected) mediaConnected.value = true
+            },
+        )
+        directClient = client
+        client.start()
+        armFirstFrameWatchdog()
+    }
+
+    private fun scanLanConsoleHosts() {
+        if (scanningLan.value) return
+        scanningLan.value = true
+        scope.launch {
+            val found = withContext(Dispatchers.IO) {
+                XyDirectConsoleStreamClient.discoverHosts(timeoutMs = 950)
+            }
+            discoveredHosts.value = found
+            scanningLan.value = false
+        }
+    }
+
     private fun startSession(hostId: String, pin: String) {
+        directModeActive.value = false
         if (started.value) {
-            // Sesi jalan tapi pairing ditolak (PIN salah / host offline) → ulangi
-            // tanpa onboarding ulang; kalau sesi benar-benar mati, tutup layar.
             val current = sessionState.value
             val retryable = current == XyHubSessionState.REGISTERED || current == XyHubSessionState.PAIRING
             if (retryable) {
@@ -223,6 +332,10 @@ class PcStreamSessionActivity : ComponentActivity() {
 
         override fun onInputChannelOpen(open: Boolean) {
             inputOpen.value = open
+            if (open) {
+                // Minta host mengirim stream hingga 120 FPS begitu channel input terbuka.
+                runCatching { viewer?.sendInputPacket(XyHostInputCodec.videoFps(120)) }
+            }
         }
 
         override fun onMediaConnected(connected: Boolean) {
@@ -230,9 +343,6 @@ class PcStreamSessionActivity : ComponentActivity() {
         }
 
         override fun onHostText(text: String) {
-            // Balasan status host berupa teks JSON. `virtualDisplay` = balasan
-            // dialog VD; `meta` = telemetry tiap detik (dipakai untuk hint
-            // anti-black-screen). Teks non-JSON diabaikan diam-diam.
             val json = runCatching { JSONObject(text) }.getOrNull() ?: return
             when (json.optString("type")) {
                 "virtualDisplay" -> {
@@ -252,13 +362,53 @@ class PcStreamSessionActivity : ComponentActivity() {
         }
 
         override fun onSignalingClosed(code: Int, reason: String) {
-            if (videoReady.value) finish()
+            if (videoReady.value && !directModeActive.value) finish()
+        }
+    }
+
+    // ── Pengiriman Input Terpadu (Hub WebRTC maupun Engine Konsol UDP :4433) ──
+
+    private fun dispatchMouseRel(dx: Int, dy: Int) {
+        if (dx == 0 && dy == 0) return
+        val dc = directClient
+        if (directModeActive.value && dc != null) {
+            dc.inputBridge.sendMouseRel(dx, dy)
+        } else {
+            viewer?.sendInputPacket(XyHostInputCodec.mouseMoveRel(dx, dy))
+        }
+    }
+
+    private fun dispatchMouseButton(button: XyHostMouseButton, down: Boolean) {
+        val dc = directClient
+        if (directModeActive.value && dc != null) {
+            dc.inputBridge.sendMouseButton(button.code, down)
+        } else {
+            viewer?.sendInputPacket(XyHostInputCodec.mouseButton(button.code, down))
+        }
+    }
+
+    private fun dispatchScroll(wheelDelta: Int) {
+        if (wheelDelta == 0) return
+        val dc = directClient
+        if (directModeActive.value && dc != null) {
+            dc.inputBridge.sendMouseWheel(wheelDelta)
+        } else {
+            viewer?.sendInputPacket(XyHostInputCodec.scroll(0, wheelDelta))
+        }
+    }
+
+    private fun dispatchKeyVk(vk: Int, down: Boolean) {
+        if (vk <= 0) return
+        val dc = directClient
+        if (directModeActive.value && dc != null) {
+            dc.inputBridge.sendKeyVk(vk, down)
+        } else {
+            viewer?.sendInputPacket(XyHostInputCodec.key(vk, down))
         }
     }
 
     // ── Anti-black-screen helpers ──────────────────────────────────────────
 
-    /** Mulai hitung mundur frame pertama; lewat batas = anggap tanpa sinyal. */
     private fun armFirstFrameWatchdog() {
         firstFrameSeen = false
         noVideoSignal.value = false
@@ -276,7 +426,6 @@ class PcStreamSessionActivity : ComponentActivity() {
         noVideoSignal.value = false
     }
 
-    /** Host tidak menjawab pairing (offline/busuk) → beri tahu + tombol hidup lagi. */
     private fun armPairingWatchdog() {
         pairingTimedOut.value = false
         pairingWatchdog?.cancel()
@@ -294,7 +443,6 @@ class PcStreamSessionActivity : ComponentActivity() {
         pairingTimedOut.value = false
     }
 
-    /** Telemetry `capture` dari meta host (tiap detik) → hint penyebab. */
     private fun updateCaptureHint(capture: JSONObject?) {
         if (capture == null) return
         val frames = capture.optInt("framesCaptured", -1)
@@ -302,7 +450,6 @@ class PcStreamSessionActivity : ComponentActivity() {
         when {
             frames > 0 -> {
                 hostCaptureHint.value = null
-                // Meta tiap detik = jalur cadangan kalau gate sink terlewat.
                 firstFrameSeen = true
                 noVideoSignal.value = false
             }
@@ -327,10 +474,6 @@ class PcStreamSessionActivity : ComponentActivity() {
         }
     }
 
-    /**
-     * Pasang renderer sebagai sink lewat gate penanda frame pertama —
-     * dipanggil dari factory AndroidView (VideoStage).
-     */
     fun attachSessionSink(renderer: VideoSink) {
         viewer?.setVideoSink(object : VideoSink {
             override fun onFrame(frame: VideoFrame) {
@@ -344,8 +487,19 @@ class PcStreamSessionActivity : ComponentActivity() {
         })
     }
 
-    /** Tutup sesi saat ini dan mulai ulang dengan kredensial terakhir. */
     private fun restartSession() {
+        if (directModeActive.value) {
+            val ip = lastDirectIp
+            if (ip.isNotBlank()) {
+                startDirectConsoleSession(ip, lastDirectPort, lastDirectFps)
+            } else {
+                directClient?.close()
+                directClient = null
+                directModeActive.value = false
+                videoReady.value = false
+            }
+            return
+        }
         viewer?.close()
         viewer = null
         runCatching { eglBase?.release() }
@@ -372,18 +526,16 @@ class PcStreamSessionActivity : ComponentActivity() {
         }
     }
 
-    /** Keyboard fisik → Windows Virtual-Key (subset penuh teks pakai dialog keyboard). */
     override fun dispatchKeyEvent(event: KeyEvent): Boolean {
-        val streamViewer = viewer ?: return super.dispatchKeyEvent(event)
         if (!inputOpen.value) return super.dispatchKeyEvent(event)
         val vk = windowsVirtualKey(event.keyCode)
         if (vk == 0) return super.dispatchKeyEvent(event)
         when (event.action) {
             KeyEvent.ACTION_DOWN -> if (event.repeatCount == 0) {
-                streamViewer.sendInputPacket(XyHostInputCodec.key(vk, true))
+                dispatchKeyVk(vk, true)
             }
 
-            KeyEvent.ACTION_UP -> streamViewer.sendInputPacket(XyHostInputCodec.key(vk, false))
+            KeyEvent.ACTION_UP -> dispatchKeyVk(vk, false)
         }
         return true
     }
@@ -417,19 +569,29 @@ class PcStreamSessionActivity : ComponentActivity() {
         if (videoReady.value) VideoStage() else PairingStage()
     }
 
-    // ── Layar pairing ───────────────────────────────────────────────────────
+    // ── Layar pairing & pemilihan engine ────────────────────────────────────
 
     @Composable
     private fun PairingStage() {
+        var engineTab by remember { mutableIntStateOf(0) } // 0 = Engine Konsol UDP :4433, 1 = Hub WebRTC
+        var directHostIp by remember { mutableStateOf("") }
+        var directPortText by remember { mutableStateOf("4433") }
+        var directFpsIdx by remember { mutableIntStateOf(2) } // 0=60Hz, 1=90Hz, 2=120Hz
+        val fpsOptions = listOf(60, 90, 120)
+
         var hostId by remember { mutableStateOf("") }
         var pin by remember { mutableStateOf("") }
         val scroll = rememberScrollState()
         val state = sessionState.value
-        // pairingTimedOut: pairing menggantung — tombol Coba Lagi boleh dipakai
-        // (retryPair tidak butuh onboarding ulang).
         val busy = (state == XyHubSessionState.AUTHENTICATING ||
             state == XyHubSessionState.CONNECTING ||
             state == XyHubSessionState.PAIRING) && !pairingTimedOut.value
+
+        LaunchedEffect(engineTab) {
+            if (engineTab == 0 && discoveredHosts.value.isEmpty()) {
+                scanLanConsoleHosts()
+            }
+        }
 
         Column(
             modifier = Modifier
@@ -440,109 +602,229 @@ class PcStreamSessionActivity : ComponentActivity() {
                 .imePadding(),
         ) {
             Text(
-                xy("PC Stream — Host XyDesk", "PC Stream — XyDesk Host"),
+                xy("PC Stream & Engine Game FPS 120Hz", "PC Stream & 120Hz FPS Game Engine"),
                 style = MaterialTheme.typography.titleLarge,
                 color = MaterialTheme.colorScheme.onBackground,
             )
             Spacer(Modifier.height(4.dp))
             Text(
                 xy(
-                    "Tancap ke host XyDesk produksi lewat hub signaling. ID host 9 digit + PIN 6 digit dari aplikasi host.",
-                    "Plug into a production XyDesk host via the signaling hub. 9-digit host ID + 6-digit PIN from the host app.",
+                    "Streaming langsung sesi konsol fisik Windows (SM_REMOTESESSION=0 · bebas deteksi RDP) dengan injeksi SendInput RawInput 120Hz untuk game FPS.",
+                    "Stream the physical Windows console session directly (SM_REMOTESESSION=0 · zero RDP detection) with 120Hz SendInput RawInput injection for FPS games.",
                 ),
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
-            Spacer(Modifier.height(18.dp))
-            XyField(
-                value = hostId,
-                onValueChange = { hostId = it.filter(Char::isDigit).take(9) },
-                label = xy("ID Host (9 Digit)", "Host ID (9 Digits)"),
-                hint = xy("Contoh: 123456789", "Example: 123456789"),
-                keyboardType = KeyboardType.Number,
-            )
-            Spacer(Modifier.height(10.dp))
-            XyField(
-                value = pin,
-                onValueChange = { pin = it.filter(Char::isDigit).take(6) },
-                label = xy("PIN Pairing (6 Digit)", "Pairing PIN (6 Digits)"),
-                hint = xy("PIN 6 digit dari host XyDesk", "6-digit PIN from the XyDesk host"),
-                isPassword = true,
-                keyboardType = KeyboardType.NumberPassword,
-            )
-            Spacer(Modifier.height(18.dp))
-            XyPillButton(
-                text = xy(
-                    if (pairRejected.value != null || pairBlockedSeconds.value != null) "Coba Lagi" else "Sambungkan",
-                    if (pairRejected.value != null || pairBlockedSeconds.value != null) "Try Again" else "Connect",
+            Spacer(Modifier.height(14.dp))
+            XySegmented(
+                options = listOf(
+                    xy("Konsol UDP :4433 (Non-RDP)", "Console UDP :4433 (Non-RDP)"),
+                    xy("Hub WebRTC (9 Digit)", "WebRTC Hub (9 Digits)"),
                 ),
-                onClick = {
-                    failure.value = null
-                    pairRejected.value = null
-                    pairBlockedSeconds.value = null
-                    pairingTimedOut.value = false
-                    startSession(hostId, pin)
-                },
-                enabled = hostId.length == 9 && pin.length == 6 && !busy,
-                icon = XyIcons.Monitor,
+                selectedIndex = engineTab,
+                onSelect = { engineTab = it },
                 modifier = Modifier.fillMaxWidth(),
             )
-            state?.let { current ->
-                Spacer(Modifier.height(14.dp))
+            Spacer(Modifier.height(16.dp))
+
+            if (engineTab == 0) {
                 Text(
-                    stateLabel(current),
+                    xy(
+                        "Jalankan XyDeskRemoteHost-Standalone.exe di PC Windows Anda. Engine ini menangkap layar konsol fisik (SM_REMOTESESSION=0), audio WASAPI, dan mouse relatif 360° langsung lewat UDP :4433 tanpa RDP.",
+                        "Run XyDeskRemoteHost-Standalone.exe on your Windows PC. This engine captures the physical console screen (SM_REMOTESESSION=0), WASAPI audio, and 360° relative mouse directly over UDP :4433 without RDP.",
+                    ),
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
-            }
-            pairRejected.value?.let { reason ->
-                Spacer(Modifier.height(6.dp))
+                Spacer(Modifier.height(12.dp))
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Text(
+                        xy("PC Terdeteksi di LAN / Tailscale", "Detected PCs on LAN / Tailscale"),
+                        style = MaterialTheme.typography.labelMedium,
+                        color = MaterialTheme.colorScheme.primary,
+                    )
+                    TextButton(onClick = { scanLanConsoleHosts() }, enabled = !scanningLan.value) {
+                        Text(
+                            if (scanningLan.value) xy("Memindai...", "Scanning...")
+                            else xy("Pindai Ulang", "Rescan"),
+                        )
+                    }
+                }
+                if (discoveredHosts.value.isNotEmpty()) {
+                    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                        discoveredHosts.value.forEach { h ->
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .clip(RoundedCornerShape(10.dp))
+                                    .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f))
+                                    .border(1.dp, MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(10.dp))
+                                    .clickable {
+                                        directHostIp = h.ip
+                                        directPortText = h.quicPort.toString()
+                                    }
+                                    .padding(horizontal = 12.dp, vertical = 10.dp),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically,
+                            ) {
+                                Column(Modifier.weight(1f)) {
+                                    Text(
+                                        "${h.hostname} · ${h.ip}:${h.quicPort}",
+                                        style = MaterialTheme.typography.titleSmall,
+                                        color = MaterialTheme.colorScheme.onSurface,
+                                    )
+                                    Text(
+                                        "${h.gpu} (${h.encoder}) · Non-RDP Console Ready",
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    )
+                                }
+                                Text(
+                                    xy("Pilih", "Select"),
+                                    style = MaterialTheme.typography.labelMedium,
+                                    color = MaterialTheme.colorScheme.primary,
+                                )
+                            }
+                        }
+                    }
+                    Spacer(Modifier.height(10.dp))
+                }
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    XyField(
+                        value = directHostIp,
+                        onValueChange = { directHostIp = it.trim() },
+                        label = xy("IP PC / Tailscale (Contoh: 192.168.1.10 / 100.x.y.z)", "PC / Tailscale IP (e.g. 192.168.1.10 / 100.x.y.z)"),
+                        hint = "192.168.1.10",
+                        modifier = Modifier.weight(1.5f),
+                    )
+                    XyField(
+                        value = directPortText,
+                        onValueChange = { directPortText = it.filter(Char::isDigit).take(5) },
+                        label = xy("Port UDP", "UDP Port"),
+                        hint = "4433",
+                        keyboardType = KeyboardType.Number,
+                        modifier = Modifier.weight(0.7f),
+                    )
+                }
+                Spacer(Modifier.height(12.dp))
                 Text(
-                    xy("Pairing ditolak: ", "Pairing rejected: ") + (reason.ifBlank { "-" }),
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.error,
+                    xy("Target Refresh & Frame Rate Konsol", "Target Console Refresh & Frame Rate"),
+                    style = MaterialTheme.typography.labelMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
-            }
-            if (pairingTimedOut.value) {
                 Spacer(Modifier.height(6.dp))
-                Text(
-                    xy(
-                        "Host tidak merespons pairing. Pastikan aplikasi host XyDesk aktif di PC, lalu coba lagi.",
-                        "Host is not responding to pairing. Make sure the XyDesk host app is running on the PC, then try again.",
+                XySegmented(
+                    options = fpsOptions.map { "$it FPS / Hz" },
+                    selectedIndex = directFpsIdx,
+                    onSelect = { directFpsIdx = it },
+                    modifier = Modifier.fillMaxWidth(),
+                )
+                Spacer(Modifier.height(18.dp))
+                XyPillButton(
+                    text = xy("Mulai Stream Konsol Non-RDP (120Hz)", "Start Non-RDP Console Stream (120Hz)"),
+                    onClick = {
+                        val p = directPortText.toIntOrNull()?.coerceIn(1, 65535) ?: 4433
+                        startDirectConsoleSession(directHostIp, p, fpsOptions[directFpsIdx])
+                    },
+                    enabled = directHostIp.isNotBlank(),
+                    icon = XyIcons.Monitor,
+                    modifier = Modifier.fillMaxWidth(),
+                )
+            } else {
+                XyField(
+                    value = hostId,
+                    onValueChange = { hostId = it.filter(Char::isDigit).take(9) },
+                    label = xy("ID Host (9 Digit)", "Host ID (9 Digits)"),
+                    hint = xy("Contoh: 123456789", "Example: 123456789"),
+                    keyboardType = KeyboardType.Number,
+                )
+                Spacer(Modifier.height(10.dp))
+                XyField(
+                    value = pin,
+                    onValueChange = { pin = it.filter(Char::isDigit).take(6) },
+                    label = xy("PIN Pairing (6 Digit)", "Pairing PIN (6 Digits)"),
+                    hint = xy("PIN 6 digit dari host XyDesk", "6-digit PIN from the XyDesk host"),
+                    isPassword = true,
+                    keyboardType = KeyboardType.NumberPassword,
+                )
+                Spacer(Modifier.height(18.dp))
+                XyPillButton(
+                    text = xy(
+                        if (pairRejected.value != null || pairBlockedSeconds.value != null) "Coba Lagi" else "Sambungkan",
+                        if (pairRejected.value != null || pairBlockedSeconds.value != null) "Try Again" else "Connect",
                     ),
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.error,
+                    onClick = {
+                        failure.value = null
+                        pairRejected.value = null
+                        pairBlockedSeconds.value = null
+                        pairingTimedOut.value = false
+                        startSession(hostId, pin)
+                    },
+                    enabled = hostId.length == 9 && pin.length == 6 && !busy,
+                    icon = XyIcons.Monitor,
+                    modifier = Modifier.fillMaxWidth(),
                 )
-            }
-            pairBlockedSeconds.value?.let { seconds ->
-                Spacer(Modifier.height(6.dp))
-                Text(
-                    xy(
-                        "Terlalu banyak percobaan PIN salah. Tunggu ±${seconds / 60} menit ${seconds % 60} detik.",
-                        "Too many wrong PIN attempts. Wait about ${seconds / 60}m ${seconds % 60}s.",
-                    ),
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.error,
-                )
-            }
-            failure.value?.let { message ->
-                Spacer(Modifier.height(6.dp))
-                Text(
-                    xy("Gagal: ", "Failed: ") + message,
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.error,
-                )
-            }
-            if (sessionEnded.value) {
-                Spacer(Modifier.height(6.dp))
-                Text(
-                    xy(
-                        "Sesi sudah berakhir — tutup dan buka lagi.",
-                        "Session already ended — close and reopen.",
-                    ),
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.error,
-                )
+                state?.let { current ->
+                    Spacer(Modifier.height(14.dp))
+                    Text(
+                        stateLabel(current),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+                pairRejected.value?.let { reason ->
+                    Spacer(Modifier.height(6.dp))
+                    Text(
+                        xy("Pairing ditolak: ", "Pairing rejected: ") + (reason.ifBlank { "-" }),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.error,
+                    )
+                }
+                if (pairingTimedOut.value) {
+                    Spacer(Modifier.height(6.dp))
+                    Text(
+                        xy(
+                            "Host tidak merespons pairing. Pastikan aplikasi host XyDesk aktif di PC, lalu coba lagi.",
+                            "Host is not responding to pairing. Make sure the XyDesk host app is running on the PC, then try again.",
+                        ),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.error,
+                    )
+                }
+                pairBlockedSeconds.value?.let { seconds ->
+                    Spacer(Modifier.height(6.dp))
+                    Text(
+                        xy(
+                            "Terlalu banyak percobaan PIN salah. Tunggu ±${seconds / 60} menit ${seconds % 60} detik.",
+                            "Too many wrong PIN attempts. Wait about ${seconds / 60}m ${seconds % 60}s.",
+                        ),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.error,
+                    )
+                }
+                failure.value?.let { message ->
+                    Spacer(Modifier.height(6.dp))
+                    Text(
+                        xy("Gagal: ", "Failed: ") + message,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.error,
+                    )
+                }
+                if (sessionEnded.value) {
+                    Spacer(Modifier.height(6.dp))
+                    Text(
+                        xy(
+                            "Sesi sudah berakhir — tutup dan buka lagi.",
+                            "Session already ended — close and reopen.",
+                        ),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.error,
+                    )
+                }
             }
             Spacer(Modifier.height(18.dp))
             XyPillButton(
@@ -566,7 +848,7 @@ class PcStreamSessionActivity : ComponentActivity() {
         XyHubSessionState.FAILED -> xy("Sesi gagal.", "Session failed.")
     }
 
-    // ── Layar video + overlay input ─────────────────────────────────────────
+    // ── Layar video + overlay input + Mode Game FPS ─────────────────────────
 
     @Composable
     private fun VideoStage() {
@@ -574,32 +856,44 @@ class PcStreamSessionActivity : ComponentActivity() {
         var showTextDialog by remember { mutableStateOf(false) }
         var padOpen by remember { mutableStateOf(false) }
         var showVdDialog by remember { mutableStateOf(false) }
+        val isFps = fpsGameMode.value
         Box(modifier = Modifier.fillMaxSize().background(Color.Black)) {
-            val egl = eglBase
-            if (egl != null) {
-                AndroidView(
-                    modifier = Modifier.fillMaxSize(),
-                    factory = { context ->
-                        SurfaceViewRenderer(context).apply {
-                            init(egl.eglBaseContext, null)
-                            setMirror(false)
-                            setEnableHardwareScaler(true)
-                            activity.attachSessionSink(this)
-                        }
-                    },
-                    onRelease = { renderer ->
-                        activity.viewer?.setVideoSink(null)
-                        runCatching { renderer.release() }
-                    },
-                )
+            if (directModeActive.value) {
+                val bmp = directFrame.value
+                if (bmp != null) {
+                    Image(
+                        bitmap = bmp.asImageBitmap(),
+                        contentDescription = null,
+                        contentScale = ContentScale.Fit,
+                        modifier = Modifier.fillMaxSize(),
+                    )
+                }
+            } else {
+                val egl = eglBase
+                if (egl != null) {
+                    AndroidView(
+                        modifier = Modifier.fillMaxSize(),
+                        factory = { context ->
+                            SurfaceViewRenderer(context).apply {
+                                init(egl.eglBaseContext, null)
+                                setMirror(false)
+                                setEnableHardwareScaler(true)
+                                activity.attachSessionSink(this)
+                            }
+                        },
+                        onRelease = { renderer ->
+                            activity.viewer?.setVideoSink(null)
+                            runCatching { renderer.release() }
+                        },
+                    )
+                }
             }
 
-            // Area sentuh = touchpad mouse: geser gerak kursor, tap klik kiri,
-            // double-tap klik ganda, tekan-tahan klik kanan.
+            // Area sentuh utama: geser gerak kamera/kursor (1.75x saat Mode Game FPS)
             Box(
                 modifier = Modifier
                     .fillMaxSize()
-                    .pointerInput(Unit) {
+                    .pointerInput(isFps) {
                         detectTapGestures(
                             onTap = { clickButton(XyHostMouseButton.LEFT) },
                             onDoubleTap = {
@@ -609,22 +903,79 @@ class PcStreamSessionActivity : ComponentActivity() {
                             onLongPress = { clickButton(XyHostMouseButton.RIGHT) },
                         )
                     }
-                    .pointerInput(Unit) {
+                    .pointerInput(isFps) {
                         detectDragGestures { change, drag ->
                             change.consume()
-                            val dx = drag.x.toInt()
-                            val dy = drag.y.toInt()
+                            val mult = if (isFps) 1.75f else 1.0f
+                            val dx = (drag.x * mult).roundToInt()
+                            val dy = (drag.y * mult).roundToInt()
                             if (dx != 0 || dy != 0) {
-                                viewer?.sendInputPacket(XyHostInputCodec.mouseMoveRel(dx, dy))
+                                dispatchMouseRel(dx, dy)
                             }
                         }
                     },
             )
 
-            // Strip scroll di kanan (ala touchpad laptop).
+            // Crosshair tengah presisi saat Mode Game FPS aktif
+            if (isFps) {
+                Box(
+                    modifier = Modifier
+                        .align(Alignment.Center)
+                        .size(18.dp),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Box(Modifier.width(12.dp).height(1.5.dp).background(Color(0xCC3DD68C)))
+                    Box(Modifier.width(1.5.dp).height(12.dp).background(Color(0xCC3DD68C)))
+                }
+
+                // Kluster WASD + Sprint/Crouch di kiri bawah untuk Game FPS
+                Column(
+                    modifier = Modifier
+                        .align(Alignment.BottomStart)
+                        .padding(start = 16.dp, bottom = 54.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.spacedBy(6.dp),
+                ) {
+                    Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                        VkHoldButton("SHIFT", VK_SHIFT)
+                        VkHoldButton("W", VK_W)
+                        VkHoldButton("R", VK_R)
+                    }
+                    Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                        VkHoldButton("A", VK_A)
+                        VkHoldButton("S", VK_S)
+                        VkHoldButton("D", VK_D)
+                    }
+                    Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                        VkHoldButton("CTRL", VK_CONTROL)
+                        VkHoldButton("SPACE", VK_SPACE)
+                        VkHoldButton("ESC", VK_ESCAPE)
+                    }
+                }
+
+                // Tombol Tembak (LMB) & Scope/ADS (RMB) di kanan bawah
+                Column(
+                    modifier = Modifier
+                        .align(Alignment.BottomEnd)
+                        .padding(end = 18.dp, bottom = 58.dp),
+                    horizontalAlignment = Alignment.End,
+                    verticalArrangement = Arrangement.spacedBy(10.dp),
+                ) {
+                    HoldButton(
+                        label = xy("SCOPE (RMB)", "SCOPE (RMB)"),
+                        button = XyHostMouseButton.RIGHT,
+                    )
+                    HoldButton(
+                        label = xy("TEMBAK (LMB)", "FIRE (LMB)"),
+                        button = XyHostMouseButton.LEFT,
+                    )
+                }
+            }
+
+            // Strip scroll di kanan
             Box(
                 modifier = Modifier
-                    .width(56.dp)
+                    .width(42.dp)
                     .fillMaxSize()
                     .align(Alignment.CenterEnd)
                     .pointerInput(Unit) {
@@ -632,7 +983,7 @@ class PcStreamSessionActivity : ComponentActivity() {
                             change.consume()
                             val steps = (amount / 24f).toInt()
                             if (steps != 0) {
-                                viewer?.sendInputPacket(XyHostInputCodec.scroll(0, steps * SCROLL_UNIT))
+                                dispatchScroll(steps * SCROLL_UNIT)
                             }
                         }
                     },
@@ -643,27 +994,46 @@ class PcStreamSessionActivity : ComponentActivity() {
                 modifier = Modifier
                     .align(Alignment.BottomCenter)
                     .fillMaxWidth()
-                    .background(Color(0x66000000))
+                    .background(Color(0x88000000))
                     .padding(horizontal = 12.dp, vertical = 6.dp),
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 Text(
                     text = buildString {
-                        append(
-                            when {
-                                noVideoSignal.value -> xy("TANPA GAMBAR", "NO VIDEO")
-                                mediaConnected.value -> xy("TERHUBUNG", "CONNECTED")
-                                videoReady.value -> xy("MENGHUBUNGKAN…", "CONNECTING…")
-                                else -> xy("MENUNGGU…", "WAITING…")
-                            },
-                        )
-                        if (inputOpen.value) append(" · " + xy("INPUT AKTIF", "INPUT LIVE"))
+                        if (directModeActive.value) {
+                            append(
+                                if (mediaConnected.value) {
+                                    if (directNonRdpVerified.value) "CONSOLE SM_REMOTESESSION=0"
+                                    else "UDP :4433 LIVE"
+                                } else {
+                                    directStatus.value ?: xy("MENUNGGU HOST :4433…", "WAITING FOR HOST :4433…")
+                                },
+                            )
+                            if (directHostFps.intValue > 0) append(" · ${directHostFps.intValue} FPS")
+                        } else {
+                            append(
+                                when {
+                                    noVideoSignal.value -> xy("TANPA GAMBAR", "NO VIDEO")
+                                    mediaConnected.value -> xy("TERHUBUNG", "CONNECTED")
+                                    videoReady.value -> xy("MENGHUBUNGKAN…", "CONNECTING…")
+                                    else -> xy("MENUNGGU…", "WAITING…")
+                                },
+                            )
+                            if (inputOpen.value) append(" · " + xy("INPUT 120Hz", "120Hz INPUT"))
+                        }
                     },
                     style = MaterialTheme.typography.labelSmall,
+                    fontFamily = FontFamily.Monospace,
                     color = Color.White,
                 )
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    XyPillButton(
+                        text = if (isFps) "FPS 360° ✓" else "FPS 360°",
+                        onClick = { fpsGameMode.value = !isFps },
+                        primary = isFps,
+                        compact = true,
+                    )
                     HoldButton(
                         label = xy("KIRI", "LEFT"),
                         button = XyHostMouseButton.LEFT,
@@ -672,18 +1042,20 @@ class PcStreamSessionActivity : ComponentActivity() {
                         label = xy("KANAN", "RIGHT"),
                         button = XyHostMouseButton.RIGHT,
                     )
-                    XyPillButton(
-                        text = xy("PAD", "PAD"),
-                        onClick = { padOpen = !padOpen },
-                        primary = false,
-                        compact = true,
-                    )
-                    XyPillButton(
-                        text = "VD",
-                        onClick = { showVdDialog = true },
-                        primary = false,
-                        compact = true,
-                    )
+                    if (!directModeActive.value) {
+                        XyPillButton(
+                            text = xy("PAD", "PAD"),
+                            onClick = { padOpen = !padOpen },
+                            primary = false,
+                            compact = true,
+                        )
+                        XyPillButton(
+                            text = "VD",
+                            onClick = { showVdDialog = true },
+                            primary = false,
+                            compact = true,
+                        )
+                    }
                     XyPillButton(
                         text = xy("TEKS", "TEXT"),
                         onClick = { showTextDialog = true },
@@ -693,6 +1065,7 @@ class PcStreamSessionActivity : ComponentActivity() {
                     XyPillButton(
                         text = xy("TUTUP", "EXIT"),
                         onClick = {
+                            directClient?.close()
                             viewer?.stop()
                             finish()
                         },
@@ -702,7 +1075,6 @@ class PcStreamSessionActivity : ComponentActivity() {
                 }
             }
 
-            // Anti-black-screen: track siap tapi frame tidak pernah datang.
             if (noVideoSignal.value) {
                 Column(
                     modifier = Modifier
@@ -712,31 +1084,47 @@ class PcStreamSessionActivity : ComponentActivity() {
                     horizontalAlignment = Alignment.CenterHorizontally,
                 ) {
                     Text(
-                        xy(
-                            "Tidak ada gambar dari host",
-                            "No video from host",
-                        ),
+                        xy("Tidak ada gambar dari host", "No video from host"),
                         style = MaterialTheme.typography.titleSmall,
                         color = Color.White,
                     )
                     Spacer(Modifier.height(4.dp))
                     Text(
-                        hostCaptureHint.value ?: xy(
-                            "Koneksi tersambung tetapi frame tidak pernah sampai. " +
-                                "Biasanya encoder host gagal atau PC headless tanpa virtual display.",
-                            "Connection is up but frames never arrive. Usually the host encoder " +
-                                "failed, or a headless PC without virtual display.",
-                        ),
+                        if (directModeActive.value) {
+                            xy(
+                                "Pastikan XyDeskRemoteHost-Standalone.exe berjalan di sesi konsol PC dan port UDP 4433 terbuka di jaringan/Tailscale.",
+                                "Make sure XyDeskRemoteHost-Standalone.exe is running on the PC console session and UDP port 4433 is reachable on LAN/Tailscale.",
+                            )
+                        } else {
+                            hostCaptureHint.value ?: xy(
+                                "Koneksi tersambung tetapi frame tidak pernah sampai. Biasanya encoder host gagal atau PC headless tanpa virtual display.",
+                                "Connection is up but frames never arrive. Usually the host encoder failed, or a headless PC without virtual display.",
+                            )
+                        },
                         style = MaterialTheme.typography.bodySmall,
                         color = Color(0xFFBDBDBD),
                     )
                     Spacer(Modifier.height(12.dp))
-                    XyPillButton(
-                        text = xy("SAMBUNG ULANG", "RECONNECT"),
-                        onClick = { restartSession() },
-                        primary = false,
-                        compact = true,
-                    )
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        XyPillButton(
+                            text = xy("SAMBUNG ULANG", "RECONNECT"),
+                            onClick = { restartSession() },
+                            primary = false,
+                            compact = true,
+                        )
+                        XyPillButton(
+                            text = xy("KEMBALI", "BACK"),
+                            onClick = {
+                                directClient?.close()
+                                directClient = null
+                                directModeActive.value = false
+                                videoReady.value = false
+                                disarmFirstFrameWatchdog()
+                            },
+                            primary = false,
+                            compact = true,
+                        )
+                    }
                 }
             }
 
@@ -784,7 +1172,15 @@ class PcStreamSessionActivity : ComponentActivity() {
                 TextInputDialog(
                     onSend = { value ->
                         if (value.isNotEmpty()) {
-                            viewer?.sendInputPacket(XyHostInputCodec.text(value))
+                            if (directModeActive.value) {
+                                value.forEach { ch ->
+                                    val code = ch.uppercaseChar().code
+                                    dispatchKeyVk(code, true)
+                                    dispatchKeyVk(code, false)
+                                }
+                            } else {
+                                viewer?.sendInputPacket(XyHostInputCodec.text(value))
+                            }
                         }
                         showTextDialog = false
                     },
@@ -794,24 +1190,60 @@ class PcStreamSessionActivity : ComponentActivity() {
         }
     }
 
-    /** Tombol tekan-tahan (drag = tahan klik) untuk tombol mouse. */
+    /** Tombol tekan-tahan untuk tombol mouse (LMB Tembak / RMB Scope). */
     @Composable
     private fun HoldButton(label: String, button: XyHostMouseButton) {
         Box(
             modifier = Modifier
-                .background(Color(0x33FFFFFF), RoundedCornerShape(16.dp))
+                .background(Color(0x44FFFFFF), RoundedCornerShape(16.dp))
+                .border(1.dp, Color(0x66FFFFFF), RoundedCornerShape(16.dp))
                 .pointerInput(button) {
                     detectTapGestures(
                         onPress = {
-                            viewer?.sendInputPacket(XyHostInputCodec.mouseButton(button.code, true))
+                            dispatchMouseButton(button, true)
                             tryAwaitRelease()
-                            viewer?.sendInputPacket(XyHostInputCodec.mouseButton(button.code, false))
+                            dispatchMouseButton(button, false)
                         },
                     )
                 }
                 .padding(horizontal = 14.dp, vertical = 8.dp),
         ) {
-            Text(label, style = MaterialTheme.typography.labelSmall, color = Color.White)
+            Text(
+                label,
+                style = MaterialTheme.typography.labelSmall,
+                fontWeight = FontWeight.SemiBold,
+                color = Color.White,
+            )
+        }
+    }
+
+    /** Tombol tekan-tahan Virtual-Key untuk WASD / Space / Shift / Ctrl / Reload di Mode Game FPS. */
+    @Composable
+    private fun VkHoldButton(label: String, vk: Int) {
+        Box(
+            modifier = Modifier
+                .size(width = 48.dp, height = 40.dp)
+                .clip(CircleShape)
+                .background(Color(0x40000000))
+                .border(1.dp, Color(0x777C9EFF), CircleShape)
+                .pointerInput(vk) {
+                    detectTapGestures(
+                        onPress = {
+                            dispatchKeyVk(vk, true)
+                            tryAwaitRelease()
+                            dispatchKeyVk(vk, false)
+                        },
+                    )
+                },
+            contentAlignment = Alignment.Center,
+        ) {
+            Text(
+                label,
+                fontSize = 10.sp,
+                fontWeight = FontWeight.Bold,
+                fontFamily = FontFamily.Monospace,
+                color = Color.White,
+            )
         }
     }
 
@@ -838,13 +1270,6 @@ class PcStreamSessionActivity : ComponentActivity() {
         )
     }
 
-    /**
-     * Pilih mode Virtual Display Adapter host (opcode `0x10`) — untuk mesin
-     * headless (cloud PC / VPS) yang tidak punya monitor fisik. Preset
-     * sengaja sedikit dan mengikuti matriks resmi host; status balasan
-     * host muncul sebagai notice di atas layar. Driver tidak dipasang dari
-     * sesi remote — bila belum terpasang, host menjawab `notInstalled`.
-     */
     @Composable
     private fun VirtualDisplayDialog(
         onPick: (width: Int, height: Int, hz: Int) -> Unit,
@@ -880,24 +1305,20 @@ class PcStreamSessionActivity : ComponentActivity() {
     }
 
     private fun clickButton(button: XyHostMouseButton) {
-        viewer?.sendInputPacket(XyHostInputCodec.mouseButton(button.code, true))
-        viewer?.sendInputPacket(XyHostInputCodec.mouseButton(button.code, false))
+        dispatchMouseButton(button, true)
+        dispatchMouseButton(button, false)
     }
 
     companion object {
-        /** Satu langkah roda = 1 unit WHEEL_DELTA (120) di codec. */
         private const val SCROLL_UNIT = 120
-
-        /** Batas tunggu frame pertama (ms) sebelum UI menyatakan tanpa sinyal. */
         private const val FIRST_FRAME_TIMEOUT_MS = 15_000L
-
-        /** Batas tunggu jawaban pairing dari host (ms). */
         private const val PAIRING_TIMEOUT_MS = 25_000L
 
-        // Subset Windows Virtual-Key yang dipetakan dari keyCode Android.
         private const val VK_BACK = 0x08
         private const val VK_TAB = 0x09
         private const val VK_ENTER = 0x0D
+        private const val VK_SHIFT = 0x10
+        private const val VK_CONTROL = 0x11
         private const val VK_ESCAPE = 0x1B
         private const val VK_SPACE = 0x20
         private const val VK_LEFT = 0x25
@@ -907,6 +1328,10 @@ class PcStreamSessionActivity : ComponentActivity() {
         private const val VK_0 = 0x30
         private const val VK_1 = 0x31
         private const val VK_A = 0x41
+        private const val VK_D = 0x44
+        private const val VK_R = 0x52
+        private const val VK_S = 0x53
+        private const val VK_W = 0x57
         private const val VK_DELETE = 0x2E
 
         fun intent(context: Context): Intent = Intent(context, PcStreamSessionActivity::class.java)

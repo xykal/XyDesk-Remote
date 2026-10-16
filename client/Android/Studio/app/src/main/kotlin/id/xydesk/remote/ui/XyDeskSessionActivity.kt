@@ -580,9 +580,12 @@ class XyDeskSessionActivity : ComponentActivity() {
     private fun requestPreferredRefreshRate(profile: ConnectionProfile) {
         runCatching {
             val options = RdpOptions.of(this, profile.id)
-            applyPreferredDisplayRefreshRate(
-                requestedHz = if (options.pcConnectMode) options.pcTargetFps else null,
-            )
+            val hz = if (options.pcConnectMode) {
+                options.pcTargetFps
+            } else {
+                options.targetFps.takeIf { it > 60 }
+            }
+            applyPreferredDisplayRefreshRate(requestedHz = hz)
         }.onFailure { error ->
             Log.w(TAG, "could not read display refresh preference; using system default", error)
         }
@@ -602,10 +605,16 @@ class XyDeskSessionActivity : ComponentActivity() {
             val preferred = RefreshRatePolicy.choose(requestedHz, rates)
                 ?: display.refreshRate.takeIf { it.isFinite() && it > 0f }
                 ?: return
-            window.attributes = window.attributes.apply { preferredRefreshRate = preferred }
+            val bestMode = modes.minByOrNull { kotlin.math.abs(it.refreshRate - preferred) }
+            window.attributes = window.attributes.apply {
+                preferredRefreshRate = preferred
+                if (bestMode != null) {
+                    preferredDisplayModeId = bestMode.modeId
+                }
+            }
             ConnectionLog.add(
                 "SES: local display refresh requested=${requestedHz ?: "max"}Hz " +
-                    "selected=${preferred}Hz supported=${rates.sorted().joinToString()}Hz",
+                    "selected=${preferred}Hz modeId=${bestMode?.modeId ?: -1} supported=${rates.sorted().joinToString()}Hz",
             )
         }.onFailure { error ->
             Log.w(TAG, "display refresh preference unavailable; using system default", error)

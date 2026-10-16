@@ -98,8 +98,9 @@ class XyHostInputCodecTest {
     }
 
     @Test
-    fun `video fps hanya 30 atau 60`() {
+    fun `video fps 30 60 90 atau 120`() {
         assertArrayEquals(byteArrayOf(0x0F, 60), XyHostInputCodec.videoFps(60))
+        assertArrayEquals(byteArrayOf(0x0F, 120), XyHostInputCodec.videoFps(120))
         assertThrows<IllegalArgumentException> { XyHostInputCodec.videoFps(45) }
     }
 

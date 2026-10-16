@@ -343,18 +343,9 @@ public class SessionInputManager
 	private void sendDelayedMoveEvent(int x, int y)
 	{
 		if (handler.hasMessages(MSG_SEND_MOVE_EVENT))
-		{
 			handler.removeMessages(MSG_SEND_MOVE_EVENT);
-			discardedMoveEvents++;
-		}
-		else
-			discardedMoveEvents = 0;
-
-		if (discardedMoveEvents > MAX_DISCARDED_MOVE_EVENTS)
-			sendCursorEvent(x, y, Mouse.getMoveEvent());
-		else
-			handler.sendMessageDelayed(Message.obtain(null, MSG_SEND_MOVE_EVENT, x, y),
-			                           SEND_MOVE_EVENT_TIMEOUT);
+		discardedMoveEvents = 0;
+		sendCursorEvent(x, y, Mouse.getMoveEvent());
 	}
 
 	private void cancelDelayedMoveEvent()

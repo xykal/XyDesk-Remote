@@ -1593,16 +1593,43 @@ fun AddDeviceScreen(
                 )
                 Spacer(Modifier.height(8.dp))
                 Text(
+                    xy("Target FPS & Refresh Layar HP (Game 120Hz)", "Target FPS & Display Refresh (120Hz Gaming)"),
+                    style = MaterialTheme.typography.titleSmall,
+                )
+                Spacer(Modifier.height(6.dp))
+                val rdpFpsValues = listOf(30, 60, 90, 120)
+                XySegmented(
+                    options = rdpFpsValues.map { "$it Hz" },
+                    selectedIndex = rdpFpsValues.indexOf(options.targetFps).coerceAtLeast(1),
+                    onSelect = { idx ->
+                        val picked = rdpFpsValues[idx]
+                        options = options.copy(
+                            targetFps = picked,
+                            pcTargetFps = picked,
+                        )
+                    },
+                    modifier = Modifier.fillMaxWidth(),
+                )
+                Spacer(Modifier.height(6.dp))
+                XyToggleRow(
+                    title = xy("Mouse Relatif RawInput (Rotasi 360° Game FPS)", "RawInput Relative Mouse (360° FPS Camera)"),
+                    checked = options.rawInputMouse,
+                    onCheckedChange = { options = options.copy(rawInputMouse = it) },
+                    leading = XyIcons.Sliders,
+                )
+                Spacer(Modifier.height(8.dp))
+                Text(
                     xy("Loop respons engine (max-loop-time)", "Engine response loop (max-loop-time)"),
                     style = MaterialTheme.typography.titleSmall,
                 )
                 Spacer(Modifier.height(6.dp))
-                val loopValues = listOf(0, 25, 50)
+                val loopValues = listOf(0, 2, 5, 25)
                 XySegmented(
                     options = listOf(
                         xy("Default", "Default"),
+                        "2 ms (120Hz)",
+                        "5 ms",
                         "25 ms",
-                        "50 ms",
                     ),
                     selectedIndex = loopValues.indexOf(options.responsiveLoopMs).coerceAtLeast(0),
                     onSelect = {

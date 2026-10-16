@@ -1388,6 +1388,12 @@ private fun DevicesScreen(
                                     onClick = onCreateRdp,
                                     modifier = Modifier.height(36.dp),
                                 )
+                                XyPillButton(
+                                    text = xy("PC Stream", "PC Stream"),
+                                    onClick = onOpenPcStream,
+                                    primary = false,
+                                    modifier = Modifier.height(36.dp),
+                                )
                             }
                         }
                     }
@@ -1496,11 +1502,11 @@ private fun DevicesScreen(
                     },
                 )
                 XyRow(
-                    title = xy("PC Stream — Host XyDesk (ID & PIN)", "PC Stream — XyDesk Host (ID & PIN)"),
+                    title = xy("PC Stream & Engine Konsol Non-RDP (120Hz)", "PC Stream & Non-RDP Console Engine (120Hz)"),
                     modifier = Modifier.padding(horizontal = 2.dp),
                     trailing = {
                         Text(
-                            xy("Baru", "New"),
+                            xy("120Hz", "120Hz"),
                             style = MaterialTheme.typography.labelSmall,
                             color = MaterialTheme.colorScheme.primary,
                             maxLines = 1,

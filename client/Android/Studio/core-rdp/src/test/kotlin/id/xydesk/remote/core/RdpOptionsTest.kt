@@ -122,6 +122,9 @@ class RdpOptionsTest {
         assertTrue(ultra.fontSmoothing)
         assertTrue(!ultra.visualThemes)
         assertEquals(24, ultra.colorDepth)
+        assertEquals(120, ultra.targetFps)
+        assertEquals(1, ultra.frameAck)
+        assertEquals(2, ultra.responsiveLoopMs)
         assertEquals("AVC420", ultra.activeCodecLabel())
 
         val highVis = ultra.withStreamProfile(XyStreamProfile.HIGH_VISUAL)
