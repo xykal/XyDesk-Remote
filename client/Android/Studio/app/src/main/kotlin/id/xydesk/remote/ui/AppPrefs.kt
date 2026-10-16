@@ -44,7 +44,11 @@ class AppPrefs(context: Context) {
         get() = sp.getBoolean(KEY_KEEP_ALIVE, true)
         set(v) = sp.edit().putBoolean(KEY_KEEP_ALIVE, v).apply()
 
-    /** Tampilan daftar perangkat: false = list, true = grid 2 kolom. */
+    /**
+     * Tampilan daftar perangkat di Home (permintaan pemilik 2026-10-16):
+     * false = list ringkas, true = kartu besar SATU kolom (bukan grid 2).
+     * Key lama "device_grid_mode" dipertahankan supaya pilihan user bertahan.
+     */
     var deviceGridMode: Boolean
         get() = sp.getBoolean("device_grid_mode", false)
         set(v) = sp.edit().putBoolean("device_grid_mode", v).apply()

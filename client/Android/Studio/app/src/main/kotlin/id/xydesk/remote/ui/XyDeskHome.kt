@@ -854,7 +854,11 @@ private fun LiveSessionsCard() {
     var confirmKill by remember { mutableStateOf<XySessionRegistry.Live?>(null) }
     LaunchedEffect(Unit) {
         while (true) {
-            live = XySessionRegistry.list()
+            // Update state hanya kalau isi benar-benar berubah — instance Live
+            // stabil di registry, jadi polling 1.5 detik tidak memicu
+            // recomposition sia-sia saat tidak ada sesi baru/mati.
+            val next = XySessionRegistry.list()
+            if (next != live) live = next
             kotlinx.coroutines.delay(1_500)
         }
     }
@@ -1180,7 +1184,7 @@ private fun DevicesScreen(
     var searchQuery by remember { mutableStateOf("") }
     var modeFilterIndex by remember { mutableStateOf(0) } // 0 = Semua, 1 = Koneksi PC, 2 = Koneksi RDP
     val devicesPrefs = remember { AppPrefs(context) }
-    var gridMode by remember { mutableStateOf(devicesPrefs.deviceGridMode) }
+    var bigCards by remember { mutableStateOf(devicesPrefs.deviceGridMode) }
     var showAddBubble by remember { mutableStateOf(false) }
     var showPcConnectionNotice by remember { mutableStateOf(true) }
 
@@ -1238,12 +1242,12 @@ private fun DevicesScreen(
                     XyIconPill(
                         XyIcons.Grid,
                         {
-                            gridMode = !gridMode
-                            devicesPrefs.deviceGridMode = gridMode
+                            bigCards = !bigCards
+                            devicesPrefs.deviceGridMode = bigCards
                         },
-                        active = gridMode,
+                        active = bigCards,
                         flat = true,
-                        contentDescription = xy("Tampilan grid / list", "Grid / list view"),
+                        contentDescription = xy("Kartu besar / list", "Big cards / list"),
                     )
                     XyIconPill(XyIcons.Menu, onMenu, flat = true, contentDescription = xy("Menu", "Menu"))
                     XyIconPill(
@@ -1382,29 +1386,22 @@ private fun DevicesScreen(
                             )
                         }
                     }
-                    if (gridMode) {
-                        // Grid 2 kolom: kartu dibungkus Box ber-weight supaya
-                        // lebarnya adil; baris ganjil ditutup spacer.
-                        items(filteredFavorites.chunked(2), key = { row -> row.first().id }) { row ->
-                            Row(
-                                Modifier.fillMaxWidth(),
-                                horizontalArrangement = Arrangement.spacedBy(10.dp),
-                            ) {
-                                row.forEach { profile ->
-                                    Box(Modifier.weight(1f)) {
-                                        DeviceCard(
-                                            profile = profile,
-                                            onConnect = { onConnect(profile) },
-                                            onWakeConnect = { onWakeConnect(profile) },
-                                            onEdit = { onEdit(profile) },
-                                            onDelete = { onDelete(profile) },
-                                        )
-                                    }
-                                }
-                                if (row.size == 1) Spacer(Modifier.weight(1f))
-                            }
+                    if (bigCards) {
+                        // Kartu besar (permintaan pemilik 2026-10-16): SATU
+                        // kolom full-width dengan preview tinggi — bukan grid
+                        // 2 kolom. Paling enak dipandang & paling ringan
+                        // dirender (satu kartu per baris LazyColumn).
+                        items(filteredFavorites, key = { it.id }) { profile ->
+                            DeviceCard(
+                                profile = profile,
+                                onConnect = { onConnect(profile) },
+                                onWakeConnect = { onWakeConnect(profile) },
+                                onEdit = { onEdit(profile) },
+                                onDelete = { onDelete(profile) },
+                            )
                         }
                     } else {
+                        // Mode list ringkas.
                         items(filteredFavorites, key = { it.id }) { profile ->
                             DeviceCard(
                                 profile = profile,
@@ -1542,7 +1539,7 @@ private fun DeviceCard(
     val previewSeed = remember(profile.id, profile.label, profile.host) {
         (profile.label ?: profile.host) + "|" + profile.host
     }
-    val shape = RoundedCornerShape(6.dp)
+    val shape = RoundedCornerShape(if (compact) 10.dp else 16.dp)
     // Baris keterangan dipakai kartu grid (overlay) dan list (compact).
     val detailLine = if (rdpOptions.pcConnectMode) {
         buildString {

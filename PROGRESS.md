@@ -1020,3 +1020,20 @@ Perubahan:
   XyTopBar padding lebih lega, bubble popover "+" radius 18dp + border +
   shadow biar konsisten.
 - Gate: commit ini. TANPA build rilis/tag/draft (menunggu perintah).
+
+### Ronde 41 — lanjutan (2026-10-16, "gas aja breku")
+
+Permintaan: enak dipandang + super cepat; tampilan perangkat di Home HANYA
+list ringkas dan kartu besar 1 kolom — grid 2 kolom dihapus.
+
+- DevicesScreen: blok grid `chunked(2)` DIHAPUS. Toggle sekarang memilih
+  antara list ringkas (compact) dan KARTU BESAR satu kolom full-width
+  (preview 212dp). Key pref "device_grid_mode" dipertahankan supaya
+  pilihan user lama tidak hilang, maknanya kini "kartu besar".
+- Radius kartu perangkat: 6dp -> 10dp (list) / 16dp (kartu besar), lebih
+  lembut dan konsisten dengan design system.
+- Performa: LiveSessionsCard hanya update state saat daftar sesi benar
+  berubah (instance Live stabil di registry) — polling 1.5s tidak lagi
+  memicu recomposition sia-sia; grid 2 kolom hilang = komposisi lebih
+  ringan (satu kartu per baris LazyColumn).
+- Gate: commit ini. Masih TANPA build rilis (menunggu perintah pemilik).
