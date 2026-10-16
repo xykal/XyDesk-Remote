@@ -314,6 +314,10 @@ fun XyDeskSessionScreen(
     val oneShotKeys = remember(profile.id) { mutableStateMapOf<String, Boolean>() }
     var controlsOverlayOpen by remember { mutableStateOf(false) }
     var controlsBackHandler by remember { mutableStateOf<(() -> Boolean)?>(null) }
+    // Ronde 45: back = putus sesi + langsung ke beranda. Logika putusnya
+    // (performDisconnect) didefinisikan jauh di bawah setelah semua state yang
+    // dipakainya siap, jadi chain back menyimpannya lewat ref ini.
+    var requestDisconnect by remember { mutableStateOf<(() -> Unit)?>(null) }
 
     fun setHudKeys(list: List<HudKey>) {
         hudKeys = list
@@ -870,15 +874,30 @@ fun XyDeskSessionScreen(
                 }
                 controlsBackHandler?.invoke() == true -> true
                 confirmDisconnect -> {
-                    confirmDisconnect = false
+                    // Dialog terbuka (dibuka tombol "Putuskan" HUD): back =
+                    // konfirmasi putus, bukan batal — back selalu berujung
+                    // ke beranda (ronde 45).
+                    requestDisconnect?.invoke()
                     true
                 }
                 confirmCancelConnect -> {
+                    // Ronde 45: back kedua saat dialog "batalkan koneksi?" =
+                    // benar-benar membatalkan — back selalu berujung ke
+                    // beranda, konsisten dengan jalur putus di atas.
                     confirmCancelConnect = false
+                    userDisconnect = true
+                    reconnecting = false
+                    appPrefs.clearAutoResumeSession(profile.id)
+                    manager.cancelConnection()
+                    exitSession()
                     true
                 }
                 state is SessionState.Connected -> {
-                    confirmDisconnect = true
+                    // Ronde 45 (laporan pemilik): balik ke beranda harus bisa
+                    // SATU tekan — back saat sesi hidup langsung memutus dan
+                    // menutup sesi. Tombol "Putuskan" di HUD tetap menampilkan
+                    // dialog konfirmasi supaya sentuhan tak sengaja aman.
+                    requestDisconnect?.invoke()
                     true
                 }
                 state is SessionState.Connecting || state is SessionState.Authenticating -> {
@@ -1120,6 +1139,26 @@ fun XyDeskSessionScreen(
         oneShotKeys.clear()
         syncHudModifierState()
     }
+
+    /**
+     * Putuskan sesi dan kembali ke beranda. Dipakai tombol konfirmasi dialog
+     * DAN jalur cepat back (ronde 45): satu definisi supaya keduanya tidak
+     * pernah berbeda perilaku.
+     */
+    fun performDisconnect() {
+        confirmDisconnect = false
+        userDisconnect = true
+        reconnecting = false
+        (context as? XyDeskSessionActivity)?.markExplicitDisconnect(profile.id)
+        appPrefs.clearAutoResumeSession(profile.id)
+        releaseLatchedKeys()
+        if (context.let { runCatching { AppPrefs(it).autoLockRemoteOnLeave }.getOrDefault(false) }) {
+            manager.lockRemoteSession()
+        }
+        manager.disconnect()
+        exitSession()
+    }
+    SideEffect { requestDisconnect = { performDisconnect() } }
 
     fun shouldConsumeOneShotAfter(key: HudKey): Boolean = when (key.kind) {
         HudKind.KEY -> !HudKey.isModifierKeyCode(key.keyCode)
@@ -2008,17 +2047,7 @@ fun XyDeskSessionScreen(
             body = xy("Putuskan sesi sekarang dan kembali ke beranda?", "Disconnect the session now and return to home?"),
             confirmLabel = xy("Putuskan", "Disconnect"),
             onConfirm = {
-                confirmDisconnect = false
-                userDisconnect = true
-                reconnecting = false
-                (context as? XyDeskSessionActivity)?.markExplicitDisconnect(profile.id)
-                appPrefs.clearAutoResumeSession(profile.id)
-                releaseLatchedKeys()
-                if (context.let { runCatching { AppPrefs(it).autoLockRemoteOnLeave }.getOrDefault(false) }) {
-                    manager.lockRemoteSession()
-                }
-                manager.disconnect()
-                exitSession()
+                performDisconnect()
             },
             dismissLabel = xy("Batal", "Cancel"),
             onDismiss = { confirmDisconnect = false },

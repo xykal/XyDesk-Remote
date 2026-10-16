@@ -82,8 +82,8 @@ internal fun TransferFileSection(deviceId: String, notice: XyNoticeState) {
                 notice.show(
                     if (sent > 0) {
                         xyNow(
-                            "{0} file siap di folder bersama. Di PC buka {1}.",
-                            "{0} file(s) are in the shared folder. On the PC open {1}.",
+                            "{0} file terkirim. Dengan Host Agent aktif, file otomatis masuk folder Download di PC (cadangan: {1}).",
+                            "{0} file(s) sent. With the Host Agent running they land in the PC's Downloads folder automatically (fallback: {1}).",
                             sent,
                             root?.remoteHint ?: "\\\\tsclient\\XyDesk",
                         )
@@ -126,8 +126,8 @@ internal fun TransferFileSection(deviceId: String, notice: XyNoticeState) {
     Column(verticalArrangement = Arrangement.spacedBy(7.dp)) {
         PanelHint(
             xy(
-                "Kirim file dari HP ke PC dan sebaliknya lewat folder bersama. Di Windows foldernya muncul sebagai drive XyDesk (\\\\tsclient\\XyDesk) — salin/tempel biasa di File Explorer juga jalan.",
-                "Move files between phone and PC through the shared folder. On Windows it appears as the XyDesk drive (\\\\tsclient\\XyDesk) — plain copy/paste in File Explorer works too.",
+                "Kirim file dari HP ke PC dan sebaliknya. Selama Host Agent berjalan di PC, file yang kamu kirim otomatis masuk ke folder Download Windows — tidak perlu cari drive XyDesk lagi. Tanpa agent, foldernya tetap ada di drive XyDesk (\\\\tsclient\\XyDesk).",
+                "Move files between phone and PC. While the Host Agent runs on the PC, files you send land in the Windows Downloads folder automatically — no need to hunt for the XyDesk drive. Without the agent, the folder is still available as the XyDesk drive (\\\\tsclient\\XyDesk).",
             ),
         )
 

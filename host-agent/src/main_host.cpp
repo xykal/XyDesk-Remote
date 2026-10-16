@@ -4,6 +4,7 @@
 #ifdef _WIN32
 #include <windows.h>
 #include <shellapi.h>
+#include <shlobj.h>
 #include <winhttp.h>
 #include <wtsapi32.h>
 #endif
@@ -12,6 +13,9 @@
 #include <cstdio>
 #include <cstring>
 #include <cwchar>
+#include <fstream>
+#include <map>
+#include <set>
 #include <string>
 #include <vector>
 
@@ -161,6 +165,9 @@ constexpr int IDC_SUB     = 1014;
 constexpr int IDC_VER     = 1015;
 constexpr int TIMER_ID    = 1;
 constexpr UINT WM_TRAY    = WM_APP + 1;
+// Baris log dari thread watcher (wParam = std::wstring* di heap; WndProc
+// membebaskannya setelah menambahkan ke kotak log).
+constexpr UINT WM_XY_LOG  = WM_APP + 2;
 constexpr UINT IDM_SHOW   = 2001;
 constexpr UINT IDM_TOGGLE = 2002;
 constexpr UINT IDM_EXIT   = 2003;
@@ -402,6 +409,163 @@ HWND make_static(HWND parent, int id, int x, int y, int w, int h, HFONT font) {
     return wnd;
 }
 
+// ---------------------------------------------------------------------------
+// Watcher file HP -> folder Download PC (ronde 45).
+//
+// Drive redirect RDP memunculkan folder HP sebagai \\tsclient\XyDesk di
+// Windows, tetapi file yang dikirim dari HP sebelumnya hanya TERDUDUK di
+// drive itu — pengguna harus membuka File Explorer dan menebak letaknya.
+// Thread ini menonton drive selama sesi RDP aktif dan memindahkan setiap
+// file yang selesai ditulis langsung ke folder Download (%USERPROFILE%\
+// Downloads), seperti layaknya aplikasi remote desktop pada umumnya.
+//
+// Dua varian folder bersama (lihat SessionFileTransfer.transferRoot di HP):
+//   - akses "semua file": root drive = seluruh storage HP, folder bersama
+//     ada di \\tsclient\XyDesk\XyDesk (dideteksi lebih dulu);
+//   - akses terbatas: root drive = folder bersama itu sendiri. Kalau root
+//     berisi folder "Android" berarti itu storage penuh dan TIDAK ditonton
+//     (menyalin DCIM dkk ke Download pasti salah).
+//
+// File baru hanya disalin setelah ukurannya stabil dua poll berturut-turut,
+// jadi file besar yang masih ditulis HP tidak menghasilkan salinan setengah
+// jadi. Tanda tangan nama|ukuran|waktu-tulis disimpan ke
+// %APPDATA%\XyDesk Remote\received-files.log supaya file yang sama tidak
+// disalin dua kali lintas restart agent.
+//
+// Semua akses filesystem terjadi di thread ini (bukan UI thread): panggilan
+// ke tsclient saat sesi baru mati bisa menggantung berdetik-detik, dan UI
+// tidak boleh ikut beku.
+// ---------------------------------------------------------------------------
+
+HWND g_ui_hwnd = nullptr;
+
+/** Kirim satu baris log ke jendela utama dari thread apa pun. */
+void ui_log_line(const std::wstring& line) {
+    if (!g_ui_hwnd) return;
+    auto* heap = new std::wstring(line);
+    if (!PostMessageW(g_ui_hwnd, WM_XY_LOG, reinterpret_cast<WPARAM>(heap), 0)) {
+        delete heap;
+    }
+}
+
+std::wstring downloads_dir() {
+    PWSTR path = nullptr;
+    std::wstring out;
+    // GUID FOLDERID_Downloads ({374DE290-123F-4565-9164-39C4925E467B})
+    // didefinisikan lokal: mingw meletakkannya di libuuid yang belum dipakai
+    // build ini, dan menambah flag link baru dilarang (catatan rilis lama).
+    static const GUID kFolderIdDownloads = {
+        0x374de290, 0x123f, 0x4565,
+        {0x91, 0x64, 0x39, 0xc4, 0x92, 0x5e, 0x46, 0x7b}};
+    if (SUCCEEDED(SHGetKnownFolderPath(kFolderIdDownloads, 0, nullptr, &path)) && path) {
+        out = path;
+    }
+    if (path) CoTaskMemFree(path);
+    return out;  // kosong = tidak ada tujuan; watcher keluar sendiri.
+}
+
+std::wstring appdata_dir() {
+    wchar_t buf[MAX_PATH] = {0};
+    if (GetEnvironmentVariableW(L"APPDATA", buf, MAX_PATH) <= 0) return L"";
+    std::wstring dir = std::wstring(buf) + L"\\XyDesk Remote";
+    CreateDirectoryW(dir.c_str(), nullptr);
+    return dir;
+}
+
+bool dir_exists(const std::wstring& path) {
+    const DWORD attr = GetFileAttributesW(path.c_str());
+    return attr != INVALID_FILE_ATTRIBUTES && (attr & FILE_ATTRIBUTE_DIRECTORY);
+}
+
+/** "a.zip" yang sudah ada di dir menjadi "a (2).zip", "a (3).zip", dst. */
+std::wstring unique_target(const std::wstring& dir, const std::wstring& name) {
+    const size_t dot = name.find_last_of(L'.');
+    const bool hasExt = dot != std::wstring::npos && dot > 0;
+    const std::wstring base = hasExt ? name.substr(0, dot) : name;
+    const std::wstring ext = hasExt ? name.substr(dot) : L"";
+    std::wstring target = dir + L"\\" + name;
+    for (int i = 2; i < 100; ++i) {
+        if (GetFileAttributesW(target.c_str()) == INVALID_FILE_ATTRIBUTES) return target;
+        target = dir + L"\\" + base + L" (" + std::to_wstring(i) + L")" + ext;
+    }
+    return L"";
+}
+
+DWORD WINAPI tsclient_downloads_thread(LPVOID) {
+    const std::wstring downloads = downloads_dir();
+    if (downloads.empty()) return 0;
+    const std::wstring record_path = appdata_dir() + L"\\received-files.log";
+
+    std::set<std::wstring> recorded;
+    {
+        std::wifstream in(record_path.c_str());
+        std::wstring line;
+        while (std::getline(in, line)) {
+            if (!line.empty()) recorded.insert(line);
+        }
+    }
+
+    std::map<std::wstring, unsigned long long> seen;  // nama -> ukuran poll pertama
+    const std::wstring kDrive = L"\\\\tsclient\\XyDesk";
+    const std::wstring kSub = kDrive + L"\\XyDesk";
+    bool announced = false;
+
+    for (;;) {
+        Sleep(2500);
+        std::wstring watch;
+        if (dir_exists(kSub)) {
+            watch = kSub;
+        } else if (dir_exists(kDrive) && !dir_exists(kDrive + L"\\Android")) {
+            watch = kDrive;
+        }
+        if (watch.empty()) {
+            seen.clear();
+            announced = false;
+            continue;
+        }
+        if (!announced) {
+            announced = true;
+            ui_log_line(L"Drive XyDesk aktif — file dari HP otomatis masuk folder Download.");
+        }
+
+        WIN32_FIND_DATAW fd{};
+        HANDLE find = FindFirstFileW((watch + L"\\*").c_str(), &fd);
+        if (find == INVALID_HANDLE_VALUE) {
+            seen.clear();
+            continue;
+        }
+        std::map<std::wstring, unsigned long long> next;
+        do {
+            if (fd.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) continue;
+            const std::wstring name = fd.cFileName;
+            const unsigned long long size =
+                ((unsigned long long)fd.nFileSizeHigh << 32) | fd.nFileSizeLow;
+            const unsigned long long mtime =
+                ((unsigned long long)fd.ftLastWriteTime.dwHighDateTime << 32) |
+                fd.ftLastWriteTime.dwLowDateTime;
+            const std::wstring sig =
+                name + L"|" + std::to_wstring(size) + L"|" + std::to_wstring(mtime);
+            if (recorded.count(sig)) continue;
+            const auto it = seen.find(name);
+            if (it == seen.end() || it->second != size) {
+                next[name] = size;  // baru terlihat / masih ditulis HP
+                continue;
+            }
+            const std::wstring target = unique_target(downloads, name);
+            if (!target.empty() && CopyFileW((watch + L"\\" + name).c_str(), target.c_str(), TRUE)) {
+                recorded.insert(sig);
+                std::wofstream out(record_path.c_str(), std::ios::app);
+                out << sig << L"\n";
+                ui_log_line(L"File dari HP diterima: " + name + L"  \u2192  Download");
+            } else {
+                next[name] = size;  // gagal salin (mis. masih terkunci) — ulang nanti
+            }
+        } while (FindNextFileW(find, &fd));
+        FindClose(find);
+        seen.swap(next);
+    }
+}
+
 LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
     UiState* st = ui_state(hwnd);
     switch (msg) {
@@ -506,6 +670,7 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
             theme_apply_dark(hwnd);
 
             SetTimer(hwnd, TIMER_ID, 1000, nullptr);
+            g_ui_hwnd = hwnd;
             append_log(st->log, L"Jendela siap.");
             g_quic_ok_last = st->quic_running;
             refresh_dynamic(hwnd);
@@ -594,6 +759,15 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
         case WM_TIMER:
             if (wp == TIMER_ID) refresh_dynamic(hwnd);
             return 0;
+        case WM_XY_LOG: {
+            // Baris log dari thread watcher (heap std::wstring*).
+            auto* line = reinterpret_cast<std::wstring*>(wp);
+            if (line) {
+                append_log(st ? st->log : nullptr, *line);
+                delete line;
+            }
+            return 0;
+        }
         case WM_SIZE:
             if (st && st->log) InvalidateRect(st->log, nullptr, TRUE);
             return 0;
@@ -723,6 +897,14 @@ static int xydesk_host_ui_run(bool quic_running) {
 }
 #endif  // _WIN32
 
+/** Mulai thread watcher file HP → folder Download (ronde 45). */
+static void xydesk_downloads_watch_start() {
+#ifdef _WIN32
+    HANDLE thread = CreateThread(nullptr, 0, tsclient_downloads_thread, nullptr, 0, nullptr);
+    if (thread) CloseHandle(thread);
+#endif
+}
+
 int main(int argc, char** argv) {
     bool setup_only = false;
     bool no_ui = false;
@@ -771,6 +953,8 @@ int main(int argc, char** argv) {
     xydesk_relay_start();
     printf("[READY] Relay heartbeat aktif — ID Global %s terdaftar di direktori.\n",
            g_global_id);
+    xydesk_downloads_watch_start();
+    printf("[READY] Watcher file aktif — kiriman HP masuk otomatis ke folder Download.\n");
 
 #ifdef _WIN32
     if (!no_ui) {

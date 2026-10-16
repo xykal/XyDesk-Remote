@@ -1031,6 +1031,12 @@ private fun ColumnScope.XyHomeMenuBody(
     // Ronde 13 dulu seksi Tampilan dibuang dari drawer demi rail minim; sejak
     // revisi UI ronde 41 semua seksi kembali lengkap (dashboard Profil sudah
     // lama menampilkan semuanya) supaya menunya terstruktur & mudah dijangkau.
+    Text(
+        xy("MENU", "MENU"),
+        style = MaterialTheme.typography.labelSmall,
+        color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
+        modifier = Modifier.padding(horizontal = 20.dp, vertical = 4.dp),
+    )
     XySection.entries.forEach { item ->
         XyHomeMenuItem(
             title = xy(item.title, item.titleEn),
@@ -1042,12 +1048,21 @@ private fun ColumnScope.XyHomeMenuBody(
                 XySection.KEAMANAN -> XyIcons.Shield
                 XySection.TENTANG -> XyIcons.Info
             },
+            subtitle = when (item) {
+                XySection.PERANGKAT -> xy("Daftar & koneksi PC", "PC list & connections")
+                XySection.TAMPILAN -> xy("Tema & gaya menu", "Theme & menu style")
+                XySection.KREDENSIAL -> xy("Akun & kredensial RDP", "Accounts & RDP credentials")
+                XySection.UMUM -> xy("Bahasa & perilaku app", "Language & app behavior")
+                XySection.KEAMANAN -> xy("Kunci perangkat & sesi", "Device & session locks")
+                XySection.TENTANG -> xy("Versi & kredit", "Version & credits")
+            },
             selected = item == section,
             onClick = { onPick(item) },
         )
     }
     XyHomeMenuItem(
         title = xy("Alat & bantuan", "Tools & help"),
+        subtitle = xy("Cadangkan, pembaruan, masukan", "Backup, updates, feedback"),
         icon = XyIcons.Folder,
         trailing = {
             Text(
@@ -1103,6 +1118,7 @@ private fun XyHomeMenuItem(
     title: String,
     icon: androidx.compose.ui.graphics.vector.ImageVector,
     selected: Boolean = false,
+    subtitle: String? = null,
     trailing: (@Composable () -> Unit)? = null,
     onClick: () -> Unit,
 ) {
@@ -1147,16 +1163,24 @@ private fun XyHomeMenuItem(
                 modifier = Modifier.size(18.dp),
             )
         }
-        Text(
-            title,
-            modifier = Modifier.weight(1f),
-            style = MaterialTheme.typography.bodyLarge,
-            color = if (selected) {
-                MaterialTheme.colorScheme.onSurface
-            } else {
-                MaterialTheme.colorScheme.onSurfaceVariant
-            },
-        )
+        Column(Modifier.weight(1f)) {
+            Text(
+                title,
+                style = MaterialTheme.typography.bodyLarge,
+                color = if (selected) {
+                    MaterialTheme.colorScheme.onSurface
+                } else {
+                    MaterialTheme.colorScheme.onSurfaceVariant
+                },
+            )
+            if (subtitle != null) {
+                Text(
+                    subtitle,
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.75f),
+                )
+            }
+        }
         trailing?.invoke()
     }
 }

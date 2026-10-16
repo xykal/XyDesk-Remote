@@ -6,6 +6,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -101,6 +102,47 @@ internal fun XyProfileScreen(
                 .padding(bottom = 18.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
+            // ---- identitas (ronde 45: layar Profil butuh jangkar visual) ----
+            XyGlassCard(padding = 16.dp) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(14.dp),
+                ) {
+                    Box(
+                        Modifier
+                            .size(54.dp)
+                            .clip(RoundedCornerShape(27.dp))
+                            .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.14f)),
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        XyLogo(modifier = Modifier.size(30.dp))
+                    }
+                    Column {
+                        Text(
+                            xy("XyDesk Remote", "XyDesk Remote"),
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.SemiBold,
+                        )
+                        Text(
+                            "XyVerse Technology Global",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                        Spacer(Modifier.height(7.dp))
+                        Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                            ProfileChip(xy("v{0}", "v{0}", versionName ?: "-"))
+                            ProfileChip(
+                                if (deviceCount == 1) {
+                                    xy("1 perangkat", "1 device")
+                                } else {
+                                    xy("{0} perangkat", "{0} devices", deviceCount)
+                                },
+                            )
+                        }
+                    }
+                }
+            }
+
             // ---- akun komunitas (guest / GitHub) ----
             CommunityAccountCard()
             CloudSyncCard()
@@ -112,10 +154,12 @@ internal fun XyProfileScreen(
                     // sectionTitle() @Composable; dipanggil di sini, di luar
                     // lambda item {} yang disimpan lalu dipanggil belakangan.
                     val title = sectionTitle(section)
+                    val subtitle = sectionSubtitle(section)
                     item {
                         XyGlassTile(
                             icon = sectionIcon(section),
                             title = title,
+                            subtitle = subtitle,
                             onClick = { onOpenSection(section) },
                             modifier = Modifier.fillMaxWidth(),
                         )
@@ -271,6 +315,31 @@ private fun sectionIcon(section: XySection): ImageVector = when (section) {
     XySection.UMUM -> XyIcons.Sliders
     XySection.KEAMANAN -> XyIcons.Shield
     XySection.TENTANG -> XyIcons.Info
+}
+
+/** Keterangan singkat tiap seksi (ronde 45) supaya kartu tidak polos judul. */
+@Composable
+private fun sectionSubtitle(section: XySection): String = when (section) {
+    XySection.PERANGKAT -> xy("Daftar & koneksi PC", "PC list & connections")
+    XySection.TAMPILAN -> xy("Tema & gaya menu", "Theme & menu style")
+    XySection.KREDENSIAL -> xy("Akun & kredensial RDP", "Accounts & RDP credentials")
+    XySection.UMUM -> xy("Bahasa & perilaku app", "Language & app behavior")
+    XySection.KEAMANAN -> xy("Kunci perangkat & sesi", "Device & session locks")
+    XySection.TENTANG -> xy("Versi & kredit", "Version & credits")
+}
+
+/** Pil kecil berteks untuk deret info (versi, jumlah perangkat). */
+@Composable
+private fun ProfileChip(text: String) {
+    Text(
+        text,
+        style = MaterialTheme.typography.labelSmall,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+        modifier = Modifier
+            .clip(RoundedCornerShape(8.dp))
+            .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.55f))
+            .padding(horizontal = 8.dp, vertical = 3.dp),
+    )
 }
 
 /**

@@ -6,6 +6,8 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Text
 import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -63,6 +65,22 @@ internal fun XyFeedScreen(
             verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
             XyGlassSectionLabel(xy("Komunitas", "Community"))
+            // Ronde 45: kartu sambutan supaya layar Feed punya konteks —
+            // sebelumnya langsung menabrak daftar postingan tanpa pembuka.
+            XyGlassCard(padding = 14.dp) {
+                Text(
+                    xy("Unggahan komunitas", "Community posts"),
+                    style = MaterialTheme.typography.titleSmall,
+                )
+                Text(
+                    xy(
+                        "Bagikan tips, cerita, atau screenshot sesi terbaikmu. Tarik ke bawah untuk menyegarkan.",
+                        "Share tips, stories, or your best session screenshots. Pull down to refresh.",
+                    ),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
             XyGlassCard(padding = 14.dp) {
                 FunHubCard(
                     onHide = null,

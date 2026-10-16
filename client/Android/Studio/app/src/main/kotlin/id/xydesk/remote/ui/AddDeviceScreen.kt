@@ -328,7 +328,10 @@ fun AddDeviceScreen(
                 accountSearch = ""
             }
             validationPopup != null -> validationPopup = null
-            confirmDiscard -> confirmDiscard = false
+            // Ronde 45: prompt "buang perubahan?" sudah tampil = back kedua
+            // berarti benar-benar pergi (dulu cuma menutup prompt sehingga
+            // back tidak pernah bisa keluar dari form).
+            confirmDiscard -> requestCancel()
             else -> requestCancel()
         }
     }
