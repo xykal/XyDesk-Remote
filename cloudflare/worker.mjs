@@ -2413,6 +2413,12 @@ const CHAT_MSG_PER_WINDOW = 8;
 const CHAT_WINDOW_MS = 20_000;
 const DEFAULT_ONESIGNAL_APP_ID = "ffaa87d6-8e1d-42b6-bb4f-ebbbfc0bccbb";
 
+function isFounderChatName(name) {
+  if (typeof name !== "string") return false;
+  const normalized = name.trim().replace(/^@/, "").toLowerCase();
+  return normalized === "xykal" || normalized === "xykal (founder)" || normalized.startsWith("xykal ");
+}
+
 function normalizeCountryCode(raw, fallback = "ID") {
   const code = String(raw || "").trim().toUpperCase();
   if (/^[A-Z]{2}$/.test(code) && code !== "XX" && code !== "T1") return code;
@@ -2652,6 +2658,7 @@ export class GlobalChat {
     const msg = {
       id,
       name,
+      is_founder: isFounderChatName(name),
       country,
       flag,
       text,
@@ -2685,6 +2692,7 @@ export class GlobalChat {
         return {
           id: k.slice(4),
           ...v,
+          is_founder: Boolean(v?.is_founder || isFounderChatName(v?.name)),
           country,
           flag,
           translated,
@@ -2789,6 +2797,7 @@ export class GlobalChat {
     const msg = {
       id,
       name: session.name,
+      is_founder: isFounderChatName(session.name),
       country: session.country,
       flag,
       text,
@@ -2806,7 +2815,10 @@ export class GlobalChat {
     const apiKey = String(this.env?.ONESIGNAL_REST_API_KEY || "").trim();
     const appId = String(this.env?.ONESIGNAL_APP_ID || DEFAULT_ONESIGNAL_APP_ID).trim();
     if (!apiKey || !appId) return;
-    const senderLabel = `${msg.flag || "🌐"} ${msg.name} (${msg.country || "ID"})`;
+    const isFounder = Boolean(msg.is_founder || isFounderChatName(msg.name));
+    const senderLabel = isFounder
+      ? `👑 ${msg.flag || "🇮🇩"} ${msg.name} [FOUNDER] (${msg.country || "ID"})`
+      : `${msg.flag || "🌐"} ${msg.name} (${msg.country || "ID"})`;
     const bodyText = msg.translated && msg.translated.toLowerCase() !== msg.text.toLowerCase()
       ? `${msg.text}\n🌐 ${msg.target_lang || "TR"}: ${msg.translated}`
       : msg.text;

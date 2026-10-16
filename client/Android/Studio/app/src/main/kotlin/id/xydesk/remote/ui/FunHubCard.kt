@@ -809,6 +809,10 @@ private fun CommunityJokeItem(
                 fontWeight = FontWeight.SemiBold,
                 color = MaterialTheme.colorScheme.primary,
             )
+            if (isFounderAccount(joke.authorName)) {
+                Spacer(Modifier.width(5.dp))
+                XyFounderBadge(compact = true)
+            }
             feedTimeAgo(joke.createdAtMillis).takeIf { it.isNotEmpty() }?.let { ago ->
                 Text(
                     " · $ago",
@@ -901,6 +905,10 @@ private fun CommentsBottomSheet(
                                 fontWeight = FontWeight.SemiBold,
                                 color = MaterialTheme.colorScheme.primary,
                             )
+                            if (isFounderAccount(c.name)) {
+                                Spacer(Modifier.width(5.dp))
+                                XyFounderBadge(compact = true)
+                            }
                             feedTimeAgo(c.createdAtMillis).takeIf { it.isNotEmpty() }?.let { ago ->
                                 Text(
                                     " · $ago",

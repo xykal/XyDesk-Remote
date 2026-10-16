@@ -505,7 +505,8 @@ private fun CommunityAccountCard() {
     var githubPatDraft by remember { mutableStateOf("") }
     var githubOpen by remember { mutableStateOf(false) }
     var githubBusy by remember { mutableStateOf(false) }
-    var githubUser by remember { mutableStateOf<String?>(null) }
+    var githubUser by remember { mutableStateOf(getVerifiedGitHubLogin(context)) }
+    val isFounder = isFounderAccount(githubUser) || isFounderAccount(name)
     val pickAvatar = androidx.activity.compose.rememberLauncherForActivityResult(
         androidx.activity.result.contract.ActivityResultContracts.GetContent(),
     ) { uri ->
@@ -551,27 +552,17 @@ private fun CommunityAccountCard() {
         }
     }
     androidx.compose.runtime.LaunchedEffect(Unit) {
-        githubUser = runCatching {
+        val gh = runCatching {
             val pat = id.xydesk.remote.security.CredentialVault(context.applicationContext)
                 .get(id.xydesk.remote.ui.rdp.XyRdpConfig.VAULT_PAT_ID)
             if (pat != null) id.xydesk.remote.ui.rdp.XyRdpClient.whoami(pat) else null
         }.getOrNull()
-    }
-
-    // Login GitHub (bila PAT tersimpan) otomatis jadi nama tampilan,
-    // kecuali pengguna sudah memilih nama sendiri.
-    androidx.compose.runtime.LaunchedEffect(Unit) {
-        if (name == null) {
-            val pat = runCatching {
-                id.xydesk.remote.security.CredentialVault(context.applicationContext)
-                    .get(id.xydesk.remote.ui.rdp.XyRdpConfig.VAULT_PAT_ID)
-            }.getOrNull()
-            if (pat != null) {
-                val gh = runCatching { id.xydesk.remote.ui.rdp.XyRdpClient.whoami(pat) }.getOrNull()
-                if (gh != null && api.displayName() == null) {
-                    runCatching { api.setDisplayName(gh) }
-                    name = api.displayName() ?: gh
-                }
+        if (gh != null) {
+            githubUser = gh
+            saveVerifiedGitHubLogin(context, gh)
+            if (name == null || api.displayName() == null) {
+                runCatching { api.setDisplayName(gh) }
+                name = api.displayName() ?: gh
             }
         }
     }
@@ -582,7 +573,10 @@ private fun CommunityAccountCard() {
                 Modifier
                     .size(44.dp)
                     .clip(RoundedCornerShape(22.dp))
-                    .background(MaterialTheme.colorScheme.onSurface.copy(alpha = 0.10f)),
+                    .background(MaterialTheme.colorScheme.onSurface.copy(alpha = 0.10f))
+                    .let { mod ->
+                        if (isFounder) mod.border(1.5.dp, founderBorderBrush(), RoundedCornerShape(22.dp)) else mod
+                    },
                 contentAlignment = Alignment.Center,
             ) {
                 val bmp = avatarBitmap
@@ -601,11 +595,19 @@ private fun CommunityAccountCard() {
                     )
                 }
             }
-            Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
-                Text(
-                    name ?: xy("Tamu $accountId", "Guest $accountId"),
-                    style = MaterialTheme.typography.titleSmall,
-                )
+            Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                ) {
+                    Text(
+                        name ?: xy("Tamu $accountId", "Guest $accountId"),
+                        style = MaterialTheme.typography.titleSmall,
+                    )
+                    if (isFounder) {
+                        XyFounderBadge(compact = true)
+                    }
+                }
                 Text(
                     "ID: $accountId",
                     style = MaterialTheme.typography.labelSmall,
@@ -619,6 +621,12 @@ private fun CommunityAccountCard() {
                     message = xyNow("Kode pemulihan disalin. Simpan untuk pulihkan akun setelah pasang ulang.", "Recovery code copied. Keep it to restore this account after a reinstall.")
                 },
                 contentDescription = xy("Salin kode pemulihan", "Copy recovery code"),
+            )
+        }
+        if (isFounder) {
+            XyFounderBadge(
+                compact = false,
+                subtitle = xy("Pemilik & Kreator XyVerse", "XyVerse Owner & Creator"),
             )
         }
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
@@ -657,6 +665,7 @@ private fun CommunityAccountCard() {
                                     .remove(id.xydesk.remote.ui.rdp.XyRdpConfig.VAULT_PAT_ID)
                             }
                             githubUser = null
+                            saveVerifiedGitHubLogin(context, null)
                             message = xyNow("Akun GitHub dilepas.", "GitHub account removed.")
                         }
                     },
@@ -776,6 +785,7 @@ private fun CommunityAccountCard() {
                         }.getOrDefault(false)
                         if (saved) {
                             githubUser = user
+                            saveVerifiedGitHubLogin(context, user)
                             githubOpen = false
                             if (api.displayName() == null) {
                                 scope.launch {

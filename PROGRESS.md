@@ -1423,9 +1423,25 @@ Tiga permintaan pemilik ditangani tuntas:
      3) **Garis pemisah horizontal tipis** di tengah bubble,
      4) Hasil terjemahan di bagian bawah (`🌐 EN · ...` atau `🌐 ID · ...`).
 
+5. **Badge Khusus `👑 FOUNDER` untuk Akun GitHub `xykal` (`FounderBadge.kt`)**:
+   - Komponen `XyFounderBadge` bergaya emas-royal dengan border gradien berkilau
+     (`#FFE082` → `#FFB300` → `#FF6F00`) dan label **`👑 FOUNDER`**.
+   - Otomatis tampil saat akun GitHub `xykal` login / aktif di:
+     1) **Kartu Akun GitHub di Layar Buat RDP** (`RdpFreeScreen.kt`) lengkap dengan
+        badge `👑 FOUNDER · Pemilik & Kreator XyVerse`.
+     2) **Kartu Profil & Akun Komunitas** (`XyProfileScreen.kt`) lengkap dengan
+        cincin emas pada foto profil + badge `👑 FOUNDER`.
+     3) **Chat Global** (`GlobalChatScreen.kt` + `cloudflare/worker.mjs` `GlobalChat`):
+        header layar, header bubble pesan `xykal` (`🇮🇩 xykal · ID [👑 FOUNDER]`),
+        border emas pada bubble pesan Founder, serta label `👑 🇮🇩 xykal [FOUNDER]`
+        pada notifikasi push.
+     4) **Feed Komunitas & Komentar** (`FunHubCard.kt`): di samping nama `xykal`
+        pada setiap postingan maupun komentar.
+
 **Checklist rilis berikutnya — tambahan ronde 48:**
 - [ ] APK rilis baru tidak lagi kena blokir keras Play Protect EFP (tidak ada `BIND_ACCESSIBILITY_SERVICE` di manifest APK)
 - [ ] Notifikasi Chat Global muncul gaya WhatsApp (`MessagingStyle`), tombol **Balas** dari notifikasi langsung mengirim pesan ke Chat Global, ketuk notif membuka layar Chat Global
 - [ ] Chat Global: deteksi bendera negara otomatis + 1 bubble berisi 2 teks (asli di atas + garis pemisah + terjemahan di bawah)
+- [ ] Badge `👑 FOUNDER` emas berkilau tampil otomatis untuk akun GitHub `xykal` di Profil, Buat RDP, Feed/Komentar, dan Chat Global
 - [ ] Layar Log XyDesk (dan tombol Detail saat gagal koneksi) menampilkan langkah bernomor 1 per 1 tanpa blok log FreeRDP terpisah
 

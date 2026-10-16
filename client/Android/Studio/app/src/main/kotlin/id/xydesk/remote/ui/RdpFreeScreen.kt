@@ -124,6 +124,7 @@ fun RdpFreeScreen(onBack: () -> Unit, onConnect: (ConnectionProfile) -> Unit) {
             if (user != null) {
                 token = saved
                 login = user
+                saveVerifiedGitHubLogin(context, user)
             } else {
                 vault.remove(XyRdpConfig.VAULT_PAT_ID)
             }
@@ -190,6 +191,7 @@ fun RdpFreeScreen(onBack: () -> Unit, onConnect: (ConnectionProfile) -> Unit) {
                         vault.remove(XyRdpConfig.VAULT_PAT_ID)
                         token = null
                         login = null
+                        saveVerifiedGitHubLogin(context, null)
                         forkReady = false
                         run = null
                         access = null
@@ -240,7 +242,23 @@ fun RdpFreeScreen(onBack: () -> Unit, onConnect: (ConnectionProfile) -> Unit) {
             } else {
                 XySectionLabel("Akun GitHub")
                 XyCard(Modifier.fillMaxWidth()) {
-                    Text(login ?: "-", style = MaterialTheme.typography.titleMedium)
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    ) {
+                        Text(login ?: "-", style = MaterialTheme.typography.titleMedium)
+                        if (isFounderAccount(login)) {
+                            XyFounderBadge(compact = true)
+                        }
+                    }
+                    if (isFounderAccount(login)) {
+                        Spacer(Modifier.height(6.dp))
+                        XyFounderBadge(
+                            compact = false,
+                            subtitle = "Pemilik & Kreator XyVerse",
+                        )
+                        Spacer(Modifier.height(6.dp))
+                    }
                     Text("Repo: $login/${XyRdpConfig.FORK_REPO_NAME} · ${if (forkReady) "siap" else "belum di-fork"}")
                     Spacer(Modifier.height(12.dp))
                     if (!forkReady) {
@@ -481,6 +499,7 @@ fun RdpFreeScreen(onBack: () -> Unit, onConnect: (ConnectionProfile) -> Unit) {
                         vault.put(XyRdpConfig.VAULT_PAT_ID, tok)
                         token = tok
                         login = user
+                        saveVerifiedGitHubLogin(context, user)
                         loginDialog = false
                         message = "Login berhasil: $user"
                     }

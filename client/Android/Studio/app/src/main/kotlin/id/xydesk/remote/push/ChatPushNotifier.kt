@@ -532,12 +532,18 @@ object ChatPushNotifier {
                                     } else {
                                         text
                                     }
+                                    val isFounder = m.optBoolean("is_founder", rawName.equals("xykal", ignoreCase = true))
+                                    val senderLabel = if (isFounder) {
+                                        "👑 $flag $rawName [FOUNDER] ($cc)"
+                                    } else {
+                                        "$flag $rawName ($cc)"
+                                    }
                                     if (at > lastSeenAt) {
                                         lastSeenAt = at
                                         onIncomingChatMessage(
                                             context = appContext,
                                             msgId = id,
-                                            senderName = "$flag $rawName ($cc)",
+                                            senderName = senderLabel,
                                             text = displayText,
                                             at = at,
                                         )

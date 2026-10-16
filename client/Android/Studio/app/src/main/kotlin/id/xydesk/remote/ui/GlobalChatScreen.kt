@@ -5,6 +5,7 @@ import android.os.Handler
 import android.os.Looper
 import android.widget.Toast
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -84,11 +85,17 @@ internal data class ChatMessage(
     val targetLang: String,
     val at: Long,
     val mine: Boolean,
+    val isFounder: Boolean = isFounderAccount(name),
 )
 
 internal fun chatNickname(context: Context): String {
     val prefs = context.getSharedPreferences(CHAT_PREFS, Context.MODE_PRIVATE)
+    val ghLogin = getVerifiedGitHubLogin(context)
     var name = prefs.getString(KEY_NICKNAME, null)
+    if (!ghLogin.isNullOrBlank() && (name.isNullOrBlank() || name.startsWith("Tamu-"))) {
+        name = ghLogin
+        prefs.edit().putString(KEY_NICKNAME, name).apply()
+    }
     if (name.isNullOrBlank()) {
         name = "Tamu-" + (1000 + (UUID.randomUUID().toString().hashCode() and 0x8fff))
         prefs.edit().putString(KEY_NICKNAME, name).apply()
@@ -112,9 +119,35 @@ internal fun countryCodeToFlag(countryCode: String): String {
 @Composable
 internal fun GlobalChatScreen(onBack: () -> Unit) {
     val context = LocalContext.current
-    val nickname = remember { chatNickname(context) }
+    var nickname by remember { mutableStateOf(chatNickname(context)) }
     val myCountry = remember { chatCountryCode() }
     val myFlag = remember(myCountry) { countryCodeToFlag(myCountry) }
+
+    LaunchedEffect(Unit) {
+        if (getVerifiedGitHubLogin(context) == null) {
+            val gh = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+                runCatching {
+                    val pat = id.xydesk.remote.security.CredentialVault(context.applicationContext)
+                        .get(id.xydesk.remote.ui.rdp.XyRdpConfig.VAULT_PAT_ID)
+                    if (pat != null) id.xydesk.remote.ui.rdp.XyRdpClient.whoami(pat) else null
+                }.getOrNull()
+            }
+            if (!gh.isNullOrBlank()) {
+                saveVerifiedGitHubLogin(context, gh)
+                val updated = chatNickname(context)
+                if (updated != nickname) {
+                    nickname = updated
+                    chatSocketSend(
+                        JSONObject()
+                            .put("type", "hello")
+                            .put("name", updated)
+                            .put("country", myCountry)
+                            .toString(),
+                    )
+                }
+            }
+        }
+    }
 
     val messages = remember { mutableStateListOf<ChatMessage>() }
     var presence by remember { mutableIntStateOf(0) }
@@ -184,16 +217,18 @@ internal fun GlobalChatScreen(onBack: () -> Unit) {
                                         val cc = m.optString("country", "ID").ifBlank { "ID" }.uppercase(Locale.ROOT)
                                         val flag = m.optString("flag").ifBlank { countryCodeToFlag(cc) }
                                         id.xydesk.remote.push.ChatPushNotifier.markSeen(msgId, msgAt, context)
+                                        val itemName = m.optString("name", "Tamu")
                                         val item = ChatMessage(
                                             id = msgId,
-                                            name = m.optString("name", "Tamu"),
+                                            name = itemName,
                                             country = cc,
                                             flag = flag,
                                             text = m.optString("text"),
                                             translated = m.optString("translated", ""),
                                             targetLang = m.optString("target_lang", "EN").ifBlank { "EN" },
                                             at = msgAt,
-                                            mine = m.optString("name") == nickname,
+                                            mine = itemName.equals(nickname, ignoreCase = true),
+                                            isFounder = m.optBoolean("is_founder", isFounderAccount(itemName)),
                                         )
                                         messages.add(item)
                                         enrichTranslationIfNeeded(item)
@@ -218,7 +253,8 @@ internal fun GlobalChatScreen(onBack: () -> Unit) {
                                         translated = data.optString("translated", ""),
                                         targetLang = data.optString("target_lang", "EN").ifBlank { "EN" },
                                         at = msgAt,
-                                        mine = from == nickname,
+                                        mine = from.equals(nickname, ignoreCase = true),
+                                        isFounder = data.optBoolean("is_founder", isFounderAccount(from)),
                                     )
                                     messages.add(item)
                                     enrichTranslationIfNeeded(item)
@@ -302,7 +338,15 @@ internal fun GlobalChatScreen(onBack: () -> Unit) {
                         .padding(horizontal = 8.dp, vertical = 6.dp),
                 )
                 Column(modifier = Modifier.weight(1f), horizontalAlignment = Alignment.CenterHorizontally) {
-                    Text("Chat Global", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(6.dp),
+                    ) {
+                        Text("Chat Global", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                        if (isFounderAccount(nickname)) {
+                            XyFounderBadge(compact = true)
+                        }
+                    }
                     Text(
                         if (connected) "$presence daring · $myFlag $nickname ($myCountry)"
                         else "menyambungkan…",
@@ -490,6 +534,13 @@ private fun ChatBubble(msg: ChatMessage) {
     }
     val transLabel = msg.targetLang.ifBlank { "EN" }.uppercase(Locale.ROOT)
     val transBody = msg.translated.ifBlank { msg.text }
+    val founderMsg = msg.isFounder || isFounderAccount(msg.name)
+    val bubbleShape = RoundedCornerShape(
+        topStart = 16.dp,
+        topEnd = 16.dp,
+        bottomStart = if (msg.mine) 16.dp else 4.dp,
+        bottomEnd = if (msg.mine) 4.dp else 16.dp,
+    )
 
     Box(
         modifier = Modifier.fillMaxWidth(),
@@ -498,31 +549,35 @@ private fun ChatBubble(msg: ChatMessage) {
         Column(
             modifier = Modifier
                 .widthIn(min = 140.dp, max = 310.dp)
-                .clip(
-                    RoundedCornerShape(
-                        topStart = 16.dp,
-                        topEnd = 16.dp,
-                        bottomStart = if (msg.mine) 16.dp else 4.dp,
-                        bottomEnd = if (msg.mine) 4.dp else 16.dp,
-                    ),
-                )
+                .clip(bubbleShape)
                 .background(
                     if (msg.mine) MaterialTheme.colorScheme.primary
                     else MaterialTheme.colorScheme.surfaceVariant,
                 )
+                .let { mod ->
+                    if (founderMsg) mod.border(1.4.dp, founderBorderBrush(), bubbleShape) else mod
+                }
                 .padding(horizontal = 12.dp, vertical = 8.dp),
         ) {
-            // Header pengirim + bendera & kode negara
-            Text(
-                text = "${msg.flag} ${msg.name} · ${msg.country}",
-                style = MaterialTheme.typography.labelSmall,
-                fontWeight = FontWeight.Bold,
-                color = if (msg.mine) {
-                    MaterialTheme.colorScheme.onPrimary.copy(alpha = 0.88f)
-                } else {
-                    MaterialTheme.colorScheme.primary
-                },
-            )
+            // Header pengirim + bendera & kode negara + badge Founder (bila xykal)
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(6.dp),
+            ) {
+                Text(
+                    text = "${msg.flag} ${msg.name} · ${msg.country}",
+                    style = MaterialTheme.typography.labelSmall,
+                    fontWeight = FontWeight.Bold,
+                    color = if (msg.mine) {
+                        MaterialTheme.colorScheme.onPrimary.copy(alpha = 0.88f)
+                    } else {
+                        MaterialTheme.colorScheme.primary
+                    },
+                )
+                if (founderMsg) {
+                    XyFounderBadge(compact = true)
+                }
+            }
             Spacer(Modifier.height(3.dp))
 
             // Baris 1: Teks asli

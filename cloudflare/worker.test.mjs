@@ -1786,13 +1786,25 @@ test("ronde 48: global chat direct reply (/api/chat/send) + OneSignal push + Pla
   assert.equal(sendUsJson.message.target_lang, "ID");
   assert.ok(sendUsJson.message.translated.toLowerCase().includes("halo"));
 
-  // Riwayat harus memuat kedua pesan lengkap dengan bendera & terjemahan.
+  // Tes pengirim Founder (xykal) -> mendapat flag is_founder = true + label [FOUNDER] di push notif.
+  const sendFounder = await worker.fetch(new Request("https://api.xydeskremote.biz.id/api/chat/send", {
+    method: "POST",
+    headers: { "Content-Type": "application/json", "cf-ipcountry": "ID" },
+    body: JSON.stringify({ name: "xykal", text: "Halo semua dari Founder!" }),
+  }), env);
+  assert.equal(sendFounder.status, 200);
+  const sendFounderJson = await sendFounder.json();
+  assert.equal(sendFounderJson.message.is_founder, true);
+  assert.ok(pushedBody.data.sender_name.includes("[FOUNDER]"));
+
+  // Riwayat harus memuat ketiga pesan lengkap dengan bendera, terjemahan, & status founder.
   const histRes = await worker.fetch(new Request("https://api.xydeskremote.biz.id/api/chat/history"), env);
   assert.equal(histRes.status, 200);
   const histJson = await histRes.json();
-  assert.equal(histJson.messages.length, 2);
+  assert.equal(histJson.messages.length, 3);
   assert.equal(histJson.messages[0].text, "Balas langsung dari notifikasi!");
   assert.equal(histJson.messages[1].country, "US");
+  assert.equal(histJson.messages[2].is_founder, true);
 
   // Guard Play Protect Enhanced Fraud Protection: manifest tidak boleh memuat BIND_ACCESSIBILITY_SERVICE.
   const coreManifest = await readFile(new URL("../client/Android/Studio/freeRDPCore/src/main/AndroidManifest.xml", import.meta.url), "utf8");
