@@ -1296,3 +1296,66 @@ bergantung web/token; dan XyRDP tanpa restart dari nol saat sesi habis.
 - [ ] Banner XyRDP tampil di layar Buat RDP
 - [ ] CATATAN: butuh APK build baru (draft v1.1.16 belum memuat r45+r46);
       template XyRDP terbaru aktif untuk run baru sekarang juga.
+
+## Ronde 47 — 2026-10-16
+
+**Status: SELESAI** (banner + web ABI + chat global; gate hijau; worker live).
+
+Empat workstream user, semuanya ditangani:
+
+1. **Banner XyRDP diganti** — gaya lama (neon) ditolak user. Banner baru
+   `xyrdp_banner.webp` (1280×480, 38 KB): gaya morphing/modern/clean/lembut —
+   blob gradient pastel + mascot robot di meja kecil + bentuk 3D lembut
+   (awan/folder/bubble/roket), tanpa neon/glow.
+2. **"Aplikasi tidak valid"** — tidak ada fix kode (diagnosis ronde 43 berlaku:
+   CI sudah benar, apksigner v1+v2+v3). Penyebab sisi user: signature mismatch
+   versi <v1.1.13 (wajib uninstall dulu), salah ABI, Play Protect/ROM China,
+   unduhan korup, Android < 6. Halaman /abi kini membantu kasus salah ABI.
+3. **Web `/abi` diperkuat** (`web/abi.html`):
+   - Deteksi: Client Hints (utama) → User-Agent → **BARU fallback ke-3:
+     renderer GPU WebGL** (Adreno/Mali/PowerVR = ARM, Intel/AMD = x86) —
+     menutup celah Firefox Android modern yang UA-nya tak menulis arsitektur.
+   - Layout: kartu verdict + tabel varian APK **di tengah** (max-width 720,
+     teaks center), tombol unduh justify-center.
+   - **Riwayat versi**: kartu baru yang fetch `/api/releases` (endpoint worker
+     BARU: GitHub API releases, filter published, top-10, cache edge 5 menit,
+     pakai GH_TOKEN worker).
+4. **Chat Global (screen BARU dari Feed)** — realtime ala WA tapi identitas
+   XyDesk (colorScheme Material3, BUKAN hijau WA):
+   - Worker: Durable Object **`GlobalChat`** (migrasi v5, binding GLOBAL_CHAT),
+     WebSocket `/ws/chat` (run_worker_first), riwayat 100 pesan di DO storage
+     (trim otomatis), rate limit 8 pesan/20 dtk + teks ≤500 + nama ≤24,
+     presence count, relay sinyal typing, broadcast echo ke pengirim.
+     Endpoint tambahan `/api/chat/history` (REST). CATATAN debugging:
+     forward DO harus kirim `request` asli (`new Request(url, request)`
+     men-strip header Upgrade → 404); 404 sesaat setelah deploy = propagasi.
+   - App: `GlobalChatScreen.kt` (OkHttp WebSocket — dep baru okhttp 4.12.0),
+     entry tombol "Chat Global" di Feed, route `XyRoute.ChatGlobal`. Fitur:
+     riwayat, bubble kiri/kanan, nama+jam, indikator "sedang mengetik…",
+     jumlah daring, auto-reconnect backoff, ping 20 dtk, nickname otomatis
+     "Tamu-XXXX" (SharedPreferences), pesan pending → diganti echo server.
+   - **Push notif: BELUM** — app tak punya FCM/Firebase; butuh kunci Firebase
+     dari user untuk push sejati. Saat ini notifikasi hanya berlaku in-app.
+
+**Kesalahan build ronde 47 (tercatat agar tak diulang):**
+- Commit pertama (4b601e7) gagal gate: (1) `import
+  androidx.compose.foundation.layout.weight` — weight itu member RowScope/
+  ColumnScope, bukan import top-level; (2) `currentCoroutineContext().
+  invokeOnCompletion` tidak ada — lifecycle socket pakai DisposableEffect.
+- Fix e988ef0 → gate Build APK SUKSES.
+- Worker: helper bernama `githubTokenCandidates` (bukan githubTokens) —
+  salah nama = error 1101.
+
+**Deploy worker (2026-10-16):** version terakhir `e1304382-3afd-4b6b-8376
+-28b24adb5c65` — membawa GlobalChat v5, /api/releases, /api/chat/history,
+abi.html baru. Verifikasi live: /api/releases OK (v1.1.15…), /api/chat/history
+OK, WS echo OK (presence+history+msg), /abi 200.
+
+**Checklist rilis berikutnya — tambahan ronde 47:**
+- [ ] Banner XyRDP baru (morphing lembut) tampil di layar Buat RDP
+- [ ] Tombol "Chat Global" di Feed membuka chat realtime; kirim/terima pesan,
+      typing indicator, dan jumlah daring berfungsi
+- [ ] Halaman /abi: deteksi GPU fallback, list download tengah, riwayat versi
+- [ ] CATATAN: draft v1.1.16 (415064151) belum memuat r45–r47 — butuh build
+      rilis baru; publish hanya setelah konfirmasi user.
+- [ ] Push notif chat global — menunggu keputusan FCM (butuh Firebase user).

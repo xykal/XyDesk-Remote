@@ -2420,7 +2420,7 @@ export class GlobalChat {
 
   async fetch(request) {
     const path = new URL(request.url).pathname;
-    if (path === "/connect" && request.headers.get("Upgrade") === "websocket") return this.handleConnect();
+    if ((path === "/connect" || path === "/ws/chat") && request.headers.get("Upgrade") === "websocket") return this.handleConnect();
     if (path === "/history" && request.method === "GET") {
       const messages = await this.loadHistory();
       return durableObjectJson({ status: "ok", messages }, 200, request.method);
@@ -2512,7 +2512,7 @@ async function releasesListResponse(request, env) {
   const cached = await cache.match(cacheKey);
   if (cached) return cached;
   const headers = { Accept: "application/vnd.github+json", "User-Agent": "xydesk-remote-worker" };
-  const tokens = githubTokens(env);
+  const tokens = githubTokenCandidates(env);
   if (tokens.length) headers.Authorization = `Bearer ${tokens[0]}`;
   let data = null;
   try {
@@ -2545,7 +2545,12 @@ export default {
     if (path === "/ws/chat") {
       if (!env.GLOBAL_CHAT) return notFound(request.method);
       const chatId = env.GLOBAL_CHAT.idFromName("xydesk-global-chat-v1");
-      return env.GLOBAL_CHAT.get(chatId).fetch(new Request(new URL("/connect", request.url), request));
+      return env.GLOBAL_CHAT.get(chatId).fetch(request);
+    }
+    if (path === "/api/chat/history") {
+      if (!env.GLOBAL_CHAT) return notFound(request.method);
+      const chatId2 = env.GLOBAL_CHAT.idFromName("xydesk-global-chat-v1");
+      return env.GLOBAL_CHAT.get(chatId2).fetch(new Request(new URL("/history", request.url), { method: "GET" }));
     }
     if (path === "/api/pc/rooms" || path.startsWith("/api/pc/rooms/")) {
       return pcSignalResponse(request, env);
