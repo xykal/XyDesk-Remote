@@ -996,7 +996,7 @@ private fun BoxScope.XyHomeMenuShell(
 
 /** Isi menu: brand, daftar seksi, alat & bantuan, versi. Dipakai 2 gaya. */
 @Composable
-private fun XyHomeMenuBody(
+private fun ColumnScope.XyHomeMenuBody(
     section: XySection,
     helpToolsOpen: Boolean,
     onToggleTools: () -> Unit,
