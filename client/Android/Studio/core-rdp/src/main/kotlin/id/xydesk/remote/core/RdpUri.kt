@@ -72,8 +72,18 @@ object RdpUri {
             options.networkAutoDetect -> out += "network" to "auto"
         }
         if (options.h264) {
-            val gfxCodec = if (options.lowBandwidth) "AVC420" else "AVC444"
+            val gfxCodec = buildString {
+                append(if (options.lowBandwidth) "AVC420" else "AVC444")
+                if (options.gfxSmallCache) append(",small-cache")
+            }
             out += "gfx" to gfxCodec
+            // ---- Engine Performa Lanjutan (custom FreeRDP, ronde 42) ----
+            // /video hanya masuk akal saat pipeline GFX aktif.
+            if (options.videoRemoting) out += "video" to ""
+        }
+        if (options.frameAck in 1..10) out += "frame-ack" to options.frameAck.toString()
+        if (options.responsiveLoopMs in 10..1000) {
+            out += "max-loop-time" to options.responsiveLoopMs.toString()
         }
 
         // Kanal DISP (Display Control): bikin resolusi remote bisa diubah

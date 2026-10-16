@@ -31,7 +31,7 @@ import org.json.JSONObject
 @Composable
 fun RdpFreeScreen(onBack: () -> Unit, onConnect: (ConnectionProfile) -> Unit) {
     val context = LocalContext.current
-    val owner = androidx.compose.ui.platform.LocalLifecycleOwner.current
+    val owner = androidx.lifecycle.compose.LocalLifecycleOwner.current
     val vault = remember { CredentialVault(context.applicationContext) }
     val api = remember { RdpFreeApi { vault.get(RdpFreeApi.VAULT_KEY) } }
     val scope = rememberCoroutineScope()

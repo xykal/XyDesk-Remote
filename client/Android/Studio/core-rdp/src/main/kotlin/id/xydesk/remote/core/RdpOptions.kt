@@ -277,6 +277,31 @@ data class RdpOptions(
     /** `+aero`: komposisi desktop DWM/Aero. */
     val desktopComposition: Boolean = true,
 
+    // ---- Engine Performa Lanjutan (custom FreeRDP, ronde 42) ----
+    /**
+     * `/video` — Video Optimized Remoting channel: region playback video
+     * (browser/media player) dikirim sebagai stream video optimal sehingga
+     * gerakan jauh lebih halus. Hanya relevan saat H.264/GFX aktif.
+     */
+    val videoRemoting: Boolean = false,
+    /**
+     * `/frame-ack:N` — jumlah frame yang boleh dikirim server tanpa menunggu
+     * ack client. Nilai kecil = latensi turun (server menunggu lebih sering);
+     * 0 = biarkan default engine.
+     */
+    val frameAck: Int = 0,
+    /**
+     * `/max-loop-time:N` (ms) — siklus maksimum engine memproses paket per
+     * iterasi loop. Nilai kecil (25-50ms) membuat input & frame terkirim lebih
+     * sering = terasa lebih responsif; 0 = default engine.
+     */
+    val responsiveLoopMs: Int = 0,
+    /**
+     * `small-cache` pada `/gfx:AVC...` — cache bitmap GFX lebih kecil:
+     * hemat bandwidth, cocok koneksi seluler/lemah.
+     */
+    val gfxSmallCache: Boolean = false,
+
     // ---- Security & Session Hardening ----
     val securityProtocol: XySecurityProtocol = XySecurityProtocol.AUTO,
     /** Level keamanan cipher OpenSSL TLS (`-1` = bawaan, `0` = kompatibel server lama, `1` = standar, `2` = ketat). */
@@ -635,6 +660,10 @@ data class RdpOptions(
         sp.putBoolean("$deviceId.menuanim", menuAnimations)
         sp.putBoolean("$deviceId.themes", visualThemes)
         sp.putBoolean("$deviceId.aero", desktopComposition)
+        sp.putBoolean("$deviceId.video_rem", videoRemoting)
+        sp.putInt("$deviceId.frame_ack", frameAck)
+        sp.putInt("$deviceId.loop_ms", responsiveLoopMs)
+        sp.putBoolean("$deviceId.gfx_smallcache", gfxSmallCache)
         sp.putInt("$deviceId.clarity_v2", 2)
         sp.putInt("$deviceId.audio_dsp_v1", 1)
         sp.putInt("$deviceId.sec_proto", securityProtocol.ordinal)
@@ -674,6 +703,7 @@ data class RdpOptions(
             "netauto", "lowbw", "h264", "dynres", "ghost", "gport", "guser", "gpass", "gdomain",
             "stream_profile", "gpu_profile", "bat_saver", "bpp", "fps", "async_upd", "async_ch", "comp_lvl",
             "fonts", "wallpaper", "windrag", "menuanim", "themes", "aero", "clarity_v2",
+            "video_rem", "frame_ack", "loop_ms", "gfx_smallcache",
             "sec_proto", "tls_sec", "admin", "restricted_admin", "remote_prog", "remote_dir",
             "wol_mac", "wol_bcast", "wol_port", "ssh_host", "ssh_port", "ssh_user", "ssh_lport",
         )
@@ -777,6 +807,10 @@ data class RdpOptions(
                 menuAnimations = sp.getBoolean("$deviceId.menuanim", false),
                 visualThemes = sp.getBoolean("$deviceId.themes", true),
                 desktopComposition = if (migratedV2) sp.getBoolean("$deviceId.aero", true) else true,
+                videoRemoting = sp.getBoolean("$deviceId.video_rem", false),
+                frameAck = sp.getInt("$deviceId.frame_ack", 0).coerceIn(0, 10),
+                responsiveLoopMs = sp.getInt("$deviceId.loop_ms", 0).coerceIn(0, 1000),
+                gfxSmallCache = sp.getBoolean("$deviceId.gfx_smallcache", false),
                 securityProtocol = secProto,
                 tlsSecLevel = sp.getInt("$deviceId.tls_sec", -1).coerceIn(-1, 2),
                 consoleAdmin = sp.getBoolean("$deviceId.admin", false),

@@ -252,4 +252,47 @@ class RdpUriTest {
         assertFalse(p.containsKey("shell"))
         assertFalse(p.containsKey("gateway"))
     }
+
+    // ------------------------------------------------- Engine Performa Lanjutan (ronde 42)
+
+    @Test
+    fun enginePerformaLanjutanDefaultTidakMengirimFlag() {
+        val p = params(simple(), RdpOptions())
+        assertFalse(p.containsKey("video"))
+        assertFalse(p.containsKey("frame-ack"))
+        assertFalse(p.containsKey("max-loop-time"))
+        assertEquals("AVC444", p["gfx"])
+    }
+
+    @Test
+    fun enginePerformaLanjutanMengirimFlagCustomFreerdp() {
+        val opts = RdpOptions(
+            videoRemoting = true,
+            frameAck = 2,
+            responsiveLoopMs = 25,
+            gfxSmallCache = true,
+        )
+        val p = params(simple(), opts)
+        assertTrue(p.containsKey("video"))
+        assertEquals("", p["video"])
+        assertEquals("2", p["frame-ack"])
+        assertEquals("25", p["max-loop-time"])
+        assertEquals("AVC444,small-cache", p["gfx"])
+    }
+
+    @Test
+    fun videoRemotingTanpaH264TidakMengirimFlagVideo() {
+        val opts = RdpOptions(h264 = false, videoRemoting = true)
+        val p = params(simple(), opts)
+        assertFalse(p.containsKey("video"))
+        assertFalse(p.containsKey("gfx"))
+    }
+
+    @Test
+    fun nilaiLoopDanFrameAckDiluarRangeDitikam() {
+        val opts = RdpOptions(frameAck = 99, responsiveLoopMs = 5)
+        val p = params(simple(), opts)
+        assertFalse(p.containsKey("frame-ack"))
+        assertFalse(p.containsKey("max-loop-time"))
+    }
 }

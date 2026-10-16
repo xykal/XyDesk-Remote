@@ -1037,3 +1037,31 @@ list ringkas dan kartu besar 1 kolom — grid 2 kolom dihapus.
   memicu recomposition sia-sia; grid 2 kolom hilang = komposisi lebih
   ringan (satu kartu per baris LazyColumn).
 - Gate: commit ini. Masih TANPA build rilis (menunggu perintah pemilik).
+
+## Ronde 42 — update gede part 1: custom FreeRDP engine tuning + bump engine
+
+Permintaan pemilik: update besar semuanya (engine, UI, UX, backend), apalagi
+FreeRDP di-custom lebih lanjut.
+
+**Custom FreeRDP (jalur aman: URI→argumen native, tree C tetap bersih):**
+Parameter baru terverifikasi ada di tree vendored 3.32 (`client/common/cmdline.h`):
+- `/video` — Video Optimized Remoting: playback video di remote jadi halus.
+- `/frame-ack:N` — buffer frame server; kecil = latensi turun.
+- `/max-loop-time:N` ms — siklus loop engine; kecil = input lebih responsif.
+- `/gfx:AVC...,small-cache` — cache bitmap kecil, hemat kuota.
+Implementasi: `RdpOptions` (+persist/of/write/KEYS), `RdpUri.queryParams`,
+UI seksi "Engine Performa Lanjutan" di AddDeviceScreen (toggle + segmented),
+4 unit test baru di RdpUriTest (default, flag aktif, tanpa-h264, range guard).
+
+**Engine bump:**
+- Compose BOM 2026.05.01 → 2026.09.00 (Compose 1.11 → 1.12.1; 1.12 butuh
+  compileSdk 37 + AGP 9 — sudah dipenuhi).
+- + androidx.lifecycle:lifecycle-runtime-compose:2.10.0 (pasangan 1.12+).
+- Migrasi 3 pemakaian LocalLifecycleOwner ke androidx.lifecycle.compose
+  (ui.platform versi lama deprecated).
+
+**Backend:** worker sudah punya cache header layered (max-age=300,
+s-maxage=900) — tidak ada perubahan dibutuhkan ronde ini; perubahan backend
+besar ditunda ke ronde berikutnya (D1/R2 dsb. kalau diminta).
+
+Gate: commit ini. TANPA build rilis — menunggu perintah pemilik.

@@ -372,7 +372,7 @@ fun XyDeskSessionScreen(
     // yang tadinya tersambung mati sendiri (bukan user disconnect, bukan
     // sedang retry/ubah-resolusi) DAN app sedang di background, kasih tahu
     // user lewat notif — di foreground layar status sudah jelas.
-    val sessionLifecycleOwner = androidx.compose.ui.platform.LocalLifecycleOwner.current
+    val sessionLifecycleOwner = androidx.lifecycle.compose.LocalLifecycleOwner.current
     var finalDropped by remember { mutableStateOf(false) }
     LaunchedEffect(state, everConnected, userDisconnect, applyingResolution, reconnecting) {
         val dropped = everConnected && !userDisconnect && !applyingResolution && !reconnecting &&

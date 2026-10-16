@@ -1533,6 +1533,83 @@ fun AddDeviceScreen(
                         options = options.copy(asyncChannels = it, streamProfile = XyStreamProfile.CUSTOM)
                     },
                 )
+                Spacer(Modifier.height(10.dp))
+                Text(
+                    xy("Engine Performa Lanjutan", "Advanced Engine Performance"),
+                    style = MaterialTheme.typography.titleSmall,
+                )
+                Text(
+                    xy(
+                        "Tuning level engine FreeRDP — asli mengubah perilaku native, bukan dekorasi.",
+                        "FreeRDP engine-level tuning — these change real native behavior.",
+                    ),
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                Spacer(Modifier.height(6.dp))
+                XyToggleRow(
+                    title = xy("Video remoting halus (/video)", "Smooth video remoting (/video)"),
+                    checked = options.videoRemoting,
+                    onCheckedChange = {
+                        options = options.copy(videoRemoting = it, streamProfile = XyStreamProfile.CUSTOM)
+                    },
+                    enabled = options.h264,
+                    leading = XyIcons.Monitor,
+                )
+                XyToggleRow(
+                    title = xy("GFX small-cache (hemat kuota)", "GFX small-cache (saves data)"),
+                    checked = options.gfxSmallCache,
+                    onCheckedChange = {
+                        options = options.copy(gfxSmallCache = it, streamProfile = XyStreamProfile.CUSTOM)
+                    },
+                    enabled = options.h264,
+                    leading = XyIcons.Sliders,
+                )
+                Spacer(Modifier.height(8.dp))
+                Text(
+                    xy("Buffer frame server (frame-ack)", "Server frame buffer (frame-ack)"),
+                    style = MaterialTheme.typography.titleSmall,
+                )
+                Spacer(Modifier.height(6.dp))
+                val frameAckValues = listOf(0, 1, 2, 4)
+                XySegmented(
+                    options = listOf(
+                        xy("Default", "Default"),
+                        "1",
+                        "2",
+                        "4",
+                    ),
+                    selectedIndex = frameAckValues.indexOf(options.frameAck).coerceAtLeast(0),
+                    onSelect = {
+                        options = options.copy(
+                            frameAck = frameAckValues[it],
+                            streamProfile = XyStreamProfile.CUSTOM,
+                        )
+                    },
+                    modifier = Modifier.fillMaxWidth(),
+                )
+                Spacer(Modifier.height(8.dp))
+                Text(
+                    xy("Loop respons engine (max-loop-time)", "Engine response loop (max-loop-time)"),
+                    style = MaterialTheme.typography.titleSmall,
+                )
+                Spacer(Modifier.height(6.dp))
+                val loopValues = listOf(0, 25, 50)
+                XySegmented(
+                    options = listOf(
+                        xy("Default", "Default"),
+                        "25 ms",
+                        "50 ms",
+                    ),
+                    selectedIndex = loopValues.indexOf(options.responsiveLoopMs).coerceAtLeast(0),
+                    onSelect = {
+                        options = options.copy(
+                            responsiveLoopMs = loopValues[it],
+                            streamProfile = XyStreamProfile.CUSTOM,
+                        )
+                    },
+                    modifier = Modifier.fillMaxWidth(),
+                )
                 Spacer(Modifier.height(8.dp))
                 Text(
                     xy("Level kompresi paket RDP", "RDP packet compression level"),
@@ -2019,7 +2096,7 @@ private fun StorageAccessRow() {
     // dibaca sekali tepat setelah startActivity — padahal activity asal
     // tidak pernah pause-hilang di momen itu, jadi status selalu "terbatas"
     // walaupun user baru saja memberi izin di Setelan.
-    val lifecycleOwner = androidx.compose.ui.platform.LocalLifecycleOwner.current
+    val lifecycleOwner = androidx.lifecycle.compose.LocalLifecycleOwner.current
     androidx.compose.runtime.DisposableEffect(lifecycleOwner) {
         val observer = androidx.lifecycle.LifecycleEventObserver { _, event ->
             if (event == androidx.lifecycle.Lifecycle.Event.ON_RESUME) {
