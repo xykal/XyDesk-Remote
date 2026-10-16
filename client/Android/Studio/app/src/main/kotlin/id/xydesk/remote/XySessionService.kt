@@ -70,9 +70,15 @@ class XySessionService : Service() {
             // Beranda tanpa memutus sesi.
             ACTION_HOME -> {
                 runCatching {
+                    AppPrefs(this).clearAutoResumeSession()
                     startActivity(
                         Intent(this, XyDeskHomeActivity::class.java)
-                            .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),
+                            .putExtra(id.xydesk.remote.ui.EXTRA_SKIP_AUTO_RESUME, true)
+                            .addFlags(
+                                Intent.FLAG_ACTIVITY_NEW_TASK or
+                                    Intent.FLAG_ACTIVITY_REORDER_TO_FRONT or
+                                    Intent.FLAG_ACTIVITY_SINGLE_TOP,
+                            ),
                     )
                 }
                 return START_NOT_STICKY

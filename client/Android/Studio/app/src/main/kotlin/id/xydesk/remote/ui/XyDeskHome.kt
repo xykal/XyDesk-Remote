@@ -60,13 +60,17 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.foundation.Image
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.shadow
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.input.pointer.pointerInput
+import id.xydesk.remote.R
 import id.xydesk.remote.core.ConnectionLog
 import id.xydesk.remote.core.ConnectionProfile
 import id.xydesk.remote.core.RdpOptions
@@ -853,6 +857,90 @@ fun XyDeskHome(
  * pertama tetap jalan".
  */
 @Composable
+private fun HomeRdpFreeBannerCard(
+    onCreateRdp: () -> Unit,
+    onOpenPcStream: () -> Unit,
+) {
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(22.dp))
+            .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.45f))
+            .border(
+                width = 1.dp,
+                color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.45f),
+                shape = RoundedCornerShape(22.dp),
+            ),
+    ) {
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(132.dp)
+                .clickable { onCreateRdp() },
+        ) {
+            androidx.compose.foundation.Image(
+                painter = androidx.compose.ui.res.painterResource(id.xydesk.remote.R.drawable.xyrdp_banner),
+                contentDescription = "Buat RDP Cloud Gratis",
+                contentScale = androidx.compose.ui.layout.ContentScale.Crop,
+                modifier = Modifier.fillMaxSize(),
+            )
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .background(
+                        Brush.verticalGradient(
+                            colors = listOf(
+                                Color.Transparent,
+                                Color(0xFF090D16).copy(alpha = 0.78f),
+                            ),
+                        ),
+                    ),
+            )
+            Column(
+                modifier = Modifier
+                    .align(Alignment.BottomStart)
+                    .padding(horizontal = 14.dp, vertical = 10.dp),
+            ) {
+                Text(
+                    xy("Buat RDP Cloud Gratis (XyRDP)", "Free Cloud RDP (XyRDP)"),
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Bold,
+                    color = Color.White,
+                )
+                Text(
+                    xy(
+                        "PC Windows 6 jam dari GitHub Actions akunmu · 120 FPS Boost & Monitor Live",
+                        "6-hour Windows PC from your GitHub Actions · 120 FPS Boost & Live Monitor",
+                    ),
+                    style = MaterialTheme.typography.labelSmall,
+                    color = Color.White.copy(alpha = 0.85f),
+                )
+            }
+        }
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 12.dp, vertical = 10.dp),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            XyPillButton(
+                text = xy("Buat RDP Gratis", "Create Free RDP"),
+                onClick = onCreateRdp,
+                icon = XyIcons.Monitor,
+                modifier = Modifier.weight(1.2f).height(38.dp),
+            )
+            XyPillButton(
+                text = xy("PC Stream", "PC Stream"),
+                onClick = onOpenPcStream,
+                primary = false,
+                modifier = Modifier.weight(0.9f).height(38.dp),
+            )
+        }
+    }
+}
+
+@Composable
 private fun LiveSessionsCard() {
     var live by remember { mutableStateOf(XySessionRegistry.list()) }
     var confirmKill by remember { mutableStateOf<XySessionRegistry.Live?>(null) }
@@ -1267,6 +1355,7 @@ private fun DevicesScreen(
                 title = xy("Perangkat", "Devices"),
                 onBack = null,
                 actions = {
+                    XyHeaderAccountActions()
                     XyIconPill(
                         XyIcons.Grid,
                         {
@@ -1288,11 +1377,15 @@ private fun DevicesScreen(
             )
 
             if (favorites.isEmpty()) {
-                Box(Modifier.fillMaxSize().padding(24.dp), contentAlignment = Alignment.Center) {
+                Box(Modifier.fillMaxSize().padding(horizontal = 16.dp, vertical = 12.dp), contentAlignment = Alignment.TopCenter) {
                     Column(
                         Modifier.fillMaxSize().verticalScroll(rememberScrollState()),
-                        verticalArrangement = Arrangement.spacedBy(12.dp),
+                        verticalArrangement = Arrangement.spacedBy(14.dp),
                     ) {
+                        HomeRdpFreeBannerCard(
+                            onCreateRdp = onCreateRdp,
+                            onOpenPcStream = onOpenPcStream,
+                        )
                         XyCard(modifier = Modifier.fillMaxWidth()) {
                             Text(xy("Belum ada perangkat", "No devices yet"), style = MaterialTheme.typography.titleMedium)
                             Spacer(Modifier.height(6.dp))
@@ -1347,55 +1440,10 @@ private fun DevicesScreen(
                 ) {
                     item { LiveSessionsCard() }
                     item {
-                        // Pemilik tidak menemukan fitur create-RDP (2026-10-10) —
-                        // sebelumnya hanya muncul di dalam bubble "+". Sekarang
-                        // ada kartu tetap di puncak daftar perangkat.
-                        XyGlassCard(modifier = Modifier.fillMaxWidth(), padding = 14.dp) {
-                            Row(
-                                verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.spacedBy(12.dp),
-                            ) {
-                                Box(
-                                    Modifier
-                                        .size(40.dp)
-                                        .clip(RoundedCornerShape(12.dp))
-                                        .background(MaterialTheme.colorScheme.onSurface.copy(alpha = 0.08f)),
-                                    contentAlignment = Alignment.Center,
-                                ) {
-                                    Icon(
-                                        XyIcons.Monitor,
-                                        contentDescription = null,
-                                        tint = MaterialTheme.colorScheme.onSurface,
-                                        modifier = Modifier.size(20.dp),
-                                    )
-                                }
-                                Column(Modifier.weight(1f)) {
-                                    Text(
-                                        xy("RdpFree", "RdpFree"),
-                                        style = MaterialTheme.typography.titleSmall,
-                                    )
-                                    Text(
-                                        xy(
-                                            "PC Windows dari akun GitHub-mu sendiri — tanpa Tailscale",
-                                            "Windows PC from your own GitHub account — no Tailscale needed",
-                                        ),
-                                        style = MaterialTheme.typography.labelSmall,
-                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                    )
-                                }
-                                XyPillButton(
-                                    text = xy("Buat", "Create"),
-                                    onClick = onCreateRdp,
-                                    modifier = Modifier.height(36.dp),
-                                )
-                                XyPillButton(
-                                    text = xy("PC Stream", "PC Stream"),
-                                    onClick = onOpenPcStream,
-                                    primary = false,
-                                    modifier = Modifier.height(36.dp),
-                                )
-                            }
-                        }
+                        HomeRdpFreeBannerCard(
+                            onCreateRdp = onCreateRdp,
+                            onOpenPcStream = onOpenPcStream,
+                        )
                     }
                     item {
                         XySegmented(

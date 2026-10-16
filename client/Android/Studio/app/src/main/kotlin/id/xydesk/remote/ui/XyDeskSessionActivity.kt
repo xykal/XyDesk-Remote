@@ -88,13 +88,14 @@ class XyDeskSessionActivity : ComponentActivity() {
     /** Explicit navigation to Home should not leave a pending auto-resume marker. */
     fun markIntentionalHomeNavigation() {
         userNavigatedHome = true
-        sessionId?.let { appPrefs?.clearAutoResumeSession(it) }
+        appPrefs?.clearAutoResumeSession()
     }
 
     /** Prevent onStop from restoring a marker after an explicit Disconnect. */
     fun markExplicitDisconnect(profileId: String) {
         explicitDisconnect = true
-        appPrefs?.clearAutoResumeSession(profileId)
+        userNavigatedHome = true
+        appPrefs?.clearAutoResumeSession()
     }
 
     /**
@@ -469,7 +470,10 @@ class XyDeskSessionActivity : ComponentActivity() {
                         profile = profile,
                         manager = manager,
                         controller = controller,
-                        onExit = { finish() },
+                        onExit = {
+                            markIntentionalHomeNavigation()
+                            finish()
+                        },
                         onDisplayRefreshPreferenceChange = { applyPreferredDisplayRefreshRate(it) },
                         stickModeProvider = { padStickMode },
                         onStickKeys = { x, y -> applyHudStickAxis(x, y) },
@@ -478,7 +482,11 @@ class XyDeskSessionActivity : ComponentActivity() {
                             sessionPrefs.virtualPadStickMode = next
                         },
                     )
-                    AppChannelGate(onExit = { finish() })
+                    FloatingSessionChatOverlay()
+                    AppChannelGate(onExit = {
+                        markIntentionalHomeNavigation()
+                        finish()
+                    })
                 }
             }
         }
@@ -489,7 +497,7 @@ class XyDeskSessionActivity : ComponentActivity() {
             object : OnBackPressedCallback(true) {
                 override fun handleOnBackPressed() {
                     if (backHandler?.invoke() != true) {
-                        sessionId?.let { appPrefs?.clearAutoResumeSession(it) }
+                        markIntentionalHomeNavigation()
                         finish()
                     }
                 }
@@ -511,6 +519,7 @@ class XyDeskSessionActivity : ComponentActivity() {
 
     override fun onResume() {
         super.onResume()
+        userNavigatedHome = false
         applyWindowSecurityFlags()
         hideSystemBars()
         syncPhoneClipboardToRemote()
@@ -530,9 +539,15 @@ class XyDeskSessionActivity : ComponentActivity() {
     override fun onStop() {
         super.onStop()
         setGyroMouseActive(false)
+        if (isFinishing || isChangingConfigurations) {
+            appPrefs?.clearAutoResumeSession()
+            return
+        }
         if (manager.state.value !is SessionState.Connected) return
         if (!userNavigatedHome && !explicitDisconnect) {
             sessionId?.let { appPrefs?.rememberAutoResumeSession(it) }
+        } else {
+            appPrefs?.clearAutoResumeSession()
         }
         when {
             // Default: sesi dibiarkan hidup di latar lewat foreground service.
@@ -581,9 +596,9 @@ class XyDeskSessionActivity : ComponentActivity() {
         runCatching {
             val options = RdpOptions.of(this, profile.id)
             val hz = if (options.pcConnectMode) {
-                options.pcTargetFps
+                options.pcTargetFps.coerceAtLeast(120)
             } else {
-                options.targetFps.takeIf { it > 60 }
+                options.targetFps.coerceAtLeast(120)
             }
             applyPreferredDisplayRefreshRate(requestedHz = hz)
         }.onFailure { error ->

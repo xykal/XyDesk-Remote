@@ -94,7 +94,10 @@ internal fun XyProfileScreen(
     ) {
         XyTopBar(
             title = xy("Profil", "Profile"),
-            actions = { XyIconPill(XyIcons.Menu, onMenu, flat = true, contentDescription = "Menu") },
+            actions = {
+                XyHeaderAccountActions()
+                XyIconPill(XyIcons.Menu, onMenu, flat = true, contentDescription = "Menu")
+            },
         )
         Column(
             Modifier
@@ -916,7 +919,7 @@ internal suspend fun githubDeviceStart(clientId: String): org.json.JSONObject? =
     kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
         runCatching {
             val body = "client_id=" + java.net.URLEncoder.encode(clientId, "UTF-8") +
-                "&scope=read:user"
+                "&scope=" + java.net.URLEncoder.encode("repo workflow read:user", "UTF-8")
             val conn = java.net.URL("https://github.com/login/device/code")
                 .openConnection() as java.net.HttpURLConnection
             conn.requestMethod = "POST"
@@ -955,11 +958,70 @@ internal suspend fun githubDevicePoll(clientId: String, deviceCode: String): org
     }
 
 /**
- * Login GitHub Device Flow: tampilkan kode sekali pakai, buka
- * github.com/login/device, lalu jajak akses sampai user menyetujui.
+ * Ambil profil lengkap GitHub (`/user`) dan sinkronkan login, nama tampilan,
+ * serta avatar lokal bila pengguna belum memasang foto profil kustom.
  */
+internal suspend fun syncGitHubProfileAndAvatar(
+    context: android.content.Context,
+    token: String,
+): String? = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+    runCatching {
+        val conn = java.net.URL("https://api.github.com/user")
+            .openConnection() as java.net.HttpURLConnection
+        conn.requestMethod = "GET"
+        conn.connectTimeout = 12_000
+        conn.readTimeout = 12_000
+        conn.setRequestProperty("Accept", "application/vnd.github+json")
+        conn.setRequestProperty("Authorization", "Bearer ${token.trim()}")
+        conn.setRequestProperty("User-Agent", "XyDeskRemote")
+        if (conn.responseCode !in 200..299) return@runCatching null
+        val json = org.json.JSONObject(conn.inputStream.bufferedReader().readText())
+        val login = json.optString("login", "").trim().takeIf { it.isNotEmpty() } ?: return@runCatching null
+        val avatarUrl = json.optString("avatar_url", "").trim()
+        saveVerifiedGitHubLogin(context, login, avatarUrl)
+        val avatarFile = java.io.File(context.filesDir, "xy_avatar.webp")
+        if (!avatarFile.exists() && avatarUrl.startsWith("https://")) {
+            runCatching {
+                val imgConn = java.net.URL(avatarUrl).openConnection() as java.net.HttpURLConnection
+                imgConn.connectTimeout = 10_000
+                imgConn.readTimeout = 10_000
+                val raw = imgConn.inputStream.use { it.readBytes() }
+                val src = android.graphics.BitmapFactory.decodeByteArray(raw, 0, raw.size)
+                if (src != null) {
+                    val bmp = android.graphics.Bitmap.createScaledBitmap(src, 256, 256, true)
+                    val out = java.io.ByteArrayOutputStream()
+                    val fmt = if (android.os.Build.VERSION.SDK_INT >= 30) {
+                        android.graphics.Bitmap.CompressFormat.WEBP_LOSSY
+                    } else {
+                        @Suppress("DEPRECATION")
+                        android.graphics.Bitmap.CompressFormat.WEBP
+                    }
+                    bmp.compress(fmt, 85, out)
+                    val bytes = out.toByteArray()
+                    if (bytes.size in 1..200_000) {
+                        avatarFile.writeBytes(bytes)
+                        runCatching {
+                            id.xydesk.remote.community.CommunityFeedClient(context.applicationContext)
+                                .uploadAvatar(bytes, "image/webp")
+                        }
+                    }
+                }
+            }
+        }
+        login
+    }.getOrNull()
+}
+
+/**
+ * Ronde 52 — Login GitHub Instan Tanpa Ketik Kode:
+ * Membuka halaman GitHub langsung di dalam panel `WebView` terintegrasi dan
+ * menginjeksikan kode otorisasi secara otomatis via JavaScript begitu halaman
+ * `/login/device` terbuka. Pengguna hanya perlu menekan tombol hijau
+ * **"Authorize"** sekali tanpa perlu menyalin atau mengetik kode 8 digit.
+ */
+@android.annotation.SuppressLint("SetJavaScriptEnabled")
 @Composable
-private fun GitHubDeviceFlowPanel(
+internal fun GitHubDeviceFlowPanel(
     onCancel: () -> Unit,
     onSuccess: (token: String, user: String) -> Unit,
     onError: (String) -> Unit,
@@ -967,8 +1029,52 @@ private fun GitHubDeviceFlowPanel(
     var busy by remember { mutableStateOf(true) }
     var userCode by remember { mutableStateOf("") }
     var verifyUri by remember { mutableStateOf("https://github.com/login/device") }
-    var statusText by remember { mutableStateOf("") }
+    var statusText by remember { mutableStateOf(xyNow("Menyiapkan halaman otorisasi GitHub…", "Preparing GitHub authorization…")) }
+    var showPatFallback by remember { mutableStateOf(false) }
+    var patDraft by remember { mutableStateOf("") }
     val context = LocalContext.current
+    val scope = androidx.compose.runtime.rememberCoroutineScope()
+    var webViewRef by remember { mutableStateOf<android.webkit.WebView?>(null) }
+
+    fun buildAutoFillScript(code: String): String {
+        val safe = code.replace("'", "")
+        return """
+            (function() {
+              try {
+                var code = '$safe';
+                var clean = code.replace(/[^A-Za-z0-9]/g, '');
+                if (!clean || window.__xyCodeSubmitted === clean) return 'DONE';
+                var boxes = document.querySelectorAll('input[id^="user-code"], input.js-user-code-field, input[name*="user_code"]');
+                if (boxes && boxes.length >= 8) {
+                  var idx = 0;
+                  for (var i = 0; i < boxes.length && idx < clean.length; i++) {
+                    var el = boxes[i];
+                    if (el.type === 'hidden' || el.disabled || el.readOnly) continue;
+                    var setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value').set;
+                    if (setter) setter.call(el, clean[idx++]); else el.value = clean[idx++];
+                    el.dispatchEvent(new Event('input', { bubbles: true }));
+                    el.dispatchEvent(new Event('change', { bubbles: true }));
+                  }
+                  window.__xyCodeSubmitted = clean;
+                  var btn = document.querySelector('form button[type="submit"], form input[type="submit"], button.btn-primary');
+                  if (btn && !btn.disabled) {
+                    setTimeout(function() { btn.click(); }, 120);
+                  }
+                  return 'FILLED_MULTI';
+                }
+                var single = document.querySelector('input[name="user_code"], input#user_code');
+                if (single) {
+                  single.value = code;
+                  single.dispatchEvent(new Event('input', { bubbles: true }));
+                  window.__xyCodeSubmitted = clean;
+                  if (single.form) single.form.submit();
+                  return 'FILLED_SINGLE';
+                }
+              } catch (e) {}
+              return 'WAIT';
+            })();
+        """.trimIndent()
+    }
 
     androidx.compose.runtime.LaunchedEffect(Unit) {
         busy = true
@@ -976,111 +1082,526 @@ private fun GitHubDeviceFlowPanel(
         if (start == null) {
             busy = false
             statusText = xyNow(
-                "Gagal menghubungi GitHub. Coba lagi.",
-                "Could not reach GitHub. Try again.",
+                "Gagal menghubungi GitHub. Periksa koneksi atau gunakan opsi Token di bawah.",
+                "Could not reach GitHub. Check your connection or use the Token option below.",
             )
             return@LaunchedEffect
         }
         userCode = start.optString("user_code", "")
         verifyUri = start.optString("verification_uri", "https://github.com/login/device")
-        val intervalMs = ((start.optInt("interval", 5) + 2).coerceIn(5, 30)) * 1000L
+        val intervalMs = (start.optInt("interval", 5).coerceIn(3, 15)) * 1000L
         val deviceCode = start.optString("device_code", "")
         val deadline = System.currentTimeMillis() + start.optInt("expires_in", 900) * 1000L
         busy = false
+        statusText = xyNow(
+            "Silakan login (jika belum) lalu tekan tombol hijau 'Authorize' di bawah — tanpa perlu ketik kode!",
+            "Sign in (if needed) and tap the green 'Authorize' button below — no code typing needed!",
+        )
+        webViewRef?.evaluateJavascript(buildAutoFillScript(userCode), null)
+
         while (System.currentTimeMillis() < deadline) {
             kotlinx.coroutines.delay(intervalMs)
+            webViewRef?.evaluateJavascript(buildAutoFillScript(userCode), null)
             val poll = githubDevicePoll(GITHUB_OAUTH_CLIENT_ID, deviceCode) ?: continue
-            if (poll.optString("access_token").isNotEmpty()) {
+            val tok = poll.optString("access_token")
+            if (tok.isNotEmpty()) {
                 busy = true
-                val token = poll.optString("access_token")
-                val user = id.xydesk.remote.ui.rdp.XyRdpClient.whoami(token)
+                statusText = xyNow("Menyinkronkan profil & avatar GitHub…", "Syncing GitHub profile & avatar…")
+                val user = syncGitHubProfileAndAvatar(context, tok)
+                    ?: id.xydesk.remote.ui.rdp.XyRdpClient.whoami(tok)
                 busy = false
-                if (user != null) onSuccess(token, user)
-                else {
-                    onError(
-                        xyNow(
-                            "Login gagal: profil tidak terbaca.",
-                            "Sign-in failed: profile unreadable.",
-                        ),
-                    )
+                if (user != null) {
+                    onSuccess(tok, user)
+                } else {
+                    onError(xyNow("Login gagal: profil tidak terbaca.", "Sign-in failed: profile unreadable."))
                 }
                 return@LaunchedEffect
             }
             when (poll.optString("error", "")) {
                 "expired_token" -> {
-                    statusText = xyNow(
-                        "Kode kedaluwarsa — buka ulang dialog login.",
-                        "Code expired — reopen the sign-in dialog.",
-                    )
+                    statusText = xyNow("Sesi login kedaluwarsa — tutup dan buka ulang.", "Sign-in session expired — reopen dialog.")
                     return@LaunchedEffect
                 }
                 "access_denied" -> {
-                    statusText = xyNow(
-                        "Login ditolak di GitHub.",
-                        "Sign-in denied on GitHub.",
-                    )
+                    statusText = xyNow("Login dibatalkan di GitHub.", "Sign-in cancelled on GitHub.")
                     return@LaunchedEffect
                 }
-                else -> Unit // authorization_pending / slow_down → terus jajak
             }
         }
     }
 
-    Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-        Text(
-            xy(
-                "Tanpa tempel token: ketik kode ini di github.com/login/device lalu setujui akses. " +
-                    "XyDesk hanya meminta izin baca profil (nama tampilanmu).",
-                "No token pasting: type this code at github.com/login/device and approve. " +
-                    "XyDesk only asks for read-profile permission (your display name).",
-            ),
-            style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-        )
-        Box(
-            Modifier
-                .fillMaxWidth()
-                .clip(RoundedCornerShape(12.dp))
-                .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f))
-                .padding(vertical = 14.dp),
-            contentAlignment = Alignment.Center,
+    Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
         ) {
-            Text(
-                if (busy && userCode.isEmpty()) "…" else userCode,
-                style = MaterialTheme.typography.titleLarge,
-                fontWeight = FontWeight.Bold,
-                color = MaterialTheme.colorScheme.onSurface,
-                letterSpacing = 3.sp,
-            )
-        }
-        XyPillButton(
-            text = xy("Buka github.com/login/device", "Open github.com/login/device"),
-            onClick = {
-                runCatching {
-                    context.startActivity(
-                        android.content.Intent(
-                            android.content.Intent.ACTION_VIEW,
-                            android.net.Uri.parse(verifyUri),
-                        ),
-                    )
-                }
-            },
-            primary = false,
-            compact = true,
-        )
-        if (statusText.isNotEmpty()) {
+            GitHubLogoIcon(size = 20.dp, tint = MaterialTheme.colorScheme.primary)
             Text(
                 statusText,
                 style = MaterialTheme.typography.labelSmall,
                 color = MaterialTheme.colorScheme.primary,
+                modifier = Modifier.weight(1f),
             )
         }
-        XyPillButton(
-            text = xy("Tutup", "Close"),
-            onClick = onCancel,
-            primary = false,
-            compact = true,
-            enabled = !busy,
-        )
+
+        if (!showPatFallback) {
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(380.dp)
+                    .clip(RoundedCornerShape(16.dp))
+                    .border(
+                        1.dp,
+                        MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f),
+                        RoundedCornerShape(16.dp),
+                    ),
+            ) {
+                androidx.compose.ui.viewinterop.AndroidView(
+                    modifier = Modifier.fillMaxSize(),
+                    factory = { ctx ->
+                        android.webkit.WebView(ctx).apply {
+                            settings.javaScriptEnabled = true
+                            settings.domStorageEnabled = true
+                            settings.userAgentString = settings.userAgentString + " XyDeskRemote/1.1.16"
+                            webViewClient = object : android.webkit.WebViewClient() {
+                                override fun onPageFinished(view: android.webkit.WebView?, url: String?) {
+                                    super.onPageFinished(view, url)
+                                    if (userCode.isNotBlank()) {
+                                        view?.evaluateJavascript(buildAutoFillScript(userCode), null)
+                                        view?.postDelayed({
+                                            view.evaluateJavascript(buildAutoFillScript(userCode), null)
+                                        }, 350L)
+                                    }
+                                }
+                            }
+                            loadUrl(verifyUri)
+                            webViewRef = this
+                        }
+                    },
+                    update = { view ->
+                        webViewRef = view
+                        if (userCode.isNotBlank()) {
+                            view.evaluateJavascript(buildAutoFillScript(userCode), null)
+                        }
+                    },
+                )
+            }
+        } else {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Text(
+                    xy(
+                        "Atau tempel Personal Access Token GitHub (scope: repo, workflow, read:user):",
+                        "Or paste a GitHub Personal Access Token (scope: repo, workflow, read:user):",
+                    ),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                id.xydesk.remote.ui.components.XyField(
+                    value = patDraft,
+                    onValueChange = { patDraft = it.trim() },
+                    label = "GitHub Token (ghp_…)",
+                    hint = "ghp_xxxxxxxxxxxxxxxxxxxx",
+                    isPassword = true,
+                )
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    XyPillButton(
+                        text = xy("Buat Token di GitHub ↗", "Create Token on GitHub ↗"),
+                        onClick = {
+                            runCatching {
+                                context.startActivity(
+                                    android.content.Intent(
+                                        android.content.Intent.ACTION_VIEW,
+                                        android.net.Uri.parse("https://github.com/settings/tokens/new?description=XyDesk+Remote&scopes=repo,workflow,read:user"),
+                                    ),
+                                )
+                            }
+                        },
+                        primary = false,
+                        compact = true,
+                        modifier = Modifier.weight(1f),
+                    )
+                    XyPillButton(
+                        text = xy("Masuk dengan Token", "Sign in with Token"),
+                        onClick = {
+                            scope.launch {
+                                busy = true
+                                val tok = patDraft.trim()
+                                val user = syncGitHubProfileAndAvatar(context, tok)
+                                    ?: id.xydesk.remote.ui.rdp.XyRdpClient.whoami(tok)
+                                busy = false
+                                if (user != null) onSuccess(tok, user)
+                                else statusText = xyNow("Token tidak valid.", "Invalid token.")
+                            }
+                        },
+                        enabled = !busy && patDraft.length >= 10,
+                        compact = true,
+                        modifier = Modifier.weight(1f),
+                    )
+                }
+            }
+        }
+
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            XyPillButton(
+                text = if (showPatFallback) xy("Pakai Login Instan", "Use Instant Login")
+                else xy("Opsi Token / Browser", "Token / Browser Option"),
+                onClick = { showPatFallback = !showPatFallback },
+                primary = false,
+                compact = true,
+                modifier = Modifier.weight(1f),
+            )
+            XyPillButton(
+                text = xy("Tutup", "Close"),
+                onClick = onCancel,
+                primary = false,
+                compact = true,
+            )
+        }
+    }
+}
+
+/**
+ * Ronde 52 — Komponen Ikon Header Atas (Avatar Profil + Logo GitHub) yang
+ * ditempatkan langsung di pojok kanan atas Header Beranda, Feed, dan Chat Global.
+ *
+ * Klik ikon Logo GitHub atau Avatar langsung membuka pop-up cepat untuk:
+ * - Ganti Foto Profil
+ * - Ganti Nama Tampilan
+ * - Login / Keluar GitHub (tanpa ketik kode)
+ */
+@Composable
+internal fun XyHeaderAccountActions(
+    onStateChanged: () -> Unit = {},
+) {
+    val context = LocalContext.current
+    val scope = androidx.compose.runtime.rememberCoroutineScope()
+    val api = remember { id.xydesk.remote.community.CommunityFeedClient(context.applicationContext) }
+    var quickOpen by remember { mutableStateOf(false) }
+    var githubLoginOpen by remember { mutableStateOf(false) }
+    var ghUser by remember { mutableStateOf(getVerifiedGitHubLogin(context)) }
+    var displayName by remember { mutableStateOf(api.displayName() ?: ghUser ?: chatNickname(context)) }
+    var nameDraft by remember { mutableStateOf(displayName) }
+    var statusMsg by remember { mutableStateOf<String?>(null) }
+    var savingName by remember { mutableStateOf(false) }
+    var avatarTick by remember { mutableIntStateOf(0) }
+    val avatarFile = remember { java.io.File(context.filesDir, "xy_avatar.webp") }
+    var avatarBitmap by remember { mutableStateOf<android.graphics.Bitmap?>(null) }
+
+    androidx.compose.runtime.LaunchedEffect(avatarTick, quickOpen, ghUser) {
+        ghUser = getVerifiedGitHubLogin(context)
+        displayName = api.displayName() ?: ghUser ?: chatNickname(context)
+        val bmp = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+            runCatching {
+                if (avatarFile.exists()) android.graphics.BitmapFactory.decodeFile(avatarFile.absolutePath) else null
+            }.getOrNull()
+        }
+        avatarBitmap = bmp
+    }
+
+    val pickHeaderAvatar = androidx.activity.compose.rememberLauncherForActivityResult(
+        androidx.activity.result.contract.ActivityResultContracts.GetContent(),
+    ) { uri ->
+        if (uri != null) {
+            scope.launch {
+                val raw = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+                    runCatching { context.contentResolver.openInputStream(uri)?.use { it.readBytes() } }.getOrNull()
+                }
+                val src = raw?.let { android.graphics.BitmapFactory.decodeByteArray(it, 0, it.size) }
+                if (src != null) {
+                    val side = 256
+                    val scale = minOf(1f, side / maxOf(src.width, src.height).toFloat())
+                    val bmp = if (scale < 1f) {
+                        android.graphics.Bitmap.createScaledBitmap(
+                            src,
+                            (src.width * scale).toInt().coerceAtLeast(1),
+                            (src.height * scale).toInt().coerceAtLeast(1),
+                            true,
+                        )
+                    } else src
+                    val stream = java.io.ByteArrayOutputStream()
+                    val fmt = if (android.os.Build.VERSION.SDK_INT >= 30) {
+                        android.graphics.Bitmap.CompressFormat.WEBP_LOSSY
+                    } else {
+                        @Suppress("DEPRECATION")
+                        android.graphics.Bitmap.CompressFormat.WEBP
+                    }
+                    bmp.compress(fmt, 85, stream)
+                    val bytes = stream.toByteArray()
+                    if (bytes.size <= 200_000) {
+                        kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+                            avatarFile.writeBytes(bytes)
+                            runCatching { api.uploadAvatar(bytes, "image/webp") }
+                        }
+                        avatarBitmap = bmp
+                        avatarTick += 1
+                        statusMsg = xyNow("Foto profil diperbarui!", "Profile photo updated!")
+                        onStateChanged()
+                    }
+                }
+            }
+        }
+    }
+
+    val founder = isFounderAccount(ghUser) || isFounderAccount(displayName)
+
+    // 1) Ikon Logo GitHub di Header Atas
+    Box(
+        modifier = Modifier
+            .size(34.dp)
+            .clip(androidx.compose.foundation.shape.CircleShape)
+            .background(
+                if (ghUser != null) MaterialTheme.colorScheme.primary.copy(alpha = 0.16f)
+                else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.08f),
+            )
+            .border(
+                width = 1.dp,
+                color = if (ghUser != null) MaterialTheme.colorScheme.primary.copy(alpha = 0.55f)
+                else MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.45f),
+                shape = androidx.compose.foundation.shape.CircleShape,
+            )
+            .padding(2.dp),
+        contentAlignment = Alignment.Center,
+    ) {
+        androidx.compose.material3.Surface(
+            onClick = { if (ghUser == null) githubLoginOpen = true else quickOpen = true },
+            color = androidx.compose.ui.graphics.Color.Transparent,
+            shape = androidx.compose.foundation.shape.CircleShape,
+        ) {
+            Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                GitHubLogoIcon(
+                    size = 18.dp,
+                    tint = if (ghUser != null) MaterialTheme.colorScheme.primary
+                    else MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                // Titik indikator status login GitHub
+                Box(
+                    modifier = Modifier
+                        .align(Alignment.BottomEnd)
+                        .size(8.dp)
+                        .clip(androidx.compose.foundation.shape.CircleShape)
+                        .background(
+                            if (ghUser != null) androidx.compose.ui.graphics.Color(0xFF10B981)
+                            else MaterialTheme.colorScheme.outline.copy(alpha = 0.5f),
+                        ),
+                )
+            }
+        }
+    }
+
+    // 2) Ikon Avatar Profil di Header Atas
+    androidx.compose.material3.Surface(
+        onClick = {
+            nameDraft = displayName
+            statusMsg = null
+            quickOpen = true
+        },
+        color = androidx.compose.ui.graphics.Color.Transparent,
+        shape = androidx.compose.foundation.shape.CircleShape,
+        modifier = Modifier
+            .size(34.dp)
+            .clip(androidx.compose.foundation.shape.CircleShape)
+            .background(MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.55f))
+            .let { mod ->
+                if (founder) mod.border(1.5.dp, founderBorderBrush(), androidx.compose.foundation.shape.CircleShape)
+                else mod.border(
+                    1.dp,
+                    MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f),
+                    androidx.compose.foundation.shape.CircleShape,
+                )
+            },
+    ) {
+        Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+            val bmp = avatarBitmap
+            if (bmp != null) {
+                androidx.compose.foundation.Image(
+                    bitmap = bmp.asImageBitmap(),
+                    contentDescription = "Profil",
+                    modifier = Modifier.fillMaxSize().clip(androidx.compose.foundation.shape.CircleShape),
+                    contentScale = androidx.compose.ui.layout.ContentScale.Crop,
+                )
+            } else {
+                Text(
+                    text = (displayName.take(1).ifBlank { "U" }).uppercase(),
+                    style = MaterialTheme.typography.labelMedium,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.onPrimaryContainer,
+                )
+            }
+        }
+    }
+
+    // Pop-up Header Cepat: Ganti Foto, Ganti Nama, & Status Login GitHub
+    if (quickOpen) {
+        XyOverlay(
+            title = xy("Profil & Akun GitHub", "Profile & GitHub Account"),
+            onDismiss = { quickOpen = false },
+        ) {
+            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(12.dp),
+                ) {
+                    androidx.compose.material3.Surface(
+                        onClick = { pickHeaderAvatar.launch("image/*") },
+                        shape = androidx.compose.foundation.shape.CircleShape,
+                        color = MaterialTheme.colorScheme.surfaceVariant,
+                        modifier = Modifier
+                            .size(56.dp)
+                            .let { m ->
+                                if (founder) m.border(2.dp, founderBorderBrush(), androidx.compose.foundation.shape.CircleShape)
+                                else m
+                            },
+                    ) {
+                        Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                            val bmp = avatarBitmap
+                            if (bmp != null) {
+                                androidx.compose.foundation.Image(
+                                    bitmap = bmp.asImageBitmap(),
+                                    contentDescription = null,
+                                    modifier = Modifier.fillMaxSize(),
+                                    contentScale = androidx.compose.ui.layout.ContentScale.Crop,
+                                )
+                            } else {
+                                Text(
+                                    (displayName.take(1).ifBlank { "U" }).uppercase(),
+                                    style = MaterialTheme.typography.titleLarge,
+                                    fontWeight = FontWeight.Bold,
+                                )
+                            }
+                        }
+                    }
+                    Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(6.dp),
+                        ) {
+                            Text(
+                                displayName,
+                                style = MaterialTheme.typography.titleMedium,
+                                fontWeight = FontWeight.Bold,
+                            )
+                            if (founder) {
+                                XyFounderBadge(compact = true)
+                            }
+                        }
+                        Text(
+                            if (ghUser != null) "GitHub: @$ghUser (Terhubung)"
+                            else xy("GitHub belum terhubung", "GitHub not connected"),
+                            style = MaterialTheme.typography.labelSmall,
+                            color = if (ghUser != null) MaterialTheme.colorScheme.primary
+                            else MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                        XyPillButton(
+                            text = xy("Ubah Foto Profil", "Change Profile Photo"),
+                            onClick = { pickHeaderAvatar.launch("image/*") },
+                            primary = false,
+                            compact = true,
+                        )
+                    }
+                }
+
+                // Input Ganti Nama Cepat
+                id.xydesk.remote.ui.components.XyField(
+                    value = nameDraft,
+                    onValueChange = { if (it.length <= 24) nameDraft = it },
+                    label = xy("Nama Tampilan", "Display Name"),
+                    hint = xy("Masukkan nama tampilan…", "Enter display name…"),
+                )
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    XyPillButton(
+                        text = if (savingName) "…" else xy("Simpan Nama", "Save Name"),
+                        onClick = {
+                            val clean = nameDraft.trim()
+                            if (clean.isNotEmpty() && !savingName) {
+                                savingName = true
+                                scope.launch {
+                                    kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+                                        runCatching { api.setDisplayName(clean) }
+                                    }
+                                    api.setDisplayNameLocally(clean)
+                                    context.getSharedPreferences("xydesk.global.chat", android.content.Context.MODE_PRIVATE)
+                                        .edit().putString("nickname", clean).apply()
+                                    displayName = clean
+                                    savingName = false
+                                    statusMsg = xyNow("Nama tampilan disimpan!", "Display name saved!")
+                                    onStateChanged()
+                                }
+                            }
+                        },
+                        compact = true,
+                        enabled = !savingName && nameDraft.trim().isNotEmpty(),
+                        modifier = Modifier.weight(1f),
+                    )
+                    if (ghUser == null) {
+                        XyPillButton(
+                            text = xy("Login GitHub", "GitHub Sign In"),
+                            onClick = {
+                                quickOpen = false
+                                githubLoginOpen = true
+                            },
+                            primary = false,
+                            compact = true,
+                            modifier = Modifier.weight(1f),
+                        )
+                    } else {
+                        XyPillButton(
+                            text = xy("Keluar GitHub", "Sign Out GitHub"),
+                            onClick = {
+                                runCatching {
+                                    id.xydesk.remote.security.CredentialVault(context.applicationContext)
+                                        .remove(id.xydesk.remote.ui.rdp.XyRdpConfig.VAULT_PAT_ID)
+                                }
+                                saveVerifiedGitHubLogin(context, null, "")
+                                ghUser = null
+                                statusMsg = xyNow("Akun GitHub dilepas.", "GitHub account disconnected.")
+                                onStateChanged()
+                            },
+                            primary = false,
+                            compact = true,
+                            modifier = Modifier.weight(1f),
+                        )
+                    }
+                }
+                statusMsg?.let {
+                    Text(it, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.primary)
+                }
+            }
+        }
+    }
+
+    if (githubLoginOpen) {
+        XyOverlay(
+            title = xy("Login GitHub Instan", "Instant GitHub Sign-In"),
+            onDismiss = { githubLoginOpen = false },
+        ) {
+            GitHubDeviceFlowPanel(
+                onCancel = { githubLoginOpen = false },
+                onSuccess = { tok, user ->
+                    runCatching {
+                        id.xydesk.remote.security.CredentialVault(context.applicationContext)
+                            .put(id.xydesk.remote.ui.rdp.XyRdpConfig.VAULT_PAT_ID, tok)
+                    }
+                    saveVerifiedGitHubLogin(context, user)
+                    ghUser = user
+                    if (api.displayName().isNullOrBlank()) {
+                        api.setDisplayNameLocally(user)
+                        scope.launch {
+                            kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+                                runCatching { api.setDisplayName(user) }
+                            }
+                        }
+                    }
+                    displayName = api.displayName() ?: user
+                    githubLoginOpen = false
+                    avatarTick += 1
+                    onStateChanged()
+                },
+                onError = { statusMsg = it },
+            )
+        }
     }
 }

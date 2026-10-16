@@ -2409,14 +2409,19 @@ async function feedbackResponse(request, env) {
 const CHAT_HISTORY_LIMIT = 100;
 const CHAT_TEXT_MAX = 500;
 const CHAT_NAME_MAX = 24;
-const CHAT_MSG_PER_WINDOW = 8;
+const CHAT_ATTACHMENT_MAX = 240_000;
+const CHAT_MSG_PER_WINDOW = 10;
 const CHAT_WINDOW_MS = 20_000;
 const DEFAULT_ONESIGNAL_APP_ID = "ffaa87d6-8e1d-42b6-bb4f-ebbbfc0bccbb";
+const LEGACY_TEST_NAMES = new Set(["tesbot", "budi", "rizky"]);
 
-function isFounderChatName(name) {
-  if (typeof name !== "string") return false;
-  const normalized = name.trim().replace(/^@/, "").toLowerCase();
-  return normalized === "xykal" || normalized === "xykal (founder)" || normalized.startsWith("xykal ");
+function isFounderChatName(name, githubLogin = "") {
+  const checkOne = (val) => {
+    if (typeof val !== "string") return false;
+    const normalized = val.trim().replace(/^@/, "").toLowerCase();
+    return normalized === "xykal" || normalized === "xykal (founder)" || normalized.startsWith("xykal ");
+  };
+  return checkOne(name) || checkOne(githubLogin);
 }
 
 function normalizeCountryCode(raw, fallback = "ID") {
@@ -2426,16 +2431,69 @@ function normalizeCountryCode(raw, fallback = "ID") {
   return /^[A-Z]{2}$/.test(fb) ? fb : "ID";
 }
 
-function detectCountryFromRequest(request, bodyCountry) {
-  if (typeof bodyCountry === "string" && /^[A-Za-z]{2}$/.test(bodyCountry.trim())) {
-    const bc = bodyCountry.trim().toUpperCase();
-    if (bc !== "XX" && bc !== "T1") return bc;
+const LANG_TO_COUNTRY = {
+  id: "ID", in: "ID", jv: "ID", su: "ID",
+  ms: "MY",
+  th: "TH",
+  ja: "JP",
+  ko: "KR",
+  vi: "VN",
+  tl: "PH", fil: "PH",
+  zh: "CN", "zh-cn": "CN", "zh-tw": "TW",
+  ru: "RU",
+  uk: "UA",
+  ar: "SA",
+  hi: "IN", bn: "BD", ta: "IN",
+  tr: "TR",
+  de: "DE",
+  fr: "FR",
+  es: "ES",
+  pt: "BR",
+  it: "IT",
+  nl: "NL",
+  pl: "PL",
+};
+
+const ID_WORD_HINT = /\b(halo|hai|apa|gimana|bagaimana|bisa|bang|bre|bro|kak|gan|aku|kamu|saya|kita|yang|ini|itu|dari|buat|untuk|udah|sudah|belum|tidak|tak|gak|nggak|konek|koneksi|langsung|terima|kasih|makasih|mantap|keren|tolong|cara|pakai|pake|kenapa|dimana|kapan|siapa|boleh|dong|aja|saja|kok|nih|tuh|lagi|sama|kalau|kalo|bukan|dengan|di|ke|jir|anjir|wkwk|wkwkwk|gasken|gas|sip|oke|mantul)\b/i;
+
+function resolveSmartCountry(text, detectedLang, clientCountry, cfCountry) {
+  const clean = String(text || "").trim();
+  const det = String(detectedLang || "").trim().toLowerCase();
+  if (/[\u0e00-\u0e7f]/.test(clean) || det === "th") return "TH";
+  if (/[\u3040-\u30ff]/.test(clean) || det === "ja") return "JP";
+  if (/[\uac00-\ud7af]/.test(clean) || det === "ko") return "KR";
+  if (/[\u0400-\u04ff]/.test(clean) || det === "ru") return "RU";
+  if (/[\u0600-\u06ff]/.test(clean) || det === "ar") return "SA";
+  if (/[\u4e00-\u9fff]/.test(clean) || det.startsWith("zh")) {
+    return det === "zh-tw" || det === "zh-hk" ? "TW" : "CN";
   }
+  if (ID_WORD_HINT.test(clean) || det === "id" || det === "in" || det === "jv") return "ID";
+
+  const langCountry = LANG_TO_COUNTRY[det];
+  const ccClient = typeof clientCountry === "string" && /^[A-Za-z]{2}$/.test(clientCountry.trim())
+    ? clientCountry.trim().toUpperCase()
+    : "";
+  const ccCf = typeof cfCountry === "string" && /^[A-Za-z]{2}$/.test(cfCountry.trim())
+    ? cfCountry.trim().toUpperCase()
+    : "";
+
+  // Jika bahasa terdeteksi spesifik (mis. vi, tl, ms, tr, de, fr, es, pt, hi)
+  // sedangkan negara dari locale/VPN adalah US/GB/SG umum, utamakan negara bahasa tersebut.
+  if (langCountry && (!ccClient || ccClient === "US" || ccClient === "GB")) {
+    return langCountry;
+  }
+  if (ccClient && ccClient !== "XX" && ccClient !== "T1") return ccClient;
+  if (langCountry) return langCountry;
+  if (ccCf && ccCf !== "XX" && ccCf !== "T1") return ccCf;
+  return "ID";
+}
+
+function detectCountryFromRequest(request, bodyCountry, text = "", detectedLang = "") {
   const cfCountry = request?.cf?.country
     || request?.headers?.get("cf-ipcountry")
     || request?.headers?.get("CF-Connecting-IP-Country")
     || request?.headers?.get("x-chat-country");
-  return normalizeCountryCode(cfCountry, "ID");
+  return resolveSmartCountry(text, detectedLang, bodyCountry, cfCountry);
 }
 
 function countryToFlag(countryCode) {
@@ -2446,14 +2504,13 @@ function countryToFlag(countryCode) {
   );
 }
 
-const ID_WORD_HINT = /\b(halo|hai|apa|gimana|bagaimana|bisa|bang|bre|bro|kak|gan|aku|kamu|saya|kita|yang|ini|itu|dari|buat|untuk|udah|sudah|belum|tidak|tak|gak|nggak|konek|koneksi|langsung|terima|kasih|makasih|mantap|keren|tolong|cara|pakai|pake|kenapa|dimana|kapan|siapa|boleh|dong|aja|saja|kok|nih|tuh|lagi|sama|kalau|kalo|bukan|dengan|di|ke)\b/i;
-
 function offlineTranslateFallback(text, country = "ID") {
   const clean = String(text || "").trim();
   if (!clean) return { translated: "", targetLang: "EN", sourceLang: "id" };
   const isId = ID_WORD_HINT.test(clean) || normalizeCountryCode(country) === "ID";
   if (isId) {
     const mapIdToEn = [
+      [/\bhalo semuanya\b/gi, "hello everyone"],
       [/\bhalo\b/gi, "hello"],
       [/\bhai\b/gi, "hi"],
       [/\bselamat pagi\b/gi, "good morning"],
@@ -2468,6 +2525,10 @@ function offlineTranslateFallback(text, country = "ID") {
       [/\bbalas\b/gi, "reply"],
       [/\bnotifikasi\b/gi, "notification"],
       [/\bcara konek\b/gi, "how to connect"],
+      [/\bkoneksi rdp nya lancar banget\b/gi, "the RDP connection is super smooth"],
+      [/\baplikasi xydesk remote keren banget\b/gi, "the XyDesk Remote app is awesome"],
+      [/\blancar banget\b/gi, "very smooth"],
+      [/\bkeren banget\b/gi, "really cool"],
       [/\bgimana\b/gi, "how"],
       [/\bbagaimana\b/gi, "how"],
       [/\bkenapa\b/gi, "why"],
@@ -2481,6 +2542,7 @@ function offlineTranslateFallback(text, country = "ID") {
       [/\bkeren\b/gi, "cool"],
       [/\blancar\b/gi, "smooth"],
       [/\bcepat\b/gi, "fast"],
+      [/\bsemuanya\b/gi, "everyone"],
       [/\bsemua\b/gi, "everyone"],
       [/\bbang\b/gi, "bro"],
       [/\bkonek\b/gi, "connect"],
@@ -2490,6 +2552,7 @@ function offlineTranslateFallback(text, country = "ID") {
     return { translated: out, targetLang: "EN", sourceLang: "id" };
   }
   const mapEnToId = [
+    [/\bhello everyone\b/gi, "halo semuanya"],
     [/\bhello\b/gi, "halo"],
     [/\bhi\b/gi, "hai"],
     [/\bgood morning\b/gi, "selamat pagi"],
@@ -2509,10 +2572,35 @@ function offlineTranslateFallback(text, country = "ID") {
   return { translated: out, targetLang: "ID", sourceLang: "en" };
 }
 
+async function fetchGoogleClients5Translate(text, sourceLang, targetLang) {
+  const q = encodeURIComponent(text);
+  const sl = sourceLang || "auto";
+  const url = `https://clients5.google.com/translate_a/t?client=dict-chrome-ex&sl=${sl}&tl=${targetLang}&q=${q}`;
+  const res = await fetch(url, {
+    headers: {
+      "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
+      Accept: "application/json,text/plain,*/*",
+    },
+  });
+  if (!res.ok) throw new Error(`clients5_http_${res.status}`);
+  const data = await res.json();
+  const first = Array.isArray(data) && data.length > 0 ? data[0] : null;
+  if (Array.isArray(first) && first[0]) {
+    return {
+      translated: String(first[0]).trim(),
+      detected: typeof first[1] === "string" ? first[1].toLowerCase() : sl,
+    };
+  }
+  if (typeof first === "string" && first.trim()) {
+    return { translated: first.trim(), detected: sl };
+  }
+  throw new Error("clients5_bad_payload");
+}
+
 async function fetchGoogleTranslate(text, sourceLang, targetLang) {
   const q = encodeURIComponent(text);
   const sl = sourceLang || "auto";
-  const url = `https://translate.googleapis.com/translate_a/single?client=gtx&sl=${sl}&tl=${targetLang}&dt=t&q=${q}`;
+  const url = `https://translate.googleapis.com/translate_a/single?client=dict-chrome-ex&sl=${sl}&tl=${targetLang}&dt=t&q=${q}`;
   const res = await fetch(url, {
     headers: {
       "User-Agent": "Mozilla/5.0 (Linux; Android 15) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Mobile Safari/537.36",
@@ -2528,31 +2616,42 @@ async function fetchGoogleTranslate(text, sourceLang, targetLang) {
   return { translated, detected };
 }
 
-function guessSourceLang(text, country = "ID") {
+function guessSourceLang(text, country = "") {
   const clean = String(text || "").trim();
+  if (/[\u0e00-\u0e7f]/.test(clean)) return "th";
   if (/[\u3040-\u30ff]/.test(clean)) return "ja";
   if (/[\uac00-\ud7af]/.test(clean)) return "ko";
-  if (/[\u4e00-\u9fff]/.test(clean)) return "zh";
+  if (/[\u4e00-\u9fff]/.test(clean)) return "zh-CN";
   if (/[\u0400-\u04ff]/.test(clean)) return "ru";
   if (/[\u0600-\u06ff]/.test(clean)) return "ar";
-  if (/[\u0e00-\u0e7f]/.test(clean)) return "th";
+  if (/[\u0900-\u097f]/.test(clean)) return "hi";
+  if (/[ăâđêôơưĂÂĐÊÔƠƯ]/i.test(clean)) return "vi";
   if (ID_WORD_HINT.test(clean)) return "id";
-  const cc = normalizeCountryCode(country, "ID");
-  if (cc === "ID" || cc === "MY") return "id";
+  if (/\b(the|and|you|are|how|what|why|where|when|this|that|with|from|have|has|for|not|can|will|good|nice|cool|hello|hi|thanks|thank)\b/i.test(clean)) {
+    return "en";
+  }
+  const cc = String(country || "").trim().toUpperCase();
   const byCountry = {
-    JP: "ja", KR: "ko", CN: "zh", TW: "zh", RU: "ru",
-    ES: "es", MX: "es", AR: "es", BR: "pt", PT: "pt",
+    ID: "id", MY: "ms", JP: "ja", KR: "ko", CN: "zh-CN", TW: "zh-TW",
+    RU: "ru", UA: "uk", ES: "es", MX: "es", AR: "es", BR: "pt", PT: "pt",
     FR: "fr", DE: "de", IT: "it", NL: "nl", TR: "tr",
-    VN: "vi", TH: "th", SA: "ar", AE: "ar", EG: "ar",
+    VN: "vi", TH: "th", PH: "tl", SA: "ar", AE: "ar", EG: "ar", IN: "hi",
   };
   return byCountry[cc] || "en";
 }
 
 async function fetchMyMemoryTranslate(text, sourceLang, targetLang) {
   const q = encodeURIComponent(text);
-  const url = `https://api.mymemory.translated.net/get?q=${q}&langpair=${sourceLang}|${targetLang}`;
+  let sl = !sourceLang || sourceLang === "auto" ? guessSourceLang(text, "") : sourceLang;
+  if (sl.toLowerCase() === String(targetLang || "").toLowerCase()) {
+    sl = String(targetLang).toLowerCase() === "id" ? "en" : "id";
+  }
+  const url = `https://api.mymemory.translated.net/get?q=${q}&langpair=${encodeURIComponent(sl)}%7C${encodeURIComponent(targetLang)}`;
   const res = await fetch(url, {
-    headers: { "User-Agent": "xydesk-remote-worker/1.0", Accept: "application/json" },
+    headers: {
+      "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
+      Accept: "application/json",
+    },
   });
   if (!res.ok) throw new Error(`mymemory_http_${res.status}`);
   const data = await res.json();
@@ -2566,30 +2665,58 @@ async function translateChatText(text, country = "ID") {
   if (!clean) return { translated: "", targetLang: "EN", sourceLang: "id" };
   const guessedSl = guessSourceLang(clean, country);
   const isSourceId = guessedSl === "id" || guessedSl === "ms";
-  const targetCode = isSourceId ? "en" : "id";
-  const targetLabel = isSourceId ? "EN" : "ID";
+  const primaryTarget = isSourceId ? "en" : "id";
+  const primaryLabel = isSourceId ? "EN" : "ID";
 
-  // Jalur 1: Google Translate GTX
+  // Jalur 1: Google clients5 (client=dict-chrome-ex, bebas rate-limit 429 & deteksi semua bahasa)
   try {
-    const gtx = await fetchGoogleTranslate(clean, guessedSl, targetCode);
-    if (gtx.translated && gtx.translated.toLowerCase() !== clean.toLowerCase()) {
+    const c5 = await fetchGoogleClients5Translate(clean, "auto", primaryTarget);
+    const det = (c5.detected || guessedSl).toLowerCase();
+    if (det === "id" && primaryTarget === "id") {
+      const c5En = await fetchGoogleClients5Translate(clean, "id", "en");
+      if (c5En.translated) {
+        return { translated: c5En.translated, targetLang: "EN", sourceLang: "id" };
+      }
+    }
+    if (c5.translated && c5.translated.toLowerCase() !== clean.toLowerCase()) {
       return {
-        translated: gtx.translated,
-        targetLang: targetLabel,
-        sourceLang: gtx.detected || guessedSl,
+        translated: c5.translated,
+        targetLang: primaryLabel,
+        sourceLang: det,
       };
     }
   } catch {
     // Lanjut ke jalur 2
   }
 
-  // Jalur 2: MyMemory API (ramah IP Cloudflare Worker)
+  // Jalur 2: Google Translate dict-chrome-ex single
   try {
-    const mm = await fetchMyMemoryTranslate(clean, guessedSl, targetCode);
+    const gtx = await fetchGoogleTranslate(clean, "auto", primaryTarget);
+    const det = (gtx.detected || guessedSl).toLowerCase();
+    if (det === "id" && primaryTarget === "id") {
+      const gtxEn = await fetchGoogleTranslate(clean, "id", "en");
+      if (gtxEn.translated) {
+        return { translated: gtxEn.translated, targetLang: "EN", sourceLang: "id" };
+      }
+    }
+    if (gtx.translated && gtx.translated.toLowerCase() !== clean.toLowerCase()) {
+      return {
+        translated: gtx.translated,
+        targetLang: primaryLabel,
+        sourceLang: det,
+      };
+    }
+  } catch {
+    // Lanjut ke jalur 3
+  }
+
+  // Jalur 3: MyMemory API
+  try {
+    const mm = await fetchMyMemoryTranslate(clean, guessedSl, primaryTarget);
     if (mm && mm.toLowerCase() !== clean.toLowerCase()) {
       return {
         translated: mm,
-        targetLang: targetLabel,
+        targetLang: primaryLabel,
         sourceLang: guessedSl,
       };
     }
@@ -2598,6 +2725,48 @@ async function translateChatText(text, country = "ID") {
   }
 
   return offlineTranslateFallback(clean, country);
+}
+
+function sanitizeChatExtras(raw) {
+  const githubLogin = typeof raw?.github_login === "string"
+    ? raw.github_login.trim().replace(/^@/, "").slice(0, 39)
+    : "";
+  const replyToId = typeof raw?.reply_to_id === "string" ? raw.reply_to_id.trim().slice(0, 64) : "";
+  const replyToName = typeof raw?.reply_to_name === "string" ? raw.reply_to_name.trim().slice(0, CHAT_NAME_MAX) : "";
+  const replyToText = typeof raw?.reply_to_text === "string" ? raw.reply_to_text.trim().slice(0, 180) : "";
+  const rawKind = typeof raw?.attachment_kind === "string" && raw.attachment_kind.trim()
+    ? raw.attachment_kind.trim().toLowerCase()
+    : typeof raw?.attachment_type === "string"
+      ? raw.attachment_type.trim().toLowerCase()
+      : "";
+  const attachmentKind = rawKind === "image" || rawKind === "photo" ? "photo"
+    : rawKind === "file" ? "file"
+    : rawKind === "sticker" ? "sticker"
+    : "";
+  const attachmentType = attachmentKind === "photo" ? "image" : attachmentKind;
+  const attachmentName = typeof raw?.attachment_name === "string" ? raw.attachment_name.trim().slice(0, 120) : "";
+  const attachmentMime = typeof raw?.attachment_mime === "string" ? raw.attachment_mime.trim().slice(0, 80) : "";
+  const attachmentSize = Number.isFinite(Number(raw?.attachment_size)) ? Math.max(0, Math.min(10_000_000, Number(raw.attachment_size))) : 0;
+  const attachmentData = typeof raw?.attachment_data === "string" && raw.attachment_data.length <= CHAT_ATTACHMENT_MAX
+    ? raw.attachment_data
+    : "";
+  const avatarUrl = typeof raw?.avatar_url === "string" && raw.avatar_url.startsWith("https://")
+    ? raw.avatar_url.trim().slice(0, 300)
+    : "";
+  const hasAttachment = Boolean(attachmentData || attachmentKind === "sticker" || attachmentKind === "file");
+  return {
+    github_login: githubLogin,
+    reply_to_id: replyToId,
+    reply_to_name: replyToName,
+    reply_to_text: replyToText,
+    attachment_kind: hasAttachment ? attachmentKind : "",
+    attachment_type: hasAttachment ? attachmentType : "",
+    attachment_name: attachmentName,
+    attachment_mime: attachmentMime,
+    attachment_size: attachmentSize,
+    attachment_data: attachmentData,
+    avatar_url: avatarUrl,
+  };
 }
 
 export class GlobalChat {
@@ -2633,14 +2802,18 @@ export class GlobalChat {
     const name = typeof body?.name === "string"
       ? body.name.trim().slice(0, CHAT_NAME_MAX) || "Tamu"
       : "Tamu";
-    const text = typeof body?.text === "string"
-      ? body.text.trim().slice(0, CHAT_TEXT_MAX)
-      : "";
+    const extras = sanitizeChatExtras(body);
+    const rawText = typeof body?.text === "string" ? body.text.trim().slice(0, CHAT_TEXT_MAX) : "";
+    const text = rawText || (
+      extras.attachment_type === "sticker" ? `🎨 Stiker: ${extras.attachment_name || "XyDesk"}`
+      : extras.attachment_type === "image" ? `📷 Foto${extras.attachment_name ? `: ${extras.attachment_name}` : ""}`
+      : extras.attachment_type === "file" ? `📎 File: ${extras.attachment_name || "Dokumen"}`
+      : ""
+    );
     if (!text) {
       return durableObjectJson({ status: "error", code: "empty_text" }, 400, request.method);
     }
-    const country = detectCountryFromRequest(request, body?.country);
-    const flag = countryToFlag(country);
+    const prelimCountry = detectCountryFromRequest(request, body?.country, text);
     const now = Date.now();
     const rateKey = name.toLowerCase();
     const bucket = this.httpRate.get(rateKey) || { sent: 0, windowAt: now };
@@ -2653,18 +2826,30 @@ export class GlobalChat {
     if (bucket.sent > CHAT_MSG_PER_WINDOW) {
       return durableObjectJson({ status: "error", code: "rate_limited" }, 429, request.method);
     }
-    const tr = await translateChatText(text, country);
+    const clientTrText = typeof body?.translated === "string" ? body.translated.trim().slice(0, CHAT_TEXT_MAX) : "";
+    const clientTargetLang = typeof body?.target_lang === "string" ? body.target_lang.trim().slice(0, 12).toUpperCase() : "";
+    const clientSourceLang = typeof body?.source_lang === "string" ? body.source_lang.trim().slice(0, 12).toLowerCase() : "";
+    const tr = (clientTrText && clientTrText.toLowerCase() !== text.toLowerCase())
+      ? {
+          translated: clientTrText,
+          targetLang: clientTargetLang || (prelimCountry === "ID" ? "EN" : "ID"),
+          sourceLang: clientSourceLang || guessSourceLang(text, prelimCountry),
+        }
+      : await translateChatText(text, prelimCountry);
+    const country = detectCountryFromRequest(request, body?.country, text, tr.sourceLang);
+    const flag = countryToFlag(country);
     const id = `${now.toString(36).padStart(9, "0")}-${Math.random().toString(36).slice(2, 8)}`;
     const msg = {
       id,
       name,
-      is_founder: isFounderChatName(name),
+      is_founder: isFounderChatName(name, extras.github_login),
       country,
       flag,
       text,
       translated: tr.translated,
       target_lang: tr.targetLang,
       source_lang: tr.sourceLang,
+      ...extras,
       at: now,
     };
     await this.state.storage.put(`msg:${id}`, msg);
@@ -2676,31 +2861,37 @@ export class GlobalChat {
 
   async loadHistory() {
     const entries = await this.state.storage.list({ prefix: "msg:" });
-    const msgs = [...entries.entries()]
-      .map(([k, v]) => {
-        const country = normalizeCountryCode(v?.country, "ID");
-        const flag = v?.flag || countryToFlag(country);
-        let translated = typeof v?.translated === "string" ? v.translated : "";
-        let targetLang = typeof v?.target_lang === "string" ? v.target_lang : "";
-        let sourceLang = typeof v?.source_lang === "string" ? v.source_lang : "";
-        if (!translated && v?.text) {
-          const fb = offlineTranslateFallback(v.text, country);
-          translated = fb.translated;
-          targetLang = fb.targetLang;
-          sourceLang = fb.sourceLang;
-        }
-        return {
-          id: k.slice(4),
-          ...v,
-          is_founder: Boolean(v?.is_founder || isFounderChatName(v?.name)),
-          country,
-          flag,
-          translated,
-          target_lang: targetLang || "EN",
-          source_lang: sourceLang || "id",
-        };
-      })
-      .sort((a, b) => a.at - b.at);
+    const msgs = [];
+    for (const [k, v] of entries.entries()) {
+      const senderLower = String(v?.name || "").trim().toLowerCase();
+      if (LEGACY_TEST_NAMES.has(senderLower)) {
+        this.state.storage.delete(k).catch(() => {});
+        continue;
+      }
+      const text = String(v?.text || "");
+      let sourceLang = typeof v?.source_lang === "string" ? v.source_lang : "";
+      const country = resolveSmartCountry(text, sourceLang, v?.country, v?.country);
+      const flag = countryToFlag(country);
+      let translated = typeof v?.translated === "string" ? v.translated : "";
+      let targetLang = typeof v?.target_lang === "string" ? v.target_lang : "";
+      if (!translated && text) {
+        const fb = offlineTranslateFallback(text, country);
+        translated = fb.translated;
+        targetLang = fb.targetLang;
+        sourceLang = fb.sourceLang;
+      }
+      msgs.push({
+        id: k.slice(4),
+        ...v,
+        is_founder: Boolean(v?.is_founder || isFounderChatName(v?.name, v?.github_login)),
+        country,
+        flag,
+        translated,
+        target_lang: targetLang || "EN",
+        source_lang: sourceLang || "id",
+      });
+    }
+    msgs.sort((a, b) => a.at - b.at);
     return msgs.slice(-CHAT_HISTORY_LIMIT);
   }
 
@@ -2720,15 +2911,13 @@ export class GlobalChat {
     const cfCountry = request?.cf?.country
       || request?.headers?.get("cf-ipcountry")
       || request?.headers?.get("CF-Connecting-IP-Country");
-    const hasCfCountry = typeof cfCountry === "string" && /^[A-Za-z]{2}$/.test(cfCountry.trim())
-      && cfCountry.trim().toUpperCase() !== "XX"
-      && cfCountry.trim().toUpperCase() !== "T1";
     const initialCountry = normalizeCountryCode(cfCountry, "ID");
     const session = {
       ws: server,
       name: "Tamu",
+      githubLogin: "",
       country: initialCountry,
-      cfDetected: hasCfCountry,
+      cfCountry: initialCountry,
       sent: 0,
       windowAt: Date.now(),
     };
@@ -2763,7 +2952,10 @@ export class GlobalChat {
       if (typeof data.name === "string") {
         session.name = String(data.name).trim().slice(0, CHAT_NAME_MAX) || "Tamu";
       }
-      if (!session.cfDetected && typeof data.country === "string") {
+      if (typeof data.github_login === "string") {
+        session.githubLogin = String(data.github_login).trim().replace(/^@/, "").slice(0, 39);
+      }
+      if (typeof data.country === "string") {
         session.country = normalizeCountryCode(data.country, session.country);
       }
       return;
@@ -2779,9 +2971,19 @@ export class GlobalChat {
       return;
     }
     if (data.type !== "msg") return;
-    const text = typeof data.text === "string" ? data.text.trim().slice(0, CHAT_TEXT_MAX) : "";
+    const extras = sanitizeChatExtras(data);
+    if (!extras.github_login && session.githubLogin) {
+      extras.github_login = session.githubLogin;
+    }
+    const rawText = typeof data.text === "string" ? data.text.trim().slice(0, CHAT_TEXT_MAX) : "";
+    const text = rawText || (
+      extras.attachment_type === "sticker" ? `🎨 Stiker: ${extras.attachment_name || "XyDesk"}`
+      : extras.attachment_type === "image" ? `📷 Foto${extras.attachment_name ? `: ${extras.attachment_name}` : ""}`
+      : extras.attachment_type === "file" ? `📎 File: ${extras.attachment_name || "Dokumen"}`
+      : ""
+    );
     if (!text) return;
-    if (!session.cfDetected && typeof data.country === "string") {
+    if (typeof data.country === "string") {
       session.country = normalizeCountryCode(data.country, session.country);
     }
     const now = Date.now();
@@ -2791,19 +2993,31 @@ export class GlobalChat {
       try { session.ws.send(JSON.stringify({ type: "error", code: "rate_limited" })); } catch {}
       return;
     }
-    const tr = await translateChatText(text, session.country);
+    const clientTrText = typeof data?.translated === "string" ? data.translated.trim().slice(0, CHAT_TEXT_MAX) : "";
+    const clientTargetLang = typeof data?.target_lang === "string" ? data.target_lang.trim().slice(0, 12).toUpperCase() : "";
+    const clientSourceLang = typeof data?.source_lang === "string" ? data.source_lang.trim().slice(0, 12).toLowerCase() : "";
+    const tr = (clientTrText && clientTrText.toLowerCase() !== text.toLowerCase())
+      ? {
+          translated: clientTrText,
+          targetLang: clientTargetLang || (session.country === "ID" ? "EN" : "ID"),
+          sourceLang: clientSourceLang || guessSourceLang(text, session.country),
+        }
+      : await translateChatText(text, session.country);
+    const resolvedCountry = resolveSmartCountry(text, tr.sourceLang, data.country || session.country, session.cfCountry);
+    session.country = resolvedCountry;
     const id = `${now.toString(36).padStart(9, "0")}-${Math.random().toString(36).slice(2, 8)}`;
-    const flag = countryToFlag(session.country);
+    const flag = countryToFlag(resolvedCountry);
     const msg = {
       id,
       name: session.name,
-      is_founder: isFounderChatName(session.name),
-      country: session.country,
+      is_founder: isFounderChatName(session.name, extras.github_login),
+      country: resolvedCountry,
       flag,
       text,
       translated: tr.translated,
       target_lang: tr.targetLang,
       source_lang: tr.sourceLang,
+      ...extras,
       at: now,
     };
     this.state.storage.put(`msg:${id}`, msg).then(() => this.trimHistory()).catch(() => {});
@@ -2919,7 +3133,27 @@ export default {
     if (path === "/api/chat/history") {
       if (!env.GLOBAL_CHAT) return notFound(request.method);
       const chatId2 = env.GLOBAL_CHAT.idFromName("xydesk-global-chat-v1");
-      return env.GLOBAL_CHAT.get(chatId2).fetch(new Request(new URL("/history", request.url), { method: "GET" }));
+      const res = await env.GLOBAL_CHAT.get(chatId2).fetch(new Request(new URL("/history", request.url), { method: "GET" }));
+      if (!res.ok) return res;
+      const payload = await res.json().catch(() => null);
+      if (!payload || !Array.isArray(payload.messages)) {
+        return durableObjectJson({ status: "ok", messages: [] }, 200, request.method);
+      }
+      const cleaned = [];
+      for (const m of payload.messages) {
+        const senderLower = String(m?.name || "").trim().toLowerCase();
+        if (LEGACY_TEST_NAMES.has(senderLower)) continue;
+        const text = String(m?.text || "");
+        const srcLang = typeof m?.source_lang === "string" ? m.source_lang : "";
+        const cc = resolveSmartCountry(text, srcLang, m?.country, m?.country);
+        cleaned.push({
+          ...m,
+          is_founder: Boolean(m?.is_founder || isFounderChatName(m?.name, m?.github_login)),
+          country: cc,
+          flag: countryToFlag(cc),
+        });
+      }
+      return durableObjectJson({ status: "ok", messages: cleaned }, 200, request.method);
     }
     if (path === "/api/chat/send") {
       if (request.method === "OPTIONS") return corsPreflight("POST, OPTIONS");
@@ -2937,6 +3171,48 @@ export default {
           body: await request.text(),
         })
       );
+    }
+    if (path === "/api/chat/translate") {
+      if (request.method === "OPTIONS") return corsPreflight("GET, OPTIONS");
+      if (request.method !== "GET") return methodNotAllowed("GET, OPTIONS");
+      const q = (url.searchParams.get("q") || "").trim().slice(0, CHAT_TEXT_MAX);
+      const tl = (url.searchParams.get("tl") || "en").trim().slice(0, 12);
+      if (!q) return jsonResponse({ status: "error", code: "empty_text" }, 400, request.method);
+      const guessedSl = guessSourceLang(q, "");
+      const c5 = await fetchGoogleClients5Translate(q, "auto", tl).catch(() => null);
+      if (c5 && c5.translated) {
+        return jsonResponse({
+          status: "ok",
+          translated: c5.translated,
+          source_lang: c5.detected || guessedSl,
+          target_lang: tl.toUpperCase(),
+        }, 200, request.method);
+      }
+      const gtx = await fetchGoogleTranslate(q, "auto", tl).catch(() => null);
+      if (gtx && gtx.translated) {
+        return jsonResponse({
+          status: "ok",
+          translated: gtx.translated,
+          source_lang: gtx.detected || guessedSl,
+          target_lang: tl.toUpperCase(),
+        }, 200, request.method);
+      }
+      const mm = await fetchMyMemoryTranslate(q, guessedSl, tl).catch(() => null);
+      if (mm) {
+        return jsonResponse({
+          status: "ok",
+          translated: mm,
+          source_lang: guessedSl,
+          target_lang: tl.toUpperCase(),
+        }, 200, request.method);
+      }
+      const fb = offlineTranslateFallback(q, tl.toUpperCase() === "ID" ? "US" : "ID");
+      return jsonResponse({
+        status: "ok",
+        translated: fb.translated,
+        source_lang: guessedSl || fb.sourceLang,
+        target_lang: tl.toUpperCase(),
+      }, 200, request.method);
     }
     if (path === "/api/pc/rooms" || path.startsWith("/api/pc/rooms/")) {
       return pcSignalResponse(request, env);

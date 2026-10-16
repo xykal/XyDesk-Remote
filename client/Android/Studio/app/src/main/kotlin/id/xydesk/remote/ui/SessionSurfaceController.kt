@@ -207,7 +207,9 @@ class SessionSurfaceController(private val activity: Activity) : GraphicsSink {
 
         val scroller = ScrollView2D(context)
         val rail = FrameLayout(context)
-        val sv = SessionView(context)
+        val sv = SessionView(context).apply {
+            setLayerType(View.LAYER_TYPE_HARDWARE, null)
+        }
         rail.addView(
             sv,
             FrameLayout.LayoutParams(
@@ -688,11 +690,10 @@ class SessionSurfaceController(private val activity: Activity) : GraphicsSink {
             if (shouldSchedule) flushScheduled = true
         }
         if (shouldSchedule) {
-            val sv = sessionView
-            if (!batterySaverMode && sv != null) {
-                sv.postOnAnimation(flushDirtyRunnable)
+            if (!batterySaverMode) {
+                uiHandler.post(flushDirtyRunnable)
             } else {
-                uiHandler.postDelayed(flushDirtyRunnable, if (batterySaverMode) 28L else 0L)
+                uiHandler.postDelayed(flushDirtyRunnable, 28L)
             }
         }
     }

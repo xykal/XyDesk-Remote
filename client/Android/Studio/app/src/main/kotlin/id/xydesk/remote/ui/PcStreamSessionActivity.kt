@@ -566,19 +566,20 @@ class PcStreamSessionActivity : ComponentActivity() {
 
     @Composable
     private fun PcStreamScreen() {
-        if (videoReady.value) VideoStage() else PairingStage()
+        if (videoReady.value) {
+            Box(Modifier.fillMaxSize()) {
+                VideoStage()
+                FloatingSessionChatOverlay()
+            }
+        } else {
+            PairingStage()
+        }
     }
 
     // ── Layar pairing & pemilihan engine ────────────────────────────────────
 
     @Composable
     private fun PairingStage() {
-        var engineTab by remember { mutableIntStateOf(0) } // 0 = Engine Konsol UDP :4433, 1 = Hub WebRTC
-        var directHostIp by remember { mutableStateOf("") }
-        var directPortText by remember { mutableStateOf("4433") }
-        var directFpsIdx by remember { mutableIntStateOf(2) } // 0=60Hz, 1=90Hz, 2=120Hz
-        val fpsOptions = listOf(60, 90, 120)
-
         var hostId by remember { mutableStateOf("") }
         var pin by remember { mutableStateOf("") }
         val scroll = rememberScrollState()
@@ -586,12 +587,6 @@ class PcStreamSessionActivity : ComponentActivity() {
         val busy = (state == XyHubSessionState.AUTHENTICATING ||
             state == XyHubSessionState.CONNECTING ||
             state == XyHubSessionState.PAIRING) && !pairingTimedOut.value
-
-        LaunchedEffect(engineTab) {
-            if (engineTab == 0 && discoveredHosts.value.isEmpty()) {
-                scanLanConsoleHosts()
-            }
-        }
 
         Column(
             modifier = Modifier
@@ -602,139 +597,21 @@ class PcStreamSessionActivity : ComponentActivity() {
                 .imePadding(),
         ) {
             Text(
-                xy("PC Stream & Engine Game FPS 120Hz", "PC Stream & 120Hz FPS Game Engine"),
+                xy("PC Stream", "PC Stream"),
                 style = MaterialTheme.typography.titleLarge,
                 color = MaterialTheme.colorScheme.onBackground,
             )
             Spacer(Modifier.height(4.dp))
             Text(
                 xy(
-                    "Streaming langsung sesi konsol fisik Windows (SM_REMOTESESSION=0 · bebas deteksi RDP) dengan injeksi SendInput RawInput 120Hz untuk game FPS.",
-                    "Stream the physical Windows console session directly (SM_REMOTESESSION=0 · zero RDP detection) with 120Hz SendInput RawInput injection for FPS games.",
+                    "Masukkan ID 9 digit dan PIN 6 digit yang tampil di aplikasi XyDesk Host pada PC Windows Anda.",
+                    "Enter the 9-digit ID and 6-digit PIN shown on the XyDesk Host app on your Windows PC.",
                 ),
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
-            Spacer(Modifier.height(14.dp))
-            XySegmented(
-                options = listOf(
-                    xy("Konsol UDP :4433 (Non-RDP)", "Console UDP :4433 (Non-RDP)"),
-                    xy("Hub WebRTC (9 Digit)", "WebRTC Hub (9 Digits)"),
-                ),
-                selectedIndex = engineTab,
-                onSelect = { engineTab = it },
-                modifier = Modifier.fillMaxWidth(),
-            )
             Spacer(Modifier.height(16.dp))
-
-            if (engineTab == 0) {
-                Text(
-                    xy(
-                        "Jalankan XyDeskRemoteHost-Standalone.exe di PC Windows Anda. Engine ini menangkap layar konsol fisik (SM_REMOTESESSION=0), audio WASAPI, dan mouse relatif 360° langsung lewat UDP :4433 tanpa RDP.",
-                        "Run XyDeskRemoteHost-Standalone.exe on your Windows PC. This engine captures the physical console screen (SM_REMOTESESSION=0), WASAPI audio, and 360° relative mouse directly over UDP :4433 without RDP.",
-                    ),
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-                Spacer(Modifier.height(12.dp))
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    Text(
-                        xy("PC Terdeteksi di LAN / Tailscale", "Detected PCs on LAN / Tailscale"),
-                        style = MaterialTheme.typography.labelMedium,
-                        color = MaterialTheme.colorScheme.primary,
-                    )
-                    TextButton(onClick = { scanLanConsoleHosts() }, enabled = !scanningLan.value) {
-                        Text(
-                            if (scanningLan.value) xy("Memindai...", "Scanning...")
-                            else xy("Pindai Ulang", "Rescan"),
-                        )
-                    }
-                }
-                if (discoveredHosts.value.isNotEmpty()) {
-                    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                        discoveredHosts.value.forEach { h ->
-                            Row(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .clip(RoundedCornerShape(10.dp))
-                                    .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f))
-                                    .border(1.dp, MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(10.dp))
-                                    .clickable {
-                                        directHostIp = h.ip
-                                        directPortText = h.quicPort.toString()
-                                    }
-                                    .padding(horizontal = 12.dp, vertical = 10.dp),
-                                horizontalArrangement = Arrangement.SpaceBetween,
-                                verticalAlignment = Alignment.CenterVertically,
-                            ) {
-                                Column(Modifier.weight(1f)) {
-                                    Text(
-                                        "${h.hostname} · ${h.ip}:${h.quicPort}",
-                                        style = MaterialTheme.typography.titleSmall,
-                                        color = MaterialTheme.colorScheme.onSurface,
-                                    )
-                                    Text(
-                                        "${h.gpu} (${h.encoder}) · Non-RDP Console Ready",
-                                        style = MaterialTheme.typography.bodySmall,
-                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                    )
-                                }
-                                Text(
-                                    xy("Pilih", "Select"),
-                                    style = MaterialTheme.typography.labelMedium,
-                                    color = MaterialTheme.colorScheme.primary,
-                                )
-                            }
-                        }
-                    }
-                    Spacer(Modifier.height(10.dp))
-                }
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    XyField(
-                        value = directHostIp,
-                        onValueChange = { directHostIp = it.trim() },
-                        label = xy("IP PC / Tailscale (Contoh: 192.168.1.10 / 100.x.y.z)", "PC / Tailscale IP (e.g. 192.168.1.10 / 100.x.y.z)"),
-                        hint = "192.168.1.10",
-                        modifier = Modifier.weight(1.5f),
-                    )
-                    XyField(
-                        value = directPortText,
-                        onValueChange = { directPortText = it.filter(Char::isDigit).take(5) },
-                        label = xy("Port UDP", "UDP Port"),
-                        hint = "4433",
-                        keyboardType = KeyboardType.Number,
-                        modifier = Modifier.weight(0.7f),
-                    )
-                }
-                Spacer(Modifier.height(12.dp))
-                Text(
-                    xy("Target Refresh & Frame Rate Konsol", "Target Console Refresh & Frame Rate"),
-                    style = MaterialTheme.typography.labelMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-                Spacer(Modifier.height(6.dp))
-                XySegmented(
-                    options = fpsOptions.map { "$it FPS / Hz" },
-                    selectedIndex = directFpsIdx,
-                    onSelect = { directFpsIdx = it },
-                    modifier = Modifier.fillMaxWidth(),
-                )
-                Spacer(Modifier.height(18.dp))
-                XyPillButton(
-                    text = xy("Mulai Stream Konsol Non-RDP (120Hz)", "Start Non-RDP Console Stream (120Hz)"),
-                    onClick = {
-                        val p = directPortText.toIntOrNull()?.coerceIn(1, 65535) ?: 4433
-                        startDirectConsoleSession(directHostIp, p, fpsOptions[directFpsIdx])
-                    },
-                    enabled = directHostIp.isNotBlank(),
-                    icon = XyIcons.Monitor,
-                    modifier = Modifier.fillMaxWidth(),
-                )
-            } else {
+            if (true) {
                 XyField(
                     value = hostId,
                     onValueChange = { hostId = it.filter(Char::isDigit).take(9) },

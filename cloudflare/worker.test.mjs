@@ -1815,4 +1815,46 @@ test("ronde 48: global chat direct reply (/api/chat/send) + OneSignal push + Pla
   const homeKt = await readFile(new URL("../client/Android/Studio/app/src/main/kotlin/id/xydesk/remote/ui/XyDeskHome.kt", import.meta.url), "utf8");
   assert.ok(!homeKt.includes("=== LOG NATIVE (FreeRDP) ==="));
   assert.ok(homeKt.includes("ConnectionLog.formattedXyDeskLog"));
+
+  // Ronde 52: uji deteksi negara akurat (tidak melabeli pesan Bahasa Indonesia sebagai US meski cf-ipcountry=US),
+  // serta fitur reply_to_* dan attachment_* (foto/file/stiker).
+  const sendIdOnUsVpn = await worker.fetch(new Request("https://api.xydeskremote.biz.id/api/chat/send", {
+    method: "POST",
+    headers: { "Content-Type": "application/json", "cf-ipcountry": "US" },
+    body: JSON.stringify({
+      name: "Andi",
+      github_login: "andi-dev",
+      text: "Halo teman-teman, gimana cara setting RDP supaya cepat?",
+      reply_to_id: sendFounderJson.message.id,
+      reply_to_name: "xykal",
+      reply_to_text: "Halo semua dari Founder!",
+      attachment_kind: "sticker",
+      attachment_data: "xydesk_120hz",
+      attachment_name: "120Hz Turbo",
+    }),
+  }), env);
+  assert.equal(sendIdOnUsVpn.status, 200);
+  const sendIdOnUsVpnJson = await sendIdOnUsVpn.json();
+  assert.equal(sendIdOnUsVpnJson.message.country, "ID");
+  assert.equal(sendIdOnUsVpnJson.message.flag, "🇮🇩");
+  assert.equal(sendIdOnUsVpnJson.message.github_login, "andi-dev");
+  assert.equal(sendIdOnUsVpnJson.message.reply_to_name, "xykal");
+  assert.equal(sendIdOnUsVpnJson.message.attachment_kind, "sticker");
+  assert.equal(sendIdOnUsVpnJson.message.attachment_data, "xydesk_120hz");
+
+  // Uji deteksi aksara Thailand -> TH
+  const sendThai = await worker.fetch(new Request("https://api.xydeskremote.biz.id/api/chat/send", {
+    method: "POST",
+    headers: { "Content-Type": "application/json", "cf-ipcountry": "SG" },
+    body: JSON.stringify({
+      name: "Somchai",
+      github_login: "somchai-th",
+      text: "สวัสดีครับ ขอบคุณมาก",
+    }),
+  }), env);
+  assert.equal(sendThai.status, 200);
+  const sendThaiJson = await sendThai.json();
+  assert.equal(sendThaiJson.message.country, "TH");
+  assert.equal(sendThaiJson.message.flag, "🇹🇭");
 });
+

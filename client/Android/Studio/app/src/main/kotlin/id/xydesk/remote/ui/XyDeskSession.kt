@@ -181,7 +181,8 @@ fun XyDeskSessionScreen(
     val appContext = context.applicationContext
     val appPrefs = remember(appContext) { AppPrefs(appContext) }
     fun exitSession() {
-        appPrefs.clearAutoResumeSession(profile.id)
+        (context as? XyDeskSessionActivity)?.markExplicitDisconnect(profile.id)
+        appPrefs.clearAutoResumeSession()
         onExit()
     }
     // Kotak posisi kursor untuk perekaman. Dideklarasikan sebelum remoteRecorder
@@ -1594,10 +1595,17 @@ fun XyDeskSessionScreen(
                     // HP). Beranda app diangkat ke depan task; activity sesi
                     // tetap hidup di bawahnya sehingga koneksi + service jalan
                     // terus. Buka lagi dari kartu "Sesi aktif" / notifikasi.
+                    (context as? XyDeskSessionActivity)?.markIntentionalHomeNavigation()
+                    appPrefs.clearAutoResumeSession()
+                    controller.blurInput()
                     runCatching {
                         context.startActivity(
                             Intent(context, XyDeskHomeActivity::class.java)
-                                .addFlags(Intent.FLAG_ACTIVITY_REORDER_TO_FRONT),
+                                .putExtra(EXTRA_SKIP_AUTO_RESUME, true)
+                                .addFlags(
+                                    Intent.FLAG_ACTIVITY_REORDER_TO_FRONT or
+                                        Intent.FLAG_ACTIVITY_SINGLE_TOP,
+                                ),
                         )
                     }
                 },
@@ -1687,6 +1695,7 @@ fun XyDeskSessionScreen(
                     // Sesi tetap jalan di latar, tetapi tidak auto-resume begitu
                     // pengguna sengaja memilih kembali ke Home.
                     (context as? XyDeskSessionActivity)?.markIntentionalHomeNavigation()
+                    appPrefs.clearAutoResumeSession()
                     controller.blurInput()
                     runCatching {
                         context.startActivity(
@@ -1694,7 +1703,7 @@ fun XyDeskSessionScreen(
                                 .putExtra(EXTRA_SKIP_AUTO_RESUME, true)
                                 .addFlags(
                                     android.content.Intent.FLAG_ACTIVITY_REORDER_TO_FRONT or
-                                        android.content.Intent.FLAG_ACTIVITY_NEW_TASK,
+                                        android.content.Intent.FLAG_ACTIVITY_SINGLE_TOP,
                                 ),
                         )
                     }
