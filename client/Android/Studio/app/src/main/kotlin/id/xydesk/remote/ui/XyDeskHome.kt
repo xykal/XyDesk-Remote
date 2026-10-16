@@ -119,6 +119,7 @@ private sealed interface XyRoute {
 
     /** Feed komunitas — layar sendiri, dipetakan ke tab nav [XyTab.FEED]. */
     data object Feed : XyRoute
+    data object ChatGlobal : XyRoute
 
     /** Dashboard pengaturan — dipetakan ke tab nav [XyTab.PROFILE]. */
     data object Profile : XyRoute
@@ -465,8 +466,12 @@ fun XyDeskHome(
                     )
                 }
 
-                XyRoute.Feed -> XyFeedScreen(onMenu = { drawerOpen = true })
+                XyRoute.Feed -> XyFeedScreen(
+                    onMenu = { drawerOpen = true },
+                    onOpenChat = { route = XyRoute.ChatGlobal },
+                )
 
+                XyRoute.ChatGlobal -> GlobalChatScreen(onBack = { route = XyRoute.Feed })
                 XyRoute.Profile -> XyProfileScreen(
                     onMenu = { drawerOpen = true },
                     onOpenSection = {

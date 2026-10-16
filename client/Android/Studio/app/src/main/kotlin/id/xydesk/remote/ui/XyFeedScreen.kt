@@ -22,6 +22,15 @@ import id.xydesk.remote.ui.components.XyGlassSectionLabel
 import id.xydesk.remote.ui.components.XyIconPill
 import id.xydesk.remote.ui.components.XyIcons
 import id.xydesk.remote.ui.components.XyTopBar
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.Surface
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.text.font.FontWeight
 
 /**
  * Layar Feed — layar sendiri, bukan kartu yang menumpang di Beranda.
@@ -38,6 +47,7 @@ import id.xydesk.remote.ui.components.XyTopBar
 @Composable
 internal fun XyFeedScreen(
     onMenu: () -> Unit,
+    onOpenChat: () -> Unit = {},
 ) {
     // Pull-to-refresh (permintaan pemilik 2026-10-13): tarik layar feed ke
     // bawah untuk memuat ulang, seperti aplikasi sosial pada umumnya.
@@ -82,6 +92,31 @@ internal fun XyFeedScreen(
                 )
             }
             XyGlassCard(padding = 14.dp) {
+                // Ronde 47 — pintu masuk Chat Global realtime.
+                Surface(
+                    tonalElevation = 1.dp,
+                    shape = RoundedCornerShape(16.dp),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clickable { onOpenChat() },
+                ) {
+                    Row(
+                        modifier = Modifier.padding(14.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text("Chat Global", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                            Text(
+                                "Sapa sesama pengguna XyDesk secara realtime — riwayat, indikator mengetik, tanpa perlu akun.",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        }
+                        Text("Buka ›", color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.Bold)
+                    }
+                }
+                Spacer(Modifier.height(10.dp))
+
                 FunHubCard(
                     onHide = null,
                     refreshSignal = pullSignal,

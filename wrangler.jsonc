@@ -22,14 +22,16 @@
       { "name": "ACTIVE_SESSIONS", "class_name": "ActiveSessions" },
       { "name": "COMMUNITY_JOKES", "class_name": "CommunityJokes" },
       { "name": "PC_SIGNAL_ROOMS", "class_name": "PcSignalRoom" },
-      { "name": "FEEDBACK_BOARD", "class_name": "FeedbackBoard" }
+      { "name": "FEEDBACK_BOARD", "class_name": "FeedbackBoard" },
+      { "name": "GLOBAL_CHAT", "class_name": "GlobalChat" }
     ]
   },
   "migrations": [
     { "tag": "v1", "new_sqlite_classes": ["ActiveSessions"] },
     { "tag": "v2", "new_sqlite_classes": ["CommunityJokes"] },
     { "tag": "v3", "new_sqlite_classes": ["PcSignalRoom"] },
-    { "tag": "v4", "new_sqlite_classes": ["FeedbackBoard"] }
+    { "tag": "v4", "new_sqlite_classes": ["FeedbackBoard"] },
+    { "tag": "v5", "new_sqlite_classes": ["GlobalChat"] }
   ],
   "assets": {
     "directory": "./web",
@@ -38,6 +40,7 @@
     "not_found_handling": "404-page",
     "run_worker_first": [
       "/api/*",
+      "/ws/chat",
       "/",
       "/index.html",
       "/arm64-v8a.apk",

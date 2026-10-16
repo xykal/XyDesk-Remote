@@ -2405,11 +2405,148 @@ async function feedbackResponse(request, env) {
   }
 }
 
+
+const CHAT_HISTORY_LIMIT = 100;
+const CHAT_TEXT_MAX = 500;
+const CHAT_NAME_MAX = 24;
+const CHAT_MSG_PER_WINDOW = 8;
+const CHAT_WINDOW_MS = 20_000;
+
+export class GlobalChat {
+  constructor(state) {
+    this.state = state;
+    this.sessions = new Set();
+  }
+
+  async fetch(request) {
+    const path = new URL(request.url).pathname;
+    if (path === "/connect" && request.headers.get("Upgrade") === "websocket") return this.handleConnect();
+    if (path === "/history" && request.method === "GET") {
+      const messages = await this.loadHistory();
+      return durableObjectJson({ status: "ok", messages }, 200, request.method);
+    }
+    return durableObjectJson({ status: "not_found" }, 404, request.method);
+  }
+
+  async loadHistory() {
+    const entries = await this.state.storage.list({ prefix: "msg:" });
+    const msgs = [...entries.entries()].map(([k, v]) => ({ id: k.slice(4), ...v })).sort((a, b) => a.at - b.at);
+    return msgs.slice(-CHAT_HISTORY_LIMIT);
+  }
+
+  async trimHistory() {
+    const entries = await this.state.storage.list({ prefix: "msg:" });
+    const keys = [...entries.keys()].sort();
+    let excess = keys.length - CHAT_HISTORY_LIMIT;
+    for (let i = 0; excess > 0 && i < keys.length; i += 1, excess -= 1) {
+      await this.state.storage.delete(keys[i]);
+    }
+  }
+
+  handleConnect() {
+    const pair = new WebSocketPair();
+    const [client, server] = Object.values(pair);
+    server.accept();
+    const session = { ws: server, name: "Tamu", sent: 0, windowAt: Date.now() };
+    this.sessions.add(session);
+    server.addEventListener("message", (event) => this.onMessage(session, event));
+    const close = () => this.onClose(session);
+    server.addEventListener("close", close);
+    server.addEventListener("error", close);
+    this.loadHistory()
+      .then((messages) => {
+        try { server.send(JSON.stringify({ type: "history", messages })); } catch {}
+      })
+      .catch(() => {});
+    this.broadcast(null, JSON.stringify({ type: "presence", count: this.sessions.size }));
+    try { server.send(JSON.stringify({ type: "presence", count: this.sessions.size })); } catch {}
+    return new Response(null, { status: 101, webSocket: client });
+  }
+
+  onClose(session) {
+    this.sessions.delete(session);
+    try { session.ws.close(); } catch {}
+    this.broadcast(null, JSON.stringify({ type: "presence", count: this.sessions.size }));
+  }
+
+  onMessage(session, event) {
+    let data = null;
+    try { data = JSON.parse(String(event.data)); } catch { return; }
+    if (!data || typeof data !== "object") return;
+    if (data.type === "hello" && typeof data.name === "string") {
+      session.name = String(data.name).trim().slice(0, CHAT_NAME_MAX) || "Tamu";
+      return;
+    }
+    if (data.type === "typing") {
+      this.broadcast(session, JSON.stringify({ type: "typing", name: session.name, on: !!data.on }));
+      return;
+    }
+    if (data.type !== "msg") return;
+    const text = typeof data.text === "string" ? data.text.trim().slice(0, CHAT_TEXT_MAX) : "";
+    if (!text) return;
+    const now = Date.now();
+    if (now - session.windowAt > CHAT_WINDOW_MS) { session.windowAt = now; session.sent = 0; }
+    session.sent += 1;
+    if (session.sent > CHAT_MSG_PER_WINDOW) {
+      try { session.ws.send(JSON.stringify({ type: "error", code: "rate_limited" })); } catch {}
+      return;
+    }
+    const id = `${now.toString(36).padStart(9, "0")}-${Math.random().toString(36).slice(2, 8)}`;
+    const msg = { id, name: session.name, text, at: now };
+    this.state.storage.put(`msg:${id}`, msg).then(() => this.trimHistory()).catch(() => {});
+    this.broadcast(null, JSON.stringify({ type: "msg", ...msg }));
+  }
+
+  broadcast(fromSession, payload) {
+    for (const s of this.sessions) {
+      if (s === fromSession) continue;
+      try { s.ws.send(payload); } catch {}
+    }
+  }
+}
+
+
+async function releasesListResponse(request, env) {
+  const cacheKey = new Request(new URL("/api/releases", request.url), { method: "GET" });
+  const cache = caches.default;
+  const cached = await cache.match(cacheKey);
+  if (cached) return cached;
+  const headers = { Accept: "application/vnd.github+json", "User-Agent": "xydesk-remote-worker" };
+  const tokens = githubTokens(env);
+  if (tokens.length) headers.Authorization = `Bearer ${tokens[0]}`;
+  let data = null;
+  try {
+    const res = await fetch("https://api.github.com/repos/xykal/XyDesk-Remote/releases?per_page=20", { headers });
+    if (!res.ok) return jsonResponse({ status: "error" }, 502, request.method);
+    data = await res.json();
+  } catch {
+    return jsonResponse({ status: "error" }, 502, request.method);
+  }
+  const releases = (Array.isArray(data) ? data : [])
+    .filter((r) => r && !r.draft && !r.prerelease)
+    .slice(0, 10)
+    .map((r) => ({
+      tag: r.tag_name,
+      name: r.name || r.tag_name,
+      date: String(r.published_at || "").slice(0, 10),
+      url: r.html_url,
+    }));
+  const out = jsonResponse({ status: "ok", releases }, 200, request.method);
+  out.headers.set("Cache-Control", "public, max-age=300");
+  await cache.put(cacheKey, out.clone());
+  return out;
+}
+
 export default {
   async fetch(request, env) {
     const url = new URL(request.url);
     const path = url.pathname;
 
+    if (path === "/ws/chat") {
+      if (!env.GLOBAL_CHAT) return notFound(request.method);
+      const chatId = env.GLOBAL_CHAT.idFromName("xydesk-global-chat-v1");
+      return env.GLOBAL_CHAT.get(chatId).fetch(new Request(new URL("/connect", request.url), request));
+    }
     if (path === "/api/pc/rooms" || path.startsWith("/api/pc/rooms/")) {
       return pcSignalResponse(request, env);
     }
@@ -2434,6 +2571,7 @@ export default {
     if (path === "/api/health") return healthResponse(request, env);
     if (path === "/api/status") return statusResponse(request, env);
     if (path === "/api/stats") return downloadStatsResponse(request, env);
+    if (path === "/api/releases") return releasesListResponse(request, env);
     if (path === "/api/update-check") return updateCheckResponse(request, env);
     if (path === "/api/active-sessions") return activeSessionsResponse(request, env);
     if (path.startsWith("/api/")) return jsonResponse({ status: "not_found" }, 404, request.method);

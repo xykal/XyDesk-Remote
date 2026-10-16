@@ -159,9 +159,16 @@
     .badge { display: inline-block; font-size: 11px; font-weight: 700; border-radius: 999px; padding: 2px 10px; border: 1px solid var(--line-strong); margin-left: 8px; vertical-align: middle; }
     .badge.ok { color: var(--ok); border-color: var(--ok); }
     .badge.warn { color: var(--warn); border-color: var(--warn); }
-    .dl-main { display: flex; gap: 10px; flex-wrap: wrap; margin-top: 6px; }
+    .dl-main { display: flex; gap: 10px; flex-wrap: wrap; margin-top: 6px; justify-content: center; }
+    .verdict-card, #detect-result { text-align: center; }
+    #detect-state { text-align: center; }
+    .verdict-abi { text-align: center; }
+    .abi-table { width: 100%; border-collapse: collapse; margin-top: 10px; font-size: clamp(12px, 1.5vw, 13px); max-width: 720px; margin-left: auto; margin-right: auto; }
+    .abi-table th, .abi-table td { text-align: center; padding: 9px 10px; border-bottom: 1px solid var(--line); }
+    .card.versions-card ul { list-style: none; padding: 0; max-width: 720px; margin: 10px auto 0; }
+    .card.versions-card li { display: flex; justify-content: space-between; gap: 12px; flex-wrap: wrap; padding: 9px 4px; border-bottom: 1px solid var(--line); font-size: clamp(12px, 1.5vw, 13px); }
+    .card.versions-card li:last-child { border-bottom: none; }
     .abi-table { width: 100%; border-collapse: collapse; margin-top: 10px; font-size: clamp(12px, 1.5vw, 13px); }
-    .abi-table th, .abi-table td { text-align: left; padding: 9px 10px; border-bottom: 1px solid var(--line); }
     .abi-table th { color: var(--text-faint); font-size: 11px; text-transform: uppercase; letter-spacing: 0.05em; }
     .abi-table td { color: var(--text-dim); }
     .abi-table td:first-child { color: var(--text); font-weight: 600; font-family: var(--font-mono); font-size: 12.5px; }
@@ -271,6 +278,12 @@
         </table>
       </div>
 
+      <div class="card versions-card">
+        <h2>Riwayat versi</h2>
+        <p>Daftar rilis terbaru XyDesk Remote.</p>
+        <ul id="versions-list"><li style="justify-content:center;color:var(--text-faint)">Memuat riwayat versi…</li></ul>
+      </div>
+
       <div class="card">
         <h2>Cara deteksi bekerja</h2>
         <ul>
@@ -357,6 +370,22 @@
         return { abi: null, vague: true };
       }
 
+      // Fallback ketiga: renderer GPU WebGL — Adreno/Mali/PowerVR pasti ARM,
+      // Intel/AMD hampir pasti x86. Menutup celah Firefox Android modern.
+      function detectFromGpu() {
+        try {
+          var c = document.createElement("canvas");
+          var gl = c.getContext("webgl") || c.getContext("experimental-webgl");
+          if (!gl) return null;
+          var ext = gl.getExtension("WEBGL_debug_renderer_info");
+          var r = (ext ? String(gl.getParameter(ext.UNMASKED_RENDERER_WEBGL) || "") : String(gl.getParameter(gl.RENDERER) || ""));
+          r += " " + gl.getParameter(gl.VERSION);
+          if (/adreno|qualcomm|mali|powervr|imagination|videocore|bifrost|valhall/i.test(r)) return "arm64-v8a";
+          if (/intel|amd|radeon|geforce|llvm/i.test(r)) return "x86_64";
+          return null;
+        } catch (e) { return null; }
+      }
+
       function renderVerdict(result) {
         var stateEl = document.getElementById("detect-state");
         var resEl = document.getElementById("detect-result");
@@ -379,6 +408,9 @@
         } else if (result.source === "ua") {
           badge = '<span class="badge ok">terdeteksi</span>';
           note = "Arsitektur diperkirakan dari teks User-Agent browser-mu.";
+        } else if (result.gpu) {
+          badge = '<span class="badge ok">perkiraan GPU</span>';
+          note = "Arsitektur diperkirakan dari GPU perangkat (WebGL). Kalau ragu, pakai varian universal.";
         } else if (result.vague) {
           badge = '<span class="badge warn">perlu cek manual</span>';
           note = "Browser-mu tidak melaporkan arsitektur CPU. Hampir semua HP Android sejak 2016 adalah 64-bit — kalau HP-mu tergolong baru, pakai APK 64-bit (ARM); kalau ragu, pakai universal, atau cek ABI lewat aplikasi info-CPU.";
@@ -408,6 +440,26 @@
         }
       }
 
+      function loadVersions() {
+        var el = document.getElementById("versions-list");
+        if (!el || !window.fetch) return;
+        fetch("/api/releases", { cache: "no-store" })
+          .then(function (r) { return r.ok ? r.json() : null; })
+          .then(function (data) {
+            if (!data || !Array.isArray(data.releases) || !data.releases.length) {
+              el.innerHTML = '<li style="justify-content:center;color:var(--text-faint)">Riwayat belum tersedia — lihat <a href="https://github.com/xykal/XyDesk-Remote/releases">halaman rilis GitHub</a>.</li>';
+              return;
+            }
+            el.innerHTML = data.releases.map(function (v) {
+              return '<li><a href="' + v.url + '"><strong>' + (v.name || v.tag) + "</strong></a>" +
+                '<span style="color:var(--text-faint)">' + (v.date || "") + "</span></li>";
+            }).join("");
+          })
+          .catch(function () {
+            el.innerHTML = '<li style="justify-content:center;color:var(--text-faint)">Gagal memuat — buka <a href="https://github.com/xykal/XyDesk-Remote/releases">halaman rilis GitHub</a>.</li>';
+          });
+      }
+
       function run() {
         applyLinks();
         loadReleaseState();
@@ -432,17 +484,26 @@
             .catch(function () {
               var r = detectFromUA(ua);
               if (r.abi) renderVerdict({ abi: r.abi, source: "ua" });
-              else renderVerdict(r);
+              else if (r.vague) {
+                var g = detectFromGpu();
+                if (g) renderVerdict({ abi: g, gpu: true });
+                else renderVerdict(r);
+              } else renderVerdict(r);
             });
           return;
         }
 
         var r = detectFromUA(ua);
         if (r.abi) renderVerdict({ abi: r.abi, source: "ua" });
-        else renderVerdict(r);
+        else if (r.vague) {
+          var g = detectFromGpu();
+          if (g) renderVerdict({ abi: g, gpu: true });
+          else renderVerdict(r);
+        } else renderVerdict(r);
       }
 
       run();
+      loadVersions();
     })();
   </script>
 </body>
