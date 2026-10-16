@@ -4,7 +4,6 @@
 #ifdef _WIN32
 #include <windows.h>
 #include <shellapi.h>
-#include <shlobj.h>
 #include <winhttp.h>
 #include <wtsapi32.h>
 #endif
@@ -449,19 +448,28 @@ void ui_log_line(const std::wstring& line) {
 }
 
 std::wstring downloads_dir() {
-    PWSTR path = nullptr;
-    std::wstring out;
-    // GUID FOLDERID_Downloads ({374DE290-123F-4565-9164-39C4925E467B})
-    // didefinisikan lokal: mingw meletakkannya di libuuid yang belum dipakai
-    // build ini, dan menambah flag link baru dilarang (catatan rilis lama).
-    static const GUID kFolderIdDownloads = {
-        0x374de290, 0x123f, 0x4565,
-        {0x91, 0x64, 0x39, 0xc4, 0x92, 0x5e, 0x46, 0x7b}};
-    if (SUCCEEDED(SHGetKnownFolderPath(kFolderIdDownloads, 0, nullptr, &path)) && path) {
-        out = path;
+    // Folder Download diselesaikan lewat registri (User Shell Folders) dan
+    // BUKAN SHGetKnownFolderPath: dealokasi API itu membutuhkan CoTaskMemFree
+    // dari ole32, sedangkan build gate host tidak memakai -lole32 dan menambah
+    // flag link baru dilarang (catatan rilis lama). Nilai registri ini punya
+    // GUID yang sama dengan FOLDERID_Downloads ({374DE290-...}) sehingga
+    // folder Download yang dipindahkan user pun tetap benar.
+    wchar_t buf[MAX_PATH] = {0};
+    DWORD size = sizeof(buf);
+    const LONG rc = RegGetValueW(
+        HKEY_CURRENT_USER,
+        L"Software\\Microsoft\\Windows\\CurrentVersion\\Explorer\\User Shell Folders",
+        L"{374DE290-123F-4565-9164-39C4925E467B}",
+        RRF_RT_REG_SZ | RRF_RT_REG_EXPAND_SZ, nullptr, buf, &size);
+    wchar_t expanded[MAX_PATH] = {0};
+    if (rc == ERROR_SUCCESS && ExpandEnvironmentStringsW(buf, expanded, MAX_PATH) && expanded[0]) {
+        return expanded;
     }
-    if (path) CoTaskMemFree(path);
-    return out;  // kosong = tidak ada tujuan; watcher keluar sendiri.
+    // Cadangan klasik: %USERPROFILE%\Downloads.
+    if (ExpandEnvironmentStringsW(L"%USERPROFILE%\\Downloads", expanded, MAX_PATH) && expanded[0]) {
+        return expanded;
+    }
+    return L"";
 }
 
 std::wstring appdata_dir() {
