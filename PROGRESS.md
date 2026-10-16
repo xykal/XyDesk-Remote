@@ -1482,6 +1482,26 @@ Tiga permintaan pemilik ditangani tuntas:
      - **Floating Bubble Chat Global Saat Sesi (`FloatingSessionChatOverlay`)**: dipasang di `XyDeskSessionActivity.kt` dan `PcStreamSessionActivity.kt` sehingga pengguna dapat menggeser gelembung `💬` dan membuka Chat Global langsung di atas sesi RDP/PC Stream tanpa memutus sesi.
    - Gate `main` (`ff7af9c`) hijau penuh: `Web Worker checks` (`38970707919`) = `success`, `Build APK` (`38970707943`) = `success`.
 
+## Ronde 53 — Akselerasi Native FreeRDP untuk Game, XyRDP Support GTA SA-MP By SilentPatch & Minecraft OpenGL 4.6 D3D12, Anti-Reset Lintas Sesi, & Rilis Publik `v1.1.17` (Build 78) (2026-10-16)
+1. **Akselerasi Native `libfreerdp` & `client/Android` untuk Game & Kecepatan Maksimal (`XyDesk-Remote`)**:
+   - `channels/rdpgfx/client/rdpgfx_main.c`: `rdpgfx_recv_end_frame_pdu` kini mengirimkan `RDPGFX_FRAME_ACKNOWLEDGE_PDU` dan `RDPGFX_QOE_FRAME_ACKNOWLEDGE_PDU` (`timeDiffSE = 1`, `timeDiffEDR = 1`) **sebelum** `context->EndFrame` (scaling & JNI blit), sehingga server Windows RDS langsung menyiapkan frame berikutnya secara paralel tanpa tertahan RTT jaringan.
+   - `client/Android/Studio/freeRDPCore/src/main/cpp/android_freerdp.c`:
+     - Mengaktifkan `FreeRDP_HasRelativeMouseEvent = TRUE`, `FreeRDP_GfxSmallCache = FALSE` (cache surface 100 MB penuh), `FreeRDP_GfxThinClient = FALSE`, `FreeRDP_GfxSendQoeAck = TRUE`, `FreeRDP_FrameAcknowledge = 8`, dan `FreeRDP_MultifragMaxRequestSize = 4194304` (4 MB).
+     - `android_freerdp_run` kini menguras antrean input `android_check_handle(instance)` **sebelum** maupun **sesudah** `freerdp_check_event_handles(context)` agar input bidikan mouse/keyboard game terkirim tanpa menunggu dekode frame video.
+   - `libfreerdp/core/tcp.c`: mengaktifkan `TCP_QUICKACK` (termasuk re-arm otomatis setelah setiap `_recv > 0` di Linux/Android untuk menghilangkan penundaan 40 ms Delayed ACK), `IPTOS_LOWDELAY`, serta menaikkan buffer socket `SO_RCVBUF` ke 1 MB dan `SO_SNDBUF` ke 512 KB.
+2. **Modifikasi `xykal/XyRDP` (`dfe59c5a3d9d8c5ce36f7c856d0760b597a09268`) untuk Support GTA SA-MP By SilentPatch & Minecraft OpenGL 4.6 D3D12**:
+   - `scripts/setup-samp.ps1`: selain memasang penuh DirectX 9.0c June 2010, VC++ 2013 & 2015–2022 (x86/x64), DirectPlay, dan NetFx3, kini menyiapkan paket **SilentPatchSA (`SilentPatchSA.asi` + `SilentPatchSA.ini` 90 FPS + `FixMouseStuck=1`)**, **SilentPatch DDraw (`ddraw.dll`)**, **Ultimate ASI Loader (`dinput8.dll` & `vorbisFile.dll`)**, **GTASA.WidescreenFix**, **open.mp / SA-MP Launcher**, serta script auto-patcher `C:\Games\GTA-SAMP\Patch-GTA-SAMP.ps1` + shortcut Desktop yang otomatis mem-patch folder GTA San Andreas dan mengatur `HKCU\Software\SAMP`.
+   - `scripts/setup-grafis.ps1` & `scripts/setup-games.ps1`: mengekstrak **Mesa3D OpenGL 4.6 (`GALLIUM_DRIVER=d3d12`)** ke `C:\XyRDP\grafis\mesa-x64`, memasang **Eclipse Temurin JDK 21 LTS (x64)** & **JRE 8 LTS (x64)**, **PrismLauncher Portable**, serta **Minecraft Launcher resmi**, lalu menyuntikkan otomatis `opengl32.dll` + `libgallium_wgl.dll` + `libglapi.dll` + `dxil.dll` ke seluruh folder `bin/` runtime Java (`Deploy-OpenGL-To-Java.ps1`) agar Minecraft Java berjalan lancar tanpa error `GLFW error 65542`.
+3. **Sistem Anti-Reset Lintas Sesi (`persist-state.ps1`, `restore-state.ps1`, `keepalive.ps1`, `setup-rdp.ps1`, `rdp-6h.yml`)**:
+   - Memperbaiki batas durasi `setup-rdp.ps1` ke `342` menit agar `persist-state.ps1` selalu sempat berjalan sebelum hard-timeout 360 menit GitHub Actions.
+   - Menyimpan & memulihkan **`C:\Persist`** (dengan shortcut Desktop `Folder Permanen (Anti-Reset)`), **`C:\Games`**, **`%APPDATA%\.minecraft`**, **`PrismLauncher`**, **`Desktop..Videos`** (termasuk `Documents\GTA San Andreas User Files`), **Registry `HKCU\Software\SAMP`**, serta **state identitas Tailscale (`C:\ProgramData\Tailscale`)** menggunakan kompresi cepat `7z.exe -mx=1 -mmt=on`.
+   - Menggunakan **Penyimpanan Ganda (Dual-Storage)** ke **GitHub Release tag `xyrdp-state-latest`** (tahan terhadap `cleanup-actions.ps1`) sekaligus **Artifact `xyrdp-state`**, ditambah **Auto-Checkpoint setiap 15 menit** di `keepalive.ps1` dan **Estafet Sesi Otomatis (`perpanjang_otomatis`)** di `rdp-6h.yml`.
+   - Terverifikasi lulus 100% di CI `xykal/XyRDP`: `Validate Windows dependencies` (`38977115792`), `Validate desktop diagnostics` (`38977117636`), dan `Validate desktop maintenance` (`38977119627`) = `completed / success`.
+4. **Rilis Publik `v1.1.17` (Build 78) — Terbit & Live**:
+   - Commit `cc33d3827a851169c47ef5a1aee33575462f96e0` (tag `v1.1.17`) lulus penuh: `Web Worker checks` (`38976865028`) = `success`, `Build APK (main)` (`38976864896`) = `success`, dan `Build APK (v1.1.17)` (`38976865032`) = `success` (semua APK per-ABI + Universal + Windows Host Agent terverifikasi `PASS (V1 + V2)` dengan sertifikat `8429f689e7c3c6a0a44cb924206d56d5a2dccbd6c88cb900835c1901ad219652`).
+   - GitHub Release `415451965` (`v1.1.17`) telah dipublikasikan (`draft: false`, `make_latest: true`) di `https://github.com/xykal/XyDesk-Remote/releases/tag/v1.1.17`, dan Cloudflare Worker (`29feb28e-8095-4e1a-b3dd-5aac2c69459f`) bersama `web/release-state.json` telah live di seluruh 8 domain resmi.
+
+
 
 
 
