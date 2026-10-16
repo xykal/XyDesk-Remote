@@ -58,7 +58,7 @@ internal fun XyFeedScreen(
         Column(
             Modifier
                 .fillMaxSize()
-                .padding(horizontal = 14.dp)
+                .padding(horizontal = 16.dp)
                 .padding(bottom = 18.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {

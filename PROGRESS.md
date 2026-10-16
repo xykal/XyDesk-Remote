@@ -1065,3 +1065,35 @@ s-maxage=900) — tidak ada perubahan dibutuhkan ronde ini; perubahan backend
 besar ditunda ke ronde berikutnya (D1/R2 dsb. kalau diminta).
 
 Gate: commit ini. TANPA build rilis — menunggu perintah pemilik.
+
+### Ronde 42 — part 2: polish UX + CHECKLIST RILIS v1.1.16
+
+- XyGlassCard/xyGlass kini punya shadow lembut (konsisten dengan XyCard r41).
+- Margin horizontal Feed & Profil 14dp -> 16dp (samakan dengan Home).
+
+## ⚠️ PENDING UNTUK v1.1.16 — CHECKLIST RILIS (SUPER INGAT, JANGAN ADA YANG TERTINGGAL)
+
+Build v1.1.16 nanti HARUS memuat SEMUA ini (semua sudah di branch main,
+commit c8b3b44 → HEAD). Verifikasi satu per satu sebelum publish draft:
+
+**Ronde 40 — widget & notifikasi:**
+- [ ] Widget quick-connect homescreen: pasang dari launcher → pilih perangkat → tap = langsung connect (XyQuickConnectWidgetProvider, XyWidgetConfigActivity, layout widget_quick_connect.xml, receiver di manifest)
+- [ ] Tap widget tetap lewat autentikasi kunci perangkat kalau aktif
+- [ ] Notifikasi "Koneksi terputus" saat sesi mati sendiri & app di background (channel xydesk.disconnect); TIDAK muncul saat disconnect disengaja / retry / layar terbuka
+
+**Ronde 41 — menu 2 gaya & polish:**
+- [ ] Tombol Menu → default POPUP TENGAH (kartu mengambang, fade+scale)
+- [ ] Ganti ke SIDEBAR KANAN lewat Tampilan → Gaya menu utama → langsung aktif
+- [ ] Semua seksi muncul di menu (termasuk Tampilan)
+- [ ] Home: toggle kanan atas = LIST ringkas ↔ KARTU BESAR 1 kolom (TIDAK ADA grid 2 kolom)
+- [ ] Kartu perangkat sudut membulat; bubble "+" konsisten (radius 18dp + border + shadow)
+
+**Ronde 42 — engine & performa:**
+- [ ] Pengaturan perangkat → "Engine Performa Lanjutan": Video remoting halus, GFX small-cache, Buffer frame server (frame-ack), Loop respons engine (max-loop-time)
+- [ ] Engine pakai Compose 1.12.1 (BOM 2026.09.00) + lifecycle-runtime-compose 2.10.0
+- [ ] Glass card (Feed/Profil) punya depth shadow; margin seragam 16dp semua layar utama
+
+**Prosedur rilis (aturan pemilik):**
+- [ ] Build & rilis HANYA setelah perintah eksplisit pemilik
+- [ ] Rilis dibuat sebagai DRAFT dulu; PUBLISH hanya setelah konfirmasi pemilik
+- [ ] Update release-state.json + deploy worker SETELAH draft dibuat, SEBELUM publish

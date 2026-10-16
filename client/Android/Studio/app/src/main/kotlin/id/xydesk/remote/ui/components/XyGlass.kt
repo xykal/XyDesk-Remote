@@ -24,6 +24,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.graphics.vector.ImageVector
@@ -78,6 +79,7 @@ fun Modifier.xyGlass(
     strength: Float = 1f,
     edge: Boolean = true,
 ): Modifier = this
+    .shadow(elevation = 6.dp, shape = shape, clip = false)
     .clip(shape)
     .background(MaterialTheme.colorScheme.surface.copy(alpha = (0.97f * opacity).coerceIn(0f, 1f)))
     .then(
