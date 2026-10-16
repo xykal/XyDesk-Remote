@@ -1001,8 +1001,7 @@ internal suspend fun syncGitHubProfileAndAvatar(
                     if (bytes.size in 1..200_000) {
                         avatarFile.writeBytes(bytes)
                         runCatching {
-                            id.xydesk.remote.community.CommunityFeedClient(context.applicationContext)
-                                .uploadAvatar(bytes, "image/webp")
+                            CommunityJokesApi(context).uploadAvatar(bytes, "image/webp")
                         }
                     }
                 }
@@ -1279,7 +1278,7 @@ internal fun XyHeaderAccountActions(
 ) {
     val context = LocalContext.current
     val scope = androidx.compose.runtime.rememberCoroutineScope()
-    val api = remember { id.xydesk.remote.community.CommunityFeedClient(context.applicationContext) }
+    val api = remember(context) { CommunityJokesApi(context) }
     var quickOpen by remember { mutableStateOf(false) }
     var githubLoginOpen by remember { mutableStateOf(false) }
     var ghUser by remember { mutableStateOf(getVerifiedGitHubLogin(context)) }
@@ -1519,13 +1518,10 @@ internal fun XyHeaderAccountActions(
                             if (clean.isNotEmpty() && !savingName) {
                                 savingName = true
                                 scope.launch {
-                                    kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
-                                        runCatching { api.setDisplayName(clean) }
-                                    }
-                                    api.setDisplayNameLocally(clean)
+                                    runCatching { api.setDisplayName(clean) }
                                     context.getSharedPreferences("xydesk.global.chat", android.content.Context.MODE_PRIVATE)
                                         .edit().putString("nickname", clean).apply()
-                                    displayName = clean
+                                    displayName = api.displayName() ?: clean
                                     savingName = false
                                     statusMsg = xyNow("Nama tampilan disimpan!", "Display name saved!")
                                     onStateChanged()
@@ -1588,11 +1584,8 @@ internal fun XyHeaderAccountActions(
                     saveVerifiedGitHubLogin(context, user)
                     ghUser = user
                     if (api.displayName().isNullOrBlank()) {
-                        api.setDisplayNameLocally(user)
                         scope.launch {
-                            kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
-                                runCatching { api.setDisplayName(user) }
-                            }
+                            runCatching { api.setDisplayName(user) }
                         }
                     }
                     displayName = api.displayName() ?: user

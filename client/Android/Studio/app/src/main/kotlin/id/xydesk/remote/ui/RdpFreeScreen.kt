@@ -473,9 +473,9 @@ fun RdpFreeScreen(onBack: () -> Unit, onConnect: (ConnectionProfile) -> Unit) {
                     XySectionLabel("2. Secret Configuration & Link Resmi")
                     XyCard(Modifier.fillMaxWidth()) {
                         val st = setupStatus
-                        val hasRdpPass = st?.hasRdpPassword == true
-                        val hasTsKey = st?.hasTailscaleAuthKey == true
-                        val hasOvpn = st?.hasPortmapOvpn == true
+                        val hasRdpPass = st?.configuredSecrets?.contains("RDP_PASSWORD") == true
+                        val hasTsKey = st?.configuredSecrets?.contains("TAILSCALE_AUTH_KEY") == true
+                        val hasOvpn = st?.configuredSecrets?.contains("PORTMAP_OVPN_CONFIG") == true
 
                         Text(
                             "Status GitHub Actions Secrets di $login/${XyRdpConfig.FORK_REPO_NAME}",
