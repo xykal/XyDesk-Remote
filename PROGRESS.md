@@ -1088,6 +1088,11 @@ commit c8b3b44 → HEAD). Verifikasi satu per satu sebelum publish draft:
 - [ ] Home: toggle kanan atas = LIST ringkas ↔ KARTU BESAR 1 kolom (TIDAK ADA grid 2 kolom)
 - [ ] Kartu perangkat sudut membulat; bubble "+" konsisten (radius 18dp + border + shadow)
 
+**Ronde 43 — host agent:**
+- [ ] Host Agent = 1 file exe standalone jadi jalur utama (setup PS1 & tombol unduh host.html)
+- [ ] UI Host modern dark: kartu rounded, Segoe UI Variable, status dot, log console, dark caption
+- [ ] https://www.xydeskremote.biz.id/XyDesk-Host.exe live 302 ke aset rilis aktif (worker 350757c0)
+
 **Ronde 42 — engine & performa:**
 - [ ] Pengaturan perangkat → "Engine Performa Lanjutan": Video remoting halus, GFX small-cache, Buffer frame server (frame-ack), Loop respons engine (max-loop-time)
 - [ ] Engine pakai Compose 1.12.1 (BOM 2026.09.00) + lifecycle-runtime-compose 2.10.0
@@ -1130,3 +1135,13 @@ utama + redesign UI.
 node --check + node --test worker 51/51 hijau. Worker dideploy ronde ini
 supaya jalur 1-exe langsung bisa dipakai (menunjuk aset v1.1.15 yang sudah
 ada; UI baru host masuk build berikutnya via checklist v1.1.16).
+
+### Ronde 43 — deploy worker (live)
+
+- Worker versi `350757c0-6da0-46e9-b58b-dbc181d21524` dideploy: alias
+  /XyDeskRemoteHost-Standalone.exe & /XyDesk-Host.exe live (302 → aset rilis
+  aktif). Fix penting: wrangler.jsonc `run_worker_first` harus memuat path
+  alias baru — tanpa itu request .exe ditangani static assets (404.html)
+  sebelum sampai worker.
+- Verifikasi live: host.html 200, arm64 302, /api/health 200, kedua alias
+  exe 302. Gate commit 5ee70db hijau.
