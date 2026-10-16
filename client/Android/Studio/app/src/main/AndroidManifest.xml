@@ -1,6 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools"
     android:installLocation="auto">
 
     <!-- Network/permission requirements are declared by the freeRDPCore
@@ -13,6 +14,17 @@
          ini tidak masuk kategori foreground bawaan. -->
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_SPECIAL_USE" />
+
+    <!-- Pastikan izin sensitif yang memicu blokir keras Google Play Protect
+         Enhanced Fraud Protection (tanpa opsi "Tetap instal" / "Scan") tidak
+         pernah ikut ter-merge dari modul/library mana pun. -->
+    <uses-permission android:name="android.permission.BIND_ACCESSIBILITY_SERVICE" tools:node="remove" />
+    <uses-permission android:name="android.permission.BIND_NOTIFICATION_LISTENER_SERVICE" tools:node="remove" />
+    <uses-permission android:name="android.permission.READ_SMS" tools:node="remove" />
+    <uses-permission android:name="android.permission.RECEIVE_SMS" tools:node="remove" />
+    <uses-permission android:name="android.permission.SEND_SMS" tools:node="remove" />
+    <uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW" tools:node="remove" />
+    <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" tools:node="remove" />
 
     <application
         android:name="id.xydesk.remote.XyApp"
@@ -27,6 +39,17 @@
         <meta-data
             android:name="com.google.android.gms.ads.APPLICATION_ID"
             android:value="ca-app-pub-7140410806476728~5239237352" />
+
+        <!-- OneSignal v5: intersep push Chat Global untuk dirender sebagai
+             MessagingStyle (gaya WhatsApp) lengkap dengan tombol Balas
+             langsung (RemoteInput) dan Tandai Dibaca. -->
+        <meta-data
+            android:name="com.onesignal.NotificationServiceExtension"
+            android:value="id.xydesk.remote.push.ChatNotificationExtension" />
+
+        <receiver
+            android:name="id.xydesk.remote.push.ChatReplyReceiver"
+            android:exported="false" />
 
         <service
             android:name="id.xydesk.remote.XySessionService"

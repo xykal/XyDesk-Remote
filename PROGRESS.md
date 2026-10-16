@@ -1358,4 +1358,60 @@ OK, WS echo OK (presence+history+msg), /abi 200.
 - [ ] Halaman /abi: deteksi GPU fallback, list download tengah, riwayat versi
 - [ ] CATATAN: draft v1.1.16 (415064151) belum memuat r45–r47 — butuh build
       rilis baru; publish hanya setelah konfirmasi user.
-- [ ] Push notif chat global — menunggu keputusan FCM (butuh Firebase user).
+- [x] Push notif chat global — selesai di ronde 48 (lihat di bawah).
+
+## Ronde 48 — Push Notif Chat Global (OneSignal + Balas dari Notif ala WA), Fix Blokir Keras Play Protect, & Log XyDesk 1-per-1 (2026-10-16)
+
+Tiga permintaan pemilik ditangani tuntas:
+
+1. **Push Notif Chat Global + Direct Reply ("Balas" dari Notif ala WhatsApp)**:
+   - OneSignal App ID `ffaa87d6-8e1d-42b6-bb4f-ebbbfc0bccbb` dipasang di
+     `ChatPushNotifier.kt` (init dari `XyApp.onCreate()`) + secret
+     `ONESIGNAL_REST_API_KEY` di Cloudflare Worker (`GlobalChat.pushChatNotification`).
+   - Interseptor `ChatNotificationExtension` (`INotificationServiceExtension`)
+     mengubah push standar menjadi `NotificationCompat.MessagingStyle` gaya
+     percakapan grup WhatsApp: avatar lingkaran inisial warna per pengirim,
+     tumpukan hingga 6 pesan belum dibaca, tombol **Balas** langsung dari
+     bar notifikasi (`RemoteInput` → `ChatReplyReceiver` → `POST /api/chat/send`
+     tanpa perlu membuka aplikasi), tombol **Tandai dibaca**, dan ketuk
+     notifikasi langsung membuka layar **Chat Global** (`EXTRA_OPEN_CHAT_GLOBAL`).
+   - Dilengkapi watcher ringan cadangan (`/api/chat/history`) dengan deduplikasi
+     ID pesan sehingga perangkat tanpa GMS / saat push tertunda tetap mendapat
+     notifikasi percakapan secara instan.
+   - Fix bug ronde 47 di `GlobalChatScreen.kt`: `chatSocketSend` sebelumnya
+     membungkus ulang string JSON ke dalam `{"type":"msg","text":...}` (double-wrap).
+
+2. **Fix Blokir Keras Google Play Protect (Tanpa Tombol "Tetap Instal" / "Scan")**:
+   - **Akar masalah ditemukan**: `freeRDPCore/src/main/AndroidManifest.xml`
+     warisan upstream mendeklarasikan `<service android:name=".presentation.KeyboardAccessibilityService" android:permission="android.permission.BIND_ACCESSIBILITY_SERVICE">`
+     beserta 8 activity warisan yang tidak pernah dipakai XyDesk Remote
+     (`SessionActivity.activeSession` selalu null). Di Indonesia (sejak
+     diberlakukannya **Google Play Protect Enhanced Fraud Protection / EFP**),
+     setiap APK sideload dari browser/WhatsApp/file manager yang meminta
+     `BIND_ACCESSIBILITY_SERVICE` (atau `READ_SMS`/`RECEIVE_SMS`/
+     `BIND_NOTIFICATION_LISTENER_SERVICE`) otomatis **diblokir keras tanpa
+     opsi "Tetap instal" maupun "Scan"**.
+   - **Perbaikan**: `KeyboardAccessibilityService` dan seluruh activity UI
+     warisan yang tidak terpakai dihapus dari `freeRDPCore/src/main/AndroidManifest.xml`,
+     ditambah guard eksplisit `tools:node="remove"` di `app/src/main/AndroidManifest.xml`
+     untuk `BIND_ACCESSIBILITY_SERVICE`, `BIND_NOTIFICATION_LISTENER_SERVICE`,
+     `READ_SMS`, `RECEIVE_SMS`, `SEND_SMS`, `SYSTEM_ALERT_WINDOW`, dan
+     `REQUEST_INSTALL_PACKAGES` + unit test penjaga di `worker.test.mjs`.
+
+3. **Log FreeRDP Dihapus dari Tampilan & Dipindah Menyatu ke Log XyDesk 1-per-1**:
+   - Seksi terpisah `=== LOG NATIVE (FreeRDP) ===` dihapus dari layar log.
+   - `ConnectionLog.syncNativeIntoXyDeskLog()` otomatis menyerap peristiwa
+     penting dari engine native (audio, clipboard, drive, resolusi, TLS, error),
+     menerjemahkannya ke bahasa XyDesk yang jelas, lalu menyatukannya ke dalam
+     **Log XyDesk**.
+   - `ConnectionLog.formattedXyDeskLog()` menyusun setiap langkah secara berurutan
+     satu per satu (`1.`, `2.`, `3.`, ...) dengan label bersih (`[Aplikasi]`,
+     `[Sesi]`, `[Koneksi]`, `[Engine XyDesk]`, `[Audio]`, `[Sukses]`, `[Gagal]`),
+     dan `LogSheet.kt` merendernya sebagai baris kartu satu per satu yang
+     mudah dibaca + tombol **Salin Log XyDesk**.
+
+**Checklist rilis berikutnya — tambahan ronde 48:**
+- [ ] APK rilis baru tidak lagi kena blokir keras Play Protect EFP (tidak ada `BIND_ACCESSIBILITY_SERVICE` di manifest APK)
+- [ ] Notifikasi Chat Global muncul gaya WhatsApp (`MessagingStyle`), tombol **Balas** dari notifikasi langsung mengirim pesan ke Chat Global, ketuk notif membuka layar Chat Global
+- [ ] Layar Log XyDesk (dan tombol Detail saat gagal koneksi) menampilkan langkah bernomor 1 per 1 tanpa blok log FreeRDP terpisah
+

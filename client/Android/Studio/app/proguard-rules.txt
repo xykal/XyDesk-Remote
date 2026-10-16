@@ -17,8 +17,9 @@
 # Application entry + implementor LibFreeRDP.EventListener
 -keep class com.freerdp.freerdpcore.application.GlobalApp { *; }
 
-# Service yang di-bind sistem (manifest-bound; defensive keep)
--keep class com.freerdp.freerdpcore.presentation.KeyboardAccessibilityService { *; }
+# OneSignal push extension & receiver Direct Reply (di-instantiate via refleksi/manifest)
+-keep class id.xydesk.remote.push.ChatNotificationExtension { *; }
+-keep class id.xydesk.remote.push.ChatReplyReceiver { *; }
 
 # --- WebRTC JNI -------------------------------------------------
 # WebRTC's native library calls Java methods by name and uses these wrappers

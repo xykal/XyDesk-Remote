@@ -5,6 +5,7 @@ import worker, {
   ActiveSessions,
   CommunityJokes,
   FeedbackBoard,
+  GlobalChat,
   PcSignalRoom,
   resetReleaseLookupCache,
 } from "./worker.mjs";
@@ -1713,4 +1714,73 @@ test("feedback board: submit, list, reply, staff-only status & hide", async () =
     body: JSON.stringify({ client_id: user, type: "idea", text: "spam" }),
   }), env);
   assert.equal(spam.status, 429);
+});
+
+test("ronde 48: global chat direct reply (/api/chat/send) + OneSignal push + Play Protect manifest guard + XyDesk unified log", async () => {
+  const records = new Map();
+  const storage = {
+    async get(key) { return records.get(key); },
+    async put(key, value) { records.set(key, value); },
+    async delete(key) { return records.delete(key); },
+    async list(options = {}) {
+      const prefix = options.prefix || "";
+      const entries = [...records.entries()].filter(([k]) => k.startsWith(prefix));
+      return new Map(entries);
+    },
+  };
+
+  let pushedBody = null;
+  globalThis.fetch = async (url, init) => {
+    if (String(url).includes("api.onesignal.com/notifications")) {
+      pushedBody = JSON.parse(init.body);
+      return new Response(JSON.stringify({ id: "os-notif-1" }), { status: 200 });
+    }
+    return new Response("offline", { status: 503 });
+  };
+
+  const chat = new GlobalChat({ storage }, {
+    ONESIGNAL_APP_ID: "ffaa87d6-8e1d-42b6-bb4f-ebbbfc0bccbb",
+    ONESIGNAL_REST_API_KEY: "os_v2_app_test_key",
+  });
+  const env = envFor({}, {
+    GLOBAL_CHAT: {
+      idFromName(name) { assert.equal(name, "xydesk-global-chat-v1"); return name; },
+      get() { return { fetch: (req) => chat.fetch(req) }; },
+    },
+  });
+
+  const sendRes = await worker.fetch(new Request("https://api.xydeskremote.biz.id/api/chat/send", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ name: "Tamu-8899", text: "Balas langsung dari notifikasi!" }),
+  }), env);
+  assert.equal(sendRes.status, 200);
+  const sendJson = await sendRes.json();
+  assert.equal(sendJson.status, "ok");
+  assert.equal(sendJson.message.name, "Tamu-8899");
+  assert.equal(sendJson.message.text, "Balas langsung dari notifikasi!");
+
+  // Pastikan OneSignal terpanggil dengan data MessagingStyle yang tepat.
+  assert.ok(pushedBody);
+  assert.equal(pushedBody.app_id, "ffaa87d6-8e1d-42b6-bb4f-ebbbfc0bccbb");
+  assert.equal(pushedBody.data.type, "global_chat");
+  assert.equal(pushedBody.data.sender_name, "Tamu-8899");
+  assert.equal(pushedBody.data.text, "Balas langsung dari notifikasi!");
+
+  // Riwayat harus memuat pesan balasan tadi.
+  const histRes = await worker.fetch(new Request("https://api.xydeskremote.biz.id/api/chat/history"), env);
+  assert.equal(histRes.status, 200);
+  const histJson = await histRes.json();
+  assert.equal(histJson.messages.length, 1);
+  assert.equal(histJson.messages[0].text, "Balas langsung dari notifikasi!");
+
+  // Guard Play Protect Enhanced Fraud Protection: manifest tidak boleh memuat BIND_ACCESSIBILITY_SERVICE.
+  const coreManifest = await readFile(new URL("../client/Android/Studio/freeRDPCore/src/main/AndroidManifest.xml", import.meta.url), "utf8");
+  assert.ok(!coreManifest.includes("android.permission.BIND_ACCESSIBILITY_SERVICE"));
+  assert.ok(!coreManifest.includes("android:name=\".presentation.KeyboardAccessibilityService\""));
+
+  // Guard Log XyDesk: tidak ada lagi blok terpisah "=== LOG NATIVE (FreeRDP) ===" di XyDeskHome.kt.
+  const homeKt = await readFile(new URL("../client/Android/Studio/app/src/main/kotlin/id/xydesk/remote/ui/XyDeskHome.kt", import.meta.url), "utf8");
+  assert.ok(!homeKt.includes("=== LOG NATIVE (FreeRDP) ==="));
+  assert.ok(homeKt.includes("ConnectionLog.formattedXyDeskLog"));
 });

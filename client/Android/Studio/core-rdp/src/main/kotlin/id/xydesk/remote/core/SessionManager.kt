@@ -879,7 +879,7 @@ class SessionManager(context: Context) {
                     "Gagal koneksi"
                 }
                 val msg = if (nativeDetail.isNotBlank()) {
-                    "$summary — Detail FreeRDP: $nativeDetail"
+                    "$summary — Detail: $nativeDetail"
                 } else {
                     summary
                 }

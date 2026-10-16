@@ -104,6 +104,7 @@ internal fun GlobalChatScreen(onBack: () -> Unit) {
     var typingSentAt by remember { mutableStateOf(0L) }
 
     androidx.compose.runtime.DisposableEffect(Unit) {
+        id.xydesk.remote.push.ChatPushNotifier.setChatOpen(context, true)
         val client = OkHttpClient.Builder()
             .pingInterval(20, TimeUnit.SECONDS)
             .connectTimeout(15, TimeUnit.SECONDS)
@@ -134,12 +135,15 @@ internal fun GlobalChatScreen(onBack: () -> Unit) {
                                     messages.clear()
                                     for (i in 0 until arr.length()) {
                                         val m = arr.optJSONObject(i) ?: continue
+                                        val msgId = m.optString("id")
+                                        val msgAt = m.optLong("at")
+                                        id.xydesk.remote.push.ChatPushNotifier.markSeen(msgId, msgAt, context)
                                         messages.add(
                                             ChatMessage(
-                                                id = m.optString("id"),
+                                                id = msgId,
                                                 name = m.optString("name"),
                                                 text = m.optString("text"),
-                                                at = m.optLong("at"),
+                                                at = msgAt,
                                                 mine = m.optString("name") == nickname,
                                             ),
                                         )
@@ -147,13 +151,16 @@ internal fun GlobalChatScreen(onBack: () -> Unit) {
                                 }
                                 "msg" -> {
                                     val from = data.optString("name")
+                                    val msgId = data.optString("id")
+                                    val msgAt = data.optLong("at")
+                                    id.xydesk.remote.push.ChatPushNotifier.markSeen(msgId, msgAt, context)
                                     messages.removeAll { it.id.startsWith("local-pending-") && it.text == data.optString("text") && it.mine }
                                     messages.add(
                                         ChatMessage(
-                                            id = data.optString("id"),
+                                            id = msgId,
                                             name = from,
                                             text = data.optString("text"),
-                                            at = data.optLong("at"),
+                                            at = msgAt,
                                             mine = from == nickname,
                                         ),
                                     )
@@ -192,6 +199,7 @@ internal fun GlobalChatScreen(onBack: () -> Unit) {
         ws = connect()
         onDispose {
             closed = true
+            id.xydesk.remote.push.ChatPushNotifier.setChatOpen(context, false)
             try {
                 ws?.close(1000, "bye")
             } catch (e: Exception) {
@@ -338,9 +346,8 @@ internal fun GlobalChatScreen(onBack: () -> Unit) {
 // Socket aktif disimpan di companion-level sederhana agar komposer bisa mengirim.
 private var activeSocket: WebSocket? = null
 
-private fun chatSocketSend(text: String) {
-    val payload = JSONObject().put("type", "msg").put("text", text).toString()
-    activeSocket?.send(payload)
+private fun chatSocketSend(rawJson: String) {
+    activeSocket?.send(rawJson)
 }
 
 @Composable

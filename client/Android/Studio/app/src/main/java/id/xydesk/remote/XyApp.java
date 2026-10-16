@@ -29,6 +29,7 @@ public class XyApp extends com.freerdp.freerdpcore.application.GlobalApp
 			    message -> id.xydesk.remote.core.ConnectionLog.INSTANCE.add("JNI: " + message));
 			super.onCreate();
 			id.xydesk.remote.core.ConnectionLog.INSTANCE.add("APP: GlobalApp.onCreate completed");
+			id.xydesk.remote.push.ChatPushNotifier.init(this);
 		}
 		catch (Throwable t)
 		{

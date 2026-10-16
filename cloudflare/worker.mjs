@@ -2411,11 +2411,14 @@ const CHAT_TEXT_MAX = 500;
 const CHAT_NAME_MAX = 24;
 const CHAT_MSG_PER_WINDOW = 8;
 const CHAT_WINDOW_MS = 20_000;
+const DEFAULT_ONESIGNAL_APP_ID = "ffaa87d6-8e1d-42b6-bb4f-ebbbfc0bccbb";
 
 export class GlobalChat {
-  constructor(state) {
+  constructor(state, env) {
     this.state = state;
+    this.env = env || {};
     this.sessions = new Set();
+    this.httpRate = new Map();
   }
 
   async fetch(request) {
@@ -2425,7 +2428,47 @@ export class GlobalChat {
       const messages = await this.loadHistory();
       return durableObjectJson({ status: "ok", messages }, 200, request.method);
     }
+    if (path === "/send" && request.method === "POST") {
+      return this.handleHttpSend(request);
+    }
     return durableObjectJson({ status: "not_found" }, 404, request.method);
+  }
+
+  async handleHttpSend(request) {
+    let body = null;
+    try {
+      body = await request.json();
+    } catch {
+      return durableObjectJson({ status: "error", code: "invalid_json" }, 400, request.method);
+    }
+    const name = typeof body?.name === "string"
+      ? body.name.trim().slice(0, CHAT_NAME_MAX) || "Tamu"
+      : "Tamu";
+    const text = typeof body?.text === "string"
+      ? body.text.trim().slice(0, CHAT_TEXT_MAX)
+      : "";
+    if (!text) {
+      return durableObjectJson({ status: "error", code: "empty_text" }, 400, request.method);
+    }
+    const now = Date.now();
+    const rateKey = name.toLowerCase();
+    const bucket = this.httpRate.get(rateKey) || { sent: 0, windowAt: now };
+    if (now - bucket.windowAt > CHAT_WINDOW_MS) {
+      bucket.windowAt = now;
+      bucket.sent = 0;
+    }
+    bucket.sent += 1;
+    this.httpRate.set(rateKey, bucket);
+    if (bucket.sent > CHAT_MSG_PER_WINDOW) {
+      return durableObjectJson({ status: "error", code: "rate_limited" }, 429, request.method);
+    }
+    const id = `${now.toString(36).padStart(9, "0")}-${Math.random().toString(36).slice(2, 8)}`;
+    const msg = { id, name, text, at: now };
+    await this.state.storage.put(`msg:${id}`, msg);
+    this.trimHistory().catch(() => {});
+    this.broadcast(null, JSON.stringify({ type: "msg", ...msg }));
+    this.pushChatNotification(msg).catch(() => {});
+    return durableObjectJson({ status: "ok", message: msg }, 200, request.method);
   }
 
   async loadHistory() {
@@ -2495,6 +2538,51 @@ export class GlobalChat {
     const msg = { id, name: session.name, text, at: now };
     this.state.storage.put(`msg:${id}`, msg).then(() => this.trimHistory()).catch(() => {});
     this.broadcast(null, JSON.stringify({ type: "msg", ...msg }));
+    this.pushChatNotification(msg).catch(() => {});
+  }
+
+  async pushChatNotification(msg) {
+    const apiKey = String(this.env?.ONESIGNAL_REST_API_KEY || "").trim();
+    const appId = String(this.env?.ONESIGNAL_APP_ID || DEFAULT_ONESIGNAL_APP_ID).trim();
+    if (!apiKey || !appId) return;
+    try {
+      await fetch("https://api.onesignal.com/notifications", {
+        method: "POST",
+        headers: {
+          Authorization: `Key ${apiKey}`,
+          "Content-Type": "application/json",
+          Accept: "application/json",
+        },
+        body: JSON.stringify({
+          app_id: appId,
+          target_channel: "push",
+          filters: [
+            { field: "tag", key: "chat_open", relation: "!=", value: "true" },
+            { operator: "AND" },
+            { field: "tag", key: "nickname", relation: "!=", value: msg.name },
+          ],
+          headings: {
+            en: `${msg.name} · Chat Global`,
+            id: `${msg.name} · Chat Global`,
+          },
+          contents: {
+            en: msg.text,
+            id: msg.text,
+          },
+          data: {
+            type: "global_chat",
+            msg_id: msg.id,
+            sender_name: msg.name,
+            text: msg.text,
+            at: msg.at,
+          },
+          android_group: "xydesk_global_chat",
+          priority: 10,
+        }),
+      });
+    } catch {
+      // Non-fatal: kegagalan push tidak boleh mengganggu aliran chat.
+    }
   }
 
   broadcast(fromSession, payload) {
@@ -2551,6 +2639,19 @@ export default {
       if (!env.GLOBAL_CHAT) return notFound(request.method);
       const chatId2 = env.GLOBAL_CHAT.idFromName("xydesk-global-chat-v1");
       return env.GLOBAL_CHAT.get(chatId2).fetch(new Request(new URL("/history", request.url), { method: "GET" }));
+    }
+    if (path === "/api/chat/send") {
+      if (request.method === "OPTIONS") return corsPreflight("POST, OPTIONS");
+      if (request.method !== "POST") return methodNotAllowed("POST, OPTIONS");
+      if (!env.GLOBAL_CHAT) return notFound(request.method);
+      const chatId3 = env.GLOBAL_CHAT.idFromName("xydesk-global-chat-v1");
+      return env.GLOBAL_CHAT.get(chatId3).fetch(
+        new Request(new URL("/send", request.url), {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: await request.text(),
+        })
+      );
     }
     if (path === "/api/pc/rooms" || path.startsWith("/api/pc/rooms/")) {
       return pcSignalResponse(request, env);

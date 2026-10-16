@@ -67,8 +67,8 @@ internal object RdpErrors {
             )
 
             code == "connect_failed" && (m.contains("wrong password") || m.contains("password supplied")) -> Pair(
-                "FreeRDP melaporkan kata sandi salah. Periksa kata sandi akun remote.",
-                "FreeRDP reported a wrong password. Check the remote account password.",
+                "XyDesk melaporkan kata sandi salah. Periksa kata sandi akun remote.",
+                "XyDesk reported a wrong password. Check the remote account password.",
             )
 
             code == "connect_failed" && m.contains("account locked") -> Pair(
@@ -89,8 +89,8 @@ internal object RdpErrors {
 
             code == "connect_failed" && (m.contains("dns") || m.contains("could not be resolved") ||
                 m.contains("host name was not found")) -> Pair(
-                "FreeRDP tidak dapat menyelesaikan nama host. Periksa DNS atau gunakan alamat host yang benar.",
-                "FreeRDP could not resolve the host name. Check DNS or use the correct host address.",
+                "XyDesk tidak dapat menemukan nama host. Periksa DNS atau gunakan alamat host yang benar.",
+                "XyDesk could not resolve the host name. Check DNS or use the correct host address.",
             )
 
             code == "connect_failed" && (m.contains("logon failed") || m.contains("logon failure") ||
@@ -107,9 +107,9 @@ internal object RdpErrors {
             )
 
             code == "connect_failed" -> Pair(
-                "FreeRDP gagal menyelesaikan handshake. Penyebab pastinya tidak tersedia; periksa Detail, " +
+                "XyDesk gagal menyelesaikan jabat tangan (handshake). Periksa Detail, " +
                     "jaringan, host, dan konfigurasi RDP.",
-                "FreeRDP did not complete the handshake. The exact cause was not provided; check Details, " +
+                "XyDesk did not complete the handshake. Check Details, " +
                     "the network, host, and RDP configuration.",
             )
 

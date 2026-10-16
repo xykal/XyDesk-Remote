@@ -138,6 +138,7 @@ fun XyDeskHome(
     sharedFileNotice: String? = null,
     autoResumeSignal: Int = 0,
     skipAutoResume: Boolean = false,
+    openChatSignal: Int = 0,
     onDismissSharedNotice: () -> Unit = {},
     onAuthenticateConnect: (() -> Unit) -> Unit = { it() },
 ) {
@@ -162,6 +163,12 @@ fun XyDeskHome(
     // drawer maupun dari layar Profil, dan keduanya menggambar SectionScreen.
     var tab by remember { mutableStateOf(XyTab.HOME) }
     var route by remember { mutableStateOf<XyRoute>(XyRoute.Devices) }
+    LaunchedEffect(openChatSignal) {
+        if (openChatSignal > 0) {
+            tab = XyTab.FEED
+            route = XyRoute.ChatGlobal
+        }
+    }
     var crashLog by remember { mutableStateOf(CrashLog.last(context.applicationContext)) }
     var showCrash by remember { mutableStateOf(false) }
     val bootTail = remember { ConnectionLog.tailFromFile(context.applicationContext, 20) }
@@ -564,21 +571,13 @@ fun XyDeskHome(
         )
     }
     if (showBoot) {
-        // Dua bagian: log app + log native FreeRDP (kanal audio/mikrofon,
-        // clipboard, drive, DISP). Yang native muncul kalau appender file
-        // aktif — dipasang XyApp sebelum library dimuat.
-        val nativeTail = remember(showBoot) { ConnectionLog.nativeTail(160) }
-        val body = buildString {
-            if (nativeTail.isNotEmpty()) {
-                appendLine("=== LOG NATIVE (FreeRDP) ===")
-                appendLine(nativeTail.joinToString("\n"))
-                appendLine()
-            }
-            appendLine("=== LOG APP (xydesk-boot.log) ===")
-            append(bootTail.joinToString("\n"))
+        // Ronde 48: seluruh log mesin telah diserap dan dirapikan ke dalam
+        // Log XyDesk satu per satu (tidak ada lagi blok log FreeRDP terpisah).
+        val body = remember(showBoot) {
+            ConnectionLog.formattedXyDeskLog(context.applicationContext, 100)
         }
         LogSheet(
-            title = xy("Log sesi terakhir", "Last session log"),
+            title = xy("Log XyDesk", "XyDesk Log"),
             body = body,
             onDismiss = { showBoot = false },
         )

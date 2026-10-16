@@ -2018,28 +2018,14 @@ fun XyDeskSessionScreen(
         }
     }
     if (!active && err != null && showLog && !userDisconnect) {
-        XyOverlay(title = xy("Log koneksi", "Connection log"), onDismiss = { showLog = false }) {
-            Column(
-                Modifier
-                    .fillMaxWidth()
-                    .heightIn(max = 420.dp)
-                    .verticalScroll(rememberScrollState()),
-            ) {
-                ConnectionLog.last(60).forEach { line ->
-                    Text(
-                        line,
-                        style = MaterialTheme.typography.bodySmall,
-                        fontFamily = FontFamily.Monospace,
-                    )
-                }
-            }
-            XyPillButton(
-                text = xy("Tutup", "Close"),
-                onClick = { showLog = false },
-                compact = true,
-                modifier = Modifier.fillMaxWidth(),
-            )
+        val logBody = remember(showLog, err) {
+            ConnectionLog.formattedXyDeskLog(context.applicationContext, 80)
         }
+        LogSheet(
+            title = xy("Log XyDesk", "XyDesk Log"),
+            body = logBody,
+            onDismiss = { showLog = false },
+        )
     }
     if (!active && err == null && confirmDisconnect) {
         XyDialog(

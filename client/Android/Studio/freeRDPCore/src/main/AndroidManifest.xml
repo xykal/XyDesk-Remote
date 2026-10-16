@@ -32,101 +32,18 @@
         android:resizeableActivity="true"
         >
         <meta-data android:name="com.samsung.android.keepalive.density" android:value="true"/>
-        <!-- Activity to create shortcuts -->
-        <!-- XyDesk: app tidak membuat shortcut; komponen bawaan FreeRDP
-             ditutup dari luar (audit keamanan 2026-09-27). -->
-        <activity
-            android:exported="false"
-            android:name=".presentation.ShortcutsActivity"
-            android:label="@string/title_create_shortcut"
-            android:theme="@style/Theme.Main">
-            <intent-filter>
-                <action android:name="android.intent.action.MAIN" />
-
-                <category android:name="android.intent.category.DEFAULT" />
-            </intent-filter>
-        </activity>
-
-        <!-- It is recommended that you use an activity-alias to provide the "CREATE_SHORTCUT" -->
-        <!-- intent-filter.  This gives you a way to set the text (and optionally the -->
-        <!-- icon) that will be seen in the launcher's create-shortcut user interface. -->
-        <activity-alias
-            android:exported="false"
-            android:name=".presentation.CreateShortcuts"
-            android:label="@string/title_create_shortcut"
-            android:targetActivity=".presentation.ShortcutsActivity">
-
-            <!-- This intent-filter allows your shortcuts to be created in the launcher. -->
-            <intent-filter>
-                <action android:name="android.intent.action.CREATE_SHORTCUT" />
-
-                <category android:name="android.intent.category.DEFAULT" />
-            </intent-filter>
-        </activity-alias>
-
-        <activity
-            android:exported="false"
-            android:name=".presentation.BookmarkActivity"
-            android:label="@string/title_bookmark_settings"
-            android:theme="@style/Theme.Main" />
-        <activity
-            android:exported="false"
-            android:name=".presentation.ApplicationSettingsActivity"
-            android:label="@string/title_application_settings"
-            android:theme="@style/Theme.Main"
-            android:windowSoftInputMode="stateHidden" />
-        <activity
-            android:exported="false"
-            android:name=".presentation.SessionActivity"
-            android:theme="@style/Theme.Main.Session"
-            android:configChanges="orientation|keyboard|keyboardHidden|screenSize|smallestScreenSize|density|screenLayout|navigation"
-            android:windowSoftInputMode="adjustResize"
-            android:taskAffinity="com.freerdp.session"
-            android:documentLaunchMode="always"
-            android:autoRemoveFromRecents="true">
-            <!--android:configChanges="orientation|keyboardHidden|screenSize|keyboard"-->
-            <!-- XyDesk: deep-link freerdp:// dibuang. Sesi dibuka lewat
-                 XyDeskSessionActivity milik app, bukan activity inti ini, jadi
-                 filter VIEW/BROWSABLE hanya jadi pintu masuk dari luar. -->
-        </activity>
-        <activity
-            android:exported="false"
-            android:name=".presentation.AboutActivity"
-            android:label="@string/title_about"
-            android:theme="@style/Theme.Main"
-            android:configChanges="orientation|keyboardHidden|screenSize" />
-        <activity
-            android:exported="false"
-            android:name=".presentation.HelpActivity"
-            android:label="@string/title_help"
-            android:theme="@style/Theme.Main"
-            android:configChanges="orientation|keyboardHidden|screenSize" />
-
-        <activity
-            android:exported="false"
-            android:name=".presentation.PrintProxyActivity"
-            android:theme="@android:style/Theme.Translucent.NoTitleBar"
-            android:excludeFromRecents="true" />
+        <!-- XyDesk (ronde 48): komponen UI warisan FreeRDP (ShortcutsActivity,
+             SessionActivity, KeyboardAccessibilityService dengan
+             BIND_ACCESSIBILITY_SERVICE) tidak dipakai XyDesk Remote dan
+             dihapus dari manifest. Izin BIND_ACCESSIBILITY_SERVICE pada APK
+             sideload memicu blokir keras Google Play Protect Enhanced Fraud
+             Protection (tanpa tombol "Tetap instal" / "Scan"). -->
 
         <provider
             android:name=".utils.ClipboardImageProvider"
             android:authorities="com.freerdp.freerdpcore.clipboard"
             android:exported="false"
             android:grantUriPermissions="true" />
-
-        <service
-            android:name=".presentation.KeyboardAccessibilityService"
-            android:label="@string/accessibility_keyboard_label"
-            android:permission="android.permission.BIND_ACCESSIBILITY_SERVICE"
-            android:enabled="true"
-            android:exported="false">
-            <intent-filter>
-                <action android:name="android.accessibilityservice.AccessibilityService" />
-            </intent-filter>
-            <meta-data
-                android:name="android.accessibilityservice"
-                android:resource="@xml/keyboard_accessibility_service" />
-        </service>
 
     </application>
 
