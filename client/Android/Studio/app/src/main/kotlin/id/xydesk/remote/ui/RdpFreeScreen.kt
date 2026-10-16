@@ -250,7 +250,7 @@ fun RdpFreeScreen(onBack: () -> Unit, onConnect: (ConnectionProfile) -> Unit) {
                                 busy = true
                                 scope.launch {
                                     try {
-                                        if (XyRdpClient.createFork(token!!, login!!)) {
+                                        if (XyRdpClient.createFork(token!!)) {
                                             XyRdpClient.enableWorkflow(token!!, login!!)
                                             forkReady = XyRdpClient.forkExists(token!!, login!!)
                                             message = if (forkReady) "Fork siap." else "Fork sedang dibuat — tunggu sebentar lalu tekan lagi."
