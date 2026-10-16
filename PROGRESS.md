@@ -1176,11 +1176,22 @@ Perintah pemilik: "lanjut lah" (menanggapi tawaran build draft v1.1.16).
 - Catatan: alias APK yang benar `/XyDesk-Remote-arm64-v8a.apk` dst.;
   `/XyDesk-Remote64bit.apk` bukan alias (404 itu memang bukan regresi).
 
+**Pelengkap draft v1.1.16 (ronde 44b, 2026-10-16):**
+- Draft rename "XyDesk Remote v1.1.16 (77)" + release notes lengkap
+  (gaya v1.1.15: widget/notif, tampilan, engine, host 1-exe, teknis,
+  changelog v1.1.15...v1.1.16) via PATCH API.
+- Pesan WA siap: /home/user/pesan-wa-v1.1.16.md (murni, ID+EN, tanpa
+  "dev", tanpa "dll", daftar lengkap) — dikirim SETELAH publish.
+- PENTING (belajar dari PATCH draft): asset URL draft di API GitHub
+  selalu tampil "untagged-<hash>" (draft v1.1.12 lama juga begitu) —
+  itu NORMAL; begitu publish otomatis jadi
+  /releases/download/v1.1.16/<file>. Jangan panik pasli rusak.
+  tag_name draft sempat terlihat hilang setelah PATCH → PATCH balik
+  tag_name "v1.1.16" memperbaikinya.
+
 **PUBLISH v1.1.16 (menunggu perintah pemilik):**
 1. Pastikan pemilik sudah tes draft (APK + host standalone exe UI baru).
-2. Flip draft → published (API PATCH releases/415064151 draft=false) +
-   rename "XyDesk Remote v1.1.16 (77)" + release notes.
+2. Flip draft → published (PATCH releases/415064151 draft=false).
 3. Update release-state.json: release_state "published" + published_at,
    commit, deploy worker.
-4. Cek live: alias → v1.1.16 (≤5 menit), lalu siapkan pesan WA
-   (gaya 2 bahasa, tanpa kata "dev", tanpa "dll").
+4. Cek live: alias → v1.1.16 (≤5 menit), kirim pesan WA.
