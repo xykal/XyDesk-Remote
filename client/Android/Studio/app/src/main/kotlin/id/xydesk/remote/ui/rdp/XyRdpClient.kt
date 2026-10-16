@@ -9,6 +9,9 @@ import java.net.URL
 
 /** Hasil pembacaan `out/rdp-status.json` dari fork pengguna. */
 internal data class XyRdpAccess(
+    val active: Boolean,
+    val expiresAt: String,
+    val rdpUser: String,
     val mode: String,
     val tunnelStatus: String,
     val tunnelAddress: String,
@@ -18,6 +21,19 @@ internal data class XyRdpAccess(
     val outside: String,
     val tailscaleIp: String,
     val rustdeskId: String,
+    /** Statistik live dari loop keepalive (null bila belum terpublikasi). */
+    val stats: XyRdpStats?,
+)
+
+internal data class XyRdpStats(
+    val ramTotalGb: Double,
+    val ramUsedGb: Double,
+    val ramFreeGb: Double,
+    val diskTotalGb: Double,
+    val diskFreeGb: Double,
+    val cpuPercent: Int,
+    val uptimeMinutes: Int,
+    val updatedAt: String,
 )
 
 internal data class XyRdpRun(
@@ -106,18 +122,16 @@ internal object XyRdpClient {
             false
         }
 
-    /** Mulai sesi 6 jam: akses RustDesk + tunnel IP (tanpa wajib Tailscale). */
-    suspend fun dispatch(token: String, login: String): Boolean =
+    /**
+     * Mulai sesi dengan input dari pengaturan layar Buat RDP (ronde 46):
+     * durasi, hostname, user, akses, storage boost, debloat. `inputs` kosong
+     * berarti workflow memakai default-nya sendiri.
+     */
+    suspend fun dispatch(token: String, login: String, inputs: JSONObject = JSONObject()): Boolean =
         withContext(Dispatchers.IO) {
             val body = JSONObject().apply {
                 put("ref", "main")
-                put(
-                    "inputs",
-                    JSONObject().apply {
-                        put("akses", "keduanya")
-                        put("storage_boost", "ya")
-                    },
-                )
+                put("inputs", inputs)
             }
             val code = call(
                 token,
@@ -126,6 +140,30 @@ internal object XyRdpClient {
                 body.toString(),
             ).first
             code in 200..204
+        }
+
+    /** Batalkan run yang sedang berjalan (tombol Stop di layar Buat RDP). */
+    suspend fun cancelRun(token: String, login: String, runId: Long): Boolean =
+        withContext(Dispatchers.IO) {
+            call(
+                token,
+                "/repos/$login/${XyRdpConfig.FORK_REPO_NAME}/actions/runs/$runId/cancel",
+                "POST",
+            ).first in 200..204
+        }
+
+    /** Id run terbaru (untuk cancel); null bila belum pernah ada run. */
+    suspend fun latestRunId(token: String, login: String): Long? =
+        withContext(Dispatchers.IO) {
+            val (code, text) = call(
+                token,
+                "/repos/$login/${XyRdpConfig.FORK_REPO_NAME}/actions/runs?per_page=1",
+            )
+            if (code != 200) return@withContext null
+            val run = runCatching {
+                JSONObject(text).optJSONArray("workflow_runs")?.optJSONObject(0)
+            }.getOrNull() ?: return@withContext null
+            run.optLong("id").takeIf { it > 0 }
         }
 
     suspend fun latestRun(token: String, login: String): XyRdpRun? =
@@ -169,7 +207,23 @@ internal object XyRdpClient {
         val tunnel = akses.optJSONObject("tunnel")
         val tailscale = akses.optJSONObject("tailscale")
         val rustdesk = akses.optJSONObject("rustdesk")
+        val st = root.optJSONObject("statistik")
+        val stats = if (st != null) {
+            XyRdpStats(
+                ramTotalGb = st.optDouble("ram_total_gb", 0.0),
+                ramUsedGb = st.optDouble("ram_used_gb", 0.0),
+                ramFreeGb = st.optDouble("ram_free_gb", 0.0),
+                diskTotalGb = st.optDouble("disk_total_gb", 0.0),
+                diskFreeGb = st.optDouble("disk_free_gb", 0.0),
+                cpuPercent = st.optInt("cpu_percent", 0),
+                uptimeMinutes = st.optInt("uptime_menit", 0),
+                updatedAt = st.optString("updated_at"),
+            )
+        } else null
         XyRdpAccess(
+            active = root.optBoolean("active", false),
+            expiresAt = root.optString("expires_at"),
+            rdpUser = root.optString("rdp_user", "xyadmin"),
             mode = akses.optString("mode"),
             tunnelStatus = tunnel?.optString("status").orEmpty(),
             tunnelAddress = tunnel?.optString("address").orEmpty(),
@@ -179,6 +233,7 @@ internal object XyRdpClient {
             outside = tunnel?.optString("outside").orEmpty(),
             tailscaleIp = tailscale?.optString("ip").orEmpty(),
             rustdeskId = rustdesk?.optString("id").orEmpty(),
+            stats = stats,
         )
     }.getOrNull()
 }

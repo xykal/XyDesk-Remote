@@ -899,9 +899,9 @@ private fun CommunityAccountCard() {
  * App di GitHub (Settings → Developer settings → OAuth Apps), tidak perlu
  * secret/redirect, lalu tempel Client ID-nya di sini.
  */
-private const val GITHUB_OAUTH_CLIENT_ID = "Ov23liBsgZ5xJKgzHGtl"
+internal const val GITHUB_OAUTH_CLIENT_ID = "Ov23liBsgZ5xJKgzHGtl"
 
-private suspend fun githubDeviceStart(clientId: String): org.json.JSONObject? =
+internal suspend fun githubDeviceStart(clientId: String): org.json.JSONObject? =
     kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
         runCatching {
             val body = "client_id=" + java.net.URLEncoder.encode(clientId, "UTF-8") +
@@ -920,7 +920,7 @@ private suspend fun githubDeviceStart(clientId: String): org.json.JSONObject? =
         }.getOrNull()
     }
 
-private suspend fun githubDevicePoll(clientId: String, deviceCode: String): org.json.JSONObject? =
+internal suspend fun githubDevicePoll(clientId: String, deviceCode: String): org.json.JSONObject? =
     kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
         runCatching {
             val body = "client_id=" + java.net.URLEncoder.encode(clientId, "UTF-8") +
