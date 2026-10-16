@@ -1458,5 +1458,9 @@ Tiga permintaan pemilik ditangani tuntas:
    - `host-agent/src/xydesk_host_core.cpp` membuka `DWMFRAMEINTERVAL = 8` (125 FPS), `TcpAckFrequency = 1` / `TCPNoDelay = 1` di semua interface jaringan, dan prioritas MMCSS `Games` (`GPU Priority = 8`).
    - `host-agent/src/xydesk_quic.cpp` dilengkapi handler input hardware `XYI1` (`SendInput` `MOUSEEVENTF_MOVE` relatif murni tanpa `MOUSEEVENTF_ABSOLUTE`) dan engine capture layar konsol fisik `XYV1` (`SM_REMOTESESSION == 0`, JPEG GDI+ in-memory berkecepatan tinggi di UDP `:4433`).
    - `PcStreamSessionActivity.kt` & `XyDirectConsoleStreamClient.kt` menyediakan mode **Konsol UDP :4433 (Non-RDP)** dengan pemindai otomatis PC di LAN/Tailscale serta overlay kombat FPS (`FPS 360°`, `TEMBAK LMB`, `SCOPE RMB`, `WASD`, `SHIFT`, `CTRL`, `SPACE`, `R`).
+4. **Rilis Publik `v1.1.16` (Build 77) — Terbit & Live**:
+   - Tag `v1.1.16` (`289fc8a44d198c0a2ae047bfda40cf6b43bb21bb`) lulus gate `Web Worker checks` (`38959679620`), `Build APK` (`38959679734`), dan workflow rilis penuh (`38960176293` — APK per-ABI R8 + signed v1/v2/v3 + Windows Host Agent C++17 `XyDeskRemoteHost-Standalone.exe`).
+   - GitHub Release `415064151` (`v1.1.16`) telah dipublikasikan (`draft: false`) beserta `web/release-state.json` dan Cloudflare Worker (`e54b7e2f-3a68-4059-9c56-16ca3c6c3cf7`) di `https://xydeskremote.biz.id`.
+
 
 

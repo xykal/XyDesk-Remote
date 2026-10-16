@@ -1,11 +1,11 @@
 {
  "service": "xydesk-remote",
  "brand": "XyVerse Technology Global",
- "release_state": "draft",
+ "release_state": "published",
  "release_tag": "v1.1.16",
- "source_commit": "8605cf61493c327f126538d58467868341529b6e",
- "published_at": "",
- "release_updated_at": "2026-10-16T14:11:02Z",
+ "source_commit": "289fc8a44d198c0a2ae047bfda40cf6b43bb21bb",
+ "published_at": "2026-10-16T20:33:28Z",
+ "release_updated_at": "2026-10-16T20:33:32Z",
  "release_url": "https://github.com/xykal/XyDesk-Remote/releases/tag/v1.1.16",
  "app_build": {
   "version": "1.1.16",
@@ -15,65 +15,65 @@
   "workflow": "Build APK",
   "status": "completed",
   "conclusion": "success",
-  "result_scope": "Aset v1.1.16 (APK per-ABI + universal + host agent + SHA256SUMS + SIGNATURE-VERIFICATION) dibangun CI 38913714998 dari tag v1.1.16, signing v1+v2+v3",
-  "url": "https://github.com/xykal/XyDesk-Remote/actions/runs/38913714998"
+  "result_scope": "Aset v1.1.16 (APK per-ABI + universal + host agent + SHA256SUMS + SIGNATURE-VERIFICATION) dibangun CI 38960176293 dari tag v1.1.16, signing v1+v2+v3",
+  "url": "https://github.com/xykal/XyDesk-Remote/actions/runs/38960176293"
  },
  "downloads": [
   {
    "abi": "arm64-v8a",
    "file": "XyDesk-Remote64bit.apk",
-   "size_bytes": 99396384,
-   "sha256": "31bd6ea891e18fd901a618875f2bfa7e2bda541e8519f23c232c4ab513de776e",
+   "size_bytes": 99800096,
+   "sha256": "bc8cb3d3658946d6a012cff4ace0efd13506085653f47c0154e691c6c00fdebb",
    "url": "https://github.com/xykal/XyDesk-Remote/releases/download/v1.1.16/XyDesk-Remote64bit.apk"
   },
   {
    "abi": "armeabi-v7a",
    "file": "XyDesk-Remote32bit.apk",
-   "size_bytes": 79903580,
-   "sha256": "22380b92396d033205be386d6e5e3fee3ddfa927dd54fa8e265710fcfbaf8b7a",
+   "size_bytes": 80307292,
+   "sha256": "81f8f353e4395e913b53ab2054d3c391e2b8794bb05d5bd7f11dcd7e9709cfd8",
    "url": "https://github.com/xykal/XyDesk-Remote/releases/download/v1.1.16/XyDesk-Remote32bit.apk"
   },
   {
    "abi": "x86_64",
    "file": "XyDesk-Remote64bit-x86.apk",
-   "size_bytes": 108661446,
-   "sha256": "0693712d3403f6aa90dc43c36aee3a9c95d5413a873ce5a6e329641610e46a3a",
+   "size_bytes": 109065158,
+   "sha256": "a9eccaddfada39a9c599d83c56e384822434b577e841bca9847aac98986df295",
    "url": "https://github.com/xykal/XyDesk-Remote/releases/download/v1.1.16/XyDesk-Remote64bit-x86.apk"
   },
   {
    "file": "XyDesk-RemoteUniversal.apk",
-   "size_bytes": 290008415,
-   "sha256": "7c20ee324e2b07f041fc4941ce368a0140f52ad12404cd7310ac107cfca13af9",
+   "size_bytes": 290412127,
+   "sha256": "dc4550efcab28940c2859f4d14a94007099d1864be825f85827d5dda2c491645",
    "url": "https://github.com/xykal/XyDesk-Remote/releases/download/v1.1.16/XyDesk-RemoteUniversal.apk"
   },
   {
    "file": "XyDesk-Remote-Host-Agent-win64.zip",
-   "size_bytes": 932591,
-   "sha256": "c086d616d527b34b158355da59282f8167e8965dd6c185a0a2fc69cde099b7f6",
+   "size_bytes": 1674222,
+   "sha256": "bf6b3eb2a47d838880373a06a91cd5a405f506ca98880be365aa7eab33afde8e",
    "url": "https://github.com/xykal/XyDesk-Remote/releases/download/v1.1.16/XyDesk-Remote-Host-Agent-win64.zip"
   },
   {
    "file": "XyDeskRemoteHost-Standalone.exe",
-   "size_bytes": 995173,
-   "sha256": "2b0093389bda167ba734e55d03e77d52cb3b96c87aaeb830128918e8eb67d0dd",
+   "size_bytes": 2588530,
+   "sha256": "ec7f3684f42c510ada8bde27e66f3d672528e0e2dc9ad4671bd9d098ef649716",
    "url": "https://github.com/xykal/XyDesk-Remote/releases/download/v1.1.16/XyDeskRemoteHost-Standalone.exe"
   },
   {
    "file": "XyDeskRemoteHost.exe",
-   "size_bytes": 734458,
-   "sha256": "6107a2c1a245b66f1a776170053235a488d7418b0f14726783a916079bbd0e6f",
+   "size_bytes": 2417809,
+   "sha256": "4ae7c12ae35847f8634fb33e83668f7ebd203394bca54d1fe5c942ec103db895",
    "url": "https://github.com/xykal/XyDesk-Remote/releases/download/v1.1.16/XyDeskRemoteHost.exe"
   },
   {
    "file": "xydesk_quic.dll",
-   "size_bytes": 629486,
-   "sha256": "6b2f33c20e467239e559c0a3ba7bc6e3441ec52bef286871c3675b507ba1d1dc",
+   "size_bytes": 641017,
+   "sha256": "ded4a78dd69e295a28ac5a7fc28e9f4e28903f1e8f7823acea441de027a296a2",
    "url": "https://github.com/xykal/XyDesk-Remote/releases/download/v1.1.16/xydesk_quic.dll"
   },
   {
    "file": "xydesk_host_core.dll",
-   "size_bytes": 376997,
-   "sha256": "94eac1246c451fccc35f8722168b9d0fcfe3e7de6e098b699e1f654d6bcc32d5",
+   "size_bytes": 378925,
+   "sha256": "c9d0d1a6dc2b96cee969920a85a62f8ce78344284a14c3d97b387dee990dd4fc",
    "url": "https://github.com/xykal/XyDesk-Remote/releases/download/v1.1.16/xydesk_host_core.dll"
   }
  ],
