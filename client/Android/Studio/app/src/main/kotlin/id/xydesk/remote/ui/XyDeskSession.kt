@@ -1830,14 +1830,12 @@ fun XyDeskSessionScreen(
                 ) {
                     Box(
                         Modifier
-                            .width(12.dp)
-                            .height(1.5.dp)
+                            .size(width = 12.dp, height = 1.5.dp)
                             .background(Color(0xCC3DD68C)),
                     )
                     Box(
                         Modifier
-                            .width(1.5.dp)
-                            .height(12.dp)
+                            .size(width = 1.5.dp, height = 12.dp)
                             .background(Color(0xCC3DD68C)),
                     )
                 }
