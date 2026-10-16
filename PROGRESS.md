@@ -1410,8 +1410,22 @@ Tiga permintaan pemilik ditangani tuntas:
      dan `LogSheet.kt` merendernya sebagai baris kartu satu per satu yang
      mudah dibaca + tombol **Salin Log XyDesk**.
 
+4. **Deteksi Negara Otomatis + Terjemahan 2 Bahasa di Dalam 1 Bubble (Dipisah Garis)**:
+   - Worker (`GlobalChat`) mendeteksi negara pengirim dari edge Cloudflare
+     (`request.cf.country` / `cf-ipcountry`) dengan fallback locale klien,
+     menghasilkan bendera emoji + kode negara (`🇮🇩 ID`, `🇺🇸 US`, `🇲🇾 MY`, dst.).
+   - Setiap pesan otomatis diterjemahkan dua arah (Indonesia/Melayu → `EN`,
+     Inggris/bahasa asing lain → `ID`) oleh Worker (`translateChatText` via GTX +
+     fallback kamus offline) serta cadangan di klien (`translateClientSide`).
+   - Di `GlobalChatScreen.kt`, **1 bubble** menampilkan:
+     1) Header pengirim + bendera & kode negara (`🇮🇩 Tamu-1234 · ID`),
+     2) Teks asli di bagian atas,
+     3) **Garis pemisah horizontal tipis** di tengah bubble,
+     4) Hasil terjemahan di bagian bawah (`🌐 EN · ...` atau `🌐 ID · ...`).
+
 **Checklist rilis berikutnya — tambahan ronde 48:**
 - [ ] APK rilis baru tidak lagi kena blokir keras Play Protect EFP (tidak ada `BIND_ACCESSIBILITY_SERVICE` di manifest APK)
 - [ ] Notifikasi Chat Global muncul gaya WhatsApp (`MessagingStyle`), tombol **Balas** dari notifikasi langsung mengirim pesan ke Chat Global, ketuk notif membuka layar Chat Global
+- [ ] Chat Global: deteksi bendera negara otomatis + 1 bubble berisi 2 teks (asli di atas + garis pemisah + terjemahan di bawah)
 - [ ] Layar Log XyDesk (dan tombol Detail saat gagal koneksi) menampilkan langkah bernomor 1 per 1 tanpa blok log FreeRDP terpisah
 

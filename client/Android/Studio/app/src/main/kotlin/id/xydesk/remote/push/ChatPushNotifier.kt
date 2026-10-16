@@ -174,7 +174,7 @@ object ChatPushNotifier {
 
         // Jangan tampilkan notifikasi jika layar Chat Global sedang dibuka
         // atau jika pesan berasal dari pengguna sendiri.
-        if (isChatOpen || senderName.equals(myNick, ignoreCase = false)) {
+        if (isChatOpen || senderName.equals(myNick, ignoreCase = false) || senderName.contains(myNick)) {
             markSeen(msgId, ts, appContext)
             return
         }
@@ -246,6 +246,7 @@ object ChatPushNotifier {
             val payload = JSONObject()
                 .put("name", myNick)
                 .put("text", clean)
+                .put("country", id.xydesk.remote.ui.chatCountryCode())
                 .toString()
             OutputStreamWriter(conn.outputStream, Charsets.UTF_8).use { it.write(payload) }
             val code = conn.responseCode
@@ -519,16 +520,25 @@ object ChatPushNotifier {
                                 for (i in 0 until arr.length()) {
                                     val m = arr.optJSONObject(i) ?: continue
                                     val id = m.optString("id")
-                                    val name = m.optString("name", "Tamu")
+                                    val rawName = m.optString("name", "Tamu")
+                                    val flag = m.optString("flag", "🇮🇩").ifBlank { "🇮🇩" }
+                                    val cc = m.optString("country", "ID").ifBlank { "ID" }
                                     val text = m.optString("text", "")
+                                    val translated = m.optString("translated", "")
+                                    val targetLang = m.optString("target_lang", "EN").ifBlank { "EN" }
                                     val at = m.optLong("at", 0L)
+                                    val displayText = if (translated.isNotBlank() && !translated.equals(text, ignoreCase = true)) {
+                                        "$text\n🌐 $targetLang: $translated"
+                                    } else {
+                                        text
+                                    }
                                     if (at > lastSeenAt) {
                                         lastSeenAt = at
                                         onIncomingChatMessage(
                                             context = appContext,
                                             msgId = id,
-                                            senderName = name,
-                                            text = text,
+                                            senderName = "$flag $rawName ($cc)",
+                                            text = displayText,
                                             at = at,
                                         )
                                     }

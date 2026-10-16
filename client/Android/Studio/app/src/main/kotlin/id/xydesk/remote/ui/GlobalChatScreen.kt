@@ -13,10 +13,11 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
@@ -37,6 +38,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.unit.dp
@@ -47,6 +49,11 @@ import okhttp3.WebSocket
 import okhttp3.WebSocketListener
 import org.json.JSONArray
 import org.json.JSONObject
+import java.io.BufferedReader
+import java.io.InputStreamReader
+import java.net.HttpURLConnection
+import java.net.URL
+import java.net.URLEncoder
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -54,17 +61,13 @@ import java.util.UUID
 import java.util.concurrent.TimeUnit
 
 /**
- * Ronde 47 — Chat Global (screen baru dari Feed).
+ * Ronde 47–48 — Chat Global (screen dari Feed).
  *
- * Chat publik realtime semua pengguna XyDesk Remote, digerakkan WebSocket
- * Durable Object `GlobalChat` di Cloudflare Worker (`/ws/chat`).
- *
- * Identitas visual: tema XyDesk (colorScheme Material3) — sengaja BUKAN
- * warna hijau khas aplikasi chat lain. Fitur: riwayat 100 pesan terakhir,
- * indikator "sedang mengetik", jumlah pengguna daring, auto-reconnect.
- *
- * Batasan saat ini: notifikasi hanya berlaku saat layar/app hidup
- * (tanpa FCM — butuh kunci Firebase dari pemilik untuk push sejati).
+ * Fitur:
+ * - Deteksi negara otomatis (bendera + kode negara tiap pengirim, mis. 🇮🇩 ID, 🇺🇸 US).
+ * - Terjemahan dua arah otomatis di dalam **1 bubble yang dipisah garis**:
+ *   bagian atas = teks asli pengirim, garis pemisah tipis, bagian bawah = hasil terjemahan.
+ * - Push notifikasi OneSignal + balas langsung dari bar notifikasi ala WhatsApp.
  */
 
 private const val CHAT_WS_URL = "wss://api.xydeskremote.biz.id/ws/chat"
@@ -74,7 +77,11 @@ private const val KEY_NICKNAME = "nickname"
 internal data class ChatMessage(
     val id: String,
     val name: String,
+    val country: String,
+    val flag: String,
     val text: String,
+    val translated: String,
+    val targetLang: String,
     val at: Long,
     val mine: Boolean,
 )
@@ -89,10 +96,25 @@ internal fun chatNickname(context: Context): String {
     return name
 }
 
+internal fun chatCountryCode(): String {
+    val raw = Locale.getDefault().country.orEmpty().trim().uppercase(Locale.ROOT)
+    return if (raw.length == 2 && raw.all { it in 'A'..'Z' }) raw else "ID"
+}
+
+internal fun countryCodeToFlag(countryCode: String): String {
+    val cc = countryCode.trim().uppercase(Locale.ROOT)
+    if (cc.length != 2 || !cc.all { it in 'A'..'Z' }) return "🌐"
+    val first = Character.toChars(0x1F1E6 + (cc[0].code - 'A'.code))
+    val second = Character.toChars(0x1F1E6 + (cc[1].code - 'A'.code))
+    return String(first) + String(second)
+}
+
 @Composable
 internal fun GlobalChatScreen(onBack: () -> Unit) {
     val context = LocalContext.current
     val nickname = remember { chatNickname(context) }
+    val myCountry = remember { chatCountryCode() }
+    val myFlag = remember(myCountry) { countryCodeToFlag(myCountry) }
 
     val messages = remember { mutableStateListOf<ChatMessage>() }
     var presence by remember { mutableIntStateOf(0) }
@@ -102,6 +124,22 @@ internal fun GlobalChatScreen(onBack: () -> Unit) {
     val listState = rememberLazyListState()
     val main = remember { Handler(Looper.getMainLooper()) }
     var typingSentAt by remember { mutableStateOf(0L) }
+
+    fun enrichTranslationIfNeeded(msg: ChatMessage) {
+        Thread {
+            val result = translateClientSide(msg.text, msg.country) ?: return@Thread
+            if (result.first.isBlank()) return@Thread
+            main.post {
+                val idx = messages.indexOfFirst { it.id == msg.id }
+                if (idx >= 0) {
+                    messages[idx] = messages[idx].copy(
+                        translated = result.first,
+                        targetLang = result.second,
+                    )
+                }
+            }
+        }.start()
+    }
 
     androidx.compose.runtime.DisposableEffect(Unit) {
         id.xydesk.remote.push.ChatPushNotifier.setChatOpen(context, true)
@@ -123,7 +161,13 @@ internal fun GlobalChatScreen(onBack: () -> Unit) {
                             connected = true
                             Toast.makeText(context, "Terhubung ke chat global", Toast.LENGTH_SHORT).show()
                         }
-                        webSocket.send(JSONObject().put("type", "hello").put("name", nickname).toString())
+                        webSocket.send(
+                            JSONObject()
+                                .put("type", "hello")
+                                .put("name", nickname)
+                                .put("country", myCountry)
+                                .toString(),
+                        )
                     }
 
                     override fun onMessage(webSocket: WebSocket, text: String) {
@@ -137,36 +181,58 @@ internal fun GlobalChatScreen(onBack: () -> Unit) {
                                         val m = arr.optJSONObject(i) ?: continue
                                         val msgId = m.optString("id")
                                         val msgAt = m.optLong("at")
+                                        val cc = m.optString("country", "ID").ifBlank { "ID" }.uppercase(Locale.ROOT)
+                                        val flag = m.optString("flag").ifBlank { countryCodeToFlag(cc) }
                                         id.xydesk.remote.push.ChatPushNotifier.markSeen(msgId, msgAt, context)
-                                        messages.add(
-                                            ChatMessage(
-                                                id = msgId,
-                                                name = m.optString("name"),
-                                                text = m.optString("text"),
-                                                at = msgAt,
-                                                mine = m.optString("name") == nickname,
-                                            ),
+                                        val item = ChatMessage(
+                                            id = msgId,
+                                            name = m.optString("name", "Tamu"),
+                                            country = cc,
+                                            flag = flag,
+                                            text = m.optString("text"),
+                                            translated = m.optString("translated", ""),
+                                            targetLang = m.optString("target_lang", "EN").ifBlank { "EN" },
+                                            at = msgAt,
+                                            mine = m.optString("name") == nickname,
                                         )
+                                        messages.add(item)
+                                        enrichTranslationIfNeeded(item)
                                     }
                                 }
                                 "msg" -> {
-                                    val from = data.optString("name")
+                                    val from = data.optString("name", "Tamu")
                                     val msgId = data.optString("id")
                                     val msgAt = data.optLong("at")
+                                    val cc = data.optString("country", "ID").ifBlank { "ID" }.uppercase(Locale.ROOT)
+                                    val flag = data.optString("flag").ifBlank { countryCodeToFlag(cc) }
                                     id.xydesk.remote.push.ChatPushNotifier.markSeen(msgId, msgAt, context)
-                                    messages.removeAll { it.id.startsWith("local-pending-") && it.text == data.optString("text") && it.mine }
-                                    messages.add(
-                                        ChatMessage(
-                                            id = msgId,
-                                            name = from,
-                                            text = data.optString("text"),
-                                            at = msgAt,
-                                            mine = from == nickname,
-                                        ),
+                                    messages.removeAll {
+                                        it.id.startsWith("local-pending-") && it.text == data.optString("text") && it.mine
+                                    }
+                                    val item = ChatMessage(
+                                        id = msgId,
+                                        name = from,
+                                        country = cc,
+                                        flag = flag,
+                                        text = data.optString("text"),
+                                        translated = data.optString("translated", ""),
+                                        targetLang = data.optString("target_lang", "EN").ifBlank { "EN" },
+                                        at = msgAt,
+                                        mine = from == nickname,
                                     )
+                                    messages.add(item)
+                                    enrichTranslationIfNeeded(item)
                                     typingName = null
                                 }
-                                "typing" -> typingName = if (data.optBoolean("on")) data.optString("name") else null
+                                "typing" -> {
+                                    if (data.optBoolean("on")) {
+                                        val tName = data.optString("name")
+                                        val tFlag = data.optString("flag")
+                                        typingName = if (tFlag.isNotBlank()) "$tFlag $tName" else tName
+                                    } else {
+                                        typingName = null
+                                    }
+                                }
                                 "presence" -> presence = data.optInt("count")
                             }
                         }
@@ -238,7 +304,7 @@ internal fun GlobalChatScreen(onBack: () -> Unit) {
                 Column(modifier = Modifier.weight(1f), horizontalAlignment = Alignment.CenterHorizontally) {
                     Text("Chat Global", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
                     Text(
-                        if (connected) "$presence daring · kamu: $nickname"
+                        if (connected) "$presence daring · $myFlag $nickname ($myCountry)"
                         else "menyambungkan…",
                         style = MaterialTheme.typography.labelSmall,
                         color = if (connected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outline,
@@ -255,7 +321,7 @@ internal fun GlobalChatScreen(onBack: () -> Unit) {
                 .weight(1f)
                 .fillMaxWidth(),
             contentPadding = androidx.compose.foundation.layout.PaddingValues(12.dp),
-            verticalArrangement = Arrangement.spacedBy(6.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp),
         ) {
             if (messages.isEmpty()) {
                 item {
@@ -297,8 +363,6 @@ internal fun GlobalChatScreen(onBack: () -> Unit) {
                     onValueChange = { value ->
                         val wasEmpty = draft.text.isEmpty()
                         draft = value
-                        // Sinyal typing: sekali per 2,5 detik saat mulai mengetik,
-                        // dan sinyal berhenti saat kolom dikosongkan.
                         val now = System.currentTimeMillis()
                         if (value.text.isNotEmpty() && now - typingSentAt > 2500) {
                             typingSentAt = now
@@ -323,17 +387,27 @@ internal fun GlobalChatScreen(onBack: () -> Unit) {
                         .clickable(enabled = draft.text.isNotBlank() && connected) {
                             val text = draft.text.trim()
                             if (text.isEmpty()) return@clickable
-                            chatSocketSend(JSONObject().put("type", "msg").put("text", text).toString())
-                            chatSocketSend(JSONObject().put("type", "typing").put("on", false).toString())
-                            messages.add(
-                                ChatMessage(
-                                    id = "local-pending-" + messages.size,
-                                    name = nickname,
-                                    text = text,
-                                    at = System.currentTimeMillis(),
-                                    mine = true,
-                                ),
+                            chatSocketSend(
+                                JSONObject()
+                                    .put("type", "msg")
+                                    .put("text", text)
+                                    .put("country", myCountry)
+                                    .toString(),
                             )
+                            chatSocketSend(JSONObject().put("type", "typing").put("on", false).toString())
+                            val pendingItem = ChatMessage(
+                                id = "local-pending-" + System.currentTimeMillis(),
+                                name = nickname,
+                                country = myCountry,
+                                flag = myFlag,
+                                text = text,
+                                translated = "Menerjemahkan…",
+                                targetLang = if (myCountry == "ID") "EN" else "ID",
+                                at = System.currentTimeMillis(),
+                                mine = true,
+                            )
+                            messages.add(pendingItem)
+                            enrichTranslationIfNeeded(pendingItem.copy(translated = ""))
                             draft = TextFieldValue("")
                         }
                         .padding(horizontal = 14.dp, vertical = 10.dp),
@@ -343,25 +417,87 @@ internal fun GlobalChatScreen(onBack: () -> Unit) {
     }
 }
 
-// Socket aktif disimpan di companion-level sederhana agar komposer bisa mengirim.
 private var activeSocket: WebSocket? = null
 
 private fun chatSocketSend(rawJson: String) {
     activeSocket?.send(rawJson)
 }
 
+/**
+ * Terjemahan sisi klien (cadangan cepat jika riwayat lama belum punya field translated).
+ */
+private fun translateClientSide(text: String, country: String): Pair<String, String>? {
+    val clean = text.trim()
+    if (clean.isEmpty()) return null
+    return runCatching {
+        val toId = callGoogleTranslate(clean, "id") ?: return null
+        val det = toId.second.lowercase(Locale.ROOT)
+        val isId = det == "id" || det == "ms" ||
+            (toId.first.equals(clean, ignoreCase = true) && country.equals("ID", ignoreCase = true))
+        if (isId) {
+            val toEn = callGoogleTranslate(clean, "en") ?: return null
+            Pair(toEn.first, "EN")
+        } else {
+            Pair(toId.first, "ID")
+        }
+    }.getOrNull()
+}
+
+private fun callGoogleTranslate(text: String, targetLang: String): Pair<String, String>? {
+    val q = URLEncoder.encode(text, "UTF-8")
+    val url = "https://translate.googleapis.com/translate_a/single?client=gtx&sl=auto&tl=$targetLang&dt=t&q=$q"
+    val conn = (URL(url).openConnection() as HttpURLConnection).apply {
+        requestMethod = "GET"
+        connectTimeout = 6_000
+        readTimeout = 6_000
+        setRequestProperty("User-Agent", "Mozilla/5.0")
+    }
+    if (conn.responseCode !in 200..299) {
+        conn.disconnect()
+        return null
+    }
+    val raw = BufferedReader(InputStreamReader(conn.inputStream, Charsets.UTF_8)).use { it.readText() }
+    conn.disconnect()
+    val root = JSONArray(raw)
+    val parts = root.optJSONArray(0) ?: return null
+    val sb = StringBuilder()
+    for (i in 0 until parts.length()) {
+        val seg = parts.optJSONArray(i) ?: continue
+        val chunk = seg.optString(0, "")
+        if (chunk.isNotEmpty()) sb.append(chunk)
+    }
+    val detected = root.optString(2, "auto")
+    val out = sb.toString().trim()
+    return if (out.isNotEmpty()) Pair(out, detected) else null
+}
+
+/**
+ * Satu bubble memuat:
+ * 1. Header: bendera negara + nama pengirim + kode negara (`🇮🇩 Tamu-1234 · ID`).
+ * 2. Bagian atas: teks asli pengirim.
+ * 3. Garis pemisah tipis di tengah bubble.
+ * 4. Bagian bawah: hasil terjemahan otomatis (`🌐 EN · ...` atau `🌐 ID · ...`).
+ */
 @Composable
 private fun ChatBubble(msg: ChatMessage) {
     val time = remember(msg.at) {
         SimpleDateFormat("HH:mm", Locale.getDefault()).format(Date(msg.at))
     }
+    val dividerColor = if (msg.mine) {
+        MaterialTheme.colorScheme.onPrimary.copy(alpha = 0.25f)
+    } else {
+        MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.20f)
+    }
+    val transLabel = msg.targetLang.ifBlank { "EN" }.uppercase(Locale.ROOT)
+    val transBody = msg.translated.ifBlank { msg.text }
+
     Box(
         modifier = Modifier.fillMaxWidth(),
         contentAlignment = if (msg.mine) Alignment.CenterEnd else Alignment.CenterStart,
     ) {
         Column(
             modifier = Modifier
-                .widthIn(max = 300.dp)
+                .widthIn(min = 140.dp, max = 310.dp)
                 .clip(
                     RoundedCornerShape(
                         topStart = 16.dp,
@@ -376,22 +512,52 @@ private fun ChatBubble(msg: ChatMessage) {
                 )
                 .padding(horizontal = 12.dp, vertical = 8.dp),
         ) {
-            if (!msg.mine) {
-                Text(
-                    msg.name,
-                    style = MaterialTheme.typography.labelSmall,
-                    fontWeight = FontWeight.Bold,
-                    color = MaterialTheme.colorScheme.primary,
-                )
-            }
+            // Header pengirim + bendera & kode negara
             Text(
-                msg.text,
+                text = "${msg.flag} ${msg.name} · ${msg.country}",
+                style = MaterialTheme.typography.labelSmall,
+                fontWeight = FontWeight.Bold,
+                color = if (msg.mine) {
+                    MaterialTheme.colorScheme.onPrimary.copy(alpha = 0.88f)
+                } else {
+                    MaterialTheme.colorScheme.primary
+                },
+            )
+            Spacer(Modifier.height(3.dp))
+
+            // Baris 1: Teks asli
+            Text(
+                text = msg.text,
                 style = MaterialTheme.typography.bodyMedium,
                 color = if (msg.mine) MaterialTheme.colorScheme.onPrimary
                 else MaterialTheme.colorScheme.onSurfaceVariant,
             )
+
+            // Garis pemisah di dalam 1 bubble
+            Spacer(Modifier.height(6.dp))
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(1.dp)
+                    .background(dividerColor),
+            )
+            Spacer(Modifier.height(5.dp))
+
+            // Baris 2: Terjemahan otomatis di bawah garis
             Text(
-                time,
+                text = "🌐 $transLabel · $transBody",
+                style = MaterialTheme.typography.bodySmall,
+                fontStyle = FontStyle.Italic,
+                color = if (msg.mine) {
+                    MaterialTheme.colorScheme.onPrimary.copy(alpha = 0.90f)
+                } else {
+                    MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.88f)
+                },
+            )
+
+            Spacer(Modifier.height(2.dp))
+            Text(
+                text = time,
                 style = MaterialTheme.typography.labelSmall,
                 color = if (msg.mine) MaterialTheme.colorScheme.onPrimary.copy(alpha = 0.7f)
                 else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),

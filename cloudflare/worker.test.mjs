@@ -1751,28 +1751,48 @@ test("ronde 48: global chat direct reply (/api/chat/send) + OneSignal push + Pla
 
   const sendRes = await worker.fetch(new Request("https://api.xydeskremote.biz.id/api/chat/send", {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: { "Content-Type": "application/json", "cf-ipcountry": "ID" },
     body: JSON.stringify({ name: "Tamu-8899", text: "Balas langsung dari notifikasi!" }),
   }), env);
   assert.equal(sendRes.status, 200);
   const sendJson = await sendRes.json();
   assert.equal(sendJson.status, "ok");
   assert.equal(sendJson.message.name, "Tamu-8899");
+  assert.equal(sendJson.message.country, "ID");
+  assert.equal(sendJson.message.flag, "🇮🇩");
   assert.equal(sendJson.message.text, "Balas langsung dari notifikasi!");
+  assert.equal(sendJson.message.target_lang, "EN");
+  assert.ok(sendJson.message.translated.toLowerCase().includes("reply"));
 
-  // Pastikan OneSignal terpanggil dengan data MessagingStyle yang tepat.
+  // Pastikan OneSignal terpanggil dengan data MessagingStyle + bendera + terjemahan.
   assert.ok(pushedBody);
   assert.equal(pushedBody.app_id, "ffaa87d6-8e1d-42b6-bb4f-ebbbfc0bccbb");
   assert.equal(pushedBody.data.type, "global_chat");
-  assert.equal(pushedBody.data.sender_name, "Tamu-8899");
+  assert.ok(pushedBody.data.sender_name.includes("Tamu-8899"));
+  assert.equal(pushedBody.data.country, "ID");
   assert.equal(pushedBody.data.text, "Balas langsung dari notifikasi!");
+  assert.ok(pushedBody.data.translated.toLowerCase().includes("reply"));
 
-  // Riwayat harus memuat pesan balasan tadi.
+  // Tes pengirim dari negara lain (US -> diterjemahkan ke ID).
+  const sendUs = await worker.fetch(new Request("https://api.xydeskremote.biz.id/api/chat/send", {
+    method: "POST",
+    headers: { "Content-Type": "application/json", "cf-ipcountry": "US" },
+    body: JSON.stringify({ name: "Alex", text: "Hello everyone, thank you!" }),
+  }), env);
+  assert.equal(sendUs.status, 200);
+  const sendUsJson = await sendUs.json();
+  assert.equal(sendUsJson.message.country, "US");
+  assert.equal(sendUsJson.message.flag, "🇺🇸");
+  assert.equal(sendUsJson.message.target_lang, "ID");
+  assert.ok(sendUsJson.message.translated.toLowerCase().includes("halo"));
+
+  // Riwayat harus memuat kedua pesan lengkap dengan bendera & terjemahan.
   const histRes = await worker.fetch(new Request("https://api.xydeskremote.biz.id/api/chat/history"), env);
   assert.equal(histRes.status, 200);
   const histJson = await histRes.json();
-  assert.equal(histJson.messages.length, 1);
+  assert.equal(histJson.messages.length, 2);
   assert.equal(histJson.messages[0].text, "Balas langsung dari notifikasi!");
+  assert.equal(histJson.messages[1].country, "US");
 
   // Guard Play Protect Enhanced Fraud Protection: manifest tidak boleh memuat BIND_ACCESSIBILITY_SERVICE.
   const coreManifest = await readFile(new URL("../client/Android/Studio/freeRDPCore/src/main/AndroidManifest.xml", import.meta.url), "utf8");

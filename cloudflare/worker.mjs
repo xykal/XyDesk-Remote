@@ -2413,6 +2413,187 @@ const CHAT_MSG_PER_WINDOW = 8;
 const CHAT_WINDOW_MS = 20_000;
 const DEFAULT_ONESIGNAL_APP_ID = "ffaa87d6-8e1d-42b6-bb4f-ebbbfc0bccbb";
 
+function normalizeCountryCode(raw, fallback = "ID") {
+  const code = String(raw || "").trim().toUpperCase();
+  if (/^[A-Z]{2}$/.test(code) && code !== "XX" && code !== "T1") return code;
+  const fb = String(fallback || "ID").trim().toUpperCase();
+  return /^[A-Z]{2}$/.test(fb) ? fb : "ID";
+}
+
+function detectCountryFromRequest(request, bodyCountry) {
+  if (typeof bodyCountry === "string" && /^[A-Za-z]{2}$/.test(bodyCountry.trim())) {
+    const bc = bodyCountry.trim().toUpperCase();
+    if (bc !== "XX" && bc !== "T1") return bc;
+  }
+  const cfCountry = request?.cf?.country
+    || request?.headers?.get("cf-ipcountry")
+    || request?.headers?.get("CF-Connecting-IP-Country")
+    || request?.headers?.get("x-chat-country");
+  return normalizeCountryCode(cfCountry, "ID");
+}
+
+function countryToFlag(countryCode) {
+  const cc = normalizeCountryCode(countryCode, "ID");
+  return String.fromCodePoint(
+    0x1F1E6 + (cc.charCodeAt(0) - 65),
+    0x1F1E6 + (cc.charCodeAt(1) - 65),
+  );
+}
+
+const ID_WORD_HINT = /\b(halo|hai|apa|gimana|bagaimana|bisa|bang|bre|bro|kak|gan|aku|kamu|saya|kita|yang|ini|itu|dari|buat|untuk|udah|sudah|belum|tidak|tak|gak|nggak|konek|koneksi|langsung|terima|kasih|makasih|mantap|keren|tolong|cara|pakai|pake|kenapa|dimana|kapan|siapa|boleh|dong|aja|saja|kok|nih|tuh|lagi|sama|kalau|kalo|bukan|dengan|di|ke)\b/i;
+
+function offlineTranslateFallback(text, country = "ID") {
+  const clean = String(text || "").trim();
+  if (!clean) return { translated: "", targetLang: "EN", sourceLang: "id" };
+  const isId = ID_WORD_HINT.test(clean) || normalizeCountryCode(country) === "ID";
+  if (isId) {
+    const mapIdToEn = [
+      [/\bhalo\b/gi, "hello"],
+      [/\bhai\b/gi, "hi"],
+      [/\bselamat pagi\b/gi, "good morning"],
+      [/\bselamat siang\b/gi, "good afternoon"],
+      [/\bselamat sore\b/gi, "good evening"],
+      [/\bselamat malam\b/gi, "good night"],
+      [/\bterima kasih\b/gi, "thank you"],
+      [/\bmakasih\b/gi, "thanks"],
+      [/\bbalas langsung dari notifikasi\b/gi, "reply directly from notification"],
+      [/\bdari notifikasi\b/gi, "from notification"],
+      [/\bbalas langsung\b/gi, "reply directly"],
+      [/\bbalas\b/gi, "reply"],
+      [/\bnotifikasi\b/gi, "notification"],
+      [/\bcara konek\b/gi, "how to connect"],
+      [/\bgimana\b/gi, "how"],
+      [/\bbagaimana\b/gi, "how"],
+      [/\bkenapa\b/gi, "why"],
+      [/\bbisa\b/gi, "can"],
+      [/\btidak\b/gi, "not"],
+      [/\bgak\b/gi, "not"],
+      [/\bsudah\b/gi, "already"],
+      [/\budah\b/gi, "already"],
+      [/\bbelum\b/gi, "not yet"],
+      [/\bmantap\b/gi, "awesome"],
+      [/\bkeren\b/gi, "cool"],
+      [/\blancar\b/gi, "smooth"],
+      [/\bcepat\b/gi, "fast"],
+      [/\bsemua\b/gi, "everyone"],
+      [/\bbang\b/gi, "bro"],
+      [/\bkonek\b/gi, "connect"],
+    ];
+    let out = clean;
+    for (const [re, rep] of mapIdToEn) out = out.replace(re, rep);
+    return { translated: out, targetLang: "EN", sourceLang: "id" };
+  }
+  const mapEnToId = [
+    [/\bhello\b/gi, "halo"],
+    [/\bhi\b/gi, "hai"],
+    [/\bgood morning\b/gi, "selamat pagi"],
+    [/\bgood night\b/gi, "selamat malam"],
+    [/\bthank you\b/gi, "terima kasih"],
+    [/\bthanks\b/gi, "makasih"],
+    [/\bhow to connect\b/gi, "cara konek"],
+    [/\bhow\b/gi, "bagaimana"],
+    [/\bwhy\b/gi, "kenapa"],
+    [/\bawesome\b/gi, "mantap"],
+    [/\bcool\b/gi, "keren"],
+    [/\bfast\b/gi, "cepat"],
+    [/\beveryone\b/gi, "semuanya"],
+  ];
+  let out = clean;
+  for (const [re, rep] of mapEnToId) out = out.replace(re, rep);
+  return { translated: out, targetLang: "ID", sourceLang: "en" };
+}
+
+async function fetchGoogleTranslate(text, sourceLang, targetLang) {
+  const q = encodeURIComponent(text);
+  const sl = sourceLang || "auto";
+  const url = `https://translate.googleapis.com/translate_a/single?client=gtx&sl=${sl}&tl=${targetLang}&dt=t&q=${q}`;
+  const res = await fetch(url, {
+    headers: {
+      "User-Agent": "Mozilla/5.0 (Linux; Android 15) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Mobile Safari/537.36",
+      Accept: "application/json,text/plain,*/*",
+    },
+  });
+  if (!res.ok) throw new Error(`translate_http_${res.status}`);
+  const data = await res.json();
+  if (!Array.isArray(data) || !Array.isArray(data[0])) throw new Error("translate_bad_payload");
+  const translated = data[0].map((part) => (Array.isArray(part) && part[0] ? String(part[0]) : "")).join("").trim();
+  const detected = typeof data[2] === "string" ? data[2].toLowerCase() : sl;
+  if (!translated) throw new Error("translate_empty");
+  return { translated, detected };
+}
+
+function guessSourceLang(text, country = "ID") {
+  const clean = String(text || "").trim();
+  if (/[\u3040-\u30ff]/.test(clean)) return "ja";
+  if (/[\uac00-\ud7af]/.test(clean)) return "ko";
+  if (/[\u4e00-\u9fff]/.test(clean)) return "zh";
+  if (/[\u0400-\u04ff]/.test(clean)) return "ru";
+  if (/[\u0600-\u06ff]/.test(clean)) return "ar";
+  if (/[\u0e00-\u0e7f]/.test(clean)) return "th";
+  if (ID_WORD_HINT.test(clean)) return "id";
+  const cc = normalizeCountryCode(country, "ID");
+  if (cc === "ID" || cc === "MY") return "id";
+  const byCountry = {
+    JP: "ja", KR: "ko", CN: "zh", TW: "zh", RU: "ru",
+    ES: "es", MX: "es", AR: "es", BR: "pt", PT: "pt",
+    FR: "fr", DE: "de", IT: "it", NL: "nl", TR: "tr",
+    VN: "vi", TH: "th", SA: "ar", AE: "ar", EG: "ar",
+  };
+  return byCountry[cc] || "en";
+}
+
+async function fetchMyMemoryTranslate(text, sourceLang, targetLang) {
+  const q = encodeURIComponent(text);
+  const url = `https://api.mymemory.translated.net/get?q=${q}&langpair=${sourceLang}|${targetLang}`;
+  const res = await fetch(url, {
+    headers: { "User-Agent": "xydesk-remote-worker/1.0", Accept: "application/json" },
+  });
+  if (!res.ok) throw new Error(`mymemory_http_${res.status}`);
+  const data = await res.json();
+  const translated = String(data?.responseData?.translatedText || "").trim();
+  if (!translated || translated.includes("MYMEMORY WARNING")) throw new Error("mymemory_empty");
+  return translated;
+}
+
+async function translateChatText(text, country = "ID") {
+  const clean = String(text || "").trim();
+  if (!clean) return { translated: "", targetLang: "EN", sourceLang: "id" };
+  const guessedSl = guessSourceLang(clean, country);
+  const isSourceId = guessedSl === "id" || guessedSl === "ms";
+  const targetCode = isSourceId ? "en" : "id";
+  const targetLabel = isSourceId ? "EN" : "ID";
+
+  // Jalur 1: Google Translate GTX
+  try {
+    const gtx = await fetchGoogleTranslate(clean, guessedSl, targetCode);
+    if (gtx.translated && gtx.translated.toLowerCase() !== clean.toLowerCase()) {
+      return {
+        translated: gtx.translated,
+        targetLang: targetLabel,
+        sourceLang: gtx.detected || guessedSl,
+      };
+    }
+  } catch {
+    // Lanjut ke jalur 2
+  }
+
+  // Jalur 2: MyMemory API (ramah IP Cloudflare Worker)
+  try {
+    const mm = await fetchMyMemoryTranslate(clean, guessedSl, targetCode);
+    if (mm && mm.toLowerCase() !== clean.toLowerCase()) {
+      return {
+        translated: mm,
+        targetLang: targetLabel,
+        sourceLang: guessedSl,
+      };
+    }
+  } catch {
+    // Lanjut ke kamus offline
+  }
+
+  return offlineTranslateFallback(clean, country);
+}
+
 export class GlobalChat {
   constructor(state, env) {
     this.state = state;
@@ -2423,7 +2604,9 @@ export class GlobalChat {
 
   async fetch(request) {
     const path = new URL(request.url).pathname;
-    if ((path === "/connect" || path === "/ws/chat") && request.headers.get("Upgrade") === "websocket") return this.handleConnect();
+    if ((path === "/connect" || path === "/ws/chat") && request.headers.get("Upgrade") === "websocket") {
+      return this.handleConnect(request);
+    }
     if (path === "/history" && request.method === "GET") {
       const messages = await this.loadHistory();
       return durableObjectJson({ status: "ok", messages }, 200, request.method);
@@ -2450,6 +2633,8 @@ export class GlobalChat {
     if (!text) {
       return durableObjectJson({ status: "error", code: "empty_text" }, 400, request.method);
     }
+    const country = detectCountryFromRequest(request, body?.country);
+    const flag = countryToFlag(country);
     const now = Date.now();
     const rateKey = name.toLowerCase();
     const bucket = this.httpRate.get(rateKey) || { sent: 0, windowAt: now };
@@ -2462,8 +2647,19 @@ export class GlobalChat {
     if (bucket.sent > CHAT_MSG_PER_WINDOW) {
       return durableObjectJson({ status: "error", code: "rate_limited" }, 429, request.method);
     }
+    const tr = await translateChatText(text, country);
     const id = `${now.toString(36).padStart(9, "0")}-${Math.random().toString(36).slice(2, 8)}`;
-    const msg = { id, name, text, at: now };
+    const msg = {
+      id,
+      name,
+      country,
+      flag,
+      text,
+      translated: tr.translated,
+      target_lang: tr.targetLang,
+      source_lang: tr.sourceLang,
+      at: now,
+    };
     await this.state.storage.put(`msg:${id}`, msg);
     this.trimHistory().catch(() => {});
     this.broadcast(null, JSON.stringify({ type: "msg", ...msg }));
@@ -2473,7 +2669,30 @@ export class GlobalChat {
 
   async loadHistory() {
     const entries = await this.state.storage.list({ prefix: "msg:" });
-    const msgs = [...entries.entries()].map(([k, v]) => ({ id: k.slice(4), ...v })).sort((a, b) => a.at - b.at);
+    const msgs = [...entries.entries()]
+      .map(([k, v]) => {
+        const country = normalizeCountryCode(v?.country, "ID");
+        const flag = v?.flag || countryToFlag(country);
+        let translated = typeof v?.translated === "string" ? v.translated : "";
+        let targetLang = typeof v?.target_lang === "string" ? v.target_lang : "";
+        let sourceLang = typeof v?.source_lang === "string" ? v.source_lang : "";
+        if (!translated && v?.text) {
+          const fb = offlineTranslateFallback(v.text, country);
+          translated = fb.translated;
+          targetLang = fb.targetLang;
+          sourceLang = fb.sourceLang;
+        }
+        return {
+          id: k.slice(4),
+          ...v,
+          country,
+          flag,
+          translated,
+          target_lang: targetLang || "EN",
+          source_lang: sourceLang || "id",
+        };
+      })
+      .sort((a, b) => a.at - b.at);
     return msgs.slice(-CHAT_HISTORY_LIMIT);
   }
 
@@ -2486,13 +2705,29 @@ export class GlobalChat {
     }
   }
 
-  handleConnect() {
+  handleConnect(request) {
     const pair = new WebSocketPair();
     const [client, server] = Object.values(pair);
     server.accept();
-    const session = { ws: server, name: "Tamu", sent: 0, windowAt: Date.now() };
+    const cfCountry = request?.cf?.country
+      || request?.headers?.get("cf-ipcountry")
+      || request?.headers?.get("CF-Connecting-IP-Country");
+    const hasCfCountry = typeof cfCountry === "string" && /^[A-Za-z]{2}$/.test(cfCountry.trim())
+      && cfCountry.trim().toUpperCase() !== "XX"
+      && cfCountry.trim().toUpperCase() !== "T1";
+    const initialCountry = normalizeCountryCode(cfCountry, "ID");
+    const session = {
+      ws: server,
+      name: "Tamu",
+      country: initialCountry,
+      cfDetected: hasCfCountry,
+      sent: 0,
+      windowAt: Date.now(),
+    };
     this.sessions.add(session);
-    server.addEventListener("message", (event) => this.onMessage(session, event));
+    server.addEventListener("message", (event) => {
+      this.onMessage(session, event).catch(() => {});
+    });
     const close = () => this.onClose(session);
     server.addEventListener("close", close);
     server.addEventListener("error", close);
@@ -2512,21 +2747,35 @@ export class GlobalChat {
     this.broadcast(null, JSON.stringify({ type: "presence", count: this.sessions.size }));
   }
 
-  onMessage(session, event) {
+  async onMessage(session, event) {
     let data = null;
     try { data = JSON.parse(String(event.data)); } catch { return; }
     if (!data || typeof data !== "object") return;
-    if (data.type === "hello" && typeof data.name === "string") {
-      session.name = String(data.name).trim().slice(0, CHAT_NAME_MAX) || "Tamu";
+    if (data.type === "hello") {
+      if (typeof data.name === "string") {
+        session.name = String(data.name).trim().slice(0, CHAT_NAME_MAX) || "Tamu";
+      }
+      if (!session.cfDetected && typeof data.country === "string") {
+        session.country = normalizeCountryCode(data.country, session.country);
+      }
       return;
     }
     if (data.type === "typing") {
-      this.broadcast(session, JSON.stringify({ type: "typing", name: session.name, on: !!data.on }));
+      this.broadcast(session, JSON.stringify({
+        type: "typing",
+        name: session.name,
+        country: session.country,
+        flag: countryToFlag(session.country),
+        on: !!data.on,
+      }));
       return;
     }
     if (data.type !== "msg") return;
     const text = typeof data.text === "string" ? data.text.trim().slice(0, CHAT_TEXT_MAX) : "";
     if (!text) return;
+    if (!session.cfDetected && typeof data.country === "string") {
+      session.country = normalizeCountryCode(data.country, session.country);
+    }
     const now = Date.now();
     if (now - session.windowAt > CHAT_WINDOW_MS) { session.windowAt = now; session.sent = 0; }
     session.sent += 1;
@@ -2534,8 +2783,20 @@ export class GlobalChat {
       try { session.ws.send(JSON.stringify({ type: "error", code: "rate_limited" })); } catch {}
       return;
     }
+    const tr = await translateChatText(text, session.country);
     const id = `${now.toString(36).padStart(9, "0")}-${Math.random().toString(36).slice(2, 8)}`;
-    const msg = { id, name: session.name, text, at: now };
+    const flag = countryToFlag(session.country);
+    const msg = {
+      id,
+      name: session.name,
+      country: session.country,
+      flag,
+      text,
+      translated: tr.translated,
+      target_lang: tr.targetLang,
+      source_lang: tr.sourceLang,
+      at: now,
+    };
     this.state.storage.put(`msg:${id}`, msg).then(() => this.trimHistory()).catch(() => {});
     this.broadcast(null, JSON.stringify({ type: "msg", ...msg }));
     this.pushChatNotification(msg).catch(() => {});
@@ -2545,6 +2806,10 @@ export class GlobalChat {
     const apiKey = String(this.env?.ONESIGNAL_REST_API_KEY || "").trim();
     const appId = String(this.env?.ONESIGNAL_APP_ID || DEFAULT_ONESIGNAL_APP_ID).trim();
     if (!apiKey || !appId) return;
+    const senderLabel = `${msg.flag || "🌐"} ${msg.name} (${msg.country || "ID"})`;
+    const bodyText = msg.translated && msg.translated.toLowerCase() !== msg.text.toLowerCase()
+      ? `${msg.text}\n🌐 ${msg.target_lang || "TR"}: ${msg.translated}`
+      : msg.text;
     try {
       await fetch("https://api.onesignal.com/notifications", {
         method: "POST",
@@ -2562,18 +2827,22 @@ export class GlobalChat {
             { field: "tag", key: "nickname", relation: "!=", value: msg.name },
           ],
           headings: {
-            en: `${msg.name} · Chat Global`,
-            id: `${msg.name} · Chat Global`,
+            en: `${senderLabel} · Chat Global`,
+            id: `${senderLabel} · Chat Global`,
           },
           contents: {
-            en: msg.text,
-            id: msg.text,
+            en: bodyText,
+            id: bodyText,
           },
           data: {
             type: "global_chat",
             msg_id: msg.id,
-            sender_name: msg.name,
+            sender_name: senderLabel,
+            country: msg.country || "ID",
+            flag: msg.flag || "🇮🇩",
             text: msg.text,
+            translated: msg.translated || "",
+            target_lang: msg.target_lang || "EN",
             at: msg.at,
           },
           android_group: "xydesk_global_chat",
@@ -2645,10 +2914,14 @@ export default {
       if (request.method !== "POST") return methodNotAllowed("POST, OPTIONS");
       if (!env.GLOBAL_CHAT) return notFound(request.method);
       const chatId3 = env.GLOBAL_CHAT.idFromName("xydesk-global-chat-v1");
+      const cfCountry = request.cf?.country || request.headers.get("cf-ipcountry") || "";
       return env.GLOBAL_CHAT.get(chatId3).fetch(
         new Request(new URL("/send", request.url), {
           method: "POST",
-          headers: { "Content-Type": "application/json" },
+          headers: {
+            "Content-Type": "application/json",
+            "x-chat-country": cfCountry,
+          },
           body: await request.text(),
         })
       );

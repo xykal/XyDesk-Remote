@@ -6,8 +6,9 @@ import com.onesignal.notifications.INotificationServiceExtension
 
 /**
  * Interseptor push OneSignal v5: mengubah notifikasi standar menjadi
- * `NotificationCompat.MessagingStyle` gaya WhatsApp lengkap dengan tombol
- * Balas langsung (`RemoteInput`) dan Tandai dibaca.
+ * `NotificationCompat.MessagingStyle` gaya WhatsApp lengkap dengan bendera
+ * negara, terjemahan otomatis, tombol Balas langsung (`RemoteInput`), dan
+ * Tandai dibaca.
  */
 @Keep
 class ChatNotificationExtension : INotificationServiceExtension {
@@ -18,17 +19,24 @@ class ChatNotificationExtension : INotificationServiceExtension {
             event.preventDefault(true)
             val msgId = data?.optString("msg_id").orEmpty()
             val senderName = data?.optString("sender_name").orEmpty().ifBlank {
-                event.notification.title?.substringAfter("·")?.trim().orEmpty().ifBlank { "Tamu" }
+                event.notification.title?.substringBefore("·")?.trim().orEmpty().ifBlank { "Tamu" }
             }
-            val text = data?.optString("text").orEmpty().ifBlank {
+            val rawText = data?.optString("text").orEmpty().ifBlank {
                 event.notification.body.orEmpty()
+            }
+            val translated = data?.optString("translated").orEmpty()
+            val targetLang = data?.optString("target_lang", "EN").orEmpty().ifBlank { "EN" }
+            val fullText = if (translated.isNotBlank() && !translated.equals(rawText, ignoreCase = true) && !rawText.contains("🌐")) {
+                "$rawText\n🌐 $targetLang: $translated"
+            } else {
+                rawText
             }
             val at = data?.optLong("at", 0L)?.takeIf { it > 0L } ?: System.currentTimeMillis()
             ChatPushNotifier.onIncomingChatMessage(
                 context = event.context,
                 msgId = msgId,
                 senderName = senderName,
-                text = text,
+                text = fullText,
                 at = at,
             )
         }
