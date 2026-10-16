@@ -1195,3 +1195,58 @@ Perintah pemilik: "lanjut lah" (menanggapi tawaran build draft v1.1.16).
 3. Update release-state.json: release_state "published" + published_at,
    commit, deploy worker.
 4. Cek live: alias → v1.1.16 (≤5 menit), kirim pesan WA.
+
+## Ronde 45 — fix transfer file & back + polish UI (2026-10-16)
+
+Laporan pemilik: (1) transfer file tidak masuk folder Download di RDP,
+(2) balik ke beranda butuh 2x, (3) UI Profil/Feed/menu kurang enak — telusuri
+lebih dalam.
+
+**1. File HP otomatis masuk folder Download PC (host-agent/src/main_host.cpp):**
+- Thread watcher `tsclient_downloads_thread` (start di main, bareng relay
+  heartbeat) menonton drive redirect `\\tsclient\\XyDesk` tiap 2,5 s SELAMA
+  sesi RDP aktif dan menyalin file baru ke folder Download Windows — sebelumnya
+  file cuma terduduk di drive tsclient dan user harus mencarinya sendiri.
+- Dua varian folder: akses semua-file → `\\tsclient\\XyDesk\\XyDesk`
+  (dicek lebih dulu); akses terbatas → root drive, TAPI kalau root berisi
+  folder "Android" berarti itu storage penuh → tidak ditonton.
+- File disalin hanya setelah ukurannya stabil 2 poll (anti setengah jadi);
+  nama bentrok → "nama (2).ext"; tanda tangan nama|ukuran|mtime disimpan di
+  `%APPDATA%\\XyDesk Remote\\received-files.log` supaya tidak dobel lintas
+  restart.
+- Folder Download diresolve via REGISTRI User Shell Folders GUID
+  {374DE290-...} + fallback %USERPROFILE%\\Downloads — BUKAN
+  SHGetKnownFolderPath (CoTaskMemFree butuh ole32 yang tidak dipakai build
+  gate; jangan tambah flag link baru). Pelajaran: gate & release build host
+  beda set lib — verifikasi lokal WAJIB pakai command gate (tanpa -lole32).
+- Log ke UI host via PostMessage WM_APP+2 (heap wstring*, dibebaskan
+  WndProc). Compile terverifikasi lokal varian gate (exit 0) + standalone.
+- HP: teks panel transfer diubah (kirim = otomatis ke Download saat agent
+  aktif; tanpa agent tetap drive tsclient).
+
+**2. Back 1x langsung ke beranda:**
+- Sesi CONNECTED: back = putus + langsung ke beranda TANPA dialog (logika
+  dialog diekstrak jadi performDisconnect(), dipakai dialog & back).
+  Tombol "Putuskan" HUD tetap pakai konfirmasi (anti sentuhan sengaja).
+- Back saat dialog konfirmasi terbuka = KONFIRMASI (dulu = batal, sehingga
+  back tidak pernah bisa keluar). Sama untuk dialog batalkan-koneksi.
+- AddDeviceScreen: back saat prompt "buang perubahan?" = benar-benar keluar
+  (dulu cuma menutup prompt = jebakan back tak berujung).
+
+**3. Polish UI:**
+- Profil: kartu hero identitas (logo bulat, XyDesk Remote + XyVerse, chip
+  versi & jumlah perangkat) + subtitle tiap kartu seksi.
+- Menu utama (popup & sidebar): label "MENU", subtitle tiap seksi + alat.
+- Feed: kartu sambutan sebelum daftar postingan.
+- Gate: bac0e87 gagal link (CoTaskMemFree/ole32) → fix 94a05c0 → run
+  38929529708 SUCCESS.
+
+**Checklist rilis BERIKUTNYA (v1.1.17 atau rebuild v1.1.16 — tunggu putusan
+pemilik):**
+- [ ] File dari HP masuk otomatis folder Download PC saat Host Agent jalan
+- [ ] Back 1x dari sesi = putus + balik beranda; back#2 di dialog = konfirmasi
+- [ ] Form tambah/edit perangkat: back 2x keluar (tidak terjebak prompt)
+- [ ] Profil hero + subtitle seksi; menu subtitle + label; feed kartu sambutan
+- [ ] CATATAN: draft v1.1.16 (id 415064151) BELUM memuat ronde 45 — host exe
+      di draft belum punya watcher Downloads. Kalau mau masuk v1.1.16 harus
+      re-tag + rebuild draft (putusan pemilik).
