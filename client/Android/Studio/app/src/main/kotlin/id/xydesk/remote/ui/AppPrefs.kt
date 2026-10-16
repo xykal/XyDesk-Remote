@@ -1,6 +1,8 @@
 package id.xydesk.remote.ui
 
 import android.content.Context
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.setValue
 
 /**
  * Preferensi global app (SP "xydesk.app"):

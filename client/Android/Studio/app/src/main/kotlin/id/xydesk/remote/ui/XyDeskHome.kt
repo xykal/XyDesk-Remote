@@ -29,6 +29,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.BoxScope
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
@@ -916,7 +917,6 @@ private fun LiveSessionsCard() {
     }
 }
 
-@Composable
 // =============================================================
 // Menu utama — 2 gaya (popup tengah / sidebar kanan), revisi UI ronde 41.
 // Konten satu (XyHomeMenuBody) supaya kedua gaya tidak pernah beda fitur.
@@ -1157,6 +1157,7 @@ private fun XyHomeMenuItem(
     }
 }
 
+@Composable
 private fun DevicesScreen(
     favorites: List<ConnectionProfile>,
     crashLog: String?,
