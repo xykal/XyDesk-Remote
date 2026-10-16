@@ -1076,32 +1076,36 @@ Gate: commit ini. TANPA build rilis — menunggu perintah pemilik.
 Build v1.1.16 nanti HARUS memuat SEMUA ini (semua sudah di branch main,
 commit c8b3b44 → HEAD). Verifikasi satu per satu sebelum publish draft:
 
+> **VERIFIKASI KODE 2026-10-16 (ronde 44):** semua item di bawah dicek
+> ada di HEAD (8605cf6, tag v1.1.16) + CI 38913714998 hijau. Yang belum:
+> tes perangkat nyata oleh pemilik sebelum konfirmasi publish.
+
 **Ronde 40 — widget & notifikasi:**
-- [ ] Widget quick-connect homescreen: pasang dari launcher → pilih perangkat → tap = langsung connect (XyQuickConnectWidgetProvider, XyWidgetConfigActivity, layout widget_quick_connect.xml, receiver di manifest)
-- [ ] Tap widget tetap lewat autentikasi kunci perangkat kalau aktif
-- [ ] Notifikasi "Koneksi terputus" saat sesi mati sendiri & app di background (channel xydesk.disconnect); TIDAK muncul saat disconnect disengaja / retry / layar terbuka
+- [x] Widget quick-connect homescreen: pasang dari launcher → pilih perangkat → tap = langsung connect (XyQuickConnectWidgetProvider, XyWidgetConfigActivity, layout widget_quick_connect.xml, receiver di manifest)
+- [x] Tap widget tetap lewat autentikasi kunci perangkat kalau aktif
+- [x] Notifikasi "Koneksi terputus" saat sesi mati sendiri & app di background (channel xydesk.disconnect); TIDAK muncul saat disconnect disengaja / retry / layar terbuka
 
 **Ronde 41 — menu 2 gaya & polish:**
-- [ ] Tombol Menu → default POPUP TENGAH (kartu mengambang, fade+scale)
-- [ ] Ganti ke SIDEBAR KANAN lewat Tampilan → Gaya menu utama → langsung aktif
-- [ ] Semua seksi muncul di menu (termasuk Tampilan)
-- [ ] Home: toggle kanan atas = LIST ringkas ↔ KARTU BESAR 1 kolom (TIDAK ADA grid 2 kolom)
-- [ ] Kartu perangkat sudut membulat; bubble "+" konsisten (radius 18dp + border + shadow)
+- [x] Tombol Menu → default POPUP TENGAH (kartu mengambang, fade+scale)
+- [x] Ganti ke SIDEBAR KANAN lewat Tampilan → Gaya menu utama → langsung aktif
+- [x] Semua seksi muncul di menu (termasuk Tampilan)
+- [x] Home: toggle kanan atas = LIST ringkas ↔ KARTU BESAR 1 kolom (TIDAK ADA grid 2 kolom)
+- [x] Kartu perangkat sudut membulat; bubble "+" konsisten (radius 18dp + border + shadow)
 
 **Ronde 43 — host agent:**
-- [ ] Host Agent = 1 file exe standalone jadi jalur utama (setup PS1 & tombol unduh host.html)
-- [ ] UI Host modern dark: kartu rounded, Segoe UI Variable, status dot, log console, dark caption
-- [ ] https://www.xydeskremote.biz.id/XyDesk-Host.exe live 302 ke aset rilis aktif (worker 350757c0)
+- [x] Host Agent = 1 file exe standalone jadi jalur utama (setup PS1 & tombol unduh host.html)
+- [x] UI Host modern dark: kartu rounded, Segoe UI Variable, status dot, log console, dark caption
+- [x] https://www.xydeskremote.biz.id/XyDesk-Host.exe live 302 ke aset rilis aktif (worker 350757c0)
 
 **Ronde 42 — engine & performa:**
-- [ ] Pengaturan perangkat → "Engine Performa Lanjutan": Video remoting halus, GFX small-cache, Buffer frame server (frame-ack), Loop respons engine (max-loop-time)
-- [ ] Engine pakai Compose 1.12.1 (BOM 2026.09.00) + lifecycle-runtime-compose 2.10.0
-- [ ] Glass card (Feed/Profil) punya depth shadow; margin seragam 16dp semua layar utama
+- [x] Pengaturan perangkat → "Engine Performa Lanjutan": Video remoting halus, GFX small-cache, Buffer frame server (frame-ack), Loop respons engine (max-loop-time)
+- [x] Engine pakai Compose 1.12.1 (BOM 2026.09.00) + lifecycle-runtime-compose 2.10.0
+- [x] Glass card (Feed/Profil) punya depth shadow; margin seragam 16dp semua layar utama
 
 **Prosedur rilis (aturan pemilik):**
-- [ ] Build & rilis HANYA setelah perintah eksplisit pemilik
-- [ ] Rilis dibuat sebagai DRAFT dulu; PUBLISH hanya setelah konfirmasi pemilik
-- [ ] Update release-state.json + deploy worker SETELAH draft dibuat, SEBELUM publish
+- [x] Build & rilis HANYA setelah perintah eksplisit pemilik
+- [x] Rilis dibuat sebagai DRAFT dulu; PUBLISH hanya setelah konfirmasi pemilik
+- [x] Update release-state.json + deploy worker SETELAH draft dibuat, SEBELUM publish
 
 ## Ronde 43 — Host Agent: 1 EXE + UI/UX modern dark
 
@@ -1145,3 +1149,38 @@ ada; UI baru host masuk build berikutnya via checklist v1.1.16).
   sebelum sampai worker.
 - Verifikasi live: host.html 200, arm64 302, /api/health 200, kedua alias
   exe 302. Gate commit 5ee70db hijau.
+
+## Ronde 44 — BUILD DRAFT v1.1.16(77) — menunggu konfirmasi publish
+
+Perintah pemilik: "lanjut lah" (menanggapi tawaran build draft v1.1.16).
+
+- Bump `release.properties` VERSION_NAME=1.1.16 / VERSION_CODE=77 → commit
+  8605cf6 + tag `v1.1.16` (gaya sama seperti rilis sebelumnya).
+- CI run **38913714998** (tag v1.1.16) SEMUA HIJAU:
+  Gate compile Kotlin ✓, Release per-ABI (R8+signed) ✓ 27 menit,
+  Publish GitHub Release ✓.
+- **Draft release id 415064151, 11 aset** (4 APK + universal, standalone
+  exe, host zip, host exe, 2 DLL, SHA256SUMS, SIGNATURE-VERIFICATION).
+  Nama draft masih "v1.1.16" — saat publish ganti jadi
+  "XyDesk Remote v1.1.16 (77)" + release notes.
+- `web/release-state.json` → v1.1.16(77), release_state "draft", sha256
+  semua aset dari SHA256SUMS draft; commit 2da3954; worker deploy
+  **5b2f4d65-de27-4015-80a1-6c94830290d8**.
+- Verifikasi LIVE pasca-deploy: alias exe & APK semua 302 → **v1.1.15**
+  (BENAR — `getLatestPublishedRelease` sengaja skip draft; begitu draft
+  di-publish, worker otomatis pindah ke v1.1.16 ≤5 menit via cache TTL).
+  /host 200, /api/health 200. Static release-state.json apex sudah
+  v1.1.16-draft; subdomain www kena edge cache lama (max-age=0,
+  must-revalidate — akan segar sendiri; redirect worker tidak terpengaruh
+  karena baca aset via ASSETS.fetch yang bypass CDN).
+- Catatan: alias APK yang benar `/XyDesk-Remote-arm64-v8a.apk` dst.;
+  `/XyDesk-Remote64bit.apk` bukan alias (404 itu memang bukan regresi).
+
+**PUBLISH v1.1.16 (menunggu perintah pemilik):**
+1. Pastikan pemilik sudah tes draft (APK + host standalone exe UI baru).
+2. Flip draft → published (API PATCH releases/415064151 draft=false) +
+   rename "XyDesk Remote v1.1.16 (77)" + release notes.
+3. Update release-state.json: release_state "published" + published_at,
+   commit, deploy worker.
+4. Cek live: alias → v1.1.16 (≤5 menit), lalu siapkan pesan WA
+   (gaya 2 bahasa, tanpa kata "dev", tanpa "dll").
