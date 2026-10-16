@@ -47,6 +47,8 @@
       "/SHA256SUMS.txt",
       "/XyDesk-Remote-Host-Agent-win64.zip",
       "/XyDeskRemoteHost.exe",
+      "/XyDeskRemoteHost-Standalone.exe",
+      "/XyDesk-Host.exe",
       "/xydesk_quic.dll",
       "/xydesk_host_core.dll",
       "/XyDesk-x64.exe",
