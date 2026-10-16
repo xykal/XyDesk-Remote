@@ -1250,3 +1250,49 @@ pemilik):**
 - [ ] CATATAN: draft v1.1.16 (id 415064151) BELUM memuat ronde 45 — host exe
       di draft belum punya watcher Downloads. Kalau mau masuk v1.1.16 harus
       re-tag + rebuild draft (putusan pemilik).
+
+## Ronde 46 — layar Buat RDP native penuh + statistik live + persistensi sesi
+
+Permintaan pemilik: banner AI bagus untuk layar RDP; screen lengkap (login
+GitHub, template XyRDP, settings, mulai RDP, statistik RAM/disk/waktu) TANPA
+bergantung web/token; dan XyRDP tanpa restart dari nol saat sesi habis.
+
+**Template repo xykal/XyRDP (commit 5452e1b):**
+- `keepalive.ps1`: heartbeat 5 menit → **statistik live tiap 60 detik**
+  (ram/disk/cpu/uptime_menit/updated_at) ditulis ke `statistik` di
+  out/rdp-status.json lalu di-publish ke branch `status` — app baca langsung
+  via GitHub API, nol web perantara.
+- **Persistensi sesi**: `persist-state.ps1` (zip Desktop/Documents/Downloads/
+  Pictures/Music/Videos profil user RDP → out/xyrdp-state.zip) +
+  `restore-state.ps1` (unduh artifact `xyrdp-state` terbaru milik run
+  sebelumnya via API, ekstrak balik ke profil). rdp-6h.yml: step
+  "Pulihkan sesi sebelumnya" setelah setup dasar; step "Simpan sesi" +
+  upload-artifact@v4 (retention 90 hari) di Finalize (always). Gagal restore
+  = non-fatal. cleanup-actions menyimpan 3 run terbaru → artifact aman.
+- Catatan: upload-artifact@v4 dipakai tag (konvensi repo ini, bukan SHA).
+
+**App XyDesk-Remote (f5dc7e2 + fix 03f8d9d, gate 38932734097 SUCCESS):**
+- Banner AI `drawable-nodpi/xyrdp_banner.webp` (1280×480, 57KB) di puncak
+  layar Buat RDP.
+- `RdpFreeScreen.kt` REWRITE TOTAL — jalur native GitHub murni:
+  login device flow (kode + buka browser), fork template XyRDP otomatis +
+  enable workflow, pengaturan sesi (durasi 15-360 menit, hostname, username
+  RDP, akses tailscale/portmap, storage boost, debloat — tersimpan di
+  SharedPreferences), Mulai/Stop RDP (dispatch + cancel), status run +
+  koneksi (tunnel address, Tailscale IP, RustDesk ID, expiry), **kartu
+  statistik live** (bar RAM/Disk/CPU + uptime + updated_at, refresh 15 dtk,
+  pause saat background), dan connect (password manual + mik switch).
+  JALUR WEB/TOKEN LAMA (rdpfree.projectkal.my.id) TIDAK DIPAKAI LAGI di
+  layar ini; RdpFreeApi tetap ada sebagai legacy.
+- `XyRdpClient`: dispatch(token, login, inputs), cancelRun, latestRunId,
+  XyRdpAccess + XyRdpStats (parse objek `statistik`).
+- `XyProfileScreen`: githubDeviceStart/githubDevicePoll/GITHUB_OAUTH_CLIENT_ID
+  private → internal (dipakai RdpFreeScreen).
+
+**Checklist rilis berikutnya — tambahan ronde 46:**
+- [ ] Layar Buat RDP: login GitHub → fork → settings → mulai → statistik live
+- [ ] Statistik RAM/disk/CPU/uptime muncul di app saat sesi XyRDP aktif
+- [ ] Sesi baru XyRDP memulihkan folder pengguna sesi sebelumnya (artifact)
+- [ ] Banner XyRDP tampil di layar Buat RDP
+- [ ] CATATAN: butuh APK build baru (draft v1.1.16 belum memuat r45+r46);
+      template XyRDP terbaru aktif untuk run baru sekarang juga.
