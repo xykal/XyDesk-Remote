@@ -1325,7 +1325,79 @@ static UINT rdpgfx_recv_end_frame_pdu(GENERIC_CHANNEL_CALLBACK* callback, wStrea
 	Stream_Read_UINT32(s, pdu.frameId); /* frameId (4 bytes) */
 	WLog_Print(gfx->base.log, WLOG_TRACE, "RecvEndFramePdu: frameId: %" PRIu32 "", pdu.frameId);
 
-	const UINT64 start = GetTickCount64();
+	/* XyDesk low-latency GFX pipeline: all surface tiles for this frame have
+	 * already been decoded during WireToSurface PDUs. Dispatch FrameAcknowledge
+	 * and QoE ACK immediately BEFORE surface scaling/JNI blit so the Windows
+	 * RDS encoder starts preparing the next frame in parallel with client
+	 * presentation instead of waiting an extra render+JNI round-trip. */
+	const UINT64 EndFrameTime = 1;
+	gfx->TotalDecodedFrames++;
+
+	if (gfx->sendFrameAcks)
+	{
+		ack.frameId = pdu.frameId;
+		ack.totalFramesDecoded = gfx->TotalDecodedFrames;
+
+		if (gfx->suspendFrameAcks)
+		{
+			ack.queueDepth = SUSPEND_FRAME_ACKNOWLEDGEMENT;
+
+			if (gfx->TotalDecodedFrames == 1)
+				if ((error = rdpgfx_send_frame_acknowledge_pdu(context, &ack)))
+					WLog_Print(gfx->base.log, WLOG_ERROR,
+					           "rdpgfx_send_frame_acknowledge_pdu failed with error %" PRIu32 "",
+					           error);
+		}
+		else
+		{
+			ack.queueDepth = QUEUE_DEPTH_UNAVAILABLE;
+
+			if ((error = rdpgfx_send_frame_acknowledge_pdu(context, &ack)))
+				WLog_Print(gfx->base.log, WLOG_ERROR,
+				           "rdpgfx_send_frame_acknowledge_pdu failed with error %" PRIu32 "",
+				           error);
+		}
+
+		switch (gfx->ConnectionCaps.version)
+		{
+#if defined(WITH_GFX_AV1)
+			case RDPGFX_CAPVERSION_FRDP_1:
+#endif
+			case RDPGFX_CAPVERSION_10:
+			case RDPGFX_CAPVERSION_102:
+			case RDPGFX_CAPVERSION_103:
+			case RDPGFX_CAPVERSION_104:
+			case RDPGFX_CAPVERSION_105:
+			case RDPGFX_CAPVERSION_106:
+			case RDPGFX_CAPVERSION_106_ERR:
+			case RDPGFX_CAPVERSION_107:
+#if defined(WITH_GFX_AZURE)
+			case RDPGFX_CAPVERSION_111:
+			case RDPGFX_CAPVERSION_112:
+			case RDPGFX_CAPVERSION_113:
+#endif
+				if (freerdp_settings_get_bool(gfx->rdpcontext->settings, FreeRDP_GfxSendQoeAck))
+				{
+					RDPGFX_QOE_FRAME_ACKNOWLEDGE_PDU qoe = WINPR_C_ARRAY_INIT;
+					qoe.frameId = pdu.frameId;
+					qoe.timestamp = gfx->StartDecodingTime % UINT32_MAX;
+					qoe.timeDiffSE = 1;
+					qoe.timeDiffEDR = WINPR_ASSERTING_INT_CAST(UINT16, EndFrameTime);
+
+					if ((error = rdpgfx_send_qoe_frame_acknowledge_pdu(context, &qoe)))
+						WLog_Print(
+						    gfx->base.log, WLOG_ERROR,
+						    "rdpgfx_send_qoe_frame_acknowledge_pdu failed with error %" PRIu32 "",
+						    error);
+				}
+
+				break;
+
+			default:
+				break;
+		}
+	}
+
 	if (context)
 	{
 		IFCALLRET(context->EndFrame, error, context, &pdu);
@@ -1336,78 +1408,6 @@ static UINT rdpgfx_recv_end_frame_pdu(GENERIC_CHANNEL_CALLBACK* callback, wStrea
 			           error);
 			return error;
 		}
-	}
-	const UINT64 end = GetTickCount64();
-	const UINT64 EndFrameTime = end - start;
-	gfx->TotalDecodedFrames++;
-
-	if (!gfx->sendFrameAcks)
-		return error;
-
-	ack.frameId = pdu.frameId;
-	ack.totalFramesDecoded = gfx->TotalDecodedFrames;
-
-	if (gfx->suspendFrameAcks)
-	{
-		ack.queueDepth = SUSPEND_FRAME_ACKNOWLEDGEMENT;
-
-		if (gfx->TotalDecodedFrames == 1)
-			if ((error = rdpgfx_send_frame_acknowledge_pdu(context, &ack)))
-				WLog_Print(gfx->base.log, WLOG_ERROR,
-				           "rdpgfx_send_frame_acknowledge_pdu failed with error %" PRIu32 "",
-				           error);
-	}
-	else
-	{
-		ack.queueDepth = QUEUE_DEPTH_UNAVAILABLE;
-
-		if ((error = rdpgfx_send_frame_acknowledge_pdu(context, &ack)))
-			WLog_Print(gfx->base.log, WLOG_ERROR,
-			           "rdpgfx_send_frame_acknowledge_pdu failed with error %" PRIu32 "", error);
-	}
-
-	switch (gfx->ConnectionCaps.version)
-	{
-#if defined(WITH_GFX_AV1)
-		case RDPGFX_CAPVERSION_FRDP_1:
-#endif
-		case RDPGFX_CAPVERSION_10:
-		case RDPGFX_CAPVERSION_102:
-		case RDPGFX_CAPVERSION_103:
-		case RDPGFX_CAPVERSION_104:
-		case RDPGFX_CAPVERSION_105:
-		case RDPGFX_CAPVERSION_106:
-		case RDPGFX_CAPVERSION_106_ERR:
-		case RDPGFX_CAPVERSION_107:
-#if defined(WITH_GFX_AZURE)
-		case RDPGFX_CAPVERSION_111:
-		case RDPGFX_CAPVERSION_112:
-		case RDPGFX_CAPVERSION_113:
-#endif
-			if (freerdp_settings_get_bool(gfx->rdpcontext->settings, FreeRDP_GfxSendQoeAck))
-			{
-				RDPGFX_QOE_FRAME_ACKNOWLEDGE_PDU qoe = WINPR_C_ARRAY_INIT;
-				UINT64 diff = (GetTickCount64() - gfx->StartDecodingTime);
-
-				if (diff > 65000)
-					diff = 0;
-
-				qoe.frameId = pdu.frameId;
-				qoe.timestamp = gfx->StartDecodingTime % UINT32_MAX;
-				qoe.timeDiffSE = WINPR_ASSERTING_INT_CAST(UINT16, diff);
-				qoe.timeDiffEDR = WINPR_ASSERTING_INT_CAST(UINT16, EndFrameTime);
-
-				if ((error = rdpgfx_send_qoe_frame_acknowledge_pdu(context, &qoe)))
-					WLog_Print(gfx->base.log, WLOG_ERROR,
-					           "rdpgfx_send_qoe_frame_acknowledge_pdu failed with error %" PRIu32
-					           "",
-					           error);
-			}
-
-			break;
-
-		default:
-			break;
 	}
 
 	return error;

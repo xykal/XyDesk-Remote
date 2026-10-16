@@ -99,15 +99,16 @@ fun RdpFreeScreen(onBack: () -> Unit, onConnect: (ConnectionProfile) -> Unit) {
     var portmapHost by remember { mutableStateOf(prefs.getString("portmap_host", "") ?: "") }
     var portmapPort by remember { mutableStateOf(prefs.getString("portmap_port", "") ?: "") }
     var debloat by remember { mutableStateOf(prefs.getString("debloat", "ringan") ?: "ringan") }
-    var grafis by remember { mutableStateOf(prefs.getString("grafis", "tidak") ?: "tidak") }
+    var grafis by remember { mutableStateOf(prefs.getString("grafis", "software") ?: "software") }
 
     // Semua checklist / toggle workflow rdp-6h.yml
+    var autoRenew by remember { mutableStateOf(prefs.getString("perpanjang_otomatis", "ya") != "tidak") }
     var xydeskBoost by remember { mutableStateOf(prefs.getString("xydesk", "ya") != "tidak") }
     var microphone by remember { mutableStateOf(prefs.getString("microphone", "ya") != "tidak") }
-    var storageBoost by remember { mutableStateOf(prefs.getString("storage_boost", "tidak") == "ya") }
+    var storageBoost by remember { mutableStateOf(prefs.getString("storage_boost", "ya") != "tidak") }
     var sampDeps by remember { mutableStateOf(prefs.getString("samp", "ya") != "tidak") }
-    var win10Theme by remember { mutableStateOf(prefs.getString("win10", "tidak") == "ya") }
-    var ekstraDesktop by remember { mutableStateOf(prefs.getString("ekstra", "tidak") == "ya") }
+    var win10Theme by remember { mutableStateOf(prefs.getString("win10", "ya") != "tidak") }
+    var ekstraDesktop by remember { mutableStateOf(prefs.getString("ekstra", "ya") != "tidak") }
     var robloxReady by remember { mutableStateOf(prefs.getString("roblox", "tidak") == "ya") }
     var mcJavaReady by remember { mutableStateOf(prefs.getString("minecraft_java", "tidak") == "ya") }
     var mcBedrockReady by remember { mutableStateOf(prefs.getString("minecraft_bedrock", "tidak") == "ya") }
@@ -162,6 +163,7 @@ fun RdpFreeScreen(onBack: () -> Unit, onConnect: (ConnectionProfile) -> Unit) {
             .putString("portmap_port", portmapPort)
             .putString("debloat", debloat)
             .putString("grafis", grafis)
+            .putString("perpanjang_otomatis", if (autoRenew) "ya" else "tidak")
             .putString("xydesk", if (xydeskBoost) "ya" else "tidak")
             .putString("microphone", if (microphone) "ya" else "tidak")
             .putString("storage_boost", if (storageBoost) "ya" else "tidak")
@@ -268,6 +270,7 @@ fun RdpFreeScreen(onBack: () -> Unit, onConnect: (ConnectionProfile) -> Unit) {
                             put("roblox", if (robloxReady) "ya" else "tidak")
                             put("minecraft_java", if (mcJavaReady) "ya" else "tidak")
                             put("minecraft_bedrock", if (mcBedrockReady) "ya" else "tidak")
+                            put("perpanjang_otomatis", if (autoRenew) "ya" else "tidak")
                             if (akses == "portmap") {
                                 if (portmapHost.isNotBlank()) put("portmap_host", portmapHost.trim())
                                 if (portmapPort.isNotBlank()) put("portmap_port", portmapPort.trim())
@@ -751,6 +754,7 @@ fun RdpFreeScreen(onBack: () -> Unit, onConnect: (ConnectionProfile) -> Unit) {
                             XyPillButton(
                                 "🎮 Profil Game Lengkap",
                                 {
+                                    autoRenew = true
                                     xydeskBoost = true
                                     microphone = true
                                     storageBoost = true
@@ -758,8 +762,10 @@ fun RdpFreeScreen(onBack: () -> Unit, onConnect: (ConnectionProfile) -> Unit) {
                                     sampDeps = true
                                     win10Theme = true
                                     ekstraDesktop = true
+                                    grafis = "software"
+                                    mcJavaReady = true
                                     saveSettings()
-                                    message = "Profil Game Lengkap (120 FPS + Storage Boost + DirectX/VC++) diterapkan."
+                                    message = "Profil Game Lengkap (GTA SA-MP SilentPatch + Minecraft OpenGL 4.6 + Anti-Reset) diterapkan."
                                 },
                                 primary = false,
                                 compact = true,
@@ -840,6 +846,13 @@ fun RdpFreeScreen(onBack: () -> Unit, onConnect: (ConnectionProfile) -> Unit) {
                         Spacer(Modifier.height(6.dp))
 
                         RdpToggleRow(
+                            title = "Anti-Reset & Lanjutkan Sesi Otomatis",
+                            subtitle = "Simpan otomatis C:\\Persist, C:\\Games, .minecraft, GTA SA-MP & Desktop tiap 15 menit + estafet sesi berikutnya tanpa mengulang dari nol",
+                            checked = autoRenew,
+                            enabled = !busy,
+                            onCheckedChange = { autoRenew = it; saveSettings() },
+                        )
+                        RdpToggleRow(
                             title = "Setup Host XyDesk (120 FPS Boost & UDP 4433)",
                             subtitle = "Aktifkan AVC444, DWM 120Hz, ClearType, Audio/Mic, & RawInput Game",
                             checked = xydeskBoost,
@@ -861,8 +874,8 @@ fun RdpFreeScreen(onBack: () -> Unit, onConnect: (ConnectionProfile) -> Unit) {
                             onCheckedChange = { storageBoost = it; saveSettings() },
                         )
                         RdpToggleRow(
-                            title = "Dependensi Game (DirectX Legacy, VC++, .NET)",
-                            subtitle = "Pasang runtime DirectX 9/x86/x64, Visual C++ Redistributable, & DirectPlay",
+                            title = "GTA SA & SA-MP By SilentPatch (90 FPS + Mouse Fix)",
+                            subtitle = "Pasang DirectX 9, VC++, DirectPlay, SilentPatchSA.asi, ASI Loader, Widescreen Fix & Auto-Patcher GTA SA-MP",
                             checked = sampDeps,
                             enabled = !busy,
                             onCheckedChange = { sampDeps = it; saveSettings() },
@@ -875,8 +888,8 @@ fun RdpFreeScreen(onBack: () -> Unit, onConnect: (ConnectionProfile) -> Unit) {
                             onCheckedChange = { win10Theme = it; saveSettings() },
                         )
                         RdpToggleRow(
-                            title = "Ekstra Desktop (Lightshot & Taskbar Translucent)",
-                            subtitle = "Pasang tool screenshot Lightshot dan kustomisasi taskbar",
+                            title = "Ekstra Desktop (7-Zip, Chrome, Lightshot)",
+                            subtitle = "Pasang aplikasi esensial desktop dan tool screenshot",
                             checked = ekstraDesktop,
                             enabled = !busy,
                             onCheckedChange = { ekstraDesktop = it; saveSettings() },
@@ -889,11 +902,15 @@ fun RdpFreeScreen(onBack: () -> Unit, onConnect: (ConnectionProfile) -> Unit) {
                             onCheckedChange = { robloxReady = it; saveSettings() },
                         )
                         RdpToggleRow(
-                            title = "Persiapan Launcher Minecraft Java",
-                            subtitle = "Siapkan launcher resmi Minecraft Java Edition di desktop",
+                            title = "Minecraft Java + OpenGL 4.6 D3D12 (Anti-GLFW 65542)",
+                            subtitle = "Pasang Temurin JDK 21 & JRE 8, PrismLauncher, Minecraft Launcher & driver OpenGL 4.6",
                             checked = mcJavaReady,
                             enabled = !busy,
-                            onCheckedChange = { mcJavaReady = it; saveSettings() },
+                            onCheckedChange = {
+                                mcJavaReady = it
+                                if (it) grafis = "software"
+                                saveSettings()
+                            },
                         )
                         RdpToggleRow(
                             title = "Persiapan Dukungan Minecraft Bedrock",

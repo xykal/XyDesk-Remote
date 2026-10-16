@@ -257,18 +257,22 @@ static BOOL android_pre_connect(freerdp* instance)
 	(void)freerdp_settings_set_bool(settings, FreeRDP_FastPathInput, TRUE);
 	(void)freerdp_settings_set_bool(settings, FreeRDP_FastPathOutput, TRUE);
 	(void)freerdp_settings_set_bool(settings, FreeRDP_HasExtendedMouseEvent, TRUE);
+	(void)freerdp_settings_set_bool(settings, FreeRDP_HasRelativeMouseEvent, TRUE);
 	(void)freerdp_settings_set_bool(settings, FreeRDP_HasHorizontalWheel, TRUE);
 	(void)freerdp_settings_set_bool(settings, FreeRDP_UnicodeInput, TRUE);
 	(void)freerdp_settings_set_bool(settings, FreeRDP_SupportMonitorLayoutPdu, TRUE);
 	(void)freerdp_settings_set_bool(settings, FreeRDP_FrameMarkerCommandEnabled, TRUE);
 	(void)freerdp_settings_set_bool(settings, FreeRDP_SurfaceFrameMarkerEnabled, TRUE);
+	(void)freerdp_settings_set_uint32(settings, FreeRDP_FrameAcknowledge, 8);
+	(void)freerdp_settings_set_uint32(settings, FreeRDP_MultifragMaxRequestSize, 4194304);
 	(void)freerdp_settings_set_bool(settings, FreeRDP_AllowFontSmoothing, TRUE);
 	(void)freerdp_settings_set_bool(settings, FreeRDP_AllowDesktopComposition, TRUE);
-	/* Teks tajam: codec RFX-Progressive (CAPROGRESSIVE) dimatikan. Codec itu
-	 * mengirim versi resolusi rendah lalu memperhalus bertahap; kalau refinement
-	 * tidak selesai (HP sibuk / link lambat) teks Windows tampak pecah dan bisa
-	 * bertahan sampai sesi ditutup. AVC444 (4:4:4) dari argumen /gfx: tetap
-	 * dipakai karena mempertahankan chroma penuh, jadi ClearType tidak rusak. */
+	/* Game & desktop acceleration: use full 100 MB RDPGFX cache (GfxSmallCache=FALSE),
+	 * full client decode capabilities (GfxThinClient=FALSE), and instant 1ms QoE ACK
+	 * so Windows RDS streams frames at full 60-120 FPS without congestion throttling. */
+	(void)freerdp_settings_set_bool(settings, FreeRDP_GfxSmallCache, FALSE);
+	(void)freerdp_settings_set_bool(settings, FreeRDP_GfxThinClient, FALSE);
+	(void)freerdp_settings_set_bool(settings, FreeRDP_GfxSendQoeAck, TRUE);
 	(void)freerdp_settings_set_bool(settings, FreeRDP_GfxProgressive, FALSE);
 	(void)freerdp_settings_set_bool(settings, FreeRDP_GfxProgressiveV2, FALSE);
 	(void)freerdp_settings_set_bool(settings, FreeRDP_AutoReconnectionEnabled, TRUE);
@@ -681,6 +685,18 @@ static int android_freerdp_run(freerdp* instance)
 			         (unsigned)GetLastError());
 			break;
 		}
+
+		/* Drain Android mouse/keyboard events BEFORE decoding incoming video
+		 * frames so game aim/clicks/keys go on the wire with 0ms frame-decode wait. */
+		if (android_check_handle(instance) != TRUE)
+		{
+			WLog_ERR(TAG, "Failed to check android file descriptor");
+			status = GetLastError();
+			break;
+		}
+
+		if (freerdp_shall_disconnect_context(instance->context))
+			break;
 
 		if (!freerdp_check_event_handles(context))
 		{

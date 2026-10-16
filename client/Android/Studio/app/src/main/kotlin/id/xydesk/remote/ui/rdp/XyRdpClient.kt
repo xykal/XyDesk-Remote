@@ -121,7 +121,7 @@ internal object XyRdpClient {
     private const val API = "https://api.github.com"
 
     private val OPTIONAL_STEP_REGEX = Regex(
-        "^(Pulihkan sesi sebelumnya|Verifikasi dependensi|Toolkit grafis opsional|Setup grafis|Setup tampilan|Storage boost|Simpan sesi|Upload simpanan sesi|Finalize)",
+        "^(Pulihkan sesi sebelumnya|Pulihkan simpanan sesi|Verifikasi dependensi|Toolkit grafis opsional|Setup grafis|Grafis OpenGL|Runtime GTA SA|Installer game opsional|Aplikasi ekstra|Optimasi storage|Setup tampilan|Storage boost|Simpan sesi|Upload simpanan sesi|Estafet sesi berikutnya|Finalize)",
         RegexOption.IGNORE_CASE,
     )
 
@@ -180,9 +180,12 @@ internal object XyRdpClient {
     /**
      * Sinkronkan fork `XyRDP` milik pengguna dengan branch `main` dari `xykal/XyRDP`
      * supaya script & workflow di fork pengguna selalu versi terbaru.
+     * Jika `/merge-upstream` mengalami konflik (`409`), paksa fast-forward/reset
+     * `refs/heads/main` di fork ke SHA `main` terbaru dari `xykal/XyRDP`.
      */
     suspend fun syncForkWithUpstream(token: String, login: String): Boolean =
         withContext(Dispatchers.IO) {
+            if (login.equals("xykal", ignoreCase = true)) return@withContext true
             val body = JSONObject().put("branch", "main").toString()
             val (code, _) = call(
                 token,
@@ -190,7 +193,31 @@ internal object XyRdpClient {
                 "POST",
                 body,
             )
-            code in 200..204 || code == 409
+            if (code in 200..204) return@withContext true
+            // Fallback untuk 409 Conflict / riwayat berbeda: samakan ref heads/main ke upstream
+            val (upCode, upText) = call(
+                token,
+                "/repos/${XyRdpConfig.TEMPLATE_REPO}/git/ref/heads/main",
+            )
+            if (upCode == 200) {
+                val upSha = runCatching {
+                    JSONObject(upText).optJSONObject("object")?.optString("sha").orEmpty()
+                }.getOrDefault("")
+                if (upSha.length >= 40) {
+                    val patchBody = JSONObject()
+                        .put("sha", upSha)
+                        .put("force", true)
+                        .toString()
+                    val (patchCode, _) = call(
+                        token,
+                        "/repos/$login/${XyRdpConfig.FORK_REPO_NAME}/git/refs/heads/main",
+                        "PATCH",
+                        patchBody,
+                    )
+                    if (patchCode in 200..204) return@withContext true
+                }
+            }
+            code == 409
         }
 
     /** Fork baru mematikan Actions; nyalakan permissions + workflow template lewat API. */

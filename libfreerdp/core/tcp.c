@@ -1373,27 +1373,57 @@ int freerdp_tcp_default_connect(rdpContext* context, rdpSettings* settings, cons
 	if (!ipcSocket && !useExternalDefinedSocket)
 	{
 		(void)freerdp_tcp_set_nodelay(WLog_Get(TAG), WLOG_ERROR, sockfd);
+#if defined(TCP_QUICKACK)
+		{
+			int quickack = 1;
+			(void)setsockopt(sockfd, IPPROTO_TCP, TCP_QUICKACK, (const void*)&quickack,
+			                 sizeof(quickack));
+		}
+#endif
+#if defined(IP_TOS) && defined(IPTOS_LOWDELAY)
+		{
+			int tos = IPTOS_LOWDELAY;
+			(void)setsockopt(sockfd, IPPROTO_IP, IP_TOS, (const void*)&tos, sizeof(tos));
+		}
+#endif
 	}
 
-	/* receive buffer must be a least 32 K */
+	/* XyDesk game/low-latency tuning: request 1 MB receive/send buffers so
+	 * high-FPS RDPGFX/AVC444 bursts never stall on TCP window exhaustion;
+	 * keep the 32 KB hard floor if kernel rmem_max caps the 1 MB request. */
 	UINT32 optval = 1;
 	socklen_t optlen = sizeof(optval);
 	if (getsockopt(sockfd, SOL_SOCKET, SO_RCVBUF, (void*)&optval, &optlen) == 0)
 	{
-		if (optval < (1024 * 32))
+		if (optval < (1024 * 1024))
 		{
-			optval = 1024 * 32;
-			optlen = sizeof(optval);
-
-			if (setsockopt(sockfd, SOL_SOCKET, SO_RCVBUF, (void*)&optval, optlen) < 0)
+			UINT32 target = 1024 * 1024;
+			if (setsockopt(sockfd, SOL_SOCKET, SO_RCVBUF, (const void*)&target, sizeof(target)) < 0)
 			{
-				close(sockfd);
-
-				freerdp_set_last_error_if_not(context, FREERDP_ERROR_CONNECT_FAILED);
-
-				WLog_ERR(TAG, "unable to set receive buffer len");
-				return -1;
+				if (optval < (1024 * 32))
+				{
+					optval = 1024 * 32;
+					optlen = sizeof(optval);
+					if (setsockopt(sockfd, SOL_SOCKET, SO_RCVBUF, (void*)&optval, optlen) < 0)
+					{
+						close(sockfd);
+						freerdp_set_last_error_if_not(context, FREERDP_ERROR_CONNECT_FAILED);
+						WLog_ERR(TAG, "unable to set receive buffer len");
+						return -1;
+					}
+				}
 			}
+		}
+	}
+	{
+		UINT32 sndval = 0;
+		socklen_t sndlen = sizeof(sndval);
+		if (getsockopt(sockfd, SOL_SOCKET, SO_SNDBUF, (void*)&sndval, &sndlen) == 0 &&
+		    sndval < (1024 * 512))
+		{
+			UINT32 targetSnd = 1024 * 512;
+			(void)setsockopt(sockfd, SOL_SOCKET, SO_SNDBUF, (const void*)&targetSnd,
+			                 sizeof(targetSnd));
 		}
 	}
 
@@ -1439,7 +1469,14 @@ static int freerdp_tcp_layer_read(void* userContext, void* data, int bytes)
 	const int status = _recv((SOCKET)tcpLayer->sockfd, data, bytes, 0);
 
 	if (status > 0)
+	{
+#if defined(TCP_QUICKACK)
+		int quickack = 1;
+		(void)setsockopt(tcpLayer->sockfd, IPPROTO_TCP, TCP_QUICKACK, (const void*)&quickack,
+		                 sizeof(quickack));
+#endif
 		return status;
+	}
 
 	const int error = WSAGetLastError();
 

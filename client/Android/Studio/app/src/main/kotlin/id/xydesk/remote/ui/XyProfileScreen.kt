@@ -1161,7 +1161,7 @@ internal fun GitHubDeviceFlowPanel(
                         android.webkit.WebView(ctx).apply {
                             settings.javaScriptEnabled = true
                             settings.domStorageEnabled = true
-                            settings.userAgentString = settings.userAgentString + " XyDeskRemote/1.1.16"
+                            settings.userAgentString = settings.userAgentString + " XyDeskRemote/1.1.17"
                             webViewClient = object : android.webkit.WebViewClient() {
                                 override fun onPageFinished(view: android.webkit.WebView?, url: String?) {
                                     super.onPageFinished(view, url)
