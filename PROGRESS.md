@@ -1097,3 +1097,36 @@ commit c8b3b44 → HEAD). Verifikasi satu per satu sebelum publish draft:
 - [ ] Build & rilis HANYA setelah perintah eksplisit pemilik
 - [ ] Rilis dibuat sebagai DRAFT dulu; PUBLISH hanya setelah konfirmasi pemilik
 - [ ] Update release-state.json + deploy worker SETELAH draft dibuat, SEBELUM publish
+
+## Ronde 43 — Host Agent: 1 EXE + UI/UX modern dark
+
+Permintaan pemilik: host masih belum 1 exe + UI/UX host gak modern.
+
+**Fakta:** XyDeskRemoteHost-Standalone.exe (1 file, static) ternyata SUDAH
+dibuild CI sejak beberapa rilis — tapi disembunyikan: setup PS1 & halaman
+host masih pakai jalur 3 file (exe + 2 DLL). Ronde ini menjadikannya jalur
+utama + redesign UI.
+
+**UI Host modern (main_host.cpp, verifikasi compile MinGW lokal sukses):**
+- Dark theme: latar #14171D, kartu #1B1F27 rounded 18px, aksen #7C9EFF,
+  status dot hijau/merah, log console-style Consolas gelap.
+- Font Segoe UI Variable (fallback otomatis Segoe UI di Win10).
+- Dark mode caption (DWMWA_USE_IMMERSIVE_DARK_MODE) + kontrol anak
+  (DarkMode_Explorer) — dimuat dinamis, tanpa dependensi link baru.
+- Layout terstruktur: header + garis aksen, kartu info label/nilai, status
+  QUIC + paket, tombol 4, panel log; WS_EX_COMPOSITED anti-flicker,
+  double-buffer WM_PAINT.
+- Judul jendela: "XyDesk Remote — Host Agent".
+
+**1-EXE jadi jalur utama:**
+- Setup PS1: default unduh XyDeskRemoteHost-Standalone.exe (1 file);
+  -LegacyZip untuk jalur lama.
+- host.html: tombol utama "Host Agent — 1 File .exe (Standalone)" + alias
+  XyDesk-Host.exe.
+- Worker: alias baru /XyDeskRemoteHost-Standalone.exe & /XyDesk-Host.exe
+  (redirect ikut rilis aktif) + 2 unit test (51/51 pass lokal).
+
+**Verifikasi lokal:** MinGW compile standalone sukses (972KB, 1 file);
+node --check + node --test worker 51/51 hijau. Worker dideploy ronde ini
+supaya jalur 1-exe langsung bisa dipakai (menunjuk aset v1.1.15 yang sudah
+ada; UI baru host masuk build berikutnya via checklist v1.1.16).

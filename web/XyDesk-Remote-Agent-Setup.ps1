@@ -17,6 +17,7 @@ param(
     [switch]$VirtualAudio,
     [string]$BaseUrl = "https://www.xydeskremote.biz.id",
     [string]$InstallDir = "C:\XyDesk-Remote-Host",
+    [switch]$LegacyZip,
     [switch]$NoRun
 )
 
@@ -36,15 +37,23 @@ Section "XyDesk Remote Host Agent"
 Say "  Sumber unduhan : $BaseUrl"
 Say "  Folder install : $InstallDir"
 
-Section "[1/6] Unduh + ekstrak agent"
+Section "[1/6] Unduh agent (1 file .exe, tanpa DLL)"
 New-Item -ItemType Directory -Force -Path $InstallDir | Out-Null
-$zip = Join-Path $InstallDir "XyDesk-Remote-Host-Agent-win64.zip"
+$exe = Join-Path $InstallDir "XyDeskRemoteHost.exe"
 try {
-    Invoke-WebRequest -UseBasicParsing "$BaseUrl/XyDesk-Remote-Host-Agent-win64.zip" -OutFile $zip
-    Expand-Archive -Force -Path $zip -DestinationPath $InstallDir
-    Say ("  exe   : " + (Join-Path $InstallDir "XyDeskRemoteHost.exe"))
-    Say ("  quic  : " + (Join-Path $InstallDir "xydesk_quic.dll"))
-    Say ("  core  : " + (Join-Path $InstallDir "xydesk_host_core.dll"))
+    # Default: XyDeskRemoteHost-Standalone.exe — SATU file mandiri (engine QUIC +
+    # core sudah dikompilasi di dalamnya, runtime ikut statis). Jalur lama
+    # (zip 3 file: exe + 2 DLL) tetap tersedia lewat switch -LegacyZip.
+    if ($LegacyZip) {
+        $zip = Join-Path $InstallDir "XyDesk-Remote-Host-Agent-win64.zip"
+        Invoke-WebRequest -UseBasicParsing "$BaseUrl/XyDesk-Remote-Host-Agent-win64.zip" -OutFile $zip
+        Expand-Archive -Force -Path $zip -DestinationPath $InstallDir
+        Say ("  quic  : " + (Join-Path $InstallDir "xydesk_quic.dll"))
+        Say ("  core  : " + (Join-Path $InstallDir "xydesk_host_core.dll"))
+    } else {
+        Invoke-WebRequest -UseBasicParsing "$BaseUrl/XyDeskRemoteHost-Standalone.exe" -OutFile $exe
+        Say ("  exe   : $exe (standalone 1 file)")
+    }
 } catch {
     Say "  Gagal mengunduh agent: $($_.Exception.Message)"
     exit 1

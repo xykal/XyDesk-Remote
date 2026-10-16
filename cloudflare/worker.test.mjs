@@ -1093,6 +1093,23 @@ test("host alias pakai tag rilis PUBLIK terakhir, dan fallback ke release-state 
   );
 });
 
+test("alias host standalone 1-exe redirect ke aset rilis aktif", async () => {
+  // Ronde 43: /XyDeskRemoteHost-Standalone.exe dan /XyDesk-Host.exe jadi
+  // jalur utama unduhan host agent (1 file, tanpa DLL).
+  for (const alias of ["XyDeskRemoteHost-Standalone.exe", "XyDesk-Host.exe"]) {
+    const response = await worker.fetch(
+      new Request(`https://rdp.xydesk.my.id/${alias}`),
+      envFor(),
+    );
+    assert.equal(response.status, 302, alias);
+    assert.equal(
+      response.headers.get("location"),
+      "https://github.com/xykal/XyDesk-Remote/releases/download/v1.0.2/XyDeskRemoteHost-Standalone.exe",
+      alias,
+    );
+  }
+});
+
 test("portal mengikuti rilis PUBLIK terbaru, bukan tag statis di bundle", async () => {
   const originalFetch = globalThis.fetch;
   globalThis.fetch = async (url) => {

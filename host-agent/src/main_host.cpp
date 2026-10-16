@@ -157,6 +157,8 @@ constexpr int IDC_INFO    = 1010;
 constexpr int IDC_STATUS  = 1011;
 constexpr int IDC_SESSION = 1012;
 constexpr int IDC_LOG     = 1013;
+constexpr int IDC_SUB     = 1014;
+constexpr int IDC_VER     = 1015;
 constexpr int TIMER_ID    = 1;
 constexpr UINT WM_TRAY    = WM_APP + 1;
 constexpr UINT IDM_SHOW   = 2001;
@@ -164,6 +166,90 @@ constexpr UINT IDM_TOGGLE = 2002;
 constexpr UINT IDM_EXIT   = 2003;
 
 const wchar_t* kClassName = L"XyDeskHostAgentWindow";
+
+// ---------------------------------------------------------------------------
+// Tema visual modern (revisi UI ronde 43): dark + kartu rounded + aksen biru.
+// Warna dipilih senada dengan app Android (graft/baja/aksen #7C9EFF).
+// ---------------------------------------------------------------------------
+constexpr COLORREF kBg        = RGB(0x14, 0x17, 0x1D);  // latar jendela
+constexpr COLORREF kCard     = RGB(0x1B, 0x1F, 0x27);  // permukaan kartu
+constexpr COLORREF kCardEdge = RGB(0x2A, 0x30, 0x3C);  // garis kartu
+constexpr COLORREF kLogBg    = RGB(0x10, 0x13, 0x1A);  // panel log
+constexpr COLORREF kText     = RGB(0xF2, 0xF5, 0xFA);  // teks utama
+constexpr COLORREF kTextDim  = RGB(0x9A, 0xA3, 0xB2);  // teks sekunder
+constexpr COLORREF kAccent   = RGB(0x7C, 0x9E, 0xFF);  // aksen XyDesk
+constexpr COLORREF kOk       = RGB(0x3D, 0xD6, 0x8C);  // status hijau
+
+HBRUSH g_brBg = nullptr;
+HBRUSH g_brCard = nullptr;
+HBRUSH g_brLog = nullptr;
+HFONT g_fontTitle = nullptr;
+HFONT g_fontSub = nullptr;
+HFONT g_fontBody = nullptr;
+HFONT g_fontLabel = nullptr;
+HFONT g_fontMono = nullptr;
+bool g_quic_ok_last = false;
+
+void theme_create_resources() {
+    if (g_brBg) return;
+    g_brBg = CreateSolidBrush(kBg);
+    g_brCard = CreateSolidBrush(kCard);
+    g_brLog = CreateSolidBrush(kLogBg);
+    // "Segoe UI Variable" hadir di Windows 11; Windows 10 otomatis gagal memuat
+    // dan CreateFontW memakai fallback sistem (Segoe UI) — jadi aman dipakai.
+    g_fontTitle = CreateFontW(26, 0, 0, 0, FW_SEMIBOLD, FALSE, FALSE, FALSE,
+                              DEFAULT_CHARSET, OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS,
+                              CLEARTYPE_QUALITY, DEFAULT_PITCH | FF_DONTCARE,
+                              L"Segoe UI Variable Display");
+    g_fontSub = CreateFontW(15, 0, 0, 0, FW_NORMAL, FALSE, TRUE /*italic*/, FALSE,
+                            DEFAULT_CHARSET, OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS,
+                            CLEARTYPE_QUALITY, DEFAULT_PITCH | FF_DONTCARE,
+                            L"Segoe UI Variable Text");
+    g_fontBody = CreateFontW(17, 0, 0, 0, FW_NORMAL, FALSE, FALSE, FALSE,
+                             DEFAULT_CHARSET, OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS,
+                             CLEARTYPE_QUALITY, DEFAULT_PITCH | FF_DONTCARE,
+                             L"Segoe UI Variable Text");
+    g_fontLabel = CreateFontW(14, 0, 0, 0, FW_NORMAL, FALSE, FALSE, FALSE,
+                              DEFAULT_CHARSET, OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS,
+                              CLEARTYPE_QUALITY, DEFAULT_PITCH | FF_DONTCARE,
+                              L"Segoe UI Variable Text");
+    g_fontMono = CreateFontW(16, 0, 0, 0, FW_NORMAL, FALSE, FALSE, FALSE,
+                             DEFAULT_CHARSET, OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS,
+                             CLEARTYPE_QUALITY, FIXED_PITCH | FF_MODERN,
+                             L"Consolas");
+}
+
+/** Dark mode caption + kontrol anak via API tema (dimuat dinamis, tanpa link baru). */
+void theme_apply_dark(HWND hwnd) {
+    // DWMWA_USE_IMMERSIVE_DARK_MODE: 20 (19 pada build lama) — coba keduanya.
+    typedef HRESULT(WINAPI * PFN_DwmSetWindowAttribute)(HWND, DWORD, const void*, DWORD);
+    HMODULE dwm = LoadLibraryW(L"dwmapi.dll");
+    if (dwm) {
+        auto set = reinterpret_cast<PFN_DwmSetWindowAttribute>(
+            (void*)GetProcAddress(dwm, "DwmSetWindowAttribute"));
+        if (set) {
+            BOOL yes = TRUE;
+            if (set(hwnd, 20, &yes, sizeof(yes)) != S_OK) {
+                set(hwnd, 19, &yes, sizeof(yes));
+            }
+        }
+    }
+    // DarkMode_Explorer membuat BUTTON/EDIT ikut dark (Windows 10 1809+).
+    typedef HRESULT(WINAPI * PFN_SetWindowTheme)(HWND, LPCWSTR, LPCWSTR);
+    HMODULE ux = LoadLibraryW(L"uxtheme.dll");
+    if (!ux) return;
+    auto setTheme = reinterpret_cast<PFN_SetWindowTheme>(
+        (void*)GetProcAddress(ux, "SetWindowTheme"));
+    if (!setTheme) return;
+    HWND child = nullptr;
+    while ((child = FindWindowExW(hwnd, child, nullptr, nullptr)) != nullptr) {
+        wchar_t cls[64] = {0};
+        RealGetWindowClassW(child, cls, 63);
+        if (wcscmp(cls, L"Button") == 0 || wcscmp(cls, L"Edit") == 0) {
+            setTheme(child, L"DarkMode_Explorer", nullptr);
+        }
+    }
+}
 
 std::wstring to_wide(const char* s) {
     if (!s || !*s) return std::wstring();
@@ -295,23 +381,25 @@ UiState* ui_state(HWND hwnd) {
 void refresh_dynamic(HWND hwnd) {
     UiState* st = ui_state(hwnd);
     if (!st) return;
-    set_text(st->status, fmt(L"QUIC : %s  ·  UDP :%u  ·  paket dilayani: %llu",
+    set_text(st->status, fmt(L"QUIC %s   ·   UDP :%u   ·   %llu paket dilayani",
                              st->quic_running ? L"AKTIF" : L"BERHENTI",
                              (unsigned)g_meta.quic_port,
                              (unsigned long long)xydesk_quic_packets_served()));
     std::wstring desktop = query_input_desktop();
     std::wstring line = fmt(L"Sesi Windows: %s", query_session_state().c_str());
     if (desktop == L"Winlogon") {
-        line += L"  ·  Layar login/kunci Windows sedang aktif — masuk lewat koneksi RDP dari HP.";
+        line += L"  ·  layar login aktif — masuk lewat RDP dari HP.";
     } else if (!desktop.empty()) {
         line += fmt(L"  ·  desktop: %s", desktop.c_str());
     }
     set_text(st->session, line);
 }
 
-HWND make_static(HWND parent, int id, int x, int y, int w, int h) {
-    return CreateWindowExW(0, L"STATIC", L"", WS_CHILD | WS_VISIBLE | SS_LEFTNOWORDWRAP,
-                           x, y, w, h, parent, (HMENU)(INT_PTR)id, nullptr, nullptr);
+HWND make_static(HWND parent, int id, int x, int y, int w, int h, HFONT font) {
+    HWND wnd = CreateWindowExW(0, L"STATIC", L"", WS_CHILD | WS_VISIBLE | SS_LEFT,
+                               x, y, w, h, parent, (HMENU)(INT_PTR)id, nullptr, nullptr);
+    if (font) SendMessageW(wnd, WM_SETFONT, (WPARAM)font, TRUE);
+    return wnd;
 }
 
 LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
@@ -322,24 +410,45 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
             st = reinterpret_cast<UiState*>(cs->lpCreateParams);
             SetWindowLongPtrW(hwnd, GWLP_USERDATA, reinterpret_cast<LONG_PTR>(st));
 
-            HFONT font = (HFONT)GetStockObject(DEFAULT_GUI_FONT);
-            int W = 556;
+            theme_create_resources();
 
-            HWND title = CreateWindowExW(0, L"STATIC", L"XyDesk Remote Host Agent",
-                                         WS_CHILD | WS_VISIBLE | SS_LEFT,
-                                         16, 12, W - 32, 24, hwnd, nullptr, nullptr, nullptr);
-            SendMessageW(title, WM_SETFONT, (WPARAM)font, TRUE);
+            RECT rc;
+            GetClientRect(hwnd, &rc);
+            const int W = (int)rc.right ? (int)rc.right : 584;
+            const int H = (int)rc.bottom ? (int)rc.bottom : 481;
 
-            st->info = make_static(hwnd, IDC_INFO, 16, 42, W - 32, 118);
-            SendMessageW(st->info, WM_SETFONT, (WPARAM)font, TRUE);
+            // ---- Header: judul besar + subjudul + versi kanan ----
+            HWND title = make_static(hwnd, 0, 24, 16, 340, 34, g_fontTitle);
+            set_text(title, L"XyDesk Remote");
+            HWND sub = make_static(hwnd, IDC_SUB, 26, 52, 340, 18, g_fontSub);
+            set_text(sub, L"HOST AGENT  ·  XYVERSE");
+            HWND ver = make_static(hwnd, IDC_VER, W - 190, 22, 166, 34, g_fontLabel);
+            set_text(ver, fmt(L"Core %s", to_wide(xydesk_host_core_version()).c_str()));
 
-            st->status = make_static(hwnd, IDC_STATUS, 16, 166, W - 32, 20);
-            SendMessageW(st->status, WM_SETFONT, (WPARAM)font, TRUE);
+            // ---- Kartu info (posisi kartu sendiri digambar WM_PAINT) ----
+            struct Row { const wchar_t* label; };
+            const Row rows[] = {
+                {L"Nama komputer"},
+                {L"IPv4 LAN"},
+                {L"GPU"},
+                {L"ID PC (LAN)"},
+                {L"ID Global (relay)"},
+                {L"Engine"},
+            };
+            int ry = 94;
+            for (int i = 0; i < 6; ++i) {
+                HWND lab = make_static(hwnd, 0, 40, ry, 150, 20, g_fontLabel);
+                set_text(lab, rows[i].label);
+                ry += 25;
+            }
+            st->info = make_static(hwnd, IDC_INFO, 196, 94, W - 220, 150, g_fontBody);
 
-            st->session = make_static(hwnd, IDC_SESSION, 16, 188, W - 32, 20);
-            SendMessageW(st->session, WM_SETFONT, (WPARAM)font, TRUE);
+            // ---- Status & sesi ----
+            st->status = make_static(hwnd, IDC_STATUS, 46, 260, W - 70, 22, g_fontBody);
+            st->session = make_static(hwnd, IDC_SESSION, 24, 288, W - 48, 20, g_fontLabel);
 
-            int by = 216, bw = 130, gap = 8;
+            // ---- Tombol aksi ----
+            const int bw = 138, gap = 10, by = 322;
             struct { int id; const wchar_t* label; } buttons[] = {
                 { IDC_APPLY,  L"Terapkan kebijakan" },
                 { IDC_COPYID, L"Salin ID PC" },
@@ -349,30 +458,32 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
             for (int i = 0; i < 4; ++i) {
                 HWND b = CreateWindowExW(0, L"BUTTON", buttons[i].label,
                                          WS_CHILD | WS_VISIBLE | BS_PUSHBUTTON,
-                                         16 + i * (bw + gap), by, bw, 30,
+                                         24 + i * (bw + gap), by, bw, 38,
                                          hwnd, (HMENU)(INT_PTR)buttons[i].id, nullptr, nullptr);
-                SendMessageW(b, WM_SETFONT, (WPARAM)font, TRUE);
+                SendMessageW(b, WM_SETFONT, (WPARAM)g_fontBody, TRUE);
                 if (buttons[i].id == IDC_TOGGLE) st->toggle = b;
             }
 
-            st->log = CreateWindowExW(WS_EX_CLIENTEDGE, L"EDIT", L"",
+            // ---- Panel log (kartu rounded digambar parent, EDIT polos di atasnya) ----
+            st->log = CreateWindowExW(0, L"EDIT", L"",
                                       WS_CHILD | WS_VISIBLE | WS_VSCROLL | ES_MULTILINE |
                                       ES_AUTOVSCROLL | ES_READONLY,
-                                      16, 258, W - 32, 150, hwnd,
+                                      28, 380, W - 56, H - 398, hwnd,
                                       (HMENU)(INT_PTR)IDC_LOG, nullptr, nullptr);
-            SendMessageW(st->log, WM_SETFONT, (WPARAM)font, TRUE);
+            SendMessageW(st->log, WM_SETFONT, (WPARAM)g_fontMono, TRUE);
 
             std::wstring info = fmt(
-                L"Hostname   : %s\r\n"
-                L"IPv4 LAN   : %s   (RDP :%u · QUIC UDP :%u)\r\n"
-                L"GPU        : %s [%s]\r\n"
-                L"ID PC      : %s\r\n"
-                L"ID Global  : %s  (relay \u2014 bisa dari luar LAN)\r\n"
-                L"Core/QUIC  : %s / %s",
+                L"%s\r\n"
+                L"%s  ·  RDP :%u · QUIC UDP :%u\r\n"
+                L"%s [%s]\r\n"
+                L"%s\r\n"
+                L"%s  (bisa dari luar LAN)\r\n"
+                L"%s / %s",
                 to_wide(g_meta.hostname).c_str(),
                 to_wide(g_meta.primary_ip).c_str(),
                 (unsigned)g_meta.rdp_port, (unsigned)g_meta.quic_port,
-                to_wide(g_meta.gpu_name).c_str(), to_wide(g_meta.gpu_encoder).c_str(),
+                to_wide(g_meta.gpu_name).c_str(),
+                to_wide(g_meta.gpu_encoder).c_str(),
                 to_wide(g_meta.pc_id).c_str(),
                 to_wide(xydesk_global_pc_id()).c_str(),
                 to_wide(xydesk_host_core_version()).c_str(),
@@ -392,10 +503,93 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
             wcscpy(nid.szTip, L"XyDesk Remote Host Agent");
             Shell_NotifyIconW(NIM_ADD, &nid);
 
+            theme_apply_dark(hwnd);
+
             SetTimer(hwnd, TIMER_ID, 1000, nullptr);
             append_log(st->log, L"Jendela siap.");
+            g_quic_ok_last = st->quic_running;
             refresh_dynamic(hwnd);
             return 0;
+        }
+        case WM_PAINT: {
+            PAINTSTRUCT ps;
+            HDC hdc = BeginPaint(hwnd, &ps);
+            RECT rc;
+            GetClientRect(hwnd, &rc);
+            const int W = (int)rc.right;
+            const int H = (int)rc.bottom;
+            // Double buffer supaya kartu tidak berkedip saat timer merefresh.
+            HDC mem = CreateCompatibleDC(hdc);
+            HBITMAP bmp = CreateCompatibleBitmap(hdc, W, H ? H : 1);
+            HBITMAP old = (HBITMAP)SelectObject(mem, bmp);
+            HBRUSH oldBr = (HBRUSH)SelectObject(mem, g_brBg);
+            PatBlt(mem, 0, 0, W, H, PATCOPY);
+
+            // Kartu info: rounded + border halus.
+            HPEN pen = CreatePen(PS_SOLID, 1, kCardEdge);
+            HPEN oldPen = (HPEN)SelectObject(mem, pen);
+            SelectObject(mem, g_brCard);
+            RoundRect(mem, 20, 78, W - 20, 78 + 162, 18, 18);
+
+            // Kartu log.
+            RoundRect(mem, 20, 372, W - 20, H - 14, 18, 18);
+
+            // Titik status (hijau saat QUIC aktif, merah saat berhenti).
+            const bool ok = st ? st->quic_running : g_quic_ok_last;
+            HBRUSH dot = CreateSolidBrush(ok ? kOk : RGB(0xE2, 0x5B, 0x5B));
+            SelectObject(mem, dot);
+            Ellipse(mem, 26, 264, 40, 278);
+            DeleteObject(dot);
+
+            // Garis aksen kecil di bawah header.
+            HPEN accentPen = CreatePen(PS_SOLID, 3, kAccent);
+            HPEN penSaved = (HPEN)SelectObject(mem, accentPen);
+            MoveToEx(mem, 26, 75, nullptr);
+            LineTo(mem, 26 + 88, 75);
+            SelectObject(mem, penSaved);
+
+            // Salin hasil buffer ke layar sebagai satu gambar utuh, lalu rapikan.
+            BitBlt(hdc, 0, 0, W, H, mem, 0, 0, SRCCOPY);
+            SelectObject(mem, oldPen);
+            SelectObject(mem, oldBr);
+            SelectObject(mem, old);
+            DeleteObject(pen);
+            DeleteObject(accentPen);
+            DeleteDC(mem);
+            DeleteObject(bmp);
+            EndPaint(hwnd, &ps);
+            return 0;
+        }
+        case WM_CTLCOLORSTATIC: {
+            HDC hdc = (HDC)wp;
+            HWND ctrl = (HWND)lp;
+            const int id = GetDlgCtrlID(ctrl);
+            if (id == IDC_INFO || id == IDC_STATUS) {
+                SetTextColor(hdc, kText);
+                SetBkColor(hdc, kCard);
+                return (LRESULT)g_brCard;
+            }
+            if (id == IDC_SUB || id == IDC_VER) {
+                SetTextColor(hdc, kTextDim);
+                SetBkColor(hdc, kBg);
+                return (LRESULT)g_brBg;
+            }
+            if (id == IDC_SESSION) {
+                SetTextColor(hdc, kTextDim);
+                SetBkColor(hdc, kBg);
+                return (LRESULT)g_brBg;
+            }
+            // Label kartu (id 0): latar kartu.
+            SetTextColor(hdc, kTextDim);
+            SetBkColor(hdc, kCard);
+            return (LRESULT)g_brCard;
+        }
+        case WM_CTLCOLOREDIT: {
+            // Panel log: latar gelap khas konsol + teks terang.
+            HDC hdc = (HDC)wp;
+            SetTextColor(hdc, RGB(0xC9, 0xD4, 0xE0));
+            SetBkColor(hdc, kLogBg);
+            return (LRESULT)g_brLog;
         }
         case WM_TIMER:
             if (wp == TIMER_ID) refresh_dynamic(hwnd);
@@ -487,13 +681,14 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
  */
 static int xydesk_host_ui_run(bool quic_running) {
     HINSTANCE inst = GetModuleHandleW(nullptr);
+    theme_create_resources();
     WNDCLASSEXW wc{};
     wc.cbSize = sizeof(wc);
     wc.lpfnWndProc = WndProc;
     wc.hInstance = inst;
     // Lihat catatan di LoadIconW: IDC_ARROW juga melebar ke bentuk ANSI.
     wc.hCursor = LoadCursorW(nullptr, MAKEINTRESOURCEW(32512));
-    wc.hbrBackground = (HBRUSH)(COLOR_BTNFACE + 1);
+    wc.hbrBackground = g_brBg;
     wc.lpszClassName = kClassName;
     if (!RegisterClassExW(&wc)) return -1;
 
@@ -501,9 +696,11 @@ static int xydesk_host_ui_run(bool quic_running) {
     state.quic_running = quic_running;
     state.running = true;
 
-    HWND hwnd = CreateWindowExW(0, kClassName, L"XyDesk Remote Host Agent",
+    // WS_EX_COMPOSITED: parent + anak digambar double-buffered sehingga kartu
+    // yang dilukis WM_PAINT tidak berkedip saat timer merefresh tiap detik.
+    HWND hwnd = CreateWindowExW(WS_EX_COMPOSITED, kClassName, L"XyDesk Remote — Host Agent",
                                 WS_OVERLAPPED | WS_CAPTION | WS_SYSMENU | WS_MINIMIZEBOX,
-                                CW_USEDEFAULT, CW_USEDEFAULT, 600, 470,
+                                CW_USEDEFAULT, CW_USEDEFAULT, 648, 566,
                                 nullptr, nullptr, inst, &state);
     if (!hwnd) return -1;
 

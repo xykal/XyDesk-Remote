@@ -227,13 +227,16 @@
       </div>
 
       <div class="card">
-        <h2>Paket Windows x64 — Host Agent Eksperimental</h2>
+        <h2>Paket Windows x64 — Host Agent (1 file .exe)</h2>
         <p>
-          Arsip rilis publik berisi <code>XyDeskRemoteHost.exe</code>, <code>xydesk_quic.dll</code>, dan <code>xydesk_host_core.dll</code>. Ini adalah komponen opsional; paket Windows ini bukan syarat untuk memakai koneksi RDP biasa. Lihat <a href="https://github.com/xykal/XyDesk-Remote/releases/tag/v1.1.8" target="_blank" rel="noopener noreferrer" style="text-decoration:underline;text-underline-offset:3px;">catatan rilis resmi</a> dan <a href="/SHA256SUMS.txt" style="text-decoration:underline;text-underline-offset:3px;">checksum SHA-256</a> sebelum memasang.
+          Cara termudah: unduh <strong>XyDeskRemoteHost-Standalone.exe</strong> — <strong>satu file mandiri</strong> tanpa DLL tambahan (engine QUIC + core sudah terkompilasi di dalamnya). Jalankan sebagai Administrator; tidak perlu instalasi. Ini adalah komponen opsional; paket Windows ini bukan syarat untuk memakai koneksi RDP biasa. Lihat <a href="https://github.com/xykal/XyDesk-Remote/releases" target="_blank" rel="noopener noreferrer" style="text-decoration:underline;text-underline-offset:3px;">catatan rilis resmi</a> dan <a href="/SHA256SUMS.txt" style="text-decoration:underline;text-underline-offset:3px;">checksum SHA-256</a> sebelum memasang.
         </p>
         <div style="margin-top: 14px; display: flex; gap: 10px; flex-wrap: wrap;">
-          <a href="/XyDesk-Remote-Host-Agent-win64.zip" download="XyDesk-Remote-Host-Agent-win64.zip" class="pill primary">
-            Unduh XyDesk-Remote-Host-Agent-win64.zip (C++17 Native + .dll)
+          <a href="/XyDeskRemoteHost-Standalone.exe" download="XyDeskRemoteHost-Standalone.exe" class="pill primary">
+            Unduh Host Agent — 1 File .exe (Standalone)
+          </a>
+          <a href="/XyDesk-Host.exe" download="XyDeskRemoteHost-Standalone.exe" class="pill">
+            Unduh sebagai XyDesk-Host.exe
           </a>
           <a href="/XyDeskHost-Setup.bat" download="XyDeskHost-Setup.bat" class="pill">
             Unduh XyDeskHost-Setup.bat Saja
