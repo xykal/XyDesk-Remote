@@ -996,3 +996,27 @@ reset index ke origin/main (225db88) + restore exec-bit file script; hanya
 perubahan ronde 40 yang tersisa di working tree.
 
 Rilis menunggu perintah pemilik (kandidat v1.1.16).
+
+## Ronde 41 — revisi UI: menu utama 2 gaya + polish
+
+Permintaan pemilik: UI lebih clean/terstruktur, menu utama punya 2 gaya —
+popup dan sidebar kanan. Scope semua layar. CATATAN BARU DARI PEMILIK:
+- Workspace dibersihkan (folder proyek lama /home/user/XyDesk dihapus,
+  uploads/env.txt & secrets tetap).
+- Rilis selanjutnya (v1.1.16+) WAJIB DRAFT dulu; publish hanya setelah
+  konfirmasi pemilik. NO BUILD/NO RILIS sampai disuruh.
+
+Perubahan:
+- `AppPrefs.homeMenuStyle` (0=popup tengah default, 1=sidebar kanan) +
+  `XyMenuStyleState` (pola XyThemeState) supaya ganti gaya langsung aktif.
+- `XyDeskHome`: drawer kiri lama diganti `XyHomeMenuShell` (scrim + animasi
+  per gaya: popup fade+scale di tengah / sidebar slide dari kanan, radius
+  24dp) + `XyHomeMenuBody` (konten sama untuk 2 gaya) + `XyHomeMenuItem`
+  (kotak ikon rounded, state terpilih jelas). Seksi Tampilan kembali masuk
+  menu (ronde 13 dulu dibuang; dashboard Profil sudah lama menampilkan
+  semua seksi).
+- Seksi Tampilan: kartu "Gaya menu utama" (XySegmented Popup/Sidebar kanan).
+- Polish semua layar lewat komponen inti: XyCard kini punya shadow lembut,
+  XyTopBar padding lebih lega, bubble popover "+" radius 18dp + border +
+  shadow biar konsisten.
+- Gate: commit ini. TANPA build rilis/tag/draft (menunggu perintah).

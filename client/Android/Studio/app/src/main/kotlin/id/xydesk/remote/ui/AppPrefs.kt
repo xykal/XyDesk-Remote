@@ -30,6 +30,14 @@ class AppPrefs(context: Context) {
         get() = sp.getBoolean("menu_drawer", false)
         set(v) = sp.edit().putBoolean("menu_drawer", v).apply()
 
+    /**
+     * Gaya menu utama (drawer home): 0 = popup tengah, 1 = sidebar kanan.
+     * Pemilik bisa ganti kapan saja dari seksi Tampilan.
+     */
+    var homeMenuStyle: Int
+        get() = sp.getInt("home_menu_style", HOME_MENU_POPUP)
+        set(v) = sp.edit().putInt("home_menu_style", v).apply()
+
     var keepAlive: Boolean
         get() = sp.getBoolean(KEY_KEEP_ALIVE, true)
         set(v) = sp.edit().putBoolean(KEY_KEEP_ALIVE, v).apply()
@@ -187,5 +195,26 @@ class AppPrefs(context: Context) {
         private const val KEY_AUTO_LOCK_REMOTE = "auto_lock_remote"
         private const val KEY_CLEAR_CLIPBOARD = "clear_clipboard_disconnect"
         private const val KEY_SHARE_ACTIVE_SESSION_STATS = "share_active_session_stats"
+        const val HOME_MENU_POPUP = 0
+        const val HOME_MENU_SIDEBAR = 1
+    }
+}
+
+/**
+ * State gaya menu utama yang bisa dibaca langsung dari composition (pola sama
+ * dengan XyThemeState): perubahan dari seksi Tampilan langsung terasa tanpa
+ * perlu restart atau navigasi ulang.
+ */
+object XyMenuStyleState {
+    private var cached by androidx.compose.runtime.mutableIntStateOf(-1)
+
+    fun current(prefs: AppPrefs): Int {
+        if (cached < 0) cached = prefs.homeMenuStyle
+        return cached
+    }
+
+    fun set(style: Int, prefs: AppPrefs) {
+        prefs.homeMenuStyle = style
+        cached = style
     }
 }

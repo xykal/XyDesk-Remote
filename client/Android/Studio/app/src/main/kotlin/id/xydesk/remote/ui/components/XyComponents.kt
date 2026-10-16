@@ -48,6 +48,7 @@ import kotlinx.coroutines.delay
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.vector.ImageVector
@@ -83,6 +84,7 @@ fun XyCard(
     val shape = RoundedCornerShape(20.dp)
     Column(
         modifier = modifier
+            .shadow(elevation = 6.dp, shape = shape, clip = false)
             .clip(shape)
             .background(MaterialTheme.colorScheme.surface)
             .border(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.42f), shape)
@@ -479,7 +481,7 @@ fun XyTopBar(
     Row(
         modifier = modifier
             .fillMaxWidth()
-            .padding(horizontal = 8.dp, vertical = 6.dp),
+            .padding(horizontal = 10.dp, vertical = 8.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(6.dp),
     ) {
@@ -494,7 +496,7 @@ fun XyTopBar(
         }
         Text(
             title,
-            modifier = Modifier.weight(1f).padding(start = if (onBack == null) 12.dp else 4.dp),
+            modifier = Modifier.weight(1f).padding(start = if (onBack == null) 10.dp else 4.dp),
             style = MaterialTheme.typography.titleLarge,
             color = MaterialTheme.colorScheme.onBackground,
             maxLines = 1,

@@ -14,15 +14,22 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.scaleIn
+import androidx.compose.animation.scaleOut
 import androidx.compose.animation.slideInHorizontally
 import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.foundation.layout.width
 import androidx.compose.ui.zIndex
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.BoxScope
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -32,6 +39,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
@@ -52,6 +60,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -496,141 +505,45 @@ fun XyDeskHome(
             }
         }
 
-    // ---- drawer kiri (custom, bukan ModalNavigationDrawer bawaan) ----
-    if (drawerOpen) {
-        Box(
-            Modifier
-                .fillMaxSize()
-                .background(MaterialTheme.colorScheme.scrim.copy(alpha = 0.55f))
-                .clickable { drawerOpen = false }
-                .zIndex(40f),
-        )
-    }
-    AnimatedVisibility(
-        visible = drawerOpen,
-        enter = slideInHorizontally { -it },
-        exit = slideOutHorizontally { -it },
-        modifier = Modifier.zIndex(41f),
+    // ---- Menu utama: 2 gaya — popup tengah atau sidebar kanan ----
+    val homeMenuStyle = XyMenuStyleState.current(appPrefs)
+    XyHomeMenuShell(
+        open = drawerOpen,
+        style = homeMenuStyle,
+        onDismiss = { drawerOpen = false },
     ) {
-        Column(
-            Modifier
-                .width(300.dp)
-                .fillMaxHeight()
-                .clip(RoundedCornerShape(topEnd = 6.dp, bottomEnd = 6.dp))
-                .background(MaterialTheme.colorScheme.surface)
-                .pointerInput(Unit) {}
-                .padding(vertical = 16.dp),
-        ) {
-            Row(
-                modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(12.dp),
-            ) {
-                XyLogo(modifier = Modifier.size(30.dp))
-                Column {
-                    XyWordmark(fontSize = 21.sp)
-                    Text(
-                        "XyVerse \u2022 Remote Desktop",
-                        style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
+        XyHomeMenuBody(
+            section = section,
+            helpToolsOpen = helpToolsOpen,
+            onToggleTools = { helpToolsOpen = !helpToolsOpen },
+            onPick = { item ->
+                section = item
+                route = XyRoute.Devices
+                // Tab ikut menyorot: seksi adalah bagian Profil, kecuali
+                // Perangkat yang memang isi Beranda.
+                tab = if (item == XySection.PERANGKAT) XyTab.HOME else XyTab.PROFILE
+                drawerOpen = false
+            },
+            onBackup = {
+                drawerOpen = false
+                backupJsonInput = exportProfilesJson(context, favorites)
+                backupModalOpen = true
+            },
+            onUpdate = {
+                drawerOpen = false
+                updateModalOpen = true
+                updateStatusText = xyNow("Memeriksa status rilis terbaru dari www.xydeskremote.biz.id...", "Checking latest release status from www.xydeskremote.biz.id...")
+                scope.launch {
+                    val status = withContext(Dispatchers.IO) { fetchRemoteReleaseStatus(context) }
+                    updateStatusText = status
                 }
-            }
-            Spacer(Modifier.height(14.dp))
-            XyDivider()
-            Spacer(Modifier.height(8.dp))
-            XySection.entries.filter { it != XySection.TAMPILAN }.forEach { item ->
-                XyRow(
-                    // Dulu title mentah (Indonesia saja) — drawer satu-satunya
-                    // tempat yang tidak ikut bahasa. Sekarang dua bahasa.
-                    title = xy(item.title, item.titleEn),
-                    modifier = Modifier.padding(horizontal = 8.dp),
-                    leading = when (item) {
-                        XySection.PERANGKAT -> XyIcons.Monitor
-                        XySection.TAMPILAN -> XyIcons.Fit
-                        XySection.KREDENSIAL -> XyIcons.Lock
-                        XySection.UMUM -> XyIcons.Sliders
-                        // Dulu Info — sama dengan Tentang, jadi dua seksi
-                        // bersebelahan punya ikon identik.
-                        XySection.KEAMANAN -> XyIcons.Shield
-                        XySection.TENTANG -> XyIcons.Info
-                    },
-                    leadingTint = if (item == section) MaterialTheme.colorScheme.onSurface
-                    else MaterialTheme.colorScheme.onSurfaceVariant,
-                    onClick = {
-                        section = item
-                        route = XyRoute.Devices
-                        // Tab ikut menyorot: seksi adalah bagian Profil, kecuali
-                        // Perangkat yang memang isi Beranda.
-                        tab = if (item == XySection.PERANGKAT) XyTab.HOME else XyTab.PROFILE
-                        drawerOpen = false
-                    },
-                )
-            }
-            XyRow(
-                title = xy("Alat & bantuan", "Tools & help"),
-                modifier = Modifier.padding(horizontal = 8.dp),
-                leading = XyIcons.Folder,
-                trailing = {
-                    Text(
-                        if (helpToolsOpen) "−" else "+",
-                        style = MaterialTheme.typography.titleMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                },
-                onClick = { helpToolsOpen = !helpToolsOpen },
-            )
-            if (helpToolsOpen) {
-                XyPillButton(
-                    text = xy("Cadangkan / Pulihkan Profil", "Backup / Restore Profiles"),
-                    onClick = {
-                        drawerOpen = false
-                        backupJsonInput = exportProfilesJson(context, favorites)
-                        backupModalOpen = true
-                    },
-                    modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp),
-                    primary = false,
-                    icon = XyIcons.Folder,
-                    compact = true,
-                )
-                Spacer(Modifier.height(6.dp))
-                XyPillButton(
-                    text = xy("Cek Pembaruan & RilisIn Store", "Check Update & RilisIn Store"),
-                    onClick = {
-                        drawerOpen = false
-                        updateModalOpen = true
-                        updateStatusText = xyNow("Memeriksa status rilis terbaru dari www.xydeskremote.biz.id...", "Checking latest release status from www.xydeskremote.biz.id...")
-                        scope.launch {
-                            val status = withContext(Dispatchers.IO) { fetchRemoteReleaseStatus(context) }
-                            updateStatusText = status
-                        }
-                    },
-                    modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp),
-                    primary = false,
-                    icon = XyIcons.Shield,
-                    compact = true,
-                )
-                Spacer(Modifier.height(6.dp))
-                XyPillButton(
-                    text = xy("Masukan & saran", "Feedback & suggestions"),
-                    onClick = {
-                        drawerOpen = false
-                        feedbackOpen = true
-                    },
-                    modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp),
-                    primary = false,
-                    icon = XyIcons.Info,
-                    compact = true,
-                )
-            }
-            Spacer(Modifier.weight(1f))
-            Text(
-                "v${appVersion(context)}",
-                style = MaterialTheme.typography.labelSmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier.padding(20.dp),
-            )
-        }
+            },
+            onFeedback = {
+                drawerOpen = false
+                feedbackOpen = true
+            },
+            version = "v${appVersion(context)}",
+        )
     }
 
     if (showCrash) {
@@ -1004,6 +917,246 @@ private fun LiveSessionsCard() {
 }
 
 @Composable
+// =============================================================
+// Menu utama — 2 gaya (popup tengah / sidebar kanan), revisi UI ronde 41.
+// Konten satu (XyHomeMenuBody) supaya kedua gaya tidak pernah beda fitur.
+// =============================================================
+
+/**
+ * Cangkang menu: scrim + animasi. Gaya [AppPrefs.HOME_MENU_POPUP] mengambang
+ * di tengah (fade + scale), [AppPrefs.HOME_MENU_SIDEBAR] menyamping dari kanan.
+ */
+@Composable
+private fun BoxScope.XyHomeMenuShell(
+    open: Boolean,
+    style: Int,
+    onDismiss: () -> Unit,
+    content: @Composable ColumnScope.() -> Unit,
+) {
+    if (open) {
+        Box(
+            Modifier
+                .fillMaxSize()
+                .background(MaterialTheme.colorScheme.scrim.copy(alpha = 0.55f))
+                .clickable { onDismiss() }
+                .zIndex(40f),
+        )
+    }
+    val isPopup = style == AppPrefs.HOME_MENU_POPUP
+    AnimatedVisibility(
+        visible = open,
+        enter = if (isPopup) {
+            fadeIn(tween(180)) + scaleIn(animationSpec = tween(220), initialScale = 0.92f)
+        } else {
+            slideInHorizontally(tween(240)) { it }
+        },
+        exit = if (isPopup) {
+            fadeOut(tween(140)) + scaleOut(animationSpec = tween(140), targetScale = 0.95f)
+        } else {
+            slideOutHorizontally(tween(200)) { it }
+        },
+        modifier = if (isPopup) {
+            Modifier.align(Alignment.Center).zIndex(41f)
+        } else {
+            Modifier.align(Alignment.CenterEnd).zIndex(41f)
+        },
+    ) {
+        if (isPopup) {
+            Column(
+                Modifier
+                    .padding(horizontal = 30.dp, vertical = 26.dp)
+                    .widthIn(max = 420.dp)
+                    .fillMaxHeight(0.88f)
+                    .clip(RoundedCornerShape(28.dp))
+                    .background(MaterialTheme.colorScheme.surface)
+                    .border(
+                        1.dp,
+                        MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.45f),
+                        RoundedCornerShape(28.dp),
+                    )
+                    .pointerInput(Unit) {}
+                    .verticalScroll(rememberScrollState())
+                    .padding(vertical = 18.dp, horizontal = 10.dp),
+                content = content,
+            )
+        } else {
+            Column(
+                Modifier
+                    .width(312.dp)
+                    .fillMaxHeight()
+                    .clip(RoundedCornerShape(topStart = 24.dp, bottomStart = 24.dp))
+                    .background(MaterialTheme.colorScheme.surface)
+                    .pointerInput(Unit) {}
+                    .padding(vertical = 18.dp, horizontal = 10.dp),
+                content = content,
+            )
+        }
+    }
+}
+
+/** Isi menu: brand, daftar seksi, alat & bantuan, versi. Dipakai 2 gaya. */
+@Composable
+private fun XyHomeMenuBody(
+    section: XySection,
+    helpToolsOpen: Boolean,
+    onToggleTools: () -> Unit,
+    onPick: (XySection) -> Unit,
+    onBackup: () -> Unit,
+    onUpdate: () -> Unit,
+    onFeedback: () -> Unit,
+    version: String,
+) {
+    Row(
+        modifier = Modifier.fillMaxWidth().padding(horizontal = 14.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(12.dp),
+    ) {
+        XyLogo(modifier = Modifier.size(32.dp))
+        Column {
+            XyWordmark(fontSize = 21.sp)
+            Text(
+                "XyVerse \u2022 Remote Desktop",
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+    }
+    Spacer(Modifier.height(14.dp))
+    XyDivider()
+    Spacer(Modifier.height(6.dp))
+    // Ronde 13 dulu seksi Tampilan dibuang dari drawer demi rail minim; sejak
+    // revisi UI ronde 41 semua seksi kembali lengkap (dashboard Profil sudah
+    // lama menampilkan semuanya) supaya menunya terstruktur & mudah dijangkau.
+    XySection.entries.forEach { item ->
+        XyHomeMenuItem(
+            title = xy(item.title, item.titleEn),
+            icon = when (item) {
+                XySection.PERANGKAT -> XyIcons.Monitor
+                XySection.TAMPILAN -> XyIcons.Fit
+                XySection.KREDENSIAL -> XyIcons.Lock
+                XySection.UMUM -> XyIcons.Sliders
+                XySection.KEAMANAN -> XyIcons.Shield
+                XySection.TENTANG -> XyIcons.Info
+            },
+            selected = item == section,
+            onClick = { onPick(item) },
+        )
+    }
+    XyHomeMenuItem(
+        title = xy("Alat & bantuan", "Tools & help"),
+        icon = XyIcons.Folder,
+        trailing = {
+            Text(
+                if (helpToolsOpen) "−" else "+",
+                style = MaterialTheme.typography.titleMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        },
+        onClick = onToggleTools,
+    )
+    AnimatedVisibility(visible = helpToolsOpen) {
+        Column(Modifier.padding(horizontal = 14.dp)) {
+            XyPillButton(
+                text = xy("Cadangkan / Pulihkan Profil", "Backup / Restore Profiles"),
+                onClick = onBackup,
+                modifier = Modifier.fillMaxWidth(),
+                primary = false,
+                icon = XyIcons.Folder,
+                compact = true,
+            )
+            Spacer(Modifier.height(6.dp))
+            XyPillButton(
+                text = xy("Cek Pembaruan & RilisIn Store", "Check Update & RilisIn Store"),
+                onClick = onUpdate,
+                modifier = Modifier.fillMaxWidth(),
+                primary = false,
+                icon = XyIcons.Shield,
+                compact = true,
+            )
+            Spacer(Modifier.height(6.dp))
+            XyPillButton(
+                text = xy("Masukan & saran", "Feedback & suggestions"),
+                onClick = onFeedback,
+                modifier = Modifier.fillMaxWidth(),
+                primary = false,
+                icon = XyIcons.Info,
+                compact = true,
+            )
+        }
+    }
+    Spacer(Modifier.weight(1f))
+    Text(
+        version,
+        style = MaterialTheme.typography.labelSmall,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+        modifier = Modifier.padding(horizontal = 24.dp, vertical = 4.dp),
+    )
+}
+
+/** Satu baris item menu: kotak ikon rounded + judul + state terpilih jelas. */
+@Composable
+private fun XyHomeMenuItem(
+    title: String,
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    selected: Boolean = false,
+    trailing: (@Composable () -> Unit)? = null,
+    onClick: () -> Unit,
+) {
+    Row(
+        Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 6.dp, vertical = 2.dp)
+            .clip(RoundedCornerShape(14.dp))
+            .background(
+                if (selected) {
+                    MaterialTheme.colorScheme.primary.copy(alpha = 0.12f)
+                } else {
+                    androidx.compose.ui.graphics.Color.Transparent
+                },
+            )
+            .clickable(onClick = onClick)
+            .padding(horizontal = 10.dp, vertical = 8.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(12.dp),
+    ) {
+        Box(
+            Modifier
+                .size(34.dp)
+                .clip(RoundedCornerShape(10.dp))
+                .background(
+                    if (selected) {
+                        MaterialTheme.colorScheme.primary.copy(alpha = 0.16f)
+                    } else {
+                        MaterialTheme.colorScheme.onSurface.copy(alpha = 0.07f)
+                    },
+                ),
+            contentAlignment = Alignment.Center,
+        ) {
+            Icon(
+                icon,
+                contentDescription = null,
+                tint = if (selected) {
+                    MaterialTheme.colorScheme.primary
+                } else {
+                    MaterialTheme.colorScheme.onSurfaceVariant
+                },
+                modifier = Modifier.size(18.dp),
+            )
+        }
+        Text(
+            title,
+            modifier = Modifier.weight(1f),
+            style = MaterialTheme.typography.bodyLarge,
+            color = if (selected) {
+                MaterialTheme.colorScheme.onSurface
+            } else {
+                MaterialTheme.colorScheme.onSurfaceVariant
+            },
+        )
+        trailing?.invoke()
+    }
+}
+
 private fun DevicesScreen(
     favorites: List<ConnectionProfile>,
     crashLog: String?,
@@ -1281,8 +1434,14 @@ private fun DevicesScreen(
                     .align(Alignment.TopEnd)
                     .padding(top = 60.dp, end = 16.dp)
                     .width(296.dp)
-                    .clip(RoundedCornerShape(8.dp))
+                    .shadow(elevation = 12.dp, shape = RoundedCornerShape(18.dp), clip = false)
+                    .clip(RoundedCornerShape(18.dp))
                     .background(MaterialTheme.colorScheme.surface)
+                    .border(
+                        1.dp,
+                        MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.45f),
+                        RoundedCornerShape(18.dp),
+                    )
                     .pointerInput(Unit) {}
                     .padding(10.dp)
                     .zIndex(26f),

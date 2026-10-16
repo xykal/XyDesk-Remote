@@ -73,7 +73,7 @@ internal fun SectionScreen(
             actions = { XyIconPill(XyIcons.Menu, onMenu, flat = true, contentDescription = "Menu") },
         )
         when (section) {
-            XySection.TAMPILAN -> DisplaySection(favorites, onEditDevice)
+            XySection.TAMPILAN -> DisplaySection(favorites, onEditDevice, appPrefs)
             XySection.KREDENSIAL -> CredentialsSection(favorites, onClearAllCredentials)
             XySection.UMUM -> GeneralSection(appPrefs, onShowLog)
             XySection.KEAMANAN -> SecuritySection(appPrefs)
@@ -91,8 +91,12 @@ internal fun SectionScreen(
 private fun DisplaySection(
     favorites: List<ConnectionProfile>,
     onEditDevice: (ConnectionProfile) -> Unit,
+    appPrefs: AppPrefs,
 ) {
     val context = LocalContext.current
+    // Gaya menu utama (ronde 41): popup tengah atau sidebar kanan. Dipilih di
+    // sini, langsung aktif lewat XyMenuStyleState tanpa restart.
+    var menuStyle by remember { mutableIntStateOf(XyMenuStyleState.current(appPrefs)) }
     if (favorites.isEmpty()) {
         EmptyHint(
             title = xy("Belum ada perangkat", "No devices yet"),
@@ -129,6 +133,32 @@ private fun DisplaySection(
             onSelect = { index = it },
             modifier = Modifier.fillMaxWidth(),
         )
+        // Gaya menu utama — dipakai tombol Menu di pojok kanan atas.
+        XyCard {
+            XySectionLabel(xy("Gaya menu utama", "Main menu style"))
+            Spacer(Modifier.height(8.dp))
+            XySegmented(
+                options = listOf(
+                    xy("Popup tengah", "Center popup"),
+                    xy("Sidebar kanan", "Right sidebar"),
+                ),
+                selectedIndex = menuStyle.coerceIn(0, 1),
+                onSelect = { i ->
+                    menuStyle = i
+                    XyMenuStyleState.set(i, appPrefs)
+                },
+                modifier = Modifier.fillMaxWidth(),
+            )
+            Spacer(Modifier.height(8.dp))
+            Text(
+                xy(
+                    "Pilih tampilan menu saat tombol Menu ditekan. Popup mengambang di tengah layar, sidebar menyamping dari kanan.",
+                    "Choose how the Menu button opens. Popup floats in the center, sidebar slides in from the right.",
+                ),
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
         XyCard {
             XyRow(
                 title = profile.label ?: profile.host,
