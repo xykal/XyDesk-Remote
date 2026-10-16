@@ -15,10 +15,12 @@ import androidx.core.app.NotificationCompat
 import androidx.core.app.Person
 import androidx.core.app.RemoteInput
 import androidx.core.graphics.drawable.IconCompat
-import com.onesignal.Continue
 import com.onesignal.OneSignal
 import com.onesignal.notifications.INotificationClickEvent
 import com.onesignal.notifications.INotificationClickListener
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
 import id.xydesk.remote.R
 import id.xydesk.remote.ui.EXTRA_OPEN_CHAT_GLOBAL
 import id.xydesk.remote.ui.EXTRA_SKIP_AUTO_RESUME
@@ -97,7 +99,9 @@ object ChatPushNotifier {
             val nick = chatNickname(appContext)
             OneSignal.User.addTag("nickname", nick)
             OneSignal.User.addTag("chat_open", "false")
-            OneSignal.Notifications.requestPermission(false, Continue.none())
+            CoroutineScope(Dispatchers.IO).launch {
+                runCatching { OneSignal.Notifications.requestPermission(false) }
+            }
             OneSignal.Notifications.addClickListener(
                 object : INotificationClickListener {
                     override fun onClick(event: INotificationClickEvent) {
