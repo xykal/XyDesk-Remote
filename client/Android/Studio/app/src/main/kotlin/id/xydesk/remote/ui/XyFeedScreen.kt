@@ -1,16 +1,9 @@
 package id.xydesk.remote.ui
 
-import androidx.compose.animation.core.FastOutSlowInEasing
-import androidx.compose.animation.core.RepeatMode
-import androidx.compose.animation.core.animateFloat
-import androidx.compose.animation.core.infiniteRepeatable
-import androidx.compose.animation.core.rememberInfiniteTransition
-import androidx.compose.animation.core.tween
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -27,6 +20,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -47,6 +41,7 @@ import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
@@ -55,11 +50,11 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import id.xydesk.remote.ui.components.XyGlassCard
-import id.xydesk.remote.ui.components.XyGlassSectionLabel
 import id.xydesk.remote.ui.components.XyIconPill
 import id.xydesk.remote.ui.components.XyIcons
 import id.xydesk.remote.ui.components.XyTopBar
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 
 internal enum class XyFeedHeaderTab {
     FEED,
@@ -83,19 +78,29 @@ internal fun XyFeedScreen(
     var pullSignal by remember { mutableIntStateOf(0) }
     var pullBusy by remember { mutableStateOf(false) }
 
-    // Poll online count + notifications + report active usage for Leaderboard Top 1-100
+    // Fetch online count & notifications in parallel without blocking initial Feed render
     LaunchedEffect(api, pullSignal) {
-        onlineCount = api.fetchOnlineCount()
-        notifications = api.fetchNotifications()
-        leaderboard = api.fetchLeaderboard(reportDeltaSec = 30L)
+        launch { onlineCount = api.fetchOnlineCount() }
+        launch { notifications = api.fetchNotifications() }
+        if (activeHeaderTab == XyFeedHeaderTab.LEADERBOARD) {
+            launch { leaderboard = api.fetchLeaderboard(reportDeltaSec = 30L) }
+        }
+    }
+
+    LaunchedEffect(api, activeHeaderTab) {
+        if (activeHeaderTab == XyFeedHeaderTab.LEADERBOARD && leaderboard.isEmpty()) {
+            leaderboard = api.fetchLeaderboard(reportDeltaSec = 15L)
+        }
     }
 
     LaunchedEffect(api) {
         while (true) {
-            delay(25_000L)
-            onlineCount = api.fetchOnlineCount()
-            notifications = api.fetchNotifications()
-            leaderboard = api.fetchLeaderboard(reportDeltaSec = 25L)
+            delay(30_000L)
+            launch { onlineCount = api.fetchOnlineCount() }
+            launch { notifications = api.fetchNotifications() }
+            if (activeHeaderTab == XyFeedHeaderTab.LEADERBOARD) {
+                launch { leaderboard = api.fetchLeaderboard(reportDeltaSec = 30L) }
+            }
         }
     }
 
@@ -113,10 +118,9 @@ internal fun XyFeedScreen(
                 title = when (activeHeaderTab) {
                     XyFeedHeaderTab.FEED -> xy("Feed Komunitas", "Community Feed")
                     XyFeedHeaderTab.NOTIFICATIONS -> xy("Kotak Notifikasi", "Notifications")
-                    XyFeedHeaderTab.LEADERBOARD -> xy("Leaderboard Top 100", "Top 100 Leaderboard")
+                    XyFeedHeaderTab.LEADERBOARD -> xy("Peringkat Top 100", "Top 100 Leaderboard")
                 },
                 actions = {
-                    // Tombol Cepat Tab Notifikasi di Header
                     Surface(
                         onClick = {
                             activeHeaderTab = if (activeHeaderTab == XyFeedHeaderTab.NOTIFICATIONS) {
@@ -127,21 +131,26 @@ internal fun XyFeedScreen(
                         },
                         shape = RoundedCornerShape(999.dp),
                         color = if (activeHeaderTab == XyFeedHeaderTab.NOTIFICATIONS) {
-                            Color(0xFFF59E0B).copy(alpha = 0.22f)
+                            Color(0xFF27272A)
                         } else {
-                            Color(0xFF181B22)
+                            Color(0xFF14161C)
                         },
                         border = BorderStroke(
                             1.dp,
-                            if (activeHeaderTab == XyFeedHeaderTab.NOTIFICATIONS) Color(0xFFF59E0B) else Color(0xFF2A2F3A),
+                            if (activeHeaderTab == XyFeedHeaderTab.NOTIFICATIONS) Color(0xFFE4E4E7) else Color(0xFF272B36),
                         ),
                     ) {
                         Row(
                             modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
                             verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(4.dp),
+                            horizontalArrangement = Arrangement.spacedBy(5.dp),
                         ) {
-                            Text("🔔", fontSize = 13.sp)
+                            Icon(
+                                imageVector = XyIcons.Bell,
+                                contentDescription = "Notifikasi",
+                                tint = Color(0xFFF4F4F5),
+                                modifier = Modifier.size(14.dp),
+                            )
                             if (notifications.isNotEmpty()) {
                                 Box(
                                     modifier = Modifier
@@ -153,14 +162,13 @@ internal fun XyFeedScreen(
                                         text = notifications.size.coerceAtMost(99).toString(),
                                         color = Color.White,
                                         fontSize = 10.sp,
-                                        fontWeight = FontWeight.ExtraBold,
+                                        fontWeight = FontWeight.Bold,
                                     )
                                 }
                             }
                         }
                     }
                     Spacer(Modifier.width(6.dp))
-                    // Tombol Cepat Leaderboard Top 100 di Header
                     Surface(
                         onClick = {
                             activeHeaderTab = if (activeHeaderTab == XyFeedHeaderTab.LEADERBOARD) {
@@ -171,26 +179,31 @@ internal fun XyFeedScreen(
                         },
                         shape = RoundedCornerShape(999.dp),
                         color = if (activeHeaderTab == XyFeedHeaderTab.LEADERBOARD) {
-                            Color(0xFFF59E0B).copy(alpha = 0.22f)
+                            Color(0xFF27272A)
                         } else {
-                            Color(0xFF181B22)
+                            Color(0xFF14161C)
                         },
                         border = BorderStroke(
                             1.dp,
-                            if (activeHeaderTab == XyFeedHeaderTab.LEADERBOARD) Color(0xFFF59E0B) else Color(0xFF2A2F3A),
+                            if (activeHeaderTab == XyFeedHeaderTab.LEADERBOARD) Color(0xFFE4E4E7) else Color(0xFF272B36),
                         ),
                     ) {
                         Row(
                             modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
                             verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(4.dp),
+                            horizontalArrangement = Arrangement.spacedBy(5.dp),
                         ) {
-                            Text("🏆", fontSize = 13.sp)
+                            Icon(
+                                imageVector = XyIcons.Trophy,
+                                contentDescription = "Top 100",
+                                tint = Color(0xFFF4F4F5),
+                                modifier = Modifier.size(14.dp),
+                            )
                             Text(
                                 "Top 100",
                                 fontSize = 11.sp,
-                                fontWeight = FontWeight.Bold,
-                                color = if (activeHeaderTab == XyFeedHeaderTab.LEADERBOARD) Color(0xFFFBBF24) else Color(0xFFE2E8F0),
+                                fontWeight = FontWeight.SemiBold,
+                                color = Color(0xFFF4F4F5),
                             )
                         }
                     }
@@ -199,7 +212,6 @@ internal fun XyFeedScreen(
                 },
             )
 
-            // Header Navigation Tabs: Feed · Notifikasi (Pengumuman/Kotak Masuk/Balasan) · Leaderboard Top 100
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -208,21 +220,24 @@ internal fun XyFeedScreen(
             ) {
                 FeedHeaderTabChip(
                     selected = activeHeaderTab == XyFeedHeaderTab.FEED,
-                    label = xy("📰 Feed Utama", "📰 Main Feed"),
+                    icon = XyIcons.Feed,
+                    label = xy("Feed Utama", "Main Feed"),
                     badge = null,
                     onClick = { activeHeaderTab = XyFeedHeaderTab.FEED },
                     modifier = Modifier.weight(1f),
                 )
                 FeedHeaderTabChip(
                     selected = activeHeaderTab == XyFeedHeaderTab.NOTIFICATIONS,
-                    label = xy("🔔 Notifikasi", "🔔 Notifications"),
+                    icon = XyIcons.Bell,
+                    label = xy("Notifikasi", "Notifications"),
                     badge = notifications.size.takeIf { it > 0 }?.toString(),
                     onClick = { activeHeaderTab = XyFeedHeaderTab.NOTIFICATIONS },
                     modifier = Modifier.weight(1f),
                 )
                 FeedHeaderTabChip(
                     selected = activeHeaderTab == XyFeedHeaderTab.LEADERBOARD,
-                    label = xy("🏆 Top 100", "🏆 Top 100"),
+                    icon = XyIcons.Trophy,
+                    label = xy("Top 100", "Top 100"),
                     badge = null,
                     onClick = { activeHeaderTab = XyFeedHeaderTab.LEADERBOARD },
                     modifier = Modifier.weight(1f),
@@ -238,7 +253,6 @@ internal fun XyFeedScreen(
             ) {
                 when (activeHeaderTab) {
                     XyFeedHeaderTab.FEED -> {
-                        // Banner Chat Global Anti-Neon dengan Elemen Grafis, Animasi Halus & Status Online Realtime
                         GlobalChatAntiNeonHeroBanner(
                             onlineCount = onlineCount,
                             onClick = onOpenChat,
@@ -280,6 +294,7 @@ internal fun XyFeedScreen(
 @Composable
 private fun FeedHeaderTabChip(
     selected: Boolean,
+    icon: ImageVector,
     label: String,
     badge: String?,
     onClick: () -> Unit,
@@ -288,11 +303,11 @@ private fun FeedHeaderTabChip(
     Surface(
         onClick = onClick,
         modifier = modifier,
-        shape = RoundedCornerShape(12.dp),
-        color = if (selected) Color(0xFF1F2430) else Color(0xFF12151C),
+        shape = RoundedCornerShape(10.dp),
+        color = if (selected) Color(0xFF1F232E) else Color(0xFF111319),
         border = BorderStroke(
             1.dp,
-            if (selected) Color(0xFFF59E0B).copy(alpha = 0.7f) else Color(0xFF232834),
+            if (selected) Color(0xFF52525B) else Color(0xFF222631),
         ),
     ) {
         Row(
@@ -300,10 +315,17 @@ private fun FeedHeaderTabChip(
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.Center,
         ) {
+            Icon(
+                imageVector = icon,
+                contentDescription = null,
+                tint = if (selected) Color(0xFFF8FAFC) else Color(0xFF94A3B8),
+                modifier = Modifier.size(14.dp),
+            )
+            Spacer(Modifier.width(6.dp))
             Text(
                 text = label,
                 fontSize = 12.sp,
-                fontWeight = if (selected) FontWeight.Bold else FontWeight.Medium,
+                fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Medium,
                 color = if (selected) Color(0xFFF8FAFC) else Color(0xFF94A3B8),
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
@@ -313,14 +335,14 @@ private fun FeedHeaderTabChip(
                 Box(
                     modifier = Modifier
                         .clip(RoundedCornerShape(999.dp))
-                        .background(Color(0xFFF59E0B))
+                        .background(Color(0xFFEF4444))
                         .padding(horizontal = 5.dp, vertical = 1.dp),
                 ) {
                     Text(
                         text = badge,
                         fontSize = 9.sp,
-                        fontWeight = FontWeight.ExtraBold,
-                        color = Color(0xFF0F172A),
+                        fontWeight = FontWeight.Bold,
+                        color = Color.White,
                     )
                 }
             }
@@ -328,41 +350,16 @@ private fun FeedHeaderTabChip(
     }
 }
 
-/**
- * Banner Chat Global Anti-Neon di Feed — satu bahasa desain dengan Banner Free RDP:
- * Monokrom karbon matte + aksen emas/emerald halus, ilustrasi radar & gelombang obrolan
- * beranimasi di latar, serta indikator jumlah anggota online secara live.
- */
 @Composable
 internal fun GlobalChatAntiNeonHeroBanner(
     onlineCount: Int,
     onClick: () -> Unit,
 ) {
-    val infinite = rememberInfiniteTransition(label = "chatHero")
-    val pulse by infinite.animateFloat(
-        initialValue = 0.85f,
-        targetValue = 1.22f,
-        animationSpec = infiniteRepeatable(
-            animation = tween(durationMillis = 1600, easing = FastOutSlowInEasing),
-            repeatMode = RepeatMode.Reverse,
-        ),
-        label = "pulse",
-    )
-    val waveShift by infinite.animateFloat(
-        initialValue = 0f,
-        targetValue = 1f,
-        animationSpec = infiniteRepeatable(
-            animation = tween(durationMillis = 3600, easing = FastOutSlowInEasing),
-            repeatMode = RepeatMode.Reverse,
-        ),
-        label = "waveShift",
-    )
-
     Surface(
         onClick = onClick,
-        shape = RoundedCornerShape(20.dp),
+        shape = RoundedCornerShape(16.dp),
         color = Color(0xFF111318),
-        border = BorderStroke(1.dp, Color(0xFF282D37)),
+        border = BorderStroke(1.dp, Color(0xFF262A34)),
         modifier = Modifier.fillMaxWidth(),
     ) {
         Box(
@@ -371,65 +368,46 @@ internal fun GlobalChatAntiNeonHeroBanner(
                 .background(
                     Brush.linearGradient(
                         colors = listOf(
-                            Color(0xFF14171F),
+                            Color(0xFF151821),
                             Color(0xFF101217),
-                            Color(0xFF171512),
+                            Color(0xFF14161D),
                         ),
                     ),
                 ),
         ) {
-            // Elemen Grafis Arsitektural Anti-Neon (Grid, Gelombang Sinyal, & Siluet Bubble)
             Canvas(
                 modifier = Modifier
                     .matchParentSize()
-                    .height(178.dp),
+                    .height(160.dp),
             ) {
                 val w = size.width
                 val h = size.height
-                // Lingkaran orbit radar halus di sisi kanan
-                val cx = w * 0.84f
-                val cy = h * 0.46f
+                val cx = w * 0.85f
+                val cy = h * 0.45f
                 drawCircle(
-                    color = Color(0xFFF59E0B).copy(alpha = 0.06f),
-                    radius = 66.dp.toPx() * pulse,
-                    center = Offset(cx, cy),
-                )
-                drawCircle(
-                    color = Color(0xFF94A3B8).copy(alpha = 0.10f),
-                    radius = 48.dp.toPx(),
-                    center = Offset(cx, cy),
-                    style = Stroke(width = 1.2.dp.toPx()),
-                )
-                drawCircle(
-                    color = Color(0xFF10B981).copy(alpha = 0.14f),
-                    radius = 28.dp.toPx(),
+                    color = Color(0xFF94A3B8).copy(alpha = 0.08f),
+                    radius = 52.dp.toPx(),
                     center = Offset(cx, cy),
                     style = Stroke(width = 1.dp.toPx()),
                 )
-                // Kartu siluet bubble bertumpuk elegan
-                val offsetY = (waveShift - 0.5f) * 8.dp.toPx()
-                drawRoundRect(
-                    color = Color(0xFF1E232E).copy(alpha = 0.72f),
-                    topLeft = Offset(w - 118.dp.toPx(), 22.dp.toPx() + offsetY),
-                    size = Size(92.dp.toPx(), 34.dp.toPx()),
-                    cornerRadius = CornerRadius(10.dp.toPx(), 10.dp.toPx()),
+                drawCircle(
+                    color = Color(0xFF64748B).copy(alpha = 0.12f),
+                    radius = 30.dp.toPx(),
+                    center = Offset(cx, cy),
+                    style = Stroke(width = 1.dp.toPx()),
                 )
                 drawRoundRect(
-                    color = Color(0xFF252B38).copy(alpha = 0.85f),
-                    topLeft = Offset(w - 102.dp.toPx(), 64.dp.toPx() - offsetY),
-                    size = Size(82.dp.toPx(), 30.dp.toPx()),
-                    cornerRadius = CornerRadius(10.dp.toPx(), 10.dp.toPx()),
+                    color = Color(0xFF1E232E).copy(alpha = 0.65f),
+                    topLeft = Offset(w - 114.dp.toPx(), 24.dp.toPx()),
+                    size = Size(88.dp.toPx(), 30.dp.toPx()),
+                    cornerRadius = CornerRadius(8.dp.toPx(), 8.dp.toPx()),
                 )
-                // Bar sinyal audio/typing halus
-                for (i in 0 until 5) {
-                    val barH = (10 + ((i * 7 + (waveShift * 14).toInt()) % 18)).dp.toPx()
-                    drawRoundRect(
-                        color = Color(0xFFF59E0B).copy(alpha = 0.25f),
-                        topLeft = Offset(w - (88 - i * 8).dp.toPx(), 79.dp.toPx() - barH / 2f - offsetY),
-                        size = Size(3.5.dp.toPx(), barH),
-                        cornerRadius = CornerRadius(2.dp.toPx(), 2.dp.toPx()),
-                    )
-                }
+                drawRoundRect(
+                    color = Color(0xFF252B38).copy(alpha = 0.75f),
+                    topLeft = Offset(w - 98.dp.toPx(), 62.dp.toPx()),
+                    size = Size(78.dp.toPx(), 28.dp.toPx()),
+                    cornerRadius = CornerRadius(8.dp.toPx(), 8.dp.toPx()),
+                )
             }
 
             Column(
@@ -443,57 +421,52 @@ internal fun GlobalChatAntiNeonHeroBanner(
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.SpaceBetween,
                 ) {
-                    // Badge Anti-Neon Hub Komunitas
                     Surface(
                         shape = RoundedCornerShape(6.dp),
-                        color = Color(0xFF1E222B),
-                        border = BorderStroke(1.dp, Color(0xFF323846)),
+                        color = Color(0xFF1A1D26),
+                        border = BorderStroke(1.dp, Color(0xFF2E3442)),
                     ) {
                         Row(
                             modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
                             verticalAlignment = Alignment.CenterVertically,
                             horizontalArrangement = Arrangement.spacedBy(6.dp),
                         ) {
-                            Text("💬", fontSize = 11.sp)
+                            Icon(
+                                imageVector = XyIcons.Chat,
+                                contentDescription = null,
+                                tint = Color(0xFFE2E8F0),
+                                modifier = Modifier.size(12.dp),
+                            )
                             Text(
                                 "GLOBAL LOUNGE · XYSHIELD",
                                 fontSize = 10.sp,
-                                fontWeight = FontWeight.ExtraBold,
+                                fontWeight = FontWeight.Bold,
                                 color = Color(0xFFE2E8F0),
-                                letterSpacing = 0.7.sp,
+                                letterSpacing = 0.6.sp,
                             )
                         }
                     }
 
-                    // Indikator Status Online Berapa Orang (Live Pulse)
                     Surface(
                         shape = RoundedCornerShape(999.dp),
                         color = Color(0xFF0F241D),
-                        border = BorderStroke(1.dp, Color(0xFF10B981).copy(alpha = 0.45f)),
+                        border = BorderStroke(1.dp, Color(0xFF10B981).copy(alpha = 0.4f)),
                     ) {
                         Row(
                             modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp),
                             verticalAlignment = Alignment.CenterVertically,
                             horizontalArrangement = Arrangement.spacedBy(6.dp),
                         ) {
-                            Box(contentAlignment = Alignment.Center) {
-                                Box(
-                                    modifier = Modifier
-                                        .size((8f * pulse).dp)
-                                        .clip(CircleShape)
-                                        .background(Color(0xFF10B981).copy(alpha = 0.32f)),
-                                )
-                                Box(
-                                    modifier = Modifier
-                                        .size(6.dp)
-                                        .clip(CircleShape)
-                                        .background(Color(0xFF10B981)),
-                                )
-                            }
+                            Box(
+                                modifier = Modifier
+                                    .size(6.dp)
+                                    .clip(CircleShape)
+                                    .background(Color(0xFF10B981)),
+                            )
                             Text(
                                 text = xy("$onlineCount Online", "$onlineCount Online"),
                                 fontSize = 11.sp,
-                                fontWeight = FontWeight.Bold,
+                                fontWeight = FontWeight.SemiBold,
                                 color = Color(0xFF6EE7B7),
                             )
                         }
@@ -504,13 +477,13 @@ internal fun GlobalChatAntiNeonHeroBanner(
                     Text(
                         text = xy("Chat Global Komunitas XyDesk", "XyDesk Global Community Chat"),
                         style = MaterialTheme.typography.titleMedium,
-                        fontWeight = FontWeight.ExtraBold,
+                        fontWeight = FontWeight.Bold,
                         color = Color(0xFFF8FAFC),
                     )
                     Text(
                         text = xy(
-                            "Diskusi realtime lintas negara, berbagi stiker favorit, media HD, OG preview, & proteksi XyShield.",
-                            "Real-time cross-region lounge with favorite stickers, HD media, OG link previews & XyShield protection.",
+                            "Diskusi realtime lintas negara, berbagi stiker, media HD, pratinjau tautan, dan proteksi XyShield.",
+                            "Real-time cross-region lounge with custom stickers, HD media, link previews, and XyShield protection.",
                         ),
                         style = MaterialTheme.typography.bodySmall,
                         color = Color(0xFF94A3B8),
@@ -518,31 +491,42 @@ internal fun GlobalChatAntiNeonHeroBanner(
                     )
                 }
 
-                // Elemen Fitur Mini Pills (Anti-Neon Matte)
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
                         .horizontalScroll(rememberScrollState()),
                     horizontalArrangement = Arrangement.spacedBy(6.dp),
                 ) {
-                    listOf(
-                        "🌍 Auto-Translate",
-                        "🛡️ Anti-Virus",
-                        "🖼️ Media HD & Video",
-                        "🎭 Stiker Favorit",
-                    ).forEach { badge ->
+                    val badges = listOf(
+                        XyIcons.Globe to "Auto-Translate",
+                        XyIcons.Shield to "XyShield",
+                        XyIcons.Camera to "Media HD",
+                        XyIcons.Star to "Stiker Kustom",
+                    )
+                    badges.forEach { (icon, label) ->
                         Surface(
                             shape = RoundedCornerShape(8.dp),
-                            color = Color(0xFF171A21),
+                            color = Color(0xFF161921),
                             border = BorderStroke(1.dp, Color(0xFF262B36)),
                         ) {
-                            Text(
-                                text = badge,
+                            Row(
                                 modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
-                                fontSize = 10.sp,
-                                fontWeight = FontWeight.SemiBold,
-                                color = Color(0xFFCBD5E1),
-                            )
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(5.dp),
+                            ) {
+                                Icon(
+                                    imageVector = icon,
+                                    contentDescription = null,
+                                    tint = Color(0xFF94A3B8),
+                                    modifier = Modifier.size(11.dp),
+                                )
+                                Text(
+                                    text = label,
+                                    fontSize = 10.sp,
+                                    fontWeight = FontWeight.Medium,
+                                    color = Color(0xFFCBD5E1),
+                                )
+                            }
                         }
                     }
                 }
@@ -553,14 +537,14 @@ internal fun GlobalChatAntiNeonHeroBanner(
                     horizontalArrangement = Arrangement.SpaceBetween,
                 ) {
                     Text(
-                        text = xy("Wajib Login Akun · Bebas Spam", "Account Login Required · Spam-Free"),
+                        text = xy("Terverifikasi GitHub · Bebas Spam", "GitHub Verified · Spam-Free"),
                         fontSize = 11.sp,
-                        color = Color(0xFFF59E0B),
-                        fontWeight = FontWeight.SemiBold,
+                        color = Color(0xFFA1A1AA),
+                        fontWeight = FontWeight.Medium,
                     )
                     Surface(
-                        shape = RoundedCornerShape(10.dp),
-                        color = Color(0xFFF8FAFC),
+                        shape = RoundedCornerShape(8.dp),
+                        color = Color(0xFFF4F4F5),
                     ) {
                         Row(
                             modifier = Modifier.padding(horizontal = 12.dp, vertical = 7.dp),
@@ -568,12 +552,17 @@ internal fun GlobalChatAntiNeonHeroBanner(
                             horizontalArrangement = Arrangement.spacedBy(6.dp),
                         ) {
                             Text(
-                                text = xy("Gabung Chat", "Enter Lounge"),
+                                text = xy("Buka Ruang Chat", "Open Lounge"),
                                 fontSize = 12.sp,
-                                fontWeight = FontWeight.ExtraBold,
-                                color = Color(0xFF0F172A),
+                                fontWeight = FontWeight.Bold,
+                                color = Color(0xFF09090B),
                             )
-                            Text("→", fontSize = 12.sp, fontWeight = FontWeight.ExtraBold, color = Color(0xFF0F172A))
+                            Icon(
+                                imageVector = XyIcons.ArrowRight,
+                                contentDescription = null,
+                                tint = Color(0xFF09090B),
+                                modifier = Modifier.size(13.dp),
+                            )
                         }
                     }
                 }
@@ -582,10 +571,6 @@ internal fun GlobalChatAntiNeonHeroBanner(
     }
 }
 
-/**
- * Panel Tab Notifikasi di Header:
- * Kategori: Semua · Pengumuman · Kotak Masuk · Balasan & Mention
- */
 @Composable
 internal fun FeedNotificationsPanel(
     items: List<XyNotificationItem>,
@@ -616,14 +601,13 @@ internal fun FeedNotificationsPanel(
                         fontWeight = FontWeight.Bold,
                     )
                     Text(
-                        xy("Pengumuman resmi, kotak masuk komentar, & balasan/mention", "Official announcements, comment inbox, & replies/mentions"),
+                        xy("Pengumuman resmi, kotak masuk komentar, dan balasan", "Official announcements, comment inbox, and replies"),
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                 }
             }
 
-            // Filter Kategori: Semua, Pengumuman, Kotak Masuk, Balasan
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -631,29 +615,40 @@ internal fun FeedNotificationsPanel(
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
             ) {
                 val categories = listOf(
-                    "all" to xy("Semua (${items.size})", "All (${items.size})"),
-                    "announcement" to xy("📢 Pengumuman", "📢 Announcements"),
-                    "inbox" to xy("📥 Kotak Masuk", "📥 Inbox"),
-                    "reply" to xy("💬 Balasan & @Mention", "💬 Replies & @Mentions"),
+                    Triple("all", XyIcons.Bell, xy("Semua (${items.size})", "All (${items.size})")),
+                    Triple("announcement", XyIcons.Megaphone, xy("Pengumuman", "Announcements")),
+                    Triple("inbox", XyIcons.Inbox, xy("Kotak Masuk", "Inbox")),
+                    Triple("reply", XyIcons.Chat, xy("Balasan & Mention", "Replies & Mentions")),
                 )
-                categories.forEach { (key, label) ->
+                categories.forEach { (key, icon, label) ->
                     val active = selectedCategory == key
                     Surface(
                         onClick = { onSelectCategory(key) },
-                        shape = RoundedCornerShape(999.dp),
-                        color = if (active) Color(0xFFF59E0B).copy(alpha = 0.2f) else Color(0xFF161922),
+                        shape = RoundedCornerShape(8.dp),
+                        color = if (active) Color(0xFF27272A) else Color(0xFF14171F),
                         border = BorderStroke(
                             1.dp,
-                            if (active) Color(0xFFF59E0B) else Color(0xFF282D3A),
+                            if (active) Color(0xFF71717A) else Color(0xFF262B36),
                         ),
                     ) {
-                        Text(
-                            text = label,
-                            modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
-                            fontSize = 11.sp,
-                            fontWeight = if (active) FontWeight.Bold else FontWeight.Medium,
-                            color = if (active) Color(0xFFFBBF24) else Color(0xFFCBD5E1),
-                        )
+                        Row(
+                            modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(5.dp),
+                        ) {
+                            Icon(
+                                imageVector = icon,
+                                contentDescription = null,
+                                tint = if (active) Color(0xFFF4F4F5) else Color(0xFF94A3B8),
+                                modifier = Modifier.size(12.dp),
+                            )
+                            Text(
+                                text = label,
+                                fontSize = 11.sp,
+                                fontWeight = if (active) FontWeight.SemiBold else FontWeight.Medium,
+                                color = if (active) Color(0xFFF4F4F5) else Color(0xFFCBD5E1),
+                            )
+                        }
                     }
                 }
             }
@@ -675,13 +670,18 @@ internal fun FeedNotificationsPanel(
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     filtered.forEach { item ->
                         val isAnn = item.category == "announcement"
+                        val itemIcon = when (item.category) {
+                            "announcement" -> XyIcons.Megaphone
+                            "reply", "mention" -> XyIcons.Chat
+                            else -> XyIcons.Inbox
+                        }
                         Surface(
                             onClick = { onOpenPost(item.jokeId) },
-                            shape = RoundedCornerShape(14.dp),
-                            color = if (isAnn) Color(0xFF1B1710) else Color(0xFF14171F),
+                            shape = RoundedCornerShape(12.dp),
+                            color = if (isAnn) Color(0xFF181A22) else Color(0xFF13161E),
                             border = BorderStroke(
                                 1.dp,
-                                if (isAnn) Color(0xFFF59E0B).copy(alpha = 0.55f) else Color(0xFF252A36),
+                                if (isAnn) Color(0xFF52525B) else Color(0xFF242936),
                             ),
                             modifier = Modifier.fillMaxWidth(),
                         ) {
@@ -692,24 +692,16 @@ internal fun FeedNotificationsPanel(
                             ) {
                                 Box(
                                     modifier = Modifier
-                                        .size(36.dp)
+                                        .size(34.dp)
                                         .clip(CircleShape)
-                                        .background(
-                                            if (isAnn) Color(0xFFF59E0B).copy(alpha = 0.2f)
-                                            else Color(0xFF222734),
-                                        ),
+                                        .background(Color(0xFF202531)),
                                     contentAlignment = Alignment.Center,
                                 ) {
-                                    Text(
-                                        text = when (item.category) {
-                                            "announcement" -> "📢"
-                                            "reply" -> "↩️"
-                                            "mention" -> "@"
-                                            else -> "📥"
-                                        },
-                                        fontSize = 15.sp,
-                                        fontWeight = FontWeight.Bold,
-                                        color = Color(0xFFF8FAFC),
+                                    Icon(
+                                        imageVector = itemIcon,
+                                        contentDescription = null,
+                                        tint = Color(0xFFE4E4E7),
+                                        modifier = Modifier.size(16.dp),
                                     )
                                 }
                                 Column(
@@ -723,8 +715,8 @@ internal fun FeedNotificationsPanel(
                                         Text(
                                             text = item.title,
                                             style = MaterialTheme.typography.labelMedium,
-                                            fontWeight = FontWeight.Bold,
-                                            color = if (isAnn) Color(0xFFFBBF24) else Color(0xFFF8FAFC),
+                                            fontWeight = FontWeight.SemiBold,
+                                            color = Color(0xFFF8FAFC),
                                         )
                                         if (isFounderAccount(item.actorGithub) || isFounderAccount(item.actorName)) {
                                             XyFounderBadge(compact = true)
@@ -750,9 +742,6 @@ internal fun FeedNotificationsPanel(
     }
 }
 
-/**
- * Panel Leaderboard Top 1, 2, 3 sampai 100 — Pengguna Paling Lama Menggunakan APK / Bermain Sesi Remote.
- */
 @Composable
 internal fun FeedLeaderboardTop100Panel(
     entries: List<XyLeaderboardEntry>,
@@ -771,15 +760,26 @@ internal fun FeedLeaderboardTop100Panel(
                 horizontalArrangement = Arrangement.SpaceBetween,
             ) {
                 Column(modifier = Modifier.weight(1f)) {
-                    Text(
-                        xy("🏆 Leaderboard Top 1–100 XyDesk", "🏆 XyDesk Top 1–100 Leaderboard"),
-                        style = MaterialTheme.typography.titleMedium,
-                        fontWeight = FontWeight.ExtraBold,
-                    )
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(6.dp),
+                    ) {
+                        Icon(
+                            imageVector = XyIcons.Trophy,
+                            contentDescription = null,
+                            tint = Color(0xFFF4F4F5),
+                            modifier = Modifier.size(16.dp),
+                        )
+                        Text(
+                            xy("Peringkat Top 1–100 XyDesk", "XyDesk Top 1–100 Leaderboard"),
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.Bold,
+                        )
+                    }
                     Text(
                         xy(
-                            "Peringkat pengguna paling aktif menggunakan APK & bermain sesi remote",
-                            "Ranked by total active APK & remote gaming session hours",
+                            "Peringkat pengguna paling aktif menggunakan aplikasi dan sesi remote",
+                            "Ranked by total active application and remote session hours",
                         ),
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -787,24 +787,34 @@ internal fun FeedLeaderboardTop100Panel(
                 }
                 Surface(
                     onClick = onRefresh,
-                    shape = RoundedCornerShape(10.dp),
+                    shape = RoundedCornerShape(8.dp),
                     color = Color(0xFF1A1E28),
                     border = BorderStroke(1.dp, Color(0xFF2D3342)),
                 ) {
-                    Text(
-                        text = xy("Segarkan", "Refresh"),
+                    Row(
                         modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
-                        fontSize = 11.sp,
-                        fontWeight = FontWeight.SemiBold,
-                        color = Color(0xFFE2E8F0),
-                    )
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(5.dp),
+                    ) {
+                        Icon(
+                            imageVector = XyIcons.Refresh,
+                            contentDescription = null,
+                            tint = Color(0xFFE2E8F0),
+                            modifier = Modifier.size(12.dp),
+                        )
+                        Text(
+                            text = xy("Segarkan", "Refresh"),
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.SemiBold,
+                            color = Color(0xFFE2E8F0),
+                        )
+                    }
                 }
             }
 
-            // Kartu Statistik Durasi Aktif Pengguna Sendiri
             Surface(
-                shape = RoundedCornerShape(12.dp),
-                color = Color(0xFF151922),
+                shape = RoundedCornerShape(10.dp),
+                color = Color(0xFF141821),
                 border = BorderStroke(1.dp, Color(0xFF272D3B)),
                 modifier = Modifier.fillMaxWidth(),
             ) {
@@ -815,28 +825,27 @@ internal fun FeedLeaderboardTop100Panel(
                 ) {
                     Column {
                         Text(
-                            xy("Total Waktu Aktif & Bermain Kamu", "Your Active & Play Time"),
+                            xy("Total Waktu Aktif Kamu", "Your Total Active Time"),
                             fontSize = 11.sp,
                             color = Color(0xFF94A3B8),
                         )
                         Text(
                             formatLeaderboardDuration(mySeconds),
                             fontSize = 16.sp,
-                            fontWeight = FontWeight.ExtraBold,
-                            color = Color(0xFFFBBF24),
+                            fontWeight = FontWeight.Bold,
+                            color = Color(0xFFF8FAFC),
                             fontFamily = FontFamily.Monospace,
                         )
                     }
                     Text(
-                        text = xy("Otomatis Tersinkron", "Auto-Synced"),
+                        text = xy("Tersinkron Otomatis", "Auto-Synced"),
                         fontSize = 11.sp,
                         color = Color(0xFF10B981),
-                        fontWeight = FontWeight.Bold,
+                        fontWeight = FontWeight.SemiBold,
                     )
                 }
             }
 
-            // Podium Top 1, Top 2, Top 3
             if (top3.isNotEmpty()) {
                 Row(
                     modifier = Modifier.fillMaxWidth(),
@@ -850,7 +859,7 @@ internal fun FeedLeaderboardTop100Panel(
                     if (second != null) {
                         PodiumCard(
                             entry = second,
-                            medal = "🥈 #2",
+                            rankLabel = "RANK #2",
                             accent = Color(0xFFCBD5E1),
                             modifier = Modifier.weight(1f),
                             elevated = false,
@@ -859,17 +868,17 @@ internal fun FeedLeaderboardTop100Panel(
                     if (first != null) {
                         PodiumCard(
                             entry = first,
-                            medal = "👑 #1",
-                            accent = Color(0xFFF59E0B),
-                            modifier = Modifier.weight(1.12f),
+                            rankLabel = "RANK #1",
+                            accent = Color(0xFFE4E4E7),
+                            modifier = Modifier.weight(1.1f),
                             elevated = true,
                         )
                     }
                     if (third != null) {
                         PodiumCard(
                             entry = third,
-                            medal = "🥉 #3",
-                            accent = Color(0xFFD97706),
+                            rankLabel = "RANK #3",
+                            accent = Color(0xFFA1A1AA),
                             modifier = Modifier.weight(1f),
                             elevated = false,
                         )
@@ -877,11 +886,10 @@ internal fun FeedLeaderboardTop100Panel(
                 }
             }
 
-            // Daftar Peringkat #4 sampai #100
             Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
                 rest.forEach { item ->
                     Surface(
-                        shape = RoundedCornerShape(12.dp),
+                        shape = RoundedCornerShape(10.dp),
                         color = Color(0xFF13161E),
                         border = BorderStroke(1.dp, Color(0xFF222733)),
                         modifier = Modifier.fillMaxWidth(),
@@ -894,9 +902,9 @@ internal fun FeedLeaderboardTop100Panel(
                             Text(
                                 text = "#${item.rank}",
                                 fontSize = 12.sp,
-                                fontWeight = FontWeight.ExtraBold,
+                                fontWeight = FontWeight.Bold,
                                 fontFamily = FontFamily.Monospace,
-                                color = if (item.rank <= 10) Color(0xFFFBBF24) else Color(0xFF94A3B8),
+                                color = if (item.rank <= 10) Color(0xFFF4F4F5) else Color(0xFF94A3B8),
                                 modifier = Modifier.width(34.dp),
                             )
                             Box(
@@ -919,7 +927,7 @@ internal fun FeedLeaderboardTop100Panel(
                                     horizontalArrangement = Arrangement.spacedBy(5.dp),
                                 ) {
                                     Text(
-                                        text = "${item.flag} ${item.name}",
+                                        text = item.name,
                                         fontSize = 13.sp,
                                         fontWeight = FontWeight.SemiBold,
                                         color = Color(0xFFF8FAFC),
@@ -931,7 +939,7 @@ internal fun FeedLeaderboardTop100Panel(
                                     }
                                 }
                                 Text(
-                                    text = xy("${item.sessionsCount} sesi dimainkan", "${item.sessionsCount} sessions played"),
+                                    text = xy("${item.sessionsCount} sesi aktif", "${item.sessionsCount} active sessions"),
                                     fontSize = 10.sp,
                                     color = Color(0xFF64748B),
                                 )
@@ -954,16 +962,16 @@ internal fun FeedLeaderboardTop100Panel(
 @Composable
 private fun PodiumCard(
     entry: XyLeaderboardEntry,
-    medal: String,
+    rankLabel: String,
     accent: Color,
     modifier: Modifier = Modifier,
     elevated: Boolean = false,
 ) {
     Surface(
         modifier = modifier,
-        shape = RoundedCornerShape(16.dp),
-        color = if (elevated) Color(0xFF1C1810) else Color(0xFF141821),
-        border = BorderStroke(if (elevated) 1.5.dp else 1.dp, accent.copy(alpha = if (elevated) 0.8f else 0.45f)),
+        shape = RoundedCornerShape(12.dp),
+        color = if (elevated) Color(0xFF1B1F2A) else Color(0xFF141821),
+        border = BorderStroke(1.dp, accent.copy(alpha = if (elevated) 0.55f else 0.28f)),
     ) {
         Column(
             modifier = Modifier.padding(horizontal = 8.dp, vertical = if (elevated) 14.dp else 10.dp),
@@ -971,30 +979,31 @@ private fun PodiumCard(
             verticalArrangement = Arrangement.spacedBy(5.dp),
         ) {
             Text(
-                text = medal,
-                fontSize = if (elevated) 14.sp else 12.sp,
-                fontWeight = FontWeight.ExtraBold,
+                text = rankLabel,
+                fontSize = 10.sp,
+                fontWeight = FontWeight.Bold,
+                fontFamily = FontFamily.Monospace,
                 color = accent,
             )
             Box(
                 modifier = Modifier
-                    .size(if (elevated) 44.dp else 36.dp)
+                    .size(if (elevated) 42.dp else 34.dp)
                     .clip(CircleShape)
-                    .background(accent.copy(alpha = 0.2f))
-                    .border(1.dp, accent, CircleShape),
+                    .background(accent.copy(alpha = 0.14f))
+                    .border(1.dp, accent.copy(alpha = 0.5f), CircleShape),
                 contentAlignment = Alignment.Center,
             ) {
                 Text(
                     text = entry.name.take(1).uppercase(),
-                    fontSize = if (elevated) 16.sp else 14.sp,
-                    fontWeight = FontWeight.ExtraBold,
+                    fontSize = if (elevated) 15.sp else 13.sp,
+                    fontWeight = FontWeight.Bold,
                     color = Color.White,
                 )
             }
             Text(
-                text = "${entry.flag} ${entry.name}",
+                text = entry.name,
                 fontSize = 11.sp,
-                fontWeight = FontWeight.Bold,
+                fontWeight = FontWeight.SemiBold,
                 color = Color(0xFFF8FAFC),
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
@@ -1006,7 +1015,7 @@ private fun PodiumCard(
             Text(
                 text = formatLeaderboardDuration(entry.totalSeconds),
                 fontSize = 11.sp,
-                fontWeight = FontWeight.ExtraBold,
+                fontWeight = FontWeight.Bold,
                 fontFamily = FontFamily.Monospace,
                 color = accent,
             )

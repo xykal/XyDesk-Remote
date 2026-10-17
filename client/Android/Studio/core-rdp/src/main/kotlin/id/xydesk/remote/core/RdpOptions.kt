@@ -604,18 +604,20 @@ data class RdpOptions(
     }
 
     fun resolveForActiveNetwork(context: Context): RdpOptions {
-        if (lowBandwidth || !networkAutoDetect) return this
+        if (lowBandwidth || !networkAutoDetect || streamProfile == XyStreamProfile.CUSTOM) return this
         return runCatching {
             val cm = context.applicationContext
                 .getSystemService(Context.CONNECTIVITY_SERVICE) as? ConnectivityManager
                 ?: return@runCatching this
             val caps = cm.activeNetwork?.let { cm.getNetworkCapabilities(it) }
-            val isCellular = caps?.hasTransport(NetworkCapabilities.TRANSPORT_CELLULAR) == true
+            val hasWifiOrEthernet = caps?.hasTransport(NetworkCapabilities.TRANSPORT_WIFI) == true ||
+                caps?.hasTransport(NetworkCapabilities.TRANSPORT_ETHERNET) == true
+            val isCellular = caps?.hasTransport(NetworkCapabilities.TRANSPORT_CELLULAR) == true && !hasWifiOrEthernet
             val downstream = caps?.linkDownstreamBandwidthKbps ?: Int.MAX_VALUE
-            val isMetered = (cm.isActiveNetworkMetered ||
-                (caps != null && !caps.hasCapability(NetworkCapabilities.NET_CAPABILITY_NOT_METERED))) &&
-                (isCellular || downstream < 15_000)
-            resolveForLink(isMetered = isMetered, isCellular = isCellular, downstreamKbps = downstream)
+            val isMetered = isCellular && (cm.isActiveNetworkMetered ||
+                (caps != null && !caps.hasCapability(NetworkCapabilities.NET_CAPABILITY_NOT_METERED)) ||
+                downstream in 1..4_999)
+            resolveForLink(isMetered = isMetered, isCellular = isCellular, downstreamKbps = if (hasWifiOrEthernet) Int.MAX_VALUE else downstream)
         }.getOrDefault(this)
     }
 

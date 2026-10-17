@@ -180,6 +180,7 @@ public class SessionView extends View
 		setMinimumHeight(height);
 
 		requestLayout();
+		invalidate();
 		currentSession = session;
 	}
 

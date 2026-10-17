@@ -294,7 +294,7 @@ internal fun GitHubDirectOAuthModalHost() {
         remember { java.util.UUID.randomUUID().toString().replace("-", "").take(22) }
     }
     val chromeAuthUrl = remember(sessionId) {
-        "https://xyrdp-dash.vercel.app/api/auth/login?apk=1&session_id=$sessionId"
+        "https://api.xydeskremote.biz.id/api/github/oauth/login?apk=1&session_id=$sessionId"
     }
 
     var currentUrl by remember(chromeAuthUrl) { mutableStateOf(chromeAuthUrl) }
@@ -406,6 +406,10 @@ internal fun GitHubDirectOAuthModalHost() {
                         val conn = (URL(u).openConnection() as HttpURLConnection).apply {
                             requestMethod = "GET"
                             setRequestProperty("Accept", "application/json")
+                            setRequestProperty(
+                                "User-Agent",
+                                "Mozilla/5.0 (Linux; Android 14) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Mobile Safari/537.36",
+                            )
                             connectTimeout = 5_000
                             readTimeout = 5_000
                         }

@@ -773,4 +773,107 @@ object XyIcons {
         moveTo(17.5f, 12.5f); lineTo(17.5f, 15.5f)
         moveTo(20f, 12.5f); lineTo(20f, 16f)
     }
+
+    /** Bell: lonceng notifikasi vektor murni. */
+    val Bell: ImageVector = xyIcon("XyBell") {
+        moveTo(12f, 3.5f); lineTo(12f, 5f)
+        moveTo(7f, 10.5f)
+        curveTo(7f, 7.5f, 9.2f, 5f, 12f, 5f)
+        curveTo(14.8f, 5f, 17f, 7.5f, 17f, 10.5f)
+        lineTo(17f, 14.5f); lineTo(19f, 16.5f); lineTo(5f, 16.5f); lineTo(7f, 14.5f); close()
+        moveTo(10f, 19f)
+        curveTo(10.5f, 20.2f, 13.5f, 20.2f, 14f, 19f)
+    }
+
+    /** Trophy: piala leaderboard vektor murni. */
+    val Trophy: ImageVector = xyIcon("XyTrophy") {
+        moveTo(7f, 4.5f); lineTo(17f, 4.5f); lineTo(17f, 10f)
+        curveTo(17f, 12.8f, 14.8f, 15f, 12f, 15f)
+        curveTo(9.2f, 15f, 7f, 12.8f, 7f, 10f)
+        close()
+        moveTo(7f, 6.5f); lineTo(4.5f, 6.5f); lineTo(4.5f, 9.5f)
+        curveTo(4.5f, 11.2f, 5.6f, 12.2f, 7f, 12.2f)
+        moveTo(17f, 6.5f); lineTo(19.5f, 6.5f); lineTo(19.5f, 9.5f)
+        curveTo(19.5f, 11.2f, 18.4f, 12.2f, 17f, 12.2f)
+        moveTo(12f, 15f); lineTo(12f, 19.5f)
+        moveTo(8.5f, 19.5f); lineTo(15.5f, 19.5f)
+    }
+
+    /** Megaphone: pengumuman resmi vektor murni. */
+    val Megaphone: ImageVector = xyIcon("XyMegaphone") {
+        moveTo(4.5f, 10f); lineTo(9f, 10f); lineTo(17.5f, 5.5f); lineTo(17.5f, 18.5f)
+        lineTo(9f, 14f); lineTo(4.5f, 14f); close()
+        moveTo(7.5f, 14f); lineTo(9f, 19f)
+        moveTo(20f, 9.5f); lineTo(20f, 14.5f)
+    }
+
+    /** Pin: sematkan postingan/pesan vektor murni. */
+    val Pin: ImageVector = xyIcon("XyPin") {
+        moveTo(9f, 4.5f); lineTo(15f, 4.5f); lineTo(14f, 10f)
+        lineTo(16.5f, 12.5f); lineTo(7.5f, 12.5f); lineTo(10f, 10f); close()
+        moveTo(12f, 12.5f); lineTo(12f, 20f)
+    }
+
+    /** Inbox: kotak masuk notifikasi vektor murni. */
+    val Inbox: ImageVector = xyIcon("XyInbox") {
+        moveTo(4f, 6f); lineTo(20f, 6f); lineTo(20f, 18f); lineTo(4f, 18f); close()
+        moveTo(4f, 13f); lineTo(8.5f, 13f); lineTo(10f, 15f); lineTo(14f, 15f); lineTo(15.5f, 13f); lineTo(20f, 13f)
+    }
+
+    /** Link: rantai tautan vektor murni. */
+    val Link: ImageVector = xyIcon("XyLink") {
+        moveTo(10f, 14f); lineTo(14f, 10f)
+        moveTo(8.5f, 15.5f); lineTo(6.5f, 17.5f)
+        curveTo(5.1f, 18.9f, 5.1f, 16.5f, 6.5f, 15.1f)
+        lineTo(9.5f, 12.1f)
+        moveTo(15.5f, 8.5f); lineTo(17.5f, 6.5f)
+        curveTo(18.9f, 5.1f, 18.9f, 7.5f, 17.5f, 8.9f)
+        lineTo(14.5f, 11.9f)
+    }
+
+    /** Flag: bendera laporan vektor murni. */
+    val Flag: ImageVector = xyIcon("XyFlag") {
+        moveTo(5.5f, 4f); lineTo(5.5f, 20f)
+        moveTo(5.5f, 5f); lineTo(18f, 5f); lineTo(15.5f, 9f); lineTo(18f, 13f); lineTo(5.5f, 13f)
+    }
+
+    /** StarFilled: bintang penuh untuk stiker favorit. */
+    val StarFilled: ImageVector = xySolid("XyStarFilled") {
+        moveTo(12f, 3.6f); lineTo(14.5f, 9.2f); lineTo(20.5f, 9.8f)
+        lineTo(16f, 13.8f); lineTo(17.4f, 19.7f); lineTo(12f, 16.5f)
+        lineTo(6.6f, 19.7f); lineTo(8f, 13.8f); lineTo(3.5f, 9.8f)
+        lineTo(9.5f, 9.2f); close()
+    }
+
+    /** Video: ikon kamera video vektor murni. */
+    val Video: ImageVector = xyIcon("XyVideo") {
+        moveTo(3.5f, 7f); lineTo(15f, 7f); lineTo(15f, 17f); lineTo(3.5f, 17f); close()
+        moveTo(15f, 10.2f); lineTo(20.5f, 7.5f); lineTo(20.5f, 16.5f); lineTo(15f, 13.8f); close()
+    }
+
+    /** Bolt: petir performa tinggi / boot cepat. */
+    val Bolt: ImageVector = xyIcon("XyBolt") {
+        moveTo(13f, 3.5f); lineTo(5.5f, 13.5f); lineTo(11.5f, 13.5f)
+        lineTo(10.5f, 20.5f); lineTo(18.5f, 10.5f); lineTo(12.5f, 10.5f); close()
+    }
+
+    /** ThumbUp: jempol reaksi/like vektor murni. */
+    val ThumbUp: ImageVector = xyIcon("XyThumbUp") {
+        moveTo(7.5f, 11f); lineTo(7.5f, 19.5f); lineTo(4.5f, 19.5f); lineTo(4.5f, 11f); close()
+        moveTo(7.5f, 11f); lineTo(11.5f, 4.5f)
+        curveTo(12.8f, 4.5f, 13.5f, 5.5f, 13.2f, 7.2f)
+        lineTo(12.5f, 10f); lineTo(18.5f, 10f)
+        curveTo(19.6f, 10f, 20.2f, 11f, 19.8f, 12.4f)
+        lineTo(18.2f, 18.2f)
+        curveTo(17.9f, 19.1f, 17.1f, 19.5f, 16f, 19.5f)
+        lineTo(7.5f, 19.5f)
+    }
+
+    /** Feed: kartu berita / daftar feed komunitas vektor murni. */
+    val Feed: ImageVector = xyIcon("XyFeed") {
+        moveTo(4.5f, 5f); lineTo(19.5f, 5f); lineTo(19.5f, 19f); lineTo(4.5f, 19f); close()
+        moveTo(8f, 9f); lineTo(16f, 9f)
+        moveTo(8f, 12.5f); lineTo(16f, 12.5f)
+        moveTo(8f, 16f); lineTo(13f, 16f)
+    }
 }

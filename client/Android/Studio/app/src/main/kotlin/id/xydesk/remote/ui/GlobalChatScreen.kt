@@ -38,6 +38,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectDragGestures
+import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.gestures.detectTransformGestures
 import androidx.compose.foundation.layout.Arrangement
@@ -1026,7 +1027,11 @@ internal fun GlobalChatScreen(
                             }
                         }
                         if (added && messages.isNotEmpty()) {
-                            listState.animateScrollToItem(messages.size - 1)
+                            val isNearBottom = !listState.canScrollForward ||
+                                listState.firstVisibleItemIndex >= (messages.size - 4).coerceAtLeast(0)
+                            if (isNearBottom) {
+                                listState.animateScrollToItem(messages.size - 1)
+                            }
                         }
                     }
                 }
@@ -1239,7 +1244,7 @@ internal fun GlobalChatScreen(
         if (cleanText.isNotEmpty() && isClientSideMaliciousText(cleanText)) {
             Toast.makeText(
                 context,
-                "🛡️ XyShield Anti-Virus: Tautan atau ekstensi berbahaya diblokir demi keamanan!",
+                "XyShield Anti-Virus: Tautan atau ekstensi berbahaya diblokir demi keamanan.",
                 Toast.LENGTH_LONG,
             ).show()
             return
@@ -1527,7 +1532,7 @@ internal fun GlobalChatScreen(
                     filePayload == null -> Toast.makeText(context, "Gagal membaca file", Toast.LENGTH_SHORT).show()
                     filePayload.first == "MALICIOUS" -> Toast.makeText(
                         context,
-                        "🛡️ XyShield Anti-Virus: File berbahaya (.exe/.apk/.bat/.scr) diblokir!",
+                        "XyShield Anti-Virus: File berbahaya (.exe/.apk/.bat/.scr) diblokir.",
                         Toast.LENGTH_LONG,
                     ).show()
                     filePayload.first == "TOO_LARGE" -> Toast.makeText(context, "Ukuran file maksimal 350 KB untuk pengiriman instan", Toast.LENGTH_LONG).show()
@@ -1624,7 +1629,7 @@ internal fun GlobalChatScreen(
                     if (isBlurActive) mod.blur(18.dp) else mod
                 }
                 .let { mod ->
-                    if (isOverlayMode) mod else mod.imePadding()
+                    if (isOverlayMode) mod else mod.navigationBarsPadding().imePadding()
                 },
         ) {
             if (isOverlayMode) {
@@ -1814,9 +1819,11 @@ internal fun GlobalChatScreen(
                                 .padding(horizontal = 10.dp, vertical = 6.dp),
                             contentAlignment = Alignment.Center,
                         ) {
-                            Text(
-                                text = "⚙️",
-                                fontSize = 13.sp,
+                            Icon(
+                                imageVector = XyIcons.Gear,
+                                contentDescription = "Pengaturan Chat",
+                                tint = Color(0xFFE4E4E7),
+                                modifier = Modifier.size(15.dp),
                             )
                         }
                     },
@@ -2077,7 +2084,7 @@ internal fun GlobalChatScreen(
                                             customStickers.addAll(reloaded)
                                         }
                                     }
-                                    Toast.makeText(context, "⭐ Stiker diperbarui di daftar Favorit!", Toast.LENGTH_SHORT).show()
+                                    Toast.makeText(context, "Stiker diperbarui di daftar Favorit", Toast.LENGTH_SHORT).show()
                                 },
                                 onManualDownloadMedia = {
                                     if (m.id !in manuallyDownloadedIds) manuallyDownloadedIds.add(m.id)
@@ -2121,9 +2128,15 @@ internal fun GlobalChatScreen(
                     shape = RoundedCornerShape(topStart = 20.dp, topEnd = 20.dp),
                     modifier = Modifier
                         .fillMaxWidth()
+                        .heightIn(max = 260.dp)
                         .padding(horizontal = 10.dp, vertical = 4.dp),
                 ) {
-                    Column(modifier = Modifier.padding(12.dp)) {
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .verticalScroll(rememberScrollState())
+                            .padding(12.dp),
+                    ) {
                         Row(
                             modifier = Modifier.fillMaxWidth(),
                             horizontalArrangement = Arrangement.SpaceBetween,
@@ -2137,7 +2150,7 @@ internal fun GlobalChatScreen(
                                     color = Color(0xFFF4F4F5),
                                 )
                                 Text(
-                                    "Ketuk stiker untuk kirim · Ketuk ★ untuk favoritkan",
+                                    "Ketuk stiker untuk kirim · Ketuk ikon bintang untuk favoritkan",
                                     style = MaterialTheme.typography.labelSmall,
                                     fontSize = 10.sp,
                                     color = Color(0xFF9CA3AF),
@@ -2250,10 +2263,11 @@ internal fun GlobalChatScreen(
                                                         },
                                                     contentAlignment = Alignment.Center,
                                                 ) {
-                                                    Text(
-                                                        text = if (isFav) "★" else "☆",
-                                                        fontSize = 12.sp,
-                                                        color = if (isFav) Color(0xFFFBBF24) else Color.White,
+                                                    Icon(
+                                                        imageVector = if (isFav) XyIcons.StarFilled else XyIcons.Star,
+                                                        contentDescription = null,
+                                                        tint = if (isFav) Color(0xFFFBBF24) else Color.White,
+                                                        modifier = Modifier.size(12.dp),
                                                     )
                                                 }
                                             }
@@ -2316,10 +2330,11 @@ internal fun GlobalChatScreen(
                                                     },
                                                 contentAlignment = Alignment.Center,
                                             ) {
-                                                Text(
-                                                    text = if (isFav) "★" else "☆",
-                                                    fontSize = 12.sp,
-                                                    color = if (isFav) Color(0xFFFBBF24) else Color.White,
+                                                Icon(
+                                                    imageVector = if (isFav) XyIcons.StarFilled else XyIcons.Star,
+                                                    contentDescription = null,
+                                                    tint = if (isFav) Color(0xFFFBBF24) else Color.White,
+                                                    modifier = Modifier.size(12.dp),
                                                 )
                                             }
                                         }
@@ -2682,13 +2697,24 @@ internal fun GlobalChatScreen(
                                 .clickable { isAnnouncementMode = !isAnnouncementMode }
                                 .padding(horizontal = 10.dp, vertical = 4.dp),
                         ) {
-                            Text(
-                                text = if (isAnnouncementMode) "📌 Mode Pengumuman Admin (Auto-Pin): AKTIF" else "📢 Kirim sebagai Pengumuman Admin (Auto-Pin)",
-                                style = MaterialTheme.typography.labelSmall,
-                                fontSize = 10.sp,
-                                fontWeight = FontWeight.Bold,
-                                color = if (isAnnouncementMode) Color(0xFFFDE047) else Color(0xFFA1A1AA),
-                            )
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(5.dp),
+                            ) {
+                                Icon(
+                                    imageVector = if (isAnnouncementMode) XyIcons.Pin else XyIcons.Megaphone,
+                                    contentDescription = null,
+                                    tint = if (isAnnouncementMode) Color(0xFFFDE047) else Color(0xFFA1A1AA),
+                                    modifier = Modifier.size(12.dp),
+                                )
+                                Text(
+                                    text = if (isAnnouncementMode) "Mode Pengumuman Admin (Auto-Pin): AKTIF" else "Kirim sebagai Pengumuman Admin (Auto-Pin)",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    fontSize = 10.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = if (isAnnouncementMode) Color(0xFFFDE047) else Color(0xFFA1A1AA),
+                                )
+                            }
                         }
                         Box(
                             modifier = Modifier
@@ -2893,6 +2919,7 @@ internal fun GlobalChatScreen(
                         modifier = Modifier
                             .widthIn(max = 360.dp)
                             .fillMaxWidth()
+                            .verticalScroll(rememberScrollState())
                             .clickable(enabled = false) {},
                         horizontalAlignment = if (targetMsg.mine) Alignment.End else Alignment.Start,
                         verticalArrangement = Arrangement.spacedBy(10.dp),
@@ -3083,18 +3110,19 @@ internal fun GlobalChatScreen(
     // Dialog Settings Chat Global (Bersihkan Chat, Style Bubble, Otomatis Unduh Media, HD Media, Autoplay Video, Nada Notifikasi)
     if (showChatSettings) {
         XyOverlay(
-            title = xy("⚙️ Pengaturan Chat Global", "⚙️ Global Chat Settings"),
+            title = xy("Pengaturan Chat Global", "Global Chat Settings"),
             onDismiss = { showChatSettings = false },
         ) {
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .heightIn(max = 460.dp),
+                    .heightIn(max = 460.dp)
+                    .verticalScroll(rememberScrollState()),
                 verticalArrangement = Arrangement.spacedBy(10.dp),
             ) {
                 // 1. Style Bubble Chat
                 Text(
-                    xy("🎨 Gaya Bubble Chat", "🎨 Chat Bubble Style"),
+                    xy("Gaya Bubble Chat", "Chat Bubble Style"),
                     style = MaterialTheme.typography.labelMedium,
                     fontWeight = FontWeight.Bold,
                     color = Color.White,
@@ -3150,7 +3178,7 @@ internal fun GlobalChatScreen(
                     ) {
                         Column(modifier = Modifier.weight(1f)) {
                             Text(
-                                xy("📥 Otomatis Unduh Media", "📥 Auto-Download Media"),
+                                xy("Otomatis Unduh Media", "Auto-Download Media"),
                                 style = MaterialTheme.typography.bodySmall,
                                 fontWeight = FontWeight.Bold,
                                 color = Color.White,
@@ -3188,7 +3216,7 @@ internal fun GlobalChatScreen(
                     ) {
                         Column(modifier = Modifier.weight(1f)) {
                             Text(
-                                xy("✨ Kualitas Media HD (1600p Jernih)", "✨ HD Media Quality (1600p Crisp)"),
+                                xy("Kualitas Media HD (1600p Jernih)", "HD Media Quality (1600p Crisp)"),
                                 style = MaterialTheme.typography.bodySmall,
                                 fontWeight = FontWeight.Bold,
                                 color = Color.White,
@@ -3226,7 +3254,7 @@ internal fun GlobalChatScreen(
                     ) {
                         Column(modifier = Modifier.weight(1f)) {
                             Text(
-                                xy("🎬 Putar Otomatis Preview Video", "🎬 Autoplay Video Preview"),
+                                xy("Putar Otomatis Preview Video", "Autoplay Video Preview"),
                                 style = MaterialTheme.typography.bodySmall,
                                 fontWeight = FontWeight.Bold,
                                 color = Color.White,
@@ -3248,7 +3276,7 @@ internal fun GlobalChatScreen(
 
                 // 5. Atur Nada Notifikasi Chat
                 Text(
-                    xy("🔔 Nada Notifikasi Pesan Masuk", "🔔 Incoming Message Notification Tone"),
+                    xy("Nada Notifikasi Pesan Masuk", "Incoming Message Notification Tone"),
                     style = MaterialTheme.typography.labelMedium,
                     fontWeight = FontWeight.Bold,
                     color = Color.White,
@@ -3289,7 +3317,7 @@ internal fun GlobalChatScreen(
 
                 // 6. Tombol Bersihkan Chat
                 XyPillButton(
-                    text = xy("🗑️ Bersihkan Riwayat Chat di Layar Saya", "🗑️ Clear Chat History on My Screen"),
+                    text = xy("Bersihkan Riwayat Chat di Layar Saya", "Clear Chat History on My Screen"),
                     onClick = {
                         messages.forEach { m ->
                             if (m.id.isNotBlank() && m.id !in hiddenMessageIds) {
@@ -3834,7 +3862,7 @@ private fun MessageBubble(
             .padding(horizontal = 2.dp)
             .offset { IntOffset(swipeOffsetX.roundToInt(), 0) }
             .pointerInput(msg.id) {
-                detectDragGestures(
+                detectHorizontalDragGestures(
                     onDragEnd = {
                         if (kotlin.math.abs(swipeOffsetX) >= 56f) {
                             onReply()
@@ -3846,11 +3874,9 @@ private fun MessageBubble(
                         swipeOffsetX = 0f
                         swipeTriggered = false
                     },
-                    onDrag = { change, dragAmount ->
-                        if (kotlin.math.abs(dragAmount.x) > kotlin.math.abs(dragAmount.y) * 1.15f) {
-                            change.consume()
-                            swipeOffsetX = (swipeOffsetX + dragAmount.x).coerceIn(-110f, 110f)
-                        }
+                    onHorizontalDrag = { change, dragAmount ->
+                        change.consume()
+                        swipeOffsetX = (swipeOffsetX + dragAmount).coerceIn(-110f, 110f)
                     },
                 )
             },
@@ -3943,15 +3969,23 @@ private fun MessageBubble(
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.spacedBy(8.dp),
                     ) {
-                        Box(
+                        Row(
                             modifier = Modifier
                                 .clip(RoundedCornerShape(999.dp))
                                 .background(Color(0xFF1A1D26))
                                 .clickable { onToggleFavoriteSticker(msg.attachmentData) }
                                 .padding(horizontal = 8.dp, vertical = 3.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(4.dp),
                         ) {
+                            Icon(
+                                imageVector = if (isFavSticker) XyIcons.StarFilled else XyIcons.Star,
+                                contentDescription = null,
+                                tint = if (isFavSticker) Color(0xFFFBBF24) else Color(0xFFE2E8F0),
+                                modifier = Modifier.size(11.dp),
+                            )
                             Text(
-                                text = if (isFavSticker) "★ Favorit" else "☆ +Favorit",
+                                text = if (isFavSticker) "Favorit" else "+Favorit",
                                 fontSize = 10.sp,
                                 fontWeight = FontWeight.Bold,
                                 color = if (isFavSticker) Color(0xFFFBBF24) else Color(0xFFE2E8F0),
@@ -3984,12 +4018,23 @@ private fun MessageBubble(
                                     .border(0.8.dp, Color(0xFFF59E0B), RoundedCornerShape(6.dp))
                                     .padding(horizontal = 8.dp, vertical = 4.dp),
                             ) {
-                                Text(
-                                    text = "📌 PENGUMUMAN RESMI ADMIN · TERSEMAT",
-                                    fontSize = 9.5.sp,
-                                    fontWeight = FontWeight.ExtraBold,
-                                    color = Color(0xFFFDE047),
-                                )
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(5.dp),
+                                ) {
+                                    Icon(
+                                        imageVector = XyIcons.Pin,
+                                        contentDescription = null,
+                                        tint = Color(0xFFFDE047),
+                                        modifier = Modifier.size(11.dp),
+                                    )
+                                    Text(
+                                        text = "PENGUMUMAN RESMI ADMIN · TERSEMAT",
+                                        fontSize = 9.5.sp,
+                                        fontWeight = FontWeight.ExtraBold,
+                                        color = Color(0xFFFDE047),
+                                    )
+                                }
                             }
                         }
 
@@ -4124,7 +4169,7 @@ private fun MessageBubble(
                                     modifier = Modifier.size(18.dp),
                                 )
                                 Text(
-                                    text = "📥 Ketuk untuk Unduh Media (${(msg.attachmentSize / 1024).coerceAtLeast(1)} KB)",
+                                    text = "Ketuk untuk Unduh Media (${(msg.attachmentSize / 1024).coerceAtLeast(1)} KB)",
                                     style = MaterialTheme.typography.labelSmall,
                                     fontWeight = FontWeight.Bold,
                                     color = primaryTextColor,

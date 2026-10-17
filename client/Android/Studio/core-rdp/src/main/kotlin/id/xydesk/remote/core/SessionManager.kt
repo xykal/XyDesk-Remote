@@ -147,6 +147,14 @@ class SessionManager(context: Context) {
     /** Sink grafik — wajib di-set SEBELUM [connect] agar tidak ada frame yang hilang. */
     fun setGraphicsSink(sink: GraphicsSink?) {
         this.sink = sink
+        val activeInst = core?.getInstance() ?: 0L
+        if (sink != null && activeInst != 0L) {
+            sink.onSessionInstanceBound(activeInst)
+            val r = resolution
+            if (r[0] > 0 && r[1] > 0) {
+                sink.onGraphicsResize(r[0], r[1], activeBpp)
+            }
+        }
     }
 
     /** Count a coalesced graphics invalidation scheduled near display refresh. */
@@ -177,20 +185,19 @@ class SessionManager(context: Context) {
         var tick = 0
         while (true) {
             val curState = state.value
-            if (curState is SessionState.Connected && tick % 4 == 0) {
-                activeNetworkLabel = detectActiveNetworkLabel()
+            if (curState is SessionState.Connected) {
+                if (tick % 4 == 0) {
+                    activeNetworkLabel = detectActiveNetworkLabel()
+                }
                 val p = lastProfile
-                if (p != null && tick % 10 == 0) {
+                if (p != null && (lastRttMs < 0 || tick % 6 == 0)) {
                     kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
                         runCatching {
-                            // Probe TCP nyata ke host:port layanan (handshake =
-                            // 1 RTT). `isReachable` dulu jarang berhasil di Android
-                            // tanpa root (ICMP dilarang, fallback port 7 tertutup).
                             val t0 = System.nanoTime()
                             java.net.Socket().use { probe ->
-                                probe.connect(java.net.InetSocketAddress(p.host, p.port), 750)
+                                probe.connect(java.net.InetSocketAddress(p.host, p.port), 1500)
                             }
-                            val sample = ((System.nanoTime() - t0) / 1_000_000L).toInt()
+                            val sample = ((System.nanoTime() - t0) / 1_000_000L).toInt().coerceAtLeast(1)
                             lastRttMs = RttSmoother.next(lastRttMs, sample)
                         }
                     }
@@ -350,6 +357,7 @@ class SessionManager(context: Context) {
             val created = GlobalApp.createSession(uri, appContext)
             val inst = created.getInstance()
             ConnectionLog.add("CM: createSession ok inst=$inst")
+            sink?.onSessionInstanceBound(inst)
             created.setUIEventListener(uiListenerFor(inst))
             GlobalApp.registerSessionListener(inst, coreListenerFor(inst))
             core = created
@@ -942,7 +950,14 @@ class SessionManager(context: Context) {
 
             override fun OnSettingsChanged(width: Int, height: Int, bpp: Int) {
                 resolution = intArrayOf(width, height)
+                lastDispLayoutW = width
+                lastDispLayoutH = height
+                if (bpp > 0) activeBpp = bpp
                 Log.v(TAG, "settings ${width}x${height} @${bpp}bpp")
+                sink?.onSessionInstanceBound(inst)
+                if (width > 0 && height > 0) {
+                    sink?.onGraphicsResize(width, height, bpp)
+                }
             }
 
             override fun OnAuthenticate(
@@ -1023,6 +1038,7 @@ class SessionManager(context: Context) {
             override fun OnExperimentalFeature(feature: Int): Boolean = true
 
             override fun OnGraphicsUpdate(x: Int, y: Int, width: Int, height: Int) {
+                sink?.onSessionInstanceBound(inst)
                 sink?.onGraphicsUpdate(x, y, width, height)
             }
 
@@ -1030,7 +1046,11 @@ class SessionManager(context: Context) {
                 resolution = intArrayOf(width, height)
                 lastDispLayoutW = width
                 lastDispLayoutH = height
-                sink?.onGraphicsResize(width, height, bpp)
+                if (bpp > 0) activeBpp = bpp
+                sink?.onSessionInstanceBound(inst)
+                if (width > 0 && height > 0) {
+                    sink?.onGraphicsResize(width, height, bpp)
+                }
             }
 
             override fun OnRemoteClipboardChanged(data: String) {

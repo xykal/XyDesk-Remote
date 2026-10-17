@@ -152,8 +152,8 @@ internal fun FunHubCard(
             loadingFeed && reason == "unavailable" ->
                 xyNow("Feed sementara tidak tersedia di server. Coba lagi sebentar.", "The feed server is temporarily unavailable. Please retry shortly.")
             reason == "rate_limited" -> xyNow("Tunggu sebentar sebelum mengirim lagi.", "Please wait a little before posting again.")
-            reason == "malicious_blocked" -> xyNow("🛡️ XyShield: Tautan atau file berbahaya (virus/phishing) diblokir demi keamanan.", "🛡️ XyShield: Malicious link or virus file blocked for security.")
-            reason == "forbidden" -> xyNow("Hanya pemilik postingan atau Admin @xykal yang dapat mengubah/menghapus ini.", "Only the post author or Admin @xykal can edit/delete this.")
+            reason == "malicious_blocked" -> xyNow("XyShield: Tautan atau file berbahaya (virus/phishing) diblokir demi keamanan.", "XyShield: Malicious link or virus file blocked for security.")
+            reason == "forbidden" -> xyNow("Hanya pemilik postingan yang dapat mengubah atau menghapus postingan ini.", "Only the post author can edit or delete this post.")
             reason == "invalid_text" -> xyNow("Teks harus 3–500 karakter dan aman dari konten berbahaya.", "Text must be 3–500 characters and safe.")
             reason == "invalid_client_id" -> xyNow("Identitas tidak valid. Coba muat ulang aplikasi.", "Invalid ID. Try reopening the app.")
             !loadingFeed && reason == "not_found" -> xyNow("Postingan sudah tidak tersedia.", "This post is no longer available.")
@@ -176,7 +176,11 @@ internal fun FunHubCard(
     LaunchedEffect(refreshing) { onBusyChange?.invoke(refreshing) }
 
     LaunchedEffect(api, refreshKey, refreshSignal) {
-        feedImageCache.evictAll()
+        if (refreshKey > 0 || refreshSignal > 0) {
+            feedImageCache.evictAll()
+            feedDecodedBitmapCache.evictAll()
+            remoteBannerBitmapCache.evictAll()
+        }
         refreshing = jokes.isEmpty() || refreshSignal > 0
         feedError = null
         try {
@@ -265,13 +269,13 @@ internal fun FunHubCard(
                     ) {
                         Text(
                             text = when {
-                                editingJoke != null -> xy("✏️ Edit Postingan", "✏️ Edit Post")
-                                isAnnouncementDraft -> xy("📢 Buat Pengumuman Resmi Admin", "📢 Create Official Admin Announcement")
-                                else -> xy("✍️ Buat Postingan Baru", "✍️ Create New Post")
+                                editingJoke != null -> xy("Edit Postingan", "Edit Post")
+                                isAnnouncementDraft -> xy("Buat Pengumuman Resmi Admin", "Create Official Admin Announcement")
+                                else -> xy("Buat Postingan Baru", "Create New Post")
                             },
                             style = MaterialTheme.typography.labelLarge,
                             fontWeight = FontWeight.Bold,
-                            color = if (editingJoke != null || isAnnouncementDraft) Color(0xFFFBBF24) else Color(0xFFF8FAFC),
+                            color = Color(0xFFF8FAFC),
                         )
                         Text(
                             xy("Batal", "Cancel"),
@@ -309,12 +313,12 @@ internal fun FunHubCard(
                             ) {
                                 Text(
                                     text = xy(
-                                        "📌 Pin Otomatis sebagai Pengumuman di Feed & Global Chat",
-                                        "📌 Auto-Pin as Official Announcement in Feed & Global Chat",
+                                        "Sematkan Otomatis sebagai Pengumuman di Feed & Global Chat",
+                                        "Auto-Pin as Official Announcement in Feed & Global Chat",
                                     ),
                                     fontSize = 11.sp,
-                                    fontWeight = FontWeight.Bold,
-                                    color = if (isAnnouncementDraft) Color(0xFFFBBF24) else Color(0xFFCBD5E1),
+                                    fontWeight = FontWeight.SemiBold,
+                                    color = if (isAnnouncementDraft) Color(0xFFF4F4F5) else Color(0xFFCBD5E1),
                                 )
                                 Text(
                                     text = if (isAnnouncementDraft) "AKTIF" else "NONAKTIF",
@@ -354,7 +358,7 @@ internal fun FunHubCard(
                         horizontalArrangement = Arrangement.spacedBy(8.dp),
                     ) {
                         XyPillButton(
-                            text = xy("📷 Foto HD / GIF / Video", "📷 HD Photo / GIF / Video"),
+                            text = xy("Foto HD / GIF / Video", "HD Photo / GIF / Video"),
                             onClick = { pickVisual.launch("*/*") },
                             primary = false,
                             compact = true,
@@ -369,7 +373,7 @@ internal fun FunHubCard(
                             ),
                         ) {
                             Text(
-                                text = if (hdUploadEnabled) "✨ HD Aktif (Jernih)" else "SD Standar",
+                                text = if (hdUploadEnabled) "HD Aktif" else "SD Standar",
                                 modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
                                 fontSize = 11.sp,
                                 fontWeight = FontWeight.Bold,
@@ -383,7 +387,7 @@ internal fun FunHubCard(
                                     color = Color(0xFF1E293B),
                                 ) {
                                     Text(
-                                        text = "🎬 Video Siap (${att.bytes.size / 1024} KB)",
+                                        text = "Video Siap (${att.bytes.size / 1024} KB)",
                                         modifier = Modifier.padding(horizontal = 8.dp, vertical = 5.dp),
                                         fontSize = 11.sp,
                                         color = Color(0xFFF8FAFC),
@@ -423,8 +427,8 @@ internal fun FunHubCard(
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
                         val helper = when {
-                            maliciousLinkDetected -> xy("🛡️ XyShield: Tautan/file berbahaya diblokir!", "🛡️ XyShield: Malicious link/file blocked!")
-                            else -> xy("{0}/500 karakter · 🛡️ XyShield Aktif", "{0}/500 chars · 🛡️ XyShield Active", characterCount)
+                            maliciousLinkDetected -> xy("XyShield: Tautan/file berbahaya diblokir", "XyShield: Malicious link/file blocked")
+                            else -> xy("{0}/500 karakter · XyShield Aktif", "{0}/500 chars · XyShield Active", characterCount)
                         }
                         Text(
                             helper,
@@ -478,8 +482,8 @@ internal fun FunHubCard(
                                             isAnnouncementDraft = false
                                             composerOpen = false
                                             feedMessage = xyNow(
-                                                if (target != null) "✅ Postingan berhasil diperbarui." else "✅ Postingan berhasil dipublikasikan.",
-                                                if (target != null) "✅ Post updated." else "✅ Post published.",
+                                                if (target != null) "Postingan berhasil diperbarui." else "Postingan berhasil dipublikasikan.",
+                                                if (target != null) "Post updated." else "Post published.",
                                             )
                                             feedMessageIsError = false
                                         } catch (error: Exception) {
@@ -503,7 +507,7 @@ internal fun FunHubCard(
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
             ) {
                 XyPillButton(
-                    text = xy("✍️ Tulis Postingan / Share Link", "✍️ Write Post / Share Link"),
+                    text = xy("Tulis Postingan / Bagikan Tautan", "Write Post / Share Link"),
                     onClick = {
                         editingJoke = null
                         draft = ""
@@ -518,7 +522,7 @@ internal fun FunHubCard(
                 )
                 if (isViewerFounder) {
                     XyPillButton(
-                        text = xy("📢 Buat Pengumuman", "📢 Announcement"),
+                        text = xy("Buat Pengumuman", "Announcement"),
                         onClick = {
                             editingJoke = null
                             draft = ""
@@ -607,8 +611,7 @@ internal fun FunHubCard(
                 }
                 Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
                     visibleJokes.forEach { joke ->
-                        val canManagePost = joke.isOwn || isViewerFounder ||
-                            (!myGithubLogin.isNullOrBlank() && joke.githubLogin?.equals(myGithubLogin, ignoreCase = true) == true)
+                        val canManagePost = joke.isOwn
                         CommunityJokeItem(
                             joke = joke,
                             canManage = canManagePost,
@@ -735,8 +738,7 @@ internal fun FunHubCard(
     }
 
     actionsTarget?.let { target ->
-        val canManage = target.isOwn || isViewerFounder ||
-            (!myGithubLogin.isNullOrBlank() && target.githubLogin?.equals(myGithubLogin, ignoreCase = true) == true)
+        val canManage = target.isOwn
         ActionsBottomSheet(
             joke = target,
             canManage = canManage,
@@ -796,7 +798,7 @@ internal fun FunHubCard(
                                     api.delete(target.id)
                                     jokes = jokes.filterNot { it.id == target.id }
                                     api.cacheFeed(jokes)
-                                    feedMessage = xyNow("🗑️ Postingan berhasil dihapus.", "🗑️ Post deleted.")
+                                    feedMessage = xyNow("Postingan berhasil dihapus.", "Post deleted.")
                                     feedMessageIsError = false
                                 } catch (error: Exception) {
                                     feedMessage = showCommunityError(error)
@@ -875,7 +877,7 @@ internal fun FunHubCard(
 private fun shareFeedPost(context: android.content.Context, joke: CommunityJoke) {
     val author = joke.authorName ?: "Komunitas XyDesk"
     val shareText = buildString {
-        if (joke.isAnnouncement) append("📢 [PENGUMUMAN RESMI XYDESK]\n")
+        if (joke.isAnnouncement) append("[PENGUMUMAN RESMI XYDESK]\n")
         append(joke.text)
         if (!joke.sharedUrl.isNullOrBlank() && !joke.text.contains(joke.sharedUrl)) {
             append("\n").append(joke.sharedUrl)
@@ -991,7 +993,12 @@ private fun CommunityJokeItem(
                             verticalAlignment = Alignment.CenterVertically,
                             horizontalArrangement = Arrangement.spacedBy(6.dp),
                         ) {
-                            Text("📌", fontSize = 12.sp)
+                            androidx.compose.material3.Icon(
+                                imageVector = id.xydesk.remote.ui.components.XyIcons.Pin,
+                                contentDescription = null,
+                                tint = Color(0xFFFBBF24),
+                                modifier = Modifier.size(12.dp),
+                            )
                             Text(
                                 text = xy("PENGUMUMAN RESMI · TERSEMAT OTOMATIS", "OFFICIAL ANNOUNCEMENT · AUTO-PINNED"),
                                 fontSize = 10.sp,
@@ -1065,13 +1072,24 @@ private fun CommunityJokeItem(
                         color = Color(0xFF1C212E),
                         border = BorderStroke(1.dp, Color(0xFF2D3548)),
                     ) {
-                        Text(
-                            text = xy("✏️ Edit", "✏️ Edit"),
+                        Row(
                             modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
-                            fontSize = 11.sp,
-                            fontWeight = FontWeight.SemiBold,
-                            color = Color(0xFFE2E8F0),
-                        )
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(4.dp),
+                        ) {
+                            androidx.compose.material3.Icon(
+                                imageVector = id.xydesk.remote.ui.components.XyIcons.Edit,
+                                contentDescription = null,
+                                tint = Color(0xFFE2E8F0),
+                                modifier = Modifier.size(11.dp),
+                            )
+                            Text(
+                                text = xy("Edit", "Edit"),
+                                fontSize = 11.sp,
+                                fontWeight = FontWeight.SemiBold,
+                                color = Color(0xFFE2E8F0),
+                            )
+                        }
                     }
                     Spacer(Modifier.width(6.dp))
                     Surface(
@@ -1080,11 +1098,17 @@ private fun CommunityJokeItem(
                         color = Color(0xFF2A161B),
                         border = BorderStroke(1.dp, Color(0xFFEF4444).copy(alpha = 0.4f)),
                     ) {
-                        Text(
-                            text = "🗑️",
-                            modifier = Modifier.padding(horizontal = 7.dp, vertical = 4.dp),
-                            fontSize = 11.sp,
-                        )
+                        Box(
+                            modifier = Modifier.padding(horizontal = 7.dp, vertical = 5.dp),
+                            contentAlignment = Alignment.Center,
+                        ) {
+                            androidx.compose.material3.Icon(
+                                imageVector = id.xydesk.remote.ui.components.XyIcons.Trash,
+                                contentDescription = "Hapus",
+                                tint = Color(0xFFF87171),
+                                modifier = Modifier.size(12.dp),
+                            )
+                        }
                     }
                     Spacer(Modifier.width(4.dp))
                 }
@@ -1240,7 +1264,12 @@ private fun CommunityJokeItem(
                         horizontalArrangement = Arrangement.Center,
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
-                        Text(activeReaction ?: "👍", fontSize = 13.sp)
+                        androidx.compose.material3.Icon(
+                            imageVector = id.xydesk.remote.ui.components.XyIcons.ThumbUp,
+                            contentDescription = null,
+                            tint = if (activeReaction != null) Color(0xFFFBBF24) else Color(0xFFE2E8F0),
+                            modifier = Modifier.size(13.dp),
+                        )
                         Spacer(Modifier.width(5.dp))
                         Text(
                             text = if (totalReactions > 0) xy("Suka ($totalReactions)", "Like ($totalReactions)") else xy("Suka", "Like"),
@@ -1264,7 +1293,12 @@ private fun CommunityJokeItem(
                         horizontalArrangement = Arrangement.Center,
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
-                        Text("💬", fontSize = 13.sp)
+                        androidx.compose.material3.Icon(
+                            imageVector = id.xydesk.remote.ui.components.XyIcons.Chat,
+                            contentDescription = null,
+                            tint = Color(0xFFE2E8F0),
+                            modifier = Modifier.size(13.dp),
+                        )
                         Spacer(Modifier.width(5.dp))
                         Text(
                             text = xy("Komen (${joke.commentsTotal})", "Comment (${joke.commentsTotal})"),
@@ -1288,7 +1322,12 @@ private fun CommunityJokeItem(
                         horizontalArrangement = Arrangement.Center,
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
-                        Text("↗️", fontSize = 13.sp)
+                        androidx.compose.material3.Icon(
+                            imageVector = id.xydesk.remote.ui.components.XyIcons.Share,
+                            contentDescription = null,
+                            tint = Color(0xFFE2E8F0),
+                            modifier = Modifier.size(13.dp),
+                        )
                         Spacer(Modifier.width(5.dp))
                         Text(
                             text = xy("Bagikan", "Share"),
@@ -1366,7 +1405,12 @@ internal fun XyOpenGraphPreviewCard(
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.spacedBy(8.dp),
                     ) {
-                        Text(socialBrand.first, fontSize = 18.sp)
+                        androidx.compose.material3.Icon(
+                            imageVector = id.xydesk.remote.ui.components.XyIcons.Globe,
+                            contentDescription = null,
+                            tint = Color(0xFF94A3B8),
+                            modifier = Modifier.size(16.dp),
+                        )
                         Column {
                             Text(
                                 text = data?.siteName?.ifBlank { socialBrand.second } ?: socialBrand.second,
@@ -1396,13 +1440,13 @@ internal fun XyOpenGraphPreviewCard(
                     horizontalArrangement = Arrangement.SpaceBetween,
                 ) {
                     Text(
-                        text = "${socialBrand.first} ${(data?.siteName?.ifBlank { socialBrand.second } ?: socialBrand.second).uppercase()}",
+                        text = (data?.siteName?.ifBlank { socialBrand.second } ?: socialBrand.second).uppercase(),
                         fontSize = 10.sp,
                         fontWeight = FontWeight.ExtraBold,
                         color = Color(0xFFF59E0B),
                     )
                     Text(
-                        text = if (data?.safe == false) "🚨 DIBLOKIR XYSHIELD" else "🛡️ XyShield Aman",
+                        text = if (data?.safe == false) "DIBLOKIR XYSHIELD" else "XyShield Aman",
                         fontSize = 10.sp,
                         fontWeight = FontWeight.Bold,
                         color = if (data?.safe == false) Color(0xFFEF4444) else Color(0xFF10B981),
@@ -1445,16 +1489,16 @@ internal fun XyOpenGraphPreviewCard(
 private fun detectSocialBrandLabel(url: String): Pair<String, String> {
     val u = url.lowercase()
     return when {
-        "youtube.com" in u || "youtu.be" in u -> "▶️" to "YouTube"
-        "tiktok.com" in u -> "🎵" to "TikTok"
-        "instagram.com" in u -> "📸" to "Instagram"
-        "twitter.com" in u || "x.com" in u -> "𝕏" to "X / Twitter"
-        "github.com" in u -> "🐙" to "GitHub"
-        "discord.gg" in u || "discord.com" in u -> "💬" to "Discord"
-        "facebook.com" in u || "fb.watch" in u -> "📘" to "Facebook"
-        "reddit.com" in u -> "👽" to "Reddit"
-        "t.me" in u || "telegram.org" in u -> "✈️" to "Telegram"
-        else -> "🌐" to "Web Link"
+        "youtube.com" in u || "youtu.be" in u -> "YT" to "YouTube"
+        "tiktok.com" in u -> "TT" to "TikTok"
+        "instagram.com" in u -> "IG" to "Instagram"
+        "twitter.com" in u || "x.com" in u -> "X" to "X / Twitter"
+        "github.com" in u -> "GH" to "GitHub"
+        "discord.gg" in u || "discord.com" in u -> "DC" to "Discord"
+        "facebook.com" in u || "fb.watch" in u -> "FB" to "Facebook"
+        "reddit.com" in u -> "RD" to "Reddit"
+        "t.me" in u || "telegram.org" in u -> "TG" to "Telegram"
+        else -> "WEB" to "Web Link"
     }
 }
 
@@ -1462,19 +1506,23 @@ private val remoteBannerCache = object : android.util.LruCache<String, ByteArray
     override fun sizeOf(key: String, value: ByteArray): Int = value.size
 }
 
+private val remoteBannerBitmapCache = android.util.LruCache<String, androidx.compose.ui.graphics.ImageBitmap>(48)
+
 @Composable
 internal fun FeedRemoteUrlBannerImage(
     imageUrl: String,
     modifier: Modifier = Modifier,
 ) {
-    var bytes by remember(imageUrl) { mutableStateOf<ByteArray?>(remoteBannerCache.get(imageUrl)) }
+    var bmp by remember(imageUrl) {
+        mutableStateOf<androidx.compose.ui.graphics.ImageBitmap?>(remoteBannerBitmapCache.get(imageUrl))
+    }
     LaunchedEffect(imageUrl) {
-        if (bytes == null && imageUrl.startsWith("https://")) {
-            bytes = withContext(Dispatchers.IO) {
-                runCatching {
+        if (bmp == null && imageUrl.startsWith("https://")) {
+            bmp = withContext(Dispatchers.IO) {
+                val raw = remoteBannerCache.get(imageUrl) ?: runCatching {
                     val conn = java.net.URL(imageUrl).openConnection() as javax.net.ssl.HttpsURLConnection
-                    conn.connectTimeout = 6000
-                    conn.readTimeout = 8000
+                    conn.connectTimeout = 5000
+                    conn.readTimeout = 6000
                     conn.setRequestProperty("User-Agent", "XyDesk-OGBot/1.1")
                     try {
                         if (conn.responseCode in 200..299) {
@@ -1484,15 +1532,18 @@ internal fun FeedRemoteUrlBannerImage(
                         conn.disconnect()
                     }
                 }.getOrNull()?.also { remoteBannerCache.put(imageUrl, it) }
+                raw?.let {
+                    runCatching {
+                        android.graphics.BitmapFactory.decodeByteArray(it, 0, it.size)?.asImageBitmap()
+                    }.getOrNull()
+                }?.also { remoteBannerBitmapCache.put(imageUrl, it) }
             }
         }
     }
-    val bmp = remember(bytes) {
-        bytes?.let { runCatching { android.graphics.BitmapFactory.decodeByteArray(it, 0, it.size) }.getOrNull() }
-    }
-    if (bmp != null) {
+    val readyBmp = bmp
+    if (readyBmp != null) {
         Image(
-            bitmap = bmp.asImageBitmap(),
+            bitmap = readyBmp,
             contentDescription = null,
             modifier = modifier,
             contentScale = ContentScale.Crop,
@@ -1580,7 +1631,7 @@ private fun CommentsBottomSheet(
                 horizontalArrangement = Arrangement.SpaceBetween,
             ) {
                 Text(
-                    xy("💬 {0} Komentar", "💬 {0} Comments", joke.commentsTotal),
+                    xy("{0} Komentar", "{0} Comments", joke.commentsTotal),
                     style = MaterialTheme.typography.titleSmall,
                     fontWeight = FontWeight.Bold,
                     color = MaterialTheme.colorScheme.onSurface,
@@ -1667,7 +1718,7 @@ private fun CommentsBottomSheet(
                                         fontWeight = FontWeight.Bold,
                                         color = Color(0xFFF59E0B),
                                     )
-                                    if (c.isOwn || isViewerFounder) {
+                                    if (c.isOwn) {
                                         Text(
                                             if (deletingCommentId == c.id) "…" else xy("Hapus", "Delete"),
                                             modifier = Modifier
@@ -1840,7 +1891,7 @@ private fun ActionsBottomSheet(
         ) {
             if (canManage) {
                 Text(
-                    xy("✏️ Edit postingan", "✏️ Edit post"),
+                    xy("Edit postingan", "Edit post"),
                     modifier = Modifier
                         .fillMaxWidth()
                         .clip(RoundedCornerShape(10.dp))
@@ -1851,7 +1902,7 @@ private fun ActionsBottomSheet(
                     color = MaterialTheme.colorScheme.onSurface,
                 )
                 Text(
-                    xy("🗑️ Hapus postingan", "🗑️ Delete post"),
+                    xy("Hapus postingan", "Delete post"),
                     modifier = Modifier
                         .fillMaxWidth()
                         .clip(RoundedCornerShape(10.dp))
@@ -1863,7 +1914,7 @@ private fun ActionsBottomSheet(
                 )
             }
             Text(
-                xy("↗️ Bagikan postingan", "↗️ Share post"),
+                xy("Bagikan postingan", "Share post"),
                 modifier = Modifier
                     .fillMaxWidth()
                     .clip(RoundedCornerShape(10.dp))
@@ -1883,7 +1934,7 @@ private fun ActionsBottomSheet(
                 )
             } else {
                 Text(
-                    xy("🚩 Laporkan", "🚩 Report"),
+                    xy("Laporkan", "Report"),
                     modifier = Modifier
                         .fillMaxWidth()
                         .clip(RoundedCornerShape(10.dp))
@@ -1920,8 +1971,8 @@ internal fun checkMaliciousUriOrFile(context: android.content.Context, uri: andr
         mime.contains("application/x-sh")
     ) {
         return xyNow(
-            "🛡️ XyShield Anti-Virus: File eksekusi/APK/script berbahaya diblokir demi keamanan komunitas!",
-            "🛡️ XyShield Anti-Virus: Executable/APK/script files are blocked for community safety!",
+            "XyShield Anti-Virus: File eksekusi/APK/script berbahaya diblokir demi keamanan komunitas!",
+            "XyShield Anti-Virus: Executable/APK/script files are blocked for community safety!",
         )
     }
     return null
@@ -1989,12 +2040,8 @@ private val feedImageCache = object : android.util.LruCache<String, ByteArray>(8
     override fun sizeOf(key: String, value: ByteArray): Int = value.size
 }
 
-/**
- * Menampilkan lampiran Feed:
- * - Video (`video/mp4`, `video/webm`) otomatis berputar preview tanpa suara (Autoplay Muted Loop) walau tidak dibuka!
- * - GIF dianimasikan otomatis.
- * - Gambar HD dirender tajam.
- */
+private val feedDecodedBitmapCache = android.util.LruCache<String, androidx.compose.ui.graphics.ImageBitmap>(48)
+
 @Composable
 internal fun FeedBinaryImage(
     path: String,
@@ -2005,11 +2052,22 @@ internal fun FeedBinaryImage(
 ) {
     val context = LocalContext.current
     var bytes by remember(path) { mutableStateOf<ByteArray?>(feedImageCache.get(path)) }
-    LaunchedEffect(path) {
-        if (bytes == null) {
-            bytes = withContext(Dispatchers.IO) {
-                runCatching { CommunityJokesApi(context).fetchBinary(path) }.getOrNull()
-                    ?.also { feedImageCache.put(path, it) }
+    var decodedBmp by remember(path) {
+        mutableStateOf<androidx.compose.ui.graphics.ImageBitmap?>(feedDecodedBitmapCache.get(path))
+    }
+    LaunchedEffect(path, mime) {
+        val raw = bytes ?: withContext(Dispatchers.IO) {
+            runCatching { CommunityJokesApi(context).fetchBinary(path) }.getOrNull()
+                ?.also { feedImageCache.put(path, it) }
+        }
+        if (raw != null && bytes == null) {
+            bytes = raw
+        }
+        if (raw != null && decodedBmp == null && mime?.startsWith("video/") != true && mime != "image/gif") {
+            decodedBmp = withContext(Dispatchers.IO) {
+                runCatching {
+                    android.graphics.BitmapFactory.decodeByteArray(raw, 0, raw.size)?.asImageBitmap()
+                }.getOrNull()?.also { feedDecodedBitmapCache.put(path, it) }
             }
         }
     }
@@ -2049,12 +2107,9 @@ internal fun FeedBinaryImage(
             modifier = modifier.clip(shape),
         )
     } else {
-        val bmp = remember(data) {
-            data?.let { android.graphics.BitmapFactory.decodeByteArray(it, 0, it.size) }
-        }
-        bmp?.let {
+        decodedBmp?.let {
             Image(
-                bitmap = it.asImageBitmap(),
+                bitmap = it,
                 contentDescription = null,
                 modifier = modifier.clip(shape),
                 contentScale = when {
@@ -2132,13 +2187,24 @@ internal fun FeedAutoplayVideoPreview(
                 .align(Alignment.BottomEnd)
                 .padding(8.dp),
         ) {
-            Text(
-                text = if (muted) "🔇 Autoplay · Ketuk Suara" else "🔊 Suara Aktif",
+            Row(
                 modifier = Modifier.padding(horizontal = 9.dp, vertical = 4.dp),
-                fontSize = 10.sp,
-                fontWeight = FontWeight.Bold,
-                color = Color.White,
-            )
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(4.dp),
+            ) {
+                androidx.compose.material3.Icon(
+                    imageVector = id.xydesk.remote.ui.components.XyIcons.Volume,
+                    contentDescription = null,
+                    tint = Color.White,
+                    modifier = Modifier.size(12.dp),
+                )
+                Text(
+                    text = if (muted) "Autoplay · Ketuk Suara" else "Suara Aktif",
+                    fontSize = 10.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = Color.White,
+                )
+            }
         }
     }
 }

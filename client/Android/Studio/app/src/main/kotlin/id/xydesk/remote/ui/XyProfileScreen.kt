@@ -858,7 +858,7 @@ private fun CommunityAccountCard(
             }
             Column(horizontalAlignment = Alignment.CenterHorizontally) {
                 Text(
-                    text = "★ $favStickersCount",
+                    text = "$favStickersCount",
                     style = MaterialTheme.typography.labelLarge,
                     fontWeight = FontWeight.ExtraBold,
                 )
@@ -870,9 +870,10 @@ private fun CommunityAccountCard(
             }
             Column(horizontalAlignment = Alignment.CenterHorizontally) {
                 Text(
-                    text = "🛡️ ON",
+                    text = "AKTIF",
                     style = MaterialTheme.typography.labelLarge,
                     fontWeight = FontWeight.ExtraBold,
+                    color = Color(0xFF10B981),
                 )
                 Text(
                     text = "XyShield",

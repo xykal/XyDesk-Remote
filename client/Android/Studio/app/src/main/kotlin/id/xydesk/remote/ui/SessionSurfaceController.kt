@@ -351,19 +351,41 @@ class SessionSurfaceController(private val activity: Activity) : GraphicsSink {
     /** Dipanggil saat state = Connected. */
     fun bind(inst: Long) {
         if (inst == 0L) return
-        this.inst = inst
+        if (this.inst != inst) {
+            this.inst = inst
+        }
         uiHandler.post {
-            val session = GlobalApp.getSession(inst)
-            val surface = session?.getSurface()
+            val session = GlobalApp.getSession(inst) ?: return@post
+            var surface = session.getSurface()
+            if (surface == null) {
+                val existingBm = bitmap
+                if (existingBm != null && !existingBm.isRecycled) {
+                    val drawable = BitmapDrawable(activity.resources, existingBm).apply {
+                        isFilterBitmap = true
+                        setDither(true)
+                        paint.isFilterBitmap = true
+                        paint.isAntiAlias = true
+                        paint.isDither = true
+                    }
+                    session.setSurface(drawable)
+                    surface = drawable
+                }
+            }
             inputManager?.attachSession(inst, surface?.bitmap)
             val root = rootView
             if (root != null && root.width > 0 && root.height > 0) {
                 inputManager?.setScreenSize(root.width, root.height)
             }
-            if (session == null || surface == null) return@post
-            bitmap = surface.bitmap
+            if (surface == null) return@post
+            val bm = surface.bitmap
+            bitmap = bm
+            synchronized(bm) {
+                runCatching { LibFreeRDP.updateGraphics(inst, bm, 0, 0, bm.width, bm.height) }
+            }
             sessionView?.onSurfaceChange(session)
+            sessionView?.invalidate()
             scrollView?.requestLayout()
+            onGraphicsInvalidated?.invoke()
         }
     }
 
@@ -655,9 +677,21 @@ class SessionSurfaceController(private val activity: Activity) : GraphicsSink {
     // GraphicsSink (dipanggil dari thread RDP)
     // ------------------------------------------------------------------
 
+    override fun onSessionInstanceBound(inst: Long) {
+        if (inst == 0L) return
+        if (this.inst != inst) {
+            this.inst = inst
+            bitmap = null
+        }
+    }
+
     override fun onGraphicsUpdate(x: Int, y: Int, width: Int, height: Int) {
         val i = inst
-        val bm = bitmap
+        var bm = bitmap
+        if (i != 0L && bm == null) {
+            bm = GlobalApp.getSession(i)?.getSurface()?.bitmap
+            if (bm != null) bitmap = bm
+        }
         if (i == 0L || bm == null) return
         if (width <= 0 || height <= 0) return
         val left = x.coerceIn(0, bm.width)
@@ -705,18 +739,19 @@ class SessionSurfaceController(private val activity: Activity) : GraphicsSink {
             ConnectionLog.add("SES: tolak surface di luar batas ${width}x$height")
             return
         }
-        val newBitmap = runCatching {
-            Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888).apply {
-                setHasAlpha(false)
-                // Mipmap trilinear dimatikan: pada skala non-bulat mip level
-                // yang dipilih GPU membuat stroke huruf tipis ikut turun
-                // resolusi sehingga teks tampak pecah. Filter bilinear
-                // (isFilterBitmap) sudah cukup untuk diperkecil/diperbesar.
-                setHasMipMap(false)
+        val existing = bitmap
+        val newBitmap = if (existing != null && !existing.isRecycled && existing.width == width && existing.height == height) {
+            existing
+        } else {
+            runCatching {
+                Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888).apply {
+                    setHasAlpha(false)
+                    setHasMipMap(false)
+                }
+            }.getOrElse {
+                ConnectionLog.addThrowable("SES: gagal alokasi surface ${width}x$height", it)
+                return
             }
-        }.getOrElse {
-            ConnectionLog.addThrowable("SES: gagal alokasi surface ${width}x$height", it)
-            return
         }
         bitmap = newBitmap
         val session = GlobalApp.getSession(i) ?: return
@@ -728,13 +763,24 @@ class SessionSurfaceController(private val activity: Activity) : GraphicsSink {
             paint.isDither = true
         }
         session.setSurface(drawable)
+        val stats = frameStats
+        val copyStartNs = if (stats != null) System.nanoTime() else 0L
+        synchronized(newBitmap) {
+            runCatching { LibFreeRDP.updateGraphics(i, newBitmap, 0, 0, width, height) }
+        }
+        if (stats != null) {
+            stats.recordUpdate(System.nanoTime() - copyStartNs)
+            stats.recordFlush(copyStartNs, 1)
+        }
         uiHandler.post {
             if (!viewReady) return@post
             val sv = sessionView ?: return@post
             sv.onSurfaceChange(session)
+            sv.invalidate()
             scrollView?.requestLayout()
             inputManager?.setBitmap(newBitmap)
             inputManager?.attachSession(i, newBitmap)
+            onGraphicsInvalidated?.invoke()
         }
     }
 
@@ -792,13 +838,19 @@ class SessionSurfaceController(private val activity: Activity) : GraphicsSink {
         if (i == 0L) return
         val session = GlobalApp.getSession(i) ?: return
         val surface = session.getSurface() ?: return
-        bitmap = surface.bitmap
+        val bm = surface.bitmap
+        bitmap = bm
+        synchronized(bm) {
+            runCatching { LibFreeRDP.updateGraphics(i, bm, 0, 0, bm.width, bm.height) }
+        }
         uiHandler.post {
             if (!viewReady) return@post
             sessionView?.onSurfaceChange(session)
+            sessionView?.invalidate()
             scrollView?.requestLayout()
-            inputManager?.setBitmap(surface.bitmap)
-            inputManager?.attachSession(i, surface.bitmap)
+            inputManager?.setBitmap(bm)
+            inputManager?.attachSession(i, bm)
+            onGraphicsInvalidated?.invoke()
         }
     }
 

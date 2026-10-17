@@ -210,14 +210,16 @@ fun RdpFreeScreen(onBack: () -> Unit, onConnect: (ConnectionProfile) -> Unit) {
 
     LaunchedEffect(Unit) {
         val saved = vault.get(XyRdpConfig.VAULT_PAT_ID)
-        if (saved != null) {
+        if (!saved.isNullOrBlank()) {
+            token = saved
+            val cachedUser = getVerifiedGitHubLogin(context)
+            if (!cachedUser.isNullOrBlank()) {
+                login = cachedUser
+            }
             val user = XyRdpClient.whoami(saved)
-            if (user != null) {
-                token = saved
+            if (!user.isNullOrBlank()) {
                 login = user
                 saveVerifiedGitHubLogin(context, user)
-            } else {
-                vault.remove(XyRdpConfig.VAULT_PAT_ID)
             }
         }
     }
@@ -831,7 +833,7 @@ fun RdpFreeScreen(onBack: () -> Unit, onConnect: (ConnectionProfile) -> Unit) {
                         // Tombol Preset Cepat
                         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                             XyPillButton(
-                                "⚡ Profil Cepat (Boot Kilat)",
+                                "Profil Cepat (Boot Kilat)",
                                 {
                                     xydeskBoost = true
                                     microphone = true
@@ -852,7 +854,7 @@ fun RdpFreeScreen(onBack: () -> Unit, onConnect: (ConnectionProfile) -> Unit) {
                                 modifier = Modifier.weight(1f),
                             )
                             XyPillButton(
-                                if (isLinuxRunner) "🐧 Profil Linux Lengkap" else "🎮 Profil Game Lengkap",
+                                if (isLinuxRunner) "Profil Linux Lengkap" else "Profil Game Lengkap",
                                 {
                                     autoRenew = true
                                     xydeskBoost = true

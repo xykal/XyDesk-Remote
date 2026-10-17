@@ -620,10 +620,7 @@ function communityJokeListKey(createdAt, id) {
 }
 
 function communityCommentPublicView(comment, viewerHash = null, viewerGh = "") {
-  const commentGh = String(comment.github_login || "").trim().toLowerCase();
   const isOwnHash = Boolean(viewerHash && comment.author_hash && comment.author_hash === viewerHash);
-  const isOwnGh = Boolean(viewerGh && commentGh && viewerGh === commentGh);
-  const isFounderViewer = viewerGh === "xykal";
   return {
     id: comment.id,
     name: comment.name || null,
@@ -633,7 +630,7 @@ function communityCommentPublicView(comment, viewerHash = null, viewerGh = "") {
     reply_to_name: comment.reply_to_name || null,
     text: comment.text,
     created_at: comment.created_at,
-    is_own: Boolean(isOwnHash || isOwnGh || isFounderViewer),
+    is_own: isOwnHash,
   };
 }
 
@@ -1228,35 +1225,36 @@ export class CommunityJokes {
     try {
       const clientHash = clientId ? await hashedCommunityClientId(clientId) : null;
       const entries = await this.state.storage.list({ prefix: "joke:", reverse: true, limit: COMMUNITY_JOKE_MAX_ITEMS });
-      const items = [];
+      const visibleJokes = [];
       for (const [, joke] of entries) {
         if (!joke || joke.hidden) continue;
-        const viewerReaction = clientHash
-          ? await this.state.storage.get(`joke-reaction:${joke.id}:${clientHash}`) || null
-          : null;
-        const commentEntries = await this.state.storage.list({
-          prefix: `joke-comments:${joke.id}:`,
-          reverse: true,
-          limit: COMMUNITY_COMMENT_FEED_SIZE,
-        });
-        const comments = Array.from(commentEntries.values()).map((c) => communityCommentPublicView(c, clientHash, viewerGh));
-        const jokeGh = String(joke.github_login || "").trim().toLowerCase();
-        const jokeAuthorLower = String(joke.author_name || "").trim().replace(/^@/, "").toLowerCase();
-        const isOwn = Boolean(
-          (clientHash && joke.author_hash === clientHash) ||
-          (viewerGh && (jokeGh === viewerGh || jokeAuthorLower === viewerGh)) ||
-          viewerGh === "xykal"
-        );
-        let avatarUrl = joke.author_avatar_url || null;
-        if (!avatarUrl && joke.author_hash && this.kv) {
-          const head = await this.kv.getWithMetadata(`feed-avatar:${joke.author_hash}`).catch(() => null);
-          if (head?.value !== null && head?.value !== undefined) {
-            avatarUrl = `/api/jokes/avatar/${joke.author_hash}`;
-          }
-        }
-        items.push(communityJokePublicView(joke, viewerReaction, comments, { isOwn, avatarUrl }));
-        if (items.length >= COMMUNITY_JOKE_FEED_SIZE) break;
+        visibleJokes.push(joke);
+        if (visibleJokes.length >= COMMUNITY_JOKE_FEED_SIZE) break;
       }
+      const items = await Promise.all(
+        visibleJokes.map(async (joke) => {
+          const [viewerReaction, commentEntries] = await Promise.all([
+            clientHash
+              ? this.state.storage.get(`joke-reaction:${joke.id}:${clientHash}`).then((r) => r || null).catch(() => null)
+              : Promise.resolve(null),
+            this.state.storage.list({
+              prefix: `joke-comments:${joke.id}:`,
+              reverse: true,
+              limit: COMMUNITY_COMMENT_FEED_SIZE,
+            }),
+          ]);
+          const comments = Array.from(commentEntries.values()).map((c) => communityCommentPublicView(c, clientHash, viewerGh));
+          const isOwn = Boolean(clientHash && joke.author_hash && joke.author_hash === clientHash);
+          let avatarUrl = joke.author_avatar_url || (joke.github_login ? `https://github.com/${joke.github_login}.png?size=120` : null);
+          if (!avatarUrl && joke.author_hash && this.kv) {
+            const head = await this.kv.getWithMetadata(`feed-avatar:${joke.author_hash}`).catch(() => null);
+            if (head?.value !== null && head?.value !== undefined) {
+              avatarUrl = `/api/jokes/avatar/${joke.author_hash}`;
+            }
+          }
+          return communityJokePublicView(joke, viewerReaction, comments, { isOwn, avatarUrl });
+        }),
+      );
       items.sort((a, b) => {
         const pa = a.pinned || a.is_announcement ? 1 : 0;
         const pb = b.pinned || b.is_announcement ? 1 : 0;
@@ -1440,17 +1438,13 @@ export class CommunityJokes {
     }
     try {
       const clientHash = await hashedCommunityClientId(clientId);
-      const reqGh = String(parsed.body?.github_login || "").trim().replace(/^@/, "").toLowerCase();
-      const isFounderEditor = isFounderChatName(parsed.body?.display_name, reqGh);
       const allowLinks = parsed.body?.allow_links === true;
       const outcome = await this.state.storage.transaction(async (transaction) => {
         const listKey = await transaction.get(`joke-id:${jokeId}`);
         if (!listKey) return { status: "not_found" };
         const joke = await transaction.get(listKey);
         if (!joke || joke.hidden) return { status: "not_found" };
-        const jokeGh = String(joke.github_login || "").trim().toLowerCase();
-        const jokeAuthorLower = String(joke.author_name || "").trim().replace(/^@/, "").toLowerCase();
-        const canEdit = joke.author_hash === clientHash || isFounderEditor || (reqGh && (jokeGh === reqGh || jokeAuthorLower === reqGh));
+        const canEdit = Boolean(clientHash && joke.author_hash && joke.author_hash === clientHash);
         if (!canEdit) return { status: "forbidden" };
 
         let text = joke.text;
@@ -1516,16 +1510,12 @@ export class CommunityJokes {
     }
     try {
       const clientHash = await hashedCommunityClientId(clientId);
-      const reqGh = String(parsed.body?.github_login || "").trim().replace(/^@/, "").toLowerCase();
-      const isFounderDeleter = isFounderChatName(parsed.body?.display_name, reqGh);
       const outcome = await this.state.storage.transaction(async (transaction) => {
         const listKey = await transaction.get(`joke-id:${jokeId}`);
         if (!listKey) return { status: "not_found" };
         const joke = await transaction.get(listKey);
         if (!joke) return { status: "not_found" };
-        const jokeGh = String(joke.github_login || "").trim().toLowerCase();
-        const jokeAuthorLower = String(joke.author_name || "").trim().replace(/^@/, "").toLowerCase();
-        const canDelete = joke.author_hash === clientHash || isFounderDeleter || (reqGh && (jokeGh === reqGh || jokeAuthorLower === reqGh));
+        const canDelete = Boolean(clientHash && joke.author_hash && joke.author_hash === clientHash);
         if (!canDelete) return { status: "forbidden" };
         await transaction.delete(listKey);
         await transaction.delete(`joke-id:${jokeId}`);
@@ -1609,8 +1599,6 @@ export class CommunityJokes {
     }
     try {
       const clientHash = await hashedCommunityClientId(clientId);
-      const reqGh = String(parsed.body?.github_login || "").trim().replace(/^@/, "").toLowerCase();
-      const isFounderDeleter = isFounderChatName(parsed.body?.display_name, reqGh);
       const outcome = await this.state.storage.transaction(async (transaction) => {
         const listKey = await transaction.get(`joke-id:${jokeId}`);
         if (!listKey) return { status: "not_found" };
@@ -1623,10 +1611,7 @@ export class CommunityJokes {
         }
         if (!targetKey) return { status: "not_found" };
         const stored = entries.get(targetKey);
-        const storedGh = String(stored?.github_login || "").trim().toLowerCase();
-        const canDel = (stored?.author_hash && stored.author_hash === clientHash) ||
-          isFounderDeleter ||
-          (reqGh && storedGh && reqGh === storedGh);
+        const canDel = Boolean(clientHash && stored?.author_hash && stored.author_hash === clientHash);
         if (!canDel) return { status: "forbidden" };
         await transaction.delete(targetKey);
         joke.comment_count = Math.max(0, (Number(joke.comment_count) || 0) - 1);
@@ -4268,6 +4253,104 @@ export default {
         } catch {}
       }
       return durableObjectJson({ status: "ok", deleted_id: msgId }, 200, request.method);
+    }
+    if (path === "/api/github/oauth/login") {
+      if (request.method === "OPTIONS") return corsPreflight("GET, OPTIONS");
+      if (request.method !== "GET") return methodNotAllowed("GET, OPTIONS");
+      const sid = String(url.searchParams.get("session_id") || "").trim().replace(/[^a-zA-Z0-9_-]/g, "").slice(0, 64);
+      const scope = String(url.searchParams.get("scope") || "repo workflow read:user user:email");
+      const oauthClientId = String(env?.GITHUB_OAUTH_CLIENT_ID || "").trim();
+      const oauthSecret = String(env?.GITHUB_OAUTH_CLIENT_SECRET || "").trim();
+      if (oauthClientId && oauthSecret) {
+        const state = sid ? `apk_${sid}_${crypto.randomUUID().replace(/-/g, "").slice(0, 12)}` : crypto.randomUUID().replace(/-/g, "");
+        const cb = `${url.origin}/api/github/oauth/callback`;
+        const authorizeUrl = "https://github.com/login/oauth/authorize"
+          + `?client_id=${encodeURIComponent(oauthClientId)}`
+          + `&redirect_uri=${encodeURIComponent(cb)}`
+          + `&scope=${encodeURIComponent(scope)}`
+          + `&state=${encodeURIComponent(state)}&allow_signup=true`;
+        return new Response(null, {
+          status: 302,
+          headers: {
+            "Location": authorizeUrl,
+            "Cache-Control": "no-store",
+            "Set-Cookie": `xy_oauth_state=${state}; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=900`,
+          },
+        });
+      }
+      const bridgeUrl = `https://xyrdp-dash.vercel.app/api/auth/login?apk=1&session_id=${encodeURIComponent(sid)}&scope=${encodeURIComponent(scope)}`;
+      return new Response(null, {
+        status: 302,
+        headers: {
+          "Location": bridgeUrl,
+          "Cache-Control": "no-store",
+        },
+      });
+    }
+    if (path === "/api/github/oauth/callback") {
+      if (request.method !== "GET") return methodNotAllowed("GET");
+      const code = String(url.searchParams.get("code") || "").trim();
+      const state = String(url.searchParams.get("state") || "").trim();
+      const oauthClientId = String(env?.GITHUB_OAUTH_CLIENT_ID || "").trim();
+      const oauthSecret = String(env?.GITHUB_OAUTH_CLIENT_SECRET || "").trim();
+      if (!code || !oauthClientId || !oauthSecret) {
+        return new Response("OAuth callback tidak valid atau belum dikonfigurasi.", { status: 400 });
+      }
+      const cb = `${url.origin}/api/github/oauth/callback`;
+      const tokRes = await fetch("https://github.com/login/oauth/access_token", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "Accept": "application/json",
+          "User-Agent": "XyDeskRemote-OAuth/1.0",
+        },
+        body: JSON.stringify({
+          client_id: oauthClientId,
+          client_secret: oauthSecret,
+          code,
+          redirect_uri: cb,
+        }),
+      });
+      const tokData = await tokRes.json().catch(() => ({}));
+      const accessToken = String(tokData?.access_token || "").trim();
+      if (!accessToken) {
+        return new Response("Gagal menukar kode OAuth GitHub.", { status: 400 });
+      }
+      const meRes = await fetch("https://api.github.com/user", {
+        headers: {
+          "User-Agent": "XyDeskRemote-OAuth/1.0",
+          "Authorization": `Bearer ${accessToken}`,
+          "X-GitHub-Api-Version": "2022-11-28",
+        },
+      });
+      const me = meRes.ok ? await meRes.json().catch(() => ({})) : {};
+      const login = String(me?.login || "").trim();
+      const name = String(me?.name || login).trim();
+      const avatarUrl = String(me?.avatar_url || "").trim();
+      const parts = state.split("_");
+      const sid = state.startsWith("apk_") && parts.length >= 2 ? parts[1] : "";
+      if (sid && login) {
+        const sessionPayload = {
+          token: accessToken,
+          login,
+          name,
+          avatar_url: avatarUrl,
+          at: Date.now(),
+        };
+        EDGE_OAUTH_SESSIONS.set(sid, sessionPayload);
+        if (env?.UNIQUE_DOWNLOADS) {
+          try {
+            await env.UNIQUE_DOWNLOADS.put(`oauth:${sid}`, JSON.stringify(sessionPayload), { expirationTtl: 600 });
+          } catch {}
+        }
+      }
+      const deepLink = `xydesk://github-auth?token=${encodeURIComponent(accessToken)}&login=${encodeURIComponent(login)}&name=${encodeURIComponent(name)}&avatar=${encodeURIComponent(avatarUrl)}`;
+      const intentLink = `intent://github-auth?token=${encodeURIComponent(accessToken)}&login=${encodeURIComponent(login)}&name=${encodeURIComponent(name)}&avatar=${encodeURIComponent(avatarUrl)}#Intent;scheme=xydesk;package=id.xydesk.remote;end`;
+      const html = `<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>GitHub Terhubung · XyDesk Remote</title><style>body{background:#09090b;color:#fafafa;font-family:system-ui,-apple-system,sans-serif;display:flex;align-items:center;justify-content:center;min-height:100vh;margin:0;padding:24px;text-align:center}.card{max-width:380px;background:#141418;border:1px solid rgba(255,255,255,.12);border-radius:20px;padding:28px 22px}.btn{display:inline-block;margin-top:18px;padding:12px 24px;border-radius:999px;background:#fafafa;color:#09090b;font-weight:700;text-decoration:none;font-size:14px}</style></head><body><div class="card"><div style="font-size:18px;font-weight:800;margin-bottom:8px">GitHub Terhubung</div><div style="font-size:13px;color:#a1a1aa">Masuk sebagai <b>@${login.replace(/[<>&"']/g, "")}</b>. Mengembalikan otomatis ke aplikasi XyDesk Remote...</div><a class="btn" href="${deepLink}">Kembali ke XyDesk Remote</a></div><script>setTimeout(function(){window.location.replace(${JSON.stringify(deepLink)});},80);setTimeout(function(){window.location.replace(${JSON.stringify(intentLink)});},600);</script></body></html>`;
+      return new Response(html, {
+        status: 200,
+        headers: { "Content-Type": "text/html; charset=utf-8", "Cache-Control": "no-store" },
+      });
     }
     if (path === "/api/github/oauth/complete") {
       if (request.method === "OPTIONS") return corsPreflight("POST, OPTIONS");

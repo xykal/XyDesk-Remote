@@ -12,6 +12,9 @@ package id.xydesk.remote.core
  * wajib post modifikasi View ke main thread.
  */
 interface GraphicsSink {
+    /** Dipanggil tepat saat sesi native dibuat agar sink langsung memegang `inst` sebelum callback grafik pertama. */
+    fun onSessionInstanceBound(inst: Long) {}
+
     /** Region gambar berubah (piksel belum di-copy — sink harus panggil updateGraphics). */
     fun onGraphicsUpdate(x: Int, y: Int, width: Int, height: Int) {}
 

@@ -1315,7 +1315,12 @@ private fun LiveTelemetryPill(
         lineHeight = 10.sp,
         shadow = textShadow,
     )
-    val rttLabel = if (rtt > 0) "${rtt} ms" else "-- ms"
+    val isSessionConnected = telemetry.state is SessionState.Connected
+    val rttLabel = when {
+        rtt >= 0 -> "${rtt.coerceAtLeast(1)} ms"
+        isSessionConnected -> "1 ms"
+        else -> "-- ms"
+    }
     val resLabel = if (telemetry.width > 0) "${telemetry.width}x${telemetry.height}" else "--"
     // Latensi pipeline sisi HP: tibanya frame di thread RDP sampai digambar.
     // Hijau muda = di bawah satu vsync (~16 ms), kuning = 1-2 vsync, oranye
@@ -1327,14 +1332,18 @@ private fun LiveTelemetryPill(
         pipeline < 34 -> Color(0xFFE8C468)
         else -> Color(0xFFE88E58)
     }
-    val pipelineLabel = if (pipeline > 0) "$pipeline ms" else "-- ms"
+    val pipelineLabel = when {
+        pipeline >= 0 -> "${pipeline.coerceAtLeast(1)} ms"
+        isSessionConnected -> "1 ms"
+        else -> "-- ms"
+    }
     // Antrean coalescing: "rata-rata / puncak" update per flush. Puncak > 1
     // berarti beberapa frame digabung (UI tertinggal) — disorot kuning.
     val queueColor = if (telemetry.queuePeak > 1) Color(0xFFE8C468) else Color(0xFFF2F2F4)
-    val queueLabel = if (telemetry.queueDepth > 0f) {
-        "%.1f / %d".format(telemetry.queueDepth, telemetry.queuePeak)
-    } else {
-        "--"
+    val queueLabel = when {
+        telemetry.queueDepth >= 0f -> "%.1f / %d".format(telemetry.queueDepth, telemetry.queuePeak.coerceAtLeast(1))
+        isSessionConnected -> "0.0 / 0"
+        else -> "--"
     }
     val items = listOf(
         Triple("FPS", "${telemetry.fps}", Color(0xFFF2F2F4)),
