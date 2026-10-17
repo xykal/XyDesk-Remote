@@ -1505,3 +1505,14 @@ Tiga permintaan pemilik ditangani tuntas:
 
 
 
+
+## Ronde 54–55 — Rilis Publik `v1.1.18` (`VERSION_CODE 79`, Commit `bc0af340301dd8c25ec8b4377b52fd5075e2e5e6`, CI `39034034723`)
+- **Perbaikan Bug Sesi Relog / Keluar Saat Main Game (`XyDeskSession.kt`, `XyDeskSessionActivity.kt`, `AndroidManifest.xml`):**
+  - Watchdog `zeroFrameStreak` kini hanya berjalan sebelum frame pertama tergambar (`!everRenderedFrame`), mencegah false-positive relog saat layar game/loading statis (`telemetry.fps == 0`).
+  - Menambahkan `keyboard|keyboardHidden|navigation|touchscreen|screenSize|smallestScreenSize|density|screenLayout|uiMode|fontScale|layoutDirection|colorMode|mcc|mnc` + `singleTask` di `AndroidManifest.xml` agar colok/cabut mouse/gamepad OTG/Bluetooth tidak menghancurkan Activity sesi.
+- **Konsistensi UI & Safe Area Semua Layar (`XyDeskHomeActivity.kt`, `XyDeskHome.kt`, `SessionControls.kt`, `GlobalChatScreen.kt`, `PcStreamSessionActivity.kt`):**
+  - Menerapkan `statusBarsPadding()`, `navigationBarsPadding()`, dan `displayCutoutPadding()` secara konsisten serta normalisasi `LocalDensity` (`fontScale` `0.85f..1.10f`).
+- **Chat Global E2EE, Custom Sticker `.webp.crypto15` & Floating Chat Liquid Glass Hitam-Putih:**
+  - Sematkan Pesan (`/api/chat/pin` + WebSocket `pin`), Salin Pesan, Kirim Video (`video/*`), Media 1× Sekali Lihat (`viewOnce`), serta Pratinjau Foto & Video Layar Penuh (`FullScreenChatMediaViewer`) dengan Pinch-to-Zoom (`1x`–`5x`), Double-Tap Zoom, Video Player, dan Simpan ke Galeri.
+  - Stiker Custom WebP Terenkripsi `.webp.crypto15` di `Android/media/id.xydesk.remote/globwlchat/sticker/<Token>+2+$+$8.webp.crypto15` & `globalchat/sticker/`.
+- **Linux Polos (Tanpa XFCE4) + Terminal SSH-2, On-Mic (`AUDIN` OpenSL ES + `onmic.ps1` / `XyDesk-RDP-OnMic-Setup.bat`), & Native GUI Windows Host Agent (`XyDeskRemoteHost.exe`).**
