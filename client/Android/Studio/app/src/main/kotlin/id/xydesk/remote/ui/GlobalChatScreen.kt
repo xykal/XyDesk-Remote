@@ -19,6 +19,7 @@ import android.util.Base64
 import android.widget.MediaController
 import android.widget.Toast
 import android.widget.VideoView
+import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.annotation.DrawableRes
@@ -41,6 +42,7 @@ import androidx.compose.foundation.gestures.detectTransformGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.IntrinsicSize
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -184,10 +186,12 @@ private const val CHAT_WS_URL = "wss://api.xydeskremote.biz.id/ws/chat"
 private const val CHAT_HISTORY_URL = "https://api.xydeskremote.biz.id/api/chat/history"
 private const val CHAT_SEND_URL = "https://api.xydeskremote.biz.id/api/chat/send"
 private const val CHAT_PIN_URL = "https://api.xydeskremote.biz.id/api/chat/pin"
+private const val CHAT_DELETE_URL = "https://api.xydeskremote.biz.id/api/chat/delete"
 private const val CHAT_PREFS = "xydesk.global.chat"
 private const val KEY_NICKNAME = "nickname"
 private const val KEY_TARGET_LANG = "viewer_target_lang"
 private const val KEY_VIEWED_ONCE_IDS = "viewed_once_ids"
+private const val KEY_HIDDEN_MSG_IDS = "hidden_msg_ids_v1"
 
 private data class PinnedChatMessage(
     val id: String,
@@ -250,25 +254,100 @@ private data class LangOption(
 )
 
 private val SUPPORTED_VIEWER_LANGS = listOf(
-    LangOption("auto", "Otomatis (ID ↔ EN Sesuai Bahasa Pesan)", "AUTO"),
+    LangOption("auto", "Otomatis Sesuai Region Negara Penonton (All Negara)", "AUTO"),
     LangOption("id", "Bahasa Indonesia", "ID"),
     LangOption("en", "English (Inggris)", "EN"),
+    LangOption("ms", "Bahasa Melayu (Malaysia / Brunei)", "MS"),
     LangOption("th", "ภาษาไทย (Thailand)", "TH"),
     LangOption("ja", "日本語 (Jepang)", "JA"),
     LangOption("ko", "한국어 (Korea)", "KO"),
-    LangOption("zh-CN", "中文简体 (Mandarin)", "ZH"),
-    LangOption("ms", "Bahasa Melayu (Malaysia)", "MS"),
+    LangOption("zh-CN", "中文简体 (Mandarin / Tiongkok)", "ZH"),
+    LangOption("zh-TW", "中文繁體 (Taiwan / Hong Kong)", "TW"),
     LangOption("vi", "Tiếng Việt (Vietnam)", "VI"),
-    LangOption("tl", "Filipino / Tagalog", "TL"),
-    LangOption("ar", "العربية (Arab)", "AR"),
-    LangOption("ru", "Русский (Rusia)", "RU"),
+    LangOption("tl", "Filipino / Tagalog (Filipina)", "TL"),
+    LangOption("ar", "العربية (Timur Tengah / Arab)", "AR"),
+    LangOption("ru", "Русский (Rusia / CIS)", "RU"),
     LangOption("hi", "हिन्दी (India)", "HI"),
-    LangOption("es", "Español (Spanyol)", "ES"),
-    LangOption("pt", "Português (Portugis)", "PT"),
-    LangOption("de", "Deutsch (Jerman)", "DE"),
-    LangOption("fr", "Français (Prancis)", "FR"),
+    LangOption("ur", "اردو (Pakistan)", "UR"),
+    LangOption("bn", "বাংলা (Bangladesh)", "BN"),
+    LangOption("es", "Español (Spanyol / Amerika Latin)", "ES"),
+    LangOption("pt", "Português (Brasil / Portugal)", "PT"),
+    LangOption("de", "Deutsch (Jerman / Austria / Swiss)", "DE"),
+    LangOption("fr", "Français (Prancis / Kanada / Afrika)", "FR"),
+    LangOption("it", "Italiano (Italia)", "IT"),
+    LangOption("nl", "Nederlands (Belanda / Belgia)", "NL"),
     LangOption("tr", "Türkçe (Turki)", "TR"),
+    LangOption("pl", "Polski (Polandia)", "PL"),
+    LangOption("uk", "Українська (Ukraina)", "UK"),
 )
+
+private val COUNTRY_TO_PRIMARY_LANG = mapOf(
+    // Asia Tenggara & Pasifik
+    "ID" to "id", "TL" to "pt",
+    "MY" to "ms", "BN" to "ms",
+    "SG" to "en", "PH" to "tl",
+    "TH" to "th", "VN" to "vi",
+    "KH" to "km", "LA" to "lo", "MM" to "my",
+    "AU" to "en", "NZ" to "en", "FJ" to "en", "PG" to "en",
+    // Asia Timur
+    "JP" to "ja", "KR" to "ko", "KP" to "ko",
+    "CN" to "zh-CN", "TW" to "zh-TW", "HK" to "zh-TW", "MO" to "zh-TW", "MN" to "mn",
+    // Asia Selatan & Tengah
+    "IN" to "hi", "PK" to "ur", "BD" to "bn", "LK" to "si", "NP" to "ne", "MV" to "en",
+    "KZ" to "ru", "UZ" to "uz", "KG" to "ru", "TJ" to "tg", "TM" to "tk",
+    // Timur Tengah & Afrika Utara
+    "SA" to "ar", "AE" to "ar", "QA" to "ar", "KW" to "ar", "BH" to "ar", "OM" to "ar",
+    "YE" to "ar", "IQ" to "ar", "SY" to "ar", "JO" to "ar", "LB" to "ar", "PS" to "ar",
+    "EG" to "ar", "LY" to "ar", "TN" to "ar", "DZ" to "ar", "MA" to "ar", "SD" to "ar",
+    "IR" to "fa", "AF" to "fa", "IL" to "iw", "TR" to "tr", "AZ" to "az", "GE" to "ka", "AM" to "hy",
+    // Eropa
+    "GB" to "en", "IE" to "en", "MT" to "en",
+    "DE" to "de", "AT" to "de", "CH" to "de", "LI" to "de", "LU" to "fr",
+    "FR" to "fr", "MC" to "fr", "BE" to "nl", "NL" to "nl",
+    "ES" to "es", "AD" to "ca", "PT" to "pt",
+    "IT" to "it", "SM" to "it", "VA" to "it",
+    "RU" to "ru", "BY" to "ru", "UA" to "uk", "MD" to "ro", "RO" to "ro",
+    "PL" to "pl", "CZ" to "cs", "SK" to "sk", "HU" to "hu", "BG" to "bg",
+    "RS" to "sr", "HR" to "hr", "BA" to "bs", "SI" to "sl", "ME" to "sr", "MK" to "mk", "AL" to "sq",
+    "GR" to "el", "CY" to "el",
+    "SE" to "sv", "NO" to "no", "DK" to "da", "FI" to "fi", "IS" to "is",
+    "EE" to "et", "LV" to "lv", "LT" to "lt",
+    // Amerika Utara & Latin
+    "US" to "en", "CA" to "en", "JM" to "en", "TT" to "en", "BS" to "en", "BB" to "en", "BZ" to "en", "GY" to "en",
+    "MX" to "es", "GT" to "es", "SV" to "es", "HN" to "es", "NI" to "es", "CR" to "es", "PA" to "es",
+    "CU" to "es", "DO" to "es", "PR" to "es",
+    "CO" to "es", "VE" to "es", "EC" to "es", "PE" to "es", "BO" to "es", "PY" to "es", "CL" to "es", "AR" to "es", "UY" to "es",
+    "BR" to "pt", "SR" to "nl", "HT" to "fr",
+    // Afrika Sub-Sahara
+    "ZA" to "en", "NG" to "en", "KE" to "sw", "TZ" to "sw", "UG" to "en", "GH" to "en",
+    "ET" to "am", "SO" to "so", "SN" to "fr", "CI" to "fr", "CM" to "fr", "CD" to "fr",
+    "AO" to "pt", "MZ" to "pt", "ZW" to "en", "ZM" to "en", "RW" to "en",
+)
+
+internal fun resolveRegionPrimaryLanguage(countryCode: String): String {
+    val cc = countryCode.trim().uppercase(Locale.ROOT)
+    COUNTRY_TO_PRIMARY_LANG[cc]?.let { return it }
+    val devLang = Locale.getDefault().language.trim().lowercase(Locale.ROOT)
+    return when {
+        devLang == "in" || devLang == "id" -> "id"
+        devLang == "zh" -> if (cc in setOf("TW", "HK", "MO")) "zh-TW" else "zh-CN"
+        devLang.isNotBlank() -> devLang
+        else -> "en"
+    }
+}
+
+internal fun normalizeLangFamily(code: String): String {
+    val c = code.trim().lowercase(Locale.ROOT)
+    return when {
+        c == "in" || c == "id" || c == "jv" || c == "su" -> "id"
+        c == "fil" || c == "tl" -> "tl"
+        c == "he" || c == "iw" -> "iw"
+        c.startsWith("zh-tw") || c.startsWith("zh-hk") -> "zh-tw"
+        c.startsWith("zh") -> "zh-cn"
+        c.contains("-") -> c.substringBefore("-")
+        else -> c
+    }
+}
 
 private val CLIENT_LANG_TO_COUNTRY = mapOf(
     "id" to "ID", "in" to "ID", "jv" to "ID", "su" to "ID",
@@ -535,7 +614,7 @@ private fun parseMessageFromJson(m: JSONObject, myName: String, myGithubLogin: S
         country = smartCountry,
         flag = flag,
         text = openedText,
-        translated = m.optString("translated", ""),
+        translated = if (isMine) "" else m.optString("translated", ""),
         targetLang = m.optString("target_lang", "EN").ifBlank { "EN" },
         sourceLang = sourceLang,
         at = m.optLong("at", System.currentTimeMillis()),
@@ -587,6 +666,10 @@ internal fun GlobalChatScreen(
     val chatPrefs = remember { context.getSharedPreferences(CHAT_PREFS, Context.MODE_PRIVATE) }
     val communityApi = remember { CommunityJokesApi(context) }
 
+    BackHandler(enabled = !isOverlayMode) {
+        onBack()
+    }
+
     var verifiedGhLogin by remember { mutableStateOf(getVerifiedGitHubLogin(context)) }
     var nickname by remember { mutableStateOf(chatNickname(context)) }
     var firstJoinedAtMs by remember(verifiedGhLogin) {
@@ -603,8 +686,6 @@ internal fun GlobalChatScreen(
     var showAttachMenu by remember { mutableStateOf(false) }
     var viewOnceMediaMode by remember { mutableStateOf(false) }
     var authBusy by remember { mutableStateOf(false) }
-    var authWaitingCode by remember { mutableStateOf<String?>(null) }
-    var authWaitingUrl by remember { mutableStateOf<String?>(null) }
 
     var replyingTo by remember { mutableStateOf<ChatMessage?>(null) }
     var pinnedMessage by remember { mutableStateOf<PinnedChatMessage?>(null) }
@@ -613,7 +694,12 @@ internal fun GlobalChatScreen(
     var fullscreenMediaMsg by remember { mutableStateOf<ChatMessage?>(null) }
 
     val messages = remember { mutableStateListOf<ChatMessage>() }
-    val hiddenMessageIds = remember { mutableStateListOf<String>() }
+    val hiddenMessageIds = remember {
+        mutableStateListOf<String>().apply {
+            val saved = chatPrefs.getStringSet(KEY_HIDDEN_MSG_IDS, emptySet()).orEmpty()
+            addAll(saved)
+        }
+    }
     val viewedOnceIds = remember {
         mutableStateListOf<String>().apply {
             val saved = chatPrefs.getStringSet(KEY_VIEWED_ONCE_IDS, emptySet()).orEmpty()
@@ -628,6 +714,48 @@ internal fun GlobalChatScreen(
             viewedOnceIds.add(msgId)
             chatPrefs.edit().putStringSet(KEY_VIEWED_ONCE_IDS, viewedOnceIds.toSet()).apply()
         }
+    }
+
+    fun deleteMessageForMe(target: ChatMessage) {
+        if (target.id.isNotBlank() && target.id !in hiddenMessageIds) {
+            hiddenMessageIds.add(target.id)
+            chatPrefs.edit().putStringSet(KEY_HIDDEN_MSG_IDS, hiddenMessageIds.toSet()).apply()
+        }
+        messages.removeAll { it.id == target.id }
+        Toast.makeText(context, "Pesan dihapus untuk saya", Toast.LENGTH_SHORT).show()
+    }
+
+    fun deleteMessageForEveryone(target: ChatMessage) {
+        if (target.id.isNotBlank() && target.id !in hiddenMessageIds) {
+            hiddenMessageIds.add(target.id)
+            chatPrefs.edit().putStringSet(KEY_HIDDEN_MSG_IDS, hiddenMessageIds.toSet()).apply()
+        }
+        messages.removeAll { it.id == target.id }
+        if (pinnedMessage?.id == target.id) {
+            pinnedMessage = null
+        }
+        val payload = JSONObject().apply {
+            put("type", "delete")
+            put("id", target.id)
+            put("deleted_by", nickname)
+            put("github_login", verifiedGhLogin.orEmpty())
+        }
+        chatSocketSend(payload.toString())
+        scope.launch(Dispatchers.IO) {
+            runCatching {
+                val conn = (URL(CHAT_DELETE_URL).openConnection() as HttpURLConnection).apply {
+                    requestMethod = "POST"
+                    doOutput = true
+                    connectTimeout = 8_000
+                    readTimeout = 8_000
+                    setRequestProperty("Content-Type", "application/json; charset=utf-8")
+                }
+                conn.outputStream.use { it.write(payload.toString().toByteArray(Charsets.UTF_8)) }
+                conn.responseCode
+                conn.disconnect()
+            }
+        }
+        Toast.makeText(context, "Pesan dihapus untuk semua orang", Toast.LENGTH_SHORT).show()
     }
 
     fun updatePinnedMessage(target: ChatMessage?, pin: Boolean) {
@@ -736,25 +864,46 @@ internal fun GlobalChatScreen(
 
     fun enrichTranslationIfNeeded(msg: ChatMessage, forceRetranslate: Boolean = false) {
         if (msg.attachmentType == "sticker") return
+        val prefSnapshot = viewerTargetLang
+        // Ketika kita mengirim pesan sendiri (msg.mine == true) pada mode otomatis ("auto"),
+        // tampilkan 1 bahasa saja di layar pengirim.
+        if (msg.mine && (prefSnapshot == "auto" || prefSnapshot.isBlank())) {
+            val idx = messages.indexOfFirst { it.id == msg.id }
+            if (idx >= 0 && messages[idx].translated.isNotEmpty()) {
+                messages[idx] = messages[idx].copy(translated = "")
+            }
+            return
+        }
         Thread {
             val result = translateClientSideMultiLang(
                 text = msg.text,
                 senderCountry = msg.country,
-                viewerLangPref = viewerTargetLang,
+                viewerLangPref = prefSnapshot,
+                viewerCountry = myCountry,
+                forServerBroadcast = false,
             ) ?: return@Thread
             val translatedText = result.first
             val targetLabel = result.second
             val detectedLang = result.third
-            if (translatedText.isBlank()) return@Thread
             val updatedCountry = resolveSmartCountryClient(msg.text, detectedLang, msg.country)
             val updatedFlag = countryCodeToFlag(updatedCountry)
             main.post {
                 val idx = messages.indexOfFirst { it.id == msg.id }
                 if (idx >= 0) {
                     val current = messages[idx]
-                    if (forceRetranslate || current.translated != translatedText || current.country != updatedCountry) {
+                    val resolvedTranslation = if (current.mine && (viewerTargetLang == "auto" || viewerTargetLang.isBlank())) {
+                        ""
+                    } else {
+                        translatedText
+                    }
+                    if (
+                        forceRetranslate ||
+                        current.translated != resolvedTranslation ||
+                        current.targetLang != targetLabel ||
+                        current.country != updatedCountry
+                    ) {
                         messages[idx] = current.copy(
-                            translated = translatedText,
+                            translated = resolvedTranslation,
                             targetLang = targetLabel,
                             sourceLang = detectedLang,
                             country = updatedCountry,
@@ -807,6 +956,16 @@ internal fun GlobalChatScreen(
                             pinnedMessage = serverPinned
                         }
                         var added = false
+                        val fetchedIds = fetched.map { it.id }.toSet()
+                        if (fetched.isNotEmpty()) {
+                            val oldestFetchedAt = fetched.minOf { it.at }
+                            messages.removeAll { existing ->
+                                !existing.id.startsWith("local-") &&
+                                    existing.at >= oldestFetchedAt &&
+                                    existing.id !in fetchedIds &&
+                                    (System.currentTimeMillis() - existing.at > 4_000L)
+                            }
+                        }
                         for (item in fetched) {
                             id.xydesk.remote.push.ChatPushNotifier.markSeen(item.id, item.at, context)
                             val existingIdx = messages.indexOfFirst { it.id == item.id }
@@ -961,6 +1120,15 @@ internal fun GlobalChatScreen(
                                 "pin" -> {
                                     pinnedMessage = parsePinnedMessageFromJson(data.optJSONObject("pinned_message"))
                                 }
+                                "delete" -> {
+                                    val delId = data.optString("id", "").trim()
+                                    if (delId.isNotEmpty()) {
+                                        messages.removeAll { it.id == delId }
+                                        if (pinnedMessage?.id == delId) {
+                                            pinnedMessage = null
+                                        }
+                                    }
+                                }
                                 "typing" -> {
                                     val who = data.optString("name")
                                     val cc = data.optString("country", "ID")
@@ -1079,7 +1247,13 @@ internal fun GlobalChatScreen(
             listState.animateScrollToItem((messages.size - 1).coerceAtLeast(0))
             val sentMsg = withContext(Dispatchers.IO) {
                 val clientTr = if (attachmentType == "sticker") null
-                else translateClientSideMultiLang(displayFallback, myCountry, "auto")
+                else translateClientSideMultiLang(
+                    text = displayFallback,
+                    senderCountry = myCountry,
+                    viewerLangPref = "auto",
+                    viewerCountry = myCountry,
+                    forServerBroadcast = true,
+                )
                 val bodyJson = JSONObject().apply {
                     put("type", "msg")
                     put("name", nickname)
@@ -2198,51 +2372,38 @@ internal fun GlobalChatScreen(
                                 color = Color.White,
                             )
                             Text(
-                                if (!authWaitingCode.isNullOrBlank()) {
-                                    "Kode $authWaitingCode sudah disalin — tinggal klik Authorize di browser!"
-                                } else {
-                                    "Buka browser in-app (⋮), tinggal klik Authorize tanpa ketik manual."
-                                },
+                                "Login ke GitHub di browser aplikasi lalu klik tombol hijau Authorize (tanpa kode).",
                                 style = MaterialTheme.typography.labelSmall,
                                 color = Color(0xFFA1A1AA),
                             )
                         }
                         XyPillButton(
-                            text = if (authBusy) "Buka Browser ↗" else "Authorize",
+                            text = "Authorize",
                             onClick = {
-                                if (!authBusy) {
-                                    authBusy = true
-                                    scope.launch {
-                                        performGitHubInAppBrowserLogin(
-                                            context = context,
-                                            onCodeReady = { code, url ->
-                                                authWaitingCode = code
-                                                authWaitingUrl = url
-                                            },
-                                            onSuccess = { _, user ->
-                                                authBusy = false
-                                                authWaitingCode = null
-                                                authWaitingUrl = null
-                                                verifiedGhLogin = user
-                                                nickname = chatNickname(context)
-                                                firstJoinedAtMs = ensureFirstJoinedAtMs(context, user)
-                                                chatSocketSend(
-                                                    JSONObject()
-                                                        .put("type", "hello")
-                                                        .put("name", nickname)
-                                                        .put("github_login", user)
-                                                        .put("country", myCountry)
-                                                        .toString(),
-                                                )
-                                            },
-                                            onError = { err ->
-                                                authBusy = false
-                                                Toast.makeText(context, err, Toast.LENGTH_SHORT).show()
-                                            },
-                                        )
-                                    }
-                                } else {
-                                    authWaitingUrl?.let { openInAppCustomTab(context, it) }
+                                authBusy = true
+                                scope.launch {
+                                    performGitHubInAppBrowserLogin(
+                                        context = context,
+                                        onCodeReady = { _, _ -> },
+                                        onSuccess = { _, user ->
+                                            authBusy = false
+                                            verifiedGhLogin = user
+                                            nickname = chatNickname(context)
+                                            firstJoinedAtMs = ensureFirstJoinedAtMs(context, user)
+                                            chatSocketSend(
+                                                JSONObject()
+                                                    .put("type", "hello")
+                                                    .put("name", nickname)
+                                                    .put("github_login", user)
+                                                    .put("country", myCountry)
+                                                    .toString(),
+                                            )
+                                        },
+                                        onError = { err ->
+                                            authBusy = false
+                                            Toast.makeText(context, err, Toast.LENGTH_SHORT).show()
+                                        },
+                                    )
                                 }
                             },
                             primary = true,
@@ -2592,13 +2753,24 @@ internal fun GlobalChatScreen(
                                 )
                                 HorizontalDivider(color = Color.White.copy(alpha = 0.08f))
                                 ContextMenuActionRow(
-                                    label = "Sembunyikan dari Layarku",
+                                    label = "Hapus untuk Semua Orang",
+                                    icon = XyIcons.Trash,
+                                    tint = Color(0xFFEF4444),
+                                    onClick = {
+                                        val snap = targetMsg
+                                        focusedContextMsg = null
+                                        deleteMessageForEveryone(snap)
+                                    },
+                                )
+                                HorizontalDivider(color = Color.White.copy(alpha = 0.08f))
+                                ContextMenuActionRow(
+                                    label = "Hapus untuk Saya",
                                     icon = XyIcons.Trash,
                                     tint = Color(0xFFF87171),
                                     onClick = {
-                                        hiddenMessageIds.add(targetMsg.id)
-                                        messages.removeAll { it.id == targetMsg.id }
+                                        val snap = targetMsg
                                         focusedContextMsg = null
+                                        deleteMessageForMe(snap)
                                     },
                                 )
                             }
@@ -3103,10 +3275,13 @@ private fun MessageBubble(
     )
 
     val transLabel = msg.targetLang.ifBlank { if (msg.country == "ID") "EN" else "ID" }
-    val transBody = msg.translated.ifBlank { msg.text }
+    val transBody = msg.translated.trim()
+    val hasMediaAttachment = msg.attachmentType == "image" || msg.attachmentType == "video" || msg.attachmentType == "file"
 
     Row(
-        modifier = Modifier.fillMaxWidth(),
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 2.dp),
         horizontalArrangement = if (msg.mine) Arrangement.End else Arrangement.Start,
         verticalAlignment = Alignment.Bottom,
     ) {
@@ -3122,7 +3297,7 @@ private fun MessageBubble(
 
         Column(
             horizontalAlignment = if (msg.mine) Alignment.End else Alignment.Start,
-            modifier = Modifier.widthIn(min = 120.dp, max = 296.dp),
+            modifier = Modifier.widthIn(min = if (hasMediaAttachment) 224.dp else 128.dp, max = 286.dp),
         ) {
             val gestureMod = Modifier.pointerInput(msg.id) {
                 detectTapGestures(
@@ -3132,7 +3307,10 @@ private fun MessageBubble(
 
             val bubbleContent: @Composable () -> Unit = {
                 Column(
-                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 9.dp),
+                    modifier = Modifier
+                        .width(IntrinsicSize.Max)
+                        .widthIn(min = if (hasMediaAttachment) 224.dp else 128.dp, max = 286.dp)
+                        .padding(horizontal = 12.dp, vertical = 9.dp),
                 ) {
                     // Baris Atas: Nama Pengirim Jelas + @github + Kode Negara + Badge Founder + Tombol Vektor Reply
                     Row(
@@ -3160,6 +3338,7 @@ private fun MessageBubble(
                                     fontSize = 10.sp,
                                     color = secondaryTextColor,
                                     maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis,
                                 )
                             }
                             // Pill Kode Negara Monokrom Rapi
@@ -3190,7 +3369,7 @@ private fun MessageBubble(
                                 )
                             }
                         }
-                        Spacer(Modifier.width(6.dp))
+                        Spacer(Modifier.width(8.dp))
                         Box(
                             modifier = Modifier
                                 .size(22.dp)
@@ -3459,7 +3638,7 @@ private fun MessageBubble(
                         }
                     }
 
-                    // Teks Asli + Garis Pemisah Halus + Terjemahan Otomatis
+                    // Teks Asli + Garis Pemisah Halus + Terjemahan Otomatis Sesuai Region (termasuk Bubble Founder)
                     if (msg.attachmentType != "sticker") {
                         Spacer(Modifier.height(5.dp))
                         Text(
@@ -3483,14 +3662,14 @@ private fun MessageBubble(
                                 Icon(
                                     imageVector = XyIcons.Globe,
                                     contentDescription = null,
-                                    tint = secondaryTextColor,
+                                    tint = if (founderMsg) Color(0xFFFDE047) else secondaryTextColor,
                                     modifier = Modifier.size(11.dp),
                                 )
                                 Text(
-                                    text = "$transLabel · $transBody",
+                                    text = "[$transLabel] · $transBody",
                                     style = MaterialTheme.typography.bodySmall,
                                     fontStyle = FontStyle.Italic,
-                                    color = secondaryTextColor,
+                                    color = if (founderMsg) Color(0xFFFDE68A).copy(alpha = 0.94f) else secondaryTextColor,
                                 )
                             }
                         }
@@ -3859,6 +4038,8 @@ internal fun translateClientSideMultiLang(
     text: String,
     senderCountry: String,
     viewerLangPref: String = "auto",
+    viewerCountry: String = Locale.getDefault().country.ifBlank { "ID" },
+    forServerBroadcast: Boolean = false,
 ): Triple<String, String, String>? {
     val clean = text.trim()
     if (clean.isEmpty()) return null
@@ -3871,12 +4052,17 @@ internal fun translateClientSideMultiLang(
     val isLikelyId = !hasThai && !hasJp && !hasKr && !hasCyrillic && !hasArabic && !hasCjk &&
         (CLIENT_ID_WORD_REGEX.containsMatchIn(clean) || senderCountry.equals("ID", ignoreCase = true))
 
-    val targetLang = if (viewerLangPref == "auto" || viewerLangPref.isBlank()) {
-        if (isLikelyId) "en" else "id"
-    } else {
-        viewerLangPref
+    val isAuto = viewerLangPref == "auto" || viewerLangPref.isBlank()
+    val viewerRegionLang = resolveRegionPrimaryLanguage(viewerCountry)
+    val targetLang = when {
+        forServerBroadcast -> if (isLikelyId) "en" else "id"
+        isAuto -> viewerRegionLang
+        else -> viewerLangPref
     }
     val targetLabel = targetLang.uppercase(Locale.ROOT)
+    val crossRegionViewer = !forServerBroadcast && isAuto &&
+        senderCountry.isNotBlank() &&
+        !senderCountry.equals(viewerCountry, ignoreCase = true)
 
     return runCatching {
         val q = URLEncoder.encode(clean, "UTF-8")
@@ -3893,10 +4079,15 @@ internal fun translateClientSideMultiLang(
             val arr = JSONArray(raw)
             val first = arr.optJSONArray(0)
             if (first != null) {
-                var tr = first.optString(0, "").trim()
+                val tr = first.optString(0, "").trim()
                 val det = first.optString(1, if (isLikelyId) "id" else "en").trim().lowercase(Locale.ROOT)
-                if ((viewerLangPref == "auto" || viewerLangPref.isBlank()) && det == targetLang.lowercase(Locale.ROOT)) {
-                    val altTarget = if (det == "id" || det == "in") "en" else "id"
+                val sameLangAsViewer = normalizeLangFamily(det) == normalizeLangFamily(targetLang)
+                if (isAuto && !forServerBroadcast && sameLangAsViewer && !crossRegionViewer) {
+                    // Bahasa pesan sudah sama dengan bahasa region penonton -> tampilkan 1 bahasa saja
+                    return@runCatching Triple("", targetLabel, det)
+                }
+                if (forServerBroadcast && sameLangAsViewer) {
+                    val altTarget = if (normalizeLangFamily(det) == "id") "en" else "id"
                     val altUrl = "https://clients5.google.com/translate_a/t?client=dict-chrome-ex&sl=$det&tl=$altTarget&q=$q"
                     val altConn = (URL(altUrl).openConnection() as HttpURLConnection).apply {
                         requestMethod = "GET"
@@ -3928,6 +4119,10 @@ internal fun translateClientSideMultiLang(
             val tr = obj.optString("translated", "").trim()
             val det = obj.optString("source_lang", if (isLikelyId) "id" else "en").trim().lowercase(Locale.ROOT)
             val lbl = obj.optString("target_lang", targetLabel).trim().uppercase(Locale.ROOT)
+            val sameLangAsViewer = normalizeLangFamily(det) == normalizeLangFamily(targetLang)
+            if (isAuto && !forServerBroadcast && sameLangAsViewer && !crossRegionViewer) {
+                return@runCatching Triple("", lbl, det)
+            }
             if (tr.isNotBlank()) return@runCatching Triple(tr, lbl, det)
         }
         null

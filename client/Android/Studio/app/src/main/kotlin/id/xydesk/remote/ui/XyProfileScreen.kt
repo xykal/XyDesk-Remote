@@ -21,6 +21,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
@@ -744,8 +745,7 @@ private fun CommunityAccountCard(
                 )
                 Text(
                     if (ghUser != null) xy("Aktif untuk Buat RDP Cloud & Chat Global", "Active for Cloud RDP & Global Chat")
-                    else if (!githubWaitingCode.isNullOrBlank()) xy("Kode ${githubWaitingCode} disalin — klik Authorize di browser!", "Code ${githubWaitingCode} copied — tap Authorize in browser!")
-                    else xy("Login via browser in-app (⋮), tinggal klik Authorize", "Sign in via in-app browser (⋮), just tap Authorize"),
+                    else xy("Login GitHub langsung & klik Authorize (tanpa kode)", "Sign in to GitHub & tap Authorize (no code needed)"),
                     style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
@@ -769,34 +769,22 @@ private fun CommunityAccountCard(
                 )
             } else {
                 XyPillButton(
-                    text = if (githubBusy) xy("Buka Browser ↗", "Open Browser ↗") else xy("Authorize GitHub", "Authorize GitHub"),
+                    text = xy("Authorize GitHub", "Authorize GitHub"),
                     onClick = {
-                        if (!githubBusy) {
-                            githubBusy = true
-                            scope.launch {
-                                performGitHubInAppBrowserLogin(
-                                    context = context,
-                                    onCodeReady = { code, url ->
-                                        githubWaitingCode = code
-                                        githubWaitingUrl = url
-                                    },
-                                    onSuccess = { _, user ->
-                                        githubBusy = false
-                                        githubWaitingCode = null
-                                        githubWaitingUrl = null
-                                        githubUser = user
-                                        name = api.displayName() ?: user
-                                        message = xyNow("Terhubung sebagai @$user!", "Connected as @$user!")
-                                    },
-                                    onError = { err ->
-                                        githubBusy = false
-                                        message = err
-                                    },
-                                )
-                            }
-                        } else {
-                            githubWaitingUrl?.let { openInAppCustomTab(context, it) }
-                        }
+                        GitHubDirectOAuthController.open(
+                            onSuccess = { _, user ->
+                                githubBusy = false
+                                githubWaitingCode = null
+                                githubWaitingUrl = null
+                                githubUser = user
+                                name = api.displayName() ?: user
+                                message = xyNow("Terhubung sebagai @$user!", "Connected as @$user!")
+                            },
+                            onError = { err ->
+                                githubBusy = false
+                                message = err
+                            },
+                        )
                     },
                     primary = true,
                     compact = true,
@@ -1579,13 +1567,10 @@ internal fun XyHeaderAccountActions(
         }
     }
 
-    if (githubLoginOpen) {
-        XyOverlay(
-            title = xy("Login GitHub Instan", "Instant GitHub Sign-In"),
-            onDismiss = { githubLoginOpen = false },
-        ) {
-            GitHubDeviceFlowPanel(
-                onCancel = { githubLoginOpen = false },
+    LaunchedEffect(githubLoginOpen) {
+        if (githubLoginOpen) {
+            githubLoginOpen = false
+            GitHubDirectOAuthController.open(
                 onSuccess = { tok, user ->
                     runCatching {
                         id.xydesk.remote.security.CredentialVault(context.applicationContext)
@@ -1599,7 +1584,6 @@ internal fun XyHeaderAccountActions(
                         }
                     }
                     displayName = api.displayName() ?: user
-                    githubLoginOpen = false
                     avatarTick += 1
                     onStateChanged()
                 },

@@ -33,7 +33,7 @@ internal data class AppUpdateInfo(
     val version: String,
     val url: String,
     val changelog: String,
-    val dataPackVersion: String = "2026.10.17.55",
+    val dataPackVersion: String = "2026.10.17.56",
     val minApkVersion: String = version,
     val apk64Url: String = "https://api.xydeskremote.biz.id/XyDesk-Remote64bit.apk",
     val apk32Url: String = "https://api.xydeskremote.biz.id/XyDesk-Remote32bit.apk",

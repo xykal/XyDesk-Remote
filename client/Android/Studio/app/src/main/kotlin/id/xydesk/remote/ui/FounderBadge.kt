@@ -17,18 +17,33 @@ import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxScope
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -43,10 +58,15 @@ import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.StrokeJoin
 import androidx.compose.ui.graphics.drawscope.Fill
 import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.viewinterop.AndroidView
+import androidx.compose.ui.window.Dialog
+import androidx.compose.ui.window.DialogProperties
 import id.xydesk.remote.security.CredentialVault
 import id.xydesk.remote.ui.rdp.XyRdpClient
 import id.xydesk.remote.ui.rdp.XyRdpConfig
@@ -54,7 +74,9 @@ import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import org.json.JSONObject
 import java.io.File
 import java.net.HttpURLConnection
 import java.net.URL
@@ -153,13 +175,45 @@ internal fun openInAppCustomTab(context: Context, url: String) {
     }
 }
 
+internal object GitHubDirectOAuthController {
+    var isOpen by mutableStateOf(false)
+        private set
+    private var onSuccessCallback: ((token: String, login: String) -> Unit)? = null
+    private var onErrorCallback: ((String) -> Unit)? = null
+
+    fun open(
+        onSuccess: (token: String, login: String) -> Unit,
+        onError: (String) -> Unit = {},
+    ) {
+        onSuccessCallback = onSuccess
+        onErrorCallback = onError
+        isOpen = true
+    }
+
+    fun dismiss(reason: String? = null) {
+        isOpen = false
+        val errCb = onErrorCallback
+        onSuccessCallback = null
+        onErrorCallback = null
+        if (!reason.isNullOrBlank()) {
+            errCb?.invoke(reason)
+        }
+    }
+
+    fun complete(token: String, login: String) {
+        isOpen = false
+        val okCb = onSuccessCallback
+        onSuccessCallback = null
+        onErrorCallback = null
+        okCb?.invoke(token, login)
+    }
+}
+
 /**
- * Alur Login GitHub 1-Klik via In-App Browser (Chrome Custom Tab):
- * 1. Meminta sesi OAuth GitHub secara otomatis di latar belakang.
- * 2. Menyalin kode verifikasi ke clipboard + langsung membuka In-App Browser (dengan titik tiga `⋮`)
- *    ke halaman otorisasi GitHub sehingga pengguna tinggal klik Continue / Authorize.
- * 3. Melakukan polling otomatis sampai pengguna selesai menekan Authorize, lalu menyimpan token,
- *    username `@github`, dan foto profil GitHub.
+ * Ronde 56 — Alur Login GitHub Langsung Tanpa Kode (Web OAuth Authorize):
+ * Membuka In-App Browser terintegrasi (dengan header bergaya Chrome & menu titik tiga `⋮`)
+ * langsung ke halaman Login & Authorize GitHub (akses profil, nama, repo, workflow, dll.)
+ * TANPA perlu melihat, menyalin, atau mengetik kode 8 digit.
  */
 internal suspend fun performGitHubInAppBrowserLogin(
     context: Context,
@@ -168,98 +222,376 @@ internal suspend fun performGitHubInAppBrowserLogin(
     onSuccess: (token: String, login: String) -> Unit = { _, _ -> },
     onError: (String) -> Unit = {},
 ) {
+    withContext(Dispatchers.Main) {
+        GitHubDirectOAuthController.open(
+            onSuccess = onSuccess,
+            onError = onError,
+        )
+    }
+}
+
+@android.annotation.SuppressLint("SetJavaScriptEnabled")
+@Composable
+internal fun GitHubDirectOAuthModalHost() {
+    if (!GitHubDirectOAuthController.isOpen) return
+    val context = LocalContext.current
     val appCtx = context.applicationContext
-    try {
+    val scope = rememberCoroutineScope()
+
+    var currentUrl by remember { mutableStateOf("https://github.com/login/oauth/authorize") }
+    var statusLabel by remember {
+        mutableStateOf(
+            xyNow(
+                "Login ke GitHub lalu klik tombol hijau 'Authorize'",
+                "Sign in to GitHub and tap the green 'Authorize' button",
+            ),
+        )
+    }
+    var menuExpanded by remember { mutableStateOf(false) }
+    var webViewRef by remember { mutableStateOf<android.webkit.WebView?>(null) }
+    var hiddenHandshakeCode by remember { mutableStateOf("") }
+    var useWebRedirectMode by remember { mutableStateOf(false) }
+    var completed by remember { mutableStateOf(false) }
+
+    fun buildSeamlessOAuthBridgeScript(code: String): String {
+        val safe = code.replace("'", "")
+        return """
+            (function() {
+              try {
+                var path = window.location.pathname || '';
+                if (path === '/login/device' || path === '/login/device/') {
+                  if (!document.getElementById('xy-seamless-oauth-style')) {
+                    var st = document.createElement('style');
+                    st.id = 'xy-seamless-oauth-style';
+                    st.innerHTML = 'input[id^="user-code"], .js-user-code-field, input[name*="user_code"] { opacity: 0.01 !important; }';
+                    document.head.appendChild(st);
+                  }
+                  var code = '$safe';
+                  var clean = code.replace(/[^A-Za-z0-9]/g, '');
+                  if (!clean || window.__xyAutoAuthDone === clean) return 'WAIT_REDIRECT';
+                  var boxes = document.querySelectorAll('input[id^="user-code"], input.js-user-code-field, input[name*="user_code"]');
+                  if (boxes && boxes.length >= 8) {
+                    var idx = 0;
+                    for (var i = 0; i < boxes.length && idx < clean.length; i++) {
+                      var el = boxes[i];
+                      if (el.type === 'hidden' || el.disabled || el.readOnly) continue;
+                      var setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value').set;
+                      if (setter) setter.call(el, clean[idx++]); else el.value = clean[idx++];
+                      el.dispatchEvent(new Event('input', { bubbles: true }));
+                      el.dispatchEvent(new Event('change', { bubbles: true }));
+                    }
+                    window.__xyAutoAuthDone = clean;
+                    var btn = document.querySelector('form button[type="submit"], form input[type="submit"], button.btn-primary');
+                    if (btn && !btn.disabled) {
+                      btn.click();
+                    } else if (boxes[0] && boxes[0].form) {
+                      boxes[0].form.submit();
+                    }
+                    return 'AUTO_SUBMITTED';
+                  }
+                  var single = document.querySelector('input[name="user_code"], input#user_code');
+                  if (single) {
+                    single.value = code;
+                    single.dispatchEvent(new Event('input', { bubbles: true }));
+                    window.__xyAutoAuthDone = clean;
+                    var sBtn = document.querySelector('form button[type="submit"], form input[type="submit"], button.btn-primary');
+                    if (sBtn) sBtn.click();
+                    else if (single.form) single.form.submit();
+                    return 'AUTO_SUBMITTED_SINGLE';
+                  }
+                }
+              } catch (e) {}
+              return 'IDLE';
+            })();
+        """.trimIndent()
+    }
+
+    suspend fun finishLoginSuccess(token: String, login: String, displayName: String = "", avatarUrl: String = "") {
+        if (completed) return
+        completed = true
+        val resolvedAvatar = avatarUrl.ifBlank { "https://github.com/$login.png?size=160" }
+        withContext(Dispatchers.IO) {
+            runCatching {
+                CredentialVault(appCtx).put(XyRdpConfig.VAULT_PAT_ID, token)
+                saveVerifiedGitHubLogin(appCtx, login, resolvedAvatar)
+                val api = CommunityJokesApi(appCtx)
+                val targetName = displayName.ifBlank { login }
+                if (api.displayName().isNullOrBlank() || isFounderAccount(login)) {
+                    api.setDisplayName(targetName)
+                }
+                syncGitHubAvatarIfNeeded(appCtx, login, api)
+            }
+        }
+        Toast.makeText(
+            appCtx,
+            xyNow("Berhasil terhubung ke GitHub sebagai @$login!", "Connected to GitHub as @$login!"),
+            Toast.LENGTH_SHORT,
+        ).show()
+        GitHubDirectOAuthController.complete(token, login)
+    }
+
+    LaunchedEffect(useWebRedirectMode) {
+        if (useWebRedirectMode) {
+            statusLabel = xyNow(
+                "OAuth Web GitHub: Login & klik tombol hijau 'Authorize'",
+                "GitHub Web OAuth: Sign in & tap the green 'Authorize' button",
+            )
+            webViewRef?.loadUrl("https://xyrdp-dash.vercel.app/api/auth/login?apk=1")
+            return@LaunchedEffect
+        }
         val start = githubDeviceStart(GITHUB_OAUTH_CLIENT_ID)
         if (start == null) {
-            withContext(Dispatchers.Main) {
-                onError(xyNow("Gagal memulai sesi login GitHub.", "Failed to start GitHub login session."))
-            }
-            return
+            useWebRedirectMode = true
+            return@LaunchedEffect
         }
-        val userCode = start.optString("user_code", "")
-        val verificationUri = start.optString("verification_uri", "https://github.com/login/device")
+        val code = start.optString("user_code", "")
+        val verifyUri = start.optString("verification_uri", "https://github.com/login/device")
         val deviceCode = start.optString("device_code", "")
-        val intervalSec = start.optInt("interval", 5).coerceIn(3, 15)
-        val expiresInSec = start.optInt("expires_in", 900)
-        val targetUrl = if (verificationUri.contains("?")) {
-            "$verificationUri&user_code=${Uri.encode(userCode)}"
-        } else {
-            "$verificationUri?user_code=${Uri.encode(userCode)}"
-        }
+        val intervalMs = (start.optInt("interval", 5).coerceIn(3, 12)) * 1000L
+        val deadline = System.currentTimeMillis() + start.optInt("expires_in", 900) * 1000L
+        hiddenHandshakeCode = code
+        webViewRef?.evaluateJavascript(buildSeamlessOAuthBridgeScript(code), null)
 
-        withContext(Dispatchers.Main) {
-            runCatching {
-                val cm = appCtx.getSystemService(Context.CLIPBOARD_SERVICE) as? ClipboardManager
-                cm?.setPrimaryClip(ClipData.newPlainText("GitHub Authorize Code", userCode))
+        while (isActive && !completed && System.currentTimeMillis() < deadline) {
+            delay(intervalMs)
+            if (hiddenHandshakeCode.isNotBlank()) {
+                webViewRef?.evaluateJavascript(buildSeamlessOAuthBridgeScript(hiddenHandshakeCode), null)
             }
-            onCodeReady(userCode, targetUrl)
-            Toast.makeText(
-                appCtx,
-                xyNow(
-                    "Kode $userCode disalin otomatis. Tinggal tempel/klik Authorize di browser!",
-                    "Code $userCode copied automatically. Just paste/tap Authorize in browser!",
-                ),
-                Toast.LENGTH_LONG,
-            ).show()
-            openInAppCustomTab(context, targetUrl)
-        }
-
-        var waitSec = intervalSec.coerceAtLeast(4)
-        val deadline = System.currentTimeMillis() + (expiresInSec * 1000L)
-        while (coroutineContext.isActive && System.currentTimeMillis() < deadline) {
-            delay(waitSec * 1000L)
             val poll = githubDevicePoll(GITHUB_OAUTH_CLIENT_ID, deviceCode) ?: continue
-            val token = poll.optString("access_token", "")
+            val tok = poll.optString("access_token", "")
             val err = poll.optString("error", "")
-            when {
-                token.isNotBlank() -> {
-                    val user = XyRdpClient.whoami(token)
-                    if (!user.isNullOrBlank()) {
-                        CredentialVault(appCtx).put(XyRdpConfig.VAULT_PAT_ID, token)
-                        val avatarUrl = "https://github.com/$user.png?size=160"
-                        saveVerifiedGitHubLogin(appCtx, user, avatarUrl)
-                        runCatching {
-                            val api = CommunityJokesApi(appCtx)
-                            if (api.displayName().isNullOrBlank() || isFounderAccount(user)) {
-                                api.setDisplayName(user)
-                            }
-                            syncGitHubAvatarIfNeeded(appCtx, user, api)
-                        }
-                        withContext(Dispatchers.Main) {
-                            Toast.makeText(
-                                appCtx,
-                                xyNow("Berhasil terhubung sebagai @$user!", "Connected as @$user!"),
-                                Toast.LENGTH_SHORT,
-                            ).show()
-                            onSuccess(token, user)
-                        }
-                        return
-                    }
+            if (tok.isNotBlank()) {
+                statusLabel = xyNow("Menyinkronkan profil, repo & workflow GitHub…", "Syncing GitHub profile, repo & workflow…")
+                val user = syncGitHubProfileAndAvatar(appCtx, tok) ?: XyRdpClient.whoami(tok)
+                if (!user.isNullOrBlank()) {
+                    finishLoginSuccess(tok, user)
+                    return@LaunchedEffect
                 }
-                err == "slow_down" -> waitSec += 5
-                err == "authorization_pending" || err.isBlank() -> Unit
-                else -> {
-                    withContext(Dispatchers.Main) {
-                        onError(
-                            xyNow(
-                                "Otorisasi GitHub dibatalkan atau kedaluwarsa.",
-                                "GitHub authorization cancelled or expired.",
-                            ),
+            } else if (err == "access_denied") {
+                GitHubDirectOAuthController.dismiss(
+                    xyNow("Otorisasi GitHub dibatalkan.", "GitHub authorization cancelled."),
+                )
+                return@LaunchedEffect
+            }
+        }
+    }
+
+    Dialog(
+        onDismissRequest = {
+            GitHubDirectOAuthController.dismiss()
+        },
+        properties = DialogProperties(
+            usePlatformDefaultWidth = false,
+            dismissOnBackPress = true,
+            dismissOnClickOutside = false,
+        ),
+    ) {
+        Surface(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(horizontal = 8.dp, vertical = 18.dp),
+            shape = RoundedCornerShape(22.dp),
+            color = Color(0xFF09090B),
+            tonalElevation = 8.dp,
+        ) {
+            Column(modifier = Modifier.fillMaxSize()) {
+                // Header Browser In-App (Tombol Tutup X + URL + Reload + Menu Titik Tiga ⋮)
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .background(Color(0xFF121216))
+                        .padding(horizontal = 12.dp, vertical = 10.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(10.dp),
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .size(32.dp)
+                            .clip(CircleShape)
+                            .background(Color.White.copy(alpha = 0.08f))
+                            .clickable { GitHubDirectOAuthController.dismiss() },
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        Text("✕", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 14.sp)
+                    }
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            text = xyNow("GitHub OAuth Authorize", "GitHub OAuth Authorize"),
+                            style = MaterialTheme.typography.labelLarge,
+                            fontWeight = FontWeight.Bold,
+                            color = Color.White,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                        )
+                        Text(
+                            text = currentUrl,
+                            style = MaterialTheme.typography.labelSmall,
+                            fontSize = 10.sp,
+                            color = Color(0xFFA1A1AA),
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
                         )
                     }
-                    return
+                    Box {
+                        Box(
+                            modifier = Modifier
+                                .size(32.dp)
+                                .clip(CircleShape)
+                                .background(Color.White.copy(alpha = 0.08f))
+                                .clickable { menuExpanded = true },
+                            contentAlignment = Alignment.Center,
+                        ) {
+                            Text("⋮", color = Color.White, fontWeight = FontWeight.ExtraBold, fontSize = 18.sp)
+                        }
+                        DropdownMenu(
+                            expanded = menuExpanded,
+                            onDismissRequest = { menuExpanded = false },
+                        ) {
+                            DropdownMenuItem(
+                                text = { Text(xyNow("Muat Ulang Halaman", "Reload Page")) },
+                                onClick = {
+                                    menuExpanded = false
+                                    webViewRef?.reload()
+                                },
+                            )
+                            DropdownMenuItem(
+                                text = {
+                                    Text(
+                                        if (useWebRedirectMode) xyNow("Mode OAuth Standar (Full Workflow)", "Standard OAuth Mode (Full Workflow)")
+                                        else xyNow("Mode OAuth Web Redirect", "Web Redirect OAuth Mode"),
+                                    )
+                                },
+                                onClick = {
+                                    menuExpanded = false
+                                    useWebRedirectMode = !useWebRedirectMode
+                                },
+                            )
+                            DropdownMenuItem(
+                                text = { Text(xyNow("Buka di Browser Eksternal ↗", "Open in External Browser ↗")) },
+                                onClick = {
+                                    menuExpanded = false
+                                    openInAppCustomTab(context, currentUrl)
+                                },
+                            )
+                        }
+                    }
                 }
+
+                // Banner instruksi singkat (tanpa kode)
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .background(Color(0xFF18181F))
+                        .padding(horizontal = 14.dp, vertical = 8.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    GitHubLogoIcon(size = 16.dp, tint = Color.White)
+                    Text(
+                        text = statusLabel,
+                        style = MaterialTheme.typography.labelSmall,
+                        color = Color(0xFFE4E4E7),
+                        modifier = Modifier.weight(1f),
+                    )
+                }
+
+                // WebView OAuth Authorize
+                AndroidView(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .weight(1f),
+                    factory = { ctx ->
+                        android.webkit.CookieManager.getInstance().setAcceptCookie(true)
+                        android.webkit.WebView(ctx).apply {
+                            settings.javaScriptEnabled = true
+                            settings.domStorageEnabled = true
+                            settings.userAgentString = settings.userAgentString + " XyDeskRemote/1.1.19"
+                            android.webkit.CookieManager.getInstance().setAcceptThirdPartyCookies(this, true)
+                            webViewClient = object : android.webkit.WebViewClient() {
+                                override fun shouldOverrideUrlLoading(
+                                    view: android.webkit.WebView?,
+                                    request: android.webkit.WebResourceRequest?,
+                                ): Boolean {
+                                    val u = request?.url?.toString().orEmpty()
+                                    if (u.startsWith("xydesk://github-auth") || u.startsWith("intent://github-auth")) {
+                                        val parsed = Uri.parse(u.replaceFirst("intent://", "xydesk://"))
+                                        val tok = parsed.getQueryParameter("token").orEmpty()
+                                        val lgn = parsed.getQueryParameter("login").orEmpty()
+                                        val nm = parsed.getQueryParameter("name").orEmpty()
+                                        val av = parsed.getQueryParameter("avatar").orEmpty()
+                                        if (tok.isNotBlank() && lgn.isNotBlank()) {
+                                            scope.launch { finishLoginSuccess(tok, lgn, nm, av) }
+                                        }
+                                        return true
+                                    }
+                                    return false
+                                }
+
+                                override fun onPageStarted(
+                                    view: android.webkit.WebView?,
+                                    url: String?,
+                                    favicon: android.graphics.Bitmap?,
+                                ) {
+                                    super.onPageStarted(view, url, favicon)
+                                    if (!url.isNullOrBlank()) currentUrl = url
+                                    if (hiddenHandshakeCode.isNotBlank()) {
+                                        view?.evaluateJavascript(buildSeamlessOAuthBridgeScript(hiddenHandshakeCode), null)
+                                    }
+                                }
+
+                                override fun onPageFinished(view: android.webkit.WebView?, url: String?) {
+                                    super.onPageFinished(view, url)
+                                    val u = url.orEmpty()
+                                    if (u.isNotBlank()) currentUrl = u
+                                    if (hiddenHandshakeCode.isNotBlank()) {
+                                        view?.evaluateJavascript(buildSeamlessOAuthBridgeScript(hiddenHandshakeCode), null)
+                                        view?.postDelayed({
+                                            view.evaluateJavascript(buildSeamlessOAuthBridgeScript(hiddenHandshakeCode), null)
+                                        }, 180L)
+                                    }
+                                    // Deteksi callback sukses pada Mode OAuth Web Redirect (xyrdp-dash.vercel.app)
+                                    if (u.startsWith("https://xyrdp-dash.vercel.app") && !u.contains("/api/auth/")) {
+                                        val cookies = android.webkit.CookieManager.getInstance()
+                                            .getCookie("https://xyrdp-dash.vercel.app").orEmpty()
+                                        if (cookies.contains("ghs=")) {
+                                            scope.launch(Dispatchers.IO) {
+                                                runCatching {
+                                                    val conn = (URL("https://xyrdp-dash.vercel.app/api/me").openConnection() as HttpURLConnection).apply {
+                                                        requestMethod = "GET"
+                                                        setRequestProperty("Cookie", cookies)
+                                                        setRequestProperty("Accept", "application/json")
+                                                        connectTimeout = 10_000
+                                                        readTimeout = 10_000
+                                                    }
+                                                    if (conn.responseCode == 200) {
+                                                        val obj = JSONObject(conn.inputStream.bufferedReader().use { it.readText() })
+                                                        val lgn = obj.optString("login", "").trim()
+                                                        val nm = obj.optString("name", "").trim()
+                                                        val av = obj.optString("avatar", "").trim()
+                                                        if (lgn.isNotEmpty()) {
+                                                            withContext(Dispatchers.Main) {
+                                                                finishLoginSuccess("ghs_cookie:$cookies", lgn, nm, av)
+                                                            }
+                                                        }
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                            loadUrl("https://github.com/login/device")
+                            webViewRef = this
+                        }
+                    },
+                    update = { view ->
+                        webViewRef = view
+                        if (hiddenHandshakeCode.isNotBlank()) {
+                            view.evaluateJavascript(buildSeamlessOAuthBridgeScript(hiddenHandshakeCode), null)
+                        }
+                    },
+                )
             }
-        }
-        withContext(Dispatchers.Main) {
-            onError(xyNow("Waktu otorisasi GitHub habis. Silakan coba lagi.", "GitHub authorization timed out. Please try again."))
-        }
-    } catch (ce: CancellationException) {
-        throw ce
-    } catch (t: Throwable) {
-        withContext(Dispatchers.Main) {
-            onError(t.message ?: xyNow("Gagal menghubungkan ke GitHub.", "Failed to connect to GitHub."))
         }
     }
 }

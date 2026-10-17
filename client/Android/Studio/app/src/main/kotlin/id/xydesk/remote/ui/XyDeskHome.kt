@@ -530,9 +530,9 @@ fun XyDeskHome(
             }
                 }
 
-                // Nav bawah disembunyikan saat form tambah/ubah perangkat terbuka
-                // supaya layar itu tetap penuh dan tombol simpan tidak tertutup.
-                if (route !is XyRoute.EditDevice) {
+                // Nav bawah disembunyikan saat form tambah/ubah perangkat, Chat Global,
+                // atau Terminal SSH terbuka supaya layar itu tetap penuh dan composer tidak tertutup.
+                if (route !is XyRoute.EditDevice && route != XyRoute.ChatGlobal && route != XyRoute.SshTerminal) {
                     // Dock melayang (macOS/iOS style): tanpa garis pemisah lagi —
                     // kapsulnya sudah dipisahkan bayangan dari konten.
                     XyBottomNav(
@@ -552,6 +552,9 @@ fun XyDeskHome(
                 }
             }
         }
+
+    // Modal OAuth GitHub Langsung Tanpa Kode (tersedia global untuk Beranda, Buat RDP, Profil, & Chat Global)
+    GitHubDirectOAuthModalHost()
 
     // ---- Menu utama: 2 gaya — popup tengah atau sidebar kanan ----
     val homeMenuStyle = XyMenuStyleState.current(appPrefs)

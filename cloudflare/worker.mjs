@@ -2515,7 +2515,7 @@ const CHAT_ATTACHMENT_MAX = 2_800_000;
 const CHAT_MSG_PER_WINDOW = 200;
 const CHAT_WINDOW_MS = 20_000;
 const APP_PRESENCE_TTL_MS = 75_000;
-const LIVE_DATA_PACK_VERSION = "2026.10.17.55";
+const LIVE_DATA_PACK_VERSION = "2026.10.17.56";
 let EDGE_PINNED_MSG = null;
 const DEFAULT_ONESIGNAL_APP_ID = "ffaa87d6-8e1d-42b6-bb4f-ebbbfc0bccbb";
 const LEGACY_TEST_NAMES = new Set(["tesbot", "budi", "rizky"]);
@@ -3001,6 +3001,52 @@ export class GlobalChat {
       this.broadcast(null, JSON.stringify({ type: "pin", pinned_message: pinned }));
       return durableObjectJson({ status: "ok", pinned_message: pinned }, 200, request.method);
     }
+    if (path === "/delete" && request.method === "POST") {
+      let body = null;
+      try { body = await request.json(); } catch {}
+      const msgId = String(body?.id || "").trim().slice(0, 80);
+      if (!msgId) {
+        return durableObjectJson({ status: "error", code: "missing_id" }, 400, request.method);
+      }
+      await this.state.storage.delete(`msg:${msgId}`);
+      const curPinned = await this.state.storage.get("pinned_message").catch(() => null);
+      if (curPinned && String(curPinned.id || "") === msgId) {
+        await this.state.storage.delete("pinned_message");
+        this.broadcast(null, JSON.stringify({ type: "pin", pinned_message: null }));
+      }
+      this.broadcast(null, JSON.stringify({ type: "delete", id: msgId }));
+      return durableObjectJson({ status: "ok", deleted_id: msgId }, 200, request.method);
+    }
+    if (path === "/oauth-complete" && request.method === "POST") {
+      let body = null;
+      try { body = await request.json(); } catch {}
+      const sid = String(body?.session_id || "").trim().replace(/[^a-zA-Z0-9_-]/g, "").slice(0, 64);
+      const tok = String(body?.token || "").trim();
+      const login = String(body?.login || "").trim().slice(0, 40);
+      if (!sid || !tok || !login) {
+        return durableObjectJson({ status: "error", code: "invalid_payload" }, 400, request.method);
+      }
+      await this.state.storage.put(`oauth:${sid}`, {
+        token: tok,
+        login,
+        name: String(body?.name || login).slice(0, 80),
+        avatar_url: String(body?.avatar_url || "").slice(0, 300),
+        at: Date.now(),
+      });
+      return durableObjectJson({ status: "ok" }, 200, request.method);
+    }
+    if (path === "/oauth-poll" && request.method === "GET") {
+      const sid = String(urlObj.searchParams.get("session_id") || "").trim().replace(/[^a-zA-Z0-9_-]/g, "").slice(0, 64);
+      if (!sid) {
+        return durableObjectJson({ status: "ok", ready: false }, 200, request.method);
+      }
+      const data = await this.state.storage.get(`oauth:${sid}`).catch(() => null);
+      if (data && data.token && Date.now() - Number(data.at || 0) < 10 * 60_000) {
+        await this.state.storage.delete(`oauth:${sid}`).catch(() => {});
+        return durableObjectJson({ status: "ok", ready: true, ...data }, 200, request.method);
+      }
+      return durableObjectJson({ status: "ok", ready: false }, 200, request.method);
+    }
     if (path === "/send" && request.method === "POST") {
       return this.handleHttpSend(request);
     }
@@ -3253,6 +3299,19 @@ export class GlobalChat {
         };
         await this.state.storage.put("pinned_message", pinned);
         this.broadcast(null, JSON.stringify({ type: "pin", pinned_message: pinned }));
+      }
+      return;
+    }
+    if (data.type === "delete") {
+      const msgId = String(data.id || "").trim().slice(0, 80);
+      if (msgId) {
+        await this.state.storage.delete(`msg:${msgId}`);
+        const curPinned = await this.state.storage.get("pinned_message").catch(() => null);
+        if (curPinned && String(curPinned.id || "") === msgId) {
+          await this.state.storage.delete("pinned_message");
+          this.broadcast(null, JSON.stringify({ type: "pin", pinned_message: null }));
+        }
+        this.broadcast(null, JSON.stringify({ type: "delete", id: msgId }));
       }
       return;
     }
@@ -3513,6 +3572,53 @@ export default {
         } catch {}
       }
       return durableObjectJson({ status: "ok", pinned_message: EDGE_PINNED_MSG }, 200, request.method);
+    }
+    if (path === "/api/chat/delete") {
+      if (request.method === "OPTIONS") return corsPreflight("POST, OPTIONS");
+      if (request.method !== "POST") return methodNotAllowed("POST, OPTIONS");
+      const bodyText = await request.text().catch(() => "");
+      let parsed = null;
+      try { parsed = JSON.parse(bodyText); } catch {}
+      const msgId = String(parsed?.id || "").trim().slice(0, 80);
+      if (!msgId) return durableObjectJson({ status: "error", code: "missing_id" }, 400, request.method);
+      if (EDGE_PINNED_MSG && String(EDGE_PINNED_MSG.id || "") === msgId) {
+        EDGE_PINNED_MSG = null;
+      }
+      if (env.GLOBAL_CHAT) {
+        try {
+          const chatIdDel = env.GLOBAL_CHAT.idFromName("xydesk-global-chat-v1");
+          return await env.GLOBAL_CHAT.get(chatIdDel).fetch(
+            new Request(new URL("/delete", request.url), {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: bodyText,
+            }),
+          );
+        } catch {}
+      }
+      return durableObjectJson({ status: "ok", deleted_id: msgId }, 200, request.method);
+    }
+    if (path === "/api/github/oauth/complete") {
+      if (request.method === "OPTIONS") return corsPreflight("POST, OPTIONS");
+      if (request.method !== "POST") return methodNotAllowed("POST, OPTIONS");
+      if (!env.GLOBAL_CHAT) return notFound(request.method);
+      const chatIdOauth = env.GLOBAL_CHAT.idFromName("xydesk-global-chat-v1");
+      return env.GLOBAL_CHAT.get(chatIdOauth).fetch(
+        new Request(new URL("/oauth-complete", request.url), {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: await request.text(),
+        }),
+      );
+    }
+    if (path === "/api/github/oauth/poll") {
+      if (request.method === "OPTIONS") return corsPreflight("GET, OPTIONS");
+      if (request.method !== "GET") return methodNotAllowed("GET, OPTIONS");
+      if (!env.GLOBAL_CHAT) return notFound(request.method);
+      const chatIdOauth = env.GLOBAL_CHAT.idFromName("xydesk-global-chat-v1");
+      const pollUrl = new URL("/oauth-poll", request.url);
+      pollUrl.search = url.search;
+      return env.GLOBAL_CHAT.get(chatIdOauth).fetch(new Request(pollUrl, { method: "GET" }));
     }
     if (path === "/api/chat/presence") {
       if (request.method === "OPTIONS") return corsPreflight("GET, POST, OPTIONS");

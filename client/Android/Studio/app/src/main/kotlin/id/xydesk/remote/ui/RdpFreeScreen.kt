@@ -367,77 +367,29 @@ fun RdpFreeScreen(onBack: () -> Unit, onConnect: (ConnectionProfile) -> Unit) {
                     }
                     Spacer(Modifier.height(6.dp))
                     Text(
-                        "Login langsung lewat browser di dalam aplikasi (Chrome Custom Tab dengan menu ⋮). " +
-                            "Cukup klik Authorize di halaman GitHub — kode verifikasi otomatis disalin dan " +
-                            "akunmu langsung tersambung tanpa ribet.",
+                        "Login GitHub langsung tanpa kode: tinggal masuk ke akun GitHub kamu lalu klik tombol hijau Authorize " +
+                            "(akses profil, nama, repository, workflow, & instalasi otomatis).",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
-                    if (!authWaitingCode.isNullOrBlank()) {
-                        Spacer(Modifier.height(10.dp))
-                        Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .clip(RoundedCornerShape(12.dp))
-                                .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.12f))
-                                .padding(horizontal = 12.dp, vertical = 10.dp),
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                        ) {
-                            Column(Modifier.weight(1f)) {
-                                Text(
-                                    "Kode Otorisasi (Sudah Disalin Otomatis):",
-                                    style = MaterialTheme.typography.labelSmall,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                )
-                                Text(
-                                    authWaitingCode.orEmpty(),
-                                    style = MaterialTheme.typography.titleLarge,
-                                    fontWeight = FontWeight.ExtraBold,
-                                    color = MaterialTheme.colorScheme.primary,
-                                )
-                            }
-                            XyPillButton(
-                                "Buka Browser ↗",
-                                {
-                                    authWaitingUrl?.let { openInAppCustomTab(context, it) }
-                                },
-                                primary = false,
-                                compact = true,
-                            )
-                        }
-                    }
                     Spacer(Modifier.height(12.dp))
                     XyPillButton(
-                        if (authBusy) "Menunggu klik Authorize di Browser…" else "Login dengan GitHub (Langsung Authorize)",
+                        "Login dengan GitHub (Langsung Authorize)",
                         {
-                            if (!authBusy) {
-                                authBusy = true
-                                message = "Membuka browser otorisasi GitHub di dalam aplikasi…"
-                                scope.launch {
-                                    performGitHubInAppBrowserLogin(
-                                        context = context,
-                                        onCodeReady = { code, url ->
-                                            authWaitingCode = code
-                                            authWaitingUrl = url
-                                        },
-                                        onSuccess = { tok, user ->
-                                            authBusy = false
-                                            authWaitingCode = null
-                                            authWaitingUrl = null
-                                            token = tok
-                                            login = user
-                                            message = "Berhasil terhubung ke GitHub sebagai @$user!"
-                                        },
-                                        onError = { err ->
-                                            authBusy = false
-                                            message = err
-                                        },
-                                    )
-                                }
-                            } else {
-                                authWaitingUrl?.let { openInAppCustomTab(context, it) }
-                            }
+                            GitHubDirectOAuthController.open(
+                                onSuccess = { tok, user ->
+                                    authBusy = false
+                                    authWaitingCode = null
+                                    authWaitingUrl = null
+                                    token = tok
+                                    login = user
+                                    message = "Berhasil terhubung ke GitHub sebagai @$user!"
+                                },
+                                onError = { err ->
+                                    authBusy = false
+                                    message = err
+                                },
+                            )
                         },
                         primary = true,
                         enabled = !busy,

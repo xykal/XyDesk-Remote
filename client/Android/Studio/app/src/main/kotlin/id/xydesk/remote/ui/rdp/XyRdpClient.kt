@@ -120,15 +120,52 @@ internal data class XyRdpValidatedSession(
  */
 internal object XyRdpClient {
     private const val API = "https://api.github.com"
+    private const val DASH_API = "https://xyrdp-dash.vercel.app/api"
 
     private val OPTIONAL_STEP_REGEX = Regex(
-        "^(Pulihkan sesi sebelumnya|Pulihkan simpanan sesi|Verifikasi dependensi|Toolkit grafis opsional|Setup grafis|Grafis OpenGL|Runtime GTA SA|Installer game opsional|Aplikasi ekstra|Optimasi storage|Setup tampilan|Storage boost|Simpan sesi|Upload simpanan sesi|Estafet sesi berikutnya|Finalize)",
+        "^(Pulihkan sesi sebelumnya|Pulihkan simpanan sesi|Verifikasi dependensi|Toolkit grafis opsional|Setup grafis|Grafis OpenGL|Runtime All-Software|Runtime GTA SA|Installer game opsional|Aplikasi ekstra|Optimasi storage|Setup tampilan|Storage boost|Simpan sesi|Upload simpanan sesi|Estafet sesi berikutnya|Finalize)",
         RegexOption.IGNORE_CASE,
     )
 
     private val HOSTNAME_REGEX = Regex(
         "^(?=.{1,253}\$)(?:[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?\\.)+[a-zA-Z]{2,63}\$",
     )
+
+    private fun isDashCookieToken(token: String): Boolean =
+        token.startsWith("ghs_cookie:")
+
+    private fun dashCall(
+        cookieToken: String,
+        path: String,
+        method: String = "GET",
+        body: String? = null,
+    ): Pair<Int, String> = runCatching {
+        val rawCookies = cookieToken.removePrefix("ghs_cookie:").trim()
+        val conn = URL("$DASH_API$path").openConnection() as HttpURLConnection
+        try {
+            conn.requestMethod = method
+            conn.setRequestProperty("Cookie", if (rawCookies.contains("ad_verified=")) rawCookies else "$rawCookies; ad_verified=1")
+            conn.setRequestProperty("X-Ad-Verified", "1")
+            conn.setRequestProperty("X-Xy-Ad", "1")
+            conn.setRequestProperty("Accept", "application/json")
+            conn.setRequestProperty("User-Agent", "XyDesk-Remote-Android")
+            conn.connectTimeout = 15_000
+            conn.readTimeout = 20_000
+            if (body != null) {
+                conn.doOutput = true
+                conn.setRequestProperty("Content-Type", "application/json")
+                conn.outputStream.use { it.write(body.toByteArray()) }
+            }
+            val code = conn.responseCode
+            val text = runCatching {
+                (if (code in 200..299) conn.inputStream else conn.errorStream)
+                    ?.bufferedReader()?.use { it.readText() }.orEmpty()
+            }.getOrDefault("")
+            code to text
+        } finally {
+            conn.disconnect()
+        }
+    }.getOrDefault(0 to "")
 
     private fun call(
         token: String,
@@ -139,7 +176,9 @@ internal object XyRdpClient {
         val conn = URL("$API$path").openConnection() as HttpURLConnection
         try {
             conn.requestMethod = method
-            conn.setRequestProperty("Authorization", "Bearer $token")
+            if (token.isNotBlank() && !isDashCookieToken(token)) {
+                conn.setRequestProperty("Authorization", "Bearer $token")
+            }
             conn.setRequestProperty("Accept", "application/vnd.github+json")
             conn.setRequestProperty("User-Agent", "XyDesk-Remote-Android")
             conn.connectTimeout = 15_000
@@ -160,8 +199,14 @@ internal object XyRdpClient {
         }
     }.getOrDefault(0 to "")
 
-    /** Login pemilik PAT; null bila token tidak sah. */
+    /** Login pemilik PAT / OAuth Session; null bila token tidak sah. */
     suspend fun whoami(token: String): String? = withContext(Dispatchers.IO) {
+        if (isDashCookieToken(token)) {
+            val (code, text) = dashCall(token, "/me")
+            if (code != 200) return@withContext null
+            return@withContext runCatching { JSONObject(text).optString("login") }
+                .getOrNull()?.takeIf { it.isNotBlank() }
+        }
         val (code, text) = call(token, "/user")
         if (code != 200) return@withContext null
         runCatching { JSONObject(text).optString("login") }
@@ -170,10 +215,21 @@ internal object XyRdpClient {
 
     suspend fun forkExists(token: String, login: String): Boolean =
         withContext(Dispatchers.IO) {
+            if (isDashCookieToken(token)) {
+                val (code, text) = dashCall(token, "/me")
+                if (code == 200) {
+                    val exists = runCatching { JSONObject(text).optBoolean("repo_exists", false) }.getOrDefault(false)
+                    if (exists) return@withContext true
+                }
+            }
             call(token, "/repos/$login/${XyRdpConfig.FORK_REPO_NAME}").first == 200
         }
 
     suspend fun createFork(token: String): Boolean = withContext(Dispatchers.IO) {
+        if (isDashCookieToken(token)) {
+            val (code, _) = dashCall(token, "/setup", "POST", """{"name":"${XyRdpConfig.FORK_REPO_NAME}","private":false}""")
+            return@withContext code in 200..204
+        }
         val code = call(token, "/repos/${XyRdpConfig.TEMPLATE_REPO}/forks", "POST", "{}").first
         code in 200..202 || code == 403 // 403 = fork sudah ada / rate limit lunak
     }
@@ -224,6 +280,10 @@ internal object XyRdpClient {
     /** Fork baru mematikan Actions; nyalakan permissions + workflow template lewat API. */
     suspend fun enableWorkflow(token: String, login: String): Boolean =
         withContext(Dispatchers.IO) {
+            if (isDashCookieToken(token)) {
+                val (code, _) = dashCall(token, "/setup", "POST", """{"name":"${XyRdpConfig.FORK_REPO_NAME}","private":false}""")
+                return@withContext code in 200..204
+            }
             runCatching {
                 call(
                     token,
@@ -264,6 +324,35 @@ internal object XyRdpClient {
      */
     suspend fun inspectSetup(token: String, login: String, aksesMode: String): XyRdpSetupStatus =
         withContext(Dispatchers.IO) {
+            if (isDashCookieToken(token)) {
+                val (code, text) = dashCall(token, "/me")
+                if (code == 200) {
+                    val obj = runCatching { JSONObject(text) }.getOrNull()
+                    if (obj != null) {
+                        val exists = obj.optBoolean("repo_exists", false)
+                        val actEnabled = obj.optBoolean("actions_enabled", true)
+                        val secArr = obj.optJSONArray("secrets")
+                        val secretNames = mutableSetOf<String>()
+                        if (secArr != null) {
+                            for (i in 0 until secArr.length()) {
+                                val s = secArr.optString(i).trim()
+                                if (s.isNotEmpty()) secretNames.add(s)
+                            }
+                        }
+                        val required = listOf(
+                            "RDP_PASSWORD",
+                            if (aksesMode == "portmap") "PORTMAP_OVPN_CONFIG" else "TAILSCALE_AUTH_KEY",
+                        )
+                        return@withContext XyRdpSetupStatus(
+                            forkExists = exists,
+                            workflowActive = exists && actEnabled,
+                            actionsEnabled = actEnabled,
+                            configuredSecrets = secretNames,
+                            missingSecrets = required.filter { it !in secretNames },
+                        )
+                    }
+                }
+            }
             val exists = forkExists(token, login)
             if (!exists) {
                 return@withContext XyRdpSetupStatus(
@@ -325,9 +414,29 @@ internal object XyRdpClient {
 
     /**
      * Mulai sesi dengan input dari pengaturan layar Buat RDP.
+     * Otomatis menyinkronkan fork dengan `xykal/XyRDP:main` terbaru sebelum dispatch,
+     * dan memastikan `runner = ubuntu-24.04` bila `linux_mode == polos`.
      */
     suspend fun dispatch(token: String, login: String, inputs: JSONObject = JSONObject()): Boolean =
         withContext(Dispatchers.IO) {
+            if (inputs.optString("linux_mode") == "polos" &&
+                !inputs.optString("runner").startsWith("ubuntu", ignoreCase = true)
+            ) {
+                inputs.put("runner", "ubuntu-24.04")
+            }
+            if (isDashCookieToken(token)) {
+                val startBody = JSONObject().apply {
+                    put("durasi", inputs.optString("durasi_menit", "360"))
+                    put("hostname", inputs.optString("hostname", "rdpfree"))
+                    put("rdp_user", inputs.optString("rdp_user", "xyadmin"))
+                    put("akses", inputs.optString("akses", "tailscale"))
+                    put("win10", inputs.optString("win10", "ya"))
+                    put("grafis", inputs.optString("grafis", "software"))
+                }
+                val (code, _) = dashCall(token, "/start", "POST", startBody.toString())
+                return@withContext code in 200..204
+            }
+            runCatching { syncForkWithUpstream(token, login) }
             val body = JSONObject().apply {
                 put("ref", "main")
                 put("inputs", inputs)
@@ -344,6 +453,10 @@ internal object XyRdpClient {
     /** Batalkan run yang sedang berjalan (tombol Stop di layar Buat RDP). */
     suspend fun cancelRun(token: String, login: String, runId: Long): Boolean =
         withContext(Dispatchers.IO) {
+            if (isDashCookieToken(token)) {
+                val (code, _) = dashCall(token, "/stop", "POST", JSONObject().put("run_id", runId).toString())
+                return@withContext code in 200..204
+            }
             call(
                 token,
                 "/repos/$login/${XyRdpConfig.FORK_REPO_NAME}/actions/runs/$runId/cancel",
