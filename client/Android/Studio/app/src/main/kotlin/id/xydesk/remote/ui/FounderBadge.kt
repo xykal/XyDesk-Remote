@@ -229,6 +229,55 @@ internal object GitHubDirectOAuthController {
         okCb?.invoke(token, login)
     }
 
+    suspend fun onCodeReceived(
+        context: Context,
+        code: String,
+        state: String = "",
+    ) {
+        val cleanCode = code.trim()
+        if (cleanCode.isEmpty()) return
+        val res = withContext(Dispatchers.IO) {
+            runCatching {
+                val sid = activeSessionId
+                val u = "https://api.xydeskremote.biz.id/api/github/oauth/exchange" +
+                    "?code=" + java.net.URLEncoder.encode(cleanCode, "UTF-8") +
+                    "&state=" + java.net.URLEncoder.encode(state, "UTF-8") +
+                    "&session_id=" + java.net.URLEncoder.encode(sid, "UTF-8") +
+                    "&format=json"
+                val conn = (URL(u).openConnection() as HttpURLConnection).apply {
+                    requestMethod = "GET"
+                    setRequestProperty("Accept", "application/json")
+                    setRequestProperty(
+                        "User-Agent",
+                        "Mozilla/5.0 (Linux; Android 14) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Mobile Safari/537.36",
+                    )
+                    connectTimeout = 8_000
+                    readTimeout = 8_000
+                }
+                try {
+                    if (conn.responseCode in 200..299) {
+                        JSONObject(conn.inputStream.bufferedReader().readText())
+                    } else null
+                } finally {
+                    conn.disconnect()
+                }
+            }.getOrNull()
+        } ?: return
+        val tok = res.optString("token").trim()
+        val lgn = res.optString("login").trim()
+        val nm = res.optString("name", lgn).trim()
+        val av = res.optString("avatar_url").trim()
+        if (tok.isNotEmpty() && lgn.isNotEmpty()) {
+            onDeepLinkReceived(
+                context = context,
+                token = tok,
+                login = lgn,
+                displayName = nm,
+                avatarUrl = av,
+            )
+        }
+    }
+
     suspend fun onDeepLinkReceived(
         context: Context,
         token: String,
@@ -747,8 +796,14 @@ internal fun GitHubDirectOAuthModalHost() {
                                         val lgn = parsed.getQueryParameter("login").orEmpty()
                                         val nm = parsed.getQueryParameter("name").orEmpty()
                                         val av = parsed.getQueryParameter("avatar").orEmpty()
+                                        val cd = parsed.getQueryParameter("code").orEmpty()
+                                        val st = parsed.getQueryParameter("state").orEmpty()
                                         if (tok.isNotBlank() && lgn.isNotBlank()) {
                                             scope.launch { finishLoginSuccess(tok, lgn, nm, av) }
+                                        } else if (cd.isNotBlank()) {
+                                            scope.launch {
+                                                GitHubDirectOAuthController.onCodeReceived(context, cd, st)
+                                            }
                                         }
                                         return true
                                     }

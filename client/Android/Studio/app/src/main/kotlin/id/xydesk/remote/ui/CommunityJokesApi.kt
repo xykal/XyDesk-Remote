@@ -242,20 +242,16 @@ internal class CommunityJokesApi(context: Context) {
             val gh = getVerifiedGitHubLogin(appContext).orEmpty()
             val name = (displayName() ?: gh).orEmpty()
             val totalLocalSec = recordAndGetLocalUsageSeconds(appContext, reportDeltaSec)
-            val body = if (name.isNotBlank() || gh.isNotBlank()) {
-                val payload = JSONObject()
-                    .put("client_id", clientId)
-                    .put("github_login", gh)
-                    .put("name", name.ifBlank { gh })
-                    .put("avatar_url", getVerifiedGitHubAvatarUrl(appContext).orEmpty())
-                    .put("country", java.util.Locale.getDefault().country.ifBlank { "ID" })
-                    .put("delta_seconds", reportDeltaSec)
-                    .put("total_seconds", totalLocalSec)
-                    .put("sessions_count", getLocalUsageSessionCount(appContext))
-                request(method = "POST", path = "/api/leaderboard", payload = payload)
-            } else {
-                request(method = "GET", path = "/api/leaderboard")
-            }
+            val payload = JSONObject()
+                .put("client_id", clientId)
+                .put("github_login", gh)
+                .put("name", name.ifBlank { gh.ifBlank { friendlyAccountId() } })
+                .put("avatar_url", getVerifiedGitHubAvatarUrl(appContext).orEmpty())
+                .put("country", java.util.Locale.getDefault().country.ifBlank { "ID" })
+                .put("delta_seconds", reportDeltaSec)
+                .put("total_seconds", totalLocalSec)
+                .put("sessions_count", getLocalUsageSessionCount(appContext))
+            val body = request(method = "POST", path = "/api/leaderboard", payload = payload)
             val arr = body.optJSONArray("items") ?: JSONArray()
             buildList(arr.length()) {
                 for (i in 0 until arr.length()) {

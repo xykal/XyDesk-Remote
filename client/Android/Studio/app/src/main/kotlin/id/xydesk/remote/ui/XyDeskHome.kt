@@ -207,8 +207,18 @@ fun XyDeskHome(
     // Ronde 54: Detak kehadiran seluruh aplikasi (App-Wide Presence Heartbeat)
     // agar jumlah Total Online menghitung seluruh orang yang sedang membuka app.
     LaunchedEffect(Unit) {
+        var tick = 0
         while (true) {
-            runCatching { AppUpdate.sendAppPresencePing(context, screen = "app", active = true) }
+            runCatching {
+                AppUpdate.sendAppPresencePing(context, screen = "app", active = true)
+                if (tick > 0) {
+                    recordAndGetLocalUsageSeconds(context, 25L)
+                }
+                if (tick % 2 == 0) {
+                    CommunityJokesApi(context).fetchLeaderboard(reportDeltaSec = 0L)
+                }
+                tick += 1
+            }
             kotlinx.coroutines.delay(25_000L)
         }
     }
@@ -225,6 +235,7 @@ fun XyDeskHome(
 
     fun connect(profile: ConnectionProfile) {
         onAuthenticateConnect {
+            incrementLocalUsageSessionCount(context)
             scope.launch { repo.touch(profile) }
             context.startActivity(XyDeskSessionActivity.connectIntent(context, profile))
         }

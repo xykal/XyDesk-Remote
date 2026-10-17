@@ -1904,7 +1904,7 @@ test("ronde 48: global chat direct reply (/api/chat/send) + OneSignal push + Pla
   const lbJson = await lbPost.json();
   assert.equal(lbJson.status, "ok");
   assert.ok(Array.isArray(lbJson.items));
-  assert.ok(lbJson.items.length >= 100);
+  assert.ok(lbJson.items.length >= 1 && lbJson.items[0].github_login === "xykal");
   assert.equal(lbJson.items[0].rank, 1);
 
   // Ronde 57: OG Preview memblokir URL berbahaya dengan XyShield & mengizinkan URL publik (GitHub/YouTube).

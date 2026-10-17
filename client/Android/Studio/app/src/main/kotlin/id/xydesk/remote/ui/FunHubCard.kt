@@ -17,11 +17,13 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.requiredSize
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
@@ -205,45 +207,28 @@ internal fun FunHubCard(
     Column(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(vertical = 6.dp),
-        verticalArrangement = Arrangement.spacedBy(14.dp),
+            .padding(vertical = 2.dp),
+        verticalArrangement = Arrangement.spacedBy(10.dp),
     ) {
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.SpaceBetween,
-        ) {
-            Column(Modifier.weight(1f)) {
+        if (onHide != null) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween,
+            ) {
                 Text(
-                    xy("Feed Komunitas & Pengumuman", "Community Feed & Announcements"),
+                    xy("Feed Komunitas", "Community Feed"),
                     style = MaterialTheme.typography.titleSmall,
                     fontWeight = FontWeight.Bold,
                 )
                 Text(
-                    xy("Media HD · Autoplay Video · OG Link Preview · XyShield Aman", "HD Media · Video Autoplay · OG Link Previews · XyShield Protected"),
-                    style = MaterialTheme.typography.labelSmall,
+                    xy("Sembunyikan", "Hide"),
+                    modifier = Modifier
+                        .clickable(onClick = onHide)
+                        .padding(start = 8.dp, top = 2.dp),
+                    style = MaterialTheme.typography.labelMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
-            }
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Text(
-                    if (refreshing) xy("Memuat…", "Loading…") else xy("Muat ulang", "Refresh"),
-                    modifier = Modifier
-                        .clickable(enabled = !refreshing) { refreshKey += 1 }
-                        .padding(horizontal = 8.dp, vertical = 4.dp),
-                    style = MaterialTheme.typography.labelMedium,
-                    color = MaterialTheme.colorScheme.primary,
-                )
-                if (onHide != null) {
-                    Text(
-                        xy("Sembunyikan", "Hide"),
-                        modifier = Modifier
-                            .clickable(onClick = onHide)
-                            .padding(start = 8.dp, top = 2.dp),
-                        style = MaterialTheme.typography.labelMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                }
             }
         }
 
@@ -502,39 +487,82 @@ internal fun FunHubCard(
                 }
             }
         } else {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-            ) {
-                XyPillButton(
-                    text = xy("Tulis Postingan / Bagikan Tautan", "Write Post / Share Link"),
-                    onClick = {
-                        editingJoke = null
-                        draft = ""
-                        pendingAttachment = null
-                        editRemoveAttachment = false
-                        isAnnouncementDraft = false
-                        composerOpen = true
-                    },
-                    primary = true,
-                    compact = true,
-                    modifier = Modifier.weight(1f),
-                )
-                if (isViewerFounder) {
-                    XyPillButton(
-                        text = xy("Buat Pengumuman", "Announcement"),
-                        onClick = {
+            val myDispName = remember(viewerGithubLogin) {
+                api.displayName() ?: viewerGithubLogin.ifBlank { "U" }
+            }
+            val myAvatarUrl = remember(viewerGithubLogin) {
+                getVerifiedGitHubAvatarUrl(context)
+                    ?: if (viewerGithubLogin.isNotBlank()) "https://github.com/$viewerGithubLogin.png?size=160" else null
+            }
+            Column(modifier = Modifier.fillMaxWidth()) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clickable {
                             editingJoke = null
                             draft = ""
                             pendingAttachment = null
                             editRemoveAttachment = false
-                            isAnnouncementDraft = true
+                            isAnnouncementDraft = false
                             composerOpen = true
-                        },
-                        primary = false,
-                        compact = true,
+                        }
+                        .padding(vertical = 10.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(12.dp),
+                ) {
+                    FeedAvatarThumb(
+                        avatarUrl = myAvatarUrl,
+                        name = myDispName,
+                        isFounder = isViewerFounder,
+                        size = 36.dp,
                     )
+                    Text(
+                        text = xy("Apa yang ingin kamu bagikan?", "What's on your mind?"),
+                        fontSize = 13.sp,
+                        color = Color(0xFF64748B),
+                        modifier = Modifier.weight(1f),
+                    )
+                    if (isViewerFounder) {
+                        Box(
+                            modifier = Modifier
+                                .size(32.dp)
+                                .clip(CircleShape)
+                                .clickable {
+                                    editingJoke = null
+                                    draft = ""
+                                    pendingAttachment = null
+                                    editRemoveAttachment = false
+                                    isAnnouncementDraft = true
+                                    composerOpen = true
+                                },
+                            contentAlignment = Alignment.Center,
+                        ) {
+                            androidx.compose.material3.Icon(
+                                imageVector = id.xydesk.remote.ui.components.XyIcons.Megaphone,
+                                contentDescription = "Pengumuman",
+                                tint = Color(0xFFFBBF24),
+                                modifier = Modifier.size(16.dp),
+                            )
+                        }
+                    }
+                    Box(
+                        modifier = Modifier
+                            .size(32.dp)
+                            .clip(CircleShape),
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        androidx.compose.material3.Icon(
+                            imageVector = id.xydesk.remote.ui.components.XyIcons.Edit,
+                            contentDescription = null,
+                            tint = Color(0xFF94A3B8),
+                            modifier = Modifier.size(16.dp),
+                        )
+                    }
                 }
+                androidx.compose.material3.HorizontalDivider(
+                    thickness = 0.75.dp,
+                    color = Color(0xFF1D222D),
+                )
             }
         }
 
@@ -959,78 +987,59 @@ private fun CommunityJokeItem(
     }
     val totalReactions = remember(joke.reactions) { joke.reactions.values.sum() }
     val activeReaction = joke.viewerReaction
+    val isFounderAuthor = isFounderAccount(joke.authorName) || isFounderAccount(joke.githubLogin)
 
-    Surface(
-        shape = RoundedCornerShape(16.dp),
-        color = if (isPinnedAnnouncement) Color(0xFF19150E) else Color(0xFF13161E),
-        border = BorderStroke(
-            width = if (isPinnedAnnouncement) 1.5.dp else 1.dp,
-            color = if (isPinnedAnnouncement) Color(0xFFF59E0B).copy(alpha = 0.78f) else Color(0xFF232834),
-        ),
-        modifier = Modifier.fillMaxWidth(),
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(top = 12.dp),
     ) {
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(13.dp),
-            verticalArrangement = Arrangement.spacedBy(10.dp),
+        if (isPinnedAnnouncement) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(bottom = 8.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(6.dp),
+            ) {
+                androidx.compose.material3.Icon(
+                    imageVector = id.xydesk.remote.ui.components.XyIcons.Pin,
+                    contentDescription = null,
+                    tint = Color(0xFFFBBF24),
+                    modifier = Modifier.size(12.dp),
+                )
+                Text(
+                    text = xy("Pengumuman Tersemat", "Pinned Announcement"),
+                    fontSize = 11.sp,
+                    fontWeight = FontWeight.SemiBold,
+                    color = Color(0xFFFBBF24),
+                )
+            }
+        }
+
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.Top,
+            horizontalArrangement = Arrangement.spacedBy(11.dp),
         ) {
-            // Pita Header Khusus Pengumuman Admin yang Otomatis Tersemat
-            if (isPinnedAnnouncement) {
-                Surface(
-                    shape = RoundedCornerShape(8.dp),
-                    color = Color(0xFFF59E0B).copy(alpha = 0.16f),
-                    border = BorderStroke(1.dp, Color(0xFFF59E0B).copy(alpha = 0.45f)),
+            FeedAvatarThumb(
+                avatarUrl = joke.authorAvatarUrl,
+                name = joke.authorName ?: "Anonim",
+                isFounder = isFounderAuthor,
+                size = 38.dp,
+            )
+
+            Column(
+                modifier = Modifier.weight(1f),
+                verticalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                // Header: Nama + Badge + Waktu + Aksi Flat (tanpa kotak/border)
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically,
                 ) {
                     Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(horizontal = 10.dp, vertical = 5.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                    ) {
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(6.dp),
-                        ) {
-                            androidx.compose.material3.Icon(
-                                imageVector = id.xydesk.remote.ui.components.XyIcons.Pin,
-                                contentDescription = null,
-                                tint = Color(0xFFFBBF24),
-                                modifier = Modifier.size(12.dp),
-                            )
-                            Text(
-                                text = xy("PENGUMUMAN RESMI · TERSEMAT OTOMATIS", "OFFICIAL ANNOUNCEMENT · AUTO-PINNED"),
-                                fontSize = 10.sp,
-                                fontWeight = FontWeight.ExtraBold,
-                                color = Color(0xFFFBBF24),
-                                letterSpacing = 0.5.sp,
-                            )
-                        }
-                        Text(
-                            text = "FEED & GLOBAL CHAT",
-                            fontSize = 9.sp,
-                            fontWeight = FontWeight.Bold,
-                            color = Color(0xFFFDE68A),
-                        )
-                    }
-                }
-            }
-
-            // Baris Penulis + Avatar + Waktu + Tombol Edit/Hapus Cepat
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                FeedAvatarThumb(
-                    avatarUrl = joke.authorAvatarUrl,
-                    name = joke.authorName ?: "Anonim",
-                    isFounder = isFounderAccount(joke.authorName) || isFounderAccount(joke.githubLogin),
-                    size = 34.dp,
-                )
-                Spacer(Modifier.width(9.dp))
-                Column(modifier = Modifier.weight(1f)) {
-                    Row(
+                        modifier = Modifier.weight(1f),
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.spacedBy(5.dp),
                     ) {
@@ -1039,306 +1048,263 @@ private fun CommunityJokeItem(
                             modifier = Modifier.clickable {
                                 onAuthorClick(joke.authorName ?: xyNow("Anonim", "Anonymous"))
                             },
-                            style = MaterialTheme.typography.labelMedium,
+                            fontSize = 13.sp,
                             fontWeight = FontWeight.Bold,
-                            color = if (isPinnedAnnouncement) Color(0xFFFBBF24) else Color(0xFFF8FAFC),
+                            color = Color(0xFFF8FAFC),
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
                         )
-                        if (isFounderAccount(joke.authorName) || isFounderAccount(joke.githubLogin)) {
+                        if (isFounderAuthor) {
                             XyFounderBadge(compact = true)
                         }
-                    }
-                    Row(verticalAlignment = Alignment.CenterVertically) {
                         feedTimeAgo(joke.createdAtMillis).takeIf { it.isNotEmpty() }?.let { ago ->
                             Text(
-                                text = ago,
-                                style = MaterialTheme.typography.labelSmall,
+                                text = "· $ago",
+                                fontSize = 11.sp,
                                 color = Color(0xFF64748B),
+                                maxLines = 1,
                             )
                         }
                         if (joke.editedAtMillis > 0) {
                             Text(
-                                text = xy(" · diedit", " · edited"),
-                                style = MaterialTheme.typography.labelSmall,
-                                color = Color(0xFF64748B),
+                                text = xy("(diedit)", "(edited)"),
+                                fontSize = 10.sp,
+                                color = Color(0xFF475569),
                             )
                         }
                     }
-                }
 
-                if (canManage) {
-                    Surface(
-                        onClick = onQuickEdit,
-                        shape = RoundedCornerShape(8.dp),
-                        color = Color(0xFF1C212E),
-                        border = BorderStroke(1.dp, Color(0xFF2D3548)),
-                    ) {
-                        Row(
-                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(4.dp),
+                    if (canManage) {
+                        Box(
+                            modifier = Modifier
+                                .size(28.dp)
+                                .clip(CircleShape)
+                                .clickable(onClick = onQuickEdit),
+                            contentAlignment = Alignment.Center,
                         ) {
                             androidx.compose.material3.Icon(
                                 imageVector = id.xydesk.remote.ui.components.XyIcons.Edit,
-                                contentDescription = null,
-                                tint = Color(0xFFE2E8F0),
-                                modifier = Modifier.size(11.dp),
-                            )
-                            Text(
-                                text = xy("Edit", "Edit"),
-                                fontSize = 11.sp,
-                                fontWeight = FontWeight.SemiBold,
-                                color = Color(0xFFE2E8F0),
+                                contentDescription = "Edit",
+                                tint = Color(0xFF94A3B8),
+                                modifier = Modifier.size(14.dp),
                             )
                         }
-                    }
-                    Spacer(Modifier.width(6.dp))
-                    Surface(
-                        onClick = onQuickDelete,
-                        shape = RoundedCornerShape(8.dp),
-                        color = Color(0xFF2A161B),
-                        border = BorderStroke(1.dp, Color(0xFFEF4444).copy(alpha = 0.4f)),
-                    ) {
                         Box(
-                            modifier = Modifier.padding(horizontal = 7.dp, vertical = 5.dp),
+                            modifier = Modifier
+                                .size(28.dp)
+                                .clip(CircleShape)
+                                .clickable(onClick = onQuickDelete),
                             contentAlignment = Alignment.Center,
                         ) {
                             androidx.compose.material3.Icon(
                                 imageVector = id.xydesk.remote.ui.components.XyIcons.Trash,
                                 contentDescription = "Hapus",
                                 tint = Color(0xFFF87171),
-                                modifier = Modifier.size(12.dp),
+                                modifier = Modifier.size(14.dp),
                             )
                         }
                     }
-                    Spacer(Modifier.width(4.dp))
+                    Box(
+                        modifier = Modifier
+                            .size(28.dp)
+                            .clip(CircleShape)
+                            .clickable(onClick = onOpenActions),
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        androidx.compose.material3.Icon(
+                            imageVector = id.xydesk.remote.ui.components.XyIcons.MoreHorizontal,
+                            contentDescription = "Lainnya",
+                            tint = Color(0xFF64748B),
+                            modifier = Modifier.size(15.dp),
+                        )
+                    }
                 }
-                Text(
-                    "···",
-                    modifier = Modifier
-                        .clip(RoundedCornerShape(8.dp))
-                        .clickable(onClick = onOpenActions)
-                        .padding(horizontal = 8.dp, vertical = 4.dp),
-                    style = MaterialTheme.typography.labelLarge,
-                    fontWeight = FontWeight.Bold,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-            }
 
-            // Isi Teks Postingan
-            if (joke.text.isNotBlank()) {
-                Text(
-                    text = joke.text,
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = Color(0xFFF1F5F9),
-                    lineHeight = 20.sp,
-                )
-            }
+                // Isi Teks Postingan
+                if (joke.text.isNotBlank()) {
+                    Text(
+                        text = joke.text,
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = Color(0xFFF1F5F9),
+                        lineHeight = 20.sp,
+                    )
+                }
 
-            // Kartu OG Link Preview Otomatis (Sosmed / Website apa pun)
-            if (!detectedUrl.isNullOrBlank()) {
-                XyOpenGraphPreviewCard(url = detectedUrl)
-            }
+                // OG Link Preview
+                if (!detectedUrl.isNullOrBlank()) {
+                    XyOpenGraphPreviewCard(url = detectedUrl)
+                }
 
-            // Lampiran Gambar HD / GIF / Autoplay Video Preview
-            joke.attachmentUrl?.let { url ->
-                FeedBinaryImage(
-                    path = url,
-                    mime = joke.attachmentMime,
+                // Lampiran Gambar HD / GIF / Video
+                joke.attachmentUrl?.let { url ->
+                    FeedBinaryImage(
+                        path = url,
+                        mime = joke.attachmentMime,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable { onImageClick(url, joke.attachmentMime) },
+                    )
+                }
+
+                // Pemilih Reaksi Opsional (hanya muncul bila tombol + ditekan)
+                if (fullEmojiPickerOpen) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clip(RoundedCornerShape(10.dp))
+                            .background(Color(0xFF151923))
+                            .horizontalScroll(rememberScrollState())
+                            .padding(horizontal = 10.dp, vertical = 6.dp),
+                        horizontalArrangement = Arrangement.spacedBy(12.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        CommunityJokesApi.QUICK_REACTIONS.forEach { emoji ->
+                            Text(
+                                text = emoji,
+                                fontSize = 16.sp,
+                                modifier = Modifier.clickable(enabled = !isReactionBusy) {
+                                    onReact(emoji)
+                                    fullEmojiPickerOpen = false
+                                },
+                            )
+                        }
+                    }
+                }
+
+                // Action Bar Modern Flat (Tanpa Card, Tanpa Border — Gaya X / Threads)
+                Row(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .heightIn(max = 360.dp)
-                        .clickable { onImageClick(url, joke.attachmentMime) },
-                )
-            }
-
-            // Pill Reaksi Gaya WhatsApp (👍 ❤️ 😂 😮 😢 🙏 🔥)
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .horizontalScroll(rememberScrollState()),
-                horizontalArrangement = Arrangement.spacedBy(6.dp),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                CommunityJokesApi.QUICK_REACTIONS.forEach { emoji ->
-                    val selected = joke.viewerReaction == emoji
-                    val count = joke.reactions[emoji] ?: 0
-                    Surface(
-                        onClick = { if (!isReactionBusy) onReact(emoji) },
-                        shape = RoundedCornerShape(999.dp),
-                        color = if (selected) Color(0xFFF59E0B).copy(alpha = 0.22f) else Color(0xFF191D27),
-                        border = BorderStroke(
-                            1.dp,
-                            if (selected) Color(0xFFF59E0B) else Color(0xFF262C3A),
-                        ),
+                        .padding(top = 2.dp, bottom = 12.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                ) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(22.dp),
                     ) {
+                        // Like / Heart (Flat)
                         Row(
-                            modifier = Modifier.padding(horizontal = 9.dp, vertical = 4.dp),
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(6.dp))
+                                .clickable(enabled = !isReactionBusy) {
+                                    onReact(activeReaction ?: "❤️")
+                                }
+                                .padding(vertical = 4.dp, horizontal = 2.dp),
                             verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(4.dp),
+                            horizontalArrangement = Arrangement.spacedBy(6.dp),
                         ) {
-                            Text(emoji, fontSize = 13.sp)
-                            if (count > 0) {
+                            androidx.compose.material3.Icon(
+                                imageVector = if (activeReaction != null) {
+                                    id.xydesk.remote.ui.components.XyIcons.HeartFilled
+                                } else {
+                                    id.xydesk.remote.ui.components.XyIcons.Heart
+                                },
+                                contentDescription = "Suka",
+                                tint = if (activeReaction != null) Color(0xFFF43F5E) else Color(0xFF94A3B8),
+                                modifier = Modifier.size(17.dp),
+                            )
+                            if (totalReactions > 0) {
                                 Text(
-                                    text = count.toString(),
-                                    fontSize = 11.sp,
-                                    fontWeight = FontWeight.Bold,
-                                    color = if (selected) Color(0xFFFBBF24) else Color(0xFFCBD5E1),
+                                    text = totalReactions.toString(),
+                                    fontSize = 12.sp,
+                                    fontWeight = FontWeight.Medium,
+                                    color = if (activeReaction != null) Color(0xFFF43F5E) else Color(0xFF94A3B8),
                                 )
                             }
                         }
-                    }
-                }
-                Surface(
-                    onClick = { if (!isReactionBusy) fullEmojiPickerOpen = !fullEmojiPickerOpen },
-                    shape = RoundedCornerShape(999.dp),
-                    color = Color(0xFF191D27),
-                    border = BorderStroke(1.dp, Color(0xFF262C3A)),
-                ) {
-                    Text(
-                        text = if (fullEmojiPickerOpen) "−" else "+",
-                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp),
-                        fontSize = 12.sp,
-                        fontWeight = FontWeight.ExtraBold,
-                        color = Color(0xFFFBBF24),
-                    )
-                }
-            }
 
-            if (fullEmojiPickerOpen) {
-                Surface(
-                    shape = RoundedCornerShape(14.dp),
-                    color = Color(0xFF181C26),
-                    border = BorderStroke(1.dp, Color(0xFF2B3244)),
-                    modifier = Modifier.fillMaxWidth(),
-                ) {
-                    Column(
-                        modifier = Modifier.padding(8.dp),
-                        verticalArrangement = Arrangement.spacedBy(4.dp),
-                    ) {
-                        CommunityJokesApi.REACTIONS.chunked(8).forEach { rowEmojis ->
-                            Row(
-                                modifier = Modifier.fillMaxWidth(),
-                                horizontalArrangement = Arrangement.SpaceEvenly,
-                            ) {
-                                rowEmojis.forEach { emoji ->
-                                    Text(
-                                        emoji,
-                                        modifier = Modifier
-                                            .clickable(enabled = !isReactionBusy) {
-                                                onReact(emoji)
-                                                fullEmojiPickerOpen = false
-                                            }
-                                            .padding(vertical = 4.dp),
-                                        style = MaterialTheme.typography.titleMedium,
-                                    )
-                                }
+                        // Komentar (Flat)
+                        Row(
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(6.dp))
+                                .clickable(onClick = onOpenComments)
+                                .padding(vertical = 4.dp, horizontal = 2.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(6.dp),
+                        ) {
+                            androidx.compose.material3.Icon(
+                                imageVector = id.xydesk.remote.ui.components.XyIcons.Chat,
+                                contentDescription = "Komentar",
+                                tint = Color(0xFF94A3B8),
+                                modifier = Modifier.size(17.dp),
+                            )
+                            if (joke.commentsTotal > 0) {
+                                Text(
+                                    text = joke.commentsTotal.toString(),
+                                    fontSize = 12.sp,
+                                    fontWeight = FontWeight.Medium,
+                                    color = Color(0xFF94A3B8),
+                                )
                             }
                         }
-                    }
-                }
-            }
 
-            // Action Bar Utama: Like · Komentar · Share · Reaksi WA
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                // Tombol Like / React Utama
-                Surface(
-                    onClick = {
-                        if (!isReactionBusy) {
-                            onReact(activeReaction ?: "👍")
+                        // Bagikan (Flat)
+                        Row(
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(6.dp))
+                                .clickable(onClick = onShare)
+                                .padding(vertical = 4.dp, horizontal = 2.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(6.dp),
+                        ) {
+                            androidx.compose.material3.Icon(
+                                imageVector = id.xydesk.remote.ui.components.XyIcons.Share,
+                                contentDescription = "Bagikan",
+                                tint = Color(0xFF94A3B8),
+                                modifier = Modifier.size(16.dp),
+                            )
                         }
-                    },
-                    shape = RoundedCornerShape(10.dp),
-                    color = if (activeReaction != null) Color(0xFFF59E0B).copy(alpha = 0.18f) else Color(0xFF181C26),
-                    border = BorderStroke(
-                        1.dp,
-                        if (activeReaction != null) Color(0xFFF59E0B) else Color(0xFF252B39),
-                    ),
-                    modifier = Modifier.weight(1f),
-                ) {
-                    Row(
-                        modifier = Modifier.padding(vertical = 7.dp),
-                        horizontalArrangement = Arrangement.Center,
-                        verticalAlignment = Alignment.CenterVertically,
-                    ) {
-                        androidx.compose.material3.Icon(
-                            imageVector = id.xydesk.remote.ui.components.XyIcons.ThumbUp,
-                            contentDescription = null,
-                            tint = if (activeReaction != null) Color(0xFFFBBF24) else Color(0xFFE2E8F0),
-                            modifier = Modifier.size(13.dp),
-                        )
-                        Spacer(Modifier.width(5.dp))
-                        Text(
-                            text = if (totalReactions > 0) xy("Suka ($totalReactions)", "Like ($totalReactions)") else xy("Suka", "Like"),
-                            fontSize = 11.sp,
-                            fontWeight = FontWeight.Bold,
-                            color = if (activeReaction != null) Color(0xFFFBBF24) else Color(0xFFE2E8F0),
-                        )
                     }
-                }
 
-                // Tombol Komentar
-                Surface(
-                    onClick = onOpenComments,
-                    shape = RoundedCornerShape(10.dp),
-                    color = Color(0xFF181C26),
-                    border = BorderStroke(1.dp, Color(0xFF252B39)),
-                    modifier = Modifier.weight(1f),
-                ) {
+                    // Ringkasan reaksi aktif (jika ada) + pemicu reaksi cepat tanpa border
                     Row(
-                        modifier = Modifier.padding(vertical = 7.dp),
-                        horizontalArrangement = Arrangement.Center,
                         verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(6.dp),
                     ) {
-                        androidx.compose.material3.Icon(
-                            imageVector = id.xydesk.remote.ui.components.XyIcons.Chat,
-                            contentDescription = null,
-                            tint = Color(0xFFE2E8F0),
-                            modifier = Modifier.size(13.dp),
-                        )
-                        Spacer(Modifier.width(5.dp))
-                        Text(
-                            text = xy("Komen (${joke.commentsTotal})", "Comment (${joke.commentsTotal})"),
-                            fontSize = 11.sp,
-                            fontWeight = FontWeight.Bold,
-                            color = Color(0xFFE2E8F0),
-                        )
-                    }
-                }
-
-                // Tombol Share
-                Surface(
-                    onClick = onShare,
-                    shape = RoundedCornerShape(10.dp),
-                    color = Color(0xFF181C26),
-                    border = BorderStroke(1.dp, Color(0xFF252B39)),
-                    modifier = Modifier.weight(1f),
-                ) {
-                    Row(
-                        modifier = Modifier.padding(vertical = 7.dp),
-                        horizontalArrangement = Arrangement.Center,
-                        verticalAlignment = Alignment.CenterVertically,
-                    ) {
-                        androidx.compose.material3.Icon(
-                            imageVector = id.xydesk.remote.ui.components.XyIcons.Share,
-                            contentDescription = null,
-                            tint = Color(0xFFE2E8F0),
-                            modifier = Modifier.size(13.dp),
-                        )
-                        Spacer(Modifier.width(5.dp))
-                        Text(
-                            text = xy("Bagikan", "Share"),
-                            fontSize = 11.sp,
-                            fontWeight = FontWeight.Bold,
-                            color = Color(0xFFE2E8F0),
-                        )
+                        val topEmojis = remember(joke.reactions) {
+                            joke.reactions.entries
+                                .filter { it.value > 0 && it.key != "❤️" }
+                                .sortedByDescending { it.value }
+                                .take(3)
+                        }
+                        topEmojis.forEach { (emoji, count) ->
+                            Text(
+                                text = "$emoji $count",
+                                fontSize = 11.sp,
+                                color = Color(0xFF94A3B8),
+                                modifier = Modifier.clickable(enabled = !isReactionBusy) { onReact(emoji) },
+                            )
+                        }
+                        Box(
+                            modifier = Modifier
+                                .size(24.dp)
+                                .clip(CircleShape)
+                                .clickable(enabled = !isReactionBusy) {
+                                    fullEmojiPickerOpen = !fullEmojiPickerOpen
+                                },
+                            contentAlignment = Alignment.Center,
+                        ) {
+                            androidx.compose.material3.Icon(
+                                imageVector = if (fullEmojiPickerOpen) {
+                                    id.xydesk.remote.ui.components.XyIcons.Close
+                                } else {
+                                    id.xydesk.remote.ui.components.XyIcons.Plus
+                                },
+                                contentDescription = "Reaksi",
+                                tint = Color(0xFF64748B),
+                                modifier = Modifier.size(14.dp),
+                            )
+                        }
                     }
                 }
             }
         }
+
+        androidx.compose.material3.HorizontalDivider(
+            thickness = 0.75.dp,
+            color = Color(0xFF1D222D),
+        )
     }
 }
 
@@ -1561,13 +1527,15 @@ internal fun FeedAvatarThumb(
     val cleanUrl = avatarUrl?.trim().orEmpty()
     Box(
         modifier = Modifier
-            .size(size)
+            .requiredSize(size)
             .clip(CircleShape)
-            .background(if (isFounder) Color(0xFF3B2A10) else Color(0xFF222836))
-            .border(
-                width = if (isFounder) 1.5.dp else 1.dp,
-                color = if (isFounder) Color(0xFFF59E0B) else Color(0xFF333B4D),
-                shape = CircleShape,
+            .background(if (isFounder) Color(0xFF272115) else Color(0xFF1C212D))
+            .then(
+                if (isFounder) {
+                    Modifier.border(1.dp, Color(0xFFF59E0B).copy(alpha = 0.7f), CircleShape)
+                } else {
+                    Modifier
+                },
             ),
         contentAlignment = Alignment.Center,
     ) {
@@ -1581,8 +1549,8 @@ internal fun FeedAvatarThumb(
             else -> {
                 Text(
                     text = name.trim().take(1).uppercase().ifEmpty { "U" },
-                    fontSize = (size.value * 0.42f).sp,
-                    fontWeight = FontWeight.ExtraBold,
+                    fontSize = (size.value * 0.40f).sp,
+                    fontWeight = FontWeight.Bold,
                     color = if (isFounder) Color(0xFFFBBF24) else Color(0xFFF8FAFC),
                 )
             }
@@ -2108,14 +2076,21 @@ internal fun FeedBinaryImage(
         )
     } else {
         decodedBmp?.let {
+            val ratio = if (!round && !fit && it.height > 0) {
+                (it.width.toFloat() / it.height.toFloat()).coerceIn(0.8f, 1.91f)
+            } else {
+                null
+            }
             Image(
                 bitmap = it,
                 contentDescription = null,
-                modifier = modifier.clip(shape),
+                modifier = modifier
+                    .then(if (ratio != null) Modifier.aspectRatio(ratio) else Modifier)
+                    .clip(shape),
                 contentScale = when {
                     round -> ContentScale.Crop
                     fit -> ContentScale.Fit
-                    else -> ContentScale.FillWidth
+                    else -> ContentScale.Crop
                 },
             )
         }

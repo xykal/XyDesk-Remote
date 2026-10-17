@@ -1,9 +1,8 @@
 package id.xydesk.remote.ui
 
-import androidx.compose.foundation.BorderStroke
-import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -14,15 +13,16 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.requiredSize
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.runtime.Composable
@@ -35,12 +35,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.geometry.CornerRadius
-import androidx.compose.ui.geometry.Offset
-import androidx.compose.ui.geometry.Size
-import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontFamily
@@ -49,7 +44,6 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import id.xydesk.remote.ui.components.XyGlassCard
 import id.xydesk.remote.ui.components.XyIconPill
 import id.xydesk.remote.ui.components.XyIcons
 import id.xydesk.remote.ui.components.XyTopBar
@@ -58,8 +52,8 @@ import kotlinx.coroutines.launch
 
 internal enum class XyFeedHeaderTab {
     FEED,
-    NOTIFICATIONS,
     LEADERBOARD,
+    NOTIFICATIONS,
 }
 
 @Composable
@@ -71,26 +65,17 @@ internal fun XyFeedScreen(
     val api = remember(context) { CommunityJokesApi(context) }
 
     var activeHeaderTab by remember { mutableStateOf(XyFeedHeaderTab.FEED) }
-    var notifCategory by remember { mutableStateOf("all") } // "all" | "announcement" | "inbox" | "reply"
+    var notifCategory by remember { mutableStateOf("all") }
     var notifications by remember { mutableStateOf<List<XyNotificationItem>>(emptyList()) }
     var leaderboard by remember { mutableStateOf<List<XyLeaderboardEntry>>(emptyList()) }
     var onlineCount by remember { mutableIntStateOf(3) }
     var pullSignal by remember { mutableIntStateOf(0) }
     var pullBusy by remember { mutableStateOf(false) }
 
-    // Fetch online count & notifications in parallel without blocking initial Feed render
     LaunchedEffect(api, pullSignal) {
         launch { onlineCount = api.fetchOnlineCount() }
         launch { notifications = api.fetchNotifications() }
-        if (activeHeaderTab == XyFeedHeaderTab.LEADERBOARD) {
-            launch { leaderboard = api.fetchLeaderboard(reportDeltaSec = 30L) }
-        }
-    }
-
-    LaunchedEffect(api, activeHeaderTab) {
-        if (activeHeaderTab == XyFeedHeaderTab.LEADERBOARD && leaderboard.isEmpty()) {
-            leaderboard = api.fetchLeaderboard(reportDeltaSec = 15L)
-        }
+        launch { leaderboard = api.fetchLeaderboard(reportDeltaSec = 30L) }
     }
 
     LaunchedEffect(api) {
@@ -98,9 +83,7 @@ internal fun XyFeedScreen(
             delay(30_000L)
             launch { onlineCount = api.fetchOnlineCount() }
             launch { notifications = api.fetchNotifications() }
-            if (activeHeaderTab == XyFeedHeaderTab.LEADERBOARD) {
-                launch { leaderboard = api.fetchLeaderboard(reportDeltaSec = 30L) }
-            }
+            launch { leaderboard = api.fetchLeaderboard(reportDeltaSec = 30L) }
         }
     }
 
@@ -116,140 +99,86 @@ internal fun XyFeedScreen(
         ) {
             XyTopBar(
                 title = when (activeHeaderTab) {
-                    XyFeedHeaderTab.FEED -> xy("Feed Komunitas", "Community Feed")
-                    XyFeedHeaderTab.NOTIFICATIONS -> xy("Kotak Notifikasi", "Notifications")
-                    XyFeedHeaderTab.LEADERBOARD -> xy("Peringkat Top 100", "Top 100 Leaderboard")
+                    XyFeedHeaderTab.FEED -> xy("Komunitas", "Community")
+                    XyFeedHeaderTab.LEADERBOARD -> xy("Leaderboard", "Leaderboard")
+                    XyFeedHeaderTab.NOTIFICATIONS -> xy("Notifikasi", "Notifications")
                 },
                 actions = {
-                    Surface(
-                        onClick = {
-                            activeHeaderTab = if (activeHeaderTab == XyFeedHeaderTab.NOTIFICATIONS) {
-                                XyFeedHeaderTab.FEED
-                            } else {
-                                XyFeedHeaderTab.NOTIFICATIONS
-                            }
-                        },
-                        shape = RoundedCornerShape(999.dp),
-                        color = if (activeHeaderTab == XyFeedHeaderTab.NOTIFICATIONS) {
-                            Color(0xFF27272A)
-                        } else {
-                            Color(0xFF14161C)
-                        },
-                        border = BorderStroke(
-                            1.dp,
-                            if (activeHeaderTab == XyFeedHeaderTab.NOTIFICATIONS) Color(0xFFE4E4E7) else Color(0xFF272B36),
-                        ),
-                    ) {
-                        Row(
-                            modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(5.dp),
-                        ) {
-                            Icon(
-                                imageVector = XyIcons.Bell,
-                                contentDescription = "Notifikasi",
-                                tint = Color(0xFFF4F4F5),
-                                modifier = Modifier.size(14.dp),
-                            )
-                            if (notifications.isNotEmpty()) {
-                                Box(
-                                    modifier = Modifier
-                                        .clip(RoundedCornerShape(999.dp))
-                                        .background(Color(0xFFEF4444))
-                                        .padding(horizontal = 5.dp, vertical = 1.dp),
-                                ) {
-                                    Text(
-                                        text = notifications.size.coerceAtMost(99).toString(),
-                                        color = Color.White,
-                                        fontSize = 10.sp,
-                                        fontWeight = FontWeight.Bold,
-                                    )
+                    Box(
+                        modifier = Modifier
+                            .requiredSize(36.dp)
+                            .clip(CircleShape)
+                            .clickable {
+                                activeHeaderTab = if (activeHeaderTab == XyFeedHeaderTab.NOTIFICATIONS) {
+                                    XyFeedHeaderTab.FEED
+                                } else {
+                                    XyFeedHeaderTab.NOTIFICATIONS
                                 }
-                            }
-                        }
-                    }
-                    Spacer(Modifier.width(6.dp))
-                    Surface(
-                        onClick = {
-                            activeHeaderTab = if (activeHeaderTab == XyFeedHeaderTab.LEADERBOARD) {
-                                XyFeedHeaderTab.FEED
-                            } else {
-                                XyFeedHeaderTab.LEADERBOARD
-                            }
-                        },
-                        shape = RoundedCornerShape(999.dp),
-                        color = if (activeHeaderTab == XyFeedHeaderTab.LEADERBOARD) {
-                            Color(0xFF27272A)
-                        } else {
-                            Color(0xFF14161C)
-                        },
-                        border = BorderStroke(
-                            1.dp,
-                            if (activeHeaderTab == XyFeedHeaderTab.LEADERBOARD) Color(0xFFE4E4E7) else Color(0xFF272B36),
-                        ),
+                            },
+                        contentAlignment = Alignment.Center,
                     ) {
-                        Row(
-                            modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(5.dp),
-                        ) {
-                            Icon(
-                                imageVector = XyIcons.Trophy,
-                                contentDescription = "Top 100",
-                                tint = Color(0xFFF4F4F5),
-                                modifier = Modifier.size(14.dp),
-                            )
-                            Text(
-                                "Top 100",
-                                fontSize = 11.sp,
-                                fontWeight = FontWeight.SemiBold,
-                                color = Color(0xFFF4F4F5),
+                        Icon(
+                            imageVector = XyIcons.Bell,
+                            contentDescription = "Notifikasi",
+                            tint = if (activeHeaderTab == XyFeedHeaderTab.NOTIFICATIONS) Color(0xFFF8FAFC) else Color(0xFF94A3B8),
+                            modifier = Modifier.size(19.dp),
+                        )
+                        if (notifications.isNotEmpty()) {
+                            Box(
+                                modifier = Modifier
+                                    .align(Alignment.TopEnd)
+                                    .padding(top = 6.dp, end = 6.dp)
+                                    .requiredSize(7.dp)
+                                    .clip(CircleShape)
+                                    .background(Color(0xFFEF4444)),
                             )
                         }
                     }
-                    Spacer(Modifier.width(6.dp))
+                    Spacer(Modifier.width(4.dp))
                     XyIconPill(XyIcons.Menu, onMenu, flat = true, contentDescription = "Menu")
                 },
             )
 
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 16.dp, vertical = 6.dp),
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-            ) {
-                FeedHeaderTabChip(
-                    selected = activeHeaderTab == XyFeedHeaderTab.FEED,
-                    icon = XyIcons.Feed,
-                    label = xy("Feed Utama", "Main Feed"),
-                    badge = null,
-                    onClick = { activeHeaderTab = XyFeedHeaderTab.FEED },
-                    modifier = Modifier.weight(1f),
-                )
-                FeedHeaderTabChip(
-                    selected = activeHeaderTab == XyFeedHeaderTab.NOTIFICATIONS,
-                    icon = XyIcons.Bell,
-                    label = xy("Notifikasi", "Notifications"),
-                    badge = notifications.size.takeIf { it > 0 }?.toString(),
-                    onClick = { activeHeaderTab = XyFeedHeaderTab.NOTIFICATIONS },
-                    modifier = Modifier.weight(1f),
-                )
-                FeedHeaderTabChip(
-                    selected = activeHeaderTab == XyFeedHeaderTab.LEADERBOARD,
-                    icon = XyIcons.Trophy,
-                    label = xy("Top 100", "Top 100"),
-                    badge = null,
-                    onClick = { activeHeaderTab = XyFeedHeaderTab.LEADERBOARD },
-                    modifier = Modifier.weight(1f),
-                )
+            // Tab navigasi modern flat dengan garis indikator bawah (tanpa kotak/border bertumpuk)
+            Column(modifier = Modifier.fillMaxWidth()) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 16.dp),
+                    horizontalArrangement = Arrangement.spacedBy(24.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    FeedUnderlineTab(
+                        selected = activeHeaderTab == XyFeedHeaderTab.FEED,
+                        icon = XyIcons.Feed,
+                        label = xy("Feed", "Feed"),
+                        badge = null,
+                        onClick = { activeHeaderTab = XyFeedHeaderTab.FEED },
+                    )
+                    FeedUnderlineTab(
+                        selected = activeHeaderTab == XyFeedHeaderTab.LEADERBOARD,
+                        icon = XyIcons.Trophy,
+                        label = xy("Leaderboard", "Leaderboard"),
+                        badge = leaderboard.size.takeIf { it > 0 }?.toString(),
+                        onClick = { activeHeaderTab = XyFeedHeaderTab.LEADERBOARD },
+                    )
+                    FeedUnderlineTab(
+                        selected = activeHeaderTab == XyFeedHeaderTab.NOTIFICATIONS,
+                        icon = XyIcons.Bell,
+                        label = xy("Notifikasi", "Notifications"),
+                        badge = notifications.size.takeIf { it > 0 }?.toString(),
+                        onClick = { activeHeaderTab = XyFeedHeaderTab.NOTIFICATIONS },
+                    )
+                }
+                HorizontalDivider(thickness = 0.75.dp, color = Color(0xFF1E222C))
             }
 
             Column(
                 Modifier
                     .fillMaxSize()
                     .padding(horizontal = 16.dp)
-                    .padding(bottom = 24.dp),
-                verticalArrangement = Arrangement.spacedBy(12.dp),
+                    .padding(top = 12.dp, bottom = 28.dp),
+                verticalArrangement = Arrangement.spacedBy(14.dp),
             ) {
                 when (activeHeaderTab) {
                     XyFeedHeaderTab.FEED -> {
@@ -258,13 +187,26 @@ internal fun XyFeedScreen(
                             onClick = onOpenChat,
                         )
 
-                        XyGlassCard(padding = 14.dp) {
-                            FunHubCard(
-                                onHide = null,
-                                refreshSignal = pullSignal,
-                                onBusyChange = { pullBusy = it },
+                        if (leaderboard.isNotEmpty()) {
+                            FeedCompactLeaderboardStrip(
+                                entries = leaderboard.take(3),
+                                totalRanked = leaderboard.size,
+                                onOpenLeaderboard = { activeHeaderTab = XyFeedHeaderTab.LEADERBOARD },
                             )
                         }
+
+                        FunHubCard(
+                            onHide = null,
+                            refreshSignal = pullSignal,
+                            onBusyChange = { pullBusy = it },
+                        )
+                    }
+
+                    XyFeedHeaderTab.LEADERBOARD -> {
+                        FeedLeaderboardTop100Panel(
+                            entries = leaderboard,
+                            onRefresh = { pullSignal += 1 },
+                        )
                     }
 
                     XyFeedHeaderTab.NOTIFICATIONS -> {
@@ -278,13 +220,6 @@ internal fun XyFeedScreen(
                             },
                         )
                     }
-
-                    XyFeedHeaderTab.LEADERBOARD -> {
-                        FeedLeaderboardTop100Panel(
-                            entries = leaderboard,
-                            onRefresh = { pullSignal += 1 },
-                        )
-                    }
                 }
             }
         }
@@ -292,61 +227,53 @@ internal fun XyFeedScreen(
 }
 
 @Composable
-private fun FeedHeaderTabChip(
+private fun FeedUnderlineTab(
     selected: Boolean,
     icon: ImageVector,
     label: String,
     badge: String?,
     onClick: () -> Unit,
-    modifier: Modifier = Modifier,
 ) {
-    Surface(
-        onClick = onClick,
-        modifier = modifier,
-        shape = RoundedCornerShape(10.dp),
-        color = if (selected) Color(0xFF1F232E) else Color(0xFF111319),
-        border = BorderStroke(
-            1.dp,
-            if (selected) Color(0xFF52525B) else Color(0xFF222631),
-        ),
+    Column(
+        modifier = Modifier
+            .clickable(onClick = onClick)
+            .padding(top = 8.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
     ) {
         Row(
-            modifier = Modifier.padding(horizontal = 10.dp, vertical = 9.dp),
+            modifier = Modifier.padding(bottom = 10.dp),
             verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.Center,
+            horizontalArrangement = Arrangement.spacedBy(6.dp),
         ) {
             Icon(
                 imageVector = icon,
                 contentDescription = null,
-                tint = if (selected) Color(0xFFF8FAFC) else Color(0xFF94A3B8),
-                modifier = Modifier.size(14.dp),
+                tint = if (selected) Color(0xFFF8FAFC) else Color(0xFF64748B),
+                modifier = Modifier.size(15.dp),
             )
-            Spacer(Modifier.width(6.dp))
             Text(
                 text = label,
-                fontSize = 12.sp,
-                fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Medium,
-                color = if (selected) Color(0xFFF8FAFC) else Color(0xFF94A3B8),
+                fontSize = 13.sp,
+                fontWeight = if (selected) FontWeight.Bold else FontWeight.Medium,
+                color = if (selected) Color(0xFFF8FAFC) else Color(0xFF64748B),
                 maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
             )
             if (!badge.isNullOrBlank()) {
-                Spacer(Modifier.width(5.dp))
-                Box(
-                    modifier = Modifier
-                        .clip(RoundedCornerShape(999.dp))
-                        .background(Color(0xFFEF4444))
-                        .padding(horizontal = 5.dp, vertical = 1.dp),
-                ) {
-                    Text(
-                        text = badge,
-                        fontSize = 9.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = Color.White,
-                    )
-                }
+                Text(
+                    text = badge,
+                    fontSize = 11.sp,
+                    fontWeight = FontWeight.SemiBold,
+                    color = if (selected) Color(0xFF94A3B8) else Color(0xFF475569),
+                )
             }
         }
+        Box(
+            modifier = Modifier
+                .width(44.dp)
+                .height(2.dp)
+                .clip(RoundedCornerShape(999.dp))
+                .background(if (selected) Color(0xFFF8FAFC) else Color.Transparent),
+        )
     }
 }
 
@@ -355,215 +282,175 @@ internal fun GlobalChatAntiNeonHeroBanner(
     onlineCount: Int,
     onClick: () -> Unit,
 ) {
-    Surface(
-        onClick = onClick,
-        shape = RoundedCornerShape(16.dp),
-        color = Color(0xFF111318),
-        border = BorderStroke(1.dp, Color(0xFF262A34)),
-        modifier = Modifier.fillMaxWidth(),
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(12.dp))
+            .background(Color(0xFF12151D))
+            .clickable(onClick = onClick)
+            .padding(horizontal = 14.dp, vertical = 12.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.SpaceBetween,
     ) {
-        Box(
-            modifier = Modifier
-                .fillMaxWidth()
-                .background(
-                    Brush.linearGradient(
-                        colors = listOf(
-                            Color(0xFF151821),
-                            Color(0xFF101217),
-                            Color(0xFF14161D),
-                        ),
-                    ),
-                ),
+        Row(
+            modifier = Modifier.weight(1f),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
         ) {
-            Canvas(
+            Box(
                 modifier = Modifier
-                    .matchParentSize()
-                    .height(160.dp),
+                    .requiredSize(36.dp)
+                    .clip(CircleShape)
+                    .background(Color(0xFF1B202C)),
+                contentAlignment = Alignment.Center,
             ) {
-                val w = size.width
-                val h = size.height
-                val cx = w * 0.85f
-                val cy = h * 0.45f
-                drawCircle(
-                    color = Color(0xFF94A3B8).copy(alpha = 0.08f),
-                    radius = 52.dp.toPx(),
-                    center = Offset(cx, cy),
-                    style = Stroke(width = 1.dp.toPx()),
-                )
-                drawCircle(
-                    color = Color(0xFF64748B).copy(alpha = 0.12f),
-                    radius = 30.dp.toPx(),
-                    center = Offset(cx, cy),
-                    style = Stroke(width = 1.dp.toPx()),
-                )
-                drawRoundRect(
-                    color = Color(0xFF1E232E).copy(alpha = 0.65f),
-                    topLeft = Offset(w - 114.dp.toPx(), 24.dp.toPx()),
-                    size = Size(88.dp.toPx(), 30.dp.toPx()),
-                    cornerRadius = CornerRadius(8.dp.toPx(), 8.dp.toPx()),
-                )
-                drawRoundRect(
-                    color = Color(0xFF252B38).copy(alpha = 0.75f),
-                    topLeft = Offset(w - 98.dp.toPx(), 62.dp.toPx()),
-                    size = Size(78.dp.toPx(), 28.dp.toPx()),
-                    cornerRadius = CornerRadius(8.dp.toPx(), 8.dp.toPx()),
+                Icon(
+                    imageVector = XyIcons.Chat,
+                    contentDescription = null,
+                    tint = Color(0xFFF8FAFC),
+                    modifier = Modifier.size(17.dp),
                 )
             }
-
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(16.dp),
-                verticalArrangement = Arrangement.spacedBy(10.dp),
-            ) {
+            Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
                 Row(
-                    modifier = Modifier.fillMaxWidth(),
                     verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.SpaceBetween,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
                 ) {
-                    Surface(
-                        shape = RoundedCornerShape(6.dp),
-                        color = Color(0xFF1A1D26),
-                        border = BorderStroke(1.dp, Color(0xFF2E3442)),
-                    ) {
-                        Row(
-                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(6.dp),
-                        ) {
-                            Icon(
-                                imageVector = XyIcons.Chat,
-                                contentDescription = null,
-                                tint = Color(0xFFE2E8F0),
-                                modifier = Modifier.size(12.dp),
-                            )
-                            Text(
-                                "GLOBAL LOUNGE · XYSHIELD",
-                                fontSize = 10.sp,
-                                fontWeight = FontWeight.Bold,
-                                color = Color(0xFFE2E8F0),
-                                letterSpacing = 0.6.sp,
-                            )
-                        }
-                    }
-
-                    Surface(
-                        shape = RoundedCornerShape(999.dp),
-                        color = Color(0xFF0F241D),
-                        border = BorderStroke(1.dp, Color(0xFF10B981).copy(alpha = 0.4f)),
-                    ) {
-                        Row(
-                            modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp),
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(6.dp),
-                        ) {
-                            Box(
-                                modifier = Modifier
-                                    .size(6.dp)
-                                    .clip(CircleShape)
-                                    .background(Color(0xFF10B981)),
-                            )
-                            Text(
-                                text = xy("$onlineCount Online", "$onlineCount Online"),
-                                fontSize = 11.sp,
-                                fontWeight = FontWeight.SemiBold,
-                                color = Color(0xFF6EE7B7),
-                            )
-                        }
-                    }
-                }
-
-                Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
                     Text(
-                        text = xy("Chat Global Komunitas XyDesk", "XyDesk Global Community Chat"),
-                        style = MaterialTheme.typography.titleMedium,
-                        fontWeight = FontWeight.Bold,
+                        text = xy("Chat Global Komunitas", "Global Community Chat"),
+                        fontSize = 13.sp,
+                        fontWeight = FontWeight.SemiBold,
                         color = Color(0xFFF8FAFC),
                     )
-                    Text(
-                        text = xy(
-                            "Diskusi realtime lintas negara, berbagi stiker, media HD, pratinjau tautan, dan proteksi XyShield.",
-                            "Real-time cross-region lounge with custom stickers, HD media, link previews, and XyShield protection.",
-                        ),
-                        style = MaterialTheme.typography.bodySmall,
-                        color = Color(0xFF94A3B8),
-                        maxLines = 2,
-                    )
-                }
-
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .horizontalScroll(rememberScrollState()),
-                    horizontalArrangement = Arrangement.spacedBy(6.dp),
-                ) {
-                    val badges = listOf(
-                        XyIcons.Globe to "Auto-Translate",
-                        XyIcons.Shield to "XyShield",
-                        XyIcons.Camera to "Media HD",
-                        XyIcons.Star to "Stiker Kustom",
-                    )
-                    badges.forEach { (icon, label) ->
-                        Surface(
-                            shape = RoundedCornerShape(8.dp),
-                            color = Color(0xFF161921),
-                            border = BorderStroke(1.dp, Color(0xFF262B36)),
-                        ) {
-                            Row(
-                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
-                                verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.spacedBy(5.dp),
-                            ) {
-                                Icon(
-                                    imageVector = icon,
-                                    contentDescription = null,
-                                    tint = Color(0xFF94A3B8),
-                                    modifier = Modifier.size(11.dp),
-                                )
-                                Text(
-                                    text = label,
-                                    fontSize = 10.sp,
-                                    fontWeight = FontWeight.Medium,
-                                    color = Color(0xFFCBD5E1),
-                                )
-                            }
-                        }
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(4.dp),
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .requiredSize(6.dp)
+                                .clip(CircleShape)
+                                .background(Color(0xFF10B981)),
+                        )
+                        Text(
+                            text = "$onlineCount online",
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.Medium,
+                            color = Color(0xFF10B981),
+                        )
                     }
                 }
+                Text(
+                    text = xy(
+                        "Diskusi langsung, stiker, media HD & terjemahan otomatis",
+                        "Live discussion, stickers, HD media & auto-translate",
+                    ),
+                    fontSize = 11.sp,
+                    color = Color(0xFF64748B),
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+            }
+        }
+        Spacer(Modifier.width(8.dp))
+        Icon(
+            imageVector = XyIcons.ChevronRight,
+            contentDescription = null,
+            tint = Color(0xFF94A3B8),
+            modifier = Modifier.size(18.dp),
+        )
+    }
+}
 
+@Composable
+private fun FeedCompactLeaderboardStrip(
+    entries: List<XyLeaderboardEntry>,
+    totalRanked: Int,
+    onOpenLeaderboard: () -> Unit,
+) {
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(12.dp))
+            .background(Color(0xFF10131A))
+            .clickable(onClick = onOpenLeaderboard)
+            .padding(horizontal = 14.dp, vertical = 11.dp),
+        verticalArrangement = Arrangement.spacedBy(10.dp),
+    ) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.SpaceBetween,
+        ) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(7.dp),
+            ) {
+                Icon(
+                    imageVector = XyIcons.Trophy,
+                    contentDescription = null,
+                    tint = Color(0xFFFBBF24),
+                    modifier = Modifier.size(15.dp),
+                )
+                Text(
+                    text = xy("Peringkat Aktif Komunitas", "Community Active Leaderboard"),
+                    fontSize = 12.sp,
+                    fontWeight = FontWeight.SemiBold,
+                    color = Color(0xFFF8FAFC),
+                )
+            }
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(4.dp),
+            ) {
+                Text(
+                    text = xy("Semua ($totalRanked)", "All ($totalRanked)"),
+                    fontSize = 11.sp,
+                    fontWeight = FontWeight.Medium,
+                    color = Color(0xFF94A3B8),
+                )
+                Icon(
+                    imageVector = XyIcons.ChevronRight,
+                    contentDescription = null,
+                    tint = Color(0xFF94A3B8),
+                    modifier = Modifier.size(14.dp),
+                )
+            }
+        }
+
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            entries.forEach { item ->
                 Row(
-                    modifier = Modifier.fillMaxWidth(),
+                    modifier = Modifier.weight(1f),
                     verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.SpaceBetween,
+                    horizontalArrangement = Arrangement.spacedBy(7.dp),
                 ) {
-                    Text(
-                        text = xy("Terverifikasi GitHub · Bebas Spam", "GitHub Verified · Spam-Free"),
-                        fontSize = 11.sp,
-                        color = Color(0xFFA1A1AA),
-                        fontWeight = FontWeight.Medium,
+                    FeedAvatarThumb(
+                        avatarUrl = item.avatarUrl,
+                        name = item.name,
+                        isFounder = item.isFounder || isFounderAccount(item.githubLogin) || isFounderAccount(item.name),
+                        size = 28.dp,
                     )
-                    Surface(
-                        shape = RoundedCornerShape(8.dp),
-                        color = Color(0xFFF4F4F5),
-                    ) {
-                        Row(
-                            modifier = Modifier.padding(horizontal = 12.dp, vertical = 7.dp),
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(6.dp),
-                        ) {
-                            Text(
-                                text = xy("Buka Ruang Chat", "Open Lounge"),
-                                fontSize = 12.sp,
-                                fontWeight = FontWeight.Bold,
-                                color = Color(0xFF09090B),
-                            )
-                            Icon(
-                                imageVector = XyIcons.ArrowRight,
-                                contentDescription = null,
-                                tint = Color(0xFF09090B),
-                                modifier = Modifier.size(13.dp),
-                            )
-                        }
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            text = "#${item.rank} ${item.name}",
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.SemiBold,
+                            color = Color(0xFFF1F5F9),
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                        )
+                        Text(
+                            text = formatLeaderboardDuration(item.totalSeconds),
+                            fontSize = 10.sp,
+                            fontFamily = FontFamily.Monospace,
+                            color = Color(0xFF64748B),
+                            maxLines = 1,
+                        )
                     }
                 }
             }
@@ -587,155 +474,125 @@ internal fun FeedNotificationsPanel(
         }
     }
 
-    XyGlassCard(padding = 14.dp) {
-        Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.SpaceBetween,
-            ) {
-                Column {
-                    Text(
-                        xy("Pusat Notifikasi", "Notification Center"),
-                        style = MaterialTheme.typography.titleMedium,
-                        fontWeight = FontWeight.Bold,
+    Column(
+        modifier = Modifier.fillMaxWidth(),
+        verticalArrangement = Arrangement.spacedBy(12.dp),
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .horizontalScroll(rememberScrollState()),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            val categories = listOf(
+                Triple("all", XyIcons.Bell, xy("Semua (${items.size})", "All (${items.size})")),
+                Triple("announcement", XyIcons.Megaphone, xy("Pengumuman", "Announcements")),
+                Triple("inbox", XyIcons.Inbox, xy("Komentar", "Comments")),
+                Triple("reply", XyIcons.Chat, xy("Balasan", "Replies")),
+            )
+            categories.forEach { (key, icon, label) ->
+                val active = selectedCategory == key
+                Row(
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(8.dp))
+                        .background(if (active) Color(0xFF1F2430) else Color.Transparent)
+                        .clickable { onSelectCategory(key) }
+                        .padding(horizontal = 10.dp, vertical = 6.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(5.dp),
+                ) {
+                    Icon(
+                        imageVector = icon,
+                        contentDescription = null,
+                        tint = if (active) Color(0xFFF8FAFC) else Color(0xFF64748B),
+                        modifier = Modifier.size(13.dp),
                     )
                     Text(
-                        xy("Pengumuman resmi, kotak masuk komentar, dan balasan", "Official announcements, comment inbox, and replies"),
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        text = label,
+                        fontSize = 12.sp,
+                        fontWeight = if (active) FontWeight.SemiBold else FontWeight.Medium,
+                        color = if (active) Color(0xFFF8FAFC) else Color(0xFF94A3B8),
                     )
                 }
             }
+        }
 
-            Row(
+        HorizontalDivider(thickness = 0.75.dp, color = Color(0xFF1E222C))
+
+        if (filtered.isEmpty()) {
+            Box(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .horizontalScroll(rememberScrollState()),
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    .padding(vertical = 36.dp),
+                contentAlignment = Alignment.Center,
             ) {
-                val categories = listOf(
-                    Triple("all", XyIcons.Bell, xy("Semua (${items.size})", "All (${items.size})")),
-                    Triple("announcement", XyIcons.Megaphone, xy("Pengumuman", "Announcements")),
-                    Triple("inbox", XyIcons.Inbox, xy("Kotak Masuk", "Inbox")),
-                    Triple("reply", XyIcons.Chat, xy("Balasan & Mention", "Replies & Mentions")),
+                Text(
+                    text = xy("Belum ada notifikasi di kategori ini.", "No notifications in this category yet."),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = Color(0xFF64748B),
                 )
-                categories.forEach { (key, icon, label) ->
-                    val active = selectedCategory == key
-                    Surface(
-                        onClick = { onSelectCategory(key) },
-                        shape = RoundedCornerShape(8.dp),
-                        color = if (active) Color(0xFF27272A) else Color(0xFF14171F),
-                        border = BorderStroke(
-                            1.dp,
-                            if (active) Color(0xFF71717A) else Color(0xFF262B36),
-                        ),
+            }
+        } else {
+            Column(modifier = Modifier.fillMaxWidth()) {
+                filtered.forEach { item ->
+                    val itemIcon = when (item.category) {
+                        "announcement" -> XyIcons.Megaphone
+                        "reply", "mention" -> XyIcons.Chat
+                        else -> XyIcons.Inbox
+                    }
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable { onOpenPost(item.jokeId) }
+                            .padding(vertical = 12.dp),
+                        verticalAlignment = Alignment.Top,
+                        horizontalArrangement = Arrangement.spacedBy(12.dp),
                     ) {
-                        Row(
-                            modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(5.dp),
+                        Box(
+                            modifier = Modifier
+                                .requiredSize(36.dp)
+                                .clip(CircleShape)
+                                .background(Color(0xFF161A24)),
+                            contentAlignment = Alignment.Center,
                         ) {
                             Icon(
-                                imageVector = icon,
+                                imageVector = itemIcon,
                                 contentDescription = null,
-                                tint = if (active) Color(0xFFF4F4F5) else Color(0xFF94A3B8),
-                                modifier = Modifier.size(12.dp),
-                            )
-                            Text(
-                                text = label,
-                                fontSize = 11.sp,
-                                fontWeight = if (active) FontWeight.SemiBold else FontWeight.Medium,
-                                color = if (active) Color(0xFFF4F4F5) else Color(0xFFCBD5E1),
+                                tint = Color(0xFFCBD5E1),
+                                modifier = Modifier.size(16.dp),
                             )
                         }
-                    }
-                }
-            }
-
-            if (filtered.isEmpty()) {
-                Box(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(vertical = 28.dp),
-                    contentAlignment = Alignment.Center,
-                ) {
-                    Text(
-                        text = xy("Belum ada notifikasi di kategori ini.", "No notifications in this category yet."),
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                }
-            } else {
-                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    filtered.forEach { item ->
-                        val isAnn = item.category == "announcement"
-                        val itemIcon = when (item.category) {
-                            "announcement" -> XyIcons.Megaphone
-                            "reply", "mention" -> XyIcons.Chat
-                            else -> XyIcons.Inbox
-                        }
-                        Surface(
-                            onClick = { onOpenPost(item.jokeId) },
-                            shape = RoundedCornerShape(12.dp),
-                            color = if (isAnn) Color(0xFF181A22) else Color(0xFF13161E),
-                            border = BorderStroke(
-                                1.dp,
-                                if (isAnn) Color(0xFF52525B) else Color(0xFF242936),
-                            ),
-                            modifier = Modifier.fillMaxWidth(),
+                        Column(
+                            modifier = Modifier.weight(1f),
+                            verticalArrangement = Arrangement.spacedBy(3.dp),
                         ) {
                             Row(
-                                modifier = Modifier.padding(12.dp),
-                                verticalAlignment = Alignment.Top,
-                                horizontalArrangement = Arrangement.spacedBy(10.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(6.dp),
                             ) {
-                                Box(
-                                    modifier = Modifier
-                                        .size(34.dp)
-                                        .clip(CircleShape)
-                                        .background(Color(0xFF202531)),
-                                    contentAlignment = Alignment.Center,
-                                ) {
-                                    Icon(
-                                        imageVector = itemIcon,
-                                        contentDescription = null,
-                                        tint = Color(0xFFE4E4E7),
-                                        modifier = Modifier.size(16.dp),
-                                    )
-                                }
-                                Column(
-                                    modifier = Modifier.weight(1f),
-                                    verticalArrangement = Arrangement.spacedBy(3.dp),
-                                ) {
-                                    Row(
-                                        verticalAlignment = Alignment.CenterVertically,
-                                        horizontalArrangement = Arrangement.spacedBy(6.dp),
-                                    ) {
-                                        Text(
-                                            text = item.title,
-                                            style = MaterialTheme.typography.labelMedium,
-                                            fontWeight = FontWeight.SemiBold,
-                                            color = Color(0xFFF8FAFC),
-                                        )
-                                        if (isFounderAccount(item.actorGithub) || isFounderAccount(item.actorName)) {
-                                            XyFounderBadge(compact = true)
-                                        }
-                                    }
-                                    Text(
-                                        text = item.body,
-                                        style = MaterialTheme.typography.bodySmall,
-                                        color = Color(0xFFCBD5E1),
-                                    )
-                                    Text(
-                                        text = "${item.actorName} · ${feedTimeAgo(item.createdAtMillis)}",
-                                        style = MaterialTheme.typography.labelSmall,
-                                        color = Color(0xFF64748B),
-                                    )
+                                Text(
+                                    text = item.title,
+                                    style = MaterialTheme.typography.labelMedium,
+                                    fontWeight = FontWeight.SemiBold,
+                                    color = Color(0xFFF8FAFC),
+                                )
+                                if (isFounderAccount(item.actorGithub) || isFounderAccount(item.actorName)) {
+                                    XyFounderBadge(compact = true)
                                 }
                             }
+                            Text(
+                                text = item.body,
+                                style = MaterialTheme.typography.bodySmall,
+                                color = Color(0xFFCBD5E1),
+                            )
+                            Text(
+                                text = "${item.actorName} · ${feedTimeAgo(item.createdAtMillis)}",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = Color(0xFF64748B),
+                            )
                         }
                     }
+                    HorizontalDivider(thickness = 0.75.dp, color = Color(0xFF1A1E28))
                 }
             }
         }
@@ -749,277 +606,256 @@ internal fun FeedLeaderboardTop100Panel(
 ) {
     val context = LocalContext.current
     val mySeconds = remember(entries) { recordAndGetLocalUsageSeconds(context, 0L) }
+    val myGithub = remember(entries) { getVerifiedGitHubLogin(context).orEmpty().lowercase() }
+    val myRank = remember(entries, myGithub) {
+        entries.firstOrNull {
+            myGithub.isNotBlank() && it.githubLogin.lowercase() == myGithub
+        }?.rank
+    }
     val top3 = entries.take(3)
     val rest = entries.drop(3).take(97)
 
-    XyGlassCard(padding = 14.dp) {
-        Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
+    Column(
+        modifier = Modifier.fillMaxWidth(),
+        verticalArrangement = Arrangement.spacedBy(16.dp),
+    ) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.SpaceBetween,
+        ) {
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    xy("Peringkat Pengguna Aktif", "Active Users Leaderboard"),
+                    style = MaterialTheme.typography.titleSmall,
+                    fontWeight = FontWeight.Bold,
+                    color = Color(0xFFF8FAFC),
+                )
+                Text(
+                    xy(
+                        "Berdasarkan durasi sesi remote, penggunaan aplikasi & kontribusi komunitas",
+                        "Ranked by remote session time, app usage & community activity",
+                    ),
+                    fontSize = 11.sp,
+                    color = Color(0xFF64748B),
+                )
+            }
             Row(
-                modifier = Modifier.fillMaxWidth(),
+                modifier = Modifier
+                    .clip(RoundedCornerShape(8.dp))
+                    .clickable(onClick = onRefresh)
+                    .padding(horizontal = 8.dp, vertical = 6.dp),
                 verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.SpaceBetween,
+                horizontalArrangement = Arrangement.spacedBy(5.dp),
             ) {
-                Column(modifier = Modifier.weight(1f)) {
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(6.dp),
-                    ) {
-                        Icon(
-                            imageVector = XyIcons.Trophy,
-                            contentDescription = null,
-                            tint = Color(0xFFF4F4F5),
-                            modifier = Modifier.size(16.dp),
-                        )
-                        Text(
-                            xy("Peringkat Top 1–100 XyDesk", "XyDesk Top 1–100 Leaderboard"),
-                            style = MaterialTheme.typography.titleMedium,
-                            fontWeight = FontWeight.Bold,
-                        )
-                    }
-                    Text(
-                        xy(
-                            "Peringkat pengguna paling aktif menggunakan aplikasi dan sesi remote",
-                            "Ranked by total active application and remote session hours",
-                        ),
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                Icon(
+                    imageVector = XyIcons.Refresh,
+                    contentDescription = null,
+                    tint = Color(0xFF94A3B8),
+                    modifier = Modifier.size(14.dp),
+                )
+                Text(
+                    text = xy("Segarkan", "Refresh"),
+                    fontSize = 12.sp,
+                    fontWeight = FontWeight.Medium,
+                    color = Color(0xFF94A3B8),
+                )
+            }
+        }
+
+        // Baris ringkasan waktu aktif pengguna sendiri (flat modern)
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .clip(RoundedCornerShape(10.dp))
+                .background(Color(0xFF12151E))
+                .padding(horizontal = 14.dp, vertical = 11.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.SpaceBetween,
+        ) {
+            Column {
+                Text(
+                    xy("Waktu Aktif Kamu", "Your Active Time"),
+                    fontSize = 11.sp,
+                    color = Color(0xFF64748B),
+                )
+                Text(
+                    formatLeaderboardDuration(mySeconds),
+                    fontSize = 15.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = Color(0xFFF8FAFC),
+                    fontFamily = FontFamily.Monospace,
+                )
+            }
+            Text(
+                text = if (myRank != null) xy("Peringkat #$myRank", "Rank #$myRank") else xy("Tersinkron Otomatis", "Auto-Synced"),
+                fontSize = 12.sp,
+                color = Color(0xFF10B981),
+                fontWeight = FontWeight.SemiBold,
+            )
+        }
+
+        if (top3.isNotEmpty()) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(vertical = 4.dp),
+                horizontalArrangement = Arrangement.spacedBy(12.dp),
+                verticalAlignment = Alignment.Bottom,
+            ) {
+                val second = top3.getOrNull(1)
+                val first = top3.getOrNull(0)
+                val third = top3.getOrNull(2)
+
+                if (second != null) {
+                    PodiumColumn(
+                        entry = second,
+                        rankLabel = "#2",
+                        accent = Color(0xFF94A3B8),
+                        modifier = Modifier.weight(1f),
+                        elevated = false,
                     )
                 }
-                Surface(
-                    onClick = onRefresh,
-                    shape = RoundedCornerShape(8.dp),
-                    color = Color(0xFF1A1E28),
-                    border = BorderStroke(1.dp, Color(0xFF2D3342)),
-                ) {
-                    Row(
-                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(5.dp),
-                    ) {
-                        Icon(
-                            imageVector = XyIcons.Refresh,
-                            contentDescription = null,
-                            tint = Color(0xFFE2E8F0),
-                            modifier = Modifier.size(12.dp),
-                        )
-                        Text(
-                            text = xy("Segarkan", "Refresh"),
-                            fontSize = 11.sp,
-                            fontWeight = FontWeight.SemiBold,
-                            color = Color(0xFFE2E8F0),
-                        )
-                    }
+                if (first != null) {
+                    PodiumColumn(
+                        entry = first,
+                        rankLabel = "#1",
+                        accent = Color(0xFFFBBF24),
+                        modifier = Modifier.weight(1.1f),
+                        elevated = true,
+                    )
+                }
+                if (third != null) {
+                    PodiumColumn(
+                        entry = third,
+                        rankLabel = "#3",
+                        accent = Color(0xFFD97706),
+                        modifier = Modifier.weight(1f),
+                        elevated = false,
+                    )
                 }
             }
+        }
 
-            Surface(
-                shape = RoundedCornerShape(10.dp),
-                color = Color(0xFF141821),
-                border = BorderStroke(1.dp, Color(0xFF272D3B)),
-                modifier = Modifier.fillMaxWidth(),
-            ) {
+        HorizontalDivider(thickness = 0.75.dp, color = Color(0xFF1E222C))
+
+        // Daftar flat tanpa kartu/border bertumpuk
+        Column(modifier = Modifier.fillMaxWidth()) {
+            rest.forEach { item ->
+                val isFounder = item.isFounder || isFounderAccount(item.githubLogin) || isFounderAccount(item.name)
                 Row(
-                    modifier = Modifier.padding(12.dp),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(vertical = 10.dp),
                     verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.SpaceBetween,
+                    horizontalArrangement = Arrangement.spacedBy(12.dp),
                 ) {
-                    Column {
-                        Text(
-                            xy("Total Waktu Aktif Kamu", "Your Total Active Time"),
-                            fontSize = 11.sp,
-                            color = Color(0xFF94A3B8),
-                        )
-                        Text(
-                            formatLeaderboardDuration(mySeconds),
-                            fontSize = 16.sp,
-                            fontWeight = FontWeight.Bold,
-                            color = Color(0xFFF8FAFC),
-                            fontFamily = FontFamily.Monospace,
-                        )
-                    }
                     Text(
-                        text = xy("Tersinkron Otomatis", "Auto-Synced"),
-                        fontSize = 11.sp,
-                        color = Color(0xFF10B981),
-                        fontWeight = FontWeight.SemiBold,
+                        text = "#${item.rank}",
+                        fontSize = 12.sp,
+                        fontWeight = FontWeight.Bold,
+                        fontFamily = FontFamily.Monospace,
+                        color = if (item.rank <= 10) Color(0xFFF8FAFC) else Color(0xFF64748B),
+                        modifier = Modifier.width(32.dp),
                     )
-                }
-            }
-
-            if (top3.isNotEmpty()) {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                    verticalAlignment = Alignment.Bottom,
-                ) {
-                    val second = top3.getOrNull(1)
-                    val first = top3.getOrNull(0)
-                    val third = top3.getOrNull(2)
-
-                    if (second != null) {
-                        PodiumCard(
-                            entry = second,
-                            rankLabel = "RANK #2",
-                            accent = Color(0xFFCBD5E1),
-                            modifier = Modifier.weight(1f),
-                            elevated = false,
-                        )
-                    }
-                    if (first != null) {
-                        PodiumCard(
-                            entry = first,
-                            rankLabel = "RANK #1",
-                            accent = Color(0xFFE4E4E7),
-                            modifier = Modifier.weight(1.1f),
-                            elevated = true,
-                        )
-                    }
-                    if (third != null) {
-                        PodiumCard(
-                            entry = third,
-                            rankLabel = "RANK #3",
-                            accent = Color(0xFFA1A1AA),
-                            modifier = Modifier.weight(1f),
-                            elevated = false,
-                        )
-                    }
-                }
-            }
-
-            Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                rest.forEach { item ->
-                    Surface(
-                        shape = RoundedCornerShape(10.dp),
-                        color = Color(0xFF13161E),
-                        border = BorderStroke(1.dp, Color(0xFF222733)),
-                        modifier = Modifier.fillMaxWidth(),
-                    ) {
+                    FeedAvatarThumb(
+                        avatarUrl = item.avatarUrl,
+                        name = item.name,
+                        isFounder = isFounder,
+                        size = 36.dp,
+                    )
+                    Column(modifier = Modifier.weight(1f)) {
                         Row(
-                            modifier = Modifier.padding(horizontal = 12.dp, vertical = 9.dp),
                             verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(10.dp),
+                            horizontalArrangement = Arrangement.spacedBy(6.dp),
                         ) {
                             Text(
-                                text = "#${item.rank}",
-                                fontSize = 12.sp,
-                                fontWeight = FontWeight.Bold,
-                                fontFamily = FontFamily.Monospace,
-                                color = if (item.rank <= 10) Color(0xFFF4F4F5) else Color(0xFF94A3B8),
-                                modifier = Modifier.width(34.dp),
+                                text = item.name,
+                                fontSize = 13.sp,
+                                fontWeight = FontWeight.SemiBold,
+                                color = Color(0xFFF8FAFC),
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
                             )
-                            Box(
-                                modifier = Modifier
-                                    .size(30.dp)
-                                    .clip(CircleShape)
-                                    .background(Color(0xFF232938)),
-                                contentAlignment = Alignment.Center,
-                            ) {
-                                Text(
-                                    text = item.name.take(1).uppercase(),
-                                    fontSize = 12.sp,
-                                    fontWeight = FontWeight.Bold,
-                                    color = Color.White,
-                                )
+                            if (isFounder) {
+                                XyFounderBadge(compact = true)
                             }
-                            Column(modifier = Modifier.weight(1f)) {
-                                Row(
-                                    verticalAlignment = Alignment.CenterVertically,
-                                    horizontalArrangement = Arrangement.spacedBy(5.dp),
-                                ) {
-                                    Text(
-                                        text = item.name,
-                                        fontSize = 13.sp,
-                                        fontWeight = FontWeight.SemiBold,
-                                        color = Color(0xFFF8FAFC),
-                                        maxLines = 1,
-                                        overflow = TextOverflow.Ellipsis,
-                                    )
-                                    if (item.isFounder || isFounderAccount(item.githubLogin) || isFounderAccount(item.name)) {
-                                        XyFounderBadge(compact = true)
-                                    }
-                                }
-                                Text(
-                                    text = xy("${item.sessionsCount} sesi aktif", "${item.sessionsCount} active sessions"),
-                                    fontSize = 10.sp,
-                                    color = Color(0xFF64748B),
-                                )
-                            }
-                            Text(
-                                text = formatLeaderboardDuration(item.totalSeconds),
-                                fontSize = 12.sp,
-                                fontWeight = FontWeight.Bold,
-                                fontFamily = FontFamily.Monospace,
-                                color = Color(0xFFE2E8F0),
-                            )
                         }
+                        val sub = buildString {
+                            if (item.githubLogin.isNotBlank()) append("@${item.githubLogin} · ")
+                            append(xy("${item.sessionsCount} aktivitas", "${item.sessionsCount} activities"))
+                        }
+                        Text(
+                            text = sub,
+                            fontSize = 11.sp,
+                            color = Color(0xFF64748B),
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                        )
                     }
+                    Text(
+                        text = formatLeaderboardDuration(item.totalSeconds),
+                        fontSize = 12.sp,
+                        fontWeight = FontWeight.SemiBold,
+                        fontFamily = FontFamily.Monospace,
+                        color = Color(0xFFCBD5E1),
+                    )
                 }
+                HorizontalDivider(thickness = 0.75.dp, color = Color(0xFF171B24))
             }
         }
     }
 }
 
 @Composable
-private fun PodiumCard(
+private fun PodiumColumn(
     entry: XyLeaderboardEntry,
     rankLabel: String,
     accent: Color,
     modifier: Modifier = Modifier,
     elevated: Boolean = false,
 ) {
-    Surface(
-        modifier = modifier,
-        shape = RoundedCornerShape(12.dp),
-        color = if (elevated) Color(0xFF1B1F2A) else Color(0xFF141821),
-        border = BorderStroke(1.dp, accent.copy(alpha = if (elevated) 0.55f else 0.28f)),
+    val isFounder = entry.isFounder || isFounderAccount(entry.githubLogin) || isFounderAccount(entry.name)
+    Column(
+        modifier = modifier
+            .clip(RoundedCornerShape(12.dp))
+            .background(if (elevated) Color(0xFF151923) else Color(0xFF10131B))
+            .padding(horizontal = 8.dp, vertical = if (elevated) 14.dp else 11.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.spacedBy(6.dp),
     ) {
-        Column(
-            modifier = Modifier.padding(horizontal = 8.dp, vertical = if (elevated) 14.dp else 10.dp),
-            horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.spacedBy(5.dp),
-        ) {
-            Text(
-                text = rankLabel,
-                fontSize = 10.sp,
-                fontWeight = FontWeight.Bold,
-                fontFamily = FontFamily.Monospace,
-                color = accent,
-            )
-            Box(
-                modifier = Modifier
-                    .size(if (elevated) 42.dp else 34.dp)
-                    .clip(CircleShape)
-                    .background(accent.copy(alpha = 0.14f))
-                    .border(1.dp, accent.copy(alpha = 0.5f), CircleShape),
-                contentAlignment = Alignment.Center,
-            ) {
-                Text(
-                    text = entry.name.take(1).uppercase(),
-                    fontSize = if (elevated) 15.sp else 13.sp,
-                    fontWeight = FontWeight.Bold,
-                    color = Color.White,
-                )
-            }
-            Text(
-                text = entry.name,
-                fontSize = 11.sp,
-                fontWeight = FontWeight.SemiBold,
-                color = Color(0xFFF8FAFC),
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-                textAlign = TextAlign.Center,
-            )
-            if (entry.isFounder || isFounderAccount(entry.githubLogin) || isFounderAccount(entry.name)) {
-                XyFounderBadge(compact = true)
-            }
-            Text(
-                text = formatLeaderboardDuration(entry.totalSeconds),
-                fontSize = 11.sp,
-                fontWeight = FontWeight.Bold,
-                fontFamily = FontFamily.Monospace,
-                color = accent,
-            )
+        Text(
+            text = rankLabel,
+            fontSize = 11.sp,
+            fontWeight = FontWeight.Bold,
+            fontFamily = FontFamily.Monospace,
+            color = accent,
+        )
+        FeedAvatarThumb(
+            avatarUrl = entry.avatarUrl,
+            name = entry.name,
+            isFounder = isFounder,
+            size = if (elevated) 48.dp else 38.dp,
+        )
+        Text(
+            text = entry.name,
+            fontSize = 12.sp,
+            fontWeight = FontWeight.SemiBold,
+            color = Color(0xFFF8FAFC),
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+            textAlign = TextAlign.Center,
+        )
+        if (isFounder) {
+            XyFounderBadge(compact = true)
         }
+        Text(
+            text = formatLeaderboardDuration(entry.totalSeconds),
+            fontSize = 11.sp,
+            fontWeight = FontWeight.SemiBold,
+            fontFamily = FontFamily.Monospace,
+            color = Color(0xFF94A3B8),
+        )
     }
 }
 

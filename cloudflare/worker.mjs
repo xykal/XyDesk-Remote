@@ -4028,18 +4028,120 @@ const EDGE_OAUTH_SESSIONS = new Map();
 let EDGE_LEADERBOARD_MAP = {};
 
 async function handleEdgeLeaderboard(request, env) {
-  let entriesMap = { ...EDGE_LEADERBOARD_MAP };
+  let entriesMap = {};
+  for (const [k, v] of Object.entries(EDGE_LEADERBOARD_MAP)) {
+    if (!k.startsWith("xydesk-player-") && v && !String(v.name || "").startsWith("Player #")) {
+      entriesMap[k] = v;
+    }
+  }
   if (env?.UNIQUE_DOWNLOADS) {
     try {
       const rawKv = await env.UNIQUE_DOWNLOADS.get("leaderboard:v1");
       if (rawKv) {
         const parsedKv = JSON.parse(rawKv);
         if (parsedKv && typeof parsedKv === "object" && !Array.isArray(parsedKv)) {
-          entriesMap = { ...parsedKv, ...entriesMap };
+          for (const [k, v] of Object.entries(parsedKv)) {
+            if (!k.startsWith("xydesk-player-") && v && !String(v.name || "").startsWith("Player #")) {
+              entriesMap[k] = { ...v, ...(entriesMap[k] || {}) };
+            }
+          }
         }
       }
     } catch {}
   }
+
+  // Tarik partisipan nyata dari Feed Komunitas & Chat Global secara paralel tanpa menggandakan nilai pada GET berulang
+  const activityMap = {};
+  await Promise.all([
+    (async () => {
+      if (!env?.COMMUNITY_JOKES) return;
+      try {
+        const jokesId = env.COMMUNITY_JOKES.idFromName("xydesk-community-jokes-v1");
+        const jokesRes = await env.COMMUNITY_JOKES.get(jokesId).fetch(
+          new Request("https://community-jokes/feed", { method: "GET" }),
+        );
+        if (!jokesRes.ok) return;
+        const jokesData = await jokesRes.json().catch(() => null);
+        const jokesList = Array.isArray(jokesData?.items) ? jokesData.items : [];
+        for (const j of jokesList) {
+          const gh = String(j?.github_login || "").trim().replace(/^@/, "");
+          const nm = String(j?.author_name || gh || "").trim();
+          const keyId = (gh || nm).toLowerCase().replace(/[^a-z0-9_.-]/g, "");
+          if (keyId && !keyId.startsWith("xydesk-player-") && nm.toLowerCase() !== "anonim") {
+            const cur = activityMap[keyId] || {};
+            const postBonus = 1800 + (Array.isArray(j?.comments) ? j.comments.length * 240 : 0);
+            activityMap[keyId] = {
+              key: keyId,
+              name: cur.name || nm || gh,
+              github_login: cur.github_login || gh,
+              avatar_url: cur.avatar_url || String(j?.author_avatar_url || (gh ? `https://github.com/${gh}.png?size=160` : "")),
+              country: cur.country || "ID",
+              flag: cur.flag || countryToFlag(cur.country || "ID"),
+              is_founder: Boolean(cur.is_founder || isFounderChatName(nm, gh)),
+              bonus_seconds: Number(cur.bonus_seconds || 0) + postBonus,
+              bonus_sessions: Number(cur.bonus_sessions || 0) + 1,
+              updated_at: Math.max(Number(cur.updated_at || 0), Number(j?.created_at || Date.now())),
+            };
+          }
+          const cList = Array.isArray(j?.comments) ? j.comments : [];
+          for (const c of cList) {
+            const cGh = String(c?.github_login || "").trim().replace(/^@/, "");
+            const cNm = String(c?.name || cGh || "").trim();
+            const rawCKey = (cGh || cNm).toLowerCase().replace(/[^a-z0-9_.-]/g, "");
+            const cKey = rawCKey === "kall" ? "xykal" : rawCKey;
+            if (cKey && !cKey.startsWith("xydesk-player-") && cNm.toLowerCase() !== "anonim") {
+              const cur = activityMap[cKey] || {};
+              activityMap[cKey] = {
+                key: cKey,
+                name: cur.name || cNm || cGh,
+                github_login: cur.github_login || cGh,
+                avatar_url: cur.avatar_url || String(c?.avatar_url || (cGh ? `https://github.com/${cGh}.png?size=160` : "")),
+                country: cur.country || "ID",
+                flag: cur.flag || countryToFlag(cur.country || "ID"),
+                is_founder: Boolean(cur.is_founder || isFounderChatName(cNm, cGh)),
+                bonus_seconds: Number(cur.bonus_seconds || 0) + 600,
+                bonus_sessions: Number(cur.bonus_sessions || 0) + 1,
+                updated_at: Math.max(Number(cur.updated_at || 0), Number(c?.created_at || Date.now())),
+              };
+            }
+          }
+        }
+      } catch {}
+    })(),
+    (async () => {
+      if (!env?.GLOBAL_CHAT) return;
+      try {
+        const chatId = env.GLOBAL_CHAT.idFromName("xydesk-global-chat-v1");
+        const chatRes = await env.GLOBAL_CHAT.get(chatId).fetch(
+          new Request("https://global-chat/history", { method: "GET" }),
+        );
+        if (!chatRes.ok) return;
+        const chatData = await chatRes.json().catch(() => null);
+        const msgs = Array.isArray(chatData?.messages) ? chatData.messages : [];
+        for (const m of msgs) {
+          const gh = String(m?.github_login || "").trim().replace(/^@/, "");
+          const nm = String(m?.name || gh || "").trim();
+          if (!gh && (!nm || nm.includes("Bot"))) continue;
+          const keyId = (gh || nm).toLowerCase().replace(/[^a-z0-9_.-]/g, "");
+          if (!keyId || keyId.startsWith("xydesk-player-") || keyId.includes("bot")) continue;
+          const cur = activityMap[keyId] || {};
+          const cc = normalizeCountryCode(m?.country || cur.country || "ID", "ID");
+          activityMap[keyId] = {
+            key: keyId,
+            name: cur.name || nm || gh,
+            github_login: cur.github_login || gh,
+            avatar_url: cur.avatar_url || String(m?.avatar_url || (gh ? `https://github.com/${gh}.png?size=160` : "")),
+            country: cc,
+            flag: countryToFlag(cc),
+            is_founder: Boolean(cur.is_founder || isFounderChatName(nm, gh)),
+            bonus_seconds: Number(cur.bonus_seconds || 0) + 900,
+            bonus_sessions: Number(cur.bonus_sessions || 0) + 1,
+            updated_at: Math.max(Number(cur.updated_at || 0), Number(m?.at || Date.now())),
+          };
+        }
+      } catch {}
+    })(),
+  ]);
 
   if (request.method === "POST") {
     let body = null;
@@ -4058,8 +4160,8 @@ async function handleEdgeLeaderboard(request, env) {
     const deltaSec = Math.max(0, Math.min(7200, Number(body?.delta_seconds || 0)));
     const reportedTotal = Math.max(0, Number(body?.total_seconds || 0));
     const prevTotal = Math.max(0, Number(existing.total_seconds || 0));
-    const newTotal = Math.max(prevTotal + deltaSec, reportedTotal, 600);
-    const country = normalizeCountryCode(body?.country || existing.country || "ID", "ID");
+    const newTotal = Math.max(prevTotal + deltaSec, reportedTotal, 60);
+    const country = normalizeCountryCode(body?.country || existing.country || request.cf?.country || "ID", "ID");
     entriesMap[keyId] = {
       key: keyId,
       name: name || existing.name || gh || "User",
@@ -4078,40 +4180,33 @@ async function handleEdgeLeaderboard(request, env) {
         await env.UNIQUE_DOWNLOADS.put("leaderboard:v1", JSON.stringify(entriesMap));
       } catch {}
     }
+  } else {
+    EDGE_LEADERBOARD_MAP = entriesMap;
   }
 
-  const list = Object.values(entriesMap).filter((val) => val && Number(val.total_seconds) > 0);
-  if (!list.some((x) => String(x.github_login || x.name || "").toLowerCase() === "xykal")) {
+  const allKeys = new Set([...Object.keys(entriesMap), ...Object.keys(activityMap)]);
+  const list = [];
+  for (const k of allKeys) {
+    if (k.startsWith("xydesk-player-")) continue;
+    const hb = entriesMap[k] || {};
+    const act = activityMap[k] || {};
+    const nm = String(hb.name || act.name || hb.github_login || act.github_login || "").trim();
+    if (!nm || nm.startsWith("Player #")) continue;
+    const gh = String(hb.github_login || act.github_login || "").trim();
+    const cc = normalizeCountryCode(hb.country || act.country || "ID", "ID");
+    const totalSec = Math.max(Number(hb.total_seconds || 0), 0) + Math.max(Number(act.bonus_seconds || 0), 0);
+    if (totalSec <= 0) continue;
     list.push({
-      key: "xykal",
-      name: "xykal",
-      github_login: "xykal",
-      avatar_url: "https://github.com/xykal.png?size=160",
-      country: "ID",
-      flag: "🇮🇩",
-      is_founder: true,
-      total_seconds: 432_000,
-      sessions_count: 185,
-      updated_at: Date.now(),
-    });
-  }
-  const countries = ["ID", "MY", "SG", "JP", "KR", "TH", "VN", "PH", "US", "DE", "BR", "AU"];
-  for (let i = 1; list.length < 100 && i <= 105; i++) {
-    const handle = `xydesk-player-${i}`;
-    if (list.some((x) => x.key === handle)) continue;
-    const cc = countries[i % countries.length];
-    const secs = Math.max(1800, 320_000 - i * 2850);
-    list.push({
-      key: handle,
-      name: `Player #${i}`,
-      github_login: "",
-      avatar_url: "",
+      key: k,
+      name: nm,
+      github_login: gh,
+      avatar_url: String(hb.avatar_url || act.avatar_url || (gh ? `https://github.com/${gh}.png?size=160` : "")),
       country: cc,
       flag: countryToFlag(cc),
-      is_founder: false,
-      total_seconds: secs,
-      sessions_count: Math.max(2, Math.floor(secs / 5400)),
-      updated_at: Date.now() - i * 60_000,
+      is_founder: Boolean(hb.is_founder || act.is_founder || isFounderChatName(nm, gh)),
+      total_seconds: totalSec,
+      sessions_count: Math.max(1, Number(hb.sessions_count || 0) + Number(act.bonus_sessions || 0)),
+      updated_at: Math.max(Number(hb.updated_at || 0), Number(act.updated_at || 0)),
     });
   }
   list.sort((a, b) => Number(b.total_seconds || 0) - Number(a.total_seconds || 0));
@@ -4254,19 +4349,51 @@ export default {
       }
       return durableObjectJson({ status: "ok", deleted_id: msgId }, 200, request.method);
     }
-    if (path === "/api/github/oauth/login") {
+    if (path === "/api/github/oauth/login" || path === "/api/auth/login") {
       if (request.method === "OPTIONS") return corsPreflight("GET, OPTIONS");
       if (request.method !== "GET") return methodNotAllowed("GET, OPTIONS");
       const sid = String(url.searchParams.get("session_id") || "").trim().replace(/[^a-zA-Z0-9_-]/g, "").slice(0, 64);
       const scope = String(url.searchParams.get("scope") || "repo workflow read:user user:email");
-      const oauthClientId = String(env?.GITHUB_OAUTH_CLIENT_ID || "").trim();
+      const oauthClientId = String(env?.GITHUB_OAUTH_CLIENT_ID || "Ov23liBsgZ5xJKgzHGtl").trim();
       const oauthSecret = String(env?.GITHUB_OAUTH_CLIENT_SECRET || "").trim();
+
+      // Fast-path jika browser Chrome sudah memiliki sesi cookie xy_gh_session yang valid
+      const cookieHeader = String(request.headers.get("cookie") || "");
+      const cookieMatch = cookieHeader.match(/(?:^|;\s*)xy_gh_session=([^;]+)/);
+      if (cookieMatch && cookieMatch[1] && url.searchParams.get("force") !== "1") {
+        try {
+          const decoded = JSON.parse(atob(decodeURIComponent(cookieMatch[1])));
+          if (decoded && decoded.token && decoded.login) {
+            if (sid) {
+              const sessionPayload = {
+                token: decoded.token,
+                login: decoded.login,
+                name: decoded.name || decoded.login,
+                avatar_url: decoded.avatar_url || "",
+                at: Date.now(),
+              };
+              EDGE_OAUTH_SESSIONS.set(sid, sessionPayload);
+              if (env?.UNIQUE_DOWNLOADS) {
+                try {
+                  await env.UNIQUE_DOWNLOADS.put(`oauth:${sid}`, JSON.stringify(sessionPayload), { expirationTtl: 600 });
+                } catch {}
+              }
+            }
+            const deepLink = `xydesk://github-auth?token=${encodeURIComponent(decoded.token)}&login=${encodeURIComponent(decoded.login)}&name=${encodeURIComponent(decoded.name || decoded.login)}&avatar=${encodeURIComponent(decoded.avatar_url || "")}`;
+            const intentLink = `intent://github-auth?token=${encodeURIComponent(decoded.token)}&login=${encodeURIComponent(decoded.login)}&name=${encodeURIComponent(decoded.name || decoded.login)}&avatar=${encodeURIComponent(decoded.avatar_url || "")}#Intent;scheme=xydesk;package=id.xydesk.remote;end`;
+            const html = `<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>GitHub Terhubung · XyDesk Remote</title><style>body{background:#09090b;color:#fafafa;font-family:system-ui,-apple-system,sans-serif;display:flex;align-items:center;justify-content:center;min-height:100vh;margin:0;padding:24px;text-align:center}.card{max-width:380px;background:#141418;border:1px solid rgba(255,255,255,.12);border-radius:16px;padding:28px 22px}.btn{display:inline-block;margin-top:18px;padding:12px 24px;border-radius:10px;background:#fafafa;color:#09090b;font-weight:700;text-decoration:none;font-size:14px}</style></head><body><div class="card"><div style="font-size:17px;font-weight:700;margin-bottom:8px">Sesi GitHub Aktif</div><div style="font-size:13px;color:#a1a1aa">Terhubung sebagai <b>@${String(decoded.login).replace(/[<>&"']/g, "")}</b>. Mengembalikan ke XyDesk Remote...</div><a class="btn" href="${deepLink}">Kembali ke XyDesk Remote</a></div><script>setTimeout(function(){window.location.replace(${JSON.stringify(deepLink)});},60);setTimeout(function(){window.location.replace(${JSON.stringify(intentLink)});},500);</script></body></html>`;
+            return new Response(html, {
+              status: 200,
+              headers: { "Content-Type": "text/html; charset=utf-8", "Cache-Control": "no-store" },
+            });
+          }
+        } catch {}
+      }
+
       if (oauthClientId && oauthSecret) {
         const state = sid ? `apk_${sid}_${crypto.randomUUID().replace(/-/g, "").slice(0, 12)}` : crypto.randomUUID().replace(/-/g, "");
-        const cb = `${url.origin}/api/github/oauth/callback`;
         const authorizeUrl = "https://github.com/login/oauth/authorize"
           + `?client_id=${encodeURIComponent(oauthClientId)}`
-          + `&redirect_uri=${encodeURIComponent(cb)}`
           + `&scope=${encodeURIComponent(scope)}`
           + `&state=${encodeURIComponent(state)}&allow_signup=true`;
         return new Response(null, {
@@ -4287,16 +4414,24 @@ export default {
         },
       });
     }
-    if (path === "/api/github/oauth/callback") {
-      if (request.method !== "GET") return methodNotAllowed("GET");
+    if (
+      path === "/api/github/oauth/callback" ||
+      path === "/api/auth/callback" ||
+      path === "/oauth/callback" ||
+      path === "/callback" ||
+      path === "/api/github/oauth/exchange" ||
+      (request.method === "GET" && url.searchParams.has("code") && String(url.searchParams.get("state") || "").startsWith("apk_"))
+    ) {
+      if (request.method === "OPTIONS") return corsPreflight("GET, OPTIONS");
+      if (request.method !== "GET") return methodNotAllowed("GET, OPTIONS");
       const code = String(url.searchParams.get("code") || "").trim();
       const state = String(url.searchParams.get("state") || "").trim();
-      const oauthClientId = String(env?.GITHUB_OAUTH_CLIENT_ID || "").trim();
+      const explicitSid = String(url.searchParams.get("session_id") || "").trim().replace(/[^a-zA-Z0-9_-]/g, "").slice(0, 64);
+      const oauthClientId = String(env?.GITHUB_OAUTH_CLIENT_ID || "Ov23liBsgZ5xJKgzHGtl").trim();
       const oauthSecret = String(env?.GITHUB_OAUTH_CLIENT_SECRET || "").trim();
       if (!code || !oauthClientId || !oauthSecret) {
-        return new Response("OAuth callback tidak valid atau belum dikonfigurasi.", { status: 400 });
+        return durableObjectJson({ status: "error", code: "oauth_unconfigured" }, 400, request.method);
       }
-      const cb = `${url.origin}/api/github/oauth/callback`;
       const tokRes = await fetch("https://github.com/login/oauth/access_token", {
         method: "POST",
         headers: {
@@ -4308,13 +4443,12 @@ export default {
           client_id: oauthClientId,
           client_secret: oauthSecret,
           code,
-          redirect_uri: cb,
         }),
       });
       const tokData = await tokRes.json().catch(() => ({}));
       const accessToken = String(tokData?.access_token || "").trim();
       if (!accessToken) {
-        return new Response("Gagal menukar kode OAuth GitHub.", { status: 400 });
+        return durableObjectJson({ status: "error", code: "token_exchange_failed" }, 400, request.method);
       }
       const meRes = await fetch("https://api.github.com/user", {
         headers: {
@@ -4328,15 +4462,15 @@ export default {
       const name = String(me?.name || login).trim();
       const avatarUrl = String(me?.avatar_url || "").trim();
       const parts = state.split("_");
-      const sid = state.startsWith("apk_") && parts.length >= 2 ? parts[1] : "";
+      const sid = explicitSid || (state.startsWith("apk_") && parts.length >= 2 ? parts[1] : "");
+      const sessionPayload = {
+        token: accessToken,
+        login,
+        name,
+        avatar_url: avatarUrl,
+        at: Date.now(),
+      };
       if (sid && login) {
-        const sessionPayload = {
-          token: accessToken,
-          login,
-          name,
-          avatar_url: avatarUrl,
-          at: Date.now(),
-        };
         EDGE_OAUTH_SESSIONS.set(sid, sessionPayload);
         if (env?.UNIQUE_DOWNLOADS) {
           try {
@@ -4344,12 +4478,20 @@ export default {
           } catch {}
         }
       }
+      if (path === "/api/github/oauth/exchange" || url.searchParams.get("format") === "json") {
+        return durableObjectJson({ status: "ok", ready: true, ...sessionPayload }, 200, request.method);
+      }
+      const cookieVal = encodeURIComponent(btoa(JSON.stringify(sessionPayload)));
       const deepLink = `xydesk://github-auth?token=${encodeURIComponent(accessToken)}&login=${encodeURIComponent(login)}&name=${encodeURIComponent(name)}&avatar=${encodeURIComponent(avatarUrl)}`;
       const intentLink = `intent://github-auth?token=${encodeURIComponent(accessToken)}&login=${encodeURIComponent(login)}&name=${encodeURIComponent(name)}&avatar=${encodeURIComponent(avatarUrl)}#Intent;scheme=xydesk;package=id.xydesk.remote;end`;
-      const html = `<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>GitHub Terhubung · XyDesk Remote</title><style>body{background:#09090b;color:#fafafa;font-family:system-ui,-apple-system,sans-serif;display:flex;align-items:center;justify-content:center;min-height:100vh;margin:0;padding:24px;text-align:center}.card{max-width:380px;background:#141418;border:1px solid rgba(255,255,255,.12);border-radius:20px;padding:28px 22px}.btn{display:inline-block;margin-top:18px;padding:12px 24px;border-radius:999px;background:#fafafa;color:#09090b;font-weight:700;text-decoration:none;font-size:14px}</style></head><body><div class="card"><div style="font-size:18px;font-weight:800;margin-bottom:8px">GitHub Terhubung</div><div style="font-size:13px;color:#a1a1aa">Masuk sebagai <b>@${login.replace(/[<>&"']/g, "")}</b>. Mengembalikan otomatis ke aplikasi XyDesk Remote...</div><a class="btn" href="${deepLink}">Kembali ke XyDesk Remote</a></div><script>setTimeout(function(){window.location.replace(${JSON.stringify(deepLink)});},80);setTimeout(function(){window.location.replace(${JSON.stringify(intentLink)});},600);</script></body></html>`;
+      const html = `<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>GitHub Terhubung · XyDesk Remote</title><style>body{background:#09090b;color:#fafafa;font-family:system-ui,-apple-system,sans-serif;display:flex;align-items:center;justify-content:center;min-height:100vh;margin:0;padding:24px;text-align:center}.card{max-width:380px;background:#141418;border:1px solid rgba(255,255,255,.12);border-radius:16px;padding:28px 22px}.btn{display:inline-block;margin-top:18px;padding:12px 24px;border-radius:10px;background:#fafafa;color:#09090b;font-weight:700;text-decoration:none;font-size:14px}</style></head><body><div class="card"><div style="font-size:17px;font-weight:700;margin-bottom:8px">GitHub Terhubung</div><div style="font-size:13px;color:#a1a1aa">Masuk sebagai <b>@${login.replace(/[<>&"']/g, "")}</b>. Mengembalikan otomatis ke aplikasi XyDesk Remote...</div><a class="btn" href="${deepLink}">Kembali ke XyDesk Remote</a></div><script>setTimeout(function(){window.location.replace(${JSON.stringify(deepLink)});},80);setTimeout(function(){window.location.replace(${JSON.stringify(intentLink)});},600);</script></body></html>`;
       return new Response(html, {
         status: 200,
-        headers: { "Content-Type": "text/html; charset=utf-8", "Cache-Control": "no-store" },
+        headers: {
+          "Content-Type": "text/html; charset=utf-8",
+          "Cache-Control": "no-store",
+          "Set-Cookie": `xy_gh_session=${cookieVal}; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=2592000`,
+        },
       });
     }
     if (path === "/api/github/oauth/complete") {
@@ -4439,8 +4581,29 @@ export default {
       }
       const cid = String(parsedBody?.client_id || "").trim().slice(0, 80);
       const gh = String(parsedBody?.github_login || "").trim().replace(/^@/, "").slice(0, 40);
+      const dispName = String(parsedBody?.name || gh || "").trim().slice(0, 28);
       const peerKey = cid || (gh ? `gh:${gh}` : `ip:${request.headers.get("cf-connecting-ip") || "anon"}`);
       const edgeOnline = updateEdgeOnlinePeers(peerKey, parsedBody?.active === false ? false : { screen: parsedBody?.screen || "app" });
+
+      if (request.method === "POST" && parsedBody?.active !== false && (gh || (dispName && dispName !== "User"))) {
+        const lbKey = (gh || dispName).toLowerCase().replace(/[^a-z0-9_.-]/g, "");
+        if (lbKey && !lbKey.startsWith("xydesk-player-")) {
+          const prev = EDGE_LEADERBOARD_MAP[lbKey] || {};
+          const cc = normalizeCountryCode(request.cf?.country || prev.country || "ID", "ID");
+          EDGE_LEADERBOARD_MAP[lbKey] = {
+            key: lbKey,
+            name: dispName || prev.name || gh,
+            github_login: gh || prev.github_login || "",
+            avatar_url: prev.avatar_url || (gh ? `https://github.com/${gh}.png?size=160` : ""),
+            country: cc,
+            flag: countryToFlag(cc),
+            is_founder: Boolean(prev.is_founder || isFounderChatName(dispName, gh)),
+            total_seconds: Math.max(Number(prev.total_seconds || 0) + 30, 300),
+            sessions_count: Math.max(1, Number(prev.sessions_count || 1)),
+            updated_at: Date.now(),
+          };
+        }
+      }
 
       if (env.GLOBAL_CHAT) {
         try {

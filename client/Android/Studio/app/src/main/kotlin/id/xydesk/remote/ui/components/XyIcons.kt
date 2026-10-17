@@ -588,15 +588,29 @@ object XyIcons {
         moveTo(12.5f, 15.5f); lineTo(16.5f, 15.5f)
     }
 
-    /** Hati (dukung lewat Saweria). */
+    /** Hati (outline Lucide 24x24). */
     val Heart: ImageVector = xyIcon("XyHeart") {
-        moveTo(12f, 20f)
-        curveTo(4.5f, 15f, 3f, 11.6f, 3f, 9.2f)
-        curveTo(3f, 6.4f, 5.2f, 4.5f, 7.7f, 4.5f)
-        curveTo(9.6f, 4.5f, 11.2f, 5.7f, 12f, 7.4f)
-        curveTo(12.8f, 5.7f, 14.4f, 4.5f, 16.3f, 4.5f)
-        curveTo(18.8f, 4.5f, 21f, 6.4f, 21f, 9.2f)
-        curveTo(21f, 11.6f, 19.5f, 15f, 12f, 20f)
+        moveTo(19f, 14f)
+        curveToRelative(1.49f, -1.46f, 3f, -3.21f, 3f, -5.5f)
+        arcToRelative(5.5f, 5.5f, 0f, false, false, -5.5f, -5.5f)
+        curveToRelative(-1.76f, 0f, -3f, 0.5f, -4.5f, 2f)
+        curveToRelative(-1.5f, -1.5f, -2.74f, -2f, -4.5f, -2f)
+        arcToRelative(5.5f, 5.5f, 0f, false, false, -5.5f, 5.5f)
+        curveToRelative(0f, 2.3f, 1.5f, 4.05f, 3f, 5.5f)
+        lineToRelative(7f, 7f)
+        close()
+    }
+
+    /** Hati penuh (solid Lucide 24x24 untuk status Liked). */
+    val HeartFilled: ImageVector = xySolid("XyHeartFilled") {
+        moveTo(19f, 14f)
+        curveToRelative(1.49f, -1.46f, 3f, -3.21f, 3f, -5.5f)
+        arcToRelative(5.5f, 5.5f, 0f, false, false, -5.5f, -5.5f)
+        curveToRelative(-1.76f, 0f, -3f, 0.5f, -4.5f, 2f)
+        curveToRelative(-1.5f, -1.5f, -2.74f, -2f, -4.5f, -2f)
+        arcToRelative(5.5f, 5.5f, 0f, false, false, -5.5f, 5.5f)
+        curveToRelative(0f, 2.3f, 1.5f, 4.05f, 3f, 5.5f)
+        lineToRelative(7f, 7f)
         close()
     }
 
@@ -701,179 +715,250 @@ object XyIcons {
         moveTo(14f, 3.5f); lineTo(14f, 8f); lineTo(18.5f, 8f)
     }
 
-    /** Globe: terjemahan multi-bahasa & jaringan global. */
+    /** Globe: terjemahan multi-bahasa & jaringan global (Lucide 24x24). */
     val Globe: ImageVector = xyIcon("XyGlobe") {
-        moveTo(12f, 3.5f)
-        curveTo(16.7f, 3.5f, 20.5f, 7.3f, 20.5f, 12f)
-        curveTo(20.5f, 16.7f, 16.7f, 20.5f, 12f, 20.5f)
-        curveTo(7.3f, 20.5f, 3.5f, 16.7f, 3.5f, 12f)
-        curveTo(3.5f, 7.3f, 7.3f, 3.5f, 12f, 3.5f)
+        moveTo(2f, 12f)
+        arcToRelative(10f, 10f, 0f, true, false, 20f, 0f)
+        arcToRelative(10f, 10f, 0f, true, false, -20f, 0f)
         close()
-        moveTo(3.8f, 12f); lineTo(20.2f, 12f)
-        moveTo(12f, 3.5f)
-        curveTo(14.8f, 6.2f, 14.8f, 17.8f, 12f, 20.5f)
-        curveTo(9.2f, 17.8f, 9.2f, 6.2f, 12f, 3.5f)
+        moveTo(2f, 12f); lineTo(22f, 12f)
+        moveTo(12f, 2f)
+        arcToRelative(15.3f, 15.3f, 0f, false, true, 4f, 10f)
+        arcToRelative(15.3f, 15.3f, 0f, false, true, -4f, 10f)
+        arcToRelative(15.3f, 15.3f, 0f, false, true, -4f, -10f)
+        arcToRelative(15.3f, 15.3f, 0f, false, true, 4f, -10f)
         close()
     }
 
-    /** Share: bagikan pesan / ruang chat global. */
+    /** Share: bagikan pesan / postingan (Lucide share-2 24x24). */
     val Share: ImageVector = xyIcon("XyShare") {
-        moveTo(18f, 5f)
-        arcToRelative(2.2f, 2.2f, 0f, true, false, 0.01f, 0f)
-        moveTo(6f, 12f)
-        arcToRelative(2.2f, 2.2f, 0f, true, false, 0.01f, 0f)
-        moveTo(18f, 19f)
-        arcToRelative(2.2f, 2.2f, 0f, true, false, 0.01f, 0f)
-        moveTo(8f, 10.9f); lineTo(16f, 6.1f)
-        moveTo(8f, 13.1f); lineTo(16f, 17.9f)
+        moveTo(15f, 5f)
+        arcToRelative(3f, 3f, 0f, true, false, 6f, 0f)
+        arcToRelative(3f, 3f, 0f, true, false, -6f, 0f)
+        close()
+        moveTo(3f, 12f)
+        arcToRelative(3f, 3f, 0f, true, false, 6f, 0f)
+        arcToRelative(3f, 3f, 0f, true, false, -6f, 0f)
+        close()
+        moveTo(15f, 19f)
+        arcToRelative(3f, 3f, 0f, true, false, 6f, 0f)
+        arcToRelative(3f, 3f, 0f, true, false, -6f, 0f)
+        close()
+        moveTo(8.59f, 13.51f); lineTo(15.42f, 17.49f)
+        moveTo(15.41f, 6.51f); lineTo(8.59f, 10.49f)
     }
 
-    /** Camera: ganti foto profil / kirim foto di chat. */
+    /** Camera: ganti foto profil / kirim foto (Lucide camera 24x24). */
     val Camera: ImageVector = xyIcon("XyCamera") {
-        moveTo(3.5f, 7.5f); lineTo(7.5f, 7.5f); lineTo(9.2f, 5f); lineTo(14.8f, 5f)
-        lineTo(16.5f, 7.5f); lineTo(20.5f, 7.5f); lineTo(20.5f, 19f); lineTo(3.5f, 19f); close()
-        moveTo(12f, 9.8f)
-        curveTo(13.9f, 9.8f, 15.4f, 11.3f, 15.4f, 13.2f)
-        curveTo(15.4f, 15.1f, 13.9f, 16.6f, 12f, 16.6f)
-        curveTo(10.1f, 16.6f, 8.6f, 15.1f, 8.6f, 13.2f)
-        curveTo(8.6f, 11.3f, 10.1f, 9.8f, 12f, 9.8f)
+        moveTo(14.5f, 4f); lineTo(9.5f, 4f); lineTo(7f, 7f); lineTo(4f, 7f)
+        arcToRelative(2f, 2f, 0f, false, false, -2f, 2f)
+        lineTo(2f, 18f)
+        arcToRelative(2f, 2f, 0f, false, false, 2f, 2f)
+        lineTo(20f, 20f)
+        arcToRelative(2f, 2f, 0f, false, false, 2f, -2f)
+        lineTo(22f, 9f)
+        arcToRelative(2f, 2f, 0f, false, false, -2f, -2f)
+        lineTo(17f, 7f); close()
+        moveTo(9f, 13f)
+        arcToRelative(3f, 3f, 0f, true, false, 6f, 0f)
+        arcToRelative(3f, 3f, 0f, true, false, -6f, 0f)
         close()
     }
 
-    /** Send: pesawat kertas vektor untuk kirim pesan. */
+    /** Send: pesawat kertas vektor untuk kirim pesan (Lucide send 24x24). */
     val Send: ImageVector = xyIcon("XySend") {
-        moveTo(20.5f, 4f); lineTo(10.5f, 13.8f)
-        moveTo(20.5f, 4f); lineTo(14.2f, 20.5f); lineTo(10.5f, 13.8f); lineTo(3.5f, 10.2f); close()
+        moveTo(22f, 2f); lineTo(11f, 13f)
+        moveTo(22f, 2f); lineTo(15f, 22f); lineTo(11f, 13f); lineTo(2f, 9f); close()
     }
 
-    /** Chat: gelembung obrolan vektor murni. */
+    /** Chat: gelembung obrolan modern (Lucide message-circle 24x24). */
     val Chat: ImageVector = xyIcon("XyChat") {
-        moveTo(4.5f, 5.5f); lineTo(19.5f, 5.5f); lineTo(19.5f, 16f)
-        lineTo(9.5f, 16f); lineTo(5f, 19.8f); lineTo(5f, 16f); lineTo(4.5f, 16f); close()
-        moveTo(8.5f, 9.5f); lineTo(15.5f, 9.5f)
-        moveTo(8.5f, 12.5f); lineTo(13f, 12.5f)
+        moveTo(7.9f, 20f)
+        arcTo(9f, 9f, 0f, true, false, 4f, 16.1f)
+        lineTo(2f, 22f)
+        close()
     }
 
-    /** Edit: pensil vektor untuk ubah nama. */
+    /** Edit: pensil vektor presisi (Lucide pen-line 24x24). */
     val Edit: ImageVector = xyIcon("XyEdit") {
-        moveTo(15.5f, 4.5f); lineTo(19.5f, 8.5f); lineTo(8.5f, 19.5f)
-        lineTo(4.5f, 19.5f); lineTo(4.5f, 15.5f); close()
-        moveTo(13.5f, 6.5f); lineTo(17.5f, 10.5f)
+        moveTo(17f, 3f)
+        arcToRelative(2.85f, 2.83f, 0f, true, true, 4f, 4f)
+        lineTo(7.5f, 20.5f); lineTo(2f, 22f); lineTo(3.5f, 16.5f); close()
+        moveTo(15f, 5f); lineTo(19f, 9f)
     }
 
     /** Key: kunci kode pemulihan akun. */
     val Key: ImageVector = xyIcon("XyKey") {
-        moveTo(8.5f, 8.5f)
-        curveTo(10.7f, 8.5f, 12.5f, 10.3f, 12.5f, 12.5f)
-        curveTo(12.5f, 14.7f, 10.7f, 16.5f, 8.5f, 16.5f)
-        curveTo(6.3f, 16.5f, 4.5f, 14.7f, 4.5f, 12.5f)
-        curveTo(4.5f, 10.3f, 6.3f, 8.5f, 8.5f, 8.5f)
+        moveTo(3.5f, 12.5f)
+        arcToRelative(4.5f, 4.5f, 0f, true, false, 9f, 0f)
+        arcToRelative(4.5f, 4.5f, 0f, true, false, -9f, 0f)
         close()
-        moveTo(12.5f, 12.5f); lineTo(20.5f, 12.5f)
-        moveTo(17.5f, 12.5f); lineTo(17.5f, 15.5f)
-        moveTo(20f, 12.5f); lineTo(20f, 16f)
+        moveTo(12.5f, 12.5f); lineTo(21f, 12.5f)
+        moveTo(18f, 12.5f); lineTo(18f, 15.5f)
+        moveTo(21f, 12.5f); lineTo(21f, 16f)
     }
 
-    /** Bell: lonceng notifikasi vektor murni. */
+    /** Bell: lonceng notifikasi (Lucide bell 24x24). */
     val Bell: ImageVector = xyIcon("XyBell") {
-        moveTo(12f, 3.5f); lineTo(12f, 5f)
-        moveTo(7f, 10.5f)
-        curveTo(7f, 7.5f, 9.2f, 5f, 12f, 5f)
-        curveTo(14.8f, 5f, 17f, 7.5f, 17f, 10.5f)
-        lineTo(17f, 14.5f); lineTo(19f, 16.5f); lineTo(5f, 16.5f); lineTo(7f, 14.5f); close()
-        moveTo(10f, 19f)
-        curveTo(10.5f, 20.2f, 13.5f, 20.2f, 14f, 19f)
-    }
-
-    /** Trophy: piala leaderboard vektor murni. */
-    val Trophy: ImageVector = xyIcon("XyTrophy") {
-        moveTo(7f, 4.5f); lineTo(17f, 4.5f); lineTo(17f, 10f)
-        curveTo(17f, 12.8f, 14.8f, 15f, 12f, 15f)
-        curveTo(9.2f, 15f, 7f, 12.8f, 7f, 10f)
+        moveTo(6f, 8f)
+        arcToRelative(6f, 6f, 0f, false, true, 12f, 0f)
+        curveToRelative(0f, 7f, 3f, 9f, 3f, 9f)
+        lineTo(3f, 17f)
+        curveToRelative(0f, 0f, 3f, -2f, 3f, -9f)
         close()
-        moveTo(7f, 6.5f); lineTo(4.5f, 6.5f); lineTo(4.5f, 9.5f)
-        curveTo(4.5f, 11.2f, 5.6f, 12.2f, 7f, 12.2f)
-        moveTo(17f, 6.5f); lineTo(19.5f, 6.5f); lineTo(19.5f, 9.5f)
-        curveTo(19.5f, 11.2f, 18.4f, 12.2f, 17f, 12.2f)
-        moveTo(12f, 15f); lineTo(12f, 19.5f)
-        moveTo(8.5f, 19.5f); lineTo(15.5f, 19.5f)
+        moveTo(10.3f, 21f)
+        arcToRelative(1.94f, 1.94f, 0f, false, false, 3.4f, 0f)
     }
 
-    /** Megaphone: pengumuman resmi vektor murni. */
+    /** Trophy: piala leaderboard (Lucide trophy 24x24). */
+    val Trophy: ImageVector = xyIcon("XyTrophy") {
+        moveTo(6f, 9f)
+        lineTo(4.5f, 9f)
+        arcToRelative(2.5f, 2.5f, 0f, false, true, 0f, -5f)
+        lineTo(6f, 4f)
+        moveTo(18f, 9f)
+        lineTo(19.5f, 9f)
+        arcToRelative(2.5f, 2.5f, 0f, false, false, 0f, -5f)
+        lineTo(18f, 4f)
+        moveTo(4f, 22f); lineTo(20f, 22f)
+        moveTo(10f, 14.66f); lineTo(10f, 17f)
+        curveToRelative(0f, 0.55f, -0.47f, 0.98f, -0.97f, 1.21f)
+        curveTo(7.85f, 18.75f, 7f, 20.24f, 7f, 22f)
+        moveTo(14f, 14.66f); lineTo(14f, 17f)
+        curveToRelative(0f, 0.55f, 0.47f, 0.98f, 0.97f, 1.21f)
+        curveTo(16.15f, 18.75f, 17f, 20.24f, 17f, 22f)
+        moveTo(18f, 2f); lineTo(6f, 2f); lineTo(6f, 9f)
+        arcToRelative(6f, 6f, 0f, false, false, 12f, 0f)
+        lineTo(18f, 2f)
+        close()
+    }
+
+    /** Megaphone: pengumuman resmi (Lucide megaphone 24x24). */
     val Megaphone: ImageVector = xyIcon("XyMegaphone") {
-        moveTo(4.5f, 10f); lineTo(9f, 10f); lineTo(17.5f, 5.5f); lineTo(17.5f, 18.5f)
-        lineTo(9f, 14f); lineTo(4.5f, 14f); close()
-        moveTo(7.5f, 14f); lineTo(9f, 19f)
-        moveTo(20f, 9.5f); lineTo(20f, 14.5f)
+        moveTo(3f, 11f); lineTo(21f, 5f); lineTo(14f, 21f); lineTo(11f, 13f); lineTo(3f, 11f); close()
     }
 
-    /** Pin: sematkan postingan/pesan vektor murni. */
+    /** Pin: sematkan postingan/pesan (Lucide pin 24x24). */
     val Pin: ImageVector = xyIcon("XyPin") {
-        moveTo(9f, 4.5f); lineTo(15f, 4.5f); lineTo(14f, 10f)
-        lineTo(16.5f, 12.5f); lineTo(7.5f, 12.5f); lineTo(10f, 10f); close()
-        moveTo(12f, 12.5f); lineTo(12f, 20f)
+        moveTo(12f, 17f); lineTo(12f, 22f)
+        moveTo(5f, 17f); lineTo(19f, 17f); lineTo(17.2f, 13.5f); lineTo(16f, 7f)
+        lineTo(17.5f, 5.5f); lineTo(6.5f, 5.5f); lineTo(8f, 7f); lineTo(6.8f, 13.5f); close()
     }
 
-    /** Inbox: kotak masuk notifikasi vektor murni. */
+    /** Inbox: kotak masuk notifikasi (Lucide inbox 24x24). */
     val Inbox: ImageVector = xyIcon("XyInbox") {
-        moveTo(4f, 6f); lineTo(20f, 6f); lineTo(20f, 18f); lineTo(4f, 18f); close()
-        moveTo(4f, 13f); lineTo(8.5f, 13f); lineTo(10f, 15f); lineTo(14f, 15f); lineTo(15.5f, 13f); lineTo(20f, 13f)
+        moveTo(22f, 12f); lineTo(16f, 12f); lineTo(14f, 15f); lineTo(10f, 15f); lineTo(8f, 12f); lineTo(2f, 12f)
+        moveTo(5.45f, 5.11f); lineTo(2f, 12f); lineTo(2f, 18f)
+        arcToRelative(2f, 2f, 0f, false, false, 2f, 2f)
+        lineTo(20f, 20f)
+        arcToRelative(2f, 2f, 0f, false, false, 2f, -2f)
+        lineTo(22f, 12f); lineTo(18.55f, 5.11f)
+        arcToRelative(2f, 2f, 0f, false, false, -1.79f, -1.11f)
+        lineTo(7.24f, 4f)
+        arcToRelative(2f, 2f, 0f, false, false, -1.79f, 1.11f)
+        close()
     }
 
-    /** Link: rantai tautan vektor murni. */
+    /** Link: rantai tautan (Lucide link-2 24x24). */
     val Link: ImageVector = xyIcon("XyLink") {
-        moveTo(10f, 14f); lineTo(14f, 10f)
-        moveTo(8.5f, 15.5f); lineTo(6.5f, 17.5f)
-        curveTo(5.1f, 18.9f, 5.1f, 16.5f, 6.5f, 15.1f)
-        lineTo(9.5f, 12.1f)
-        moveTo(15.5f, 8.5f); lineTo(17.5f, 6.5f)
-        curveTo(18.9f, 5.1f, 18.9f, 7.5f, 17.5f, 8.9f)
-        lineTo(14.5f, 11.9f)
+        moveTo(9f, 17f); lineTo(7f, 17f)
+        arcToRelative(5f, 5f, 0f, false, true, 0f, -10f)
+        lineTo(9f, 7f)
+        moveTo(15f, 7f); lineTo(17f, 7f)
+        arcToRelative(5f, 5f, 0f, false, true, 0f, 10f)
+        lineTo(15f, 17f)
+        moveTo(8f, 12f); lineTo(16f, 12f)
     }
 
-    /** Flag: bendera laporan vektor murni. */
+    /** Flag: bendera laporan (Lucide flag 24x24). */
     val Flag: ImageVector = xyIcon("XyFlag") {
-        moveTo(5.5f, 4f); lineTo(5.5f, 20f)
-        moveTo(5.5f, 5f); lineTo(18f, 5f); lineTo(15.5f, 9f); lineTo(18f, 13f); lineTo(5.5f, 13f)
+        moveTo(4f, 15f)
+        curveToRelative(1f, -1f, 4f, -1f, 5f, 2f)
+        curveToRelative(2f, 2f, 4f, 1f, 6f, 0f)
+        curveToRelative(1f, -1f, 3f, -1f, 4f, 0f)
+        lineTo(19f, 4f)
+        curveToRelative(-1f, -1f, -3f, -1f, -4f, 0f)
+        curveToRelative(-2f, 1f, -4f, 2f, -6f, 0f)
+        curveToRelative(-1f, -3f, -4f, -3f, -5f, -2f)
+        close()
+        moveTo(4f, 22f); lineTo(4f, 15f)
     }
 
     /** StarFilled: bintang penuh untuk stiker favorit. */
     val StarFilled: ImageVector = xySolid("XyStarFilled") {
-        moveTo(12f, 3.6f); lineTo(14.5f, 9.2f); lineTo(20.5f, 9.8f)
-        lineTo(16f, 13.8f); lineTo(17.4f, 19.7f); lineTo(12f, 16.5f)
-        lineTo(6.6f, 19.7f); lineTo(8f, 13.8f); lineTo(3.5f, 9.8f)
-        lineTo(9.5f, 9.2f); close()
+        moveTo(12f, 2.5f); lineTo(14.9f, 8.6f); lineTo(21.5f, 9.5f)
+        lineTo(16.7f, 14.1f); lineTo(17.9f, 20.7f); lineTo(12f, 17.6f)
+        lineTo(6.1f, 20.7f); lineTo(7.3f, 14.1f); lineTo(2.5f, 9.5f)
+        lineTo(9.1f, 8.6f); close()
     }
 
-    /** Video: ikon kamera video vektor murni. */
+    /** Video: ikon kamera video (Lucide video 24x24). */
     val Video: ImageVector = xyIcon("XyVideo") {
-        moveTo(3.5f, 7f); lineTo(15f, 7f); lineTo(15f, 17f); lineTo(3.5f, 17f); close()
-        moveTo(15f, 10.2f); lineTo(20.5f, 7.5f); lineTo(20.5f, 16.5f); lineTo(15f, 13.8f); close()
+        moveTo(23f, 7f); lineTo(16f, 12f); lineTo(23f, 17f); close()
+        moveTo(4f, 5f); lineTo(14f, 5f)
+        arcToRelative(2f, 2f, 0f, false, true, 2f, 2f)
+        lineTo(16f, 17f)
+        arcToRelative(2f, 2f, 0f, false, true, -2f, 2f)
+        lineTo(4f, 19f)
+        arcToRelative(2f, 2f, 0f, false, true, -2f, -2f)
+        lineTo(2f, 7f)
+        arcToRelative(2f, 2f, 0f, false, true, 2f, -2f)
+        close()
     }
 
-    /** Bolt: petir performa tinggi / boot cepat. */
+    /** Bolt: petir performa tinggi (Lucide zap 24x24). */
     val Bolt: ImageVector = xyIcon("XyBolt") {
-        moveTo(13f, 3.5f); lineTo(5.5f, 13.5f); lineTo(11.5f, 13.5f)
-        lineTo(10.5f, 20.5f); lineTo(18.5f, 10.5f); lineTo(12.5f, 10.5f); close()
+        moveTo(13f, 2f); lineTo(3f, 14f); lineTo(12f, 14f)
+        lineTo(11f, 22f); lineTo(21f, 10f); lineTo(12f, 10f); close()
     }
 
-    /** ThumbUp: jempol reaksi/like vektor murni. */
+    /** ThumbUp: jempol reaksi/like (Lucide thumbs-up 24x24). */
     val ThumbUp: ImageVector = xyIcon("XyThumbUp") {
-        moveTo(7.5f, 11f); lineTo(7.5f, 19.5f); lineTo(4.5f, 19.5f); lineTo(4.5f, 11f); close()
-        moveTo(7.5f, 11f); lineTo(11.5f, 4.5f)
-        curveTo(12.8f, 4.5f, 13.5f, 5.5f, 13.2f, 7.2f)
-        lineTo(12.5f, 10f); lineTo(18.5f, 10f)
-        curveTo(19.6f, 10f, 20.2f, 11f, 19.8f, 12.4f)
-        lineTo(18.2f, 18.2f)
-        curveTo(17.9f, 19.1f, 17.1f, 19.5f, 16f, 19.5f)
-        lineTo(7.5f, 19.5f)
+        moveTo(7f, 10f); lineTo(7f, 20f)
+        moveTo(15f, 5.88f); lineTo(14f, 10f); lineTo(19.83f, 10f)
+        arcToRelative(2f, 2f, 0f, false, true, 1.92f, 2.56f)
+        lineToRelative(-2.33f, 8f)
+        arcToRelative(2f, 2f, 0f, false, true, -1.92f, 1.44f)
+        lineTo(4f, 22f)
+        arcToRelative(2f, 2f, 0f, false, true, -2f, -2f)
+        lineTo(2f, 12f)
+        arcToRelative(2f, 2f, 0f, false, true, 2f, -2f)
+        lineTo(6.76f, 10f)
+        arcToRelative(2f, 2f, 0f, false, false, 1.79f, -1.11f)
+        lineTo(12f, 2f)
+        arcToRelative(3.13f, 3.13f, 0f, false, true, 3f, 3.88f)
+        close()
     }
 
-    /** Feed: kartu berita / daftar feed komunitas vektor murni. */
+    /** Feed: ikon feed komunitas (Lucide layout-list / newspaper 24x24). */
     val Feed: ImageVector = xyIcon("XyFeed") {
-        moveTo(4.5f, 5f); lineTo(19.5f, 5f); lineTo(19.5f, 19f); lineTo(4.5f, 19f); close()
-        moveTo(8f, 9f); lineTo(16f, 9f)
-        moveTo(8f, 12.5f); lineTo(16f, 12.5f)
-        moveTo(8f, 16f); lineTo(13f, 16f)
+        moveTo(5f, 4f); lineTo(19f, 4f)
+        arcToRelative(2f, 2f, 0f, false, true, 2f, 2f)
+        lineTo(21f, 18f)
+        arcToRelative(2f, 2f, 0f, false, true, -2f, 2f)
+        lineTo(5f, 20f)
+        arcToRelative(2f, 2f, 0f, false, true, -2f, -2f)
+        lineTo(3f, 6f)
+        arcToRelative(2f, 2f, 0f, false, true, 2f, -2f)
+        close()
+        moveTo(7.5f, 8.5f); lineTo(16.5f, 8.5f)
+        moveTo(7.5f, 12f); lineTo(16.5f, 12f)
+        moveTo(7.5f, 15.5f); lineTo(13f, 15.5f)
+    }
+
+    /** MoreHorizontal: tiga titik aksi menu (Lucide ellipsis 24x24). */
+    val MoreHorizontal: ImageVector = xySolid("XyMoreHorizontal") {
+        moveTo(3.5f, 12f)
+        arcToRelative(1.5f, 1.5f, 0f, true, false, 3f, 0f)
+        arcToRelative(1.5f, 1.5f, 0f, true, false, -3f, 0f)
+        close()
+        moveTo(10.5f, 12f)
+        arcToRelative(1.5f, 1.5f, 0f, true, false, 3f, 0f)
+        arcToRelative(1.5f, 1.5f, 0f, true, false, -3f, 0f)
+        close()
+        moveTo(17.5f, 12f)
+        arcToRelative(1.5f, 1.5f, 0f, true, false, 3f, 0f)
+        arcToRelative(1.5f, 1.5f, 0f, true, false, -3f, 0f)
+        close()
     }
 }

@@ -164,6 +164,8 @@ class XyDeskHomeActivity : ComponentActivity() {
             val login = data.getQueryParameter("login").orEmpty().trim()
             val name = data.getQueryParameter("name").orEmpty().trim()
             val avatar = data.getQueryParameter("avatar").orEmpty().trim()
+            val code = data.getQueryParameter("code").orEmpty().trim()
+            val state = data.getQueryParameter("state").orEmpty().trim()
             incoming.data = null
             if (token.isNotEmpty() && login.isNotEmpty()) {
                 lifecycleScope.launch {
@@ -173,6 +175,14 @@ class XyDeskHomeActivity : ComponentActivity() {
                         login = login,
                         displayName = name,
                         avatarUrl = avatar,
+                    )
+                }
+            } else if (code.isNotEmpty()) {
+                lifecycleScope.launch {
+                    GitHubDirectOAuthController.onCodeReceived(
+                        context = applicationContext,
+                        code = code,
+                        state = state,
                     )
                 }
             }
