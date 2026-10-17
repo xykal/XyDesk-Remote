@@ -1,5 +1,6 @@
 package id.xydesk.remote.ui
 
+import id.xydesk.remote.core.SessionState
 import id.xydesk.remote.ui.input.XyStickMode
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.fadeIn
