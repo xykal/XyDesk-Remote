@@ -1516,3 +1516,13 @@ Tiga permintaan pemilik ditangani tuntas:
   - Sematkan Pesan (`/api/chat/pin` + WebSocket `pin`), Salin Pesan, Kirim Video (`video/*`), Media 1× Sekali Lihat (`viewOnce`), serta Pratinjau Foto & Video Layar Penuh (`FullScreenChatMediaViewer`) dengan Pinch-to-Zoom (`1x`–`5x`), Double-Tap Zoom, Video Player, dan Simpan ke Galeri.
   - Stiker Custom WebP Terenkripsi `.webp.crypto15` di `Android/media/id.xydesk.remote/globwlchat/sticker/<Token>+2+$+$8.webp.crypto15` & `globalchat/sticker/`.
 - **Linux Polos (Tanpa XFCE4) + Terminal SSH-2, On-Mic (`AUDIN` OpenSL ES + `onmic.ps1` / `XyDesk-RDP-OnMic-Setup.bat`), & Native GUI Windows Host Agent (`XyDeskRemoteHost.exe`).**
+
+## Ronde 56 — Rilis Publik `v1.1.19` (`VERSION_CODE 80`, Commit `65beb569f144c44cb6185eb9be9252d68d9b0047`, CI `39041215022`) (2026-10-17)
+- **Perbaikan `xykal/XyRDP` (`c548e53` & `cc22a90`) + Sinkronisasi Otomatis Fork (`XyRdpClient.kt`):**
+  - Memperbaiki kegagalan `Tailscale tersambung tetapi listener RDP 3389 belum aktif; periksa setup-rdp` dengan memblokir `Grant-KeyAccess`/`New-Item -Force` pada `WinStations\RDP-Tcp` (yang sebelumnya merusak owner/ACL sehingga `TermService` gagal membuka port `3389`), menambahkan auto-recovery `TermService`/`UmRdpService` di `setup-rdp.ps1` dan `setup-akses.ps1`, serta membuktikan live workflow run `39038435063` lulus penuh (`rdp_listen: ":::3389 (svchost) + handshake ok via 127.0.0.1"`, Tailscale `100.83.90.63`).
+  - Menambahkan kompatibilitas penuh semua software 2026 (`compat2026: true`, `LongPathsEnabled`, Developer Mode, SmartScreen bypass, VC++ 2013/2015–2022, WebView2), auto-sync fork `XyRDP` ke upstream saat dispatch sesi di aplikasi, dan auto-runner `ubuntu-24.04` saat `linux_mode=polos`.
+- **Perbaikan Chat Global (`GlobalChatScreen.kt`, `XyDeskHome.kt`, `cloudflare/worker.mjs`):**
+  - Menyembunyikan `XyBottomNav` saat berada di halaman Chat Global, merapikan ukuran bubble secara presisi dengan `IntrinsicSize.Max`, menambahkan **Hapus untuk Semua Orang** (`/api/chat/delete` + WebSocket `delete`) dan **Hapus untuk Saya**, serta menerapkan terjemahan otomatis sesuai region di seluruh negara dunia (1 bahasa saat mengirim pesan sendiri; otomatis tampil terjemahan sesuai region penonton saat dilihat orang lain, termasuk pada **Bubble Founder `@xykal`**).
+- **Login GitHub Tanpa Kode (`FounderBadge.kt`, `XyDeskHome.kt`, `RdpFreeScreen.kt`, `XyProfileScreen.kt`, `GlobalChatScreen.kt`):**
+  - Mengganti mekanisme kode 8 digit dengan alur Web OAuth Authorize langsung di browser dalam aplikasi (`GitHubDirectOAuthController` & `GitHubDirectOAuthModalHost`).
+
