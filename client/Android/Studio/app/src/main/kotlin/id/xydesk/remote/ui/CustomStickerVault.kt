@@ -274,4 +274,47 @@ internal object CustomStickerVault {
         }
         return fileName to bmp
     }
+
+    private const val PREF_STICKER_FAVS = "xydesk_sticker_favorites_v2"
+    private const val KEY_FAV_SET = "fav_keys"
+
+    fun loadFavoriteKeys(context: Context): Set<String> {
+        val prefs = context.getSharedPreferences(PREF_STICKER_FAVS, Context.MODE_PRIVATE)
+        return prefs.getStringSet(KEY_FAV_SET, emptySet())?.toSet() ?: emptySet()
+    }
+
+    fun isFavorite(context: Context, key: String): Boolean {
+        return key.trim() in loadFavoriteKeys(context)
+    }
+
+    fun toggleFavoriteKey(context: Context, key: String): Set<String> {
+        val clean = key.trim()
+        val prefs = context.getSharedPreferences(PREF_STICKER_FAVS, Context.MODE_PRIVATE)
+        val next = loadFavoriteKeys(context).toMutableSet()
+        if (clean in next) next.remove(clean) else next.add(clean)
+        prefs.edit().putStringSet(KEY_FAV_SET, next).apply()
+        return next
+    }
+
+    fun addFavoriteFromChatSticker(context: Context, attachmentData: String): Set<String> {
+        if (attachmentData.startsWith("sticker_crypto15:")) {
+            val decoded = decodeAndCacheFromChatPayload(context, attachmentData)
+            if (decoded != null) {
+                return toggleFavoriteIfNotPresent(context, "custom:${decoded.first}")
+            }
+        } else if (attachmentData.startsWith("sticker:")) {
+            val id = attachmentData.removePrefix("sticker:").trim()
+            return toggleFavoriteIfNotPresent(context, "preset:$id")
+        }
+        return loadFavoriteKeys(context)
+    }
+
+    private fun toggleFavoriteIfNotPresent(context: Context, key: String): Set<String> {
+        val clean = key.trim()
+        val prefs = context.getSharedPreferences(PREF_STICKER_FAVS, Context.MODE_PRIVATE)
+        val next = loadFavoriteKeys(context).toMutableSet()
+        if (clean in next) next.remove(clean) else next.add(clean)
+        prefs.edit().putStringSet(KEY_FAV_SET, next).apply()
+        return next
+    }
 }

@@ -144,12 +144,26 @@ internal fun getVerifiedGitHubAvatar(context: Context): String? {
     return "https://github.com/$login.png?size=160"
 }
 
+internal fun getVerifiedGitHubAvatarUrl(context: Context): String? = getVerifiedGitHubAvatar(context)
+
 /**
  * Membuka URL di dalam In-App Browser (Chrome Custom Tabs) yang memiliki tombol tutup `X`
  * dan menu titik tiga `⋮` di pojok kanan atas serta berbagi sesi login dengan browser utama.
  */
 internal fun openInAppCustomTab(context: Context, url: String) {
     runCatching {
+        val pm = context.packageManager
+        val preferredBrowsers = listOf(
+            "com.android.chrome",
+            "com.chrome.beta",
+            "com.chrome.dev",
+            "com.brave.browser",
+            "com.microsoft.emmx",
+            "com.sec.android.app.sbrowser",
+        )
+        val chosenPackage = preferredBrowsers.firstOrNull { pkg ->
+            runCatching { pm.getPackageInfo(pkg, 0); true }.getOrDefault(false)
+        }
         val intent = Intent(Intent.ACTION_VIEW, Uri.parse(url)).apply {
             val extras = Bundle().apply {
                 putBinder("android.support.customtabs.extra.SESSION", null)
@@ -160,6 +174,9 @@ internal fun openInAppCustomTab(context: Context, url: String) {
                 putBoolean("android.support.customtabs.extra.ENABLE_URLBAR_HIDING", false)
             }
             putExtras(extras)
+            if (chosenPackage != null) {
+                setPackage(chosenPackage)
+            }
             if (context !is android.app.Activity) {
                 addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
             }
@@ -178,6 +195,8 @@ internal fun openInAppCustomTab(context: Context, url: String) {
 internal object GitHubDirectOAuthController {
     var isOpen by mutableStateOf(false)
         private set
+    var activeSessionId by mutableStateOf("")
+        private set
     private var onSuccessCallback: ((token: String, login: String) -> Unit)? = null
     private var onErrorCallback: ((String) -> Unit)? = null
 
@@ -187,6 +206,7 @@ internal object GitHubDirectOAuthController {
     ) {
         onSuccessCallback = onSuccess
         onErrorCallback = onError
+        activeSessionId = java.util.UUID.randomUUID().toString().replace("-", "").take(22)
         isOpen = true
     }
 
@@ -207,13 +227,45 @@ internal object GitHubDirectOAuthController {
         onErrorCallback = null
         okCb?.invoke(token, login)
     }
+
+    suspend fun onDeepLinkReceived(
+        context: Context,
+        token: String,
+        login: String,
+        displayName: String = "",
+        avatarUrl: String = "",
+    ) {
+        val appCtx = context.applicationContext
+        val resolvedAvatar = avatarUrl.ifBlank { "https://github.com/$login.png?size=160" }
+        withContext(Dispatchers.IO) {
+            runCatching {
+                CredentialVault(appCtx).put(XyRdpConfig.VAULT_PAT_ID, token)
+                saveVerifiedGitHubLogin(appCtx, login, resolvedAvatar)
+                val api = CommunityJokesApi(appCtx)
+                val targetName = displayName.ifBlank { login }
+                if (api.displayName().isNullOrBlank() || isFounderAccount(login)) {
+                    api.setDisplayName(targetName)
+                }
+                syncGitHubAvatarIfNeeded(appCtx, login, api)
+            }
+        }
+        withContext(Dispatchers.Main) {
+            Toast.makeText(
+                appCtx,
+                xyNow("Berhasil terhubung ke GitHub sebagai @$login!", "Connected to GitHub as @$login!"),
+                Toast.LENGTH_SHORT,
+            ).show()
+            complete(token, login)
+        }
+    }
 }
 
 /**
- * Ronde 56 — Alur Login GitHub Langsung Tanpa Kode (Web OAuth Authorize):
- * Membuka In-App Browser terintegrasi (dengan header bergaya Chrome & menu titik tiga `⋮`)
- * langsung ke halaman Login & Authorize GitHub (akses profil, nama, repo, workflow, dll.)
- * TANPA perlu melihat, menyalin, atau mengetik kode 8 digit.
+ * Ronde 57 — Alur Login GitHub Sinkron dengan Chrome / Browser Utama (Chrome Custom Tabs):
+ * Membuka langsung halaman OAuth GitHub di Chrome Custom Tabs yang berbagi sesi login
+ * GitHub & Google dengan browser Chrome pengguna (tanpa kode 8 digit, mendukung tombol
+ * "Continue with Google" & sesi GitHub yang sudah login di Chrome), lalu otomatis kembali
+ * ke XyDesk Remote begitu tombol hijau "Authorize" diklik.
  */
 internal suspend fun performGitHubInAppBrowserLogin(
     context: Context,
@@ -237,20 +289,27 @@ internal fun GitHubDirectOAuthModalHost() {
     val context = LocalContext.current
     val appCtx = context.applicationContext
     val scope = rememberCoroutineScope()
+    val sessionId = GitHubDirectOAuthController.activeSessionId.ifBlank {
+        remember { java.util.UUID.randomUUID().toString().replace("-", "").take(22) }
+    }
+    val chromeAuthUrl = remember(sessionId) {
+        "https://xyrdp-dash.vercel.app/api/auth/login?apk=1&session_id=$sessionId"
+    }
 
-    var currentUrl by remember { mutableStateOf("https://github.com/login/oauth/authorize") }
+    var currentUrl by remember(chromeAuthUrl) { mutableStateOf(chromeAuthUrl) }
     var statusLabel by remember {
         mutableStateOf(
             xyNow(
-                "Login ke GitHub lalu klik tombol hijau 'Authorize'",
-                "Sign in to GitHub and tap the green 'Authorize' button",
+                "Membuka Chrome (Sinkron Sesi GitHub & Google) — klik tombol hijau 'Authorize'",
+                "Opening Chrome (Synced GitHub & Google Session) — tap the green 'Authorize' button",
             ),
         )
     }
     var menuExpanded by remember { mutableStateOf(false) }
     var webViewRef by remember { mutableStateOf<android.webkit.WebView?>(null) }
     var hiddenHandshakeCode by remember { mutableStateOf("") }
-    var useWebRedirectMode by remember { mutableStateOf(false) }
+    var useWebRedirectMode by remember { mutableStateOf(true) }
+    var showEmbeddedWebView by remember { mutableStateOf(false) }
     var completed by remember { mutableStateOf(false) }
 
     fun buildSeamlessOAuthBridgeScript(code: String): String {
@@ -330,13 +389,58 @@ internal fun GitHubDirectOAuthModalHost() {
         GitHubDirectOAuthController.complete(token, login)
     }
 
-    LaunchedEffect(useWebRedirectMode) {
+    LaunchedEffect(sessionId) {
+        openInAppCustomTab(context, chromeAuthUrl)
+        val deadline = System.currentTimeMillis() + 10 * 60 * 1000L
+        val pollUrls = listOf(
+            "https://api.xydeskremote.biz.id/api/github/oauth/poll?session_id=$sessionId",
+            "https://xyrdp-dash.vercel.app/api/auth/apk-poll?session_id=$sessionId",
+        )
+        while (isActive && !completed && System.currentTimeMillis() < deadline) {
+            delay(1_200L)
+            val hit = withContext(Dispatchers.IO) {
+                var found: JSONObject? = null
+                for (u in pollUrls) {
+                    val res = runCatching {
+                        val conn = (URL(u).openConnection() as HttpURLConnection).apply {
+                            requestMethod = "GET"
+                            setRequestProperty("Accept", "application/json")
+                            connectTimeout = 5_000
+                            readTimeout = 5_000
+                        }
+                        if (conn.responseCode == 200) {
+                            val obj = JSONObject(conn.inputStream.bufferedReader().use { it.readText() })
+                            if (obj.optBoolean("ready", false) && obj.optString("token", "").isNotBlank()) obj else null
+                        } else null
+                    }.getOrNull()
+                    if (res != null) {
+                        found = res
+                        break
+                    }
+                }
+                found
+            }
+            if (hit != null) {
+                val tok = hit.optString("token", "").trim()
+                val lgn = hit.optString("login", "").trim()
+                val nm = hit.optString("name", "").trim()
+                val av = hit.optString("avatar_url", "").trim()
+                if (tok.isNotEmpty() && lgn.isNotEmpty()) {
+                    finishLoginSuccess(tok, lgn, nm, av)
+                    return@LaunchedEffect
+                }
+            }
+        }
+    }
+
+    LaunchedEffect(showEmbeddedWebView, useWebRedirectMode) {
+        if (!showEmbeddedWebView) return@LaunchedEffect
         if (useWebRedirectMode) {
             statusLabel = xyNow(
                 "OAuth Web GitHub: Login & klik tombol hijau 'Authorize'",
                 "GitHub Web OAuth: Sign in & tap the green 'Authorize' button",
             )
-            webViewRef?.loadUrl("https://xyrdp-dash.vercel.app/api/auth/login?apk=1")
+            webViewRef?.loadUrl(chromeAuthUrl)
             return@LaunchedEffect
         }
         val start = githubDeviceStart(GITHUB_OAUTH_CLIENT_ID)
@@ -345,7 +449,6 @@ internal fun GitHubDirectOAuthModalHost() {
             return@LaunchedEffect
         }
         val code = start.optString("user_code", "")
-        val verifyUri = start.optString("verification_uri", "https://github.com/login/device")
         val deviceCode = start.optString("device_code", "")
         val intervalMs = (start.optInt("interval", 5).coerceIn(3, 12)) * 1000L
         val deadline = System.currentTimeMillis() + start.optInt("expires_in", 900) * 1000L
@@ -374,6 +477,126 @@ internal fun GitHubDirectOAuthModalHost() {
                 return@LaunchedEffect
             }
         }
+    }
+
+    if (!showEmbeddedWebView) {
+        Dialog(
+            onDismissRequest = { GitHubDirectOAuthController.dismiss() },
+            properties = DialogProperties(dismissOnBackPress = true, dismissOnClickOutside = false),
+        ) {
+            Surface(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp),
+                shape = RoundedCornerShape(24.dp),
+                color = Color(0xFF0E0E14),
+                border = BorderStroke(1.dp, Color.White.copy(alpha = 0.12f)),
+                tonalElevation = 10.dp,
+            ) {
+                Column(
+                    modifier = Modifier.padding(22.dp),
+                    verticalArrangement = Arrangement.spacedBy(12.dp),
+                ) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(10.dp),
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .size(38.dp)
+                                .clip(CircleShape)
+                                .background(Color.White.copy(alpha = 0.1f)),
+                            contentAlignment = Alignment.Center,
+                        ) {
+                            GitHubLogoIcon(size = 20.dp, tint = Color.White)
+                        }
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                text = xyNow("Sinkron Login GitHub via Chrome", "Sync GitHub Sign-In via Chrome"),
+                                style = MaterialTheme.typography.titleSmall,
+                                fontWeight = FontWeight.ExtraBold,
+                                color = Color.White,
+                            )
+                            Text(
+                                text = xyNow("Otomatis memakai sesi GitHub & Google di browser Anda", "Uses your existing GitHub & Google session in Chrome"),
+                                style = MaterialTheme.typography.bodySmall,
+                                color = Color(0xFFA1A1AA),
+                            )
+                        }
+                    }
+
+                    Text(
+                        text = xyNow(
+                            "Halaman OAuth GitHub telah dibuka di Chrome Custom Tabs. Jika Anda sudah login GitHub atau Google di Chrome, cukup klik tombol hijau 'Authorize' — aplikasi akan otomatis tersambung tanpa mengetik kode.",
+                            "GitHub OAuth opened in Chrome Custom Tabs. If you're already signed in to GitHub or Google in Chrome, just tap the green 'Authorize' button — the app connects automatically with no code required.",
+                        ),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = Color(0xFFD4D4D8),
+                    )
+
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clip(RoundedCornerShape(14.dp))
+                            .background(Color.White)
+                            .clickable { openInAppCustomTab(context, chromeAuthUrl) }
+                            .padding(vertical = 12.dp),
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        ) {
+                            GitHubLogoIcon(size = 16.dp, tint = Color(0xFF09090B))
+                            Text(
+                                text = xyNow("Buka Chrome / Browser (Authorize)", "Open Chrome / Browser (Authorize)"),
+                                style = MaterialTheme.typography.labelLarge,
+                                fontWeight = FontWeight.ExtraBold,
+                                color = Color(0xFF09090B),
+                            )
+                        }
+                    }
+
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .weight(1f)
+                                .clip(RoundedCornerShape(12.dp))
+                                .background(Color.White.copy(alpha = 0.07f))
+                                .border(1.dp, Color.White.copy(alpha = 0.12f), RoundedCornerShape(12.dp))
+                                .clickable { showEmbeddedWebView = true }
+                                .padding(vertical = 10.dp),
+                            contentAlignment = Alignment.Center,
+                        ) {
+                            Text(
+                                text = xyNow("Browser Internal", "Built-in Browser"),
+                                style = MaterialTheme.typography.labelMedium,
+                                fontWeight = FontWeight.SemiBold,
+                                color = Color(0xFFE4E4E7),
+                            )
+                        }
+                        Box(
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(12.dp))
+                                .background(Color.White.copy(alpha = 0.05f))
+                                .clickable { GitHubDirectOAuthController.dismiss() }
+                                .padding(horizontal = 16.dp, vertical = 10.dp),
+                            contentAlignment = Alignment.Center,
+                        ) {
+                            Text(
+                                text = xyNow("Tutup", "Close"),
+                                style = MaterialTheme.typography.labelMedium,
+                                color = Color(0xFFA1A1AA),
+                            )
+                        }
+                    }
+                }
+            }
+        }
+        return
     }
 
     Dialog(
@@ -505,7 +728,7 @@ internal fun GitHubDirectOAuthModalHost() {
                         android.webkit.WebView(ctx).apply {
                             settings.javaScriptEnabled = true
                             settings.domStorageEnabled = true
-                            settings.userAgentString = settings.userAgentString + " XyDeskRemote/1.1.19"
+                            settings.userAgentString = settings.userAgentString + " XyDeskRemote/1.1.20"
                             android.webkit.CookieManager.getInstance().setAcceptThirdPartyCookies(this, true)
                             webViewClient = object : android.webkit.WebViewClient() {
                                 override fun shouldOverrideUrlLoading(

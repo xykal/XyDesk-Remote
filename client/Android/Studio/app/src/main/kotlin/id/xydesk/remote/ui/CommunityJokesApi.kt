@@ -26,10 +26,15 @@ internal class CommunityJokesApi(context: Context) {
     private val clientId: String get() = loadOrCreateClientId()
 
     suspend fun latest(): List<CommunityJoke> = withContext(Dispatchers.IO) {
+        val gh = getVerifiedGitHubLogin(appContext)
+        val hdrs = buildMap {
+            put("X-XyDesk-Client-ID", clientId)
+            if (!gh.isNullOrBlank()) put("X-XyDesk-GitHub-Login", gh)
+        }
         val body = request(
             method = "GET",
             path = "/api/jokes",
-            headers = mapOf("X-XyDesk-Client-ID" to clientId),
+            headers = hdrs,
         )
         val items = body.optJSONArray("items") ?: JSONArray()
         buildList(items.length()) {
@@ -58,27 +63,59 @@ internal class CommunityJokesApi(context: Context) {
         runCatching { request(method = "GET", path = "/api/pc/relay?id=$globalId") }.getOrNull()
     }
 
-    suspend fun submit(text: String, attachment: FeedAttachment? = null): CommunityJoke = withContext(Dispatchers.IO) {
+    suspend fun submit(
+        text: String,
+        attachment: FeedAttachment? = null,
+        isAnnouncement: Boolean = false,
+        pinned: Boolean = false,
+    ): CommunityJoke = withContext(Dispatchers.IO) {
         val attachmentJson = attachment?.let { att ->
             JSONObject()
                 .put("mime", att.mime)
                 .put("data", android.util.Base64.encodeToString(att.bytes, android.util.Base64.NO_WRAP))
         }
-        val payload = JSONObject().put("client_id", clientId).put("text", text)
+        val gh = getVerifiedGitHubLogin(appContext)
+        val ghAvatar = getVerifiedGitHubAvatarUrl(appContext)
+        val payload = JSONObject()
+            .put("client_id", clientId)
+            .put("text", text)
+            .put("allow_links", true)
+            .put("is_announcement", isAnnouncement)
+            .put("pinned", pinned || isAnnouncement)
         attachmentJson?.let { payload.put("attachment", it) }
-        displayName()?.let { payload.put("display_name", it) }
+        (displayName() ?: gh)?.let { payload.put("display_name", it) }
+        gh?.let { payload.put("github_login", it) }
+        ghAvatar?.let { payload.put("avatar_url", it) }
         val body = request(method = "POST", path = "/api/jokes", payload = payload)
         parseJoke(body.optJSONObject("joke") ?: error("Missing submitted joke"))
     }
 
-    suspend fun comment(jokeId: String, text: String): JokeComment = withContext(Dispatchers.IO) {
-        val payload = JSONObject().put("client_id", clientId).put("text", text)
-        displayName()?.let { payload.put("display_name", it) }
+    suspend fun comment(
+        jokeId: String,
+        text: String,
+        replyToId: String? = null,
+        replyToName: String? = null,
+    ): JokeComment = withContext(Dispatchers.IO) {
+        val gh = getVerifiedGitHubLogin(appContext)
+        val ghAvatar = getVerifiedGitHubAvatarUrl(appContext)
+        val payload = JSONObject()
+            .put("client_id", clientId)
+            .put("text", text)
+            .put("allow_links", true)
+        (displayName() ?: gh)?.let { payload.put("display_name", it) }
+        gh?.let { payload.put("github_login", it) }
+        ghAvatar?.let { payload.put("avatar_url", it) }
+        replyToId?.takeIf { it.isNotBlank() }?.let { payload.put("reply_to_id", it) }
+        replyToName?.takeIf { it.isNotBlank() }?.let { payload.put("reply_to_name", it) }
         val body = request(method = "POST", path = "/api/jokes/$jokeId/comment", payload = payload)
         val c = body.optJSONObject("comment") ?: error("Missing comment")
         JokeComment(
             id = c.optString("id"),
             name = c.strOrNull("name"),
+            githubLogin = c.strOrNull("github_login"),
+            avatarUrl = c.strOrNull("avatar_url"),
+            replyToId = c.strOrNull("reply_to_id"),
+            replyToName = c.strOrNull("reply_to_name"),
             text = c.optString("text"),
             createdAtMillis = c.optLong("created_at", 0L),
             isOwn = true,
@@ -87,7 +124,10 @@ internal class CommunityJokesApi(context: Context) {
 
     /** Hapus komentar sendiri (butuh worker r37 dengan author_hash). */
     suspend fun deleteComment(jokeId: String, commentId: String): Int = withContext(Dispatchers.IO) {
+        val gh = getVerifiedGitHubLogin(appContext)
         val payload = JSONObject().put("client_id", clientId).put("comment_id", commentId)
+        (displayName() ?: gh)?.let { payload.put("display_name", it) }
+        gh?.let { payload.put("github_login", it) }
         val body = request(method = "POST", path = "/api/jokes/$jokeId/comment-delete", payload = payload)
         body.optInt("comments_total", 0)
     }
@@ -115,7 +155,13 @@ internal class CommunityJokesApi(context: Context) {
         attachment: FeedAttachment? = null,
         removeAttachment: Boolean = false,
     ): CommunityJoke = withContext(Dispatchers.IO) {
-        val payload = JSONObject().put("client_id", clientId).put("text", text)
+        val gh = getVerifiedGitHubLogin(appContext)
+        val payload = JSONObject()
+            .put("client_id", clientId)
+            .put("text", text)
+            .put("allow_links", true)
+        (displayName() ?: gh)?.let { payload.put("display_name", it) }
+        gh?.let { payload.put("github_login", it) }
         if (removeAttachment) {
             payload.put("attachment", JSONObject.NULL)
         } else {
@@ -133,12 +179,125 @@ internal class CommunityJokesApi(context: Context) {
     }
 
     suspend fun delete(jokeId: String): Boolean = withContext(Dispatchers.IO) {
+        val gh = getVerifiedGitHubLogin(appContext)
+        val payload = JSONObject().put("client_id", clientId)
+        (displayName() ?: gh)?.let { payload.put("display_name", it) }
+        gh?.let { payload.put("github_login", it) }
         request(
             method = "POST",
             path = "/api/jokes/$jokeId/delete",
-            payload = JSONObject().put("client_id", clientId),
+            payload = payload,
         )
         true
+    }
+
+    suspend fun fetchNotifications(): List<XyNotificationItem> = withContext(Dispatchers.IO) {
+        runCatching {
+            val gh = getVerifiedGitHubLogin(appContext).orEmpty()
+            val disp = displayName().orEmpty()
+            val hdrs = buildMap {
+                put("X-XyDesk-Client-ID", clientId)
+                if (gh.isNotBlank()) put("X-XyDesk-GitHub-Login", gh)
+                if (disp.isNotBlank()) put("X-XyDesk-Display-Name", disp)
+            }
+            val body = request(method = "GET", path = "/api/jokes/notifications", headers = hdrs)
+            val arr = body.optJSONArray("items") ?: JSONArray()
+            buildList(arr.length()) {
+                for (i in 0 until arr.length()) {
+                    val o = arr.optJSONObject(i) ?: continue
+                    add(
+                        XyNotificationItem(
+                            id = o.optString("id"),
+                            category = o.optString("category", "inbox"),
+                            title = o.optString("title"),
+                            body = o.optString("body"),
+                            actorName = o.optString("actor_name", "Komunitas"),
+                            actorGithub = o.optString("actor_github"),
+                            actorAvatar = o.optString("actor_avatar"),
+                            jokeId = o.optString("joke_id"),
+                            createdAtMillis = o.optLong("created_at", 0L),
+                        ),
+                    )
+                }
+            }
+        }.getOrDefault(emptyList())
+    }
+
+    suspend fun fetchOnlineCount(): Int = withContext(Dispatchers.IO) {
+        runCatching {
+            val gh = getVerifiedGitHubLogin(appContext).orEmpty()
+            val payload = JSONObject()
+                .put("client_id", clientId)
+                .put("github_login", gh)
+                .put("name", displayName() ?: gh.ifBlank { "User" })
+                .put("screen", "feed")
+                .put("active", true)
+            val body = request(method = "POST", path = "/api/chat/presence", payload = payload)
+            body.optInt("online_count", 1).coerceAtLeast(1)
+        }.getOrDefault(1)
+    }
+
+    suspend fun fetchLeaderboard(reportDeltaSec: Long = 0L): List<XyLeaderboardEntry> = withContext(Dispatchers.IO) {
+        runCatching {
+            val gh = getVerifiedGitHubLogin(appContext).orEmpty()
+            val name = (displayName() ?: gh).orEmpty()
+            val totalLocalSec = recordAndGetLocalUsageSeconds(appContext, reportDeltaSec)
+            val body = if (name.isNotBlank() || gh.isNotBlank()) {
+                val payload = JSONObject()
+                    .put("client_id", clientId)
+                    .put("github_login", gh)
+                    .put("name", name.ifBlank { gh })
+                    .put("avatar_url", getVerifiedGitHubAvatarUrl(appContext).orEmpty())
+                    .put("country", java.util.Locale.getDefault().country.ifBlank { "ID" })
+                    .put("delta_seconds", reportDeltaSec)
+                    .put("total_seconds", totalLocalSec)
+                    .put("sessions_count", getLocalUsageSessionCount(appContext))
+                request(method = "POST", path = "/api/leaderboard", payload = payload)
+            } else {
+                request(method = "GET", path = "/api/leaderboard")
+            }
+            val arr = body.optJSONArray("items") ?: JSONArray()
+            buildList(arr.length()) {
+                for (i in 0 until arr.length()) {
+                    val o = arr.optJSONObject(i) ?: continue
+                    add(
+                        XyLeaderboardEntry(
+                            rank = o.optInt("rank", i + 1),
+                            name = o.optString("name", "User"),
+                            githubLogin = o.optString("github_login"),
+                            avatarUrl = o.optString("avatar_url"),
+                            country = o.optString("country", "ID"),
+                            flag = o.optString("flag", "🇮🇩"),
+                            isFounder = o.optBoolean("is_founder", false),
+                            totalSeconds = o.optLong("total_seconds", 0L),
+                            sessionsCount = o.optInt("sessions_count", 1),
+                        ),
+                    )
+                }
+            }
+        }.getOrDefault(emptyList())
+    }
+
+    suspend fun fetchOpenGraph(rawUrl: String): XyOpenGraphData? = withContext(Dispatchers.IO) {
+        val clean = rawUrl.trim()
+        if (clean.isEmpty()) return@withContext null
+        ogMemoryCache.get(clean)?.let { return@withContext it }
+        runCatching {
+            val encoded = java.net.URLEncoder.encode(clean, "UTF-8")
+            val body = request(method = "GET", path = "/api/og?url=$encoded")
+            val status = body.optString("status")
+            if (status != "ok" && status != "blocked") return@runCatching null
+            XyOpenGraphData(
+                url = body.optString("url", clean),
+                domain = body.optString("domain", ""),
+                siteName = body.optString("site_name", ""),
+                title = body.optString("title", clean),
+                description = body.optString("description", ""),
+                image = body.optString("image", ""),
+                safe = body.optBoolean("safe", status != "blocked"),
+                shieldBadge = body.optString("shield_badge", "XyShield Verified"),
+            ).also { ogMemoryCache.put(clean, it) }
+        }.getOrNull()
     }
 
     /** Unduh lampiran feed / avatar (byte mentah). */
@@ -233,6 +392,10 @@ internal class CommunityJokesApi(context: Context) {
                         JokeComment(
                             id = c.optString("id"),
                             name = c.strOrNull("name"),
+                            githubLogin = c.strOrNull("github_login"),
+                            avatarUrl = c.strOrNull("avatar_url"),
+                            replyToId = c.strOrNull("reply_to_id"),
+                            replyToName = c.strOrNull("reply_to_name"),
                             text = c.optString("text"),
                             createdAtMillis = c.optLong("created_at", 0L),
                             isOwn = c.optBoolean("is_own", false),
@@ -241,6 +404,8 @@ internal class CommunityJokesApi(context: Context) {
                 }
             }
         }
+        val rawAvatar = value.strOrNull("author_avatar_url")
+            ?.takeIf { it.startsWith("/api/jokes/avatar/") || it.startsWith("https://") }
         return CommunityJoke(
             id = value.optString("id"),
             text = value.optString("text"),
@@ -248,16 +413,19 @@ internal class CommunityJokesApi(context: Context) {
             reactions = reactions,
             viewerReaction = value.optString("viewer_reaction").takeIf { it in REACTIONS },
             authorName = value.strOrNull("author_name"),
+            githubLogin = value.strOrNull("github_login"),
             commentsTotal = value.optInt("comments_total", 0),
             comments = comments,
             editedAtMillis = value.optLong("edited_at", 0L),
             isOwn = value.optBoolean("is_own", false),
+            isAnnouncement = value.optBoolean("is_announcement", false),
+            pinned = value.optBoolean("pinned", false),
+            sharedUrl = value.strOrNull("shared_url"),
             attachmentUrl = value.optJSONObject("attachment")?.optString("url")
                 ?.takeIf { it.startsWith("/api/jokes/attachment/") },
             attachmentMime = value.optJSONObject("attachment")?.optString("mime")
                 ?.takeIf { it.isNotBlank() },
-            authorAvatarUrl = value.optString("author_avatar_url")
-                ?.takeIf { it.startsWith("/api/jokes/avatar/") },
+            authorAvatarUrl = rawAvatar,
         )
     }
 
@@ -353,17 +521,87 @@ internal class CommunityJokesApi(context: Context) {
         private const val KEY_FEED_CACHE = "feed_cache_v1"
         // Harus sama dengan COMMUNITY_JOKE_REACTIONS di worker.
         val REACTIONS = listOf(
-            "😂", "😭", "💀", "🔥", "👍", "👎", "❤️", "🎉",
-            "🤔", "😍", "🥳", "😎", "🙏", "👏", "💯", "🤣",
-            "😡", "😱", "🥶", "🤯", "😴", "🍿", "⚡", "🏆",
+            "👍", "❤️", "😂", "😮", "😢", "🙏", "🔥", "🎉",
+            "😭", "💀", "👎", "🤔", "😍", "🥳", "😎", "👏",
+            "💯", "🤣", "😡", "😱", "🥶", "🤯", "😴", "🍿", "⚡", "🏆",
         )
-        val QUICK_REACTIONS = listOf("😂", "💀", "🔥", "👍", "❤️", "🎉")
+        // Reaksi cepat gaya WhatsApp
+        val QUICK_REACTIONS = listOf("👍", "❤️", "😂", "😮", "😢", "🙏", "🔥")
     }
 }
+
+private val ogMemoryCache = object : android.util.LruCache<String, XyOpenGraphData>(80) {}
+
+internal fun recordAndGetLocalUsageSeconds(context: Context, addDeltaSeconds: Long = 0L): Long {
+    val prefs = context.getSharedPreferences("xydesk_usage_stats", Context.MODE_PRIVATE)
+    val now = System.currentTimeMillis()
+    val firstInstall = prefs.getLong("first_install_at", 0L).let {
+        if (it <= 0L) {
+            prefs.edit().putLong("first_install_at", now).putInt("sessions_count", 1).apply()
+            now
+        } else it
+    }
+    val prevSec = prefs.getLong("total_active_seconds", 900L).coerceAtLeast(300L)
+    val updated = (prevSec + addDeltaSeconds.coerceIn(0L, 7200L)).coerceAtLeast(300L)
+    if (addDeltaSeconds > 0L) {
+        prefs.edit().putLong("total_active_seconds", updated).apply()
+    }
+    return updated
+}
+
+internal fun incrementLocalUsageSessionCount(context: Context) {
+    val prefs = context.getSharedPreferences("xydesk_usage_stats", Context.MODE_PRIVATE)
+    val c = prefs.getInt("sessions_count", 1).coerceAtLeast(1)
+    prefs.edit().putInt("sessions_count", c + 1).apply()
+}
+
+internal fun getLocalUsageSessionCount(context: Context): Int {
+    val prefs = context.getSharedPreferences("xydesk_usage_stats", Context.MODE_PRIVATE)
+    return prefs.getInt("sessions_count", 1).coerceAtLeast(1)
+}
+
+internal data class XyOpenGraphData(
+    val url: String,
+    val domain: String,
+    val siteName: String,
+    val title: String,
+    val description: String,
+    val image: String,
+    val safe: Boolean = true,
+    val shieldBadge: String = "XyShield Verified",
+)
+
+internal data class XyNotificationItem(
+    val id: String,
+    val category: String, // "announcement" | "inbox" | "reply" | "mention"
+    val title: String,
+    val body: String,
+    val actorName: String,
+    val actorGithub: String = "",
+    val actorAvatar: String = "",
+    val jokeId: String = "",
+    val createdAtMillis: Long = 0L,
+)
+
+internal data class XyLeaderboardEntry(
+    val rank: Int,
+    val name: String,
+    val githubLogin: String = "",
+    val avatarUrl: String = "",
+    val country: String = "ID",
+    val flag: String = "🇮🇩",
+    val isFounder: Boolean = false,
+    val totalSeconds: Long = 0L,
+    val sessionsCount: Int = 1,
+)
 
 internal data class JokeComment(
     val id: String,
     val name: String?,
+    val githubLogin: String? = null,
+    val avatarUrl: String? = null,
+    val replyToId: String? = null,
+    val replyToName: String? = null,
     val text: String,
     val createdAtMillis: Long,
     /** Komentar milik pengguna ini (untuk tombol hapus di bottom sheet). */
@@ -382,10 +620,14 @@ internal data class CommunityJoke(
     val reactions: Map<String, Int>,
     val viewerReaction: String?,
     val authorName: String? = null,
+    val githubLogin: String? = null,
     val commentsTotal: Int = 0,
     val comments: List<JokeComment> = emptyList(),
     val editedAtMillis: Long = 0L,
     val isOwn: Boolean = false,
+    val isAnnouncement: Boolean = false,
+    val pinned: Boolean = false,
+    val sharedUrl: String? = null,
     val attachmentUrl: String? = null,
     val attachmentMime: String? = null,
     val authorAvatarUrl: String? = null,

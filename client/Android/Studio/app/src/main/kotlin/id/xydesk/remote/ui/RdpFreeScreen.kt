@@ -1139,6 +1139,58 @@ fun RdpFreeScreen(onBack: () -> Unit, onConnect: (ConnectionProfile) -> Unit) {
                         val isRunningOrQueued = vs?.phase == XyRdpPhase.PREPARING ||
                             vs?.phase == XyRdpPhase.QUEUED ||
                             vs?.phase == XyRdpPhase.READY
+                        val isLinuxTarget = runnerImage.startsWith("ubuntu", ignoreCase = true)
+                        val isLinuxPolosTarget = isLinuxTarget && linuxMode == "polos"
+                        Text(
+                            text = when {
+                                isLinuxPolosTarget -> "Target Sesi: Linux Polos SSH ($runnerImage · Port :22)"
+                                isLinuxTarget -> "Target Sesi: Linux Desktop XFCE4 ($runnerImage · RDP :3389)"
+                                else -> "Target Sesi: Windows Server RDP ($runnerImage · RDP :3389)"
+                            },
+                            style = MaterialTheme.typography.labelMedium,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.primary,
+                        )
+                        Spacer(Modifier.height(6.dp))
+                        Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                            XyPillButton(
+                                "Windows RDP",
+                                {
+                                    runnerImage = "windows-2022"
+                                    linuxMode = "desktop"
+                                    saveSettings()
+                                },
+                                primary = !isLinuxTarget,
+                                compact = true,
+                                enabled = !busy && !isRunningOrQueued,
+                                modifier = Modifier.weight(1f),
+                            )
+                            XyPillButton(
+                                "Linux Desktop",
+                                {
+                                    if (!runnerImage.startsWith("ubuntu", ignoreCase = true)) runnerImage = "ubuntu-24.04"
+                                    linuxMode = "desktop"
+                                    saveSettings()
+                                },
+                                primary = isLinuxTarget && !isLinuxPolosTarget,
+                                compact = true,
+                                enabled = !busy && !isRunningOrQueued,
+                                modifier = Modifier.weight(1f),
+                            )
+                            XyPillButton(
+                                "Linux SSH",
+                                {
+                                    if (!runnerImage.startsWith("ubuntu", ignoreCase = true)) runnerImage = "ubuntu-24.04"
+                                    linuxMode = "polos"
+                                    saveSettings()
+                                },
+                                primary = isLinuxPolosTarget,
+                                compact = true,
+                                enabled = !busy && !isRunningOrQueued,
+                                modifier = Modifier.weight(1f),
+                            )
+                        }
+                        Spacer(Modifier.height(10.dp))
                         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                             Box(Modifier.weight(1f)) {
                                 XyPillButton(
@@ -1478,14 +1530,20 @@ fun RdpFreeScreen(onBack: () -> Unit, onConnect: (ConnectionProfile) -> Unit) {
         }
     }
     confirmAction?.let { action ->
+        val isLin = runnerImage.startsWith("ubuntu", ignoreCase = true)
+        val osDesc = when {
+            isLin && linuxMode == "polos" -> "Linux Polos SSH ($runnerImage · Port :22)"
+            isLin -> "Linux Desktop XFCE4 ($runnerImage · RDP :3389)"
+            else -> "Windows Server RDP ($runnerImage · RDP :3389)"
+        }
         XyDialog(
             title = when (action) {
-                "start" -> "Mulai RDP?"
+                "start" -> "Mulai Sesi ($osDesc)?"
                 "stop" -> "Hentikan RDP?"
                 else -> "Keluar GitHub?"
             },
             body = when (action) {
-                "start" -> "Workflow rdp-6h dikirim dengan pengaturan & checklist di atas menggunakan kuota GitHub Actions-mu. Data pengguna dari sesi sebelumnya otomatis dipulihkan."
+                "start" -> "Menjalankan $osDesc via workflow rdp-6h menggunakan kuota GitHub Actions-mu. Data pengguna dari sesi sebelumnya otomatis dipulihkan."
                 "stop" -> "Sesi aktif dihentikan. Folder pengguna disimpan dulu ke artifact supaya sesi berikutnya lanjut, bukan dari nol."
                 else -> "App lupa token GitHub di HP ini (repo fork dan sesi di GitHub tidak tersentuh)."
             },

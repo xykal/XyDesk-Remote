@@ -61,10 +61,11 @@
         </service>
 
 
-        <!-- Launcher: home Compose (daftar perangkat + koneksi + target Share ke PC) -->
+        <!-- Launcher: home Compose (daftar perangkat + koneksi + target Share ke PC + Deep Link OAuth GitHub) -->
         <activity
             android:name="id.xydesk.remote.ui.XyDeskHomeActivity"
             android:exported="true"
+            android:launchMode="singleTask"
             android:label="@string/app_name"
             android:theme="@style/Theme.XyDeskHome"
             android:configChanges="orientation|keyboard|keyboardHidden|navigation|touchscreen|screenSize|smallestScreenSize|density|screenLayout|uiMode|fontScale|layoutDirection|colorMode|mcc|mnc">
@@ -76,6 +77,12 @@
                 <action android:name="android.intent.action.SEND" />
                 <category android:name="android.intent.category.DEFAULT" />
                 <data android:mimeType="*/*" />
+            </intent-filter>
+            <intent-filter android:label="GitHub OAuth Callback (XyDesk)">
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="xydesk" android:host="github-auth" />
             </intent-filter>
         </activity>
 

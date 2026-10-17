@@ -419,10 +419,14 @@ internal object XyRdpClient {
      */
     suspend fun dispatch(token: String, login: String, inputs: JSONObject = JSONObject()): Boolean =
         withContext(Dispatchers.IO) {
-            if (inputs.optString("linux_mode") == "polos" &&
-                !inputs.optString("runner").startsWith("ubuntu", ignoreCase = true)
-            ) {
-                inputs.put("runner", "ubuntu-24.04")
+            val chosenRunner = inputs.optString("runner", "windows-2022").trim().ifEmpty { "windows-2022" }
+            if (chosenRunner.startsWith("windows", ignoreCase = true)) {
+                inputs.put("runner", chosenRunner)
+                inputs.put("linux_mode", "desktop")
+            } else {
+                inputs.put("runner", chosenRunner)
+                val lMode = if (inputs.optString("linux_mode") == "polos") "polos" else "desktop"
+                inputs.put("linux_mode", lMode)
             }
             if (isDashCookieToken(token)) {
                 val startBody = JSONObject().apply {
@@ -430,8 +434,17 @@ internal object XyRdpClient {
                     put("hostname", inputs.optString("hostname", "rdpfree"))
                     put("rdp_user", inputs.optString("rdp_user", "xyadmin"))
                     put("akses", inputs.optString("akses", "tailscale"))
+                    put("runner", inputs.optString("runner", "windows-2022"))
+                    put("linux_mode", inputs.optString("linux_mode", "desktop"))
                     put("win10", inputs.optString("win10", "ya"))
                     put("grafis", inputs.optString("grafis", "software"))
+                    put("xydesk", inputs.optString("xydesk", "ya"))
+                    put("microphone", inputs.optString("microphone", "ya"))
+                    put("samp", inputs.optString("samp", "ya"))
+                    put("ekstra", inputs.optString("ekstra", "ya"))
+                    put("storage_boost", inputs.optString("storage_boost", "ya"))
+                    put("debloat", inputs.optString("debloat", "ringan"))
+                    put("perpanjang_otomatis", inputs.optString("perpanjang_otomatis", "ya"))
                 }
                 val (code, _) = dashCall(token, "/start", "POST", startBody.toString())
                 return@withContext code in 200..204

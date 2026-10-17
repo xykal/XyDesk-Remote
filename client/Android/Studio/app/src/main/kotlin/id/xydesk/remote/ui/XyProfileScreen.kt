@@ -559,7 +559,7 @@ private fun CommunityAccountCard(
                     if (src == null) {
                         message = xyNow("Gambar tidak terbaca.", "Couldn't read the image.")
                     } else {
-                        val side = 256
+                        val side = 512
                         val scale = minOf(1f, side / maxOf(src.width, src.height).toFloat())
                         val bmp = if (scale < 1f) {
                             android.graphics.Bitmap.createScaledBitmap(
@@ -574,15 +574,15 @@ private fun CommunityAccountCard(
                             @Suppress("DEPRECATION")
                             android.graphics.Bitmap.CompressFormat.WEBP
                         }
-                        bmp.compress(fmt, 85, stream)
+                        bmp.compress(fmt, 90, stream)
                         val bytes = stream.toByteArray()
-                        if (bytes.size > 200_000) {
+                        if (bytes.size > 1_200_000) {
                             message = xyNow("Foto terlalu besar. Coba gambar lain.", "Photo too large. Try another image.")
                         } else {
                             avatarFile.writeBytes(bytes)
                             avatarBitmap = bmp
                             runCatching { api.uploadAvatar(bytes, "image/webp") }
-                            message = xyNow("Foto profil disimpan.", "Profile photo saved.")
+                            message = xyNow("Foto profil HD berhasil disimpan.", "HD profile photo saved.")
                         }
                     }
                 } finally {
@@ -592,7 +592,8 @@ private fun CommunityAccountCard(
         }
     }
     androidx.compose.runtime.LaunchedEffect(Unit) {
-        val gh = runCatching {
+        val savedGh = getVerifiedGitHubLogin(context)
+        val gh = savedGh ?: runCatching {
             val pat = id.xydesk.remote.security.CredentialVault(context.applicationContext)
                 .get(id.xydesk.remote.ui.rdp.XyRdpConfig.VAULT_PAT_ID)
             if (pat != null) id.xydesk.remote.ui.rdp.XyRdpClient.whoami(pat) else null
@@ -604,8 +605,30 @@ private fun CommunityAccountCard(
                 runCatching { api.setDisplayName(gh) }
                 name = api.displayName() ?: gh
             }
+            // Muat otomatis foto profil GitHub bila belum ada foto profil lokal
+            if (avatarBitmap == null) {
+                val ghBmp = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+                    runCatching {
+                        val urlStr = getVerifiedGitHubAvatarUrl(context)?.takeIf { it.isNotBlank() }
+                            ?: "https://github.com/$gh.png?size=160"
+                        val conn = java.net.URL(urlStr).openConnection() as java.net.HttpURLConnection
+                        conn.connectTimeout = 6000
+                        conn.readTimeout = 6000
+                        conn.instanceFollowRedirects = true
+                        if (conn.responseCode in 200..299) {
+                            val bytes = conn.inputStream.use { it.readBytes() }
+                            android.graphics.BitmapFactory.decodeByteArray(bytes, 0, bytes.size)
+                        } else null
+                    }.getOrNull()
+                }
+                if (ghBmp != null) avatarBitmap = ghBmp
+            }
         }
     }
+
+    val activeUsageSecs = remember { recordAndGetLocalUsageSeconds(context, 0L) }
+    val sessionsPlayed = remember { getLocalUsageSessionCount(context) }
+    val favStickersCount = remember { CustomStickerVault.loadFavoriteKeys(context).size }
 
     XyGlassCard(padding = 16.dp) {
         Row(
@@ -669,7 +692,7 @@ private fun CommunityAccountCard(
                     horizontalArrangement = Arrangement.spacedBy(6.dp),
                 ) {
                     Text(
-                        name ?: githubUser ?: xy("Tamu $accountId", "Guest $accountId"),
+                        name ?: githubUser ?: xy("Akun $accountId", "Account $accountId"),
                         style = MaterialTheme.typography.titleMedium,
                         fontWeight = FontWeight.Bold,
                     )
@@ -693,6 +716,7 @@ private fun CommunityAccountCard(
                         if (deviceCount == 1) xy("1 perangkat", "1 device")
                         else xy("{0} perangkat", "{0} devices", deviceCount),
                     )
+                    ProfileChip("⏱️ ${formatLeaderboardDuration(activeUsageSecs)}")
                 }
             }
 
@@ -769,25 +793,91 @@ private fun CommunityAccountCard(
                 )
             } else {
                 XyPillButton(
-                    text = xy("Authorize GitHub", "Authorize GitHub"),
+                    text = if (githubBusy) xy("Menghubungkan…", "Connecting…") else xy("Login GitHub (Chrome)", "Login GitHub (Chrome)"),
                     onClick = {
-                        GitHubDirectOAuthController.open(
-                            onSuccess = { _, user ->
-                                githubBusy = false
-                                githubWaitingCode = null
-                                githubWaitingUrl = null
-                                githubUser = user
-                                name = api.displayName() ?: user
-                                message = xyNow("Terhubung sebagai @$user!", "Connected as @$user!")
-                            },
-                            onError = { err ->
-                                githubBusy = false
-                                message = err
-                            },
-                        )
+                        githubBusy = true
+                        scope.launch {
+                            performGitHubInAppBrowserLogin(
+                                context = context,
+                                onCodeReady = { _, _ -> },
+                                onSuccess = { _, user ->
+                                    githubBusy = false
+                                    githubWaitingCode = null
+                                    githubWaitingUrl = null
+                                    githubUser = user
+                                    name = api.displayName() ?: user
+                                    message = xyNow("Terhubung sebagai @$user!", "Connected as @$user!")
+                                },
+                                onError = { err ->
+                                    githubBusy = false
+                                    message = err
+                                },
+                            )
+                        }
                     },
                     primary = true,
                     compact = true,
+                )
+            }
+        }
+
+        // Statistik Aktivitas Profil (Waktu Bermain/Aktif APK, Sesi, Stiker Favorit, Proteksi XyShield)
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .clip(RoundedCornerShape(12.dp))
+                .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.32f))
+                .padding(horizontal = 12.dp, vertical = 10.dp),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                Text(
+                    text = formatLeaderboardDuration(activeUsageSecs),
+                    style = MaterialTheme.typography.labelLarge,
+                    fontWeight = FontWeight.ExtraBold,
+                    color = MaterialTheme.colorScheme.primary,
+                )
+                Text(
+                    text = xy("Waktu Aktif", "Active Time"),
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                Text(
+                    text = "$sessionsPlayed",
+                    style = MaterialTheme.typography.labelLarge,
+                    fontWeight = FontWeight.ExtraBold,
+                )
+                Text(
+                    text = xy("Sesi Main", "Sessions"),
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                Text(
+                    text = "★ $favStickersCount",
+                    style = MaterialTheme.typography.labelLarge,
+                    fontWeight = FontWeight.ExtraBold,
+                )
+                Text(
+                    text = xy("Stiker Fav", "Fav Stickers"),
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                Text(
+                    text = "🛡️ ON",
+                    style = MaterialTheme.typography.labelLarge,
+                    fontWeight = FontWeight.ExtraBold,
+                )
+                Text(
+                    text = "XyShield",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             }
         }

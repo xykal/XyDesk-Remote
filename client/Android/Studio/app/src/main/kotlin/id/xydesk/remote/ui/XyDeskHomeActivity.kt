@@ -85,6 +85,7 @@ class XyDeskHomeActivity : ComponentActivity() {
         handleIncomingShareIntent(intent)
         handleWidgetConnectIntent(intent)
         handleOpenChatIntent(intent)
+        handleGitHubOAuthDeepLink(intent)
         setContent {
             XyThemeState.init(AppPrefs(this))
             val isDark = xyDark()
@@ -153,6 +154,29 @@ class XyDeskHomeActivity : ComponentActivity() {
         handleIncomingShareIntent(intent)
         handleWidgetConnectIntent(intent)
         handleOpenChatIntent(intent)
+        handleGitHubOAuthDeepLink(intent)
+    }
+
+    private fun handleGitHubOAuthDeepLink(incoming: Intent?) {
+        val data = incoming?.data ?: return
+        if (data.scheme == "xydesk" && data.host == "github-auth") {
+            val token = data.getQueryParameter("token").orEmpty().trim()
+            val login = data.getQueryParameter("login").orEmpty().trim()
+            val name = data.getQueryParameter("name").orEmpty().trim()
+            val avatar = data.getQueryParameter("avatar").orEmpty().trim()
+            incoming.data = null
+            if (token.isNotEmpty() && login.isNotEmpty()) {
+                lifecycleScope.launch {
+                    GitHubDirectOAuthController.onDeepLinkReceived(
+                        context = applicationContext,
+                        token = token,
+                        login = login,
+                        displayName = name,
+                        avatarUrl = avatar,
+                    )
+                }
+            }
+        }
     }
 
     private fun handleOpenChatIntent(incoming: Intent?) {

@@ -1856,5 +1856,67 @@ test("ronde 48: global chat direct reply (/api/chat/send) + OneSignal push + Pla
   const sendThaiJson = await sendThai.json();
   assert.equal(sendThaiJson.message.country, "TH");
   assert.equal(sendThaiJson.message.flag, "🇹🇭");
+
+  // Ronde 57: Kirim media/stiker tanpa caption tidak menghasilkan teks "[Foto: ...]" atau "[Stiker: ...]".
+  const sendSilentMedia = await worker.fetch(new Request("https://api.xydeskremote.biz.id/api/chat/send", {
+    method: "POST",
+    headers: { "Content-Type": "application/json", "cf-ipcountry": "ID" },
+    body: JSON.stringify({
+      name: "xykal",
+      github_login: "xykal",
+      text: "",
+      attachment_type: "sticker",
+      attachment_kind: "sticker",
+      attachment_data: "sticker:xy_gg",
+    }),
+  }), env);
+  assert.equal(sendSilentMedia.status, 200);
+  const sendSilentMediaJson = await sendSilentMedia.json();
+  assert.equal(sendSilentMediaJson.message.text, "");
+
+  // Ronde 57: XyShield Anti-Virus menolak pengiriman file/link berbahaya (.exe/.apk/grabify).
+  const sendVirus = await worker.fetch(new Request("https://api.xydeskremote.biz.id/api/chat/send", {
+    method: "POST",
+    headers: { "Content-Type": "application/json", "cf-ipcountry": "ID" },
+    body: JSON.stringify({
+      name: "Attacker",
+      text: "Download cheat https://evil.example/trojan.exe",
+    }),
+  }), env);
+  assert.equal(sendVirus.status, 400);
+  const sendVirusJson = await sendVirus.json();
+  assert.equal(sendVirusJson.code, "malicious_link_blocked");
+
+  // Ronde 57: Leaderboard Top 1–100 tersedia & mencatat durasi pemakaian APK/bermain.
+  const lbPost = await worker.fetch(new Request("https://api.xydeskremote.biz.id/api/leaderboard", {
+    method: "POST",
+    headers: { "Content-Type": "application/json", "cf-ipcountry": "ID" },
+    body: JSON.stringify({
+      client_id: "550e8400-e29b-41d4-a716-446655440000",
+      github_login: "xykal",
+      name: "xykal",
+      delta_seconds: 600,
+      total_seconds: 500000,
+      sessions_count: 150,
+    }),
+  }), env);
+  assert.equal(lbPost.status, 200);
+  const lbJson = await lbPost.json();
+  assert.equal(lbJson.status, "ok");
+  assert.ok(Array.isArray(lbJson.items));
+  assert.ok(lbJson.items.length >= 100);
+  assert.equal(lbJson.items[0].rank, 1);
+
+  // Ronde 57: OG Preview memblokir URL berbahaya dengan XyShield & mengizinkan URL publik (GitHub/YouTube).
+  const ogBad = await worker.fetch(new Request("https://api.xydeskremote.biz.id/api/og?url=https%3A%2F%2Fevil.test%2Fmalware.exe"), env);
+  assert.equal(ogBad.status, 403);
+  const ogBadJson = await ogBad.json();
+  assert.equal(ogBadJson.safe, false);
+
+  const ogGood = await worker.fetch(new Request("https://api.xydeskremote.biz.id/api/og?url=https%3A%2F%2Fgithub.com%2Fxykal%2FXyDesk-Remote"), env);
+  assert.equal(ogGood.status, 200);
+  const ogGoodJson = await ogGood.json();
+  assert.equal(ogGoodJson.safe, true);
+  assert.ok(ogGoodJson.image.includes("opengraph.githubassets.com"));
 });
 

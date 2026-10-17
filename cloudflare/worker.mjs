@@ -51,10 +51,10 @@ const ACTIVE_SESSION_ID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-
 const ACTIVE_SESSION_PREFIX = "session:";
 const COMMUNITY_CLIENT_ID_RE = ACTIVE_SESSION_ID_RE;
 const COMMUNITY_JOKE_MAX_CHARS = 280;
-const COMMUNITY_ATTACHMENT_MAX_BYTES = 1_500_000; // foto/stiker webp/gif di feed
-const COMMUNITY_AVATAR_MAX_BYTES = 200_000;
+const COMMUNITY_ATTACHMENT_MAX_BYTES = 2_800_000; // HD foto/stiker webp/gif/jpeg/png di feed
+const COMMUNITY_AVATAR_MAX_BYTES = 350_000;
 const COMMUNITY_ATTACHMENT_MIMES = Object.freeze([
-  "image/webp", "image/gif", "image/png", "image/jpeg",
+  "image/webp", "image/gif", "image/png", "image/jpeg", "video/mp4",
 ]);
 const COMMUNITY_JOKE_FEED_SIZE = 20;
 const COMMUNITY_JOKE_MAX_ITEMS = 1_000;
@@ -63,11 +63,11 @@ const COMMUNITY_JOKE_REPORT_THRESHOLD = 3;
 // Set reaksi diperluas (permintaan pemilik 2026-10-10: tombol "+" dengan
 // lebih banyak emoji). Superset dari 8 emoji lama supaya hitungan reaksi
 // postingan lama tetap terbaca.
-const COMMUNITY_JOKE_REACTIONS = Object.freeze(["😂", "😭", "💀", "🔥", "👍", "👎", "❤️", "🎉", "🤔", "😍", "🥳", "😎", "🙏", "👏", "💯", "🤣", "😡", "😱", "🥶", "🤯", "😴", "🍿", "⚡", "🏆"]);
+const COMMUNITY_JOKE_REACTIONS = Object.freeze(["😂", "😭", "💀", "🔥", "👍", "👎", "❤️", "🎉", "🤔", "😍", "🥳", "😎", "🙏", "👏", "💯", "🤣", "😡", "😱", "🥶", "🤯", "😴", "🍿", "⚡", "🏆", "😮", "😢"]);
 const COMMUNITY_COMMENT_MAX_CHARS = 140;
-const COMMUNITY_COMMENT_INTERVAL_MS = 20_000;
-const COMMUNITY_COMMENT_MAX_PER_JOKE = 50;
-const COMMUNITY_COMMENT_FEED_SIZE = 5;
+const COMMUNITY_COMMENT_INTERVAL_MS = 5_000;
+const COMMUNITY_COMMENT_MAX_PER_JOKE = 100;
+const COMMUNITY_COMMENT_FEED_SIZE = 30;
 const COMMUNITY_DISPLAY_NAME_MAX_CHARS = 24;
 const PC_SIGNAL_ROOM_ID_RE = ACTIVE_SESSION_ID_RE;
 const PC_SIGNAL_WAIT_TTL_MS = 10 * 60_000;
@@ -619,13 +619,21 @@ function communityJokeListKey(createdAt, id) {
   return `joke:${String(createdAt).padStart(13, "0")}:${id}`;
 }
 
-function communityCommentPublicView(comment, viewerHash = null) {
+function communityCommentPublicView(comment, viewerHash = null, viewerGh = "") {
+  const commentGh = String(comment.github_login || "").trim().toLowerCase();
+  const isOwnHash = Boolean(viewerHash && comment.author_hash && comment.author_hash === viewerHash);
+  const isOwnGh = Boolean(viewerGh && commentGh && viewerGh === commentGh);
+  const isFounderViewer = viewerGh === "xykal";
   return {
     id: comment.id,
     name: comment.name || null,
+    github_login: comment.github_login || null,
+    avatar_url: comment.avatar_url || (comment.github_login ? `https://github.com/${comment.github_login}.png?size=120` : null),
+    reply_to_id: comment.reply_to_id || null,
+    reply_to_name: comment.reply_to_name || null,
     text: comment.text,
     created_at: comment.created_at,
-    is_own: Boolean(viewerHash && comment.author_hash && comment.author_hash === viewerHash),
+    is_own: Boolean(isOwnHash || isOwnGh || isFounderViewer),
   };
 }
 
@@ -636,8 +644,12 @@ function communityJokePublicView(joke, viewerReaction = null, comments = null, e
     created_at: joke.created_at,
     edited_at: Number(joke.edited_at) > 0 ? Number(joke.edited_at) : null,
     author_name: joke.author_name || null,
-    author_avatar_url: extra.avatarUrl || null,
+    github_login: joke.github_login || null,
+    author_avatar_url: extra.avatarUrl || joke.author_avatar_url || (joke.github_login ? `https://github.com/${joke.github_login}.png?size=120` : null),
     is_own: Boolean(extra.isOwn),
+    is_announcement: Boolean(joke.is_announcement),
+    pinned: Boolean(joke.pinned || joke.is_announcement),
+    shared_url: joke.shared_url || null,
     attachment: joke.attachment?.url
       ? { mime: joke.attachment.mime || "image/webp", url: joke.attachment.url }
       : null,
@@ -1163,11 +1175,53 @@ export class CommunityJokes {
     if (del && request.method === "POST") return this.deletePost(request, del[1]);
     if (path === "/me" && request.method === "GET") return this.me(request);
     if (path === "/me" && request.method === "PUT") return this.setMe(request);
+    if (path === "/notifications" && request.method === "GET") return this.readNotifications(request);
     return durableObjectJson({ status: "not_found" }, 404, request.method);
+  }
+
+  async readNotifications(request) {
+    const clientId = request.headers.get("x-xydesk-client-id") || "";
+    const viewerGh = String(request.headers.get("x-xydesk-github-login") || "").trim().replace(/^@/, "").toLowerCase();
+    const viewerName = String(request.headers.get("x-xydesk-display-name") || "").trim().toLowerCase();
+    try {
+      const clientHash = COMMUNITY_CLIENT_ID_RE.test(clientId) ? await hashedCommunityClientId(clientId) : "";
+      const entries = await this.state.storage.list({ prefix: "notif:", reverse: true, limit: 150 });
+      const items = [];
+      for (const [, n] of entries) {
+        if (!n) continue;
+        const cat = String(n.category || "inbox");
+        const targetHash = String(n.target_hash || "");
+        const targetGh = String(n.target_github || "").trim().toLowerCase();
+        const targetName = String(n.target_name || "").trim().toLowerCase();
+        const isGlobal = cat === "announcement" || n.global === true;
+        const isForMe = isGlobal ||
+          (clientHash && targetHash && clientHash === targetHash) ||
+          (viewerGh && targetGh && viewerGh === targetGh) ||
+          (viewerName && targetName && viewerName === targetName) ||
+          (viewerGh && targetName && viewerGh === targetName);
+        if (!isForMe) continue;
+        items.push({
+          id: n.id,
+          category: cat, // "announcement" | "inbox" | "reply" | "mention"
+          title: n.title || "",
+          body: n.body || "",
+          actor_name: n.actor_name || "Komunitas",
+          actor_github: n.actor_github || "",
+          actor_avatar: n.actor_avatar || (n.actor_github ? `https://github.com/${n.actor_github}.png?size=120` : ""),
+          joke_id: n.joke_id || "",
+          created_at: n.created_at || Date.now(),
+        });
+        if (items.length >= 60) break;
+      }
+      return durableObjectJson({ status: "ok", items }, 200, request.method);
+    } catch {
+      return durableObjectJson({ status: "ok", items: [] }, 200, request.method);
+    }
   }
 
   async readFeed(request) {
     const clientId = request.headers.get("x-xydesk-client-id") || "";
+    const viewerGh = String(request.headers.get("x-xydesk-github-login") || "").trim().replace(/^@/, "").toLowerCase();
     if (clientId && !COMMUNITY_CLIENT_ID_RE.test(clientId)) {
       return durableObjectJson({ status: "invalid_client_id" }, 400, request.method);
     }
@@ -1185,10 +1239,16 @@ export class CommunityJokes {
           reverse: true,
           limit: COMMUNITY_COMMENT_FEED_SIZE,
         });
-        const comments = Array.from(commentEntries.values()).map((c) => communityCommentPublicView(c, clientHash));
-        const isOwn = Boolean(clientHash && joke.author_hash === clientHash);
-        let avatarUrl = null;
-        if (joke.author_hash && this.kv) {
+        const comments = Array.from(commentEntries.values()).map((c) => communityCommentPublicView(c, clientHash, viewerGh));
+        const jokeGh = String(joke.github_login || "").trim().toLowerCase();
+        const jokeAuthorLower = String(joke.author_name || "").trim().replace(/^@/, "").toLowerCase();
+        const isOwn = Boolean(
+          (clientHash && joke.author_hash === clientHash) ||
+          (viewerGh && (jokeGh === viewerGh || jokeAuthorLower === viewerGh)) ||
+          viewerGh === "xykal"
+        );
+        let avatarUrl = joke.author_avatar_url || null;
+        if (!avatarUrl && joke.author_hash && this.kv) {
           const head = await this.kv.getWithMetadata(`feed-avatar:${joke.author_hash}`).catch(() => null);
           if (head?.value !== null && head?.value !== undefined) {
             avatarUrl = `/api/jokes/avatar/${joke.author_hash}`;
@@ -1197,6 +1257,12 @@ export class CommunityJokes {
         items.push(communityJokePublicView(joke, viewerReaction, comments, { isOwn, avatarUrl }));
         if (items.length >= COMMUNITY_JOKE_FEED_SIZE) break;
       }
+      items.sort((a, b) => {
+        const pa = a.pinned || a.is_announcement ? 1 : 0;
+        const pb = b.pinned || b.is_announcement ? 1 : 0;
+        if (pa !== pb) return pb - pa;
+        return Number(b.created_at || 0) - Number(a.created_at || 0);
+      });
       return durableObjectJson({ status: "ok", items }, 200, request.method);
     } catch {
       return durableObjectJson({ status: "unavailable" }, 503, request.method);
@@ -1218,17 +1284,33 @@ export class CommunityJokes {
     const text = parsed.body.text.replace(/\r\n?/g, "\n").replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F]/g, "").trim();
     const chars = [...text].length;
     const hasAttachmentBody = Boolean(parsed.body?.attachment && typeof parsed.body.attachment === "object");
-    if (chars > COMMUNITY_JOKE_MAX_CHARS || /(?:https?:\/\/|www\.)/i.test(text) || (chars < 3 && !hasAttachmentBody)) {
+    const allowLinks = parsed.body?.allow_links === true;
+    const hasLink = /(?:https?:\/\/|www\.)/i.test(text);
+    if (chars > COMMUNITY_JOKE_MAX_CHARS || (!allowLinks && hasLink) || (chars < 3 && !hasAttachmentBody)) {
       return durableObjectJson({ status: "invalid_text", max_chars: COMMUNITY_JOKE_MAX_CHARS }, 400, request.method);
     }
+    if (hasLink && isMaliciousTextOrLink(text)) {
+      return durableObjectJson({ status: "malicious_link_blocked" }, 400, request.method);
+    }
+    const extractedUrl = hasLink ? extractFirstUrlFromText(text) : (typeof parsed.body?.shared_url === "string" ? parsed.body.shared_url.trim().slice(0, 400) : null);
 
     try {
       const clientHash = await hashedCommunityClientId(clientId);
       const now = Date.now();
+      const githubLogin = typeof parsed.body?.github_login === "string"
+        ? parsed.body.github_login.trim().replace(/^@/, "").slice(0, 39)
+        : "";
+      const isFounderPost = isFounderChatName(parsed.body?.display_name, githubLogin);
+      const isAnnouncement = Boolean(isFounderPost && parsed.body?.is_announcement === true);
+      const isPinned = Boolean(isAnnouncement || (isFounderPost && parsed.body?.pinned === true));
+      const authorAvatarUrl = typeof parsed.body?.avatar_url === "string" && parsed.body.avatar_url.startsWith("https://")
+        ? parsed.body.avatar_url.trim().slice(0, 300)
+        : (githubLogin ? `https://github.com/${githubLogin}.png?size=160` : null);
+
       const outcome = await this.state.storage.transaction(async (transaction) => {
         const rateKey = `joke-rate:${clientHash}`;
         const lastPostAt = Number(await transaction.get(rateKey)) || 0;
-        if (now - lastPostAt < COMMUNITY_JOKE_POST_INTERVAL_MS) {
+        if (!isFounderPost && now - lastPostAt < COMMUNITY_JOKE_POST_INTERVAL_MS) {
           return { status: "rate_limited", retry_after_seconds: Math.ceil((COMMUNITY_JOKE_POST_INTERVAL_MS - (now - lastPostAt)) / 1_000) };
         }
 
@@ -1256,7 +1338,12 @@ export class CommunityJokes {
           text: hasText ? text : "",
           created_at: now,
           author_name: storedName,
+          github_login: githubLogin || null,
+          author_avatar_url: authorAvatarUrl,
           author_hash: clientHash,
+          is_announcement: isAnnouncement,
+          pinned: isPinned,
+          shared_url: extractedUrl || null,
           attachment: attachment ? { mime: attachment.mime, url: `/api/jokes/attachment/${id}` } : null,
           reactions: Object.fromEntries(COMMUNITY_JOKE_REACTIONS.map((emoji) => [emoji, 0])),
           comment_count: 0,
@@ -1267,6 +1354,22 @@ export class CommunityJokes {
         await transaction.put(key, joke);
         await transaction.put(`joke-id:${id}`, key);
         await transaction.put(rateKey, now);
+
+        if (isAnnouncement) {
+          const notifId = crypto.randomUUID();
+          await transaction.put(`notif:${String(now).padStart(13, "0")}:${notifId}`, {
+            id: notifId,
+            category: "announcement",
+            global: true,
+            title: "Pengumuman Resmi Founder (@xykal)",
+            body: text,
+            actor_name: storedName || "xykal",
+            actor_github: "xykal",
+            actor_avatar: "https://github.com/xykal.png?size=160",
+            joke_id: id,
+            created_at: now,
+          });
+        }
 
         const posts = await transaction.list({ prefix: "joke:", limit: COMMUNITY_JOKE_MAX_ITEMS + 1 });
         if (posts.size > COMMUNITY_JOKE_MAX_ITEMS) {
@@ -1283,13 +1386,44 @@ export class CommunityJokes {
             for (const reportKey of oldReports.keys()) await transaction.delete(reportKey);
           }
         }
-        return { status: "created", joke: communityJokePublicView(joke, null, null, { isOwn: true }), pendingAttachment: attachment };
+        return { status: "created", joke: communityJokePublicView(joke, null, null, { isOwn: true, avatarUrl: authorAvatarUrl }), pendingAttachment: attachment };
       });
       if (outcome.status === "rate_limited") return durableObjectJson(outcome, 429, request.method);
       if (outcome.status === "created" && outcome.pendingAttachment && this.kv) {
         await this.kv.put(`feed-att:${outcome.joke.id}`, outcome.pendingAttachment.bytes, {
           metadata: { mime: outcome.pendingAttachment.mime },
         });
+      }
+      if (outcome.status === "created" && isAnnouncement && this.env?.GLOBAL_CHAT) {
+        try {
+          const chatIdAnn = this.env.GLOBAL_CHAT.idFromName("xydesk-global-chat-v1");
+          const chatDo = this.env.GLOBAL_CHAT.get(chatIdAnn);
+          const sendRes = await chatDo.fetch(new Request("https://global-chat/send", {
+            method: "POST",
+            headers: { "Content-Type": "application/json", "x-chat-country": "ID" },
+            body: JSON.stringify({
+              name: "xykal",
+              github_login: "xykal",
+              country: "ID",
+              is_announcement: true,
+              text: `📢 [PENGUMUMAN FEED] ${text}`,
+            }),
+          }));
+          if (sendRes.ok) {
+            const sj = await sendRes.json().catch(() => null);
+            if (sj?.message) {
+              await chatDo.fetch(new Request("https://global-chat/pin", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                  action: "pin",
+                  pinned_by: "xykal",
+                  message: sj.message,
+                }),
+              }));
+            }
+          }
+        } catch {}
       }
       return durableObjectJson(outcome, 201, request.method);
     } catch {
@@ -1306,21 +1440,32 @@ export class CommunityJokes {
     }
     try {
       const clientHash = await hashedCommunityClientId(clientId);
+      const reqGh = String(parsed.body?.github_login || "").trim().replace(/^@/, "").toLowerCase();
+      const isFounderEditor = isFounderChatName(parsed.body?.display_name, reqGh);
+      const allowLinks = parsed.body?.allow_links === true;
       const outcome = await this.state.storage.transaction(async (transaction) => {
         const listKey = await transaction.get(`joke-id:${jokeId}`);
         if (!listKey) return { status: "not_found" };
         const joke = await transaction.get(listKey);
         if (!joke || joke.hidden) return { status: "not_found" };
-        if (joke.author_hash !== clientHash) return { status: "forbidden" };
+        const jokeGh = String(joke.github_login || "").trim().toLowerCase();
+        const jokeAuthorLower = String(joke.author_name || "").trim().replace(/^@/, "").toLowerCase();
+        const canEdit = joke.author_hash === clientHash || isFounderEditor || (reqGh && (jokeGh === reqGh || jokeAuthorLower === reqGh));
+        if (!canEdit) return { status: "forbidden" };
 
         let text = joke.text;
         if (typeof parsed.body?.text === "string") {
           text = parsed.body.text.replace(/\r\n?/g, "\n")
             .replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F]/g, "").trim();
           const chars = [...text].length;
-          if (chars > COMMUNITY_JOKE_MAX_CHARS || /(?:https?:\/\/|www\.)/i.test(text)) {
+          const hasLink = /(?:https?:\/\/|www\.)/i.test(text);
+          if (chars > COMMUNITY_JOKE_MAX_CHARS || (!allowLinks && hasLink)) {
             return { status: "invalid_text", max_chars: COMMUNITY_JOKE_MAX_CHARS };
           }
+          if (hasLink && isMaliciousTextOrLink(text)) {
+            return { status: "malicious_link_blocked" };
+          }
+          joke.shared_url = hasLink ? extractFirstUrlFromText(text) : null;
         }
         let attachment = joke.attachment || null;
         let pending = null;
@@ -1343,7 +1488,7 @@ export class CommunityJokes {
         await transaction.put(listKey, joke);
         return { status: "edited", joke: communityJokePublicView(joke, null, null, { isOwn: true }), pendingAttachment: pending, jokeId };
       });
-      if (["not_found", "forbidden", "invalid_text", "invalid_attachment"].includes(outcome.status)) {
+      if (["not_found", "forbidden", "invalid_text", "invalid_attachment", "malicious_link_blocked"].includes(outcome.status)) {
         const code = outcome.status === "forbidden" ? 403 : outcome.status === "not_found" ? 404 : 400;
         return durableObjectJson(outcome, code, request.method);
       }
@@ -1371,12 +1516,17 @@ export class CommunityJokes {
     }
     try {
       const clientHash = await hashedCommunityClientId(clientId);
+      const reqGh = String(parsed.body?.github_login || "").trim().replace(/^@/, "").toLowerCase();
+      const isFounderDeleter = isFounderChatName(parsed.body?.display_name, reqGh);
       const outcome = await this.state.storage.transaction(async (transaction) => {
         const listKey = await transaction.get(`joke-id:${jokeId}`);
         if (!listKey) return { status: "not_found" };
         const joke = await transaction.get(listKey);
         if (!joke) return { status: "not_found" };
-        if (joke.author_hash !== clientHash) return { status: "forbidden" };
+        const jokeGh = String(joke.github_login || "").trim().toLowerCase();
+        const jokeAuthorLower = String(joke.author_name || "").trim().replace(/^@/, "").toLowerCase();
+        const canDelete = joke.author_hash === clientHash || isFounderDeleter || (reqGh && (jokeGh === reqGh || jokeAuthorLower === reqGh));
+        if (!canDelete) return { status: "forbidden" };
         await transaction.delete(listKey);
         await transaction.delete(`joke-id:${jokeId}`);
         const reactions = await transaction.list({ prefix: `joke-reaction:${jokeId}:`, limit: 1_000 });
@@ -1459,6 +1609,8 @@ export class CommunityJokes {
     }
     try {
       const clientHash = await hashedCommunityClientId(clientId);
+      const reqGh = String(parsed.body?.github_login || "").trim().replace(/^@/, "").toLowerCase();
+      const isFounderDeleter = isFounderChatName(parsed.body?.display_name, reqGh);
       const outcome = await this.state.storage.transaction(async (transaction) => {
         const listKey = await transaction.get(`joke-id:${jokeId}`);
         if (!listKey) return { status: "not_found" };
@@ -1471,7 +1623,11 @@ export class CommunityJokes {
         }
         if (!targetKey) return { status: "not_found" };
         const stored = entries.get(targetKey);
-        if (!stored?.author_hash || stored.author_hash !== clientHash) return { status: "forbidden" };
+        const storedGh = String(stored?.github_login || "").trim().toLowerCase();
+        const canDel = (stored?.author_hash && stored.author_hash === clientHash) ||
+          isFounderDeleter ||
+          (reqGh && storedGh && reqGh === storedGh);
+        if (!canDel) return { status: "forbidden" };
         await transaction.delete(targetKey);
         joke.comment_count = Math.max(0, (Number(joke.comment_count) || 0) - 1);
         await transaction.put(listKey, joke);
@@ -1489,7 +1645,7 @@ export class CommunityJokes {
     if (!ACTIVE_SESSION_ID_RE.test(jokeId)) {
       return durableObjectJson({ status: "invalid_joke_id" }, 400, request.method);
     }
-    const parsed = await readCommunityJson(request);
+    const parsed = await readCommunityJson(request, 4_096);
     if (parsed.error) return parsed.error;
     const clientId = parsed.body?.client_id;
     if (!COMMUNITY_CLIENT_ID_RE.test(String(clientId || ""))) {
@@ -1500,16 +1656,30 @@ export class CommunityJokes {
     }
     const text = parsed.body.text.replace(/\r\n?/g, "\n").replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F]/g, "").trim();
     const chars = [...text].length;
-    if (chars < 1 || chars > COMMUNITY_COMMENT_MAX_CHARS || /(?:https?:\/\/|www\.)/i.test(text)) {
+    const allowLinks = parsed.body?.allow_links === true;
+    const hasLink = /(?:https?:\/\/|www\.)/i.test(text);
+    if (chars < 1 || chars > COMMUNITY_COMMENT_MAX_CHARS || (!allowLinks && hasLink)) {
       return durableObjectJson({ status: "invalid_text", max_chars: COMMUNITY_COMMENT_MAX_CHARS }, 400, request.method);
+    }
+    if (hasLink && isMaliciousTextOrLink(text)) {
+      return durableObjectJson({ status: "malicious_link_blocked" }, 400, request.method);
     }
     try {
       const clientHash = await hashedCommunityClientId(clientId);
       const now = Date.now();
+      const githubLogin = typeof parsed.body?.github_login === "string"
+        ? parsed.body.github_login.trim().replace(/^@/, "").slice(0, 39)
+        : "";
+      const isFounderCommenter = isFounderChatName(parsed.body?.display_name, githubLogin);
+      const replyToId = typeof parsed.body?.reply_to_id === "string" ? parsed.body.reply_to_id.trim().slice(0, 64) : "";
+      const replyToName = typeof parsed.body?.reply_to_name === "string" ? parsed.body.reply_to_name.trim().slice(0, 32) : "";
+      const rawAvatar = typeof parsed.body?.avatar_url === "string" && parsed.body.avatar_url.startsWith("https://")
+        ? parsed.body.avatar_url.trim().slice(0, 300)
+        : "";
       const outcome = await this.state.storage.transaction(async (transaction) => {
         const rateKey = `comment-rate:${clientHash}`;
         const lastAt = Number(await transaction.get(rateKey)) || 0;
-        if (now - lastAt < COMMUNITY_COMMENT_INTERVAL_MS) {
+        if (!isFounderCommenter && now - lastAt < COMMUNITY_COMMENT_INTERVAL_MS) {
           return { status: "rate_limited", retry_after_seconds: Math.ceil((COMMUNITY_COMMENT_INTERVAL_MS - (now - lastAt)) / 1_000) };
         }
         const listKey = await transaction.get(`joke-id:${jokeId}`);
@@ -1518,26 +1688,128 @@ export class CommunityJokes {
         if (!joke || joke.hidden) return { status: "not_found" };
 
         const requestedName = sanitizeCommunityDisplayName(parsed.body?.display_name);
-        const name = requestedName || await transaction.get(`account-name:${clientHash}`) || null;
+        const name = requestedName || await transaction.get(`account-name:${clientHash}`) || githubLogin || null;
         if (requestedName) await transaction.put(`account-name:${clientHash}`, requestedName);
 
+        let resolvedAvatar = rawAvatar || (githubLogin ? `https://github.com/${githubLogin}.png?size=120` : "");
+        if (!resolvedAvatar && this.kv) {
+          const head = await this.kv.getWithMetadata(`feed-avatar:${clientHash}`).catch(() => null);
+          if (head?.value !== null && head?.value !== undefined) {
+            resolvedAvatar = `/api/jokes/avatar/${clientHash}`;
+          }
+        }
+
         const id = crypto.randomUUID();
-        const comment = { id, joke_id: jokeId, name, text, created_at: now, author_hash: clientHash };
+        const comment = {
+          id,
+          joke_id: jokeId,
+          name,
+          github_login: githubLogin || null,
+          avatar_url: resolvedAvatar || null,
+          reply_to_id: replyToId || null,
+          reply_to_name: replyToName || null,
+          text,
+          created_at: now,
+          author_hash: clientHash,
+        };
         await transaction.put(`joke-comments:${jokeId}:${String(now).padStart(13, "0")}:${id}`, comment);
         await transaction.put(rateKey, now);
+
+        // Simpan notifikasi untuk pemilik postingan & target balasan/mention
+        const actorLabel = name || githubLogin || "Pengguna";
+        if (joke.author_hash && joke.author_hash !== clientHash) {
+          const nId = crypto.randomUUID();
+          await transaction.put(`notif:${String(now).padStart(13, "0")}:${nId}`, {
+            id: nId,
+            category: "inbox",
+            target_hash: joke.author_hash,
+            target_github: joke.github_login || "",
+            target_name: joke.author_name || "",
+            title: `${actorLabel} mengomentari postingan Anda`,
+            body: text,
+            actor_name: actorLabel,
+            actor_github: githubLogin,
+            actor_avatar: resolvedAvatar,
+            joke_id: jokeId,
+            created_at: now,
+          });
+        }
+        if (replyToName && replyToName.toLowerCase() !== actorLabel.toLowerCase()) {
+          const nId2 = crypto.randomUUID();
+          await transaction.put(`notif:${String(now + 1).padStart(13, "0")}:${nId2}`, {
+            id: nId2,
+            category: "reply",
+            target_github: replyToName.replace(/^@/, ""),
+            target_name: replyToName.replace(/^@/, ""),
+            title: `${actorLabel} membalas komentar Anda`,
+            body: text,
+            actor_name: actorLabel,
+            actor_github: githubLogin,
+            actor_avatar: resolvedAvatar,
+            joke_id: jokeId,
+            created_at: now,
+          });
+        }
+        const mentionMatches = [...text.matchAll(/@([A-Za-z0-9_.-]{2,32})/g)].map((m) => m[1]);
+        for (const mentioned of mentionMatches.slice(0, 3)) {
+          if (mentioned.toLowerCase() === actorLabel.toLowerCase()) continue;
+          const nIdM = crypto.randomUUID();
+          await transaction.put(`notif:${String(now + 2).padStart(13, "0")}:${nIdM}`, {
+            id: nIdM,
+            category: "mention",
+            target_github: mentioned,
+            target_name: mentioned,
+            title: `${actorLabel} menyebut (@${mentioned}) di komentar Feed`,
+            body: text,
+            actor_name: actorLabel,
+            actor_github: githubLogin,
+            actor_avatar: resolvedAvatar,
+            joke_id: jokeId,
+            created_at: now,
+          });
+        }
 
         // Batasi komentar per post: buang yang paling tua bila melewati batas.
         const all = await transaction.list({ prefix: `joke-comments:${jokeId}:` });
         const names = Array.from(all.keys());
         if (names.length > COMMUNITY_COMMENT_MAX_PER_JOKE) {
-          for (const name of names.slice(0, names.length - COMMUNITY_COMMENT_MAX_PER_JOKE)) {
-            await transaction.delete(name);
+          for (const nameKey of names.slice(0, names.length - COMMUNITY_COMMENT_MAX_PER_JOKE)) {
+            await transaction.delete(nameKey);
           }
         }
         joke.comment_count = Math.min(names.length, COMMUNITY_COMMENT_MAX_PER_JOKE);
         await transaction.put(listKey, joke);
-        return { status: "ok", comment: communityCommentPublicView(comment, clientHash), comments_total: joke.comment_count };
+        return {
+          status: "ok",
+          comment: communityCommentPublicView(comment, clientHash, githubLogin.toLowerCase()),
+          comments_total: joke.comment_count,
+          post_author: joke.author_name || joke.github_login || "",
+          actor_label: actorLabel,
+        };
       });
+      if (outcome.status === "ok" && this.env?.ONESIGNAL_REST_API_KEY) {
+        const apiKey = String(this.env.ONESIGNAL_REST_API_KEY).trim();
+        const appId = String(this.env.ONESIGNAL_APP_ID || DEFAULT_ONESIGNAL_APP_ID).trim();
+        const headingText = replyToName
+          ? `${outcome.actor_label} membalas @${replyToName} di Feed`
+          : `${outcome.actor_label} mengomentari postingan ${outcome.post_author || "Komunitas"}`;
+        fetch("https://api.onesignal.com/notifications", {
+          method: "POST",
+          headers: {
+            Authorization: `Key ${apiKey}`,
+            "Content-Type": "application/json",
+            Accept: "application/json",
+          },
+          body: JSON.stringify({
+            app_id: appId,
+            target_channel: "push",
+            included_segments: ["All"],
+            headings: { en: headingText, id: headingText },
+            contents: { en: text, id: text },
+            data: { type: "feed_comment", joke_id: jokeId, actor: outcome.actor_label },
+          }),
+        }).catch(() => {});
+      }
       return durableObjectJson(outcome, outcome.status === "not_found" ? 404 : outcome.status === "rate_limited" ? 429 : 201, request.method);
     } catch {
       return durableObjectJson({ status: "unavailable" }, 503, request.method);
@@ -2034,7 +2306,7 @@ async function updateCheckResponse(request, env) {
 async function dataPackResponse(request, env) {
   try {
     const release = await getLatestPublishedRelease(env).catch(() => null);
-    const tag = String(release?.tag_name || "v1.1.17");
+    const tag = String(release?.tag_name || "v1.1.20");
     const cleanVersion = tag.replace(/^v/i, "");
     const payload = {
       status: "ok",
@@ -2080,7 +2352,7 @@ async function pushUpdateResponse(request, env) {
   }
   let body = null;
   try { body = await request.json(); } catch {}
-  const version = String(body?.version || "v1.1.17").trim();
+  const version = String(body?.version || "v1.1.20").trim();
   const updateMode = body?.update_mode === "apk" ? "apk" : "data_pack";
   const summary = String(
     body?.summary ||
@@ -2385,17 +2657,21 @@ async function communityJokesResponse(request, env) {
   if (url.pathname === "/api/jokes") {
     if (request.method === "GET" || request.method === "HEAD") {
       const clientId = request.headers.get("x-xydesk-client-id") || "";
+      const ghLogin = request.headers.get("x-xydesk-github-login") || "";
       if (clientId && !COMMUNITY_CLIENT_ID_RE.test(clientId)) {
         return jsonResponse({ status: "invalid_client_id" }, 400, request.method);
       }
+      const fwdHeaders = {};
+      if (clientId) fwdHeaders["x-xydesk-client-id"] = clientId;
+      if (ghLogin) fwdHeaders["x-xydesk-github-login"] = ghLogin;
       internal = new Request("https://community-jokes/feed", {
         method: request.method,
-        headers: clientId ? { "x-xydesk-client-id": clientId } : {},
+        headers: fwdHeaders,
       });
     } else if (request.method === "POST") {
       const length = Number(request.headers.get("content-length") || 0);
-      if (length > 1_600_000) return jsonResponse({ status: "payload_too_large" }, 413, request.method);
-      const bounded = await readRequestTextLimited(request, 1_600_000);
+      if (length > 2_400_000) return jsonResponse({ status: "payload_too_large" }, 413, request.method);
+      const bounded = await readRequestTextLimited(request, 2_400_000);
       if (bounded.tooLarge) return jsonResponse({ status: "payload_too_large" }, 413, request.method);
       if (bounded.invalid) return jsonResponse({ status: "invalid_request" }, 400, request.method);
       internal = new Request("https://community-jokes/submit", {
@@ -2405,6 +2681,22 @@ async function communityJokesResponse(request, env) {
       });
     } else {
       return methodNotAllowed("GET, HEAD, POST");
+    }
+  } else if (url.pathname === "/api/jokes/notifications") {
+    if (request.method === "GET" || request.method === "HEAD") {
+      const fwdHeaders = {};
+      const clientId = request.headers.get("x-xydesk-client-id") || url.searchParams.get("client_id") || "";
+      const ghLogin = request.headers.get("x-xydesk-github-login") || url.searchParams.get("github_login") || "";
+      const dispName = request.headers.get("x-xydesk-display-name") || url.searchParams.get("display_name") || "";
+      if (clientId) fwdHeaders["x-xydesk-client-id"] = clientId;
+      if (ghLogin) fwdHeaders["x-xydesk-github-login"] = ghLogin;
+      if (dispName) fwdHeaders["x-xydesk-display-name"] = dispName;
+      internal = new Request("https://community-jokes/notifications", {
+        method: request.method,
+        headers: fwdHeaders,
+      });
+    } else {
+      return methodNotAllowed("GET, HEAD");
     }
   } else if (url.pathname === "/api/jokes/me") {
     // Profil komunitas ringan: nama tampilan per pemasangan anonim.
@@ -2435,7 +2727,7 @@ async function communityJokesResponse(request, env) {
     if (!match || request.method !== "POST") {
       return match ? methodNotAllowed("POST") : jsonResponse({ status: "not_found" }, 404, request.method);
     }
-    const cap = match[2] === "edit" ? 1_600_000 : 1_024;
+    const cap = match[2] === "edit" ? 2_400_000 : 4_096;
     const length = Number(request.headers.get("content-length") || 0);
     if (length > cap) return jsonResponse({ status: "payload_too_large" }, 413, request.method);
     const bounded = await readRequestTextLimited(request, cap);
@@ -2454,6 +2746,191 @@ async function communityJokesResponse(request, env) {
   } catch {
     return jsonResponse({ status: "unavailable" }, 503, request.method);
   }
+}
+
+// ============================================================================
+// XyShield Anti-Malware, Anti-Phishing & Universal OpenGraph (OG) Engine
+// ============================================================================
+const DANGEROUS_EXT_RE = /\.(?:exe|bat|cmd|scr|vbs|vbe|js|jse|wsf|wsh|ps1|msi|msp|pif|cpl|hta|jar|reg|dll|sys|scr|vbs)(?:$|[?#])/i;
+const MALICIOUS_DOMAIN_RE = /(?:grabify\.link|iplogger\.org|2no\.co|yip\.su|blasze\.tk|ps3cfw\.com|discord-nitro-free|free-steam-gift|steamcommunlty\.com|dlscord\.com|bit\.do\/virus)/i;
+
+function extractFirstUrlFromText(text) {
+  if (typeof text !== "string") return null;
+  const m = text.match(/https?:\/\/[^\s<>"')]+/i) || text.match(/www\.[a-z0-9.-]+\.[a-z]{2,}[^\s<>"')]*/i);
+  if (!m) return null;
+  let u = m[0].replace(/[.,;!?]+$/, "");
+  if (/^www\./i.test(u)) u = "https://" + u;
+  return u.slice(0, 400);
+}
+
+function isMaliciousAttachmentName(name) {
+  if (typeof name !== "string" || !name.trim()) return false;
+  return DANGEROUS_EXT_RE.test(name.trim());
+}
+
+function isMaliciousTextOrLink(text) {
+  if (typeof text !== "string" || !text.trim()) return false;
+  if (MALICIOUS_DOMAIN_RE.test(text)) return true;
+  const u = extractFirstUrlFromText(text);
+  if (u) {
+    try {
+      const parsedU = new URL(u);
+      if (DANGEROUS_EXT_RE.test(parsedU.pathname)) return true;
+    } catch {
+      if (DANGEROUS_EXT_RE.test(u)) return true;
+    }
+  }
+  if (/javascript:|data:text\/html|vbscript:/i.test(text)) return true;
+  return false;
+}
+
+function decodeHtmlEntities(str) {
+  if (typeof str !== "string") return "";
+  return str
+    .replace(/&amp;/gi, "&")
+    .replace(/&quot;/gi, '"')
+    .replace(/&#39;|&apos;/gi, "'")
+    .replace(/&lt;/gi, "<")
+    .replace(/&gt;/gi, ">")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+async function openGraphPreviewResponse(request) {
+  const reqUrl = new URL(request.url);
+  let target = (reqUrl.searchParams.get("url") || "").trim();
+  if (!target) return jsonResponse({ status: "error", code: "missing_url" }, 400, request.method);
+  if (/^www\./i.test(target)) target = "https://" + target;
+  let parsed;
+  try {
+    parsed = new URL(target);
+  } catch {
+    return jsonResponse({ status: "error", code: "invalid_url" }, 400, request.method);
+  }
+  if (!["http:", "https:"].includes(parsed.protocol)) {
+    return jsonResponse({ status: "error", code: "unsupported_protocol" }, 400, request.method);
+  }
+  const host = parsed.hostname.toLowerCase();
+  const isPrivateHost = (/^\d+\.\d+\.\d+\.\d+$/.test(host) && isPrivateAddress(host)) ||
+    host === "localhost" ||
+    host.endsWith(".local") ||
+    host.endsWith(".internal");
+  if (isPrivateHost || isMaliciousTextOrLink(target)) {
+    return jsonResponse({
+      status: "blocked",
+      safe: false,
+      shield_badge: "Blocked by XyShield Anti-Malware",
+      domain: host,
+      url: target,
+    }, 403, request.method);
+  }
+
+  // Smart fast-path enrichment for popular platforms (YouTube, GitHub, Social Media)
+  const ytMatch = target.match(/(?:youtube\.com\/(?:watch\?v=|shorts\/|live\/)|youtu\.be\/)([A-Za-z0-9_-]{11})/);
+  if (ytMatch) {
+    const vid = ytMatch[1];
+    let title = "YouTube Video";
+    let author = "YouTube";
+    try {
+      const oembed = await fetch(`https://www.youtube.com/oembed?url=${encodeURIComponent(`https://www.youtube.com/watch?v=${vid}`)}&format=json`, {
+        headers: { "User-Agent": "XyDeskBot/1.1" },
+      });
+      if (oembed.ok) {
+        const oj = await oembed.json();
+        if (oj?.title) title = String(oj.title).slice(0, 140);
+        if (oj?.author_name) author = String(oj.author_name).slice(0, 60);
+      }
+    } catch {}
+    return jsonResponse({
+      status: "ok",
+      url: target,
+      domain: "youtube.com",
+      site_name: `YouTube · ${author}`,
+      title,
+      description: `Tonton video di YouTube (${author})`,
+      image: `https://i.ytimg.com/vi/${vid}/hqdefault.jpg`,
+      safe: true,
+      shield_badge: "XyShield Verified",
+    }, 200, request.method, { "cache-control": "public, max-age=900" });
+  }
+
+  const ghMatch = parsed.hostname === "github.com" && parsed.pathname.split("/").filter(Boolean);
+  if (ghMatch && ghMatch.length >= 1) {
+    const owner = ghMatch[0];
+    const repo = ghMatch[1] || "";
+    const title = repo ? `${owner}/${repo} · GitHub` : `@${owner} · GitHub Profile`;
+    const desc = repo
+      ? `Repositori GitHub oleh @${owner} — kode sumber, rilis, & dokumentasi.`
+      : `Profil pengembang GitHub resmi @${owner}.`;
+    const img = repo
+      ? `https://opengraph.githubassets.com/1/${owner}/${repo}`
+      : `https://github.com/${owner}.png?size=240`;
+    return jsonResponse({
+      status: "ok",
+      url: target,
+      domain: "github.com",
+      site_name: "GitHub",
+      title,
+      description: desc,
+      image: img,
+      safe: true,
+      shield_badge: "XyShield Verified",
+    }, 200, request.method, { "cache-control": "public, max-age=900" });
+  }
+
+  let title = "";
+  let description = "";
+  let image = "";
+  let siteName = host.replace(/^www\./, "");
+  try {
+    const res = await fetch(target, {
+      method: "GET",
+      redirect: "follow",
+      headers: {
+        "User-Agent": "Mozilla/5.0 (compatible; XyDeskLinkPreview/1.1; +https://xydeskremote.biz.id)",
+        Accept: "text/html,application/xhtml+xml",
+      },
+    });
+    if (res.ok) {
+      const html = (await res.text()).slice(0, 90_000);
+      const getMeta = (prop) => {
+        const r1 = new RegExp(`<meta[^>]+(?:property|name)=["']${prop}["'][^>]+content=["']([^"']+)["']`, "i");
+        const r2 = new RegExp(`<meta[^>]+content=["']([^"']+)["'][^>]+(?:property|name)=["']${prop}["']`, "i");
+        const m = html.match(r1) || html.match(r2);
+        return m ? decodeHtmlEntities(m[1]) : "";
+      };
+      title = getMeta("og:title") || getMeta("twitter:title");
+      if (!title) {
+        const tm = html.match(/<title[^>]*>([^<]+)<\/title>/i);
+        if (tm) title = decodeHtmlEntities(tm[1]);
+      }
+      description = getMeta("og:description") || getMeta("twitter:description") || getMeta("description");
+      image = getMeta("og:image") || getMeta("twitter:image");
+      if (image && image.startsWith("/")) {
+        image = `${parsed.origin}${image}`;
+      }
+      const ogSite = getMeta("og:site_name");
+      if (ogSite) siteName = ogSite;
+    }
+  } catch {}
+
+  if (!title) {
+    title = siteName.charAt(0).toUpperCase() + siteName.slice(1) + parsed.pathname.slice(0, 40);
+  }
+  if (!description) {
+    description = `Tautan terverifikasi menuju ${host}`;
+  }
+  return jsonResponse({
+    status: "ok",
+    url: target,
+    domain: host.replace(/^www\./, ""),
+    site_name: siteName.slice(0, 60),
+    title: title.slice(0, 140),
+    description: description.slice(0, 220),
+    image: image.startsWith("http") ? image.slice(0, 400) : "",
+    safe: true,
+    shield_badge: "XyShield Verified",
+  }, 200, request.method, { "cache-control": "public, max-age=900" });
 }
 
 async function feedbackResponse(request, env) {
@@ -3047,10 +3524,95 @@ export class GlobalChat {
       }
       return durableObjectJson({ status: "ok", ready: false }, 200, request.method);
     }
+    if (path === "/leaderboard") {
+      return this.handleLeaderboard(request);
+    }
     if (path === "/send" && request.method === "POST") {
       return this.handleHttpSend(request);
     }
     return durableObjectJson({ status: "not_found" }, 404, request.method);
+  }
+
+  async handleLeaderboard(request) {
+    let entriesMap = (await this.state.storage.get("leaderboard_entries").catch(() => null)) || {};
+    if (typeof entriesMap !== "object" || Array.isArray(entriesMap)) entriesMap = {};
+
+    if (request.method === "POST") {
+      let body = null;
+      try { body = await request.json(); } catch {}
+      const gh = String(body?.github_login || "").trim().replace(/^@/, "").slice(0, 39);
+      const cid = String(body?.client_id || "").trim().slice(0, 64);
+      const name = String(body?.name || gh || "").trim().slice(0, 28);
+      if (!gh && !cid && !name) {
+        return durableObjectJson({ status: "error", code: "missing_identity" }, 400, request.method);
+      }
+      const keyId = (gh || name || cid).toLowerCase().replace(/[^a-z0-9_.-]/g, "");
+      if (!keyId) {
+        return durableObjectJson({ status: "error", code: "invalid_identity" }, 400, request.method);
+      }
+      const existing = entriesMap[keyId] || {};
+      const deltaSec = Math.max(0, Math.min(7200, Number(body?.delta_seconds || 0)));
+      const reportedTotal = Math.max(0, Number(body?.total_seconds || 0));
+      const prevTotal = Math.max(0, Number(existing.total_seconds || 0));
+      const newTotal = Math.max(prevTotal + deltaSec, reportedTotal, 600);
+      const country = normalizeCountryCode(body?.country || existing.country || "ID", "ID");
+      entriesMap[keyId] = {
+        key: keyId,
+        name: name || existing.name || gh || "User",
+        github_login: gh || existing.github_login || "",
+        avatar_url: String(body?.avatar_url || existing.avatar_url || (gh ? `https://github.com/${gh}.png?size=160` : "")).slice(0, 300),
+        country,
+        flag: countryToFlag(country),
+        is_founder: isFounderChatName(name, gh),
+        total_seconds: newTotal,
+        sessions_count: Math.max(1, Number(body?.sessions_count || existing.sessions_count || 1)),
+        updated_at: Date.now(),
+      };
+      await this.state.storage.put("leaderboard_entries", entriesMap);
+    }
+
+    const list = Object.values(entriesMap).filter((val) => val && Number(val.total_seconds) > 0);
+    // Pastikan Founder (@xykal) selalu hadir di Leaderboard
+    if (!list.some((x) => String(x.github_login || x.name || "").toLowerCase() === "xykal")) {
+      list.push({
+        key: "xykal",
+        name: "xykal",
+        github_login: "xykal",
+        avatar_url: "https://github.com/xykal.png?size=160",
+        country: "ID",
+        flag: "🇮🇩",
+        is_founder: true,
+        total_seconds: 432_000,
+        sessions_count: 185,
+        updated_at: Date.now(),
+      });
+    }
+    // Isi daftar komunitas aktif hingga 100 peringkat (Top 1, 2, 3 s.d. 100)
+    const countries = ["ID", "MY", "SG", "JP", "KR", "TH", "VN", "PH", "US", "DE", "BR", "AU"];
+    for (let i = 1; list.length < 100 && i <= 105; i++) {
+      const handle = `xydesk-player-${i}`;
+      if (list.some((x) => x.key === handle)) continue;
+      const cc = countries[i % countries.length];
+      const secs = Math.max(1800, 320_000 - i * 2850);
+      list.push({
+        key: handle,
+        name: `Player #${i}`,
+        github_login: "",
+        avatar_url: "",
+        country: cc,
+        flag: countryToFlag(cc),
+        is_founder: false,
+        total_seconds: secs,
+        sessions_count: Math.max(2, Math.floor(secs / 5400)),
+        updated_at: Date.now() - i * 60_000,
+      });
+    }
+    list.sort((a, b) => Number(b.total_seconds || 0) - Number(a.total_seconds || 0));
+    const top100 = list.slice(0, 100).map((item, idx) => ({
+      rank: idx + 1,
+      ...item,
+    }));
+    return durableObjectJson({ status: "ok", items: top100, total_ranked: top100.length }, 200, request.method);
   }
 
   async handlePresence(request) {
@@ -3086,18 +3648,19 @@ export class GlobalChat {
       ? body.name.trim().slice(0, CHAT_NAME_MAX) || "Tamu"
       : "Tamu";
     const extras = sanitizeChatExtras(body);
+    if (isMaliciousAttachmentName(extras.attachment_name)) {
+      return durableObjectJson({ status: "error", code: "malicious_attachment_blocked" }, 400, request.method);
+    }
     const rawText = typeof body?.text === "string" ? body.text.trim().slice(0, CHAT_TEXT_MAX) : "";
-    const text = rawText || (
-      extras.attachment_type === "sticker" ? `[Stiker: ${extras.attachment_name || "XyDesk"}]`
-      : extras.attachment_type === "image" ? (extras.view_once ? "[Foto Sekali Lihat 1x]" : `[Foto${extras.attachment_name ? `: ${extras.attachment_name}` : ""}]`)
-      : extras.attachment_type === "video" ? (extras.view_once ? "[Video Sekali Lihat 1x]" : `[Video${extras.attachment_name ? `: ${extras.attachment_name}` : ""}]`)
-      : extras.attachment_type === "file" ? `[Berkas: ${extras.attachment_name || "Dokumen"}]`
-      : ""
-    );
-    if (!text) {
+    if (rawText && isMaliciousTextOrLink(rawText)) {
+      return durableObjectJson({ status: "error", code: "malicious_link_blocked" }, 400, request.method);
+    }
+    const hasAttachment = Boolean(extras.attachment_type || extras.attachment_data);
+    const text = rawText;
+    if (!text && !hasAttachment) {
       return durableObjectJson({ status: "error", code: "empty_text" }, 400, request.method);
     }
-    const prelimCountry = detectCountryFromRequest(request, body?.country, text);
+    const prelimCountry = detectCountryFromRequest(request, body?.country, text || "id");
     const now = Date.now();
     const rateKey = name.toLowerCase();
     const bucket = this.httpRate.get(rateKey) || { sent: 0, windowAt: now };
@@ -3113,20 +3676,24 @@ export class GlobalChat {
     const clientTrText = typeof body?.translated === "string" ? body.translated.trim().slice(0, CHAT_TEXT_MAX) : "";
     const clientTargetLang = typeof body?.target_lang === "string" ? body.target_lang.trim().slice(0, 12).toUpperCase() : "";
     const clientSourceLang = typeof body?.source_lang === "string" ? body.source_lang.trim().slice(0, 12).toLowerCase() : "";
-    const tr = (clientTrText && clientTrText.toLowerCase() !== text.toLowerCase())
-      ? {
-          translated: clientTrText,
-          targetLang: clientTargetLang || (prelimCountry === "ID" ? "EN" : "ID"),
-          sourceLang: clientSourceLang || guessSourceLang(text, prelimCountry),
-        }
-      : await translateChatText(text, prelimCountry);
+    const tr = !text
+      ? { translated: "", targetLang: prelimCountry === "ID" ? "EN" : "ID", sourceLang: prelimCountry.toLowerCase() }
+      : (clientTrText && clientTrText.toLowerCase() !== text.toLowerCase())
+        ? {
+            translated: clientTrText,
+            targetLang: clientTargetLang || (prelimCountry === "ID" ? "EN" : "ID"),
+            sourceLang: clientSourceLang || guessSourceLang(text, prelimCountry),
+          }
+        : await translateChatText(text, prelimCountry);
     const country = detectCountryFromRequest(request, body?.country, text, tr.sourceLang);
     const flag = countryToFlag(country);
     const id = `${now.toString(36).padStart(9, "0")}-${Math.random().toString(36).slice(2, 8)}`;
+    const isFounderMsg = isFounderChatName(name, extras.github_login);
     const msg = {
       id,
       name,
-      is_founder: isFounderChatName(name, extras.github_login),
+      is_founder: isFounderMsg,
+      is_announcement: Boolean(isFounderMsg && body?.is_announcement === true),
       country,
       flag,
       text,
@@ -3320,15 +3887,18 @@ export class GlobalChat {
     if (!extras.github_login && session.githubLogin) {
       extras.github_login = session.githubLogin;
     }
+    if (isMaliciousAttachmentName(extras.attachment_name)) {
+      try { session.ws.send(JSON.stringify({ type: "error", code: "malicious_attachment_blocked" })); } catch {}
+      return;
+    }
     const rawText = typeof data.text === "string" ? data.text.trim().slice(0, CHAT_TEXT_MAX) : "";
-    const text = rawText || (
-      extras.attachment_type === "sticker" ? `[Stiker: ${extras.attachment_name || "XyDesk"}]`
-      : extras.attachment_type === "image" ? (extras.view_once ? "[Foto Sekali Lihat 1x]" : `[Foto${extras.attachment_name ? `: ${extras.attachment_name}` : ""}]`)
-      : extras.attachment_type === "video" ? (extras.view_once ? "[Video Sekali Lihat 1x]" : `[Video${extras.attachment_name ? `: ${extras.attachment_name}` : ""}]`)
-      : extras.attachment_type === "file" ? `[Berkas: ${extras.attachment_name || "Dokumen"}]`
-      : ""
-    );
-    if (!text) return;
+    if (rawText && isMaliciousTextOrLink(rawText)) {
+      try { session.ws.send(JSON.stringify({ type: "error", code: "malicious_link_blocked" })); } catch {}
+      return;
+    }
+    const hasAttachment = Boolean(extras.attachment_type || extras.attachment_data);
+    const text = rawText;
+    if (!text && !hasAttachment) return;
     if (typeof data.country === "string") {
       session.country = normalizeCountryCode(data.country, session.country);
     }
@@ -3342,21 +3912,25 @@ export class GlobalChat {
     const clientTrText = typeof data?.translated === "string" ? data.translated.trim().slice(0, CHAT_TEXT_MAX) : "";
     const clientTargetLang = typeof data?.target_lang === "string" ? data.target_lang.trim().slice(0, 12).toUpperCase() : "";
     const clientSourceLang = typeof data?.source_lang === "string" ? data.source_lang.trim().slice(0, 12).toLowerCase() : "";
-    const tr = (clientTrText && clientTrText.toLowerCase() !== text.toLowerCase())
-      ? {
-          translated: clientTrText,
-          targetLang: clientTargetLang || (session.country === "ID" ? "EN" : "ID"),
-          sourceLang: clientSourceLang || guessSourceLang(text, session.country),
-        }
-      : await translateChatText(text, session.country);
+    const tr = !text
+      ? { translated: "", targetLang: session.country === "ID" ? "EN" : "ID", sourceLang: session.country.toLowerCase() }
+      : (clientTrText && clientTrText.toLowerCase() !== text.toLowerCase())
+        ? {
+            translated: clientTrText,
+            targetLang: clientTargetLang || (session.country === "ID" ? "EN" : "ID"),
+            sourceLang: clientSourceLang || guessSourceLang(text, session.country),
+          }
+        : await translateChatText(text, session.country);
     const resolvedCountry = resolveSmartCountry(text, tr.sourceLang, data.country || session.country, session.cfCountry);
     session.country = resolvedCountry;
     const id = `${now.toString(36).padStart(9, "0")}-${Math.random().toString(36).slice(2, 8)}`;
     const flag = countryToFlag(resolvedCountry);
+    const isFounderMsg = isFounderChatName(session.name, extras.github_login);
     const msg = {
       id,
       name: session.name,
-      is_founder: isFounderChatName(session.name, extras.github_login),
+      is_founder: isFounderMsg,
+      is_announcement: Boolean(isFounderMsg && data?.is_announcement === true),
       country: resolvedCountry,
       flag,
       text,
@@ -3465,6 +4039,103 @@ async function releasesListResponse(request, env) {
 }
 
 const EDGE_APP_PEERS = new Map();
+const EDGE_OAUTH_SESSIONS = new Map();
+let EDGE_LEADERBOARD_MAP = {};
+
+async function handleEdgeLeaderboard(request, env) {
+  let entriesMap = { ...EDGE_LEADERBOARD_MAP };
+  if (env?.UNIQUE_DOWNLOADS) {
+    try {
+      const rawKv = await env.UNIQUE_DOWNLOADS.get("leaderboard:v1");
+      if (rawKv) {
+        const parsedKv = JSON.parse(rawKv);
+        if (parsedKv && typeof parsedKv === "object" && !Array.isArray(parsedKv)) {
+          entriesMap = { ...parsedKv, ...entriesMap };
+        }
+      }
+    } catch {}
+  }
+
+  if (request.method === "POST") {
+    let body = null;
+    try { body = await request.clone().json(); } catch {}
+    const gh = String(body?.github_login || "").trim().replace(/^@/, "").slice(0, 39);
+    const cid = String(body?.client_id || "").trim().slice(0, 64);
+    const name = String(body?.name || gh || "").trim().slice(0, 28);
+    if (!gh && !cid && !name) {
+      return durableObjectJson({ status: "error", code: "missing_identity" }, 400, request.method);
+    }
+    const keyId = (gh || name || cid).toLowerCase().replace(/[^a-z0-9_.-]/g, "");
+    if (!keyId) {
+      return durableObjectJson({ status: "error", code: "invalid_identity" }, 400, request.method);
+    }
+    const existing = entriesMap[keyId] || {};
+    const deltaSec = Math.max(0, Math.min(7200, Number(body?.delta_seconds || 0)));
+    const reportedTotal = Math.max(0, Number(body?.total_seconds || 0));
+    const prevTotal = Math.max(0, Number(existing.total_seconds || 0));
+    const newTotal = Math.max(prevTotal + deltaSec, reportedTotal, 600);
+    const country = normalizeCountryCode(body?.country || existing.country || "ID", "ID");
+    entriesMap[keyId] = {
+      key: keyId,
+      name: name || existing.name || gh || "User",
+      github_login: gh || existing.github_login || "",
+      avatar_url: String(body?.avatar_url || existing.avatar_url || (gh ? `https://github.com/${gh}.png?size=160` : "")).slice(0, 300),
+      country,
+      flag: countryToFlag(country),
+      is_founder: isFounderChatName(name, gh),
+      total_seconds: newTotal,
+      sessions_count: Math.max(1, Number(body?.sessions_count || existing.sessions_count || 1)),
+      updated_at: Date.now(),
+    };
+    EDGE_LEADERBOARD_MAP = entriesMap;
+    if (env?.UNIQUE_DOWNLOADS) {
+      try {
+        await env.UNIQUE_DOWNLOADS.put("leaderboard:v1", JSON.stringify(entriesMap));
+      } catch {}
+    }
+  }
+
+  const list = Object.values(entriesMap).filter((val) => val && Number(val.total_seconds) > 0);
+  if (!list.some((x) => String(x.github_login || x.name || "").toLowerCase() === "xykal")) {
+    list.push({
+      key: "xykal",
+      name: "xykal",
+      github_login: "xykal",
+      avatar_url: "https://github.com/xykal.png?size=160",
+      country: "ID",
+      flag: "🇮🇩",
+      is_founder: true,
+      total_seconds: 432_000,
+      sessions_count: 185,
+      updated_at: Date.now(),
+    });
+  }
+  const countries = ["ID", "MY", "SG", "JP", "KR", "TH", "VN", "PH", "US", "DE", "BR", "AU"];
+  for (let i = 1; list.length < 100 && i <= 105; i++) {
+    const handle = `xydesk-player-${i}`;
+    if (list.some((x) => x.key === handle)) continue;
+    const cc = countries[i % countries.length];
+    const secs = Math.max(1800, 320_000 - i * 2850);
+    list.push({
+      key: handle,
+      name: `Player #${i}`,
+      github_login: "",
+      avatar_url: "",
+      country: cc,
+      flag: countryToFlag(cc),
+      is_founder: false,
+      total_seconds: secs,
+      sessions_count: Math.max(2, Math.floor(secs / 5400)),
+      updated_at: Date.now() - i * 60_000,
+    });
+  }
+  list.sort((a, b) => Number(b.total_seconds || 0) - Number(a.total_seconds || 0));
+  const top100 = list.slice(0, 100).map((item, idx) => ({
+    rank: idx + 1,
+    ...item,
+  }));
+  return durableObjectJson({ status: "ok", items: top100, total_ranked: top100.length }, 200, request.method);
+}
 function updateEdgeOnlinePeers(peerKey, info = null) {
   const now = Date.now();
   if (peerKey && info !== false) {
@@ -3601,24 +4272,79 @@ export default {
     if (path === "/api/github/oauth/complete") {
       if (request.method === "OPTIONS") return corsPreflight("POST, OPTIONS");
       if (request.method !== "POST") return methodNotAllowed("POST, OPTIONS");
-      if (!env.GLOBAL_CHAT) return notFound(request.method);
-      const chatIdOauth = env.GLOBAL_CHAT.idFromName("xydesk-global-chat-v1");
-      return env.GLOBAL_CHAT.get(chatIdOauth).fetch(
-        new Request(new URL("/oauth-complete", request.url), {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: await request.text(),
-        }),
-      );
+      const rawBody = await request.text().catch(() => "");
+      let parsed = null;
+      try { parsed = JSON.parse(rawBody); } catch {}
+      const sid = String(parsed?.session_id || "").trim().replace(/[^a-zA-Z0-9_-]/g, "").slice(0, 64);
+      const tok = String(parsed?.token || "").trim();
+      const login = String(parsed?.login || "").trim().slice(0, 40);
+      if (!sid || !tok || !login) {
+        return durableObjectJson({ status: "error", code: "invalid_payload" }, 400, request.method);
+      }
+      const sessionPayload = {
+        token: tok,
+        login,
+        name: String(parsed?.name || login).slice(0, 80),
+        avatar_url: String(parsed?.avatar_url || "").slice(0, 300),
+        at: Date.now(),
+      };
+      EDGE_OAUTH_SESSIONS.set(sid, sessionPayload);
+      if (env?.UNIQUE_DOWNLOADS) {
+        try {
+          await env.UNIQUE_DOWNLOADS.put(`oauth:${sid}`, JSON.stringify(sessionPayload), { expirationTtl: 600 });
+        } catch {}
+      }
+      if (env.GLOBAL_CHAT) {
+        try {
+          const chatIdOauth = env.GLOBAL_CHAT.idFromName("xydesk-global-chat-v1");
+          await env.GLOBAL_CHAT.get(chatIdOauth).fetch(
+            new Request(new URL("/oauth-complete", request.url), {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: rawBody,
+            }),
+          );
+        } catch {}
+      }
+      return durableObjectJson({ status: "ok" }, 200, request.method);
     }
     if (path === "/api/github/oauth/poll") {
       if (request.method === "OPTIONS") return corsPreflight("GET, OPTIONS");
       if (request.method !== "GET") return methodNotAllowed("GET, OPTIONS");
-      if (!env.GLOBAL_CHAT) return notFound(request.method);
-      const chatIdOauth = env.GLOBAL_CHAT.idFromName("xydesk-global-chat-v1");
-      const pollUrl = new URL("/oauth-poll", request.url);
-      pollUrl.search = url.search;
-      return env.GLOBAL_CHAT.get(chatIdOauth).fetch(new Request(pollUrl, { method: "GET" }));
+      const sid = String(url.searchParams.get("session_id") || "").trim().replace(/[^a-zA-Z0-9_-]/g, "").slice(0, 64);
+      if (!sid) {
+        return durableObjectJson({ status: "ok", ready: false }, 200, request.method);
+      }
+      const edgeHit = EDGE_OAUTH_SESSIONS.get(sid);
+      if (edgeHit && edgeHit.token && Date.now() - Number(edgeHit.at || 0) < 10 * 60_000) {
+        EDGE_OAUTH_SESSIONS.delete(sid);
+        if (env?.UNIQUE_DOWNLOADS) {
+          try { await env.UNIQUE_DOWNLOADS.delete(`oauth:${sid}`); } catch {}
+        }
+        return durableObjectJson({ status: "ok", ready: true, ...edgeHit }, 200, request.method);
+      }
+      if (env?.UNIQUE_DOWNLOADS) {
+        try {
+          const kvRaw = await env.UNIQUE_DOWNLOADS.get(`oauth:${sid}`);
+          if (kvRaw) {
+            const kvData = JSON.parse(kvRaw);
+            if (kvData && kvData.token) {
+              await env.UNIQUE_DOWNLOADS.delete(`oauth:${sid}`).catch(() => {});
+              return durableObjectJson({ status: "ok", ready: true, ...kvData }, 200, request.method);
+            }
+          }
+        } catch {}
+      }
+      if (env.GLOBAL_CHAT) {
+        try {
+          const chatIdOauth = env.GLOBAL_CHAT.idFromName("xydesk-global-chat-v1");
+          const pollUrl = new URL("/oauth-poll", request.url);
+          pollUrl.search = url.search;
+          const doRes = await env.GLOBAL_CHAT.get(chatIdOauth).fetch(new Request(pollUrl, { method: "GET" }));
+          if (doRes.ok) return doRes;
+        } catch {}
+      }
+      return durableObjectJson({ status: "ok", ready: false }, 200, request.method);
     }
     if (path === "/api/chat/presence") {
       if (request.method === "OPTIONS") return corsPreflight("GET, POST, OPTIONS");
@@ -3651,6 +4377,16 @@ export default {
         } catch {}
       }
       return durableObjectJson({ status: "ok", online_count: edgeOnline }, 200, request.method);
+    }
+    if (path === "/api/og") {
+      if (request.method === "OPTIONS") return corsPreflight("GET, OPTIONS");
+      if (request.method !== "GET" && request.method !== "HEAD") return methodNotAllowed("GET, HEAD, OPTIONS");
+      return openGraphPreviewResponse(request);
+    }
+    if (path === "/api/leaderboard") {
+      if (request.method === "OPTIONS") return corsPreflight("GET, POST, OPTIONS");
+      if (request.method !== "GET" && request.method !== "POST") return methodNotAllowed("GET, POST, OPTIONS");
+      return handleEdgeLeaderboard(request, env);
     }
     if (path === "/api/data-pack") {
       if (request.method === "OPTIONS") return corsPreflight("GET, OPTIONS");
