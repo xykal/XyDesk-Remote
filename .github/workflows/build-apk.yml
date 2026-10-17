@@ -132,11 +132,11 @@ jobs:
             -Wl,--out-implib,/tmp/dist-host/libxydesk_host_core.a \
             -static-libgcc -static-libstdc++ -Wl,-Bstatic -lstdc++ -lpthread -Wl,-Bdynamic \
             -lws2_32 -ldxgi -ladvapi32 -liphlpapi -luser32 -lgdi32
-          x86_64-w64-mingw32-g++ -std=c++17 -O2 \
+          x86_64-w64-mingw32-g++ -std=c++17 -O2 -mwindows \
             host-agent/src/main_host.cpp -Ihost-agent/include \
             -L/tmp/dist-host -lxydesk_quic -lxydesk_host_core \
             -o /tmp/dist-host/XyDeskRemoteHost.exe \
-            -static-libgcc -static-libstdc++ -Wl,-Bstatic -lstdc++ -lpthread -Wl,-Bdynamic -luser32 -lgdi32 -lshell32 -lwtsapi32 -lwinhttp -ladvapi32
+            -static-libgcc -static-libstdc++ -Wl,-Bstatic -lstdc++ -lpthread -Wl,-Bdynamic -luser32 -lgdi32 -lshell32 -ldwmapi -lwtsapi32 -lwinhttp -ladvapi32
           # Exe tunggal mandiri: kedua pustaka dikompilasi langsung ke dalam exe
           # dan runtime mingw diikat statis, jadi hasilnya tidak membutuhkan
           # xydesk_quic.dll, xydesk_host_core.dll, maupun DLL runtime mingw.
@@ -147,7 +147,7 @@ jobs:
           # build tunggal ini tidak lewat CMake: tanpa keduanya header memilih
           # __declspec(dllimport) dan linker gagal dengan
           # "undefined reference to __imp_xydesk_host_inspect_system".
-          x86_64-w64-mingw32-g++ -std=c++17 -O2 \
+          x86_64-w64-mingw32-g++ -std=c++17 -O2 -mwindows \
             -DXYDESK_QUIC_EXPORTS -DXYDESK_HOST_CORE_EXPORTS \
             host-agent/src/main_host.cpp \
             host-agent/src/xydesk_quic.cpp \
@@ -155,7 +155,7 @@ jobs:
             -Ihost-agent/include \
             -o "/tmp/dist-host/XyDeskRemoteHost-Standalone.exe" \
             -static -static-libgcc -static-libstdc++ \
-            -lws2_32 -lole32 -ldxgi -ladvapi32 -liphlpapi -luser32 -lgdi32 -lshell32 -lwtsapi32 -lwinhttp -ladvapi32
+            -lws2_32 -lole32 -ldxgi -ladvapi32 -liphlpapi -luser32 -lgdi32 -lshell32 -ldwmapi -lwtsapi32 -lwinhttp -ladvapi32
           ls -lh /tmp/dist-host/
 
   # ------------------------------------------------------------------
@@ -289,7 +289,7 @@ jobs:
             client/Android/Studio/freeRDPCore/.cxx
             client/Android/Studio/freeRDPCore/src/main/cpp/external
             $HOME/.gradle/caches
-          key: freerdp-native-cxx-v2-${{ hashFiles('client/Android/cmake/**', 'client/Android/Studio/freeRDPCore/src/main/cpp/**', 'channels/rdpsnd/**', 'channels/disp/**', 'channels/client/**', 'channels/cliprdr/**', 'client/common/**', 'libfreerdp/codec/**') }}
+          key: freerdp-native-cxx-v2-${{ hashFiles('client/Android/cmake/**', 'client/Android/Studio/freeRDPCore/src/main/cpp/**', 'channels/rdpsnd/**', 'channels/audin/**', 'channels/disp/**', 'channels/client/**', 'channels/cliprdr/**', 'client/common/**', 'libfreerdp/codec/**') }}
           restore-keys: |
             freerdp-native-cxx-v2-
       # Cache .cxx dan source ExternalProject harus selalu sepasang. Kalau .cxx
@@ -501,58 +501,10 @@ jobs:
             echo
           } > "$REPORT"
 
-          # Cek file persis yang ada di rilis publik v1.0.2, termasuk armv7 yang
-          # dilaporkan MT Manager. Baseline hash diambil dari digest GitHub Releases.
-          baseline_entries=(
-            "armeabi-v7a|https://github.com/xykal/XyDesk-Remote/releases/download/v1.0.2/XyDesk-armeabi-v7a.apk|ebf796a5e1f20b789a2beeda29e8769949ed9793ebce5e4fb6cec2a20f5e02b4"
-            "arm64-v8a|https://github.com/xykal/XyDesk-Remote/releases/download/v1.0.2/XyDesk-arm64-v8a.apk|dad982b13f4c9c42926caf04fb6c5a9ad14cd877c9b9bf90ee5ff93b09f5041d"
-            "x86_64|https://github.com/xykal/XyDesk-Remote/releases/download/v1.0.2/XyDesk-x86_64.apk|4f1a0d3d5de6caa9b2f445269c6e94ba8f07d927f4399e9d30f240fde2908979"
-          )
-          for entry in "${baseline_entries[@]}"; do
-            IFS='|' read -r abi url expected_sha <<< "$entry"
-            apk="$BASELINE_DIR/v1.0.2-$abi.apk"
-            curl --fail --location --retry 3 --retry-delay 2 --silent --show-error "$url" --output "$apk"
-            actual_sha="$(sha256sum "$apk" | awk '{print $1}')"
-            if [ "$actual_sha" != "$expected_sha" ]; then
-              echo "::error::Hash baseline v1.0.2 $abi tidak cocok dengan digest rilis GitHub."
-              exit 1
-            fi
-            set +e
-            baseline_output="$("$APK_SIGNER" verify --verbose --print-certs "$apk" 2>&1)"
-            verify_status=$?
-            set -e
-            printf '%s\n' "--- baseline v1.0.2 $abi (apksigner exit $verify_status) ---" "$baseline_output"
-            baseline_v1="false"
-            baseline_v2="false"
-            grep -Fq 'Verified using v1 scheme (JAR signing): true' <<<"$baseline_output" && baseline_v1="true"
-            grep -Fq 'Verified using v2 scheme (APK Signature Scheme v2): true' <<<"$baseline_output" && baseline_v2="true"
-            if [ "$baseline_v2" != "true" ]; then
-              echo "::error::Baseline v1.0.2 $abi tidak lolos verifikasi V2."
-              exit 1
-            fi
-            if ! grep -Fq 'Number of signers: 1' <<<"$baseline_output"; then
-              echo "::error::Baseline v1.0.2 $abi harus memiliki tepat satu signer."
-              exit 1
-            fi
-            # apksigner mencetak "V2 Signer: certificate SHA-256 digest: ..." pada
-            # versi build-tools baru dan "Signer #1 certificate ..." pada versi lama.
-            # Ambil baris mana pun yang memuat sertifikat SHA-256, lalu bersihkan
-            # jadi hex 64 karakter agar perbandingan signer tetap valid.
-            cert="$(printf '%s\n' "$baseline_output" | awk -F': *' '/certificate SHA-256 digest:/ { gsub(/[^0-9a-fA-F]/, "", $NF); print tolower($NF); exit }')"
-            if [ -z "$cert" ]; then
-              echo "::error::Tidak dapat membaca signer certificate dari baseline $abi."
-              exit 1
-            fi
-            if [ -z "$baseline_cert" ]; then
-              baseline_cert="$cert"
-            elif [ "$cert" != "$baseline_cert" ]; then
-              echo "::error::Sertifikat v1.0.2 berbeda antar-ABI."
-              exit 1
-            fi
-            printf '%s v1.0.2: apksigner-exit=%s, V1=%s, V2=%s, SHA-256=%s\n' \
-              "$abi" "$verify_status" "$baseline_v1" "$baseline_v2" "$actual_sha" >> "$REPORT"
-          done
-          printf 'Baseline signer SHA-256: %s\n\n' "$baseline_cert" >> "$REPORT"
+          # Baseline signer SHA-256 resmi sejak v1.0.2 (rilis lama telah dibersihkan
+          # sehingga verifikasi memakai pin sertifikat SHA-256 langsung).
+          baseline_cert="8429f689e7c3c6a0a44cb924206d56d5a2dccbd6c88cb900835c1901ad219652"
+          printf 'Baseline signer SHA-256 (pinned v1.0.2+): %s\n\n' "$baseline_cert" >> "$REPORT"
 
           for abi in armeabi-v7a arm64-v8a x86_64 universal; do
             case "$abi" in
@@ -628,11 +580,11 @@ jobs:
             -Wl,--out-implib,"$STAGE_DIR/libxydesk_host_core.a" \
             -static-libgcc -static-libstdc++ -Wl,-Bstatic -lstdc++ -lpthread -Wl,-Bdynamic \
             -lws2_32 -ldxgi -ladvapi32 -liphlpapi -luser32 -lgdi32
-          x86_64-w64-mingw32-g++ -std=c++17 -O2 \
+          x86_64-w64-mingw32-g++ -std=c++17 -O2 -mwindows \
             host-agent/src/main_host.cpp -Ihost-agent/include \
             -L"$STAGE_DIR" -lxydesk_quic -lxydesk_host_core \
             -o "$STAGE_DIR/XyDeskRemoteHost.exe" \
-            -static-libgcc -static-libstdc++ -Wl,-Bstatic -lstdc++ -lpthread -Wl,-Bdynamic -luser32 -lgdi32 -lshell32 -lwtsapi32 -lwinhttp -ladvapi32
+            -static-libgcc -static-libstdc++ -Wl,-Bstatic -lstdc++ -lpthread -Wl,-Bdynamic -luser32 -lgdi32 -lshell32 -ldwmapi -lwtsapi32 -lwinhttp -ladvapi32
           # Exe tunggal mandiri: kedua pustaka dikompilasi langsung ke dalam exe
           # dan runtime mingw diikat statis, jadi hasilnya tidak membutuhkan
           # xydesk_quic.dll, xydesk_host_core.dll, maupun DLL runtime mingw.
@@ -643,7 +595,7 @@ jobs:
           # build tunggal ini tidak lewat CMake: tanpa keduanya header memilih
           # __declspec(dllimport) dan linker gagal dengan
           # "undefined reference to __imp_xydesk_host_inspect_system".
-          x86_64-w64-mingw32-g++ -std=c++17 -O2 \
+          x86_64-w64-mingw32-g++ -std=c++17 -O2 -mwindows \
             -DXYDESK_QUIC_EXPORTS -DXYDESK_HOST_CORE_EXPORTS \
             host-agent/src/main_host.cpp \
             host-agent/src/xydesk_quic.cpp \
@@ -651,10 +603,12 @@ jobs:
             -Ihost-agent/include \
             -o "$STAGE_DIR/XyDeskRemoteHost-Standalone.exe" \
             -static -static-libgcc -static-libstdc++ \
-            -lws2_32 -lole32 -ldxgi -ladvapi32 -liphlpapi -luser32 -lgdi32 -lshell32 -lwtsapi32 -lwinhttp -ladvapi32
+            -lws2_32 -lole32 -ldxgi -ladvapi32 -liphlpapi -luser32 -lgdi32 -lshell32 -ldwmapi -lwtsapi32 -lwinhttp -ladvapi32
           rm -f "$STAGE_DIR"/*.a
           cp web/XyDeskHost-Setup.bat "$STAGE_DIR/XyDeskHost-Setup.bat"
           cp web/XyDesk-Remote-Agent-Setup.ps1 "$STAGE_DIR/XyDesk-Remote-Agent-Setup.ps1"
+          cp web/XyDesk-RDP-OnMic-Setup.bat "$STAGE_DIR/XyDesk-RDP-OnMic-Setup.bat"
+          cp web/onmic.ps1 "$STAGE_DIR/onmic.ps1"
           cp "$STAGE_DIR/xydesk_quic.dll" "$OUT_DIR/xydesk_quic.dll"
           cp "$STAGE_DIR/xydesk_host_core.dll" "$OUT_DIR/xydesk_host_core.dll"
           cp "$STAGE_DIR/XyDeskRemoteHost.exe" "$OUT_DIR/XyDeskRemoteHost.exe"

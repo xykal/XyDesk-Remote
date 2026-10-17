@@ -66,7 +66,6 @@ internal fun XyFeedScreen(
         XyTopBar(
             title = xy("Feed", "Feed"),
             actions = {
-                XyHeaderAccountActions()
                 XyIconPill(XyIcons.Menu, onMenu, flat = true, contentDescription = "Menu")
             },
         )

@@ -16,12 +16,18 @@ import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.unit.Density
+import androidx.core.view.WindowCompat
+import androidx.core.view.WindowInsetsControllerCompat
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.lifecycleScope
 import com.freerdp.freerdpcore.services.LibFreeRDP
@@ -73,6 +79,7 @@ class XyDeskHomeActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        WindowCompat.setDecorFitsSystemWindows(window, false)
         applyScreenSecurityFlags()
         markSkipAutoResumeIfNeeded(intent)
         handleIncomingShareIntent(intent)
@@ -80,33 +87,50 @@ class XyDeskHomeActivity : ComponentActivity() {
         handleOpenChatIntent(intent)
         setContent {
             XyThemeState.init(AppPrefs(this))
-            XyDeskTheme(dark = xyDark()) {
-                var boot by remember { mutableStateOf(true) }
-                var ready by remember { mutableStateOf(false) }
-                val sharedBanner by sharedFileBanner
-                Box(Modifier.fillMaxSize()) {
-                    XyDeskHome(
-                        onExit = { finish() },
-                        onReady = { ready = true },
-                        sharedFileNotice = sharedBanner,
-                        autoResumeSignal = autoResumeSignal.intValue,
-                        skipAutoResume = autoResumeSignal.intValue > 0 &&
-                            skipAutoResumeSignal.intValue == autoResumeSignal.intValue,
-                        openChatSignal = openChatSignal.intValue,
-                        onDismissSharedNotice = { sharedFileBanner.value = null },
-                        onAuthenticateConnect = { action -> authenticateBeforeConnect(action) },
-                    )
-                    // Splash XyVerse menutup layar sampai data siap; home
-                    // sudah tersusun di belakangnya, jadi begitu splash hilang
-                    // tidak ada kedipan.
-                    if (boot) {
-                        XySplashScreen(
-                            ready = ready,
-                            dark = xyDark(),
-                            onDone = { boot = false },
+            val isDark = xyDark()
+            SideEffect {
+                runCatching {
+                    val insetsCtrl = WindowInsetsControllerCompat(window, window.decorView)
+                    insetsCtrl.isAppearanceLightStatusBars = !isDark
+                    insetsCtrl.isAppearanceLightNavigationBars = !isDark
+                }
+            }
+            val baseDensity = LocalDensity.current
+            val normalizedDensity = remember(baseDensity.density, baseDensity.fontScale) {
+                Density(
+                    density = baseDensity.density,
+                    fontScale = baseDensity.fontScale.coerceIn(0.85f, 1.10f),
+                )
+            }
+            CompositionLocalProvider(LocalDensity provides normalizedDensity) {
+                XyDeskTheme(dark = isDark) {
+                    var boot by remember { mutableStateOf(true) }
+                    var ready by remember { mutableStateOf(false) }
+                    val sharedBanner by sharedFileBanner
+                    Box(Modifier.fillMaxSize()) {
+                        XyDeskHome(
+                            onExit = { finish() },
+                            onReady = { ready = true },
+                            sharedFileNotice = sharedBanner,
+                            autoResumeSignal = autoResumeSignal.intValue,
+                            skipAutoResume = autoResumeSignal.intValue > 0 &&
+                                skipAutoResumeSignal.intValue == autoResumeSignal.intValue,
+                            openChatSignal = openChatSignal.intValue,
+                            onDismissSharedNotice = { sharedFileBanner.value = null },
+                            onAuthenticateConnect = { action -> authenticateBeforeConnect(action) },
                         )
+                        // Splash XyVerse menutup layar sampai data siap; home
+                        // sudah tersusun di belakangnya, jadi begitu splash hilang
+                        // tidak ada kedipan.
+                        if (boot) {
+                            XySplashScreen(
+                                ready = ready,
+                                dark = isDark,
+                                onDone = { boot = false },
+                            )
+                        }
+                        AppChannelGate(onExit = { finish() })
                     }
-                    AppChannelGate(onExit = { finish() })
                 }
             }
         }

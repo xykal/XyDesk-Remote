@@ -2,6 +2,7 @@ package id.xydesk.remote.ui
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -16,6 +17,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -72,6 +74,9 @@ internal fun XyProfileScreen(
     var updateChecking by remember { mutableStateOf(false) }
     var updateMessage by remember { mutableStateOf<String?>(null) }
     var updateAvailable by remember { mutableStateOf<AppUpdateInfo?>(null) }
+    var otaSheetOpen by remember { mutableStateOf(false) }
+    var otaProgress by remember { mutableStateOf<Int?>(null) }
+    var otaStatusText by remember { mutableStateOf<String?>(null) }
     // BuildConfig tidak dipakai di lapisan UI; versi dibaca dari PackageManager
     // supaya tetap benar tanpa menambah konfigurasi build.
     val versionName = remember(context) {
@@ -95,7 +100,6 @@ internal fun XyProfileScreen(
         XyTopBar(
             title = xy("Profil", "Profile"),
             actions = {
-                XyHeaderAccountActions()
                 XyIconPill(XyIcons.Menu, onMenu, flat = true, contentDescription = "Menu")
             },
         )
@@ -106,49 +110,11 @@ internal fun XyProfileScreen(
                 .padding(bottom = 18.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
-            // ---- identitas (ronde 45: layar Profil butuh jangkar visual) ----
-            XyGlassCard(padding = 16.dp) {
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(14.dp),
-                ) {
-                    Box(
-                        Modifier
-                            .size(54.dp)
-                            .clip(RoundedCornerShape(27.dp))
-                            .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.14f)),
-                        contentAlignment = Alignment.Center,
-                    ) {
-                        XyLogo(modifier = Modifier.size(30.dp))
-                    }
-                    Column {
-                        Text(
-                            xy("XyDesk Remote", "XyDesk Remote"),
-                            style = MaterialTheme.typography.titleMedium,
-                            fontWeight = FontWeight.SemiBold,
-                        )
-                        Text(
-                            "XyVerse Technology Global",
-                            style = MaterialTheme.typography.labelSmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
-                        Spacer(Modifier.height(7.dp))
-                        Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                            ProfileChip(xy("v{0}", "v{0}", versionName ?: "-"))
-                            ProfileChip(
-                                if (deviceCount == 1) {
-                                    xy("1 perangkat", "1 device")
-                                } else {
-                                    xy("{0} perangkat", "{0} devices", deviceCount)
-                                },
-                            )
-                        }
-                    }
-                }
-            }
-
-            // ---- akun komunitas (guest / GitHub) ----
-            CommunityAccountCard()
+            // ---- Kartu Utama Profil (Ronde 54: terpadu, bersih, tidak menumpuk) ----
+            CommunityAccountCard(
+                versionName = versionName,
+                deviceCount = deviceCount,
+            )
             CloudSyncCard()
 
             // ---- seksi sebagai grid kartu ----
@@ -217,31 +183,20 @@ internal fun XyProfileScreen(
             XyGlassRow(
                 icon = XyIcons.Refresh,
                 title = if (updateChecking) xy("Memeriksa…", "Checking…")
-                else xy("Cek pembaruan", "Check for updates"),
+                else xy("Pusat Pembaruan (Download Data & APK)", "Update Center (Download Data & APK)"),
                 onClick = {
+                    otaSheetOpen = true
                     if (!updateChecking) {
                         profileScope.launch {
                             updateChecking = true
-                            updateMessage = null
-                            updateAvailable = null
-                            val info = AppUpdate.fetch()
+                            val info = AppUpdate.fetch(context)
                             val current = runCatching {
                                 context.packageManager
                                     .getPackageInfo(context.packageName, 0).versionName
                             }.getOrNull()
                             updateChecking = false
-                            if (info == null || current == null) {
-                                updateMessage = xyNow(
-                                    "Gagal menghubungi portal. Coba lagi.",
-                                    "Could not reach the portal. Try again.",
-                                )
-                            } else if (AppUpdate.isNewer(info.version, current)) {
+                            if (info != null && current != null && AppUpdate.isNewer(info.version, current)) {
                                 updateAvailable = info
-                            } else {
-                                updateMessage = xyNow(
-                                    "Kamu sudah pakai versi terbaru ($current).",
-                                    "You're already on the latest version ($current).",
-                                )
                             }
                         }
                     }
@@ -273,6 +228,85 @@ internal fun XyProfileScreen(
         }
     }
 
+    if (otaSheetOpen) {
+        XyOverlay(
+            title = xy("Pusat Pembaruan Langsung", "Direct Update Center"),
+            onDismiss = { otaSheetOpen = false },
+        ) {
+            Text(
+                text = "APK: v${versionName ?: "-"}  ·  Paket Data OTA: ${AppUpdate.installedDataVersion(context)}",
+                style = MaterialTheme.typography.titleSmall,
+                fontWeight = FontWeight.Bold,
+            )
+            Text(
+                text = otaStatusText ?: xy(
+                    "Untuk update ringan (konfigurasi, runner OS, stiker, patch protokol) gunakan Download Data di bawah tanpa perlu instal ulang APK. Untuk rilis besar gunakan Unduh APK.",
+                    "For lightweight updates (configs, OS runners, stickers, protocol patches) use Download Data below without reinstalling the APK. For major releases use Download APK.",
+                ),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            otaProgress?.let { pct ->
+                Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                    Box(
+                        Modifier
+                            .fillMaxWidth()
+                            .height(8.dp)
+                            .clip(RoundedCornerShape(4.dp))
+                            .background(MaterialTheme.colorScheme.onSurface.copy(alpha = 0.14f)),
+                    ) {
+                        Box(
+                            Modifier
+                                .fillMaxWidth((pct / 100f).coerceIn(0f, 1f))
+                                .height(8.dp)
+                                .clip(RoundedCornerShape(4.dp))
+                                .background(MaterialTheme.colorScheme.primary),
+                        )
+                    }
+                    Text(
+                        "$pct%",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.primary,
+                    )
+                }
+            }
+            XyPillButton(
+                text = xy("Download Data Update (OTA Ringan In-App)", "Download Data Update (Lightweight In-App OTA)"),
+                onClick = {
+                    profileScope.launch {
+                        otaProgress = 8
+                        AppUpdate.downloadAndApplyDataPack(context) { pct, lbl ->
+                            otaProgress = pct
+                            otaStatusText = lbl
+                        }.onFailure { err ->
+                            otaStatusText = err.message
+                        }
+                    }
+                },
+                primary = true,
+                compact = true,
+                modifier = Modifier.fillMaxWidth(),
+            )
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                XyPillButton(
+                    text = xy("Unduh APK (Update Besar)", "Download APK (Major Update)"),
+                    onClick = {
+                        openInAppCustomTab(context, "https://api.xydeskremote.biz.id/XyDesk-Remote64bit.apk")
+                    },
+                    primary = false,
+                    compact = true,
+                    modifier = Modifier.weight(1f),
+                )
+                XyPillButton(
+                    text = xy("Tutup", "Close"),
+                    onClick = { otaSheetOpen = false },
+                    primary = false,
+                    compact = true,
+                    modifier = Modifier.weight(1f),
+                )
+            }
+        }
+    }
     updateMessage?.let { msg ->
         XyDialog(
             title = xy("Pembaruan", "Updates"),
@@ -476,7 +510,10 @@ private fun CloudSyncCard() {
  * fitur RDP Gratis) otomatis mengisi nama tampilan. Nama bisa dikustom.
  */
 @Composable
-private fun CommunityAccountCard() {
+private fun CommunityAccountCard(
+    versionName: String? = null,
+    deviceCount: Int = 0,
+) {
     val context = LocalContext.current
     val api = remember(context) { CommunityJokesApi(context) }
     val clipboard = androidx.compose.ui.platform.LocalClipboardManager.current
@@ -484,16 +521,14 @@ private fun CommunityAccountCard() {
 
     var name by remember { mutableStateOf(api.displayName()) }
     var editing by remember { mutableStateOf(false) }
+    var showRecoverySection by remember { mutableStateOf(false) }
     var draft by remember { mutableStateOf("") }
     var busy by remember { mutableStateOf(false) }
     var restoreDraft by remember { mutableStateOf("") }
     var message by remember { mutableStateOf<String?>(null) }
     val accountId = remember { api.friendlyAccountId() }
 
-    // Foto profil: cache lokal + unggah ke worker biar muncul di feed.
     val avatarFile = remember { java.io.File(context.filesDir, "xy_avatar.webp") }
-    // Decode avatar di background (bukan di composition) supaya layar profil
-    // terasa terbuka seketika walau file avatar ada.
     var avatarBitmap by remember { mutableStateOf<android.graphics.Bitmap?>(null) }
     androidx.compose.runtime.LaunchedEffect(avatarFile) {
         val bmp = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
@@ -506,9 +541,9 @@ private fun CommunityAccountCard() {
         avatarBitmap = bmp
     }
     var avatarBusy by remember { mutableStateOf(false) }
-    var githubPatDraft by remember { mutableStateOf("") }
-    var githubOpen by remember { mutableStateOf(false) }
     var githubBusy by remember { mutableStateOf(false) }
+    var githubWaitingCode by remember { mutableStateOf<String?>(null) }
+    var githubWaitingUrl by remember { mutableStateOf<String?>(null) }
     var githubUser by remember { mutableStateOf(getVerifiedGitHubLogin(context)) }
     val isFounder = isFounderAccount(githubUser) || isFounderAccount(name)
     val pickAvatar = androidx.activity.compose.rememberLauncherForActivityResult(
@@ -571,95 +606,151 @@ private fun CommunityAccountCard() {
         }
     }
 
-    XyGlassCard(padding = 14.dp) {
-        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+    XyGlassCard(padding = 16.dp) {
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(14.dp),
+        ) {
+            // Avatar + tombol kamera di sudut kanan bawah avatar
             Box(
-                Modifier
-                    .size(44.dp)
-                    .clip(RoundedCornerShape(22.dp))
-                    .background(MaterialTheme.colorScheme.onSurface.copy(alpha = 0.10f))
-                    .let { mod ->
-                        if (isFounder) mod.border(1.5.dp, founderBorderBrush(), RoundedCornerShape(22.dp)) else mod
-                    },
+                modifier = Modifier
+                    .size(58.dp)
+                    .clickable(enabled = !avatarBusy) { pickAvatar.launch("image/*") },
                 contentAlignment = Alignment.Center,
             ) {
-                val bmp = avatarBitmap
-                if (bmp != null) {
-                    androidx.compose.foundation.Image(
-                        bitmap = bmp.asImageBitmap(),
-                        contentDescription = xy("Foto profil", "Profile photo"),
-                        modifier = Modifier.size(44.dp).clip(RoundedCornerShape(22.dp)),
-                        contentScale = androidx.compose.ui.layout.ContentScale.Crop,
-                    )
-                } else {
-                    Text(
-                        (name?.take(1) ?: "T").uppercase(),
-                        style = MaterialTheme.typography.titleMedium,
-                        fontWeight = androidx.compose.ui.text.font.FontWeight.Bold,
+                Box(
+                    Modifier
+                        .size(56.dp)
+                        .clip(RoundedCornerShape(28.dp))
+                        .background(MaterialTheme.colorScheme.onSurface.copy(alpha = 0.10f))
+                        .let { mod ->
+                            if (isFounder) mod.border(2.dp, founderBorderBrush(), RoundedCornerShape(28.dp)) else mod
+                        },
+                    contentAlignment = Alignment.Center,
+                ) {
+                    val bmp = avatarBitmap
+                    if (bmp != null) {
+                        androidx.compose.foundation.Image(
+                            bitmap = bmp.asImageBitmap(),
+                            contentDescription = xy("Foto profil", "Profile photo"),
+                            modifier = Modifier.size(56.dp).clip(RoundedCornerShape(28.dp)),
+                            contentScale = androidx.compose.ui.layout.ContentScale.Crop,
+                        )
+                    } else {
+                        Text(
+                            (name?.take(1) ?: githubUser?.take(1) ?: "T").uppercase(),
+                            style = MaterialTheme.typography.titleLarge,
+                            fontWeight = FontWeight.Bold,
+                        )
+                    }
+                }
+                Box(
+                    modifier = Modifier
+                        .align(Alignment.BottomEnd)
+                        .size(22.dp)
+                        .clip(RoundedCornerShape(11.dp))
+                        .background(MaterialTheme.colorScheme.primary)
+                        .border(1.5.dp, MaterialTheme.colorScheme.surface, RoundedCornerShape(11.dp)),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Icon(
+                        imageVector = XyIcons.Camera,
+                        contentDescription = xy("Ganti foto", "Change photo"),
+                        tint = MaterialTheme.colorScheme.onPrimary,
+                        modifier = Modifier.size(12.dp),
                     )
                 }
             }
-            Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
+
+            Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(6.dp),
                 ) {
                     Text(
-                        name ?: xy("Tamu $accountId", "Guest $accountId"),
-                        style = MaterialTheme.typography.titleSmall,
+                        name ?: githubUser ?: xy("Tamu $accountId", "Guest $accountId"),
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Bold,
                     )
                     if (isFounder) {
                         XyFounderBadge(compact = true)
                     }
                 }
                 Text(
-                    "ID: $accountId",
+                    buildString {
+                        if (!githubUser.isNullOrBlank()) {
+                            append("@$githubUser  ·  ")
+                        }
+                        append("ID: $accountId")
+                    },
                     style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
+                Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    ProfileChip(xy("v{0}", "v{0}", versionName ?: "-"))
+                    ProfileChip(
+                        if (deviceCount == 1) xy("1 perangkat", "1 device")
+                        else xy("{0} perangkat", "{0} devices", deviceCount),
+                    )
+                }
             }
-            XyIconPill(
-                XyIcons.Clip,
-                {
-                    clipboard.setText(androidx.compose.ui.text.AnnotatedString(api.restoreCode()))
-                    message = xyNow("Kode pemulihan disalin. Simpan untuk pulihkan akun setelah pasang ulang.", "Recovery code copied. Keep it to restore this account after a reinstall.")
-                },
-                contentDescription = xy("Salin kode pemulihan", "Copy recovery code"),
-            )
+
+            // Deret ikon aksi di pojok kanan kartu profil (Ganti nama, Pemulihan)
+            Row(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
+                XyIconPill(
+                    XyIcons.Edit,
+                    { editing = !editing; draft = name.orEmpty() },
+                    active = editing,
+                    contentDescription = xy("Ganti nama", "Change name"),
+                )
+                XyIconPill(
+                    XyIcons.Key,
+                    {
+                        showRecoverySection = !showRecoverySection
+                        clipboard.setText(androidx.compose.ui.text.AnnotatedString(api.restoreCode()))
+                        message = xyNow("Kode pemulihan akun disalin ke clipboard.", "Account recovery code copied to clipboard.")
+                    },
+                    active = showRecoverySection,
+                    contentDescription = xy("Pemulihan Akun", "Account Recovery"),
+                )
+            }
         }
+
         if (isFounder) {
             XyFounderBadge(
                 compact = false,
                 subtitle = xy("Pemilik & Kreator XyVerse", "XyVerse Owner & Creator"),
             )
         }
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
-            XyPillButton(
-                text = xy("Ganti nama", "Change name"),
-                onClick = { editing = !editing; draft = name.orEmpty() },
-                primary = false,
-                compact = true,
-            )
-            XyPillButton(
-                text = if (avatarBusy) xy("Menyimpan…", "Saving…") else xy("Ganti foto", "Change photo"),
-                onClick = {
-                    pickAvatar.launch("image/*")
-                },
-                primary = false,
-                compact = true,
-                enabled = !avatarBusy,
-            )
-        }
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
-            val ghUser = githubUser
-            if (ghUser != null) {
-                XyPillButton(
-                    text = xy("GitHub: $ghUser", "GitHub: $ghUser"),
-                    onClick = {},
-                    primary = false,
-                    compact = true,
-                    enabled = false,
+
+        // Baris Status & Tombol Login GitHub 1-Klik via In-App Browser (Chrome Custom Tab ⋮)
+        val ghUser = githubUser
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .clip(RoundedCornerShape(12.dp))
+                .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.42f))
+                .padding(horizontal = 12.dp, vertical = 9.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(10.dp),
+        ) {
+            GitHubLogoIcon(size = 20.dp, tint = MaterialTheme.colorScheme.onSurface)
+            Column(Modifier.weight(1f)) {
+                Text(
+                    if (ghUser != null) xy("GitHub Terhubung: @$ghUser", "GitHub Connected: @$ghUser")
+                    else xy("Hubungkan Akun GitHub", "Connect GitHub Account"),
+                    style = MaterialTheme.typography.labelLarge,
+                    fontWeight = FontWeight.SemiBold,
                 )
+                Text(
+                    if (ghUser != null) xy("Aktif untuk Buat RDP Cloud & Chat Global", "Active for Cloud RDP & Global Chat")
+                    else if (!githubWaitingCode.isNullOrBlank()) xy("Kode ${githubWaitingCode} disalin — klik Authorize di browser!", "Code ${githubWaitingCode} copied — tap Authorize in browser!")
+                    else xy("Login via browser in-app (⋮), tinggal klik Authorize", "Sign in via in-app browser (⋮), just tap Authorize"),
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+            if (ghUser != null) {
                 XyPillButton(
                     text = xy("Keluar", "Sign out"),
                     onClick = {
@@ -678,15 +769,51 @@ private fun CommunityAccountCard() {
                 )
             } else {
                 XyPillButton(
-                    text = xy("Login pakai GitHub", "Sign in with GitHub"),
-                    onClick = { githubOpen = true },
-                    primary = false,
+                    text = if (githubBusy) xy("Buka Browser ↗", "Open Browser ↗") else xy("Authorize GitHub", "Authorize GitHub"),
+                    onClick = {
+                        if (!githubBusy) {
+                            githubBusy = true
+                            scope.launch {
+                                performGitHubInAppBrowserLogin(
+                                    context = context,
+                                    onCodeReady = { code, url ->
+                                        githubWaitingCode = code
+                                        githubWaitingUrl = url
+                                    },
+                                    onSuccess = { _, user ->
+                                        githubBusy = false
+                                        githubWaitingCode = null
+                                        githubWaitingUrl = null
+                                        githubUser = user
+                                        name = api.displayName() ?: user
+                                        message = xyNow("Terhubung sebagai @$user!", "Connected as @$user!")
+                                    },
+                                    onError = { err ->
+                                        githubBusy = false
+                                        message = err
+                                    },
+                                )
+                            }
+                        } else {
+                            githubWaitingUrl?.let { openInAppCustomTab(context, it) }
+                        }
+                    },
+                    primary = true,
                     compact = true,
                 )
             }
         }
+
         if (editing) {
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(10.dp))
+                    .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.45f))
+                    .padding(horizontal = 10.dp, vertical = 6.dp),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
                 androidx.compose.foundation.text.BasicTextField(
                     value = draft,
                     onValueChange = { if (it.length <= 24) draft = it },
@@ -697,7 +824,7 @@ private fun CommunityAccountCard() {
                     decorationBox = { inner ->
                         if (draft.isEmpty()) {
                             Text(
-                                xy("Nama tampilan (maks 24)", "Display name (max 24)"),
+                                xy("Nama tampilan baru (maks 24)", "New display name (max 24)"),
                                 style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                             )
@@ -714,6 +841,7 @@ private fun CommunityAccountCard() {
                                 val ok = runCatching { api.setDisplayName(draft) }.getOrDefault(false)
                                 message = if (ok) {
                                     name = api.displayName()
+                                    editing = false
                                     xyNow("Nama tersimpan.", "Name saved.")
                                 } else {
                                     xyNow("Gagal menyimpan. Cek jaringan / coba lagi.", "Couldn't save. Check network and retry.")
@@ -727,116 +855,21 @@ private fun CommunityAccountCard() {
                 )
             }
         }
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
-            androidx.compose.foundation.text.BasicTextField(
-                value = restoreDraft,
-                onValueChange = { restoreDraft = it },
-                modifier = Modifier.weight(1f),
-                textStyle = androidx.compose.ui.text.TextStyle(
-                    color = MaterialTheme.colorScheme.onSurface,
-                    fontSize = MaterialTheme.typography.bodySmall.fontSize,
-                ),
-                cursorBrush = androidx.compose.ui.graphics.SolidColor(MaterialTheme.colorScheme.primary),
-                singleLine = true,
-                decorationBox = { inner ->
-                    if (restoreDraft.isEmpty()) {
-                        Text(
-                            xy("Kode pemulihan akun lama…", "Old account recovery code…"),
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
-                    }
-                    inner()
-                },
-            )
-            XyPillButton(
-                text = xy("Pulihkan", "Restore"),
-                onClick = {
-                    val ok = api.restoreClientId(restoreDraft)
-                    message = if (ok) {
-                        editing = false
-                        scope.launch {
-                            name = runCatching { api.fetchServerDisplayName() }.getOrNull() ?: api.displayName()
-                            name?.let { api.setDisplayNameLocally(it) }
-                        }
-                        xyNow("Akun dipulihkan. Nama lama dimuat ulang.", "Account restored. Reloading your old name.")
-                    } else {
-                        xyNow("Kode tidak valid. Tempel kode pemulihan yang dulu kamu salin.", "Invalid code. Paste the recovery code you copied before.")
-                    }
-                },
-                primary = false,
-                compact = true,
-                enabled = restoreDraft.trim().isNotEmpty(),
-            )
-        }
-        message?.let {
-            Text(it, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.primary)
-        }
-    }
 
-    if (githubOpen) {
-        XyOverlay(
-            title = xy("Login pakai GitHub", "Sign in with GitHub"),
-            onDismiss = { if (!githubBusy) githubOpen = false },
-        ) {
-            if (GITHUB_OAUTH_CLIENT_ID.isNotBlank()) {
-                GitHubDeviceFlowPanel(
-                    onCancel = { githubOpen = false },
-                    onSuccess = { token, user ->
-                        val saved = runCatching {
-                            id.xydesk.remote.security.CredentialVault(context.applicationContext)
-                                .put(id.xydesk.remote.ui.rdp.XyRdpConfig.VAULT_PAT_ID, token)
-                        }.getOrDefault(false)
-                        if (saved) {
-                            githubUser = user
-                            saveVerifiedGitHubLogin(context, user)
-                            githubOpen = false
-                            if (api.displayName() == null) {
-                                scope.launch {
-                                    runCatching { api.setDisplayName(user) }
-                                    name = api.displayName() ?: user
-                                }
-                            }
-                            message = xyNow("Masuk sebagai $user.", "Signed in as $user.")
-                        } else {
-                            message = xyNow(
-                                "Keystore tidak tersedia di perangkat ini.",
-                                "Keystore unavailable on this device.",
-                            )
-                        }
-                    },
-                    onError = { message = it },
-                )
-            } else Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                Text(
-                    xy(
-                        "Buat Personal Access Token (scope: read:user) di GitHub, tempel di sini. " +
-                            "Token disimpan aman di Keystore perangkat dan hanya dipakai untuk nama profilmu.",
-                        "Create a Personal Access Token (scope: read:user) on GitHub and paste it here. " +
-                            "The token stays in device Keystore and is only used for your profile name.",
-                    ),
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-                XyPillButton(
-                    text = xy("Buka github.com/settings/tokens", "Open github.com/settings/tokens"),
-                    onClick = {
-                        runCatching {
-                            context.startActivity(
-                                android.content.Intent(
-                                    android.content.Intent.ACTION_VIEW,
-                                    android.net.Uri.parse("https://github.com/settings/tokens/new?description=XyDesk+Remote&scope=read:user"),
-                                ),
-                            )
-                        }
-                    },
-                    primary = false,
-                    compact = true,
-                )
+        if (showRecoverySection) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(10.dp))
+                    .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.45f))
+                    .padding(horizontal = 10.dp, vertical = 6.dp),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
                 androidx.compose.foundation.text.BasicTextField(
-                    value = githubPatDraft,
-                    onValueChange = { githubPatDraft = it.take(120) },
-                    modifier = Modifier.fillMaxWidth(),
+                    value = restoreDraft,
+                    onValueChange = { restoreDraft = it },
+                    modifier = Modifier.weight(1f),
                     textStyle = androidx.compose.ui.text.TextStyle(
                         color = MaterialTheme.colorScheme.onSurface,
                         fontSize = MaterialTheme.typography.bodySmall.fontSize,
@@ -844,9 +877,9 @@ private fun CommunityAccountCard() {
                     cursorBrush = androidx.compose.ui.graphics.SolidColor(MaterialTheme.colorScheme.primary),
                     singleLine = true,
                     decorationBox = { inner ->
-                        if (githubPatDraft.isEmpty()) {
+                        if (restoreDraft.isEmpty()) {
                             Text(
-                                xy("Tempel token (ghp_… / github_pat_…)", "Paste token (ghp_… / github_pat_…)"),
+                                xy("Tempel kode pemulihan akun lama…", "Paste old account recovery code…"),
                                 style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                             )
@@ -854,53 +887,30 @@ private fun CommunityAccountCard() {
                         inner()
                     },
                 )
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    XyPillButton(
-                        text = xy("Batal", "Cancel"),
-                        onClick = { githubOpen = false },
-                        primary = false,
-                        compact = true,
-                        modifier = Modifier.weight(1f),
-                    )
-                    XyPillButton(
-                        text = if (githubBusy) xy("Memeriksa…", "Checking…") else xy("Masuk", "Sign in"),
-                        onClick = {
+                XyPillButton(
+                    text = xy("Pulihkan", "Restore"),
+                    onClick = {
+                        val ok = api.restoreClientId(restoreDraft)
+                        message = if (ok) {
+                            editing = false
+                            showRecoverySection = false
                             scope.launch {
-                                githubBusy = true
-                                try {
-                                    val token = githubPatDraft.trim()
-                                    val user = id.xydesk.remote.ui.rdp.XyRdpClient.whoami(token)
-                                    if (user == null) {
-                                        message = xyNow("Token tidak valid atau scope kurang (read:user).", "Invalid token or missing scope (read:user).")
-                                    } else {
-                                        val saved = runCatching {
-                                            id.xydesk.remote.security.CredentialVault(context.applicationContext)
-                                                .put(id.xydesk.remote.ui.rdp.XyRdpConfig.VAULT_PAT_ID, token)
-                                        }.getOrDefault(false)
-                                        if (saved) {
-                                            githubUser = user
-                                            githubOpen = false
-                                            githubPatDraft = ""
-                                            if (api.displayName() == null) {
-                                                runCatching { api.setDisplayName(user) }
-                                                name = api.displayName() ?: user
-                                            }
-                                            message = xyNow("Masuk sebagai $user.", "Signed in as $user.")
-                                        } else {
-                                            message = xyNow("Keystore tidak tersedia di perangkat ini.", "Keystore unavailable on this device.")
-                                        }
-                                    }
-                                } finally {
-                                    githubBusy = false
-                                }
+                                name = runCatching { api.fetchServerDisplayName() }.getOrNull() ?: api.displayName()
+                                name?.let { api.setDisplayNameLocally(it) }
                             }
-                        },
-                        enabled = !githubBusy && githubPatDraft.trim().isNotEmpty(),
-                        compact = true,
-                        modifier = Modifier.weight(1f),
-                    )
-                }
+                            xyNow("Akun dipulihkan. Nama lama dimuat ulang.", "Account restored. Reloading your old name.")
+                        } else {
+                            xyNow("Kode tidak valid. Tempel kode pemulihan yang dulu kamu salin.", "Invalid code. Paste the recovery code you copied before.")
+                        }
+                    },
+                    primary = false,
+                    compact = true,
+                    enabled = restoreDraft.trim().isNotEmpty(),
+                )
             }
+        }
+        message?.let {
+            Text(it, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.primary)
         }
     }
 }

@@ -515,6 +515,11 @@ class XyDeskSessionActivity : ComponentActivity() {
         super.onStart()
         // balik dari background sebelum timer jalan = cancel auto-disconnect
         bgHandler.removeCallbacks(bgDisconnect)
+        // Jalankan Foreground Service sejak sesi di foreground agar Android 12–15+
+        // tidak pernah membekukan / mematikan sesi saat bermain game atau ada notifikasi.
+        if (appPrefs?.keepAlive != false) {
+            runCatching { XySessionService.start(this, sessionLabel, ping = true) }
+        }
     }
 
     override fun onResume() {

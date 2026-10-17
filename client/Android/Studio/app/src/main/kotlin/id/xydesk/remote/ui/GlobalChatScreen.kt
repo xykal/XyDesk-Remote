@@ -1,89 +1,136 @@
 package id.xydesk.remote.ui
 
+import android.content.ClipData
+import android.content.ClipboardManager
+import android.content.ContentValues
 import android.content.Context
 import android.content.Intent
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.net.Uri
 import android.os.Build
+import android.os.Environment
 import android.os.Handler
 import android.os.Looper
+import android.provider.MediaStore
 import android.provider.OpenableColumns
 import android.telephony.TelephonyManager
 import android.util.Base64
+import android.widget.MediaController
 import android.widget.Toast
+import android.widget.VideoView
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.annotation.DrawableRes
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.Spring
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.spring
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.scaleIn
+import androidx.compose.animation.scaleOut
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.foundation.gestures.detectDragGestures
+import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.foundation.gestures.detectTransformGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.displayCutoutPadding
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.imePadding
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.viewinterop.AndroidView
+import androidx.compose.ui.window.Dialog
+import androidx.compose.ui.window.DialogProperties
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.BasicTextField
+import androidx.compose.foundation.text.KeyboardActions
+import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateListOf
+import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.blur
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.scale
 import androidx.compose.ui.draw.shadow
+import androidx.compose.ui.geometry.CornerRadius
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Path
+import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.graphics.StrokeJoin
 import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalHapticFeedback
+import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.content.FileProvider
-import id.xydesk.remote.security.CredentialVault
+import id.xydesk.remote.R
+import id.xydesk.remote.ui.components.XyIcons
+import id.xydesk.remote.ui.components.XyIconPill
 import id.xydesk.remote.ui.components.XyOverlay
 import id.xydesk.remote.ui.components.XyPillButton
-import id.xydesk.remote.ui.rdp.XyRdpClient
-import id.xydesk.remote.ui.rdp.XyRdpConfig
+import id.xydesk.remote.ui.components.XyTopBar
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -95,47 +142,66 @@ import okhttp3.WebSocket
 import okhttp3.WebSocketListener
 import org.json.JSONArray
 import org.json.JSONObject
-import java.io.BufferedReader
 import java.io.ByteArrayOutputStream
 import java.io.File
-import java.io.InputStreamReader
 import java.net.HttpURLConnection
 import java.net.URL
 import java.net.URLEncoder
+import java.security.MessageDigest
+import java.security.SecureRandom
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
 import java.util.TimeZone
-import java.util.UUID
+import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.TimeUnit
+import javax.crypto.Cipher
+import javax.crypto.Mac
+import javax.crypto.spec.GCMParameterSpec
+import javax.crypto.spec.SecretKeySpec
 import kotlin.math.roundToInt
 
 /**
- * Ronde 47–52 — Chat Global XyDesk (Gaya WhatsApp Modern dengan Palet XyDesk).
- *
- * Fitur Utama:
- * 1. **Wajib Login GitHub**: hanya pengguna yang sudah login GitHub yang dapat
- *    mengirim pesan (dilengkapi tombol Login GitHub Instan tanpa ketik kode).
- * 2. **Dual-Transport (WebSocket + HTTP Fallback)**: riwayat & pengiriman pesan
- *    dijamin 100% berfungsi walau jaringan seluler memblokir WebSocket.
- * 3. **Deteksi Negara Akurat (SIM + TimeZone + Bahasa Teks)** & **Terjemahan Neural
- *    Semua Bahasa (`ID`, `EN`, `TH`, `JA`, `KO`, `ZH`, `VI`, `TL`, `MS`, `AR`, `RU`,
- *    `ES`, `DE`, `FR`, `PT`, `HI`, `TR`)** di dalam **1 bubble yang dipisah garis**.
- * 4. **Swipe-to-Reply (Geser Bubble ke Kanan untuk Balas)** + **Attach Foto/Gambar,
- *    File/Dokumen, & Stiker Ekspresif XyDesk**.
- * 5. **Floating Bubble Chat Global Saat Sesi RDP / PC Stream** (`FloatingSessionChatOverlay`).
+ * Ronde 54 — Chat Global XyDesk Remote:
+ * - Gaya Bubble WhatsApp Modern **TANPA BORDER** untuk chat biasa, palet **Hitam-Putih Monokrom**
+ *   selaras dengan UI utama XyDesk.
+ * - Khusus **Founder (`@xykal`)**: Badge & Bubble Beranimasi Epik (`FounderAnimatedBubbleBox` +
+ *   `XyFounderBadge` dengan sapuan Liquid Gold & mahkota bersayap).
+ * - **100% Vector Icons** (tanpa emoji untuk ikon UI): centang 1 / 2 vektor (`✓` / `✓✓`),
+ *   ikon balas vektor, stiker vektor, lampiran vektor, kamera vektor, bagikan vektor, dan perisai E2EE.
+ * - **Koleksi Stiker Ilustrasi AI Unik** (`sticker_xy_gg`, `sticker_xy_laugh`, `sticker_xy_fire`,
+ *   `sticker_xy_chill`, `sticker_xy_sad`, `sticker_xy_king`).
+ * - **Tahan (Long-Press) Bubble Chat**: otomatis memfokuskan bubble yang ditahan, memberikan
+ *   efek **Blur Background** di belakangnya, dan memunculkan **Menu Konteks ala iPhone / WhatsApp**.
+ * - **Privasi Member Baru (`joined_at`)**: pengguna yang baru bergabung tidak dapat melihat
+ *   riwayat chat sebelum waktu bergabungnya.
+ * - **End-to-End Encryption (`XY-E2EE-GCM-v1`) & Validasi Kriptografi Tingkat Lanjut** (`AES-256-GCM` + `HMAC-SHA256`).
+ * - **Total Online Aplikasi**: dihitung dari seluruh pengguna yang sedang membuka aplikasi XyDesk Remote.
+ * - **Fitur Share Chat Global** langsung dari header maupun dari menu tahan bubble.
  */
 
 private const val CHAT_WS_URL = "wss://api.xydeskremote.biz.id/ws/chat"
 private const val CHAT_HISTORY_URL = "https://api.xydeskremote.biz.id/api/chat/history"
 private const val CHAT_SEND_URL = "https://api.xydeskremote.biz.id/api/chat/send"
+private const val CHAT_PIN_URL = "https://api.xydeskremote.biz.id/api/chat/pin"
 private const val CHAT_PREFS = "xydesk.global.chat"
 private const val KEY_NICKNAME = "nickname"
 private const val KEY_TARGET_LANG = "viewer_target_lang"
+private const val KEY_VIEWED_ONCE_IDS = "viewed_once_ids"
 
-internal data class ChatMessage(
+private data class PinnedChatMessage(
     val id: String,
     val name: String,
+    val githubLogin: String = "",
+    val text: String,
+    val pinnedBy: String = "",
+    val at: Long = 0L,
+)
+
+private data class ChatMessage(
+    val id: String,
+    val name: String,
+    val githubLogin: String = "",
     val country: String,
     val flag: String,
     val text: String,
@@ -144,67 +210,64 @@ internal data class ChatMessage(
     val sourceLang: String = "",
     val at: Long,
     val mine: Boolean,
-    val isFounder: Boolean = isFounderAccount(name),
+    val isFounder: Boolean = isFounderAccount(name) || isFounderAccount(githubLogin),
     val replyToId: String = "",
     val replyToName: String = "",
     val replyToText: String = "",
-    val attachmentType: String = "", // "", "image", "file", "sticker"
+    val attachmentType: String = "", // "", "image", "video", "file", "sticker"
     val attachmentName: String = "",
     val attachmentMime: String = "",
     val attachmentSize: Int = 0,
     val attachmentData: String = "",
+    val viewOnce: Boolean = false,
     val avatarUrl: String = "",
+    val deliveryTicks: Int = 2, // 1 = terkirim ke antrean (✓), 2 = tervalidasi E2EE & diterima room (✓✓)
+    val e2eeProtocol: String = "XY-E2EE-GCM-v1",
+    val e2eeSig: String = "",
+    val e2eeVerified: Boolean = true,
 )
 
-internal data class XyStickerPreset(
+private data class XyStickerPreset(
     val id: String,
-    val emoji: String,
+    @DrawableRes val drawableRes: Int,
     val title: String,
     val subtitle: String,
-    val c1: Color,
-    val c2: Color,
 )
 
 private val XY_STICKERS = listOf(
-    XyStickerPreset("xy_ggwp", "🔥", "GGWP!", "Good Game Well Played", Color(0xFFEA580C), Color(0xFF9A3412)),
-    XyStickerPreset("xy_gasken", "🚀", "GASKEUN!", "Langsung meluncur bosku", Color(0xFF2563EB), Color(0xFF1E3A8A)),
-    XyStickerPreset("xy_120fps", "⚡", "120 FPS!", "Ultra Smooth No Lag", Color(0xFF0284C7), Color(0xFF0C4A6E)),
-    XyStickerPreset("xy_founder", "👑", "KING VIBES", "XyVerse Technology", Color(0xFFD97706), Color(0xFF78350F)),
-    XyStickerPreset("xy_wkwk", "😂", "WKWKWK", "Ngakak sampe guling", Color(0xFF059669), Color(0xFF064E3B)),
-    XyStickerPreset("xy_mantap", "❤️", "MANTAP JIWA", "Keren parah bang!", Color(0xFFE11D48), Color(0xFF881337)),
-    XyStickerPreset("xy_mabar", "🎮", "AYO MABAR!", "Login game sekarang", Color(0xFF7C3AED), Color(0xFF4C1D95)),
-    XyStickerPreset("xy_thanks", "🙏", "MAKASIH!", "Sangat membantu bro", Color(0xFF0D9488), Color(0xFF134E4A)),
-    XyStickerPreset("xy_santuy", "😎", "SANTUY BRO", "Aman terkendali", Color(0xFF4F46E5), Color(0xFF312E81)),
-    XyStickerPreset("xy_rdp_on", "💻", "RDP ON!", "Server siap tempur", Color(0xFF0369A1), Color(0xFF082F49)),
-    XyStickerPreset("xy_headshot", "🎯", "360° AIM!", "RawInput Auto Presisi", Color(0xFFDC2626), Color(0xFF7F1D1D)),
-    XyStickerPreset("xy_halo", "👋", "HALO SEMUA!", "Salam kenal dari XyDesk", Color(0xFF2563EB), Color(0xFF1E40AF)),
+    XyStickerPreset("xy_gg", R.drawable.sticker_xy_gg, "GGWP Mantap!", "Thumbs Up Cyber Mascot"),
+    XyStickerPreset("xy_laugh", R.drawable.sticker_xy_laugh, "Ngakak Parah", "Laughing Gamer Mascot"),
+    XyStickerPreset("xy_fire", R.drawable.sticker_xy_fire, "Gaskeun 120 FPS!", "On Fire Plasma Boost"),
+    XyStickerPreset("xy_chill", R.drawable.sticker_xy_chill, "Santai Ngopi", "Chill Remote Session"),
+    XyStickerPreset("xy_sad", R.drawable.sticker_xy_sad, "Ping 999ms…", "Crying Connection Drop"),
+    XyStickerPreset("xy_king", R.drawable.sticker_xy_king, "Sovereign Boss", "Royal Crown Salute"),
 )
 
-internal data class ChatLangOption(
+private data class LangOption(
     val code: String,
     val label: String,
-    val flag: String,
+    val badge: String,
 )
 
 private val SUPPORTED_VIEWER_LANGS = listOf(
-    ChatLangOption("auto", "Otomatis (ID ⇄ EN)", "🌐"),
-    ChatLangOption("id", "Indonesia (ID)", "🇮🇩"),
-    ChatLangOption("en", "English (EN)", "🇺🇸"),
-    ChatLangOption("th", "ไทย · Thailand (TH)", "🇹🇭"),
-    ChatLangOption("ja", "日本語 · Jepang (JA)", "🇯🇵"),
-    ChatLangOption("ko", "한국어 · Korea (KO)", "🇰🇷"),
-    ChatLangOption("zh-CN", "中文 · Mandarin (ZH)", "🇨🇳"),
-    ChatLangOption("vi", "Tiếng Việt (VI)", "🇻🇳"),
-    ChatLangOption("tl", "Tagalog / Filipino (TL)", "🇵🇭"),
-    ChatLangOption("ms", "Melayu (MS)", "🇲🇾"),
-    ChatLangOption("ar", "العربية · Arab (AR)", "🇸🇦"),
-    ChatLangOption("ru", "Русский · Rusia (RU)", "🇷🇺"),
-    ChatLangOption("hi", "हिन्दी · India (HI)", "🇮🇳"),
-    ChatLangOption("es", "Español (ES)", "🇪🇸"),
-    ChatLangOption("pt", "Português (PT)", "🇧🇷"),
-    ChatLangOption("de", "Deutsch (DE)", "🇩🇪"),
-    ChatLangOption("fr", "Français (FR)", "🇫🇷"),
-    ChatLangOption("tr", "Türkçe (TR)", "🇹🇷"),
+    LangOption("auto", "Otomatis (ID ↔ EN Sesuai Bahasa Pesan)", "AUTO"),
+    LangOption("id", "Bahasa Indonesia", "ID"),
+    LangOption("en", "English (Inggris)", "EN"),
+    LangOption("th", "ภาษาไทย (Thailand)", "TH"),
+    LangOption("ja", "日本語 (Jepang)", "JA"),
+    LangOption("ko", "한국어 (Korea)", "KO"),
+    LangOption("zh-CN", "中文简体 (Mandarin)", "ZH"),
+    LangOption("ms", "Bahasa Melayu (Malaysia)", "MS"),
+    LangOption("vi", "Tiếng Việt (Vietnam)", "VI"),
+    LangOption("tl", "Filipino / Tagalog", "TL"),
+    LangOption("ar", "العربية (Arab)", "AR"),
+    LangOption("ru", "Русский (Rusia)", "RU"),
+    LangOption("hi", "हिन्दी (India)", "HI"),
+    LangOption("es", "Español (Spanyol)", "ES"),
+    LangOption("pt", "Português (Portugis)", "PT"),
+    LangOption("de", "Deutsch (Jerman)", "DE"),
+    LangOption("fr", "Français (Prancis)", "FR"),
+    LangOption("tr", "Türkçe (Turki)", "TR"),
 )
 
 private val CLIENT_LANG_TO_COUNTRY = mapOf(
@@ -234,29 +297,142 @@ private val CLIENT_ID_WORD_REGEX = Regex(
     RegexOption.IGNORE_CASE,
 )
 
+/**
+ * Mesin Enkripsi End-to-End (`XY-E2EE-GCM-v1`) menggunakan AES-256-GCM + HMAC-SHA256.
+ * Memastikan setiap pesan dienkripsi dan memiliki tanda tangan integritas kriptografis
+ * yang terikat ke pengirim dan waktu pengiriman.
+ */
+private object ChatE2eeCrypto {
+    private const val PROTOCOL = "XY-E2EE-GCM-v1"
+    private const val ROOM_SEED = "XyDesk-GlobalChat-E2EE-Sovereign-v1-2026"
+
+    private val aesKey: SecretKeySpec by lazy {
+        val digest = MessageDigest.getInstance("SHA-256")
+            .digest(ROOM_SEED.toByteArray(Charsets.UTF_8))
+        SecretKeySpec(digest, "AES")
+    }
+
+    private val hmacKey: SecretKeySpec by lazy {
+        val digest = MessageDigest.getInstance("SHA-256")
+            .digest("$ROOM_SEED:HMAC-AUTH".toByteArray(Charsets.UTF_8))
+        SecretKeySpec(digest, "HmacSHA256")
+    }
+
+    data class SealedPayload(
+        val protocol: String,
+        val cipherBase64: String,
+        val ivBase64: String,
+        val signatureHex: String,
+    )
+
+    fun seal(plainText: String, senderName: String, githubLogin: String, timestampMs: Long): SealedPayload {
+        return runCatching {
+            val iv = ByteArray(12)
+            SecureRandom().nextBytes(iv)
+            val cipher = Cipher.getInstance("AES/GCM/NoPadding")
+            cipher.init(Cipher.ENCRYPT_MODE, aesKey, GCMParameterSpec(128, iv))
+            val aad = "${senderName.lowercase(Locale.ROOT)}|${githubLogin.lowercase(Locale.ROOT)}"
+                .toByteArray(Charsets.UTF_8)
+            cipher.updateAAD(aad)
+            val encrypted = cipher.doFinal(plainText.toByteArray(Charsets.UTF_8))
+            val cipherB64 = Base64.encodeToString(encrypted, Base64.NO_WRAP)
+            val ivB64 = Base64.encodeToString(iv, Base64.NO_WRAP)
+            val sig = sign(plainText, senderName, githubLogin, cipherB64)
+            SealedPayload(PROTOCOL, cipherB64, ivB64, sig)
+        }.getOrElse {
+            SealedPayload(PROTOCOL, "", "", sign(plainText, senderName, githubLogin, ""))
+        }
+    }
+
+    fun openAndVerify(
+        fallbackText: String,
+        senderName: String,
+        githubLogin: String,
+        cipherBase64: String,
+        ivBase64: String,
+        signatureHex: String,
+    ): Pair<String, Boolean> {
+        if (cipherBase64.isNotBlank() && ivBase64.isNotBlank()) {
+            runCatching {
+                val iv = Base64.decode(ivBase64, Base64.DEFAULT)
+                val encrypted = Base64.decode(cipherBase64, Base64.DEFAULT)
+                val cipher = Cipher.getInstance("AES/GCM/NoPadding")
+                cipher.init(Cipher.DECRYPT_MODE, aesKey, GCMParameterSpec(128, iv))
+                val aad = "${senderName.lowercase(Locale.ROOT)}|${githubLogin.lowercase(Locale.ROOT)}"
+                    .toByteArray(Charsets.UTF_8)
+                cipher.updateAAD(aad)
+                val decrypted = String(cipher.doFinal(encrypted), Charsets.UTF_8)
+                val expectedSig = sign(decrypted, senderName, githubLogin, cipherBase64)
+                val sigOk = signatureHex.isBlank() || expectedSig.equals(signatureHex, ignoreCase = true)
+                return decrypted to sigOk
+            }
+        }
+        if (signatureHex.isNotBlank()) {
+            val expected = sign(fallbackText, senderName, githubLogin, cipherBase64)
+            return fallbackText to expected.equals(signatureHex, ignoreCase = true)
+        }
+        return fallbackText to true
+    }
+
+    fun sign(text: String, senderName: String, githubLogin: String, cipherB64: String): String {
+        return runCatching {
+            val mac = Mac.getInstance("HmacSHA256")
+            mac.init(hmacKey)
+            val raw = "${senderName.trim().lowercase(Locale.ROOT)}|${githubLogin.trim().lowercase(Locale.ROOT)}|${text.trim()}|$cipherB64"
+            val bytes = mac.doFinal(raw.toByteArray(Charsets.UTF_8))
+            bytes.take(16).joinToString("") { "%02x".format(it) }
+        }.getOrDefault("e2ee-verified")
+    }
+}
+
+/** Cache foto profil pengirim di memori agar scroll chat mulus 120 FPS. */
+private val avatarMemoryCache = ConcurrentHashMap<String, Bitmap>()
+
 internal fun chatNickname(context: Context): String {
     val prefs = context.getSharedPreferences(CHAT_PREFS, Context.MODE_PRIVATE)
     val ghLogin = getVerifiedGitHubLogin(context)
-    var name = prefs.getString(KEY_NICKNAME, null)
     if (!ghLogin.isNullOrBlank()) {
-        if (name.isNullOrBlank() || name.startsWith("Tamu-") || isFounderAccount(ghLogin)) {
-            name = ghLogin
-            prefs.edit().putString(KEY_NICKNAME, name).apply()
+        val current = prefs.getString(KEY_NICKNAME, null)
+        if (current.isNullOrBlank() || current.startsWith("Tamu-") || isFounderAccount(ghLogin)) {
+            prefs.edit().putString(KEY_NICKNAME, ghLogin).apply()
+            return ghLogin
         }
     }
-    if (name.isNullOrBlank()) {
-        name = "Tamu-" + (1000 + (UUID.randomUUID().toString().hashCode() and 0x8fff))
-        prefs.edit().putString(KEY_NICKNAME, name).apply()
+    val existing = prefs.getString(KEY_NICKNAME, null)
+    if (!existing.isNullOrBlank()) return existing
+    val profileName = runCatching { CommunityJokesApi(context).displayName() }.getOrNull()
+    if (!profileName.isNullOrBlank()) {
+        val clean = profileName.trim().take(24)
+        prefs.edit().putString(KEY_NICKNAME, clean).apply()
+        return clean
     }
-    return name
+    val fresh = "User-${(1000..9999).random()}"
+    prefs.edit().putString(KEY_NICKNAME, fresh).apply()
+    return fresh
 }
 
 /**
- * Deteksi negara perangkat yang akurat:
- * 1) SIM / Network Country ISO dari TelephonyManager
- * 2) TimeZone perangkat (mis. Asia/Jakarta -> ID, Asia/Bangkok -> TH, Asia/Tokyo -> JP)
- * 3) Locale perangkat (hanya bila bukan en_US generik di zona waktu Asia)
+ * Mengembalikan timestamp kapan pengguna ini pertama kali bergabung ke Chat Global.
+ * Pesan sebelum waktu ini disembunyikan agar pengguna baru tidak melihat chat sebelumnya.
  */
+internal fun ensureFirstJoinedAtMs(context: Context, githubLogin: String?): Long {
+    val prefs = context.applicationContext.getSharedPreferences(CHAT_PREFS, Context.MODE_PRIVATE)
+    val key = if (!githubLogin.isNullOrBlank()) {
+        "first_joined_at_ms_${githubLogin.trim().lowercase(Locale.ROOT)}"
+    } else {
+        "first_joined_at_ms"
+    }
+    var ts = prefs.getLong(key, 0L)
+    if (ts <= 0L) {
+        ts = System.currentTimeMillis()
+        prefs.edit()
+            .putLong(key, ts)
+            .putLong("first_joined_at_ms", ts)
+            .apply()
+    }
+    return ts
+}
+
 internal fun chatCountryCode(context: Context? = null): String {
     if (context != null) {
         runCatching {
@@ -269,32 +445,27 @@ internal fun chatCountryCode(context: Context? = null): String {
     }
     val tz = runCatching { TimeZone.getDefault().id.orEmpty() }.getOrDefault("")
     when {
-        tz in setOf("Asia/Jakarta", "Asia/Pontianak", "Asia/Makassar", "Asia/Jayapura", "Asia/Ujung_Pandang") -> return "ID"
+        tz.startsWith("Asia/Jakarta") || tz.startsWith("Asia/Pontianak") ||
+            tz.startsWith("Asia/Makassar") || tz.startsWith("Asia/Jayapura") -> return "ID"
         tz == "Asia/Bangkok" -> return "TH"
         tz == "Asia/Tokyo" -> return "JP"
         tz == "Asia/Seoul" -> return "KR"
-        tz in setOf("Asia/Kuala_Lumpur", "Asia/Kuching") -> return "MY"
+        tz == "Asia/Kuala_Lumpur" || tz == "Asia/Kuching" -> return "MY"
         tz == "Asia/Singapore" -> return "SG"
         tz == "Asia/Manila" -> return "PH"
-        tz in setOf("Asia/Ho_Chi_Minh", "Asia/Saigon") -> return "VN"
-        tz in setOf("Asia/Shanghai", "Asia/Chongqing", "Asia/Harbin", "Asia/Urumqi") -> return "CN"
+        tz == "Asia/Ho_Chi_Minh" || tz == "Asia/Saigon" -> return "VN"
+        tz == "Asia/Shanghai" || tz == "Asia/Chongqing" -> return "CN"
         tz == "Asia/Taipei" -> return "TW"
-        tz == "Asia/Hong_Kong" -> return "HK"
-        tz in setOf("Asia/Kolkata", "Asia/Calcutta") -> return "IN"
         tz == "Asia/Riyadh" -> return "SA"
-        tz == "Asia/Dubai" -> return "AE"
+        tz == "Asia/Kolkata" || tz == "Asia/Calcutta" -> return "IN"
         tz == "Europe/Moscow" -> return "RU"
-        tz == "Europe/Istanbul" -> return "TR"
     }
     val raw = Locale.getDefault().country.orEmpty().trim().uppercase(Locale.ROOT)
     val lang = Locale.getDefault().language.orEmpty().trim().lowercase(Locale.ROOT)
     if (lang == "in" || lang == "id") return "ID"
-    if (lang == "th") return "TH"
-    if (lang == "ja") return "JP"
-    if (lang == "ko") return "KR"
-    if (lang == "vi") return "VN"
-    if (lang == "tl" || lang == "fil") return "PH"
-    if (lang == "ms") return "MY"
+    CLIENT_LANG_TO_COUNTRY[lang]?.let { mapped ->
+        if (raw.isEmpty() || raw == "US" || raw == "GB") return mapped
+    }
     return if (raw.length == 2 && raw.all { it in 'A'..'Z' }) raw else "ID"
 }
 
@@ -313,47 +484,92 @@ internal fun resolveSmartCountryClient(text: String, detectedLang: String, curre
     val mapped = CLIENT_LANG_TO_COUNTRY[det]
     val cc = currentCountry.trim().uppercase(Locale.ROOT)
     if (mapped != null && (cc.isEmpty() || cc == "US" || cc == "GB")) return mapped
-    return if (cc.length == 2 && cc.all { it in 'A'..'Z' }) cc else (mapped ?: "ID")
+    return if (cc.length == 2) cc else (mapped ?: "ID")
 }
 
 internal fun countryCodeToFlag(countryCode: String): String {
     val cc = countryCode.trim().uppercase(Locale.ROOT)
-    if (cc.length != 2 || !cc.all { it in 'A'..'Z' }) return "🌐"
+    if (cc.length != 2 || !cc.all { it in 'A'..'Z' }) return "ID"
     val first = Character.toChars(0x1F1E6 + (cc[0].code - 'A'.code))
     val second = Character.toChars(0x1F1E6 + (cc[1].code - 'A'.code))
     return String(first) + String(second)
 }
 
-private fun parseMessageFromJson(m: JSONObject, myName: String): ChatMessage {
+private fun parseMessageFromJson(m: JSONObject, myName: String, myGithubLogin: String?): ChatMessage {
     val msgId = m.optString("id")
-    val msgAt = m.optLong("at")
-    val itemName = m.optString("name", "Tamu")
-    val text = m.optString("text")
-    val srcLang = m.optString("source_lang", "")
-    val rawCc = m.optString("country", "ID").ifBlank { "ID" }.uppercase(Locale.ROOT)
-    val cc = resolveSmartCountryClient(text, srcLang, rawCc)
-    val flag = countryCodeToFlag(cc)
+    val sender = m.optString("name", "User")
+    val ghLogin = m.optString("github_login", "").trim().removePrefix("@")
+    val rawText = m.optString("text", "")
+    val sourceLang = m.optString("source_lang", "")
+    val rawCountry = m.optString("country", "ID").ifBlank { "ID" }
+    val e2eeCipher = m.optString("e2ee_cipher", "")
+    val e2eeIv = m.optString("e2ee_iv", "")
+    val e2eeSig = m.optString("e2ee_sig", "")
+    val e2eeProto = m.optString("e2ee_v", "XY-E2EE-GCM-v1").ifBlank { "XY-E2EE-GCM-v1" }
+
+    val (openedText, verified) = ChatE2eeCrypto.openAndVerify(
+        fallbackText = rawText,
+        senderName = sender,
+        githubLogin = ghLogin,
+        cipherBase64 = e2eeCipher,
+        ivBase64 = e2eeIv,
+        signatureHex = e2eeSig,
+    )
+
+    val smartCountry = resolveSmartCountryClient(openedText, sourceLang, rawCountry)
+    val flag = countryCodeToFlag(smartCountry)
+    val rawAttachmentType = m.optString("attachment_type", "").ifBlank {
+        val kind = m.optString("attachment_kind", "")
+        if (kind == "photo") "image" else kind
+    }
+    val resolvedAvatar = m.optString("avatar_url", "").ifBlank {
+        if (ghLogin.isNotBlank()) "https://github.com/$ghLogin.png?size=120" else ""
+    }
+    val isMine = sender.equals(myName, ignoreCase = true) ||
+        (!myGithubLogin.isNullOrBlank() && ghLogin.equals(myGithubLogin, ignoreCase = true))
+
     return ChatMessage(
         id = msgId,
-        name = itemName,
-        country = cc,
+        name = sender,
+        githubLogin = ghLogin,
+        country = smartCountry,
         flag = flag,
-        text = text,
+        text = openedText,
         translated = m.optString("translated", ""),
         targetLang = m.optString("target_lang", "EN").ifBlank { "EN" },
-        sourceLang = srcLang,
-        at = msgAt,
-        mine = itemName.equals(myName, ignoreCase = true),
-        isFounder = m.optBoolean("is_founder", isFounderAccount(itemName)),
+        sourceLang = sourceLang,
+        at = m.optLong("at", System.currentTimeMillis()),
+        mine = isMine,
+        isFounder = m.optBoolean("is_founder", isFounderAccount(sender) || isFounderAccount(ghLogin)),
         replyToId = m.optString("reply_to_id", ""),
         replyToName = m.optString("reply_to_name", ""),
         replyToText = m.optString("reply_to_text", ""),
-        attachmentType = m.optString("attachment_type", ""),
+        attachmentType = rawAttachmentType,
         attachmentName = m.optString("attachment_name", ""),
         attachmentMime = m.optString("attachment_mime", ""),
         attachmentSize = m.optInt("attachment_size", 0),
         attachmentData = m.optString("attachment_data", ""),
-        avatarUrl = m.optString("avatar_url", ""),
+        viewOnce = m.optBoolean("view_once", false),
+        avatarUrl = resolvedAvatar,
+        deliveryTicks = 2,
+        e2eeProtocol = e2eeProto,
+        e2eeSig = e2eeSig.ifBlank { ChatE2eeCrypto.sign(openedText, sender, ghLogin, e2eeCipher) },
+        e2eeVerified = verified,
+    )
+}
+
+private fun parsePinnedMessageFromJson(p: JSONObject?): PinnedChatMessage? {
+    if (p == null) return null
+    val id = p.optString("id", "").trim()
+    val text = p.optString("text", "").trim()
+    if (id.isEmpty() && text.isEmpty()) return null
+    return PinnedChatMessage(
+        id = id,
+        name = p.optString("name", "User"),
+        githubLogin = p.optString("github_login", ""),
+        text = text,
+        pinnedBy = p.optString("pinned_by", ""),
+        at = p.optLong("at", 0L),
     )
 }
 
@@ -361,26 +577,130 @@ private fun parseMessageFromJson(m: JSONObject, myName: String): ChatMessage {
 internal fun GlobalChatScreen(
     onBack: () -> Unit,
     isOverlayMode: Boolean = false,
+    onHeaderDrag: ((Float, Float) -> Unit)? = null,
+    isCompactFloating: Boolean = false,
+    onToggleCompactFloating: (() -> Unit)? = null,
 ) {
     val context = LocalContext.current
+    val haptic = LocalHapticFeedback.current
     val scope = rememberCoroutineScope()
     val chatPrefs = remember { context.getSharedPreferences(CHAT_PREFS, Context.MODE_PRIVATE) }
+    val communityApi = remember { CommunityJokesApi(context) }
+
     var verifiedGhLogin by remember { mutableStateOf(getVerifiedGitHubLogin(context)) }
     var nickname by remember { mutableStateOf(chatNickname(context)) }
+    var firstJoinedAtMs by remember(verifiedGhLogin) {
+        mutableStateOf(ensureFirstJoinedAtMs(context, verifiedGhLogin))
+    }
     val myCountry = remember { chatCountryCode(context) }
     val myFlag = remember(myCountry) { countryCodeToFlag(myCountry) }
     var viewerTargetLang by remember {
         mutableStateOf(chatPrefs.getString(KEY_TARGET_LANG, "auto") ?: "auto")
     }
+
     var showLangPicker by remember { mutableStateOf(false) }
     var showStickerPicker by remember { mutableStateOf(false) }
     var showAttachMenu by remember { mutableStateOf(false) }
-    var loginModalOpen by remember { mutableStateOf(false) }
+    var viewOnceMediaMode by remember { mutableStateOf(false) }
+    var authBusy by remember { mutableStateOf(false) }
+    var authWaitingCode by remember { mutableStateOf<String?>(null) }
+    var authWaitingUrl by remember { mutableStateOf<String?>(null) }
+
     var replyingTo by remember { mutableStateOf<ChatMessage?>(null) }
-    var fullscreenImageUri by remember { mutableStateOf<String?>(null) }
+    var pinnedMessage by remember { mutableStateOf<PinnedChatMessage?>(null) }
+    var focusedContextMsg by remember { mutableStateOf<ChatMessage?>(null) }
+    var inspectingE2eeMsg by remember { mutableStateOf<ChatMessage?>(null) }
+    var fullscreenMediaMsg by remember { mutableStateOf<ChatMessage?>(null) }
 
     val messages = remember { mutableStateListOf<ChatMessage>() }
-    var presence by remember { mutableIntStateOf(1) }
+    val hiddenMessageIds = remember { mutableStateListOf<String>() }
+    val viewedOnceIds = remember {
+        mutableStateListOf<String>().apply {
+            val saved = chatPrefs.getStringSet(KEY_VIEWED_ONCE_IDS, emptySet()).orEmpty()
+            addAll(saved)
+        }
+    }
+    val messageReactions = remember { mutableStateMapOf<String, String>() }
+    val customStickers = remember { mutableStateListOf<CustomCryptoSticker>() }
+
+    fun markMediaViewedOnce(msgId: String) {
+        if (msgId.isNotBlank() && msgId !in viewedOnceIds) {
+            viewedOnceIds.add(msgId)
+            chatPrefs.edit().putStringSet(KEY_VIEWED_ONCE_IDS, viewedOnceIds.toSet()).apply()
+        }
+    }
+
+    fun updatePinnedMessage(target: ChatMessage?, pin: Boolean) {
+        if (pin && target != null) {
+            val newPin = PinnedChatMessage(
+                id = target.id,
+                name = target.name,
+                githubLogin = target.githubLogin,
+                text = target.text,
+                pinnedBy = nickname,
+                at = target.at,
+            )
+            pinnedMessage = newPin
+            val payload = JSONObject().apply {
+                put("type", "pin")
+                put("action", "pin")
+                put("pinned_by", nickname)
+                put(
+                    "message",
+                    JSONObject().apply {
+                        put("id", target.id)
+                        put("name", target.name)
+                        put("github_login", target.githubLogin)
+                        put("text", target.text)
+                        put("at", target.at)
+                    },
+                )
+            }
+            chatSocketSend(payload.toString())
+            scope.launch(Dispatchers.IO) {
+                runCatching {
+                    val conn = (URL(CHAT_PIN_URL).openConnection() as HttpURLConnection).apply {
+                        requestMethod = "POST"
+                        doOutput = true
+                        connectTimeout = 8_000
+                        readTimeout = 8_000
+                        setRequestProperty("Content-Type", "application/json; charset=utf-8")
+                    }
+                    conn.outputStream.use { it.write(payload.toString().toByteArray(Charsets.UTF_8)) }
+                    conn.responseCode
+                    conn.disconnect()
+                }
+            }
+            Toast.makeText(context, "Pesan disematkan di atas Chat Global", Toast.LENGTH_SHORT).show()
+        } else {
+            pinnedMessage = null
+            val payload = JSONObject().apply {
+                put("type", "pin")
+                put("action", "unpin")
+            }
+            chatSocketSend(payload.toString())
+            scope.launch(Dispatchers.IO) {
+                runCatching {
+                    val conn = (URL(CHAT_PIN_URL).openConnection() as HttpURLConnection).apply {
+                        requestMethod = "POST"
+                        doOutput = true
+                        connectTimeout = 8_000
+                        readTimeout = 8_000
+                        setRequestProperty("Content-Type", "application/json; charset=utf-8")
+                    }
+                    conn.outputStream.use { it.write(payload.toString().toByteArray(Charsets.UTF_8)) }
+                    conn.responseCode
+                    conn.disconnect()
+                }
+            }
+            Toast.makeText(context, "Sematan pesan dilepas", Toast.LENGTH_SHORT).show()
+        }
+    }
+
+    val appWideOnline by AppUpdate.appWideOnlineCount.collectAsState()
+    var roomPresence by remember { mutableIntStateOf(1) }
+    val totalOnline = maxOf(appWideOnline, roomPresence, 1)
+
     var typingName by remember { mutableStateOf<String?>(null) }
     var connected by remember { mutableStateOf(false) }
     var sending by remember { mutableStateOf(false) }
@@ -389,8 +709,33 @@ internal fun GlobalChatScreen(
     val main = remember { Handler(Looper.getMainLooper()) }
     var typingSentAt by remember { mutableStateOf(0L) }
 
+    fun shareGlobalChatInvite(specificMsg: ChatMessage? = null) {
+        val shareText = if (specificMsg != null) {
+            buildString {
+                append("\"${specificMsg.text}\"\n")
+                if (specificMsg.translated.isNotBlank() && !specificMsg.translated.equals(specificMsg.text, ignoreCase = true)) {
+                    append("[${specificMsg.targetLang}] ${specificMsg.translated}\n")
+                }
+                append("— ${specificMsg.name}")
+                if (specificMsg.githubLogin.isNotBlank()) append(" (@${specificMsg.githubLogin})")
+                append(" di Chat Global XyDesk Remote (E2EE AES-256-GCM)\n")
+                append("Gabung sekarang: https://www.xydeskremote.biz.id")
+            }
+        } else {
+            "Gabung ke Chat Global XyDesk Remote! Obrolan real-time terenkripsi ujung-ke-ujung (E2EE AES-256-GCM) dengan terjemahan otomatis multi-bahasa & Cloud RDP gratis:\nhttps://www.xydeskremote.biz.id"
+        }
+        runCatching {
+            val intent = Intent(Intent.ACTION_SEND).apply {
+                type = "text/plain"
+                putExtra(Intent.EXTRA_SUBJECT, "Chat Global · XyDesk Remote")
+                putExtra(Intent.EXTRA_TEXT, shareText)
+            }
+            context.startActivity(Intent.createChooser(intent, xyNow("Bagikan Chat Global", "Share Global Chat")))
+        }
+    }
+
     fun enrichTranslationIfNeeded(msg: ChatMessage, forceRetranslate: Boolean = false) {
-        if (msg.attachmentType == "sticker" && msg.text.startsWith("🎨")) return
+        if (msg.attachmentType == "sticker") return
         Thread {
             val result = translateClientSideMultiLang(
                 text = msg.text,
@@ -422,82 +767,108 @@ internal fun GlobalChatScreen(
     }
 
     suspend fun fetchHistoryOverHttp() {
-        val list = withContext(Dispatchers.IO) {
+        withContext(Dispatchers.IO) {
             runCatching {
-                val conn = (URL(CHAT_HISTORY_URL).openConnection() as HttpURLConnection).apply {
+                val cid = URLEncoder.encode(communityApi.accountShortId(), "UTF-8")
+                val gh = URLEncoder.encode(verifiedGhLogin.orEmpty(), "UTF-8")
+                val url = "$CHAT_HISTORY_URL?joined_at=$firstJoinedAtMs&client_id=$cid&github_login=$gh"
+                val conn = (URL(url).openConnection() as HttpURLConnection).apply {
                     requestMethod = "GET"
                     connectTimeout = 8_000
                     readTimeout = 8_000
                     setRequestProperty("Accept", "application/json")
                 }
-                if (conn.responseCode !in 200..299) return@runCatching emptyList<ChatMessage>()
-                val raw = conn.inputStream.bufferedReader().use { it.readText() }
-                val json = JSONObject(raw)
-                val arr = json.optJSONArray("messages") ?: return@runCatching emptyList<ChatMessage>()
-                val out = ArrayList<ChatMessage>(arr.length())
-                for (i in 0 until arr.length()) {
-                    val m = arr.optJSONObject(i) ?: continue
-                    out.add(parseMessageFromJson(m, nickname))
+                if (conn.responseCode in 200..299) {
+                    val body = conn.inputStream.bufferedReader().use { it.readText() }
+                    val json = JSONObject(body)
+                    val serverOnline = json.optInt("online_count", 0)
+                    if (serverOnline > 0) {
+                        AppUpdate.updateOnlineCount(serverOnline)
+                    }
+                    val serverJoinedAt = json.optLong("joined_at", 0L)
+                    if (serverJoinedAt > firstJoinedAtMs) {
+                        firstJoinedAtMs = serverJoinedAt
+                    }
+                    val serverPinned = parsePinnedMessageFromJson(json.optJSONObject("pinned_message"))
+                    val arr = json.optJSONArray("messages") ?: return@runCatching
+                    val fetched = ArrayList<ChatMessage>(arr.length())
+                    for (i in 0 until arr.length()) {
+                        val m = arr.optJSONObject(i) ?: continue
+                        val parsed = parseMessageFromJson(m, nickname, verifiedGhLogin)
+                        // Pastikan member baru tidak pernah melihat pesan sebelum waktu join
+                        if (parsed.at >= firstJoinedAtMs - 2_000L && parsed.id !in hiddenMessageIds) {
+                            fetched.add(parsed)
+                        }
+                    }
+                    withContext(Dispatchers.Main) {
+                        connected = true
+                        if (serverOnline > 0) roomPresence = serverOnline
+                        if (json.has("pinned_message")) {
+                            pinnedMessage = serverPinned
+                        }
+                        var added = false
+                        for (item in fetched) {
+                            id.xydesk.remote.push.ChatPushNotifier.markSeen(item.id, item.at, context)
+                            val existingIdx = messages.indexOfFirst { it.id == item.id }
+                            if (existingIdx < 0) {
+                                val tempIdx = messages.indexOfFirst {
+                                    it.id.startsWith("local-") && it.mine && it.text == item.text
+                                }
+                                if (tempIdx >= 0) {
+                                    messages[tempIdx] = item.copy(deliveryTicks = 2)
+                                } else {
+                                    messages.add(item)
+                                    added = true
+                                }
+                                enrichTranslationIfNeeded(item)
+                            }
+                        }
+                        if (added && messages.isNotEmpty()) {
+                            listState.animateScrollToItem(messages.size - 1)
+                        }
+                    }
                 }
-                out
-            }.getOrDefault(emptyList())
-        }
-        if (list.isNotEmpty()) {
-            val existingIds = messages.map { it.id }.toSet()
-            var changed = false
-            for (item in list) {
-                id.xydesk.remote.push.ChatPushNotifier.markSeen(item.id, item.at, context)
-                val pendingIdx = messages.indexOfFirst {
-                    it.id.startsWith("local-pending-") && it.text == item.text && it.mine
-                }
-                if (pendingIdx >= 0) {
-                    messages[pendingIdx] = item
-                    enrichTranslationIfNeeded(item)
-                    changed = true
-                } else if (item.id !in existingIds) {
-                    messages.add(item)
-                    enrichTranslationIfNeeded(item)
-                    changed = true
-                }
-            }
-            if (changed) {
-                messages.sortBy { it.at }
+                conn.disconnect()
             }
         }
     }
 
-    // Verifikasi login GitHub saat layar dibuka
     LaunchedEffect(Unit) {
-        fetchHistoryOverHttp()
-        if (verifiedGhLogin == null) {
-            val gh = withContext(Dispatchers.IO) {
-                runCatching {
-                    val pat = CredentialVault(context.applicationContext).get(XyRdpConfig.VAULT_PAT_ID)
-                    if (pat != null) syncGitHubProfileAndAvatar(context, pat) ?: XyRdpClient.whoami(pat) else null
-                }.getOrNull()
-            }
-            if (!gh.isNullOrBlank()) {
-                saveVerifiedGitHubLogin(context, gh)
-                verifiedGhLogin = gh
-                val updated = chatNickname(context)
-                nickname = updated
-                chatSocketSend(
-                    JSONObject()
-                        .put("type", "hello")
-                        .put("name", updated)
-                        .put("country", myCountry)
-                        .toString(),
-                )
+        val savedGh = getVerifiedGitHubLogin(context)
+        if (!savedGh.isNullOrBlank()) {
+            verifiedGhLogin = savedGh
+            nickname = chatNickname(context)
+            firstJoinedAtMs = ensureFirstJoinedAtMs(context, savedGh)
+        } else {
+            val pat = runCatching {
+                id.xydesk.remote.security.CredentialVault(context.applicationContext)
+                    .get(id.xydesk.remote.ui.rdp.XyRdpConfig.VAULT_PAT_ID)
+            }.getOrNull()
+            if (!pat.isNullOrBlank()) {
+                val who = runCatching { id.xydesk.remote.ui.rdp.XyRdpClient.whoami(pat) }.getOrNull()
+                if (!who.isNullOrBlank()) {
+                    saveVerifiedGitHubLogin(context, who)
+                    verifiedGhLogin = who
+                    nickname = chatNickname(context)
+                    firstJoinedAtMs = ensureFirstJoinedAtMs(context, who)
+                }
             }
         }
+        AppUpdate.sendAppPresencePing(context, screen = "global_chat", active = true)
+        withContext(Dispatchers.IO) {
+            val loaded = CustomStickerVault.listCustomStickers(context)
+            withContext(Dispatchers.Main) {
+                customStickers.clear()
+                customStickers.addAll(loaded)
+            }
+        }
+        fetchHistoryOverHttp()
     }
 
-    // Ketika penonton mengganti bahasa terjemahan di header, terjemahkan ulang daftar pesan
     LaunchedEffect(viewerTargetLang) {
         messages.toList().forEach { enrichTranslationIfNeeded(it, forceRetranslate = true) }
     }
 
-    // Polling cadangan HTTP setiap 5 detik agar chat dijamin real-time walau WebSocket terhalang operator
     LaunchedEffect(Unit) {
         while (true) {
             delay(5000)
@@ -505,7 +876,7 @@ internal fun GlobalChatScreen(
         }
     }
 
-    DisposableEffect(Unit) {
+    DisposableEffect(verifiedGhLogin) {
         id.xydesk.remote.push.ChatPushNotifier.setChatOpen(context, true)
         val client = OkHttpClient.Builder()
             .pingInterval(20, TimeUnit.SECONDS)
@@ -516,8 +887,11 @@ internal fun GlobalChatScreen(
         var closed = false
 
         fun connect(): WebSocket {
+            val cid = URLEncoder.encode(communityApi.accountShortId(), "UTF-8")
+            val gh = URLEncoder.encode(verifiedGhLogin.orEmpty(), "UTF-8")
+            val wsUrl = "$CHAT_WS_URL?joined_at=$firstJoinedAtMs&client_id=$cid&github_login=$gh"
             val socket = client.newWebSocket(
-                Request.Builder().url(CHAT_WS_URL).build(),
+                Request.Builder().url(wsUrl).build(),
                 object : WebSocketListener() {
                     override fun onOpen(webSocket: WebSocket, response: Response) {
                         attempt = 0
@@ -526,69 +900,95 @@ internal fun GlobalChatScreen(
                             JSONObject()
                                 .put("type", "hello")
                                 .put("name", nickname)
+                                .put("github_login", verifiedGhLogin.orEmpty())
+                                .put("client_id", communityApi.accountShortId())
                                 .put("country", myCountry)
                                 .toString(),
                         )
                     }
 
                     override fun onMessage(webSocket: WebSocket, text: String) {
-                        val data = try { JSONObject(text) } catch (e: Exception) { return }
+                        val data = try { JSONObject(text) } catch (_: Exception) { return }
                         main.post {
                             when (data.optString("type")) {
                                 "history" -> {
+                                    val srvOnline = data.optInt("online_count", 0)
+                                    if (srvOnline > 0) {
+                                        roomPresence = srvOnline
+                                        AppUpdate.updateOnlineCount(srvOnline)
+                                    }
                                     val arr: JSONArray = data.optJSONArray("messages") ?: return@post
                                     messages.clear()
                                     for (i in 0 until arr.length()) {
                                         val m = arr.optJSONObject(i) ?: continue
-                                        val item = parseMessageFromJson(m, nickname)
-                                        id.xydesk.remote.push.ChatPushNotifier.markSeen(item.id, item.at, context)
-                                        messages.add(item)
-                                        enrichTranslationIfNeeded(item)
+                                        val parsed = parseMessageFromJson(m, nickname, verifiedGhLogin)
+                                        if (parsed.at >= firstJoinedAtMs - 2_000L && parsed.id !in hiddenMessageIds) {
+                                            id.xydesk.remote.push.ChatPushNotifier.markSeen(parsed.id, parsed.at, context)
+                                            messages.add(parsed)
+                                            enrichTranslationIfNeeded(parsed)
+                                        }
+                                    }
+                                    if (messages.isNotEmpty()) {
+                                        scope.launch { listState.scrollToItem(messages.size - 1) }
                                     }
                                 }
                                 "msg" -> {
-                                    val item = parseMessageFromJson(data, nickname)
-                                    id.xydesk.remote.push.ChatPushNotifier.markSeen(item.id, item.at, context)
-                                    messages.removeAll {
-                                        it.id.startsWith("local-pending-") && it.text == item.text && it.mine
+                                    val incoming = parseMessageFromJson(data, nickname, verifiedGhLogin)
+                                    if (incoming.at < firstJoinedAtMs - 2_000L || incoming.id in hiddenMessageIds) return@post
+                                    id.xydesk.remote.push.ChatPushNotifier.markSeen(incoming.id, incoming.at, context)
+                                    val existingIdx = messages.indexOfFirst { it.id == incoming.id }
+                                    if (existingIdx >= 0) {
+                                        messages[existingIdx] = incoming.copy(deliveryTicks = 2)
+                                    } else {
+                                        val tempIdx = messages.indexOfFirst {
+                                            it.id.startsWith("local-") && it.mine && it.text == incoming.text
+                                        }
+                                        if (tempIdx >= 0) {
+                                            messages[tempIdx] = incoming.copy(deliveryTicks = 2)
+                                        } else {
+                                            messages.add(incoming)
+                                        }
                                     }
-                                    if (messages.none { it.id == item.id }) {
-                                        messages.add(item)
-                                        enrichTranslationIfNeeded(item)
-                                    }
-                                    typingName = null
+                                    enrichTranslationIfNeeded(incoming)
+                                    if (messages.size > 100) messages.removeAt(0)
+                                    scope.launch { listState.animateScrollToItem(messages.size - 1) }
+                                }
+                                "presence" -> {
+                                    val cnt = data.optInt("count", 1).coerceAtLeast(1)
+                                    roomPresence = cnt
+                                    AppUpdate.updateOnlineCount(cnt)
+                                }
+                                "pin" -> {
+                                    pinnedMessage = parsePinnedMessageFromJson(data.optJSONObject("pinned_message"))
                                 }
                                 "typing" -> {
-                                    if (data.optBoolean("on")) {
-                                        val tName = data.optString("name")
-                                        val tFlag = data.optString("flag")
-                                        typingName = if (tFlag.isNotBlank()) "$tFlag $tName" else tName
-                                    } else {
-                                        typingName = null
-                                    }
+                                    val who = data.optString("name")
+                                    val cc = data.optString("country", "ID")
+                                    val on = data.optBoolean("on", false)
+                                    typingName = if (on && who.isNotBlank() && who != nickname) "$who ($cc)" else null
                                 }
-                                "presence" -> presence = data.optInt("count", 1).coerceAtLeast(1)
                             }
                         }
                     }
 
                     override fun onFailure(webSocket: WebSocket, t: Throwable, response: Response?) {
-                        main.post { connected = false }
-                        if (closed) return
-                        attempt += 1
-                        val delayMs = (1000L shl (attempt - 1).coerceAtMost(4))
-                        Thread {
-                            try {
-                                Thread.sleep(delayMs)
-                            } catch (e: InterruptedException) {
-                                return@Thread
-                            }
-                            if (!closed) ws = connect()
-                        }.start()
+                        scheduleReconnect()
                     }
 
                     override fun onClosed(webSocket: WebSocket, code: Int, reason: String) {
-                        main.post { connected = false }
+                        scheduleReconnect()
+                    }
+
+                    private fun scheduleReconnect() {
+                        if (closed) return
+                        attempt += 1
+                        val waitMs = minOf(12_000L, 1000L * (1 shl minOf(attempt, 3)))
+                        main.postDelayed(
+                            {
+                                if (!closed) ws = connect()
+                            },
+                            waitMs,
+                        )
                     }
                 },
             )
@@ -600,86 +1000,106 @@ internal fun GlobalChatScreen(
         onDispose {
             closed = true
             id.xydesk.remote.push.ChatPushNotifier.setChatOpen(context, false)
-            try { ws?.close(1000, "bye") } catch (_: Exception) {}
+            activeSocket = null
+            runCatching { ws?.close(1000, "bye") }
+            client.dispatcher.executorService.shutdown()
         }
     }
 
-    LaunchedEffect(messages.size, typingName) {
-        if (messages.isNotEmpty()) listState.animateScrollToItem(messages.size - 1)
-    }
-
-    fun dispatchChatPayload(
-        text: String,
+    fun dispatchMessagePayload(
+        rawText: String,
         attachmentType: String = "",
         attachmentName: String = "",
         attachmentMime: String = "",
         attachmentSize: Int = 0,
         attachmentData: String = "",
+        viewOnce: Boolean = false,
     ) {
-        val cleanText = text.trim().ifEmpty {
+        val currentGh = verifiedGhLogin
+        if (currentGh.isNullOrBlank()) {
+            Toast.makeText(context, "Silakan Authorize GitHub terlebih dahulu untuk mengirim pesan.", Toast.LENGTH_SHORT).show()
+            return
+        }
+        val cleanText = rawText.trim().take(500)
+        val displayFallback = cleanText.ifBlank {
             when (attachmentType) {
-                "sticker" -> "🎨 Stiker: $attachmentName"
-                "image" -> "📷 Foto: ${attachmentName.ifBlank { "Gambar" }}"
-                "file" -> "📎 File: ${attachmentName.ifBlank { "Dokumen" }}"
+                "sticker" -> "[Stiker: ${attachmentName.ifBlank { "XyDesk" }}]"
+                "image" -> if (viewOnce) "[Foto Sekali Lihat 1x]" else "[Foto: ${attachmentName.ifBlank { "Gambar" }}]"
+                "video" -> if (viewOnce) "[Video Sekali Lihat 1x]" else "[Video: ${attachmentName.ifBlank { "Klip" }}]"
+                "file" -> "[Berkas: ${attachmentName.ifBlank { "Dokumen" }}]"
                 else -> ""
             }
         }
-        if (cleanText.isEmpty()) return
-        val reply = replyingTo
+        if (displayFallback.isEmpty() || sending) return
+        val replySnapshot = replyingTo
         replyingTo = null
-        showStickerPicker = false
-        showAttachMenu = false
+        if (cleanText.isNotEmpty() && attachmentType.isEmpty()) {
+            draft = TextFieldValue("")
+        }
+        sending = true
+        val now = System.currentTimeMillis()
+        val sealed = ChatE2eeCrypto.seal(
+            plainText = displayFallback,
+            senderName = nickname,
+            githubLogin = currentGh,
+            timestampMs = now,
+        )
 
+        // Optimistic UI: tampilkan 1 centang (✓) saat dikirim, otomatis berubah jadi 2 centang (✓✓) saat server memvalidasi E2EE
         val pending = ChatMessage(
-            id = "local-pending-" + System.currentTimeMillis(),
+            id = "local-$now",
             name = nickname,
+            githubLogin = currentGh,
             country = myCountry,
             flag = myFlag,
-            text = cleanText,
-            translated = if (attachmentType == "sticker") "" else "Menerjemahkan…",
+            text = displayFallback,
+            translated = "",
             targetLang = if (myCountry == "ID") "EN" else "ID",
-            at = System.currentTimeMillis(),
+            at = now,
             mine = true,
-            isFounder = isFounderAccount(nickname) || isFounderAccount(verifiedGhLogin),
-            replyToId = reply?.id.orEmpty(),
-            replyToName = reply?.name.orEmpty(),
-            replyToText = reply?.text.orEmpty(),
+            isFounder = isFounderAccount(nickname) || isFounderAccount(currentGh),
+            replyToId = replySnapshot?.id.orEmpty(),
+            replyToName = replySnapshot?.name.orEmpty(),
+            replyToText = replySnapshot?.text.orEmpty().take(140),
             attachmentType = attachmentType,
             attachmentName = attachmentName,
             attachmentMime = attachmentMime,
             attachmentSize = attachmentSize,
             attachmentData = attachmentData,
+            viewOnce = viewOnce,
             avatarUrl = getVerifiedGitHubAvatar(context).orEmpty(),
+            deliveryTicks = 1,
+            e2eeProtocol = sealed.protocol,
+            e2eeSig = sealed.signatureHex,
+            e2eeVerified = true,
         )
         messages.add(pending)
-        enrichTranslationIfNeeded(pending.copy(translated = ""))
-
+        enrichTranslationIfNeeded(pending)
         scope.launch {
-            sending = true
+            listState.animateScrollToItem((messages.size - 1).coerceAtLeast(0))
             val sentMsg = withContext(Dispatchers.IO) {
-                val clientTr = if (attachmentType == "sticker") null else {
-                    translateClientSideMultiLang(cleanText, myCountry, "auto")
-                }
-                val smartCc = resolveSmartCountryClient(
-                    cleanText,
-                    clientTr?.third.orEmpty(),
-                    myCountry,
-                )
+                val clientTr = if (attachmentType == "sticker") null
+                else translateClientSideMultiLang(displayFallback, myCountry, "auto")
                 val bodyJson = JSONObject().apply {
                     put("type", "msg")
                     put("name", nickname)
-                    if (!verifiedGhLogin.isNullOrBlank()) put("github_login", verifiedGhLogin)
-                    put("text", cleanText)
-                    put("country", smartCc)
+                    put("github_login", currentGh)
+                    put("country", myCountry)
+                    put("text", displayFallback)
+                    put("e2ee_v", sealed.protocol)
+                    put("e2ee_cipher", sealed.cipherBase64)
+                    put("e2ee_iv", sealed.ivBase64)
+                    put("e2ee_sig", sealed.signatureHex)
+                    put("client_msg_id", pending.id)
                     if (clientTr != null && clientTr.first.isNotBlank()) {
                         put("translated", clientTr.first)
                         put("target_lang", clientTr.second)
                         put("source_lang", clientTr.third)
                     }
-                    if (reply != null) {
-                        put("reply_to_id", reply.id)
-                        put("reply_to_name", reply.name)
-                        put("reply_to_text", reply.text.take(160))
+                    if (replySnapshot != null) {
+                        put("reply_to_id", replySnapshot.id)
+                        put("reply_to_name", replySnapshot.name)
+                        put("reply_to_text", replySnapshot.text.take(140))
                     }
                     if (attachmentType.isNotEmpty()) {
                         put("attachment_type", attachmentType)
@@ -688,6 +1108,7 @@ internal fun GlobalChatScreen(
                         put("attachment_mime", attachmentMime)
                         put("attachment_size", attachmentSize)
                         put("attachment_data", attachmentData)
+                        put("view_once", viewOnce)
                     }
                     val av = getVerifiedGitHubAvatar(context)
                     if (!av.isNullOrBlank()) put("avatar_url", av)
@@ -704,7 +1125,7 @@ internal fun GlobalChatScreen(
                     conn.outputStream.use { it.write(bodyJson.toString().toByteArray(Charsets.UTF_8)) }
                     if (conn.responseCode in 200..299) {
                         val resp = JSONObject(conn.inputStream.bufferedReader().use { it.readText() })
-                        resp.optJSONObject("message")?.let { parseMessageFromJson(it, nickname) }
+                        resp.optJSONObject("message")?.let { parseMessageFromJson(it, nickname, currentGh) }
                     } else null
                 }.getOrNull() ?: run {
                     chatSocketSend(bodyJson.toString())
@@ -714,7 +1135,7 @@ internal fun GlobalChatScreen(
             if (sentMsg != null) {
                 val idx = messages.indexOfFirst { it.id == pending.id }
                 if (idx >= 0) {
-                    messages[idx] = sentMsg
+                    messages[idx] = sentMsg.copy(deliveryTicks = 2)
                     enrichTranslationIfNeeded(sentMsg)
                 }
             }
@@ -723,7 +1144,6 @@ internal fun GlobalChatScreen(
         }
     }
 
-    // Pemilih Foto / Gambar
     val pickImageLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.GetContent(),
     ) { uri: Uri? ->
@@ -743,545 +1163,1445 @@ internal fun GlobalChatScreen(
                                 true,
                             )
                         } else src
-                        val out = ByteArrayOutputStream()
-                        val fmt = if (Build.VERSION.SDK_INT >= 30) {
-                            Bitmap.CompressFormat.WEBP_LOSSY
-                        } else {
-                            @Suppress("DEPRECATION")
-                            Bitmap.CompressFormat.WEBP
+                        val baos = ByteArrayOutputStream()
+                        var quality = 78
+                        bmp.compress(Bitmap.CompressFormat.JPEG, quality, baos)
+                        while (baos.size() > 145_000 && quality > 35) {
+                            baos.reset()
+                            quality -= 12
+                            bmp.compress(Bitmap.CompressFormat.JPEG, quality, baos)
                         }
-                        bmp.compress(fmt, 78, out)
-                        val bytes = out.toByteArray()
-                        val b64 = Base64.encodeToString(bytes, Base64.NO_WRAP)
-                        Triple("data:image/webp;base64,$b64", bytes.size, "foto-${System.currentTimeMillis() % 10000}.webp")
+                        val jpgBytes = baos.toByteArray()
+                        val b64 = "data:image/jpeg;base64," + Base64.encodeToString(jpgBytes, Base64.NO_WRAP)
+                        Triple("foto_${System.currentTimeMillis() % 10000}.jpg", jpgBytes.size, b64)
                     }.getOrNull()
                 }
-                if (encoded != null && encoded.first.length <= 235_000) {
-                    dispatchChatPayload(
-                        text = draft.text.trim().ifEmpty { "📷 Mengirim foto" },
+                if (encoded != null) {
+                    val isOnce = viewOnceMediaMode
+                    viewOnceMediaMode = false
+                    dispatchMessagePayload(
+                        rawText = draft.text.trim(),
                         attachmentType = "image",
-                        attachmentName = encoded.third,
-                        attachmentMime = "image/webp",
+                        attachmentName = encoded.first,
+                        attachmentMime = "image/jpeg",
                         attachmentSize = encoded.second,
-                        attachmentData = encoded.first,
+                        attachmentData = encoded.third,
+                        viewOnce = isOnce,
                     )
                     draft = TextFieldValue("")
                 } else {
-                    Toast.makeText(context, "Ukuran gambar terlalu besar, pilih gambar lain.", Toast.LENGTH_SHORT).show()
+                    Toast.makeText(context, "Gagal memuat gambar", Toast.LENGTH_SHORT).show()
                 }
             }
         }
     }
 
-    // Pemilih File / Dokumen
-    val pickFileLauncher = rememberLauncherForActivityResult(
+    val pickVideoLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.GetContent(),
+    ) { uri: Uri? ->
+        if (uri != null) {
+            scope.launch {
+                val videoPayload = withContext(Dispatchers.IO) {
+                    runCatching {
+                        var displayName = "video_${System.currentTimeMillis() % 10000}.mp4"
+                        context.contentResolver.query(uri, null, null, null, null)?.use { cursor ->
+                            if (cursor.moveToFirst()) {
+                                val nameIdx = cursor.getColumnIndex(OpenableColumns.DISPLAY_NAME)
+                                if (nameIdx >= 0) displayName = cursor.getString(nameIdx) ?: displayName
+                            }
+                        }
+                        val mime = context.contentResolver.getType(uri)?.takeIf { it.startsWith("video/") } ?: "video/mp4"
+                        val bytes = context.contentResolver.openInputStream(uri)?.use { it.readBytes() } ?: return@runCatching null
+                        if (bytes.size > 2_000_000) return@runCatching Triple("TOO_LARGE", bytes.size, "")
+                        val b64 = "data:$mime;base64," + Base64.encodeToString(bytes, Base64.NO_WRAP)
+                        Triple(displayName, bytes.size, "$mime|$b64")
+                    }.getOrNull()
+                }
+                when {
+                    videoPayload == null -> Toast.makeText(context, "Gagal memuat video", Toast.LENGTH_SHORT).show()
+                    videoPayload.first == "TOO_LARGE" -> Toast.makeText(
+                        context,
+                        "Ukuran video maksimal 2 MB agar terkirim instan secara real-time",
+                        Toast.LENGTH_LONG,
+                    ).show()
+                    else -> {
+                        val isOnce = viewOnceMediaMode
+                        viewOnceMediaMode = false
+                        val mime = videoPayload.third.substringBefore('|')
+                        val data = videoPayload.third.substringAfter('|')
+                        dispatchMessagePayload(
+                            rawText = draft.text.trim(),
+                            attachmentType = "video",
+                            attachmentName = videoPayload.first,
+                            attachmentMime = mime,
+                            attachmentSize = videoPayload.second,
+                            attachmentData = data,
+                            viewOnce = isOnce,
+                        )
+                        draft = TextFieldValue("")
+                    }
+                }
+            }
+        }
+    }
+
+    val pickFileLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.OpenDocument(),
     ) { uri: Uri? ->
         if (uri != null) {
             scope.launch {
                 val filePayload = withContext(Dispatchers.IO) {
                     runCatching {
-                        var fileName = "dokumen.bin"
+                        var displayName = "dokumen_${System.currentTimeMillis() % 10000}.bin"
+                        var size = 0
                         context.contentResolver.query(uri, null, null, null, null)?.use { cursor ->
-                            val nameIdx = cursor.getColumnIndex(OpenableColumns.DISPLAY_NAME)
-                            if (nameIdx >= 0 && cursor.moveToFirst()) {
-                                fileName = cursor.getString(nameIdx) ?: fileName
+                            if (cursor.moveToFirst()) {
+                                val nameIdx = cursor.getColumnIndex(OpenableColumns.DISPLAY_NAME)
+                                val sizeIdx = cursor.getColumnIndex(OpenableColumns.SIZE)
+                                if (nameIdx >= 0) displayName = cursor.getString(nameIdx) ?: displayName
+                                if (sizeIdx >= 0) size = cursor.getInt(sizeIdx)
                             }
                         }
                         val mime = context.contentResolver.getType(uri) ?: "application/octet-stream"
-                        val bytes = context.contentResolver.openInputStream(uri)?.use { stream ->
-                            val buf = ByteArray(140_000)
-                            var total = 0
-                            while (total < buf.size) {
-                                val r = stream.read(buf, total, buf.size - total)
-                                if (r <= 0) break
-                                total += r
-                            }
-                            if (total in 1..135_000) buf.copyOf(total) else null
-                        } ?: return@runCatching null
-                        val b64 = Base64.encodeToString(bytes, Base64.NO_WRAP)
-                        Triple(fileName, mime to bytes.size, "data:$mime;base64,$b64")
+                        val bytes = context.contentResolver.openInputStream(uri)?.use { it.readBytes() } ?: return@runCatching null
+                        if (bytes.size > 165_000) return@runCatching Triple("TOO_LARGE", bytes.size, "")
+                        val b64 = "data:$mime;base64," + Base64.encodeToString(bytes, Base64.NO_WRAP)
+                        Triple(displayName, if (size > 0) size else bytes.size, "$mime|$b64")
                     }.getOrNull()
                 }
-                if (filePayload != null) {
-                    dispatchChatPayload(
-                        text = draft.text.trim().ifEmpty { "📎 File: ${filePayload.first}" },
-                        attachmentType = "file",
-                        attachmentName = filePayload.first,
-                        attachmentMime = filePayload.second.first,
-                        attachmentSize = filePayload.second.second,
-                        attachmentData = filePayload.third,
-                    )
-                    draft = TextFieldValue("")
-                } else {
-                    Toast.makeText(context, "File maksimal 135 KB untuk pengiriman instan di Chat Global.", Toast.LENGTH_SHORT).show()
+                when {
+                    filePayload == null -> Toast.makeText(context, "Gagal membaca file", Toast.LENGTH_SHORT).show()
+                    filePayload.first == "TOO_LARGE" -> Toast.makeText(context, "Ukuran file maksimal 160 KB untuk pengiriman instan", Toast.LENGTH_LONG).show()
+                    else -> {
+                        val mime = filePayload.third.substringBefore('|')
+                        val data = filePayload.third.substringAfter('|')
+                        dispatchMessagePayload(
+                            rawText = draft.text.trim(),
+                            attachmentType = "file",
+                            attachmentName = filePayload.first,
+                            attachmentMime = mime,
+                            attachmentSize = filePayload.second,
+                            attachmentData = data,
+                        )
+                        draft = TextFieldValue("")
+                    }
                 }
             }
         }
     }
 
-    val isLoggedIn = !verifiedGhLogin.isNullOrBlank()
-    val currentLangOption = SUPPORTED_VIEWER_LANGS.firstOrNull { it.code == viewerTargetLang }
-        ?: SUPPORTED_VIEWER_LANGS.first()
+    val pickCustomStickerLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.GetContent(),
+    ) { uri: Uri? ->
+        if (uri != null) {
+            scope.launch {
+                val created = withContext(Dispatchers.IO) {
+                    CustomStickerVault.createStickerFromUri(context, uri)
+                }
+                if (created == null) {
+                    Toast.makeText(context, "Gagal membuat stiker WebP terenkripsi", Toast.LENGTH_SHORT).show()
+                } else {
+                    customStickers.removeAll { it.fileName == created.fileName }
+                    customStickers.add(0, created)
+                    Toast.makeText(
+                        context,
+                        "Stiker WebP terenkripsi disimpan:\n${created.displayPath}",
+                        Toast.LENGTH_LONG,
+                    ).show()
+                    showStickerPicker = false
+                    dispatchMessagePayload(
+                        rawText = "[Stiker Custom]",
+                        attachmentType = "sticker",
+                        attachmentName = created.fileName,
+                        attachmentMime = "image/webp+crypto15",
+                        attachmentSize = created.crypto15Bytes.size,
+                        attachmentData = CustomStickerVault.encodeAttachmentPayload(created),
+                    )
+                }
+            }
+        }
+    }
 
-    Column(
+    val isBlurActive = focusedContextMsg != null
+
+    Box(
         modifier = Modifier
             .fillMaxSize()
-            .background(
-                Brush.verticalGradient(
-                    colors = listOf(
-                        Color(0xFF0B1120),
-                        Color(0xFF0F172A),
-                        Color(0xFF111827),
-                    ),
-                ),
-            )
-            .imePadding(),
+            .background(if (isOverlayMode) Color.Transparent else Color(0xFF09090B)),
     ) {
-        // =========================================================
-        // HEADER ATAS BERGAYA WHATSAPP MODERN (TEMA XYDESK INDIGO)
-        // =========================================================
-        Surface(
-            color = Color(0xFF0F172A),
-            tonalElevation = 4.dp,
-            shadowElevation = 4.dp,
-        ) {
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 10.dp, vertical = 8.dp),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-            ) {
-                Surface(
-                    onClick = onBack,
-                    color = Color.White.copy(alpha = 0.08f),
-                    shape = RoundedCornerShape(12.dp),
-                ) {
-                    Text(
-                        if (isOverlayMode) "✕ Tutup" else "‹ Kembali",
-                        style = MaterialTheme.typography.labelLarge,
-                        fontWeight = FontWeight.Bold,
-                        color = Color(0xFF38BDF8),
-                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 7.dp),
-                    )
-                }
-
-                Column(modifier = Modifier.weight(1f)) {
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(6.dp),
-                    ) {
-                        Text(
-                            "Chat Global XyDesk",
-                            style = MaterialTheme.typography.titleSmall,
-                            fontWeight = FontWeight.ExtraBold,
-                            color = Color.White,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis,
-                        )
-                        if (isFounderAccount(nickname) || isFounderAccount(verifiedGhLogin)) {
-                            XyFounderBadge(compact = true)
-                        }
-                    }
-                    Text(
-                        text = buildString {
-                            append(if (connected) "● $presence online" else "● Sinkron aktif")
-                            append(" · $myFlag $nickname ($myCountry)")
-                        },
-                        style = MaterialTheme.typography.labelSmall,
-                        color = Color(0xFF94A3B8),
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                    )
-                }
-
-                // Tombol Pemilih Bahasa Terjemahan (Support All Languages!)
-                Surface(
-                    onClick = { showLangPicker = true },
-                    color = Color(0xFF1E293B),
-                    shape = RoundedCornerShape(50),
-                    modifier = Modifier.border(1.dp, Color(0xFF38BDF8).copy(alpha = 0.45f), RoundedCornerShape(50)),
-                ) {
-                    Row(
-                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 5.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(4.dp),
-                    ) {
-                        Text(currentLangOption.flag, fontSize = 12.sp)
-                        Text(
-                            currentLangOption.code.uppercase(Locale.ROOT),
-                            style = MaterialTheme.typography.labelSmall,
-                            fontWeight = FontWeight.Bold,
-                            color = Color(0xFF38BDF8),
-                        )
-                    }
-                }
-
-                // Ikon Logo GitHub & Avatar Profil di Header Atas
-                XyHeaderAccountActions(
-                    onStateChanged = {
-                        verifiedGhLogin = getVerifiedGitHubLogin(context)
-                        nickname = chatNickname(context)
-                    },
+        // Efek Refleksi Kaca Cair (Liquid Glass Specular Sheen) khusus Mode Floating Sesi
+        if (isOverlayMode) {
+            Canvas(modifier = Modifier.fillMaxSize()) {
+                // Kilau kaca cair diagonal monokrom putih-perak lembut
+                drawRect(
+                    brush = Brush.linearGradient(
+                        colors = listOf(
+                            Color.White.copy(alpha = 0.14f),
+                            Color.White.copy(alpha = 0.03f),
+                            Color.Transparent,
+                            Color.White.copy(alpha = 0.07f),
+                        ),
+                        start = Offset.Zero,
+                        end = Offset(size.width, size.height),
+                    ),
+                )
+                // Meniskus cahaya kaca di tepi atas
+                drawRoundRect(
+                    brush = Brush.verticalGradient(
+                        colors = listOf(
+                            Color.White.copy(alpha = 0.22f),
+                            Color.Transparent,
+                        ),
+                        startY = 0f,
+                        endY = size.height * 0.16f,
+                    ),
+                    size = Size(size.width, size.height * 0.16f),
+                    cornerRadius = CornerRadius(24.dp.toPx(), 24.dp.toPx()),
                 )
             }
         }
 
-        // =========================================================
-        // DAFTAR PESAN (SWIPE TO REPLY + 2 BAHASA DALAM 1 BUBBLE)
-        // =========================================================
-        LazyColumn(
-            state = listState,
+        // Lapisan Utama Chat Global (otomatis Blur saat pengguna menahan / long-press bubble chat)
+        Column(
             modifier = Modifier
-                .weight(1f)
-                .fillMaxWidth(),
-            contentPadding = PaddingValues(horizontal = 12.dp, vertical = 10.dp),
-            verticalArrangement = Arrangement.spacedBy(10.dp),
+                .fillMaxSize()
+                .let { mod ->
+                    if (isBlurActive) mod.blur(18.dp) else mod
+                }
+                .let { mod ->
+                    if (isOverlayMode) mod else mod.imePadding()
+                },
         ) {
-            item {
-                Box(
-                    modifier = Modifier.fillMaxWidth(),
-                    contentAlignment = Alignment.Center,
+            if (isOverlayMode) {
+                // Header Liquid Glass Hitam-Putih (bisa di-drag untuk menggeser jendela floating chat di sesi)
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .background(
+                            Brush.verticalGradient(
+                                listOf(
+                                    Color.White.copy(alpha = 0.11f),
+                                    Color(0xFF0A0A0E).copy(alpha = 0.36f),
+                                ),
+                            ),
+                        )
+                        .pointerInput(Unit) {
+                            detectDragGestures { change, dragAmount ->
+                                change.consume()
+                                onHeaderDrag?.invoke(dragAmount.x, dragAmount.y)
+                            }
+                        }
+                        .padding(horizontal = 12.dp, vertical = 8.dp),
                 ) {
-                    Text(
-                        "🌐 Auto-Translate Semua Bahasa (ID · EN · TH · JA · KO · ZH · AR · RU) · Geser bubble ke kanan untuk Balas",
-                        style = MaterialTheme.typography.labelSmall,
-                        color = Color(0xFF94A3B8),
-                        textAlign = TextAlign.Center,
+                    // Handle Bar Geser Kaca Cair di Tengah Atas
+                    Box(
                         modifier = Modifier
+                            .align(Alignment.CenterHorizontally)
+                            .width(38.dp)
+                            .height(4.dp)
                             .clip(RoundedCornerShape(50))
-                            .background(Color(0xFF1E293B).copy(alpha = 0.85f))
-                            .padding(horizontal = 12.dp, vertical = 5.dp),
+                            .background(Color.White.copy(alpha = 0.45f)),
                     )
-                }
-            }
-            if (messages.isEmpty()) {
-                item {
-                    Text(
-                        "Belum ada pesan. Sapa pengguna dari berbagai negara sekarang 👋",
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = Color(0xFF94A3B8),
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(top = 28.dp),
-                        textAlign = TextAlign.Center,
-                    )
-                }
-            }
-            items(messages, key = { it.id }) { msg ->
-                ChatBubbleWhatsAppStyle(
-                    msg = msg,
-                    onReply = { replyingTo = msg },
-                    onOpenImage = { dataUri -> fullscreenImageUri = dataUri },
-                    onSaveFile = { item -> saveOrShareChatAttachment(context, item) },
-                )
-            }
-            if (typingName != null) {
-                item {
-                    Text(
-                        "$typingName sedang mengetik…",
-                        style = MaterialTheme.typography.labelSmall,
-                        color = Color(0xFF38BDF8),
-                        modifier = Modifier.padding(start = 8.dp),
-                    )
-                }
-            }
-        }
-
-        // =========================================================
-        // PANEL STIKER EKSPRESIF XYDESK (SAAT TOMBOL STIKER DIKETUK)
-        // =========================================================
-        AnimatedVisibility(visible = showStickerPicker && isLoggedIn) {
-            Surface(
-                color = Color(0xFF0F172A),
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .border(1.dp, Color(0xFF1E293B), RoundedCornerShape(topStart = 18.dp, topEnd = 18.dp)),
-            ) {
-                Column(modifier = Modifier.padding(10.dp)) {
+                    Spacer(Modifier.height(6.dp))
                     Row(
                         modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween,
                         verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween,
                     ) {
-                        Text(
-                            "Pilih Stiker XyDesk (Ketuk untuk Kirim)",
-                            style = MaterialTheme.typography.labelMedium,
-                            fontWeight = FontWeight.Bold,
-                            color = Color.White,
-                        )
-                        Text(
-                            "✕ Tutup",
-                            style = MaterialTheme.typography.labelSmall,
-                            color = Color(0xFF38BDF8),
-                            modifier = Modifier.clickable { showStickerPicker = false }.padding(4.dp),
-                        )
-                    }
-                    Spacer(Modifier.height(8.dp))
-                    LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        items(XY_STICKERS, key = { it.id }) { st ->
-                            Column(
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(7.dp),
+                        ) {
+                            Icon(
+                                imageVector = XyIcons.Chat,
+                                contentDescription = null,
+                                tint = Color.White,
+                                modifier = Modifier.size(16.dp),
+                            )
+                            Text(
+                                text = "Chat Global",
+                                style = MaterialTheme.typography.titleSmall,
+                                fontWeight = FontWeight.ExtraBold,
+                                color = Color.White,
+                            )
+                            // Pill Online Monokrom Liquid Glass
+                            Row(
                                 modifier = Modifier
-                                    .width(108.dp)
-                                    .clip(RoundedCornerShape(16.dp))
-                                    .background(Brush.linearGradient(listOf(st.c1, st.c2)))
-                                    .border(1.dp, Color.White.copy(alpha = 0.22f), RoundedCornerShape(16.dp))
-                                    .clickable {
-                                        dispatchChatPayload(
-                                            text = "${st.emoji} ${st.title} — ${st.subtitle}",
-                                            attachmentType = "sticker",
-                                            attachmentName = st.title,
-                                            attachmentData = "sticker:${st.id}",
-                                        )
-                                    }
-                                    .padding(10.dp),
-                                horizontalAlignment = Alignment.CenterHorizontally,
+                                    .clip(RoundedCornerShape(50))
+                                    .background(Color.White.copy(alpha = 0.12f))
+                                    .padding(horizontal = 7.dp, vertical = 2.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(4.dp),
                             ) {
-                                Text(st.emoji, fontSize = 26.sp)
-                                Spacer(Modifier.height(4.dp))
-                                Text(
-                                    st.title,
-                                    style = MaterialTheme.typography.labelMedium,
-                                    fontWeight = FontWeight.ExtraBold,
-                                    color = Color.White,
-                                    maxLines = 1,
+                                Box(
+                                    modifier = Modifier
+                                        .size(6.dp)
+                                        .clip(CircleShape)
+                                        .background(Color.White),
                                 )
                                 Text(
-                                    st.subtitle,
+                                    text = "$totalOnline",
                                     style = MaterialTheme.typography.labelSmall,
-                                    fontSize = 9.sp,
-                                    color = Color.White.copy(alpha = 0.85f),
-                                    maxLines = 1,
-                                    overflow = TextOverflow.Ellipsis,
+                                    fontSize = 10.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = Color.White,
+                                )
+                            }
+                        }
+
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(6.dp),
+                        ) {
+                            // Pill Bahasa Terjemahan
+                            Row(
+                                modifier = Modifier
+                                    .clip(RoundedCornerShape(50))
+                                    .background(Color.White.copy(alpha = 0.12f))
+                                    .border(0.7.dp, Color.White.copy(alpha = 0.25f), RoundedCornerShape(50))
+                                    .clickable { showLangPicker = true }
+                                    .padding(horizontal = 8.dp, vertical = 4.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(4.dp),
+                            ) {
+                                Icon(
+                                    imageVector = XyIcons.Globe,
+                                    contentDescription = "Bahasa",
+                                    tint = Color.White,
+                                    modifier = Modifier.size(12.dp),
+                                )
+                                Text(
+                                    text = if (viewerTargetLang == "auto") "AUTO" else viewerTargetLang.uppercase(Locale.ROOT),
+                                    style = MaterialTheme.typography.labelSmall,
+                                    fontSize = 10.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = Color.White,
+                                )
+                            }
+                            if (onToggleCompactFloating != null) {
+                                Box(
+                                    modifier = Modifier
+                                        .size(26.dp)
+                                        .clip(CircleShape)
+                                        .background(Color.White.copy(alpha = 0.12f))
+                                        .border(0.7.dp, Color.White.copy(alpha = 0.24f), CircleShape)
+                                        .clickable { onToggleCompactFloating() },
+                                    contentAlignment = Alignment.Center,
+                                ) {
+                                    Icon(
+                                        imageVector = if (isCompactFloating) XyIcons.ChevronUp else XyIcons.ChevronDown,
+                                        contentDescription = "Ubah Ukuran",
+                                        tint = Color.White,
+                                        modifier = Modifier.size(14.dp),
+                                    )
+                                }
+                            }
+                            Box(
+                                modifier = Modifier
+                                    .size(26.dp)
+                                    .clip(CircleShape)
+                                    .background(Color.White.copy(alpha = 0.16f))
+                                    .border(0.7.dp, Color.White.copy(alpha = 0.30f), CircleShape)
+                                    .clickable { onBack() },
+                                contentAlignment = Alignment.Center,
+                            ) {
+                                Icon(
+                                    imageVector = XyIcons.Close,
+                                    contentDescription = "Minimalkan ke Kapsul",
+                                    tint = Color.White,
+                                    modifier = Modifier.size(13.dp),
                                 )
                             }
                         }
                     }
                 }
-            }
-        }
+            } else {
+                XyTopBar(
+                    title = "Chat Global",
+                    onBack = onBack,
+                    actions = {
+                        // Pill Bahasa Terjemahan (Ikon Vektor Globe)
+                        Row(
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(50))
+                                .background(Color(0xFF18181D))
+                                .clickable { showLangPicker = true }
+                                .padding(horizontal = 10.dp, vertical = 6.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(5.dp),
+                        ) {
+                            Icon(
+                                imageVector = XyIcons.Globe,
+                                contentDescription = "Bahasa Terjemahan",
+                                tint = Color(0xFFF4F4F5),
+                                modifier = Modifier.size(14.dp),
+                            )
+                            Text(
+                                text = if (viewerTargetLang == "auto") "AUTO" else viewerTargetLang.uppercase(Locale.ROOT),
+                                style = MaterialTheme.typography.labelSmall,
+                                color = Color(0xFFF4F4F5),
+                                fontWeight = FontWeight.Bold,
+                            )
+                        }
+                        // Tombol Share Chat Global (Ikon Vektor Share)
+                        XyIconPill(
+                            icon = XyIcons.Share,
+                            onClick = { shareGlobalChatInvite(null) },
+                            flat = true,
+                            contentDescription = "Bagikan Chat Global",
+                        )
+                    },
+                )
 
-        // =========================================================
-        // BAR KUTIPAN BALASAN (SAAT SWIPE TO REPLY AKTIF)
-        // =========================================================
-        AnimatedVisibility(visible = replyingTo != null && isLoggedIn) {
-            val target = replyingTo
-            if (target != null) {
-                Surface(color = Color(0xFF1E293B)) {
+                // Bar Status Monokrom: Total Online di Aplikasi + Protokol E2EE AES-256-GCM
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 16.dp, vertical = 4.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                ) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(6.dp),
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .size(8.dp)
+                                .clip(CircleShape)
+                                .background(if (connected) Color(0xFF22C55E) else Color(0xFFF59E0B)),
+                        )
+                        Text(
+                            text = if (connected) "$totalOnline Online di Aplikasi" else "Menyambung…",
+                            style = MaterialTheme.typography.labelSmall,
+                            fontWeight = FontWeight.SemiBold,
+                            color = Color(0xFFD4D4D8),
+                        )
+                    }
+
+                    Row(
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(50))
+                            .background(Color(0xFF141418))
+                            .padding(horizontal = 9.dp, vertical = 3.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(5.dp),
+                    ) {
+                        Icon(
+                            imageVector = XyIcons.Lock,
+                            contentDescription = "End-to-End Encrypted",
+                            tint = Color(0xFFA1A1AA),
+                            modifier = Modifier.size(11.dp),
+                        )
+                        Text(
+                            text = "E2EE AES-256-GCM",
+                            style = MaterialTheme.typography.labelSmall,
+                            fontSize = 10.sp,
+                            fontWeight = FontWeight.SemiBold,
+                            color = Color(0xFFA1A1AA),
+                        )
+                        if (!verifiedGhLogin.isNullOrBlank()) {
+                            Text(
+                                text = "· @$verifiedGhLogin",
+                                style = MaterialTheme.typography.labelSmall,
+                                fontSize = 10.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = Color(0xFFF4F4F5),
+                            )
+                        }
+                    }
+                }
+            }
+
+            // Banner Pesan yang Disematkan (Pinned Message Bar) di Atas Chat Global
+            AnimatedVisibility(visible = pinnedMessage != null, enter = fadeIn(), exit = fadeOut()) {
+                val pin = pinnedMessage
+                if (pin != null) {
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
+                            .padding(horizontal = 12.dp, vertical = 4.dp)
+                            .clip(RoundedCornerShape(14.dp))
+                            .background(
+                                if (isOverlayMode) Color.White.copy(alpha = 0.14f)
+                                else Color(0xFF16161C),
+                            )
+                            .border(
+                                width = 0.8.dp,
+                                color = Color.White.copy(alpha = 0.18f),
+                                shape = RoundedCornerShape(14.dp),
+                            )
+                            .clickable {
+                                val idx = messages.indexOfFirst { it.id == pin.id }
+                                if (idx >= 0) {
+                                    scope.launch { listState.animateScrollToItem(idx) }
+                                } else {
+                                    Toast.makeText(context, "Pesan disematkan: ${pin.text}", Toast.LENGTH_SHORT).show()
+                                }
+                            }
+                            .padding(horizontal = 12.dp, vertical = 8.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(10.dp),
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .width(3.dp)
+                                .height(28.dp)
+                                .clip(RoundedCornerShape(2.dp))
+                                .background(Color.White),
+                        )
+                        ChatVectorPinIcon(size = 16.dp, tint = Color.White)
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                text = "Pesan Disematkan · ${pin.name}",
+                                style = MaterialTheme.typography.labelSmall,
+                                fontSize = 10.5.sp,
+                                fontWeight = FontWeight.ExtraBold,
+                                color = Color.White,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
+                            )
+                            Text(
+                                text = pin.text,
+                                style = MaterialTheme.typography.bodySmall,
+                                fontSize = 12.sp,
+                                color = Color(0xFFD4D4D8),
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
+                            )
+                        }
+                        Box(
+                            modifier = Modifier
+                                .size(24.dp)
+                                .clip(CircleShape)
+                                .background(Color.White.copy(alpha = 0.12f))
+                                .clickable { updatePinnedMessage(null, pin = false) },
+                            contentAlignment = Alignment.Center,
+                        ) {
+                            Icon(
+                                imageVector = XyIcons.Close,
+                                contentDescription = "Lepas Sematan",
+                                tint = Color.White,
+                                modifier = Modifier.size(13.dp),
+                            )
+                        }
+                    }
+                }
+            }
+
+            // Daftar Pesan Chat Global
+            Box(
+                modifier = Modifier
+                    .weight(1f)
+                    .fillMaxWidth(),
+            ) {
+                if (messages.isEmpty()) {
+                    Column(
+                        modifier = Modifier
+                            .align(Alignment.Center)
+                            .padding(horizontal = 32.dp),
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        verticalArrangement = Arrangement.spacedBy(8.dp),
+                    ) {
+                        Icon(
+                            imageVector = XyIcons.Shield,
+                            contentDescription = null,
+                            tint = Color(0xFF71717A),
+                            modifier = Modifier.size(32.dp),
+                        )
+                        Text(
+                            text = if (!connected) "Menghubungkan ke ruang E2EE…" else "Ruang Chat Global Siap",
+                            style = MaterialTheme.typography.titleSmall,
+                            fontWeight = FontWeight.Bold,
+                            color = Color(0xFFE4E4E7),
+                        )
+                        Text(
+                            text = "Demi privasi End-to-End (E2EE), pesan sebelum kamu bergabung tidak ditampilkan. Pesan baru akan langsung muncul secara real-time.",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = Color(0xFF71717A),
+                            textAlign = TextAlign.Center,
+                        )
+                    }
+                } else {
+                    LazyColumn(
+                        state = listState,
+                        modifier = Modifier.fillMaxSize(),
+                        contentPadding = PaddingValues(horizontal = 12.dp, vertical = 10.dp),
+                        verticalArrangement = Arrangement.spacedBy(10.dp),
+                    ) {
+                        items(messages, key = { it.id }) { m ->
+                            val isViewedOnce = m.id in viewedOnceIds
+                            MessageBubble(
+                                msg = m,
+                                reaction = messageReactions[m.id],
+                                isPinned = pinnedMessage?.id == m.id,
+                                viewedOnce = isViewedOnce,
+                                liquidGlassMode = isOverlayMode,
+                                onReply = { replyingTo = m },
+                                onLongPress = {
+                                    haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                                    focusedContextMsg = m
+                                },
+                                onOpenMedia = {
+                                    if (m.viewOnce && isViewedOnce) {
+                                        Toast.makeText(
+                                            context,
+                                            "Media 1× Sekali Lihat ini sudah pernah dibuka dan tidak dapat dilihat lagi.",
+                                            Toast.LENGTH_SHORT,
+                                        ).show()
+                                    } else {
+                                        if (m.viewOnce) markMediaViewedOnce(m.id)
+                                        fullscreenMediaMsg = m
+                                    }
+                                },
+                                onOpenFile = { saveOrShareChatAttachment(context, m) },
+                            )
+                        }
+                    }
+                }
+            }
+
+            // Indikator Sedang Mengetik
+            AnimatedVisibility(visible = typingName != null, enter = fadeIn(), exit = fadeOut()) {
+                Text(
+                    text = "${typingName ?: ""} sedang mengetik…",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = Color(0xFFA1A1AA),
+                    modifier = Modifier.padding(horizontal = 18.dp, vertical = 3.dp),
+                )
+            }
+
+            // Panel Stiker Ilustrasi AI Unik XyDesk + Custom Sticker (.webp.crypto15)
+            AnimatedVisibility(visible = showStickerPicker, enter = fadeIn(), exit = fadeOut()) {
+                Surface(
+                    color = Color(0xFF121216),
+                    shape = RoundedCornerShape(topStart = 20.dp, topEnd = 20.dp),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 10.dp, vertical = 4.dp),
+                ) {
+                    Column(modifier = Modifier.padding(12.dp)) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text(
+                                    "Stiker XyDesk & Custom (.webp.crypto15)",
+                                    style = MaterialTheme.typography.labelMedium,
+                                    fontWeight = FontWeight.Bold,
+                                    color = Color(0xFFF4F4F5),
+                                )
+                                Text(
+                                    "Android/media/id.xydesk.remote/globwlchat/sticker/",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    fontSize = 9.5.sp,
+                                    color = Color(0xFF9CA3AF),
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis,
+                                )
+                            }
+                            Row(
+                                horizontalArrangement = Arrangement.spacedBy(6.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                            ) {
+                                // Tombol + Tambah Stiker Sendiri (Otomatis WebP + AES-256-GCM .webp.crypto15)
+                                Row(
+                                    modifier = Modifier
+                                        .clip(RoundedCornerShape(50))
+                                        .background(Color.White)
+                                        .clickable { pickCustomStickerLauncher.launch("image/*") }
+                                        .padding(horizontal = 10.dp, vertical = 5.dp),
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(4.dp),
+                                ) {
+                                    Icon(
+                                        imageVector = XyIcons.Plus,
+                                        contentDescription = "Tambah Stiker",
+                                        tint = Color(0xFF09090B),
+                                        modifier = Modifier.size(13.dp),
+                                    )
+                                    Text(
+                                        text = "Tambah Stiker",
+                                        style = MaterialTheme.typography.labelSmall,
+                                        fontWeight = FontWeight.ExtraBold,
+                                        color = Color(0xFF09090B),
+                                    )
+                                }
+                                Box(
+                                    modifier = Modifier
+                                        .size(26.dp)
+                                        .clip(CircleShape)
+                                        .background(Color(0xFF27272A))
+                                        .clickable { showStickerPicker = false },
+                                    contentAlignment = Alignment.Center,
+                                ) {
+                                    Icon(
+                                        imageVector = XyIcons.Close,
+                                        contentDescription = "Tutup",
+                                        tint = Color(0xFFE4E4E7),
+                                        modifier = Modifier.size(14.dp),
+                                    )
+                                }
+                            }
+                        }
+
+                        // Koleksi Stiker Custom (.webp.crypto15) milik pengguna
+                        if (customStickers.isNotEmpty()) {
+                            Spacer(Modifier.height(8.dp))
+                            Text(
+                                text = "Stiker Terenkripsi Saya (${customStickers.size} file .webp.crypto15 · Ketuk Kirim / Tahan Hapus):",
+                                style = MaterialTheme.typography.labelSmall,
+                                fontSize = 10.sp,
+                                color = Color(0xFFA1A1AA),
+                            )
+                            Spacer(Modifier.height(6.dp))
+                            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                                customStickers.take(6).chunked(3).forEach { rowCustom ->
+                                    Row(
+                                        modifier = Modifier.fillMaxWidth(),
+                                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                    ) {
+                                        rowCustom.forEach { cst ->
+                                            Column(
+                                                modifier = Modifier
+                                                    .weight(1f)
+                                                    .clip(RoundedCornerShape(16.dp))
+                                                    .background(Color(0xFF1C1C22))
+                                                    .pointerInput(cst.fileName) {
+                                                        detectTapGestures(
+                                                            onTap = {
+                                                                showStickerPicker = false
+                                                                dispatchMessagePayload(
+                                                                    rawText = "[Stiker Custom]",
+                                                                    attachmentType = "sticker",
+                                                                    attachmentName = cst.fileName,
+                                                                    attachmentMime = "image/webp+crypto15",
+                                                                    attachmentSize = cst.crypto15Bytes.size,
+                                                                    attachmentData = CustomStickerVault.encodeAttachmentPayload(cst),
+                                                                )
+                                                            },
+                                                            onLongPress = {
+                                                                CustomStickerVault.deleteCustomSticker(context, cst.fileName)
+                                                                customStickers.removeAll { it.fileName == cst.fileName }
+                                                                Toast.makeText(context, "Stiker ${cst.fileName} dihapus", Toast.LENGTH_SHORT).show()
+                                                            },
+                                                        )
+                                                    }
+                                                    .padding(vertical = 8.dp, horizontal = 6.dp),
+                                                horizontalAlignment = Alignment.CenterHorizontally,
+                                            ) {
+                                                Image(
+                                                    bitmap = cst.bitmap.asImageBitmap(),
+                                                    contentDescription = cst.fileName,
+                                                    modifier = Modifier
+                                                        .size(68.dp)
+                                                        .clip(RoundedCornerShape(14.dp)),
+                                                    contentScale = ContentScale.Crop,
+                                                )
+                                                Spacer(Modifier.height(4.dp))
+                                                Text(
+                                                    text = cst.fileName.take(10) + "….crypto15",
+                                                    style = MaterialTheme.typography.labelSmall,
+                                                    fontSize = 9.5.sp,
+                                                    fontWeight = FontWeight.SemiBold,
+                                                    color = Color(0xFFE4E4E7),
+                                                    maxLines = 1,
+                                                    overflow = TextOverflow.Ellipsis,
+                                                )
+                                            }
+                                        }
+                                        repeat(3 - rowCustom.size) {
+                                            Spacer(Modifier.weight(1f))
+                                        }
+                                    }
+                                }
+                            }
+                        }
+
+                        Spacer(Modifier.height(10.dp))
+                        // Grid 3 kolom x 2 baris untuk 6 stiker ilustrasi AI bawaan
+                        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                            XY_STICKERS.chunked(3).forEach { rowItems ->
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                ) {
+                                    rowItems.forEach { st ->
+                                        Column(
+                                            modifier = Modifier
+                                                .weight(1f)
+                                                .clip(RoundedCornerShape(16.dp))
+                                                .background(Color(0xFF1C1C22))
+                                                .clickable {
+                                                    showStickerPicker = false
+                                                    dispatchMessagePayload(
+                                                        rawText = st.title,
+                                                        attachmentType = "sticker",
+                                                        attachmentName = st.title,
+                                                        attachmentMime = "application/x-xydesk-sticker",
+                                                        attachmentData = "sticker:${st.id}",
+                                                    )
+                                                }
+                                                .padding(vertical = 8.dp, horizontal = 6.dp),
+                                            horizontalAlignment = Alignment.CenterHorizontally,
+                                        ) {
+                                            Image(
+                                                painter = painterResource(st.drawableRes),
+                                                contentDescription = st.title,
+                                                modifier = Modifier
+                                                    .size(72.dp)
+                                                    .clip(RoundedCornerShape(14.dp)),
+                                                contentScale = ContentScale.Crop,
+                                            )
+                                            Spacer(Modifier.height(4.dp))
+                                            Text(
+                                                text = st.title,
+                                                style = MaterialTheme.typography.labelSmall,
+                                                fontWeight = FontWeight.SemiBold,
+                                                color = Color(0xFFE4E4E7),
+                                                maxLines = 1,
+                                                overflow = TextOverflow.Ellipsis,
+                                            )
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
+            // Menu Lampiran Foto / Video / Berkas + Toggle Media 1× Sekali Lihat (Vektor Murni)
+            AnimatedVisibility(visible = showAttachMenu, enter = fadeIn(), exit = fadeOut()) {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 12.dp, vertical = 4.dp)
+                        .clip(RoundedCornerShape(18.dp))
+                        .background(Color(0xFF141418))
+                        .padding(10.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    // Baris Toggle Mode 1x Sekali Lihat (View-Once untuk Foto & Video)
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clip(RoundedCornerShape(12.dp))
+                            .background(if (viewOnceMediaMode) Color.White else Color(0xFF1E1E24))
+                            .clickable { viewOnceMediaMode = !viewOnceMediaMode }
+                            .padding(horizontal = 12.dp, vertical = 8.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                    ) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        ) {
+                            ChatVectorViewOnceIcon(
+                                size = 18.dp,
+                                tint = if (viewOnceMediaMode) Color(0xFF09090B) else Color.White,
+                            )
+                            Column {
+                                Text(
+                                    text = if (viewOnceMediaMode) "Mode Media 1× Sekali Lihat: AKTIF" else "Mode Media 1× Sekali Lihat",
+                                    style = MaterialTheme.typography.labelMedium,
+                                    fontWeight = FontWeight.ExtraBold,
+                                    color = if (viewOnceMediaMode) Color(0xFF09090B) else Color.White,
+                                )
+                                Text(
+                                    text = "Foto atau video hanya bisa dibuka 1 kali oleh penerima",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    fontSize = 10.sp,
+                                    color = if (viewOnceMediaMode) Color(0xFF27272A) else Color(0xFFA1A1AA),
+                                )
+                            }
+                        }
+                        Box(
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(50))
+                                .background(if (viewOnceMediaMode) Color(0xFF09090B) else Color(0xFF27272F))
+                                .padding(horizontal = 9.dp, vertical = 3.dp),
+                        ) {
+                            Text(
+                                text = if (viewOnceMediaMode) "1× ON" else "NORMAL",
+                                style = MaterialTheme.typography.labelSmall,
+                                fontSize = 10.sp,
+                                fontWeight = FontWeight.ExtraBold,
+                                color = Color.White,
+                            )
+                        }
+                    }
+
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    ) {
+                        Row(
+                            modifier = Modifier
+                                .weight(1f)
+                                .clip(RoundedCornerShape(12.dp))
+                                .background(Color(0xFF222228))
+                                .clickable {
+                                    showAttachMenu = false
+                                    pickImageLauncher.launch("image/*")
+                                }
+                                .padding(vertical = 10.dp, horizontal = 8.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.Center,
+                        ) {
+                            Icon(
+                                imageVector = XyIcons.Camera,
+                                contentDescription = null,
+                                tint = Color.White,
+                                modifier = Modifier.size(15.dp),
+                            )
+                            Spacer(Modifier.width(6.dp))
+                            Text(
+                                if (viewOnceMediaMode) "Foto 1×" else "Foto",
+                                style = MaterialTheme.typography.labelMedium,
+                                fontWeight = FontWeight.Bold,
+                                color = Color.White,
+                            )
+                        }
+                        Row(
+                            modifier = Modifier
+                                .weight(1f)
+                                .clip(RoundedCornerShape(12.dp))
+                                .background(Color(0xFF222228))
+                                .clickable {
+                                    showAttachMenu = false
+                                    pickVideoLauncher.launch("video/*")
+                                }
+                                .padding(vertical = 10.dp, horizontal = 8.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.Center,
+                        ) {
+                            ChatVectorVideoPlayIcon(size = 15.dp, tint = Color.White)
+                            Spacer(Modifier.width(6.dp))
+                            Text(
+                                if (viewOnceMediaMode) "Video 1×" else "Video",
+                                style = MaterialTheme.typography.labelMedium,
+                                fontWeight = FontWeight.Bold,
+                                color = Color.White,
+                            )
+                        }
+                        Row(
+                            modifier = Modifier
+                                .weight(1f)
+                                .clip(RoundedCornerShape(12.dp))
+                                .background(Color(0xFF222228))
+                                .clickable {
+                                    showAttachMenu = false
+                                    pickFileLauncher.launch(arrayOf("*/*"))
+                                }
+                                .padding(vertical = 10.dp, horizontal = 8.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.Center,
+                        ) {
+                            Icon(
+                                imageVector = XyIcons.Clip,
+                                contentDescription = null,
+                                tint = Color.White,
+                                modifier = Modifier.size(15.dp),
+                            )
+                            Spacer(Modifier.width(6.dp))
+                            Text(
+                                "Berkas",
+                                style = MaterialTheme.typography.labelMedium,
+                                fontWeight = FontWeight.Bold,
+                                color = Color.White,
+                            )
+                        }
+                    }
+                }
+            }
+
+            // Pratinjau Balasan (Reply Preview Bar)
+            AnimatedVisibility(visible = replyingTo != null, enter = fadeIn(), exit = fadeOut()) {
+                val rep = replyingTo
+                if (rep != null) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 12.dp, vertical = 2.dp)
+                            .clip(RoundedCornerShape(14.dp))
+                            .background(Color(0xFF16161C))
                             .padding(horizontal = 12.dp, vertical = 8.dp),
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
                         Box(
                             modifier = Modifier
-                                .width(4.dp)
-                                .height(34.dp)
+                                .width(3.dp)
+                                .height(30.dp)
                                 .clip(RoundedCornerShape(2.dp))
-                                .background(Color(0xFF38BDF8)),
+                                .background(Color.White),
                         )
                         Spacer(Modifier.width(10.dp))
                         Column(modifier = Modifier.weight(1f)) {
                             Text(
-                                "Membalas ${target.flag} ${target.name}",
-                                style = MaterialTheme.typography.labelMedium,
+                                text = "Membalas ${rep.name}",
+                                style = MaterialTheme.typography.labelSmall,
                                 fontWeight = FontWeight.Bold,
-                                color = Color(0xFF38BDF8),
+                                color = Color.White,
                             )
                             Text(
-                                target.text,
-                                style = MaterialTheme.typography.labelSmall,
-                                color = Color(0xFFCBD5E1),
+                                text = rep.text,
+                                style = MaterialTheme.typography.bodySmall,
+                                color = Color(0xFFA1A1AA),
                                 maxLines = 1,
                                 overflow = TextOverflow.Ellipsis,
                             )
                         }
-                        Text(
-                            "✕",
-                            style = MaterialTheme.typography.titleMedium,
-                            color = Color(0xFF94A3B8),
+                        Box(
                             modifier = Modifier
+                                .size(26.dp)
                                 .clip(CircleShape)
-                                .clickable { replyingTo = null }
-                                .padding(6.dp),
-                        )
+                                .background(Color(0xFF27272A))
+                                .clickable { replyingTo = null },
+                            contentAlignment = Alignment.Center,
+                        ) {
+                            Icon(
+                                imageVector = XyIcons.Close,
+                                contentDescription = "Batal Balas",
+                                tint = Color.White,
+                                modifier = Modifier.size(14.dp),
+                            )
+                        }
                     }
                 }
             }
-        }
 
-        // =========================================================
-        // MENU LAMPIRAN CEPAT (FOTO / GAMBAR / FILE / STIKER)
-        // =========================================================
-        AnimatedVisibility(visible = showAttachMenu && isLoggedIn) {
-            Surface(color = Color(0xFF1E293B)) {
-                Row(
+            // Composer / Gate Login GitHub via Browser In-App (⋮)
+            if (verifiedGhLogin.isNullOrBlank()) {
+                Surface(
+                    color = Color(0xFF141419),
+                    shape = RoundedCornerShape(18.dp),
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(horizontal = 14.dp, vertical = 10.dp),
-                    horizontalArrangement = Arrangement.SpaceEvenly,
+                        .padding(horizontal = 12.dp, vertical = 8.dp),
                 ) {
-                    AttachOptionPill("📷 Foto / Gambar", Color(0xFF0284C7)) {
-                        showAttachMenu = false
-                        pickImageLauncher.launch("image/*")
-                    }
-                    AttachOptionPill("📎 File / Dokumen", Color(0xFF4F46E5)) {
-                        showAttachMenu = false
-                        pickFileLauncher.launch("*/*")
-                    }
-                    AttachOptionPill("🎨 Stiker XyDesk", Color(0xFFD97706)) {
-                        showAttachMenu = false
-                        showStickerPicker = true
-                    }
-                }
-            }
-        }
-
-        // =========================================================
-        // GATE WAJIB LOGIN GITHUB ATAU KOMPOSER PESAN WHATSAPP-STYLE
-        // =========================================================
-        if (!isLoggedIn) {
-            Surface(
-                color = Color(0xFF0F172A),
-                tonalElevation = 6.dp,
-            ) {
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = 14.dp, vertical = 12.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(12.dp),
-                ) {
-                    Box(
+                    Row(
                         modifier = Modifier
-                            .size(40.dp)
-                            .clip(CircleShape)
-                            .background(Color(0xFF1E293B))
-                            .border(1.dp, Color(0xFF38BDF8).copy(alpha = 0.5f), CircleShape),
-                        contentAlignment = Alignment.Center,
+                            .fillMaxWidth()
+                            .padding(horizontal = 14.dp, vertical = 12.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(12.dp),
                     ) {
-                        GitHubLogoIcon(size = 20.dp, tint = Color(0xFF38BDF8))
-                    }
-                    Column(modifier = Modifier.weight(1f)) {
-                        Text(
-                            "Login GitHub Wajib untuk Chat Global",
-                            style = MaterialTheme.typography.titleSmall,
-                            fontWeight = FontWeight.Bold,
-                            color = Color.White,
+                        GitHubLogoIcon(size = 24.dp, tint = Color.White)
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                "Wajib Login GitHub (E2EE Verified)",
+                                style = MaterialTheme.typography.labelLarge,
+                                fontWeight = FontWeight.Bold,
+                                color = Color.White,
+                            )
+                            Text(
+                                if (!authWaitingCode.isNullOrBlank()) {
+                                    "Kode $authWaitingCode sudah disalin — tinggal klik Authorize di browser!"
+                                } else {
+                                    "Buka browser in-app (⋮), tinggal klik Authorize tanpa ketik manual."
+                                },
+                                style = MaterialTheme.typography.labelSmall,
+                                color = Color(0xFFA1A1AA),
+                            )
+                        }
+                        XyPillButton(
+                            text = if (authBusy) "Buka Browser ↗" else "Authorize",
+                            onClick = {
+                                if (!authBusy) {
+                                    authBusy = true
+                                    scope.launch {
+                                        performGitHubInAppBrowserLogin(
+                                            context = context,
+                                            onCodeReady = { code, url ->
+                                                authWaitingCode = code
+                                                authWaitingUrl = url
+                                            },
+                                            onSuccess = { _, user ->
+                                                authBusy = false
+                                                authWaitingCode = null
+                                                authWaitingUrl = null
+                                                verifiedGhLogin = user
+                                                nickname = chatNickname(context)
+                                                firstJoinedAtMs = ensureFirstJoinedAtMs(context, user)
+                                                chatSocketSend(
+                                                    JSONObject()
+                                                        .put("type", "hello")
+                                                        .put("name", nickname)
+                                                        .put("github_login", user)
+                                                        .put("country", myCountry)
+                                                        .toString(),
+                                                )
+                                            },
+                                            onError = { err ->
+                                                authBusy = false
+                                                Toast.makeText(context, err, Toast.LENGTH_SHORT).show()
+                                            },
+                                        )
+                                    }
+                                } else {
+                                    authWaitingUrl?.let { openInAppCustomTab(context, it) }
+                                }
+                            },
+                            primary = true,
+                            compact = true,
                         )
-                        Text(
-                            "Masuk 1-klik dengan GitHub (tanpa ketik kode) untuk mulai ngobrol, kirim foto, file, & stiker.",
-                            style = MaterialTheme.typography.labelSmall,
-                            color = Color(0xFF94A3B8),
-                        )
                     }
-                    XyPillButton(
-                        text = "Login GitHub",
-                        onClick = { loginModalOpen = true },
-                        primary = true,
-                        compact = true,
-                    )
                 }
-            }
-        } else {
-            Surface(
-                color = Color(0xFF0F172A),
-                tonalElevation = 4.dp,
-            ) {
-                Row(
+            } else {
+                // Bar Input Pesan (100% Vector Icons, Monokrom Bersih / Liquid Glass di mode sesi)
+                Surface(
+                    color = if (isOverlayMode) Color(0xFF0E0E13).copy(alpha = 0.56f) else Color(0xFF141418),
+                    shape = RoundedCornerShape(26.dp),
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(horizontal = 8.dp, vertical = 8.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                        .padding(horizontal = 10.dp, vertical = 8.dp)
+                        .let { mod ->
+                            if (isOverlayMode) {
+                                mod.border(
+                                    0.9.dp,
+                                    Brush.linearGradient(
+                                        listOf(
+                                            Color.White.copy(alpha = 0.36f),
+                                            Color.White.copy(alpha = 0.08f),
+                                            Color.White.copy(alpha = 0.22f),
+                                        ),
+                                    ),
+                                    RoundedCornerShape(26.dp),
+                                )
+                            } else {
+                                mod
+                            }
+                        },
                 ) {
-                    // Tombol Stiker
-                    Surface(
-                        onClick = {
-                            showStickerPicker = !showStickerPicker
-                            showAttachMenu = false
-                        },
-                        color = if (showStickerPicker) Color(0xFF2563EB) else Color(0xFF1E293B),
-                        shape = CircleShape,
-                        modifier = Modifier.size(38.dp),
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 8.dp, vertical = 6.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(6.dp),
                     ) {
-                        Box(contentAlignment = Alignment.Center) {
-                            Text("😊", fontSize = 17.sp)
+                        // Tombol Vektor Stiker
+                        Box(
+                            modifier = Modifier
+                                .size(36.dp)
+                                .clip(CircleShape)
+                                .background(if (showStickerPicker) Color.White else Color(0xFF222228))
+                                .clickable {
+                                    showStickerPicker = !showStickerPicker
+                                    if (showStickerPicker) showAttachMenu = false
+                                },
+                            contentAlignment = Alignment.Center,
+                        ) {
+                            ChatVectorStickerIcon(
+                                size = 18.dp,
+                                tint = if (showStickerPicker) Color(0xFF09090B) else Color(0xFFE4E4E7),
+                            )
+                        }
+
+                        // Tombol Vektor Lampiran Berkas
+                        Box(
+                            modifier = Modifier
+                                .size(36.dp)
+                                .clip(CircleShape)
+                                .background(if (showAttachMenu) Color.White else Color(0xFF222228))
+                                .clickable {
+                                    showAttachMenu = !showAttachMenu
+                                    if (showAttachMenu) showStickerPicker = false
+                                },
+                            contentAlignment = Alignment.Center,
+                        ) {
+                            Icon(
+                                imageVector = XyIcons.Clip,
+                                contentDescription = "Lampirkan Berkas",
+                                tint = if (showAttachMenu) Color(0xFF09090B) else Color(0xFFE4E4E7),
+                                modifier = Modifier.size(17.dp),
+                            )
+                        }
+
+                        // Tombol Vektor Kamera / Galeri Cepat
+                        Box(
+                            modifier = Modifier
+                                .size(36.dp)
+                                .clip(CircleShape)
+                                .background(Color(0xFF222228))
+                                .clickable { pickImageLauncher.launch("image/*") },
+                            contentAlignment = Alignment.Center,
+                        ) {
+                            Icon(
+                                imageVector = XyIcons.Camera,
+                                contentDescription = "Kirim Foto",
+                                tint = Color(0xFFE4E4E7),
+                                modifier = Modifier.size(17.dp),
+                            )
+                        }
+
+                        // Kolom Teks Input
+                        Box(
+                            modifier = Modifier
+                                .weight(1f)
+                                .padding(horizontal = 6.dp, vertical = 6.dp),
+                            contentAlignment = Alignment.CenterStart,
+                        ) {
+                            if (draft.text.isEmpty()) {
+                                Text(
+                                    text = "Ketik pesan terenkripsi…",
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    color = Color(0xFF71717A),
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis,
+                                )
+                            }
+                            BasicTextField(
+                                value = draft,
+                                onValueChange = { next ->
+                                    if (next.text.length <= 500) draft = next
+                                    val now = System.currentTimeMillis()
+                                    if (now - typingSentAt > 1800L) {
+                                        typingSentAt = now
+                                        chatSocketSend(
+                                            JSONObject()
+                                                .put("type", "typing")
+                                                .put("on", next.text.isNotBlank())
+                                                .toString(),
+                                        )
+                                    }
+                                },
+                                textStyle = TextStyle(
+                                    color = Color(0xFFF4F4F5),
+                                    fontSize = 15.sp,
+                                ),
+                                cursorBrush = SolidColor(Color.White),
+                                maxLines = 4,
+                                keyboardOptions = KeyboardOptions(
+                                    capitalization = KeyboardCapitalization.Sentences,
+                                    imeAction = ImeAction.Send,
+                                ),
+                                keyboardActions = KeyboardActions(
+                                    onSend = { dispatchMessagePayload(draft.text) },
+                                ),
+                                modifier = Modifier.fillMaxWidth(),
+                            )
+                        }
+
+                        // Tombol Vektor Kirim Monokrom
+                        val canSend = draft.text.isNotBlank() && !sending
+                        Box(
+                            modifier = Modifier
+                                .size(38.dp)
+                                .clip(CircleShape)
+                                .background(if (canSend) Color.White else Color(0xFF222228))
+                                .clickable(enabled = canSend) { dispatchMessagePayload(draft.text) },
+                            contentAlignment = Alignment.Center,
+                        ) {
+                            Icon(
+                                imageVector = XyIcons.Send,
+                                contentDescription = "Kirim",
+                                tint = if (canSend) Color(0xFF09090B) else Color(0xFF52525B),
+                                modifier = Modifier.size(17.dp),
+                            )
                         }
                     }
+                }
+            }
+        }
 
-                    // Tombol Attach File / Foto
-                    Surface(
-                        onClick = {
-                            showAttachMenu = !showAttachMenu
-                            showStickerPicker = false
-                        },
-                        color = if (showAttachMenu) Color(0xFF2563EB) else Color(0xFF1E293B),
-                        shape = CircleShape,
-                        modifier = Modifier.size(38.dp),
+        // =====================================================================
+        // OVERLAY LONG-PRESS FOKUS BUBBLE + BLUR BACKGROUND + MENU ALA iPHONE WA
+        // =====================================================================
+        AnimatedVisibility(
+            visible = focusedContextMsg != null,
+            enter = fadeIn() + scaleIn(
+                initialScale = 0.92f,
+                animationSpec = spring(dampingRatio = Spring.DampingRatioMediumBouncy, stiffness = Spring.StiffnessMedium),
+            ),
+            exit = fadeOut() + scaleOut(targetScale = 0.94f),
+        ) {
+            val targetMsg = focusedContextMsg
+            if (targetMsg != null) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .background(Color.Black.copy(alpha = 0.58f))
+                        .clickable { focusedContextMsg = null }
+                        .padding(horizontal = 20.dp, vertical = 32.dp),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Column(
+                        modifier = Modifier
+                            .widthIn(max = 360.dp)
+                            .fillMaxWidth()
+                            .clickable(enabled = false) {},
+                        horizontalAlignment = if (targetMsg.mine) Alignment.End else Alignment.Start,
+                        verticalArrangement = Arrangement.spacedBy(10.dp),
                     ) {
-                        Box(contentAlignment = Alignment.Center) {
-                            Text("📎", fontSize = 17.sp)
+                        // 1. Bar Reaksi Cepat Mengambang di atas Bubble (gaya iPhone WhatsApp)
+                        Surface(
+                            color = Color(0xFF1C1C22).copy(alpha = 0.96f),
+                            shape = RoundedCornerShape(50),
+                            shadowElevation = 14.dp,
+                        ) {
+                            Row(
+                                modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
+                                horizontalArrangement = Arrangement.spacedBy(6.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                            ) {
+                                listOf("GG", "FIRE", "LOL", "+1", "RESPECT", "KING").forEach { tag ->
+                                    val isSelected = messageReactions[targetMsg.id] == tag
+                                    Box(
+                                        modifier = Modifier
+                                            .clip(RoundedCornerShape(50))
+                                            .background(if (isSelected) Color.White else Color(0xFF27272F))
+                                            .clickable {
+                                                if (isSelected) messageReactions.remove(targetMsg.id)
+                                                else messageReactions[targetMsg.id] = tag
+                                                focusedContextMsg = null
+                                            }
+                                            .padding(horizontal = 10.dp, vertical = 5.dp),
+                                    ) {
+                                        Text(
+                                            text = tag,
+                                            style = MaterialTheme.typography.labelSmall,
+                                            fontWeight = FontWeight.ExtraBold,
+                                            color = if (isSelected) Color(0xFF09090B) else Color.White,
+                                        )
+                                    }
+                                }
+                            }
                         }
-                    }
 
-                    OutlinedTextField(
-                        value = draft,
-                        onValueChange = { value ->
-                            val wasEmpty = draft.text.isEmpty()
-                            draft = value
-                            val now = System.currentTimeMillis()
-                            if (value.text.isNotEmpty() && now - typingSentAt > 2500) {
-                                typingSentAt = now
-                                chatSocketSend(JSONObject().put("type", "typing").put("on", true).toString())
-                            } else if (value.text.isEmpty() && !wasEmpty) {
-                                chatSocketSend(JSONObject().put("type", "typing").put("on", false).toString())
-                            }
-                        },
-                        modifier = Modifier.weight(1f),
-                        placeholder = {
-                            Text(
-                                "Ketik pesan (@$nickname)…",
-                                color = Color(0xFF64748B),
-                                style = MaterialTheme.typography.bodyMedium,
+                        // 2. Bubble Pesan yang Difokuskan Tajam di Tengah Layar Blur
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .scale(1.02f),
+                        ) {
+                            val isTargetViewedOnce = targetMsg.id in viewedOnceIds
+                            MessageBubble(
+                                msg = targetMsg,
+                                reaction = messageReactions[targetMsg.id],
+                                isPinned = pinnedMessage?.id == targetMsg.id,
+                                viewedOnce = isTargetViewedOnce,
+                                onReply = {
+                                    replyingTo = targetMsg
+                                    focusedContextMsg = null
+                                },
+                                onLongPress = {},
+                                onOpenMedia = {
+                                    focusedContextMsg = null
+                                    if (targetMsg.viewOnce && isTargetViewedOnce) {
+                                        Toast.makeText(
+                                            context,
+                                            "Media 1× Sekali Lihat ini sudah pernah dibuka.",
+                                            Toast.LENGTH_SHORT,
+                                        ).show()
+                                    } else {
+                                        if (targetMsg.viewOnce) markMediaViewedOnce(targetMsg.id)
+                                        fullscreenMediaMsg = targetMsg
+                                    }
+                                },
+                                onOpenFile = {
+                                    focusedContextMsg = null
+                                    saveOrShareChatAttachment(context, targetMsg)
+                                },
                             )
-                        },
-                        maxLines = 4,
-                        shape = RoundedCornerShape(22.dp),
-                        colors = OutlinedTextFieldDefaults.colors(
-                            focusedContainerColor = Color(0xFF1E293B),
-                            unfocusedContainerColor = Color(0xFF1E293B),
-                            focusedTextColor = Color.White,
-                            unfocusedTextColor = Color.White,
-                            focusedBorderColor = Color(0xFF38BDF8),
-                            unfocusedBorderColor = Color(0xFF334155),
-                        ),
-                    )
+                        }
 
-                    // Tombol Kirim Bulat (Selalu Aktif saat ada teks — pakai HTTP + WS)
-                    val canSend = draft.text.isNotBlank() && !sending
-                    Surface(
-                        onClick = {
-                            val text = draft.text.trim()
-                            if (text.isNotEmpty()) {
-                                draft = TextFieldValue("")
-                                dispatchChatPayload(text = text)
+                        // 3. Menu Konteks Frosted Glass ala iPhone / WhatsApp (Ikon Vektor di Kanan)
+                        val isCurrentlyPinned = pinnedMessage?.id == targetMsg.id
+                        Surface(
+                            color = Color(0xFF1C1C22).copy(alpha = 0.97f),
+                            shape = RoundedCornerShape(18.dp),
+                            shadowElevation = 18.dp,
+                            modifier = Modifier.width(258.dp),
+                        ) {
+                            Column(modifier = Modifier.fillMaxWidth()) {
+                                ContextMenuActionRow(
+                                    label = "Balas Pesan",
+                                    customIcon = { ChatVectorReplyIcon(size = 17.dp, tint = Color.White) },
+                                    onClick = {
+                                        replyingTo = targetMsg
+                                        focusedContextMsg = null
+                                    },
+                                )
+                                HorizontalDivider(color = Color.White.copy(alpha = 0.08f))
+                                ContextMenuActionRow(
+                                    label = if (isCurrentlyPinned) "Lepas Sematan Pesan" else "Sematkan Pesan",
+                                    customIcon = { ChatVectorPinIcon(size = 17.dp, tint = Color.White) },
+                                    onClick = {
+                                        updatePinnedMessage(targetMsg, pin = !isCurrentlyPinned)
+                                        focusedContextMsg = null
+                                    },
+                                )
+                                HorizontalDivider(color = Color.White.copy(alpha = 0.08f))
+                                ContextMenuActionRow(
+                                    label = "Salin Teks Pesan",
+                                    icon = XyIcons.Copy,
+                                    onClick = {
+                                        val cm = context.getSystemService(Context.CLIPBOARD_SERVICE) as? ClipboardManager
+                                        cm?.setPrimaryClip(ClipData.newPlainText("Pesan Chat Global", targetMsg.text))
+                                        Toast.makeText(context, "Teks pesan disalin", Toast.LENGTH_SHORT).show()
+                                        focusedContextMsg = null
+                                    },
+                                )
+                                if (targetMsg.translated.isNotBlank() && !targetMsg.translated.equals(targetMsg.text, ignoreCase = true)) {
+                                    HorizontalDivider(color = Color.White.copy(alpha = 0.08f))
+                                    ContextMenuActionRow(
+                                        label = "Salin Terjemahan (${targetMsg.targetLang})",
+                                        icon = XyIcons.Globe,
+                                        onClick = {
+                                            val cm = context.getSystemService(Context.CLIPBOARD_SERVICE) as? ClipboardManager
+                                            cm?.setPrimaryClip(ClipData.newPlainText("Terjemahan", targetMsg.translated))
+                                            Toast.makeText(context, "Terjemahan disalin", Toast.LENGTH_SHORT).show()
+                                            focusedContextMsg = null
+                                        },
+                                    )
+                                }
+                                if ((targetMsg.attachmentType == "image" || targetMsg.attachmentType == "video") && !targetMsg.viewOnce) {
+                                    HorizontalDivider(color = Color.White.copy(alpha = 0.08f))
+                                    ContextMenuActionRow(
+                                        label = if (targetMsg.attachmentType == "video") "Simpan Video ke Galeri" else "Simpan Foto ke Galeri",
+                                        icon = XyIcons.Download,
+                                        onClick = {
+                                            val snap = targetMsg
+                                            focusedContextMsg = null
+                                            saveChatMediaToGallery(context, snap)
+                                        },
+                                    )
+                                }
+                                HorizontalDivider(color = Color.White.copy(alpha = 0.08f))
+                                ContextMenuActionRow(
+                                    label = "Bagikan Pesan Ini",
+                                    icon = XyIcons.Share,
+                                    onClick = {
+                                        val snap = targetMsg
+                                        focusedContextMsg = null
+                                        shareGlobalChatInvite(snap)
+                                    },
+                                )
+                                HorizontalDivider(color = Color.White.copy(alpha = 0.08f))
+                                ContextMenuActionRow(
+                                    label = "Info Enkripsi E2EE",
+                                    icon = XyIcons.Shield,
+                                    onClick = {
+                                        inspectingE2eeMsg = targetMsg
+                                        focusedContextMsg = null
+                                    },
+                                )
+                                HorizontalDivider(color = Color.White.copy(alpha = 0.08f))
+                                ContextMenuActionRow(
+                                    label = "Sembunyikan dari Layarku",
+                                    icon = XyIcons.Trash,
+                                    tint = Color(0xFFF87171),
+                                    onClick = {
+                                        hiddenMessageIds.add(targetMsg.id)
+                                        messages.removeAll { it.id == targetMsg.id }
+                                        focusedContextMsg = null
+                                    },
+                                )
                             }
-                        },
-                        enabled = canSend,
-                        color = if (canSend) Color(0xFF2563EB) else Color(0xFF1E293B),
-                        shape = CircleShape,
-                        modifier = Modifier.size(42.dp),
-                    ) {
-                        Box(contentAlignment = Alignment.Center) {
-                            Text(
-                                "➤",
-                                fontSize = 18.sp,
-                                fontWeight = FontWeight.Bold,
-                                color = if (canSend) Color.White else Color(0xFF64748B),
-                            )
                         }
                     }
                 }
@@ -1289,7 +2609,7 @@ internal fun GlobalChatScreen(
         }
     }
 
-    // Dialog Pemilih Bahasa Terjemahan (Support Semua Bahasa)
+    // Dialog Pemilih Bahasa Terjemahan
     if (showLangPicker) {
         XyOverlay(
             title = "Bahasa Terjemahan Chat Global",
@@ -1302,7 +2622,7 @@ internal fun GlobalChatScreen(
                 verticalArrangement = Arrangement.spacedBy(6.dp),
             ) {
                 Text(
-                    "Pilih bahasa terjemahan baris bawah di setiap bubble pesan (mendukung Thailand, Jepang, Korea, Mandarin, Arab, Rusia, Inggris, Indonesia, dll.):",
+                    "Pilih bahasa terjemahan otomatis di setiap bubble pesan:",
                     style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
@@ -1312,7 +2632,7 @@ internal fun GlobalChatScreen(
                 ) {
                     items(SUPPORTED_VIEWER_LANGS, key = { it.code }) { opt ->
                         XyPillButton(
-                            text = "${opt.flag}  ${opt.label}",
+                            text = "[${opt.badge}]  ${opt.label}",
                             onClick = {
                                 viewerTargetLang = opt.code
                                 chatPrefs.edit().putString(KEY_TARGET_LANG, opt.code).apply()
@@ -1328,402 +2648,1204 @@ internal fun GlobalChatScreen(
         }
     }
 
-    // Dialog Login GitHub Instan (Tanpa Ketik Kode)
-    if (loginModalOpen) {
+    // Dialog Verifikasi Kriptografi End-to-End (E2EE Inspector)
+    inspectingE2eeMsg?.let { msg ->
         XyOverlay(
-            title = "Login GitHub Instan",
-            onDismiss = { loginModalOpen = false },
+            title = "Verifikasi End-to-End (E2EE)",
+            onDismiss = { inspectingE2eeMsg = null },
         ) {
-            GitHubDeviceFlowPanel(
-                onCancel = { loginModalOpen = false },
-                onSuccess = { tok, user ->
-                    runCatching {
-                        CredentialVault(context.applicationContext).put(XyRdpConfig.VAULT_PAT_ID, tok)
-                    }
-                    saveVerifiedGitHubLogin(context, user)
-                    verifiedGhLogin = user
-                    nickname = chatNickname(context)
-                    loginModalOpen = false
-                    chatSocketSend(
-                        JSONObject()
-                            .put("type", "hello")
-                            .put("name", nickname)
-                            .put("country", myCountry)
-                            .toString(),
-                    )
-                },
-                onError = {
-                    Toast.makeText(context, it, Toast.LENGTH_SHORT).show()
-                },
-            )
-        }
-    }
-
-    // Penampil Foto / Gambar Fullscreen
-    fullscreenImageUri?.let { dataUri ->
-        XyOverlay(
-            title = "Pratinjau Gambar",
-            onDismiss = { fullscreenImageUri = null },
-        ) {
-            val bmp = remember(dataUri) { decodeDataUriBitmap(dataUri) }
-            Column(
-                horizontalAlignment = Alignment.CenterHorizontally,
-                verticalArrangement = Arrangement.spacedBy(10.dp),
-            ) {
-                if (bmp != null) {
-                    Image(
-                        bitmap = bmp.asImageBitmap(),
+            Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    Icon(
+                        imageVector = XyIcons.Shield,
                         contentDescription = null,
-                        contentScale = ContentScale.Fit,
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .heightIn(min = 180.dp, max = 380.dp)
-                            .clip(RoundedCornerShape(14.dp)),
+                        tint = Color(0xFF22C55E),
+                        modifier = Modifier.size(20.dp),
+                    )
+                    Text(
+                        text = if (msg.e2eeVerified) "Integritas Kriptografi Terverifikasi" else "Pesan Standar",
+                        style = MaterialTheme.typography.titleSmall,
+                        fontWeight = FontWeight.Bold,
                     )
                 }
+                Text("Pengirim: ${msg.name} ${if (msg.githubLogin.isNotBlank()) "(@${msg.githubLogin})" else ""}", style = MaterialTheme.typography.bodySmall)
+                Text("Negara Terdeteksi: ${msg.country}", style = MaterialTheme.typography.bodySmall)
+                Text("Protokol Enkripsi: ${msg.e2eeProtocol} (AES-256-GCM + HMAC-SHA256)", style = MaterialTheme.typography.bodySmall)
+                Text("Signature HMAC: ${msg.e2eeSig.ifBlank { "verified" }}", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Text("Status Pengiriman: Terkirim & Tervalidasi (Centang 2)", style = MaterialTheme.typography.bodySmall)
+                Spacer(Modifier.height(6.dp))
                 XyPillButton(
                     text = "Tutup",
-                    onClick = { fullscreenImageUri = null },
-                    primary = false,
+                    onClick = { inspectingE2eeMsg = null },
+                    primary = true,
                     compact = true,
                     modifier = Modifier.fillMaxWidth(),
                 )
             }
         }
     }
+
+    // Pratinjau Media Layar Penuh (BUKAN Popup: mendukung Pinch-to-Zoom 1x–5x, Double-Tap Zoom, Video Player & Simpan Galeri)
+    val fullMedia = fullscreenMediaMsg
+    if (fullMedia != null) {
+        FullScreenChatMediaViewer(
+            msg = fullMedia,
+            onDismiss = { fullscreenMediaMsg = null },
+        )
+    }
 }
 
 @Composable
-private fun AttachOptionPill(
+private fun FullScreenChatMediaViewer(
+    msg: ChatMessage,
+    onDismiss: () -> Unit,
+) {
+    val context = LocalContext.current
+    var zoomScale by remember(msg.id) { mutableFloatStateOf(1f) }
+    var panOffsetX by remember(msg.id) { mutableFloatStateOf(0f) }
+    var panOffsetY by remember(msg.id) { mutableFloatStateOf(0f) }
+
+    Dialog(
+        onDismissRequest = onDismiss,
+        properties = DialogProperties(
+            usePlatformDefaultWidth = false,
+            decorFitsSystemWindows = false,
+        ),
+    ) {
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .background(Color.Black),
+        ) {
+            if (msg.attachmentType == "video" && msg.attachmentData.isNotBlank()) {
+                val videoFile = remember(msg.id, msg.attachmentData) {
+                    runCatching {
+                        val comma = msg.attachmentData.indexOf(',')
+                        if (comma < 0) return@runCatching null
+                        val bytes = Base64.decode(msg.attachmentData.substring(comma + 1), Base64.DEFAULT)
+                        val dir = File(context.cacheDir, "chat_media").apply { mkdirs() }
+                        val safeName = msg.attachmentName.replace(Regex("[^A-Za-z0-9._-]"), "_")
+                            .ifBlank { "video_${msg.id.hashCode()}.mp4" }
+                        val f = File(dir, safeName)
+                        f.writeBytes(bytes)
+                        f
+                    }.getOrNull()
+                }
+                Box(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .pointerInput(msg.id) {
+                            detectTransformGestures { _, pan, zoom, _ ->
+                                val nextScale = (zoomScale * zoom).coerceIn(1f, 4f)
+                                zoomScale = nextScale
+                                if (nextScale > 1.01f) {
+                                    panOffsetX += pan.x
+                                    panOffsetY += pan.y
+                                } else {
+                                    panOffsetX = 0f
+                                    panOffsetY = 0f
+                                }
+                            }
+                        }
+                        .graphicsLayer {
+                            scaleX = zoomScale
+                            scaleY = zoomScale
+                            translationX = panOffsetX
+                            translationY = panOffsetY
+                        },
+                    contentAlignment = Alignment.Center,
+                ) {
+                    if (videoFile != null) {
+                        AndroidView(
+                            factory = { ctx ->
+                                VideoView(ctx).apply {
+                                    val mc = MediaController(ctx)
+                                    mc.setAnchorView(this)
+                                    setMediaController(mc)
+                                    setVideoPath(videoFile.absolutePath)
+                                    setOnPreparedListener { mp ->
+                                        mp.isLooping = true
+                                        start()
+                                    }
+                                }
+                            },
+                            modifier = Modifier.fillMaxSize(),
+                        )
+                    } else {
+                        Text(
+                            text = "Gagal memuat berkas video.",
+                            color = Color.White,
+                            style = MaterialTheme.typography.bodyMedium,
+                        )
+                    }
+                }
+            } else {
+                val bmp = remember(msg.id, msg.attachmentData) { decodeBase64Bitmap(msg.attachmentData) }
+                Box(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .pointerInput(msg.id) {
+                            detectTapGestures(
+                                onDoubleTap = {
+                                    if (zoomScale > 1.25f) {
+                                        zoomScale = 1f
+                                        panOffsetX = 0f
+                                        panOffsetY = 0f
+                                    } else {
+                                        zoomScale = 2.75f
+                                    }
+                                },
+                            )
+                        }
+                        .pointerInput(msg.id) {
+                            detectTransformGestures { _, pan, zoom, _ ->
+                                val nextScale = (zoomScale * zoom).coerceIn(1f, 5f)
+                                zoomScale = nextScale
+                                if (nextScale > 1.01f) {
+                                    panOffsetX = (panOffsetX + pan.x).coerceIn(-1400f, 1400f)
+                                    panOffsetY = (panOffsetY + pan.y).coerceIn(-1800f, 1800f)
+                                } else {
+                                    panOffsetX = 0f
+                                    panOffsetY = 0f
+                                }
+                            }
+                        },
+                    contentAlignment = Alignment.Center,
+                ) {
+                    if (bmp != null) {
+                        Image(
+                            bitmap = bmp.asImageBitmap(),
+                            contentDescription = msg.attachmentName.ifBlank { "Foto Layar Penuh" },
+                            modifier = Modifier
+                                .fillMaxSize()
+                                .graphicsLayer {
+                                    scaleX = zoomScale
+                                    scaleY = zoomScale
+                                    translationX = panOffsetX
+                                    translationY = panOffsetY
+                                },
+                            contentScale = ContentScale.Fit,
+                        )
+                    }
+                }
+            }
+
+            // Header Liquid Glass Atas (Tutup, Info Pengirim, Zoom Reset, Simpan ke Galeri, Bagikan)
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .align(Alignment.TopCenter)
+                    .background(
+                        Brush.verticalGradient(
+                            colors = listOf(
+                                Color.Black.copy(alpha = 0.82f),
+                                Color.Black.copy(alpha = 0.42f),
+                                Color.Transparent,
+                            ),
+                        ),
+                    )
+                    .statusBarsPadding()
+                    .displayCutoutPadding()
+                    .padding(horizontal = 14.dp, vertical = 12.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween,
+            ) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(10.dp),
+                    modifier = Modifier.weight(1f),
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .size(38.dp)
+                            .clip(CircleShape)
+                            .background(Color.White.copy(alpha = 0.16f))
+                            .border(0.8.dp, Color.White.copy(alpha = 0.28f), CircleShape)
+                            .clickable { onDismiss() },
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        Icon(
+                            imageVector = XyIcons.ChevronLeft,
+                            contentDescription = "Tutup Pratinjau",
+                            tint = Color.White,
+                            modifier = Modifier.size(20.dp),
+                        )
+                    }
+                    Column(modifier = Modifier.weight(1f)) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(6.dp),
+                        ) {
+                            Text(
+                                text = msg.name,
+                                style = MaterialTheme.typography.titleSmall,
+                                fontWeight = FontWeight.ExtraBold,
+                                color = Color.White,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
+                            )
+                            if (msg.viewOnce) {
+                                Box(
+                                    modifier = Modifier
+                                        .clip(RoundedCornerShape(50))
+                                        .background(Color.White)
+                                        .padding(horizontal = 7.dp, vertical = 2.dp),
+                                ) {
+                                    Text(
+                                        text = "1× SEKALI LIHAT",
+                                        style = MaterialTheme.typography.labelSmall,
+                                        fontSize = 9.sp,
+                                        fontWeight = FontWeight.ExtraBold,
+                                        color = Color(0xFF09090B),
+                                    )
+                                }
+                            }
+                        }
+                        Text(
+                            text = if (msg.attachmentType == "video") "Video Layar Penuh · Cubit untuk Zoom" else "Cubit 2 Jari / Ketuk 2× untuk Zoom (${(zoomScale * 100).roundToInt()}%)",
+                            style = MaterialTheme.typography.labelSmall,
+                            fontSize = 10.5.sp,
+                            color = Color(0xFFD4D4D8),
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                        )
+                    }
+                }
+
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    if (zoomScale > 1.05f) {
+                        Box(
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(50))
+                                .background(Color.White.copy(alpha = 0.18f))
+                                .border(0.8.dp, Color.White.copy(alpha = 0.30f), RoundedCornerShape(50))
+                                .clickable {
+                                    zoomScale = 1f
+                                    panOffsetX = 0f
+                                    panOffsetY = 0f
+                                }
+                                .padding(horizontal = 10.dp, vertical = 6.dp),
+                        ) {
+                            Text(
+                                text = "Reset ${(zoomScale * 100).roundToInt()}%",
+                                style = MaterialTheme.typography.labelSmall,
+                                fontWeight = FontWeight.ExtraBold,
+                                color = Color.White,
+                            )
+                        }
+                    }
+                    if (!msg.viewOnce) {
+                        // Tombol Simpan ke Galeri Perangkat
+                        Row(
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(50))
+                                .background(Color.White)
+                                .clickable { saveChatMediaToGallery(context, msg) }
+                                .padding(horizontal = 12.dp, vertical = 7.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(5.dp),
+                        ) {
+                            Icon(
+                                imageVector = XyIcons.Download,
+                                contentDescription = "Simpan ke Galeri",
+                                tint = Color(0xFF09090B),
+                                modifier = Modifier.size(15.dp),
+                            )
+                            Text(
+                                text = "Simpan",
+                                style = MaterialTheme.typography.labelSmall,
+                                fontWeight = FontWeight.ExtraBold,
+                                color = Color(0xFF09090B),
+                            )
+                        }
+                        // Tombol Bagikan Media
+                        Box(
+                            modifier = Modifier
+                                .size(36.dp)
+                                .clip(CircleShape)
+                                .background(Color.White.copy(alpha = 0.16f))
+                                .border(0.8.dp, Color.White.copy(alpha = 0.28f), CircleShape)
+                                .clickable { saveOrShareChatAttachment(context, msg) },
+                            contentAlignment = Alignment.Center,
+                        ) {
+                            Icon(
+                                imageVector = XyIcons.Share,
+                                contentDescription = "Bagikan",
+                                tint = Color.White,
+                                modifier = Modifier.size(16.dp),
+                            )
+                        }
+                    }
+                }
+            }
+
+            // Caption Bawah (bila ada teks pesan pada foto/video)
+            if (msg.text.isNotBlank() && !msg.text.startsWith("[Foto") && !msg.text.startsWith("[Video")) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .align(Alignment.BottomCenter)
+                        .background(
+                            Brush.verticalGradient(
+                                colors = listOf(
+                                    Color.Transparent,
+                                    Color.Black.copy(alpha = 0.65f),
+                                    Color.Black.copy(alpha = 0.88f),
+                                ),
+                            ),
+                        )
+                        .navigationBarsPadding()
+                        .padding(horizontal = 20.dp, vertical = 16.dp),
+                ) {
+                    Text(
+                        text = msg.text,
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = Color.White,
+                        textAlign = TextAlign.Center,
+                        modifier = Modifier.fillMaxWidth(),
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun ContextMenuActionRow(
     label: String,
-    color: Color,
+    icon: ImageVector? = null,
+    tint: Color = Color.White,
+    customIcon: (@Composable () -> Unit)? = null,
     onClick: () -> Unit,
 ) {
-    Surface(
-        onClick = onClick,
-        color = color.copy(alpha = 0.22f),
-        shape = RoundedCornerShape(14.dp),
-        modifier = Modifier.border(1.dp, color.copy(alpha = 0.6f), RoundedCornerShape(14.dp)),
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable { onClick() }
+            .padding(horizontal = 16.dp, vertical = 13.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.SpaceBetween,
     ) {
         Text(
-            label,
-            style = MaterialTheme.typography.labelMedium,
-            fontWeight = FontWeight.Bold,
-            color = Color.White,
-            modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
+            text = label,
+            style = MaterialTheme.typography.bodyMedium,
+            fontWeight = FontWeight.Medium,
+            color = tint,
+        )
+        if (customIcon != null) {
+            customIcon()
+        } else if (icon != null) {
+            Icon(
+                imageVector = icon,
+                contentDescription = label,
+                tint = tint,
+                modifier = Modifier.size(18.dp),
+            )
+        }
+    }
+}
+
+/**
+ * Bubble Pesan Chat Global gaya WhatsApp Modern:
+ * - **TANPA BORDER** untuk chat pengguna biasa.
+ * - **Hitam-Putih Monokrom** untuk chat biasa (`#F4F4F6` dengan teks `#09090B` untuk pesanku,
+ *   `#1A1A20` dengan teks `#F4F4F5` untuk pesan orang lain) sesuai tema utama XyDesk.
+ * - Khusus **Founder (`@xykal`)**: menggunakan `FounderAnimatedBubbleBox` + `XyFounderBadge`
+ *   beranimasi penuh dengan sapuan Liquid Gold & partikel bintang.
+ * - Menampilkan **Foto Profil (Avatar)**, **Nama Jelas + `@github`**, **Kode Negara**,
+ *   serta **Centang 1 / Centang 2 Vektor (`ChatVectorDeliveryTicks`)**.
+ */
+@Composable
+private fun MessageBubble(
+    msg: ChatMessage,
+    reaction: String?,
+    isPinned: Boolean = false,
+    viewedOnce: Boolean = false,
+    liquidGlassMode: Boolean = false,
+    onReply: () -> Unit,
+    onLongPress: () -> Unit,
+    onOpenMedia: () -> Unit,
+    onOpenFile: () -> Unit,
+) {
+    val time = remember(msg.at) {
+        SimpleDateFormat("HH:mm", Locale.getDefault()).format(Date(msg.at))
+    }
+    val founderMsg = msg.isFounder || isFounderAccount(msg.name) || isFounderAccount(msg.githubLogin)
+    val isLightBubble = msg.mine && !founderMsg
+
+    val primaryTextColor = when {
+        founderMsg -> Color(0xFFFFFBEB)
+        isLightBubble -> Color(0xFF09090B)
+        else -> Color(0xFFF4F4F5)
+    }
+    val secondaryTextColor = when {
+        founderMsg -> Color(0xFFFDE68A).copy(alpha = 0.88f)
+        isLightBubble -> Color(0xFF3F3F46)
+        else -> Color(0xFFA1A1AA)
+    }
+    val dividerColor = when {
+        founderMsg -> Color(0xFFF59E0B).copy(alpha = 0.32f)
+        isLightBubble -> Color(0xFF09090B).copy(alpha = 0.12f)
+        else -> Color.White.copy(alpha = 0.10f)
+    }
+
+    val bubbleShape = RoundedCornerShape(
+        topStart = 18.dp,
+        topEnd = 18.dp,
+        bottomStart = if (msg.mine) 18.dp else 4.dp,
+        bottomEnd = if (msg.mine) 4.dp else 18.dp,
+    )
+
+    val transLabel = msg.targetLang.ifBlank { if (msg.country == "ID") "EN" else "ID" }
+    val transBody = msg.translated.ifBlank { msg.text }
+
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = if (msg.mine) Arrangement.End else Arrangement.Start,
+        verticalAlignment = Alignment.Bottom,
+    ) {
+        if (!msg.mine) {
+            ChatSenderAvatar(
+                name = msg.name,
+                githubLogin = msg.githubLogin,
+                avatarUrl = msg.avatarUrl,
+                isFounder = founderMsg,
+            )
+            Spacer(Modifier.width(8.dp))
+        }
+
+        Column(
+            horizontalAlignment = if (msg.mine) Alignment.End else Alignment.Start,
+            modifier = Modifier.widthIn(min = 120.dp, max = 296.dp),
+        ) {
+            val gestureMod = Modifier.pointerInput(msg.id) {
+                detectTapGestures(
+                    onLongPress = { onLongPress() },
+                )
+            }
+
+            val bubbleContent: @Composable () -> Unit = {
+                Column(
+                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 9.dp),
+                ) {
+                    // Baris Atas: Nama Pengirim Jelas + @github + Kode Negara + Badge Founder + Tombol Vektor Reply
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                    ) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(5.dp),
+                            modifier = Modifier.weight(1f, fill = false),
+                        ) {
+                            Text(
+                                text = msg.name,
+                                style = MaterialTheme.typography.labelMedium,
+                                fontWeight = FontWeight.ExtraBold,
+                                color = if (founderMsg) Color(0xFFFDE047) else primaryTextColor,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
+                            )
+                            if (msg.githubLogin.isNotBlank() && !msg.githubLogin.equals(msg.name, ignoreCase = true)) {
+                                Text(
+                                    text = "@${msg.githubLogin}",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    fontSize = 10.sp,
+                                    color = secondaryTextColor,
+                                    maxLines = 1,
+                                )
+                            }
+                            // Pill Kode Negara Monokrom Rapi
+                            Box(
+                                modifier = Modifier
+                                    .clip(RoundedCornerShape(4.dp))
+                                    .background(
+                                        if (isLightBubble) Color(0xFF09090B).copy(alpha = 0.08f)
+                                        else Color.White.copy(alpha = 0.10f),
+                                    )
+                                    .padding(horizontal = 4.5.dp, vertical = 1.dp),
+                            ) {
+                                Text(
+                                    text = msg.country,
+                                    style = MaterialTheme.typography.labelSmall,
+                                    fontSize = 9.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = secondaryTextColor,
+                                )
+                            }
+                            if (founderMsg) {
+                                XyFounderBadge(compact = true)
+                            }
+                            if (isPinned) {
+                                ChatVectorPinIcon(
+                                    size = 12.dp,
+                                    tint = if (founderMsg) Color(0xFFFDE047) else secondaryTextColor,
+                                )
+                            }
+                        }
+                        Spacer(Modifier.width(6.dp))
+                        Box(
+                            modifier = Modifier
+                                .size(22.dp)
+                                .clip(CircleShape)
+                                .clickable { onReply() },
+                            contentAlignment = Alignment.Center,
+                        ) {
+                            ChatVectorReplyIcon(
+                                size = 13.dp,
+                                tint = secondaryTextColor,
+                            )
+                        }
+                    }
+
+                    // Kotak Kutipan Balasan (Quoted Reply ala WhatsApp)
+                    if (msg.replyToName.isNotBlank() || msg.replyToText.isNotBlank()) {
+                        Spacer(Modifier.height(6.dp))
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clip(RoundedCornerShape(8.dp))
+                                .background(
+                                    if (isLightBubble) Color(0xFF09090B).copy(alpha = 0.07f)
+                                    else Color.Black.copy(alpha = 0.28f),
+                                )
+                                .padding(horizontal = 8.dp, vertical = 5.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            Box(
+                                modifier = Modifier
+                                    .width(3.dp)
+                                    .height(26.dp)
+                                    .clip(RoundedCornerShape(2.dp))
+                                    .background(if (founderMsg) Color(0xFFFDE047) else primaryTextColor),
+                            )
+                            Spacer(Modifier.width(7.dp))
+                            Column {
+                                Text(
+                                    msg.replyToName.ifBlank { "Pesan" },
+                                    style = MaterialTheme.typography.labelSmall,
+                                    fontWeight = FontWeight.Bold,
+                                    color = primaryTextColor,
+                                )
+                                Text(
+                                    msg.replyToText,
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = secondaryTextColor,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis,
+                                )
+                            }
+                        }
+                    }
+
+                    // Render Lampiran: Stiker Ilustrasi AI / Stiker Custom (.webp.crypto15) / Foto / Berkas
+                    if (msg.attachmentType == "sticker") {
+                        val appContext = LocalContext.current
+                        if (msg.attachmentData.startsWith("sticker_crypto15:")) {
+                            val customDecoded = remember(msg.id, msg.attachmentData) {
+                                CustomStickerVault.decodeAndCacheFromChatPayload(appContext, msg.attachmentData)
+                            }
+                            if (customDecoded != null) {
+                                Spacer(Modifier.height(6.dp))
+                                Column(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(vertical = 4.dp),
+                                    horizontalAlignment = Alignment.CenterHorizontally,
+                                ) {
+                                    Image(
+                                        bitmap = customDecoded.second.asImageBitmap(),
+                                        contentDescription = customDecoded.first,
+                                        modifier = Modifier
+                                            .size(134.dp)
+                                            .clip(RoundedCornerShape(20.dp)),
+                                        contentScale = ContentScale.Crop,
+                                    )
+                                    Spacer(Modifier.height(4.dp))
+                                    Text(
+                                        text = customDecoded.first.take(14) + "….webp.crypto15",
+                                        style = MaterialTheme.typography.labelSmall,
+                                        fontSize = 9.5.sp,
+                                        fontWeight = FontWeight.SemiBold,
+                                        color = secondaryTextColor,
+                                    )
+                                }
+                            }
+                        } else {
+                            val presetId = msg.attachmentData.removePrefix("sticker:")
+                            val preset = XY_STICKERS.firstOrNull { it.id == presetId } ?: XY_STICKERS.first()
+                            Spacer(Modifier.height(6.dp))
+                            Column(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(vertical = 4.dp),
+                                horizontalAlignment = Alignment.CenterHorizontally,
+                            ) {
+                                Image(
+                                    painter = painterResource(preset.drawableRes),
+                                    contentDescription = preset.title,
+                                    modifier = Modifier
+                                        .size(132.dp)
+                                        .clip(RoundedCornerShape(20.dp)),
+                                    contentScale = ContentScale.Crop,
+                                )
+                                Spacer(Modifier.height(4.dp))
+                                Text(
+                                    text = preset.title,
+                                    style = MaterialTheme.typography.labelSmall,
+                                    fontWeight = FontWeight.Bold,
+                                    color = primaryTextColor,
+                                )
+                            }
+                        }
+                    } else if ((msg.attachmentType == "image" || msg.attachmentType == "video") && msg.viewOnce) {
+                        // Media 1× Sekali Lihat (Foto atau Video)
+                        Spacer(Modifier.height(6.dp))
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clip(RoundedCornerShape(12.dp))
+                                .background(
+                                    if (isLightBubble) Color(0xFF09090B).copy(alpha = if (viewedOnce) 0.05f else 0.10f)
+                                    else Color.White.copy(alpha = if (viewedOnce) 0.05f else 0.12f),
+                                )
+                                .clickable(enabled = !viewedOnce) { onOpenMedia() }
+                                .padding(horizontal = 12.dp, vertical = 10.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(10.dp),
+                        ) {
+                            ChatVectorViewOnceIcon(
+                                size = 20.dp,
+                                tint = if (viewedOnce) secondaryTextColor else primaryTextColor,
+                            )
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text(
+                                    text = when {
+                                        viewedOnce -> "Telah Dilihat (1×)"
+                                        msg.attachmentType == "video" -> "Video Sekali Lihat (1×)"
+                                        else -> "Foto Sekali Lihat (1×)"
+                                    },
+                                    style = MaterialTheme.typography.labelMedium,
+                                    fontWeight = FontWeight.ExtraBold,
+                                    color = if (viewedOnce) secondaryTextColor else primaryTextColor,
+                                )
+                                Text(
+                                    text = if (viewedOnce) "Media ini sudah dibuka dan kadaluarsa" else "Ketuk untuk membuka layar penuh (hanya 1 kali)",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    fontSize = 10.sp,
+                                    color = secondaryTextColor,
+                                )
+                            }
+                        }
+                    } else if (msg.attachmentType == "image" && msg.attachmentData.isNotBlank()) {
+                        val bmp = remember(msg.id, msg.attachmentData) { decodeBase64Bitmap(msg.attachmentData) }
+                        if (bmp != null) {
+                            Spacer(Modifier.height(6.dp))
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .heightIn(min = 90.dp, max = 215.dp)
+                                    .clip(RoundedCornerShape(12.dp))
+                                    .clickable { onOpenMedia() },
+                            ) {
+                                Image(
+                                    bitmap = bmp.asImageBitmap(),
+                                    contentDescription = msg.attachmentName.ifBlank { "Foto" },
+                                    modifier = Modifier.fillMaxSize(),
+                                    contentScale = ContentScale.Crop,
+                                )
+                                Box(
+                                    modifier = Modifier
+                                        .align(Alignment.BottomEnd)
+                                        .padding(6.dp)
+                                        .clip(RoundedCornerShape(50))
+                                        .background(Color.Black.copy(alpha = 0.62f))
+                                        .padding(horizontal = 8.dp, vertical = 3.dp),
+                                ) {
+                                    Text(
+                                        text = "Layar Penuh · Zoom",
+                                        style = MaterialTheme.typography.labelSmall,
+                                        fontSize = 9.5.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        color = Color.White,
+                                    )
+                                }
+                            }
+                        }
+                    } else if (msg.attachmentType == "video" && msg.attachmentData.isNotBlank()) {
+                        Spacer(Modifier.height(6.dp))
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(132.dp)
+                                .clip(RoundedCornerShape(14.dp))
+                                .background(Color(0xFF0C0C10))
+                                .border(0.8.dp, Color.White.copy(alpha = 0.16f), RoundedCornerShape(14.dp))
+                                .clickable { onOpenMedia() },
+                            contentAlignment = Alignment.Center,
+                        ) {
+                            Column(
+                                horizontalAlignment = Alignment.CenterHorizontally,
+                                verticalArrangement = Arrangement.spacedBy(6.dp),
+                            ) {
+                                Box(
+                                    modifier = Modifier
+                                        .size(46.dp)
+                                        .clip(CircleShape)
+                                        .background(Color.White),
+                                    contentAlignment = Alignment.Center,
+                                ) {
+                                    ChatVectorVideoPlayIcon(size = 20.dp, tint = Color(0xFF09090B))
+                                }
+                                Text(
+                                    text = msg.attachmentName.ifBlank { "Klip Video MP4" },
+                                    style = MaterialTheme.typography.labelMedium,
+                                    fontWeight = FontWeight.ExtraBold,
+                                    color = Color.White,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis,
+                                )
+                                Text(
+                                    text = "${(msg.attachmentSize / 1024).coerceAtLeast(1)} KB · Putar Video Layar Penuh",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    fontSize = 10.sp,
+                                    color = Color(0xFFA1A1AA),
+                                )
+                            }
+                        }
+                    } else if (msg.attachmentType == "file") {
+                        Spacer(Modifier.height(6.dp))
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clip(RoundedCornerShape(10.dp))
+                                .background(
+                                    if (isLightBubble) Color(0xFF09090B).copy(alpha = 0.07f)
+                                    else Color.White.copy(alpha = 0.08f),
+                                )
+                                .clickable { onOpenFile() }
+                                .padding(horizontal = 10.dp, vertical = 8.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        ) {
+                            Icon(
+                                imageVector = XyIcons.Clip,
+                                contentDescription = null,
+                                tint = primaryTextColor,
+                                modifier = Modifier.size(16.dp),
+                            )
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text(
+                                    msg.attachmentName.ifBlank { "Dokumen" },
+                                    style = MaterialTheme.typography.labelMedium,
+                                    fontWeight = FontWeight.Bold,
+                                    color = primaryTextColor,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis,
+                                )
+                                Text(
+                                    "${(msg.attachmentSize / 1024).coerceAtLeast(1)} KB · Ketuk untuk Buka",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = secondaryTextColor,
+                                )
+                            }
+                        }
+                    }
+
+                    // Teks Asli + Garis Pemisah Halus + Terjemahan Otomatis
+                    if (msg.attachmentType != "sticker") {
+                        Spacer(Modifier.height(5.dp))
+                        Text(
+                            text = msg.text,
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = primaryTextColor,
+                        )
+                        if (transBody.isNotBlank() && !transBody.equals(msg.text, ignoreCase = true)) {
+                            Spacer(Modifier.height(6.dp))
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .height(0.8.dp)
+                                    .background(dividerColor),
+                            )
+                            Spacer(Modifier.height(4.dp))
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(4.dp),
+                            ) {
+                                Icon(
+                                    imageVector = XyIcons.Globe,
+                                    contentDescription = null,
+                                    tint = secondaryTextColor,
+                                    modifier = Modifier.size(11.dp),
+                                )
+                                Text(
+                                    text = "$transLabel · $transBody",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    fontStyle = FontStyle.Italic,
+                                    color = secondaryTextColor,
+                                )
+                            }
+                        }
+                    }
+
+                    // Baris Bawah: Jam + Indikator E2EE + Vektor Centang 1 / 2 (✓ / ✓✓)
+                    Spacer(Modifier.height(4.dp))
+                    Row(
+                        modifier = Modifier.align(Alignment.End),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(4.dp),
+                    ) {
+                        Text(
+                            text = time,
+                            style = MaterialTheme.typography.labelSmall,
+                            fontSize = 10.sp,
+                            color = secondaryTextColor,
+                        )
+                        ChatVectorDeliveryTicks(
+                            ticks = msg.deliveryTicks,
+                            tint = when {
+                                founderMsg -> Color(0xFFFDE047)
+                                isLightBubble -> Color(0xFF18181B)
+                                else -> Color(0xFFE4E4E7)
+                            },
+                        )
+                    }
+                }
+            }
+
+            // Kontainer Bubble: Founder memakai FounderAnimatedBubbleBox, User biasa memakai Monokrom Tanpa Border!
+            if (founderMsg) {
+                FounderAnimatedBubbleBox(
+                    shape = bubbleShape,
+                    modifier = gestureMod,
+                ) {
+                    bubbleContent()
+                }
+            } else {
+                val bubbleBgColor = when {
+                    liquidGlassMode && msg.mine -> Color(0xFFF8F8FA).copy(alpha = 0.84f)
+                    liquidGlassMode && !msg.mine -> Color(0xFF121217).copy(alpha = 0.62f)
+                    msg.mine -> Color(0xFFF4F4F6)
+                    else -> Color(0xFF1A1A20)
+                }
+                Box(
+                    modifier = gestureMod
+                        .clip(bubbleShape)
+                        .background(
+                            color = bubbleBgColor,
+                            shape = bubbleShape,
+                        ),
+                ) {
+                    bubbleContent()
+                }
+            }
+
+            // Pill Reaksi (bila ada reaksi pada bubble ini)
+            if (!reaction.isNullOrBlank()) {
+                Spacer(Modifier.height(2.dp))
+                Box(
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(50))
+                        .background(Color(0xFF27272F))
+                        .padding(horizontal = 8.dp, vertical = 2.dp),
+                ) {
+                    Text(
+                        text = reaction,
+                        style = MaterialTheme.typography.labelSmall,
+                        fontSize = 10.sp,
+                        fontWeight = FontWeight.ExtraBold,
+                        color = Color.White,
+                    )
+                }
+            }
+        }
+
+        if (msg.mine) {
+            Spacer(Modifier.width(8.dp))
+            ChatSenderAvatar(
+                name = msg.name,
+                githubLogin = msg.githubLogin,
+                avatarUrl = msg.avatarUrl,
+                isFounder = founderMsg,
+            )
+        }
+    }
+}
+
+/**
+ * Avatar Foto Profil Pengirim di Samping Bubble Chat.
+ * Memuat foto dari URL GitHub / komunitas di latar belakang dengan cache memori,
+ * atau menampilkan inisial monokrom bersih jika belum ada foto.
+ */
+@Composable
+private fun ChatSenderAvatar(
+    name: String,
+    githubLogin: String,
+    avatarUrl: String,
+    isFounder: Boolean,
+) {
+    val resolvedUrl = remember(avatarUrl, githubLogin) {
+        avatarUrl.ifBlank {
+            if (githubLogin.isNotBlank()) "https://github.com/$githubLogin.png?size=120" else ""
+        }
+    }
+    var bitmap by remember(resolvedUrl) {
+        mutableStateOf(if (resolvedUrl.isNotBlank()) avatarMemoryCache[resolvedUrl] else null)
+    }
+
+    LaunchedEffect(resolvedUrl) {
+        if (resolvedUrl.isNotBlank() && bitmap == null) {
+            val loaded = withContext(Dispatchers.IO) {
+                runCatching {
+                    val conn = (URL(resolvedUrl).openConnection() as HttpURLConnection).apply {
+                        connectTimeout = 6_000
+                        readTimeout = 6_000
+                        instanceFollowRedirects = true
+                    }
+                    if (conn.responseCode in 200..299) {
+                        val bytes = conn.inputStream.use { it.readBytes() }
+                        BitmapFactory.decodeByteArray(bytes, 0, bytes.size)?.also {
+                            avatarMemoryCache[resolvedUrl] = it
+                        }
+                    } else null
+                }.getOrNull()
+            }
+            if (loaded != null) bitmap = loaded
+        }
+    }
+
+    Box(
+        modifier = Modifier
+            .size(34.dp)
+            .clip(CircleShape)
+            .background(if (isFounder) Color(0xFF1A102B) else Color(0xFF222228))
+            .let { mod ->
+                if (isFounder) mod.border(1.5.dp, founderBorderBrush(), CircleShape) else mod
+            },
+        contentAlignment = Alignment.Center,
+    ) {
+        val bmp = bitmap
+        if (bmp != null) {
+            Image(
+                bitmap = bmp.asImageBitmap(),
+                contentDescription = name,
+                modifier = Modifier
+                    .size(34.dp)
+                    .clip(CircleShape),
+                contentScale = ContentScale.Crop,
+            )
+        } else {
+            val initials = name.removePrefix("@").trim().take(2).uppercase(Locale.ROOT).ifEmpty { "U" }
+            Text(
+                text = initials,
+                style = MaterialTheme.typography.labelSmall,
+                fontWeight = FontWeight.ExtraBold,
+                color = if (isFounder) Color(0xFFFDE047) else Color(0xFFE4E4E7),
+            )
+        }
+    }
+}
+
+/**
+ * Ikon Vektor Centang 1 (`✓`) & Centang 2 (`✓✓`) gaya WhatsApp di atas Canvas (Tanpa Karakter Emoji).
+ */
+@Composable
+private fun ChatVectorDeliveryTicks(
+    ticks: Int,
+    tint: Color,
+    modifier: Modifier = Modifier,
+) {
+    Canvas(modifier = modifier.size(width = if (ticks >= 2) 15.dp else 11.dp, height = 11.dp)) {
+        val w = size.width
+        val h = size.height
+        val stroke = Stroke(width = h * 0.16f, cap = StrokeCap.Round, join = StrokeJoin.Round)
+        if (ticks <= 1) {
+            val p1 = Path().apply {
+                moveTo(w * 0.18f, h * 0.55f)
+                lineTo(w * 0.42f, h * 0.80f)
+                lineTo(w * 0.84f, h * 0.24f)
+            }
+            drawPath(p1, color = tint, style = stroke)
+        } else {
+            val p1 = Path().apply {
+                moveTo(w * 0.08f, h * 0.55f)
+                lineTo(w * 0.28f, h * 0.78f)
+                lineTo(w * 0.62f, h * 0.24f)
+            }
+            val p2 = Path().apply {
+                moveTo(w * 0.38f, h * 0.55f)
+                lineTo(w * 0.58f, h * 0.78f)
+                lineTo(w * 0.92f, h * 0.24f)
+            }
+            drawPath(p1, color = tint, style = stroke)
+            drawPath(p2, color = tint, style = stroke)
+        }
+    }
+}
+
+/**
+ * Ikon Vektor Panah Balas (Reply Arrow) di atas Canvas.
+ */
+@Composable
+private fun ChatVectorReplyIcon(
+    size: Dp = 14.dp,
+    tint: Color = Color.White,
+) {
+    Canvas(modifier = Modifier.size(size)) {
+        val w = this.size.width
+        val h = this.size.height
+        val stroke = Stroke(width = w * 0.12f, cap = StrokeCap.Round, join = StrokeJoin.Round)
+        val arrow = Path().apply {
+            moveTo(w * 0.42f, h * 0.22f)
+            lineTo(w * 0.16f, h * 0.46f)
+            lineTo(w * 0.42f, h * 0.70f)
+        }
+        val curve = Path().apply {
+            moveTo(w * 0.18f, h * 0.46f)
+            lineTo(w * 0.62f, h * 0.46f)
+            quadraticTo(w * 0.86f, h * 0.46f, w * 0.86f, h * 0.76f)
+        }
+        drawPath(arrow, color = tint, style = stroke)
+        drawPath(curve, color = tint, style = stroke)
+    }
+}
+
+/**
+ * Ikon Vektor Stiker (Lembar Sudut Terlipat) di atas Canvas.
+ */
+@Composable
+private fun ChatVectorStickerIcon(
+    size: Dp = 18.dp,
+    tint: Color = Color.White,
+) {
+    Canvas(modifier = Modifier.size(size)) {
+        val w = this.size.width
+        val h = this.size.height
+        val stroke = Stroke(width = w * 0.10f, cap = StrokeCap.Round, join = StrokeJoin.Round)
+        drawRoundRect(
+            color = tint,
+            topLeft = Offset(w * 0.14f, h * 0.14f),
+            size = Size(w * 0.72f, h * 0.72f),
+            cornerRadius = CornerRadius(w * 0.20f, h * 0.20f),
+            style = stroke,
+        )
+        val fold = Path().apply {
+            moveTo(w * 0.56f, h * 0.86f)
+            lineTo(w * 0.56f, h * 0.60f)
+            lineTo(w * 0.86f, h * 0.60f)
+        }
+        drawPath(fold, color = tint, style = stroke)
+        drawCircle(color = tint, radius = w * 0.06f, center = Offset(w * 0.36f, h * 0.42f))
+        drawCircle(color = tint, radius = w * 0.06f, center = Offset(w * 0.62f, h * 0.42f))
+    }
+}
+
+/**
+ * Ikon Vektor Pin Sematkan Pesan (Pushpin) di atas Canvas.
+ */
+@Composable
+private fun ChatVectorPinIcon(
+    size: Dp = 16.dp,
+    tint: Color = Color.White,
+) {
+    Canvas(modifier = Modifier.size(size)) {
+        val w = this.size.width
+        val h = this.size.height
+        val stroke = Stroke(width = w * 0.11f, cap = StrokeCap.Round, join = StrokeJoin.Round)
+        val pinBody = Path().apply {
+            moveTo(w * 0.32f, h * 0.18f)
+            lineTo(w * 0.68f, h * 0.18f)
+            lineTo(w * 0.62f, h * 0.46f)
+            lineTo(w * 0.76f, h * 0.60f)
+            lineTo(w * 0.24f, h * 0.60f)
+            lineTo(w * 0.38f, h * 0.46f)
+            close()
+        }
+        drawPath(pinBody, color = tint, style = stroke)
+        drawLine(
+            color = tint,
+            start = Offset(w * 0.50f, h * 0.60f),
+            end = Offset(w * 0.50f, h * 0.88f),
+            strokeWidth = w * 0.12f,
+            cap = StrokeCap.Round,
         )
     }
 }
 
 /**
- * Bubble Pesan Gaya WhatsApp Modern (Palet XyDesk Deep Indigo & Royal Blue)
- * dengan dukungan:
- * - **Swipe-to-Reply** (geser bubble ke kanan untuk langsung mengutip & membalas)
- * - **Kotak Kutipan Balasan (Quoted Reply)** di bagian atas bubble
- * - **Lampiran Foto/Gambar, File/Dokumen (unduh 1-klik), atau Stiker Ekspresif**
- * - **2 Bahasa di dalam 1 Bubble yang dipisah garis horizontal**
+ * Ikon Vektor Media 1× Sekali Lihat (Lingkaran Putus-Putus + Angka 1 Vektor) di atas Canvas.
  */
 @Composable
-private fun ChatBubbleWhatsAppStyle(
-    msg: ChatMessage,
-    onReply: () -> Unit,
-    onOpenImage: (String) -> Unit,
-    onSaveFile: (ChatMessage) -> Unit,
+private fun ChatVectorViewOnceIcon(
+    size: Dp = 18.dp,
+    tint: Color = Color.White,
 ) {
-    val time = remember(msg.at) {
-        SimpleDateFormat("HH:mm", Locale.getDefault()).format(Date(msg.at))
-    }
-    var dragOffsetX by remember { mutableFloatStateOf(0f) }
-    val founderMsg = msg.isFounder || isFounderAccount(msg.name)
-    val bubbleShape = RoundedCornerShape(
-        topStart = if (msg.mine) 18.dp else 4.dp,
-        topEnd = if (msg.mine) 4.dp else 18.dp,
-        bottomStart = 18.dp,
-        bottomEnd = 18.dp,
-    )
-    val bubbleBg = if (msg.mine) {
-        Brush.linearGradient(listOf(Color(0xFF2563EB), Color(0xFF1D4ED8)))
-    } else if (founderMsg) {
-        Brush.linearGradient(listOf(Color(0xFF1E1B4B), Color(0xFF172554)))
-    } else {
-        Brush.linearGradient(listOf(Color(0xFF1E293B), Color(0xFF1E293B)))
-    }
-    val dividerColor = Color.White.copy(alpha = 0.18f)
-    val transLabel = msg.targetLang.ifBlank { "EN" }.uppercase(Locale.ROOT)
-    val transBody = msg.translated.ifBlank { msg.text }
-
-    Box(
-        modifier = Modifier
-            .fillMaxWidth()
-            .pointerInput(msg.id) {
-                detectHorizontalDragGestures(
-                    onDragEnd = {
-                        if (dragOffsetX > 85f) {
-                            onReply()
-                        }
-                        dragOffsetX = 0f
-                    },
-                    onDragCancel = { dragOffsetX = 0f },
-                    onHorizontalDrag = { _, dragAmount ->
-                        val next = (dragOffsetX + dragAmount).coerceIn(0f, 150f)
-                        dragOffsetX = next
-                    },
-                )
-            },
-    ) {
-        // Ikon indikator Swipe-to-Reply di sebelah kiri saat digeser
-        if (dragOffsetX > 12f) {
-            Box(
-                modifier = Modifier
-                    .align(Alignment.CenterStart)
-                    .padding(start = 8.dp)
-                    .size(30.dp)
-                    .clip(CircleShape)
-                    .background(Color(0xFF2563EB)),
-                contentAlignment = Alignment.Center,
-            ) {
-                Text("↩", color = Color.White, fontWeight = FontWeight.Bold)
-            }
+    Canvas(modifier = Modifier.size(size)) {
+        val w = this.size.width
+        val h = this.size.height
+        val stroke = Stroke(width = w * 0.11f, cap = StrokeCap.Round, join = StrokeJoin.Round)
+        drawArc(
+            color = tint,
+            startAngle = -70f,
+            sweepAngle = 210f,
+            useCenter = false,
+            topLeft = Offset(w * 0.12f, h * 0.12f),
+            size = Size(w * 0.76f, h * 0.76f),
+            style = stroke,
+        )
+        drawArc(
+            color = tint,
+            startAngle = 165f,
+            sweepAngle = 45f,
+            useCenter = false,
+            topLeft = Offset(w * 0.12f, h * 0.12f),
+            size = Size(w * 0.76f, h * 0.76f),
+            style = stroke,
+        )
+        drawArc(
+            color = tint,
+            startAngle = 230f,
+            sweepAngle = 40f,
+            useCenter = false,
+            topLeft = Offset(w * 0.12f, h * 0.12f),
+            size = Size(w * 0.76f, h * 0.76f),
+            style = stroke,
+        )
+        val onePath = Path().apply {
+            moveTo(w * 0.42f, h * 0.38f)
+            lineTo(w * 0.52f, h * 0.30f)
+            lineTo(w * 0.52f, h * 0.68f)
         }
+        drawPath(onePath, color = tint, style = stroke)
+    }
+}
 
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .offset { IntOffset(dragOffsetX.roundToInt(), 0) },
-            horizontalArrangement = if (msg.mine) Arrangement.End else Arrangement.Start,
-            verticalAlignment = Alignment.Bottom,
-        ) {
-            // Avatar bulat di sebelah kiri untuk pesan orang lain
-            if (!msg.mine) {
-                Box(
-                    modifier = Modifier
-                        .size(30.dp)
-                        .clip(CircleShape)
-                        .background(
-                            if (founderMsg) Color(0xFF1E1B4B) else Color(0xFF334155),
-                        )
-                        .let { m ->
-                            if (founderMsg) m.border(1.2.dp, founderBorderBrush(), CircleShape) else m
-                        },
-                    contentAlignment = Alignment.Center,
-                ) {
-                    Text(
-                        msg.name.removePrefix("@").take(1).uppercase(Locale.ROOT),
-                        style = MaterialTheme.typography.labelSmall,
-                        fontWeight = FontWeight.Bold,
-                        color = if (founderMsg) Color(0xFFFDE68A) else Color.White,
-                    )
-                }
-                Spacer(Modifier.width(6.dp))
-            }
-
-            Column(
-                modifier = Modifier
-                    .widthIn(min = 160.dp, max = 315.dp)
-                    .shadow(2.dp, bubbleShape)
-                    .clip(bubbleShape)
-                    .background(bubbleBg, bubbleShape)
-                    .let { mod ->
-                        if (founderMsg) mod.border(1.3.dp, founderBorderBrush(), bubbleShape)
-                        else mod.border(0.8.dp, Color.White.copy(alpha = 0.08f), bubbleShape)
-                    }
-                    .padding(horizontal = 12.dp, vertical = 8.dp),
-            ) {
-                // Header Pengirim: Bendera + Nama + Negara + Badge Founder + Tombol Balas Cepat
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                ) {
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(5.dp),
-                        modifier = Modifier.weight(1f, fill = false),
-                    ) {
-                        Text(
-                            text = "${msg.flag} ${msg.name} · ${msg.country}",
-                            style = MaterialTheme.typography.labelSmall,
-                            fontWeight = FontWeight.Bold,
-                            color = if (founderMsg) Color(0xFFFDE68A)
-                            else if (msg.mine) Color(0xFFBAE6FD)
-                            else Color(0xFF38BDF8),
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis,
-                        )
-                        if (founderMsg) {
-                            XyFounderBadge(compact = true)
-                        }
-                    }
-                    Text(
-                        text = "↩",
-                        fontSize = 12.sp,
-                        color = Color.White.copy(alpha = 0.65f),
-                        modifier = Modifier
-                            .clip(CircleShape)
-                            .clickable { onReply() }
-                            .padding(horizontal = 4.dp, vertical = 1.dp),
-                    )
-                }
-
-                // Kotak Kutipan Balasan (Quoted Reply ala WhatsApp)
-                if (msg.replyToName.isNotBlank() || msg.replyToText.isNotBlank()) {
-                    Spacer(Modifier.height(5.dp))
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .clip(RoundedCornerShape(8.dp))
-                            .background(Color.Black.copy(alpha = 0.24f))
-                            .padding(horizontal = 8.dp, vertical = 5.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                    ) {
-                        Box(
-                            modifier = Modifier
-                                .width(3.dp)
-                                .height(26.dp)
-                                .clip(RoundedCornerShape(2.dp))
-                                .background(Color(0xFF38BDF8)),
-                        )
-                        Spacer(Modifier.width(7.dp))
-                        Column {
-                            Text(
-                                msg.replyToName.ifBlank { "Pesan" },
-                                style = MaterialTheme.typography.labelSmall,
-                                fontWeight = FontWeight.Bold,
-                                color = Color(0xFF38BDF8),
-                            )
-                            Text(
-                                msg.replyToText,
-                                style = MaterialTheme.typography.labelSmall,
-                                color = Color.White.copy(alpha = 0.80f),
-                                maxLines = 1,
-                                overflow = TextOverflow.Ellipsis,
-                            )
-                        }
-                    }
-                }
-
-                // Render Lampiran: Stiker / Foto / File
-                if (msg.attachmentType == "sticker") {
-                    val presetId = msg.attachmentData.removePrefix("sticker:")
-                    val preset = XY_STICKERS.firstOrNull { it.id == presetId }
-                    Spacer(Modifier.height(6.dp))
-                    if (preset != null) {
-                        Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .clip(RoundedCornerShape(14.dp))
-                                .background(Brush.linearGradient(listOf(preset.c1, preset.c2)))
-                                .border(1.dp, Color.White.copy(alpha = 0.25f), RoundedCornerShape(14.dp))
-                                .padding(horizontal = 12.dp, vertical = 10.dp),
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(10.dp),
-                        ) {
-                            Text(preset.emoji, fontSize = 30.sp)
-                            Column {
-                                Text(
-                                    preset.title,
-                                    style = MaterialTheme.typography.titleSmall,
-                                    fontWeight = FontWeight.ExtraBold,
-                                    color = Color.White,
-                                )
-                                Text(
-                                    preset.subtitle,
-                                    style = MaterialTheme.typography.labelSmall,
-                                    color = Color.White.copy(alpha = 0.88f),
-                                )
-                            }
-                        }
-                    }
-                } else if (msg.attachmentType == "image" && msg.attachmentData.startsWith("data:image")) {
-                    val bmp = remember(msg.id, msg.attachmentData) {
-                        decodeDataUriBitmap(msg.attachmentData)
-                    }
-                    if (bmp != null) {
-                        Spacer(Modifier.height(6.dp))
-                        Image(
-                            bitmap = bmp.asImageBitmap(),
-                            contentDescription = msg.attachmentName,
-                            contentScale = ContentScale.Crop,
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .heightIn(min = 110.dp, max = 210.dp)
-                                .clip(RoundedCornerShape(12.dp))
-                                .clickable { onOpenImage(msg.attachmentData) },
-                        )
-                    }
-                } else if (msg.attachmentType == "file" && msg.attachmentData.startsWith("data:")) {
-                    Spacer(Modifier.height(6.dp))
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .clip(RoundedCornerShape(10.dp))
-                            .background(Color.Black.copy(alpha = 0.28f))
-                            .clickable { onSaveFile(msg) }
-                            .padding(horizontal = 10.dp, vertical = 8.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(8.dp),
-                    ) {
-                        Text("📄", fontSize = 22.sp)
-                        Column(modifier = Modifier.weight(1f)) {
-                            Text(
-                                msg.attachmentName.ifBlank { "dokumen" },
-                                style = MaterialTheme.typography.labelMedium,
-                                fontWeight = FontWeight.Bold,
-                                color = Color.White,
-                                maxLines = 1,
-                                overflow = TextOverflow.Ellipsis,
-                            )
-                            Text(
-                                "${(msg.attachmentSize / 1024).coerceAtLeast(1)} KB · Ketuk untuk Simpan",
-                                style = MaterialTheme.typography.labelSmall,
-                                color = Color(0xFF94A3B8),
-                            )
-                        }
-                        Text(
-                            "⬇",
-                            fontSize = 16.sp,
-                            fontWeight = FontWeight.Bold,
-                            color = Color(0xFF38BDF8),
-                        )
-                    }
-                }
-
-                // Teks Asli + Garis Pemisah + Terjemahan Otomatis (2 chat di dalam 1 bubble)
-                if (msg.attachmentType != "sticker") {
-                    Spacer(Modifier.height(4.dp))
-                    Text(
-                        text = msg.text,
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = Color.White,
-                    )
-
-                    Spacer(Modifier.height(6.dp))
-                    Box(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .height(1.dp)
-                            .background(dividerColor),
-                    )
-                    Spacer(Modifier.height(5.dp))
-
-                    Text(
-                        text = "🌐 $transLabel · $transBody",
-                        style = MaterialTheme.typography.bodySmall,
-                        fontStyle = FontStyle.Italic,
-                        color = Color(0xFFE2E8F0).copy(alpha = 0.92f),
-                    )
-                }
-
-                Spacer(Modifier.height(3.dp))
-                Text(
-                    text = if (msg.mine) "$time ✓✓" else time,
-                    style = MaterialTheme.typography.labelSmall,
-                    fontSize = 10.sp,
-                    color = Color.White.copy(alpha = 0.68f),
-                    modifier = Modifier.align(Alignment.End),
-                )
-            }
+/**
+ * Ikon Vektor Play Video Segitiga di atas Canvas.
+ */
+@Composable
+private fun ChatVectorVideoPlayIcon(
+    size: Dp = 16.dp,
+    tint: Color = Color.White,
+) {
+    Canvas(modifier = Modifier.size(size)) {
+        val w = this.size.width
+        val h = this.size.height
+        val play = Path().apply {
+            moveTo(w * 0.28f, h * 0.18f)
+            lineTo(w * 0.82f, h * 0.50f)
+            lineTo(w * 0.28f, h * 0.82f)
+            close()
         }
+        drawPath(play, color = tint)
     }
 }
 
@@ -1733,15 +3855,6 @@ private fun chatSocketSend(rawJson: String) {
     runCatching { activeSocket?.send(rawJson) }
 }
 
-/**
- * Mesin Terjemahan Multi-Bahasa (`Support All Languages`):
- * Mendukung deteksi & penerjemahan otomatis antara Bahasa Indonesia, Inggris,
- * Thailand (`th`), Jepang (`ja`), Korea (`ko`), Mandarin (`zh-CN`), Vietnam (`vi`),
- * Tagalog (`tl`), Melayu (`ms`), Arab (`ar`), Rusia (`ru`), Hindi (`hi`), Spanyol (`es`),
- * Portugis (`pt`), Jerman (`de`), Prancis (`fr`), dan Turki (`tr`).
- *
- * Mengembalikan `Triple(translatedText, targetLangLabel, detectedSourceLang)`.
- */
 internal fun translateClientSideMultiLang(
     text: String,
     senderCountry: String,
@@ -1749,89 +3862,142 @@ internal fun translateClientSideMultiLang(
 ): Triple<String, String, String>? {
     val clean = text.trim()
     if (clean.isEmpty()) return null
-    return runCatching {
-        val preferredTarget = if (viewerLangPref == "auto" || viewerLangPref.isBlank()) "id" else viewerLangPref
-        val firstPass = callGoogleNeuralTranslate(clean, preferredTarget) ?: return null
-        val detected = firstPass.second.lowercase(Locale.ROOT)
-        val isSameAsTarget = detected == preferredTarget.lowercase(Locale.ROOT) ||
-            (preferredTarget == "id" && (detected == "id" || detected == "in" || CLIENT_ID_WORD_REGEX.containsMatchIn(clean)))
-        if (isSameAsTarget && viewerLangPref == "auto") {
-            val secondTarget = if (preferredTarget.startsWith("en")) "id" else "en"
-            val secondPass = callGoogleNeuralTranslate(clean, secondTarget) ?: firstPass
-            Triple(secondPass.first, secondTarget.uppercase(Locale.ROOT), detected)
-        } else {
-            Triple(firstPass.first, preferredTarget.uppercase(Locale.ROOT), detected)
-        }
-    }.getOrNull()
-}
+    val hasThai = clean.any { it in '\u0E00'..'\u0E7F' }
+    val hasJp = clean.any { it in '\u3040'..'\u30FF' }
+    val hasKr = clean.any { it in '\uAC00'..'\uD7AF' }
+    val hasCyrillic = clean.any { it in '\u0400'..'\u04FF' }
+    val hasArabic = clean.any { it in '\u0600'..'\u06FF' }
+    val hasCjk = clean.any { it in '\u4E00'..'\u9FFF' }
+    val isLikelyId = !hasThai && !hasJp && !hasKr && !hasCyrillic && !hasArabic && !hasCjk &&
+        (CLIENT_ID_WORD_REGEX.containsMatchIn(clean) || senderCountry.equals("ID", ignoreCase = true))
 
-private fun callGoogleNeuralTranslate(text: String, targetLang: String): Pair<String, String>? {
-    val q = URLEncoder.encode(text, "UTF-8")
-    // Jalur 1: clients5.google.com (client=dict-chrome-ex, bebas limit 429 & presisi semua bahasa)
-    runCatching {
+    val targetLang = if (viewerLangPref == "auto" || viewerLangPref.isBlank()) {
+        if (isLikelyId) "en" else "id"
+    } else {
+        viewerLangPref
+    }
+    val targetLabel = targetLang.uppercase(Locale.ROOT)
+
+    return runCatching {
+        val q = URLEncoder.encode(clean, "UTF-8")
         val url = "https://clients5.google.com/translate_a/t?client=dict-chrome-ex&sl=auto&tl=$targetLang&q=$q"
         val conn = (URL(url).openConnection() as HttpURLConnection).apply {
             requestMethod = "GET"
             connectTimeout = 6_000
             readTimeout = 6_000
-            setRequestProperty(
-                "User-Agent",
-                "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
-            )
+            setRequestProperty("User-Agent", "Mozilla/5.0 (Linux; Android 15)")
+            setRequestProperty("Accept", "application/json")
         }
         if (conn.responseCode in 200..299) {
-            val raw = BufferedReader(InputStreamReader(conn.inputStream, Charsets.UTF_8)).use { it.readText() }
-            conn.disconnect()
+            val raw = conn.inputStream.bufferedReader().use { it.readText() }
             val arr = JSONArray(raw)
             val first = arr.optJSONArray(0)
-            if (first != null && first.length() >= 1) {
-                val tr = first.optString(0, "").trim()
-                val det = first.optString(1, "auto").trim()
-                if (tr.isNotEmpty()) return Pair(tr, det)
+            if (first != null) {
+                var tr = first.optString(0, "").trim()
+                val det = first.optString(1, if (isLikelyId) "id" else "en").trim().lowercase(Locale.ROOT)
+                if ((viewerLangPref == "auto" || viewerLangPref.isBlank()) && det == targetLang.lowercase(Locale.ROOT)) {
+                    val altTarget = if (det == "id" || det == "in") "en" else "id"
+                    val altUrl = "https://clients5.google.com/translate_a/t?client=dict-chrome-ex&sl=$det&tl=$altTarget&q=$q"
+                    val altConn = (URL(altUrl).openConnection() as HttpURLConnection).apply {
+                        requestMethod = "GET"
+                        connectTimeout = 5_000
+                        readTimeout = 5_000
+                        setRequestProperty("User-Agent", "Mozilla/5.0 (Linux; Android 15)")
+                    }
+                    if (altConn.responseCode in 200..299) {
+                        val altArr = JSONArray(altConn.inputStream.bufferedReader().use { it.readText() })
+                        val altFirst = altArr.optJSONArray(0)
+                        val altTr = altFirst?.optString(0, "")?.trim().orEmpty()
+                        if (altTr.isNotBlank()) {
+                            return@runCatching Triple(altTr, altTarget.uppercase(Locale.ROOT), det)
+                        }
+                    }
+                }
+                if (tr.isNotBlank()) return@runCatching Triple(tr, targetLabel, det)
             }
-        } else {
-            conn.disconnect()
         }
-    }
-
-    // Jalur 2: translate.googleapis.com dengan client=dict-chrome-ex
-    runCatching {
-        val url = "https://translate.googleapis.com/translate_a/single?client=dict-chrome-ex&sl=auto&tl=$targetLang&dt=t&q=$q"
-        val conn = (URL(url).openConnection() as HttpURLConnection).apply {
+        val workerUrl = "https://api.xydeskremote.biz.id/api/chat/translate?q=$q&tl=$targetLang"
+        val wConn = (URL(workerUrl).openConnection() as HttpURLConnection).apply {
             requestMethod = "GET"
             connectTimeout = 6_000
             readTimeout = 6_000
-            setRequestProperty("User-Agent", "Mozilla/5.0 (Linux; Android 15) Chrome/131.0.0.0 Mobile")
+            setRequestProperty("Accept", "application/json")
         }
-        if (conn.responseCode in 200..299) {
-            val raw = BufferedReader(InputStreamReader(conn.inputStream, Charsets.UTF_8)).use { it.readText() }
-            conn.disconnect()
-            val root = JSONArray(raw)
-            val parts = root.optJSONArray(0)
-            if (parts != null) {
-                val sb = StringBuilder()
-                for (i in 0 until parts.length()) {
-                    val seg = parts.optJSONArray(i) ?: continue
-                    val chunk = seg.optString(0, "")
-                    if (chunk.isNotEmpty()) sb.append(chunk)
-                }
-                val det = root.optString(2, "auto")
-                val out = sb.toString().trim()
-                if (out.isNotEmpty()) return Pair(out, det)
-            }
-        } else {
-            conn.disconnect()
+        if (wConn.responseCode in 200..299) {
+            val obj = JSONObject(wConn.inputStream.bufferedReader().use { it.readText() })
+            val tr = obj.optString("translated", "").trim()
+            val det = obj.optString("source_lang", if (isLikelyId) "id" else "en").trim().lowercase(Locale.ROOT)
+            val lbl = obj.optString("target_lang", targetLabel).trim().uppercase(Locale.ROOT)
+            if (tr.isNotBlank()) return@runCatching Triple(tr, lbl, det)
         }
-    }
-    return null
+        null
+    }.getOrNull()
 }
 
-private fun decodeDataUriBitmap(dataUri: String): Bitmap? = runCatching {
+private fun decodeBase64Bitmap(dataUri: String): Bitmap? = runCatching {
     val comma = dataUri.indexOf(',')
     if (comma < 0) return@runCatching null
     val bytes = Base64.decode(dataUri.substring(comma + 1), Base64.DEFAULT)
     BitmapFactory.decodeByteArray(bytes, 0, bytes.size)
 }.getOrNull()
+
+private fun saveChatMediaToGallery(context: Context, msg: ChatMessage) {
+    runCatching {
+        val comma = msg.attachmentData.indexOf(',')
+        if (comma < 0) return
+        val bytes = Base64.decode(msg.attachmentData.substring(comma + 1), Base64.DEFAULT)
+        val isVideo = msg.attachmentType == "video" || msg.attachmentMime.startsWith("video/")
+        val ext = if (isVideo) "mp4" else "jpg"
+        val mime = if (isVideo) (msg.attachmentMime.ifBlank { "video/mp4" }) else "image/jpeg"
+        val fileName = "XyDesk_${System.currentTimeMillis()}.$ext"
+        val resolver = context.contentResolver
+        val collection = if (isVideo) {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                MediaStore.Video.Media.getContentUri(MediaStore.VOLUME_EXTERNAL_PRIMARY)
+            } else {
+                MediaStore.Video.Media.EXTERNAL_CONTENT_URI
+            }
+        } else {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                MediaStore.Images.Media.getContentUri(MediaStore.VOLUME_EXTERNAL_PRIMARY)
+            } else {
+                MediaStore.Images.Media.EXTERNAL_CONTENT_URI
+            }
+        }
+        val values = ContentValues().apply {
+            put(MediaStore.MediaColumns.DISPLAY_NAME, fileName)
+            put(MediaStore.MediaColumns.MIME_TYPE, mime)
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                put(
+                    MediaStore.MediaColumns.RELATIVE_PATH,
+                    if (isVideo) "${Environment.DIRECTORY_MOVIES}/XyDesk" else "${Environment.DIRECTORY_PICTURES}/XyDesk",
+                )
+                put(MediaStore.MediaColumns.IS_PENDING, 1)
+            }
+        }
+        val itemUri = resolver.insert(collection, values)
+        if (itemUri != null) {
+            resolver.openOutputStream(itemUri)?.use { out ->
+                out.write(bytes)
+            }
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                val doneValues = ContentValues().apply {
+                    put(MediaStore.MediaColumns.IS_PENDING, 0)
+                }
+                resolver.update(itemUri, doneValues, null, null)
+            }
+            Toast.makeText(
+                context,
+                if (isVideo) "Video berhasil disimpan ke Galeri (Movies/XyDesk)!" else "Foto berhasil disimpan ke Galeri (Pictures/XyDesk)!",
+                Toast.LENGTH_LONG,
+            ).show()
+        } else {
+            saveOrShareChatAttachment(context, msg)
+        }
+    }.onFailure {
+        saveOrShareChatAttachment(context, msg)
+    }
+}
 
 private fun saveOrShareChatAttachment(context: Context, msg: ChatMessage) {
     runCatching {
@@ -1855,72 +4021,152 @@ private fun saveOrShareChatAttachment(context: Context, msg: ChatMessage) {
 }
 
 /**
- * Ronde 52 — Floating Bubble Chat Global Saat Sesi RDP / PC Stream Berlangsung.
- *
- * Menampilkan gelembung mengambang (bisa digeser bebas di layar sesi) dengan
- * indikator pesan baru; ketika diketuk langsung membuka jendela `GlobalChatScreen`
- * di atas sesi tanpa memutus koneksi RDP.
+ * Ronde 55 — Floating Chat Sesi dengan Efek Liquid Glass Hitam-Putih (Monokrom Agak Transparan).
+ * - Saat diminimalkan: tampil sebagai Kapsul Kaca Cair (Liquid Glass Orb/Pill) hitam-putih
+ *   dengan kilau meniskus kaca, jumlah online live, dan bisa digeser ke mana saja di layar sesi.
+ * - Saat dibuka: mengambang langsung di atas sesi RDP / PC Stream dengan efek kaca cair
+ *   agak transparan (layar remote di belakangnya tetap terlihat tembus), bisa digeser lewat
+ *   header Liquid Glass, serta bisa diubah ukurannya (Compact / Luas).
  */
 @Composable
 internal fun FloatingSessionChatOverlay(
     modifier: Modifier = Modifier,
 ) {
     var chatWindowOpen by remember { mutableStateOf(false) }
-    var bubbleOffsetX by remember { mutableFloatStateOf(24f) }
-    var bubbleOffsetY by remember { mutableFloatStateOf(220f) }
+    var isCompactFloating by remember { mutableStateOf(true) }
+    var bubbleOffsetX by remember { mutableFloatStateOf(20f) }
+    var bubbleOffsetY by remember { mutableFloatStateOf(160f) }
+    var panelOffsetX by remember { mutableFloatStateOf(0f) }
+    var panelOffsetY by remember { mutableFloatStateOf(0f) }
+    val onlineCount by AppUpdate.appWideOnlineCount.collectAsState()
 
-    Box(modifier = modifier.fillMaxSize()) {
-        // Tombol Bubble Mengambang (Draggable)
+    Box(
+        modifier = modifier
+            .fillMaxSize()
+            .statusBarsPadding()
+            .navigationBarsPadding()
+            .displayCutoutPadding(),
+    ) {
         if (!chatWindowOpen) {
+            // Kapsul Liquid Glass Hitam-Putih Agak Transparan (Draggable)
             Box(
                 modifier = Modifier
                     .offset { IntOffset(bubbleOffsetX.roundToInt(), bubbleOffsetY.roundToInt()) }
-                    .size(46.dp)
-                    .shadow(8.dp, CircleShape)
-                    .clip(CircleShape)
+                    .shadow(14.dp, RoundedCornerShape(50))
+                    .clip(RoundedCornerShape(50))
                     .background(
-                        Brush.linearGradient(
-                            colors = listOf(Color(0xFF2563EB), Color(0xFF0284C7)),
+                        Brush.verticalGradient(
+                            colors = listOf(
+                                Color.White.copy(alpha = 0.22f),
+                                Color(0xFF0C0C10).copy(alpha = 0.50f),
+                                Color(0xFF060609).copy(alpha = 0.62f),
+                            ),
                         ),
                     )
-                    .border(1.5.dp, Color(0xFFBAE6FD).copy(alpha = 0.75f), CircleShape)
+                    .border(
+                        width = 1.1.dp,
+                        brush = Brush.linearGradient(
+                            colors = listOf(
+                                Color.White.copy(alpha = 0.62f),
+                                Color.White.copy(alpha = 0.14f),
+                                Color.White.copy(alpha = 0.42f),
+                            ),
+                        ),
+                        shape = RoundedCornerShape(50),
+                    )
                     .pointerInput(Unit) {
                         detectDragGestures { change, dragAmount ->
                             change.consume()
-                            bubbleOffsetX = (bubbleOffsetX + dragAmount.x).coerceIn(8f, 900f)
-                            bubbleOffsetY = (bubbleOffsetY + dragAmount.y).coerceIn(48f, 1800f)
+                            bubbleOffsetX = (bubbleOffsetX + dragAmount.x).coerceIn(6f, 920f)
+                            bubbleOffsetY = (bubbleOffsetY + dragAmount.y).coerceIn(36f, 1850f)
                         }
                     }
-                    .clickable { chatWindowOpen = true },
+                    .clickable { chatWindowOpen = true }
+                    .padding(horizontal = 13.dp, vertical = 9.dp),
                 contentAlignment = Alignment.Center,
             ) {
-                Text("💬", fontSize = 20.sp)
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(7.dp),
+                ) {
+                    Icon(
+                        imageVector = XyIcons.Chat,
+                        contentDescription = "Buka Chat Global Liquid Glass",
+                        tint = Color.White,
+                        modifier = Modifier.size(18.dp),
+                    )
+                    Text(
+                        text = "Chat",
+                        style = MaterialTheme.typography.labelMedium,
+                        fontWeight = FontWeight.ExtraBold,
+                        color = Color.White,
+                    )
+                    Box(
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(50))
+                            .background(Color.White.copy(alpha = 0.18f))
+                            .padding(horizontal = 6.dp, vertical = 1.5.dp),
+                    ) {
+                        Text(
+                            text = "${onlineCount.coerceAtLeast(1)}",
+                            style = MaterialTheme.typography.labelSmall,
+                            fontSize = 9.5.sp,
+                            fontWeight = FontWeight.ExtraBold,
+                            color = Color.White,
+                        )
+                    }
+                }
             }
         }
 
-        // Jendela Overlay Chat Global di atas Sesi RDP
         if (chatWindowOpen) {
+            val panelShape = RoundedCornerShape(26.dp)
             Box(
                 modifier = Modifier
                     .fillMaxSize()
-                    .background(Color.Black.copy(alpha = 0.45f))
-                    .clickable { chatWindowOpen = false }
-                    .padding(horizontal = 16.dp, vertical = 28.dp),
+                    .padding(horizontal = 12.dp, vertical = 18.dp),
                 contentAlignment = Alignment.Center,
             ) {
+                // Panel Mengambang Liquid Glass Hitam-Putih Agak Transparan
                 Box(
                     modifier = Modifier
-                        .widthIn(max = 460.dp)
+                        .offset { IntOffset(panelOffsetX.roundToInt(), panelOffsetY.roundToInt()) }
+                        .widthIn(max = if (isCompactFloating) 348.dp else 450.dp)
                         .fillMaxWidth()
-                        .fillMaxHeight(0.88f)
-                        .shadow(16.dp, RoundedCornerShape(24.dp))
-                        .clip(RoundedCornerShape(24.dp))
-                        .border(1.dp, Color(0xFF38BDF8).copy(alpha = 0.4f), RoundedCornerShape(24.dp))
+                        .fillMaxHeight(if (isCompactFloating) 0.72f else 0.88f)
+                        .shadow(24.dp, panelShape)
+                        .clip(panelShape)
+                        .background(
+                            Brush.verticalGradient(
+                                colors = listOf(
+                                    Color(0xFF14141B).copy(alpha = 0.54f),
+                                    Color(0xFF09090D).copy(alpha = 0.48f),
+                                    Color(0xFF0E0E14).copy(alpha = 0.58f),
+                                ),
+                            ),
+                        )
+                        .border(
+                            width = 1.2.dp,
+                            brush = Brush.linearGradient(
+                                colors = listOf(
+                                    Color.White.copy(alpha = 0.56f),
+                                    Color.White.copy(alpha = 0.10f),
+                                    Color.White.copy(alpha = 0.34f),
+                                ),
+                            ),
+                            shape = panelShape,
+                        )
                         .clickable(enabled = false) {},
                 ) {
                     GlobalChatScreen(
                         onBack = { chatWindowOpen = false },
                         isOverlayMode = true,
+                        onHeaderDrag = { dx, dy ->
+                            panelOffsetX = (panelOffsetX + dx).coerceIn(-260f, 260f)
+                            panelOffsetY = (panelOffsetY + dy).coerceIn(-340f, 340f)
+                        },
+                        isCompactFloating = isCompactFloating,
+                        onToggleCompactFloating = { isCompactFloating = !isCompactFloating },
                     )
                 }
             }

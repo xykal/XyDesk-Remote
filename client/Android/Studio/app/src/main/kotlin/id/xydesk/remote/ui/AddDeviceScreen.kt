@@ -7,6 +7,7 @@ import android.content.Intent
 import android.net.Uri
 import android.os.Build
 import android.provider.Settings
+import android.widget.Toast
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -36,10 +37,14 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontFamily
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import com.freerdp.freerdpcore.services.LibFreeRDP
 import id.xydesk.remote.core.ConnectionProfile
 import id.xydesk.remote.core.DiscoveredPcHost
@@ -60,6 +65,7 @@ import id.xydesk.remote.core.XyAudioMode
 import id.xydesk.remote.core.XyGateway
 import id.xydesk.remote.security.CredentialVault
 import id.xydesk.remote.ui.components.XyNoticeBus
+import id.xydesk.remote.ui.ssh.XySshTerminalScreen
 import androidx.activity.compose.BackHandler
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -237,6 +243,7 @@ fun AddDeviceScreen(
                 tlsSecLevel = if (initialPcQuickMode) 2 else app.defaultTlsSecLevel,
             ).withStreamProfile(baseProfile).copy(
                 pcConnectMode = initialPcQuickMode,
+                microphone = !initialPcQuickMode,
                 udpTransport = if (initialPcQuickMode) true else app.defaultUdp,
                 networkAutoDetect = app.defaultNetAuto,
                 h264 = true,
@@ -249,6 +256,7 @@ fun AddDeviceScreen(
         }
     }
     var options by remember { mutableStateOf(stored) }
+    var openSshTerminal by remember { mutableStateOf(false) }
     var wolStatusText by remember { mutableStateOf<String?>(null) }
     var gatewayOn by remember { mutableStateOf(stored.gateway != null) }
     var gwHost by remember { mutableStateOf(stored.gateway?.host.orEmpty()) }
@@ -475,6 +483,19 @@ fun AddDeviceScreen(
         onSubmit(profile, rememberPass, connect)
     }
 
+    if (openSshTerminal) {
+        XySshTerminalScreen(
+            initialHost = host.substringBefore(":").trim(),
+            initialPort = host.substringAfter(":", "22").toIntOrNull() ?: 22,
+            initialUser = user.ifBlank { "root" },
+            initialPassword = pass,
+            initialLabel = label,
+            autoConnectOnStart = false,
+            onBack = { openSshTerminal = false },
+        )
+        return
+    }
+
     Box(Modifier.fillMaxSize()) {
     Column(
         Modifier
@@ -543,12 +564,21 @@ fun AddDeviceScreen(
                         } else {
                             options = options.withStreamProfile(XyStreamProfile.AUTO).copy(
                                 pcConnectMode = false,
+                                microphone = true,
                                 gpuProfile = XyGpuProfile.AUTO,
                                 dynamicResolution = true,
                                 consoleAdmin = false,
                             )
                         }
                     },
+                    modifier = Modifier.fillMaxWidth(),
+                )
+                XyPillButton(
+                    text = xy("Terminal SSH / Linux VPS (Ubuntu, Debian, Linux Polos)", "SSH Terminal / Linux VPS (Ubuntu, Debian, Plain Linux)"),
+                    icon = XyIcons.Terminal,
+                    primary = false,
+                    compact = true,
+                    onClick = { openSshTerminal = true },
                     modifier = Modifier.fillMaxWidth(),
                 )
             }
@@ -1405,14 +1435,61 @@ fun AddDeviceScreen(
                         )
                         Text(
                             xy(
-                                "Mic dirender ke endpoint 'CABLE Input / XyDesk Virtual Microphone' di PC; " +
-                                    "kalau tidak ada, Host Agent pakai perangkat default.",
-                                "The mic renders into the PC's 'CABLE Input / XyDesk Virtual Microphone' endpoint; " +
-                                    "if missing, the Host Agent falls back to the default device.",
+                                "Mic dirender ke endpoint 'Remote Audio' (RDP standar) dan 'CABLE Input / XyDesk Virtual Microphone' di PC.",
+                                "The mic renders into 'Remote Audio' (standard RDP) and 'CABLE Input / XyDesk Virtual Microphone' on the PC.",
                             ),
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
+                        Spacer(Modifier.height(6.dp))
+                        XySectionLabel(
+                            xy(
+                                "Setup On-Mic untuk RDP Beli / Selain GitHub",
+                                "On-Mic Setup for Purchased / Non-GitHub RDP",
+                            ),
+                        )
+                        Text(
+                            xy(
+                                "Jika RDP Windows beli sendiri belum mendeteksi mic di game/Discord, jalankan perintah 1-klik atau file .BAT ini di dalam RDP:",
+                                "If your purchased Windows RDP doesn't detect the mic in games/Discord yet, run this 1-click command or .BAT file inside the RDP:",
+                            ),
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                        Spacer(Modifier.height(4.dp))
+                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            XyPillButton(
+                                text = xy("Salin Cmd On-Mic", "Copy On-Mic Cmd"),
+                                icon = XyIcons.Copy,
+                                primary = false,
+                                compact = true,
+                                onClick = {
+                                    val cm = context.getSystemService(Context.CLIPBOARD_SERVICE) as? ClipboardManager
+                                    cm?.setPrimaryClip(
+                                        ClipData.newPlainText(
+                                            "XyDesk On-Mic Setup",
+                                            "powershell -NoProfile -ExecutionPolicy Bypass -Command \"irm https://xydeskremote.biz.id/onmic.ps1 | iex\"",
+                                        ),
+                                    )
+                                    Toast.makeText(
+                                        context,
+                                        xyNow("Perintah PowerShell On-Mic disalin! Tempel di CMD/PowerShell Admin RDP.", "On-Mic PowerShell command copied! Paste in RDP Admin CMD/PowerShell."),
+                                        Toast.LENGTH_LONG,
+                                    ).show()
+                                },
+                                modifier = Modifier.weight(1f),
+                            )
+                            XyPillButton(
+                                text = xy("Unduh File .BAT", "Download .BAT"),
+                                icon = XyIcons.Download,
+                                primary = false,
+                                compact = true,
+                                onClick = {
+                                    openInAppCustomTab(context, "https://xydeskremote.biz.id/XyDesk-RDP-OnMic-Setup.bat")
+                                },
+                                modifier = Modifier.weight(1f),
+                            )
+                        }
                     }
                 }
                 XyToggleRow(

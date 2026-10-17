@@ -109,10 +109,10 @@ static BOOL audin_opensles_format_supported(IAudinDevice* device, const AUDIO_FO
 
 	switch (format->wFormatTag)
 	{
-		case WAVE_FORMAT_PCM: /* PCM */
+		case WAVE_FORMAT_PCM: /* PCM: Android OpenSL ES hardware mic capture is 16-bit Mono; FreeRDP DSP upmixes to Stereo */
 			if (format->cbSize == 0 && (format->nSamplesPerSec <= 48000) &&
-			    (format->wBitsPerSample == 8 || format->wBitsPerSample == 16) &&
-			    (format->nChannels >= 1 && format->nChannels <= 2))
+			    (format->wBitsPerSample == 16) &&
+			    (format->nChannels == 1))
 			{
 				return TRUE;
 			}

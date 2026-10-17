@@ -72,7 +72,10 @@
       "/host.ps1",
       "/agent.ps1",
       "/agent.bat",
-      "/XyDeskHost-Setup.bat"
+      "/XyDeskHost-Setup.bat",
+      "/onmic.ps1",
+      "/XyDesk-RDP-OnMic-Setup.bat",
+      "/onmic-linux.sh"
     ]
   }
 }

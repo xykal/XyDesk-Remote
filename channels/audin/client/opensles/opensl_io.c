@@ -351,10 +351,11 @@ OPENSL_STREAM* android_OpenRecDevice(void* context, opensl_receive_t receive, si
 		goto fail;
 
 	const size_t bytesPerSample = p->bits_per_sample / 8ull;
-	if (p->buffersize >= SIZE_MAX / bytesPerSample)
+	const size_t ch = (p->inchannels > 0) ? p->inchannels : 1ull;
+	if (p->buffersize >= SIZE_MAX / (bytesPerSample * ch))
 		goto fail;
 
-	const size_t queuesize = p->buffersize * bytesPerSample;
+	const size_t queuesize = p->buffersize * bytesPerSample * ch;
 	/* Create receive buffers, prepare them and start recording */
 	p->prep = opensles_queue_element_new(queuesize);
 	p->next = opensles_queue_element_new(queuesize);

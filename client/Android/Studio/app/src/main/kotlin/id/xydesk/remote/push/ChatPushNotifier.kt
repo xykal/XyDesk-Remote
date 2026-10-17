@@ -10,6 +10,9 @@ import android.graphics.Canvas
 import android.graphics.Color
 import android.graphics.Paint
 import android.graphics.Rect
+import android.media.AudioAttributes
+import android.media.AudioManager
+import android.media.RingtoneManager
 import android.os.Build
 import androidx.core.app.NotificationCompat
 import androidx.core.app.Person
@@ -53,9 +56,11 @@ import java.util.Collections
  */
 object ChatPushNotifier {
 
-    const val ONESIGNAL_APP_ID = "ffaa87d6-8e1d-42b6-bb4f-ebbbfc0bccbb"
-    const val CHAT_CHANNEL_ID = "xydesk.global.chat.push"
+    const val ONESIGNAL_APP_ID = "e3d5adea-1c0f-4986-9ce5-e088d65f0998"
+    const val CHAT_CHANNEL_ID = "xydesk.global.chat.sound.v3"
+    const val UPDATE_CHANNEL_ID = "xydesk.app.update.sound.v3"
     const val CHAT_NOTIF_ID = 2005
+    const val UPDATE_NOTIF_ID = 2006
 
     const val ACTION_DIRECT_REPLY = "id.xydesk.remote.push.ACTION_DIRECT_REPLY"
     const val ACTION_MARK_READ = "id.xydesk.remote.push.ACTION_MARK_READ"
@@ -64,11 +69,12 @@ object ChatPushNotifier {
     private const val REQ_OPEN_CHAT = 2050
     private const val REQ_DIRECT_REPLY = 2051
     private const val REQ_MARK_READ = 2052
+    private const val REQ_OPEN_UPDATE = 2053
 
     private const val PREFS_NAME = "xydesk.global.chat"
     private const val KEY_UNREAD_STACK = "unread_notif_stack_v1"
     private const val KEY_LAST_SEEN_AT = "last_seen_msg_at_v1"
-    private const val MAX_STACK_MESSAGES = 6
+    private const val MAX_STACK_MESSAGES = 12
 
     private const val HISTORY_URL = "https://api.xydeskremote.biz.id/api/chat/history"
     private const val SEND_URL = "https://api.xydeskremote.biz.id/api/chat/send"
@@ -355,6 +361,9 @@ object ChatPushNotifier {
             xyNow("Chat Global", "Global Chat")
         }
 
+        val soundUri = RingtoneManager.getDefaultUri(RingtoneManager.TYPE_NOTIFICATION)
+        val vibPattern = longArrayOf(0L, 240L, 120L, 240L)
+
         val builder = NotificationCompat.Builder(context, CHAT_CHANNEL_ID)
             .setSmallIcon(R.drawable.ic_launcher_monochrome)
             .setContentTitle("${lastItem.name} · Chat Global")
@@ -363,6 +372,8 @@ object ChatPushNotifier {
             .setStyle(messagingStyle)
             .setCategory(NotificationCompat.CATEGORY_MESSAGE)
             .setPriority(NotificationCompat.PRIORITY_HIGH)
+            .setSound(soundUri)
+            .setVibrate(vibPattern)
             .setDefaults(NotificationCompat.DEFAULT_ALL)
             .setAutoCancel(true)
             .setOnlyAlertOnce(lastItem.isMe)
@@ -373,9 +384,12 @@ object ChatPushNotifier {
             .setContentIntent(openPending)
             .addAction(replyAction)
             .addAction(markReadAction)
-            .setVisibility(NotificationCompat.VISIBILITY_PRIVATE)
+            .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
 
         nm.notify(CHAT_NOTIF_ID, builder.build())
+        if (!lastItem.isMe) {
+            playFallbackSoundIfNeeded(context)
+        }
     }
 
     fun openChatIntent(context: Context): Intent =
@@ -384,20 +398,109 @@ object ChatPushNotifier {
             .putExtra(EXTRA_SKIP_AUTO_RESUME, true)
             .putExtra(EXTRA_OPEN_CHAT_GLOBAL, true)
 
-    private fun ensureChannel(nm: NotificationManager) {
+    fun notifyAppUpdateAvailable(
+        context: Context,
+        title: String,
+        summary: String,
+        isDataPack: Boolean = true,
+    ) {
+        val appContext = context.applicationContext
+        val nm = appContext.getSystemService(Context.NOTIFICATION_SERVICE) as? NotificationManager ?: return
+        val soundUri = RingtoneManager.getDefaultUri(RingtoneManager.TYPE_NOTIFICATION)
+        val vibPattern = longArrayOf(0L, 240L, 120L, 240L)
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            val channel = NotificationChannel(
-                CHAT_CHANNEL_ID,
-                xyNow("Chat Global", "Global Chat"),
+            val audioAttrs = AudioAttributes.Builder()
+                .setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION)
+                .setUsage(AudioAttributes.USAGE_NOTIFICATION)
+                .build()
+            val ch = NotificationChannel(
+                UPDATE_CHANNEL_ID,
+                xyNow("Pembaruan Aplikasi & Data OTA", "App & OTA Data Updates"),
                 NotificationManager.IMPORTANCE_HIGH,
             ).apply {
                 description = xyNow(
-                    "Notifikasi pesan baru dari Chat Global XyDesk Remote",
-                    "New message notifications from XyDesk Remote Global Chat",
+                    "Notifikasi pembaruan paket data ringan (Download Data) dan versi APK baru",
+                    "Notifications for lightweight OTA data packs and new APK releases",
                 )
+                setSound(soundUri, audioAttrs)
                 enableVibration(true)
+                vibrationPattern = vibPattern
+                enableLights(true)
+            }
+            nm.createNotificationChannel(ch)
+        }
+        val openAppIntent = Intent(appContext, XyDeskHomeActivity::class.java)
+            .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP or Intent.FLAG_ACTIVITY_CLEAR_TOP)
+            .putExtra(EXTRA_SKIP_AUTO_RESUME, true)
+        val pending = PendingIntent.getActivity(
+            appContext,
+            REQ_OPEN_UPDATE,
+            openAppIntent,
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
+        )
+        val notif = NotificationCompat.Builder(appContext, UPDATE_CHANNEL_ID)
+            .setSmallIcon(R.drawable.ic_launcher_monochrome)
+            .setContentTitle(title)
+            .setContentText(summary)
+            .setSubText(if (isDataPack) xyNow("Update Data In-App", "In-App Data Update") else xyNow("Update APK", "APK Update"))
+            .setStyle(NotificationCompat.BigTextStyle().bigText(summary))
+            .setPriority(NotificationCompat.PRIORITY_HIGH)
+            .setSound(soundUri)
+            .setVibrate(vibPattern)
+            .setDefaults(NotificationCompat.DEFAULT_ALL)
+            .setAutoCancel(true)
+            .setContentIntent(pending)
+            .build()
+        nm.notify(UPDATE_NOTIF_ID, notif)
+        playFallbackSoundIfNeeded(appContext)
+    }
+
+    private fun ensureChannel(nm: NotificationManager) {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            val soundUri = RingtoneManager.getDefaultUri(RingtoneManager.TYPE_NOTIFICATION)
+            val audioAttrs = AudioAttributes.Builder()
+                .setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION)
+                .setUsage(AudioAttributes.USAGE_NOTIFICATION_COMMUNICATION_INSTANT)
+                .build()
+            val channel = NotificationChannel(
+                CHAT_CHANNEL_ID,
+                xyNow("Chat Global (Dengan Suara)", "Global Chat (With Sound)"),
+                NotificationManager.IMPORTANCE_HIGH,
+            ).apply {
+                description = xyNow(
+                    "Notifikasi pesan baru dengan suara & getar dari Chat Global XyDesk Remote",
+                    "New message notifications with sound & vibration from XyDesk Remote Global Chat",
+                )
+                setSound(soundUri, audioAttrs)
+                enableVibration(true)
+                vibrationPattern = longArrayOf(0L, 240L, 120L, 240L)
+                enableLights(true)
+                lightColor = 0xFF4F7CFF.toInt()
+                lockscreenVisibility = NotificationCompat.VISIBILITY_PUBLIC
             }
             nm.createNotificationChannel(channel)
+        }
+    }
+
+    @Volatile
+    private var lastSoundPlayedAtMs: Long = 0L
+
+    private fun playFallbackSoundIfNeeded(context: Context) {
+        val now = System.currentTimeMillis()
+        if (now - lastSoundPlayedAtMs < 1500L) return
+        lastSoundPlayedAtMs = now
+        runCatching {
+            val am = context.getSystemService(Context.AUDIO_SERVICE) as? AudioManager
+            if (am != null && am.ringerMode != AudioManager.RINGER_MODE_NORMAL) return
+            val uri = RingtoneManager.getDefaultUri(RingtoneManager.TYPE_NOTIFICATION)
+                ?: RingtoneManager.getDefaultUri(RingtoneManager.TYPE_RINGTONE)
+            if (uri != null) {
+                val r = RingtoneManager.getRingtone(context.applicationContext, uri)
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+                    r?.isLooping = false
+                }
+                r?.play()
+            }
         }
     }
 
@@ -488,12 +591,22 @@ object ChatPushNotifier {
         Thread(
             {
                 var seeded = false
+                var tickCount = 0
                 while (true) {
                     try {
-                        Thread.sleep(if (seeded) 15_000L else 4_000L)
+                        Thread.sleep(if (seeded) 5_000L else 2_500L)
+                        tickCount += 1
+                        if (tickCount % 24 == 1) {
+                            kotlinx.coroutines.runBlocking {
+                                runCatching { id.xydesk.remote.ui.AppUpdate.fetch(appContext) }
+                            }
+                        }
                         val prefs = appContext.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
                         var lastSeenAt = prefs.getLong(KEY_LAST_SEEN_AT, 0L)
-                        val conn = (URL(HISTORY_URL).openConnection() as HttpURLConnection).apply {
+                        val joinedAt = prefs.getLong("first_joined_at_ms", 0L)
+                        if (joinedAt > lastSeenAt) lastSeenAt = joinedAt
+                        val historyEndpoint = if (joinedAt > 0L) "$HISTORY_URL?joined_at=$joinedAt" else HISTORY_URL
+                        val conn = (URL(historyEndpoint).openConnection() as HttpURLConnection).apply {
                             requestMethod = "GET"
                             connectTimeout = 8_000
                             readTimeout = 8_000
@@ -502,6 +615,10 @@ object ChatPushNotifier {
                         if (conn.responseCode in 200..299) {
                             val body = BufferedReader(InputStreamReader(conn.inputStream, Charsets.UTF_8)).use { it.readText() }
                             val json = JSONObject(body)
+                            val onlineCount = json.optInt("online_count", 0)
+                            if (onlineCount > 0) {
+                                id.xydesk.remote.ui.AppUpdate.updateOnlineCount(onlineCount)
+                            }
                             val arr = json.optJSONArray("messages") ?: JSONArray()
                             if (!seeded && lastSeenAt == 0L) {
                                 // Seed awal: tandai pesan lama agar tidak membanjiri notif saat baru instal/buka
@@ -521,22 +638,21 @@ object ChatPushNotifier {
                                     val m = arr.optJSONObject(i) ?: continue
                                     val id = m.optString("id")
                                     val rawName = m.optString("name", "Tamu")
-                                    val flag = m.optString("flag", "🇮🇩").ifBlank { "🇮🇩" }
                                     val cc = m.optString("country", "ID").ifBlank { "ID" }
                                     val text = m.optString("text", "")
                                     val translated = m.optString("translated", "")
                                     val targetLang = m.optString("target_lang", "EN").ifBlank { "EN" }
                                     val at = m.optLong("at", 0L)
                                     val displayText = if (translated.isNotBlank() && !translated.equals(text, ignoreCase = true)) {
-                                        "$text\n🌐 $targetLang: $translated"
+                                        "$text\n[$targetLang] $translated"
                                     } else {
                                         text
                                     }
                                     val isFounder = m.optBoolean("is_founder", rawName.equals("xykal", ignoreCase = true))
                                     val senderLabel = if (isFounder) {
-                                        "👑 $flag $rawName [FOUNDER] ($cc)"
+                                        "$rawName [FOUNDER] ($cc)"
                                     } else {
-                                        "$flag $rawName ($cc)"
+                                        "$rawName ($cc)"
                                     }
                                     if (at > lastSeenAt) {
                                         lastSeenAt = at

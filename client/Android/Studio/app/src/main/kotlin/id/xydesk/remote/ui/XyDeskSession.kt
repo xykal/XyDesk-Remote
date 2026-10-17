@@ -35,6 +35,8 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.heightIn
+import androidx.compose.ui.input.pointer.isSecondaryPressed
+import androidx.compose.ui.input.pointer.isTertiaryPressed
 import androidx.compose.ui.text.input.ImeAction
 import id.xydesk.remote.ui.components.XyDialog
 import id.xydesk.remote.ui.components.XyNoticeBus
@@ -348,10 +350,13 @@ fun XyDeskSessionScreen(
     var blackScreenChecked by remember { mutableStateOf(false) }
     var connectedSinceMs by remember { mutableStateOf(0L) }
     var zeroFrameStreak by remember { mutableIntStateOf(0) }
+    var everRenderedFrame by remember { mutableStateOf(false) }
     // Anti-black-screen (laporan pemilik 2026-10-15): fallback grafis
     // kompatibel bisa ikut hitam — sebelumnya cek kedua diblokir
     // blackScreenChecked sehingga layar diam hitam selamanya. Sekarang
-    // maksimal 2x reconnect otomatis, lalu layar status jelas.
+    // maksimal 2x reconnect otomatis HANYA jika sejak awal sesi belum ada
+    // satu pun frame yang tergambar (mencegah false-positive relog saat layar
+    // game/loading sedang statis).
     var blackScreenReconnects by remember(profile.id) { mutableIntStateOf(0) }
     var blackScreenFatal by remember { mutableStateOf(false) }
     /** Popup ubah username/password setelah error kredensial. */
@@ -468,33 +473,47 @@ fun XyDeskSessionScreen(
         }
     }
 
+    // Mode Game FPS (Mouse Relatif RawInput 360°): aktif otomatis pada profil
+    // Koneksi PC atau profil Ultra-Low Latency, dan bisa dinyalakan/dimatikan
+    // langsung kapan saja dari panel Input sesi RDP maupun Koneksi PC.
+    var relMouseEnabled by remember(profile.id) {
+        mutableStateOf(
+            runCatching {
+                val o = RdpOptions.of(context, profile.id)
+                (o.pcConnectMode && o.rawInputMouse) ||
+                    (o.streamProfile == id.xydesk.remote.core.XyStreamProfile.ULTRA_LOW_LATENCY && o.rawInputMouse)
+            }.getOrDefault(false),
+        )
+    }
+    var fpsAnchorX by remember { mutableFloatStateOf(640f) }
+    var fpsAnchorY by remember { mutableFloatStateOf(360f) }
+
     LaunchedEffect(state, telemetry.fps) {
         if (state is SessionState.Connected) {
             if (connectedSinceMs == 0L) connectedSinceMs = System.currentTimeMillis()
-            if (telemetry.fps > 0) {
-                // Frame normal: pulihkan grafis penuh bila sebelumnya fallback.
+            val hasFrameNow = telemetry.fps > 0 || controller.peekBitmap() != null
+            if (hasFrameNow) {
+                // Begitu minimal 1 frame sudah pernah tampil di layar, JANGAN PERNAH
+                // memicu black-screen relog saat pemain berada di loading screen / menu statis!
+                everRenderedFrame = true
                 zeroFrameStreak = 0
                 blackScreenFatal = false
                 if (id.xydesk.remote.core.RdpOptions.graphicsFallback(context, profile.id)) {
                     id.xydesk.remote.core.RdpOptions.setGraphicsFallback(context, profile.id, false)
                 }
                 blackScreenChecked = false
-            } else if (System.currentTimeMillis() - connectedSinceMs > 4_000L) {
+            } else if (!everRenderedFrame && !relMouseEnabled && System.currentTimeMillis() - connectedSinceMs > 6_000L) {
                 zeroFrameStreak++
-                // Telemetri 500 ms: 12 sampel tanpa frame = ~6 detik gelap.
-                if (zeroFrameStreak >= 12 && !blackScreenChecked && !userDisconnect) {
+                if (zeroFrameStreak >= 16 && !blackScreenChecked && !userDisconnect) {
                     blackScreenChecked = true
-                    if (blackScreenReconnects < 2) {
+                    if (blackScreenReconnects < 1) {
                         blackScreenReconnects++
-                        // Reset penanda supaya siklus deteksi berjalan lagi pada
-                        // koneksi pengganti; bila masih gelap, sampel kedua
-                        // akan memicu reconnect/fatal berikutnya.
                         blackScreenChecked = false
                         id.xydesk.remote.core.RdpOptions.setGraphicsFallback(context, profile.id, true)
                         notice.show(
                             xyNow(
-                                "Layar hitam terdeteksi — menyambung ulang dengan grafis kompatibel.",
-                                "Black screen detected — reconnecting with compatible graphics.",
+                                "Layar hitam awal terdeteksi — menyambung ulang dengan grafis kompatibel.",
+                                "Initial black screen detected — reconnecting with compatible graphics.",
                             ),
                         )
                         boundInstance = 0L
@@ -502,8 +521,6 @@ fun XyDeskSessionScreen(
                         kotlinx.coroutines.delay(1_200)
                         if (!userDisconnect) manager.connect(activeProfile)
                     } else {
-                        // Fallback pun tetap gelap: berhenti reconnect diam-diam
-                        // dan tunjukkan layar status + pilihan ke pengguna.
                         blackScreenFatal = true
                     }
                 }
@@ -511,6 +528,7 @@ fun XyDeskSessionScreen(
         } else {
             connectedSinceMs = 0L
             zeroFrameStreak = 0
+            everRenderedFrame = false
         }
     }
 
@@ -729,21 +747,6 @@ fun XyDeskSessionScreen(
         onDispose { rawInputBridge.stop() }
     }
 
-    // Mode Game FPS (Mouse Relatif RawInput 360°): aktif otomatis pada profil
-    // Koneksi PC atau profil Ultra-Low Latency, dan bisa dinyalakan/dimatikan
-    // langsung kapan saja dari panel Input sesi RDP maupun Koneksi PC.
-    var relMouseEnabled by remember(profile.id) {
-        mutableStateOf(
-            runCatching {
-                val o = RdpOptions.of(context, profile.id)
-                (o.pcConnectMode && o.rawInputMouse) ||
-                    (o.streamProfile == id.xydesk.remote.core.XyStreamProfile.ULTRA_LOW_LATENCY && o.rawInputMouse)
-            }.getOrDefault(false),
-        )
-    }
-    var fpsAnchorX by remember { mutableFloatStateOf(640f) }
-    var fpsAnchorY by remember { mutableFloatStateOf(360f) }
-
     // Restore remote DPI on each new native instance, and apply user changes
     // through DISP without touching the local zoom slider.
     LaunchedEffect(state, boundInstance, remoteDpi, pendingResize, telemetry.width, telemetry.height) {
@@ -779,16 +782,22 @@ fun XyDeskSessionScreen(
     }
 
     val configuration = LocalConfiguration.current
-    LaunchedEffect(state, configuration.screenWidthDp, configuration.screenHeightDp, viewport) {
+    var lastAutoResizedOrientation by remember { mutableIntStateOf(configuration.orientation) }
+    LaunchedEffect(state, configuration.orientation) {
         if (state !is SessionState.Connected || applyingResolution) return@LaunchedEffect
         if (viewport.width <= 0 || viewport.height <= 0) return@LaunchedEffect
-        if (isPcConnectMode || isConsoleAdminMode) {
+        // Jangan kirim resizeRemote otomatis saat sedang Mode Game FPS (relMouseEnabled)
+        // supaya game fullscreen (GTA SAMP / Valorant / Roblox) tidak ter-reset / relog!
+        if (isPcConnectMode || isConsoleAdminMode || relMouseEnabled) {
             if (autoFit) controller.fitToScreen()
             return@LaunchedEffect
         }
         if (autoFit) controller.fitToScreen()
         kotlinx.coroutines.delay(950)
-        if (state !is SessionState.Connected || applyingResolution) return@LaunchedEffect
+        if (state !is SessionState.Connected || applyingResolution || relMouseEnabled) return@LaunchedEffect
+        val orientChanged = lastAutoResizedOrientation != configuration.orientation
+        lastAutoResizedOrientation = configuration.orientation
+        if (!orientChanged && telemetry.width > 0 && telemetry.height > 0) return@LaunchedEffect
         when (DisplayPrefs.resolution(context, profile.id)) {
             // Otomatis uses conservative 720p instead of forcing FHD on landscape phones.
             DisplayPrefs.AUTOMATIC -> {
@@ -909,11 +918,11 @@ fun XyDeskSessionScreen(
                     true
                 }
                 state is SessionState.Connected -> {
-                    // Ronde 45 (laporan pemilik): balik ke beranda harus bisa
-                    // SATU tekan — back saat sesi hidup langsung memutus dan
-                    // menutup sesi. Tombol "Putuskan" di HUD tetap menampilkan
-                    // dialog konfirmasi supaya sentuhan tak sengaja aman.
-                    requestDisconnect?.invoke()
+                    // Saat sedang bermain game / sesi aktif, swipe tidak sengaja di tepi
+                    // layar Android memicu gesture Back: tampilkan dialog konfirmasi
+                    // (tekan Back sekali lagi atau ketuk Putuskan untuk keluar), sehingga
+                    // tidak langsung keluar/putus tiba-tiba saat main game!
+                    confirmDisconnect = true
                     true
                 }
                 state is SessionState.Connecting || state is SessionState.Authenticating -> {
@@ -1343,22 +1352,54 @@ fun XyDeskSessionScreen(
                     .pointerInput(zoom, remoteWidth, remoteHeight, relMouseEnabled) {
                         awaitPointerEventScope {
                             var lastMousePos: Offset? = null
+                            var activeMouseBtn: XyMouseButton? = null
                             while (true) {
                                 val ev = awaitPointerEvent()
                                 val firstChange = ev.changes.firstOrNull() ?: continue
                                 if (firstChange.type == androidx.compose.ui.input.pointer.PointerType.Mouse) {
+                                    val prev = lastMousePos
+                                    lastMousePos = firstChange.position
+                                    if (prev != null) {
+                                        val d = firstChange.position - prev
+                                        if (d.getDistance() > 0.1f) movePointer(d.x, d.y)
+                                    }
                                     when (ev.type) {
-                                        androidx.compose.ui.input.pointer.PointerEventType.Move -> {
-                                            if (!firstChange.pressed) {
-                                                val prev = lastMousePos
-                                                lastMousePos = firstChange.position
-                                                if (prev != null) {
-                                                    val d = firstChange.position - prev
-                                                    if (d.getDistance() > 0.1f) movePointer(d.x, d.y)
-                                                }
-                                            } else {
-                                                lastMousePos = firstChange.position
+                                        androidx.compose.ui.input.pointer.PointerEventType.Press -> {
+                                            val btn = when {
+                                                ev.buttons.isSecondaryPressed -> XyMouseButton.RIGHT
+                                                ev.buttons.isTertiaryPressed -> XyMouseButton.MIDDLE
+                                                else -> XyMouseButton.LEFT
                                             }
+                                            if (activeMouseBtn != null && activeMouseBtn != btn) {
+                                                sendButton(activeMouseBtn!!, false)
+                                            }
+                                            activeMouseBtn = btn
+                                            sendButton(btn, true)
+                                            ev.changes.forEach { it.consume() }
+                                        }
+                                        androidx.compose.ui.input.pointer.PointerEventType.Release -> {
+                                            val btn = activeMouseBtn ?: XyMouseButton.LEFT
+                                            activeMouseBtn = null
+                                            sendButton(btn, false)
+                                            consumeOneShotKeys()
+                                            ev.changes.forEach { it.consume() }
+                                        }
+                                        androidx.compose.ui.input.pointer.PointerEventType.Move -> {
+                                            if (firstChange.pressed && activeMouseBtn == null) {
+                                                val btn = when {
+                                                    ev.buttons.isSecondaryPressed -> XyMouseButton.RIGHT
+                                                    ev.buttons.isTertiaryPressed -> XyMouseButton.MIDDLE
+                                                    else -> XyMouseButton.LEFT
+                                                }
+                                                activeMouseBtn = btn
+                                                sendButton(btn, true)
+                                            } else if (!firstChange.pressed && activeMouseBtn != null) {
+                                                val btn = activeMouseBtn!!
+                                                activeMouseBtn = null
+                                                sendButton(btn, false)
+                                                consumeOneShotKeys()
+                                            }
+                                            ev.changes.forEach { it.consume() }
                                         }
                                         androidx.compose.ui.input.pointer.PointerEventType.Scroll -> {
                                             val scrollY = firstChange.scrollDelta.y
@@ -2411,6 +2452,9 @@ private suspend fun androidx.compose.ui.input.pointer.PointerInputScope.trackpad
         val holdTimeout = viewConfiguration.longPressTimeoutMillis
         val edgeZonePx = 28.dp.toPx()
         val first = awaitFirstDown(requireUnconsumed = false)
+        if (first.type == androidx.compose.ui.input.pointer.PointerType.Mouse) {
+            return@awaitEachGesture
+        }
         first.consume()
 
         val startedInEdgeScroll = isInRightEdgeScrollZone(

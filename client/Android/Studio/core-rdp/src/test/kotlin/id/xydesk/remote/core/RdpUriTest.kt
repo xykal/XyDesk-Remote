@@ -120,7 +120,9 @@ class RdpUriTest {
 
     @Test
     fun mikrofonIkutSaatDinyalakan() {
-        assertTrue(params(simple(), RdpOptions(microphone = true)).containsKey("microphone"))
+        val p = params(simple(), RdpOptions(microphone = true))
+        assertTrue(p.containsKey("microphone"))
+        assertEquals("sys:opensles,format:1", p["microphone"])
     }
 
     // ---------------------------------------------------------------- perangkat

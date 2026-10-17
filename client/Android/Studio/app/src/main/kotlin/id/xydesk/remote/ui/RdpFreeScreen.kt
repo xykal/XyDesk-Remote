@@ -56,6 +56,7 @@ import id.xydesk.remote.ui.rdp.XyRdpConfig
 import id.xydesk.remote.ui.rdp.XyRdpPhase
 import id.xydesk.remote.ui.rdp.XyRdpSetupStatus
 import id.xydesk.remote.ui.rdp.XyRdpValidatedSession
+import id.xydesk.remote.ui.ssh.XySshTerminalScreen
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -84,7 +85,9 @@ fun RdpFreeScreen(onBack: () -> Unit, onConnect: (ConnectionProfile) -> Unit) {
 
     var token by remember { mutableStateOf<String?>(null) }
     var login by remember { mutableStateOf<String?>(null) }
-    var loginDialog by remember { mutableStateOf(false) }
+    var authWaitingCode by remember { mutableStateOf<String?>(null) }
+    var authWaitingUrl by remember { mutableStateOf<String?>(null) }
+    var authBusy by remember { mutableStateOf(false) }
     var forkReady by remember { mutableStateOf(false) }
     var setupStatus by remember { mutableStateOf<XyRdpSetupStatus?>(null) }
     var busy by remember { mutableStateOf(false) }
@@ -93,7 +96,13 @@ fun RdpFreeScreen(onBack: () -> Unit, onConnect: (ConnectionProfile) -> Unit) {
     // Pilihan utama workflow rdp-6h.yml
     var duration by remember { mutableStateOf(prefs.getString("durasi_menit", "360") ?: "360") }
     var runnerImage by remember { mutableStateOf(prefs.getString("runner", "windows-2022") ?: "windows-2022") }
+    var linuxMode by remember { mutableStateOf(prefs.getString("linux_mode", "desktop") ?: "desktop") }
     var hostname by remember { mutableStateOf(prefs.getString("hostname", "rdpfree") ?: "rdpfree") }
+    var openSshTerminal by remember { mutableStateOf(false) }
+    var sshInitHost by remember { mutableStateOf("") }
+    var sshInitPort by remember { mutableStateOf(22) }
+    var sshInitUser by remember { mutableStateOf("xyadmin") }
+    var sshInitAuto by remember { mutableStateOf(false) }
     var rdpUser by remember { mutableStateOf(prefs.getString("rdp_user", "xyadmin") ?: "xyadmin") }
     var akses by remember { mutableStateOf(prefs.getString("akses", "tailscale") ?: "tailscale") }
     var portmapHost by remember { mutableStateOf(prefs.getString("portmap_host", "") ?: "") }
@@ -135,8 +144,7 @@ fun RdpFreeScreen(onBack: () -> Unit, onConnect: (ConnectionProfile) -> Unit) {
     var confirmAction by remember { mutableStateOf<String?>(null) }
 
     fun openBrowser(url: String) {
-        runCatching { context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url))) }
-            .onFailure { message = "Browser tidak tersedia" }
+        openInAppCustomTab(context, url)
     }
 
     fun copyToClipboard(label: String, text: String) {
@@ -156,6 +164,7 @@ fun RdpFreeScreen(onBack: () -> Unit, onConnect: (ConnectionProfile) -> Unit) {
         prefs.edit()
             .putString("durasi_menit", duration)
             .putString("runner", runnerImage)
+            .putString("linux_mode", linuxMode)
             .putString("hostname", hostname)
             .putString("rdp_user", rdpUser)
             .putString("akses", akses)
@@ -256,6 +265,7 @@ fun RdpFreeScreen(onBack: () -> Unit, onConnect: (ConnectionProfile) -> Unit) {
                         val inputs = JSONObject().apply {
                             put("durasi_menit", duration)
                             put("runner", runnerImage)
+                            put("linux_mode", linuxMode)
                             put("hostname", hostname)
                             put("rdp_user", rdpUser)
                             put("akses", akses)
@@ -314,25 +324,23 @@ fun RdpFreeScreen(onBack: () -> Unit, onConnect: (ConnectionProfile) -> Unit) {
         }
     }
 
+    if (openSshTerminal) {
+        XySshTerminalScreen(
+            initialHost = sshInitHost,
+            initialPort = sshInitPort,
+            initialUser = sshInitUser,
+            initialPassword = password,
+            initialLabel = if (sshInitHost.isNotBlank()) "XyRDP Linux ($sshInitHost)" else "",
+            autoConnectOnStart = sshInitAuto,
+            onBack = { openSshTerminal = false },
+        )
+        return
+    }
+
     Column(Modifier.fillMaxSize()) {
         XyTopBar(
             title = "Buat RDP Cloud",
             onBack = onBack,
-            actions = {
-                XyHeaderAccountActions(
-                    onStateChanged = {
-                        val saved = vault.get(XyRdpConfig.VAULT_PAT_ID)
-                        val verified = getVerifiedGitHubLogin(context)
-                        if (saved != null && verified != null) {
-                            token = saved
-                            login = verified
-                        } else if (saved == null) {
-                            token = null
-                            login = null
-                        }
-                    },
-                )
-            },
         )
         Column(
             Modifier.weight(1f).verticalScroll(rememberScrollState()).padding(16.dp),
@@ -355,20 +363,82 @@ fun RdpFreeScreen(onBack: () -> Unit, onConnect: (ConnectionProfile) -> Unit) {
                         horizontalArrangement = Arrangement.spacedBy(10.dp),
                     ) {
                         GitHubLogoIcon(size = 24.dp, tint = MaterialTheme.colorScheme.primary)
-                        Text("RDP Gratis dari GitHub Actions-mu", style = MaterialTheme.typography.titleMedium)
+                        Text("RDP Cloud Gratis (Windows & Linux)", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
                     }
                     Spacer(Modifier.height(6.dp))
                     Text(
-                        "Login 1-klik dengan akun GitHub-mu (tanpa perlu ketik kode 8 digit). " +
-                            "App otomatis menyiapkan repo template XyRDP, memvalidasi sesi & tahapan workflow " +
-                            "secara real-time, lalu menampilkan monitor RAM, disk, CPU, dan sisa waktu.",
+                        "Login langsung lewat browser di dalam aplikasi (Chrome Custom Tab dengan menu ⋮). " +
+                            "Cukup klik Authorize di halaman GitHub — kode verifikasi otomatis disalin dan " +
+                            "akunmu langsung tersambung tanpa ribet.",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
+                    if (!authWaitingCode.isNullOrBlank()) {
+                        Spacer(Modifier.height(10.dp))
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clip(RoundedCornerShape(12.dp))
+                                .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.12f))
+                                .padding(horizontal = 12.dp, vertical = 10.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                        ) {
+                            Column(Modifier.weight(1f)) {
+                                Text(
+                                    "Kode Otorisasi (Sudah Disalin Otomatis):",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                )
+                                Text(
+                                    authWaitingCode.orEmpty(),
+                                    style = MaterialTheme.typography.titleLarge,
+                                    fontWeight = FontWeight.ExtraBold,
+                                    color = MaterialTheme.colorScheme.primary,
+                                )
+                            }
+                            XyPillButton(
+                                "Buka Browser ↗",
+                                {
+                                    authWaitingUrl?.let { openInAppCustomTab(context, it) }
+                                },
+                                primary = false,
+                                compact = true,
+                            )
+                        }
+                    }
                     Spacer(Modifier.height(12.dp))
                     XyPillButton(
-                        "Login GitHub Instan (Tanpa Ketik Kode)",
-                        { loginDialog = true },
+                        if (authBusy) "Menunggu klik Authorize di Browser…" else "Login dengan GitHub (Langsung Authorize)",
+                        {
+                            if (!authBusy) {
+                                authBusy = true
+                                message = "Membuka browser otorisasi GitHub di dalam aplikasi…"
+                                scope.launch {
+                                    performGitHubInAppBrowserLogin(
+                                        context = context,
+                                        onCodeReady = { code, url ->
+                                            authWaitingCode = code
+                                            authWaitingUrl = url
+                                        },
+                                        onSuccess = { tok, user ->
+                                            authBusy = false
+                                            authWaitingCode = null
+                                            authWaitingUrl = null
+                                            token = tok
+                                            login = user
+                                            message = "Berhasil terhubung ke GitHub sebagai @$user!"
+                                        },
+                                        onError = { err ->
+                                            authBusy = false
+                                            message = err
+                                        },
+                                    )
+                                }
+                            } else {
+                                authWaitingUrl?.let { openInAppCustomTab(context, it) }
+                            }
+                        },
                         primary = true,
                         enabled = !busy,
                         modifier = Modifier.fillMaxWidth(),
@@ -724,10 +794,88 @@ fun RdpFreeScreen(onBack: () -> Unit, onConnect: (ConnectionProfile) -> Unit) {
                     }
 
                     // =========================================================
-                    // 3. PENGATURAN SESI & SEMUA CHECKLIST / TOGGLE LENGKAP
+                    // 3. SISTEM OPERASI, IMAGE & CHECKLIST FITUR LENGKAP
                     // =========================================================
-                    XySectionLabel("3. Pengaturan Sesi & Checklist Fitur")
+                    XySectionLabel("3. Sistem Operasi, Image & Pengaturan Sesi")
                     XyCard(Modifier.fillMaxWidth()) {
+                        val isLinuxRunner = runnerImage.startsWith("ubuntu", ignoreCase = true)
+                        val isLinuxPolos = isLinuxRunner && linuxMode == "polos"
+                        Text(
+                            "Pilih Sistem Operasi Cloud RDP / VPS:",
+                            style = MaterialTheme.typography.labelLarge,
+                            fontWeight = FontWeight.Bold,
+                        )
+                        Spacer(Modifier.height(6.dp))
+                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            XyPillButton(
+                                "Windows Server",
+                                {
+                                    runnerImage = "windows-2022"
+                                    linuxMode = "desktop"
+                                    saveSettings()
+                                },
+                                primary = !isLinuxRunner,
+                                compact = true,
+                                enabled = !busy,
+                                modifier = Modifier.weight(1f),
+                            )
+                            XyPillButton(
+                                "Linux Desktop (XFCE4)",
+                                {
+                                    if (!isLinuxRunner) runnerImage = "ubuntu-24.04"
+                                    linuxMode = "desktop"
+                                    saveSettings()
+                                },
+                                primary = isLinuxRunner && !isLinuxPolos,
+                                compact = true,
+                                enabled = !busy,
+                                modifier = Modifier.weight(1f),
+                            )
+                        }
+                        Spacer(Modifier.height(6.dp))
+                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            XyPillButton(
+                                "Linux Polos (Tanpa XFCE4 · SSH VPS)",
+                                {
+                                    if (!isLinuxRunner) runnerImage = "ubuntu-24.04"
+                                    linuxMode = "polos"
+                                    saveSettings()
+                                },
+                                primary = isLinuxPolos,
+                                compact = true,
+                                enabled = !busy,
+                                modifier = Modifier.weight(1f),
+                            )
+                            XyPillButton(
+                                "Terminal SSH / VPS",
+                                {
+                                    val live = validatedSession?.takeIf { it.isVerifiedLive && !it.validatedHost.isNullOrBlank() }
+                                    sshInitHost = live?.validatedHost.orEmpty()
+                                    sshInitPort = if (live != null && live.access?.linuxMode == "polos") live.validatedPort else 22
+                                    sshInitUser = live?.access?.rdpUser ?: rdpUser.ifBlank { "xyadmin" }
+                                    sshInitAuto = false
+                                    openSshTerminal = true
+                                },
+                                primary = false,
+                                compact = true,
+                                modifier = Modifier.weight(1f),
+                            )
+                        }
+                        Spacer(Modifier.height(6.dp))
+                        Text(
+                            when {
+                                isLinuxPolos ->
+                                    "Mode Linux Polos aktif ($runnerImage · Tanpa XFCE4): Server SSH murni di port :22 & :3389, waktu boot super kilat ~20 detik, cocok untuk bot, Docker, coding, & VPS terminal."
+                                isLinuxRunner ->
+                                    "Mode Linux Desktop aktif ($runnerImage): XFCE4 + XRDP :3389 + SSH :22 + Virtual Mic PulseAudio, waktu boot ~90 detik, penyimpanan /persist anti-reset."
+                                else ->
+                                    "Mode Windows Server aktif ($runnerImage): Mendukung penuh GTA SA-MP SilentPatch, Minecraft OpenGL 4.6 D3D12, On-Mic Audio Capture, dan Dual-Storage Persistence."
+                            },
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                        Spacer(Modifier.height(10.dp))
+
                         // Tombol Preset Cepat
                         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                             XyPillButton(
@@ -752,20 +900,24 @@ fun RdpFreeScreen(onBack: () -> Unit, onConnect: (ConnectionProfile) -> Unit) {
                                 modifier = Modifier.weight(1f),
                             )
                             XyPillButton(
-                                "🎮 Profil Game Lengkap",
+                                if (isLinuxRunner) "🐧 Profil Linux Lengkap" else "🎮 Profil Game Lengkap",
                                 {
                                     autoRenew = true
                                     xydeskBoost = true
                                     microphone = true
                                     storageBoost = true
                                     debloat = "ringan"
-                                    sampDeps = true
-                                    win10Theme = true
+                                    sampDeps = !isLinuxRunner
+                                    win10Theme = !isLinuxRunner
                                     ekstraDesktop = true
                                     grafis = "software"
-                                    mcJavaReady = true
+                                    mcJavaReady = !isLinuxRunner
                                     saveSettings()
-                                    message = "Profil Game Lengkap (GTA SA-MP SilentPatch + Minecraft OpenGL 4.6 + Anti-Reset) diterapkan."
+                                    message = if (isLinuxRunner) {
+                                        "Profil Linux Desktop Lengkap (XFCE4 + Chrome + VS Code + Wine + Storage Boost + Anti-Reset) diterapkan."
+                                    } else {
+                                        "Profil Game Lengkap (GTA SA-MP SilentPatch + Minecraft OpenGL 4.6 + Anti-Reset) diterapkan."
+                                    }
                                 },
                                 primary = false,
                                 compact = true,
@@ -783,7 +935,7 @@ fun RdpFreeScreen(onBack: () -> Unit, onConnect: (ConnectionProfile) -> Unit) {
                                 modifier = Modifier.weight(1f),
                             )
                             XyPillButton(
-                                "Image: $runnerImage",
+                                "OS/Image: $runnerImage",
                                 { chooseRunner = true },
                                 primary = false,
                                 enabled = !busy,
@@ -1135,17 +1287,19 @@ fun RdpFreeScreen(onBack: () -> Unit, onConnect: (ConnectionProfile) -> Unit) {
                     }
 
                     // =========================================================
-                    // 6. HUBUNGKAN KE SESI RDP
+                    // 6. HUBUNGKAN KE SESI RDP / TERMINAL SSH
                     // =========================================================
                     val vsReady = validatedSession?.takeIf { it.isVerifiedLive && !it.validatedHost.isNullOrBlank() }
                     if (vsReady != null && vsReady.access != null) {
                         val a = vsReady.access
                         val hostToConnect = vsReady.validatedHost!!
                         val portToConnect = vsReady.validatedPort
-                        XySectionLabel("6. Hubungkan ke RDP")
+                        val isSessionPolos = a.linuxMode == "polos" || a.osName.contains("Polos", ignoreCase = true) || portToConnect == 22
+                        val isSessionLinux = isSessionPolos || a.osName.contains("Ubuntu", ignoreCase = true) || a.osName.contains("Linux", ignoreCase = true)
+                        XySectionLabel(if (isSessionPolos) "6. Hubungkan ke Terminal SSH (Linux Polos)" else "6. Hubungkan ke RDP / SSH")
                         XyCard(Modifier.fillMaxWidth()) {
                             Text("$hostToConnect:$portToConnect", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
-                            Text("Username: ${a.rdpUser} · Mode: ${vsReady.validatedTransport ?: a.mode}")
+                            Text("Username: ${a.rdpUser} · OS: ${a.osName} · Mode: ${vsReady.validatedTransport ?: a.mode}")
                             if ((vsReady.validatedTransport ?: a.mode) == "tailscale") {
                                 Text(
                                     "Pastikan aplikasi Tailscale di HP sudah ON dan login ke tailnet yang sama.",
@@ -1156,36 +1310,74 @@ fun RdpFreeScreen(onBack: () -> Unit, onConnect: (ConnectionProfile) -> Unit) {
                             Spacer(Modifier.height(8.dp))
                             XyField(password, { password = it }, "Password RDP_PASSWORD", isPassword = true)
                             Spacer(Modifier.height(8.dp))
-                            XyPillButton(
-                                "Hubungkan RDP (120 FPS Boost)",
-                                {
-                                    busy = true
-                                    scope.launch {
-                                        try {
-                                            val fresh = XyRdpClient.pollValidatedSession(token!!, login!!)
-                                            check(fresh.isVerifiedLive && !fresh.validatedHost.isNullOrBlank()) {
-                                                "Sesi tidak lagi aktif di GitHub Actions"
-                                            }
+                            if (isSessionPolos) {
+                                XyPillButton(
+                                    "Hubungkan Terminal SSH (Linux Polos)",
+                                    {
+                                        if (rememberPasswordLocal && password.isNotBlank()) {
+                                            vault.put("xyrdp.saved.rdp_password", password)
+                                        }
+                                        sshInitHost = hostToConnect
+                                        sshInitPort = portToConnect
+                                        sshInitUser = a.rdpUser
+                                        sshInitAuto = true
+                                        openSshTerminal = true
+                                    },
+                                    primary = true,
+                                    enabled = !busy && password.isNotBlank(),
+                                    modifier = Modifier.fillMaxWidth(),
+                                )
+                            } else {
+                                XyPillButton(
+                                    "Hubungkan RDP (120 FPS Boost + On-Mic)",
+                                    {
+                                        busy = true
+                                        scope.launch {
+                                            try {
+                                                val fresh = XyRdpClient.pollValidatedSession(token!!, login!!)
+                                                check(fresh.isVerifiedLive && !fresh.validatedHost.isNullOrBlank()) {
+                                                    "Sesi tidak lagi aktif di GitHub Actions"
+                                                }
+                                                if (rememberPasswordLocal && password.isNotBlank()) {
+                                                    vault.put("xyrdp.saved.rdp_password", password)
+                                                }
+                                                val profile = ConnectionProfile(
+                                                    host = fresh.validatedHost,
+                                                    port = fresh.validatedPort,
+                                                    username = fresh.access?.rdpUser ?: a.rdpUser,
+                                                    password = password,
+                                                    label = "XyRDP (${fresh.access?.hostname ?: "Cloud"})",
+                                                    key = "xyrdp:${login}",
+                                                )
+                                                RdpOptions.of(context, profile.id).forRdpFree(microphone).write(context, profile.id)
+                                                onConnect(profile)
+                                            } catch (e: Exception) { error(e) } finally { busy = false }
+                                        }
+                                    },
+                                    primary = true,
+                                    enabled = !busy && password.isNotBlank(),
+                                    modifier = Modifier.fillMaxWidth(),
+                                )
+                                if (isSessionLinux) {
+                                    Spacer(Modifier.height(8.dp))
+                                    XyPillButton(
+                                        "Buka Terminal SSH Pendamping (:22)",
+                                        {
                                             if (rememberPasswordLocal && password.isNotBlank()) {
                                                 vault.put("xyrdp.saved.rdp_password", password)
                                             }
-                                            val profile = ConnectionProfile(
-                                                host = fresh.validatedHost,
-                                                port = fresh.validatedPort,
-                                                username = fresh.access?.rdpUser ?: a.rdpUser,
-                                                password = password,
-                                                label = "XyRDP (${fresh.access?.hostname ?: "Cloud"})",
-                                                key = "xyrdp:${login}",
-                                            )
-                                            RdpOptions.of(context, profile.id).forRdpFree(microphone).write(context, profile.id)
-                                            onConnect(profile)
-                                        } catch (e: Exception) { error(e) } finally { busy = false }
-                                    }
-                                },
-                                primary = true,
-                                enabled = !busy && password.isNotBlank(),
-                                modifier = Modifier.fillMaxWidth(),
-                            )
+                                            sshInitHost = hostToConnect
+                                            sshInitPort = 22
+                                            sshInitUser = a.rdpUser
+                                            sshInitAuto = true
+                                            openSshTerminal = true
+                                        },
+                                        primary = false,
+                                        enabled = !busy && password.isNotBlank(),
+                                        modifier = Modifier.fillMaxWidth(),
+                                    )
+                                }
+                            }
                         }
                     }
                 }
@@ -1217,17 +1409,64 @@ fun RdpFreeScreen(onBack: () -> Unit, onConnect: (ConnectionProfile) -> Unit) {
         }
     }
     if (chooseRunner) {
-        XyOverlay(title = "Image Windows Runner", onDismiss = { chooseRunner = false }) {
-            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        XyOverlay(title = "Pilih OS & Image Runner", onDismiss = { chooseRunner = false }) {
+            Column(
+                Modifier.heightIn(max = 420.dp).verticalScroll(rememberScrollState()),
+                verticalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                Text(
+                    "Windows Server (Desktop Penuh + Game Win64)",
+                    style = MaterialTheme.typography.labelMedium,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.primary,
+                )
                 listOf(
-                    "windows-2022" to "Windows Server 2022 (Paling Stabil & Direkomendasikan)",
-                    "windows-2025" to "Windows Server 2025 (Terbaru)",
-                    "windows-latest" to "windows-latest (Default GitHub)",
+                    "windows-2022" to "Windows Server 2022 (Paling Stabil · GTA SA-MP & Minecraft)",
+                    "windows-2025" to "Windows Server 2025 (Kernel Terbaru & Performa I/O Tinggi)",
+                    "windows-latest" to "windows-latest (Otomatis Image Windows Terbaru GitHub)",
                 ).forEach { (id, label) ->
                     XyPillButton(
                         label,
-                        { runnerImage = id; saveSettings(); chooseRunner = false },
-                        primary = runnerImage == id,
+                        { runnerImage = id; linuxMode = "desktop"; saveSettings(); chooseRunner = false },
+                        primary = runnerImage == id && !runnerImage.startsWith("ubuntu"),
+                        modifier = Modifier.fillMaxWidth(),
+                    )
+                }
+                Spacer(Modifier.height(6.dp))
+                Text(
+                    "Linux Desktop (XFCE4 + XRDP :3389 · Boot Kilat ~90 Detik)",
+                    style = MaterialTheme.typography.labelMedium,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.primary,
+                )
+                listOf(
+                    "ubuntu-24.04" to "Ubuntu 24.04 LTS Desktop (XFCE4 + XRDP + SSH :22)",
+                    "ubuntu-22.04" to "Ubuntu 22.04 LTS Desktop (XFCE4 LTS Klasik Kompatibilitas Tinggi)",
+                    "ubuntu-latest" to "ubuntu-latest Desktop (Otomatis Image Ubuntu Terbaru)",
+                ).forEach { (id, label) ->
+                    XyPillButton(
+                        label,
+                        { runnerImage = id; linuxMode = "desktop"; saveSettings(); chooseRunner = false },
+                        primary = runnerImage == id && linuxMode == "desktop",
+                        modifier = Modifier.fillMaxWidth(),
+                    )
+                }
+                Spacer(Modifier.height(6.dp))
+                Text(
+                    "Linux Polos Tanpa XFCE4 (Headless SSH VPS :22 & :3389 · Boot ~20 Detik)",
+                    style = MaterialTheme.typography.labelMedium,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.primary,
+                )
+                listOf(
+                    "ubuntu-24.04" to "Ubuntu 24.04 LTS Polos (Server SSH Murni Tanpa GUI)",
+                    "ubuntu-22.04" to "Ubuntu 22.04 LTS Polos (Server SSH Murni Tanpa GUI)",
+                    "ubuntu-latest" to "ubuntu-latest Polos (Server SSH Murni Tanpa GUI)",
+                ).forEach { (id, label) ->
+                    XyPillButton(
+                        label,
+                        { runnerImage = id; linuxMode = "polos"; saveSettings(); chooseRunner = false },
+                        primary = runnerImage == id && linuxMode == "polos",
                         modifier = Modifier.fillMaxWidth(),
                     )
                 }
@@ -1303,24 +1542,6 @@ fun RdpFreeScreen(onBack: () -> Unit, onConnect: (ConnectionProfile) -> Unit) {
             dismissLabel = "Batal",
             onDismiss = { confirmAction = null },
         )
-    }
-    if (loginDialog) {
-        XyOverlay(title = "Login GitHub Instan", onDismiss = { loginDialog = false }) {
-            GitHubDeviceFlowPanel(
-                onCancel = { loginDialog = false },
-                onSuccess = { tok, user ->
-                    scope.launch {
-                        vault.put(XyRdpConfig.VAULT_PAT_ID, tok)
-                        token = tok
-                        login = user
-                        saveVerifiedGitHubLogin(context, user)
-                        loginDialog = false
-                        message = "Login berhasil: @$user"
-                    }
-                },
-                onError = { message = it },
-            )
-        }
     }
 }
 

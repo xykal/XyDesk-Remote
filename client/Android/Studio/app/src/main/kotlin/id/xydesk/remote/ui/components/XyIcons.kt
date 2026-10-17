@@ -700,4 +700,77 @@ object XyIcons {
         lineTo(6f, 20.5f); close()
         moveTo(14f, 3.5f); lineTo(14f, 8f); lineTo(18.5f, 8f)
     }
+
+    /** Globe: terjemahan multi-bahasa & jaringan global. */
+    val Globe: ImageVector = xyIcon("XyGlobe") {
+        moveTo(12f, 3.5f)
+        curveTo(16.7f, 3.5f, 20.5f, 7.3f, 20.5f, 12f)
+        curveTo(20.5f, 16.7f, 16.7f, 20.5f, 12f, 20.5f)
+        curveTo(7.3f, 20.5f, 3.5f, 16.7f, 3.5f, 12f)
+        curveTo(3.5f, 7.3f, 7.3f, 3.5f, 12f, 3.5f)
+        close()
+        moveTo(3.8f, 12f); lineTo(20.2f, 12f)
+        moveTo(12f, 3.5f)
+        curveTo(14.8f, 6.2f, 14.8f, 17.8f, 12f, 20.5f)
+        curveTo(9.2f, 17.8f, 9.2f, 6.2f, 12f, 3.5f)
+        close()
+    }
+
+    /** Share: bagikan pesan / ruang chat global. */
+    val Share: ImageVector = xyIcon("XyShare") {
+        moveTo(18f, 5f)
+        arcToRelative(2.2f, 2.2f, 0f, true, false, 0.01f, 0f)
+        moveTo(6f, 12f)
+        arcToRelative(2.2f, 2.2f, 0f, true, false, 0.01f, 0f)
+        moveTo(18f, 19f)
+        arcToRelative(2.2f, 2.2f, 0f, true, false, 0.01f, 0f)
+        moveTo(8f, 10.9f); lineTo(16f, 6.1f)
+        moveTo(8f, 13.1f); lineTo(16f, 17.9f)
+    }
+
+    /** Camera: ganti foto profil / kirim foto di chat. */
+    val Camera: ImageVector = xyIcon("XyCamera") {
+        moveTo(3.5f, 7.5f); lineTo(7.5f, 7.5f); lineTo(9.2f, 5f); lineTo(14.8f, 5f)
+        lineTo(16.5f, 7.5f); lineTo(20.5f, 7.5f); lineTo(20.5f, 19f); lineTo(3.5f, 19f); close()
+        moveTo(12f, 9.8f)
+        curveTo(13.9f, 9.8f, 15.4f, 11.3f, 15.4f, 13.2f)
+        curveTo(15.4f, 15.1f, 13.9f, 16.6f, 12f, 16.6f)
+        curveTo(10.1f, 16.6f, 8.6f, 15.1f, 8.6f, 13.2f)
+        curveTo(8.6f, 11.3f, 10.1f, 9.8f, 12f, 9.8f)
+        close()
+    }
+
+    /** Send: pesawat kertas vektor untuk kirim pesan. */
+    val Send: ImageVector = xyIcon("XySend") {
+        moveTo(20.5f, 4f); lineTo(10.5f, 13.8f)
+        moveTo(20.5f, 4f); lineTo(14.2f, 20.5f); lineTo(10.5f, 13.8f); lineTo(3.5f, 10.2f); close()
+    }
+
+    /** Chat: gelembung obrolan vektor murni. */
+    val Chat: ImageVector = xyIcon("XyChat") {
+        moveTo(4.5f, 5.5f); lineTo(19.5f, 5.5f); lineTo(19.5f, 16f)
+        lineTo(9.5f, 16f); lineTo(5f, 19.8f); lineTo(5f, 16f); lineTo(4.5f, 16f); close()
+        moveTo(8.5f, 9.5f); lineTo(15.5f, 9.5f)
+        moveTo(8.5f, 12.5f); lineTo(13f, 12.5f)
+    }
+
+    /** Edit: pensil vektor untuk ubah nama. */
+    val Edit: ImageVector = xyIcon("XyEdit") {
+        moveTo(15.5f, 4.5f); lineTo(19.5f, 8.5f); lineTo(8.5f, 19.5f)
+        lineTo(4.5f, 19.5f); lineTo(4.5f, 15.5f); close()
+        moveTo(13.5f, 6.5f); lineTo(17.5f, 10.5f)
+    }
+
+    /** Key: kunci kode pemulihan akun. */
+    val Key: ImageVector = xyIcon("XyKey") {
+        moveTo(8.5f, 8.5f)
+        curveTo(10.7f, 8.5f, 12.5f, 10.3f, 12.5f, 12.5f)
+        curveTo(12.5f, 14.7f, 10.7f, 16.5f, 8.5f, 16.5f)
+        curveTo(6.3f, 16.5f, 4.5f, 14.7f, 4.5f, 12.5f)
+        curveTo(4.5f, 10.3f, 6.3f, 8.5f, 8.5f, 8.5f)
+        close()
+        moveTo(12.5f, 12.5f); lineTo(20.5f, 12.5f)
+        moveTo(17.5f, 12.5f); lineTo(17.5f, 15.5f)
+        moveTo(20f, 12.5f); lineTo(20f, 16f)
+    }
 }

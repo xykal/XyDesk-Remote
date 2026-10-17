@@ -81,8 +81,7 @@ internal fun XyBottomNav(
     Box(
         modifier = modifier
             .fillMaxWidth()
-            .navigationBarsPadding()
-            .padding(horizontal = 20.dp, vertical = 12.dp),
+            .padding(horizontal = 20.dp, vertical = 10.dp),
     ) {
         Row(
             modifier = Modifier

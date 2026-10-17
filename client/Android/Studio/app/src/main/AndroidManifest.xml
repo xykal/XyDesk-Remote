@@ -67,7 +67,7 @@
             android:exported="true"
             android:label="@string/app_name"
             android:theme="@style/Theme.XyDeskHome"
-            android:configChanges="orientation|keyboardHidden|screenSize|smallestScreenSize|density|screenLayout">
+            android:configChanges="orientation|keyboard|keyboardHidden|navigation|touchscreen|screenSize|smallestScreenSize|density|screenLayout|uiMode|fontScale|layoutDirection|colorMode|mcc|mnc">
             <intent-filter android:label="@string/app_name">
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
@@ -83,19 +83,21 @@
         <activity
             android:name="id.xydesk.remote.ui.XyDeskSessionActivity"
             android:exported="false"
+            android:launchMode="singleTask"
             android:label="Sesi RDP"
             android:theme="@style/Theme.XyDeskHome"
             android:windowSoftInputMode="adjustNothing"
-            android:configChanges="orientation|keyboardHidden|screenSize|smallestScreenSize|density|screenLayout" />
+            android:configChanges="orientation|keyboard|keyboardHidden|navigation|touchscreen|screenSize|smallestScreenSize|density|screenLayout|uiMode|fontScale|layoutDirection|colorMode|mcc|mnc" />
 
         <!-- Sesi PC-stream produksi (host XyDesk via hub signaling). -->
         <activity
             android:name="id.xydesk.remote.ui.PcStreamSessionActivity"
             android:exported="false"
+            android:launchMode="singleTask"
             android:label="Sesi PC Stream"
             android:theme="@style/Theme.XyDeskHome"
             android:windowSoftInputMode="adjustNothing"
-            android:configChanges="orientation|keyboardHidden|screenSize|smallestScreenSize|density|screenLayout" />
+            android:configChanges="orientation|keyboard|keyboardHidden|navigation|touchscreen|screenSize|smallestScreenSize|density|screenLayout|uiMode|fontScale|layoutDirection|colorMode|mcc|mnc" />
 
         <!-- Konfigurasi widget quick-connect: dipanggil launcher saat widget
              dipasang, karena itu harus exported. -->

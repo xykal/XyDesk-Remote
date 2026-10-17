@@ -59,7 +59,9 @@ object RdpUri {
         if (options.audioMode == XyAudioMode.DEVICE) {
             out += "sound" to "sys:opensles,format:1,quality:high"
         }
-        if (options.microphone && !options.pcConnectMode) out += "microphone" to ""
+        if (options.microphone && !options.pcConnectMode) {
+            out += "microphone" to "sys:opensles,format:1"
+        }
 
         out += "clipboard" to if (options.clipboard) "+" else "-"
         if (options.localDrive && !options.pcConnectMode) out += "drive" to "XyDesk"

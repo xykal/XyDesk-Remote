@@ -58,10 +58,10 @@
       "name": "XyDesk Remote",
       "applicationCategory": "UtilitiesApplication",
       "operatingSystem": "Android 6.0 and later",
-      "softwareVersion": "1.1.8",
+      "softwareVersion": "1.1.17",
       "url": "https://www.xydeskremote.biz.id/",
       "downloadUrl": "https://github.com/xykal/XyDesk-Remote/releases/latest",
-      "description": "Klien RDP Android untuk mengakses PC Windows, dengan kontrol sentuh, keyboard, clipboard, audio, dan pilihan monitor.",
+      "description": "Klien RDP & Terminal SSH-2 Android dengan On-Mic, Buat RDP Cloud Gratis (Windows, Linux XFCE4, Linux Polos SSH), Chat Global E2EE Liquid Glass (.webp.crypto15), dan Native GUI Host Agent.",
       "author": {
         "@id": "https://www.xydeskremote.biz.id/#organization"
       },
@@ -1151,9 +1151,73 @@
       }
     }
 
-    /* Polesan 2026-10-10: super-responsif & halus. */
+    /* Polesan 2026-10-17: Liquid Glass Monokrom & Grid Ekosistem Baru */
     html { font-size: clamp(15px, 14.5px + 0.35vw, 17px); }
     .container { padding-inline: clamp(14px, 4vw, 32px); }
+    .liquid-grid {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 16px;
+      margin-top: 18px;
+    }
+    .liquid-card {
+      position: relative;
+      overflow: hidden;
+      border-radius: 18px;
+      padding: clamp(18px, 2.6vw, 24px);
+      background: linear-gradient(155deg, rgba(255,255,255,0.07) 0%, rgba(18,18,24,0.72) 48%, rgba(12,12,16,0.88) 100%);
+      border: 1px solid rgba(255,255,255,0.16);
+      box-shadow: 0 18px 42px rgba(0,0,0,0.42), inset 0 1px 0 rgba(255,255,255,0.22);
+      backdrop-filter: blur(18px);
+      -webkit-backdrop-filter: blur(18px);
+    }
+    .liquid-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 4px 10px;
+      border-radius: 999px;
+      font-size: 11px;
+      font-weight: 700;
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
+      background: rgba(255,255,255,0.10);
+      border: 1px solid rgba(255,255,255,0.20);
+      color: var(--text);
+      margin-bottom: 10px;
+    }
+    .liquid-card h3 {
+      font-size: clamp(15.5px, 1.85vw, 18px);
+      font-weight: 800;
+      letter-spacing: -0.02em;
+      margin-bottom: 8px;
+      color: var(--text);
+    }
+    .liquid-card p {
+      font-size: clamp(13px, 1.45vw, 14px);
+      color: var(--text-dim);
+      line-height: 1.62;
+    }
+    .liquid-cmd {
+      margin-top: 12px;
+      padding: 10px 12px;
+      border-radius: 10px;
+      background: rgba(8,8,10,0.72);
+      border: 1px solid rgba(255,255,255,0.12);
+      font-size: 12px;
+      overflow-x: auto;
+      white-space: nowrap;
+      color: var(--text);
+    }
+    .liquid-actions {
+      margin-top: 12px;
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+    }
+    @media (max-width: 860px) {
+      .liquid-grid { grid-template-columns: 1fr; }
+    }
     a:focus-visible, button:focus-visible, .pill-btn:focus-visible {
       outline: 2px solid var(--line-strong);
       outline-offset: 3px;
@@ -1189,7 +1253,7 @@
           <img src="/favicon.png" alt="Logo XyDesk Remote" style="width:30px;height:30px;border-radius:8px;flex:none;" />
           <span style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">XyDesk Remote</span>
         </span>
-        <span class="brand-tag mono" data-dyn="ver">Ver 1.1.8</span>
+        <span class="brand-tag mono" data-dyn="ver">Ver 1.1.17</span>
       </a>
       <nav class="nav-row" aria-label="Navigasi Utama">
         <a href="#download" class="pill-btn primary" data-i18n="nav.download">Unduh</a>
@@ -1255,20 +1319,20 @@
     <!-- Editorial Intro -->
     <section class="intro">
       <div class="container">
-        <div class="intro-meta mono" data-dyn="intro-meta">Klien RDP Android · Untuk PC Windows &amp; server · APK v1.1.8</div>
-        <h1 data-i18n="intro.title">Remote Desktop (RDP) untuk Mengakses PC Windows dari Android</h1>
+        <div class="intro-meta mono" data-dyn="intro-meta">Klien RDP &amp; SSH-2 Android · Windows &amp; Linux VPS · APK v1.1.17</div>
+        <h1 data-i18n="intro.title">Remote Desktop (RDP), Terminal SSH-2 &amp; Cloud RDP dari Android</h1>
         <p data-i18n="intro.lead">
-          Hubungkan perangkat Android ke PC atau server Windows yang kamu miliki atau kelola. XyDesk Remote adalah klien RDP Android berbasis FreeRDP 3, dengan kontrol sentuh, keyboard, clipboard, audio, dan pilihan monitor. Host Agent atau mode Koneksi PC masih eksperimental; untuk RDP standar, aplikasi ini tidak memerlukan Host Agent.
+          Hubungkan perangkat Android ke PC Windows, RDP Cloud (Windows / Linux Desktop XFCE4 / Linux Polos SSH), maupun VPS Linux. Dilengkapi dukungan penuh <strong>On-Mic (Mikrofon dua arah)</strong>, <strong>Floating Chat Sesi berdesain Liquid Glass Monokrom + Stiker Custom (.webp.crypto15)</strong>, serta <strong>Windows Host Agent Native GUI</strong> dengan Clean ID/Password, Enkripsi E2EE, dan Virtual Device 120Hz.
         </p>
         <div class="intro-actions">
           <a href="#download" class="pill-btn primary lg" data-i18n="intro.cta.dl">
             Unduh APK Resmi
           </a>
-          <a href="#changelog" class="pill-btn lg" data-i18n="intro.cta.cl">
-            Lihat Changelog
+          <a href="#ecosystem-new" class="pill-btn lg">
+            Setup On-Mic &amp; Fitur Baru
           </a>
           <a href="host.html" class="pill-btn lg" data-i18n="intro.cta.host">
-            Setup XyDesk Host (PC Windows)
+            Windows Host Agent (Native GUI)
           </a>
         </div>
         <div class="intro-direct-dl" role="group" aria-label="Unduhan langsung APK per ABI">
@@ -1305,23 +1369,85 @@
         <div class="ledger">
           <div class="ledger-cell">
             <div class="ledger-k" data-i18n="led.1.k">Mesin Protokol</div>
-            <div class="ledger-v mono">FreeRDP 3 · NLA / RDP</div>
-            <div class="ledger-sub" data-i18n="led.1.s">RDP · koneksi Windows</div>
+            <div class="ledger-v mono">FreeRDP 3 · SSH-2 · QUIC</div>
+            <div class="ledger-sub" data-i18n="led.1.s">RDP Windows/Linux &amp; Terminal VPS</div>
           </div>
           <div class="ledger-cell">
-            <div class="ledger-k" data-i18n="led.2.k">Multi-Layar &amp; Sesi</div>
-            <div class="ledger-v mono">Multi-monitor</div>
-            <div class="ledger-sub" data-i18n="led.2.s">Pilih layar &amp; resolusi</div>
+            <div class="ledger-k" data-i18n="led.2.k">Audio &amp; On-Mic</div>
+            <div class="ledger-v mono">OpenSL ES · On-Mic Ready</div>
+            <div class="ledger-sub" data-i18n="led.2.s">Suara + Mikrofon di XyRDP &amp; RDP Beli</div>
           </div>
           <div class="ledger-cell">
-            <div class="ledger-k" data-i18n="led.3.k">Kontrol Layar Sentuh</div>
-            <div class="ledger-v mono">Touch · keyboard · mouse</div>
-            <div class="ledger-sub" data-i18n="led.3.s">Kontrol sentuh &amp; keyboard</div>
+            <div class="ledger-k" data-i18n="led.3.k">Chat Global &amp; Sesi</div>
+            <div class="ledger-v mono">Liquid Glass · .crypto15</div>
+            <div class="ledger-sub" data-i18n="led.3.s">E2EE · Stiker Custom · Floating Sesi</div>
           </div>
           <div class="ledger-cell">
-            <div class="ledger-k" data-i18n="led.4.k">Arsitektur Paket</div>
-            <div class="ledger-v mono">APK per ABI</div>
-            <div class="ledger-sub">Android 6+ · tiga ABI</div>
+            <div class="ledger-k" data-i18n="led.4.k">Windows Host Agent</div>
+            <div class="ledger-v mono">Native GUI · Clean ID/PW</div>
+            <div class="ledger-sub">Tanpa Terminal · Virtual Device 120Hz</div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Ekosistem Baru: On-Mic Setup, Linux Polos SSH, Liquid Glass Chat & Native Host GUI -->
+    <section class="section" id="ecosystem-new">
+      <div class="container">
+        <div class="section-head">
+          <div class="section-kicker mono">Ekosistem Generasi Baru · Liquid Glass Monochrome</div>
+          <h2 class="section-title">On-Mic Semua RDP, Linux Polos (SSH), Host Agent Native GUI &amp; Chat Liquid Glass</h2>
+          <p class="section-lead">
+            Empat peningkatan arsitektur utama agar XyDesk Remote bekerja mulus untuk RDP Cloud GitHub (<code>XyRDP</code>), RDP Windows/Linux yang kamu beli sendiri, hingga PC Gaming pribadi.
+          </p>
+        </div>
+
+        <div class="liquid-grid">
+          <div class="liquid-card">
+            <span class="liquid-badge mono">ON-MIC · XYDESK &amp; RDP BELI SENDIRI</span>
+            <h3>On-Mic Lancar di XyRDP &amp; File Setup untuk RDP Beli / Non-GitHub</h3>
+            <p>
+              Kanal mikrofon <code>AUDIN</code> OpenSL ES kini mendukung penuh perekaman suara 16-bit mono/upmix stereo untuk Discord, Voice Chat GTA SAMP, dan rapat di dalam RDP. Punya RDP Windows atau VPS Linux yang beli sendiri? Jalankan installer mandiri 1-klik di bawah ini di dalam RDP Anda:
+            </p>
+            <div class="liquid-cmd mono" id="onmic-win-cmd">powershell -ExecutionPolicy Bypass -Command "irm https://xydeskremote.biz.id/onmic.ps1 | iex"</div>
+            <div class="liquid-actions">
+              <a href="/XyDesk-RDP-OnMic-Setup.bat" download="XyDesk-RDP-OnMic-Setup.bat" class="pill-btn primary">Unduh File Setup On-Mic (.BAT)</a>
+              <button type="button" class="pill-btn" onclick="navigator.clipboard&&navigator.clipboard.writeText(document.getElementById('onmic-win-cmd').textContent);this.textContent='Perintah Tersalin ✓';">Salin Cmd PowerShell</button>
+              <a href="/onmic.ps1" download="onmic.ps1" class="pill-btn">Unduh onmic.ps1</a>
+            </div>
+          </div>
+
+          <div class="liquid-card">
+            <span class="liquid-badge mono">LINUX POLOS (TANPA XFCE4) · TERMINAL SSH-2</span>
+            <h3>Mode Linux Polos (SSH Cepat) &amp; Klien Terminal SSH-2 Interaktif</h3>
+            <p>
+              Di fitur <strong>Buat RDP Gratis</strong>, kamu kini bisa memilih <strong>Windows Desktop</strong>, <strong>Linux Desktop (XFCE4 GUI)</strong>, atau <strong>Linux Polos (Tanpa XFCE4 · Server SSH cepat ~45 detik)</strong>. Aplikasi XyDesk Remote juga dilengkapi <strong>Terminal SSH-2 Interaktif</strong> (<code>xterm-256color</code>) untuk meremote VPS Linux mana pun langsung dari HP.
+            </p>
+            <div class="liquid-cmd mono">Port SSH XyRDP Linux Polos: :22 &amp; :3389 (Tembus semua tunnel otomatis)</div>
+            <div class="liquid-actions">
+              <a href="#download" class="pill-btn primary">Buka Terminal SSH di Aplikasi</a>
+            </div>
+          </div>
+
+          <div class="liquid-card">
+            <span class="liquid-badge mono">WINDOWS HOST AGENT · 100% NATIVE GUI</span>
+            <h3>Host Agent Modern Tanpa Terminal: Clean ID/PW, E2EE &amp; Virtual Device</h3>
+            <p>
+              <code>XyDeskRemoteHost-Standalone.exe</code> kini tampil dengan antarmuka <strong>Native GUI Modern (tanpa jendela terminal/CMD)</strong>. Dilengkapi <strong>Clean ID &amp; Password</strong> (tombol salin &amp; acak password instan), sidik jari <strong>Enkripsi E2EE AES-256-GCM + QUIC TLS 1.3</strong>, serta pengelola <strong>Virtual Display 120Hz &amp; Virtual Microphone On-Mic</strong>.
+            </p>
+            <div class="liquid-actions">
+              <a href="/XyDeskRemoteHost-Standalone.exe" download="XyDeskRemoteHost-Standalone.exe" class="pill-btn primary">Unduh Host Agent (.EXE Mandiri)</a>
+              <a href="host.html" class="pill-btn">Lihat Panduan Host Agent</a>
+            </div>
+          </div>
+
+          <div class="liquid-card">
+            <span class="liquid-badge mono">FLOATING LIQUID GLASS · CUSTOM STICKER .CRYPTO15</span>
+            <h3>Floating Chat Sesi Liquid Glass &amp; Stiker Custom (.webp.crypto15)</h3>
+            <p>
+              Mengobrol sambil meremote PC dengan <strong>Floating Chat berdesain Hitam-Putih Liquid Glass</strong> yang agak transparan, bisa digeser ke mana saja, dan tidak menutupi layar RDP. Buat stiker sendiri dari foto galeri—otomatis dikonversi ke WebP dan dienkripsi AES-256-GCM di <code>Android/media/id.xydesk.remote/globwlchat/sticker/*.webp.crypto15</code>.
+            </p>
+            <div class="liquid-cmd mono">Android/media/id.xydesk.remote/globwlchat/sticker/Jwkwhdixhdbehejeudjdo+2+$+$8.webp.crypto15</div>
           </div>
         </div>
       </div>
@@ -1505,9 +1631,22 @@
         </div>
 
         <div class="changelog-list">
+          <div class="cl-card" style="border-color: rgba(255,255,255,0.28); background: linear-gradient(160deg, rgba(255,255,255,0.05) 0%, var(--surface) 100%);">
+            <div class="cl-head">
+              <div class="cl-ver mono">v1.1.17+ (VERSION_CODE 78 · Pembaruan Ekosistem Terbaru)</div>
+              <span class="cl-badge mono">17 Oktober 2026 · On-Mic RDP, Linux Polos SSH, Host GUI &amp; Liquid Glass Chat</span>
+            </div>
+            <ul class="arch-list">
+              <li><strong>On-Mic Lancar di <code>XyRDP</code>, <code>XyDesk-Remote</code> &amp; RDP Beli Sendiri (<code>audin_opensl_es.c</code>, <code>opensl_io.c</code>, <code>onmic.ps1</code>):</strong> Memperbaiki negosiasi perekaman hardware OpenSL ES Android ke 16-bit mono PCM (upmix otomatis DSP FreeRDP), membuka kunci pre-boot <code>fDisableAudioCapture=0</code> &amp; <code>ConsentStore\microphone\NonPackaged=Allow</code>, serta menyediakan installer mandiri <code>XyDesk-RDP-OnMic-Setup.bat</code> untuk RDP yang dibeli di luar GitHub.</li>
+              <li><strong>Mode Linux Polos (Tanpa XFCE4) &amp; Klien Terminal SSH-2 Interaktif (<code>XySshClient.kt</code>, <code>XySshTerminalScreen.kt</code>):</strong> Menambahkan opsi <strong>Linux Polos (SSH Server tanpa XFCE4)</strong> di Buat RDP Gratis yang menyala dalam ~45 detik, dilengkapi layar Terminal SSH-2 interaktif (<code>xterm-256color</code>) di dalam aplikasi untuk terhubung ke Linux Polos maupun VPS Linux eksternal.</li>
+              <li><strong>Rombak Total UI/UX Windows Host Agent (<code>XyDeskRemoteHost.exe</code>):</strong> Menghapus tampilan terminal/console dan beralih ke <strong>100% Native GUI Modern (<code>-mwindows</code>)</strong> dengan kartu <strong>Clean ID &amp; Password</strong>, <strong>Enkripsi E2EE AES-256-GCM + QUIC TLS 1.3</strong>, dan pengelola <strong>Virtual Display 120Hz + Virtual Mic On-Mic</strong>.</li>
+              <li><strong>Chat Global E2EE, Stiker Custom Terenkripsi (<code>.webp.crypto15</code>) &amp; Floating Chat Sesi Liquid Glass:</strong> Menambahkan pembuat stiker sendiri dari galeri yang otomatis dikonversi ke WebP dan dienkripsi AES-256-GCM di <code>Android/media/id.xydesk.remote/globwlchat/sticker/&lt;Token&gt;.webp.crypto15</code>, notifikasi push bersuara aktif (OneSignal FCM v1), serta Floating Chat di dalam sesi RDP berdesain <strong>Hitam-Putih Liquid Glass</strong> yang agak transparan dan bisa digeser.</li>
+            </ul>
+          </div>
+
           <div class="cl-card">
             <div class="cl-head">
-              <div class="cl-ver mono">v1.0.2 (VERSION_CODE 53) — Build Terbaru</div>
+              <div class="cl-ver mono">v1.0.2 (VERSION_CODE 53)</div>
               <span class="cl-badge mono">4 Oktober 2026 · Perbaikan Startup Android 8 &amp; Penyederhanaan UI</span>
             </div>
             <ul class="arch-list">
@@ -1722,11 +1861,11 @@
             <p class="download-desc" data-i18n="dl.desc">
               Unduh APK resmi XyDesk Remote untuk perangkatmu. Tag rilis dan checksum mengikuti rilis GitHub terbaru. APK publik saat ini membutuhkan Android 6.0 (API 23) atau lebih baru.
             </p>
-            <span class="release-pill mono" data-dyn="release-pill">RILIS PUBLIK · v1.1.8</span>
+            <span class="release-pill mono" data-dyn="release-pill">RILIS PUBLIK · v1.1.17</span>
           </div>
 
           <div class="download-facts" aria-label="Informasi rilis dan kompatibilitas">
-            <p><strong data-i18n="dl.label.version">Versi rilis:</strong> <span data-dyn="version-note">v1.1.8 adalah tag GitHub Release; versi aplikasi Android di dalam APK adalah 1.1.8.</span></p>
+            <p><strong data-i18n="dl.label.version">Versi rilis:</strong> <span data-dyn="version-note">v1.1.17 adalah tag GitHub Release; versi aplikasi Android di dalam APK adalah 1.1.17.</span></p>
             <p><strong data-i18n="dl.label.compatibility">Kompatibilitas:</strong> <span data-i18n="dl.android-min">APK publik saat ini membutuhkan Android 6.0 (API 23) atau lebih baru.</span></p>
             <p><strong data-i18n="dl.label.abi">Pilih ABI:</strong> <span data-i18n="dl.abi-help">arm64-v8a untuk kebanyakan HP modern, armeabi-v7a untuk perangkat ARM 32-bit, dan x86_64 untuk emulator/perangkat Android x86_64.</span></p>
           </div>
@@ -1890,24 +2029,27 @@
       }
 
       function loadActiveSessionStats() {
-        fetch("/api/active-sessions", { headers: { Accept: "application/json" } })
-          .then(function (response) {
-            if (!response.ok) throw new Error("Active session stats request failed");
-            return response.json();
-          })
-          .then(function (data) {
-            if (data.status !== "ok" || !Number.isFinite(data.active_session_count)) {
-              throw new Error("Active session stats unavailable");
-            }
-            latestActiveSessionStats = data;
-            activeSessionStatsFailed = false;
-            renderActiveSessionStats();
-          })
-          .catch(function () {
-            latestActiveSessionStats = null;
-            activeSessionStatsFailed = true;
-            renderActiveSessionStats();
-          });
+        Promise.allSettled([
+          fetch("/api/active-sessions", { headers: { Accept: "application/json" } }).then(function (r) { return r.json(); }),
+          fetch("/api/chat/presence", { headers: { Accept: "application/json" } }).then(function (r) { return r.json(); })
+        ]).then(function (results) {
+          var sesData = results[0].status === "fulfilled" ? results[0].value : null;
+          var chatData = results[1].status === "fulfilled" ? results[1].value : null;
+          var sesCount = (sesData && Number.isFinite(sesData.active_session_count)) ? sesData.active_session_count : 0;
+          var appOnline = (chatData && Number.isFinite(chatData.online_count)) ? chatData.online_count : 0;
+          var combined = Math.max(sesCount, appOnline, 1);
+          latestActiveSessionStats = {
+            status: "ok",
+            active_session_count: combined,
+            checked_at: (sesData && sesData.checked_at) || new Date().toISOString()
+          };
+          activeSessionStatsFailed = false;
+          renderActiveSessionStats();
+        }).catch(function () {
+          latestActiveSessionStats = null;
+          activeSessionStatsFailed = true;
+          renderActiveSessionStats();
+        });
       }
 
       function renderDownloadStats() {

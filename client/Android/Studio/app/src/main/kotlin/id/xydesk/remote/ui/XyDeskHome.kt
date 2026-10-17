@@ -7,7 +7,9 @@ import android.content.ClipboardManager
 import android.content.Context
 import android.content.Intent
 import android.net.Uri
+import android.widget.Toast
 import androidx.activity.compose.BackHandler
+import id.xydesk.remote.ui.ssh.XySshTerminalScreen
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
@@ -34,12 +36,15 @@ import androidx.compose.foundation.layout.BoxScope
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.displayCutoutPadding
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -118,6 +123,7 @@ internal fun sectionTitle(section: XySection): String = xy(section.title, sectio
 private sealed interface XyRoute {
     data object Devices : XyRoute
     data object CreateRdp : XyRoute
+    data object SshTerminal : XyRoute
     data class EditDevice(val profile: ConnectionProfile?, val pcQuickMode: Boolean = false) : XyRoute
     data object Section : XyRoute
 
@@ -181,16 +187,29 @@ fun XyDeskHome(
     // Pembaruan app: cek maksimal 12 jam sekali; dialog muncul bila portal
     // melaporkan versi lebih baru yang belum dilewati user.
     var updateInfo by remember { mutableStateOf<AppUpdateInfo?>(null) }
+    var dataPackProgress by remember { mutableStateOf<Int?>(null) }
+    var dataPackStatus by remember { mutableStateOf<String?>(null) }
     LaunchedEffect(Unit) {
         val now = System.currentTimeMillis()
-        if (now - appPrefs.lastUpdateCheckAt < 12 * 3_600_000L) return@LaunchedEffect
-        appPrefs.lastUpdateCheckAt = now
-        val info = AppUpdate.fetch() ?: return@LaunchedEffect
-        val current = runCatching {
-            context.packageManager.getPackageInfo(context.packageName, 0).versionName
-        }.getOrNull() ?: return@LaunchedEffect
-        if (AppUpdate.isNewer(info.version, current) && appPrefs.updateSkipVersion != info.version) {
-            updateInfo = info
+        if (now - appPrefs.lastUpdateCheckAt >= 2 * 3_600_000L) {
+            appPrefs.lastUpdateCheckAt = now
+            val info = AppUpdate.fetch(context)
+            if (info != null) {
+                val current = runCatching {
+                    context.packageManager.getPackageInfo(context.packageName, 0).versionName
+                }.getOrNull().orEmpty()
+                if (AppUpdate.isNewer(info.version, current) && appPrefs.updateSkipVersion != info.version) {
+                    updateInfo = info
+                }
+            }
+        }
+    }
+    // Ronde 54: Detak kehadiran seluruh aplikasi (App-Wide Presence Heartbeat)
+    // agar jumlah Total Online menghitung seluruh orang yang sedang membuka app.
+    LaunchedEffect(Unit) {
+        while (true) {
+            runCatching { AppUpdate.sendAppPresencePing(context, screen = "app", active = true) }
+            kotlinx.coroutines.delay(25_000L)
         }
     }
     var backupModalOpen by remember { mutableStateOf(false) }
@@ -400,7 +419,14 @@ fun XyDeskHome(
         }
     }
 
-    Box(Modifier.fillMaxSize()) {
+    Box(
+        Modifier
+            .fillMaxSize()
+            .background(MaterialTheme.colorScheme.background)
+            .statusBarsPadding()
+            .navigationBarsPadding()
+            .displayCutoutPadding(),
+    ) {
         Column(
             Modifier
                 .fillMaxSize()
@@ -415,6 +441,10 @@ fun XyDeskHome(
                 XyRoute.CreateRdp -> RdpFreeScreen(
                     onBack = { route = XyRoute.Devices },
                     onConnect = { connect(it) },
+                )
+
+                XyRoute.SshTerminal -> XySshTerminalScreen(
+                    onBack = { route = XyRoute.Devices },
                 )
 
                 is XyRoute.EditDevice -> AddDeviceScreen(
@@ -438,6 +468,7 @@ fun XyDeskHome(
                         onAddPcQuick = { route = XyRoute.EditDevice(null, pcQuickMode = true) },
                         onOpenPcStream = { context.startActivity(PcStreamSessionActivity.intent(context)) },
                         onCreateRdp = { route = XyRoute.CreateRdp },
+                        onOpenSshTerminal = { route = XyRoute.SshTerminal },
                         onEdit = {
                             route = XyRoute.EditDevice(
                                 it,
@@ -799,35 +830,80 @@ fun XyDeskHome(
 
     if (updateModalOpen) {
         XyOverlay(
-            title = xy("Pembaruan & RilisIn Store", "Updates & RilisIn Store"),
+            title = xy("Pusat Pembaruan (Download Data & APK)", "Update Center (Download Data & APK)"),
             onDismiss = { updateModalOpen = false },
         ) {
             Text(
-                text = "XyDesk Remote v${appVersion(context)}  ·  XyVerse Technology Global",
+                text = "XyDesk Remote v${appVersion(context)}  ·  Data OTA: ${AppUpdate.installedDataVersion(context)}",
                 style = MaterialTheme.typography.titleSmall,
+                fontWeight = FontWeight.Bold,
             )
             Text(
-                text = updateStatusText ?: xy("Memeriksa pembaruan...", "Checking for updates..."),
+                text = dataPackStatus ?: updateStatusText ?: xy(
+                    "Update ringan cukup dengan Download Data di dalam HP (tanpa instal ulang APK). Update besar/native menggunakan APK.",
+                    "Lightweight updates only need Download Data in-app (no APK reinstall). Major native updates use APK.",
+                ),
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
+            dataPackProgress?.let { pct ->
+                Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                    Box(
+                        Modifier
+                            .fillMaxWidth()
+                            .height(8.dp)
+                            .clip(RoundedCornerShape(4.dp))
+                            .background(MaterialTheme.colorScheme.onSurface.copy(alpha = 0.14f)),
+                    ) {
+                        Box(
+                            Modifier
+                                .fillMaxWidth((pct / 100f).coerceIn(0f, 1f))
+                                .height(8.dp)
+                                .clip(RoundedCornerShape(4.dp))
+                                .background(MaterialTheme.colorScheme.primary),
+                        )
+                    }
+                    Text(
+                        "$pct%",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.primary,
+                    )
+                }
+            }
+            XyPillButton(
+                text = xy("Download Data Update (OTA Ringan In-App)", "Download Data Update (Lightweight In-App OTA)"),
+                onClick = {
+                    scope.launch {
+                        dataPackProgress = 5
+                        val res = AppUpdate.downloadAndApplyDataPack(context) { pct, lbl ->
+                            dataPackProgress = pct
+                            dataPackStatus = lbl
+                        }
+                        res.onSuccess { ver ->
+                            notice.show(xyNow("Paket Data OTA $ver berhasil diterapkan!", "OTA Data Pack $ver applied!"))
+                        }.onFailure { err ->
+                            dataPackStatus = err.message
+                        }
+                    }
+                },
+                primary = true,
+                compact = true,
+                modifier = Modifier.fillMaxWidth(),
+            )
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 XyPillButton(
-                    text = xy("Portal www.xydeskremote.biz.id", "www.xydeskremote.biz.id Portal"),
+                    text = xy("Unduh APK Terbaru", "Download Latest APK"),
                     onClick = {
-                        runCatching {
-                            context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse("https://www.xydeskremote.biz.id")))
-                        }
+                        openInAppCustomTab(context, "https://api.xydeskremote.biz.id/XyDesk-Remote64bit.apk")
                     },
+                    primary = false,
                     compact = true,
                     modifier = Modifier.weight(1f),
                 )
                 XyPillButton(
-                    text = xy("Buka RilisIn Store", "Open RilisIn Store"),
+                    text = xy("Portal Rilis", "Release Portal"),
                     onClick = {
-                        runCatching {
-                            context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse("https://rilisin.xyverse.my.id")))
-                        }
+                        openInAppCustomTab(context, "https://www.xydeskremote.biz.id")
                     },
                     primary = false,
                     compact = true,
@@ -860,6 +936,7 @@ fun XyDeskHome(
 private fun HomeRdpFreeBannerCard(
     onCreateRdp: () -> Unit,
     onOpenPcStream: () -> Unit,
+    onOpenSshTerminal: () -> Unit = {},
 ) {
     Column(
         modifier = Modifier
@@ -909,8 +986,8 @@ private fun HomeRdpFreeBannerCard(
                 )
                 Text(
                     xy(
-                        "PC Windows 6 jam dari GitHub Actions akunmu · 120 FPS Boost & Monitor Live",
-                        "6-hour Windows PC from your GitHub Actions · 120 FPS Boost & Live Monitor",
+                        "Windows Server · Linux XFCE4 · Linux Polos SSH · 120 FPS & On-Mic",
+                        "Windows Server · Linux XFCE4 · Plain Linux SSH · 120 FPS & On-Mic",
                     ),
                     style = MaterialTheme.typography.labelSmall,
                     color = Color.White.copy(alpha = 0.85f),
@@ -928,13 +1005,19 @@ private fun HomeRdpFreeBannerCard(
                 text = xy("Buat RDP Gratis", "Create Free RDP"),
                 onClick = onCreateRdp,
                 icon = XyIcons.Monitor,
-                modifier = Modifier.weight(1.2f).height(38.dp),
+                modifier = Modifier.weight(1.15f).height(38.dp),
             )
             XyPillButton(
                 text = xy("PC Stream", "PC Stream"),
                 onClick = onOpenPcStream,
                 primary = false,
-                modifier = Modifier.weight(0.9f).height(38.dp),
+                modifier = Modifier.weight(0.85f).height(38.dp),
+            )
+            XyPillButton(
+                text = xy("SSH / VPS", "SSH / VPS"),
+                onClick = onOpenSshTerminal,
+                primary = false,
+                modifier = Modifier.weight(0.85f).height(38.dp),
             )
         }
     }
@@ -1289,6 +1372,7 @@ private fun DevicesScreen(
     onAddPcQuick: () -> Unit,
     onOpenPcStream: () -> Unit,
     onCreateRdp: () -> Unit,
+    onOpenSshTerminal: () -> Unit,
     onEdit: (ConnectionProfile) -> Unit,
     onConnect: (ConnectionProfile) -> Unit,
     onWakeConnect: (ConnectionProfile) -> Unit,
@@ -1355,7 +1439,6 @@ private fun DevicesScreen(
                 title = xy("Perangkat", "Devices"),
                 onBack = null,
                 actions = {
-                    XyHeaderAccountActions()
                     XyIconPill(
                         XyIcons.Grid,
                         {
@@ -1385,6 +1468,7 @@ private fun DevicesScreen(
                         HomeRdpFreeBannerCard(
                             onCreateRdp = onCreateRdp,
                             onOpenPcStream = onOpenPcStream,
+                            onOpenSshTerminal = onOpenSshTerminal,
                         )
                         XyCard(modifier = Modifier.fillMaxWidth()) {
                             Text(xy("Belum ada perangkat", "No devices yet"), style = MaterialTheme.typography.titleMedium)
@@ -1443,6 +1527,7 @@ private fun DevicesScreen(
                         HomeRdpFreeBannerCard(
                             onCreateRdp = onCreateRdp,
                             onOpenPcStream = onOpenPcStream,
+                            onOpenSshTerminal = onOpenSshTerminal,
                         )
                     }
                     item {
@@ -1571,6 +1656,50 @@ private fun DevicesScreen(
                     onClick = {
                         showAddBubble = false
                         onAddRdp()
+                    },
+                )
+                XyRow(
+                    title = xy("Terminal SSH / Linux VPS", "SSH Terminal / Linux VPS"),
+                    modifier = Modifier.padding(horizontal = 2.dp),
+                    trailing = {
+                        Text(
+                            "SSH-2",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.primary,
+                            maxLines = 1,
+                        )
+                    },
+                    onClick = {
+                        showAddBubble = false
+                        onOpenSshTerminal()
+                    },
+                )
+                XyRow(
+                    title = xy("Setup On-Mic (Untuk RDP Beli / VPS)", "On-Mic Setup (For Purchased RDP / VPS)"),
+                    modifier = Modifier.padding(horizontal = 2.dp),
+                    trailing = {
+                        Text(
+                            "On-Mic",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.primary,
+                            maxLines = 1,
+                        )
+                    },
+                    onClick = {
+                        showAddBubble = false
+                        val cm = context.getSystemService(Context.CLIPBOARD_SERVICE) as? ClipboardManager
+                        cm?.setPrimaryClip(
+                            ClipData.newPlainText(
+                                "XyDesk On-Mic Setup",
+                                "powershell -NoProfile -ExecutionPolicy Bypass -Command \"irm https://xydeskremote.biz.id/onmic.ps1 | iex\"",
+                            ),
+                        )
+                        Toast.makeText(
+                            context,
+                            xyNow("Perintah PowerShell On-Mic disalin! Jalankan di PowerShell Admin pada RDP beli Anda.", "On-Mic PowerShell command copied! Run in Admin PowerShell on your purchased RDP."),
+                            Toast.LENGTH_LONG,
+                        ).show()
+                        openInAppCustomTab(context, "https://xydeskremote.biz.id/XyDesk-RDP-OnMic-Setup.bat")
                     },
                 )
                 XyRow(

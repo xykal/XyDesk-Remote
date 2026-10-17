@@ -41,6 +41,7 @@ internal data class XyRdpAccess(
     val initialDiskFreeGb: Double,
     /** Statistik live dari loop keepalive (null bila belum terpublikasi). */
     val stats: XyRdpStats?,
+    val linuxMode: String = "desktop",
 )
 
 internal data class XyRdpStats(
@@ -408,6 +409,7 @@ internal object XyRdpClient {
                 val stepList = mutableListOf<Triple<String, String, String?>>()
                 for (i in 0 until jobs.length()) {
                     val job = jobs.optJSONObject(i) ?: continue
+                    if (job.optString("conclusion") == "skipped") continue
                     val steps = job.optJSONArray("steps") ?: continue
                     for (j in 0 until steps.length()) {
                         val s = steps.optJSONObject(j) ?: continue
@@ -728,6 +730,10 @@ internal object XyRdpClient {
             initialRamGb = hw?.optDouble("ram_gb", 0.0) ?: 0.0,
             initialDiskFreeGb = hw?.optDouble("disk_free_gb", 0.0) ?: 0.0,
             stats = stats,
+            linuxMode = root.optString(
+                "linux_mode",
+                if (root.optString("os").contains("Polos", ignoreCase = true) || root.optInt("rdp_port", 3389) == 22) "polos" else "desktop",
+            ),
         )
     }.getOrNull()
 }

@@ -42,6 +42,35 @@ void WriteRegDword(HKEY root, const char* subkey, const char* name, DWORD val) {
         RegCloseKey(hKey);
     }
 }
+
+void WriteRegString(HKEY root, const char* subkey, const char* name, const char* val) {
+    if (!val) return;
+    HKEY hKey = nullptr;
+    if (RegCreateKeyExA(root, subkey, 0, nullptr, REG_OPTION_NON_VOLATILE,
+                        KEY_SET_VALUE, nullptr, &hKey, nullptr) == ERROR_SUCCESS) {
+        RegSetValueExA(hKey, name, 0, REG_SZ,
+                       reinterpret_cast<const BYTE*>(val),
+                       static_cast<DWORD>(strlen(val) + 1));
+        RegCloseKey(hKey);
+    }
+}
+
+void RunHiddenCmd(const char* cmdLine) {
+    if (!cmdLine || !*cmdLine) return;
+    STARTUPINFOA si{};
+    PROCESS_INFORMATION pi{};
+    si.cb = sizeof(si);
+    si.dwFlags = STARTF_USESHOWWINDOW;
+    si.wShowWindow = SW_HIDE;
+    char mutableCmd[1024] = {};
+    snprintf(mutableCmd, sizeof(mutableCmd), "%s", cmdLine);
+    if (CreateProcessA(nullptr, mutableCmd, nullptr, nullptr, FALSE,
+                       CREATE_NO_WINDOW, nullptr, nullptr, &si, &pi)) {
+        WaitForSingleObject(pi.hProcess, 4000);
+        CloseHandle(pi.hThread);
+        CloseHandle(pi.hProcess);
+    }
+}
 #endif
 
 }  // namespace
@@ -127,17 +156,53 @@ extern "C" XYDESK_CORE_API int xydesk_host_apply_windows_policies(void) {
     const char* ts_rdp = "SYSTEM\\CurrentControlSet\\Control\\Terminal Server\\WinStations\\RDP-Tcp";
     const char* ts_pol = "SOFTWARE\\Policies\\Microsoft\\Windows NT\\Terminal Services";
 
-    // 1. Enable RDP + Multi-User Concurrent Sessions + Audio
+    // 1. Enable RDP + Multi-User Concurrent Sessions + Audio & On-Mic Capture + Camera
     WriteRegDword(HKEY_LOCAL_MACHINE, ts_ctrl, "fDenyTSConnections", 0);
     WriteRegDword(HKEY_LOCAL_MACHINE, ts_ctrl, "fSingleSessionPerUser", 0);
+    WriteRegDword(HKEY_LOCAL_MACHINE, ts_ctrl, "fDisableAudio", 0);
+    WriteRegDword(HKEY_LOCAL_MACHINE, ts_ctrl, "fDisableAudioCapture", 0);
+    WriteRegDword(HKEY_LOCAL_MACHINE, ts_ctrl, "fDisableCam", 0);
+    WriteRegDword(HKEY_LOCAL_MACHINE, ts_ctrl, "fDisableCdm", 0);
+    WriteRegDword(HKEY_LOCAL_MACHINE, ts_ctrl, "fDisableClip", 0);
+
     WriteRegDword(HKEY_LOCAL_MACHINE, ts_rdp, "fDisableAudio", 0);
     WriteRegDword(HKEY_LOCAL_MACHINE, ts_rdp, "fDisableAudioCapture", 0);
+    WriteRegDword(HKEY_LOCAL_MACHINE, ts_rdp, "fDisableCam", 0);
+    WriteRegDword(HKEY_LOCAL_MACHINE, ts_rdp, "fDisableCdm", 0);
+    WriteRegDword(HKEY_LOCAL_MACHINE, ts_rdp, "fDisableClip", 0);
     WriteRegDword(HKEY_LOCAL_MACHINE, ts_rdp, "MaxMonitors", 16);
 
-    // 2. Enable Hardware GPU H.264 / AVC 4:4:4 Full-Chroma & 60+ FPS DWM
+    // 2. Enable Hardware GPU H.264 / AVC 4:4:4 Full-Chroma, On-Mic Policy & 120 FPS DWM
     WriteRegDword(HKEY_LOCAL_MACHINE, ts_pol, "fDenyTSConnections", 0);
     WriteRegDword(HKEY_LOCAL_MACHINE, ts_pol, "fSingleSessionPerUser", 0);
+    WriteRegDword(HKEY_LOCAL_MACHINE, ts_pol, "fDisableAudio", 0);
+    WriteRegDword(HKEY_LOCAL_MACHINE, ts_pol, "fDisableAudioCapture", 0);
+    WriteRegDword(HKEY_LOCAL_MACHINE, ts_pol, "fDisableCam", 0);
+    WriteRegDword(HKEY_LOCAL_MACHINE, ts_pol, "fDisableCdm", 0);
+    WriteRegDword(HKEY_LOCAL_MACHINE, ts_pol, "fDisableClip", 0);
+    WriteRegDword(HKEY_LOCAL_MACHINE, ts_pol, "fNoRemoteDesktopWallpaper", 0);
+    WriteRegDword(HKEY_LOCAL_MACHINE, ts_pol, "AudioQualityMode", 2);
     WriteRegDword(HKEY_LOCAL_MACHINE, ts_pol, "AVC444ModePreferred", 1);
+
+    // 2a. Unlock Windows Privacy Consent for Microphone & Webcam (Store + Desktop Win32 Games/Discord)
+    WriteRegString(HKEY_LOCAL_MACHINE,
+                   "SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\CapabilityAccessManager\\ConsentStore\\microphone",
+                   "Value", "Allow");
+    WriteRegString(HKEY_LOCAL_MACHINE,
+                   "SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\CapabilityAccessManager\\ConsentStore\\microphone\\NonPackaged",
+                   "Value", "Allow");
+    WriteRegString(HKEY_LOCAL_MACHINE,
+                   "SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\CapabilityAccessManager\\ConsentStore\\webcam",
+                   "Value", "Allow");
+    WriteRegString(HKEY_LOCAL_MACHINE,
+                   "SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\CapabilityAccessManager\\ConsentStore\\webcam\\NonPackaged",
+                   "Value", "Allow");
+    WriteRegString(HKEY_CURRENT_USER,
+                   "Software\\Microsoft\\Windows\\CurrentVersion\\CapabilityAccessManager\\ConsentStore\\microphone",
+                   "Value", "Allow");
+    WriteRegString(HKEY_CURRENT_USER,
+                   "Software\\Microsoft\\Windows\\CurrentVersion\\CapabilityAccessManager\\ConsentStore\\microphone\\NonPackaged",
+                   "Value", "Allow");
     WriteRegDword(HKEY_LOCAL_MACHINE, ts_pol, "AVCHardwareEncodePreferred", 1);
     WriteRegDword(HKEY_LOCAL_MACHINE, ts_pol, "bEnumerateHWBeforeSW", 1);
     WriteRegDword(HKEY_LOCAL_MACHINE, ts_pol, "VGAdapter", 1);
@@ -194,10 +259,14 @@ extern "C" XYDESK_CORE_API int xydesk_host_apply_windows_policies(void) {
                   "SYSTEM\\CurrentControlSet\\Control\\Terminal Server\\WinStations\\RDP-Tcp",
                   "AllowFontAntiAlias", 1);
 
-    // 4. Open Windows Firewall for TCP 3389, UDP 3389, and UDP 4433 (QUIC)
-    WinExec("netsh advfirewall firewall add rule name=\"XyDesk Remote RDP TCP\" dir=in action=allow protocol=TCP localport=3389", SW_HIDE);
-    WinExec("netsh advfirewall firewall add rule name=\"XyDesk Remote RDP UDP\" dir=in action=allow protocol=UDP localport=3389", SW_HIDE);
-    WinExec("netsh advfirewall firewall add rule name=\"XyDesk Remote QUIC UDP\" dir=in action=allow protocol=UDP localport=4433", SW_HIDE);
+    // 4. Ensure AudioEndpointBuilder & Audiosrv are running + Open Firewall (No Console Flash)
+    RunHiddenCmd("sc.exe config AudioEndpointBuilder start= auto");
+    RunHiddenCmd("sc.exe start AudioEndpointBuilder");
+    RunHiddenCmd("sc.exe config Audiosrv start= auto");
+    RunHiddenCmd("sc.exe start Audiosrv");
+    RunHiddenCmd("netsh advfirewall firewall add rule name=\"XyDesk Remote RDP TCP\" dir=in action=allow protocol=TCP localport=3389");
+    RunHiddenCmd("netsh advfirewall firewall add rule name=\"XyDesk Remote RDP UDP\" dir=in action=allow protocol=UDP localport=3389");
+    RunHiddenCmd("netsh advfirewall firewall add rule name=\"XyDesk Remote QUIC UDP\" dir=in action=allow protocol=UDP localport=4433");
     return 0;
 #else
     return -1;

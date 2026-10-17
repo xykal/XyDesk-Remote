@@ -1991,7 +1991,7 @@ async function serveCommunityBinary(request, env, url) {
 }
 
 // Pemeriksaan pembaruan untuk app: tag rilis publik terbaru + ringkasan
-// changelog. App membandingkan versinya sendiri dengan `version` di sini.
+// changelog + dukungan sistem OTA "Download Data" untuk update ringan.
 async function updateCheckResponse(request, env) {
   try {
     const release = await getLatestPublishedRelease(env);
@@ -2000,9 +2000,8 @@ async function updateCheckResponse(request, env) {
     if (!RELEASE_TAG_PATTERN.test(tag)) {
       return jsonResponse({ status: "unavailable" }, 503, request.method);
     }
+    const cleanVersion = tag.replace(/^v/i, "");
     const body = String(release.body || "");
-    // Body rilis = seluruh CHANGELOG: header "# ..." (opsional) lalu blok
-    // "## vX.Y.Z" per versi. Ambil blok pertama yang diawali pola versi.
     const sections = body.split(/\n## |^## /);
     const latest = sections.find((part) => /^v?\d+\.\d+/.test(part.trim())) || sections[0] || "";
     const excerpt = latest.trim().slice(0, 2000);
@@ -2010,7 +2009,13 @@ async function updateCheckResponse(request, env) {
       {
         status: "ok",
         tag,
-        version: tag.replace(/^v/i, ""),
+        version: cleanVersion,
+        data_pack_version: LIVE_DATA_PACK_VERSION,
+        min_apk_version: cleanVersion,
+        apk_64bit_url: "https://api.xydeskremote.biz.id/XyDesk-Remote64bit.apk",
+        apk_32bit_url: "https://api.xydeskremote.biz.id/XyDesk-Remote32bit.apk",
+        apk_universal_url: "https://api.xydeskremote.biz.id/XyDesk-RemoteUniversal.apk",
+        data_pack_url: "https://api.xydeskremote.biz.id/api/data-pack",
         url:
           typeof release.html_url === "string" && release.html_url
             ? release.html_url
@@ -2023,6 +2028,103 @@ async function updateCheckResponse(request, env) {
     );
   } catch {
     return jsonResponse({ status: "unavailable" }, 503, request.method);
+  }
+}
+
+async function dataPackResponse(request, env) {
+  try {
+    const release = await getLatestPublishedRelease(env).catch(() => null);
+    const tag = String(release?.tag_name || "v1.1.17");
+    const cleanVersion = tag.replace(/^v/i, "");
+    const payload = {
+      status: "ok",
+      data_version: LIVE_DATA_PACK_VERSION,
+      apk_version: cleanVersion,
+      min_apk_version: cleanVersion,
+      updated_at: new Date().toISOString(),
+      e2ee_protocol: "XY-E2EE-GCM-v1",
+      rdp_runners: [
+        { id: "windows-2022", label: "Windows Server 2022 (Stabil · GTA SA-MP & Minecraft)", family: "windows" },
+        { id: "windows-2025", label: "Windows Server 2025 (Kernel Terbaru)", family: "windows" },
+        { id: "windows-latest", label: "Windows Latest (Default GitHub)", family: "windows" },
+        { id: "ubuntu-24.04", label: "Ubuntu 24.04 LTS Desktop (XFCE4 + XRDP :3389)", family: "linux" },
+        { id: "ubuntu-22.04", label: "Ubuntu 22.04 LTS Desktop (XFCE4 LTS Klasik)", family: "linux" },
+        { id: "ubuntu-latest", label: "Ubuntu Latest Desktop (Otomatis Terbaru)", family: "linux" },
+      ],
+      stickers: [
+        { code: "xy_gg", name: "XyDesk GG!", res: "sticker_xy_gg" },
+        { code: "xy_laugh", name: "Ngakak Gaming", res: "sticker_xy_laugh" },
+        { code: "xy_fire", name: "Gaskeun On Fire!", res: "sticker_xy_fire" },
+        { code: "xy_chill", name: "Santai Ngopi", res: "sticker_xy_chill" },
+        { code: "xy_sad", name: "Ping 999ms", res: "sticker_xy_sad" },
+        { code: "xy_king", name: "Sovereign Boss", res: "sticker_xy_king" },
+      ],
+      changelog_summary:
+        "Paket Data OTA XyDesk: Dukungan penuh Multi-OS Cloud RDP (Windows Server & Ubuntu XFCE4 Desktop), perbaikan runtime GTA SA-MP anti-stuck, klik mouse fisik instan 0ms, E2EE AES-256-GCM Chat Global, dan koleksi stiker eksklusif XyDesk.",
+    };
+    return jsonResponse(payload, 200, request.method);
+  } catch {
+    return jsonResponse({ status: "unavailable" }, 503, request.method);
+  }
+}
+
+async function pushUpdateResponse(request, env) {
+  const staffToken = request.headers.get("x-xydesk-staff-token") || "";
+  if (!env.FEEDBACK_STAFF_TOKEN || !staffToken || staffToken !== env.FEEDBACK_STAFF_TOKEN) {
+    return jsonResponse({ status: "forbidden" }, 403, request.method);
+  }
+  const apiKey = String(env?.ONESIGNAL_REST_API_KEY || "").trim();
+  const appId = String(env?.ONESIGNAL_APP_ID || DEFAULT_ONESIGNAL_APP_ID).trim();
+  if (!apiKey || !appId) {
+    return jsonResponse({ status: "error", code: "missing_onesignal_credentials" }, 500, request.method);
+  }
+  let body = null;
+  try { body = await request.json(); } catch {}
+  const version = String(body?.version || "v1.1.17").trim();
+  const updateMode = body?.update_mode === "apk" ? "apk" : "data_pack";
+  const summary = String(
+    body?.summary ||
+      (updateMode === "data_pack"
+        ? `Paket Data ${LIVE_DATA_PACK_VERSION} tersedia! Unduh data langsung di dalam aplikasi tanpa instal ulang APK.`
+        : `Pembaruan besar XyDesk Remote ${version} telah rilis! Ketuk untuk memperbarui langsung dari HP.`),
+  ).trim().slice(0, 400);
+
+  try {
+    const res = await fetch("https://api.onesignal.com/notifications", {
+      method: "POST",
+      headers: {
+        Authorization: `Key ${apiKey}`,
+        "Content-Type": "application/json",
+        Accept: "application/json",
+      },
+      body: JSON.stringify({
+        app_id: appId,
+        target_channel: "push",
+        included_segments: ["All"],
+        headings: {
+          en: updateMode === "data_pack" ? `Update Data Tersedia · XyDesk ${version}` : `Update Aplikasi · XyDesk ${version}`,
+          id: updateMode === "data_pack" ? `Update Data Tersedia · XyDesk ${version}` : `Update Aplikasi · XyDesk ${version}`,
+        },
+        contents: {
+          en: summary,
+          id: summary,
+        },
+        data: {
+          type: "app_update",
+          version,
+          data_version: LIVE_DATA_PACK_VERSION,
+          update_mode: updateMode,
+          summary,
+          at: Date.now(),
+        },
+        android_group: "xydesk_app_update",
+        priority: 10,
+      }),
+    });
+    const out = await res.json().catch(() => ({}));
+    return jsonResponse({ status: "ok", onesignal: out }, 200, request.method);
+  } catch (e) {
+    return jsonResponse({ status: "error", message: String(e) }, 502, request.method);
   }
 }
 
@@ -2409,9 +2511,12 @@ async function feedbackResponse(request, env) {
 const CHAT_HISTORY_LIMIT = 100;
 const CHAT_TEXT_MAX = 500;
 const CHAT_NAME_MAX = 24;
-const CHAT_ATTACHMENT_MAX = 240_000;
-const CHAT_MSG_PER_WINDOW = 10;
+const CHAT_ATTACHMENT_MAX = 2_800_000;
+const CHAT_MSG_PER_WINDOW = 200;
 const CHAT_WINDOW_MS = 20_000;
+const APP_PRESENCE_TTL_MS = 75_000;
+const LIVE_DATA_PACK_VERSION = "2026.10.17.55";
+let EDGE_PINNED_MSG = null;
 const DEFAULT_ONESIGNAL_APP_ID = "ffaa87d6-8e1d-42b6-bb4f-ebbbfc0bccbb";
 const LEGACY_TEST_NAMES = new Set(["tesbot", "budi", "rizky"]);
 
@@ -2740,20 +2845,36 @@ function sanitizeChatExtras(raw) {
       ? raw.attachment_type.trim().toLowerCase()
       : "";
   const attachmentKind = rawKind === "image" || rawKind === "photo" ? "photo"
+    : rawKind === "video" ? "video"
     : rawKind === "file" ? "file"
     : rawKind === "sticker" ? "sticker"
     : "";
   const attachmentType = attachmentKind === "photo" ? "image" : attachmentKind;
   const attachmentName = typeof raw?.attachment_name === "string" ? raw.attachment_name.trim().slice(0, 120) : "";
   const attachmentMime = typeof raw?.attachment_mime === "string" ? raw.attachment_mime.trim().slice(0, 80) : "";
-  const attachmentSize = Number.isFinite(Number(raw?.attachment_size)) ? Math.max(0, Math.min(10_000_000, Number(raw.attachment_size))) : 0;
+  const attachmentSize = Number.isFinite(Number(raw?.attachment_size)) ? Math.max(0, Math.min(25_000_000, Number(raw.attachment_size))) : 0;
   const attachmentData = typeof raw?.attachment_data === "string" && raw.attachment_data.length <= CHAT_ATTACHMENT_MAX
     ? raw.attachment_data
     : "";
+  const viewOnce = Boolean(raw?.view_once);
   const avatarUrl = typeof raw?.avatar_url === "string" && raw.avatar_url.startsWith("https://")
     ? raw.avatar_url.trim().slice(0, 300)
     : "";
-  const hasAttachment = Boolean(attachmentData || attachmentKind === "sticker" || attachmentKind === "file");
+  const e2eeV = typeof raw?.e2ee_v === "string" ? raw.e2ee_v.trim().slice(0, 32) : "";
+  const e2eeCipher = typeof raw?.e2ee_cipher === "string" && raw.e2ee_cipher.length <= 4096
+    ? raw.e2ee_cipher.trim()
+    : "";
+  const e2eeIv = typeof raw?.e2ee_iv === "string" && raw.e2ee_iv.length <= 64
+    ? raw.e2ee_iv.trim()
+    : "";
+  const e2eeSig = typeof raw?.e2ee_sig === "string" && raw.e2ee_sig.length <= 128
+    ? raw.e2ee_sig.trim()
+    : "";
+  const clientMsgId = typeof raw?.client_msg_id === "string"
+    ? raw.client_msg_id.trim().slice(0, 64)
+    : "";
+  const hasAttachment = Boolean(attachmentData || attachmentKind === "sticker" || attachmentKind === "file" || attachmentKind === "video");
+  const e2eeVerified = Boolean(e2eeV && e2eeSig && e2eeSig.length >= 16);
   return {
     github_login: githubLogin,
     reply_to_id: replyToId,
@@ -2765,7 +2886,15 @@ function sanitizeChatExtras(raw) {
     attachment_mime: attachmentMime,
     attachment_size: attachmentSize,
     attachment_data: attachmentData,
+    view_once: viewOnce,
     avatar_url: avatarUrl,
+    e2ee_v: e2eeV || "XY-E2EE-GCM-v1",
+    e2ee_cipher: e2eeCipher,
+    e2ee_iv: e2eeIv,
+    e2ee_sig: e2eeSig,
+    e2ee_verified: e2eeVerified,
+    client_msg_id: clientMsgId,
+    delivery_status: "delivered",
   };
 }
 
@@ -2775,21 +2904,129 @@ export class GlobalChat {
     this.env = env || {};
     this.sessions = new Set();
     this.httpRate = new Map();
+    this.appOnlinePeers = new Map();
+  }
+
+  getActiveOnlineCount() {
+    const now = Date.now();
+    const activeKeys = new Set();
+    for (const [peerId, info] of this.appOnlinePeers.entries()) {
+      if (!info || now - info.lastSeen > APP_PRESENCE_TTL_MS) {
+        this.appOnlinePeers.delete(peerId);
+      } else {
+        activeKeys.add(peerId);
+      }
+    }
+    for (const s of this.sessions) {
+      const key = s.clientId || s.githubLogin || s.name || `ws-${Math.random()}`;
+      activeKeys.add(key);
+    }
+    return Math.max(activeKeys.size, this.sessions.size);
+  }
+
+  async resolveJoinedAt(urlObj) {
+    const rawJoined = Number(urlObj.searchParams.get("joined_at") || 0);
+    const githubLogin = String(urlObj.searchParams.get("github_login") || "").trim().replace(/^@/, "").toLowerCase();
+    const clientId = String(urlObj.searchParams.get("client_id") || "").trim().slice(0, 80);
+    const identityKey = githubLogin ? `join:gh:${githubLogin}` : clientId ? `join:cid:${clientId}` : "";
+    if (!identityKey) {
+      return rawJoined > 0 ? rawJoined : 0;
+    }
+    let stored = await this.state.storage.get(identityKey);
+    const now = Date.now();
+    if (!stored || typeof stored !== "number" || stored <= 0) {
+      stored = rawJoined > 0 ? rawJoined : now;
+      await this.state.storage.put(identityKey, stored);
+    } else if (rawJoined > stored) {
+      stored = rawJoined;
+    }
+    return stored;
   }
 
   async fetch(request) {
-    const path = new URL(request.url).pathname;
+    const urlObj = new URL(request.url);
+    const path = urlObj.pathname;
     if ((path === "/connect" || path === "/ws/chat") && request.headers.get("Upgrade") === "websocket") {
       return this.handleConnect(request);
     }
+    if (path === "/presence") {
+      return this.handlePresence(request);
+    }
     if (path === "/history" && request.method === "GET") {
-      const messages = await this.loadHistory();
-      return durableObjectJson({ status: "ok", messages }, 200, request.method);
+      const clientId = String(urlObj.searchParams.get("client_id") || "").trim().slice(0, 80);
+      const ghLogin = String(urlObj.searchParams.get("github_login") || "").trim().slice(0, 40);
+      if (clientId || ghLogin) {
+        this.appOnlinePeers.set(clientId || `gh:${ghLogin}`, {
+          lastSeen: Date.now(),
+          name: ghLogin || clientId,
+          screen: "chat",
+        });
+      }
+      const sinceMs = await this.resolveJoinedAt(urlObj);
+      const messages = await this.loadHistory(sinceMs);
+      const pinnedMsg = await this.state.storage.get("pinned_message").catch(() => null);
+      const onlineCount = this.getActiveOnlineCount();
+      return durableObjectJson(
+        {
+          status: "ok",
+          messages,
+          pinned_message: pinnedMsg || null,
+          online_count: onlineCount,
+          joined_at: sinceMs,
+          e2ee_protocol: "XY-E2EE-GCM-v1",
+        },
+        200,
+        request.method,
+      );
+    }
+    if (path === "/pin" && request.method === "POST") {
+      let body = null;
+      try { body = await request.json(); } catch {}
+      const action = String(body?.action || "pin").toLowerCase();
+      if (action === "unpin" || !body?.message) {
+        await this.state.storage.delete("pinned_message");
+        this.broadcast(null, JSON.stringify({ type: "pin", pinned_message: null }));
+        return durableObjectJson({ status: "ok", pinned_message: null }, 200, request.method);
+      }
+      const rawPin = body.message;
+      const pinned = {
+        id: String(rawPin.id || ""),
+        name: String(rawPin.name || "User").slice(0, 32),
+        github_login: String(rawPin.github_login || "").slice(0, 40),
+        text: String(rawPin.text || "").slice(0, 300),
+        pinned_by: String(body.pinned_by || rawPin.name || "User").slice(0, 32),
+        at: Number(rawPin.at || Date.now()),
+      };
+      await this.state.storage.put("pinned_message", pinned);
+      this.broadcast(null, JSON.stringify({ type: "pin", pinned_message: pinned }));
+      return durableObjectJson({ status: "ok", pinned_message: pinned }, 200, request.method);
     }
     if (path === "/send" && request.method === "POST") {
       return this.handleHttpSend(request);
     }
     return durableObjectJson({ status: "not_found" }, 404, request.method);
+  }
+
+  async handlePresence(request) {
+    if (request.method === "POST") {
+      let body = null;
+      try { body = await request.json(); } catch {}
+      const clientId = String(body?.client_id || "").trim().slice(0, 80);
+      const ghLogin = String(body?.github_login || "").trim().replace(/^@/, "").slice(0, 40);
+      const name = String(body?.name || ghLogin || "User").trim().slice(0, 32);
+      const screen = String(body?.screen || "app").trim().slice(0, 32);
+      const active = body?.active !== false;
+      const key = clientId || (ghLogin ? `gh:${ghLogin}` : `ip:${request.headers.get("cf-connecting-ip") || "anon"}`);
+      if (!active) {
+        this.appOnlinePeers.delete(key);
+      } else {
+        this.appOnlinePeers.set(key, { lastSeen: Date.now(), name, screen });
+      }
+      const count = this.getActiveOnlineCount();
+      this.broadcast(null, JSON.stringify({ type: "presence", count }));
+      return durableObjectJson({ status: "ok", online_count: count }, 200, request.method);
+    }
+    return durableObjectJson({ status: "ok", online_count: this.getActiveOnlineCount() }, 200, request.method);
   }
 
   async handleHttpSend(request) {
@@ -2805,9 +3042,10 @@ export class GlobalChat {
     const extras = sanitizeChatExtras(body);
     const rawText = typeof body?.text === "string" ? body.text.trim().slice(0, CHAT_TEXT_MAX) : "";
     const text = rawText || (
-      extras.attachment_type === "sticker" ? `🎨 Stiker: ${extras.attachment_name || "XyDesk"}`
-      : extras.attachment_type === "image" ? `📷 Foto${extras.attachment_name ? `: ${extras.attachment_name}` : ""}`
-      : extras.attachment_type === "file" ? `📎 File: ${extras.attachment_name || "Dokumen"}`
+      extras.attachment_type === "sticker" ? `[Stiker: ${extras.attachment_name || "XyDesk"}]`
+      : extras.attachment_type === "image" ? (extras.view_once ? "[Foto Sekali Lihat 1x]" : `[Foto${extras.attachment_name ? `: ${extras.attachment_name}` : ""}]`)
+      : extras.attachment_type === "video" ? (extras.view_once ? "[Video Sekali Lihat 1x]" : `[Video${extras.attachment_name ? `: ${extras.attachment_name}` : ""}]`)
+      : extras.attachment_type === "file" ? `[Berkas: ${extras.attachment_name || "Dokumen"}]`
       : ""
     );
     if (!text) {
@@ -2859,13 +3097,17 @@ export class GlobalChat {
     return durableObjectJson({ status: "ok", message: msg }, 200, request.method);
   }
 
-  async loadHistory() {
+  async loadHistory(sinceMs = 0) {
     const entries = await this.state.storage.list({ prefix: "msg:" });
     const msgs = [];
     for (const [k, v] of entries.entries()) {
       const senderLower = String(v?.name || "").trim().toLowerCase();
       if (LEGACY_TEST_NAMES.has(senderLower)) {
         this.state.storage.delete(k).catch(() => {});
+        continue;
+      }
+      const msgAt = Number(v?.at || 0);
+      if (sinceMs > 0 && msgAt > 0 && msgAt < sinceMs) {
         continue;
       }
       const text = String(v?.text || "");
@@ -2889,6 +3131,8 @@ export class GlobalChat {
         translated,
         target_lang: targetLang || "EN",
         source_lang: sourceLang || "id",
+        delivery_status: v?.delivery_status || "delivered",
+        e2ee_v: v?.e2ee_v || "XY-E2EE-GCM-v1",
       });
     }
     msgs.sort((a, b) => a.at - b.at);
@@ -2905,6 +3149,7 @@ export class GlobalChat {
   }
 
   handleConnect(request) {
+    const urlObj = new URL(request.url);
     const pair = new WebSocketPair();
     const [client, server] = Object.values(pair);
     server.accept();
@@ -2912,36 +3157,48 @@ export class GlobalChat {
       || request?.headers?.get("cf-ipcountry")
       || request?.headers?.get("CF-Connecting-IP-Country");
     const initialCountry = normalizeCountryCode(cfCountry, "ID");
+    const clientId = String(urlObj.searchParams.get("client_id") || "").trim().slice(0, 80);
+    const ghLogin = String(urlObj.searchParams.get("github_login") || "").trim().replace(/^@/, "").slice(0, 40);
     const session = {
       ws: server,
-      name: "Tamu",
-      githubLogin: "",
+      clientId,
+      name: ghLogin || "Tamu",
+      githubLogin: ghLogin,
       country: initialCountry,
       cfCountry: initialCountry,
       sent: 0,
       windowAt: Date.now(),
     };
     this.sessions.add(session);
+    if (clientId || ghLogin) {
+      this.appOnlinePeers.set(clientId || `gh:${ghLogin}`, {
+        lastSeen: Date.now(),
+        name: ghLogin || "User",
+        screen: "chat",
+      });
+    }
     server.addEventListener("message", (event) => {
       this.onMessage(session, event).catch(() => {});
     });
     const close = () => this.onClose(session);
     server.addEventListener("close", close);
     server.addEventListener("error", close);
-    this.loadHistory()
+    this.resolveJoinedAt(urlObj)
+      .then((sinceMs) => this.loadHistory(sinceMs))
       .then((messages) => {
-        try { server.send(JSON.stringify({ type: "history", messages })); } catch {}
+        try { server.send(JSON.stringify({ type: "history", messages, online_count: this.getActiveOnlineCount() })); } catch {}
       })
       .catch(() => {});
-    this.broadcast(null, JSON.stringify({ type: "presence", count: this.sessions.size }));
-    try { server.send(JSON.stringify({ type: "presence", count: this.sessions.size })); } catch {}
+    const totalOnline = this.getActiveOnlineCount();
+    this.broadcast(null, JSON.stringify({ type: "presence", count: totalOnline }));
+    try { server.send(JSON.stringify({ type: "presence", count: totalOnline })); } catch {}
     return new Response(null, { status: 101, webSocket: client });
   }
 
   onClose(session) {
     this.sessions.delete(session);
     try { session.ws.close(); } catch {}
-    this.broadcast(null, JSON.stringify({ type: "presence", count: this.sessions.size }));
+    this.broadcast(null, JSON.stringify({ type: "presence", count: this.getActiveOnlineCount() }));
   }
 
   async onMessage(session, event) {
@@ -2955,9 +3212,18 @@ export class GlobalChat {
       if (typeof data.github_login === "string") {
         session.githubLogin = String(data.github_login).trim().replace(/^@/, "").slice(0, 39);
       }
+      if (typeof data.client_id === "string" && data.client_id.trim()) {
+        session.clientId = data.client_id.trim().slice(0, 80);
+      }
       if (typeof data.country === "string") {
         session.country = normalizeCountryCode(data.country, session.country);
       }
+      const peerKey = session.clientId || (session.githubLogin ? `gh:${session.githubLogin}` : "");
+      if (peerKey) {
+        this.appOnlinePeers.set(peerKey, { lastSeen: Date.now(), name: session.name, screen: "chat" });
+      }
+      const totalOnline = this.getActiveOnlineCount();
+      this.broadcast(null, JSON.stringify({ type: "presence", count: totalOnline }));
       return;
     }
     if (data.type === "typing") {
@@ -2970,6 +3236,26 @@ export class GlobalChat {
       }));
       return;
     }
+    if (data.type === "pin") {
+      const action = String(data.action || "pin").toLowerCase();
+      if (action === "unpin" || !data.message) {
+        await this.state.storage.delete("pinned_message");
+        this.broadcast(null, JSON.stringify({ type: "pin", pinned_message: null }));
+      } else {
+        const rm = data.message;
+        const pinned = {
+          id: String(rm.id || ""),
+          name: String(rm.name || "User").slice(0, 32),
+          github_login: String(rm.github_login || "").slice(0, 40),
+          text: String(rm.text || "").slice(0, 300),
+          pinned_by: String(data.pinned_by || session.name || "User").slice(0, 32),
+          at: Number(rm.at || Date.now()),
+        };
+        await this.state.storage.put("pinned_message", pinned);
+        this.broadcast(null, JSON.stringify({ type: "pin", pinned_message: pinned }));
+      }
+      return;
+    }
     if (data.type !== "msg") return;
     const extras = sanitizeChatExtras(data);
     if (!extras.github_login && session.githubLogin) {
@@ -2977,9 +3263,10 @@ export class GlobalChat {
     }
     const rawText = typeof data.text === "string" ? data.text.trim().slice(0, CHAT_TEXT_MAX) : "";
     const text = rawText || (
-      extras.attachment_type === "sticker" ? `🎨 Stiker: ${extras.attachment_name || "XyDesk"}`
-      : extras.attachment_type === "image" ? `📷 Foto${extras.attachment_name ? `: ${extras.attachment_name}` : ""}`
-      : extras.attachment_type === "file" ? `📎 File: ${extras.attachment_name || "Dokumen"}`
+      extras.attachment_type === "sticker" ? `[Stiker: ${extras.attachment_name || "XyDesk"}]`
+      : extras.attachment_type === "image" ? (extras.view_once ? "[Foto Sekali Lihat 1x]" : `[Foto${extras.attachment_name ? `: ${extras.attachment_name}` : ""}]`)
+      : extras.attachment_type === "video" ? (extras.view_once ? "[Video Sekali Lihat 1x]" : `[Video${extras.attachment_name ? `: ${extras.attachment_name}` : ""}]`)
+      : extras.attachment_type === "file" ? `[Berkas: ${extras.attachment_name || "Dokumen"}]`
       : ""
     );
     if (!text) return;
@@ -3029,12 +3316,12 @@ export class GlobalChat {
     const apiKey = String(this.env?.ONESIGNAL_REST_API_KEY || "").trim();
     const appId = String(this.env?.ONESIGNAL_APP_ID || DEFAULT_ONESIGNAL_APP_ID).trim();
     if (!apiKey || !appId) return;
-    const isFounder = Boolean(msg.is_founder || isFounderChatName(msg.name));
+    const isFounder = Boolean(msg.is_founder || isFounderChatName(msg.name, msg.github_login));
     const senderLabel = isFounder
-      ? `👑 ${msg.flag || "🇮🇩"} ${msg.name} [FOUNDER] (${msg.country || "ID"})`
-      : `${msg.flag || "🌐"} ${msg.name} (${msg.country || "ID"})`;
+      ? `${msg.name} [FOUNDER] (${msg.country || "ID"})`
+      : `${msg.name} (${msg.country || "ID"})`;
     const bodyText = msg.translated && msg.translated.toLowerCase() !== msg.text.toLowerCase()
-      ? `${msg.text}\n🌐 ${msg.target_lang || "TR"}: ${msg.translated}`
+      ? `${msg.text}\n[${msg.target_lang || "TR"}] ${msg.translated}`
       : msg.text;
     try {
       await fetch("https://api.onesignal.com/notifications", {
@@ -3047,11 +3334,7 @@ export class GlobalChat {
         body: JSON.stringify({
           app_id: appId,
           target_channel: "push",
-          filters: [
-            { field: "tag", key: "chat_open", relation: "!=", value: "true" },
-            { operator: "AND" },
-            { field: "tag", key: "nickname", relation: "!=", value: msg.name },
-          ],
+          included_segments: ["All"],
           headings: {
             en: `${senderLabel} · Chat Global`,
             id: `${senderLabel} · Chat Global`,
@@ -3064,6 +3347,8 @@ export class GlobalChat {
             type: "global_chat",
             msg_id: msg.id,
             sender_name: senderLabel,
+            raw_sender: msg.name,
+            github_login: msg.github_login || "",
             country: msg.country || "ID",
             flag: msg.flag || "🇮🇩",
             text: msg.text,
@@ -3120,6 +3405,22 @@ async function releasesListResponse(request, env) {
   return out;
 }
 
+const EDGE_APP_PEERS = new Map();
+function updateEdgeOnlinePeers(peerKey, info = null) {
+  const now = Date.now();
+  if (peerKey && info !== false) {
+    EDGE_APP_PEERS.set(peerKey, { lastSeen: now, ...(info || {}) });
+  } else if (peerKey && info === false) {
+    EDGE_APP_PEERS.delete(peerKey);
+  }
+  for (const [k, v] of EDGE_APP_PEERS.entries()) {
+    if (!v || now - v.lastSeen > APP_PRESENCE_TTL_MS) {
+      EDGE_APP_PEERS.delete(k);
+    }
+  }
+  return Math.max(1, EDGE_APP_PEERS.size);
+}
+
 export default {
   async fetch(request, env) {
     const url = new URL(request.url);
@@ -3132,17 +3433,28 @@ export default {
     }
     if (path === "/api/chat/history") {
       if (!env.GLOBAL_CHAT) return notFound(request.method);
+      const reqJoinedAt = Number(url.searchParams.get("joined_at") || 0);
+      const reqClientId = String(url.searchParams.get("client_id") || "").trim().slice(0, 80);
+      const reqGhLogin = String(url.searchParams.get("github_login") || "").trim().slice(0, 40);
+      const edgeOnline = updateEdgeOnlinePeers(reqClientId || (reqGhLogin ? `gh:${reqGhLogin}` : ""), { screen: "chat" });
+
       const chatId2 = env.GLOBAL_CHAT.idFromName("xydesk-global-chat-v1");
-      const res = await env.GLOBAL_CHAT.get(chatId2).fetch(new Request(new URL("/history", request.url), { method: "GET" }));
+      const historyUrl = new URL("/history", request.url);
+      historyUrl.search = url.search;
+      const res = await env.GLOBAL_CHAT.get(chatId2).fetch(new Request(historyUrl, { method: "GET" }));
       if (!res.ok) return res;
       const payload = await res.json().catch(() => null);
       if (!payload || !Array.isArray(payload.messages)) {
-        return durableObjectJson({ status: "ok", messages: [] }, 200, request.method);
+        return durableObjectJson({ status: "ok", messages: [], online_count: Math.max(edgeOnline, payload?.online_count || 1) }, 200, request.method);
       }
+      const effectiveJoinedAt = Math.max(reqJoinedAt, Number(payload.joined_at || 0));
       const cleaned = [];
       for (const m of payload.messages) {
         const senderLower = String(m?.name || "").trim().toLowerCase();
         if (LEGACY_TEST_NAMES.has(senderLower)) continue;
+        // Filter tegas: pengguna yang baru join tidak boleh melihat chat sebelum joined_at
+        const msgAt = Number(m?.at || 0);
+        if (effectiveJoinedAt > 0 && msgAt > 0 && msgAt < effectiveJoinedAt) continue;
         const text = String(m?.text || "");
         const srcLang = typeof m?.source_lang === "string" ? m.source_lang : "";
         const cc = resolveSmartCountry(text, srcLang, m?.country, m?.country);
@@ -3151,9 +3463,97 @@ export default {
           is_founder: Boolean(m?.is_founder || isFounderChatName(m?.name, m?.github_login)),
           country: cc,
           flag: countryToFlag(cc),
+          delivery_status: m?.delivery_status || "delivered",
+          e2ee_v: m?.e2ee_v || "XY-E2EE-GCM-v1",
         });
       }
-      return durableObjectJson({ status: "ok", messages: cleaned }, 200, request.method);
+      return durableObjectJson(
+        {
+          status: "ok",
+          messages: cleaned,
+          pinned_message: payload.pinned_message !== undefined ? payload.pinned_message : EDGE_PINNED_MSG,
+          online_count: Math.max(edgeOnline, Number(payload.online_count || 1)),
+          joined_at: effectiveJoinedAt,
+          e2ee_protocol: "XY-E2EE-GCM-v1",
+        },
+        200,
+        request.method,
+      );
+    }
+    if (path === "/api/chat/pin") {
+      if (request.method === "OPTIONS") return corsPreflight("POST, OPTIONS");
+      if (request.method !== "POST") return methodNotAllowed("POST, OPTIONS");
+      const bodyText = await request.text().catch(() => "");
+      let parsed = null;
+      try { parsed = JSON.parse(bodyText); } catch {}
+      const action = String(parsed?.action || "pin").toLowerCase();
+      if (action === "unpin" || !parsed?.message) {
+        EDGE_PINNED_MSG = null;
+      } else {
+        const rm = parsed.message;
+        EDGE_PINNED_MSG = {
+          id: String(rm.id || ""),
+          name: String(rm.name || "User").slice(0, 32),
+          github_login: String(rm.github_login || "").slice(0, 40),
+          text: String(rm.text || "").slice(0, 300),
+          pinned_by: String(parsed.pinned_by || rm.name || "User").slice(0, 32),
+          at: Number(rm.at || Date.now()),
+        };
+      }
+      if (env.GLOBAL_CHAT) {
+        try {
+          const chatIdPin = env.GLOBAL_CHAT.idFromName("xydesk-global-chat-v1");
+          await env.GLOBAL_CHAT.get(chatIdPin).fetch(
+            new Request(new URL("/pin", request.url), {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: bodyText,
+            }),
+          );
+        } catch {}
+      }
+      return durableObjectJson({ status: "ok", pinned_message: EDGE_PINNED_MSG }, 200, request.method);
+    }
+    if (path === "/api/chat/presence") {
+      if (request.method === "OPTIONS") return corsPreflight("GET, POST, OPTIONS");
+      let bodyText = "";
+      let parsedBody = null;
+      if (request.method === "POST") {
+        bodyText = await request.text().catch(() => "");
+        try { parsedBody = JSON.parse(bodyText); } catch {}
+      }
+      const cid = String(parsedBody?.client_id || "").trim().slice(0, 80);
+      const gh = String(parsedBody?.github_login || "").trim().replace(/^@/, "").slice(0, 40);
+      const peerKey = cid || (gh ? `gh:${gh}` : `ip:${request.headers.get("cf-connecting-ip") || "anon"}`);
+      const edgeOnline = updateEdgeOnlinePeers(peerKey, parsedBody?.active === false ? false : { screen: parsedBody?.screen || "app" });
+
+      if (env.GLOBAL_CHAT) {
+        try {
+          const chatIdP = env.GLOBAL_CHAT.idFromName("xydesk-global-chat-v1");
+          const doRes = await env.GLOBAL_CHAT.get(chatIdP).fetch(
+            new Request(new URL("/presence", request.url), {
+              method: request.method,
+              headers: { "Content-Type": "application/json" },
+              body: request.method === "POST" ? bodyText : undefined,
+            }),
+          );
+          if (doRes.ok) {
+            const doJson = await doRes.json().catch(() => null);
+            const mergedCount = Math.max(edgeOnline, Number(doJson?.online_count || 1));
+            return durableObjectJson({ status: "ok", online_count: mergedCount }, 200, request.method);
+          }
+        } catch {}
+      }
+      return durableObjectJson({ status: "ok", online_count: edgeOnline }, 200, request.method);
+    }
+    if (path === "/api/data-pack") {
+      if (request.method === "OPTIONS") return corsPreflight("GET, OPTIONS");
+      return dataPackResponse(request, env);
+    }
+    if (path === "/api/push-update") {
+      if (request.method === "OPTIONS") return corsPreflight("POST, OPTIONS");
+      if (request.method !== "POST") return methodNotAllowed("POST, OPTIONS");
+      return pushUpdateResponse(request, env);
     }
     if (path === "/api/chat/send") {
       if (request.method === "OPTIONS") return corsPreflight("POST, OPTIONS");

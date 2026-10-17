@@ -22,14 +22,17 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.displayCutoutPadding
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
@@ -517,6 +520,8 @@ fun SessionControls(
                 telemetry = telemetry,
                 modifier = Modifier
                     .align(Alignment.TopStart)
+                    .statusBarsPadding()
+                    .displayCutoutPadding()
                     .padding(start = 8.dp, top = 8.dp)
                     .zIndex(19f),
             )
@@ -564,6 +569,8 @@ fun SessionControls(
             RecordingIndicator(
                 modifier = Modifier
                     .align(Alignment.TopStart)
+                    .statusBarsPadding()
+                    .displayCutoutPadding()
                     .padding(start = 10.dp, top = 10.dp)
                     .zIndex(24f),
             )
@@ -576,6 +583,7 @@ fun SessionControls(
                 onScrollUnits = onScrollUnits,
                 modifier = Modifier
                     .align(Alignment.CenterEnd)
+                    .displayCutoutPadding()
                     .padding(end = 68.dp)
                     .zIndex(23f),
             )
@@ -588,6 +596,8 @@ fun SessionControls(
             Column(
                 Modifier
                     .align(Alignment.BottomEnd)
+                    .navigationBarsPadding()
+                    .displayCutoutPadding()
                     .padding(end = 10.dp, bottom = 24.dp)
                     .zIndex(24f),
                 horizontalAlignment = Alignment.End,
@@ -674,7 +684,14 @@ fun SessionControls(
         }
 
         if (mappingMode) {
-            Box(Modifier.align(Alignment.TopCenter).padding(top = 8.dp).zIndex(26f)) {
+            Box(
+                Modifier
+                    .align(Alignment.TopCenter)
+                    .statusBarsPadding()
+                    .displayCutoutPadding()
+                    .padding(top = 8.dp)
+                    .zIndex(26f),
+            ) {
                 HudMappingBanner(
                     keyCount = keys.size,
                     onAdd = { pickerOpen = true },
@@ -842,6 +859,8 @@ fun SessionControls(
                 },
                 modifier = Modifier
                     .align(Alignment.TopEnd)
+                    .statusBarsPadding()
+                    .displayCutoutPadding()
                     .padding(top = 12.dp, end = 6.dp),
             )
         }

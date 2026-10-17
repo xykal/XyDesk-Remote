@@ -267,6 +267,8 @@ internal class CommunityJokesApi(context: Context) {
     /** ID ramah pengguna, contoh: XY-7F3A9C. Turunan stabil dari client id. */
     fun friendlyAccountId(): String = "XY-" + clientId.replace("-", "").take(6).uppercase()
 
+    fun accountShortId(): String = friendlyAccountId()
+
     fun displayName(): String? = prefs.getString(KEY_DISPLAY_NAME, null)?.takeIf { it.isNotBlank() }
 
     fun setDisplayNameLocally(name: String?) {

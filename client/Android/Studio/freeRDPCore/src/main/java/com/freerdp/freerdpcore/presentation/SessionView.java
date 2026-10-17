@@ -75,6 +75,7 @@ public class SessionView extends View
 	private int cursorHeight = 0;
 	private int cursorHotX = 0;
 	private int cursorHotY = 0;
+	private int pressedMouseButtons = 0;
 
 	// private static final String TAG = "FreeRDP.SessionView";
 	private DoubleGestureDetector doubleGestureDetector;
@@ -317,9 +318,10 @@ public class SessionView extends View
 
 	@Override public boolean onTouchEvent(MotionEvent event)
 	{
-		// Physical mouse events: bypass gesture detector entirely.
-		// Buttons are handled in onGenericMotionEvent; hover moves in onHoverEvent.
-		// Only ACTION_MOVE with a button held (drag) needs handling here.
+		// Physical mouse events: bypass finger gesture detector (which waits for
+		// long-press or single-tap-up without movement). Handle instant button
+		// press/release and drag directly so physical USB/Bluetooth mice click
+		// immediately on tap without needing a long press.
 		if (event.isFromSource(InputDevice.SOURCE_MOUSE))
 		{
 			int action = event.getActionMasked();
@@ -328,11 +330,49 @@ public class SessionView extends View
 				handleTouchpadScroll(event);
 				return true;
 			}
-			if (action == MotionEvent.ACTION_MOVE && event.getButtonState() != 0)
+			MotionEvent mapped = mapTouchEvent(event);
+			int x = (int)mapped.getX();
+			int y = (int)mapped.getY();
+			mapped.recycle();
+
+			if (action == MotionEvent.ACTION_DOWN)
 			{
-				MotionEvent mapped = mapTouchEvent(event);
-				sessionViewListener.onSessionViewMouseMove((int)mapped.getX(), (int)mapped.getY());
-				mapped.recycle();
+				int btn = event.getButtonState();
+				if (btn == 0)
+					btn = MotionEvent.BUTTON_PRIMARY;
+				if (pressedMouseButtons == 0 && sessionViewListener != null)
+				{
+					pressedMouseButtons = btn;
+					sessionViewListener.onSessionViewBeginTouch();
+					if ((btn & MotionEvent.BUTTON_SECONDARY) != 0)
+						sessionViewListener.onSessionViewRightTouch(x, y, true);
+					else if ((btn & MotionEvent.BUTTON_TERTIARY) != 0)
+						sessionViewListener.onSessionViewMiddleTouch(x, y, true);
+					else
+						sessionViewListener.onSessionViewLeftTouch(x, y, true);
+				}
+				return true;
+			}
+			if (action == MotionEvent.ACTION_MOVE)
+			{
+				if (sessionViewListener != null)
+					sessionViewListener.onSessionViewMouseMove(x, y);
+				return true;
+			}
+			if (action == MotionEvent.ACTION_UP || action == MotionEvent.ACTION_CANCEL)
+			{
+				if (pressedMouseButtons != 0 && sessionViewListener != null)
+				{
+					int btn = pressedMouseButtons;
+					pressedMouseButtons = 0;
+					if ((btn & MotionEvent.BUTTON_SECONDARY) != 0)
+						sessionViewListener.onSessionViewRightTouch(x, y, false);
+					else if ((btn & MotionEvent.BUTTON_TERTIARY) != 0)
+						sessionViewListener.onSessionViewMiddleTouch(x, y, false);
+					else
+						sessionViewListener.onSessionViewLeftTouch(x, y, false);
+					sessionViewListener.onSessionViewEndTouch();
+				}
 				return true;
 			}
 			return true;
@@ -404,12 +444,26 @@ public class SessionView extends View
 		                action == MotionEvent.ACTION_BUTTON_RELEASE))
 		{
 			boolean down = action == MotionEvent.ACTION_BUTTON_PRESS;
+			int actionButton = event.getActionButton();
+			if (down)
+			{
+				if ((pressedMouseButtons & actionButton) != 0)
+					return true;
+				pressedMouseButtons |= actionButton;
+			}
+			else
+			{
+				if ((pressedMouseButtons & actionButton) == 0)
+					return true;
+				pressedMouseButtons &= ~actionButton;
+			}
+
 			MotionEvent mapped = mapTouchEvent(event);
 			int x = (int)mapped.getX();
 			int y = (int)mapped.getY();
 			mapped.recycle();
 
-			switch (event.getActionButton())
+			switch (actionButton)
 			{
 				case MotionEvent.BUTTON_PRIMARY:
 					if (down)
@@ -422,6 +476,8 @@ public class SessionView extends View
 					if (down)
 						sessionViewListener.onSessionViewBeginTouch();
 					sessionViewListener.onSessionViewRightTouch(x, y, down);
+					if (!down)
+						sessionViewListener.onSessionViewEndTouch();
 					return true;
 				case MotionEvent.BUTTON_TERTIARY:
 					sessionViewListener.onSessionViewMiddleTouch(x, y, down);
