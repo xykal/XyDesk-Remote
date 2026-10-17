@@ -487,12 +487,12 @@ internal fun FunHubCard(
                 }
             }
         } else {
-            val myDispName = remember(viewerGithubLogin) {
-                api.displayName() ?: viewerGithubLogin.ifBlank { "U" }
+            val myDispName = remember(myGithubLogin) {
+                api.displayName() ?: myGithubLogin?.takeIf { it.isNotBlank() } ?: "U"
             }
-            val myAvatarUrl = remember(viewerGithubLogin) {
+            val myAvatarUrl = remember(myGithubLogin) {
                 getVerifiedGitHubAvatarUrl(context)
-                    ?: if (viewerGithubLogin.isNotBlank()) "https://github.com/$viewerGithubLogin.png?size=160" else null
+                    ?: myGithubLogin?.takeIf { it.isNotBlank() }?.let { "https://github.com/$it.png?size=160" }
             }
             Column(modifier = Modifier.fillMaxWidth()) {
                 Row(
