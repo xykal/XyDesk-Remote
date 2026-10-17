@@ -1526,3 +1526,18 @@ Tiga permintaan pemilik ditangani tuntas:
 - **Login GitHub Tanpa Kode (`FounderBadge.kt`, `XyDeskHome.kt`, `RdpFreeScreen.kt`, `XyProfileScreen.kt`, `GlobalChatScreen.kt`):**
   - Mengganti mekanisme kode 8 digit dengan alur Web OAuth Authorize langsung di browser dalam aplikasi (`GitHubDirectOAuthController` & `GitHubDirectOAuthModalHost`).
 
+## Ronde 57 — Rilis Publik `v1.1.20` (`VERSION_CODE 81`, Commit `83254a0b8577f807232c19101ecab1ccbe1b6b61`, CI `39048973039`) (2026-10-17)
+- **Revisi Penuh UI/UX Feed, Banner Anti-Neon Chat Global, Tab Notifikasi & Leaderboard Top 100 (`XyFeedScreen.kt`, `FunHubCard.kt`, `CommunityJokesApi.kt`):**
+  - **Banner Chat Global Anti-Neon di Feed**: Desain obsidian/slate elegan dengan jumlah user online real-time dan animasi titik-titik mengetik (`• • •`).
+  - **Edit & Hapus Postingan, Komentar Ber-Avatar + Balas & `@mention`, serta Action Bar Baru**: Ikon Like, Komentar, Share, dan Reaksi Cepat gaya WhatsApp (`👍 ❤️ 😂 😮 😢 🙏 🔥`).
+  - **Tab Notifikasi di Header Feed**: Kategori **Semua**, **📢 Pengumuman**, **📥 Kotak Masuk**, dan **💬 Balasan / Mention**.
+  - **Pengumuman Admin (`@xykal`) Otomatis Tersemat**: Pengumuman oleh Admin memiliki kartu emas khusus dan otomatis di-pin di **Feed** sekaligus **Chat Global**.
+  - **Leaderboard Top 1–100**: Podium **Top 1, Top 2, Top 3** hingga peringkat **100** berdasarkan durasi aktif menggunakan APK / bermain sesi remote (`/api/leaderboard`).
+  - **Universal OpenGraph (OG) Link Preview + XyShield Anti-Malware (`/api/og`)**: Menampilkan preview banner otomatis untuk semua link (YouTube, GitHub, sosmed, web umum) dan memblokir file/tautan berbahaya.
+  - **Media HD (1600px @ 90%, maks 2.8MB) & Video Autoplay Preview**: Kompresi gambar ditingkatkan ke kualitas HD dan video otomatis berputar preview (*muted loop*) di Feed maupun Chat Global.
+- **Perbaikan Chat Global, Stiker Favorit Semua Pengguna, Profil & Keamanan (`GlobalChatScreen.kt`, `CustomStickerVault.kt`, `XyProfileScreen.kt`):**
+  - Kirim foto/video/stiker **tanpa teks nama file**, **Swipe-to-Reply** aktif kembali, stiker dirender **tanpa bubble card & tanpa label** dengan tombol **`★ Favorit`** untuk semua pengguna, **wajib login GitHub** (tanpa mode Tamu), serta **Menu Pengaturan Chat Global** lengkap (Bersihkan Chat, Gaya Gelembung, Otomatis Unduh Media, HD Media, Autoplay Video, Nada Notifikasi, XyShield).
+- **Login GitHub Sinkron Chrome (`xyrdp-dash.vercel.app` `dpl_GqLY4sbW6d9uCiUiXDSJKGty4hEr`) & Pemilih OS `xykal/XyRDP` (`d336256`):**
+  - Chrome Custom Tabs + deep link `xydesk://github-auth` + polling `/api/github/oauth/poll`, serta pemisahan `--setup-only` / `--keepalive-only` / `--finalize-only` di `setup-linux-rdp.sh` agar tidak stuck di step setup dan bisa memilih **Windows Server 2022 RDP / Linux Desktop / Linux SSH** secara akurat.
+
+
