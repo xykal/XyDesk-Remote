@@ -178,13 +178,17 @@ class PcStreamViewer(
      * refresh held controls so loss of an unreliable packet cannot stick a key.
      */
     fun sendControlPacket(packet: ByteArray): Boolean {
-        if (closed.get() || packet.isEmpty() || packet.size > MAX_CONTROL_PACKET_BYTES) return false
-        val channel = controlChannel ?: return false
-        if (channel.state() != DataChannel.State.OPEN) return false
-        return try {
-            channel.send(DataChannel.Buffer(ByteBuffer.wrap(packet), true))
-        } catch (_: RuntimeException) {
-            false
+        if (packet.isEmpty() || packet.size > MAX_CONTROL_PACKET_BYTES) return false
+        // Use the same lock as detach/dispose: state() itself may hit native code.
+        return synchronized(dataChannelLock) {
+            if (closed.get()) return@synchronized false
+            val channel = controlChannel ?: return@synchronized false
+            try {
+                if (channel.state() != DataChannel.State.OPEN) false
+                else channel.send(DataChannel.Buffer(ByteBuffer.wrap(packet), true))
+            } catch (_: RuntimeException) {
+                false
+            }
         }
     }
 
