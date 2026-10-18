@@ -163,6 +163,7 @@ fun XyDeskTheme(
     dark: Boolean,
     content: @Composable () -> Unit,
 ) {
+    val decorativeMotion = rememberDecorativeMotionEnabled()
     val scheme = if (dark) DarkScheme else LightScheme
     val view = LocalView.current
     if (!view.isInEditMode) {
@@ -215,7 +216,7 @@ fun XyDeskTheme(
             ),
         ),
         content = {
-            CompositionLocalProvider(LocalContentColor provides scheme.onSurface) {
+            CompositionLocalProvider(LocalContentColor provides scheme.onSurface, LocalDecorativeMotionEnabled provides decorativeMotion) {
                 content()
             }
         },
