@@ -585,7 +585,7 @@ fun XyDeskSessionScreen(
         manager.setListener(object : SessionManager.Listener {
             override fun onCertificatePrompt(info: CertificateInfo, reply: (Int) -> Unit) {
                 val stored = trustStore.fingerprint(info.host, info.port)
-                if (stored != null && stored == info.fingerprint) {
+                if (id.xydesk.remote.core.canAutoAcceptPinnedCertificate(info, stored)) {
                     reply(CertificateInfo.VERIFY_ACCEPT)
                     return
                 }
@@ -2789,6 +2789,7 @@ private fun CertificateDialog(
         XyPillButton(
             text = xy("Percaya & ingat", "Trust & remember"),
             onClick = onTrustRemember,
+            enabled = info.fingerprint.isNotBlank() && info.host.isNotBlank() && info.port in 1..65535,
             compact = true,
             modifier = Modifier.fillMaxWidth(),
         )
