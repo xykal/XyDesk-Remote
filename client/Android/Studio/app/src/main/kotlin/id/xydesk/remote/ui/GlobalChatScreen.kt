@@ -152,6 +152,8 @@ import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.sync.Semaphore
 import kotlinx.coroutines.sync.withPermit
+import androidx.compose.runtime.snapshotFlow
+import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -363,7 +365,7 @@ internal fun GlobalChatScreen(
     val oauthRev = GitHubDirectOAuthController.authRevision
     LaunchedEffect(oauthRev) {
         val currentUser = getVerifiedGitHubLogin(context)
-        if (!currentUser.isNullOrBlank() && currentUser != verifiedGhLogin) {
+        if (currentUser != verifiedGhLogin) {
             verifiedGhLogin = currentUser
             nickname = chatNickname(context)
             firstJoinedAtMs = ensureFirstJoinedAtMs(context, currentUser)
@@ -436,14 +438,29 @@ internal fun GlobalChatScreen(
     val manuallyDownloadedIds = remember { mutableStateListOf<String>() }
 
     var replyingTo by remember { mutableStateOf<ChatMessage?>(null) }
-    var pinnedMessage by remember { mutableStateOf<PinnedChatMessage?>(GlobalChatMemoryCache.pinnedMessage) }
+    var pinnedMessage by remember(verifiedGhLogin) { mutableStateOf<PinnedChatMessage?>(null) }
     var focusedContextMsg by remember { mutableStateOf<ChatMessage?>(null) }
     var inspectingE2eeMsg by remember { mutableStateOf<ChatMessage?>(null) }
     var fullscreenMediaMsg by remember { mutableStateOf<ChatMessage?>(null) }
 
-    val messages = remember {
-        mutableStateListOf<ChatMessage>().apply {
-            addAll(GlobalChatMemoryCache.messages)
+    val messages = remember(verifiedGhLogin) {
+        mutableStateListOf<ChatMessage>()
+    }
+    LaunchedEffect(verifiedGhLogin) {
+        val login = verifiedGhLogin.orEmpty()
+        val cached = withContext(Dispatchers.IO) {
+            GlobalChatOfflineCache.read(context.applicationContext, login, nickname)
+        }
+        // Network may have completed while disk was being read; don't replace fresher state.
+        val hidden = chatPrefs.getStringSet(KEY_HIDDEN_MSG_IDS, emptySet()).orEmpty()
+        if (messages.isEmpty()) messages.addAll(cached.filter {
+            it.id !in hidden && it.at >= firstJoinedAtMs - 2_000L
+        })
+        snapshotFlow { messages.toList() }.collectLatest { snapshot ->
+            delay(800L)
+            withContext(Dispatchers.IO) {
+                GlobalChatOfflineCache.write(context.applicationContext, login, snapshot)
+            }
         }
     }
     val hiddenMessageIds = remember {
@@ -716,6 +733,9 @@ internal fun GlobalChatScreen(
                             for (item in fetched) {
                                 id.xydesk.remote.push.ChatPushNotifier.markSeen(item.id, item.at, context)
                                 val existingIdx = messages.indexOfFirst { it.id == item.id }
+                                if (existingIdx >= 0 && messages[existingIdx].attachmentData.isBlank() && item.attachmentData.isNotBlank()) {
+                                    messages[existingIdx] = item
+                                }
                                 if (existingIdx < 0) {
                                     val tempIdx = messages.indexOfFirst {
                                         it.id.startsWith("local-") && it.mine && it.text == item.text
