@@ -18,6 +18,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -71,14 +72,25 @@ internal fun PcStreamPadOverlay(
     deviceId: String,
     onSend: (XyGamepadState) -> Unit,
     onClose: () -> Unit,
+    inputAvailable: Boolean = true,
 ) {
     val tracker = remember { XyVirtualPadTracker() }
     var layout by remember { mutableStateOf(XyPadLayout.resolve(prefs.virtualPadLayout(deviceId))) }
     var editMode by remember { mutableStateOf(false) }
+    val lifecycle = androidx.lifecycle.compose.LocalLifecycleOwner.current.lifecycle
+    var resumed by remember(lifecycle) {
+        mutableStateOf(lifecycle.currentState.isAtLeast(androidx.lifecycle.Lifecycle.State.RESUMED))
+    }
+    val windowFocused = androidx.compose.ui.platform.LocalWindowInfo.current.isWindowFocused
+    fun acceptsInput() = virtualPadInputEnabled(editMode, resumed, windowFocused, inputAvailable)
 
     fun push() {
-        // Snapshot penuh tiap perubahan — host tinggal menerapkan frame
-        // terakhir, aman terhadap paket hilang (lihat XyGamepadPacketV1).
+        // Full state lets a later frame restore synchronization after packet loss.
+        // It does not acknowledge delivery of the final neutral/release frame.
+        if (!acceptsInput()) {
+            tracker.reset()
+            return
+        }
         if (tracker.consumeDirty()) onSend(tracker.state())
     }
 
@@ -87,10 +99,27 @@ internal fun PcStreamPadOverlay(
         tracker.reset()
         onSend(tracker.state())
     }
+    val releaseNow by rememberUpdatedState(::releaseAll)
+    DisposableEffect(lifecycle) {
+        val observer = androidx.lifecycle.LifecycleEventObserver { _, _ ->
+            val active = lifecycle.currentState.isAtLeast(androidx.lifecycle.Lifecycle.State.RESUMED)
+            val wasActive = resumed
+            resumed = active
+            if (wasActive && !active) releaseNow()
+        }
+        lifecycle.addObserver(observer)
+        onDispose { lifecycle.removeObserver(observer) }
+    }
+    LaunchedEffect(inputAvailable, windowFocused) {
+        if (!inputAvailable || !windowFocused) releaseAll()
+    }
     DisposableEffect(Unit) {
         onDispose {
-            prefs.setVirtualPadLayout(deviceId, layout)
-            releaseAll()
+            try {
+                prefs.setVirtualPadLayout(deviceId, layout)
+            } finally {
+                releaseAll()
+            }
         }
     }
 
@@ -155,22 +184,22 @@ internal fun PcStreamPadOverlay(
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(4.dp),
             ) {
-                PadKey("LT", mini = true, enabled = { !editMode }) {
+                PadKey("LT", mini = true, enabled = { acceptsInput() }) {
                     tracker.setTrigger(left = if (it) 1f else 0f); push()
                 }
-                PadKey("LB", mini = true, enabled = { !editMode }) {
+                PadKey("LB", mini = true, enabled = { acceptsInput() }) {
                     tracker.setButton(XyPadButton.LEFT_SHOULDER, it); push()
                 }
-                PadKey("ST", mini = true, enabled = { !editMode }) {
+                PadKey("ST", mini = true, enabled = { acceptsInput() }) {
                     tracker.setButton(XyPadButton.START, it); push()
                 }
-                PadKey("BK", mini = true, enabled = { !editMode }) {
+                PadKey("BK", mini = true, enabled = { acceptsInput() }) {
                     tracker.setButton(XyPadButton.BACK, it); push()
                 }
-                PadKey("RB", mini = true, enabled = { !editMode }) {
+                PadKey("RB", mini = true, enabled = { acceptsInput() }) {
                     tracker.setButton(XyPadButton.RIGHT_SHOULDER, it); push()
                 }
-                PadKey("RT", mini = true, enabled = { !editMode }) {
+                PadKey("RT", mini = true, enabled = { acceptsInput() }) {
                     tracker.setTrigger(right = if (it) 1f else 0f); push()
                 }
                 PadKey("EDIT", mini = true, enabled = { true }) { down ->
@@ -200,19 +229,19 @@ internal fun PcStreamPadOverlay(
             editMode = editMode,
         ) {
             Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                PadKey("▲", enabled = { !editMode }) {
+                PadKey("▲", enabled = { acceptsInput() }) {
                     tracker.setButton(XyPadButton.DPAD_UP, it); push()
                 }
                 Row {
-                    PadKey("◀", enabled = { !editMode }) {
+                    PadKey("◀", enabled = { acceptsInput() }) {
                         tracker.setButton(XyPadButton.DPAD_LEFT, it); push()
                     }
                     Box(Modifier.size(38.dp))
-                    PadKey("▶", enabled = { !editMode }) {
+                    PadKey("▶", enabled = { acceptsInput() }) {
                         tracker.setButton(XyPadButton.DPAD_RIGHT, it); push()
                     }
                 }
-                PadKey("▼", enabled = { !editMode }) {
+                PadKey("▼", enabled = { acceptsInput() }) {
                     tracker.setButton(XyPadButton.DPAD_DOWN, it); push()
                 }
             }
@@ -229,7 +258,7 @@ internal fun PcStreamPadOverlay(
         ) {
             PadStick(
                 label = "L",
-                dragEnabled = { !editMode },
+                enabled = acceptsInput(),
             ) { x, y ->
                 tracker.setLeftStick(x, y); push()
             }
@@ -246,7 +275,7 @@ internal fun PcStreamPadOverlay(
         ) {
             PadStick(
                 label = "R",
-                dragEnabled = { !editMode },
+                enabled = acceptsInput(),
             ) { x, y ->
                 tracker.setRightStick(x, y); push()
             }
@@ -262,19 +291,19 @@ internal fun PcStreamPadOverlay(
             editMode = editMode,
         ) {
             Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                PadKey("Y", enabled = { !editMode }) {
+                PadKey("Y", enabled = { acceptsInput() }) {
                     tracker.setButton(XyPadButton.Y, it); push()
                 }
                 Row {
-                    PadKey("X", enabled = { !editMode }) {
+                    PadKey("X", enabled = { acceptsInput() }) {
                         tracker.setButton(XyPadButton.X, it); push()
                     }
                     Box(Modifier.size(38.dp))
-                    PadKey("B", enabled = { !editMode }) {
+                    PadKey("B", enabled = { acceptsInput() }) {
                         tracker.setButton(XyPadButton.B, it); push()
                     }
                 }
-                PadKey("A", enabled = { !editMode }) {
+                PadKey("A", enabled = { acceptsInput() }) {
                     tracker.setButton(XyPadButton.A, it); push()
                 }
             }
@@ -297,6 +326,7 @@ private fun BoxScope.ClusterBox(
     editMode: Boolean,
     content: @Composable () -> Unit,
 ) {
+    val dragNow by rememberUpdatedState(drag)
     Box(
         modifier = Modifier
             .offset { place(cluster, width, height) }
@@ -308,11 +338,11 @@ private fun BoxScope.ClusterBox(
                     Modifier
                 },
             )
-            .pointerInput(cluster) {
+            .pointerInput(cluster, editMode) {
                 detectDragGestures { change, amount ->
                     if (!editMode) return@detectDragGestures
                     change.consume()
-                    drag(cluster, width, height, amount.x, amount.y)
+                    dragNow(cluster, width, height, amount.x, amount.y)
                 }
             },
     ) {
@@ -334,6 +364,7 @@ private fun PadKey(
 ) {
     val sizeDp = if (mini) 30.dp else 38.dp
     val enabledNow by rememberUpdatedState(enabled)
+    val acceptingInput = enabled()
     val actionNow by rememberUpdatedState(action)
     Box(
         modifier = Modifier
@@ -341,10 +372,10 @@ private fun PadKey(
             .clip(CircleShape)
             .background(Color(0x55000000))
             .border(1.dp, Color(0xAAFFFFFF), CircleShape)
-            .pointerInput(label) {
+            .pointerInput(label, acceptingInput) {
                 detectTapGestures(
                     onPress = {
-                        if (enabledNow()) {
+                        if (acceptingInput && enabledNow()) {
                             // Capture one callback for both edges of this press.
                             dispatchPadPress(actionNow) { tryAwaitRelease() }
                         }
@@ -371,9 +402,10 @@ private fun PadKey(
 @Composable
 private fun PadStick(
     label: String,
-    dragEnabled: () -> Boolean,
+    enabled: Boolean,
     onAxis: (Float, Float) -> Unit,
 ) {
+    val axisNow by rememberUpdatedState(onAxis)
     val density = LocalDensity.current
     val knobRadiusPx = with(density) { 24.dp.toPx() }
     val maxRadiusPx = with(density) { 62.dp.toPx() } - knobRadiusPx
@@ -387,7 +419,7 @@ private fun PadStick(
             offset
         }
         knob = clamped
-        onAxis(clamped.x / maxRadiusPx, -clamped.y / maxRadiusPx)
+        axisNow(clamped.x / maxRadiusPx, -clamped.y / maxRadiusPx)
     }
 
     Box(
@@ -408,22 +440,27 @@ private fun PadStick(
                 .clip(CircleShape)
                 .background(Color(0x99EEEEEE))
                 .border(1.dp, Color(0xFFFFFFFF), CircleShape)
-                .pointerInput(label) {
-                    detectDragGestures(
-                        onDrag = { change, amount ->
-                            if (!dragEnabled()) return@detectDragGestures
-                            change.consume()
-                            applyAxis(knob + amount)
-                        },
-                        onDragEnd = {
-                            knob = Offset.Zero
-                            onAxis(0f, 0f)
-                        },
-                        onDragCancel = {
-                            knob = Offset.Zero
-                            onAxis(0f, 0f)
-                        },
-                    )
+                .pointerInput(label, enabled, maxRadiusPx) {
+                    if (!enabled) return@pointerInput
+                    try {
+                        detectDragGestures(
+                            onDrag = { change, amount ->
+                                change.consume()
+                                applyAxis(knob + amount)
+                            },
+                            onDragEnd = {
+                                knob = Offset.Zero
+                                axisNow(0f, 0f)
+                            },
+                            onDragCancel = {
+                                knob = Offset.Zero
+                                axisNow(0f, 0f)
+                            },
+                        )
+                    } finally {
+                        knob = Offset.Zero
+                        axisNow(0f, 0f)
+                    }
                 },
             contentAlignment = Alignment.Center,
         ) {

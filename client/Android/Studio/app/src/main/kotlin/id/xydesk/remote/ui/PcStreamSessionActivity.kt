@@ -1105,6 +1105,7 @@ class PcStreamSessionActivity : ComponentActivity() {
                 PcStreamPadOverlay(
                     prefs = remember { SessionPrefs(activity) },
                     deviceId = activeHostId,
+                    inputAvailable = inputOpen.value,
                     onSend = { state ->
                         if (inputOpen.value) {
                             viewer?.sendInputPacket(XyHostInputCodec.gamepad(state))
