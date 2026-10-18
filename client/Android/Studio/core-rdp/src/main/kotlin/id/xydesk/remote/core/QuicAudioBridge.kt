@@ -57,12 +57,15 @@ class QuicAudioBridge(
     @Volatile private var txThread: Thread? = null
     private val micPeak = java.util.concurrent.atomic.AtomicInteger(0)
     private val hostFlags = java.util.concurrent.atomic.AtomicInteger(0)
+    @Volatile var micCapturing: Boolean = false
+        private set
     @Volatile var micActive: Boolean = enableMic
         private set
     @Volatile var speakerActive: Boolean = enableSpeaker
 
     val healthy: Boolean get() = running.get() && hostFlags.get() != 0
 
+    @Synchronized
     fun setVoiceMicEnabled(enabled: Boolean) {
         micActive = enabled
         if (!enabled) {
@@ -95,6 +98,7 @@ class QuicAudioBridge(
 
     fun stop() {
         if (!running.compareAndSet(true, false)) return
+        micActive = false
         runCatching { socket?.close() }
         socket = null
         rxThread?.interrupt()
@@ -240,6 +244,7 @@ class QuicAudioBridge(
     private fun runMicSender() {
         var record: AudioRecord? = null
         try {
+            if (!running.get() || !micActive) return
             val addr = InetAddress.getByName(host.trim().removePrefix("[").removeSuffix("]"))
             val minBuf = AudioRecord.getMinBufferSize(
                 SAMPLE_RATE,
@@ -255,6 +260,7 @@ class QuicAudioBridge(
                 minBuf,
             )
             if (record.state != AudioRecord.STATE_INITIALIZED) {
+                record.release()
                 record = AudioRecord(
                     MediaRecorder.AudioSource.MIC,
                     SAMPLE_RATE,
@@ -264,10 +270,18 @@ class QuicAudioBridge(
                 )
             }
             if (record.state != AudioRecord.STATE_INITIALIZED) {
+                micActive = false
                 onStatus("mic HP tidak bisa dibuka (AudioRecord gagal init)")
                 return
             }
+            if (!running.get() || !micActive) return
             record.startRecording()
+            if (record.recordingState != AudioRecord.RECORDSTATE_RECORDING) {
+                micActive = false
+                onStatus("mic HP gagal mulai merekam")
+                return
+            }
+            micCapturing = true
 
             val frameSamples = 240 // 10 ms @ 24 kHz mono
             val pcmShorts = ShortArray(frameSamples)
@@ -283,14 +297,11 @@ class QuicAudioBridge(
             val gateLinear = 10.0.pow(micGateDb / 20.0).toFloat()
             val gainLinear = 10.0.pow(micGainDb / 20.0).toFloat()
 
-            while (running.get()) {
-                if (!micActive) {
-                    micPeak.set(0)
-                    Thread.sleep(40)
-                    continue
-                }
+            while (running.get() && micActive) {
                 val n = record.read(pcmShorts, 0, frameSamples)
-                if (n <= 0) {
+                if (!running.get() || !micActive) break
+                if (n < 0) throw IllegalStateException("AudioRecord read failed")
+                if (n == 0) {
                     Thread.sleep(5)
                     continue
                 }
@@ -329,10 +340,18 @@ class QuicAudioBridge(
                 runCatching { sock.send(DatagramPacket(pktBytes, 8 + n * 2, addr, port)) }
             }
         } catch (_: Throwable) {
+            micActive = false
             onStatus("mic HP berhenti (izin/perangkat)")
         } finally {
             runCatching { record?.stop() }
             runCatching { record?.release() }
+            synchronized(this) {
+                micCapturing = false
+                micPeak.set(0)
+                if (txThread === Thread.currentThread()) txThread = null
+                // If OFF/ON raced cleanup, start only after the old recorder is released.
+                if (running.get() && micActive) setVoiceMicEnabled(true)
+            }
         }
     }
 
