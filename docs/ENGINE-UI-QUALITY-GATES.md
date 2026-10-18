@@ -6,7 +6,7 @@ No APK assembly, production deployment or automatic merge is authorized.
 | Area | Current work | Required evidence still missing |
 |---|---|---|
 | FreeRDP render/lifecycle | Pending dirty batches reset on instance/resize/release; obsolete bind/resize/input callbacks guarded | Reconnect, rotate, background/foreground and resize stress on a real RDP session; JNI lifetime/thread audit |
-| HUD input | One queued combo transaction, reverse key release attempted after callback failure; pure unit cases | Physical + IME + HUD modifier coexistence, stuck-key recovery, touch cancellation and accessibility |
+| HUD input | One queued combo transaction, reverse key release after failure; virtual pad press cleanup in finally and neutral state on edit entry (new CI pending) | Physical + IME + HUD modifier coexistence, stuck-key recovery, touch cancellation and accessibility |
 | PC stream | Control channel state/send shares teardown lock; packet schema unchanged | Disconnect/send race stress with real WebRTC; loss, delay, bandwidth and queued-input behavior |
 | Profile / identity | Account-keyed chat state, nickname/avatar cleanup, unread preferences partitioned | Switch/logout during network activity, cache restore and profile refresh on Android |
 | Security | View-once local temporary hygiene, encrypted text snapshots, no fabricated read receipts | Host identity/auth validation, certificate-trust UX, threat-model review and device tests; local UI checks are not server auth |
