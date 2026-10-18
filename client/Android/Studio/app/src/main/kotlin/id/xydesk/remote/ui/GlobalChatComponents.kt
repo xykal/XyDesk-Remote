@@ -277,7 +277,7 @@ internal fun FullScreenChatMediaViewer(
                     }
                 }
             } else {
-                val bmp = remember(msg.id, msg.attachmentData) { decodeBase64Bitmap(msg.attachmentData) }
+                val bmp = rememberChatBitmap(msg.id, msg.attachmentData)
                 Box(
                     modifier = Modifier
                         .fillMaxSize()
@@ -1362,7 +1362,7 @@ internal fun ChatMediaAttachmentBox(
             FloatingTimePill(modifier = Modifier.align(Alignment.BottomEnd))
         }
     } else if (msg.attachmentType == "image" && msg.attachmentData.isNotBlank()) {
-        val bmp = remember(msg.id, msg.attachmentData) { decodeBase64Bitmap(msg.attachmentData) }
+        val bmp = rememberChatBitmap(msg.id, msg.attachmentData)
         val ratio = remember(bmp) {
             if (bmp != null && bmp.height > 0) {
                 (bmp.width.toFloat() / bmp.height.toFloat()).coerceIn(0.62f, 1.85f)
