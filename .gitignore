@@ -40,3 +40,4 @@ hamcrest.jar
 
 # wrangler local cache (berisi metadata akun Cloudflare — jangan commit)
 .wrangler/
+**/.kotlin/
