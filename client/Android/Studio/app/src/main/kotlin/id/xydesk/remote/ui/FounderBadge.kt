@@ -1960,8 +1960,8 @@ internal fun resolveSpecialUserRole(nameOrLogin: String?, githubLogin: String? =
         if (raw.isNullOrBlank()) continue
         val key = raw.trim().removePrefix("@").lowercase(Locale.ROOT)
         if (key in FOUNDER_GITHUB_LOGINS) return "FOUNDER"
-        if (key in XySpecialRoleRegistry.XYTEAM_DEFAULT_LOGINS || key.contains("xyteam") || key.endsWith("_xy")) return "XYTEAM"
-        if (key in XySpecialRoleRegistry.XYTESTER_DEFAULT_LOGINS || key.contains("tester") || key.contains("qa_")) return "TESTER"
+        if (key in XYTEAM_DEFAULT_LOGINS || key.contains("xyteam") || key.endsWith("_xy")) return "XYTEAM"
+        if (key in XYTESTER_DEFAULT_LOGINS || key.contains("tester") || key.contains("qa_")) return "TESTER"
     }
     return null
 }
