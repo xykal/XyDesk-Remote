@@ -1848,7 +1848,7 @@ internal fun XyClickableLinkText(
             overflow = TextOverflow.Ellipsis,
             onTextLayout = { layoutResult = it },
             modifier = modifier.pointerInput(annotated, onNonLinkClick, onLongPress) {
-                androidx.compose.foundation.gestures.detectTapGestures(
+                detectTapGestures(
                     onLongPress = { onLongPress?.invoke() },
                     onTap = { pos ->
                         val layout = layoutResult
