@@ -401,6 +401,17 @@ fun XyField(
     var pwVisible by remember { mutableStateOf(false) }
     val interactionSource = remember { MutableInteractionSource() }
     val focused by interactionSource.collectIsFocusedAsState()
+    LaunchedEffect(focused, isPassword) { if (!focused || !isPassword) pwVisible = false }
+    if (isPassword) {
+        val lifecycle = androidx.lifecycle.compose.LocalLifecycleOwner.current.lifecycle
+        androidx.compose.runtime.DisposableEffect(lifecycle) {
+            val observer = androidx.lifecycle.LifecycleEventObserver { _, event ->
+                if (event == androidx.lifecycle.Lifecycle.Event.ON_STOP) pwVisible = false
+            }
+            lifecycle.addObserver(observer)
+            onDispose { lifecycle.removeObserver(observer) }
+        }
+    }
     val fieldOutline = if (focused) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outlineVariant
     val fieldOutlineWidth = if (focused) 1.5.dp else 1.dp
     Column(modifier.fillMaxWidth()) {
@@ -423,7 +434,7 @@ fun XyField(
             interactionSource = interactionSource,
             visualTransformation = if (isPassword && !pwVisible) PasswordVisualTransformation()
             else VisualTransformation.None,
-            keyboardOptions = KeyboardOptions(keyboardType = keyboardType, imeAction = imeAction),
+            keyboardOptions = xyFieldKeyboardOptions(isPassword, keyboardType, imeAction),
             decorationBox = { inner ->
                 Row(
                     modifier = Modifier
@@ -432,7 +443,7 @@ fun XyField(
                         .clip(XyPill)
                         .background(MaterialTheme.colorScheme.surface)
                         .border(fieldOutlineWidth, fieldOutline, XyPill)
-                        .padding(horizontal = 14.dp, vertical = 6.dp),
+                        .padding(horizontal = 14.dp, vertical = if (isPassword) 2.dp else 6.dp),
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
                     Box(Modifier.weight(1f)) {
@@ -448,9 +459,10 @@ fun XyField(
                     if (isPassword) {
                         Box(
                             Modifier
+                                .size(48.dp)
                                 .clip(CircleShape)
-                                .clickable { pwVisible = !pwVisible }
-                                .padding(6.dp),
+                                .clickable { pwVisible = !pwVisible },
+                            contentAlignment = Alignment.Center,
                         ) {
                             Icon(
                                 if (pwVisible) XyIcons.EyeOff else XyIcons.Eye,
