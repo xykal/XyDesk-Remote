@@ -2,7 +2,44 @@ package id.xydesk.remote.ui
 
 import android.content.Context
 import android.os.Build
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.Spring
+import androidx.compose.animation.core.spring
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.slideInVertically
+import androidx.compose.animation.slideOutVertically
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.statusBarsPadding
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.Icon
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Surface
+import androidx.compose.material3.Text
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import id.xydesk.remote.push.ChatPushNotifier
+import id.xydesk.remote.ui.components.XyIcons
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -15,6 +52,210 @@ import java.io.FileOutputStream
 import java.io.OutputStreamWriter
 import java.net.HttpURLConnection
 import java.net.URL
+import java.net.URLEncoder
+
+internal data class XyInAppNotificationItem(
+    val id: String,
+    val title: String,
+    val body: String,
+    val category: String = "info", // announcement, reply, like, reaction, comment, mention, chat, ota
+    val actorName: String = "",
+    val isFounder: Boolean = false,
+    val targetRoute: String = "", // "chat", "feed"
+    val createdAt: Long = System.currentTimeMillis(),
+)
+
+internal object XyInAppNotificationBus {
+    private val _current = MutableStateFlow<XyInAppNotificationItem?>(null)
+    val current: StateFlow<XyInAppNotificationItem?> = _current.asStateFlow()
+
+    private val _unreadCount = MutableStateFlow(0)
+    val unreadCount: StateFlow<Int> = _unreadCount.asStateFlow()
+
+    private val _history = MutableStateFlow<List<XyInAppNotificationItem>>(emptyList())
+    val history: StateFlow<List<XyInAppNotificationItem>> = _history.asStateFlow()
+
+    private val seenIds = LinkedHashSet<String>()
+
+    fun push(item: XyInAppNotificationItem) {
+        synchronized(seenIds) {
+            if (item.id.isNotBlank() && !seenIds.add(item.id)) return
+            while (seenIds.size > 200) {
+                val first = seenIds.firstOrNull() ?: break
+                seenIds.remove(first)
+            }
+        }
+        _current.value = item
+        _history.value = (listOf(item) + _history.value).take(40)
+        _unreadCount.value = (_unreadCount.value + 1).coerceAtMost(99)
+    }
+
+    fun dismissCurrent() {
+        _current.value = null
+    }
+
+    fun markAllRead() {
+        _unreadCount.value = 0
+    }
+}
+
+@Composable
+internal fun XyInAppNotificationBannerHost(
+    onOpenChat: () -> Unit = {},
+    onOpenFeed: () -> Unit = {},
+) {
+    val active by XyInAppNotificationBus.current.collectAsState()
+
+    LaunchedEffect(active?.id) {
+        val item = active ?: return@LaunchedEffect
+        delay(4400L)
+        if (XyInAppNotificationBus.current.value?.id == item.id) {
+            XyInAppNotificationBus.dismissCurrent()
+        }
+    }
+
+    Box(
+        modifier = Modifier
+            .fillMaxWidth()
+            .statusBarsPadding()
+            .padding(horizontal = 12.dp, vertical = 6.dp),
+        contentAlignment = Alignment.TopCenter,
+    ) {
+        AnimatedVisibility(
+            visible = active != null,
+            enter = slideInVertically(
+                initialOffsetY = { -it - 40 },
+                animationSpec = spring(
+                    dampingRatio = Spring.DampingRatioMediumBouncy,
+                    stiffness = Spring.StiffnessMediumLow,
+                ),
+            ) + fadeIn(),
+            exit = slideOutVertically(targetOffsetY = { -it - 40 }) + fadeOut(),
+        ) {
+            val item = active ?: return@AnimatedVisibility
+            val accentColor = when (item.category.lowercase()) {
+                "announcement" -> Color(0xFFA855F7)
+                "like" -> Color(0xFFF43F5E)
+                "reaction" -> Color(0xFFF59E0B)
+                "reply", "mention", "chat" -> Color(0xFF38BDF8)
+                "ota" -> Color(0xFF10B981)
+                else -> MaterialTheme.colorScheme.primary
+            }
+            val iconVec = when (item.category.lowercase()) {
+                "announcement" -> XyIcons.Megaphone
+                "like" -> XyIcons.HeartFilled
+                "reaction" -> XyIcons.Emoji
+                "reply", "mention", "chat", "comment" -> XyIcons.Chat
+                "ota" -> XyIcons.Check
+                else -> XyIcons.Bell
+            }
+            val categoryTag = when (item.category.lowercase()) {
+                "announcement" -> "PENGUMUMAN"
+                "like" -> "LIKE BARU"
+                "reaction" -> "REAKSI"
+                "reply" -> "BALASAN"
+                "mention" -> "MENTION"
+                "comment" -> "KOMENTAR"
+                "chat" -> "CHAT GLOBAL"
+                "ota" -> "DATA UPDATE"
+                else -> "NOTIFIKASI"
+            }
+
+            Surface(
+                shape = RoundedCornerShape(18.dp),
+                color = Color(0xFF111115).copy(alpha = 0.96f),
+                tonalElevation = 8.dp,
+                shadowElevation = 14.dp,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .border(1.dp, accentColor.copy(alpha = 0.55f), RoundedCornerShape(18.dp))
+                    .clickable {
+                        XyInAppNotificationBus.dismissCurrent()
+                        when (item.targetRoute) {
+                            "chat" -> onOpenChat()
+                            "feed" -> onOpenFeed()
+                        }
+                    },
+            ) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 13.dp, vertical = 11.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(10.dp),
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .size(36.dp)
+                            .clip(CircleShape)
+                            .background(accentColor.copy(alpha = 0.18f))
+                            .border(1.dp, accentColor.copy(alpha = 0.5f), CircleShape),
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        Icon(
+                            imageVector = iconVec,
+                            contentDescription = null,
+                            tint = accentColor,
+                            modifier = Modifier.size(18.dp),
+                        )
+                    }
+                    Column(
+                        modifier = Modifier.weight(1f),
+                        verticalArrangement = Arrangement.spacedBy(2.dp),
+                    ) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(6.dp),
+                        ) {
+                            Text(
+                                text = categoryTag,
+                                fontSize = 9.sp,
+                                fontWeight = FontWeight.ExtraBold,
+                                color = accentColor,
+                                letterSpacing = 0.6.sp,
+                            )
+                            Text(
+                                text = "·",
+                                fontSize = 10.sp,
+                                color = Color(0xFF71717A),
+                            )
+                            Text(
+                                text = item.title,
+                                style = MaterialTheme.typography.labelMedium,
+                                fontWeight = FontWeight.Bold,
+                                color = Color.White,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
+                            )
+                        }
+                        Text(
+                            text = item.body,
+                            style = MaterialTheme.typography.bodySmall,
+                            color = Color(0xFFD4D4D8),
+                            maxLines = 2,
+                            overflow = TextOverflow.Ellipsis,
+                        )
+                    }
+                    Box(
+                        modifier = Modifier
+                            .size(26.dp)
+                            .clip(CircleShape)
+                            .background(Color.White.copy(alpha = 0.07f))
+                            .clickable { XyInAppNotificationBus.dismissCurrent() },
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        Icon(
+                            imageVector = XyIcons.Close,
+                            contentDescription = "Tutup",
+                            tint = Color(0xFFA1A1AA),
+                            modifier = Modifier.size(13.dp),
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
 
 /**
  * Info versi terbaru & paket data OTA dari portal (`/api/update-check` & `/api/data-pack`).
@@ -88,7 +329,22 @@ internal object AppUpdate {
                 dataPackUrl = body.optString("data_pack_url", DATA_PACK_ENDPOINT),
             )
             if (context != null) {
-                maybeNotifyUpdatePush(context.applicationContext, info)
+                val appCtx = context.applicationContext
+                // Otomatis unduh & pasang paket data OTA di latar belakang bila ada versi baru
+                if (hasDataPackUpdate(appCtx, info.dataPackVersion)) {
+                    val applied = downloadAndApplyDataPack(appCtx) { _, _ -> }.getOrNull()
+                    if (!applied.isNullOrBlank()) {
+                        XyInAppNotificationBus.push(
+                            XyInAppNotificationItem(
+                                id = "ota-${applied}",
+                                title = "Data Otomatis Diperbarui",
+                                body = "Paket data $applied telah diunduh & diaktifkan secara otomatis.",
+                                category = "ota",
+                            ),
+                        )
+                    }
+                }
+                maybeNotifyUpdatePush(appCtx, info)
             }
             info
         }.getOrNull()
@@ -173,6 +429,29 @@ internal object AppUpdate {
             }
             val outFile = File(appCtx.filesDir, "xydesk_live_data_pack.json")
             outFile.writeText(rawJson, Charsets.UTF_8)
+
+            // Sinkronkan juga konfigurasi animasi bubble & badge khusus dari paket data OTA
+            runCatching {
+                json.optJSONObject("bubble_anim_config")?.let { bcfg ->
+                    val defaultPreset = bcfg.optString("default_preset", "SPARKLES").trim()
+                    if (defaultPreset.isNotBlank()) {
+                        appCtx.getSharedPreferences("xydesk_global_chat_prefs", Context.MODE_PRIVATE)
+                            .edit()
+                            .putString("bubble_floating_element", defaultPreset)
+                            .apply()
+                    }
+                }
+                json.optJSONObject("special_roles")?.let { rolesObj ->
+                    val keys = rolesObj.keys()
+                    while (keys.hasNext()) {
+                        val k = keys.next()
+                        val roleVal = rolesObj.optString(k, "").trim()
+                        if (roleVal.isNotBlank()) {
+                            XySpecialRoleRegistry.setRole(appCtx, k, roleVal)
+                        }
+                    }
+                }
+            }
 
             appCtx.getSharedPreferences(PREFS_DATA_PACK, Context.MODE_PRIVATE)
                 .edit()
@@ -280,14 +559,94 @@ internal object AppUpdate {
             val code = conn.responseCode
             if (code in 200..299) {
                 val body = conn.inputStream.bufferedReader(Charsets.UTF_8).use { it.readText() }
-                val count = JSONObject(body).optInt("online_count", 1).coerceAtLeast(1)
+                val root = JSONObject(body)
+                val count = root.optInt("online_count", 1).coerceAtLeast(1)
                 _appWideOnlineCount.value = count
+                // Cek notifikasi in-app terbaru dari server (pengumuman, balasan, like, react, mention)
+                pollInAppNotifications(appCtx, clientId, ghLogin, name)
                 conn.disconnect()
                 return@runCatching count
             }
             conn.disconnect()
             _appWideOnlineCount.value
         }.getOrDefault(_appWideOnlineCount.value)
+    }
+
+    private fun pollInAppNotifications(
+        appCtx: Context,
+        clientId: String,
+        ghLogin: String,
+        displayName: String,
+    ) {
+        runCatching {
+            val prefs = appCtx.getSharedPreferences(PREFS_DATA_PACK, Context.MODE_PRIVATE)
+            val sinceMs = prefs.getLong("last_inapp_notif_ts", System.currentTimeMillis() - 120_000L)
+            val urlStr = "https://api.xydeskremote.biz.id/api/notifications" +
+                "?client_id=${URLEncoder.encode(clientId, "UTF-8")}" +
+                "&github_login=${URLEncoder.encode(ghLogin, "UTF-8")}" +
+                "&name=${URLEncoder.encode(displayName, "UTF-8")}" +
+                "&since=$sinceMs"
+            val conn = (URL(urlStr).openConnection() as HttpURLConnection).apply {
+                requestMethod = "GET"
+                connectTimeout = 5_000
+                readTimeout = 5_000
+                setRequestProperty("Accept", "application/json")
+            }
+            if (conn.responseCode in 200..299) {
+                val raw = conn.inputStream.bufferedReader(Charsets.UTF_8).use { it.readText() }
+                val obj = JSONObject(raw)
+                val items = obj.optJSONArray("items")
+                var maxTs = sinceMs
+                if (items != null) {
+                    for (i in 0 until items.length()) {
+                        val it = items.optJSONObject(i) ?: continue
+                        val id = it.optString("id", "").trim()
+                        val ts = it.optLong("created_at", 0L)
+                        if (ts > maxTs) maxTs = ts
+                        val actorHash = it.optString("actor_id", "").trim()
+                        val actorName = it.optString("actor_name", "").trim()
+                        val actorClean = actorName.removePrefix("@").trim()
+                        val isSelfActor = (actorHash.isNotBlank() && actorHash.equals(clientId, ignoreCase = true)) ||
+                            (actorClean.isNotBlank() && displayName.isNotBlank() && actorClean.equals(displayName.removePrefix("@"), ignoreCase = true)) ||
+                            (actorClean.isNotBlank() && ghLogin.isNotBlank() && actorClean.equals(ghLogin.removePrefix("@"), ignoreCase = true))
+                        if (isSelfActor) continue
+                        val cat = it.optString("category", "info")
+                        val title = it.optString("title", "Notifikasi Baru")
+                        val msg = it.optString("body", "")
+                        val route = it.optString("target_route", if (cat == "like" || cat == "comment" || cat == "reaction") "feed" else "chat")
+                        if (id.isNotBlank() && msg.isNotBlank()) {
+                            XyInAppNotificationBus.push(
+                                XyInAppNotificationItem(
+                                    id = id,
+                                    title = title,
+                                    body = msg,
+                                    category = cat,
+                                    actorName = actorName,
+                                    isFounder = it.optBoolean("is_founder", false),
+                                    targetRoute = route,
+                                    createdAt = ts.takeIf { t -> t > 0L } ?: System.currentTimeMillis(),
+                                ),
+                            )
+                            ChatPushNotifier.unreadNotifCountState.intValue = (ChatPushNotifier.unreadNotifCountState.intValue + 1).coerceAtMost(99)
+                            if (cat == "mention" || cat == "reply") {
+                                ChatPushNotifier.unreadChatCountState.intValue = (ChatPushNotifier.unreadChatCountState.intValue + 1).coerceAtMost(99)
+                            }
+                            ChatPushNotifier.notifySocialEvent(
+                                context = appCtx,
+                                notifId = id,
+                                category = cat,
+                                title = title,
+                                body = msg,
+                            )
+                        }
+                    }
+                }
+                if (maxTs > sinceMs) {
+                    prefs.edit().putLong("last_inapp_notif_ts", maxTs).apply()
+                }
+            }
+            conn.disconnect()
+        }
     }
 
     /** True bila [remote] lebih baru dari [current] (per segmen numerik). */

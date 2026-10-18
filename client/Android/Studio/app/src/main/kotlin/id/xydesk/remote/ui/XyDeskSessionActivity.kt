@@ -491,14 +491,27 @@ class XyDeskSessionActivity : ComponentActivity() {
             }
         }
 
-        // back = delegate ke layar Compose; default finish
+        // back = delegate ke layar Compose; jika masih Connected jangan finish() agar sesi tetap hidup
         onBackPressedDispatcher.addCallback(
             this,
             object : OnBackPressedCallback(true) {
                 override fun handleOnBackPressed() {
                     if (backHandler?.invoke() != true) {
                         markIntentionalHomeNavigation()
-                        finish()
+                        if (manager.state.value is SessionState.Connected) {
+                            runCatching {
+                                startActivity(
+                                    Intent(this@XyDeskSessionActivity, XyDeskHomeActivity::class.java)
+                                        .putExtra(EXTRA_SKIP_AUTO_RESUME, true)
+                                        .addFlags(
+                                            Intent.FLAG_ACTIVITY_REORDER_TO_FRONT or
+                                                Intent.FLAG_ACTIVITY_SINGLE_TOP,
+                                        ),
+                                )
+                            }
+                        } else {
+                            finish()
+                        }
                     }
                 }
             }
@@ -765,12 +778,71 @@ class XyDeskSessionActivity : ComponentActivity() {
         lastHudStickState = state
     }
 
+    @Volatile
+    private var lastSecondaryMouseEventAtMs: Long = 0L
+
+    fun noteSecondaryMouseButtonEvent() {
+        lastSecondaryMouseEventAtMs = SystemClock.elapsedRealtime()
+    }
+
+    private fun isFromPhysicalMouseOrTouchpad(event: KeyEvent): Boolean {
+        val src = event.source
+        if ((src and InputDevice.SOURCE_MOUSE) == InputDevice.SOURCE_MOUSE ||
+            (src and InputDevice.SOURCE_TOUCHPAD) == InputDevice.SOURCE_TOUCHPAD ||
+            (src and InputDevice.SOURCE_MOUSE_RELATIVE) == InputDevice.SOURCE_MOUSE_RELATIVE
+        ) {
+            return true
+        }
+        val devSources = event.device?.sources ?: 0
+        val isMouseDev = (devSources and InputDevice.SOURCE_MOUSE) == InputDevice.SOURCE_MOUSE ||
+            (devSources and InputDevice.SOURCE_TOUCHPAD) == InputDevice.SOURCE_TOUCHPAD
+        val isAlphaKbd = event.device?.keyboardType == InputDevice.KEYBOARD_TYPE_ALPHABETIC
+        return isMouseDev && !isAlphaKbd
+    }
+
+    private fun isFromPhysicalKeyboard(event: KeyEvent): Boolean {
+        if (event.deviceId <= 0) return false
+        val dev = event.device ?: return false
+        if (dev.isVirtual) return false
+        return (event.source and InputDevice.SOURCE_KEYBOARD) == InputDevice.SOURCE_KEYBOARD &&
+            dev.keyboardType == InputDevice.KEYBOARD_TYPE_ALPHABETIC
+    }
+
     /**
      * Tombol fisik / event kunci Android diteruskan ke mapper inti. Karakter
      * dari keyboard HP lewat jalur InputSink milik SessionView. Tombol
      * gamepad Bluetooth/USB dipetakan ke klik & aksi bila diaktifkan.
      */
     override fun dispatchKeyEvent(event: KeyEvent): Boolean {
+        // Cegah klik kanan / tombol samping mouse fisik (yang dipetakan Android ke KEYCODE_BACK)
+        // keluar dari sesi RDP secara tiba-tiba.
+        if ((event.keyCode == KeyEvent.KEYCODE_BACK || event.keyCode == KeyEvent.KEYCODE_FORWARD) &&
+            isFromPhysicalMouseOrTouchpad(event) &&
+            !controller.overlayInputActive
+        ) {
+            if (event.keyCode == KeyEvent.KEYCODE_BACK &&
+                SystemClock.elapsedRealtime() - lastSecondaryMouseEventAtMs > 240L
+            ) {
+                val down = event.action == KeyEvent.ACTION_DOWN
+                if (down || event.action == KeyEvent.ACTION_UP) {
+                    onExternalMouseClick?.invoke(XyMouseButton.RIGHT, down)
+                }
+            }
+            return true
+        }
+
+        // Cegah tombol Escape / Back pada keyboard fisik menutup sesi RDP saat tidak ada dialog overlay.
+        if ((event.keyCode == KeyEvent.KEYCODE_ESCAPE || event.keyCode == KeyEvent.KEYCODE_BACK) &&
+            isFromPhysicalKeyboard(event) &&
+            !controller.overlayInputActive
+        ) {
+            if (event.action == KeyEvent.ACTION_DOWN && event.repeatCount == 0) {
+                controller.sendVirtualKey(KeyEvent.KEYCODE_ESCAPE, true)
+                controller.sendVirtualKey(KeyEvent.KEYCODE_ESCAPE, false)
+            }
+            return true
+        }
+
         val isGamepad = (event.source and InputDevice.SOURCE_GAMEPAD) == InputDevice.SOURCE_GAMEPAD ||
             (event.source and InputDevice.SOURCE_JOYSTICK) == InputDevice.SOURCE_JOYSTICK
         if (isGamepad && SessionPrefs(this).gamepadEnabled) {
@@ -806,6 +878,11 @@ class XyDeskSessionActivity : ComponentActivity() {
     }
 
     override fun dispatchGenericMotionEvent(event: MotionEvent): Boolean {
+        if ((event.buttonState and MotionEvent.BUTTON_SECONDARY) != 0 ||
+            event.actionButton == MotionEvent.BUTTON_SECONDARY
+        ) {
+            noteSecondaryMouseButtonEvent()
+        }
         val isJoystick = (event.source and InputDevice.SOURCE_JOYSTICK) == InputDevice.SOURCE_JOYSTICK
         if (isJoystick && event.action == MotionEvent.ACTION_MOVE && SessionPrefs(this).gamepadEnabled) {
             val ax = event.getAxisValue(MotionEvent.AXIS_X)

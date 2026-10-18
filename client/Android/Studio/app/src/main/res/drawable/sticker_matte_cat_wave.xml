@@ -1,0 +1,83 @@
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="160dp"
+    android:height="160dp"
+    android:viewportWidth="160"
+    android:viewportHeight="160">
+    <!-- Die-cut white sticker border (matte, no neon) -->
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M42,26 C50,26 58,34 62,40 C74,36 86,36 98,40 C102,34 110,26 118,26 C126,26 130,38 128,54 C136,66 138,84 134,102 C142,100 148,106 146,116 C144,126 132,134 120,136 C104,142 56,142 40,136 C28,132 24,116 26,98 C22,82 24,66 32,54 C30,38 34,26 42,26 Z" />
+    <!-- Cat ears (warm cream & terracotta) -->
+    <path
+        android:fillColor="#F5E6D3"
+        android:strokeColor="#27272A"
+        android:strokeWidth="4.5"
+        android:strokeLineJoin="round"
+        android:pathData="M38,60 L36,32 L62,46 Z" />
+    <path
+        android:fillColor="#E07A5F"
+        android:pathData="M42,54 L41,38 L56,46 Z" />
+    <path
+        android:fillColor="#F5E6D3"
+        android:strokeColor="#27272A"
+        android:strokeWidth="4.5"
+        android:strokeLineJoin="round"
+        android:pathData="M122,60 L124,32 L98,46 Z" />
+    <path
+        android:fillColor="#E07A5F"
+        android:pathData="M118,54 L119,38 L104,46 Z" />
+    <!-- Mochi Cat round head & body -->
+    <path
+        android:fillColor="#FAF3EB"
+        android:strokeColor="#27272A"
+        android:strokeWidth="4.5"
+        android:strokeLineJoin="round"
+        android:pathData="M80,42 C112,42 130,62 128,94 C126,122 108,134 80,134 C52,134 34,122 32,94 C30,62 48,42 80,42 Z" />
+    <!-- Calico patch on forehead -->
+    <path
+        android:fillColor="#D97757"
+        android:pathData="M56,45 C70,41 88,41 100,46 C96,58 84,62 74,60 C64,58 58,52 56,45 Z" />
+    <!-- Happy curved eyes -->
+    <path
+        android:fillColor="#00000000"
+        android:strokeColor="#27272A"
+        android:strokeWidth="4.5"
+        android:strokeLineCap="round"
+        android:pathData="M54,78 Q62,68 70,78" />
+    <path
+        android:fillColor="#00000000"
+        android:strokeColor="#27272A"
+        android:strokeWidth="4.5"
+        android:strokeLineCap="round"
+        android:pathData="M90,78 Q98,68 106,78" />
+    <!-- Soft matte blush cheeks -->
+    <path
+        android:fillColor="#F2A699"
+        android:pathData="M48,86 a8,5 0 1,0 16,0 a8,5 0 1,0 -16,0" />
+    <path
+        android:fillColor="#F2A699"
+        android:pathData="M96,86 a8,5 0 1,0 16,0 a8,5 0 1,0 -16,0" />
+    <!-- Cute cat mouth :3 -->
+    <path
+        android:fillColor="#00000000"
+        android:strokeColor="#27272A"
+        android:strokeWidth="4"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round"
+        android:pathData="M72,86 Q76,92 80,86 Q84,92 88,86" />
+    <!-- Waving right paw -->
+    <path
+        android:fillColor="#FAF3EB"
+        android:strokeColor="#27272A"
+        android:strokeWidth="4.5"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round"
+        android:pathData="M118,104 C128,92 140,94 140,106 C140,116 128,124 116,120 Z" />
+    <!-- Motion wave lines (matte charcoal) -->
+    <path
+        android:fillColor="#00000000"
+        android:strokeColor="#52525B"
+        android:strokeWidth="3.5"
+        android:strokeLineCap="round"
+        android:pathData="M142,84 Q148,90 146,98" />
+</vector>

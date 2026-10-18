@@ -193,6 +193,8 @@ fun SessionControls(
     fpsGameMode: Boolean = false,
     rawInputUdpAlive: Boolean = false,
     onFpsGameModeChange: (Boolean) -> Unit = {},
+    voiceMicEnabled: Boolean = false,
+    onToggleVoiceMic: () -> Unit = {},
     coreInfo: List<String> = emptyList(),
     notice: XyNoticeState,
 ) {
@@ -643,6 +645,17 @@ fun SessionControls(
                             },
                         ) {
                             toggleHudButtonVisibility()
+                        }
+                        RailMenuItem(
+                            icon = if (voiceMicEnabled) XyIcons.VolumeOn else XyIcons.VolumeOff,
+                            label = if (voiceMicEnabled) {
+                                xy("Voice / Mic: ON", "Voice / Mic: ON")
+                            } else {
+                                xy("Voice / Mic: OFF", "Voice / Mic: OFF")
+                            },
+                            active = voiceMicEnabled,
+                        ) {
+                            onToggleVoiceMic()
                         }
                         RailMenuItem(
                             icon = XyIcons.Monitor,

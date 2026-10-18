@@ -19,12 +19,84 @@ import android.net.Uri
  */
 object RdpUri {
 
+    /**
+     * Normalisasi input host, port, username (`DOMAIN\user` atau `.\user`), dan domain
+     * agar format yang biasa diketik pengguna di Microsoft Windows App (mis. `host:port`,
+     * `.\Administrator`, `WORKGROUP\User`, `user@outlook.com`) selalu valid di FreeRDP.
+     */
+    fun normalizeProfile(profile: ConnectionProfile): ConnectionProfile {
+        var rawHost = profile.host.trim()
+            .removePrefix("rdp://")
+            .removePrefix("tcp://")
+            .removePrefix("http://")
+            .removePrefix("https://")
+            .trimEnd('/')
+        var resolvedPort = profile.port
+
+        // Jika pengguna mengetik host:port (satu titik dua, bukan IPv6 literal)
+        if (!rawHost.startsWith('[') && rawHost.count { it == ':' } == 1) {
+            val idx = rawHost.lastIndexOf(':')
+            val maybeHost = rawHost.substring(0, idx).trim()
+            val maybePort = rawHost.substring(idx + 1).trim().toIntOrNull()
+            if (maybeHost.isNotEmpty() && maybePort != null && maybePort in 1..65535) {
+                rawHost = maybeHost
+                if (resolvedPort == 3389) {
+                    resolvedPort = maybePort
+                }
+            }
+        } else if (rawHost.startsWith('[') && rawHost.contains("]:")) {
+            val closeIdx = rawHost.indexOf("]:")
+            val maybeHost = rawHost.substring(1, closeIdx).trim()
+            val maybePort = rawHost.substring(closeIdx + 2).trim().toIntOrNull()
+            if (maybeHost.isNotEmpty() && maybePort != null && maybePort in 1..65535) {
+                rawHost = maybeHost
+                if (resolvedPort == 3389) {
+                    resolvedPort = maybePort
+                }
+            }
+        }
+
+        var resolvedUser = profile.username?.trim()?.takeIf { it.isNotEmpty() }
+        var resolvedDomain = profile.domain?.trim()?.takeIf { it.isNotEmpty() }
+
+        // Pisahkan DOMAIN\username atau .\username bila kolom domain kosong
+        if (resolvedUser != null && resolvedUser.contains('\\') && resolvedDomain == null) {
+            val slashIdx = resolvedUser.indexOf('\\')
+            val domPart = resolvedUser.substring(0, slashIdx).trim()
+            val usrPart = resolvedUser.substring(slashIdx + 1).trim()
+            if (usrPart.isNotEmpty()) {
+                resolvedUser = usrPart
+                if (domPart.isNotEmpty() && domPart != ".") {
+                    resolvedDomain = domPart
+                }
+            }
+        }
+
+        return profile.copy(
+            host = rawHost.ifEmpty { profile.host },
+            port = resolvedPort,
+            username = resolvedUser,
+            domain = resolvedDomain,
+        )
+    }
+
+    private fun needsQueryParamUser(user: String?): Boolean {
+        val u = user?.trim() ?: return false
+        if (u.isEmpty()) return false
+        return u.any { it == '@' || it == '\\' || it == ':' || it == '/' || it == '%' || it.isWhitespace() }
+    }
+
     /** `[user@]host[:port]`; port default 3389 tidak ditulis. */
     fun authority(profile: ConnectionProfile): String {
-        val uriHost = if (profile.host.contains(':') && !profile.host.startsWith('[')) "[${profile.host}]" else profile.host
+        val norm = normalizeProfile(profile)
+        val isIpv6 = norm.host.count { it == ':' } >= 2 && !norm.host.startsWith('[')
+        val uriHost = if (isIpv6) "[${norm.host}]" else norm.host
         var authority = uriHost
-        if (profile.port != 3389) authority = "$uriHost:${profile.port}"
-        if (!profile.username.isNullOrBlank()) authority = "${profile.username}@$authority"
+        if (norm.port != 3389) authority = "$uriHost:${norm.port}"
+        val u = norm.username
+        if (!u.isNullOrBlank() && !needsQueryParamUser(u)) {
+            authority = "$u@$authority"
+        }
         return authority
     }
 
@@ -50,9 +122,13 @@ object RdpUri {
         profile: ConnectionProfile,
         options: RdpOptions = RdpOptions(),
     ): List<Pair<String, String>> {
-        val out = ArrayList<Pair<String, String>>(24)
-        if (!profile.password.isNullOrBlank()) out += "p" to profile.password!!
-        if (!profile.domain.isNullOrBlank()) out += "domain" to profile.domain!!
+        val norm = normalizeProfile(profile)
+        val out = ArrayList<Pair<String, String>>(26)
+        if (!norm.username.isNullOrBlank() && needsQueryParamUser(norm.username)) {
+            out += "u" to norm.username!!
+        }
+        if (!norm.password.isNullOrBlank()) out += "p" to norm.password!!
+        if (!norm.domain.isNullOrBlank()) out += "domain" to norm.domain!!
 
         // Audio: /audio-mode:0|1|2, ditambah /sound:sys:opensles,format:1,quality:high saat diputar di perangkat.
         out += "audio-mode" to options.audioMode.wire.toString()

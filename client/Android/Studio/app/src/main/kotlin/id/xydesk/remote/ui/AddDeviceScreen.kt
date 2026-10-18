@@ -24,6 +24,7 @@ import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -1076,12 +1077,23 @@ fun AddDeviceScreen(
                                             )
                                         }
                                         if (isSelected) {
-                                            Text(
-                                                xy("✓ Dipilih", "✓ Selected"),
-                                                style = MaterialTheme.typography.labelSmall,
-                                                color = MaterialTheme.colorScheme.primary,
+                                            Row(
                                                 modifier = Modifier.padding(start = 8.dp),
-                                            )
+                                                verticalAlignment = Alignment.CenterVertically,
+                                                horizontalArrangement = Arrangement.spacedBy(4.dp),
+                                            ) {
+                                                Icon(
+                                                    imageVector = XyIcons.Check,
+                                                    contentDescription = null,
+                                                    tint = MaterialTheme.colorScheme.primary,
+                                                    modifier = Modifier.size(13.dp),
+                                                )
+                                                Text(
+                                                    xy("Dipilih", "Selected"),
+                                                    style = MaterialTheme.typography.labelSmall,
+                                                    color = MaterialTheme.colorScheme.primary,
+                                                )
+                                            }
                                         }
                                     }
                                 }
@@ -1106,9 +1118,16 @@ fun AddDeviceScreen(
                                             }
                                             .padding(horizontal = 14.dp, vertical = 10.dp),
                                         verticalAlignment = Alignment.CenterVertically,
+                                        horizontalArrangement = Arrangement.spacedBy(8.dp),
                                     ) {
+                                        Icon(
+                                            imageVector = XyIcons.Edit,
+                                            contentDescription = null,
+                                            tint = MaterialTheme.colorScheme.onSurface,
+                                            modifier = Modifier.size(15.dp),
+                                        )
                                         Text(
-                                            xy("✎ Ubah detail / password akun ini", "✎ Edit this account"),
+                                            xy("Ubah detail / password akun ini", "Edit this account"),
                                             style = MaterialTheme.typography.titleSmall,
                                         )
                                     }

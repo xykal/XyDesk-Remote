@@ -114,6 +114,8 @@ class SessionManager(context: Context) {
     @Volatile private var connectedAtMs: Long = 0L
     @Volatile private var userInitiatedDisconnect: Boolean = false
     @Volatile private var autoReconnectAttempts: Int = 0
+    @Volatile private var compatHandshakeStage: Int = 0
+    @Volatile private var lastTcpReachable: Boolean = false
     @Volatile private var quicAudioBridge: QuicAudioBridge? = null
     @Volatile private var pendingAudioTap: ((ByteArray, Int, Int) -> Unit)? = null
 
@@ -126,6 +128,36 @@ class SessionManager(context: Context) {
     fun setAudioPcmTap(tap: ((ByteArray, Int, Int) -> Unit)?) {
         pendingAudioTap = tap
         quicAudioBridge?.tap = tap
+    }
+
+    fun isVoiceMicEnabled(): Boolean = quicAudioBridge?.micActive == true
+
+    fun setVoiceMicEnabled(enabled: Boolean) {
+        val bridge = quicAudioBridge
+        if (bridge != null) {
+            bridge.setVoiceMicEnabled(enabled)
+        } else if (enabled) {
+            val p = lastProfile ?: return
+            val opts = runCatching { RdpOptions.of(appContext, p.id) }.getOrDefault(RdpOptions())
+            quicAudioBridge = QuicAudioBridge(
+                host = p.host,
+                port = 4433,
+                enableSpeaker = opts.quicAudio,
+                enableMic = true,
+                micGainDb = opts.micGainDb,
+                micGateDb = opts.micGateDb,
+                micNoiseSuppression = opts.micNoiseSuppression,
+                micAgc = opts.micAgc,
+                onStatus = { st ->
+                    audioBridgeState = st
+                    listener?.onAudioBridge(st)
+                },
+                onLevel = { tx, rx -> listener?.onAudioLevel(tx, rx) },
+            ).also {
+                pendingAudioTap?.let { tap -> it.tap = tap }
+                it.start()
+            }
+        }
     }
     /** Status teks bridge audio/mic untuk diagnostik & HUD. */
     @Volatile var audioBridgeState: String = "idle"
@@ -256,7 +288,22 @@ class SessionManager(context: Context) {
                 base
             }
         }
-        val options = storedOptions.resolveForActiveNetwork(appContext).forSessionProfile(profile)
+        val options = storedOptions.resolveForActiveNetwork(appContext).forSessionProfile(profile).let { resolved ->
+            when (compatHandshakeStage) {
+                1 -> resolved.copy(
+                    tlsSecLevel = 0,
+                    udpTransport = false,
+                    securityProtocol = XySecurityProtocol.AUTO,
+                )
+                2 -> resolved.copy(
+                    tlsSecLevel = 0,
+                    udpTransport = false,
+                    securityProtocol = XySecurityProtocol.TLS,
+                    h264 = false,
+                )
+                else -> resolved
+            }
+        }
         activeCodec = options.activeCodecLabel()
         activeUdp = options.udpTransport
         activeBpp = options.colorDepth
@@ -333,7 +380,11 @@ class SessionManager(context: Context) {
     /** Info build inti (versi + kanal penting) untuk layar diagnostik. */
     fun buildInfo(): String = coreBuildInfo()
 
-    fun connect(profile: ConnectionProfile) {
+    fun connect(rawProfile: ConnectionProfile) {
+        val profile = RdpUri.normalizeProfile(rawProfile).copy(
+            label = rawProfile.label,
+            key = rawProfile.key,
+        )
         val session = synchronized(lifecycleLock) {
             if (released) return
             val cur = _state.value
@@ -353,7 +404,7 @@ class SessionManager(context: Context) {
             }
             val uri = sessionUri(profile)
             // Never log the RDP URI: its query may contain the plaintext password.
-            ConnectionLog.add("CM: native createSession mulai (${profile.host}:${profile.port})")
+            ConnectionLog.add("CM: native createSession mulai (${profile.host}:${profile.port}) compatStage=$compatHandshakeStage")
             val created = GlobalApp.createSession(uri, appContext)
             val inst = created.getInstance()
             ConnectionLog.add("CM: createSession ok inst=$inst")
@@ -378,6 +429,7 @@ class SessionManager(context: Context) {
             }
             val probeStartNs = System.nanoTime()
             val reachable = tcpReachable(profile.host, profile.port, TCP_PROBE_TIMEOUT_MS)
+            lastTcpReachable = reachable
             if (reachable) {
                 lastRttMs = ((System.nanoTime() - probeStartNs) / 1_000_000L).toInt().coerceAtLeast(1)
             }
@@ -810,6 +862,7 @@ class SessionManager(context: Context) {
                 stopWatchdog()
                 userInitiatedDisconnect = false
                 autoReconnectAttempts = 0
+                compatHandshakeStage = 0
                 connectedAtMs = android.os.SystemClock.elapsedRealtime()
                 setStage(Stage.READY)
                 ConnectionLog.add("koneksi SUKSES")
@@ -820,7 +873,7 @@ class SessionManager(context: Context) {
                     // kanal RDP (rdpsnd), jadi bridge hanya mengantar suara di mode
                     // "Audio di PC" (REMOTE).
                     val speakerOn = opts.quicAudio && opts.audioMode == XyAudioMode.REMOTE
-                    val micOn = opts.usesQuicMicrophone()
+                    val micOn = opts.usesQuicMicrophone() || opts.microphone
                     if (speakerOn || micOn) {
                         audioBridgeState = "start…"
                         listener?.onAudioBridge(audioBridgeState)
@@ -870,6 +923,19 @@ class SessionManager(context: Context) {
                         lower.contains("access_denied") || lower.contains("denied")
                 }
                 cleanupTerminalSession(inst)
+                if (!userInitiatedDisconnect && !released && !isAuthFailure &&
+                    connectedAtMs == 0L && lastTcpReachable && compatHandshakeStage < 2 && p != null
+                ) {
+                    compatHandshakeStage++
+                    ConnectionLog.add(
+                        "CM: negosiasi awal gagal padahal TCP hidup ($nativeDetail) -> coba otomatis mode kompatibilitas Windows App #$compatHandshakeStage",
+                    )
+                    transition(SessionState.Connecting)
+                    mainHandler.postDelayed({
+                        if (!released && !userInitiatedDisconnect) connect(p)
+                    }, 450L)
+                    return
+                }
                 if (!userInitiatedDisconnect && !released && !isAuthFailure &&
                     connectedAtMs > 0L && autoReconnectAttempts < 6 && p != null
                 ) {

@@ -89,10 +89,21 @@ internal fun PcStreamPadOverlay(
         onSend(tracker.state())
     }
     DisposableEffect(Unit) {
-        onDispose { releaseAll() }
+        onDispose {
+            prefs.setVirtualPadLayout(deviceId, layout)
+            releaseAll()
+        }
     }
 
-    BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
+    val padAlpha = remember(prefs, editMode) {
+        if (editMode) 1f else prefs.hudOpacity.coerceIn(0.18f, 1f)
+    }
+
+    BoxWithConstraints(
+        modifier = Modifier
+            .fillMaxSize()
+            .then(Modifier.padding(0.dp)),
+    ) {
         val screenW = constraints.maxWidth
         val screenH = constraints.maxHeight
         val density = LocalDensity.current
@@ -122,7 +133,9 @@ internal fun PcStreamPadOverlay(
                 wPx,
                 hPx,
             )
-            layout = layout.toMutableMap().apply { put(cluster, next) }
+            val updated = layout.toMutableMap().apply { put(cluster, next) }
+            layout = updated
+            prefs.setVirtualPadLayout(deviceId, updated)
         }
 
         // ---- Klaster: pill atas (bumper, trigger, start/back, atur, tutup) ----
@@ -161,13 +174,13 @@ internal fun PcStreamPadOverlay(
                 PadKey("RT", mini = true, enabled = { !editNow }) {
                     tracker.setTrigger(right = if (it) 1f else 0f); push()
                 }
-                PadKey("☰", mini = true, enabled = { true }) { down ->
+                PadKey("EDIT", mini = true, enabled = { true }) { down ->
                     if (down) {
                         editMode = !editMode
                         if (!editMode) prefs.setVirtualPadLayout(deviceId, layout)
                     }
                 }
-                PadKey("×", mini = true, enabled = { true }) { down ->
+                PadKey("TUTUP", mini = true, enabled = { true }) { down ->
                     if (down) {
                         releaseAll()
                         onClose()

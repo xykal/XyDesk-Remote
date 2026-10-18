@@ -524,6 +524,24 @@ class SessionSurfaceController(private val activity: Activity) : GraphicsSink {
         return Offset(screenX, screenY)
     }
 
+    /**
+     * Konversi koordinat layar HP (px) -> koordinat desktop remote (px) secara
+     * presisi 1:1 (memperhitungkan zoom, scroll, dan offset container).
+     * Dipakai mouse fisik (PointerType.Mouse) agar klik dan hover persis di
+     * titik kursor hardware Android pada layar.
+     */
+    fun screenToRemote(screenX: Float, screenY: Float): Offset? {
+        val sv = sessionView ?: return null
+        val bm = bitmap ?: return null
+        val zoom = sv.getZoom().takeIf { it > 0.01f } ?: return null
+        val container = if (scrollView?.childCount ?: 0 > 0) scrollView!!.getChildAt(0) else sv
+        val rx = ((screenX + (scrollView?.scrollX ?: 0) - container.left) / zoom)
+            .coerceIn(0f, (bm.width - 1).coerceAtLeast(1).toFloat())
+        val ry = ((screenY + (scrollView?.scrollY ?: 0) - container.top) / zoom)
+            .coerceIn(0f, (bm.height - 1).coerceAtLeast(1).toFloat())
+        return Offset(rx, ry)
+    }
+
     /** Terapkan zoom tersimpan (dipanggil setelah bind, main thread). */
     fun applyZoom(zoom: Float) {
         sessionView?.setZoom(zoom)

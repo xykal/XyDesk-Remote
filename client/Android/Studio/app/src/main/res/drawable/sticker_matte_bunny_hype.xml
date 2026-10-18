@@ -1,0 +1,75 @@
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="160dp"
+    android:height="160dp"
+    android:viewportWidth="160"
+    android:viewportHeight="160">
+    <!-- Die-cut matte white sticker border -->
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M56,12 C66,12 72,24 74,38 L86,38 C88,24 94,12 104,12 C114,12 120,28 116,52 C132,64 138,88 132,112 C124,132 104,142 80,142 C56,142 36,132 28,112 C22,88 28,64 44,52 C40,28 46,12 56,12 Z" />
+    <!-- Long bunny ears -->
+    <path
+        android:fillColor="#F4F4F5"
+        android:strokeColor="#27272A"
+        android:strokeWidth="4.5"
+        android:strokeLineJoin="round"
+        android:pathData="M52,60 C46,32 50,18 58,18 C66,18 70,32 68,58 Z" />
+    <path
+        android:fillColor="#FDA4AF"
+        android:pathData="M55,54 C52,36 54,26 58,26 C62,26 64,36 63,54 Z" />
+    <path
+        android:fillColor="#F4F4F5"
+        android:strokeColor="#27272A"
+        android:strokeWidth="4.5"
+        android:strokeLineJoin="round"
+        android:pathData="M108,60 C114,32 110,18 102,18 C94,18 90,32 92,58 Z" />
+    <path
+        android:fillColor="#FDA4AF"
+        android:pathData="M105,54 C108,36 106,26 102,26 C98,26 96,36 97,54 Z" />
+    <!-- Bunny round head -->
+    <path
+        android:fillColor="#FAFAFA"
+        android:strokeColor="#27272A"
+        android:strokeWidth="4.5"
+        android:strokeLineJoin="round"
+        android:pathData="M80,48 C110,48 128,66 126,96 C124,122 106,134 80,134 C54,134 36,122 34,96 C32,66 50,48 80,48 Z" />
+    <!-- Cool matte sunglasses -->
+    <path
+        android:fillColor="#18181B"
+        android:strokeColor="#27272A"
+        android:strokeWidth="3.5"
+        android:strokeLineJoin="round"
+        android:pathData="M42,70 L74,70 L70,86 L46,86 Z M86,70 L118,70 L114,86 L90,86 Z M74,74 L86,74" />
+    <!-- Diagonal matte reflection on glasses -->
+    <path
+        android:fillColor="#00000000"
+        android:strokeColor="#E4E4E7"
+        android:strokeWidth="2.8"
+        android:strokeLineCap="round"
+        android:pathData="M50,82 L58,74 M94,82 L102,74" />
+    <!-- Confident smirk -->
+    <path
+        android:fillColor="#00000000"
+        android:strokeColor="#27272A"
+        android:strokeWidth="4"
+        android:strokeLineCap="round"
+        android:pathData="M70,98 Q82,104 92,94" />
+    <!-- Matte rose blush -->
+    <path
+        android:fillColor="#FDA4AF"
+        android:pathData="M44,94 a7,4 0 1,0 14,0 a7,4 0 1,0 -14,0" />
+    <path
+        android:fillColor="#FDA4AF"
+        android:pathData="M102,94 a7,4 0 1,0 14,0 a7,4 0 1,0 -14,0" />
+    <!-- Raised celebratory paws -->
+    <path
+        android:fillColor="#FAFAFA"
+        android:strokeColor="#27272A"
+        android:strokeWidth="4.5"
+        android:pathData="M32,112 a10,10 0 1,0 20,0 a10,10 0 1,0 -20,0" />
+    <path
+        android:fillColor="#FAFAFA"
+        android:strokeColor="#27272A"
+        android:strokeWidth="4.5"
+        android:pathData="M108,112 a10,10 0 1,0 20,0 a10,10 0 1,0 -20,0" />
+</vector>

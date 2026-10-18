@@ -9,6 +9,7 @@ import android.content.Intent
 import android.net.Uri
 import android.widget.Toast
 import androidx.activity.compose.BackHandler
+import id.xydesk.remote.ui.components.XyEmptyState
 import id.xydesk.remote.ui.ssh.XySshTerminalScreen
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.ui.graphics.Brush
@@ -141,6 +142,12 @@ private sealed interface XyRoute {
  * Semua info yang ditampilkan sengaja tipis: nama perangkat, alamat, akun.
  * Preview pakai wallpaper motif OS perangkat (digambar prosedural, tanpa aset).
  */
+private object XyHomeNavPersist {
+    var section: XySection = XySection.PERANGKAT
+    var tab: XyTab = XyTab.HOME
+    var route: XyRoute = XyRoute.Devices
+}
+
 @Composable
 fun XyDeskHome(
     onExit: () -> Unit,
@@ -168,11 +175,16 @@ fun XyDeskHome(
     val appPrefs = remember { AppPrefs(context) }
     var drawerOpen by remember { mutableStateOf(false) }
     var helpToolsOpen by remember { mutableStateOf(false) }
-    var section by remember { mutableStateOf(XySection.PERANGKAT) }
+    var section by remember { mutableStateOf(XyHomeNavPersist.section) }
     // Tab nav bawah (3 tujuan). `section` tetap ada karena seksi dibuka dari
     // drawer maupun dari layar Profil, dan keduanya menggambar SectionScreen.
-    var tab by remember { mutableStateOf(XyTab.HOME) }
-    var route by remember { mutableStateOf<XyRoute>(XyRoute.Devices) }
+    var tab by remember { mutableStateOf(XyHomeNavPersist.tab) }
+    var route by remember { mutableStateOf<XyRoute>(XyHomeNavPersist.route) }
+    LaunchedEffect(section, tab, route) {
+        XyHomeNavPersist.section = section
+        XyHomeNavPersist.tab = tab
+        XyHomeNavPersist.route = route
+    }
     LaunchedEffect(openChatSignal) {
         if (openChatSignal > 0) {
             tab = XyTab.FEED
@@ -191,16 +203,14 @@ fun XyDeskHome(
     var dataPackStatus by remember { mutableStateOf<String?>(null) }
     LaunchedEffect(Unit) {
         val now = System.currentTimeMillis()
-        if (now - appPrefs.lastUpdateCheckAt >= 2 * 3_600_000L) {
-            appPrefs.lastUpdateCheckAt = now
-            val info = AppUpdate.fetch(context)
-            if (info != null) {
-                val current = runCatching {
-                    context.packageManager.getPackageInfo(context.packageName, 0).versionName
-                }.getOrNull().orEmpty()
-                if (AppUpdate.isNewer(info.version, current) && appPrefs.updateSkipVersion != info.version) {
-                    updateInfo = info
-                }
+        appPrefs.lastUpdateCheckAt = now
+        val info = AppUpdate.fetch(context)
+        if (info != null) {
+            val current = runCatching {
+                context.packageManager.getPackageInfo(context.packageName, 0).versionName
+            }.getOrNull().orEmpty()
+            if (AppUpdate.isNewer(info.version, current) && appPrefs.updateSkipVersion != info.version) {
+                updateInfo = info
             }
         }
     }
@@ -566,6 +576,15 @@ fun XyDeskHome(
 
     // Modal OAuth GitHub Langsung Tanpa Kode (tersedia global untuk Beranda, Buat RDP, Profil, & Chat Global)
     GitHubDirectOAuthModalHost()
+
+    // In-App Notification Banner (Pengumuman, Balasan, Like, Reaksi, Mention, Chat, & OTA Data)
+    XyInAppNotificationBannerHost(
+        onOpenChat = { route = XyRoute.ChatGlobal },
+        onOpenFeed = {
+            tab = XyTab.FEED
+            route = XyRoute.Feed
+        },
+    )
 
     // ---- Menu utama: 2 gaya — popup tengah atau sidebar kanan ----
     val homeMenuStyle = XyMenuStyleState.current(appPrefs)
@@ -1484,32 +1503,27 @@ private fun DevicesScreen(
                             onOpenPcStream = onOpenPcStream,
                             onOpenSshTerminal = onOpenSshTerminal,
                         )
-                        XyCard(modifier = Modifier.fillMaxWidth()) {
-                            Text(xy("Belum ada perangkat", "No devices yet"), style = MaterialTheme.typography.titleMedium)
-                            Spacer(Modifier.height(6.dp))
-                            Text(
-                                xy(
-                                    "Tambahkan Koneksi PC, PC Stream, atau RDP untuk mulai.",
-                                    "Add a PC, PC Stream, or RDP connection to get started.",
-                                ),
-                                style = MaterialTheme.typography.bodyMedium,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        XyEmptyState(
+                            title = xy("Belum Ada Perangkat Tersimpan", "No Saved Devices Yet"),
+                            subtitle = xy(
+                                "Tambahkan Koneksi PC, PC Stream, atau RDP untuk mulai mengakses desktop jarak jauh.",
+                                "Add a PC, PC Stream, or RDP connection to start accessing your remote desktop.",
+                            ),
+                            icon = XyIcons.Monitor,
+                        )
+                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            XyPillButton(
+                                xy("Koneksi PC (ID)", "PC (ID & Pass)"),
+                                onAddPcQuick,
+                                icon = XyIcons.Plus,
+                                modifier = Modifier.weight(1f),
                             )
-                            Spacer(Modifier.height(16.dp))
-                            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                                XyPillButton(
-                                    xy("Koneksi PC (ID)", "PC (ID & Pass)"),
-                                    onAddPcQuick,
-                                    icon = XyIcons.Plus,
-                                    modifier = Modifier.weight(1f),
-                                )
-                                XyPillButton(
-                                    xy("Koneksi RDP", "Standard RDP"),
-                                    onAddRdp,
-                                    primary = false,
-                                    modifier = Modifier.weight(1f),
-                                )
-                            }
+                            XyPillButton(
+                                xy("Koneksi RDP", "Standard RDP"),
+                                onAddRdp,
+                                primary = false,
+                                modifier = Modifier.weight(1f),
+                            )
                         }
                     }
                 }
@@ -1567,7 +1581,23 @@ private fun DevicesScreen(
                             )
                         }
                     }
-                    if (bigCards) {
+                    if (filteredFavorites.isEmpty()) {
+                        item {
+                            XyEmptyState(
+                                title = xy("Perangkat Tidak Ditemukan", "No Matching Devices"),
+                                subtitle = xy(
+                                    "Tidak ada perangkat yang cocok dengan filter atau pencarian saat ini.",
+                                    "No devices match the current filter or search query.",
+                                ),
+                                icon = XyIcons.Monitor,
+                                actionText = xy("Reset Filter", "Reset Filter"),
+                                onAction = {
+                                    searchQuery = ""
+                                    modeFilterIndex = 0
+                                },
+                            )
+                        }
+                    } else if (bigCards) {
                         // Kartu besar (permintaan pemilik 2026-10-16): SATU
                         // kolom full-width dengan preview tinggi — bukan grid
                         // 2 kolom. Paling enak dipandang & paling ringan

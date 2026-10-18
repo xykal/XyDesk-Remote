@@ -171,7 +171,11 @@ class SessionPrefs(context: Context) {
     }
 
     fun setVirtualPadLayout(deviceId: String, layout: Map<XyPadCluster, XyPadPos>) {
-        input.edit().putString(KEY_PAD_LAYOUT, XyPadLayout.encode(layout)).apply()
+        val encoded = XyPadLayout.encode(layout)
+        input.edit().putString(KEY_PAD_LAYOUT, encoded).apply()
+        if (deviceId.isNotBlank()) {
+            device.edit().putString("$deviceId.padlayout", encoded).apply()
+        }
     }
 
     /**
@@ -229,10 +233,10 @@ class SessionPrefs(context: Context) {
         get() = input.getBoolean(KEY_BTN_SWITCH, true)
         set(v) = input.edit().putBoolean(KEY_BTN_SWITCH, v).apply()
 
-    /** Default diameter for newly created/reset HUD buttons; compact 46dp default. */
+    /** Default diameter for newly created/reset HUD buttons; supports full 34dp..96dp range. */
     var hudButtonSize: Float
-        get() = input.getFloat(KEY_HUD_SIZE, 46f).coerceIn(34f, 64f)
-        set(v) = input.edit().putFloat(KEY_HUD_SIZE, v.coerceIn(34f, 64f)).apply()
+        get() = input.getFloat(KEY_HUD_SIZE, 46f).coerceIn(HudKey.MIN_SIZE, HudKey.MAX_SIZE)
+        set(v) = input.edit().putFloat(KEY_HUD_SIZE, v.coerceIn(HudKey.MIN_SIZE, HudKey.MAX_SIZE)).apply()
 
     // ---- per perangkat ----
 
@@ -275,7 +279,17 @@ class SessionPrefs(context: Context) {
     }
 
     fun setHudKeys(deviceId: String, keys: List<HudKey>) {
-        input.edit().putString(KEY_HUD_KEYS, HudKey.encode(keys)).apply()
+        val encoded = HudKey.encode(keys)
+        input.edit()
+            .putString(KEY_HUD_KEYS, encoded)
+            .putString(KEY_HUD_CUSTOM, encoded)
+            .apply()
+        if (deviceId.isNotBlank()) {
+            device.edit()
+                .putString("$deviceId.hudkeys", encoded)
+                .putString("$deviceId.hudkeys.custom", encoded)
+                .apply()
+        }
     }
 
     fun customHudKeys(deviceId: String): List<HudKey>? {
@@ -287,7 +301,11 @@ class SessionPrefs(context: Context) {
     }
 
     fun setCustomHudKeys(deviceId: String, keys: List<HudKey>) {
-        input.edit().putString(KEY_HUD_CUSTOM, HudKey.encode(keys)).apply()
+        val encoded = HudKey.encode(keys)
+        input.edit().putString(KEY_HUD_CUSTOM, encoded).apply()
+        if (deviceId.isNotBlank()) {
+            device.edit().putString("$deviceId.hudkeys.custom", encoded).apply()
+        }
     }
 
     fun hudButtonsVisible(deviceId: String): Boolean {

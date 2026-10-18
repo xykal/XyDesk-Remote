@@ -182,10 +182,27 @@ fun XyDeskSessionScreen(
     val context = LocalContext.current
     val appContext = context.applicationContext
     val appPrefs = remember(appContext) { AppPrefs(appContext) }
+    var confirmDisconnect by remember { mutableStateOf(false) }
     fun exitSession() {
         (context as? XyDeskSessionActivity)?.markExplicitDisconnect(profile.id)
         appPrefs.clearAutoResumeSession()
         onExit()
+    }
+    fun navigateToHomeKeepAlive() {
+        confirmDisconnect = false
+        (context as? XyDeskSessionActivity)?.markIntentionalHomeNavigation()
+        appPrefs.clearAutoResumeSession()
+        controller.blurInput()
+        runCatching {
+            context.startActivity(
+                android.content.Intent(context, XyDeskHomeActivity::class.java)
+                    .putExtra(EXTRA_SKIP_AUTO_RESUME, true)
+                    .addFlags(
+                        android.content.Intent.FLAG_ACTIVITY_REORDER_TO_FRONT or
+                            android.content.Intent.FLAG_ACTIVITY_SINGLE_TOP,
+                    ),
+            )
+        }
     }
     // Kotak posisi kursor untuk perekaman. Dideklarasikan sebelum remoteRecorder
     // karena cursorX/cursorY baru tersedia jauh di bawah, sementara provider-nya
@@ -265,7 +282,6 @@ fun XyDeskSessionScreen(
     }
     var certPrompt by remember { mutableStateOf<CertPrompt?>(null) }
     var nlaPrompt by remember { mutableStateOf<NlaPrompt?>(null) }
-    var confirmDisconnect by remember { mutableStateOf(false) }
     var confirmCancelConnect by remember { mutableStateOf(false) }
     var showLog by remember { mutableStateOf(false) }
     var activeProfile by remember(profile.id) { mutableStateOf(profile) }
@@ -325,8 +341,13 @@ fun XyDeskSessionScreen(
     fun setHudKeys(list: List<HudKey>) {
         hudKeys = list
         prefs.setHudKeys(profile.id, list)
-        if (prefs.hudProfile(profile.id) == HudProfilePreset.CUSTOM) {
-            prefs.setCustomHudKeys(profile.id, list)
+        prefs.setCustomHudKeys(profile.id, list)
+    }
+
+    DisposableEffect(profile.id) {
+        onDispose {
+            prefs.setHudKeys(profile.id, hudKeys)
+            prefs.setCustomHudKeys(profile.id, hudKeys)
         }
     }
     var cursorX by remember { mutableFloatStateOf(0f) }
@@ -899,10 +920,9 @@ fun XyDeskSessionScreen(
                 }
                 controlsBackHandler?.invoke() == true -> true
                 confirmDisconnect -> {
-                    // Dialog terbuka (dibuka tombol "Putuskan" HUD): back =
-                    // konfirmasi putus, bukan batal — back selalu berujung
-                    // ke beranda (ronde 45).
-                    requestDisconnect?.invoke()
+                    // Saat dialog keluar terbuka, tekan Back sekali lagi = kembali ke
+                    // Beranda TANPA memutus sesi (sesi tetap hidup di latar).
+                    navigateToHomeKeepAlive()
                     true
                 }
                 confirmCancelConnect -> {
@@ -1359,14 +1379,43 @@ fun XyDeskSessionScreen(
                                 if (firstChange.type == androidx.compose.ui.input.pointer.PointerType.Mouse) {
                                     val prev = lastMousePos
                                     lastMousePos = firstChange.position
-                                    if (prev != null) {
-                                        val d = firstChange.position - prev
-                                        if (d.getDistance() > 0.1f) movePointer(d.x, d.y)
+                                    if (relMouseEnabled) {
+                                        if (prev != null) {
+                                            val d = firstChange.position - prev
+                                            if (d.getDistance() > 0.1f) movePointer(d.x, d.y)
+                                        }
+                                    } else {
+                                        // Pemetaan 1:1 presisi piksel dari posisi kursor hardware Android di layar ke desktop remote
+                                        val mappedPt = controller.screenToRemote(
+                                            firstChange.position.x,
+                                            firstChange.position.y,
+                                        )
+                                        if (mappedPt != null) {
+                                            val moved = !cursorInit ||
+                                                kotlin.math.abs(mappedPt.x - cursorX) >= 0.4f ||
+                                                kotlin.math.abs(mappedPt.y - cursorY) >= 0.4f
+                                            cursorX = mappedPt.x
+                                            cursorY = mappedPt.y
+                                            cursorInit = true
+                                            if (moved || ev.type == androidx.compose.ui.input.pointer.PointerEventType.Press) {
+                                                manager.sendCursorEvent(
+                                                    cursorX.roundToInt(),
+                                                    cursorY.roundToInt(),
+                                                    Mouse.getMoveEvent(),
+                                                )
+                                            }
+                                        } else if (prev != null) {
+                                            val d = firstChange.position - prev
+                                            if (d.getDistance() > 0.1f) movePointer(d.x, d.y)
+                                        }
                                     }
                                     when (ev.type) {
                                         androidx.compose.ui.input.pointer.PointerEventType.Press -> {
                                             val btn = when {
-                                                ev.buttons.isSecondaryPressed -> XyMouseButton.RIGHT
+                                                ev.buttons.isSecondaryPressed -> {
+                                                    (context as? XyDeskSessionActivity)?.noteSecondaryMouseButtonEvent()
+                                                    XyMouseButton.RIGHT
+                                                }
                                                 ev.buttons.isTertiaryPressed -> XyMouseButton.MIDDLE
                                                 else -> XyMouseButton.LEFT
                                             }
@@ -1379,6 +1428,9 @@ fun XyDeskSessionScreen(
                                         }
                                         androidx.compose.ui.input.pointer.PointerEventType.Release -> {
                                             val btn = activeMouseBtn ?: XyMouseButton.LEFT
+                                            if (btn == XyMouseButton.RIGHT) {
+                                                (context as? XyDeskSessionActivity)?.noteSecondaryMouseButtonEvent()
+                                            }
                                             activeMouseBtn = null
                                             sendButton(btn, false)
                                             consumeOneShotKeys()
@@ -1387,7 +1439,10 @@ fun XyDeskSessionScreen(
                                         androidx.compose.ui.input.pointer.PointerEventType.Move -> {
                                             if (firstChange.pressed && activeMouseBtn == null) {
                                                 val btn = when {
-                                                    ev.buttons.isSecondaryPressed -> XyMouseButton.RIGHT
+                                                    ev.buttons.isSecondaryPressed -> {
+                                                        (context as? XyDeskSessionActivity)?.noteSecondaryMouseButtonEvent()
+                                                        XyMouseButton.RIGHT
+                                                    }
                                                     ev.buttons.isTertiaryPressed -> XyMouseButton.MIDDLE
                                                     else -> XyMouseButton.LEFT
                                                 }
@@ -1866,6 +1921,20 @@ fun XyDeskSessionScreen(
                         },
                     )
                 },
+                voiceMicEnabled = manager.isVoiceMicEnabled(),
+                onToggleVoiceMic = {
+                    val next = !manager.isVoiceMicEnabled()
+                    manager.setVoiceMicEnabled(next)
+                    runCatching {
+                        RdpOptions.of(context, activeProfile.id)
+                            .copy(microphone = next)
+                            .write(context, activeProfile.id)
+                    }
+                    notice.show(
+                        if (next) xyNow("Voice / Mikrofon Sesi: ON", "Session Voice / Mic: ON")
+                        else xyNow("Voice / Mikrofon Sesi: OFF", "Session Voice / Mic: OFF"),
+                    )
+                },
                 coreInfo = coreInfo,
                 notice = notice,
             )
@@ -2182,16 +2251,43 @@ fun XyDeskSessionScreen(
         )
     }
     if (!active && err == null && confirmDisconnect) {
-        XyDialog(
-            title = xy("Putuskan sesi?", "Disconnect session?"),
-            body = xy("Putuskan sesi sekarang dan kembali ke beranda?", "Disconnect the session now and return to home?"),
-            confirmLabel = xy("Putuskan", "Disconnect"),
-            onConfirm = {
-                performDisconnect()
-            },
-            dismissLabel = xy("Batal", "Cancel"),
+        XyOverlay(
+            title = xy("Keluar dari layar sesi?", "Leave session screen?"),
             onDismiss = { confirmDisconnect = false },
-        )
+        ) {
+            Text(
+                xy(
+                    "Anda bisa kembali ke Beranda tanpa memutus sesi (sesi tetap jalan di latar), atau memutuskan koneksi sepenuhnya.",
+                    "You can return to Home while keeping the session alive in background, or disconnect completely.",
+                ),
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            Spacer(Modifier.height(10.dp))
+            XyPillButton(
+                text = xy("Ke Beranda (Sesi Tetap Jalan)", "Go to Home (Keep Session Alive)"),
+                icon = XyIcons.Monitor,
+                onClick = { navigateToHomeKeepAlive() },
+                primary = true,
+                compact = true,
+                modifier = Modifier.fillMaxWidth(),
+            )
+            XyPillButton(
+                text = xy("Putuskan Koneksi Sesi", "Disconnect Session"),
+                icon = XyIcons.Power,
+                onClick = { performDisconnect() },
+                primary = false,
+                compact = true,
+                modifier = Modifier.fillMaxWidth(),
+            )
+            XyPillButton(
+                text = xy("Tetap di Sesi", "Stay in Session"),
+                onClick = { confirmDisconnect = false },
+                primary = false,
+                compact = true,
+                modifier = Modifier.fillMaxWidth(),
+            )
+        }
     }
     if (!active && confirmCancelConnect) {
         XyDialog(

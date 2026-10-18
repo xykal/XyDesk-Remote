@@ -57,10 +57,22 @@ import java.util.Collections
 object ChatPushNotifier {
 
     const val ONESIGNAL_APP_ID = "e3d5adea-1c0f-4986-9ce5-e088d65f0998"
-    const val CHAT_CHANNEL_ID = "xydesk.global.chat.sound.v3"
-    const val UPDATE_CHANNEL_ID = "xydesk.app.update.sound.v3"
+    const val CHAT_CHANNEL_ID = "xydesk.global.chat.system.v4"
+    const val MENTION_CHANNEL_ID = "xydesk.mention.reply.system.v4"
+    const val FEED_CHANNEL_ID = "xydesk.feed.social.system.v4"
+    const val UPDATE_CHANNEL_ID = "xydesk.app.update.system.v4"
     const val CHAT_NOTIF_ID = 2005
     const val UPDATE_NOTIF_ID = 2006
+    const val SOCIAL_NOTIF_BASE_ID = 2100
+
+    const val KEY_PUSH_MASTER = "push_master_enabled"
+    const val KEY_PUSH_CHAT_ALL = "push_chat_all_enabled"
+    const val KEY_PUSH_MENTION_REPLY = "push_mention_reply_enabled"
+    const val KEY_PUSH_FEED_SOCIAL = "push_feed_social_enabled"
+    const val KEY_PUSH_ANNOUNCEMENT = "push_announcement_enabled"
+
+    val unreadChatCountState = androidx.compose.runtime.mutableIntStateOf(0)
+    val unreadNotifCountState = androidx.compose.runtime.mutableIntStateOf(0)
 
     const val ACTION_DIRECT_REPLY = "id.xydesk.remote.push.ACTION_DIRECT_REPLY"
     const val ACTION_MARK_READ = "id.xydesk.remote.push.ACTION_MARK_READ"
@@ -101,6 +113,11 @@ object ChatPushNotifier {
     fun init(context: Context) {
         val appContext = context.applicationContext
         runCatching {
+            val nm = appContext.getSystemService(Context.NOTIFICATION_SERVICE) as? NotificationManager
+            if (nm != null) ensureChannel(nm)
+            unreadChatCountState.intValue = loadStack(appContext).count { !it.isMe }
+        }
+        runCatching {
             OneSignal.initWithContext(appContext, ONESIGNAL_APP_ID)
             val nick = chatNickname(appContext)
             OneSignal.User.addTag("nickname", nick)
@@ -124,10 +141,39 @@ object ChatPushNotifier {
         startBackgroundWatcherIfNeeded(appContext)
     }
 
+    fun isCategoryEnabled(context: Context, key: String): Boolean {
+        val prefs = context.applicationContext.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+        if (!prefs.getBoolean(KEY_PUSH_MASTER, true)) return false
+        return prefs.getBoolean(key, true)
+    }
+
+    fun setCategoryEnabled(context: Context, key: String, enabled: Boolean) {
+        val prefs = context.applicationContext.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+        prefs.edit().putBoolean(key, enabled).apply()
+    }
+
+    fun openSystemNotificationSettings(context: Context) {
+        runCatching {
+            val intent = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                Intent(android.provider.Settings.ACTION_APP_NOTIFICATION_SETTINGS).apply {
+                    putExtra(android.provider.Settings.EXTRA_APP_PACKAGE, context.packageName)
+                    addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                }
+            } else {
+                Intent(android.provider.Settings.ACTION_APPLICATION_DETAILS_SETTINGS).apply {
+                    data = android.net.Uri.fromParts("package", context.packageName, null)
+                    addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                }
+            }
+            context.startActivity(intent)
+        }
+    }
+
     fun setChatOpen(context: Context, open: Boolean) {
         isChatOpen = open
         val appContext = context.applicationContext
         if (open) {
+            unreadChatCountState.intValue = 0
             clearNotification(appContext)
         }
         runCatching {
@@ -159,6 +205,7 @@ object ChatPushNotifier {
 
     fun clearNotification(context: Context) {
         val appContext = context.applicationContext
+        unreadChatCountState.intValue = 0
         val prefs = appContext.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
         prefs.edit().remove(KEY_UNREAD_STACK).apply()
         val nm = appContext.getSystemService(Context.NOTIFICATION_SERVICE) as? NotificationManager
@@ -171,16 +218,31 @@ object ChatPushNotifier {
         senderName: String,
         text: String,
         at: Long,
+        rawSender: String = "",
+        githubLogin: String = "",
+        replyToName: String = "",
+        isAnnouncement: Boolean = false,
     ) {
         val appContext = context.applicationContext
         val cleanText = text.trim()
         if (cleanText.isEmpty()) return
-        val myNick = chatNickname(appContext)
+        val myNick = chatNickname(appContext).trim()
+        val myGh = id.xydesk.remote.ui.getVerifiedGitHubLogin(appContext).orEmpty().trim().removePrefix("@")
         val ts = if (at > 0L) at else System.currentTimeMillis()
 
-        // Jangan tampilkan notifikasi jika layar Chat Global sedang dibuka
-        // atau jika pesan berasal dari pengguna sendiri.
-        if (isChatOpen || senderName.equals(myNick, ignoreCase = false) || senderName.contains(myNick)) {
+        val senderBase = rawSender.ifBlank {
+            senderName.substringBefore(" [").substringBefore(" (").trim()
+        }
+        val isFromMe = (myNick.isNotBlank() && senderBase.equals(myNick, ignoreCase = true)) ||
+            (myGh.isNotBlank() && (senderBase.equals(myGh, ignoreCase = true) || githubLogin.equals(myGh, ignoreCase = true)))
+
+        // Jangan tampilkan notifikasi jika pesan berasal dari pengguna sendiri.
+        if (isFromMe) {
+            markSeen(msgId, ts, appContext)
+            return
+        }
+
+        if (isChatOpen) {
             markSeen(msgId, ts, appContext)
             return
         }
@@ -211,7 +273,74 @@ object ChatPushNotifier {
             stack.removeAt(0)
         }
         saveStack(appContext, stack)
-        renderMessagingNotification(appContext, stack)
+        unreadChatCountState.intValue = stack.count { !it.isMe }.coerceAtLeast(1)
+
+        // Cek apakah pesan ini me-mention pengguna atau membalas pesan pengguna
+        val isMentionedMe = (myNick.isNotBlank() && cleanText.contains("@$myNick", ignoreCase = true)) ||
+            (myGh.isNotBlank() && cleanText.contains("@$myGh", ignoreCase = true))
+        val isReplyToMe = replyToName.isNotBlank() && (
+            (myNick.isNotBlank() && replyToName.removePrefix("@").equals(myNick, ignoreCase = true)) ||
+                (myGh.isNotBlank() && replyToName.removePrefix("@").equals(myGh, ignoreCase = true))
+            )
+
+        if (isAnnouncement) {
+            if (!isCategoryEnabled(appContext, KEY_PUSH_ANNOUNCEMENT)) return
+        } else if (isMentionedMe || isReplyToMe) {
+            if (!isCategoryEnabled(appContext, KEY_PUSH_MENTION_REPLY)) return
+        } else {
+            if (!isCategoryEnabled(appContext, KEY_PUSH_CHAT_ALL)) return
+        }
+
+        renderSystemChatNotification(
+            context = appContext,
+            stack = stack,
+            isMention = isMentionedMe,
+            isReply = isReplyToMe,
+            isAnnouncement = isAnnouncement,
+        )
+    }
+
+    fun notifySocialEvent(
+        context: Context,
+        notifId: String,
+        category: String,
+        title: String,
+        body: String,
+    ) {
+        val appContext = context.applicationContext
+        val cat = category.lowercase()
+        val allowed = when (cat) {
+            "announcement" -> isCategoryEnabled(appContext, KEY_PUSH_ANNOUNCEMENT)
+            "mention", "reply" -> isCategoryEnabled(appContext, KEY_PUSH_MENTION_REPLY)
+            "like", "reaction", "comment", "inbox" -> isCategoryEnabled(appContext, KEY_PUSH_FEED_SOCIAL)
+            else -> isCategoryEnabled(appContext, KEY_PUSH_MASTER)
+        }
+        if (!allowed) return
+        val nm = appContext.getSystemService(Context.NOTIFICATION_SERVICE) as? NotificationManager ?: return
+        ensureChannel(nm)
+        val channelId = when (cat) {
+            "announcement" -> UPDATE_CHANNEL_ID
+            "mention", "reply" -> MENTION_CHANNEL_ID
+            else -> FEED_CHANNEL_ID
+        }
+        val openIntent = Intent(appContext, XyDeskHomeActivity::class.java)
+            .addFlags(Intent.FLAG_ACTIVITY_REORDER_TO_FRONT or Intent.FLAG_ACTIVITY_SINGLE_TOP or Intent.FLAG_ACTIVITY_NEW_TASK)
+            .putExtra(EXTRA_SKIP_AUTO_RESUME, true)
+        val pending = PendingIntent.getActivity(
+            appContext,
+            (notifId.hashCode() and 0x7fffffff),
+            openIntent,
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
+        )
+        val notif = NotificationCompat.Builder(appContext, channelId)
+            .setSmallIcon(R.drawable.ic_stat_xydesk)
+            .setContentTitle(title)
+            .setContentText(body)
+            .setStyle(NotificationCompat.BigTextStyle().bigText(body))
+            .setAutoCancel(true)
+            .setContentIntent(pending)
+            .build()
+        nm.notify(SOCIAL_NOTIF_BASE_ID + (notifId.hashCode() and 0x3ff), notif)
     }
 
     fun appendInlineReplyAndSend(context: Context, replyText: String) {
@@ -271,33 +400,19 @@ object ChatPushNotifier {
     }
 
     private fun renderMessagingNotification(context: Context, stack: List<StackedMsg>) {
+        renderSystemChatNotification(context, stack, isMention = false, isReply = false, isAnnouncement = false)
+    }
+
+    private fun renderSystemChatNotification(
+        context: Context,
+        stack: List<StackedMsg>,
+        isMention: Boolean,
+        isReply: Boolean,
+        isAnnouncement: Boolean,
+    ) {
         if (stack.isEmpty()) return
         val nm = context.getSystemService(Context.NOTIFICATION_SERVICE) as? NotificationManager ?: return
         ensureChannel(nm)
-
-        val myNick = chatNickname(context)
-        val mePerson = Person.Builder()
-            .setName(xyNow("Kamu ($myNick)", "You ($myNick)"))
-            .setKey("me:$myNick")
-            .setIcon(IconCompat.createWithBitmap(createAvatarBitmap(myNick, isMe = true)))
-            .build()
-
-        val messagingStyle = NotificationCompat.MessagingStyle(mePerson)
-            .setConversationTitle(xyNow("Chat Global · XyDesk", "Global Chat · XyDesk"))
-            .setGroupConversation(true)
-
-        for (item in stack) {
-            val senderPerson = if (item.isMe) {
-                mePerson
-            } else {
-                Person.Builder()
-                    .setName(item.name)
-                    .setKey("user:${item.name}")
-                    .setIcon(IconCompat.createWithBitmap(createAvatarBitmap(item.name, isMe = false)))
-                    .build()
-            }
-            messagingStyle.addMessage(item.text, item.at, senderPerson)
-        }
 
         val openPending = PendingIntent.getActivity(
             context,
@@ -306,9 +421,8 @@ object ChatPushNotifier {
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
         )
 
-        // Tombol 1: Balas langsung dari notifikasi (RemoteInput memerlukan FLAG_MUTABLE pada API 31+)
         val remoteInput = RemoteInput.Builder(KEY_TEXT_REPLY)
-            .setLabel(xyNow("Ketik balasan ke Chat Global…", "Type a reply to Global Chat…"))
+            .setLabel(xyNow("Ketik balasan…", "Type a reply…"))
             .build()
 
         val replyFlags = PendingIntent.FLAG_UPDATE_CURRENT or
@@ -334,7 +448,6 @@ object ChatPushNotifier {
             .setShowsUserInterface(false)
             .build()
 
-        // Tombol 2: Tandai dibaca
         val markReadPending = PendingIntent.getBroadcast(
             context,
             REQ_MARK_READ,
@@ -355,46 +468,46 @@ object ChatPushNotifier {
 
         val lastItem = stack.last()
         val unreadCount = stack.count { !it.isMe }
-        val summarySubText = if (unreadCount > 1) {
-            xyNow("$unreadCount pesan baru", "$unreadCount new messages")
+        val channelId = when {
+            isAnnouncement -> UPDATE_CHANNEL_ID
+            isMention || isReply -> MENTION_CHANNEL_ID
+            else -> CHAT_CHANNEL_ID
+        }
+        val titleText = when {
+            isAnnouncement -> "Pengumuman · ${lastItem.name}"
+            isMention -> "${lastItem.name} menyebut Anda"
+            isReply -> "${lastItem.name} membalas pesan Anda"
+            else -> lastItem.name
+        }
+        val inboxLines = stack.takeLast(5).map { "${it.name}: ${it.text}" }
+        val bigText = if (inboxLines.size > 1 && !isMention && !isReply) {
+            inboxLines.joinToString("\n")
         } else {
-            xyNow("Chat Global", "Global Chat")
+            lastItem.text
         }
 
-        val soundUri = RingtoneManager.getDefaultUri(RingtoneManager.TYPE_NOTIFICATION)
-        val vibPattern = longArrayOf(0L, 240L, 120L, 240L)
-
-        val builder = NotificationCompat.Builder(context, CHAT_CHANNEL_ID)
+        // Gunakan sistem notifikasi standar bawaan HP (mengikuti pengaturan suara/getar channel sistem HP)
+        val builder = NotificationCompat.Builder(context, channelId)
             .setSmallIcon(R.drawable.ic_stat_xydesk)
-            .setContentTitle("${lastItem.name} · Chat Global")
+            .setContentTitle(titleText)
             .setContentText(lastItem.text)
-            .setSubText(summarySubText)
-            .setStyle(messagingStyle)
+            .setSubText(if (unreadCount > 1) "$unreadCount pesan" else "Chat Global")
+            .setStyle(NotificationCompat.BigTextStyle().bigText(bigText))
             .setCategory(NotificationCompat.CATEGORY_MESSAGE)
-            .setPriority(NotificationCompat.PRIORITY_HIGH)
-            .setSound(soundUri)
-            .setVibrate(vibPattern)
-            .setDefaults(NotificationCompat.DEFAULT_ALL)
             .setAutoCancel(true)
             .setOnlyAlertOnce(lastItem.isMe)
             .setWhen(lastItem.at)
             .setShowWhen(true)
-            .setColor(0xFF4F7CFF.toInt())
-            .setGroup("xydesk_global_chat")
             .setContentIntent(openPending)
             .addAction(replyAction)
             .addAction(markReadAction)
-            .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
 
         nm.notify(CHAT_NOTIF_ID, builder.build())
-        if (!lastItem.isMe) {
-            playFallbackSoundIfNeeded(context)
-        }
     }
 
     fun openChatIntent(context: Context): Intent =
         Intent(context, XyDeskHomeActivity::class.java)
-            .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP or Intent.FLAG_ACTIVITY_CLEAR_TOP)
+            .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP or Intent.FLAG_ACTIVITY_REORDER_TO_FRONT)
             .putExtra(EXTRA_SKIP_AUTO_RESUME, true)
             .putExtra(EXTRA_OPEN_CHAT_GLOBAL, true)
 
@@ -405,32 +518,11 @@ object ChatPushNotifier {
         isDataPack: Boolean = true,
     ) {
         val appContext = context.applicationContext
+        if (!isCategoryEnabled(appContext, KEY_PUSH_ANNOUNCEMENT)) return
         val nm = appContext.getSystemService(Context.NOTIFICATION_SERVICE) as? NotificationManager ?: return
-        val soundUri = RingtoneManager.getDefaultUri(RingtoneManager.TYPE_NOTIFICATION)
-        val vibPattern = longArrayOf(0L, 240L, 120L, 240L)
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            val audioAttrs = AudioAttributes.Builder()
-                .setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION)
-                .setUsage(AudioAttributes.USAGE_NOTIFICATION)
-                .build()
-            val ch = NotificationChannel(
-                UPDATE_CHANNEL_ID,
-                xyNow("Pembaruan Aplikasi & Data OTA", "App & OTA Data Updates"),
-                NotificationManager.IMPORTANCE_HIGH,
-            ).apply {
-                description = xyNow(
-                    "Notifikasi pembaruan paket data ringan (Download Data) dan versi APK baru",
-                    "Notifications for lightweight OTA data packs and new APK releases",
-                )
-                setSound(soundUri, audioAttrs)
-                enableVibration(true)
-                vibrationPattern = vibPattern
-                enableLights(true)
-            }
-            nm.createNotificationChannel(ch)
-        }
+        ensureChannel(nm)
         val openAppIntent = Intent(appContext, XyDeskHomeActivity::class.java)
-            .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP or Intent.FLAG_ACTIVITY_CLEAR_TOP)
+            .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP or Intent.FLAG_ACTIVITY_REORDER_TO_FRONT)
             .putExtra(EXTRA_SKIP_AUTO_RESUME, true)
         val pending = PendingIntent.getActivity(
             appContext,
@@ -444,41 +536,57 @@ object ChatPushNotifier {
             .setContentText(summary)
             .setSubText(if (isDataPack) xyNow("Update Data In-App", "In-App Data Update") else xyNow("Update APK", "APK Update"))
             .setStyle(NotificationCompat.BigTextStyle().bigText(summary))
-            .setPriority(NotificationCompat.PRIORITY_HIGH)
-            .setSound(soundUri)
-            .setVibrate(vibPattern)
-            .setDefaults(NotificationCompat.DEFAULT_ALL)
             .setAutoCancel(true)
             .setContentIntent(pending)
             .build()
         nm.notify(UPDATE_NOTIF_ID, notif)
-        playFallbackSoundIfNeeded(appContext)
     }
 
     private fun ensureChannel(nm: NotificationManager) {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            val soundUri = RingtoneManager.getDefaultUri(RingtoneManager.TYPE_NOTIFICATION)
-            val audioAttrs = AudioAttributes.Builder()
-                .setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION)
-                .setUsage(AudioAttributes.USAGE_NOTIFICATION_COMMUNICATION_INSTANT)
-                .build()
-            val channel = NotificationChannel(
-                CHAT_CHANNEL_ID,
-                xyNow("Chat Global (Dengan Suara)", "Global Chat (With Sound)"),
-                NotificationManager.IMPORTANCE_HIGH,
-            ).apply {
-                description = xyNow(
-                    "Notifikasi pesan baru dengan suara & getar dari Chat Global XyDesk Remote",
-                    "New message notifications with sound & vibration from XyDesk Remote Global Chat",
-                )
-                setSound(soundUri, audioAttrs)
-                enableVibration(true)
-                vibrationPattern = longArrayOf(0L, 240L, 120L, 240L)
-                enableLights(true)
-                lightColor = 0xFF4F7CFF.toInt()
-                lockscreenVisibility = NotificationCompat.VISIBILITY_PUBLIC
-            }
-            nm.createNotificationChannel(channel)
+            val channels = listOf(
+                NotificationChannel(
+                    MENTION_CHANNEL_ID,
+                    xyNow("Mention (@) & Balasan", "Mentions (@) & Replies"),
+                    NotificationManager.IMPORTANCE_HIGH,
+                ).apply {
+                    description = xyNow(
+                        "Notifikasi saat nama Anda disebut (@mention) atau pesan/komentar Anda dibalas",
+                        "Notifications when you are @mentioned or your message/comment is replied to",
+                    )
+                },
+                NotificationChannel(
+                    CHAT_CHANNEL_ID,
+                    xyNow("Pesan Chat Global", "Global Chat Messages"),
+                    NotificationManager.IMPORTANCE_DEFAULT,
+                ).apply {
+                    description = xyNow(
+                        "Notifikasi pesan baru di ruang Chat Global XyDesk",
+                        "Notifications for new messages in XyDesk Global Chat",
+                    )
+                },
+                NotificationChannel(
+                    FEED_CHANNEL_ID,
+                    xyNow("Like, Reaksi & Komentar Feed", "Feed Likes, Reactions & Comments"),
+                    NotificationManager.IMPORTANCE_DEFAULT,
+                ).apply {
+                    description = xyNow(
+                        "Notifikasi saat postingan Anda disukai, diberi reaksi, atau dikomentari",
+                        "Notifications when your posts receive likes, reactions, or comments",
+                    )
+                },
+                NotificationChannel(
+                    UPDATE_CHANNEL_ID,
+                    xyNow("Pengumuman & Pembaruan", "Announcements & Updates"),
+                    NotificationManager.IMPORTANCE_HIGH,
+                ).apply {
+                    description = xyNow(
+                        "Notifikasi pengumuman resmi dan pembaruan aplikasi",
+                        "Official announcements and app update notifications",
+                    )
+                },
+            )
+            channels.forEach { nm.createNotificationChannel(it) }
         }
     }
 
@@ -662,6 +770,10 @@ object ChatPushNotifier {
                                             senderName = senderLabel,
                                             text = displayText,
                                             at = at,
+                                            rawSender = rawName,
+                                            githubLogin = m.optString("github_login"),
+                                            replyToName = m.optString("reply_to_name"),
+                                            isAnnouncement = m.optBoolean("is_announcement", false),
                                         )
                                     }
                                 }

@@ -317,13 +317,30 @@ public class SessionView extends View
 		return mappedEvent;
 	}
 
+	private int clampRemoteX(float x)
+	{
+		int rx = Math.round(x);
+		if (rx < 0) return 0;
+		if (width > 0 && rx >= width) return width - 1;
+		return rx;
+	}
+
+	private int clampRemoteY(float y)
+	{
+		int ry = Math.round(y);
+		if (ry < 0) return 0;
+		if (height > 0 && ry >= height) return height - 1;
+		return ry;
+	}
+
 	@Override public boolean onTouchEvent(MotionEvent event)
 	{
 		// Physical mouse events: bypass finger gesture detector (which waits for
 		// long-press or single-tap-up without movement). Handle instant button
 		// press/release and drag directly so physical USB/Bluetooth mice click
 		// immediately on tap without needing a long press.
-		if (event.isFromSource(InputDevice.SOURCE_MOUSE))
+		if (event.isFromSource(InputDevice.SOURCE_MOUSE) ||
+		    event.isFromSource(InputDevice.SOURCE_TOUCHPAD))
 		{
 			int action = event.getActionMasked();
 			if (TouchEventCompat.isTwoFingerSwipe(event))
@@ -332,8 +349,8 @@ public class SessionView extends View
 				return true;
 			}
 			MotionEvent mapped = mapTouchEvent(event);
-			int x = (int)mapped.getX();
-			int y = (int)mapped.getY();
+			int x = clampRemoteX(mapped.getX());
+			int y = clampRemoteY(mapped.getY());
 			mapped.recycle();
 
 			if (action == MotionEvent.ACTION_DOWN)
@@ -427,7 +444,8 @@ public class SessionView extends View
 		if (!isPointer)
 			return false;
 
-		final boolean isMouse = event.isFromSource(InputDevice.SOURCE_MOUSE);
+		final boolean isMouse = event.isFromSource(InputDevice.SOURCE_MOUSE) ||
+		                        event.isFromSource(InputDevice.SOURCE_TOUCHPAD);
 		int action = event.getActionMasked();
 
 		if (isMouse && action == MotionEvent.ACTION_HOVER_MOVE)
@@ -435,7 +453,10 @@ public class SessionView extends View
 			MotionEvent mapped = mapTouchEvent(event);
 			if (sessionViewListener != null)
 			{
-				sessionViewListener.onSessionViewMouseMove((int)mapped.getX(), (int)mapped.getY());
+				sessionViewListener.onSessionViewMouseMove(
+				    clampRemoteX(mapped.getX()),
+				    clampRemoteY(mapped.getY())
+				);
 			}
 			mapped.recycle();
 			return true;
@@ -460,8 +481,8 @@ public class SessionView extends View
 			}
 
 			MotionEvent mapped = mapTouchEvent(event);
-			int x = (int)mapped.getX();
-			int y = (int)mapped.getY();
+			int x = clampRemoteX(mapped.getX());
+			int y = clampRemoteY(mapped.getY());
 			mapped.recycle();
 
 			switch (actionButton)

@@ -1,0 +1,71 @@
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="160dp"
+    android:height="160dp"
+    android:viewportWidth="160"
+    android:viewportHeight="160">
+    <!-- Die-cut matte white sticker border -->
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M44,26 C56,26 64,34 66,40 C74,38 86,38 94,40 C96,34 104,26 116,26 C128,26 136,36 132,50 C140,64 142,88 134,110 C124,132 104,140 80,140 C56,140 36,132 26,110 C18,88 20,64 28,50 C24,36 32,26 44,26 Z" />
+    <!-- Bear round ears (warm cocoa matte) -->
+    <path
+        android:fillColor="#92400E"
+        android:strokeColor="#27272A"
+        android:strokeWidth="4.5"
+        android:pathData="M34,46 a14,14 0 1,0 28,0 a14,14 0 1,0 -28,0" />
+    <path
+        android:fillColor="#D97706"
+        android:pathData="M40,46 a8,8 0 1,0 16,0 a8,8 0 1,0 -16,0" />
+    <path
+        android:fillColor="#92400E"
+        android:strokeColor="#27272A"
+        android:strokeWidth="4.5"
+        android:pathData="M98,46 a14,14 0 1,0 28,0 a14,14 0 1,0 -28,0" />
+    <path
+        android:fillColor="#D97706"
+        android:pathData="M104,46 a8,8 0 1,0 16,0 a8,8 0 1,0 -16,0" />
+    <!-- Cozy Bear head -->
+    <path
+        android:fillColor="#B45309"
+        android:strokeColor="#27272A"
+        android:strokeWidth="4.5"
+        android:strokeLineJoin="round"
+        android:pathData="M80,42 C112,42 132,64 130,94 C128,120 108,132 80,132 C52,132 32,120 30,94 C28,64 48,42 80,42 Z" />
+    <!-- Cream muzzle oval -->
+    <path
+        android:fillColor="#FEF3C7"
+        android:strokeColor="#27272A"
+        android:strokeWidth="3.5"
+        android:pathData="M62,90 a18,14 0 1,0 36,0 a18,14 0 1,0 -36,0" />
+    <!-- Sleeping closed eyes -->
+    <path
+        android:fillColor="#00000000"
+        android:strokeColor="#27272A"
+        android:strokeWidth="4.5"
+        android:strokeLineCap="round"
+        android:pathData="M50,72 Q58,80 66,72" />
+    <path
+        android:fillColor="#00000000"
+        android:strokeColor="#27272A"
+        android:strokeWidth="4.5"
+        android:strokeLineCap="round"
+        android:pathData="M94,72 Q102,80 110,72" />
+    <!-- Cute snot bubble (sleepy anime style, matte sky blue) -->
+    <path
+        android:fillColor="#BAE6FD"
+        android:strokeColor="#27272A"
+        android:strokeWidth="3.5"
+        android:pathData="M88,88 a12,12 0 1,0 24,0 a12,12 0 1,0 -24,0" />
+    <!-- Bear nose -->
+    <path
+        android:fillColor="#27272A"
+        android:pathData="M74,84 a6,4.5 0 1,0 12,0 a6,4.5 0 1,0 -12,0" />
+    <!-- Matte 'Zzz' sleep letters -->
+    <path
+        android:fillColor="#00000000"
+        android:strokeColor="#3F3F46"
+        android:strokeWidth="4"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round"
+        android:pathData="M116,28 L130,28 L116,42 L130,42 M134,18 L144,18 L134,28 L144,28" />
+</vector>

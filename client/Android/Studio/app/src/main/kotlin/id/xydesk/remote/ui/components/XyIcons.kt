@@ -73,6 +73,21 @@ private fun xyTwoPath(
 
 object XyIcons {
 
+    /** Emoji / Reaksi: ikon senyum vektor untuk picker reaksi. */
+    val Emoji: ImageVector = xyIcon("XyEmoji") {
+        moveTo(12f, 3f)
+        curveTo(7.03f, 3f, 3f, 7.03f, 3f, 12f)
+        curveTo(3f, 16.97f, 7.03f, 21f, 12f, 21f)
+        curveTo(16.97f, 21f, 21f, 16.97f, 21f, 12f)
+        curveTo(21f, 7.03f, 16.97f, 3f, 12f, 3f)
+        close()
+        moveTo(9f, 10f); lineTo(9.05f, 10f)
+        moveTo(15f, 10f); lineTo(15.05f, 10f)
+        moveTo(8.5f, 14.2f)
+        curveTo(9.4f, 15.8f, 10.6f, 16.5f, 12f, 16.5f)
+        curveTo(13.4f, 16.5f, 14.6f, 15.8f, 15.5f, 14.2f)
+    }
+
     /** Monitor: perangkat remote. */
     val Monitor: ImageVector = xyIcon("XyMonitor") {
         moveTo(2.5f, 4.5f); lineTo(21.5f, 4.5f); lineTo(21.5f, 16f); lineTo(2.5f, 16f); close()
@@ -961,4 +976,22 @@ object XyIcons {
         arcToRelative(1.5f, 1.5f, 0f, true, false, -3f, 0f)
         close()
     }
+
+    /** VolumeOn: ikon speaker/audio menyala (Lucide volume-2 24x24). */
+    val VolumeOn: ImageVector = xyIcon("XyVolumeOn") {
+        moveTo(11f, 5f); lineTo(6f, 9f); lineTo(2f, 9f); lineTo(2f, 15f); lineTo(6f, 15f); lineTo(11f, 19f); close()
+        moveTo(15.54f, 8.46f)
+        arcToRelative(5f, 5f, 0f, false, true, 0f, 7.07f)
+        moveTo(19.07f, 4.93f)
+        arcToRelative(10f, 10f, 0f, false, true, 0f, 14.14f)
+    }
+
+    /** VolumeOff: ikon speaker/audio bisu/mute (Lucide volume-x 24x24). */
+    val VolumeOff: ImageVector = xyIcon("XyVolumeOff") {
+        moveTo(11f, 5f); lineTo(6f, 9f); lineTo(2f, 9f); lineTo(2f, 15f); lineTo(6f, 15f); lineTo(11f, 19f); close()
+        moveTo(22f, 9f); lineTo(16f, 15f)
+        moveTo(16f, 9f); lineTo(22f, 15f)
+    }
+
+    val Tune: ImageVector get() = Sliders
 }

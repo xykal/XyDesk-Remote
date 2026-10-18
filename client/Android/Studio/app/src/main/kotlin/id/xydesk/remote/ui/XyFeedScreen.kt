@@ -44,8 +44,10 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import id.xydesk.remote.ui.components.XyEmptyState
 import id.xydesk.remote.ui.components.XyIconPill
 import id.xydesk.remote.ui.components.XyIcons
+import id.xydesk.remote.ui.components.XyLoadingSkeletonCard
 import id.xydesk.remote.ui.components.XyTopBar
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -170,7 +172,7 @@ internal fun XyFeedScreen(
                         onClick = { activeHeaderTab = XyFeedHeaderTab.NOTIFICATIONS },
                     )
                 }
-                HorizontalDivider(thickness = 0.75.dp, color = Color(0xFF1E222C))
+                Box(Modifier.fillMaxWidth().height(0.75.dp).background(Color(0xFF1E222C)))
             }
 
             Column(
@@ -282,6 +284,7 @@ internal fun GlobalChatAntiNeonHeroBanner(
     onlineCount: Int,
     onClick: () -> Unit,
 ) {
+    val unreadChatCount = id.xydesk.remote.push.ChatPushNotifier.unreadChatCountState.intValue
     Row(
         modifier = Modifier
             .fillMaxWidth()
@@ -298,17 +301,31 @@ internal fun GlobalChatAntiNeonHeroBanner(
             horizontalArrangement = Arrangement.spacedBy(12.dp),
         ) {
             Box(
-                modifier = Modifier
-                    .requiredSize(36.dp)
-                    .clip(CircleShape)
-                    .background(Color(0xFF1B202C)),
+                modifier = Modifier.requiredSize(36.dp),
                 contentAlignment = Alignment.Center,
             ) {
-                Icon(
-                    imageVector = XyIcons.Chat,
-                    contentDescription = null,
-                    tint = Color(0xFFF8FAFC),
-                    modifier = Modifier.size(17.dp),
+                Box(
+                    modifier = Modifier
+                        .requiredSize(36.dp)
+                        .clip(CircleShape)
+                        .background(Color(0xFF1B202C)),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Icon(
+                        imageVector = XyIcons.Chat,
+                        contentDescription = null,
+                        tint = Color(0xFFF8FAFC),
+                        modifier = Modifier.size(17.dp),
+                    )
+                }
+                // Titik notifikasi pada ikon Chat Global
+                Box(
+                    modifier = Modifier
+                        .align(Alignment.TopEnd)
+                        .requiredSize(9.dp)
+                        .clip(CircleShape)
+                        .background(if (unreadChatCount > 0) Color(0xFFEF4444) else Color(0xFF38BDF8))
+                        .border(1.5.dp, Color(0xFF12151D), CircleShape),
                 )
             }
             Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
@@ -322,6 +339,21 @@ internal fun GlobalChatAntiNeonHeroBanner(
                         fontWeight = FontWeight.SemiBold,
                         color = Color(0xFFF8FAFC),
                     )
+                    if (unreadChatCount > 0) {
+                        Box(
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(999.dp))
+                                .background(Color(0xFFEF4444))
+                                .padding(horizontal = 6.dp, vertical = 1.dp),
+                        ) {
+                            Text(
+                                text = xy("$unreadChatCount baru", "$unreadChatCount new"),
+                                fontSize = 9.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = Color.White,
+                            )
+                        }
+                    }
                     Row(
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.spacedBy(4.dp),
@@ -465,11 +497,34 @@ internal fun FeedNotificationsPanel(
     onSelectCategory: (String) -> Unit,
     onOpenPost: (String) -> Unit,
 ) {
+    val context = LocalContext.current
+    var showPushSettings by remember { mutableStateOf(false) }
+    var masterPush by remember {
+        mutableStateOf(id.xydesk.remote.push.ChatPushNotifier.isCategoryEnabled(context, id.xydesk.remote.push.ChatPushNotifier.KEY_PUSH_MASTER))
+    }
+    var mentionPush by remember {
+        mutableStateOf(id.xydesk.remote.push.ChatPushNotifier.isCategoryEnabled(context, id.xydesk.remote.push.ChatPushNotifier.KEY_PUSH_MENTION_REPLY))
+    }
+    var chatPush by remember {
+        mutableStateOf(id.xydesk.remote.push.ChatPushNotifier.isCategoryEnabled(context, id.xydesk.remote.push.ChatPushNotifier.KEY_PUSH_CHAT_ALL))
+    }
+    var feedPush by remember {
+        mutableStateOf(id.xydesk.remote.push.ChatPushNotifier.isCategoryEnabled(context, id.xydesk.remote.push.ChatPushNotifier.KEY_PUSH_FEED_SOCIAL))
+    }
+    var announcePush by remember {
+        mutableStateOf(id.xydesk.remote.push.ChatPushNotifier.isCategoryEnabled(context, id.xydesk.remote.push.ChatPushNotifier.KEY_PUSH_ANNOUNCEMENT))
+    }
+
+    LaunchedEffect(Unit) {
+        id.xydesk.remote.push.ChatPushNotifier.unreadNotifCountState.intValue = 0
+    }
+
     val filtered = remember(items, selectedCategory) {
         when (selectedCategory) {
             "announcement" -> items.filter { it.category == "announcement" }
-            "inbox" -> items.filter { it.category == "inbox" }
+            "inbox" -> items.filter { it.category == "inbox" || it.category == "comment" }
             "reply" -> items.filter { it.category == "reply" || it.category == "mention" }
+            "like" -> items.filter { it.category == "like" || it.category == "reaction" }
             else -> items
         }
     }
@@ -478,6 +533,156 @@ internal fun FeedNotificationsPanel(
         modifier = Modifier.fillMaxWidth(),
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
+        // Panel Pengaturan Push Notifikasi Bawaan HP
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .clip(RoundedCornerShape(12.dp))
+                .background(Color(0xFF12151D))
+                .border(0.75.dp, Color(0xFF1E222C), RoundedCornerShape(12.dp))
+                .padding(horizontal = 14.dp, vertical = 11.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp),
+        ) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clickable { showPushSettings = !showPushSettings },
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween,
+            ) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(10.dp),
+                ) {
+                    Icon(
+                        imageVector = XyIcons.Bell,
+                        contentDescription = null,
+                        tint = Color(0xFF38BDF8),
+                        modifier = Modifier.size(16.dp),
+                    )
+                    Column {
+                        Text(
+                            text = xy("Pengaturan Push Notifikasi HP", "Device Push Notification Settings"),
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.SemiBold,
+                            color = Color(0xFFF8FAFC),
+                        )
+                        Text(
+                            text = xy(
+                                "Atur kategori notif yang aktif & suara bawaan HP",
+                                "Choose active notification categories & native device sound",
+                            ),
+                            fontSize = 10.sp,
+                            color = Color(0xFF64748B),
+                        )
+                    }
+                }
+                Text(
+                    text = if (showPushSettings) xy("Tutup", "Hide") else xy("Atur", "Configure"),
+                    fontSize = 11.sp,
+                    fontWeight = FontWeight.SemiBold,
+                    color = Color(0xFF38BDF8),
+                )
+            }
+
+            if (showPushSettings) {
+                Box(Modifier.fillMaxWidth().height(0.75.dp).background(Color(0xFF1E222C)))
+                val toggleItems = listOf(
+                    Triple(
+                        xy("Aktifkan Semua Push Notifikasi", "Enable All Push Notifications"),
+                        masterPush,
+                    ) { v: Boolean ->
+                        masterPush = v
+                        id.xydesk.remote.push.ChatPushNotifier.setCategoryEnabled(context, id.xydesk.remote.push.ChatPushNotifier.KEY_PUSH_MASTER, v)
+                    },
+                    Triple(
+                        xy("Mention (@) & Balasan Pesan", "Mentions (@) & Message Replies"),
+                        mentionPush && masterPush,
+                    ) { v: Boolean ->
+                        mentionPush = v
+                        id.xydesk.remote.push.ChatPushNotifier.setCategoryEnabled(context, id.xydesk.remote.push.ChatPushNotifier.KEY_PUSH_MENTION_REPLY, v)
+                    },
+                    Triple(
+                        xy("Pesan Baru Chat Global", "New Global Chat Messages"),
+                        chatPush && masterPush,
+                    ) { v: Boolean ->
+                        chatPush = v
+                        id.xydesk.remote.push.ChatPushNotifier.setCategoryEnabled(context, id.xydesk.remote.push.ChatPushNotifier.KEY_PUSH_CHAT_ALL, v)
+                    },
+                    Triple(
+                        xy("Like, Reaksi & Komentar Feed", "Feed Likes, Reactions & Comments"),
+                        feedPush && masterPush,
+                    ) { v: Boolean ->
+                        feedPush = v
+                        id.xydesk.remote.push.ChatPushNotifier.setCategoryEnabled(context, id.xydesk.remote.push.ChatPushNotifier.KEY_PUSH_FEED_SOCIAL, v)
+                    },
+                    Triple(
+                        xy("Pengumuman & Pembaruan", "Announcements & Updates"),
+                        announcePush && masterPush,
+                    ) { v: Boolean ->
+                        announcePush = v
+                        id.xydesk.remote.push.ChatPushNotifier.setCategoryEnabled(context, id.xydesk.remote.push.ChatPushNotifier.KEY_PUSH_ANNOUNCEMENT, v)
+                    },
+                )
+                toggleItems.forEach { (label, checked, onToggle) ->
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable { onToggle(!checked) }
+                            .padding(vertical = 4.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                    ) {
+                        Text(
+                            text = label,
+                            fontSize = 12.sp,
+                            color = if (checked) Color(0xFFF1F5F9) else Color(0xFF64748B),
+                        )
+                        Box(
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(999.dp))
+                                .background(if (checked) Color(0xFF10B981).copy(alpha = 0.2f) else Color(0xFF1E222C))
+                                .border(
+                                    0.75.dp,
+                                    if (checked) Color(0xFF10B981) else Color(0xFF334155),
+                                    RoundedCornerShape(999.dp),
+                                )
+                                .padding(horizontal = 10.dp, vertical = 3.dp),
+                        ) {
+                            Text(
+                                text = if (checked) "ON" else "OFF",
+                                fontSize = 10.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = if (checked) Color(0xFF10B981) else Color(0xFF94A3B8),
+                            )
+                        }
+                    }
+                }
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(8.dp))
+                        .background(Color(0xFF1B202C))
+                        .clickable { id.xydesk.remote.push.ChatPushNotifier.openSystemNotificationSettings(context) }
+                        .padding(horizontal = 12.dp, vertical = 8.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                ) {
+                    Text(
+                        text = xy("Buka Setelan Notifikasi Bawaan HP", "Open Native System Notification Settings"),
+                        fontSize = 11.sp,
+                        fontWeight = FontWeight.SemiBold,
+                        color = Color(0xFFF8FAFC),
+                    )
+                    Icon(
+                        imageVector = XyIcons.ChevronRight,
+                        contentDescription = null,
+                        tint = Color(0xFF94A3B8),
+                        modifier = Modifier.size(14.dp),
+                    )
+                }
+            }
+        }
         Row(
             modifier = Modifier
                 .fillMaxWidth()
@@ -487,6 +692,7 @@ internal fun FeedNotificationsPanel(
             val categories = listOf(
                 Triple("all", XyIcons.Bell, xy("Semua (${items.size})", "All (${items.size})")),
                 Triple("announcement", XyIcons.Megaphone, xy("Pengumuman", "Announcements")),
+                Triple("like", XyIcons.Heart, xy("Like & Reaksi", "Likes & Reactions")),
                 Triple("inbox", XyIcons.Inbox, xy("Komentar", "Comments")),
                 Triple("reply", XyIcons.Chat, xy("Balasan", "Replies")),
             )
@@ -517,28 +723,29 @@ internal fun FeedNotificationsPanel(
             }
         }
 
-        HorizontalDivider(thickness = 0.75.dp, color = Color(0xFF1E222C))
+        Box(Modifier.fillMaxWidth().height(0.75.dp).background(Color(0xFF1E222C)))
 
         if (filtered.isEmpty()) {
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(vertical = 36.dp),
-                contentAlignment = Alignment.Center,
-            ) {
-                Text(
-                    text = xy("Belum ada notifikasi di kategori ini.", "No notifications in this category yet."),
-                    style = MaterialTheme.typography.bodySmall,
-                    color = Color(0xFF64748B),
-                )
-            }
+            XyEmptyState(
+                title = xy("Belum Ada Notifikasi", "No Notifications Yet"),
+                subtitle = xy("Belum ada pengumuman, komentar, atau balasan baru di kategori ini.", "No announcements, comments, or replies in this category yet."),
+                icon = XyIcons.Bell,
+            )
         } else {
             Column(modifier = Modifier.fillMaxWidth()) {
                 filtered.forEach { item ->
                     val itemIcon = when (item.category) {
                         "announcement" -> XyIcons.Megaphone
+                        "like" -> XyIcons.HeartFilled
+                        "reaction" -> XyIcons.Emoji
                         "reply", "mention" -> XyIcons.Chat
                         else -> XyIcons.Inbox
+                    }
+                    val itemTint = when (item.category) {
+                        "like" -> Color(0xFFFB7185)
+                        "reaction" -> Color(0xFFFBBF24)
+                        "announcement" -> Color(0xFF38BDF8)
+                        else -> Color(0xFFCBD5E1)
                     }
                     Row(
                         modifier = Modifier
@@ -558,7 +765,7 @@ internal fun FeedNotificationsPanel(
                             Icon(
                                 imageVector = itemIcon,
                                 contentDescription = null,
-                                tint = Color(0xFFCBD5E1),
+                                tint = itemTint,
                                 modifier = Modifier.size(16.dp),
                             )
                         }
@@ -576,14 +783,17 @@ internal fun FeedNotificationsPanel(
                                     fontWeight = FontWeight.SemiBold,
                                     color = Color(0xFFF8FAFC),
                                 )
-                                if (isFounderAccount(item.actorGithub) || isFounderAccount(item.actorName)) {
-                                    XyFounderBadge(compact = true)
-                                }
+                                XyUserRoleBadges(
+                                    name = item.actorName,
+                                    githubLogin = item.actorGithub,
+                                    compact = true,
+                                )
                             }
-                            Text(
+                            XyClickableLinkText(
                                 text = item.body,
-                                style = MaterialTheme.typography.bodySmall,
                                 color = Color(0xFFCBD5E1),
+                                linkColor = Color(0xFF38BDF8),
+                                style = MaterialTheme.typography.bodySmall,
                             )
                             Text(
                                 text = "${item.actorName} · ${feedTimeAgo(item.createdAtMillis)}",
@@ -592,7 +802,7 @@ internal fun FeedNotificationsPanel(
                             )
                         }
                     }
-                    HorizontalDivider(thickness = 0.75.dp, color = Color(0xFF1A1E28))
+                    Box(Modifier.fillMaxWidth().height(0.75.dp).background(Color(0xFF1A1E28)))
                 }
             }
         }
@@ -735,9 +945,11 @@ internal fun FeedLeaderboardTop100Panel(
                     )
                 }
             }
+        } else {
+            XyLoadingSkeletonCard(count = 3, itemHeight = 56.dp)
         }
 
-        HorizontalDivider(thickness = 0.75.dp, color = Color(0xFF1E222C))
+        Box(Modifier.fillMaxWidth().height(0.75.dp).background(Color(0xFF1E222C)))
 
         // Daftar flat tanpa kartu/border bertumpuk
         Column(modifier = Modifier.fillMaxWidth()) {
@@ -777,9 +989,11 @@ internal fun FeedLeaderboardTop100Panel(
                                 maxLines = 1,
                                 overflow = TextOverflow.Ellipsis,
                             )
-                            if (isFounder) {
-                                XyFounderBadge(compact = true)
-                            }
+                            XyUserRoleBadges(
+                                name = item.name,
+                                githubLogin = item.githubLogin,
+                                compact = true,
+                            )
                         }
                         val sub = buildString {
                             if (item.githubLogin.isNotBlank()) append("@${item.githubLogin} · ")
@@ -801,7 +1015,7 @@ internal fun FeedLeaderboardTop100Panel(
                         color = Color(0xFFCBD5E1),
                     )
                 }
-                HorizontalDivider(thickness = 0.75.dp, color = Color(0xFF171B24))
+                Box(Modifier.fillMaxWidth().height(0.75.dp).background(Color(0xFF171B24)))
             }
         }
     }
@@ -846,9 +1060,11 @@ private fun PodiumColumn(
             overflow = TextOverflow.Ellipsis,
             textAlign = TextAlign.Center,
         )
-        if (isFounder) {
-            XyFounderBadge(compact = true)
-        }
+        XyUserRoleBadges(
+            name = entry.name,
+            githubLogin = entry.githubLogin,
+            compact = true,
+        )
         Text(
             text = formatLeaderboardDuration(entry.totalSeconds),
             fontSize = 11.sp,

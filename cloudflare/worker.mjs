@@ -650,6 +650,8 @@ function communityJokePublicView(joke, viewerReaction = null, comments = null, e
     attachment: joke.attachment?.url
       ? { mime: joke.attachment.mime || "image/webp", url: joke.attachment.url }
       : null,
+    likes_count: Math.max(0, Number(joke.likes_count) || 0),
+    viewer_liked: Boolean(extra.viewerLiked),
     reactions: Object.fromEntries(COMMUNITY_JOKE_REACTIONS.map((emoji) => [emoji, Math.max(0, Number(joke.reactions?.[emoji]) || 0)])),
     viewer_reaction: viewerReaction,
     comments_total: Math.max(0, Number(joke.comment_count) || 0),
@@ -1158,6 +1160,8 @@ export class CommunityJokes {
       return this.readFeed(request);
     }
     if (path === "/submit" && request.method === "POST") return this.submit(request);
+    const likeMatch = path.match(/^\/like\/([0-9a-f-]{36})$/i);
+    if (likeMatch && request.method === "POST") return this.like(request, likeMatch[1]);
     const reaction = path.match(/^\/reaction\/([0-9a-f-]{36})$/i);
     if (reaction && request.method === "POST") return this.react(request, reaction[1]);
     const report = path.match(/^\/report\/([0-9a-f-]{36})$/i);
@@ -1177,20 +1181,36 @@ export class CommunityJokes {
   }
 
   async readNotifications(request) {
-    const clientId = request.headers.get("x-xydesk-client-id") || "";
-    const viewerGh = String(request.headers.get("x-xydesk-github-login") || "").trim().replace(/^@/, "").toLowerCase();
-    const viewerName = String(request.headers.get("x-xydesk-display-name") || "").trim().toLowerCase();
+    const reqUrl = new URL(request.url);
+    const clientId = request.headers.get("x-xydesk-client-id") || reqUrl.searchParams.get("client_id") || "";
+    const viewerGh = String(request.headers.get("x-xydesk-github-login") || reqUrl.searchParams.get("github_login") || "").trim().replace(/^@/, "").toLowerCase();
+    const viewerName = String(request.headers.get("x-xydesk-display-name") || reqUrl.searchParams.get("name") || "").trim().toLowerCase();
+    const sinceMs = Math.max(0, Number(reqUrl.searchParams.get("since") || 0) || 0);
     try {
       const clientHash = COMMUNITY_CLIENT_ID_RE.test(clientId) ? await hashedCommunityClientId(clientId) : "";
       const entries = await this.state.storage.list({ prefix: "notif:", reverse: true, limit: 150 });
       const items = [];
       for (const [, n] of entries) {
         if (!n) continue;
+        const createdAt = Number(n.created_at || 0);
+        if (sinceMs > 0 && createdAt <= sinceMs) continue;
         const cat = String(n.category || "inbox");
         const targetHash = String(n.target_hash || "");
         const targetGh = String(n.target_github || "").trim().toLowerCase();
         const targetName = String(n.target_name || "").trim().toLowerCase();
         const isGlobal = cat === "announcement" || n.global === true;
+        if (!isGlobal) {
+          const actorHash = String(n.actor_hash || "");
+          const actorGh = String(n.actor_github || "").trim().replace(/^@/, "").toLowerCase();
+          const actorName = String(n.actor_name || "").trim().replace(/^@/, "").toLowerCase();
+          const isSelfActor =
+            (clientHash && actorHash && clientHash === actorHash) ||
+            (viewerGh && actorGh && viewerGh === actorGh) ||
+            (viewerName && actorName && viewerName === actorName) ||
+            (viewerGh && actorName && viewerGh === actorName) ||
+            (viewerName && actorGh && viewerName === actorGh);
+          if (isSelfActor) continue;
+        }
         const isForMe = isGlobal ||
           (clientHash && targetHash && clientHash === targetHash) ||
           (viewerGh && targetGh && viewerGh === targetGh) ||
@@ -1199,14 +1219,16 @@ export class CommunityJokes {
         if (!isForMe) continue;
         items.push({
           id: n.id,
-          category: cat, // "announcement" | "inbox" | "reply" | "mention"
+          category: cat, // "announcement" | "like" | "reaction" | "reply" | "mention" | "inbox"
           title: n.title || "",
           body: n.body || "",
+          actor_id: n.actor_id || "",
           actor_name: n.actor_name || "Komunitas",
           actor_github: n.actor_github || "",
           actor_avatar: n.actor_avatar || (n.actor_github ? `https://github.com/${n.actor_github}.png?size=120` : ""),
+          target_route: n.target_route || (cat === "announcement" ? "chat" : "feed"),
           joke_id: n.joke_id || "",
-          created_at: n.created_at || Date.now(),
+          created_at: createdAt || Date.now(),
         });
         if (items.length >= 60) break;
       }
@@ -1233,10 +1255,13 @@ export class CommunityJokes {
       }
       const items = await Promise.all(
         visibleJokes.map(async (joke) => {
-          const [viewerReaction, commentEntries] = await Promise.all([
+          const [viewerReaction, viewerLiked, commentEntries] = await Promise.all([
             clientHash
               ? this.state.storage.get(`joke-reaction:${joke.id}:${clientHash}`).then((r) => r || null).catch(() => null)
               : Promise.resolve(null),
+            clientHash
+              ? this.state.storage.get(`joke-like:${joke.id}:${clientHash}`).then((v) => Boolean(v)).catch(() => false)
+              : Promise.resolve(false),
             this.state.storage.list({
               prefix: `joke-comments:${joke.id}:`,
               reverse: true,
@@ -1252,7 +1277,7 @@ export class CommunityJokes {
               avatarUrl = `/api/jokes/avatar/${joke.author_hash}`;
             }
           }
-          return communityJokePublicView(joke, viewerReaction, comments, { isOwn, avatarUrl });
+          return communityJokePublicView(joke, viewerReaction, comments, { isOwn, avatarUrl, viewerLiked });
         }),
       );
       items.sort((a, b) => {
@@ -1536,6 +1561,74 @@ export class CommunityJokes {
     }
   }
 
+  async like(request, jokeId) {
+    if (!ACTIVE_SESSION_ID_RE.test(jokeId)) {
+      return durableObjectJson({ status: "invalid_joke_id" }, 400, request.method);
+    }
+    const parsed = await readCommunityJson(request, 1_024);
+    if (parsed.error) return parsed.error;
+    const clientId = parsed.body?.client_id;
+    if (!COMMUNITY_CLIENT_ID_RE.test(String(clientId || ""))) {
+      return durableObjectJson({ status: "invalid_client_id" }, 400, request.method);
+    }
+    try {
+      const clientHash = await hashedCommunityClientId(clientId);
+      const actorName = sanitizeCommunityDisplayName(parsed.body?.display_name) ||
+        (typeof parsed.body?.github_login === "string" ? parsed.body.github_login.trim().replace(/^@/, "") : "") ||
+        "Komunitas";
+      const actorGh = typeof parsed.body?.github_login === "string" ? parsed.body.github_login.trim().replace(/^@/, "") : "";
+      const now = Date.now();
+      const outcome = await this.state.storage.transaction(async (transaction) => {
+        const listKey = await transaction.get(`joke-id:${jokeId}`);
+        if (!listKey) return { status: "not_found" };
+        const joke = await transaction.get(listKey);
+        if (!joke || joke.hidden) return { status: "not_found" };
+
+        const likeKey = `joke-like:${jokeId}:${clientHash}`;
+        const prevLiked = Boolean(await transaction.get(likeKey));
+        const viewerReaction = await transaction.get(`joke-reaction:${jokeId}:${clientHash}`).catch(() => null);
+        const nextLiked = !prevLiked;
+        joke.likes_count = Math.max(0, (Number(joke.likes_count) || 0) + (nextLiked ? 1 : -1));
+        const isSelfLike =
+          (joke.author_hash && joke.author_hash === clientHash) ||
+          (actorGh && joke.github_login && actorGh.toLowerCase() === String(joke.github_login).toLowerCase()) ||
+          (actorName && joke.author_name && actorName.toLowerCase() === String(joke.author_name).toLowerCase());
+        if (nextLiked) {
+          await transaction.put(likeKey, true);
+          if (!isSelfLike && (joke.author_hash || joke.github_login || joke.author_name)) {
+            const nId = crypto.randomUUID();
+            await transaction.put(`notif:${String(now).padStart(13, "0")}:${nId}`, {
+              id: nId,
+              category: "like",
+              actor_hash: clientHash,
+              target_hash: joke.author_hash || "",
+              target_github: joke.github_login || "",
+              target_name: joke.author_name || "",
+              title: `${actorName} menyukai postingan Anda`,
+              body: String(joke.text || "Postingan media").slice(0, 120),
+              actor_name: actorName,
+              actor_github: actorGh,
+              target_route: "feed",
+              joke_id: jokeId,
+              created_at: now,
+            });
+          }
+        } else {
+          await transaction.delete(likeKey);
+        }
+        await transaction.put(listKey, joke);
+        const isOwn = Boolean(joke.author_hash && joke.author_hash === clientHash);
+        return {
+          status: "ok",
+          joke: communityJokePublicView(joke, viewerReaction || null, null, { isOwn, viewerLiked: nextLiked }),
+        };
+      });
+      return durableObjectJson(outcome, outcome.status === "not_found" ? 404 : 200, request.method);
+    } catch {
+      return durableObjectJson({ status: "unavailable" }, 503, request.method);
+    }
+  }
+
   async react(request, jokeId) {
     if (!ACTIVE_SESSION_ID_RE.test(jokeId)) {
       return durableObjectJson({ status: "invalid_joke_id" }, 400, request.method);
@@ -1549,6 +1642,11 @@ export class CommunityJokes {
     }
     try {
       const clientHash = await hashedCommunityClientId(clientId);
+      const actorName = sanitizeCommunityDisplayName(parsed.body?.display_name) ||
+        (typeof parsed.body?.github_login === "string" ? parsed.body.github_login.trim().replace(/^@/, "") : "") ||
+        "Komunitas";
+      const actorGh = typeof parsed.body?.github_login === "string" ? parsed.body.github_login.trim().replace(/^@/, "") : "";
+      const now = Date.now();
       const outcome = await this.state.storage.transaction(async (transaction) => {
         const listKey = await transaction.get(`joke-id:${jokeId}`);
         if (!listKey) return { status: "not_found" };
@@ -1557,13 +1655,15 @@ export class CommunityJokes {
 
         const reactionKey = `joke-reaction:${jokeId}:${clientHash}`;
         const previous = await transaction.get(reactionKey);
+        const viewerLiked = Boolean(await transaction.get(`joke-like:${jokeId}:${clientHash}`).catch(() => false));
+        const isOwn = Boolean(joke.author_hash && joke.author_hash === clientHash);
         const reactions = { ...joke.reactions };
         if (previous === emoji) {
           reactions[emoji] = Math.max(0, (Number(reactions[emoji]) || 0) - 1);
           await transaction.delete(reactionKey);
           joke.reactions = reactions;
           await transaction.put(listKey, joke);
-          return { status: "ok", joke: communityJokePublicView(joke, null) };
+          return { status: "ok", joke: communityJokePublicView(joke, null, null, { isOwn, viewerLiked }) };
         }
         if (previous && COMMUNITY_JOKE_REACTIONS.includes(previous)) {
           reactions[previous] = Math.max(0, (Number(reactions[previous]) || 0) - 1);
@@ -1572,7 +1672,29 @@ export class CommunityJokes {
         joke.reactions = reactions;
         await transaction.put(reactionKey, emoji);
         await transaction.put(listKey, joke);
-        return { status: "ok", joke: communityJokePublicView(joke, emoji) };
+        const isSelfReact =
+          (joke.author_hash && joke.author_hash === clientHash) ||
+          (actorGh && joke.github_login && actorGh.toLowerCase() === String(joke.github_login).toLowerCase()) ||
+          (actorName && joke.author_name && actorName.toLowerCase() === String(joke.author_name).toLowerCase());
+        if (!isSelfReact && (joke.author_hash || joke.github_login || joke.author_name)) {
+          const nId = crypto.randomUUID();
+          await transaction.put(`notif:${String(now).padStart(13, "0")}:${nId}`, {
+            id: nId,
+            category: "reaction",
+            actor_hash: clientHash,
+            target_hash: joke.author_hash || "",
+            target_github: joke.github_login || "",
+            target_name: joke.author_name || "",
+            title: `${actorName} bereaksi ${emoji} pada postingan Anda`,
+            body: String(joke.text || "Postingan media").slice(0, 120),
+            actor_name: actorName,
+            actor_github: actorGh,
+            target_route: "feed",
+            joke_id: jokeId,
+            created_at: now,
+          });
+        }
+        return { status: "ok", joke: communityJokePublicView(joke, emoji, null, { isOwn, viewerLiked }) };
       });
       return durableObjectJson(outcome, outcome.status === "not_found" ? 404 : 200, request.method);
     } catch {
@@ -1700,14 +1822,19 @@ export class CommunityJokes {
         await transaction.put(`joke-comments:${jokeId}:${String(now).padStart(13, "0")}:${id}`, comment);
         await transaction.put(rateKey, now);
 
-        // Simpan notifikasi untuk pemilik postingan & target balasan/mention
+        // Simpan notifikasi untuk pemilik postingan & target balasan/mention (kecuali diri sendiri)
         const actorLabel = name || githubLogin || "Pengguna";
-        if (joke.author_hash && joke.author_hash !== clientHash) {
+        const isSelfPostAuthor =
+          (joke.author_hash && joke.author_hash === clientHash) ||
+          (githubLogin && joke.github_login && githubLogin.toLowerCase() === String(joke.github_login).toLowerCase()) ||
+          (actorLabel && joke.author_name && actorLabel.toLowerCase() === String(joke.author_name).toLowerCase());
+        if (!isSelfPostAuthor && (joke.author_hash || joke.github_login || joke.author_name)) {
           const nId = crypto.randomUUID();
           await transaction.put(`notif:${String(now).padStart(13, "0")}:${nId}`, {
             id: nId,
             category: "inbox",
-            target_hash: joke.author_hash,
+            actor_hash: clientHash,
+            target_hash: joke.author_hash || "",
             target_github: joke.github_login || "",
             target_name: joke.author_name || "",
             title: `${actorLabel} mengomentari postingan Anda`,
@@ -1719,13 +1846,17 @@ export class CommunityJokes {
             created_at: now,
           });
         }
-        if (replyToName && replyToName.toLowerCase() !== actorLabel.toLowerCase()) {
+        const cleanReplyTarget = replyToName.replace(/^@/, "");
+        if (cleanReplyTarget &&
+            cleanReplyTarget.toLowerCase() !== actorLabel.toLowerCase() &&
+            (!githubLogin || cleanReplyTarget.toLowerCase() !== githubLogin.toLowerCase())) {
           const nId2 = crypto.randomUUID();
           await transaction.put(`notif:${String(now + 1).padStart(13, "0")}:${nId2}`, {
             id: nId2,
             category: "reply",
-            target_github: replyToName.replace(/^@/, ""),
-            target_name: replyToName.replace(/^@/, ""),
+            actor_hash: clientHash,
+            target_github: cleanReplyTarget,
+            target_name: cleanReplyTarget,
             title: `${actorLabel} membalas komentar Anda`,
             body: text,
             actor_name: actorLabel,
@@ -1738,10 +1869,12 @@ export class CommunityJokes {
         const mentionMatches = [...text.matchAll(/@([A-Za-z0-9_.-]{2,32})/g)].map((m) => m[1]);
         for (const mentioned of mentionMatches.slice(0, 3)) {
           if (mentioned.toLowerCase() === actorLabel.toLowerCase()) continue;
+          if (githubLogin && mentioned.toLowerCase() === githubLogin.toLowerCase()) continue;
           const nIdM = crypto.randomUUID();
           await transaction.put(`notif:${String(now + 2).padStart(13, "0")}:${nIdM}`, {
             id: nIdM,
             category: "mention",
+            actor_hash: clientHash,
             target_github: mentioned,
             target_name: mentioned,
             title: `${actorLabel} menyebut (@${mentioned}) di komentar Feed`,
@@ -2316,8 +2449,29 @@ async function dataPackResponse(request, env) {
         { code: "xy_sad", name: "Ping 999ms", res: "sticker_xy_sad" },
         { code: "xy_king", name: "Sovereign Boss", res: "sticker_xy_king" },
       ],
+      bubble_anim_config: {
+        version: "2026.10.18.63",
+        default_preset: "SPARKLES",
+        founder_preset: "CRYSTAL",
+        speed_multiplier: 1.35,
+        intensity: 1.6,
+        aurora_waves: true,
+        shooting_stars: true,
+        neon_border_sweep: true,
+        founder_colors: ["#14052B", "#2E1065", "#581C87", "#7E22CE", "#A855F7", "#E879F9"],
+        accent_color: "#D8B4FE",
+        secondary_color: "#A855F7",
+      },
+      special_roles: {
+        xykal: "FOUNDER",
+        xyverse: "XYTEAM",
+        xyteam: "XYTEAM",
+        projectkal: "XYTEAM",
+        xytester: "TESTER",
+        betatester: "TESTER",
+      },
       changelog_summary:
-        "Paket Data OTA XyDesk: Dukungan penuh Multi-OS Cloud RDP (Windows Server & Ubuntu XFCE4 Desktop), perbaikan runtime GTA SA-MP anti-stuck, klik mouse fisik instan 0ms, E2EE AES-256-GCM Chat Global, dan koleksi stiker eksklusif XyDesk.",
+        "Paket Data OTA XyDesk 2026.10.18.62: Upgrade Animasi Bubble Aurora Plasma + Bintang Jatuh Meteor + Kristal Amethyst 3D (Server-Driven OTA tanpa perlu update APK), Badge Khusus XYTEAM & TESTER, Link Biru Bisa Diklik, dan Notifikasi Pesan Gaya WhatsApp.",
     };
     return jsonResponse(payload, 200, request.method);
   } catch {
@@ -2667,16 +2821,18 @@ async function communityJokesResponse(request, env) {
     } else {
       return methodNotAllowed("GET, HEAD, POST");
     }
-  } else if (url.pathname === "/api/jokes/notifications") {
+  } else if (url.pathname === "/api/jokes/notifications" || url.pathname === "/api/notifications") {
     if (request.method === "GET" || request.method === "HEAD") {
       const fwdHeaders = {};
       const clientId = request.headers.get("x-xydesk-client-id") || url.searchParams.get("client_id") || "";
       const ghLogin = request.headers.get("x-xydesk-github-login") || url.searchParams.get("github_login") || "";
-      const dispName = request.headers.get("x-xydesk-display-name") || url.searchParams.get("display_name") || "";
+      const dispName = request.headers.get("x-xydesk-display-name") || url.searchParams.get("display_name") || url.searchParams.get("name") || "";
       if (clientId) fwdHeaders["x-xydesk-client-id"] = clientId;
       if (ghLogin) fwdHeaders["x-xydesk-github-login"] = ghLogin;
       if (dispName) fwdHeaders["x-xydesk-display-name"] = dispName;
-      internal = new Request("https://community-jokes/notifications", {
+      const internalUrl = new URL("https://community-jokes/notifications");
+      for (const [k, v] of url.searchParams.entries()) internalUrl.searchParams.set(k, v);
+      internal = new Request(internalUrl.toString(), {
         method: request.method,
         headers: fwdHeaders,
       });
@@ -2708,7 +2864,7 @@ async function communityJokesResponse(request, env) {
   } else if (url.pathname.match(/^\/api\/jokes\/(attachment|avatar)\//i)) {
     return serveCommunityBinary(request, env, url);
   } else {
-    const match = url.pathname.match(/^\/api\/jokes\/([0-9a-f-]{36})\/(reaction|report|comment-delete|comment|edit|delete)$/i);
+    const match = url.pathname.match(/^\/api\/jokes\/([0-9a-f-]{36})\/(like|reaction|report|comment-delete|comment|edit|delete)$/i);
     if (!match || request.method !== "POST") {
       return match ? methodNotAllowed("POST") : jsonResponse({ status: "not_found" }, 404, request.method);
     }
@@ -2977,9 +3133,9 @@ const CHAT_ATTACHMENT_MAX = 2_800_000;
 const CHAT_MSG_PER_WINDOW = 200;
 const CHAT_WINDOW_MS = 20_000;
 const APP_PRESENCE_TTL_MS = 75_000;
-const LIVE_DATA_PACK_VERSION = "2026.10.17.56";
+const LIVE_DATA_PACK_VERSION = "2026.10.18.64";
 let EDGE_PINNED_MSG = null;
-const DEFAULT_ONESIGNAL_APP_ID = "ffaa87d6-8e1d-42b6-bb4f-ebbbfc0bccbb";
+const DEFAULT_ONESIGNAL_APP_ID = "e3d5adea-1c0f-4986-9ce5-e088d65f0998";
 const LEGACY_TEST_NAMES = new Set(["tesbot", "budi", "rizky"]);
 
 function isFounderChatName(name, githubLogin = "") {
@@ -3308,6 +3464,7 @@ function sanitizeChatExtras(raw) {
       : "";
   const attachmentKind = rawKind === "image" || rawKind === "photo" ? "photo"
     : rawKind === "video" ? "video"
+    : rawKind === "audio" || rawKind === "voice" ? "audio"
     : rawKind === "file" ? "file"
     : rawKind === "sticker" ? "sticker"
     : "";
@@ -3335,7 +3492,7 @@ function sanitizeChatExtras(raw) {
   const clientMsgId = typeof raw?.client_msg_id === "string"
     ? raw.client_msg_id.trim().slice(0, 64)
     : "";
-  const hasAttachment = Boolean(attachmentData || attachmentKind === "sticker" || attachmentKind === "file" || attachmentKind === "video");
+  const hasAttachment = Boolean(attachmentData || attachmentKind === "sticker" || attachmentKind === "file" || attachmentKind === "video" || attachmentKind === "audio");
   const e2eeVerified = Boolean(e2eeV && e2eeSig && e2eeSig.length >= 16);
   return {
     github_login: githubLogin,
@@ -3940,7 +4097,26 @@ export class GlobalChat {
       : `${msg.name} (${msg.country || "ID"})`;
     const bodyText = msg.translated && msg.translated.toLowerCase() !== msg.text.toLowerCase()
       ? `${msg.text}\n[${msg.target_lang || "TR"}] ${msg.translated}`
-      : msg.text;
+      : (msg.text || (msg.attachment_type ? `[Media: ${msg.attachment_type}]` : "Pesan baru"));
+    const mentions = [...String(msg.text || "").matchAll(/@([A-Za-z0-9_.-]{2,32})/g)]
+      .map((m) => m[1])
+      .filter((u) => u.toLowerCase() !== String(msg.name || "").toLowerCase() && u.toLowerCase() !== String(msg.github_login || "").toLowerCase());
+    const replyToName = String(msg.reply_to_name || "").trim().replace(/^@/, "");
+    const isSelfReply = replyToName && (replyToName.toLowerCase() === String(msg.name || "").toLowerCase() || replyToName.toLowerCase() === String(msg.github_login || "").toLowerCase());
+    const headingTitle = msg.is_announcement
+      ? `Pengumuman · ${senderLabel}`
+      : mentions.length > 0
+        ? `${msg.name} menyebut @${mentions[0]} · Chat Global`
+        : (replyToName && !isSelfReply)
+          ? `${msg.name} membalas @${replyToName} · Chat Global`
+          : `${senderLabel} · Chat Global`;
+    const notifCategory = msg.is_announcement
+      ? "announcement"
+      : mentions.length > 0
+        ? "mention"
+        : (replyToName && !isSelfReply)
+          ? "reply"
+          : "global_chat";
     try {
       await fetch("https://api.onesignal.com/notifications", {
         method: "POST",
@@ -3954,8 +4130,8 @@ export class GlobalChat {
           target_channel: "push",
           included_segments: ["All"],
           headings: {
-            en: `${senderLabel} · Chat Global`,
-            id: `${senderLabel} · Chat Global`,
+            en: headingTitle,
+            id: headingTitle,
           },
           contents: {
             en: bodyText,
@@ -3963,10 +4139,13 @@ export class GlobalChat {
           },
           data: {
             type: "global_chat",
+            category: notifCategory,
             msg_id: msg.id,
             sender_name: senderLabel,
             raw_sender: msg.name,
             github_login: msg.github_login || "",
+            reply_to_name: isSelfReply ? "" : replyToName,
+            mentioned_users: mentions.join(","),
             country: msg.country || "ID",
             flag: msg.flag || "🇮🇩",
             text: msg.text,
@@ -4753,7 +4932,7 @@ export default {
       if (request.method !== "POST") return methodNotAllowed("POST");
       return sessionReportResponse(request, env);
     }
-    if (path === "/api/jokes" || path.startsWith("/api/jokes/")) {
+    if (path === "/api/jokes" || path.startsWith("/api/jokes/") || path === "/api/notifications") {
       return communityJokesResponse(request, env);
     }
     if (path === "/api/feedback" || path.startsWith("/api/feedback/")) {

@@ -54,14 +54,29 @@ class QuicAudioBridge(
     private val running = AtomicBoolean(false)
     @Volatile private var socket: DatagramSocket? = null
     private var rxThread: Thread? = null
-    private var txThread: Thread? = null
+    @Volatile private var txThread: Thread? = null
     private val micPeak = java.util.concurrent.atomic.AtomicInteger(0)
     private val hostFlags = java.util.concurrent.atomic.AtomicInteger(0)
+    @Volatile var micActive: Boolean = enableMic
+        private set
+    @Volatile var speakerActive: Boolean = enableSpeaker
 
     val healthy: Boolean get() = running.get() && hostFlags.get() != 0
 
+    fun setVoiceMicEnabled(enabled: Boolean) {
+        micActive = enabled
+        if (!enabled) {
+            micPeak.set(0)
+        } else if (running.get() && (txThread == null || txThread?.isAlive != true)) {
+            txThread = Thread({ runMicSender() }, "xydesk-quic-mic-tx").apply {
+                isDaemon = true
+                start()
+            }
+        }
+    }
+
     fun start() {
-        if (!enableSpeaker && !enableMic) {
+        if (!enableSpeaker && !enableMic && !micActive) {
             onStatus("idle (audio & mic mati)")
             return
         }
@@ -70,7 +85,7 @@ class QuicAudioBridge(
             isDaemon = true
             start()
         }
-        if (enableMic) {
+        if (enableMic || micActive) {
             txThread = Thread({ runMicSender() }, "xydesk-quic-mic-tx").apply {
                 isDaemon = true
                 start()
@@ -168,7 +183,9 @@ class QuicAudioBridge(
                                 // keadaan AudioTrack; kegagalan sadapan tidak
                                 // boleh mengganggu audio yang didengar pengguna.
                                 tap?.let { sink -> runCatching { sink(rxBuf, 8, pcmLength) } }
-                                track?.write(rxBuf, 8, pcmLength)
+                                if (speakerActive) {
+                                    track?.write(rxBuf, 8, pcmLength)
+                                }
                             }
                             'S' -> if (rxBuf[3] == 'T'.code.toByte() && len >= 16) {
                                 lastHostMs = now
@@ -267,6 +284,11 @@ class QuicAudioBridge(
             val gainLinear = 10.0.pow(micGainDb / 20.0).toFloat()
 
             while (running.get()) {
+                if (!micActive) {
+                    micPeak.set(0)
+                    Thread.sleep(40)
+                    continue
+                }
                 val n = record.read(pcmShorts, 0, frameSamples)
                 if (n <= 0) {
                     Thread.sleep(5)

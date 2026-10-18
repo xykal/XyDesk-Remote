@@ -583,25 +583,53 @@ private fun GeneralSection(
 
         XySectionLabel(xy("Keyboard & HUD", "Keyboard & HUD"))
         XyCard {
+            var hudOpacityVal by remember { mutableStateOf(prefs.hudOpacity) }
             Text(
-                xy("Ukuran default tombol HUD: {0} dp", "Default HUD button size: {0} dp", hudSize.toInt()),
+                xy("Ukuran tombol HUD: {0} dp", "HUD button size: {0} dp", hudSize.toInt()),
                 style = MaterialTheme.typography.bodyMedium,
             )
             Spacer(Modifier.height(4.dp))
             Text(
                 xy(
-                    "Ukuran ini dipakai untuk tombol baru dan tata letak bawaan. " +
-                        "Tombol yang sudah diatur tetap memakai ukuran masing-masing.",
-                    "New buttons and restored default layouts use this size. " +
-                        "Existing custom buttons keep their individual sizes.",
+                    "Ukuran disimpan permanen (34–96 dp). Menggeser slider juga memperbarui ukuran default tombol baru.",
+                    "Size is saved permanently (34–96 dp). Moving the slider also updates the default size for new buttons.",
                 ),
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
             XySlider(
-                value = hudSize,
-                onValueChange = { hudSize = it; prefs.hudButtonSize = it },
-                valueRange = 56f..80f,
+                value = hudSize.coerceIn(HudKey.MIN_SIZE, HudKey.MAX_SIZE),
+                onValueChange = {
+                    val clamped = it.coerceIn(HudKey.MIN_SIZE, HudKey.MAX_SIZE)
+                    hudSize = clamped
+                    prefs.hudButtonSize = clamped
+                },
+                valueRange = HudKey.MIN_SIZE..HudKey.MAX_SIZE,
+            )
+            Spacer(Modifier.height(6.dp))
+            XyPillButton(
+                text = xy("Terapkan {0} dp ke semua tombol HUD tersimpan", "Apply {0} dp to all saved HUD buttons", hudSize.toInt()),
+                onClick = {
+                    val updated = prefs.hudKeys("").map { k -> k.copy(size = hudSize.coerceIn(HudKey.MIN_SIZE, HudKey.MAX_SIZE)) }
+                    prefs.setHudKeys("", updated)
+                },
+                primary = false,
+                compact = true,
+                modifier = Modifier.fillMaxWidth(),
+            )
+            Spacer(Modifier.height(10.dp))
+            Text(
+                xy("Opasitas / Transparansi HUD: {0}%", "HUD Opacity: {0}%", (hudOpacityVal * 100f).toInt()),
+                style = MaterialTheme.typography.bodyMedium,
+            )
+            XySlider(
+                value = hudOpacityVal.coerceIn(0.18f, 1.0f),
+                onValueChange = {
+                    val c = it.coerceIn(0.18f, 1.0f)
+                    hudOpacityVal = c
+                    prefs.hudOpacity = c
+                },
+                valueRange = 0.18f..1.0f,
             )
         }
 

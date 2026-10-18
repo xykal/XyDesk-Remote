@@ -607,7 +607,7 @@ public class LibFreeRDP
 		}
 
 		String user = openUri.getUserInfo();
-		if (user != null)
+		if (user != null && openUri.getQueryParameter("u") == null)
 		{
 			args.add("/u:" + user);
 		}
@@ -615,6 +615,7 @@ public class LibFreeRDP
 		for (String key : openUri.getQueryParameterNames())
 		{
 			String value = openUri.getQueryParameter(key);
+			if (value == null) continue;
 
 			if (value.isEmpty())
 			{
@@ -652,6 +653,8 @@ public class LibFreeRDP
 				args.add("/" + key + ":" + value);
 			}
 		}
+
+		args.add("/kbd:unicode:on");
 
 		String[] arrayArgs = args.toArray(new String[0]);
 		return freerdp_parse_arguments(inst, arrayArgs);

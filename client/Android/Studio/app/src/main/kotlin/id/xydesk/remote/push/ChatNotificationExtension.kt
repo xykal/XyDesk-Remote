@@ -49,12 +49,20 @@ class ChatNotificationExtension : INotificationServiceExtension {
                 rawText
             }
             val at = data?.optLong("at", 0L)?.takeIf { it > 0L } ?: System.currentTimeMillis()
+            val rawSender = data?.optString("raw_sender").orEmpty()
+            val githubLogin = data?.optString("github_login").orEmpty()
+            val replyToName = data?.optString("reply_to_name").orEmpty()
+            val isAnnouncement = data?.optString("category") == "announcement"
             ChatPushNotifier.onIncomingChatMessage(
                 context = event.context,
                 msgId = msgId,
                 senderName = senderName,
                 text = fullText,
                 at = at,
+                rawSender = rawSender,
+                githubLogin = githubLogin,
+                replyToName = replyToName,
+                isAnnouncement = isAnnouncement,
             )
         }
     }

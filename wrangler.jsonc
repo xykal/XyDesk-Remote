@@ -5,7 +5,7 @@
   "compatibility_date": "2026-10-03",
   "workers_dev": false,
   "vars": {
-    "ONESIGNAL_APP_ID": "ffaa87d6-8e1d-42b6-bb4f-ebbbfc0bccbb"
+    "ONESIGNAL_APP_ID": "e3d5adea-1c0f-4986-9ce5-e088d65f0998"
   },
   "routes": [
     { "pattern": "rdp.xydesk.my.id", "custom_domain": true },

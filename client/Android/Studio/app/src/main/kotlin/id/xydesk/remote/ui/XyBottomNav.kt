@@ -151,17 +151,32 @@ internal fun XyBottomNav(
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.spacedBy(7.dp),
                     ) {
-                        Icon(
-                            tabIcon(tab),
-                            contentDescription = null,
-                            tint = iconTint,
-                            modifier = Modifier
-                                .size(20.dp)
-                                .graphicsLayer {
-                                    scaleX = iconScale
-                                    scaleY = iconScale
-                                },
-                        )
+                        Box {
+                            Icon(
+                                tabIcon(tab),
+                                contentDescription = null,
+                                tint = iconTint,
+                                modifier = Modifier
+                                    .size(20.dp)
+                                    .graphicsLayer {
+                                        scaleX = iconScale
+                                        scaleY = iconScale
+                                    },
+                            )
+                            val unreadDot = tab == XyTab.FEED && (
+                                id.xydesk.remote.push.ChatPushNotifier.unreadChatCountState.intValue > 0 ||
+                                    id.xydesk.remote.push.ChatPushNotifier.unreadNotifCountState.intValue > 0
+                                )
+                            if (unreadDot) {
+                                Box(
+                                    modifier = Modifier
+                                        .align(Alignment.TopEnd)
+                                        .size(7.dp)
+                                        .clip(androidx.compose.foundation.shape.CircleShape)
+                                        .background(Color(0xFFEF4444)),
+                                )
+                            }
+                        }
                         AnimatedVisibility(
                             visible = active,
                             enter = expandHorizontally() + fadeIn(),

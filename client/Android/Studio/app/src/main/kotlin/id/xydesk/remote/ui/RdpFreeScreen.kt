@@ -3,11 +3,11 @@ package id.xydesk.remote.ui
 import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
-import android.content.Intent
-import android.net.Uri
+import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -17,17 +17,22 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material3.Checkbox
+import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -35,9 +40,13 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import id.xydesk.remote.core.ConnectionProfile
@@ -46,10 +55,17 @@ import id.xydesk.remote.core.forRdpFree
 import id.xydesk.remote.security.CredentialVault
 import id.xydesk.remote.ui.components.XyCard
 import id.xydesk.remote.ui.components.XyDialog
+import id.xydesk.remote.ui.components.XyEmptyState
+import id.xydesk.remote.ui.components.XyErrorState
 import id.xydesk.remote.ui.components.XyField
+import id.xydesk.remote.ui.components.XyIcons
+import id.xydesk.remote.ui.components.XyLoadingSkeletonCard
+import id.xydesk.remote.ui.components.XyLoadingSpinnerState
 import id.xydesk.remote.ui.components.XyOverlay
 import id.xydesk.remote.ui.components.XyPillButton
 import id.xydesk.remote.ui.components.XySectionLabel
+import id.xydesk.remote.ui.components.XySegmented
+import id.xydesk.remote.ui.components.XySuccessStateBanner
 import id.xydesk.remote.ui.components.XyTopBar
 import id.xydesk.remote.ui.rdp.XyRdpClient
 import id.xydesk.remote.ui.rdp.XyRdpConfig
@@ -64,17 +80,9 @@ import org.json.JSONObject
 import java.security.SecureRandom
 
 /**
- * Layar "Buat RDP" — RDP gratis dari GitHub Actions milik akun sendiri.
- *
- * Ronde 46–52:
- * - Banner utama kini ditempatkan di Beranda (`XyDeskHome.kt`).
- * - Dilengkapi **Secret Configuration** lengkap dengan indikator status per-secret,
- *   generator password kuat, simpan password lokal terenkripsi untuk auto-connect,
- *   serta **Link Resmi 1-Klik** menuju Tailscale Keys, Tailscale Machines,
- *   Portmap OpenVPN Configs, Portmap Mapping Rules, dan GitHub Actions Secrets.
- * - Dilengkapi **semua checklist / toggle pengaturan workflow `rdp-6h.yml`**:
- *   `xydesk`, `microphone`, `storage_boost`, `samp`, `win10`, `ekstra`,
- *   `roblox`, `minecraft_java`, `minecraft_bedrock`, `debloat`, `grafis`, dan `runner`.
+ * Layar "Buat RDP Cloud" — UI/UX terstruktur rapi, selaras dengan rana utama
+ * (`XyDeskTheme.kt` / `XyDeskHome.kt`), responsif di semua ukuran layar/DPI/rasio,
+ * dan dilengkapi Loading Skeleton/Spinner, Empty State, Error State, & Success State.
  */
 @Composable
 fun RdpFreeScreen(onBack: () -> Unit, onConnect: (ConnectionProfile) -> Unit) {
@@ -83,15 +91,16 @@ fun RdpFreeScreen(onBack: () -> Unit, onConnect: (ConnectionProfile) -> Unit) {
     val scope = rememberCoroutineScope()
     val prefs = remember { context.getSharedPreferences("xyrdp_settings", Context.MODE_PRIVATE) }
 
-    var token by remember { mutableStateOf<String?>(null) }
-    var login by remember { mutableStateOf<String?>(null) }
-    var authWaitingCode by remember { mutableStateOf<String?>(null) }
-    var authWaitingUrl by remember { mutableStateOf<String?>(null) }
-    var authBusy by remember { mutableStateOf(false) }
+    var token by remember { mutableStateOf<String?>(vault.get(XyRdpConfig.VAULT_PAT_ID)) }
+    var login by remember { mutableStateOf<String?>(getVerifiedGitHubLogin(context)) }
+    var initialLoading by remember { mutableStateOf(false) }
     var forkReady by remember { mutableStateOf(false) }
     var setupStatus by remember { mutableStateOf<XyRdpSetupStatus?>(null) }
     var busy by remember { mutableStateOf(false) }
-    var message by remember { mutableStateOf("") }
+    var busyLabel by remember { mutableStateOf("Memproses permintaan ke GitHub…") }
+    var successMessage by remember { mutableStateOf<String?>(null) }
+    var errorMessage by remember { mutableStateOf<String?>(null) }
+    var activeTab by remember { mutableIntStateOf(0) } // 0 = Sesi & Koneksi, 1 = OS & Fitur, 2 = Secrets & Akses
 
     // Pilihan utama workflow rdp-6h.yml
     var duration by remember { mutableStateOf(prefs.getString("durasi_menit", "360") ?: "360") }
@@ -100,7 +109,7 @@ fun RdpFreeScreen(onBack: () -> Unit, onConnect: (ConnectionProfile) -> Unit) {
     var hostname by remember { mutableStateOf(prefs.getString("hostname", "rdpfree") ?: "rdpfree") }
     var openSshTerminal by remember { mutableStateOf(false) }
     var sshInitHost by remember { mutableStateOf("") }
-    var sshInitPort by remember { mutableStateOf(22) }
+    var sshInitPort by remember { mutableIntStateOf(22) }
     var sshInitUser by remember { mutableStateOf("xyadmin") }
     var sshInitAuto by remember { mutableStateOf(false) }
     var rdpUser by remember { mutableStateOf(prefs.getString("rdp_user", "xyadmin") ?: "xyadmin") }
@@ -131,7 +140,7 @@ fun RdpFreeScreen(onBack: () -> Unit, onConnect: (ConnectionProfile) -> Unit) {
     }
     var secretTailscaleDraft by remember { mutableStateOf("") }
     var secretOvpnDraft by remember { mutableStateOf("") }
-    var showSecretGuide by remember { mutableStateOf(true) }
+    var showSecretGuide by remember { mutableStateOf(false) }
 
     var validatedSession by remember { mutableStateOf<XyRdpValidatedSession?>(null) }
     var nowTickMillis by remember { mutableStateOf(System.currentTimeMillis()) }
@@ -191,24 +200,35 @@ fun RdpFreeScreen(onBack: () -> Unit, onConnect: (ConnectionProfile) -> Unit) {
         }
     }
 
-    fun error(e: Exception) {
+    fun reportError(e: Exception) {
         if (e is CancellationException) throw e
-        message = e.message ?: "Operasi GitHub gagal. Coba lagi."
+        errorMessage = e.message ?: "Operasi GitHub gagal. Periksa jaringan lalu coba lagi."
     }
 
-    suspend fun refreshAll(tok: String, user: String) {
-        val setup = XyRdpClient.inspectSetup(tok, user, akses)
-        setupStatus = setup
-        forkReady = setup.forkExists
-        if (setup.forkExists) {
-            validatedSession = XyRdpClient.pollValidatedSession(tok, user)
-            nowTickMillis = System.currentTimeMillis()
-        } else {
-            validatedSession = null
+    suspend fun refreshAll(tok: String, user: String, showSkeleton: Boolean = false) {
+        if (showSkeleton) initialLoading = true
+        try {
+            val setup = XyRdpClient.inspectSetup(tok, user, akses)
+            setupStatus = setup
+            forkReady = setup.forkExists
+            if (setup.forkExists) {
+                validatedSession = XyRdpClient.pollValidatedSession(tok, user)
+                nowTickMillis = System.currentTimeMillis()
+            } else {
+                validatedSession = null
+            }
+            errorMessage = null
+        } catch (e: Exception) {
+            if (e is CancellationException) throw e
+            errorMessage = e.message ?: "Gagal memuat status repository & sesi GitHub."
+        } finally {
+            if (showSkeleton) initialLoading = false
         }
     }
 
-    LaunchedEffect(Unit) {
+    // Sinkron otomatis saat selesai login GitHub OAuth dari Chrome Custom Tabs
+    val oauthRev = GitHubDirectOAuthController.authRevision
+    LaunchedEffect(oauthRev) {
         val saved = vault.get(XyRdpConfig.VAULT_PAT_ID)
         if (!saved.isNullOrBlank()) {
             token = saved
@@ -225,8 +245,10 @@ fun RdpFreeScreen(onBack: () -> Unit, onConnect: (ConnectionProfile) -> Unit) {
     }
 
     LaunchedEffect(token, login, akses) {
-        if (token == null || login == null) return@LaunchedEffect
-        refreshAll(token!!, login!!)
+        val tok = token
+        val usr = login
+        if (tok.isNullOrBlank() || usr.isNullOrBlank()) return@LaunchedEffect
+        refreshAll(tok, usr, showSkeleton = setupStatus == null)
     }
 
     LaunchedEffect(validatedSession?.isVerifiedLive) {
@@ -240,12 +262,14 @@ fun RdpFreeScreen(onBack: () -> Unit, onConnect: (ConnectionProfile) -> Unit) {
 
     val owner = LocalLifecycleOwner.current
     LaunchedEffect(token, login) {
-        if (token == null || login == null) return@LaunchedEffect
+        val tok = token
+        val usr = login
+        if (tok.isNullOrBlank() || usr.isNullOrBlank()) return@LaunchedEffect
         while (true) {
-            if (owner.lifecycle.currentState.isAtLeast(Lifecycle.State.STARTED) && !busy) {
-                refreshAll(token!!, login!!)
-            }
             delay(8000)
+            if (owner.lifecycle.currentState.isAtLeast(Lifecycle.State.STARTED) && !busy && !initialLoading) {
+                refreshAll(tok, usr, showSkeleton = false)
+            }
         }
     }
 
@@ -254,14 +278,16 @@ fun RdpFreeScreen(onBack: () -> Unit, onConnect: (ConnectionProfile) -> Unit) {
         val tok = token ?: return
         val user = login ?: return
         busy = true
+        errorMessage = null
         scope.launch {
             try {
                 when (action) {
                     "start" -> {
                         if (!forkReady) {
-                            message = "Fork repo XyRDP dulu (tombol di atas)."
+                            errorMessage = "Repository XyRDP belum di-fork. Tekan tombol 'Fork Repo XyRDP' terlebih dahulu."
                             return@launch
                         }
+                        busyLabel = "Menyinkronkan template XyRDP & mengirim workflow sesi baru…"
                         XyRdpClient.syncForkWithUpstream(tok, user)
                         XyRdpClient.enableWorkflow(tok, user)
                         val inputs = JSONObject().apply {
@@ -290,21 +316,23 @@ fun RdpFreeScreen(onBack: () -> Unit, onConnect: (ConnectionProfile) -> Unit) {
                         }
                         if (XyRdpClient.dispatch(tok, user, inputs)) {
                             saveSettings()
-                            message = "Workflow dikirim ke GitHub Actions — memantau progres tahap demi tahap…"
+                            activeTab = 0
+                            successMessage = "Workflow berhasil dikirim ke GitHub Actions. Memantau tahapan boot secara real-time…"
                             delay(2500)
                             refreshAll(tok, user)
                         } else {
-                            message = "Gagal mengirim workflow. Cek izin token (`repo` + `workflow`) atau kuota Actions."
+                            errorMessage = "Gagal mengirim workflow. Pastikan secret RDP_PASSWORD sudah terpasang dan kuota Actions tersedia."
                         }
                     }
                     "stop" -> {
+                        busyLabel = "Menghentikan sesi & menyimpan state ke cloud…"
                         val id = validatedSession?.run?.id ?: XyRdpClient.latestRunId(tok, user)
                         if (id != null && XyRdpClient.cancelRun(tok, user, id)) {
-                            message = "Permintaan stop dikirim ke Run #$id."
+                            successMessage = "Permintaan berhenti dikirim ke Run #$id. Data sesi sedang disimpan."
                             delay(2000)
                             refreshAll(tok, user)
                         } else {
-                            message = "Tidak ada run aktif untuk dihentikan."
+                            errorMessage = "Tidak ditemukan run aktif untuk dihentikan."
                         }
                     }
                     "logout" -> {
@@ -315,11 +343,11 @@ fun RdpFreeScreen(onBack: () -> Unit, onConnect: (ConnectionProfile) -> Unit) {
                         forkReady = false
                         setupStatus = null
                         validatedSession = null
-                        message = "GitHub terputus dari app."
+                        successMessage = "Akun GitHub berhasil diputus dari perangkat ini."
                     }
                 }
             } catch (e: Exception) {
-                error(e)
+                reportError(e)
             } finally {
                 busy = false
             }
@@ -339,1073 +367,1000 @@ fun RdpFreeScreen(onBack: () -> Unit, onConnect: (ConnectionProfile) -> Unit) {
         return
     }
 
-    Column(Modifier.fillMaxSize()) {
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(MaterialTheme.colorScheme.background)
+            .navigationBarsPadding(),
+    ) {
         XyTopBar(
             title = "Buat RDP Cloud",
             onBack = onBack,
-        )
-        Column(
-            Modifier.weight(1f).verticalScroll(rememberScrollState()).padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(14.dp),
-        ) {
-            if (message.isNotBlank()) {
-                XyCard(Modifier.fillMaxWidth()) {
-                    Text(
-                        message,
-                        color = MaterialTheme.colorScheme.primary,
-                        style = MaterialTheme.typography.bodySmall,
+            actions = {
+                if (token != null && login != null) {
+                    XyPillButton(
+                        text = "Segarkan",
+                        onClick = {
+                            val tok = token ?: return@XyPillButton
+                            val usr = login ?: return@XyPillButton
+                            scope.launch {
+                                busy = true
+                                busyLabel = "Memperbarui status repository & sesi…"
+                                try {
+                                    refreshAll(tok, usr)
+                                    successMessage = "Status sesi & telemetri diperbarui."
+                                } finally {
+                                    busy = false
+                                }
+                            }
+                        },
+                        primary = false,
+                        compact = true,
+                        enabled = !busy && !initialLoading,
                     )
                 }
-            }
+            },
+        )
 
-            if (token == null || login == null) {
-                XyCard(Modifier.fillMaxWidth()) {
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(10.dp),
-                    ) {
-                        GitHubLogoIcon(size = 24.dp, tint = MaterialTheme.colorScheme.primary)
-                        Text("RDP Cloud Gratis (Windows & Linux)", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
-                    }
-                    Spacer(Modifier.height(6.dp))
-                    Text(
-                        "Login GitHub langsung tanpa kode: tinggal masuk ke akun GitHub kamu lalu klik tombol hijau Authorize " +
-                            "(akses profil, nama, repository, workflow, & instalasi otomatis).",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+        Column(
+            modifier = Modifier
+                .weight(1f)
+                .fillMaxWidth()
+                .verticalScroll(rememberScrollState())
+                .padding(horizontal = 16.dp, vertical = 12.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+        ) {
+            Column(
+                modifier = Modifier
+                    .widthIn(max = 680.dp)
+                    .fillMaxWidth(),
+                verticalArrangement = Arrangement.spacedBy(12.dp),
+            ) {
+                // State Banners: Loading Spinner, Error State, & Success State
+                if (busy) {
+                    XyLoadingSpinnerState(
+                        title = busyLabel,
+                        subtitle = "Harap tunggu sebentar, jangan tutup halaman ini.",
                     )
-                    Spacer(Modifier.height(12.dp))
-                    XyPillButton(
-                        "Login dengan GitHub (Langsung Authorize)",
-                        {
+                }
+                errorMessage?.let { err ->
+                    XyErrorState(
+                        title = "Kendala Operasi Cloud RDP",
+                        message = err,
+                        retryLabel = if (token != null && login != null) "Coba Lagi" else null,
+                        onRetry = if (token != null && login != null) {
+                            {
+                                scope.launch {
+                                    refreshAll(token!!, login!!, showSkeleton = true)
+                                }
+                            }
+                        } else null,
+                        onDismiss = { errorMessage = null },
+                    )
+                }
+                successMessage?.let { ok ->
+                    XySuccessStateBanner(
+                        title = "Berhasil",
+                        subtitle = ok,
+                        onDismiss = { successMessage = null },
+                    )
+                }
+
+                // =========================================================
+                // BELUM LOGIN GITHUB -> EMPTY / ONBOARDING STATE RAPI
+                // =========================================================
+                if (token.isNullOrBlank() || login.isNullOrBlank()) {
+                    XyEmptyState(
+                        title = "Cloud RDP & VPS",
+                        subtitle = "Login GitHub untuk menjalankan Windows RDP, Linux XFCE, atau SSH.",
+                        icon = XyIcons.Monitor,
+                        actionLabel = "Login GitHub",
+                        onAction = {
+                            errorMessage = null
                             GitHubDirectOAuthController.open(
                                 onSuccess = { tok, user ->
-                                    authBusy = false
-                                    authWaitingCode = null
-                                    authWaitingUrl = null
                                     token = tok
                                     login = user
-                                    message = "Berhasil terhubung ke GitHub sebagai @$user!"
+                                    successMessage = "Login @$user berhasil"
                                 },
                                 onError = { err ->
-                                    authBusy = false
-                                    message = err
+                                    errorMessage = err
                                 },
                             )
                         },
-                        primary = true,
-                        enabled = !busy,
-                        modifier = Modifier.fillMaxWidth(),
                     )
-                }
-            } else {
-                // =========================================================
-                // 1. KARTU AKUN GITHUB & STATUS REPOSITORY
-                // =========================================================
-                XySectionLabel("1. Akun GitHub & Repository")
-                XyCard(Modifier.fillMaxWidth()) {
+                } else {
+                    // =========================================================
+                    // BAR IDENTITAS AKUN GITHUB RINGKAS
+                    // =========================================================
                     Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clip(RoundedCornerShape(14.dp))
+                            .background(MaterialTheme.colorScheme.surface)
+                            .padding(horizontal = 12.dp, vertical = 10.dp),
                         verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        horizontalArrangement = Arrangement.spacedBy(10.dp),
                     ) {
-                        GitHubLogoIcon(size = 20.dp, tint = MaterialTheme.colorScheme.primary)
-                        Text("@${login ?: "-"}", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
-                        if (isFounderAccount(login)) {
-                            XyFounderBadge(compact = true)
+                        Box(
+                            modifier = Modifier
+                                .size(34.dp)
+                                .clip(CircleShape)
+                                .background(MaterialTheme.colorScheme.surfaceVariant),
+                            contentAlignment = Alignment.Center,
+                        ) {
+                            GitHubLogoIcon(size = 18.dp, tint = MaterialTheme.colorScheme.onSurface)
                         }
-                    }
-                    if (isFounderAccount(login)) {
-                        Spacer(Modifier.height(6.dp))
-                        XyFounderBadge(
-                            compact = false,
-                            subtitle = "Pemilik & Kreator XyVerse",
+                        Column(modifier = Modifier.weight(1f)) {
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(6.dp),
+                            ) {
+                                Text(
+                                    text = "@${login ?: "-"}",
+                                    style = MaterialTheme.typography.titleSmall,
+                                    fontWeight = FontWeight.Bold,
+                                    color = MaterialTheme.colorScheme.onSurface,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis,
+                                )
+                                XyUserRoleBadges(name = login, githubLogin = login, compact = true)
+                            }
+                            Text(
+                                text = when {
+                                    initialLoading -> "Memuat…"
+                                    !forkReady -> "Belum di-fork"
+                                    setupStatus?.workflowActive == true -> "Aktif · Siap"
+                                    else -> "Perlu sinkron"
+                                },
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                maxLines = 1,
+                            )
+                        }
+                        if (forkReady) {
+                            XyPillButton(
+                                text = "Sinkron",
+                                onClick = {
+                                    busy = true
+                                    busyLabel = "Menyinkronkan…"
+                                    scope.launch {
+                                        try {
+                                            XyRdpClient.syncForkWithUpstream(token!!, login!!)
+                                            XyRdpClient.enableWorkflow(token!!, login!!)
+                                            refreshAll(token!!, login!!)
+                                            successMessage = "Tersinkronisasi"
+                                        } catch (e: Exception) {
+                                            reportError(e)
+                                        } finally {
+                                            busy = false
+                                        }
+                                    }
+                                },
+                                primary = false,
+                                compact = true,
+                                enabled = !busy,
+                            )
+                        }
+                        XyPillButton(
+                            text = "Keluar",
+                            onClick = { confirmAction = "logout" },
+                            primary = false,
+                            compact = true,
+                            enabled = !busy,
                         )
                     }
-                    Spacer(Modifier.height(4.dp))
-                    val wfTxt = when {
-                        !forkReady -> "belum di-fork"
-                        setupStatus?.workflowActive == true -> "workflow aktif ✓"
-                        else -> "workflow perlu diaktifkan"
-                    }
-                    Text(
-                        "Repository: $login/${XyRdpConfig.FORK_REPO_NAME} · $wfTxt",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                    Spacer(Modifier.height(10.dp))
-                    if (!forkReady) {
-                        XyPillButton(
-                            "Fork Template Resmi xykal/XyRDP",
-                            {
+
+                    if (initialLoading && setupStatus == null) {
+                        XyLoadingSkeletonCard(lines = 2, showAvatar = false)
+                        XyLoadingSkeletonCard(lines = 3, showAvatar = false)
+                    } else if (!forkReady) {
+                        XyEmptyState(
+                            title = "Fork Repository XyRDP",
+                            subtitle = "Buat fork template XyRDP ke akun @$login untuk mulai.",
+                            icon = XyIcons.Monitor,
+                            actionLabel = "Fork XyRDP",
+                            onAction = {
                                 busy = true
+                                busyLabel = "Membuat fork…"
                                 scope.launch {
                                     try {
                                         if (XyRdpClient.createFork(token!!)) {
                                             delay(2000)
                                             XyRdpClient.enableWorkflow(token!!, login!!)
                                             refreshAll(token!!, login!!)
-                                            message = if (forkReady) "Fork siap & workflow diaktifkan." else "Fork sedang dibuat — tunggu sebentar lalu tekan Periksa Ulang."
+                                            successMessage = "Fork siap digunakan"
                                         } else {
-                                            message = "Fork gagal — cek koneksi/kuota GitHub."
+                                            errorMessage = "Gagal membuat fork XyRDP."
                                         }
-                                    } catch (e: Exception) { error(e) } finally { busy = false }
+                                    } catch (e: Exception) {
+                                        reportError(e)
+                                    } finally {
+                                        busy = false
+                                    }
                                 }
                             },
-                            primary = true,
-                            enabled = !busy,
-                            modifier = Modifier.fillMaxWidth(),
                         )
                     } else {
-                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                            Box(Modifier.weight(1f)) {
-                                XyPillButton(
-                                    "Sinkronkan Fork",
-                                    {
-                                        busy = true
-                                        scope.launch {
-                                            try {
-                                                val okSync = XyRdpClient.syncForkWithUpstream(token!!, login!!)
-                                                XyRdpClient.enableWorkflow(token!!, login!!)
-                                                refreshAll(token!!, login!!)
-                                                message = if (okSync) {
-                                                    "Fork disinkronkan dengan template xykal/XyRDP terbaru."
-                                                } else {
-                                                    "Status fork diperbarui."
-                                                }
-                                            } catch (e: Exception) { error(e) } finally { busy = false }
-                                        }
-                                    },
-                                    primary = false,
-                                    enabled = !busy,
-                                    modifier = Modifier.fillMaxWidth(),
-                                )
-                            }
-                            Box(Modifier.weight(1f)) {
-                                XyPillButton(
-                                    "Buka Repo ↗",
-                                    { openBrowser("https://github.com/$login/${XyRdpConfig.FORK_REPO_NAME}") },
-                                    primary = false,
-                                    enabled = !busy,
-                                    modifier = Modifier.fillMaxWidth(),
-                                )
-                            }
-                        }
-                    }
-                }
-
-                if (forkReady) {
-                    // =========================================================
-                    // 2. KONFIGURASI SECRET (SECRET CONFIGURATION + LINK RESMI)
-                    // =========================================================
-                    XySectionLabel("2. Secret Configuration & Link Resmi")
-                    XyCard(Modifier.fillMaxWidth()) {
-                        val st = setupStatus
-                        val hasRdpPass = st?.configuredSecrets?.contains("RDP_PASSWORD") == true
-                        val hasTsKey = st?.configuredSecrets?.contains("TAILSCALE_AUTH_KEY") == true
-                        val hasOvpn = st?.configuredSecrets?.contains("PORTMAP_OVPN_CONFIG") == true
-
-                        Text(
-                            "Status GitHub Actions Secrets di $login/${XyRdpConfig.FORK_REPO_NAME}",
-                            style = MaterialTheme.typography.titleSmall,
-                            fontWeight = FontWeight.Bold,
-                        )
-                        Spacer(Modifier.height(6.dp))
-
-                        // Checklist status secret nyata dari GitHub API
-                        SecretStatusRow(
-                            name = "RDP_PASSWORD",
-                            configured = hasRdpPass,
-                            required = true,
-                            desc = "Password login Windows RDP (wajib untuk semua mode)",
-                            onCopyName = {
-                                copyToClipboard("Secret Name", "RDP_PASSWORD")
-                                message = "Nama secret 'RDP_PASSWORD' disalin ke clipboard."
-                            },
-                        )
-                        Spacer(Modifier.height(6.dp))
-                        SecretStatusRow(
-                            name = "TAILSCALE_AUTH_KEY",
-                            configured = hasTsKey,
-                            required = akses == "tailscale",
-                            desc = "Auth Key Tailscale (tskey-auth-…) untuk koneksi privat",
-                            onCopyName = {
-                                copyToClipboard("Secret Name", "TAILSCALE_AUTH_KEY")
-                                message = "Nama secret 'TAILSCALE_AUTH_KEY' disalin ke clipboard."
-                            },
-                        )
-                        Spacer(Modifier.height(6.dp))
-                        SecretStatusRow(
-                            name = "PORTMAP_OVPN_CONFIG",
-                            configured = hasOvpn,
-                            required = akses == "portmap",
-                            desc = "Isi file .ovpn Portmap.io untuk mode TCP publik tanpa VPN di HP",
-                            onCopyName = {
-                                copyToClipboard("Secret Name", "PORTMAP_OVPN_CONFIG")
-                                message = "Nama secret 'PORTMAP_OVPN_CONFIG' disalin ke clipboard."
-                            },
-                        )
-
-                        Spacer(Modifier.height(12.dp))
-                        Text(
-                            "Siapkan & Salin Nilai Secret",
-                            style = MaterialTheme.typography.labelLarge,
-                            color = MaterialTheme.colorScheme.primary,
-                        )
-                        Spacer(Modifier.height(6.dp))
-
-                        // Input & Generator Password RDP
-                        XyField(
-                            value = password,
-                            onValueChange = {
-                                password = it
-                                if (rememberPasswordLocal && it.isNotBlank()) {
-                                    vault.put("xyrdp.saved.rdp_password", it)
-                                }
-                            },
-                            label = "Password RDP (RDP_PASSWORD)",
-                            hint = "Min. 12 karakter (huruf besar, kecil, angka, simbol)",
-                            isPassword = false,
-                        )
-                        Spacer(Modifier.height(6.dp))
-                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                            XyPillButton(
-                                "Buat Password Kuat",
-                                {
-                                    val generated = generateStrongPassword()
-                                    password = generated
-                                    copyToClipboard("RDP_PASSWORD", generated)
-                                    if (rememberPasswordLocal) vault.put("xyrdp.saved.rdp_password", generated)
-                                    message = "Password kuat dibuat & disalin ke clipboard!"
-                                },
-                                primary = false,
-                                compact = true,
-                                modifier = Modifier.weight(1f),
-                            )
-                            XyPillButton(
-                                "Salin & Pasang RDP_PASSWORD ↗",
-                                {
-                                    if (password.isNotBlank()) copyToClipboard("RDP_PASSWORD", password)
-                                    openBrowser("https://github.com/$login/${XyRdpConfig.FORK_REPO_NAME}/settings/secrets/actions/new")
-                                },
-                                primary = !hasRdpPass,
-                                compact = true,
-                                modifier = Modifier.weight(1f),
-                            )
-                        }
-
-                        Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .clickable {
-                                    rememberPasswordLocal = !rememberPasswordLocal
-                                    saveSettings()
-                                }
-                                .padding(vertical = 4.dp),
-                            verticalAlignment = Alignment.CenterVertically,
-                        ) {
-                            Checkbox(
-                                checked = rememberPasswordLocal,
-                                onCheckedChange = {
-                                    rememberPasswordLocal = it
-                                    saveSettings()
-                                },
-                            )
-                            Text(
-                                "Simpan salinan RDP_PASSWORD terenkripsi di HP agar siap langsung Connect saat RDP menyala",
-                                style = MaterialTheme.typography.labelSmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            )
-                        }
-
-                        Spacer(Modifier.height(8.dp))
-                        if (akses == "tailscale") {
-                            XyField(
-                                value = secretTailscaleDraft,
-                                onValueChange = { secretTailscaleDraft = it.trim() },
-                                label = "Tailscale Auth Key (TAILSCALE_AUTH_KEY)",
-                                hint = "tskey-auth-k...",
-                            )
-                            Spacer(Modifier.height(6.dp))
-                            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                                XyPillButton(
-                                    "Ambil Tailscale Auth Key ↗",
-                                    { openBrowser("https://login.tailscale.com/admin/settings/keys") },
-                                    primary = !hasTsKey,
-                                    compact = true,
-                                    modifier = Modifier.weight(1f),
-                                )
-                                XyPillButton(
-                                    "Salin & Pasang di GitHub ↗",
-                                    {
-                                        if (secretTailscaleDraft.isNotBlank()) {
-                                            copyToClipboard("TAILSCALE_AUTH_KEY", secretTailscaleDraft)
-                                        } else {
-                                            copyToClipboard("Secret Name", "TAILSCALE_AUTH_KEY")
-                                        }
-                                        openBrowser("https://github.com/$login/${XyRdpConfig.FORK_REPO_NAME}/settings/secrets/actions/new")
-                                    },
-                                    primary = false,
-                                    compact = true,
-                                    modifier = Modifier.weight(1f),
-                                )
-                            }
-                            Spacer(Modifier.height(6.dp))
-                            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                                XyPillButton(
-                                    "Panel Mesin Tailscale ↗",
-                                    { openBrowser("https://login.tailscale.com/admin/machines") },
-                                    primary = false,
-                                    compact = true,
-                                    modifier = Modifier.weight(1f),
-                                )
-                                XyPillButton(
-                                    "Panduan Auth Key ↗",
-                                    { openBrowser("https://tailscale.com/kb/1085/auth-keys") },
-                                    primary = false,
-                                    compact = true,
-                                    modifier = Modifier.weight(1f),
-                                )
-                            }
-                        } else {
-                            XyField(
-                                value = secretOvpnDraft,
-                                onValueChange = { secretOvpnDraft = it },
-                                label = "Isi Konfigurasi .ovpn (PORTMAP_OVPN_CONFIG)",
-                                hint = "Tempel isi file .ovpn dari Portmap.io di sini…",
-                            )
-                            Spacer(Modifier.height(6.dp))
-                            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                                XyPillButton(
-                                    "1. Buat Config .ovpn ↗",
-                                    { openBrowser("https://portmap.io/configs") },
-                                    primary = !hasOvpn,
-                                    compact = true,
-                                    modifier = Modifier.weight(1f),
-                                )
-                                XyPillButton(
-                                    "2. Buat Mapping TCP 3389 ↗",
-                                    { openBrowser("https://portmap.io/mapping_rules") },
-                                    primary = false,
-                                    compact = true,
-                                    modifier = Modifier.weight(1f),
-                                )
-                            }
-                            Spacer(Modifier.height(6.dp))
-                            XyPillButton(
-                                "Salin & Pasang PORTMAP_OVPN_CONFIG di GitHub ↗",
-                                {
-                                    if (secretOvpnDraft.isNotBlank()) {
-                                        copyToClipboard("PORTMAP_OVPN_CONFIG", secretOvpnDraft)
-                                    } else {
-                                        copyToClipboard("Secret Name", "PORTMAP_OVPN_CONFIG")
-                                    }
-                                    openBrowser("https://github.com/$login/${XyRdpConfig.FORK_REPO_NAME}/settings/secrets/actions/new")
-                                },
-                                primary = false,
-                                compact = true,
-                                modifier = Modifier.fillMaxWidth(),
-                            )
-                        }
-
-                        Spacer(Modifier.height(8.dp))
-                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                            XyPillButton(
-                                "Buka Halaman Secrets GitHub ↗",
-                                { openBrowser("https://github.com/$login/${XyRdpConfig.FORK_REPO_NAME}/settings/secrets/actions") },
-                                primary = false,
-                                compact = true,
-                                modifier = Modifier.weight(1f),
-                            )
-                            XyPillButton(
-                                if (showSecretGuide) "Tutup Panduan" else "Panduan Cepat",
-                                { showSecretGuide = !showSecretGuide },
-                                primary = false,
-                                compact = true,
-                            )
-                        }
-
-                        if (showSecretGuide) {
-                            Spacer(Modifier.height(8.dp))
-                            Column(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .clip(RoundedCornerShape(12.dp))
-                                    .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f))
-                                    .padding(10.dp),
-                                verticalArrangement = Arrangement.spacedBy(4.dp),
-                            ) {
-                                Text(
-                                    "Cara Cepat Mendapatkan Tailscale Auth Key:",
-                                    style = MaterialTheme.typography.labelMedium,
-                                    fontWeight = FontWeight.Bold,
-                                )
-                                Text("1. Ketuk tombol 'Ambil Tailscale Auth Key ↗' di atas lalu pilih 'Generate auth key'.", style = MaterialTheme.typography.labelSmall)
-                                Text("2. Aktifkan 'Reusable' dan 'Ephemeral', lalu salin kode 'tskey-auth-…'.", style = MaterialTheme.typography.labelSmall)
-                                Text("3. Ketuk 'Salin & Pasang di GitHub ↗' dan simpan dengan nama TAILSCALE_AUTH_KEY.", style = MaterialTheme.typography.labelSmall)
-                                Text("4. Simpan juga secret kedua bernama RDP_PASSWORD berisi password RDP di atas.", style = MaterialTheme.typography.labelSmall)
-                            }
-                        }
-                    }
-
-                    // =========================================================
-                    // 3. SISTEM OPERASI, IMAGE & CHECKLIST FITUR LENGKAP
-                    // =========================================================
-                    XySectionLabel("3. Sistem Operasi, Image & Pengaturan Sesi")
-                    XyCard(Modifier.fillMaxWidth()) {
-                        val isLinuxRunner = runnerImage.startsWith("ubuntu", ignoreCase = true)
-                        val isLinuxPolos = isLinuxRunner && linuxMode == "polos"
-                        Text(
-                            "Pilih Sistem Operasi Cloud RDP / VPS:",
-                            style = MaterialTheme.typography.labelLarge,
-                            fontWeight = FontWeight.Bold,
-                        )
-                        Spacer(Modifier.height(6.dp))
-                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                            XyPillButton(
-                                "Windows Server",
-                                {
-                                    runnerImage = "windows-2022"
-                                    linuxMode = "desktop"
-                                    saveSettings()
-                                },
-                                primary = !isLinuxRunner,
-                                compact = true,
-                                enabled = !busy,
-                                modifier = Modifier.weight(1f),
-                            )
-                            XyPillButton(
-                                "Linux Desktop (XFCE4)",
-                                {
-                                    if (!isLinuxRunner) runnerImage = "ubuntu-24.04"
-                                    linuxMode = "desktop"
-                                    saveSettings()
-                                },
-                                primary = isLinuxRunner && !isLinuxPolos,
-                                compact = true,
-                                enabled = !busy,
-                                modifier = Modifier.weight(1f),
-                            )
-                        }
-                        Spacer(Modifier.height(6.dp))
-                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                            XyPillButton(
-                                "Linux Polos (Tanpa XFCE4 · SSH VPS)",
-                                {
-                                    if (!isLinuxRunner) runnerImage = "ubuntu-24.04"
-                                    linuxMode = "polos"
-                                    saveSettings()
-                                },
-                                primary = isLinuxPolos,
-                                compact = true,
-                                enabled = !busy,
-                                modifier = Modifier.weight(1f),
-                            )
-                            XyPillButton(
-                                "Terminal SSH / VPS",
-                                {
-                                    val live = validatedSession?.takeIf { it.isVerifiedLive && !it.validatedHost.isNullOrBlank() }
-                                    sshInitHost = live?.validatedHost.orEmpty()
-                                    sshInitPort = if (live != null && live.access?.linuxMode == "polos") live.validatedPort else 22
-                                    sshInitUser = live?.access?.rdpUser ?: rdpUser.ifBlank { "xyadmin" }
-                                    sshInitAuto = false
-                                    openSshTerminal = true
-                                },
-                                primary = false,
-                                compact = true,
-                                modifier = Modifier.weight(1f),
-                            )
-                        }
-                        Spacer(Modifier.height(6.dp))
-                        Text(
-                            when {
-                                isLinuxPolos ->
-                                    "Mode Linux Polos aktif ($runnerImage · Tanpa XFCE4): Server SSH murni di port :22 & :3389, waktu boot super kilat ~20 detik, cocok untuk bot, Docker, coding, & VPS terminal."
-                                isLinuxRunner ->
-                                    "Mode Linux Desktop aktif ($runnerImage): XFCE4 + XRDP :3389 + SSH :22 + Virtual Mic PulseAudio, waktu boot ~90 detik, penyimpanan /persist anti-reset."
-                                else ->
-                                    "Mode Windows Server aktif ($runnerImage): Mendukung penuh GTA SA-MP SilentPatch, Minecraft OpenGL 4.6 D3D12, On-Mic Audio Capture, dan Dual-Storage Persistence."
-                            },
-                            style = MaterialTheme.typography.labelSmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
-                        Spacer(Modifier.height(10.dp))
-
-                        // Tombol Preset Cepat
-                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                            XyPillButton(
-                                "Profil Cepat (Boot Kilat)",
-                                {
-                                    xydeskBoost = true
-                                    microphone = true
-                                    storageBoost = false
-                                    debloat = "tidak"
-                                    sampDeps = false
-                                    win10Theme = false
-                                    ekstraDesktop = false
-                                    grafis = "tidak"
-                                    robloxReady = false
-                                    mcJavaReady = false
-                                    mcBedrockReady = false
-                                    saveSettings()
-                                    message = "Profil Cepat diterapkan — waktu tunggu setup paling singkat."
-                                },
-                                primary = false,
-                                compact = true,
-                                modifier = Modifier.weight(1f),
-                            )
-                            XyPillButton(
-                                if (isLinuxRunner) "Profil Linux Lengkap" else "Profil Game Lengkap",
-                                {
-                                    autoRenew = true
-                                    xydeskBoost = true
-                                    microphone = true
-                                    storageBoost = true
-                                    debloat = "ringan"
-                                    sampDeps = !isLinuxRunner
-                                    win10Theme = !isLinuxRunner
-                                    ekstraDesktop = true
-                                    grafis = "software"
-                                    mcJavaReady = !isLinuxRunner
-                                    saveSettings()
-                                    message = if (isLinuxRunner) {
-                                        "Profil Linux Desktop Lengkap (XFCE4 + Chrome + VS Code + Wine + Storage Boost + Anti-Reset) diterapkan."
-                                    } else {
-                                        "Profil Game Lengkap (GTA SA-MP SilentPatch + Minecraft OpenGL 4.6 + Anti-Reset) diterapkan."
-                                    }
-                                },
-                                primary = false,
-                                compact = true,
-                                modifier = Modifier.weight(1f),
-                            )
-                        }
-
-                        Spacer(Modifier.height(10.dp))
-                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                            XyPillButton(
-                                "Durasi: $duration mnt",
-                                { chooseDuration = true },
-                                primary = false,
-                                enabled = !busy,
-                                modifier = Modifier.weight(1f),
-                            )
-                            XyPillButton(
-                                "OS/Image: $runnerImage",
-                                { chooseRunner = true },
-                                primary = false,
-                                enabled = !busy,
-                                modifier = Modifier.weight(1f),
-                            )
-                        }
-                        Spacer(Modifier.height(8.dp))
-                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                            XyField(
-                                value = hostname,
-                                onValueChange = { hostname = it.take(30) },
-                                label = "Hostname",
-                                modifier = Modifier.weight(1f),
-                            )
-                            XyField(
-                                value = rdpUser,
-                                onValueChange = { rdpUser = it.take(20) },
-                                label = "Username RDP",
-                                modifier = Modifier.weight(1f),
-                            )
-                        }
-                        Spacer(Modifier.height(8.dp))
-                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                            XyPillButton(
-                                "Akses: $akses",
-                                { chooseAkses = true },
-                                primary = false,
-                                enabled = !busy,
-                                modifier = Modifier.weight(1f),
-                            )
-                            XyPillButton(
-                                "Debloat: $debloat",
-                                { chooseDebloat = true },
-                                primary = false,
-                                enabled = !busy,
-                                modifier = Modifier.weight(1f),
-                            )
-                        }
-                        if (akses == "portmap") {
-                            Spacer(Modifier.height(8.dp))
-                            XyField(portmapHost, { portmapHost = it.take(120) }, "Hostname publik Portmap (tanpa tcp://)")
-                            Spacer(Modifier.height(8.dp))
-                            XyField(portmapPort, { portmapPort = it.filter { c -> c.isDigit() }.take(5) }, "Port publik Portmap (1–65535)")
-                        }
-                        Spacer(Modifier.height(8.dp))
-                        XyPillButton(
-                            "Toolkit Grafis CPU (Mesa): $grafis",
-                            { chooseGrafis = true },
-                            primary = false,
-                            enabled = !busy,
+                        XySegmented(
+                            options = listOf("Sesi", "Opsi", "Secrets"),
+                            selectedIndex = activeTab,
+                            onSelect = { activeTab = it },
                             modifier = Modifier.fillMaxWidth(),
                         )
 
-                        Spacer(Modifier.height(12.dp))
-                        Text(
-                            "Checklist & Toggle Fitur Sesi",
-                            style = MaterialTheme.typography.titleSmall,
-                            fontWeight = FontWeight.Bold,
-                        )
-                        Spacer(Modifier.height(6.dp))
+                        when (activeTab) {
+                            // ---------------------------------------------------------
+                            // TAB 0: SESI LIVE, KONTROL MULAI/STOP, & KONEKSI 1-KLIK
+                            // ---------------------------------------------------------
+                            0 -> {
+                                val vs = validatedSession
+                                val r = vs?.run
+                                val isRunningOrQueued = vs?.phase == XyRdpPhase.PREPARING ||
+                                    vs?.phase == XyRdpPhase.QUEUED ||
+                                    vs?.phase == XyRdpPhase.READY
+                                val isLinuxTarget = runnerImage.startsWith("ubuntu", ignoreCase = true)
+                                val isLinuxPolosTarget = isLinuxTarget && linuxMode == "polos"
 
-                        RdpToggleRow(
-                            title = "Anti-Reset & Lanjutkan Sesi Otomatis",
-                            subtitle = "Simpan otomatis C:\\Persist, C:\\Games, .minecraft, GTA SA-MP & Desktop tiap 15 menit + estafet sesi berikutnya tanpa mengulang dari nol",
-                            checked = autoRenew,
-                            enabled = !busy,
-                            onCheckedChange = { autoRenew = it; saveSettings() },
-                        )
-                        RdpToggleRow(
-                            title = "Setup Host XyDesk (120 FPS Boost & UDP 4433)",
-                            subtitle = "Aktifkan AVC444, DWM 120Hz, ClearType, Audio/Mic, & RawInput Game",
-                            checked = xydeskBoost,
-                            enabled = !busy,
-                            onCheckedChange = { xydeskBoost = it; saveSettings() },
-                        )
-                        RdpToggleRow(
-                            title = "Input Mikrofon RDP",
-                            subtitle = "Izinkan suara mikrofon HP masuk ke sesi Windows RDP",
-                            checked = microphone,
-                            enabled = !busy,
-                            onCheckedChange = { microphone = it; saveSettings() },
-                        )
-                        RdpToggleRow(
-                            title = "Storage Boost (+45 s/d 75 GB Disk Kosong)",
-                            subtitle = "Bersihkan SDK Android/Haskell/CodeQL bawaan runner agar C: lega",
-                            checked = storageBoost,
-                            enabled = !busy,
-                            onCheckedChange = { storageBoost = it; saveSettings() },
-                        )
-                        RdpToggleRow(
-                            title = "GTA SA & SA-MP By SilentPatch (90 FPS + Mouse Fix)",
-                            subtitle = "Pasang DirectX 9, VC++, DirectPlay, SilentPatchSA.asi, ASI Loader, Widescreen Fix & Auto-Patcher GTA SA-MP",
-                            checked = sampDeps,
-                            enabled = !busy,
-                            onCheckedChange = { sampDeps = it; saveSettings() },
-                        )
-                        RdpToggleRow(
-                            title = "Tweak Tampilan Windows 10",
-                            subtitle = "Matikan Server Manager, aktifkan personalisasi & wallpaper XyVerse",
-                            checked = win10Theme,
-                            enabled = !busy,
-                            onCheckedChange = { win10Theme = it; saveSettings() },
-                        )
-                        RdpToggleRow(
-                            title = "Ekstra Desktop (7-Zip, Chrome, Lightshot)",
-                            subtitle = "Pasang aplikasi esensial desktop dan tool screenshot",
-                            checked = ekstraDesktop,
-                            enabled = !busy,
-                            onCheckedChange = { ekstraDesktop = it; saveSettings() },
-                        )
-                        RdpToggleRow(
-                            title = "Persiapan Kompatibilitas Roblox",
-                            subtitle = "Pemeriksaan dependensi & konfigurasi lingkungan Roblox",
-                            checked = robloxReady,
-                            enabled = !busy,
-                            onCheckedChange = { robloxReady = it; saveSettings() },
-                        )
-                        RdpToggleRow(
-                            title = "Minecraft Java + OpenGL 4.6 D3D12 (Anti-GLFW 65542)",
-                            subtitle = "Pasang Temurin JDK 21 & JRE 8, PrismLauncher, Minecraft Launcher & driver OpenGL 4.6",
-                            checked = mcJavaReady,
-                            enabled = !busy,
-                            onCheckedChange = {
-                                mcJavaReady = it
-                                if (it) grafis = "software"
-                                saveSettings()
-                            },
-                        )
-                        RdpToggleRow(
-                            title = "Persiapan Dukungan Minecraft Bedrock",
-                            subtitle = "Periksa layanan Store/Xbox pada image runner",
-                            checked = mcBedrockReady,
-                            enabled = !busy,
-                            onCheckedChange = { mcBedrockReady = it; saveSettings() },
-                        )
-                    }
-
-                    // =========================================================
-                    // 4. SESI & VALIDASI OTORITATIF
-                    // =========================================================
-                    XySectionLabel("4. Sesi & Validasi Live")
-                    XyCard(Modifier.fillMaxWidth()) {
-                        val vs = validatedSession
-                        val r = vs?.run
-                        Text(
-                            text = vs?.phaseLabel ?: "Memeriksa status sesi…",
-                            style = MaterialTheme.typography.titleSmall,
-                            fontWeight = FontWeight.Bold,
-                            color = when (vs?.phase) {
-                                XyRdpPhase.READY -> MaterialTheme.colorScheme.primary
-                                XyRdpPhase.FAILED -> MaterialTheme.colorScheme.error
-                                else -> MaterialTheme.colorScheme.onSurface
-                            },
-                        )
-                        if (r != null) {
-                            Spacer(Modifier.height(4.dp))
-                            Text(
-                                "Run #${r.number} (ID ${r.id}): ${r.status}${r.conclusion?.let { " · $it" } ?: ""}",
-                                style = MaterialTheme.typography.bodySmall,
-                            )
-                        }
-                        vs?.validationNote?.let { note ->
-                            Spacer(Modifier.height(4.dp))
-                            Text(
-                                note,
-                                style = MaterialTheme.typography.labelSmall,
-                                color = if (vs.isVerifiedLive) MaterialTheme.colorScheme.primary
-                                else MaterialTheme.colorScheme.onSurfaceVariant,
-                            )
-                        }
-
-                        vs?.progress?.let { prog ->
-                            if (prog.totalSteps > 0) {
-                                Spacer(Modifier.height(8.dp))
-                                StatBar(
-                                    "Progres Tahap Workflow",
-                                    "${prog.completedSteps} / ${prog.totalSteps} tahap",
-                                    fraction(prog.completedSteps.toDouble(), prog.totalSteps.toDouble()),
-                                )
-                                prog.currentStep?.let { cur ->
-                                    Spacer(Modifier.height(4.dp))
-                                    Text(
-                                        "⟳ Sedang berjalan: $cur",
-                                        style = MaterialTheme.typography.labelSmall,
-                                        color = MaterialTheme.colorScheme.primary,
-                                    )
+                                // Peringatan cepat bila Secret wajib belum dipasang
+                                val st = setupStatus
+                                val hasRdpPass = st?.configuredSecrets?.contains("RDP_PASSWORD") == true
+                                val hasAccessSecret = if (akses == "tailscale") {
+                                    st?.configuredSecrets?.contains("TAILSCALE_AUTH_KEY") == true
+                                } else {
+                                    st?.configuredSecrets?.contains("PORTMAP_OVPN_CONFIG") == true
                                 }
-                                prog.failedStep?.let { fail ->
-                                    Spacer(Modifier.height(4.dp))
-                                    Text(
-                                        "✕ Tahap gagal: $fail",
-                                        style = MaterialTheme.typography.labelSmall,
-                                        color = MaterialTheme.colorScheme.error,
-                                    )
-                                }
-                                Spacer(Modifier.height(6.dp))
-                                XyPillButton(
-                                    if (showStepsDetail) "Sembunyikan rincian tahap" else "Lihat rincian tahap (${prog.completedSteps}/${prog.totalSteps})",
-                                    { showStepsDetail = !showStepsDetail },
-                                    primary = false,
-                                )
-                                if (showStepsDetail) {
-                                    Spacer(Modifier.height(6.dp))
-                                    prog.steps.forEachIndexed { idx, (sName, sState) ->
-                                        val icon = when (sState) {
-                                            "success" -> "✓"
-                                            "in_progress" -> "⟳"
-                                            "failure", "timed_out" -> "✕"
-                                            "skipped" -> "–"
-                                            else -> "·"
-                                        }
+                                if (st != null && (!hasRdpPass || !hasAccessSecret)) {
+                                    Row(
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .clip(RoundedCornerShape(12.dp))
+                                            .background(MaterialTheme.colorScheme.surface)
+                                            .clickable { activeTab = 2 }
+                                            .padding(horizontal = 12.dp, vertical = 10.dp),
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                    ) {
+                                        Icon(
+                                            imageVector = XyIcons.Key,
+                                            contentDescription = null,
+                                            tint = MaterialTheme.colorScheme.primary,
+                                            modifier = Modifier.size(16.dp),
+                                        )
                                         Text(
-                                            "${idx + 1}. $icon $sName ($sState)",
-                                            style = MaterialTheme.typography.labelSmall,
-                                            color = when (sState) {
-                                                "failure", "timed_out" -> MaterialTheme.colorScheme.error
-                                                "in_progress" -> MaterialTheme.colorScheme.primary
-                                                else -> MaterialTheme.colorScheme.onSurfaceVariant
-                                            },
+                                            text = "Secrets belum lengkap · Ketuk untuk atur",
+                                            style = MaterialTheme.typography.labelMedium,
+                                            fontWeight = FontWeight.SemiBold,
+                                            modifier = Modifier.weight(1f),
+                                        )
+                                        Icon(
+                                            imageVector = XyIcons.ChevronRight,
+                                            contentDescription = null,
+                                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                                            modifier = Modifier.size(15.dp),
                                         )
                                     }
                                 }
-                            }
-                        }
 
-                        val liveAccess = vs?.access
-                        if (vs?.isVerifiedLive == true && liveAccess != null) {
-                            Spacer(Modifier.height(8.dp))
-                            val remSec = if (liveAccess.expiresAtMillis > nowTickMillis) {
-                                ((liveAccess.expiresAtMillis - nowTickMillis) / 1000L).coerceAtLeast(0L)
-                            } else 0L
-                            val hh = remSec / 3600L
-                            val mm = (remSec % 3600L) / 60L
-                            val ss = remSec % 60L
-                            Text(
-                                "Sisa waktu aktif: %02d:%02d:%02d".format(hh, mm, ss),
-                                style = MaterialTheme.typography.titleMedium,
-                                fontWeight = FontWeight.Bold,
-                                color = MaterialTheme.colorScheme.primary,
-                            )
-                            Text("Hostname: ${liveAccess.hostname} (${liveAccess.osName})")
-                            Text("Endpoint tervalidasi: ${vs.validatedHost}:${vs.validatedPort} (${vs.validatedTransport})")
-                            if (liveAccess.expiresAt.isNotBlank()) {
-                                Text("Berakhir (UTC): ${liveAccess.expiresAt}")
-                            }
-                        }
-
-                        Spacer(Modifier.height(12.dp))
-                        val isRunningOrQueued = vs?.phase == XyRdpPhase.PREPARING ||
-                            vs?.phase == XyRdpPhase.QUEUED ||
-                            vs?.phase == XyRdpPhase.READY
-                        val isLinuxTarget = runnerImage.startsWith("ubuntu", ignoreCase = true)
-                        val isLinuxPolosTarget = isLinuxTarget && linuxMode == "polos"
-                        Text(
-                            text = when {
-                                isLinuxPolosTarget -> "Target Sesi: Linux Polos SSH ($runnerImage · Port :22)"
-                                isLinuxTarget -> "Target Sesi: Linux Desktop XFCE4 ($runnerImage · RDP :3389)"
-                                else -> "Target Sesi: Windows Server RDP ($runnerImage · RDP :3389)"
-                            },
-                            style = MaterialTheme.typography.labelMedium,
-                            fontWeight = FontWeight.Bold,
-                            color = MaterialTheme.colorScheme.primary,
-                        )
-                        Spacer(Modifier.height(6.dp))
-                        Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                            XyPillButton(
-                                "Windows RDP",
-                                {
-                                    runnerImage = "windows-2022"
-                                    linuxMode = "desktop"
-                                    saveSettings()
-                                },
-                                primary = !isLinuxTarget,
-                                compact = true,
-                                enabled = !busy && !isRunningOrQueued,
-                                modifier = Modifier.weight(1f),
-                            )
-                            XyPillButton(
-                                "Linux Desktop",
-                                {
-                                    if (!runnerImage.startsWith("ubuntu", ignoreCase = true)) runnerImage = "ubuntu-24.04"
-                                    linuxMode = "desktop"
-                                    saveSettings()
-                                },
-                                primary = isLinuxTarget && !isLinuxPolosTarget,
-                                compact = true,
-                                enabled = !busy && !isRunningOrQueued,
-                                modifier = Modifier.weight(1f),
-                            )
-                            XyPillButton(
-                                "Linux SSH",
-                                {
-                                    if (!runnerImage.startsWith("ubuntu", ignoreCase = true)) runnerImage = "ubuntu-24.04"
-                                    linuxMode = "polos"
-                                    saveSettings()
-                                },
-                                primary = isLinuxPolosTarget,
-                                compact = true,
-                                enabled = !busy && !isRunningOrQueued,
-                                modifier = Modifier.weight(1f),
-                            )
-                        }
-                        Spacer(Modifier.height(10.dp))
-                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                            Box(Modifier.weight(1f)) {
-                                XyPillButton(
-                                    "Mulai RDP",
-                                    { confirmAction = "start" },
-                                    primary = true,
-                                    enabled = !busy && !isRunningOrQueued,
-                                    modifier = Modifier.fillMaxWidth(),
-                                )
-                            }
-                            Box(Modifier.weight(1f)) {
-                                XyPillButton(
-                                    "Stop",
-                                    { confirmAction = "stop" },
-                                    primary = false,
-                                    enabled = !busy && isRunningOrQueued,
-                                    modifier = Modifier.fillMaxWidth(),
-                                )
-                            }
-                        }
-                        Spacer(Modifier.height(8.dp))
-                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                            Box(Modifier.weight(1f)) {
-                                XyPillButton(
-                                    "Periksa Ulang",
-                                    {
-                                        scope.launch {
-                                            busy = true
-                                            try {
-                                                refreshAll(token!!, login!!)
-                                                message = "Status sesi & monitor diperbarui."
-                                            } catch (e: Exception) { error(e) } finally { busy = false }
-                                        }
-                                    },
-                                    primary = false,
-                                    enabled = !busy,
-                                    modifier = Modifier.fillMaxWidth(),
-                                )
-                            }
-                            if (r?.url?.isNotBlank() == true) {
-                                Box(Modifier.weight(1f)) {
-                                    XyPillButton(
-                                        "Log GitHub ↗",
-                                        { openBrowser(r.url) },
-                                        primary = false,
-                                        enabled = !busy,
+                                // Kartu Utama Status Sesi & Kontrol Cepat
+                                XyCard(Modifier.fillMaxWidth()) {
+                                    Row(
                                         modifier = Modifier.fillMaxWidth(),
-                                    )
-                                }
-                            }
-                        }
-                    }
-
-                    // =========================================================
-                    // 5. MONITOR & STATISTIK LIVE
-                    // =========================================================
-                    val liveAcc = validatedSession?.access
-                    if (liveAcc != null) {
-                        XySectionLabel("5. Monitor & Statistik Live")
-                        XyCard(Modifier.fillMaxWidth()) {
-                            val st = liveAcc.stats
-                            if (st != null && st.ramTotalGb > 0.0) {
-                                StatBar(
-                                    "RAM",
-                                    "${"%.1f".format(st.ramUsedGb)} / ${"%.1f".format(st.ramTotalGb)} GB",
-                                    fraction(st.ramUsedGb, st.ramTotalGb),
-                                )
-                                Spacer(Modifier.height(8.dp))
-                                StatBar(
-                                    "Disk C:",
-                                    "bebas ${"%.1f".format(st.diskFreeGb)} / ${"%.1f".format(st.diskTotalGb)} GB",
-                                    1f - fraction(st.diskFreeGb, st.diskTotalGb),
-                                )
-                                Spacer(Modifier.height(8.dp))
-                                StatBar("CPU", "${st.cpuPercent}%", (st.cpuPercent / 100f).coerceIn(0f, 1f))
-                                Spacer(Modifier.height(8.dp))
-                                Text("Uptime sesi: ${st.uptimeMinutes / 60}j ${st.uptimeMinutes % 60}m")
-                                if (st.updatedAt.isNotBlank()) {
-                                    Text(
-                                        "Diperbarui: ${st.updatedAt.take(19).replace('T', ' ')} UTC",
-                                        style = MaterialTheme.typography.labelSmall,
-                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                    )
-                                }
-                            } else {
-                                Text(
-                                    "Spesifikasi Runner: ${liveAcc.initialCpuThreads} vCPU · RAM ${"%.1f".format(liveAcc.initialRamGb)} GB · Disk bebas awal ${"%.1f".format(liveAcc.initialDiskFreeGb)} GB",
-                                    style = MaterialTheme.typography.bodySmall,
-                                )
-                                Spacer(Modifier.height(4.dp))
-                                Text(
-                                    "Menunggu detak telemetri 60 detik pertama dari loop keepalive…",
-                                    style = MaterialTheme.typography.labelSmall,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                )
-                            }
-                        }
-                    }
-
-                    // =========================================================
-                    // 6. HUBUNGKAN KE SESI RDP / TERMINAL SSH
-                    // =========================================================
-                    val vsReady = validatedSession?.takeIf { it.isVerifiedLive && !it.validatedHost.isNullOrBlank() }
-                    if (vsReady != null && vsReady.access != null) {
-                        val a = vsReady.access
-                        val hostToConnect = vsReady.validatedHost!!
-                        val portToConnect = vsReady.validatedPort
-                        val isSessionPolos = a.linuxMode == "polos" || a.osName.contains("Polos", ignoreCase = true) || portToConnect == 22
-                        val isSessionLinux = isSessionPolos || a.osName.contains("Ubuntu", ignoreCase = true) || a.osName.contains("Linux", ignoreCase = true)
-                        XySectionLabel(if (isSessionPolos) "6. Hubungkan ke Terminal SSH (Linux Polos)" else "6. Hubungkan ke RDP / SSH")
-                        XyCard(Modifier.fillMaxWidth()) {
-                            Text("$hostToConnect:$portToConnect", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
-                            Text("Username: ${a.rdpUser} · OS: ${a.osName} · Mode: ${vsReady.validatedTransport ?: a.mode}")
-                            if ((vsReady.validatedTransport ?: a.mode) == "tailscale") {
-                                Text(
-                                    "Pastikan aplikasi Tailscale di HP sudah ON dan login ke tailnet yang sama.",
-                                    style = MaterialTheme.typography.labelSmall,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                )
-                            }
-                            Spacer(Modifier.height(8.dp))
-                            XyField(password, { password = it }, "Password RDP_PASSWORD", isPassword = true)
-                            Spacer(Modifier.height(8.dp))
-                            if (isSessionPolos) {
-                                XyPillButton(
-                                    "Hubungkan Terminal SSH (Linux Polos)",
-                                    {
-                                        if (rememberPasswordLocal && password.isNotBlank()) {
-                                            vault.put("xyrdp.saved.rdp_password", password)
+                                        horizontalArrangement = Arrangement.SpaceBetween,
+                                        verticalAlignment = Alignment.CenterVertically,
+                                    ) {
+                                        Row(
+                                            verticalAlignment = Alignment.CenterVertically,
+                                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                            modifier = Modifier.weight(1f),
+                                        ) {
+                                            Box(
+                                                modifier = Modifier
+                                                    .size(9.dp)
+                                                    .clip(CircleShape)
+                                                    .background(
+                                                        when (vs?.phase) {
+                                                            XyRdpPhase.READY -> Color(0xFF10B981)
+                                                            XyRdpPhase.PREPARING, XyRdpPhase.QUEUED -> Color(0xFFF59E0B)
+                                                            XyRdpPhase.FAILED -> Color(0xFFEF4444)
+                                                            else -> MaterialTheme.colorScheme.outlineVariant
+                                                        },
+                                                    ),
+                                            )
+                                            Text(
+                                                text = vs?.phaseLabel ?: "Siap Mulai",
+                                                style = MaterialTheme.typography.titleSmall,
+                                                fontWeight = FontWeight.Bold,
+                                            )
                                         }
-                                        sshInitHost = hostToConnect
-                                        sshInitPort = portToConnect
-                                        sshInitUser = a.rdpUser
-                                        sshInitAuto = true
-                                        openSshTerminal = true
-                                    },
-                                    primary = true,
-                                    enabled = !busy && password.isNotBlank(),
-                                    modifier = Modifier.fillMaxWidth(),
-                                )
-                            } else {
-                                XyPillButton(
-                                    "Hubungkan RDP (120 FPS Boost + On-Mic)",
-                                    {
-                                        busy = true
-                                        scope.launch {
-                                            try {
-                                                val fresh = XyRdpClient.pollValidatedSession(token!!, login!!)
-                                                check(fresh.isVerifiedLive && !fresh.validatedHost.isNullOrBlank()) {
-                                                    "Sesi tidak lagi aktif di GitHub Actions"
-                                                }
-                                                if (rememberPasswordLocal && password.isNotBlank()) {
-                                                    vault.put("xyrdp.saved.rdp_password", password)
-                                                }
-                                                val profile = ConnectionProfile(
-                                                    host = fresh.validatedHost,
-                                                    port = fresh.validatedPort,
-                                                    username = fresh.access?.rdpUser ?: a.rdpUser,
-                                                    password = password,
-                                                    label = "XyRDP (${fresh.access?.hostname ?: "Cloud"})",
-                                                    key = "xyrdp:${login}",
+                                        if (r != null) {
+                                            Text(
+                                                text = "#${r.number}",
+                                                style = MaterialTheme.typography.labelSmall,
+                                                fontFamily = FontFamily.Monospace,
+                                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                            )
+                                        }
+                                    }
+
+                                    // Progress tahapan workflow bila sedang berjalan
+                                    vs?.progress?.let { prog ->
+                                        if (prog.totalSteps > 0) {
+                                            Spacer(Modifier.height(8.dp))
+                                            StatBar(
+                                                prog.currentStep ?: "Booting",
+                                                "${prog.completedSteps}/${prog.totalSteps}",
+                                                fraction(prog.completedSteps.toDouble(), prog.totalSteps.toDouble()),
+                                            )
+                                        }
+                                    }
+
+                                    Spacer(Modifier.height(10.dp))
+
+                                    Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                                        XyPillButton(
+                                            text = "Windows",
+                                            onClick = {
+                                                runnerImage = "windows-2022"
+                                                linuxMode = "desktop"
+                                                saveSettings()
+                                            },
+                                            primary = !isLinuxTarget,
+                                            compact = true,
+                                            enabled = !busy && !isRunningOrQueued,
+                                            modifier = Modifier.weight(1f),
+                                        )
+                                        XyPillButton(
+                                            text = "Linux XFCE",
+                                            onClick = {
+                                                if (!runnerImage.startsWith("ubuntu", ignoreCase = true)) runnerImage = "ubuntu-24.04"
+                                                linuxMode = "desktop"
+                                                saveSettings()
+                                            },
+                                            primary = isLinuxTarget && !isLinuxPolosTarget,
+                                            compact = true,
+                                            enabled = !busy && !isRunningOrQueued,
+                                            modifier = Modifier.weight(1f),
+                                        )
+                                        XyPillButton(
+                                            text = "Linux SSH",
+                                            onClick = {
+                                                if (!runnerImage.startsWith("ubuntu", ignoreCase = true)) runnerImage = "ubuntu-24.04"
+                                                linuxMode = "polos"
+                                                saveSettings()
+                                            },
+                                            primary = isLinuxPolosTarget,
+                                            compact = true,
+                                            enabled = !busy && !isRunningOrQueued,
+                                            modifier = Modifier.weight(1f),
+                                        )
+                                    }
+
+                                    Spacer(Modifier.height(8.dp))
+                                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                        XyPillButton(
+                                            text = if (isRunningOrQueued) "Berjalan" else "Mulai ($duration mnt)",
+                                            onClick = { confirmAction = "start" },
+                                            primary = true,
+                                            enabled = !busy && !isRunningOrQueued,
+                                            modifier = Modifier.weight(1.3f),
+                                        )
+                                        XyPillButton(
+                                            text = "Stop",
+                                            onClick = { confirmAction = "stop" },
+                                            primary = false,
+                                            enabled = !busy && isRunningOrQueued,
+                                            modifier = Modifier.weight(0.7f),
+                                        )
+                                    }
+                                }
+
+                                // KARTU KONEKSI 1-KLIK (MUNCUL BEGITU SESI VERIFIED LIVE)
+                                val vsReady = validatedSession?.takeIf { it.isVerifiedLive && !it.validatedHost.isNullOrBlank() }
+                                if (vsReady != null && vsReady.access != null) {
+                                    val a = vsReady.access
+                                    val hostToConnect = vsReady.validatedHost!!
+                                    val portToConnect = vsReady.validatedPort
+                                    val isSessionPolos = a.linuxMode == "polos" || a.osName.contains("Polos", ignoreCase = true) || portToConnect == 22
+                                    val isSessionLinux = isSessionPolos || a.osName.contains("Ubuntu", ignoreCase = true) || a.osName.contains("Linux", ignoreCase = true)
+                                    val remSec = if (a.expiresAtMillis > nowTickMillis) {
+                                        ((a.expiresAtMillis - nowTickMillis) / 1000L).coerceAtLeast(0L)
+                                    } else 0L
+                                    val hh = remSec / 3600L
+                                    val mm = (remSec % 3600L) / 60L
+                                    val ss = remSec % 60L
+
+                                    XyCard(Modifier.fillMaxWidth()) {
+                                        Row(
+                                            modifier = Modifier.fillMaxWidth(),
+                                            horizontalArrangement = Arrangement.SpaceBetween,
+                                            verticalAlignment = Alignment.CenterVertically,
+                                        ) {
+                                            Column(Modifier.weight(1f)) {
+                                                Text(
+                                                    text = "SESI AKTIF · SIAP TERHUBUNG",
+                                                    style = MaterialTheme.typography.labelSmall,
+                                                    fontFamily = FontFamily.Monospace,
+                                                    color = Color(0xFF34D399),
+                                                    fontWeight = FontWeight.Bold,
                                                 )
-                                                RdpOptions.of(context, profile.id).forRdpFree(microphone).write(context, profile.id)
-                                                onConnect(profile)
-                                            } catch (e: Exception) { error(e) } finally { busy = false }
+                                                Text(
+                                                    text = "$hostToConnect:$portToConnect",
+                                                    style = MaterialTheme.typography.titleMedium,
+                                                    fontFamily = FontFamily.Monospace,
+                                                    fontWeight = FontWeight.ExtraBold,
+                                                )
+                                            }
+                                            Box(
+                                                modifier = Modifier
+                                                    .clip(RoundedCornerShape(999.dp))
+                                                    .background(MaterialTheme.colorScheme.surfaceVariant)
+                                                    .padding(horizontal = 10.dp, vertical = 5.dp),
+                                            ) {
+                                                Text(
+                                                    text = "%02d:%02d:%02d".format(hh, mm, ss),
+                                                    style = MaterialTheme.typography.labelMedium,
+                                                    fontFamily = FontFamily.Monospace,
+                                                    fontWeight = FontWeight.Bold,
+                                                )
+                                            }
                                         }
-                                    },
-                                    primary = true,
-                                    enabled = !busy && password.isNotBlank(),
-                                    modifier = Modifier.fillMaxWidth(),
-                                )
-                                if (isSessionLinux) {
+                                        Spacer(Modifier.height(4.dp))
+                                        Text(
+                                            text = "User: ${a.rdpUser} · OS: ${a.osName} · Jalur: ${vsReady.validatedTransport ?: a.mode}",
+                                            style = MaterialTheme.typography.bodySmall,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                        )
+                                        Spacer(Modifier.height(10.dp))
+                                        XyField(
+                                            value = password,
+                                            onValueChange = {
+                                                password = it
+                                                if (rememberPasswordLocal && it.isNotBlank()) {
+                                                    vault.put("xyrdp.saved.rdp_password", it)
+                                                }
+                                            },
+                                            label = "Password Sesi (RDP_PASSWORD)",
+                                            hint = "Masukkan RDP_PASSWORD untuk terhubung",
+                                            isPassword = true,
+                                        )
+                                        Spacer(Modifier.height(10.dp))
+                                        if (isSessionPolos) {
+                                            XyPillButton(
+                                                text = "Buka Terminal SSH (Linux Polos)",
+                                                onClick = {
+                                                    if (rememberPasswordLocal && password.isNotBlank()) {
+                                                        vault.put("xyrdp.saved.rdp_password", password)
+                                                    }
+                                                    sshInitHost = hostToConnect
+                                                    sshInitPort = portToConnect
+                                                    sshInitUser = a.rdpUser
+                                                    sshInitAuto = true
+                                                    openSshTerminal = true
+                                                },
+                                                primary = true,
+                                                enabled = !busy && password.isNotBlank(),
+                                                modifier = Modifier.fillMaxWidth(),
+                                            )
+                                        } else {
+                                            XyPillButton(
+                                                text = "Hubungkan ke Desktop RDP Sekarang",
+                                                onClick = {
+                                                    busy = true
+                                                    busyLabel = "Memvalidasi endpoint & membuka sesi RDP…"
+                                                    scope.launch {
+                                                        try {
+                                                            val fresh = XyRdpClient.pollValidatedSession(token!!, login!!)
+                                                            check(fresh.isVerifiedLive && !fresh.validatedHost.isNullOrBlank()) {
+                                                                "Sesi tidak lagi aktif di GitHub Actions"
+                                                            }
+                                                            if (rememberPasswordLocal && password.isNotBlank()) {
+                                                                vault.put("xyrdp.saved.rdp_password", password)
+                                                            }
+                                                            val profile = ConnectionProfile(
+                                                                host = fresh.validatedHost,
+                                                                port = fresh.validatedPort,
+                                                                username = fresh.access?.rdpUser ?: a.rdpUser,
+                                                                password = password,
+                                                                label = "XyRDP (${fresh.access?.hostname ?: "Cloud"})",
+                                                                key = "xyrdp:${login}",
+                                                            )
+                                                            RdpOptions.of(context, profile.id).forRdpFree(microphone).write(context, profile.id)
+                                                            onConnect(profile)
+                                                        } catch (e: Exception) {
+                                                            reportError(e)
+                                                        } finally {
+                                                            busy = false
+                                                        }
+                                                    }
+                                                },
+                                                primary = true,
+                                                enabled = !busy && password.isNotBlank(),
+                                                modifier = Modifier.fillMaxWidth(),
+                                            )
+                                            if (isSessionLinux) {
+                                                Spacer(Modifier.height(8.dp))
+                                                XyPillButton(
+                                                    text = "Buka Terminal SSH Pendamping (:22)",
+                                                    onClick = {
+                                                        if (rememberPasswordLocal && password.isNotBlank()) {
+                                                            vault.put("xyrdp.saved.rdp_password", password)
+                                                        }
+                                                        sshInitHost = hostToConnect
+                                                        sshInitPort = 22
+                                                        sshInitUser = a.rdpUser
+                                                        sshInitAuto = true
+                                                        openSshTerminal = true
+                                                    },
+                                                    primary = false,
+                                                    compact = true,
+                                                    enabled = !busy && password.isNotBlank(),
+                                                    modifier = Modifier.fillMaxWidth(),
+                                                )
+                                            }
+                                        }
+                                    }
+                                }
+
+                                // TELEMETRI & MONITOR RESOURCE LIVE
+                                val liveAcc = validatedSession?.access
+                                if (liveAcc != null) {
+                                    XyCard(Modifier.fillMaxWidth()) {
+                                        Text(
+                                            text = "Telemetri & Resource Server",
+                                            style = MaterialTheme.typography.titleSmall,
+                                            fontWeight = FontWeight.Bold,
+                                        )
+                                        Spacer(Modifier.height(8.dp))
+                                        val stMonitor = liveAcc.stats
+                                        if (stMonitor != null && stMonitor.ramTotalGb > 0.0) {
+                                            StatBar(
+                                                "RAM",
+                                                "${"%.1f".format(stMonitor.ramUsedGb)} / ${"%.1f".format(stMonitor.ramTotalGb)} GB",
+                                                fraction(stMonitor.ramUsedGb, stMonitor.ramTotalGb),
+                                            )
+                                            Spacer(Modifier.height(8.dp))
+                                            StatBar(
+                                                "Disk C:",
+                                                "Bebas ${"%.1f".format(stMonitor.diskFreeGb)} / ${"%.1f".format(stMonitor.diskTotalGb)} GB",
+                                                1f - fraction(stMonitor.diskFreeGb, stMonitor.diskTotalGb),
+                                            )
+                                            Spacer(Modifier.height(8.dp))
+                                            StatBar("CPU", "${stMonitor.cpuPercent}%", (stMonitor.cpuPercent / 100f).coerceIn(0f, 1f))
+                                            Spacer(Modifier.height(6.dp))
+                                            Text(
+                                                text = "Uptime: ${stMonitor.uptimeMinutes / 60}j ${stMonitor.uptimeMinutes % 60}m · Anti-Disconnect Keepalive Aktif",
+                                                style = MaterialTheme.typography.labelSmall,
+                                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                            )
+                                        } else {
+                                            Text(
+                                                text = "${liveAcc.initialCpuThreads} vCPU · RAM ${"%.1f".format(liveAcc.initialRamGb)} GB · Disk bebas ${"%.1f".format(liveAcc.initialDiskFreeGb)} GB",
+                                                style = MaterialTheme.typography.bodySmall,
+                                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                            )
+                                        }
+                                    }
+                                }
+                            }
+
+                            // ---------------------------------------------------------
+                            // TAB 1: KONFIGURASI OS, PARAMETER RUNNER, & TOGGLE FITUR
+                            // ---------------------------------------------------------
+                            1 -> {
+                                val isLinuxRunner = runnerImage.startsWith("ubuntu", ignoreCase = true)
+                                XyCard(Modifier.fillMaxWidth()) {
+                                    Text(
+                                        text = "Preset Cepat & Parameter Sesi",
+                                        style = MaterialTheme.typography.titleSmall,
+                                        fontWeight = FontWeight.Bold,
+                                    )
+                                    Spacer(Modifier.height(8.dp))
+                                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                        XyPillButton(
+                                            text = "Preset Boot Kilat",
+                                            onClick = {
+                                                xydeskBoost = true
+                                                microphone = true
+                                                storageBoost = false
+                                                debloat = "tidak"
+                                                sampDeps = false
+                                                win10Theme = false
+                                                ekstraDesktop = false
+                                                grafis = "tidak"
+                                                robloxReady = false
+                                                mcJavaReady = false
+                                                mcBedrockReady = false
+                                                saveSettings()
+                                                successMessage = "Preset Boot Kilat diterapkan."
+                                            },
+                                            primary = false,
+                                            compact = true,
+                                            modifier = Modifier.weight(1f),
+                                        )
+                                        XyPillButton(
+                                            text = if (isLinuxRunner) "Preset Linux Lengkap" else "Preset Game Lengkap",
+                                            onClick = {
+                                                autoRenew = true
+                                                xydeskBoost = true
+                                                microphone = true
+                                                storageBoost = true
+                                                debloat = "ringan"
+                                                sampDeps = !isLinuxRunner
+                                                win10Theme = !isLinuxRunner
+                                                ekstraDesktop = true
+                                                grafis = "software"
+                                                mcJavaReady = !isLinuxRunner
+                                                saveSettings()
+                                                successMessage = "Preset Lengkap + Anti-Reset diterapkan."
+                                            },
+                                            primary = false,
+                                            compact = true,
+                                            modifier = Modifier.weight(1f),
+                                        )
+                                    }
+                                    Spacer(Modifier.height(10.dp))
+                                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                        XyPillButton(
+                                            text = "Durasi: $duration mnt",
+                                            onClick = { chooseDuration = true },
+                                            primary = false,
+                                            compact = true,
+                                            modifier = Modifier.weight(1f),
+                                        )
+                                        XyPillButton(
+                                            text = "Image: $runnerImage",
+                                            onClick = { chooseRunner = true },
+                                            primary = false,
+                                            compact = true,
+                                            modifier = Modifier.weight(1f),
+                                        )
+                                    }
+                                    Spacer(Modifier.height(8.dp))
+                                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                        XyPillButton(
+                                            text = "Akses: $akses",
+                                            onClick = { chooseAkses = true },
+                                            primary = false,
+                                            compact = true,
+                                            modifier = Modifier.weight(1f),
+                                        )
+                                        XyPillButton(
+                                            text = "Debloat: $debloat",
+                                            onClick = { chooseDebloat = true },
+                                            primary = false,
+                                            compact = true,
+                                            modifier = Modifier.weight(1f),
+                                        )
+                                    }
                                     Spacer(Modifier.height(8.dp))
                                     XyPillButton(
-                                        "Buka Terminal SSH Pendamping (:22)",
-                                        {
-                                            if (rememberPasswordLocal && password.isNotBlank()) {
-                                                vault.put("xyrdp.saved.rdp_password", password)
-                                            }
-                                            sshInitHost = hostToConnect
-                                            sshInitPort = 22
-                                            sshInitUser = a.rdpUser
-                                            sshInitAuto = true
-                                            openSshTerminal = true
-                                        },
+                                        text = "Driver Grafis OpenGL/Mesa: $grafis",
+                                        onClick = { chooseGrafis = true },
                                         primary = false,
-                                        enabled = !busy && password.isNotBlank(),
+                                        compact = true,
                                         modifier = Modifier.fillMaxWidth(),
                                     )
+                                    Spacer(Modifier.height(10.dp))
+                                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                        XyField(
+                                            value = hostname,
+                                            onValueChange = { hostname = it.take(30); saveSettings() },
+                                            label = "Hostname",
+                                            modifier = Modifier.weight(1f),
+                                        )
+                                        XyField(
+                                            value = rdpUser,
+                                            onValueChange = { rdpUser = it.take(20); saveSettings() },
+                                            label = "Username RDP",
+                                            modifier = Modifier.weight(1f),
+                                        )
+                                    }
+                                    if (akses == "portmap") {
+                                        Spacer(Modifier.height(8.dp))
+                                        XyField(portmapHost, { portmapHost = it.take(120); saveSettings() }, "Host Portmap (tanpa tcp://)")
+                                        Spacer(Modifier.height(8.dp))
+                                        XyField(portmapPort, { portmapPort = it.filter { c -> c.isDigit() }.take(5); saveSettings() }, "Port Publik Portmap")
+                                    }
+                                }
+
+                                XyCard(Modifier.fillMaxWidth()) {
+                                    Text(
+                                        text = "Fitur & Modul Otomatis",
+                                        style = MaterialTheme.typography.titleSmall,
+                                        fontWeight = FontWeight.Bold,
+                                    )
+                                    Spacer(Modifier.height(8.dp))
+                                    RdpFlatToggleRow(
+                                        title = "Anti-Reset Cloud Persistence v3",
+                                        subtitle = "Simpan otomatis sesi login Chrome/Edge, Desktop, Documents & lanjutkan sesi berikutnya",
+                                        checked = autoRenew,
+                                        enabled = !busy,
+                                        onCheckedChange = { autoRenew = it; saveSettings() },
+                                    )
+                                    RdpFlatToggleRow(
+                                        title = "XyDesk Host Boost (120 FPS + XyDeskTools.exe)",
+                                        subtitle = "Pasang otomatis XyDeskTools.exe di Desktop RDP, DWM 120Hz & AVC444",
+                                        checked = xydeskBoost,
+                                        enabled = !busy,
+                                        onCheckedChange = { xydeskBoost = it; saveSettings() },
+                                    )
+                                    RdpFlatToggleRow(
+                                        title = "Redirect Mikrofon Dua Arah (On-Mic)",
+                                        subtitle = "Teruskan suara mikrofon HP ke dalam sesi RDP Windows/Linux",
+                                        checked = microphone,
+                                        enabled = !busy,
+                                        onCheckedChange = { microphone = it; saveSettings() },
+                                    )
+                                    RdpFlatToggleRow(
+                                        title = "Storage Boost (+45 s/d 75 GB Disk Lega)",
+                                        subtitle = "Hapus SDK bawaan runner GitHub yang tidak terpakai",
+                                        checked = storageBoost,
+                                        enabled = !busy,
+                                        onCheckedChange = { storageBoost = it; saveSettings() },
+                                    )
+                                    RdpFlatToggleRow(
+                                        title = "GTA SA-MP SilentPatch (90 FPS + Mouse Fix)",
+                                        subtitle = "DirectX 9, VC++, DirectPlay, SilentPatchSA & Widescreen Fix",
+                                        checked = sampDeps,
+                                        enabled = !busy,
+                                        onCheckedChange = { sampDeps = it; saveSettings() },
+                                    )
+                                    RdpFlatToggleRow(
+                                        title = "Minecraft Java + OpenGL 4.6 D3D12",
+                                        subtitle = "Temurin JDK 21 & JRE 8, PrismLauncher & anti-GLFW error 65542",
+                                        checked = mcJavaReady,
+                                        enabled = !busy,
+                                        onCheckedChange = {
+                                            mcJavaReady = it
+                                            if (it) grafis = "software"
+                                            saveSettings()
+                                        },
+                                    )
+                                    RdpFlatToggleRow(
+                                        title = "Aplikasi Esensial (Chrome, 7-Zip, Lightshot)",
+                                        subtitle = "Pasang browser dan utilitas dasar secara otomatis",
+                                        checked = ekstraDesktop,
+                                        enabled = !busy,
+                                        onCheckedChange = { ekstraDesktop = it; saveSettings() },
+                                    )
+                                    RdpFlatToggleRow(
+                                        title = "Tema Visual Windows 10 & Wallpaper XyVerse",
+                                        subtitle = "Matikan pop-up Server Manager saat masuk desktop",
+                                        checked = win10Theme,
+                                        enabled = !busy,
+                                        onCheckedChange = { win10Theme = it; saveSettings() },
+                                    )
+                                    RdpFlatToggleRow(
+                                        title = "Kompatibilitas Roblox & Minecraft Bedrock",
+                                        subtitle = "Siapkan dependensi runtime Windows Store / Roblox",
+                                        checked = robloxReady || mcBedrockReady,
+                                        enabled = !busy,
+                                        onCheckedChange = {
+                                            robloxReady = it
+                                            mcBedrockReady = it
+                                            saveSettings()
+                                        },
+                                    )
+                                }
+                            }
+
+                            // ---------------------------------------------------------
+                            // TAB 2: SECRETS GITHUB ACTIONS & TAUTAN RESMI
+                            // ---------------------------------------------------------
+                            2 -> {
+                                val st = setupStatus
+                                val hasRdpPass = st?.configuredSecrets?.contains("RDP_PASSWORD") == true
+                                val hasTsKey = st?.configuredSecrets?.contains("TAILSCALE_AUTH_KEY") == true
+                                val hasOvpn = st?.configuredSecrets?.contains("PORTMAP_OVPN_CONFIG") == true
+
+                                XyCard(Modifier.fillMaxWidth()) {
+                                    Text(
+                                        text = "Status GitHub Secrets ($login/${XyRdpConfig.FORK_REPO_NAME})",
+                                        style = MaterialTheme.typography.titleSmall,
+                                        fontWeight = FontWeight.Bold,
+                                    )
+                                    Spacer(Modifier.height(8.dp))
+                                    SecretStatusRow(
+                                        name = "RDP_PASSWORD",
+                                        configured = hasRdpPass,
+                                        required = true,
+                                        desc = "Password login Windows/Linux RDP & SSH",
+                                        onCopyName = {
+                                            copyToClipboard("Secret Name", "RDP_PASSWORD")
+                                            successMessage = "Nama secret 'RDP_PASSWORD' disalin."
+                                        },
+                                    )
+                                    Spacer(Modifier.height(6.dp))
+                                    SecretStatusRow(
+                                        name = "TAILSCALE_AUTH_KEY",
+                                        configured = hasTsKey,
+                                        required = akses == "tailscale",
+                                        desc = "Kunci autentikasi Tailscale (tskey-auth-…)",
+                                        onCopyName = {
+                                            copyToClipboard("Secret Name", "TAILSCALE_AUTH_KEY")
+                                            successMessage = "Nama secret 'TAILSCALE_AUTH_KEY' disalin."
+                                        },
+                                    )
+                                    Spacer(Modifier.height(6.dp))
+                                    SecretStatusRow(
+                                        name = "PORTMAP_OVPN_CONFIG",
+                                        configured = hasOvpn,
+                                        required = akses == "portmap",
+                                        desc = "Isi konfigurasi .ovpn untuk mode Portmap publik",
+                                        onCopyName = {
+                                            copyToClipboard("Secret Name", "PORTMAP_OVPN_CONFIG")
+                                            successMessage = "Nama secret 'PORTMAP_OVPN_CONFIG' disalin."
+                                        },
+                                    )
+
+                                    Spacer(Modifier.height(12.dp))
+                                    XyField(
+                                        value = password,
+                                        onValueChange = {
+                                            password = it
+                                            if (rememberPasswordLocal && it.isNotBlank()) {
+                                                vault.put("xyrdp.saved.rdp_password", it)
+                                            }
+                                        },
+                                        label = "Password RDP (RDP_PASSWORD)",
+                                        hint = "Min. 12 karakter kombinasi huruf, angka, simbol",
+                                        isPassword = false,
+                                    )
+                                    Spacer(Modifier.height(8.dp))
+                                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                        XyPillButton(
+                                            text = "Buat Password Kuat",
+                                            onClick = {
+                                                val generated = generateStrongPassword()
+                                                password = generated
+                                                copyToClipboard("RDP_PASSWORD", generated)
+                                                if (rememberPasswordLocal) vault.put("xyrdp.saved.rdp_password", generated)
+                                                successMessage = "Password kuat dibuat & disalin ke clipboard."
+                                            },
+                                            primary = false,
+                                            compact = true,
+                                            modifier = Modifier.weight(1f),
+                                        )
+                                        XyPillButton(
+                                            text = "Pasang RDP_PASSWORD ↗",
+                                            onClick = {
+                                                if (password.isNotBlank()) copyToClipboard("RDP_PASSWORD", password)
+                                                openBrowser("https://github.com/$login/${XyRdpConfig.FORK_REPO_NAME}/settings/secrets/actions/new")
+                                            },
+                                            primary = !hasRdpPass,
+                                            compact = true,
+                                            modifier = Modifier.weight(1f),
+                                        )
+                                    }
+                                    Spacer(Modifier.height(8.dp))
+                                    RdpFlatToggleRow(
+                                        title = "Simpan RDP_PASSWORD Terenkripsi di HP",
+                                        subtitle = "Otomatis mengisi password saat sesi RDP siap disambungkan",
+                                        checked = rememberPasswordLocal,
+                                        enabled = true,
+                                        onCheckedChange = {
+                                            rememberPasswordLocal = it
+                                            saveSettings()
+                                        },
+                                    )
+
+                                    Spacer(Modifier.height(10.dp))
+                                    if (akses == "tailscale") {
+                                        XyField(
+                                            value = secretTailscaleDraft,
+                                            onValueChange = { secretTailscaleDraft = it.trim() },
+                                            label = "Tailscale Auth Key (TAILSCALE_AUTH_KEY)",
+                                            hint = "tskey-auth-k...",
+                                        )
+                                        Spacer(Modifier.height(8.dp))
+                                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                            XyPillButton(
+                                                text = "Ambil Key Tailscale ↗",
+                                                onClick = { openBrowser("https://login.tailscale.com/admin/settings/keys") },
+                                                primary = !hasTsKey,
+                                                compact = true,
+                                                modifier = Modifier.weight(1f),
+                                            )
+                                            XyPillButton(
+                                                text = "Pasang di GitHub ↗",
+                                                onClick = {
+                                                    if (secretTailscaleDraft.isNotBlank()) {
+                                                        copyToClipboard("TAILSCALE_AUTH_KEY", secretTailscaleDraft)
+                                                    } else {
+                                                        copyToClipboard("Secret Name", "TAILSCALE_AUTH_KEY")
+                                                    }
+                                                    openBrowser("https://github.com/$login/${XyRdpConfig.FORK_REPO_NAME}/settings/secrets/actions/new")
+                                                },
+                                                primary = false,
+                                                compact = true,
+                                                modifier = Modifier.weight(1f),
+                                            )
+                                        }
+                                    } else {
+                                        XyField(
+                                            value = secretOvpnDraft,
+                                            onValueChange = { secretOvpnDraft = it },
+                                            label = "Konfigurasi .ovpn (PORTMAP_OVPN_CONFIG)",
+                                            hint = "Tempel isi file .ovpn dari Portmap.io…",
+                                        )
+                                        Spacer(Modifier.height(8.dp))
+                                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                            XyPillButton(
+                                                text = "Buat .ovpn ↗",
+                                                onClick = { openBrowser("https://portmap.io/configs") },
+                                                primary = !hasOvpn,
+                                                compact = true,
+                                                modifier = Modifier.weight(1f),
+                                            )
+                                            XyPillButton(
+                                                text = "Pasang di GitHub ↗",
+                                                onClick = {
+                                                    if (secretOvpnDraft.isNotBlank()) {
+                                                        copyToClipboard("PORTMAP_OVPN_CONFIG", secretOvpnDraft)
+                                                    } else {
+                                                        copyToClipboard("Secret Name", "PORTMAP_OVPN_CONFIG")
+                                                    }
+                                                    openBrowser("https://github.com/$login/${XyRdpConfig.FORK_REPO_NAME}/settings/secrets/actions/new")
+                                                },
+                                                primary = false,
+                                                compact = true,
+                                                modifier = Modifier.weight(1f),
+                                            )
+                                        }
+                                    }
+
+                                    Spacer(Modifier.height(8.dp))
+                                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                        XyPillButton(
+                                            text = "Halaman Secrets GitHub ↗",
+                                            onClick = { openBrowser("https://github.com/$login/${XyRdpConfig.FORK_REPO_NAME}/settings/secrets/actions") },
+                                            primary = false,
+                                            compact = true,
+                                            modifier = Modifier.weight(1f),
+                                        )
+                                        XyPillButton(
+                                            text = if (showSecretGuide) "Tutup Panduan" else "Panduan Cepat",
+                                            onClick = { showSecretGuide = !showSecretGuide },
+                                            primary = false,
+                                            compact = true,
+                                        )
+                                    }
+                                    AnimatedVisibility(visible = showSecretGuide) {
+                                        Column(
+                                            modifier = Modifier
+                                                .fillMaxWidth()
+                                                .padding(top = 8.dp)
+                                                .clip(RoundedCornerShape(12.dp))
+                                                .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.45f))
+                                                .padding(12.dp),
+                                            verticalArrangement = Arrangement.spacedBy(4.dp),
+                                        ) {
+                                            Text("Panduan Singkat Setup Tailscale Auth Key:", style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.Bold)
+                                            Text("1. Ketuk 'Ambil Key Tailscale ↗' lalu pilih 'Generate auth key'.", style = MaterialTheme.typography.labelSmall)
+                                            Text("2. Centang 'Reusable' & 'Ephemeral', lalu salin kode tskey-auth-…", style = MaterialTheme.typography.labelSmall)
+                                            Text("3. Ketuk 'Pasang di GitHub ↗' dan simpan sebagai TAILSCALE_AUTH_KEY.", style = MaterialTheme.typography.labelSmall)
+                                            Text("4. Simpan juga secret kedua bernama RDP_PASSWORD.", style = MaterialTheme.typography.labelSmall)
+                                        }
+                                    }
                                 }
                             }
                         }
                     }
                 }
             }
-
-            Text(
-                "Sesi berjalan di runner GitHub — data pengguna otomatis disimpan ke artifact dan dipulihkan di sesi berikutnya.",
-                style = MaterialTheme.typography.labelSmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
         }
     }
 
     if (chooseDuration) {
-        XyOverlay(title = "Durasi sesi", onDismiss = { chooseDuration = false }) {
+        XyOverlay(title = "Durasi Sesi RDP", onDismiss = { chooseDuration = false }) {
             Column(
                 Modifier.heightIn(max = 360.dp).verticalScroll(rememberScrollState()),
                 verticalArrangement = Arrangement.spacedBy(8.dp),
             ) {
                 listOf("15", "30", "60", "120", "180", "240", "300", "330", "360").forEach { minutes ->
                     XyPillButton(
-                        "$minutes menit",
+                        "$minutes menit (${if (minutes == "360") "Maksimal 6 Jam" else "${minutes.toInt() / 60}j ${minutes.toInt() % 60}m"})",
                         { duration = minutes; saveSettings(); chooseDuration = false },
                         primary = duration == minutes,
                         modifier = Modifier.fillMaxWidth(),
@@ -1427,9 +1382,9 @@ fun RdpFreeScreen(onBack: () -> Unit, onConnect: (ConnectionProfile) -> Unit) {
                     color = MaterialTheme.colorScheme.primary,
                 )
                 listOf(
-                    "windows-2022" to "Windows Server 2022 (Paling Stabil · GTA SA-MP & Minecraft)",
+                    "windows-2022" to "Windows Server 2022 (Stabil · GTA SA-MP & Minecraft)",
                     "windows-2025" to "Windows Server 2025 (Kernel Terbaru & Performa I/O Tinggi)",
-                    "windows-latest" to "windows-latest (Otomatis Image Windows Terbaru GitHub)",
+                    "windows-latest" to "windows-latest (Image Windows Terbaru GitHub)",
                 ).forEach { (id, label) ->
                     XyPillButton(
                         label,
@@ -1440,15 +1395,15 @@ fun RdpFreeScreen(onBack: () -> Unit, onConnect: (ConnectionProfile) -> Unit) {
                 }
                 Spacer(Modifier.height(6.dp))
                 Text(
-                    "Linux Desktop (XFCE4 + XRDP :3389 · Boot Kilat ~90 Detik)",
+                    "Linux Desktop (XFCE4 + XRDP :3389 · Boot ~90 Detik)",
                     style = MaterialTheme.typography.labelMedium,
                     fontWeight = FontWeight.Bold,
                     color = MaterialTheme.colorScheme.primary,
                 )
                 listOf(
                     "ubuntu-24.04" to "Ubuntu 24.04 LTS Desktop (XFCE4 + XRDP + SSH :22)",
-                    "ubuntu-22.04" to "Ubuntu 22.04 LTS Desktop (XFCE4 LTS Klasik Kompatibilitas Tinggi)",
-                    "ubuntu-latest" to "ubuntu-latest Desktop (Otomatis Image Ubuntu Terbaru)",
+                    "ubuntu-22.04" to "Ubuntu 22.04 LTS Desktop (XFCE4 LTS Klasik)",
+                    "ubuntu-latest" to "ubuntu-latest Desktop (Otomatis Image Terbaru)",
                 ).forEach { (id, label) ->
                     XyPillButton(
                         label,
@@ -1459,15 +1414,15 @@ fun RdpFreeScreen(onBack: () -> Unit, onConnect: (ConnectionProfile) -> Unit) {
                 }
                 Spacer(Modifier.height(6.dp))
                 Text(
-                    "Linux Polos Tanpa XFCE4 (Headless SSH VPS :22 & :3389 · Boot ~20 Detik)",
+                    "Linux Polos Tanpa XFCE4 (Headless SSH VPS · Boot ~20 Detik)",
                     style = MaterialTheme.typography.labelMedium,
                     fontWeight = FontWeight.Bold,
                     color = MaterialTheme.colorScheme.primary,
                 )
                 listOf(
-                    "ubuntu-24.04" to "Ubuntu 24.04 LTS Polos (Server SSH Murni Tanpa GUI)",
-                    "ubuntu-22.04" to "Ubuntu 22.04 LTS Polos (Server SSH Murni Tanpa GUI)",
-                    "ubuntu-latest" to "ubuntu-latest Polos (Server SSH Murni Tanpa GUI)",
+                    "ubuntu-24.04" to "Ubuntu 24.04 LTS Polos (Server SSH Murni)",
+                    "ubuntu-22.04" to "Ubuntu 22.04 LTS Polos (Server SSH Murni)",
+                    "ubuntu-latest" to "ubuntu-latest Polos (Server SSH Murni)",
                 ).forEach { (id, label) ->
                     XyPillButton(
                         label,
@@ -1483,7 +1438,7 @@ fun RdpFreeScreen(onBack: () -> Unit, onConnect: (ConnectionProfile) -> Unit) {
         XyOverlay(title = "Jalur Akses Koneksi", onDismiss = { chooseAkses = false }) {
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 listOf(
-                    "tailscale" to "Tailscale (Jaringan Privat Paling Cepat & Aman)",
+                    "tailscale" to "Tailscale (Jaringan Privat Paling Cepat & Stabil)",
                     "portmap" to "Portmap.io (TCP Publik Tanpa VPN di HP)",
                 ).forEach { (mode, label) ->
                     XyPillButton(
@@ -1515,11 +1470,11 @@ fun RdpFreeScreen(onBack: () -> Unit, onConnect: (ConnectionProfile) -> Unit) {
         }
     }
     if (chooseGrafis) {
-        XyOverlay(title = "Toolkit Grafis CPU (Mesa)", onDismiss = { chooseGrafis = false }) {
+        XyOverlay(title = "Driver Grafis OpenGL / Mesa", onDismiss = { chooseGrafis = false }) {
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 listOf(
+                    "software" to "Software (Mesa3D OpenGL 4.6 D3D12 — Wajib untuk Game)",
                     "tidak" to "Tidak (Gunakan driver bawaan Windows)",
-                    "software" to "Software (Pasang Mesa3D OpenGL CPU)",
                 ).forEach { (mode, label) ->
                     XyPillButton(
                         label,
@@ -1540,14 +1495,14 @@ fun RdpFreeScreen(onBack: () -> Unit, onConnect: (ConnectionProfile) -> Unit) {
         }
         XyDialog(
             title = when (action) {
-                "start" -> "Mulai Sesi ($osDesc)?"
-                "stop" -> "Hentikan RDP?"
-                else -> "Keluar GitHub?"
+                "start" -> "Mulai Sesi Cloud RDP?"
+                "stop" -> "Hentikan Sesi Aktif?"
+                else -> "Putuskan Akun GitHub?"
             },
             body = when (action) {
-                "start" -> "Menjalankan $osDesc via workflow rdp-6h menggunakan kuota GitHub Actions-mu. Data pengguna dari sesi sebelumnya otomatis dipulihkan."
-                "stop" -> "Sesi aktif dihentikan. Folder pengguna disimpan dulu ke artifact supaya sesi berikutnya lanjut, bukan dari nol."
-                else -> "App lupa token GitHub di HP ini (repo fork dan sesi di GitHub tidak tersentuh)."
+                "start" -> "Menjalankan $osDesc selama $duration menit via GitHub Actions. Data sesi sebelumnya otomatis dipulihkan."
+                "stop" -> "Sesi aktif akan dihentikan dan seluruh perubahan data/profil disimpan ke cloud."
+                else -> "Melepas token GitHub dari HP ini (repository dan sesi aktif di GitHub tetap aman)."
             },
             confirmLabel = "Lanjutkan",
             onConfirm = { confirmAction = null; operate(action) },
@@ -1568,64 +1523,72 @@ private fun SecretStatusRow(
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .clip(RoundedCornerShape(12.dp))
-            .background(
-                if (configured) MaterialTheme.colorScheme.primary.copy(alpha = 0.10f)
-                else if (required) MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.35f)
-                else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f),
-            )
+            .clip(RoundedCornerShape(14.dp))
+            .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.45f))
             .border(
                 width = 1.dp,
-                color = if (configured) MaterialTheme.colorScheme.primary.copy(alpha = 0.45f)
-                else if (required) MaterialTheme.colorScheme.error.copy(alpha = 0.45f)
-                else MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.35f),
-                shape = RoundedCornerShape(12.dp),
+                color = if (configured) Color(0xFF34D399).copy(alpha = 0.45f)
+                else if (required) Color(0xFFF87171).copy(alpha = 0.45f)
+                else MaterialTheme.colorScheme.outline.copy(alpha = 0.4f),
+                shape = RoundedCornerShape(14.dp),
             )
             .clickable { onCopyName() }
-            .padding(horizontal = 12.dp, vertical = 8.dp),
+            .padding(horizontal = 12.dp, vertical = 10.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(10.dp),
     ) {
-        Text(
-            text = if (configured) "✓" else if (required) "⚠" else "○",
-            style = MaterialTheme.typography.titleMedium,
-            fontWeight = FontWeight.Bold,
-            color = if (configured) MaterialTheme.colorScheme.primary
-            else if (required) MaterialTheme.colorScheme.error
-            else MaterialTheme.colorScheme.onSurfaceVariant,
-        )
-        Column(Modifier.weight(1f)) {
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(6.dp),
-            ) {
-                Text(name, style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.Bold)
-                Text(
-                    if (configured) "Terpasang" else if (required) "Wajib diisi" else "Opsional",
-                    style = MaterialTheme.typography.labelSmall,
-                    color = if (configured) MaterialTheme.colorScheme.primary
-                    else if (required) MaterialTheme.colorScheme.error
-                    else MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-            }
+        Box(
+            modifier = Modifier
+                .size(22.dp)
+                .clip(CircleShape)
+                .background(
+                    if (configured) Color(0xFF10B981).copy(alpha = 0.22f)
+                    else if (required) Color(0xFFEF4444).copy(alpha = 0.20f)
+                    else MaterialTheme.colorScheme.surface,
+                ),
+            contentAlignment = Alignment.Center,
+        ) {
+            Icon(
+                imageVector = if (configured) XyIcons.Check else XyIcons.Key,
+                contentDescription = null,
+                tint = if (configured) Color(0xFF6EE7B7)
+                else if (required) Color(0xFFFCA5A5)
+                else MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.size(13.dp),
+            )
+        }
+        Row(
+            modifier = Modifier.weight(1f),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
             Text(
-                desc,
+                text = name,
+                style = MaterialTheme.typography.labelLarge,
+                fontFamily = FontFamily.Monospace,
+                fontWeight = FontWeight.Bold,
+            )
+            Text(
+                text = if (configured) "Aktif" else if (required) "Wajib" else "Opsional",
                 style = MaterialTheme.typography.labelSmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                color = if (configured) Color(0xFF6EE7B7)
+                else if (required) Color(0xFFFCA5A5)
+                else MaterialTheme.colorScheme.onSurfaceVariant,
             )
         }
         Text(
-            "Salin",
+            text = "Salin",
             style = MaterialTheme.typography.labelSmall,
+            fontWeight = FontWeight.Bold,
             color = MaterialTheme.colorScheme.primary,
         )
     }
 }
 
 @Composable
-private fun RdpToggleRow(
+private fun RdpFlatToggleRow(
     title: String,
-    subtitle: String,
+    subtitle: String = "",
     checked: Boolean,
     enabled: Boolean,
     onCheckedChange: (Boolean) -> Unit,
@@ -1633,24 +1596,23 @@ private fun RdpToggleRow(
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .clip(RoundedCornerShape(12.dp))
+            .clip(RoundedCornerShape(10.dp))
             .clickable(enabled = enabled) { onCheckedChange(!checked) }
             .padding(vertical = 6.dp, horizontal = 4.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(10.dp),
     ) {
-        Column(Modifier.weight(1f)) {
-            Text(title, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold)
-            Text(
-                subtitle,
-                style = MaterialTheme.typography.labelSmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-        }
-        Switch(
+        Text(
+            text = title,
+            style = MaterialTheme.typography.bodyMedium,
+            fontWeight = FontWeight.Medium,
+            color = MaterialTheme.colorScheme.onSurface,
+            modifier = Modifier.weight(1f),
+        )
+        androidx.compose.material3.Switch(
             checked = checked,
-            onCheckedChange = onCheckedChange,
             enabled = enabled,
+            onCheckedChange = { if (enabled) onCheckedChange(it) },
         )
     }
 }
@@ -1662,22 +1624,22 @@ private fun fraction(used: Double, total: Double): Float =
 private fun StatBar(label: String, value: String, fraction: Float) {
     Column {
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-            Text(label, style = MaterialTheme.typography.titleSmall)
-            Text(value, style = MaterialTheme.typography.bodySmall)
+            Text(label, style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.SemiBold)
+            Text(value, style = MaterialTheme.typography.labelSmall, fontFamily = FontFamily.Monospace)
         }
-        Spacer(Modifier.height(4.dp))
+        Spacer(Modifier.height(5.dp))
         Box(
             Modifier
                 .fillMaxWidth()
-                .height(8.dp)
-                .clip(RoundedCornerShape(4.dp))
-                .background(MaterialTheme.colorScheme.onSurface.copy(alpha = 0.12f)),
+                .height(6.dp)
+                .clip(RoundedCornerShape(999.dp))
+                .background(MaterialTheme.colorScheme.surfaceVariant),
         ) {
             Box(
                 Modifier
                     .fillMaxWidth(fraction)
-                    .height(8.dp)
-                    .clip(RoundedCornerShape(4.dp))
+                    .height(6.dp)
+                    .clip(RoundedCornerShape(999.dp))
                     .background(MaterialTheme.colorScheme.primary),
             )
         }

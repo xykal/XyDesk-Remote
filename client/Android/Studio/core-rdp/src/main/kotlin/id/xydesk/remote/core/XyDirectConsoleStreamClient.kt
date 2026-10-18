@@ -59,6 +59,12 @@ class XyDirectConsoleStreamClient(
     val inputBridge = XyRawGameInputBridge(host = host, port = port)
     private var audioBridge: QuicAudioBridge? = null
 
+    fun setVoiceMicEnabled(enabled: Boolean) {
+        audioBridge?.setVoiceMicEnabled(enabled)
+    }
+
+    fun isVoiceMicEnabled(): Boolean = audioBridge?.micActive == true
+
     fun start() {
         val cleanHost = host.trim().removePrefix("[").removeSuffix("]")
         if (cleanHost.isEmpty()) {

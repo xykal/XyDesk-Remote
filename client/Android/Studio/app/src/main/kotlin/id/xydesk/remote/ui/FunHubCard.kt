@@ -1,8 +1,16 @@
 package id.xydesk.remote.ui
 
 import android.content.Intent
+import android.net.Uri
+import android.util.Base64
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import id.xydesk.remote.ui.components.XyEmptyState
+import id.xydesk.remote.ui.components.XyErrorState
+import id.xydesk.remote.ui.components.XyIcons
+import id.xydesk.remote.ui.components.XyLoadingSkeletonCard
+import id.xydesk.remote.ui.components.XySuccessStateBanner
+import java.util.Locale
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
@@ -48,6 +56,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.scale
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
@@ -110,8 +119,10 @@ internal fun FunHubCard(
     var commentsTarget by remember { mutableStateOf<CommunityJoke?>(null) }
     var actionsTarget by remember { mutableStateOf<CommunityJoke?>(null) }
     var deletingCommentId by remember { mutableStateOf<String?>(null) }
+    var studioAttachment by remember { mutableStateOf<FeedAttachment?>(null) }
 
-    val myGithubLogin = remember(context, composerOpen, refreshKey) { getVerifiedGitHubLogin(context) }
+    val authRev = GitHubDirectOAuthController.authRevision
+    val myGithubLogin = remember(context, composerOpen, refreshKey, authRev) { getVerifiedGitHubLogin(context) }
     val isViewerFounder = remember(myGithubLogin) {
         isFounderAccount(myGithubLogin) || isFounderAccount(api.displayName())
     }
@@ -135,9 +146,7 @@ internal fun FunHubCard(
                     )
                     formMessageIsError = true
                 } else {
-                    pendingAttachment = att
-                    editRemoveAttachment = false
-                    formMessage = null
+                    studioAttachment = att
                 }
             }
         }
@@ -145,6 +154,47 @@ internal fun FunHubCard(
     var feedError by remember { mutableStateOf<String?>(null) }
     var feedMessage by remember { mutableStateOf<String?>(null) }
     var feedMessageIsError by remember { mutableStateOf(false) }
+
+    studioAttachment?.let { activeAtt ->
+        val initialDataUri = remember(activeAtt) {
+            "data:${activeAtt.mime};base64," + Base64.encodeToString(activeAtt.bytes, Base64.NO_WRAP)
+        }
+        val kind = remember(activeAtt.mime) {
+            if (activeAtt.mime.startsWith("video/")) "video" else "photo"
+        }
+        PreSendMediaStudioDialog(
+            initialAttachmentData = initialDataUri,
+            initialAttachmentName = "Feed Media",
+            initialAttachmentType = kind,
+            initialCaption = draft,
+            initialViewOnce = false,
+            onDismiss = { studioAttachment = null },
+            onConfirmSend = { finalData, _, _, captionText, _ ->
+                studioAttachment = null
+                if (captionText.isNotBlank()) {
+                    draft = captionText
+                }
+                val updatedAtt = if (finalData != initialDataUri && finalData.startsWith("data:image/")) {
+                    runCatching {
+                        val rawB64 = finalData.substringAfter("base64,", "")
+                        val decoded = Base64.decode(rawB64, Base64.DEFAULT)
+                        FeedAttachment(mime = "image/jpeg", bytes = decoded)
+                    }.getOrNull() ?: activeAtt
+                } else if (finalData != initialDataUri && finalData.startsWith("data:video/")) {
+                    runCatching {
+                        val rawB64 = finalData.substringAfter("base64,", "")
+                        val decoded = Base64.decode(rawB64, Base64.DEFAULT)
+                        FeedAttachment(mime = "video/mp4", bytes = decoded)
+                    }.getOrNull() ?: activeAtt
+                } else {
+                    activeAtt
+                }
+                pendingAttachment = updatedAtt
+                editRemoveAttachment = false
+                formMessage = null
+            },
+        )
+    }
 
     fun showCommunityError(error: Throwable, loadingFeed: Boolean = false): String {
         val reason = (error as? CommunityJokesException)?.reason.orEmpty()
@@ -559,53 +609,71 @@ internal fun FunHubCard(
                         )
                     }
                 }
-                androidx.compose.material3.HorizontalDivider(
-                    thickness = 0.75.dp,
-                    color = Color(0xFF1D222D),
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(0.75.dp)
+                        .background(Color(0xFF1D222D)),
                 )
             }
         }
 
-        formMessage?.let {
-            Text(
-                it,
-                style = MaterialTheme.typography.bodySmall,
-                color = if (formMessageIsError) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary,
-            )
+        formMessage?.let { msg ->
+            if (formMessageIsError) {
+                XyErrorState(
+                    message = msg,
+                    onRetry = { formMessage = null },
+                )
+            } else {
+                XySuccessStateBanner(
+                    message = msg,
+                    onDismiss = { formMessage = null },
+                )
+            }
         }
 
-        feedMessage?.let {
-            Text(
-                it,
-                style = MaterialTheme.typography.bodySmall,
-                color = if (feedMessageIsError) MaterialTheme.colorScheme.error else Color(0xFF10B981),
-                fontWeight = FontWeight.SemiBold,
-            )
+        feedMessage?.let { msg ->
+            if (feedMessageIsError) {
+                XyErrorState(
+                    message = msg,
+                    onRetry = { feedMessage = null },
+                )
+            } else {
+                XySuccessStateBanner(
+                    message = msg,
+                    onDismiss = { feedMessage = null },
+                )
+            }
         }
         if (feedError != null && jokes.isNotEmpty()) {
-            Text(feedError.orEmpty(), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error)
+            XyErrorState(
+                message = feedError.orEmpty(),
+                onRetry = { refreshKey += 1 },
+            )
         }
 
         when {
-            refreshing && jokes.isEmpty() -> Text(
-                xy("Memuat feed komunitas…", "Loading community feed…"),
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-            feedError != null && jokes.isEmpty() -> Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                Text(feedError.orEmpty(), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error)
-                XyPillButton(
-                    text = xy("Coba lagi", "Try again"),
-                    onClick = { refreshKey += 1 },
-                    primary = false,
-                    compact = true,
+            refreshing && jokes.isEmpty() -> {
+                XyLoadingSkeletonCard(
+                    count = 3,
+                    itemHeight = 84.dp,
                 )
             }
-            jokes.isEmpty() -> Text(
-                xy("Belum ada postingan. Kirim yang pertama.", "Nothing here yet. Post the first one."),
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
+            feedError != null && jokes.isEmpty() -> {
+                XyErrorState(
+                    message = feedError.orEmpty(),
+                    onRetry = { refreshKey += 1 },
+                )
+            }
+            jokes.isEmpty() -> {
+                XyEmptyState(
+                    title = xy("Belum Ada Postingan", "No Posts Yet"),
+                    subtitle = xy("Jadilah yang pertama membagikan informasi, tips RDP, atau media ke komunitas XyDesk.", "Be the first to share news, RDP tips, or media with the XyDesk community."),
+                    icon = id.xydesk.remote.ui.components.XyIcons.Globe,
+                    actionText = xy("Tulis Postingan Pertama", "Write First Post"),
+                    onAction = { composerOpen = true },
+                )
+            }
             else -> {
                 authorFilter?.let { who ->
                     Row(
@@ -619,13 +687,14 @@ internal fun FunHubCard(
                             fontWeight = FontWeight.SemiBold,
                             color = MaterialTheme.colorScheme.primary,
                         )
-                        Text(
-                            "✕",
+                        androidx.compose.material3.Icon(
+                            imageVector = XyIcons.Close,
+                            contentDescription = "Tutup",
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
                             modifier = Modifier
                                 .clickable { authorFilter = null }
-                                .padding(horizontal = 6.dp, vertical = 2.dp),
-                            style = MaterialTheme.typography.labelMedium,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                .padding(horizontal = 6.dp, vertical = 2.dp)
+                                .size(14.dp),
                         )
                     }
                 }
@@ -649,6 +718,27 @@ internal fun FunHubCard(
                                 showAll = true
                             },
                             isReactionBusy = activeReactionId == joke.id,
+                            onLike = {
+                                if (activeReactionId == null) {
+                                    val prevJoke = joke
+                                    val nextLiked = !joke.viewerLiked
+                                    val nextCount = (joke.likesCount + if (nextLiked) 1 else -1).coerceAtLeast(0)
+                                    updateJoke(joke.copy(viewerLiked = nextLiked, likesCount = nextCount))
+                                    scope.launch {
+                                        activeReactionId = joke.id
+                                        feedMessage = null
+                                        try {
+                                            updateJoke(api.like(joke.id))
+                                        } catch (error: Exception) {
+                                            updateJoke(prevJoke)
+                                            feedMessage = showCommunityError(error)
+                                            feedMessageIsError = true
+                                        } finally {
+                                            activeReactionId = null
+                                        }
+                                    }
+                                }
+                            },
                             onReact = { emoji ->
                                 if (activeReactionId == null) {
                                     scope.launch {
@@ -972,6 +1062,7 @@ private fun CommunityJokeItem(
     onImageClick: (String, String?) -> Unit,
     onAuthorClick: (String) -> Unit,
     isReactionBusy: Boolean,
+    onLike: () -> Unit,
     onReact: (String) -> Unit,
     onOpenComments: () -> Unit,
     onOpenActions: () -> Unit,
@@ -979,13 +1070,30 @@ private fun CommunityJokeItem(
     onQuickDelete: () -> Unit,
     onShare: () -> Unit,
 ) {
-    var waReactBarOpen by remember(joke.id) { mutableStateOf(false) }
     var fullEmojiPickerOpen by remember(joke.id) { mutableStateOf(false) }
+    var reactAnimTrigger by remember(joke.id) { mutableIntStateOf(0) }
+    var likeAnimTrigger by remember(joke.id) { mutableIntStateOf(0) }
+    val likePopAnim = remember(joke.id) { androidx.compose.animation.core.Animatable(1f) }
+    LaunchedEffect(likeAnimTrigger) {
+        if (likeAnimTrigger > 0) {
+            likePopAnim.snapTo(0.65f)
+            likePopAnim.animateTo(
+                targetValue = 1.32f,
+                animationSpec = androidx.compose.animation.core.spring(
+                    dampingRatio = androidx.compose.animation.core.Spring.DampingRatioLowBouncy,
+                    stiffness = androidx.compose.animation.core.Spring.StiffnessMedium,
+                ),
+            )
+            likePopAnim.animateTo(1f)
+        }
+    }
     val isPinnedAnnouncement = joke.isAnnouncement || joke.pinned
     val detectedUrl = remember(joke.id, joke.text, joke.sharedUrl) {
         joke.sharedUrl?.takeIf { it.isNotBlank() } ?: extractFirstUrl(joke.text)
     }
-    val totalReactions = remember(joke.reactions) { joke.reactions.values.sum() }
+    val totalEmojiReactions = remember(joke.reactions) {
+        joke.reactions.entries.filter { it.key != "❤️" }.sumOf { it.value }
+    }
     val activeReaction = joke.viewerReaction
     val isFounderAuthor = isFounderAccount(joke.authorName) || isFounderAccount(joke.githubLogin)
 
@@ -1050,13 +1158,15 @@ private fun CommunityJokeItem(
                             },
                             fontSize = 13.sp,
                             fontWeight = FontWeight.Bold,
-                            color = Color(0xFFF8FAFC),
+                            color = if (isFounderAuthor) Color(0xFFE9D5FF) else Color(0xFFF8FAFC),
                             maxLines = 1,
                             overflow = TextOverflow.Ellipsis,
                         )
-                        if (isFounderAuthor) {
-                            XyFounderBadge(compact = true)
-                        }
+                        XyUserRoleBadges(
+                            name = joke.authorName,
+                            githubLogin = joke.githubLogin,
+                            compact = true,
+                        )
                         feedTimeAgo(joke.createdAtMillis).takeIf { it.isNotEmpty() }?.let { ago ->
                             Text(
                                 text = "· $ago",
@@ -1120,13 +1230,13 @@ private fun CommunityJokeItem(
                     }
                 }
 
-                // Isi Teks Postingan
+                // Isi Teks Postingan (Semua Link/URL Berwarna Biru Cerah & Bisa Diklik!)
                 if (joke.text.isNotBlank()) {
-                    Text(
+                    XyClickableLinkText(
                         text = joke.text,
-                        style = MaterialTheme.typography.bodyMedium,
                         color = Color(0xFFF1F5F9),
-                        lineHeight = 20.sp,
+                        linkColor = Color(0xFF38BDF8),
+                        style = MaterialTheme.typography.bodyMedium.copy(lineHeight = 20.sp),
                     )
                 }
 
@@ -1146,32 +1256,43 @@ private fun CommunityJokeItem(
                     )
                 }
 
-                // Pemilih Reaksi Opsional (hanya muncul bila tombol + ditekan)
+                // Pemilih Reaksi Emoji (Terpisah dari Like Hati — Beranimasi saat Di-React)
                 if (fullEmojiPickerOpen) {
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .clip(RoundedCornerShape(10.dp))
+                            .clip(RoundedCornerShape(14.dp))
                             .background(Color(0xFF151923))
                             .horizontalScroll(rememberScrollState())
-                            .padding(horizontal = 10.dp, vertical = 6.dp),
-                        horizontalArrangement = Arrangement.spacedBy(12.dp),
+                            .padding(horizontal = 10.dp, vertical = 7.dp),
+                        horizontalArrangement = Arrangement.spacedBy(10.dp),
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
                         CommunityJokesApi.QUICK_REACTIONS.forEach { emoji ->
-                            Text(
-                                text = emoji,
-                                fontSize = 16.sp,
-                                modifier = Modifier.clickable(enabled = !isReactionBusy) {
-                                    onReact(emoji)
-                                    fullEmojiPickerOpen = false
-                                },
-                            )
+                            val isSelectedEmoji = activeReaction == emoji
+                            Box(
+                                modifier = Modifier
+                                    .size(34.dp)
+                                    .clip(CircleShape)
+                                    .background(if (isSelectedEmoji) Color(0xFF2E364F) else Color(0xFF1E2433))
+                                    .clickable(enabled = !isReactionBusy) {
+                                        reactAnimTrigger += 1
+                                        onReact(emoji)
+                                        fullEmojiPickerOpen = false
+                                    },
+                                contentAlignment = Alignment.Center,
+                            ) {
+                                IosWhatsAppEmoji3D(
+                                    tag = emoji,
+                                    size = 21.dp,
+                                    animateTrigger = reactAnimTrigger,
+                                )
+                            }
                         }
                     }
                 }
 
-                // Action Bar Modern Flat (Tanpa Card, Tanpa Border — Gaya X / Threads)
+                // Action Bar Modern Flat (Like Hati Terpisah dari Reaksi Emoji + Komentar + Bagikan)
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
@@ -1181,47 +1302,85 @@ private fun CommunityJokeItem(
                 ) {
                     Row(
                         verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(22.dp),
+                        horizontalArrangement = Arrangement.spacedBy(20.dp),
                     ) {
-                        // Like / Heart (Flat)
+                        // 1. Tombol LIKE (Murni Ikon Hati Vektor + Counter Likes)
                         Row(
                             modifier = Modifier
                                 .clip(RoundedCornerShape(6.dp))
                                 .clickable(enabled = !isReactionBusy) {
-                                    onReact(activeReaction ?: "❤️")
+                                    likeAnimTrigger += 1
+                                    onLike()
                                 }
                                 .padding(vertical = 4.dp, horizontal = 2.dp),
                             verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(6.dp),
+                            horizontalArrangement = Arrangement.spacedBy(5.dp),
                         ) {
                             androidx.compose.material3.Icon(
-                                imageVector = if (activeReaction != null) {
+                                imageVector = if (joke.viewerLiked) {
                                     id.xydesk.remote.ui.components.XyIcons.HeartFilled
                                 } else {
                                     id.xydesk.remote.ui.components.XyIcons.Heart
                                 },
                                 contentDescription = "Suka",
-                                tint = if (activeReaction != null) Color(0xFFF43F5E) else Color(0xFF94A3B8),
-                                modifier = Modifier.size(17.dp),
+                                tint = if (joke.viewerLiked) Color(0xFFF43F5E) else Color(0xFF94A3B8),
+                                modifier = Modifier
+                                    .size(17.dp)
+                                    .scale(likePopAnim.value),
                             )
-                            if (totalReactions > 0) {
+                            if (joke.likesCount > 0) {
                                 Text(
-                                    text = totalReactions.toString(),
+                                    text = joke.likesCount.toString(),
                                     fontSize = 12.sp,
-                                    fontWeight = FontWeight.Medium,
-                                    color = if (activeReaction != null) Color(0xFFF43F5E) else Color(0xFF94A3B8),
+                                    fontWeight = if (joke.viewerLiked) FontWeight.Bold else FontWeight.Medium,
+                                    color = if (joke.viewerLiked) Color(0xFFF43F5E) else Color(0xFF94A3B8),
                                 )
                             }
                         }
 
-                        // Komentar (Flat)
+                        // 2. Tombol REACT EMOJI (Terpisah dari Like!)
+                        Row(
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(6.dp))
+                                .clickable(enabled = !isReactionBusy) {
+                                    fullEmojiPickerOpen = !fullEmojiPickerOpen
+                                }
+                                .padding(vertical = 4.dp, horizontal = 2.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(5.dp),
+                        ) {
+                            if (activeReaction != null) {
+                                IosWhatsAppEmoji3D(
+                                    tag = activeReaction,
+                                    size = 17.dp,
+                                    animateTrigger = reactAnimTrigger,
+                                )
+                            } else {
+                                androidx.compose.material3.Icon(
+                                    imageVector = id.xydesk.remote.ui.components.XyIcons.Emoji,
+                                    contentDescription = "Reaksi Emoji",
+                                    tint = if (fullEmojiPickerOpen) Color.White else Color(0xFF94A3B8),
+                                    modifier = Modifier.size(17.dp),
+                                )
+                            }
+                            if (totalEmojiReactions > 0) {
+                                Text(
+                                    text = totalEmojiReactions.toString(),
+                                    fontSize = 12.sp,
+                                    fontWeight = if (activeReaction != null) FontWeight.Bold else FontWeight.Medium,
+                                    color = if (activeReaction != null) Color(0xFFFBBF24) else Color(0xFF94A3B8),
+                                )
+                            }
+                        }
+
+                        // 3. Tombol KOMENTAR (Flat)
                         Row(
                             modifier = Modifier
                                 .clip(RoundedCornerShape(6.dp))
                                 .clickable(onClick = onOpenComments)
                                 .padding(vertical = 4.dp, horizontal = 2.dp),
                             verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(6.dp),
+                            horizontalArrangement = Arrangement.spacedBy(5.dp),
                         ) {
                             androidx.compose.material3.Icon(
                                 imageVector = id.xydesk.remote.ui.components.XyIcons.Chat,
@@ -1239,14 +1398,14 @@ private fun CommunityJokeItem(
                             }
                         }
 
-                        // Bagikan (Flat)
+                        // 4. Tombol BAGIKAN (Flat)
                         Row(
                             modifier = Modifier
                                 .clip(RoundedCornerShape(6.dp))
                                 .clickable(onClick = onShare)
                                 .padding(vertical = 4.dp, horizontal = 2.dp),
                             verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(6.dp),
+                            horizontalArrangement = Arrangement.spacedBy(5.dp),
                         ) {
                             androidx.compose.material3.Icon(
                                 imageVector = id.xydesk.remote.ui.components.XyIcons.Share,
@@ -1257,10 +1416,10 @@ private fun CommunityJokeItem(
                         }
                     }
 
-                    // Ringkasan reaksi aktif (jika ada) + pemicu reaksi cepat tanpa border
+                    // Ringkasan Top Emoji Reaksi di kanan (Tanpa Hati Like)
                     Row(
                         verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(6.dp),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
                     ) {
                         val topEmojis = remember(joke.reactions) {
                             joke.reactions.entries
@@ -1269,41 +1428,36 @@ private fun CommunityJokeItem(
                                 .take(3)
                         }
                         topEmojis.forEach { (emoji, count) ->
-                            Text(
-                                text = "$emoji $count",
-                                fontSize = 11.sp,
-                                color = Color(0xFF94A3B8),
-                                modifier = Modifier.clickable(enabled = !isReactionBusy) { onReact(emoji) },
-                            )
-                        }
-                        Box(
-                            modifier = Modifier
-                                .size(24.dp)
-                                .clip(CircleShape)
-                                .clickable(enabled = !isReactionBusy) {
-                                    fullEmojiPickerOpen = !fullEmojiPickerOpen
+                            Row(
+                                modifier = Modifier.clickable(enabled = !isReactionBusy) {
+                                    reactAnimTrigger += 1
+                                    onReact(emoji)
                                 },
-                            contentAlignment = Alignment.Center,
-                        ) {
-                            androidx.compose.material3.Icon(
-                                imageVector = if (fullEmojiPickerOpen) {
-                                    id.xydesk.remote.ui.components.XyIcons.Close
-                                } else {
-                                    id.xydesk.remote.ui.components.XyIcons.Plus
-                                },
-                                contentDescription = "Reaksi",
-                                tint = Color(0xFF64748B),
-                                modifier = Modifier.size(14.dp),
-                            )
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(3.dp),
+                            ) {
+                                IosWhatsAppEmoji3D(
+                                    tag = emoji,
+                                    size = 15.dp,
+                                    animateTrigger = reactAnimTrigger,
+                                )
+                                Text(
+                                    text = count.toString(),
+                                    fontSize = 11.sp,
+                                    color = Color(0xFF94A3B8),
+                                )
+                            }
                         }
                     }
                 }
             }
         }
 
-        androidx.compose.material3.HorizontalDivider(
-            thickness = 0.75.dp,
-            color = Color(0xFF1D222D),
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(0.75.dp)
+                .background(Color(0xFF1D222D)),
         )
     }
 }
@@ -1660,12 +1814,14 @@ private fun CommentsBottomSheet(
                                         text = cAuthor,
                                         style = MaterialTheme.typography.labelMedium,
                                         fontWeight = FontWeight.Bold,
-                                        color = if (cIsFounder) Color(0xFFFBBF24) else MaterialTheme.colorScheme.onSurface,
+                                        color = if (cIsFounder) Color(0xFFE9D5FF) else MaterialTheme.colorScheme.onSurface,
                                     )
-                                    if (cIsFounder) {
-                                        Spacer(Modifier.width(5.dp))
-                                        XyFounderBadge(compact = true)
-                                    }
+                                    Spacer(Modifier.width(5.dp))
+                                    XyUserRoleBadges(
+                                        name = c.name,
+                                        githubLogin = c.githubLogin,
+                                        compact = true,
+                                    )
                                     feedTimeAgo(c.createdAtMillis).takeIf { it.isNotEmpty() }?.let { ago ->
                                         Text(
                                             " · $ago",
@@ -1708,10 +1864,11 @@ private fun CommentsBottomSheet(
                                         color = MaterialTheme.colorScheme.primary,
                                     )
                                 }
-                                Text(
+                                XyClickableLinkText(
                                     text = c.text,
-                                    style = MaterialTheme.typography.bodyMedium,
                                     color = MaterialTheme.colorScheme.onSurface,
+                                    linkColor = Color(0xFF38BDF8),
+                                    style = MaterialTheme.typography.bodyMedium,
                                 )
                             }
                         }
@@ -1742,53 +1899,15 @@ private fun CommentsBottomSheet(
                         fontWeight = FontWeight.SemiBold,
                         color = MaterialTheme.colorScheme.primary,
                     )
-                    Text(
-                        text = "✕",
+                    androidx.compose.material3.Icon(
+                        imageVector = XyIcons.Close,
+                        contentDescription = "Batal Balas",
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
                         modifier = Modifier
                             .clickable { replyingTo = null }
-                            .padding(horizontal = 6.dp),
-                        fontSize = 12.sp,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            .padding(horizontal = 6.dp)
+                            .size(14.dp),
                     )
-                }
-            }
-
-            // Bar Cepat @Mention (flat pill selaras Feed)
-            if (mentionCandidates.isNotEmpty()) {
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .horizontalScroll(rememberScrollState()),
-                    horizontalArrangement = Arrangement.spacedBy(6.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    Text(
-                        text = "@Mention:",
-                        fontSize = 10.sp,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        fontWeight = FontWeight.SemiBold,
-                    )
-                    mentionCandidates.forEach { handle ->
-                        Box(
-                            modifier = Modifier
-                                .clip(RoundedCornerShape(999.dp))
-                                .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.55f))
-                                .clickable {
-                                    val mentionToken = "@${handle.replace(" ", "")} "
-                                    if (!draft.contains(mentionToken.trim())) {
-                                        draft = (draft + (if (draft.isEmpty() || draft.endsWith(" ")) "" else " ") + mentionToken).take(140)
-                                    }
-                                }
-                                .padding(horizontal = 9.dp, vertical = 4.dp),
-                        ) {
-                            Text(
-                                text = "@$handle",
-                                fontSize = 10.sp,
-                                fontWeight = FontWeight.SemiBold,
-                                color = MaterialTheme.colorScheme.onSurface,
-                            )
-                        }
-                    }
                 }
             }
 
@@ -2049,12 +2168,15 @@ internal fun FeedBinaryImage(
     val shape = if (round) CircleShape else RoundedCornerShape(12.dp)
 
     if (mime?.startsWith("video/") == true && data != null && data.isNotEmpty()) {
+        val vidRatio = remember(path, data.size) {
+            extractCachedVideoAspectRatio(context, path, data)
+        }
         FeedAutoplayVideoPreview(
             videoBytes = data,
             cacheKey = path,
             modifier = modifier
                 .fillMaxWidth()
-                .height(220.dp)
+                .aspectRatio(vidRatio)
                 .clip(shape),
         )
     } else if (mime == "image/gif" &&
@@ -2103,19 +2225,55 @@ internal fun FeedBinaryImage(
     }
 }
 
+internal object XyVideoPlaybackCoordinator {
+    val fullscreenOpenCount = androidx.compose.runtime.mutableIntStateOf(0)
+}
+
+internal fun extractCachedVideoAspectRatio(
+    context: android.content.Context,
+    cacheKey: String,
+    videoBytes: ByteArray,
+): Float = runCatching {
+    val safeName = "xy_vid_" + cacheKey.hashCode().toUInt().toString(16) + ".mp4"
+    val file = java.io.File(context.cacheDir, safeName)
+    if (!file.exists() || file.length() != videoBytes.size.toLong()) {
+        file.writeBytes(videoBytes)
+    }
+    val retriever = android.media.MediaMetadataRetriever()
+    try {
+        retriever.setDataSource(file.absolutePath)
+        val w = retriever.extractMetadata(android.media.MediaMetadataRetriever.METADATA_KEY_VIDEO_WIDTH)?.toIntOrNull() ?: 0
+        val h = retriever.extractMetadata(android.media.MediaMetadataRetriever.METADATA_KEY_VIDEO_HEIGHT)?.toIntOrNull() ?: 0
+        val rot = retriever.extractMetadata(android.media.MediaMetadataRetriever.METADATA_KEY_VIDEO_ROTATION)?.toIntOrNull() ?: 0
+        val effW = if (rot == 90 || rot == 270) h else w
+        val effH = if (rot == 90 || rot == 270) w else h
+        if (effW > 0 && effH > 0) {
+            (effW.toFloat() / effH.toFloat()).coerceIn(0.5f, 2.2f)
+        } else {
+            9f / 16f
+        }
+    } finally {
+        runCatching { retriever.release() }
+    }
+}.getOrDefault(9f / 16f)
+
 /**
- * Video Autoplay Preview (berputar otomatis tanpa suara dalam loop walau belum dibuka penuh,
- * dengan tombol Mute/Unmute cepat di pojok).
+ * Video Autoplay Preview (berputar otomatis sesuai rasio asli 9:16 atau 16:9 tanpa bar hitam,
+ * dengan tombol Speaker Mute/Unmute di pojok dan otomatis berhenti/mute saat Fullscreen dibuka).
  */
 @Composable
 internal fun FeedAutoplayVideoPreview(
     videoBytes: ByteArray,
     cacheKey: String,
     modifier: Modifier = Modifier,
+    externalPaused: Boolean = false,
 ) {
     val context = LocalContext.current
     var muted by remember(cacheKey) { mutableStateOf(true) }
     var mediaPlayerRef by remember(cacheKey) { mutableStateOf<android.media.MediaPlayer?>(null) }
+    var videoViewRef by remember(cacheKey) { mutableStateOf<android.widget.VideoView?>(null) }
+    val fullscreenActive = XyVideoPlaybackCoordinator.fullscreenOpenCount.intValue > 0 || externalPaused
+
     val tempFile = remember(cacheKey, videoBytes.size) {
         runCatching {
             val safeName = "xy_vid_" + cacheKey.hashCode().toUInt().toString(16) + ".mp4"
@@ -2127,34 +2285,63 @@ internal fun FeedAutoplayVideoPreview(
         }.getOrNull()
     }
 
-    DisposableEffect(cacheKey) {
-        onDispose {
-            runCatching { mediaPlayerRef?.stop() }
-            runCatching { mediaPlayerRef?.release() }
-            mediaPlayerRef = null
+    LaunchedEffect(fullscreenActive, muted) {
+        val mp = mediaPlayerRef
+        val vv = videoViewRef
+        if (fullscreenActive) {
+            runCatching { mp?.setVolume(0f, 0f) }
+            runCatching { if (vv?.isPlaying == true) vv.pause() }
+        } else {
+            val vol = if (muted) 0f else 1f
+            runCatching { mp?.setVolume(vol, vol) }
+            runCatching { if (vv != null && !vv.isPlaying) vv.start() }
         }
     }
 
-    Box(modifier = modifier.background(Color.Black)) {
+    DisposableEffect(cacheKey) {
+        onDispose {
+            runCatching { videoViewRef?.stopPlayback() }
+            runCatching { mediaPlayerRef?.stop() }
+            runCatching { mediaPlayerRef?.release() }
+            mediaPlayerRef = null
+            videoViewRef = null
+        }
+    }
+
+    Box(
+        modifier = modifier.background(Color.Black),
+        contentAlignment = Alignment.Center,
+    ) {
         if (tempFile != null) {
             androidx.compose.ui.viewinterop.AndroidView(
                 factory = { ctx ->
                     android.widget.VideoView(ctx).apply {
+                        videoViewRef = this
                         setVideoPath(tempFile.absolutePath)
                         setOnPreparedListener { mp ->
                             mediaPlayerRef = mp
                             mp.isLooping = true
-                            val vol = if (muted) 0f else 1f
+                            val vol = if (muted || fullscreenActive) 0f else 1f
                             mp.setVolume(vol, vol)
-                            start()
+                            if (!fullscreenActive) {
+                                start()
+                            }
                         }
                     }
                 },
                 update = { view ->
-                    val vol = if (muted) 0f else 1f
-                    runCatching { mediaPlayerRef?.setVolume(vol, vol) }
-                    if (!view.isPlaying) {
-                        runCatching { view.start() }
+                    videoViewRef = view
+                    if (fullscreenActive) {
+                        runCatching { mediaPlayerRef?.setVolume(0f, 0f) }
+                        if (view.isPlaying) {
+                            runCatching { view.pause() }
+                        }
+                    } else {
+                        val vol = if (muted) 0f else 1f
+                        runCatching { mediaPlayerRef?.setVolume(vol, vol) }
+                        if (!view.isPlaying) {
+                            runCatching { view.start() }
+                        }
                     }
                 },
                 modifier = Modifier.fillMaxSize(),
@@ -2162,28 +2349,24 @@ internal fun FeedAutoplayVideoPreview(
         }
         Surface(
             onClick = { muted = !muted },
-            shape = RoundedCornerShape(999.dp),
-            color = Color.Black.copy(alpha = 0.65f),
+            shape = CircleShape,
+            color = Color.Black.copy(alpha = 0.68f),
+            border = androidx.compose.foundation.BorderStroke(0.75.dp, Color.White.copy(alpha = 0.22f)),
             modifier = Modifier
-                .align(Alignment.BottomEnd)
-                .padding(8.dp),
+                .align(Alignment.BottomStart)
+                .padding(8.dp)
+                .size(30.dp),
         ) {
-            Row(
-                modifier = Modifier.padding(horizontal = 9.dp, vertical = 4.dp),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(4.dp),
-            ) {
+            Box(contentAlignment = Alignment.Center) {
                 androidx.compose.material3.Icon(
-                    imageVector = id.xydesk.remote.ui.components.XyIcons.Volume,
-                    contentDescription = null,
+                    imageVector = if (muted) {
+                        id.xydesk.remote.ui.components.XyIcons.VolumeOff
+                    } else {
+                        id.xydesk.remote.ui.components.XyIcons.VolumeOn
+                    },
+                    contentDescription = if (muted) "Suara Mati" else "Suara Aktif",
                     tint = Color.White,
-                    modifier = Modifier.size(12.dp),
-                )
-                Text(
-                    text = if (muted) "Autoplay · Ketuk Suara" else "Suara Aktif",
-                    fontSize = 10.sp,
-                    fontWeight = FontWeight.Bold,
-                    color = Color.White,
+                    modifier = Modifier.size(15.dp),
                 )
             }
         }
@@ -2192,6 +2375,13 @@ internal fun FeedAutoplayVideoPreview(
 
 @Composable
 private fun FeedImageViewer(url: String, mime: String?, onDismiss: () -> Unit) {
+    DisposableEffect(Unit) {
+        XyVideoPlaybackCoordinator.fullscreenOpenCount.intValue += 1
+        onDispose {
+            XyVideoPlaybackCoordinator.fullscreenOpenCount.intValue =
+                (XyVideoPlaybackCoordinator.fullscreenOpenCount.intValue - 1).coerceAtLeast(0)
+        }
+    }
     var scale by remember { mutableStateOf(1f) }
     var offset by remember { mutableStateOf(androidx.compose.ui.geometry.Offset.Zero) }
     val transformState = rememberTransformableState { zoomChange, panChange, _ ->

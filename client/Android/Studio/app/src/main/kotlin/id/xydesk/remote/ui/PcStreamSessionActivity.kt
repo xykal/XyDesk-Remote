@@ -350,8 +350,8 @@ class PcStreamSessionActivity : ComponentActivity() {
             when (json.optString("type")) {
                 "virtualDisplay" -> {
                     hostNotice.value = when (json.optString("status")) {
-                        "applied" -> "VD " + json.optInt("width") + "×" + json.optInt("height") +
-                            "@" + json.optInt("hz") + "Hz ✓"
+                        "applied" -> "VD " + json.optInt("width") + "x" + json.optInt("height") +
+                            "@" + json.optInt("hz") + "Hz"
                         "notInstalled" -> "VD: adapter belum terpasang di host (pasang via panel host)"
                         else -> "VD: " + json.optString("detail").ifBlank { "gagal" }
                     }
@@ -530,6 +530,30 @@ class PcStreamSessionActivity : ComponentActivity() {
     }
 
     override fun dispatchKeyEvent(event: KeyEvent): Boolean {
+        if (started.value && !sessionEnded.value) {
+            val src = event.source
+            val devSources = event.device?.sources ?: 0
+            val isMouse = (src and android.view.InputDevice.SOURCE_MOUSE) == android.view.InputDevice.SOURCE_MOUSE ||
+                (src and android.view.InputDevice.SOURCE_TOUCHPAD) == android.view.InputDevice.SOURCE_TOUCHPAD ||
+                ((devSources and android.view.InputDevice.SOURCE_MOUSE) == android.view.InputDevice.SOURCE_MOUSE &&
+                    event.device?.keyboardType != android.view.InputDevice.KEYBOARD_TYPE_ALPHABETIC)
+            if (isMouse && (event.keyCode == KeyEvent.KEYCODE_BACK || event.keyCode == KeyEvent.KEYCODE_FORWARD)) {
+                val down = event.action == KeyEvent.ACTION_DOWN
+                if (event.keyCode == KeyEvent.KEYCODE_BACK && (down || event.action == KeyEvent.ACTION_UP)) {
+                    dispatchMouseButton(XyHostMouseButton.RIGHT, down)
+                }
+                return true
+            }
+            val isPhysKbd = event.deviceId > 0 && event.device?.isVirtual == false &&
+                event.device?.keyboardType == android.view.InputDevice.KEYBOARD_TYPE_ALPHABETIC
+            if (isPhysKbd && (event.keyCode == KeyEvent.KEYCODE_ESCAPE || event.keyCode == KeyEvent.KEYCODE_BACK)) {
+                val down = event.action == KeyEvent.ACTION_DOWN
+                if (down || event.action == KeyEvent.ACTION_UP) {
+                    dispatchKeyVk(VK_ESCAPE, down)
+                }
+                return true
+            }
+        }
         if (!inputOpen.value) return super.dispatchKeyEvent(event)
         val vk = windowsVirtualKey(event.keyCode)
         if (vk == 0) return super.dispatchKeyEvent(event)
@@ -570,6 +594,18 @@ class PcStreamSessionActivity : ComponentActivity() {
     @Composable
     private fun PcStreamScreen() {
         if (videoReady.value) {
+            androidx.activity.compose.BackHandler {
+                runCatching {
+                    startActivity(
+                        android.content.Intent(this@PcStreamSessionActivity, XyDeskHomeActivity::class.java)
+                            .putExtra(EXTRA_SKIP_AUTO_RESUME, true)
+                            .addFlags(
+                                android.content.Intent.FLAG_ACTIVITY_REORDER_TO_FRONT or
+                                    android.content.Intent.FLAG_ACTIVITY_SINGLE_TOP,
+                            ),
+                    )
+                }
+            }
             Box(Modifier.fillMaxSize()) {
                 VideoStage()
                 FloatingSessionChatOverlay()
@@ -911,8 +947,18 @@ class PcStreamSessionActivity : ComponentActivity() {
                     color = Color.White,
                 )
                 Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    var voiceOn by remember { mutableStateOf(false) }
                     XyPillButton(
-                        text = if (isFps) "FPS 360° ✓" else "FPS 360°",
+                        text = if (voiceOn) "VOICE ON" else "VOICE OFF",
+                        onClick = {
+                            voiceOn = !voiceOn
+                            directClient?.setVoiceMicEnabled(voiceOn)
+                        },
+                        primary = voiceOn,
+                        compact = true,
+                    )
+                    XyPillButton(
+                        text = if (isFps) "FPS 360° ON" else "FPS 360°",
                         onClick = { fpsGameMode.value = !isFps },
                         primary = isFps,
                         compact = true,
@@ -946,7 +992,24 @@ class PcStreamSessionActivity : ComponentActivity() {
                         compact = true,
                     )
                     XyPillButton(
-                        text = xy("TUTUP", "EXIT"),
+                        text = xy("BERANDA", "HOME"),
+                        onClick = {
+                            runCatching {
+                                startActivity(
+                                    android.content.Intent(this@PcStreamSessionActivity, XyDeskHomeActivity::class.java)
+                                        .putExtra(EXTRA_SKIP_AUTO_RESUME, true)
+                                        .addFlags(
+                                            android.content.Intent.FLAG_ACTIVITY_REORDER_TO_FRONT or
+                                                android.content.Intent.FLAG_ACTIVITY_SINGLE_TOP,
+                                        ),
+                                )
+                            }
+                        },
+                        primary = false,
+                        compact = true,
+                    )
+                    XyPillButton(
+                        text = xy("PUTUS", "DISCONNECT"),
                         onClick = {
                             directClient?.close()
                             viewer?.stop()
