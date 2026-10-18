@@ -3295,11 +3295,12 @@ function offlineTranslateFallback(text, country = "ID") {
   return { translated: out, targetLang: "ID", sourceLang: "en" };
 }
 
-async function fetchGoogleClients5Translate(text, sourceLang, targetLang) {
+async function fetchGoogleClients5Translate(text, sourceLang, targetLang, signal) {
   const q = encodeURIComponent(text);
   const sl = sourceLang || "auto";
   const url = `https://clients5.google.com/translate_a/t?client=dict-chrome-ex&sl=${sl}&tl=${targetLang}&q=${q}`;
   const res = await fetch(url, {
+    signal,
     headers: {
       "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
       Accept: "application/json,text/plain,*/*",
@@ -3320,11 +3321,12 @@ async function fetchGoogleClients5Translate(text, sourceLang, targetLang) {
   throw new Error("clients5_bad_payload");
 }
 
-async function fetchGoogleTranslate(text, sourceLang, targetLang) {
+async function fetchGoogleTranslate(text, sourceLang, targetLang, signal) {
   const q = encodeURIComponent(text);
   const sl = sourceLang || "auto";
   const url = `https://translate.googleapis.com/translate_a/single?client=dict-chrome-ex&sl=${sl}&tl=${targetLang}&dt=t&q=${q}`;
   const res = await fetch(url, {
+    signal,
     headers: {
       "User-Agent": "Mozilla/5.0 (Linux; Android 15) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Mobile Safari/537.36",
       Accept: "application/json,text/plain,*/*",
@@ -3363,7 +3365,7 @@ function guessSourceLang(text, country = "") {
   return byCountry[cc] || "en";
 }
 
-async function fetchMyMemoryTranslate(text, sourceLang, targetLang) {
+async function fetchMyMemoryTranslate(text, sourceLang, targetLang, signal) {
   const q = encodeURIComponent(text);
   let sl = !sourceLang || sourceLang === "auto" ? guessSourceLang(text, "") : sourceLang;
   if (sl.toLowerCase() === String(targetLang || "").toLowerCase()) {
@@ -3371,6 +3373,7 @@ async function fetchMyMemoryTranslate(text, sourceLang, targetLang) {
   }
   const url = `https://api.mymemory.translated.net/get?q=${q}&langpair=${encodeURIComponent(sl)}%7C${encodeURIComponent(targetLang)}`;
   const res = await fetch(url, {
+    signal,
     headers: {
       "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
       Accept: "application/json",
@@ -3383,7 +3386,36 @@ async function fetchMyMemoryTranslate(text, sourceLang, targetLang) {
   return translated;
 }
 
+// One deadline for all translation providers, including response body reads.
+// Receipt/storage must not wait indefinitely on external translation services.
+export async function withChatTranslationBudget(task, fallback, timeoutMs = 2_000) {
+  const controller = new AbortController();
+  let timer;
+  const deadline = new Promise((resolve) => {
+    timer = setTimeout(() => {
+      controller.abort();
+      resolve(fallback());
+    }, timeoutMs);
+  });
+  try {
+    return await Promise.race([
+      Promise.resolve().then(() => task(controller.signal)).catch(() => fallback()),
+      deadline,
+    ]);
+  } finally {
+    clearTimeout(timer);
+    controller.abort();
+  }
+}
+
 async function translateChatText(text, country = "ID") {
+  return withChatTranslationBudget(
+    (signal) => translateChatTextWithinBudget(text, country, signal),
+    () => offlineTranslateFallback(text, country),
+  );
+}
+
+async function translateChatTextWithinBudget(text, country, signal) {
   const clean = String(text || "").trim();
   if (!clean) return { translated: "", targetLang: "EN", sourceLang: "id" };
   const guessedSl = guessSourceLang(clean, country);
@@ -3392,11 +3424,12 @@ async function translateChatText(text, country = "ID") {
   const primaryLabel = isSourceId ? "EN" : "ID";
 
   // Jalur 1: Google clients5 (client=dict-chrome-ex, bebas rate-limit 429 & deteksi semua bahasa)
+  if (signal.aborted) return offlineTranslateFallback(clean, country);
   try {
-    const c5 = await fetchGoogleClients5Translate(clean, "auto", primaryTarget);
+    const c5 = await fetchGoogleClients5Translate(clean, "auto", primaryTarget, signal);
     const det = (c5.detected || guessedSl).toLowerCase();
     if (det === "id" && primaryTarget === "id") {
-      const c5En = await fetchGoogleClients5Translate(clean, "id", "en");
+      const c5En = await fetchGoogleClients5Translate(clean, "id", "en", signal);
       if (c5En.translated) {
         return { translated: c5En.translated, targetLang: "EN", sourceLang: "id" };
       }
@@ -3413,11 +3446,12 @@ async function translateChatText(text, country = "ID") {
   }
 
   // Jalur 2: Google Translate dict-chrome-ex single
+  if (signal.aborted) return offlineTranslateFallback(clean, country);
   try {
-    const gtx = await fetchGoogleTranslate(clean, "auto", primaryTarget);
+    const gtx = await fetchGoogleTranslate(clean, "auto", primaryTarget, signal);
     const det = (gtx.detected || guessedSl).toLowerCase();
     if (det === "id" && primaryTarget === "id") {
-      const gtxEn = await fetchGoogleTranslate(clean, "id", "en");
+      const gtxEn = await fetchGoogleTranslate(clean, "id", "en", signal);
       if (gtxEn.translated) {
         return { translated: gtxEn.translated, targetLang: "EN", sourceLang: "id" };
       }
@@ -3434,8 +3468,9 @@ async function translateChatText(text, country = "ID") {
   }
 
   // Jalur 3: MyMemory API
+  if (signal.aborted) return offlineTranslateFallback(clean, country);
   try {
-    const mm = await fetchMyMemoryTranslate(clean, guessedSl, primaryTarget);
+    const mm = await fetchMyMemoryTranslate(clean, guessedSl, primaryTarget, signal);
     if (mm && mm.toLowerCase() !== clean.toLowerCase()) {
       return {
         translated: mm,

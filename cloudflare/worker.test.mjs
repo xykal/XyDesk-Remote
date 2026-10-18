@@ -6,6 +6,7 @@ import worker, {
   CommunityJokes,
   FeedbackBoard,
   GlobalChat,
+  withChatTranslationBudget,
   PcSignalRoom,
   resetReleaseLookupCache,
 } from "./worker.mjs";
@@ -1920,3 +1921,19 @@ test("ronde 48: global chat direct reply (/api/chat/send) + OneSignal push + Pla
   assert.ok(ogGoodJson.image.includes("opengraph.githubassets.com"));
 });
 
+
+
+test("chat translation shares a deadline even when a provider ignores abort", async () => {
+  let signal;
+  const result = await withChatTranslationBudget((s) => {
+    signal = s;
+    return new Promise(() => {});
+  }, () => "fallback", 20);
+  assert.equal(result, "fallback");
+  assert.equal(signal.aborted, true);
+});
+
+test("chat translation keeps fast results and falls back on provider errors", async () => {
+  assert.equal(await withChatTranslationBudget(async () => "translated", () => "fallback", 500), "translated");
+  assert.equal(await withChatTranslationBudget(async () => { throw new Error("offline"); }, () => "fallback", 500), "fallback");
+});
