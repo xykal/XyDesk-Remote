@@ -1,0 +1,77 @@
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="160dp"
+    android:height="160dp"
+    android:viewportWidth="160"
+    android:viewportHeight="160">
+    <!-- Die-cut matte white sticker border -->
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M36,24 C48,24 58,34 64,42 C74,40 86,40 96,42 C102,34 112,24 124,24 C134,24 138,40 132,58 C140,72 140,96 132,114 C122,134 102,142 80,142 C58,142 38,134 28,114 C20,96 20,72 28,58 C22,40 26,24 36,24 Z" />
+    <!-- Shiba ears (warm caramel matte) -->
+    <path
+        android:fillColor="#D97706"
+        android:strokeColor="#27272A"
+        android:strokeWidth="4.5"
+        android:strokeLineJoin="round"
+        android:pathData="M36,62 L32,30 L62,46 Z" />
+    <path
+        android:fillColor="#FEF3C7"
+        android:pathData="M40,56 L38,38 L56,47 Z" />
+    <path
+        android:fillColor="#D97706"
+        android:strokeColor="#27272A"
+        android:strokeWidth="4.5"
+        android:strokeLineJoin="round"
+        android:pathData="M124,62 L128,30 L98,46 Z" />
+    <path
+        android:fillColor="#FEF3C7"
+        android:pathData="M120,56 L122,38 L104,47 Z" />
+    <!-- Shiba head -->
+    <path
+        android:fillColor="#F59E0B"
+        android:strokeColor="#27272A"
+        android:strokeWidth="4.5"
+        android:strokeLineJoin="round"
+        android:pathData="M80,42 C112,42 132,62 130,94 C128,120 108,134 80,134 C52,134 32,120 30,94 C28,62 48,42 80,42 Z" />
+    <!-- Cream Shiba cheeks & muzzle -->
+    <path
+        android:fillColor="#FFFBEB"
+        android:pathData="M36,92 C36,74 58,74 80,74 C102,74 124,74 124,92 C124,118 104,130 80,130 C56,130 36,118 36,92 Z" />
+    <!-- Cream eyebrow dots -->
+    <path
+        android:fillColor="#FFFBEB"
+        android:pathData="M56,58 a5,3.5 0 1,0 10,0 a5,3.5 0 1,0 -10,0" />
+    <path
+        android:fillColor="#FFFBEB"
+        android:pathData="M94,58 a5,3.5 0 1,0 10,0 a5,3.5 0 1,0 -10,0" />
+    <!-- Happy smiling eyes -->
+    <path
+        android:fillColor="#00000000"
+        android:strokeColor="#27272A"
+        android:strokeWidth="4.5"
+        android:strokeLineCap="round"
+        android:pathData="M52,72 Q60,64 68,72" />
+    <path
+        android:fillColor="#00000000"
+        android:strokeColor="#27272A"
+        android:strokeWidth="4.5"
+        android:strokeLineCap="round"
+        android:pathData="M92,72 Q100,64 108,72" />
+    <!-- Nose & happy smile -->
+    <path
+        android:fillColor="#27272A"
+        android:pathData="M75,80 C75,77 85,77 85,80 C85,84 80,86 80,86 C80,86 75,84 75,80 Z" />
+    <path
+        android:fillColor="#00000000"
+        android:strokeColor="#27272A"
+        android:strokeWidth="4"
+        android:strokeLineCap="round"
+        android:pathData="M70,88 Q80,96 90,88" />
+    <!-- Big matte crimson heart held in paws -->
+    <path
+        android:fillColor="#E11D48"
+        android:strokeColor="#27272A"
+        android:strokeWidth="4"
+        android:strokeLineJoin="round"
+        android:pathData="M80,132 C80,132 54,116 54,102 C54,93 64,90 72,96 C76,99 80,104 80,104 C80,104 84,99 88,96 C96,90 106,93 106,102 C106,116 80,132 80,132 Z" />
+</vector>

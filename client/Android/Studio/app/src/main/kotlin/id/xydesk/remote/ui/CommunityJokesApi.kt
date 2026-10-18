@@ -140,11 +140,28 @@ internal class CommunityJokesApi(context: Context) {
         }.getOrNull()
     }
 
+    suspend fun like(jokeId: String): CommunityJoke = withContext(Dispatchers.IO) {
+        val gh = getVerifiedGitHubLogin(appContext)
+        val payload = JSONObject().put("client_id", clientId)
+        (displayName() ?: gh)?.let { payload.put("display_name", it) }
+        gh?.let { payload.put("github_login", it) }
+        val body = request(
+            method = "POST",
+            path = "/api/jokes/$jokeId/like",
+            payload = payload,
+        )
+        parseJoke(body.optJSONObject("joke") ?: error("Missing liked joke"))
+    }
+
     suspend fun react(jokeId: String, emoji: String): CommunityJoke = withContext(Dispatchers.IO) {
+        val gh = getVerifiedGitHubLogin(appContext)
+        val payload = JSONObject().put("client_id", clientId).put("emoji", emoji)
+        (displayName() ?: gh)?.let { payload.put("display_name", it) }
+        gh?.let { payload.put("github_login", it) }
         val body = request(
             method = "POST",
             path = "/api/jokes/$jokeId/reaction",
-            payload = JSONObject().put("client_id", clientId).put("emoji", emoji),
+            payload = payload,
         )
         parseJoke(body.optJSONObject("joke") ?: error("Missing reacted joke"))
     }
@@ -406,8 +423,10 @@ internal class CommunityJokesApi(context: Context) {
             id = value.optString("id"),
             text = value.optString("text"),
             createdAtMillis = value.optLong("created_at", 0L),
+            likesCount = value.optInt("likes_count", rawReactions.optInt("❤️", 0)).coerceAtLeast(0),
+            viewerLiked = value.optBoolean("viewer_liked", value.optString("viewer_reaction") == "❤️"),
             reactions = reactions,
-            viewerReaction = value.optString("viewer_reaction").takeIf { it in REACTIONS },
+            viewerReaction = value.optString("viewer_reaction").takeIf { it in REACTIONS && it != "❤️" },
             authorName = value.strOrNull("author_name"),
             githubLogin = value.strOrNull("github_login"),
             commentsTotal = value.optInt("comments_total", 0),
@@ -521,8 +540,8 @@ internal class CommunityJokesApi(context: Context) {
             "😭", "💀", "👎", "🤔", "😍", "🥳", "😎", "👏",
             "💯", "🤣", "😡", "😱", "🥶", "🤯", "😴", "🍿", "⚡", "🏆",
         )
-        // Reaksi cepat gaya WhatsApp
-        val QUICK_REACTIONS = listOf("👍", "❤️", "😂", "😮", "😢", "🙏", "🔥")
+        // Reaksi cepat gaya WhatsApp (terpisah dari Like Hati)
+        val QUICK_REACTIONS = listOf("👍", "😂", "😮", "😢", "🙏", "🔥", "🎉", "💯")
     }
 }
 
@@ -613,6 +632,8 @@ internal data class CommunityJoke(
     val id: String,
     val text: String,
     val createdAtMillis: Long,
+    val likesCount: Int = 0,
+    val viewerLiked: Boolean = false,
     val reactions: Map<String, Int>,
     val viewerReaction: String?,
     val authorName: String? = null,

@@ -451,17 +451,17 @@ fun RdpFreeScreen(onBack: () -> Unit, onConnect: (ConnectionProfile) -> Unit) {
                 // =========================================================
                 if (token.isNullOrBlank() || login.isNullOrBlank()) {
                     XyEmptyState(
-                        title = "Cloud RDP & VPS Gratis 6 Jam Nonstop",
-                        subtitle = "Jalankan Windows Server RDP, Linux Desktop XFCE4, atau VPS SSH langsung dari kuota GitHub Actions milikmu. Mendukung penyimpanan otomatis Login Browser (Google/Chrome), Game, dan XyDeskTools.exe.",
+                        title = "Cloud RDP & VPS",
+                        subtitle = "Login GitHub untuk menjalankan Windows RDP, Linux XFCE, atau SSH.",
                         icon = XyIcons.Monitor,
-                        actionLabel = "Login dengan GitHub (Authorize)",
+                        actionLabel = "Login GitHub",
                         onAction = {
                             errorMessage = null
                             GitHubDirectOAuthController.open(
                                 onSuccess = { tok, user ->
                                     token = tok
                                     login = user
-                                    successMessage = "Terhubung ke GitHub sebagai @$user!"
+                                    successMessage = "Login @$user berhasil"
                                 },
                                 onError = { err ->
                                     errorMessage = err
@@ -471,28 +471,27 @@ fun RdpFreeScreen(onBack: () -> Unit, onConnect: (ConnectionProfile) -> Unit) {
                     )
                 } else {
                     // =========================================================
-                    // BAR IDENTITAS AKUN GITHUB & REPOSITORY RINGKAS
+                    // BAR IDENTITAS AKUN GITHUB RINGKAS
                     // =========================================================
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .clip(RoundedCornerShape(18.dp))
+                            .clip(RoundedCornerShape(14.dp))
                             .background(MaterialTheme.colorScheme.surface)
-                            .border(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.55f), RoundedCornerShape(18.dp))
-                            .padding(horizontal = 14.dp, vertical = 12.dp),
+                            .padding(horizontal = 12.dp, vertical = 10.dp),
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.spacedBy(10.dp),
                     ) {
                         Box(
                             modifier = Modifier
-                                .size(38.dp)
+                                .size(34.dp)
                                 .clip(CircleShape)
                                 .background(MaterialTheme.colorScheme.surfaceVariant),
                             contentAlignment = Alignment.Center,
                         ) {
-                            GitHubLogoIcon(size = 20.dp, tint = MaterialTheme.colorScheme.onSurface)
+                            GitHubLogoIcon(size = 18.dp, tint = MaterialTheme.colorScheme.onSurface)
                         }
-                        Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                        Column(modifier = Modifier.weight(1f)) {
                             Row(
                                 verticalAlignment = Alignment.CenterVertically,
                                 horizontalArrangement = Arrangement.spacedBy(6.dp),
@@ -500,27 +499,23 @@ fun RdpFreeScreen(onBack: () -> Unit, onConnect: (ConnectionProfile) -> Unit) {
                                 Text(
                                     text = "@${login ?: "-"}",
                                     style = MaterialTheme.typography.titleSmall,
-                                    fontWeight = FontWeight.ExtraBold,
+                                    fontWeight = FontWeight.Bold,
                                     color = MaterialTheme.colorScheme.onSurface,
                                     maxLines = 1,
                                     overflow = TextOverflow.Ellipsis,
                                 )
-                                if (isFounderAccount(login)) {
-                                    XyFounderBadge(compact = true)
-                                }
-                            }
-                            val wfStatusText = when {
-                                initialLoading -> "Memeriksa repository XyRDP…"
-                                !forkReady -> "Repo XyRDP belum di-fork"
-                                setupStatus?.workflowActive == true -> "$login/${XyRdpConfig.FORK_REPO_NAME} · Siap"
-                                else -> "$login/${XyRdpConfig.FORK_REPO_NAME} · Perlu sinkron"
+                                XyUserRoleBadges(name = login, githubLogin = login, compact = true)
                             }
                             Text(
-                                text = wfStatusText,
-                                style = MaterialTheme.typography.bodySmall,
+                                text = when {
+                                    initialLoading -> "Memuat…"
+                                    !forkReady -> "Belum di-fork"
+                                    setupStatus?.workflowActive == true -> "Aktif · Siap"
+                                    else -> "Perlu sinkron"
+                                },
+                                style = MaterialTheme.typography.labelSmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                                 maxLines = 1,
-                                overflow = TextOverflow.Ellipsis,
                             )
                         }
                         if (forkReady) {
@@ -528,17 +523,13 @@ fun RdpFreeScreen(onBack: () -> Unit, onConnect: (ConnectionProfile) -> Unit) {
                                 text = "Sinkron",
                                 onClick = {
                                     busy = true
-                                    busyLabel = "Menyinkronkan fork dengan xykal/XyRDP terbaru…"
+                                    busyLabel = "Menyinkronkan…"
                                     scope.launch {
                                         try {
-                                            val okSync = XyRdpClient.syncForkWithUpstream(token!!, login!!)
+                                            XyRdpClient.syncForkWithUpstream(token!!, login!!)
                                             XyRdpClient.enableWorkflow(token!!, login!!)
                                             refreshAll(token!!, login!!)
-                                            successMessage = if (okSync) {
-                                                "Fork disinkronkan dengan pembaruan anti-disconnect terbaru."
-                                            } else {
-                                                "Status fork diperbarui."
-                                            }
+                                            successMessage = "Tersinkronisasi"
                                         } catch (e: Exception) {
                                             reportError(e)
                                         } finally {
@@ -560,31 +551,27 @@ fun RdpFreeScreen(onBack: () -> Unit, onConnect: (ConnectionProfile) -> Unit) {
                         )
                     }
 
-                    // =========================================================
-                    // SKELETON LOADER SAAT MEMUAT DATA PERTAMA KALI
-                    // =========================================================
                     if (initialLoading && setupStatus == null) {
-                        XyLoadingSkeletonCard(lines = 3, showAvatar = true)
-                        XyLoadingSkeletonCard(lines = 4, showAvatar = false)
+                        XyLoadingSkeletonCard(lines = 2, showAvatar = false)
+                        XyLoadingSkeletonCard(lines = 3, showAvatar = false)
                     } else if (!forkReady) {
-                        // EMPTY STATE REPOSITORY BELUM DI-FORK
                         XyEmptyState(
-                            title = "Siapkan Repository XyRDP Milikmu",
-                            subtitle = "Langkah pertama: fork template resmi xykal/XyRDP ke akun GitHub @$login agar workflow RDP 6 jam dapat berjalan di akunmu.",
+                            title = "Fork Repository XyRDP",
+                            subtitle = "Buat fork template XyRDP ke akun @$login untuk mulai.",
                             icon = XyIcons.Monitor,
-                            actionLabel = "Fork Template Resmi xykal/XyRDP",
+                            actionLabel = "Fork XyRDP",
                             onAction = {
                                 busy = true
-                                busyLabel = "Membuat fork xykal/XyRDP & mengaktifkan Actions…"
+                                busyLabel = "Membuat fork…"
                                 scope.launch {
                                     try {
                                         if (XyRdpClient.createFork(token!!)) {
-                                            delay(2200)
+                                            delay(2000)
                                             XyRdpClient.enableWorkflow(token!!, login!!)
                                             refreshAll(token!!, login!!)
-                                            successMessage = "Fork berhasil dibuat dan GitHub Actions telah diaktifkan!"
+                                            successMessage = "Fork siap digunakan"
                                         } else {
-                                            errorMessage = "Gagal membuat fork XyRDP. Pastikan akun GitHub aktif dan memiliki izin repo."
+                                            errorMessage = "Gagal membuat fork XyRDP."
                                         }
                                     } catch (e: Exception) {
                                         reportError(e)
@@ -595,11 +582,8 @@ fun RdpFreeScreen(onBack: () -> Unit, onConnect: (ConnectionProfile) -> Unit) {
                             },
                         )
                     } else {
-                        // =========================================================
-                        // NAVIGASI 3 TAB BERSIH (TIDAK MENUMPUK SEMUA KARTU SEKALIGUS)
-                        // =========================================================
                         XySegmented(
-                            options = listOf("Sesi & Koneksi", "OS & Fitur", "Secrets & Akses"),
+                            options = listOf("Sesi", "Opsi", "Secrets"),
                             selectedIndex = activeTab,
                             onSelect = { activeTab = it },
                             modifier = Modifier.fillMaxWidth(),
@@ -630,37 +614,30 @@ fun RdpFreeScreen(onBack: () -> Unit, onConnect: (ConnectionProfile) -> Unit) {
                                     Row(
                                         modifier = Modifier
                                             .fillMaxWidth()
-                                            .clip(RoundedCornerShape(16.dp))
+                                            .clip(RoundedCornerShape(12.dp))
                                             .background(MaterialTheme.colorScheme.surface)
-                                            .border(1.dp, MaterialTheme.colorScheme.outline, RoundedCornerShape(16.dp))
                                             .clickable { activeTab = 2 }
-                                            .padding(14.dp),
+                                            .padding(horizontal = 12.dp, vertical = 10.dp),
                                         verticalAlignment = Alignment.CenterVertically,
-                                        horizontalArrangement = Arrangement.spacedBy(10.dp),
+                                        horizontalArrangement = Arrangement.spacedBy(8.dp),
                                     ) {
                                         Icon(
                                             imageVector = XyIcons.Key,
                                             contentDescription = null,
                                             tint = MaterialTheme.colorScheme.primary,
-                                            modifier = Modifier.size(18.dp),
+                                            modifier = Modifier.size(16.dp),
                                         )
-                                        Column(Modifier.weight(1f)) {
-                                            Text(
-                                                text = "Lengkapi GitHub Secrets Sebelum Mulai",
-                                                style = MaterialTheme.typography.labelLarge,
-                                                fontWeight = FontWeight.Bold,
-                                            )
-                                            Text(
-                                                text = "Ketuk di sini untuk mengatur RDP_PASSWORD & ${if (akses == "tailscale") "TAILSCALE_AUTH_KEY" else "PORTMAP_OVPN_CONFIG"} di tab Secrets.",
-                                                style = MaterialTheme.typography.bodySmall,
-                                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                            )
-                                        }
+                                        Text(
+                                            text = "Secrets belum lengkap · Ketuk untuk atur",
+                                            style = MaterialTheme.typography.labelMedium,
+                                            fontWeight = FontWeight.SemiBold,
+                                            modifier = Modifier.weight(1f),
+                                        )
                                         Icon(
                                             imageVector = XyIcons.ChevronRight,
                                             contentDescription = null,
                                             tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                                            modifier = Modifier.size(16.dp),
+                                            modifier = Modifier.size(15.dp),
                                         )
                                     }
                                 }
@@ -679,7 +656,7 @@ fun RdpFreeScreen(onBack: () -> Unit, onConnect: (ConnectionProfile) -> Unit) {
                                         ) {
                                             Box(
                                                 modifier = Modifier
-                                                    .size(10.dp)
+                                                    .size(9.dp)
                                                     .clip(CircleShape)
                                                     .background(
                                                         when (vs?.phase) {
@@ -691,14 +668,14 @@ fun RdpFreeScreen(onBack: () -> Unit, onConnect: (ConnectionProfile) -> Unit) {
                                                     ),
                                             )
                                             Text(
-                                                text = vs?.phaseLabel ?: "Belum Ada Sesi Aktif",
+                                                text = vs?.phaseLabel ?: "Siap Mulai",
                                                 style = MaterialTheme.typography.titleSmall,
-                                                fontWeight = FontWeight.ExtraBold,
+                                                fontWeight = FontWeight.Bold,
                                             )
                                         }
                                         if (r != null) {
                                             Text(
-                                                text = "Run #${r.number}",
+                                                text = "#${r.number}",
                                                 style = MaterialTheme.typography.labelSmall,
                                                 fontFamily = FontFamily.Monospace,
                                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -706,105 +683,20 @@ fun RdpFreeScreen(onBack: () -> Unit, onConnect: (ConnectionProfile) -> Unit) {
                                         }
                                     }
 
-                                    vs?.validationNote?.let { note ->
-                                        Spacer(Modifier.height(4.dp))
-                                        Text(
-                                            text = note,
-                                            style = MaterialTheme.typography.bodySmall,
-                                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                        )
-                                    }
-
                                     // Progress tahapan workflow bila sedang berjalan
                                     vs?.progress?.let { prog ->
                                         if (prog.totalSteps > 0) {
-                                            Spacer(Modifier.height(10.dp))
+                                            Spacer(Modifier.height(8.dp))
                                             StatBar(
-                                                "Progres Tahap Boot",
-                                                "${prog.completedSteps}/${prog.totalSteps} tahap",
+                                                prog.currentStep ?: "Booting",
+                                                "${prog.completedSteps}/${prog.totalSteps}",
                                                 fraction(prog.completedSteps.toDouble(), prog.totalSteps.toDouble()),
                                             )
-                                            prog.currentStep?.let { cur ->
-                                                Spacer(Modifier.height(6.dp))
-                                                Text(
-                                                    text = "Sedang berjalan: $cur",
-                                                    style = MaterialTheme.typography.labelSmall,
-                                                    color = MaterialTheme.colorScheme.primary,
-                                                )
-                                            }
-                                            prog.failedStep?.let { fail ->
-                                                Spacer(Modifier.height(6.dp))
-                                                Text(
-                                                    text = "Tahap gagal: $fail",
-                                                    style = MaterialTheme.typography.labelSmall,
-                                                    color = Color(0xFFF87171),
-                                                )
-                                            }
-                                            Spacer(Modifier.height(6.dp))
-                                            Row(
-                                                modifier = Modifier.fillMaxWidth(),
-                                                horizontalArrangement = Arrangement.SpaceBetween,
-                                                verticalAlignment = Alignment.CenterVertically,
-                                            ) {
-                                                Text(
-                                                    text = if (showStepsDetail) "Sembunyikan rincian tahap ▲" else "Lihat rincian tahap (${prog.completedSteps}/${prog.totalSteps}) ▼",
-                                                    style = MaterialTheme.typography.labelSmall,
-                                                    fontWeight = FontWeight.SemiBold,
-                                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                                    modifier = Modifier.clickable { showStepsDetail = !showStepsDetail },
-                                                )
-                                                if (r?.url?.isNotBlank() == true) {
-                                                    Text(
-                                                        text = "Buka Log GitHub ↗",
-                                                        style = MaterialTheme.typography.labelSmall,
-                                                        fontWeight = FontWeight.SemiBold,
-                                                        color = MaterialTheme.colorScheme.primary,
-                                                        modifier = Modifier.clickable { openBrowser(r.url) },
-                                                    )
-                                                }
-                                            }
-                                            AnimatedVisibility(visible = showStepsDetail) {
-                                                Column(
-                                                    modifier = Modifier
-                                                        .fillMaxWidth()
-                                                        .padding(top = 8.dp)
-                                                        .clip(RoundedCornerShape(12.dp))
-                                                        .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.45f))
-                                                        .padding(10.dp),
-                                                    verticalArrangement = Arrangement.spacedBy(4.dp),
-                                                ) {
-                                                    prog.steps.forEachIndexed { idx, (sName, sState) ->
-                                                        val sym = when (sState) {
-                                                            "success" -> "✓"
-                                                            "in_progress" -> "⟳"
-                                                            "failure", "timed_out" -> "✕"
-                                                            else -> "·"
-                                                        }
-                                                        Text(
-                                                            text = "${idx + 1}. $sym $sName",
-                                                            style = MaterialTheme.typography.labelSmall,
-                                                            fontFamily = FontFamily.Monospace,
-                                                            color = when (sState) {
-                                                                "failure", "timed_out" -> Color(0xFFF87171)
-                                                                "in_progress" -> MaterialTheme.colorScheme.primary
-                                                                else -> MaterialTheme.colorScheme.onSurfaceVariant
-                                                            },
-                                                        )
-                                                    }
-                                                }
-                                            }
                                         }
                                     }
 
-                                    Spacer(Modifier.height(12.dp))
+                                    Spacer(Modifier.height(10.dp))
 
-                                    // Pemilih Cepat OS Target sebelum klik Mulai
-                                    Text(
-                                        text = "Target Sistem Operasi:",
-                                        style = MaterialTheme.typography.labelSmall,
-                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                    )
-                                    Spacer(Modifier.height(6.dp))
                                     Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                                         XyPillButton(
                                             text = "Windows",
@@ -844,17 +736,17 @@ fun RdpFreeScreen(onBack: () -> Unit, onConnect: (ConnectionProfile) -> Unit) {
                                         )
                                     }
 
-                                    Spacer(Modifier.height(10.dp))
+                                    Spacer(Modifier.height(8.dp))
                                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                                         XyPillButton(
-                                            text = if (isRunningOrQueued) "Sesi Berjalan" else "Mulai RDP ($duration mnt)",
+                                            text = if (isRunningOrQueued) "Berjalan" else "Mulai ($duration mnt)",
                                             onClick = { confirmAction = "start" },
                                             primary = true,
                                             enabled = !busy && !isRunningOrQueued,
                                             modifier = Modifier.weight(1.3f),
                                         )
                                         XyPillButton(
-                                            text = "Hentikan",
+                                            text = "Stop",
                                             onClick = { confirmAction = "stop" },
                                             primary = false,
                                             enabled = !busy && isRunningOrQueued,
@@ -1665,29 +1557,23 @@ private fun SecretStatusRow(
                 modifier = Modifier.size(13.dp),
             )
         }
-        Column(Modifier.weight(1f)) {
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(6.dp),
-            ) {
-                Text(
-                    text = name,
-                    style = MaterialTheme.typography.labelLarge,
-                    fontFamily = FontFamily.Monospace,
-                    fontWeight = FontWeight.Bold,
-                )
-                Text(
-                    text = if (configured) "Terpasang" else if (required) "Wajib" else "Opsional",
-                    style = MaterialTheme.typography.labelSmall,
-                    color = if (configured) Color(0xFF6EE7B7)
-                    else if (required) Color(0xFFFCA5A5)
-                    else MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-            }
+        Row(
+            modifier = Modifier.weight(1f),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
             Text(
-                text = desc,
+                text = name,
+                style = MaterialTheme.typography.labelLarge,
+                fontFamily = FontFamily.Monospace,
+                fontWeight = FontWeight.Bold,
+            )
+            Text(
+                text = if (configured) "Aktif" else if (required) "Wajib" else "Opsional",
                 style = MaterialTheme.typography.labelSmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                color = if (configured) Color(0xFF6EE7B7)
+                else if (required) Color(0xFFFCA5A5)
+                else MaterialTheme.colorScheme.onSurfaceVariant,
             )
         }
         Text(
@@ -1702,7 +1588,7 @@ private fun SecretStatusRow(
 @Composable
 private fun RdpFlatToggleRow(
     title: String,
-    subtitle: String,
+    subtitle: String = "",
     checked: Boolean,
     enabled: Boolean,
     onCheckedChange: (Boolean) -> Unit,
@@ -1710,25 +1596,19 @@ private fun RdpFlatToggleRow(
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .clip(RoundedCornerShape(12.dp))
+            .clip(RoundedCornerShape(10.dp))
             .clickable(enabled = enabled) { onCheckedChange(!checked) }
-            .padding(vertical = 8.dp, horizontal = 4.dp),
+            .padding(vertical = 6.dp, horizontal = 4.dp),
         verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(12.dp),
+        horizontalArrangement = Arrangement.spacedBy(10.dp),
     ) {
-        Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
-            Text(
-                text = title,
-                style = MaterialTheme.typography.bodyMedium,
-                fontWeight = FontWeight.SemiBold,
-                color = MaterialTheme.colorScheme.onSurface,
-            )
-            Text(
-                text = subtitle,
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-        }
+        Text(
+            text = title,
+            style = MaterialTheme.typography.bodyMedium,
+            fontWeight = FontWeight.Medium,
+            color = MaterialTheme.colorScheme.onSurface,
+            modifier = Modifier.weight(1f),
+        )
         androidx.compose.material3.Switch(
             checked = checked,
             enabled = enabled,

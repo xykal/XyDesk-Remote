@@ -10,6 +10,16 @@ import android.graphics.RectF
 import android.graphics.Typeface
 import android.util.Base64
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.LinearEasing
+import androidx.compose.animation.core.RepeatMode
+import androidx.compose.animation.core.Spring
+import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.animation.core.spring
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.Image
@@ -40,6 +50,7 @@ import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableIntStateOf
@@ -62,6 +73,7 @@ import androidx.compose.ui.graphics.StrokeJoin
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
@@ -77,55 +89,140 @@ import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import java.io.ByteArrayOutputStream
+import kotlin.math.cos
 import kotlin.math.min
+import kotlin.math.sin
 import kotlin.random.Random
+import kotlinx.coroutines.launch
 
 /**
- * Pemetaan kode reaksi atau karakter emoji ke representasi visual bergaya
- * iPhone / iOS / WhatsApp 3D Glossy (gradasi bola 3D, kilau spekular atas,
- * ekspresi khas Apple Color Emoji).
+ * Komponen Emoji Reaksi Asli (Native Color Emoji) dengan Animasi Interaktif
+ * (Pop-In Elastic Bounce + Gerakan Ekspresif Hidup sesuai jenis emoji + Ring Burst).
  */
 @Composable
 fun IosWhatsAppEmoji3D(
     codeOrEmoji: String = "",
     tag: String = "",
     size: Dp = 18.dp,
+    animated: Boolean = true,
     modifier: Modifier = Modifier
 ) {
     val activeInput = codeOrEmoji.ifBlank { tag }
     val norm = remember(activeInput) { normalizeReactionToIosType(activeInput) }
-    Canvas(modifier = modifier.requiredSize(size)) {
-        val s = this.size.minDimension
-        val cx = this.size.width / 2f
-        val cy = this.size.height / 2f
-        val r = s * 0.46f
+    val glyph = remember(norm, activeInput) { resolveNativeEmojiGlyph(norm, activeInput) }
 
-        when (norm) {
-            "heart" -> drawIos3DHeart(cx, cy, r)
-            "fire" -> drawIos3DFire(cx, cy, r)
-            "like" -> drawIos3DThumb(cx, cy, r, up = true)
-            "dislike" -> drawIos3DThumb(cx, cy, r, up = false)
-            "laugh" -> drawIos3DFace(cx, cy, r, mode = "laugh")
-            "rofl" -> drawIos3DFace(cx, cy, r, mode = "rofl")
-            "sob" -> drawIos3DFace(cx, cy, r, mode = "sob")
-            "love_eyes" -> drawIos3DFace(cx, cy, r, mode = "love_eyes")
-            "cool" -> drawIos3DFace(cx, cy, r, mode = "cool")
-            "think" -> drawIos3DFace(cx, cy, r, mode = "think")
-            "party" -> drawIos3DFace(cx, cy, r, mode = "party")
-            "wow" -> drawIos3DFace(cx, cy, r, mode = "wow")
-            "angry" -> drawIos3DFace(cx, cy, r, mode = "angry")
-            "cold" -> drawIos3DFace(cx, cy, r, mode = "cold")
-            "mindblown" -> drawIos3DFace(cx, cy, r, mode = "mindblown")
-            "skull" -> drawIos3DSkull(cx, cy, r)
-            "hundred" -> drawIos3DHundred(cx, cy, r)
-            "pray" -> drawIos3DPray(cx, cy, r)
-            "clap" -> drawIos3DClap(cx, cy, r)
-            "bolt" -> drawIos3DBolt(cx, cy, r)
-            "gem" -> drawIos3DGem(cx, cy, r)
-            "crown", "trophy" -> drawIos3DCrown(cx, cy, r)
-            "check" -> drawIos3DCheck(cx, cy, r)
-            else -> drawIos3DFace(cx, cy, r, mode = "laugh")
+    val popScale = remember(activeInput) { Animatable(if (animated) 0.38f else 1f) }
+    val burstProgress = remember(activeInput) { Animatable(0f) }
+
+    LaunchedEffect(activeInput) {
+        if (animated) {
+            launch {
+                popScale.snapTo(0.38f)
+                popScale.animateTo(
+                    targetValue = 1.28f,
+                    animationSpec = tween(durationMillis = 170, easing = FastOutSlowInEasing)
+                )
+                popScale.animateTo(
+                    targetValue = 1f,
+                    animationSpec = spring(
+                        dampingRatio = Spring.DampingRatioMediumBouncy,
+                        stiffness = Spring.StiffnessMedium
+                    )
+                )
+            }
+            launch {
+                burstProgress.snapTo(0f)
+                burstProgress.animateTo(
+                    targetValue = 1f,
+                    animationSpec = tween(durationMillis = 480, easing = FastOutSlowInEasing)
+                )
+            }
         }
+    }
+
+    val infinite = rememberInfiniteTransition(label = "emojiLiveAnim")
+    val phase by infinite.animateFloat(
+        initialValue = 0f,
+        targetValue = 1f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(durationMillis = 1400, easing = LinearEasing),
+            repeatMode = RepeatMode.Restart
+        ),
+        label = "emojiPhase"
+    )
+
+    val angleRad = phase * 2f * PI.toFloat()
+    val liveScale = if (!animated) 1f else when (norm) {
+        "heart", "love_eyes" -> 1f + 0.14f * kotlin.math.abs(sin(angleRad * 1.5f))
+        "fire", "bolt", "hundred" -> 1f + 0.10f * sin(angleRad * 2f)
+        "party", "crown" -> 1f + 0.09f * cos(angleRad)
+        else -> 1f + 0.06f * sin(angleRad)
+    }
+    val liveRotation = if (!animated) 0f else when (norm) {
+        "laugh", "rofl", "party", "clap" -> sin(angleRad * 2f) * 10f
+        "like", "dislike", "pray" -> sin(angleRad) * 7f
+        "think", "wow", "mindblown" -> cos(angleRad) * 6f
+        else -> sin(angleRad) * 4f
+    }
+
+    Box(
+        modifier = modifier.requiredSize(size),
+        contentAlignment = Alignment.Center
+    ) {
+        if (animated && burstProgress.value in 0.02f..0.95f) {
+            val bp = burstProgress.value
+            val burstAlpha = (1f - bp).coerceIn(0f, 1f)
+            Canvas(modifier = Modifier.fillMaxSize()) {
+                val cx = this.size.width / 2f
+                val cy = this.size.height / 2f
+                val maxR = this.size.minDimension * 0.56f
+                for (i in 0 until 6) {
+                    val a = (i * 60f) * (PI.toFloat() / 180f)
+                    val dist = maxR * (0.45f + 0.55f * bp)
+                    drawCircle(
+                        color = Color(0xFFFBBF24).copy(alpha = 0.65f * burstAlpha),
+                        radius = (this.size.minDimension * 0.07f) * (1f - bp * 0.5f),
+                        center = Offset(cx + cos(a) * dist, cy + sin(a) * dist)
+                    )
+                }
+            }
+        }
+        Text(
+            text = glyph,
+            fontSize = (size.value * 0.78f).sp,
+            modifier = Modifier
+                .scale(popScale.value * liveScale)
+                .rotate(liveRotation)
+        )
+    }
+}
+
+private fun resolveNativeEmojiGlyph(norm: String, raw: String): String {
+    return when (norm) {
+        "heart" -> "\u2764\uFE0F"
+        "fire" -> "\uD83D\uDD25"
+        "like" -> "\uD83D\uDC4D"
+        "dislike" -> "\uD83D\uDC4E"
+        "laugh" -> "\uD83D\uDE02"
+        "rofl" -> "\uD83E\uDD23"
+        "sob" -> "\uD83D\uDE2D"
+        "love_eyes" -> "\uD83D\uDE0D"
+        "cool" -> "\uD83D\uDE0E"
+        "think" -> "\uD83E\uDD14"
+        "party" -> "\uD83C\uDF89"
+        "wow" -> "\uD83D\uDE2E"
+        "angry" -> "\uD83D\uDE21"
+        "cold" -> "\uD83E\uDD76"
+        "mindblown" -> "\uD83E\uDD2F"
+        "skull" -> "\uD83D\uDC80"
+        "hundred" -> "\uD83D\uDCAF"
+        "pray" -> "\uD83D\uDE4F"
+        "clap" -> "\uD83D\uDC4F"
+        "bolt" -> "\u26A1"
+        "gem" -> "\uD83D\uDC8E"
+        "crown", "trophy" -> "\uD83D\uDC51"
+        "check" -> "\u2705"
+        else -> if (raw.any { it.code > 0x2000 }) raw.trim() else "\uD83D\uDD25"
     }
 }
 
@@ -1364,16 +1461,16 @@ fun BubbleShapeAndAiSection(
                 val sel = currentShape == id
                 Surface(
                     shape = RoundedCornerShape(10.dp),
-                    color = if (sel) Color(0xFF581C87) else Color(0xFF141824),
+                    color = if (sel) Color(0xFFF4F4F5) else Color(0xFF18181B),
                     border = BorderStroke(
                         1.dp,
-                        if (sel) Color(0xFFC084FC) else Color.White.copy(alpha = 0.08f)
+                        if (sel) Color.White else Color.White.copy(alpha = 0.10f)
                     ),
                     modifier = Modifier.clickable { onSelectShape(id) }
                 ) {
                     Text(
                         text = label,
-                        color = if (sel) Color(0xFFFAF5FF) else Color(0xFFA1A1AA),
+                        color = if (sel) Color(0xFF09090B) else Color(0xFFA1A1AA),
                         fontSize = 11.sp,
                         fontWeight = if (sel) FontWeight.Bold else FontWeight.Medium,
                         modifier = Modifier.padding(horizontal = 11.dp, vertical = 7.dp)
@@ -1382,7 +1479,7 @@ fun BubbleShapeAndAiSection(
             }
         }
 
-        // 2. Pilihan Elemen Melayang Beranimasi di dalam Bubble
+        // 2. Pilihan Elemen Melayang Beranimasi di dalam Bubble (Tanpa Emoji di Kontrol UI)
         Text(
             text = "Elemen Melayang Beranimasi",
             color = Color(0xFFD4D4D8),
@@ -1396,27 +1493,27 @@ fun BubbleShapeAndAiSection(
             horizontalArrangement = Arrangement.spacedBy(6.dp)
         ) {
             listOf(
-                "none" to "Tanpa",
-                "crystals" to "💎 Kristal Ungu",
-                "orbs" to "🔮 Bola Plasma",
-                "stars" to "✨ Bintang",
-                "cyber" to "⬡ Cyber HUD",
-                "sakura" to "🌸 Kelopak",
-                "fireflies" to "🌟 Kunang-Kunang"
+                "none" to "Tanpa Efek",
+                "crystals" to "Kristal",
+                "orbs" to "Bola Plasma",
+                "stars" to "Bintang",
+                "cyber" to "Cyber HUD",
+                "sakura" to "Kelopak",
+                "fireflies" to "Kunang-Kunang"
             ).forEach { (id, label) ->
                 val sel = currentFloating == id
                 Surface(
                     shape = RoundedCornerShape(10.dp),
-                    color = if (sel) Color(0xFF581C87) else Color(0xFF141824),
+                    color = if (sel) Color(0xFFF4F4F5) else Color(0xFF18181B),
                     border = BorderStroke(
                         1.dp,
-                        if (sel) Color(0xFFC084FC) else Color.White.copy(alpha = 0.08f)
+                        if (sel) Color.White else Color.White.copy(alpha = 0.10f)
                     ),
                     modifier = Modifier.clickable { onSelectFloating(id) }
                 ) {
                     Text(
                         text = label,
-                        color = if (sel) Color(0xFFFAF5FF) else Color(0xFFA1A1AA),
+                        color = if (sel) Color(0xFF09090B) else Color(0xFFA1A1AA),
                         fontSize = 11.sp,
                         fontWeight = if (sel) FontWeight.Bold else FontWeight.Medium,
                         modifier = Modifier.padding(horizontal = 11.dp, vertical = 7.dp)
@@ -1425,17 +1522,13 @@ fun BubbleShapeAndAiSection(
             }
         }
 
-        // 3. Generate with AI (Meracik otomatis Warna + Shape + Elemen Melayang Beranimasi)
+        // 3. Generate with AI (Selaras Palet Utama Monokrom Matte)
         Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .clip(RoundedCornerShape(14.dp))
-                .background(
-                    Brush.linearGradient(
-                        colors = listOf(Color(0xFF1F093D), Color(0xFF131626))
-                    )
-                )
-                .border(1.dp, Color(0xFFA855F7).copy(alpha = 0.40f), RoundedCornerShape(14.dp))
+                .clip(RoundedCornerShape(12.dp))
+                .background(Color(0xFF141418))
+                .border(1.dp, Color.White.copy(alpha = 0.10f), RoundedCornerShape(12.dp))
                 .padding(11.dp),
             verticalArrangement = Arrangement.spacedBy(8.dp)
         ) {
@@ -1445,14 +1538,14 @@ fun BubbleShapeAndAiSection(
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Text(
-                    text = "✨ Generate Bubble with AI",
-                    color = Color(0xFFE9D5FF),
+                    text = "Generate Bubble with AI",
+                    color = Color(0xFFF4F4F5),
                     fontSize = 11.5.sp,
                     fontWeight = FontWeight.ExtraBold
                 )
                 Text(
                     text = "AI Style Engine",
-                    color = Color(0xFFC084FC),
+                    color = Color(0xFFA1A1AA),
                     fontSize = 9.5.sp,
                     fontFamily = FontFamily.Monospace
                 )
@@ -1466,13 +1559,13 @@ fun BubbleShapeAndAiSection(
                     modifier = Modifier
                         .weight(1f)
                         .clip(RoundedCornerShape(10.dp))
-                        .background(Color(0xFF0E101A))
-                        .border(1.dp, Color.White.copy(alpha = 0.12f), RoundedCornerShape(10.dp))
+                        .background(Color(0xFF0C0C0F))
+                        .border(1.dp, Color.White.copy(alpha = 0.10f), RoundedCornerShape(10.dp))
                         .padding(horizontal = 10.dp, vertical = 8.dp)
                 ) {
                     if (aiPrompt.isEmpty()) {
                         Text(
-                            text = "Misal: Ungu Kristal Tajam / Cyber Morph / Galaxy...",
+                            text = "Misal: Kristal Tajam / Cyber Morph / Bintang...",
                             color = Color(0xFF71717A),
                             fontSize = 11.sp,
                             maxLines = 1,
@@ -1484,14 +1577,13 @@ fun BubbleShapeAndAiSection(
                         onValueChange = { if (it.length <= 80) aiPrompt = it },
                         singleLine = true,
                         textStyle = TextStyle(color = Color.White, fontSize = 11.5.sp),
-                        cursorBrush = SolidColor(Color(0xFFC084FC)),
+                        cursorBrush = SolidColor(Color.White),
                         modifier = Modifier.fillMaxWidth()
                     )
                 }
                 Surface(
                     shape = RoundedCornerShape(10.dp),
-                    color = Color(0xFF7E22CE),
-                    border = BorderStroke(1.dp, Color(0xFFD8B4FE)),
+                    color = Color(0xFFF4F4F5),
                     modifier = Modifier.clickable {
                         val generated = synthesizeAiBubbleStyle(aiPrompt)
                         onApplyAiPreset(
@@ -1505,8 +1597,8 @@ fun BubbleShapeAndAiSection(
                     }
                 ) {
                     Text(
-                        text = "✨ Generate",
-                        color = Color.White,
+                        text = "Generate",
+                        color = Color(0xFF09090B),
                         fontSize = 11.sp,
                         fontWeight = FontWeight.ExtraBold,
                         modifier = Modifier.padding(horizontal = 11.dp, vertical = 8.dp)

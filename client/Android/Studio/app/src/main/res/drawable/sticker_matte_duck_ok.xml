@@ -1,0 +1,73 @@
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="160dp"
+    android:height="160dp"
+    android:viewportWidth="160"
+    android:viewportHeight="160">
+    <!-- Die-cut matte white sticker border -->
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M80,18 C114,18 136,42 138,76 C144,82 148,94 144,106 C140,122 122,138 80,138 C38,138 22,122 24,90 C26,46 46,18 80,18 Z" />
+    <!-- Top duck hair tuft -->
+    <path
+        android:fillColor="#FBBF24"
+        android:strokeColor="#27272A"
+        android:strokeWidth="4.5"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round"
+        android:pathData="M74,30 Q80,16 88,26 Q96,18 92,32" />
+    <!-- Duck round head & body (warm matte butter yellow) -->
+    <path
+        android:fillColor="#FDE68A"
+        android:strokeColor="#27272A"
+        android:strokeWidth="4.5"
+        android:strokeLineJoin="round"
+        android:pathData="M80,32 C110,32 128,54 128,88 C128,118 110,130 80,130 C50,130 32,118 32,88 C32,54 50,32 80,32 Z" />
+    <!-- Confident eyes -->
+    <path
+        android:fillColor="#27272A"
+        android:pathData="M56,68 a5.5,6.5 0 1,0 11,0 a5.5,6.5 0 1,0 -11,0" />
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M58,65 a2,2 0 1,0 4,0 a2,2 0 1,0 -4,0" />
+    <!-- Winking right eye -->
+    <path
+        android:fillColor="#00000000"
+        android:strokeColor="#27272A"
+        android:strokeWidth="4.5"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round"
+        android:pathData="M92,64 L104,69 L92,74" />
+    <!-- Matte coral duck bill -->
+    <path
+        android:fillColor="#F97316"
+        android:strokeColor="#27272A"
+        android:strokeWidth="4"
+        android:strokeLineJoin="round"
+        android:pathData="M64,78 C72,74 88,74 96,78 C100,84 94,92 80,92 C66,92 60,84 64,78 Z" />
+    <!-- Matte blush -->
+    <path
+        android:fillColor="#FB7185"
+        android:pathData="M44,80 a7,4.5 0 1,0 14,0 a7,4.5 0 1,0 -14,0" />
+    <path
+        android:fillColor="#FB7185"
+        android:pathData="M102,80 a7,4.5 0 1,0 14,0 a7,4.5 0 1,0 -14,0" />
+    <!-- Thumbs-up wing -->
+    <path
+        android:fillColor="#FCD34D"
+        android:strokeColor="#27272A"
+        android:strokeWidth="4.5"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round"
+        android:pathData="M118,96 C122,82 132,82 132,92 C140,92 142,108 130,114 C122,116 114,112 114,104 Z" />
+    <!-- Clean matte 'OK' pill badge -->
+    <path
+        android:fillColor="#18181B"
+        android:pathData="M42,104 L78,104 A10,10 0 0,1 88,114 L88,118 A10,10 0 0,1 78,128 L42,128 A10,10 0 0,1 32,118 L32,114 A10,10 0 0,1 42,104 Z" />
+    <path
+        android:fillColor="#00000000"
+        android:strokeColor="#FFFFFF"
+        android:strokeWidth="3.2"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round"
+        android:pathData="M48,116 a5,5 0 1,0 10,0 a5,5 0 1,0 -10,0 M64,110 L64,122 M72,110 L65,116 L72,122" />
+</vector>

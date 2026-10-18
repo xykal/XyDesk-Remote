@@ -312,12 +312,12 @@ class XySshSession(
             val clientKexInit = SshBuf().apply {
                 writeByte(SSH_MSG_KEXINIT)
                 writeRaw(cookie)
-                writeString("diffie-hellman-group14-sha256,diffie-hellman-group14-sha1")
+                writeString("diffie-hellman-group16-sha512,diffie-hellman-group14-sha256,diffie-hellman-group14-sha1")
                 writeString("ssh-ed25519,ecdsa-sha2-nistp256,rsa-sha2-512,rsa-sha2-256,ssh-rsa")
                 writeString("aes128-ctr,aes256-ctr")
                 writeString("aes128-ctr,aes256-ctr")
-                writeString("hmac-sha2-256")
-                writeString("hmac-sha2-256")
+                writeString("hmac-sha2-256,hmac-sha2-512,hmac-sha1")
+                writeString("hmac-sha2-256,hmac-sha2-512,hmac-sha1")
                 writeString("none")
                 writeString("none")
                 writeString("")
@@ -343,16 +343,39 @@ class XySshSession(
             val _serverHostKeyAlgs = sReader.readString()
             val serverCiphersC2S = sReader.readString().split(",")
             val serverCiphersS2C = sReader.readString().split(",")
+            val serverMacsC2S = sReader.readString().split(",")
+            val serverMacsS2C = sReader.readString().split(",")
 
-            val useSha256Kex = "diffie-hellman-group14-sha256" in serverKexAlgs || "diffie-hellman-group14-sha1" !in serverKexAlgs
-            val kexHashAlg = if (useSha256Kex) "SHA-256" else "SHA-1"
+            val chosenKex = listOf(
+                "diffie-hellman-group16-sha512",
+                "diffie-hellman-group14-sha256",
+                "diffie-hellman-group14-sha1",
+            ).firstOrNull { it in serverKexAlgs } ?: "diffie-hellman-group14-sha256"
+
+            val kexHashAlg = when (chosenKex) {
+                "diffie-hellman-group16-sha512" -> "SHA-512"
+                "diffie-hellman-group14-sha1" -> "SHA-1"
+                else -> "SHA-256"
+            }
+            val dhPrime = if (chosenKex == "diffie-hellman-group16-sha512") DH_GROUP16_P else DH_GROUP14_P
             val c2sKeyLen = if ("aes128-ctr" in serverCiphersC2S || "aes256-ctr" !in serverCiphersC2S) 16 else 32
             val s2cKeyLen = if ("aes128-ctr" in serverCiphersS2C || "aes256-ctr" !in serverCiphersS2C) 16 else 32
 
-            // 3. Diffie-Hellman Group 14 (2048-bit MODP)
-            val xBytes = ByteArray(32).also { rnd.nextBytes(it) }
+            fun pickMacAlg(serverList: List<String>): Triple<String, String, Int> {
+                return when {
+                    "hmac-sha2-256" in serverList -> Triple("hmac-sha2-256", "HmacSHA256", 32)
+                    "hmac-sha2-512" in serverList -> Triple("hmac-sha2-512", "HmacSHA512", 64)
+                    "hmac-sha1" in serverList -> Triple("hmac-sha1", "HmacSHA1", 20)
+                    else -> Triple("hmac-sha2-256", "HmacSHA256", 32)
+                }
+            }
+            val (_, c2sMacJce, c2sMacLen) = pickMacAlg(serverMacsC2S)
+            val (_, s2cMacJce, s2cMacLen) = pickMacAlg(serverMacsS2C)
+
+            // 3. Diffie-Hellman Group 14 / Group 16 MODP
+            val xBytes = ByteArray(if (chosenKex == "diffie-hellman-group16-sha512") 64 else 32).also { rnd.nextBytes(it) }
             val x = BigInteger(1, xBytes)
-            val e = DH_GROUP14_G.modPow(x, DH_GROUP14_P)
+            val e = DH_GROUP14_G.modPow(x, dhPrime)
 
             sendPacket(
                 SshBuf().apply {
@@ -376,7 +399,7 @@ class XySshSession(
             val f = rReader.readMpint()
             val _sigBlob = rReader.readBytes()
 
-            val kShared = f.modPow(x, DH_GROUP14_P)
+            val kShared = f.modPow(x, dhPrime)
             val hostKeySha256 = MessageDigest.getInstance("SHA-256").digest(ksBlob)
             hostFingerprint = "SHA256:" + Base64.encodeToString(hostKeySha256, Base64.NO_WRAP or Base64.NO_PADDING)
 
@@ -424,22 +447,22 @@ class XySshSession(
             val ivS2C = deriveKey('B', 16)
             val keyC2S = deriveKey('C', c2sKeyLen)
             val keyS2C = deriveKey('D', s2cKeyLen)
-            val macKeyC2S = deriveKey('E', 32)
-            val macKeyS2C = deriveKey('F', 32)
+            val macKeyC2S = deriveKey('E', c2sMacLen)
+            val macKeyS2C = deriveKey('F', s2cMacLen)
 
             synchronized(writeLock) {
                 encCipher = Cipher.getInstance("AES/CTR/NoPadding").apply {
                     init(Cipher.ENCRYPT_MODE, SecretKeySpec(keyC2S, "AES"), IvParameterSpec(ivC2S))
                 }
-                encMac = Mac.getInstance("HmacSHA256").apply {
-                    init(SecretKeySpec(macKeyC2S, "HmacSHA256"))
+                encMac = Mac.getInstance(c2sMacJce).apply {
+                    init(SecretKeySpec(macKeyC2S, c2sMacJce))
                 }
             }
             decCipher = Cipher.getInstance("AES/CTR/NoPadding").apply {
                 init(Cipher.DECRYPT_MODE, SecretKeySpec(keyS2C, "AES"), IvParameterSpec(ivS2C))
             }
-            decMac = Mac.getInstance("HmacSHA256").apply {
-                init(SecretKeySpec(macKeyS2C, "HmacSHA256"))
+            decMac = Mac.getInstance(s2cMacJce).apply {
+                init(SecretKeySpec(macKeyS2C, s2cMacJce))
             }
 
             onStateChange(false, "Autentikasi pengguna $username…", hostFingerprint)
@@ -574,6 +597,28 @@ class XySshSession(
             onStateChange(true, "Terhubung · $username@$host:$port", hostFingerprint)
             onOutput("✓ Sesi SSH-2 Terenkripsi Aktif ($serverVersion)\n✓ Fingerprint Host: $hostFingerprint\n\n")
 
+            // Thread KeepAlive SSH (setiap 25 detik) agar koneksi VPS/NAT tidak pernah putus saat idle
+            Thread({
+                while (running.get() && channelReady) {
+                    try {
+                        Thread.sleep(25_000L)
+                        if (!running.get() || !channelReady) break
+                        sendPacket(
+                            SshBuf().apply {
+                                writeByte(SSH_MSG_GLOBAL_REQUEST)
+                                writeString("keepalive@openssh.com")
+                                writeBoolean(false)
+                            }.toByteArray(),
+                        )
+                    } catch (_: Throwable) {
+                        break
+                    }
+                }
+            }, "xydesk-ssh-keepalive").apply {
+                isDaemon = true
+                start()
+            }
+
             // 9. Loop baca data interaktif
             var receivedBytesWindow = 0
             while (running.get()) {
@@ -607,8 +652,38 @@ class XySshSession(
                         val data = dr.readBytes()
                         onOutput(cleanAnsiForTerminal(String(data, StandardCharsets.UTF_8)))
                     }
-                    SSH_MSG_GLOBAL_REQUEST, SSH_MSG_CHANNEL_REQUEST -> {
-                        // Balas keepalive / request dengan want_reply jika diperlukan
+                    SSH_MSG_GLOBAL_REQUEST -> {
+                        runCatching {
+                            val gr = SshReader(p)
+                            gr.readByte()
+                            gr.readString() // request name (e.g. keepalive@openssh.com / hostkeys-00@openssh.com)
+                            val wantReply = gr.readByte() != 0
+                            if (wantReply) {
+                                sendPacket(byteArrayOf(SSH_MSG_REQUEST_FAILURE.toByte()))
+                            }
+                        }
+                    }
+                    SSH_MSG_CHANNEL_REQUEST -> {
+                        runCatching {
+                            val cr = SshReader(p)
+                            cr.readByte()
+                            cr.readInt() // recipient channel
+                            val reqType = cr.readString()
+                            val wantReply = cr.readByte() != 0
+                            if (wantReply) {
+                                val respByte = if (reqType == "keepalive@openssh.com") {
+                                    SSH_MSG_CHANNEL_SUCCESS
+                                } else {
+                                    SSH_MSG_CHANNEL_FAILURE
+                                }
+                                sendPacket(
+                                    SshBuf().apply {
+                                        writeByte(respByte)
+                                        writeInt(remoteChannelId)
+                                    }.toByteArray(),
+                                )
+                            }
+                        }
                     }
                     SSH_MSG_CHANNEL_EOF, SSH_MSG_CHANNEL_CLOSE -> {
                         onOutput("\n[SSH] Sesi shell ditutup oleh server.\n")
@@ -697,6 +772,8 @@ class XySshSession(
         private const val SSH_MSG_USERAUTH_INFO_REQUEST = 60
         private const val SSH_MSG_USERAUTH_INFO_RESPONSE = 61
         private const val SSH_MSG_GLOBAL_REQUEST = 80
+        private const val SSH_MSG_REQUEST_SUCCESS = 81
+        private const val SSH_MSG_REQUEST_FAILURE = 82
         private const val SSH_MSG_CHANNEL_OPEN = 90
         private const val SSH_MSG_CHANNEL_OPEN_CONFIRMATION = 91
         private const val SSH_MSG_CHANNEL_OPEN_FAILURE = 92
@@ -706,6 +783,8 @@ class XySshSession(
         private const val SSH_MSG_CHANNEL_EOF = 96
         private const val SSH_MSG_CHANNEL_CLOSE = 97
         private const val SSH_MSG_CHANNEL_REQUEST = 98
+        private const val SSH_MSG_CHANNEL_SUCCESS = 99
+        private const val SSH_MSG_CHANNEL_FAILURE = 100
 
         private val DH_GROUP14_G: BigInteger = BigInteger.valueOf(2L)
         private val DH_GROUP14_P: BigInteger = BigInteger(
@@ -722,14 +801,41 @@ class XySshSession(
                 "15728E5A8AACAA68FFFFFFFFFFFFFFFF",
             16,
         )
+        private val DH_GROUP16_P: BigInteger = BigInteger(
+            "FFFFFFFFFFFFFFFFC90FDAA22168C234C4C6628B80DC1CD1" +
+                "29024E088A67CC74020BBEA63B139B22514A08798E3404DD" +
+                "EF9519B3CD3A431B302B0A6DF25F14374FE1356D6D51C245" +
+                "E485B576625E7EC6F44C42E9A637ED6B0BFF5CB6F406B7ED" +
+                "EE386BFB5A899FA5AE9F24117C4B1FE649286651ECE45B3D" +
+                "C2007CB8A163BF0598DA48361C55D39A69163FA8FD24CF5F" +
+                "83655D23DCA3AD961C62F356208552BB9ED529077096966D" +
+                "670C354E4ABC9804F1746C08CA18217C32905E462E36CE3B" +
+                "E39E772C180E86039B2783A2EC07A28FB5C55DF06F4C52C9" +
+                "DE2BCBF6955817183995497CEA956AE515D2261898FA0510" +
+                "15728E5A8AAAC42DAD33170D04507A33A85521ABDF1CBA64" +
+                "ECFB850458DBEF0A8AEA71575D060C7DB3970F85A6E1E4C7" +
+                "ABF5AE8CDB0933D71E8C94E04A25619DCEE3D2261AD2EE6B" +
+                "F12FFA06D98A0864D87602733EC86A64521F2B18177B200C" +
+                "BBE117577A615D6C770988C0BAD946E208E24FA074E5AB31" +
+                "43DB5BFCE0FD108E4B82D120A92108011A723C12A787E6D7" +
+                "88719A10BDBA5B2699C327186AF4E23C1A946834B6150BDA" +
+                "2583E9CA2AD44CE8DBBBC2DB04DE8EF92E8EFC141FBECAA6" +
+                "287C59474E6BC05D99B2964FA090C3A2233BA186515BE7ED" +
+                "1F612970CEE2D7AFB81BDD762170481CD0069127D5B05AA9" +
+                "93B4EA988D8FDDC186FFB7DC90A6C08F4DF435C934063199" +
+                "FFFFFFFFFFFFFFFF",
+            16,
+        )
 
-        private val ANSI_CSI_REGEX = Regex("\u001B\\[[0-9;?]*[ -/]*[@-~]")
+        // Pertahankan kode warna ANSI SGR (\u001B[...m) dan clear screen (\u001B[2J) untuk renderer Termux,
+        // hanya bersihkan CSI non-SGR (kursor/mode privat selain 2J) dan OSC title.
+        private val ANSI_NON_SGR_CSI_REGEX = Regex("\u001B\\[(?![0-9;]*m|2J)[0-9;?]*[ -/]*[@-~]")
         private val ANSI_OSC_REGEX = Regex("\u001B\\][^\u0007\u001B]*(\u0007|\u001B\\\\)")
 
         internal fun cleanAnsiForTerminal(raw: String): String {
             return raw
                 .replace(ANSI_OSC_REGEX, "")
-                .replace(ANSI_CSI_REGEX, "")
+                .replace(ANSI_NON_SGR_CSI_REGEX, "")
                 .replace("\r\n", "\n")
                 .replace("\r", "")
                 .replace("\u0007", "")

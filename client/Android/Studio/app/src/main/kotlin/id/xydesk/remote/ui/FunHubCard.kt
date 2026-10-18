@@ -709,6 +709,22 @@ internal fun FunHubCard(
                                 showAll = true
                             },
                             isReactionBusy = activeReactionId == joke.id,
+                            onLike = {
+                                if (activeReactionId == null) {
+                                    scope.launch {
+                                        activeReactionId = joke.id
+                                        feedMessage = null
+                                        try {
+                                            updateJoke(api.like(joke.id))
+                                        } catch (error: Exception) {
+                                            feedMessage = showCommunityError(error)
+                                            feedMessageIsError = true
+                                        } finally {
+                                            activeReactionId = null
+                                        }
+                                    }
+                                }
+                            },
                             onReact = { emoji ->
                                 if (activeReactionId == null) {
                                     scope.launch {
@@ -1032,6 +1048,7 @@ private fun CommunityJokeItem(
     onImageClick: (String, String?) -> Unit,
     onAuthorClick: (String) -> Unit,
     isReactionBusy: Boolean,
+    onLike: () -> Unit,
     onReact: (String) -> Unit,
     onOpenComments: () -> Unit,
     onOpenActions: () -> Unit,
@@ -1039,13 +1056,30 @@ private fun CommunityJokeItem(
     onQuickDelete: () -> Unit,
     onShare: () -> Unit,
 ) {
-    var waReactBarOpen by remember(joke.id) { mutableStateOf(false) }
     var fullEmojiPickerOpen by remember(joke.id) { mutableStateOf(false) }
+    var reactAnimTrigger by remember(joke.id) { mutableIntStateOf(0) }
+    var likeAnimTrigger by remember(joke.id) { mutableIntStateOf(0) }
+    val likePopAnim = remember(joke.id) { androidx.compose.animation.core.Animatable(1f) }
+    LaunchedEffect(likeAnimTrigger) {
+        if (likeAnimTrigger > 0) {
+            likePopAnim.snapTo(0.65f)
+            likePopAnim.animateTo(
+                targetValue = 1.32f,
+                animationSpec = androidx.compose.animation.core.spring(
+                    dampingRatio = androidx.compose.animation.core.Spring.DampingRatioLowBouncy,
+                    stiffness = androidx.compose.animation.core.Spring.StiffnessMedium,
+                ),
+            )
+            likePopAnim.animateTo(1f)
+        }
+    }
     val isPinnedAnnouncement = joke.isAnnouncement || joke.pinned
     val detectedUrl = remember(joke.id, joke.text, joke.sharedUrl) {
         joke.sharedUrl?.takeIf { it.isNotBlank() } ?: extractFirstUrl(joke.text)
     }
-    val totalReactions = remember(joke.reactions) { joke.reactions.values.sum() }
+    val totalEmojiReactions = remember(joke.reactions) {
+        joke.reactions.entries.filter { it.key != "❤️" }.sumOf { it.value }
+    }
     val activeReaction = joke.viewerReaction
     val isFounderAuthor = isFounderAccount(joke.authorName) || isFounderAccount(joke.githubLogin)
 
@@ -1208,37 +1242,43 @@ private fun CommunityJokeItem(
                     )
                 }
 
-                // Pemilih Reaksi Opsional (Emoji 3D Gaya iPhone / WhatsApp)
+                // Pemilih Reaksi Emoji (Terpisah dari Like Hati — Beranimasi saat Di-React)
                 if (fullEmojiPickerOpen) {
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .clip(RoundedCornerShape(12.dp))
+                            .clip(RoundedCornerShape(14.dp))
                             .background(Color(0xFF151923))
                             .horizontalScroll(rememberScrollState())
-                            .padding(horizontal = 10.dp, vertical = 6.dp),
+                            .padding(horizontal = 10.dp, vertical = 7.dp),
                         horizontalArrangement = Arrangement.spacedBy(10.dp),
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
                         CommunityJokesApi.QUICK_REACTIONS.forEach { emoji ->
+                            val isSelectedEmoji = activeReaction == emoji
                             Box(
                                 modifier = Modifier
-                                    .size(30.dp)
+                                    .size(34.dp)
                                     .clip(CircleShape)
-                                    .background(Color(0xFF1E2433))
+                                    .background(if (isSelectedEmoji) Color(0xFF2E364F) else Color(0xFF1E2433))
                                     .clickable(enabled = !isReactionBusy) {
+                                        reactAnimTrigger += 1
                                         onReact(emoji)
                                         fullEmojiPickerOpen = false
                                     },
                                 contentAlignment = Alignment.Center,
                             ) {
-                                IosWhatsAppEmoji3D(tag = emoji, size = 20.dp)
+                                IosWhatsAppEmoji3D(
+                                    tag = emoji,
+                                    size = 21.dp,
+                                    animateTrigger = reactAnimTrigger,
+                                )
                             }
                         }
                     }
                 }
 
-                // Action Bar Modern Flat (Tanpa Card, Tanpa Border — Gaya X / Threads)
+                // Action Bar Modern Flat (Like Hati Terpisah dari Reaksi Emoji + Komentar + Bagikan)
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
@@ -1248,47 +1288,81 @@ private fun CommunityJokeItem(
                 ) {
                     Row(
                         verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(22.dp),
+                        horizontalArrangement = Arrangement.spacedBy(20.dp),
                     ) {
-                        // Like / Heart (Flat)
+                        // 1. Tombol LIKE (Murni Ikon Hati Vektor + Counter Likes)
                         Row(
                             modifier = Modifier
                                 .clip(RoundedCornerShape(6.dp))
                                 .clickable(enabled = !isReactionBusy) {
-                                    onReact(activeReaction ?: "❤️")
+                                    likeAnimTrigger += 1
+                                    onLike()
                                 }
                                 .padding(vertical = 4.dp, horizontal = 2.dp),
                             verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(6.dp),
+                            horizontalArrangement = Arrangement.spacedBy(5.dp),
                         ) {
-                            if (activeReaction != null) {
-                                IosWhatsAppEmoji3D(tag = activeReaction, size = 17.dp)
-                            } else {
-                                androidx.compose.material3.Icon(
-                                    imageVector = id.xydesk.remote.ui.components.XyIcons.Heart,
-                                    contentDescription = "Suka",
-                                    tint = Color(0xFF94A3B8),
-                                    modifier = Modifier.size(17.dp),
-                                )
-                            }
-                            if (totalReactions > 0) {
+                            androidx.compose.material3.Icon(
+                                imageVector = id.xydesk.remote.ui.components.XyIcons.Heart,
+                                contentDescription = "Suka",
+                                tint = if (joke.viewerLiked) Color(0xFFF43F5E) else Color(0xFF94A3B8),
+                                modifier = Modifier
+                                    .size(17.dp)
+                                    .scale(likePopAnim.value),
+                            )
+                            if (joke.likesCount > 0) {
                                 Text(
-                                    text = totalReactions.toString(),
+                                    text = joke.likesCount.toString(),
                                     fontSize = 12.sp,
-                                    fontWeight = FontWeight.Medium,
-                                    color = if (activeReaction != null) Color(0xFFF43F5E) else Color(0xFF94A3B8),
+                                    fontWeight = if (joke.viewerLiked) FontWeight.Bold else FontWeight.Medium,
+                                    color = if (joke.viewerLiked) Color(0xFFF43F5E) else Color(0xFF94A3B8),
                                 )
                             }
                         }
 
-                        // Komentar (Flat)
+                        // 2. Tombol REACT EMOJI (Terpisah dari Like!)
+                        Row(
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(6.dp))
+                                .clickable(enabled = !isReactionBusy) {
+                                    fullEmojiPickerOpen = !fullEmojiPickerOpen
+                                }
+                                .padding(vertical = 4.dp, horizontal = 2.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(5.dp),
+                        ) {
+                            if (activeReaction != null) {
+                                IosWhatsAppEmoji3D(
+                                    tag = activeReaction,
+                                    size = 17.dp,
+                                    animateTrigger = reactAnimTrigger,
+                                )
+                            } else {
+                                androidx.compose.material3.Icon(
+                                    imageVector = id.xydesk.remote.ui.components.XyIcons.Emoji,
+                                    contentDescription = "Reaksi Emoji",
+                                    tint = if (fullEmojiPickerOpen) Color.White else Color(0xFF94A3B8),
+                                    modifier = Modifier.size(17.dp),
+                                )
+                            }
+                            if (totalEmojiReactions > 0) {
+                                Text(
+                                    text = totalEmojiReactions.toString(),
+                                    fontSize = 12.sp,
+                                    fontWeight = if (activeReaction != null) FontWeight.Bold else FontWeight.Medium,
+                                    color = if (activeReaction != null) Color(0xFFFBBF24) else Color(0xFF94A3B8),
+                                )
+                            }
+                        }
+
+                        // 3. Tombol KOMENTAR (Flat)
                         Row(
                             modifier = Modifier
                                 .clip(RoundedCornerShape(6.dp))
                                 .clickable(onClick = onOpenComments)
                                 .padding(vertical = 4.dp, horizontal = 2.dp),
                             verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(6.dp),
+                            horizontalArrangement = Arrangement.spacedBy(5.dp),
                         ) {
                             androidx.compose.material3.Icon(
                                 imageVector = id.xydesk.remote.ui.components.XyIcons.Chat,
@@ -1306,14 +1380,14 @@ private fun CommunityJokeItem(
                             }
                         }
 
-                        // Bagikan (Flat)
+                        // 4. Tombol BAGIKAN (Flat)
                         Row(
                             modifier = Modifier
                                 .clip(RoundedCornerShape(6.dp))
                                 .clickable(onClick = onShare)
                                 .padding(vertical = 4.dp, horizontal = 2.dp),
                             verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(6.dp),
+                            horizontalArrangement = Arrangement.spacedBy(5.dp),
                         ) {
                             androidx.compose.material3.Icon(
                                 imageVector = id.xydesk.remote.ui.components.XyIcons.Share,
@@ -1324,7 +1398,7 @@ private fun CommunityJokeItem(
                         }
                     }
 
-                    // Ringkasan reaksi aktif (Emoji 3D iOS/WA) + pemicu reaksi cepat tanpa border
+                    // Ringkasan Top Emoji Reaksi di kanan (Tanpa Hati Like)
                     Row(
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.spacedBy(8.dp),
@@ -1337,37 +1411,24 @@ private fun CommunityJokeItem(
                         }
                         topEmojis.forEach { (emoji, count) ->
                             Row(
-                                modifier = Modifier.clickable(enabled = !isReactionBusy) { onReact(emoji) },
+                                modifier = Modifier.clickable(enabled = !isReactionBusy) {
+                                    reactAnimTrigger += 1
+                                    onReact(emoji)
+                                },
                                 verticalAlignment = Alignment.CenterVertically,
                                 horizontalArrangement = Arrangement.spacedBy(3.dp),
                             ) {
-                                IosWhatsAppEmoji3D(tag = emoji, size = 14.dp)
+                                IosWhatsAppEmoji3D(
+                                    tag = emoji,
+                                    size = 15.dp,
+                                    animateTrigger = reactAnimTrigger,
+                                )
                                 Text(
                                     text = count.toString(),
                                     fontSize = 11.sp,
                                     color = Color(0xFF94A3B8),
                                 )
                             }
-                        }
-                        Box(
-                            modifier = Modifier
-                                .size(24.dp)
-                                .clip(CircleShape)
-                                .clickable(enabled = !isReactionBusy) {
-                                    fullEmojiPickerOpen = !fullEmojiPickerOpen
-                                },
-                            contentAlignment = Alignment.Center,
-                        ) {
-                            androidx.compose.material3.Icon(
-                                imageVector = if (fullEmojiPickerOpen) {
-                                    id.xydesk.remote.ui.components.XyIcons.Close
-                                } else {
-                                    id.xydesk.remote.ui.components.XyIcons.Plus
-                                },
-                                contentDescription = "Reaksi",
-                                tint = Color(0xFF64748B),
-                                modifier = Modifier.size(14.dp),
-                            )
                         }
                     }
                 }
@@ -1828,45 +1889,6 @@ private fun CommentsBottomSheet(
                         fontSize = 12.sp,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
-                }
-            }
-
-            // Bar Cepat @Mention (flat pill selaras Feed)
-            if (mentionCandidates.isNotEmpty()) {
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .horizontalScroll(rememberScrollState()),
-                    horizontalArrangement = Arrangement.spacedBy(6.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    Text(
-                        text = "@Mention:",
-                        fontSize = 10.sp,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        fontWeight = FontWeight.SemiBold,
-                    )
-                    mentionCandidates.forEach { handle ->
-                        Box(
-                            modifier = Modifier
-                                .clip(RoundedCornerShape(999.dp))
-                                .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.55f))
-                                .clickable {
-                                    val mentionToken = "@${handle.replace(" ", "")} "
-                                    if (!draft.contains(mentionToken.trim())) {
-                                        draft = (draft + (if (draft.isEmpty() || draft.endsWith(" ")) "" else " ") + mentionToken).take(140)
-                                    }
-                                }
-                                .padding(horizontal = 9.dp, vertical = 4.dp),
-                        ) {
-                            Text(
-                                text = "@$handle",
-                                fontSize = 10.sp,
-                                fontWeight = FontWeight.SemiBold,
-                                color = MaterialTheme.colorScheme.onSurface,
-                            )
-                        }
-                    }
                 }
             }
 

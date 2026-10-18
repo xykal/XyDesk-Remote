@@ -203,16 +203,14 @@ fun XyDeskHome(
     var dataPackStatus by remember { mutableStateOf<String?>(null) }
     LaunchedEffect(Unit) {
         val now = System.currentTimeMillis()
-        if (now - appPrefs.lastUpdateCheckAt >= 2 * 3_600_000L) {
-            appPrefs.lastUpdateCheckAt = now
-            val info = AppUpdate.fetch(context)
-            if (info != null) {
-                val current = runCatching {
-                    context.packageManager.getPackageInfo(context.packageName, 0).versionName
-                }.getOrNull().orEmpty()
-                if (AppUpdate.isNewer(info.version, current) && appPrefs.updateSkipVersion != info.version) {
-                    updateInfo = info
-                }
+        appPrefs.lastUpdateCheckAt = now
+        val info = AppUpdate.fetch(context)
+        if (info != null) {
+            val current = runCatching {
+                context.packageManager.getPackageInfo(context.packageName, 0).versionName
+            }.getOrNull().orEmpty()
+            if (AppUpdate.isNewer(info.version, current) && appPrefs.updateSkipVersion != info.version) {
+                updateInfo = info
             }
         }
     }
@@ -578,6 +576,15 @@ fun XyDeskHome(
 
     // Modal OAuth GitHub Langsung Tanpa Kode (tersedia global untuk Beranda, Buat RDP, Profil, & Chat Global)
     GitHubDirectOAuthModalHost()
+
+    // In-App Notification Banner (Pengumuman, Balasan, Like, Reaksi, Mention, Chat, & OTA Data)
+    XyInAppNotificationBannerHost(
+        onOpenChat = { route = XyRoute.ChatGlobal },
+        onOpenFeed = {
+            tab = XyTab.FEED
+            route = XyRoute.Feed
+        },
+    )
 
     // ---- Menu utama: 2 gaya — popup tengah atau sidebar kanan ----
     val homeMenuStyle = XyMenuStyleState.current(appPrefs)

@@ -965,80 +965,87 @@ internal fun resolveCustomBubbleShape(
 ): Shape {
     val activeStyle = shapePreset.ifBlank { shapeStyle }
     val own = isOwn || isMine
-    val baseRadiusDp = if (compact) 13f else 17f
+    val baseRadiusDp = if (compact) 14f else 18f
     return when (activeStyle.lowercase(Locale.ROOT)) {
-        "sharp" -> androidx.compose.foundation.shape.GenericShape { size, _ ->
+        "sharp", "sharp_edge" -> androidx.compose.foundation.shape.GenericShape { size, _ ->
             val w = size.width
             val h = size.height
             val cut = (minOf(w, h) * 0.18f).coerceIn(6f, 18f)
             if (own) {
+                // Ujung kanan-atas tajam mengarah tepat ke foto profil pengirim di atas
                 moveTo(cut, 0f)
                 lineTo(w, 0f)
-                lineTo(w, h - cut * 0.35f)
-                lineTo(w - cut * 0.9f, h)
-                lineTo(0f, h)
+                lineTo(w, h - cut)
+                lineTo(w - cut, h)
+                lineTo(cut * 0.6f, h)
+                lineTo(0f, h - cut * 0.6f)
                 lineTo(0f, cut)
                 close()
             } else {
+                // Ujung kiri-atas tajam mengarah tepat ke foto profil pengirim di atas
                 moveTo(0f, 0f)
                 lineTo(w - cut, 0f)
                 lineTo(w, cut)
-                lineTo(w, h)
-                lineTo(cut * 0.9f, h)
-                lineTo(0f, h - cut * 0.35f)
+                lineTo(w, h - cut * 0.6f)
+                lineTo(w - cut * 0.6f, h)
+                lineTo(cut, h)
+                lineTo(0f, h - cut)
                 close()
             }
         }
-        "abstract" -> androidx.compose.foundation.shape.GenericShape { size, _ ->
+        "abstract", "abstract_cyber" -> androidx.compose.foundation.shape.GenericShape { size, _ ->
             val w = size.width
             val h = size.height
-            val c1 = (minOf(w, h) * 0.22f).coerceIn(8f, 22f)
-            val c2 = (minOf(w, h) * 0.10f).coerceIn(4f, 12f)
+            val c1 = (minOf(w, h) * 0.20f).coerceIn(7f, 20f)
+            val c2 = (minOf(w, h) * 0.09f).coerceIn(4f, 10f)
             if (own) {
                 moveTo(c1, 0f)
-                lineTo(w - c2, 0f)
-                lineTo(w, c2)
-                lineTo(w, h)
+                lineTo(w, 0f)
+                lineTo(w, h - c1)
+                lineTo(w - c1, h)
                 lineTo(c2, h)
-                lineTo(0f, h - c1)
+                lineTo(0f, h - c2)
+                lineTo(0f, c1)
                 close()
             } else {
-                moveTo(c2, 0f)
+                moveTo(0f, 0f)
                 lineTo(w - c1, 0f)
                 lineTo(w, c1)
                 lineTo(w, h - c2)
                 lineTo(w - c2, h)
-                lineTo(0f, h)
+                lineTo(c1, h)
+                lineTo(0f, h - c1)
                 close()
             }
         }
-        "morph" -> {
-            val wave1 = (sin(morphPhase * 2f * PI.toFloat()) * 6f)
-            val wave2 = (cos(morphPhase * 2f * PI.toFloat()) * 6f)
-            val tl = (baseRadiusDp + wave1).coerceIn(6f, 26f).dp
-            val tr = (baseRadiusDp - wave2).coerceIn(6f, 26f).dp
-            val bl = if (own) (baseRadiusDp + wave2).coerceIn(6f, 26f).dp else 4.dp
-            val br = if (own) 4.dp else (baseRadiusDp - wave1).coerceIn(6f, 26f).dp
+        "morph", "morph_wave" -> {
+            val wave1 = (sin(morphPhase * 2f * PI.toFloat()) * 4f)
+            val wave2 = (cos(morphPhase * 2f * PI.toFloat()) * 4f)
+            val tl = if (own) (baseRadiusDp + wave1).coerceIn(10f, 24f).dp else 2.dp
+            val tr = if (own) 2.dp else (baseRadiusDp - wave2).coerceIn(10f, 24f).dp
+            val bl = (baseRadiusDp + wave2).coerceIn(10f, 24f).dp
+            val br = (baseRadiusDp - wave1).coerceIn(10f, 24f).dp
             RoundedCornerShape(topStart = tl, topEnd = tr, bottomEnd = br, bottomStart = bl)
         }
-        "cloud" -> {
-            val r = (baseRadiusDp + 7f).dp
-            val tail = if (compact) 6.dp else 8.dp
+        "cloud", "cloud_soft" -> {
+            val r = (baseRadiusDp + 6f).dp
+            val sharpTop = 2.dp
             RoundedCornerShape(
-                topStart = r,
-                topEnd = r,
-                bottomEnd = if (own) tail else r,
-                bottomStart = if (own) r else tail,
+                topStart = if (own) r else sharpTop,
+                topEnd = if (own) sharpTop else r,
+                bottomEnd = r,
+                bottomStart = r,
             )
         }
         else -> {
+            // Ujung tajam (2.dp) tepat di sudut atas yang menghadap ke Foto Profil (Alignment.Top)
             val r = baseRadiusDp.dp
-            val tail = if (compact) 4.dp else 5.dp
+            val sharpTop = 2.dp
             RoundedCornerShape(
-                topStart = r,
-                topEnd = r,
-                bottomEnd = if (own) tail else r,
-                bottomStart = if (own) r else tail,
+                topStart = if (own) r else sharpTop,
+                topEnd = if (own) sharpTop else r,
+                bottomEnd = r,
+                bottomStart = r,
             )
         }
     }
@@ -1564,9 +1571,138 @@ internal fun XyFounderBadge(
 }
 
 /**
- * Kontainer Bubble Chat Epik Beranimasi Khusus Founder (`@xykal`) berwarna **Ungu Royal Amethyst**.
- * Menampilkan inti Royal Amethyst (`#1A0633 -> #3B0764 -> #4C1D95 -> #240946`) dengan tepi
- * sapuan ungu-lavender bergerak, kristal amethyst melayang, dan kilau cahaya diagonal real-time.
+ * Menggambar sambaran Petir Elektrik Bercabang (Royal Amethyst Cyber Thunderstorm)
+ * khusus di dalam Bubble Founder (`@xykal`).
+ */
+internal fun androidx.compose.ui.graphics.drawscope.DrawScope.drawFounderLightningStorm(
+    phase: Float,
+    boltPulse: Float,
+) {
+    val w = size.width
+    val h = size.height
+    if (w <= 4f || h <= 4f) return
+
+    // Kilatan guntur latar (Thunder Flash) saat petir menyambar
+    val strikeCycle1 = ((phase * 3.0f) % 1f)
+    val strikeIntensity1 = if (strikeCycle1 < 0.45f) {
+        sin((strikeCycle1 / 0.45f) * PI.toFloat()).coerceIn(0f, 1f)
+    } else 0.18f
+
+    val strikeCycle2 = (((phase + 0.48f) * 2.5f) % 1f)
+    val strikeIntensity2 = if (strikeCycle2 < 0.50f) {
+        sin((strikeCycle2 / 0.50f) * PI.toFloat()).coerceIn(0f, 1f)
+    } else 0.15f
+
+    // Helper menggambar 1 batang petir 3-lapis (Outer Violet Glow + Mid Electric Magenta + Core White-Hot)
+    fun drawElectricBolt(points: List<Offset>, intensity: Float, widthScale: Float = 1f) {
+        if (points.size < 2 || intensity <= 0.02f) return
+        val path = Path().apply {
+            moveTo(points.first().x, points.first().y)
+            for (i in 1 until points.size) {
+                lineTo(points[i].x, points[i].y)
+            }
+        }
+        // Lapisan 1: Outer Electric Violet Halo
+        drawPath(
+            path = path,
+            color = Color(0xFFA855F7).copy(alpha = (0.46f * intensity).coerceIn(0f, 1f)),
+            style = Stroke(width = 5.5.dp.toPx() * widthScale, cap = StrokeCap.Round, join = StrokeJoin.Miter),
+        )
+        // Lapisan 2: Mid Neon Amethyst-Fuchsia Plasma
+        drawPath(
+            path = path,
+            color = Color(0xFFE879F9).copy(alpha = (0.78f * intensity).coerceIn(0f, 1f)),
+            style = Stroke(width = 2.5.dp.toPx() * widthScale, cap = StrokeCap.Round, join = StrokeJoin.Miter),
+        )
+        // Lapisan 3: Core White-Hot Lightning
+        drawPath(
+            path = path,
+            color = Color(0xFFFAF5FF).copy(alpha = (0.96f * intensity).coerceIn(0f, 1f)),
+            style = Stroke(width = 1.1.dp.toPx() * widthScale, cap = StrokeCap.Round, join = StrokeJoin.Miter),
+        )
+    }
+
+    val jitter1 = sin(phase * 18f) * 3.5.dp.toPx()
+    val jitter2 = cos(phase * 22f) * 3.0.dp.toPx()
+
+    // Petir Utama #1 (Menyambar dari kanan-atas ke tengah-kiri)
+    val mainBolt1 = listOf(
+        Offset(w * 0.88f, h * 0.04f),
+        Offset(w * 0.74f + jitter1, h * 0.26f),
+        Offset(w * 0.80f - jitter2, h * 0.42f),
+        Offset(w * 0.62f + jitter1, h * 0.66f),
+        Offset(w * 0.67f, h * 0.82f),
+        Offset(w * 0.52f - jitter1, h * 0.96f),
+    )
+    drawElectricBolt(mainBolt1, strikeIntensity1, 1.0f)
+
+    // Cabang Petir #1A & #1B
+    val fork1A = listOf(
+        mainBolt1[1],
+        Offset(w * 0.60f - jitter2, h * 0.34f),
+        Offset(w * 0.48f + jitter1, h * 0.46f),
+    )
+    val fork1B = listOf(
+        mainBolt1[3],
+        Offset(w * 0.78f + jitter2, h * 0.78f),
+        Offset(w * 0.86f, h * 0.90f),
+    )
+    drawElectricBolt(fork1A, strikeIntensity1 * 0.85f, 0.65f)
+    drawElectricBolt(fork1B, strikeIntensity1 * 0.75f, 0.58f)
+
+    // Petir Utama #2 (Menyambar dari kiri-atas ke tengah-bawah)
+    val mainBolt2 = listOf(
+        Offset(w * 0.14f, h * 0.06f),
+        Offset(w * 0.26f - jitter2, h * 0.30f),
+        Offset(w * 0.19f + jitter1, h * 0.48f),
+        Offset(w * 0.34f - jitter1, h * 0.74f),
+        Offset(w * 0.28f + jitter2, h * 0.94f),
+    )
+    drawElectricBolt(mainBolt2, strikeIntensity2, 0.92f)
+
+    // Cabang Petir #2A
+    val fork2A = listOf(
+        mainBolt2[1],
+        Offset(w * 0.40f + jitter1, h * 0.38f),
+        Offset(w * 0.46f, h * 0.54f),
+    )
+    drawElectricBolt(fork2A, strikeIntensity2 * 0.80f, 0.60f)
+
+    // Busur Listrik Horisontal Halus (Electric Plasma Arc) yang merambat di tepi atas/bawah
+    val arcX = w * ((phase * 1.4f) % 1f)
+    val arcPoints = listOf(
+        Offset((arcX - w * 0.18f).coerceAtLeast(0f), h * 0.12f),
+        Offset((arcX - w * 0.09f).coerceIn(0f, w), h * 0.06f + jitter1 * 0.6f),
+        Offset(arcX.coerceIn(0f, w), h * 0.15f - jitter2 * 0.6f),
+        Offset((arcX + w * 0.10f).coerceAtMost(w), h * 0.08f),
+    )
+    drawElectricBolt(arcPoints, 0.55f * boltPulse, 0.55f)
+
+    // Percikan Simpul Listrik (Electric Node Sparks)
+    val sparkNodes = listOf(mainBolt1[1], mainBolt1[3], mainBolt2[1], mainBolt2[3])
+    sparkNodes.forEachIndexed { idx, pt ->
+        val nodeAlpha = if (idx < 2) strikeIntensity1 else strikeIntensity2
+        if (nodeAlpha > 0.22f) {
+            drawCircle(
+                brush = Brush.radialGradient(
+                    colors = listOf(
+                        Color.White.copy(alpha = 0.90f * nodeAlpha),
+                        Color(0xFFE879F9).copy(alpha = 0.45f * nodeAlpha),
+                        Color.Transparent,
+                    ),
+                    center = pt,
+                    radius = 9.dp.toPx(),
+                ),
+                radius = 9.dp.toPx(),
+                center = pt,
+            )
+        }
+    }
+}
+
+/**
+ * Kontainer Bubble Chat Epik Beranimasi Khusus Founder (`@xykal`) berwarna **Ungu Royal Amethyst**
+ * dengan **Efek Sambaran Petir Elektrik Bercabang (Cyber Thunderstorm)** super keren.
  */
 @Composable
 internal fun FounderAnimatedBubbleBox(
@@ -1580,16 +1716,16 @@ internal fun FounderAnimatedBubbleBox(
         initialValue = 0f,
         targetValue = 1f,
         animationSpec = infiniteRepeatable(
-            animation = tween(3200, easing = LinearEasing),
+            animation = tween(2400, easing = LinearEasing),
             repeatMode = RepeatMode.Restart,
         ),
         label = "bubble_phase",
     )
     val pulse by infinite.animateFloat(
-        initialValue = 0.6f,
+        initialValue = 0.62f,
         targetValue = 1f,
         animationSpec = infiniteRepeatable(
-            animation = tween(1800, easing = FastOutSlowInEasing),
+            animation = tween(1100, easing = FastOutSlowInEasing),
             repeatMode = RepeatMode.Reverse,
         ),
         label = "bubble_pulse",
@@ -1601,12 +1737,12 @@ internal fun FounderAnimatedBubbleBox(
             .background(
                 brush = Brush.linearGradient(
                     colors = listOf(
-                        Color(0xFF14052B),
-                        Color(0xFF2E1065),
+                        Color(0xFF120428),
+                        Color(0xFF2B0B5E),
                         Color(0xFF4C1D95),
                         Color(0xFF6B21A8),
                         Color(0xFF3B0764),
-                        Color(0xFF190630),
+                        Color(0xFF17052E),
                     ),
                     start = Offset(0f, 0f),
                     end = Offset(420f * (0.65f + 0.35f * sin(phase * 2f * PI.toFloat())), 340f),
@@ -1630,8 +1766,8 @@ internal fun FounderAnimatedBubbleBox(
                 drawCircle(
                     brush = Brush.radialGradient(
                         colors = listOf(
-                            Color(0xFFC084FC).copy(alpha = 0.34f * pulse),
-                            Color(0xFF9333EA).copy(alpha = 0.14f * pulse),
+                            Color(0xFFC084FC).copy(alpha = 0.36f * pulse),
+                            Color(0xFF9333EA).copy(alpha = 0.15f * pulse),
                             Color.Transparent,
                         ),
                         center = Offset(orb1X, orb1Y),
@@ -1643,7 +1779,7 @@ internal fun FounderAnimatedBubbleBox(
                 drawCircle(
                     brush = Brush.radialGradient(
                         colors = listOf(
-                            Color(0xFFE879F9).copy(alpha = 0.26f * pulse),
+                            Color(0xFFE879F9).copy(alpha = 0.28f * pulse),
                             Color(0xFF7E22CE).copy(alpha = 0.12f * pulse),
                             Color.Transparent,
                         ),
@@ -1654,13 +1790,8 @@ internal fun FounderAnimatedBubbleBox(
                     center = Offset(orb2X, orb2Y),
                 )
 
-                // Elemen kristal/partikel + gelombang aurora + meteor ungu melayang di dalam bubble Founder
-                drawBubbleFloatingElements(
-                    elementStyle = floatingElementStyle.ifBlank { "crystals" },
-                    accentColor = Color(0xFFE9D5FF),
-                    secondaryColor = Color(0xFFC084FC),
-                    phase = phase,
-                )
+                // Efek Utama Bubble Founder: Sambaran Petir Elektrik Bercabang (Royal Amethyst Lightning Storm)
+                drawFounderLightningStorm(phase = phase, boltPulse = pulse)
 
                 drawContent()
 
@@ -1670,14 +1801,67 @@ internal fun FounderAnimatedBubbleBox(
                     brush = Brush.linearGradient(
                         colors = listOf(
                             Color.Transparent,
-                            Color(0xFFFAF5FF).copy(alpha = 0.20f),
-                            Color(0xFFE879F9).copy(alpha = 0.14f),
+                            Color(0xFFFAF5FF).copy(alpha = 0.18f),
+                            Color(0xFFE879F9).copy(alpha = 0.12f),
                             Color.Transparent,
                         ),
                         start = Offset(sweepX - w * 0.24f, 0f),
                         end = Offset(sweepX + w * 0.24f, h),
                     ),
                 )
+            },
+        content = content,
+    )
+}
+
+/**
+ * Kontainer Bubble Chat Beranimasi Khusus untuk Role `XYTEAM` (Cyber Cyan-Indigo Grid)
+ * dan `TESTER` (Bio-Lab Emerald Matrix).
+ */
+@Composable
+internal fun XyRoleAnimatedBubbleBox(
+    role: String,
+    shape: Shape,
+    modifier: Modifier = Modifier,
+    content: @Composable BoxScope.() -> Unit,
+) {
+    val isTeam = role.equals("XYTEAM", ignoreCase = true)
+    val infinite = rememberInfiniteTransition(label = "role_bubble_fx")
+    val phase by infinite.animateFloat(
+        initialValue = 0f,
+        targetValue = 1f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(3000, easing = LinearEasing),
+            repeatMode = RepeatMode.Restart,
+        ),
+        label = "role_phase",
+    )
+    val bgColors = if (isTeam) {
+        listOf(Color(0xFF0A1428), Color(0xFF0F2547), Color(0xFF0C365A), Color(0xFF091931))
+    } else {
+        listOf(Color(0xFF061C17), Color(0xFF0B3128), Color(0xFF0F4436), Color(0xFF07221B))
+    }
+    val borderColors = if (isTeam) {
+        listOf(Color(0xFF38BDF8), Color(0xFF818CF8), Color(0xFF22D3EE), Color(0xFF38BDF8))
+    } else {
+        listOf(Color(0xFF34D399), Color(0xFF10B981), Color(0xFF6EE7B7), Color(0xFF34D399))
+    }
+    val accent = if (isTeam) Color(0xFF38BDF8) else Color(0xFF34D399)
+    val secondary = if (isTeam) Color(0xFF818CF8) else Color(0xFF10B981)
+
+    Box(
+        modifier = modifier
+            .clip(shape)
+            .background(brush = Brush.linearGradient(colors = bgColors), shape = shape)
+            .border(width = 1.2.dp, brush = Brush.linearGradient(colors = borderColors), shape = shape)
+            .drawWithContent {
+                drawBubbleFloatingElements(
+                    preset = if (isTeam) "cyber" else "bubbles",
+                    accentColor = accent,
+                    secondaryColor = secondary,
+                    phase = phase,
+                )
+                drawContent()
             },
         content = content,
     )

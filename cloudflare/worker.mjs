@@ -650,6 +650,8 @@ function communityJokePublicView(joke, viewerReaction = null, comments = null, e
     attachment: joke.attachment?.url
       ? { mime: joke.attachment.mime || "image/webp", url: joke.attachment.url }
       : null,
+    likes_count: Math.max(0, Number(joke.likes_count) || 0),
+    viewer_liked: Boolean(extra.viewerLiked),
     reactions: Object.fromEntries(COMMUNITY_JOKE_REACTIONS.map((emoji) => [emoji, Math.max(0, Number(joke.reactions?.[emoji]) || 0)])),
     viewer_reaction: viewerReaction,
     comments_total: Math.max(0, Number(joke.comment_count) || 0),
@@ -1158,6 +1160,8 @@ export class CommunityJokes {
       return this.readFeed(request);
     }
     if (path === "/submit" && request.method === "POST") return this.submit(request);
+    const likeMatch = path.match(/^\/like\/([0-9a-f-]{36})$/i);
+    if (likeMatch && request.method === "POST") return this.like(request, likeMatch[1]);
     const reaction = path.match(/^\/reaction\/([0-9a-f-]{36})$/i);
     if (reaction && request.method === "POST") return this.react(request, reaction[1]);
     const report = path.match(/^\/report\/([0-9a-f-]{36})$/i);
@@ -1177,15 +1181,19 @@ export class CommunityJokes {
   }
 
   async readNotifications(request) {
-    const clientId = request.headers.get("x-xydesk-client-id") || "";
-    const viewerGh = String(request.headers.get("x-xydesk-github-login") || "").trim().replace(/^@/, "").toLowerCase();
-    const viewerName = String(request.headers.get("x-xydesk-display-name") || "").trim().toLowerCase();
+    const reqUrl = new URL(request.url);
+    const clientId = request.headers.get("x-xydesk-client-id") || reqUrl.searchParams.get("client_id") || "";
+    const viewerGh = String(request.headers.get("x-xydesk-github-login") || reqUrl.searchParams.get("github_login") || "").trim().replace(/^@/, "").toLowerCase();
+    const viewerName = String(request.headers.get("x-xydesk-display-name") || reqUrl.searchParams.get("name") || "").trim().toLowerCase();
+    const sinceMs = Math.max(0, Number(reqUrl.searchParams.get("since") || 0) || 0);
     try {
       const clientHash = COMMUNITY_CLIENT_ID_RE.test(clientId) ? await hashedCommunityClientId(clientId) : "";
       const entries = await this.state.storage.list({ prefix: "notif:", reverse: true, limit: 150 });
       const items = [];
       for (const [, n] of entries) {
         if (!n) continue;
+        const createdAt = Number(n.created_at || 0);
+        if (sinceMs > 0 && createdAt <= sinceMs) continue;
         const cat = String(n.category || "inbox");
         const targetHash = String(n.target_hash || "");
         const targetGh = String(n.target_github || "").trim().toLowerCase();
@@ -1199,14 +1207,16 @@ export class CommunityJokes {
         if (!isForMe) continue;
         items.push({
           id: n.id,
-          category: cat, // "announcement" | "inbox" | "reply" | "mention"
+          category: cat, // "announcement" | "like" | "reaction" | "reply" | "mention" | "inbox"
           title: n.title || "",
           body: n.body || "",
+          actor_id: n.actor_id || "",
           actor_name: n.actor_name || "Komunitas",
           actor_github: n.actor_github || "",
           actor_avatar: n.actor_avatar || (n.actor_github ? `https://github.com/${n.actor_github}.png?size=120` : ""),
+          target_route: n.target_route || (cat === "announcement" ? "chat" : "feed"),
           joke_id: n.joke_id || "",
-          created_at: n.created_at || Date.now(),
+          created_at: createdAt || Date.now(),
         });
         if (items.length >= 60) break;
       }
@@ -1233,10 +1243,13 @@ export class CommunityJokes {
       }
       const items = await Promise.all(
         visibleJokes.map(async (joke) => {
-          const [viewerReaction, commentEntries] = await Promise.all([
+          const [viewerReaction, viewerLiked, commentEntries] = await Promise.all([
             clientHash
               ? this.state.storage.get(`joke-reaction:${joke.id}:${clientHash}`).then((r) => r || null).catch(() => null)
               : Promise.resolve(null),
+            clientHash
+              ? this.state.storage.get(`joke-like:${joke.id}:${clientHash}`).then((v) => Boolean(v)).catch(() => false)
+              : Promise.resolve(false),
             this.state.storage.list({
               prefix: `joke-comments:${joke.id}:`,
               reverse: true,
@@ -1252,7 +1265,7 @@ export class CommunityJokes {
               avatarUrl = `/api/jokes/avatar/${joke.author_hash}`;
             }
           }
-          return communityJokePublicView(joke, viewerReaction, comments, { isOwn, avatarUrl });
+          return communityJokePublicView(joke, viewerReaction, comments, { isOwn, avatarUrl, viewerLiked });
         }),
       );
       items.sort((a, b) => {
@@ -1536,6 +1549,69 @@ export class CommunityJokes {
     }
   }
 
+  async like(request, jokeId) {
+    if (!ACTIVE_SESSION_ID_RE.test(jokeId)) {
+      return durableObjectJson({ status: "invalid_joke_id" }, 400, request.method);
+    }
+    const parsed = await readCommunityJson(request, 1_024);
+    if (parsed.error) return parsed.error;
+    const clientId = parsed.body?.client_id;
+    if (!COMMUNITY_CLIENT_ID_RE.test(String(clientId || ""))) {
+      return durableObjectJson({ status: "invalid_client_id" }, 400, request.method);
+    }
+    try {
+      const clientHash = await hashedCommunityClientId(clientId);
+      const actorName = sanitizeCommunityDisplayName(parsed.body?.display_name) ||
+        (typeof parsed.body?.github_login === "string" ? parsed.body.github_login.trim().replace(/^@/, "") : "") ||
+        "Komunitas";
+      const actorGh = typeof parsed.body?.github_login === "string" ? parsed.body.github_login.trim().replace(/^@/, "") : "";
+      const now = Date.now();
+      const outcome = await this.state.storage.transaction(async (transaction) => {
+        const listKey = await transaction.get(`joke-id:${jokeId}`);
+        if (!listKey) return { status: "not_found" };
+        const joke = await transaction.get(listKey);
+        if (!joke || joke.hidden) return { status: "not_found" };
+
+        const likeKey = `joke-like:${jokeId}:${clientHash}`;
+        const prevLiked = Boolean(await transaction.get(likeKey));
+        const viewerReaction = await transaction.get(`joke-reaction:${jokeId}:${clientHash}`).catch(() => null);
+        const nextLiked = !prevLiked;
+        joke.likes_count = Math.max(0, (Number(joke.likes_count) || 0) + (nextLiked ? 1 : -1));
+        if (nextLiked) {
+          await transaction.put(likeKey, true);
+          if (joke.author_hash && joke.author_hash !== clientHash) {
+            const nId = crypto.randomUUID();
+            await transaction.put(`notif:${String(now).padStart(13, "0")}:${nId}`, {
+              id: nId,
+              category: "like",
+              target_hash: joke.author_hash,
+              target_github: joke.github_login || "",
+              target_name: joke.author_name || "",
+              title: `${actorName} menyukai postingan Anda`,
+              body: String(joke.text || "Postingan media").slice(0, 120),
+              actor_name: actorName,
+              actor_github: actorGh,
+              target_route: "feed",
+              joke_id: jokeId,
+              created_at: now,
+            });
+          }
+        } else {
+          await transaction.delete(likeKey);
+        }
+        await transaction.put(listKey, joke);
+        const isOwn = Boolean(joke.author_hash && joke.author_hash === clientHash);
+        return {
+          status: "ok",
+          joke: communityJokePublicView(joke, viewerReaction || null, null, { isOwn, viewerLiked: nextLiked }),
+        };
+      });
+      return durableObjectJson(outcome, outcome.status === "not_found" ? 404 : 200, request.method);
+    } catch {
+      return durableObjectJson({ status: "unavailable" }, 503, request.method);
+    }
+  }
+
   async react(request, jokeId) {
     if (!ACTIVE_SESSION_ID_RE.test(jokeId)) {
       return durableObjectJson({ status: "invalid_joke_id" }, 400, request.method);
@@ -1549,6 +1625,11 @@ export class CommunityJokes {
     }
     try {
       const clientHash = await hashedCommunityClientId(clientId);
+      const actorName = sanitizeCommunityDisplayName(parsed.body?.display_name) ||
+        (typeof parsed.body?.github_login === "string" ? parsed.body.github_login.trim().replace(/^@/, "") : "") ||
+        "Komunitas";
+      const actorGh = typeof parsed.body?.github_login === "string" ? parsed.body.github_login.trim().replace(/^@/, "") : "";
+      const now = Date.now();
       const outcome = await this.state.storage.transaction(async (transaction) => {
         const listKey = await transaction.get(`joke-id:${jokeId}`);
         if (!listKey) return { status: "not_found" };
@@ -1557,13 +1638,15 @@ export class CommunityJokes {
 
         const reactionKey = `joke-reaction:${jokeId}:${clientHash}`;
         const previous = await transaction.get(reactionKey);
+        const viewerLiked = Boolean(await transaction.get(`joke-like:${jokeId}:${clientHash}`).catch(() => false));
+        const isOwn = Boolean(joke.author_hash && joke.author_hash === clientHash);
         const reactions = { ...joke.reactions };
         if (previous === emoji) {
           reactions[emoji] = Math.max(0, (Number(reactions[emoji]) || 0) - 1);
           await transaction.delete(reactionKey);
           joke.reactions = reactions;
           await transaction.put(listKey, joke);
-          return { status: "ok", joke: communityJokePublicView(joke, null) };
+          return { status: "ok", joke: communityJokePublicView(joke, null, null, { isOwn, viewerLiked }) };
         }
         if (previous && COMMUNITY_JOKE_REACTIONS.includes(previous)) {
           reactions[previous] = Math.max(0, (Number(reactions[previous]) || 0) - 1);
@@ -1572,7 +1655,24 @@ export class CommunityJokes {
         joke.reactions = reactions;
         await transaction.put(reactionKey, emoji);
         await transaction.put(listKey, joke);
-        return { status: "ok", joke: communityJokePublicView(joke, emoji) };
+        if (joke.author_hash && joke.author_hash !== clientHash) {
+          const nId = crypto.randomUUID();
+          await transaction.put(`notif:${String(now).padStart(13, "0")}:${nId}`, {
+            id: nId,
+            category: "reaction",
+            target_hash: joke.author_hash,
+            target_github: joke.github_login || "",
+            target_name: joke.author_name || "",
+            title: `${actorName} bereaksi ${emoji} pada postingan Anda`,
+            body: String(joke.text || "Postingan media").slice(0, 120),
+            actor_name: actorName,
+            actor_github: actorGh,
+            target_route: "feed",
+            joke_id: jokeId,
+            created_at: now,
+          });
+        }
+        return { status: "ok", joke: communityJokePublicView(joke, emoji, null, { isOwn, viewerLiked }) };
       });
       return durableObjectJson(outcome, outcome.status === "not_found" ? 404 : 200, request.method);
     } catch {
@@ -2317,7 +2417,7 @@ async function dataPackResponse(request, env) {
         { code: "xy_king", name: "Sovereign Boss", res: "sticker_xy_king" },
       ],
       bubble_anim_config: {
-        version: "2026.10.18.62",
+        version: "2026.10.18.63",
         default_preset: "SPARKLES",
         founder_preset: "CRYSTAL",
         speed_multiplier: 1.35,
@@ -2688,16 +2788,18 @@ async function communityJokesResponse(request, env) {
     } else {
       return methodNotAllowed("GET, HEAD, POST");
     }
-  } else if (url.pathname === "/api/jokes/notifications") {
+  } else if (url.pathname === "/api/jokes/notifications" || url.pathname === "/api/notifications") {
     if (request.method === "GET" || request.method === "HEAD") {
       const fwdHeaders = {};
       const clientId = request.headers.get("x-xydesk-client-id") || url.searchParams.get("client_id") || "";
       const ghLogin = request.headers.get("x-xydesk-github-login") || url.searchParams.get("github_login") || "";
-      const dispName = request.headers.get("x-xydesk-display-name") || url.searchParams.get("display_name") || "";
+      const dispName = request.headers.get("x-xydesk-display-name") || url.searchParams.get("display_name") || url.searchParams.get("name") || "";
       if (clientId) fwdHeaders["x-xydesk-client-id"] = clientId;
       if (ghLogin) fwdHeaders["x-xydesk-github-login"] = ghLogin;
       if (dispName) fwdHeaders["x-xydesk-display-name"] = dispName;
-      internal = new Request("https://community-jokes/notifications", {
+      const internalUrl = new URL("https://community-jokes/notifications");
+      for (const [k, v] of url.searchParams.entries()) internalUrl.searchParams.set(k, v);
+      internal = new Request(internalUrl.toString(), {
         method: request.method,
         headers: fwdHeaders,
       });
@@ -2729,7 +2831,7 @@ async function communityJokesResponse(request, env) {
   } else if (url.pathname.match(/^\/api\/jokes\/(attachment|avatar)\//i)) {
     return serveCommunityBinary(request, env, url);
   } else {
-    const match = url.pathname.match(/^\/api\/jokes\/([0-9a-f-]{36})\/(reaction|report|comment-delete|comment|edit|delete)$/i);
+    const match = url.pathname.match(/^\/api\/jokes\/([0-9a-f-]{36})\/(like|reaction|report|comment-delete|comment|edit|delete)$/i);
     if (!match || request.method !== "POST") {
       return match ? methodNotAllowed("POST") : jsonResponse({ status: "not_found" }, 404, request.method);
     }
@@ -2998,7 +3100,7 @@ const CHAT_ATTACHMENT_MAX = 2_800_000;
 const CHAT_MSG_PER_WINDOW = 200;
 const CHAT_WINDOW_MS = 20_000;
 const APP_PRESENCE_TTL_MS = 75_000;
-const LIVE_DATA_PACK_VERSION = "2026.10.18.62";
+const LIVE_DATA_PACK_VERSION = "2026.10.18.63";
 let EDGE_PINNED_MSG = null;
 const DEFAULT_ONESIGNAL_APP_ID = "e3d5adea-1c0f-4986-9ce5-e088d65f0998";
 const LEGACY_TEST_NAMES = new Set(["tesbot", "budi", "rizky"]);
@@ -4775,7 +4877,7 @@ export default {
       if (request.method !== "POST") return methodNotAllowed("POST");
       return sessionReportResponse(request, env);
     }
-    if (path === "/api/jokes" || path.startsWith("/api/jokes/")) {
+    if (path === "/api/jokes" || path.startsWith("/api/jokes/") || path === "/api/notifications") {
       return communityJokesResponse(request, env);
     }
     if (path === "/api/feedback" || path.startsWith("/api/feedback/")) {

@@ -679,8 +679,8 @@ jobs:
             release-apks/SHA256SUMS.txt
           generate_release_notes: true
           overwrite_files: true
-          # Publikasikan langsung (draft: false) sesuai permintaan pemilik
-          draft: false
+          # Simpan sebagai Release Draft terlebih dahulu (draft: true) sesuai instruksi pemilik di Ronde 63
+          draft: true
       - name: Bersihkan cache, artifacts, dan output sementara Actions
         env:
           GH_TOKEN: ${{ github.token }}

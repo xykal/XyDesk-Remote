@@ -51,6 +51,9 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.AnnotatedString
+import androidx.compose.ui.text.SpanStyle
+import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
@@ -58,6 +61,7 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import id.xydesk.remote.ui.components.XyCard
@@ -129,12 +133,19 @@ fun XySshTerminalScreen(
     var cmdInput by remember { mutableStateOf("") }
     val cmdHistory = remember { mutableStateListOf<String>() }
     var historyCursor by remember { mutableIntStateOf(-1) }
+    var ctrlSticky by remember { mutableStateOf(false) }
+    var altSticky by remember { mutableStateOf(false) }
 
     val termScroll = rememberScrollState()
 
     fun appendTerminal(chunk: String) {
         mainHandler.post {
-            val combined = terminalBuffer + chunk
+            if (chunk.contains("\u001B[2J")) {
+                val afterClear = chunk.substringAfterLast("\u001B[2J")
+                terminalBuffer = processBackspaces(afterClear)
+                return@post
+            }
+            val combined = processBackspaces(terminalBuffer + chunk)
             terminalBuffer = if (combined.length > 48_000) {
                 combined.takeLast(40_000)
             } else {
@@ -575,7 +586,10 @@ fun XySshTerminalScreen(
                 }
             }
 
-            // Layar Output Terminal Monospace
+            // Layar Output Terminal Monospace (Termux ANSI 256-Color Renderer)
+            val styledTerminalText = remember(terminalBuffer) {
+                renderTermuxAnsiText(terminalBuffer)
+            }
             Box(
                 modifier = Modifier
                     .weight(1f)
@@ -586,7 +600,7 @@ fun XySshTerminalScreen(
             ) {
                 SelectionContainer {
                     Text(
-                        text = terminalBuffer,
+                        text = styledTerminalText,
                         color = Color(0xFFD1FAE5),
                         fontFamily = FontFamily.Monospace,
                         fontSize = 12.5.sp,
@@ -596,7 +610,81 @@ fun XySshTerminalScreen(
                 }
             }
 
-            // Input Perintah Shell Interaktif
+            // 2-Row Termux Extra Keys Bar (ESC, /, -, HOME, UP, END, PGUP / TAB, CTRL, ALT, LEFT, DOWN, RIGHT, PGDN)
+            val termuxRow1 = listOf(
+                "ESC" to "\u001B",
+                "/" to "/",
+                "-" to "-",
+                "HOME" to "\u001B[H",
+                "↑" to "\u001B[A",
+                "END" to "\u001B[F",
+                "PGUP" to "\u001B[5~",
+            )
+            val termuxRow2 = listOf(
+                "TAB" to "\t",
+                "CTRL" to "MOD_CTRL",
+                "ALT" to "MOD_ALT",
+                "←" to "\u001B[D",
+                "↓" to "\u001B[B",
+                "→" to "\u001B[C",
+                "PGDN" to "\u001B[6~",
+            )
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .background(Color(0xFF0D1117))
+                    .padding(horizontal = 6.dp, vertical = 4.dp),
+                verticalArrangement = Arrangement.spacedBy(4.dp),
+            ) {
+                for (rowKeys in listOf(termuxRow1, termuxRow2)) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(4.dp),
+                    ) {
+                        for ((kLabel, kSeq) in rowKeys) {
+                            val isModActive = (kSeq == "MOD_CTRL" && ctrlSticky) || (kSeq == "MOD_ALT" && altSticky)
+                            Box(
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .clip(RoundedCornerShape(6.dp))
+                                    .background(if (isModActive) Color(0xFF0284C7) else Color(0xFF161B22))
+                                    .border(
+                                        0.75.dp,
+                                        if (isModActive) Color(0xFF38BDF8) else Color(0xFF28303D),
+                                        RoundedCornerShape(6.dp),
+                                    )
+                                    .clickable {
+                                        when (kSeq) {
+                                            "MOD_CTRL" -> ctrlSticky = !ctrlSticky
+                                            "MOD_ALT" -> altSticky = !altSticky
+                                            else -> {
+                                                val outBytes = if (altSticky) {
+                                                    altSticky = false
+                                                    ("\u001B" + kSeq).toByteArray(Charsets.UTF_8)
+                                                } else {
+                                                    kSeq.toByteArray(Charsets.UTF_8)
+                                                }
+                                                activeSession?.sendRawData(outBytes)
+                                            }
+                                        }
+                                    }
+                                    .padding(vertical = 6.dp),
+                                contentAlignment = Alignment.Center,
+                            ) {
+                                Text(
+                                    text = kLabel,
+                                    color = if (isModActive) Color.White else Color(0xFFE2E8F0),
+                                    fontSize = 11.sp,
+                                    fontFamily = FontFamily.Monospace,
+                                    fontWeight = FontWeight.SemiBold,
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+
+            // Input Perintah Shell Interaktif (Mendukung Sticky CTRL/ALT ala Termux)
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -606,8 +694,8 @@ fun XySshTerminalScreen(
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
             ) {
                 Text(
-                    text = "$",
-                    color = Color(0xFF22C55E),
+                    text = if (ctrlSticky) "^" else "$",
+                    color = if (ctrlSticky) Color(0xFF38BDF8) else Color(0xFF22C55E),
                     fontFamily = FontFamily.Monospace,
                     fontWeight = FontWeight.Bold,
                     fontSize = 16.sp,
@@ -615,7 +703,24 @@ fun XySshTerminalScreen(
                 )
                 OutlinedTextField(
                     value = cmdInput,
-                    onValueChange = { cmdInput = it },
+                    onValueChange = { nextVal ->
+                        if (ctrlSticky && nextVal.length == cmdInput.length + 1) {
+                            val ch = nextVal.last().lowercaseChar()
+                            if (ch in 'a'..'z') {
+                                val ctrlByte = (ch.code - 'a'.code + 1).toByte()
+                                activeSession?.sendRawData(byteArrayOf(ctrlByte))
+                                ctrlSticky = false
+                                return@OutlinedTextField
+                            }
+                        }
+                        if (altSticky && nextVal.length == cmdInput.length + 1) {
+                            val ch = nextVal.last()
+                            activeSession?.sendRawData(("\u001B$ch").toByteArray(Charsets.UTF_8))
+                            altSticky = false
+                            return@OutlinedTextField
+                        }
+                        cmdInput = nextVal
+                    },
                     placeholder = {
                         Text(
                             text = xy("Ketik perintah Linux (mis. ls -la, htop, docker ps)…", "Type Linux command (e.g. ls -la, htop, docker ps)…"),
@@ -676,3 +781,91 @@ fun XySshTerminalScreen(
         }
     }
 }
+
+private val TERMUX_SGR_REGEX = Regex("\u001B\\[([0-9;]*)m")
+
+private fun processBackspaces(input: String): String {
+    if (!input.contains('\u0008') && !input.contains('\u007F')) return input
+    val sb = StringBuilder(input.length)
+    for (ch in input) {
+        if (ch == '\u0008' || ch == '\u007F') {
+            if (sb.isNotEmpty() && sb.last() != '\n') {
+                sb.deleteCharAt(sb.length - 1)
+            }
+        } else {
+            sb.append(ch)
+        }
+    }
+    return sb.toString()
+}
+
+private fun renderTermuxAnsiText(raw: String): AnnotatedString {
+    if (!raw.contains("\u001B[")) return AnnotatedString(raw)
+    return buildAnnotatedString {
+        var currentFg = Color(0xFFD1FAE5)
+        var isBold = false
+        var lastIndex = 0
+        for (match in TERMUX_SGR_REGEX.findAll(raw)) {
+            if (match.range.first > lastIndex) {
+                val seg = raw.substring(lastIndex, match.range.first)
+                withStyle(
+                    SpanStyle(
+                        color = currentFg,
+                        fontWeight = if (isBold) FontWeight.Bold else FontWeight.Normal,
+                    ),
+                ) {
+                    append(seg)
+                }
+            }
+            val codes = match.groupValues[1].split(";").mapNotNull { it.toIntOrNull() }
+            if (codes.isEmpty()) {
+                currentFg = Color(0xFFD1FAE5)
+                isBold = false
+            } else {
+                var i = 0
+                while (i < codes.size) {
+                    when (val c = codes[i]) {
+                        0 -> {
+                            currentFg = Color(0xFFD1FAE5)
+                            isBold = false
+                        }
+                        1 -> isBold = true
+                        22 -> isBold = false
+                        30, 90 -> currentFg = Color(0xFF94A3B8)
+                        31, 91 -> currentFg = Color(0xFFF87171)
+                        32, 92 -> currentFg = Color(0xFF4ADE80)
+                        33, 93 -> currentFg = Color(0xFFFBBF24)
+                        34, 94 -> currentFg = Color(0xFF60A5FA)
+                        35, 95 -> currentFg = Color(0xFFC084FC)
+                        36, 96 -> currentFg = Color(0xFF22D3EE)
+                        37, 39, 97 -> currentFg = Color(0xFFF8FAFC)
+                        38 -> {
+                            if (i + 2 < codes.size && codes[i + 1] == 5) {
+                                val idx = codes[i + 2]
+                                currentFg = when (idx) {
+                                    in 1..6 -> Color(0xFF38BDF8)
+                                    in 9..14 -> Color(0xFF4ADE80)
+                                    else -> Color(0xFFE2E8F0)
+                                }
+                                i += 2
+                            }
+                        }
+                    }
+                    i++
+                }
+            }
+            lastIndex = match.range.last + 1
+        }
+        if (lastIndex < raw.length) {
+            withStyle(
+                SpanStyle(
+                    color = currentFg,
+                    fontWeight = if (isBold) FontWeight.Bold else FontWeight.Normal,
+                ),
+            ) {
+                append(raw.substring(lastIndex))
+            }
+        }
+    }
+}
+

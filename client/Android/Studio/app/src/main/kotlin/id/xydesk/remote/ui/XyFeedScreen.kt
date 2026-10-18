@@ -470,8 +470,9 @@ internal fun FeedNotificationsPanel(
     val filtered = remember(items, selectedCategory) {
         when (selectedCategory) {
             "announcement" -> items.filter { it.category == "announcement" }
-            "inbox" -> items.filter { it.category == "inbox" }
+            "inbox" -> items.filter { it.category == "inbox" || it.category == "comment" }
             "reply" -> items.filter { it.category == "reply" || it.category == "mention" }
+            "like" -> items.filter { it.category == "like" || it.category == "reaction" }
             else -> items
         }
     }
@@ -489,6 +490,7 @@ internal fun FeedNotificationsPanel(
             val categories = listOf(
                 Triple("all", XyIcons.Bell, xy("Semua (${items.size})", "All (${items.size})")),
                 Triple("announcement", XyIcons.Megaphone, xy("Pengumuman", "Announcements")),
+                Triple("like", XyIcons.Heart, xy("Like & Reaksi", "Likes & Reactions")),
                 Triple("inbox", XyIcons.Inbox, xy("Komentar", "Comments")),
                 Triple("reply", XyIcons.Chat, xy("Balasan", "Replies")),
             )
@@ -532,8 +534,16 @@ internal fun FeedNotificationsPanel(
                 filtered.forEach { item ->
                     val itemIcon = when (item.category) {
                         "announcement" -> XyIcons.Megaphone
+                        "like" -> XyIcons.Heart
+                        "reaction" -> XyIcons.Emoji
                         "reply", "mention" -> XyIcons.Chat
                         else -> XyIcons.Inbox
+                    }
+                    val itemTint = when (item.category) {
+                        "like" -> Color(0xFFFB7185)
+                        "reaction" -> Color(0xFFFBBF24)
+                        "announcement" -> Color(0xFF38BDF8)
+                        else -> Color(0xFFCBD5E1)
                     }
                     Row(
                         modifier = Modifier
@@ -553,7 +563,7 @@ internal fun FeedNotificationsPanel(
                             Icon(
                                 imageVector = itemIcon,
                                 contentDescription = null,
-                                tint = Color(0xFFCBD5E1),
+                                tint = itemTint,
                                 modifier = Modifier.size(16.dp),
                             )
                         }

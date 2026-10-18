@@ -1,0 +1,64 @@
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="160dp"
+    android:height="160dp"
+    android:viewportWidth="160"
+    android:viewportHeight="160">
+    <!-- Die-cut matte white sticker border -->
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M42,24 C54,24 62,32 66,38 C74,36 86,36 94,38 C98,32 106,24 118,24 C130,24 138,34 134,48 C142,64 142,92 134,112 C124,132 104,140 80,140 C56,140 36,132 26,112 C18,92 18,64 26,48 C22,34 30,24 42,24 Z" />
+    <!-- Panda black ears -->
+    <path
+        android:fillColor="#27272A"
+        android:pathData="M32,44 a15,15 0 1,0 30,0 a15,15 0 1,0 -30,0" />
+    <path
+        android:fillColor="#27272A"
+        android:pathData="M98,44 a15,15 0 1,0 30,0 a15,15 0 1,0 -30,0" />
+    <!-- Panda white head -->
+    <path
+        android:fillColor="#FAFAFA"
+        android:strokeColor="#27272A"
+        android:strokeWidth="4.5"
+        android:strokeLineJoin="round"
+        android:pathData="M80,40 C112,40 132,62 130,94 C128,120 108,132 80,132 C52,132 32,120 30,94 C28,62 48,40 80,40 Z" />
+    <!-- Panda dark eye patches -->
+    <path
+        android:fillColor="#27272A"
+        android:pathData="M44,72 a13,16 0 1,0 26,0 a13,16 0 1,0 -26,0" />
+    <path
+        android:fillColor="#27272A"
+        android:pathData="M90,72 a13,16 0 1,0 26,0 a13,16 0 1,0 -26,0" />
+    <!-- Wide shocked white eyes -->
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M50,70 a7,7 0 1,0 14,0 a7,7 0 1,0 -14,0" />
+    <path
+        android:fillColor="#27272A"
+        android:pathData="M55,70 a2.5,2.5 0 1,0 5,0 a2.5,2.5 0 1,0 -5,0" />
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M96,70 a7,7 0 1,0 14,0 a7,7 0 1,0 -14,0" />
+    <path
+        android:fillColor="#27272A"
+        android:pathData="M101,70 a2.5,2.5 0 1,0 5,0 a2.5,2.5 0 1,0 -5,0" />
+    <!-- Open shocked mouth -->
+    <path
+        android:fillColor="#E11D48"
+        android:strokeColor="#27272A"
+        android:strokeWidth="4"
+        android:pathData="M71,98 a9,12 0 1,0 18,0 a9,12 0 1,0 -18,0" />
+    <!-- Panda paws on cheeks (Home Alone shock pose) -->
+    <path
+        android:fillColor="#27272A"
+        android:pathData="M30,98 a11,16 0 1,0 22,0 a11,16 0 1,0 -22,0" />
+    <path
+        android:fillColor="#27272A"
+        android:pathData="M108,98 a11,16 0 1,0 22,0 a11,16 0 1,0 -22,0" />
+    <!-- Matte shock lines at top -->
+    <path
+        android:fillColor="#00000000"
+        android:strokeColor="#D97706"
+        android:strokeWidth="4"
+        android:strokeLineCap="round"
+        android:pathData="M80,18 L80,30 M66,22 L70,32 M94,22 L90,32" />
+</vector>
