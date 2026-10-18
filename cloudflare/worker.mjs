@@ -1,3 +1,5 @@
+import { verifyGithubIdentity } from "./oauth-identity.mjs";
+
 // Pinned fallback only; alias and checksum redirects prefer the current
 // release_tag/downloads from release-state.json (see currentReleaseAssetUrl).
 const RELEASE = "https://github.com/xykal/XyDesk-Remote/releases/download/v1.0.2/";
@@ -4721,17 +4723,23 @@ export default {
       const rawBody = await request.text().catch(() => "");
       let parsed = null;
       try { parsed = JSON.parse(rawBody); } catch {}
-      const sid = String(parsed?.session_id || "").trim().replace(/[^a-zA-Z0-9_-]/g, "").slice(0, 64);
+      const sid = typeof parsed?.session_id === "string" ? parsed.session_id.trim() : "";
       const tok = String(parsed?.token || "").trim();
       const login = String(parsed?.login || "").trim().slice(0, 40);
-      if (!sid || !tok || !login) {
+      if (!/^[a-zA-Z0-9_-]{1,64}$/.test(sid) || !tok || !login) {
         return durableObjectJson({ status: "error", code: "invalid_payload" }, 400, request.method);
+      }
+      // This verifies the provider principal, not ownership of the polling session.
+      // Session/state binding remains a separate prerequisite before reward grants.
+      const verified = await verifyGithubIdentity(tok, login);
+      if (!verified.ok) {
+        return durableObjectJson({ status: "error", code: verified.code }, verified.status, request.method);
       }
       const sessionPayload = {
         token: tok,
-        login,
-        name: String(parsed?.name || login).slice(0, 80),
-        avatar_url: String(parsed?.avatar_url || "").slice(0, 300),
+        login: verified.principal.login,
+        name: verified.principal.name,
+        avatar_url: verified.principal.avatar_url,
         at: Date.now(),
       };
       EDGE_OAUTH_SESSIONS.set(sid, sessionPayload);
@@ -4747,7 +4755,7 @@ export default {
             new Request(new URL("/oauth-complete", request.url), {
               method: "POST",
               headers: { "Content-Type": "application/json" },
-              body: rawBody,
+              body: JSON.stringify({ session_id: sid, ...sessionPayload }),
             }),
           );
         } catch {}

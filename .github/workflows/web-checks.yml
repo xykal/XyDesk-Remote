@@ -21,7 +21,6 @@ jobs:
           persist-credentials: false
       - name: Check Worker JavaScript syntax
         run: |
-          node --check cloudflare/worker.mjs
-          node --check cloudflare/worker.test.mjs
+          for file in cloudflare/*.mjs; do node --check "$file"; done
       - name: Run Worker route and compatibility tests
-        run: node --test cloudflare/worker.test.mjs
+        run: node --test cloudflare/*.test.mjs

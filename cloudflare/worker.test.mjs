@@ -1946,3 +1946,62 @@ test("empty durable leaderboard never fabricates founder or placeholder podium u
   assert.deepEqual(body.items, []);
   assert.equal(body.total_ranked, 0);
 });
+
+test("OAuth complete rejects mismatched provider identity before any storage or DO write", async () => {
+  let writes = 0;
+  const env = envFor({}, {
+    UNIQUE_DOWNLOADS: { put: async () => { writes++; } },
+    GLOBAL_CHAT: { idFromName() { writes++; throw new Error("must not forward"); } },
+  });
+  globalThis.fetch = async () => Response.json({ id: 123, login: "alice" });
+  const response = await worker.fetch(new Request("https://example.test/api/github/oauth/complete", {
+    method: "POST", body: JSON.stringify({ session_id: "test-mismatch", token: "test-only", login: "bob" }),
+  }), env);
+  assert.equal(response.status, 401);
+  assert.deepEqual(await response.json(), { status: "error", code: "invalid_identity" });
+  assert.equal(writes, 0);
+});
+
+test("OAuth complete writes only provider identity and forwards canonical metadata", async () => {
+  const stored = [];
+  const forwarded = [];
+  const env = envFor({}, {
+    UNIQUE_DOWNLOADS: { put: async (key, value) => { stored.push([key, JSON.parse(value)]); } },
+    GLOBAL_CHAT: {
+      idFromName: () => "test-chat",
+      get: () => ({ fetch: async request => { forwarded.push(await request.json()); return Response.json({ status: "ok" }); } }),
+    },
+  });
+  globalThis.fetch = async () => Response.json({ id: 123, login: "Alice", name: "Verified Provider", avatar_url: "https://avatars.githubusercontent.com/u/123" });
+  const response = await worker.fetch(new Request("https://example.test/api/github/oauth/complete", {
+    method: "POST", body: JSON.stringify({ session_id: "test-canonical", token: "test-only", login: "alice", name: "Forged Founder", avatar_url: "https://example.test/forged" }),
+  }), env);
+  assert.equal(response.status, 200);
+  assert.equal(stored.length, 1);
+  assert.equal(stored[0][1].login, "Alice");
+  assert.equal(stored[0][1].name, "Verified Provider");
+  assert.equal(forwarded.length, 1);
+  assert.equal(forwarded[0].name, "Verified Provider");
+  assert.equal(forwarded[0].avatar_url, "https://avatars.githubusercontent.com/u/123");
+});
+
+test("OAuth complete provider failure cannot write session", async () => {
+  let writes = 0;
+  globalThis.fetch = async () => new Response("provider unavailable", { status: 503 });
+  const response = await worker.fetch(new Request("https://example.test/api/github/oauth/complete", {
+    method: "POST", body: JSON.stringify({ session_id: "test-unavailable", token: "test-only", login: "alice" }),
+  }), envFor({}, { UNIQUE_DOWNLOADS: { put: async () => { writes++; } } }));
+  assert.equal(response.status, 503);
+  assert.equal(writes, 0);
+  assert.deepEqual(await response.json(), { status: "error", code: "identity_provider_unavailable" });
+});
+
+test("OAuth complete rejects malformed session rather than aliasing it", async () => {
+  let calls = 0;
+  globalThis.fetch = async () => { calls++; throw new Error("must not fetch"); };
+  const response = await worker.fetch(new Request("https://example.test/api/github/oauth/complete", {
+    method: "POST", body: JSON.stringify({ session_id: "test!aliased", token: "test-only", login: "alice" }),
+  }), envFor());
+  assert.equal(response.status, 400);
+  assert.equal(calls, 0);
+});
