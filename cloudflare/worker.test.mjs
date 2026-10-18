@@ -2005,3 +2005,53 @@ test("OAuth complete rejects malformed session rather than aliasing it", async (
   assert.equal(response.status, 400);
   assert.equal(calls, 0);
 });
+
+test("unsigned legacy cookie cannot create a polling session or token deep link", async () => {
+  let writes = 0;
+  let providerCalls = 0;
+  globalThis.fetch = async () => { providerCalls++; throw new Error("no provider request during authorization redirect"); };
+  const cookie = encodeURIComponent(btoa(JSON.stringify({ token: "forged-cookie-token", login: "xykal", name: "Forged Founder" })));
+  const response = await worker.fetch(new Request("https://example.test/api/github/oauth/login?session_id=cookie-guard", {
+    headers: { cookie: `xy_gh_session=${cookie}` },
+  }), envFor({}, { UNIQUE_DOWNLOADS: { put: async () => { writes++; } } }));
+  assert.equal(response.status, 302);
+  const destination = new URL(response.headers.get("location"));
+  assert.equal(destination.origin, "https://github.com");
+  assert.equal(destination.pathname, "/login/oauth/authorize");
+  assert.equal(destination.searchParams.has("access_token"), false);
+  assert.equal(response.headers.get("location").includes("forged-cookie-token"), false);
+  assert.equal(writes, 0);
+  assert.equal(providerCalls, 0);
+  assert.match(response.headers.get("set-cookie"), /xy_oauth_state=.*HttpOnly; Secure; SameSite=Lax/);
+  const poll = await worker.fetch(new Request("https://example.test/api/github/oauth/poll?session_id=cookie-guard"), envFor());
+  assert.equal((await poll.json()).ready, false);
+});
+
+test("malformed legacy cookie follows same provider flow as no cookie on login aliases", async () => {
+  for (const path of ["/api/github/oauth/login", "/api/auth/login"]) {
+    for (const cookie of ["", "xy_gh_session=not-valid-base64", `xy_gh_session=${encodeURIComponent(btoa(JSON.stringify({ token: "legacy-test", login: "alice" })))}`]) {
+      const response = await worker.fetch(new Request(`https://example.test${path}?session_id=legacy-alias`, {
+        headers: cookie ? { cookie } : {},
+      }), envFor());
+      assert.equal(response.status, 302);
+      assert.equal(new URL(response.headers.get("location")).origin, "https://github.com");
+      assert.equal((await response.text()).includes("legacy-test"), false);
+    }
+  }
+});
+
+test("HTML OAuth callback expires legacy bearer cookie instead of minting it", async () => {
+  globalThis.fetch = async url => {
+    if (String(url) === "https://github.com/login/oauth/access_token") return Response.json({ access_token: "test-callback-token" });
+    if (String(url) === "https://api.github.com/user") return Response.json({ id: 123, login: "alice", name: "Alice" });
+    throw new Error("unexpected external request");
+  };
+  const response = await worker.fetch(new Request("https://example.test/api/github/oauth/callback?code=test-code&state=apk_cookie-expire_nonce"), envFor({}, {
+    GITHUB_OAUTH_CLIENT_ID: "test-client", GITHUB_OAUTH_CLIENT_SECRET: "test-config-not-real",
+  }));
+  assert.equal(response.status, 200);
+  assert.equal(response.headers.get("set-cookie"), "xy_gh_session=; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=0");
+  assert.equal(response.headers.get("set-cookie").includes("test-callback-token"), false);
+  // Existing application return mechanism is unchanged in this step.
+  assert.ok((await response.text()).includes("xydesk://github-auth?token=test-callback-token"));
+});

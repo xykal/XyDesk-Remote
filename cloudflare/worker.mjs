@@ -4539,38 +4539,9 @@ export default {
       const oauthClientId = String(env?.GITHUB_OAUTH_CLIENT_ID || "Ov23liBsgZ5xJKgzHGtl").trim();
       const oauthSecret = String(env?.GITHUB_OAUTH_CLIENT_SECRET || "").trim();
 
-      // Fast-path jika browser Chrome sudah memiliki sesi cookie xy_gh_session yang valid
-      const cookieHeader = String(request.headers.get("cookie") || "");
-      const cookieMatch = cookieHeader.match(/(?:^|;\s*)xy_gh_session=([^;]+)/);
-      if (cookieMatch && cookieMatch[1] && url.searchParams.get("force") !== "1") {
-        try {
-          const decoded = JSON.parse(atob(decodeURIComponent(cookieMatch[1])));
-          if (decoded && decoded.token && decoded.login) {
-            if (sid) {
-              const sessionPayload = {
-                token: decoded.token,
-                login: decoded.login,
-                name: decoded.name || decoded.login,
-                avatar_url: decoded.avatar_url || "",
-                at: Date.now(),
-              };
-              EDGE_OAUTH_SESSIONS.set(sid, sessionPayload);
-              if (env?.UNIQUE_DOWNLOADS) {
-                try {
-                  await env.UNIQUE_DOWNLOADS.put(`oauth:${sid}`, JSON.stringify(sessionPayload), { expirationTtl: 600 });
-                } catch {}
-              }
-            }
-            const deepLink = `xydesk://github-auth?token=${encodeURIComponent(decoded.token)}&login=${encodeURIComponent(decoded.login)}&name=${encodeURIComponent(decoded.name || decoded.login)}&avatar=${encodeURIComponent(decoded.avatar_url || "")}`;
-            const intentLink = `intent://github-auth?token=${encodeURIComponent(decoded.token)}&login=${encodeURIComponent(decoded.login)}&name=${encodeURIComponent(decoded.name || decoded.login)}&avatar=${encodeURIComponent(decoded.avatar_url || "")}#Intent;scheme=xydesk;package=id.xydesk.remote;end`;
-            const html = `<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>GitHub Terhubung · XyDesk Remote</title><style>body{background:#09090b;color:#fafafa;font-family:system-ui,-apple-system,sans-serif;display:flex;align-items:center;justify-content:center;min-height:100vh;margin:0;padding:24px;text-align:center}.card{max-width:380px;background:#141418;border:1px solid rgba(255,255,255,.12);border-radius:16px;padding:28px 22px}.btn{display:inline-block;margin-top:18px;padding:12px 24px;border-radius:10px;background:#fafafa;color:#09090b;font-weight:700;text-decoration:none;font-size:14px}</style></head><body><div class="card"><div style="font-size:17px;font-weight:700;margin-bottom:8px">Sesi GitHub Aktif</div><div style="font-size:13px;color:#a1a1aa">Terhubung sebagai <b>@${String(decoded.login).replace(/[<>&"']/g, "")}</b>. Mengembalikan ke XyDesk Remote...</div><a class="btn" href="${deepLink}">Kembali ke XyDesk Remote</a></div><script>setTimeout(function(){window.location.replace(${JSON.stringify(deepLink)});},60);setTimeout(function(){window.location.replace(${JSON.stringify(intentLink)});},500);</script></body></html>`;
-            return new Response(html, {
-              status: 200,
-              headers: { "Content-Type": "text/html; charset=utf-8", "Cache-Control": "no-store" },
-            });
-          }
-        } catch {}
-      }
+      // Legacy xy_gh_session cookies are unsigned bearer-token containers.
+      // Never turn client-controlled cookie claims into a polling session/deep link.
+      // Continue through normal provider authorization even if that cookie exists.
 
       // Gunakan OAuth App yang sudah terverifikasi callback-nya di GitHub (https://rdpfree.projectkal.my.id/api/auth/callback/github)
       // secara default agar langsung jalan 100% tanpa user perlu atur Redirect URI manual, sekaligus dukung Ov23liBsgZ5xJKgzHGtl.
@@ -4704,7 +4675,6 @@ export default {
       if (path === "/api/github/oauth/exchange" || url.searchParams.get("format") === "json") {
         return durableObjectJson({ status: "ok", ready: true, ...sessionPayload }, 200, request.method);
       }
-      const cookieVal = encodeURIComponent(btoa(JSON.stringify(sessionPayload)));
       const deepLink = `xydesk://github-auth?token=${encodeURIComponent(accessToken)}&login=${encodeURIComponent(login)}&name=${encodeURIComponent(name)}&avatar=${encodeURIComponent(avatarUrl)}`;
       const intentLink = `intent://github-auth?token=${encodeURIComponent(accessToken)}&login=${encodeURIComponent(login)}&name=${encodeURIComponent(name)}&avatar=${encodeURIComponent(avatarUrl)}#Intent;scheme=xydesk;package=id.xydesk.remote;end`;
       const html = `<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>GitHub Terhubung · XyDesk Remote</title><style>body{background:#09090b;color:#fafafa;font-family:system-ui,-apple-system,sans-serif;display:flex;align-items:center;justify-content:center;min-height:100vh;margin:0;padding:24px;text-align:center}.card{max-width:380px;background:#141418;border:1px solid rgba(255,255,255,.12);border-radius:16px;padding:28px 22px}.btn{display:inline-block;margin-top:18px;padding:12px 24px;border-radius:10px;background:#fafafa;color:#09090b;font-weight:700;text-decoration:none;font-size:14px}</style></head><body><div class="card"><div style="font-size:17px;font-weight:700;margin-bottom:8px">GitHub Terhubung</div><div style="font-size:13px;color:#a1a1aa">Masuk sebagai <b>@${login.replace(/[<>&"']/g, "")}</b>. Mengembalikan otomatis ke aplikasi XyDesk Remote...</div><a class="btn" href="${deepLink}">Kembali ke XyDesk Remote</a></div><script>setTimeout(function(){window.location.replace(${JSON.stringify(deepLink)});},80);setTimeout(function(){window.location.replace(${JSON.stringify(intentLink)});},600);</script></body></html>`;
@@ -4713,7 +4683,8 @@ export default {
         headers: {
           "Content-Type": "text/html; charset=utf-8",
           "Cache-Control": "no-store",
-          "Set-Cookie": `xy_gh_session=${cookieVal}; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=2592000`,
+          // Retire the unused bearer-token cookie instead of retaining it for 30 days.
+          "Set-Cookie": "xy_gh_session=; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=0",
         },
       });
     }
