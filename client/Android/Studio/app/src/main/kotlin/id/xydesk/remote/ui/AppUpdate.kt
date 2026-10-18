@@ -142,7 +142,7 @@ internal fun XyInAppNotificationBannerHost(
                 else -> MaterialTheme.colorScheme.primary
             }
             val iconVec = when (item.category.lowercase()) {
-                "announcement" -> XyIcons.Sparkles
+                "announcement" -> XyIcons.Megaphone
                 "like" -> XyIcons.Heart
                 "reaction" -> XyIcons.Emoji
                 "reply", "mention", "chat", "comment" -> XyIcons.Chat
