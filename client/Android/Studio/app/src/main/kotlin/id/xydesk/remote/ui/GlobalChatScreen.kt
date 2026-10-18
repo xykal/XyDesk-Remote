@@ -170,7 +170,6 @@ import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
 import java.util.TimeZone
-import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.TimeUnit
 import javax.crypto.Cipher
 import javax.crypto.Mac
@@ -185,14 +184,15 @@ import kotlin.math.roundToInt
  * - Khusus **Founder (`@xykal`)**: Badge & Bubble Beranimasi Epik (`FounderAnimatedBubbleBox` +
  *   `XyFounderBadge` dengan sapuan Liquid Gold & mahkota bersayap).
  * - **100% Vector Icons** (tanpa emoji untuk ikon UI): centang 1 / 2 vektor (`✓` / `✓✓`),
- *   ikon balas vektor, stiker vektor, lampiran vektor, kamera vektor, bagikan vektor, dan perisai E2EE.
+ *   ikon balas vektor, stiker vektor, lampiran vektor, kamera vektor, bagikan vektor, dan perisai keamanan pesan.
  * - **Koleksi Stiker Ilustrasi AI Unik** (`sticker_xy_gg`, `sticker_xy_laugh`, `sticker_xy_fire`,
  *   `sticker_xy_chill`, `sticker_xy_sad`, `sticker_xy_king`).
  * - **Tahan (Long-Press) Bubble Chat**: otomatis memfokuskan bubble yang ditahan, memberikan
  *   efek **Blur Background** di belakangnya, dan memunculkan **Menu Konteks ala iPhone / WhatsApp**.
  * - **Privasi Member Baru (`joined_at`)**: pengguna yang baru bergabung tidak dapat melihat
  *   riwayat chat sebelum waktu bergabungnya.
- * - **End-to-End Encryption (`XY-E2EE-GCM-v1`) & Validasi Kriptografi Tingkat Lanjut** (`AES-256-GCM` + `HMAC-SHA256`).
+ * - **Proteksi Transit Pesan (`XY-E2EE-GCM-v1`: AES-256-GCM + HMAC-SHA256)** — enkripsi &
+ *   integritas saat transit via WSS/TLS; BUKAN E2EE sejati (lihat catatan di `ChatE2eeCrypto`).
  * - **Total Online Aplikasi**: dihitung dari seluruh pengguna yang sedang membuka aplikasi XyDesk Remote.
  * - **Fitur Share Chat Global** langsung dari header maupun dari menu tahan bubble.
  */
@@ -261,10 +261,11 @@ private data class ChatMessage(
     val attachmentData: String = "",
     val viewOnce: Boolean = false,
     val avatarUrl: String = "",
-    val deliveryTicks: Int = 2, // 1 = terkirim ke antrean (✓), 2 = tervalidasi E2EE & diterima room (✓✓)
+    val deliveryTicks: Int = 2, // 1 = terkirim ke antrean (✓), 2 = diterima & tervalidasi room (✓✓)
     val e2eeProtocol: String = "XY-E2EE-GCM-v1",
     val e2eeSig: String = "",
-    val e2eeVerified: Boolean = true,
+    // Default TIDAK terverifikasi; hanya HMAC valid dari server yang menyalakan ini.
+    val e2eeVerified: Boolean = false,
 )
 
 private data class XyStickerPreset(
@@ -427,9 +428,15 @@ private val CLIENT_ID_WORD_REGEX = Regex(
 )
 
 /**
- * Mesin Enkripsi End-to-End (`XY-E2EE-GCM-v1`) menggunakan AES-256-GCM + HMAC-SHA256.
- * Memastikan setiap pesan dienkripsi dan memiliki tanda tangan integritas kriptografis
- * yang terikat ke pengirim dan waktu pengiriman.
+ * Proteksi pesan Chat Global (`XY-E2EE-GCM-v1`): AES-256-GCM + HMAC-SHA256.
+ *
+ * JUJUR SOAL MODEL ANCAMAN: kunci room diturunkan dari [ROOM_SEED] yang
+ * ter-compile ke APK publik, dan server juga menyimpan plaintext di field
+ * `text`. Jadi ini obfuscation + cek integritas transit — BUKAN end-to-end
+ * encryption sejati. Jangan pernah mengklaim "E2EE" ke user atas modul ini.
+ * TODO(fase-1.5): ganti ke sender-key nyata (X25519 per-member, ratchet saat
+ * member keluar) di app + worker; nama protokol wire dipertahankan supaya
+ * client lama tetap kompatibel sampai migrasi selesai.
  */
 private object ChatE2eeCrypto {
     private const val PROTOCOL = "XY-E2EE-GCM-v1"
@@ -492,15 +499,18 @@ private object ChatE2eeCrypto {
                 cipher.updateAAD(aad)
                 val decrypted = String(cipher.doFinal(encrypted), Charsets.UTF_8)
                 val expectedSig = sign(decrypted, senderName, githubLogin, cipherBase64)
-                val sigOk = signatureHex.isBlank() || expectedSig.equals(signatureHex, ignoreCase = true)
+                // Signature kosong TIDAK lagi dihitung valid; HMAC gagal juga tidak.
+                val sigOk = expectedSig.isNotBlank() && expectedSig.equals(signatureHex, ignoreCase = true)
                 return decrypted to sigOk
             }
         }
         if (signatureHex.isNotBlank()) {
             val expected = sign(fallbackText, senderName, githubLogin, cipherBase64)
-            return fallbackText to expected.equals(signatureHex, ignoreCase = true)
+            return fallbackText to (expected.isNotBlank() && expected.equals(signatureHex, ignoreCase = true))
         }
-        return fallbackText to true
+        // Tanpa cipher dan tanpa signature: pesan plaintext biasa (mis. dari
+        // server/versi lama) — tampilkan apa adanya, tandai TIDAK terverifikasi.
+        return fallbackText to false
     }
 
     fun sign(text: String, senderName: String, githubLogin: String, cipherB64: String): String {
@@ -510,12 +520,20 @@ private object ChatE2eeCrypto {
             val raw = "${senderName.trim().lowercase(Locale.ROOT)}|${githubLogin.trim().lowercase(Locale.ROOT)}|${text.trim()}|$cipherB64"
             val bytes = mac.doFinal(raw.toByteArray(Charsets.UTF_8))
             bytes.take(16).joinToString("") { "%02x".format(it) }
-        }.getOrDefault("e2ee-verified")
+        }.getOrDefault("") // gagal sign = "" (jangan pernah mengaku "verified")
     }
 }
 
-/** Cache foto profil pengirim di memori agar scroll chat mulus 120 FPS. */
-private val avatarMemoryCache = ConcurrentHashMap<String, Bitmap>()
+/**
+ * Cache foto profil pengirim di memori agar scroll chat mulus.
+ * LruCache dengan anggaran byte (±1/8 max heap, floor 4 MB) — sebelumnya
+ * ConcurrentHashMap tanpa batas: sesi chat panjang menumpuk Bitmap sampai OOM.
+ */
+private val avatarMemoryCache = object : android.util.LruCache<String, Bitmap>(
+    maxOf(4L * 1024L * 1024L, Runtime.getRuntime().maxMemory() / 8L).toInt(),
+) {
+    override fun sizeOf(key: String, value: Bitmap): Int = value.byteCount
+}
 
 internal fun chatNickname(context: Context): String {
     val prefs = context.getSharedPreferences(CHAT_PREFS, Context.MODE_PRIVATE)
@@ -695,7 +713,9 @@ private fun parseMessageFromJson(m: JSONObject, myName: String, myGithubLogin: S
         avatarUrl = resolvedAvatar,
         deliveryTicks = 2,
         e2eeProtocol = e2eeProto,
-        e2eeSig = e2eeSig.ifBlank { ChatE2eeCrypto.sign(openedText, sender, ghLogin, e2eeCipher) },
+        // Signature apa adanya dari server — jangan pernah dipabrikasi lokal,
+        // itu membuat pesan tanpa signature tampak "terverifikasi".
+        e2eeSig = e2eeSig,
         e2eeVerified = verified,
     )
 }
@@ -976,11 +996,11 @@ internal fun GlobalChatScreen(
                 }
                 append("— ${specificMsg.name}")
                 if (specificMsg.githubLogin.isNotBlank()) append(" (@${specificMsg.githubLogin})")
-                append(" di Chat Global XyDesk Remote (E2EE AES-256-GCM)\n")
+                append(" di Chat Global XyDesk Remote\n")
                 append("Gabung sekarang: https://www.xydeskremote.biz.id")
             }
         } else {
-            "Gabung ke Chat Global XyDesk Remote! Obrolan real-time terenkripsi ujung-ke-ujung (E2EE AES-256-GCM) dengan terjemahan otomatis multi-bahasa & Cloud RDP gratis:\nhttps://www.xydeskremote.biz.id"
+            "Gabung ke Chat Global XyDesk Remote! Obrolan real-time dengan terjemahan otomatis multi-bahasa & Cloud RDP gratis:\nhttps://www.xydeskremote.biz.id"
         }
         runCatching {
             val intent = Intent(Intent.ACTION_SEND).apply {
@@ -1380,7 +1400,7 @@ internal fun GlobalChatScreen(
             timestampMs = now,
         )
 
-        // Optimistic UI: tampilkan 1 centang (✓) saat dikirim, otomatis berubah jadi 2 centang (✓✓) saat server memvalidasi E2EE
+        // Optimistic UI: tampilkan 1 centang (✓) saat dikirim, otomatis berubah jadi 2 centang (✓✓) saat server memvalidasi pesan
         val pending = ChatMessage(
             id = "local-$now",
             name = nickname,
@@ -2240,8 +2260,8 @@ internal fun GlobalChatScreen(
                         XyEmptyState(
                             title = xy("Ruang Chat Global Siap", "Global Chat Room Ready"),
                             subtitle = xy(
-                                "Demi privasi End-to-End (E2EE) & XyShield Anti-Virus, pesan sebelum kamu bergabung tidak ditampilkan. Pesan baru akan langsung muncul secara real-time.",
-                                "For E2EE privacy & XyShield protection, messages before you joined are hidden. New messages will appear in real-time.",
+                                "Demi privasi & XyShield Anti-Virus, pesan sebelum kamu bergabung tidak ditampilkan. Pesan baru akan langsung muncul secara real-time.",
+                                "For privacy & XyShield protection, messages before you joined are hidden. New messages will appear in real-time.",
                             ),
                             icon = XyIcons.Shield,
                         )
@@ -3052,7 +3072,7 @@ internal fun GlobalChatScreen(
                         ) {
                             if (draft.text.isEmpty()) {
                                 Text(
-                                    text = "Ketik pesan terenkripsi…",
+                                    text = "Ketik pesan…",
                                     style = MaterialTheme.typography.bodyMedium,
                                     color = Color(0xFF71717A),
                                     maxLines = 1,
@@ -3361,7 +3381,7 @@ internal fun GlobalChatScreen(
                                 }
                                 HorizontalDivider(color = Color.White.copy(alpha = 0.08f))
                                 ContextMenuActionRow(
-                                    label = "Info Enkripsi E2EE",
+                                    label = "Info Keamanan Pesan",
                                     icon = XyIcons.Shield,
                                     onClick = {
                                         inspectingE2eeMsg = targetMsg
@@ -3777,10 +3797,10 @@ internal fun GlobalChatScreen(
         }
     }
 
-    // Dialog Verifikasi Kriptografi End-to-End (E2EE Inspector)
+    // Dialog Info Keamanan Pesan (Message Security Inspector)
     inspectingE2eeMsg?.let { msg ->
         XyOverlay(
-            title = "Verifikasi End-to-End (E2EE)",
+            title = "Info Keamanan Pesan",
             onDismiss = { inspectingE2eeMsg = null },
         ) {
             Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
@@ -3795,15 +3815,15 @@ internal fun GlobalChatScreen(
                         modifier = Modifier.size(20.dp),
                     )
                     Text(
-                        text = if (msg.e2eeVerified) "Integritas Kriptografi Terverifikasi" else "Pesan Standar",
+                        text = if (msg.e2eeVerified) "Integritas Terverifikasi (HMAC)" else "Pesan Standar",
                         style = MaterialTheme.typography.titleSmall,
                         fontWeight = FontWeight.Bold,
                     )
                 }
                 Text("Pengirim: ${msg.name} ${if (msg.githubLogin.isNotBlank()) "(@${msg.githubLogin})" else ""}", style = MaterialTheme.typography.bodySmall)
                 Text("Negara Terdeteksi: ${msg.country}", style = MaterialTheme.typography.bodySmall)
-                Text("Protokol Enkripsi: ${msg.e2eeProtocol} (AES-256-GCM + HMAC-SHA256)", style = MaterialTheme.typography.bodySmall)
-                Text("Signature HMAC: ${msg.e2eeSig.ifBlank { "verified" }}", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Text("Proteksi Transit: ${msg.e2eeProtocol} (AES-256-GCM + HMAC-SHA256 via WSS/TLS)", style = MaterialTheme.typography.bodySmall)
+                Text("Signature HMAC: ${msg.e2eeSig.ifBlank { "tidak ada" }}", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 Text("Status Pengiriman: Terkirim & Tervalidasi (Centang 2)", style = MaterialTheme.typography.bodySmall)
                 Spacer(Modifier.height(6.dp))
                 XyPillButton(
@@ -5406,7 +5426,7 @@ private fun ChatSenderAvatar(
         }
     }
     var bitmap by remember(resolvedUrl) {
-        mutableStateOf(if (resolvedUrl.isNotBlank()) avatarMemoryCache[resolvedUrl] else null)
+        mutableStateOf(if (resolvedUrl.isNotBlank()) avatarMemoryCache.get(resolvedUrl) else null)
     }
 
     LaunchedEffect(resolvedUrl) {
@@ -5421,7 +5441,7 @@ private fun ChatSenderAvatar(
                     if (conn.responseCode in 200..299) {
                         val bytes = conn.inputStream.use { it.readBytes() }
                         BitmapFactory.decodeByteArray(bytes, 0, bytes.size)?.also {
-                            avatarMemoryCache[resolvedUrl] = it
+                            avatarMemoryCache.put(resolvedUrl, it)
                         }
                     } else null
                 }.getOrNull()

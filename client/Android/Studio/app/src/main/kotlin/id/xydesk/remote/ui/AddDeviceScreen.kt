@@ -692,8 +692,8 @@ fun AddDeviceScreen(
                     Spacer(Modifier.height(6.dp))
                     Text(
                         xy(
-                            "Berbeda dari RDP standar: Koneksi PC tidak memakai kredensial akun/domain Windows dan mengunci resolusi + DPI 1:1 mengikuti monitor fisik PC (DXGI Desktop Duplication). Seluruh paket dienkripsi End-to-End (TLS 1.3 + Pinning Keystore) dengan jalur Ultra-Low Latency untuk game FPS.",
-                            "Unlike standard RDP: PC Connection does not use Windows account/domain credentials and locks resolution + DPI 1:1 to the physical PC monitor (DXGI Desktop Duplication). All traffic is End-to-End Encrypted (TLS 1.3 + Keystore Pinning) with an Ultra-Low Latency path for FPS games.",
+                            "Berbeda dari RDP standar: Koneksi PC tidak memakai kredensial akun/domain Windows dan mengunci resolusi + DPI 1:1 mengikuti monitor fisik PC (DXGI Desktop Duplication). Seluruh paket terenkripsi saat transit (TLS 1.3) dengan jalur Ultra-Low Latency untuk game FPS.",
+                            "Unlike standard RDP: PC Connection does not use Windows account/domain credentials and locks resolution + DPI 1:1 to the physical PC monitor (DXGI Desktop Duplication). All traffic is encrypted in transit (TLS 1.3) with an Ultra-Low Latency path for FPS games.",
                         ),
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
