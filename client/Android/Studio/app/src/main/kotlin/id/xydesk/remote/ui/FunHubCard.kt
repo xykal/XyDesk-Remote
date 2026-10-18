@@ -110,8 +110,10 @@ internal fun FunHubCard(
     var commentsTarget by remember { mutableStateOf<CommunityJoke?>(null) }
     var actionsTarget by remember { mutableStateOf<CommunityJoke?>(null) }
     var deletingCommentId by remember { mutableStateOf<String?>(null) }
+    var studioUri by remember { mutableStateOf<Uri?>(null) }
 
-    val myGithubLogin = remember(context, composerOpen, refreshKey) { getVerifiedGitHubLogin(context) }
+    val authRev by GitHubDirectOAuthController.authRevision.collectAsState()
+    val myGithubLogin = remember(context, composerOpen, refreshKey, authRev) { getVerifiedGitHubLogin(context) }
     val isViewerFounder = remember(myGithubLogin) {
         isFounderAccount(myGithubLogin) || isFounderAccount(api.displayName())
     }
@@ -127,24 +129,63 @@ internal fun FunHubCard(
                     formMessageIsError = true
                     return@launch
                 }
-                val att = encodePickedFeedImage(context, uri, hdMode = hdUploadEnabled)
-                if (att == null) {
-                    formMessage = xyNow(
-                        "Media tidak didukung atau melebihi batas ukuran HD (2,5 MB).",
-                        "Media unsupported or exceeds HD size limit (2.5 MB).",
-                    )
-                    formMessageIsError = true
-                } else {
-                    pendingAttachment = att
-                    editRemoveAttachment = false
-                    formMessage = null
-                }
+                studioUri = uri
             }
         }
     }
     var feedError by remember { mutableStateOf<String?>(null) }
     var feedMessage by remember { mutableStateOf<String?>(null) }
     var feedMessageIsError by remember { mutableStateOf(false) }
+
+    studioUri?.let { activeUri ->
+        val mime = remember(activeUri) { context.contentResolver.getType(activeUri).orEmpty().lowercase(Locale.ROOT) }
+        val kind = remember(mime) {
+            when {
+                mime.startsWith("video/") -> "video"
+                mime.startsWith("image/") || mime.isBlank() -> "image"
+                else -> "file"
+            }
+        }
+        PreSendMediaStudioDialog(
+            uri = activeUri,
+            mediaKind = kind,
+            fileName = "Feed Media",
+            initialCaption = draft,
+            initialHd = hdUploadEnabled,
+            initialViewOnce = false,
+            showViewOnceToggle = false,
+            onDismiss = { studioUri = null },
+            onConfirmSend = { captionText, hdSelected, _, editedBytes ->
+                studioUri = null
+                hdUploadEnabled = hdSelected
+                if (captionText.isNotBlank()) {
+                    draft = captionText
+                }
+                scope.launch {
+                    val att = if (editedBytes != null) {
+                        val b64 = Base64.encodeToString(editedBytes, Base64.NO_WRAP)
+                        FeedAttachment(
+                            dataUrl = "data:image/jpeg;base64,$b64",
+                            mime = "image/jpeg",
+                        )
+                    } else {
+                        encodePickedFeedImage(context, activeUri, hdMode = hdSelected)
+                    }
+                    if (att == null) {
+                        formMessage = xyNow(
+                            "Media tidak didukung atau melebihi batas ukuran HD (2,5 MB).",
+                            "Media unsupported or exceeds HD size limit (2.5 MB).",
+                        )
+                        formMessageIsError = true
+                    } else {
+                        pendingAttachment = att
+                        editRemoveAttachment = false
+                        formMessage = null
+                    }
+                }
+            },
+        )
+    }
 
     fun showCommunityError(error: Throwable, loadingFeed: Boolean = false): String {
         val reason = (error as? CommunityJokesException)?.reason.orEmpty()
@@ -559,53 +600,71 @@ internal fun FunHubCard(
                         )
                     }
                 }
-                androidx.compose.material3.HorizontalDivider(
-                    thickness = 0.75.dp,
-                    color = Color(0xFF1D222D),
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(0.75.dp)
+                        .background(Color(0xFF1D222D)),
                 )
             }
         }
 
-        formMessage?.let {
-            Text(
-                it,
-                style = MaterialTheme.typography.bodySmall,
-                color = if (formMessageIsError) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary,
-            )
+        formMessage?.let { msg ->
+            if (formMessageIsError) {
+                XyErrorState(
+                    message = msg,
+                    onRetry = { formMessage = null },
+                )
+            } else {
+                XySuccessStateBanner(
+                    message = msg,
+                    onDismiss = { formMessage = null },
+                )
+            }
         }
 
-        feedMessage?.let {
-            Text(
-                it,
-                style = MaterialTheme.typography.bodySmall,
-                color = if (feedMessageIsError) MaterialTheme.colorScheme.error else Color(0xFF10B981),
-                fontWeight = FontWeight.SemiBold,
-            )
+        feedMessage?.let { msg ->
+            if (feedMessageIsError) {
+                XyErrorState(
+                    message = msg,
+                    onRetry = { feedMessage = null },
+                )
+            } else {
+                XySuccessStateBanner(
+                    message = msg,
+                    onDismiss = { feedMessage = null },
+                )
+            }
         }
         if (feedError != null && jokes.isNotEmpty()) {
-            Text(feedError.orEmpty(), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error)
+            XyErrorState(
+                message = feedError.orEmpty(),
+                onRetry = { refreshKey += 1 },
+            )
         }
 
         when {
-            refreshing && jokes.isEmpty() -> Text(
-                xy("Memuat feed komunitas…", "Loading community feed…"),
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-            feedError != null && jokes.isEmpty() -> Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                Text(feedError.orEmpty(), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error)
-                XyPillButton(
-                    text = xy("Coba lagi", "Try again"),
-                    onClick = { refreshKey += 1 },
-                    primary = false,
-                    compact = true,
+            refreshing && jokes.isEmpty() -> {
+                XyLoadingSkeletonCard(
+                    count = 3,
+                    itemHeight = 84.dp,
                 )
             }
-            jokes.isEmpty() -> Text(
-                xy("Belum ada postingan. Kirim yang pertama.", "Nothing here yet. Post the first one."),
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
+            feedError != null && jokes.isEmpty() -> {
+                XyErrorState(
+                    message = feedError.orEmpty(),
+                    onRetry = { refreshKey += 1 },
+                )
+            }
+            jokes.isEmpty() -> {
+                XyEmptyState(
+                    title = xy("Belum Ada Postingan", "No Posts Yet"),
+                    subtitle = xy("Jadilah yang pertama membagikan informasi, tips RDP, atau media ke komunitas XyDesk.", "Be the first to share news, RDP tips, or media with the XyDesk community."),
+                    icon = id.xydesk.remote.ui.components.XyIcons.Globe,
+                    actionText = xy("Tulis Postingan Pertama", "Write First Post"),
+                    onAction = { composerOpen = true },
+                )
+            }
             else -> {
                 authorFilter?.let { who ->
                     Row(
@@ -1146,27 +1205,32 @@ private fun CommunityJokeItem(
                     )
                 }
 
-                // Pemilih Reaksi Opsional (hanya muncul bila tombol + ditekan)
+                // Pemilih Reaksi Opsional (Emoji 3D Gaya iPhone / WhatsApp)
                 if (fullEmojiPickerOpen) {
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .clip(RoundedCornerShape(10.dp))
+                            .clip(RoundedCornerShape(12.dp))
                             .background(Color(0xFF151923))
                             .horizontalScroll(rememberScrollState())
                             .padding(horizontal = 10.dp, vertical = 6.dp),
-                        horizontalArrangement = Arrangement.spacedBy(12.dp),
+                        horizontalArrangement = Arrangement.spacedBy(10.dp),
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
                         CommunityJokesApi.QUICK_REACTIONS.forEach { emoji ->
-                            Text(
-                                text = emoji,
-                                fontSize = 16.sp,
-                                modifier = Modifier.clickable(enabled = !isReactionBusy) {
-                                    onReact(emoji)
-                                    fullEmojiPickerOpen = false
-                                },
-                            )
+                            Box(
+                                modifier = Modifier
+                                    .size(30.dp)
+                                    .clip(CircleShape)
+                                    .background(Color(0xFF1E2433))
+                                    .clickable(enabled = !isReactionBusy) {
+                                        onReact(emoji)
+                                        fullEmojiPickerOpen = false
+                                    },
+                                contentAlignment = Alignment.Center,
+                            ) {
+                                IosWhatsAppEmoji3D(tag = emoji, size = 20.dp)
+                            }
                         }
                     }
                 }
@@ -1194,16 +1258,16 @@ private fun CommunityJokeItem(
                             verticalAlignment = Alignment.CenterVertically,
                             horizontalArrangement = Arrangement.spacedBy(6.dp),
                         ) {
-                            androidx.compose.material3.Icon(
-                                imageVector = if (activeReaction != null) {
-                                    id.xydesk.remote.ui.components.XyIcons.HeartFilled
-                                } else {
-                                    id.xydesk.remote.ui.components.XyIcons.Heart
-                                },
-                                contentDescription = "Suka",
-                                tint = if (activeReaction != null) Color(0xFFF43F5E) else Color(0xFF94A3B8),
-                                modifier = Modifier.size(17.dp),
-                            )
+                            if (activeReaction != null) {
+                                IosWhatsAppEmoji3D(tag = activeReaction, size = 17.dp)
+                            } else {
+                                androidx.compose.material3.Icon(
+                                    imageVector = id.xydesk.remote.ui.components.XyIcons.Heart,
+                                    contentDescription = "Suka",
+                                    tint = Color(0xFF94A3B8),
+                                    modifier = Modifier.size(17.dp),
+                                )
+                            }
                             if (totalReactions > 0) {
                                 Text(
                                     text = totalReactions.toString(),
@@ -1257,10 +1321,10 @@ private fun CommunityJokeItem(
                         }
                     }
 
-                    // Ringkasan reaksi aktif (jika ada) + pemicu reaksi cepat tanpa border
+                    // Ringkasan reaksi aktif (Emoji 3D iOS/WA) + pemicu reaksi cepat tanpa border
                     Row(
                         verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(6.dp),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
                     ) {
                         val topEmojis = remember(joke.reactions) {
                             joke.reactions.entries
@@ -1269,12 +1333,18 @@ private fun CommunityJokeItem(
                                 .take(3)
                         }
                         topEmojis.forEach { (emoji, count) ->
-                            Text(
-                                text = "$emoji $count",
-                                fontSize = 11.sp,
-                                color = Color(0xFF94A3B8),
+                            Row(
                                 modifier = Modifier.clickable(enabled = !isReactionBusy) { onReact(emoji) },
-                            )
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(3.dp),
+                            ) {
+                                IosWhatsAppEmoji3D(tag = emoji, size = 14.dp)
+                                Text(
+                                    text = count.toString(),
+                                    fontSize = 11.sp,
+                                    color = Color(0xFF94A3B8),
+                                )
+                            }
                         }
                         Box(
                             modifier = Modifier
@@ -1301,9 +1371,11 @@ private fun CommunityJokeItem(
             }
         }
 
-        androidx.compose.material3.HorizontalDivider(
-            thickness = 0.75.dp,
-            color = Color(0xFF1D222D),
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(0.75.dp)
+                .background(Color(0xFF1D222D)),
         )
     }
 }

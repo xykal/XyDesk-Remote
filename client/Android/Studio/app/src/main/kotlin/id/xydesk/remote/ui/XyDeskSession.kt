@@ -325,8 +325,13 @@ fun XyDeskSessionScreen(
     fun setHudKeys(list: List<HudKey>) {
         hudKeys = list
         prefs.setHudKeys(profile.id, list)
-        if (prefs.hudProfile(profile.id) == HudProfilePreset.CUSTOM) {
-            prefs.setCustomHudKeys(profile.id, list)
+        prefs.setCustomHudKeys(profile.id, list)
+    }
+
+    DisposableEffect(profile.id) {
+        onDispose {
+            prefs.setHudKeys(profile.id, hudKeys)
+            prefs.setCustomHudKeys(profile.id, hudKeys)
         }
     }
     var cursorX by remember { mutableFloatStateOf(0f) }
@@ -1359,14 +1364,43 @@ fun XyDeskSessionScreen(
                                 if (firstChange.type == androidx.compose.ui.input.pointer.PointerType.Mouse) {
                                     val prev = lastMousePos
                                     lastMousePos = firstChange.position
-                                    if (prev != null) {
-                                        val d = firstChange.position - prev
-                                        if (d.getDistance() > 0.1f) movePointer(d.x, d.y)
+                                    if (relMouseEnabled) {
+                                        if (prev != null) {
+                                            val d = firstChange.position - prev
+                                            if (d.getDistance() > 0.1f) movePointer(d.x, d.y)
+                                        }
+                                    } else {
+                                        // Pemetaan 1:1 presisi piksel dari posisi kursor hardware Android di layar ke desktop remote
+                                        val mappedPt = controller.screenToRemote(
+                                            firstChange.position.x,
+                                            firstChange.position.y,
+                                        )
+                                        if (mappedPt != null) {
+                                            val moved = !cursorInit ||
+                                                kotlin.math.abs(mappedPt.x - cursorX) >= 0.4f ||
+                                                kotlin.math.abs(mappedPt.y - cursorY) >= 0.4f
+                                            cursorX = mappedPt.x
+                                            cursorY = mappedPt.y
+                                            cursorInit = true
+                                            if (moved || ev.type == androidx.compose.ui.input.pointer.PointerEventType.Press) {
+                                                manager.sendCursorEvent(
+                                                    cursorX.roundToInt(),
+                                                    cursorY.roundToInt(),
+                                                    Mouse.getMoveEvent(),
+                                                )
+                                            }
+                                        } else if (prev != null) {
+                                            val d = firstChange.position - prev
+                                            if (d.getDistance() > 0.1f) movePointer(d.x, d.y)
+                                        }
                                     }
                                     when (ev.type) {
                                         androidx.compose.ui.input.pointer.PointerEventType.Press -> {
                                             val btn = when {
-                                                ev.buttons.isSecondaryPressed -> XyMouseButton.RIGHT
+                                                ev.buttons.isSecondaryPressed -> {
+                                                    (context as? XyDeskSessionActivity)?.noteSecondaryMouseButtonEvent()
+                                                    XyMouseButton.RIGHT
+                                                }
                                                 ev.buttons.isTertiaryPressed -> XyMouseButton.MIDDLE
                                                 else -> XyMouseButton.LEFT
                                             }
@@ -1379,6 +1413,9 @@ fun XyDeskSessionScreen(
                                         }
                                         androidx.compose.ui.input.pointer.PointerEventType.Release -> {
                                             val btn = activeMouseBtn ?: XyMouseButton.LEFT
+                                            if (btn == XyMouseButton.RIGHT) {
+                                                (context as? XyDeskSessionActivity)?.noteSecondaryMouseButtonEvent()
+                                            }
                                             activeMouseBtn = null
                                             sendButton(btn, false)
                                             consumeOneShotKeys()
@@ -1387,7 +1424,10 @@ fun XyDeskSessionScreen(
                                         androidx.compose.ui.input.pointer.PointerEventType.Move -> {
                                             if (firstChange.pressed && activeMouseBtn == null) {
                                                 val btn = when {
-                                                    ev.buttons.isSecondaryPressed -> XyMouseButton.RIGHT
+                                                    ev.buttons.isSecondaryPressed -> {
+                                                        (context as? XyDeskSessionActivity)?.noteSecondaryMouseButtonEvent()
+                                                        XyMouseButton.RIGHT
+                                                    }
                                                     ev.buttons.isTertiaryPressed -> XyMouseButton.MIDDLE
                                                     else -> XyMouseButton.LEFT
                                                 }

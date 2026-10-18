@@ -31,10 +31,15 @@ import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.unit.dp
 import id.xydesk.remote.core.ConnectionLog
 import id.xydesk.remote.ui.components.XyCard
+import id.xydesk.remote.ui.components.XyEmptyState
+import id.xydesk.remote.ui.components.XyErrorState
 import id.xydesk.remote.ui.components.XyIconPill
 import id.xydesk.remote.ui.components.XyIcons
+import id.xydesk.remote.ui.components.XyLoadingSkeletonCard
+import id.xydesk.remote.ui.components.XyLoadingSpinnerState
 import id.xydesk.remote.ui.components.XyPillButton
 import id.xydesk.remote.ui.components.XySectionLabel
+import id.xydesk.remote.ui.components.XySuccessStateBanner
 import id.xydesk.remote.ui.components.XyTopBar
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -146,17 +151,27 @@ fun StatusScreen(
             XySectionLabel(xy("Portal rilis", "Release portal"))
             XyCard {
                 if (portalLoading) {
-                    Text(xy("Memuat…", "Loading…"), style = MaterialTheme.typography.bodyMedium)
+                    XyLoadingSkeletonCard(count = 2, itemHeight = 42.dp)
+                    Spacer(Modifier.height(6.dp))
+                    XyLoadingSpinnerState(text = xy("Memuat status portal rilis…", "Loading release portal status…"))
                 } else if (portalError != null) {
-                    Text(
-                        text = xy(
+                    XyErrorState(
+                        message = xy(
                             "Tidak bisa menghubungi portal: $portalError",
                             "Cannot reach the portal: $portalError",
                         ),
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.error,
+                        onRetry = { scope.launch { fetchPortal() } },
+                    )
+                } else if (portalSummary.isNullOrBlank()) {
+                    XyEmptyState(
+                        title = xy("Belum Ada Data Portal", "No Portal Data"),
+                        subtitle = xy("Ketuk Muat Ulang untuk memeriksa status rilis dari server XyDesk.", "Tap Reload to check release status from the XyDesk server."),
                     )
                 } else {
+                    XySuccessStateBanner(
+                        message = xy("Portal rilis aktif & tersinkronisasi.", "Release portal active & synchronized."),
+                    )
+                    Spacer(Modifier.height(8.dp))
                     Text(
                         text = portalSummary ?: "-",
                         style = MaterialTheme.typography.bodySmall,

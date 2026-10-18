@@ -189,8 +189,8 @@ data class HudKey(
          * menambah sendiri lewat editor HUD.
          */
         fun defaults(size: Float = DEFAULT_SIZE): List<HudKey> {
-            val diameter = size.coerceIn(MIN_SIZE, 54f)
-            val small = (diameter * 0.88f).coerceIn(MIN_SIZE, 48f)
+            val diameter = size.coerceIn(MIN_SIZE, MAX_SIZE)
+            val small = (diameter * 0.90f).coerceIn(MIN_SIZE, MAX_SIZE)
             val ctrl = KeyEvent.KEYCODE_CTRL_LEFT
             return listOf(
                 HudKey("kiri", HudKind.MOUSE_LEFT, "Kiri", x = 0.05f, y = 0.84f, size = diameter),
@@ -202,10 +202,10 @@ data class HudKey(
             )
         }
 
-        /** Hasilkan set tombol siap pakai berdasarkan [HudProfilePreset] dengan ukuran ringkas. */
+        /** Hasilkan set tombol siap pakai berdasarkan [HudProfilePreset] dengan ukuran penuh yang dipilih pengguna. */
         fun presetLayout(preset: HudProfilePreset, size: Float = DEFAULT_SIZE): List<HudKey> {
-            val d = size.coerceIn(MIN_SIZE, 54f)
-            val s = (d * 0.88f).coerceIn(MIN_SIZE, 48f)
+            val d = size.coerceIn(MIN_SIZE, MAX_SIZE)
+            val s = (d * 0.90f).coerceIn(MIN_SIZE, MAX_SIZE)
             val ctrl = KeyEvent.KEYCODE_CTRL_LEFT
             val shift = KeyEvent.KEYCODE_SHIFT_LEFT
             val alt = KeyEvent.KEYCODE_ALT_LEFT
@@ -385,11 +385,16 @@ data class HudKey(
                 it.id.startsWith("aux_") || it.id == "keyboard" || it.kind == HudKind.KEYBOARD
             }
             if (kept.isEmpty()) return defaults(defaultSize)
-            val compactDefault = defaultSize.coerceIn(MIN_SIZE, 50f)
             return kept.map { key ->
                 val normalizedAction = if (key.action in allowedActions(key.kind)) key.action else HudAction.TAP
-                val normalizedSize = if (key.size >= 60f) compactDefault else key.size.coerceIn(MIN_SIZE, MAX_SIZE)
-                key.copy(action = normalizedAction, size = normalizedSize)
+                val normalizedSize = key.size.takeIf { it > 0f }?.coerceIn(MIN_SIZE, MAX_SIZE)
+                    ?: defaultSize.coerceIn(MIN_SIZE, MAX_SIZE)
+                key.copy(
+                    action = normalizedAction,
+                    x = key.x.coerceIn(0f, 1f),
+                    y = key.y.coerceIn(0f, 1f),
+                    size = normalizedSize,
+                )
             }
         }
     }

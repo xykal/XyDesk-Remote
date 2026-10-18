@@ -1,5 +1,6 @@
 package id.xydesk.remote.ui
 
+import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.LinearEasing
@@ -8,31 +9,35 @@ import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeOut
 import androidx.compose.foundation.Canvas
-import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
-import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.requiredSize
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.scale
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
@@ -42,265 +47,315 @@ import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.StrokeJoin
 import androidx.compose.ui.graphics.drawscope.Stroke
-import androidx.compose.ui.graphics.graphicsLayer
-import androidx.compose.ui.layout.ContentScale
-import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import id.xydesk.remote.R
-import id.xydesk.remote.ui.theme.XyDisplay
-import id.xydesk.remote.ui.theme.XyThemeState
+import id.xydesk.remote.ui.theme.XyBg
+import id.xydesk.remote.ui.theme.XyLine
+import id.xydesk.remote.ui.theme.XySurface
+import id.xydesk.remote.ui.theme.XySurfaceAlt
+import id.xydesk.remote.ui.theme.XyText
+import id.xydesk.remote.ui.theme.XyTextDim
+import id.xydesk.remote.ui.theme.XyTextFaint
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
 /**
- * Splash screen XyDesk Remote (Ronde 60):
- *  - Tengah: Logo Vektor XyDesk (Monitor + Click Ripple + Cursor tajam 100% vektor) + Wordmark "XyDesk Remote"
- *  - Bawah (Footer): "from / Pengembang · Developer" + Logo XyVerse Tech
+ * Splash screen XyDesk Remote — selaras penuh dengan palet monokrom matte
+ * rana utama (`XyDeskTheme.kt` / `XyDeskHome.kt`):
+ *  - Tengah layar: Emblem vektor tajam XyDesk + tipografi bersih "XyDesk Remote"
+ *    serta indikator muat minimalis selaras rana utama.
+ *  - Bawah layar: Identitas korporasi "XYVERSE TECHNOLOGY GLOBAL" selaras footer utama.
  */
 @Composable
-internal fun XySplashScreen(
+fun XySplashScreen(
     ready: Boolean = true,
-    dark: Boolean = when (XyThemeState.mode) {
-        XyThemeState.DARK -> true
-        XyThemeState.LIGHT -> false
-        else -> isSystemInDarkTheme()
-    },
+    dark: Boolean = true,
     onDone: () -> Unit = {},
     onFinished: () -> Unit = onDone,
 ) {
-    val alpha = remember { Animatable(0f) }
-    val scale = remember { Animatable(0.92f) }
-    val footerAlpha = remember { Animatable(0f) }
-    val minTimeDone = remember { androidx.compose.runtime.mutableStateOf(false) }
+    val bg0 = if (dark) XyBg else Color(0xFFF7F7F8)
+    val bg1 = if (dark) XySurface else Color(0xFFFFFFFF)
+    val bg2 = if (dark) XySurfaceAlt else Color(0xFFF1F1F3)
+    val line0 = if (dark) XyLine else Color(0xFFDDDDDF)
+    val ink0 = if (dark) XyText else Color(0xFF1A1A1D)
+    val ink1 = if (dark) XyTextDim else Color(0xFF5F5F65)
+    val ink2 = if (dark) XyTextFaint else Color(0xFF808086)
 
-    val pulseTransition = rememberInfiniteTransition(label = "splashPulse")
-    val rippleScale by pulseTransition.animateFloat(
-        initialValue = 0.92f,
+    var visible by remember { mutableStateOf(true) }
+
+    val logoAlpha = remember { Animatable(0f) }
+    val logoScale = remember { Animatable(0.92f) }
+    val textAlpha = remember { Animatable(0f) }
+    val footerAlpha = remember { Animatable(0f) }
+
+    val inf = rememberInfiniteTransition(label = "xySplashPulse")
+    val ambientPulse by inf.animateFloat(
+        initialValue = 0.88f,
         targetValue = 1.12f,
         animationSpec = infiniteRepeatable(
-            animation = tween(durationMillis = 1100, easing = LinearEasing),
+            animation = tween(2200, easing = FastOutSlowInEasing),
             repeatMode = RepeatMode.Reverse,
         ),
-        label = "rippleScale",
+        label = "ambientPulse",
+    )
+    val shimmerPhase by inf.animateFloat(
+        initialValue = 0f,
+        targetValue = 1f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(1350, easing = LinearEasing),
+            repeatMode = RepeatMode.Restart,
+        ),
+        label = "shimmerPhase",
     )
 
     LaunchedEffect(Unit) {
         launch {
-            alpha.animateTo(
-                targetValue = 1f,
-                animationSpec = tween(durationMillis = 480, easing = FastOutSlowInEasing),
-            )
+            logoAlpha.animateTo(1f, tween(340, easing = FastOutSlowInEasing))
         }
         launch {
-            scale.animateTo(
-                targetValue = 1f,
-                animationSpec = tween(durationMillis = 560, easing = FastOutSlowInEasing),
-            )
+            logoScale.animateTo(1f, tween(380, easing = FastOutSlowInEasing))
         }
+        delay(90)
         launch {
-            delay(180)
-            footerAlpha.animateTo(
-                targetValue = 1f,
-                animationSpec = tween(durationMillis = 450, easing = FastOutSlowInEasing),
-            )
+            textAlpha.animateTo(1f, tween(320, easing = FastOutSlowInEasing))
         }
-        delay(1050)
-        minTimeDone.value = true
+        delay(70)
+        launch {
+            footerAlpha.animateTo(1f, tween(320, easing = FastOutSlowInEasing))
+        }
     }
 
-    LaunchedEffect(ready, minTimeDone.value) {
-        if (ready && minTimeDone.value) {
-            launch {
-                footerAlpha.animateTo(
-                    targetValue = 0f,
-                    animationSpec = tween(durationMillis = 220, easing = FastOutSlowInEasing),
-                )
-            }
-            alpha.animateTo(
-                targetValue = 0f,
-                animationSpec = tween(durationMillis = 260, easing = FastOutSlowInEasing),
-            )
+    LaunchedEffect(ready) {
+        if (ready) {
+            delay(820)
+            visible = false
+            delay(200)
             onFinished()
         }
     }
 
-    val bgColor = if (dark) Color(0xFF07080D) else Color(0xFFF8FAFC)
-    val cardGradient = if (dark) {
-        Brush.linearGradient(
-            colors = listOf(Color(0xFF1A102E), Color(0xFF0E0B1A)),
-        )
-    } else {
-        Brush.linearGradient(
-            colors = listOf(Color(0xFF1E1B4B), Color(0xFF0F172A)),
-        )
-    }
-    val primaryTextColor = if (dark) Color(0xFFF8FAFC) else Color(0xFF0F172A)
-    val subTextColor = if (dark) Color(0xFF94A3B8) else Color(0xFF64748B)
-    val footerLogoRes = if (dark) R.drawable.xyverse_logo_h_white else R.drawable.xyverse_logo_h_black
-
-    Box(
-        Modifier
-            .fillMaxSize()
-            .background(bgColor),
+    AnimatedVisibility(
+        visible = visible,
+        exit = fadeOut(tween(200)),
     ) {
-        // TENGAH: Logo Utama XyDesk (100% Vector Crisp) + Wordmark XyDesk Remote
-        Column(
+        Box(
             modifier = Modifier
-                .align(Alignment.Center)
-                .alpha(alpha.value)
-                .graphicsLayer {
-                    scaleX = scale.value
-                    scaleY = scale.value
-                },
-            horizontalAlignment = Alignment.CenterHorizontally,
+                .fillMaxSize()
+                .background(bg0),
         ) {
-            Box(
-                modifier = Modifier
-                    .size(96.dp)
-                    .clip(RoundedCornerShape(26.dp))
-                    .background(cardGradient)
-                    .border(
-                        width = 1.2.dp,
-                        brush = Brush.linearGradient(
-                            colors = listOf(
-                                Color(0xFF818CF8).copy(alpha = 0.45f),
-                                Color.White.copy(alpha = 0.10f),
-                            ),
+            // Ambient glow tipis selaras dengan header XyDeskHome.kt
+            Canvas(modifier = Modifier.fillMaxSize()) {
+                val center = Offset(size.width * 0.5f, size.height * 0.44f)
+                drawCircle(
+                    brush = Brush.radialGradient(
+                        colors = listOf(
+                            ink0.copy(alpha = if (dark) 0.05f else 0.035f),
+                            bg2.copy(alpha = if (dark) 0.16f else 0.08f),
+                            Color.Transparent,
                         ),
-                        shape = RoundedCornerShape(26.dp),
+                        center = center,
+                        radius = size.minDimension * 0.56f * ambientPulse,
                     ),
-                contentAlignment = Alignment.Center,
-            ) {
-                XyDeskVectorEmblem(
-                    modifier = Modifier.size(62.dp),
-                    tint = Color.White,
-                    rippleScale = rippleScale,
+                    center = center,
+                    radius = size.minDimension * 0.56f * ambientPulse,
                 )
             }
 
-            Spacer(Modifier.height(18.dp))
+            // Bagian Tengah: Emblem XyDesk Vektor + Judul Utama + Bar Progress Monokrom
+            Column(
+                modifier = Modifier
+                    .align(Alignment.Center)
+                    .padding(horizontal = 32.dp),
+                horizontalAlignment = Alignment.CenterHorizontally,
+            ) {
+                Box(
+                    modifier = Modifier
+                        .requiredSize(86.dp)
+                        .scale(logoScale.value)
+                        .alpha(logoAlpha.value)
+                        .clip(RoundedCornerShape(24.dp))
+                        .background(bg1)
+                        .border(1.dp, line0, RoundedCornerShape(24.dp)),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Canvas(modifier = Modifier.requiredSize(50.dp)) {
+                        val w = size.width
+                        val h = size.height
+                        val strokeW = w * 0.078f
 
-            Text(
-                text = "XyDesk",
-                fontFamily = XyDisplay,
-                fontWeight = FontWeight.ExtraBold,
-                fontSize = 30.sp,
-                letterSpacing = (-0.6).sp,
-                color = primaryTextColor,
-            )
-            Spacer(Modifier.height(4.dp))
-            Text(
-                text = "REMOTE DESKTOP",
-                style = MaterialTheme.typography.labelSmall,
-                fontWeight = FontWeight.SemiBold,
-                fontSize = 10.5.sp,
-                letterSpacing = 2.8.sp,
-                color = subTextColor,
-            )
+                        // Bingkai layar monitor tipis presisi selaras ikon rana utama
+                        drawRoundRect(
+                            color = ink0,
+                            topLeft = Offset(w * 0.06f, h * 0.08f),
+                            size = Size(w * 0.88f, h * 0.64f),
+                            cornerRadius = CornerRadius(w * 0.14f, w * 0.14f),
+                            style = Stroke(width = strokeW, cap = StrokeCap.Round, join = StrokeJoin.Round),
+                        )
+
+                        // Monogram Xy di tengah layar monitor
+                        val xyPath = Path().apply {
+                            moveTo(w * 0.29f, h * 0.25f)
+                            lineTo(w * 0.48f, h * 0.55f)
+                            moveTo(w * 0.48f, h * 0.25f)
+                            lineTo(w * 0.29f, h * 0.55f)
+
+                            moveTo(w * 0.55f, h * 0.27f)
+                            lineTo(w * 0.63f, h * 0.42f)
+                            lineTo(w * 0.72f, h * 0.27f)
+                            moveTo(w * 0.63f, h * 0.42f)
+                            lineTo(w * 0.59f, h * 0.56f)
+                        }
+                        drawPath(
+                            path = xyPath,
+                            color = ink0,
+                            style = Stroke(width = strokeW * 0.92f, cap = StrokeCap.Round, join = StrokeJoin.Round),
+                        )
+
+                        // Kaki penyangga monitor
+                        drawLine(
+                            color = ink1,
+                            start = Offset(w * 0.50f, h * 0.72f),
+                            end = Offset(w * 0.50f, h * 0.88f),
+                            strokeWidth = strokeW,
+                            cap = StrokeCap.Round,
+                        )
+                        drawLine(
+                            color = ink0,
+                            start = Offset(w * 0.30f, h * 0.88f),
+                            end = Offset(w * 0.70f, h * 0.88f),
+                            strokeWidth = strokeW,
+                            cap = StrokeCap.Round,
+                        )
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(18.dp))
+
+                Column(
+                    modifier = Modifier.alpha(textAlpha.value),
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                ) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    ) {
+                        Text(
+                            text = "XyDesk Remote",
+                            color = ink0,
+                            fontSize = 21.sp,
+                            fontWeight = FontWeight.ExtraBold,
+                            letterSpacing = (-0.4).sp,
+                        )
+                        Box(
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(999.dp))
+                                .background(bg2)
+                                .border(0.75.dp, line0, RoundedCornerShape(999.dp))
+                                .padding(horizontal = 8.dp, vertical = 2.dp),
+                        ) {
+                            Text(
+                                text = "RDP · SSH",
+                                color = ink1,
+                                fontSize = 9.5.sp,
+                                fontWeight = FontWeight.Bold,
+                                fontFamily = FontFamily.Monospace,
+                                letterSpacing = 0.5.sp,
+                            )
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.height(5.dp))
+
+                    Text(
+                        text = "WINDOWS RDP · TERMINAL SSH-2 · CLOUD STUDIO",
+                        color = ink2,
+                        fontSize = 10.sp,
+                        fontWeight = FontWeight.SemiBold,
+                        fontFamily = FontFamily.Monospace,
+                        letterSpacing = 1.2.sp,
+                    )
+
+                    Spacer(modifier = Modifier.height(22.dp))
+
+                    // Indikator loading bar tipis monokrom selaras XyControls
+                    Box(
+                        modifier = Modifier
+                            .width(116.dp)
+                            .height(2.5.dp)
+                            .clip(CircleShape)
+                            .background(bg2),
+                    ) {
+                        Canvas(modifier = Modifier.fillMaxSize()) {
+                            val barW = size.width * 0.42f
+                            val startX = (size.width + barW) * shimmerPhase - barW
+                            drawRoundRect(
+                                color = ink0.copy(alpha = 0.85f),
+                                topLeft = Offset(startX.coerceAtLeast(0f), 0f),
+                                size = Size(
+                                    (startX + barW).coerceAtMost(size.width) - startX.coerceAtLeast(0f),
+                                    size.height,
+                                ),
+                                cornerRadius = CornerRadius(size.height, size.height),
+                            )
+                        }
+                    }
+                }
+            }
+
+            // Bagian Bawah: Branding XyVerse selaras tema monokrom rana utama
+            Column(
+                modifier = Modifier
+                    .align(Alignment.BottomCenter)
+                    .navigationBarsPadding()
+                    .padding(bottom = 28.dp)
+                    .alpha(footerAlpha.value),
+                horizontalAlignment = Alignment.CenterHorizontally,
+            ) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.Center,
+                ) {
+                    Canvas(modifier = Modifier.requiredSize(14.dp)) {
+                        val s = size.minDimension
+                        val path = Path().apply {
+                            moveTo(s * 0.50f, s * 0.06f)
+                            lineTo(s * 0.94f, s * 0.50f)
+                            lineTo(s * 0.50f, s * 0.94f)
+                            lineTo(s * 0.06f, s * 0.50f)
+                            close()
+                        }
+                        drawPath(
+                            path = path,
+                            color = ink1,
+                            style = Stroke(width = s * 0.13f, join = StrokeJoin.Round),
+                        )
+                        drawCircle(
+                            color = ink0,
+                            radius = s * 0.13f,
+                            center = Offset(s * 0.50f, s * 0.50f),
+                        )
+                    }
+                    Spacer(modifier = Modifier.width(7.dp))
+                    Text(
+                        text = "XYVERSE",
+                        color = ink0,
+                        fontSize = 11.5.sp,
+                        fontWeight = FontWeight.ExtraBold,
+                        letterSpacing = 2.6.sp,
+                    )
+                }
+                Spacer(modifier = Modifier.height(2.dp))
+                Text(
+                    text = "TECHNOLOGY GLOBAL",
+                    color = ink2,
+                    fontSize = 8.5.sp,
+                    fontWeight = FontWeight.Medium,
+                    fontFamily = FontFamily.Monospace,
+                    letterSpacing = 2.0.sp,
+                )
+            }
         }
-
-        // BAWAH (FOOTER): Logo XyVerse Tech
-        Column(
-            modifier = Modifier
-                .align(Alignment.BottomCenter)
-                .navigationBarsPadding()
-                .padding(bottom = 32.dp)
-                .alpha(footerAlpha.value),
-            horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.spacedBy(6.dp),
-        ) {
-            Text(
-                text = xy("Pengembang · Developer", "Developer · Pengembang"),
-                style = MaterialTheme.typography.labelSmall,
-                color = subTextColor.copy(alpha = 0.78f),
-                fontSize = 10.sp,
-                letterSpacing = 1.1.sp,
-            )
-            Image(
-                painter = painterResource(footerLogoRes),
-                contentDescription = "XyVerse Tech",
-                modifier = Modifier.height(22.dp),
-                contentScale = ContentScale.FillHeight,
-            )
-        }
-    }
-}
-
-/**
- * Emblem Vektor XyDesk (Monitor + Click Ripple + Cursor) tajam di segala ukuran DPI.
- */
-@Composable
-internal fun XyDeskVectorEmblem(
-    modifier: Modifier = Modifier,
-    tint: Color = Color.White,
-    rippleScale: Float = 1f,
-) {
-    Canvas(modifier = modifier) {
-        val w = size.width
-        val h = size.height
-        val s = minOf(w, h) / 64f
-
-        // 1. Layar Monitor Rounded
-        val frameStroke = Stroke(width = 3.8f * s, cap = StrokeCap.Round, join = StrokeJoin.Round)
-        drawRoundRect(
-            color = tint,
-            topLeft = Offset(7f * s, 9f * s),
-            size = Size(50f * s, 34f * s),
-            cornerRadius = CornerRadius(5.5f * s, 5.5f * s),
-            style = frameStroke,
-        )
-
-        // 2. Leher & Kaki Stand Monitor
-        drawLine(
-            color = tint,
-            start = Offset(32f * s, 43.5f * s),
-            end = Offset(32f * s, 51.5f * s),
-            strokeWidth = 4.2f * s,
-            cap = StrokeCap.Round,
-        )
-        drawLine(
-            color = tint,
-            start = Offset(21f * s, 52f * s),
-            end = Offset(43f * s, 52f * s),
-            strokeWidth = 4.2f * s,
-            cap = StrokeCap.Round,
-        )
-
-        // 3. Click Ripple Concentric Rings di ujung kursor
-        val tipX = 24.5f * s
-        val tipY = 21.5f * s
-        drawArc(
-            color = tint.copy(alpha = 0.92f),
-            startAngle = 145f,
-            sweepAngle = 250f,
-            useCenter = false,
-            topLeft = Offset(tipX - 3.6f * s * rippleScale, tipY - 3.6f * s * rippleScale),
-            size = Size(7.2f * s * rippleScale, 7.2f * s * rippleScale),
-            style = Stroke(width = 1.8f * s, cap = StrokeCap.Round),
-        )
-        drawArc(
-            color = tint.copy(alpha = 0.65f),
-            startAngle = 145f,
-            sweepAngle = 250f,
-            useCenter = false,
-            topLeft = Offset(tipX - 6.4f * s * rippleScale, tipY - 6.4f * s * rippleScale),
-            size = Size(12.8f * s * rippleScale, 12.8f * s * rippleScale),
-            style = Stroke(width = 1.6f * s, cap = StrokeCap.Round),
-        )
-
-        // 4. Panah Kursor Presisi
-        val cursorPath = Path().apply {
-            moveTo(24.8f * s, 21.8f * s)
-            lineTo(29.8f * s, 36.2f * s)
-            lineTo(33.2f * s, 32.6f * s)
-            lineTo(37.4f * s, 36.8f * s)
-            lineTo(40.2f * s, 34.0f * s)
-            lineTo(36.0f * s, 29.8f * s)
-            lineTo(39.8f * s, 26.4f * s)
-            close()
-        }
-        drawPath(path = cursorPath, color = tint)
     }
 }

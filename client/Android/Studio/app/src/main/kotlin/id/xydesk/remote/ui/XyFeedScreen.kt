@@ -44,8 +44,10 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import id.xydesk.remote.ui.components.XyEmptyState
 import id.xydesk.remote.ui.components.XyIconPill
 import id.xydesk.remote.ui.components.XyIcons
+import id.xydesk.remote.ui.components.XyLoadingSkeletonCard
 import id.xydesk.remote.ui.components.XyTopBar
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -170,7 +172,7 @@ internal fun XyFeedScreen(
                         onClick = { activeHeaderTab = XyFeedHeaderTab.NOTIFICATIONS },
                     )
                 }
-                HorizontalDivider(thickness = 0.75.dp, color = Color(0xFF1E222C))
+                Box(Modifier.fillMaxWidth().height(0.75.dp).background(Color(0xFF1E222C)))
             }
 
             Column(
@@ -517,21 +519,14 @@ internal fun FeedNotificationsPanel(
             }
         }
 
-        HorizontalDivider(thickness = 0.75.dp, color = Color(0xFF1E222C))
+        Box(Modifier.fillMaxWidth().height(0.75.dp).background(Color(0xFF1E222C)))
 
         if (filtered.isEmpty()) {
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(vertical = 36.dp),
-                contentAlignment = Alignment.Center,
-            ) {
-                Text(
-                    text = xy("Belum ada notifikasi di kategori ini.", "No notifications in this category yet."),
-                    style = MaterialTheme.typography.bodySmall,
-                    color = Color(0xFF64748B),
-                )
-            }
+            XyEmptyState(
+                title = xy("Belum Ada Notifikasi", "No Notifications Yet"),
+                subtitle = xy("Belum ada pengumuman, komentar, atau balasan baru di kategori ini.", "No announcements, comments, or replies in this category yet."),
+                icon = XyIcons.Bell,
+            )
         } else {
             Column(modifier = Modifier.fillMaxWidth()) {
                 filtered.forEach { item ->
@@ -592,7 +587,7 @@ internal fun FeedNotificationsPanel(
                             )
                         }
                     }
-                    HorizontalDivider(thickness = 0.75.dp, color = Color(0xFF1A1E28))
+                    Box(Modifier.fillMaxWidth().height(0.75.dp).background(Color(0xFF1A1E28)))
                 }
             }
         }
@@ -735,9 +730,11 @@ internal fun FeedLeaderboardTop100Panel(
                     )
                 }
             }
+        } else {
+            XyLoadingSkeletonCard(count = 3, itemHeight = 56.dp)
         }
 
-        HorizontalDivider(thickness = 0.75.dp, color = Color(0xFF1E222C))
+        Box(Modifier.fillMaxWidth().height(0.75.dp).background(Color(0xFF1E222C)))
 
         // Daftar flat tanpa kartu/border bertumpuk
         Column(modifier = Modifier.fillMaxWidth()) {
@@ -801,7 +798,7 @@ internal fun FeedLeaderboardTop100Panel(
                         color = Color(0xFFCBD5E1),
                     )
                 }
-                HorizontalDivider(thickness = 0.75.dp, color = Color(0xFF171B24))
+                Box(Modifier.fillMaxWidth().height(0.75.dp).background(Color(0xFF171B24)))
             }
         }
     }

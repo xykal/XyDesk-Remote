@@ -679,9 +679,8 @@ jobs:
             release-apks/SHA256SUMS.txt
           generate_release_notes: true
           overwrite_files: true
-          # Semua tag rilis selalu dibuat sebagai draft untuk diuji pemilik dulu.
-          # Publikasi final dilakukan manual setelah APK draft lolos tes perangkat.
-          draft: true
+          # Publikasikan langsung (draft: false) sesuai permintaan pemilik
+          draft: false
       - name: Bersihkan cache, artifacts, dan output sementara Actions
         env:
           GH_TOKEN: ${{ github.token }}

@@ -469,16 +469,15 @@ public class KeyboardMapper
 	{
 		switch (event.getAction())
 		{
-			// we only process down events
 			case KeyEvent.ACTION_UP:
 			{
-				if (event.getKeyCode() == KeyEvent.KEYCODE_META_LEFT ||
-				    event.getKeyCode() == KeyEvent.KEYCODE_META_RIGHT)
+				int kc = event.getKeyCode();
+				if (kc == KeyEvent.KEYCODE_META_LEFT || kc == KeyEvent.KEYCODE_META_RIGHT)
 				{
 					if (!isWinKeyDown)
-						return false;
+						return true;
 					isWinKeyDown = false;
-					if (!isWinComboUsed)
+					if (!isWinComboUsed && listener != null)
 					{
 						listener.processVirtualKey(VK_LWIN | VK_EXT_KEY, true);
 						listener.processVirtualKey(VK_LWIN | VK_EXT_KEY, false);
@@ -486,17 +485,74 @@ public class KeyboardMapper
 					isWinComboUsed = false;
 					return true;
 				}
+				if (kc == KeyEvent.KEYCODE_CTRL_LEFT || kc == KeyEvent.KEYCODE_CTRL_RIGHT)
+				{
+					if (ctrlPressed && !isCtrlLocked && listener != null)
+					{
+						listener.processVirtualKey(kc == KeyEvent.KEYCODE_CTRL_RIGHT ? (VK_RCONTROL | VK_EXT_KEY) : VK_LCONTROL, false);
+						ctrlPressed = false;
+					}
+					return true;
+				}
+				if (kc == KeyEvent.KEYCODE_SHIFT_LEFT || kc == KeyEvent.KEYCODE_SHIFT_RIGHT)
+				{
+					if (shiftPressed && !isShiftLocked && listener != null)
+					{
+						listener.processVirtualKey(kc == KeyEvent.KEYCODE_SHIFT_RIGHT ? VK_RSHIFT : VK_LSHIFT, false);
+						shiftPressed = false;
+					}
+					return true;
+				}
+				if (kc == KeyEvent.KEYCODE_ALT_LEFT || kc == KeyEvent.KEYCODE_ALT_RIGHT)
+				{
+					if (altPressed && !isAltLocked && listener != null)
+					{
+						listener.processVirtualKey(kc == KeyEvent.KEYCODE_ALT_RIGHT ? (VK_RMENU | VK_EXT_KEY) : VK_LMENU, false);
+						altPressed = false;
+					}
+					return true;
+				}
+				// Consume ACTION_UP of any mapped key so it never falls through to Android's default handler
+				if (getVirtualKeyCode(kc) != 0 || event.getUnicodeChar() != 0)
+					return true;
 				return false;
 			}
 
 			case KeyEvent.ACTION_DOWN:
 			{
+				int kc = event.getKeyCode();
 				/* Physical Win key: buffer until release to distinguish tap vs combo. */
-				if (event.getKeyCode() == KeyEvent.KEYCODE_META_LEFT ||
-				    event.getKeyCode() == KeyEvent.KEYCODE_META_RIGHT)
+				if (kc == KeyEvent.KEYCODE_META_LEFT || kc == KeyEvent.KEYCODE_META_RIGHT)
 				{
 					isWinKeyDown = true;
 					isWinComboUsed = false;
+					return true;
+				}
+				if (kc == KeyEvent.KEYCODE_CTRL_LEFT || kc == KeyEvent.KEYCODE_CTRL_RIGHT)
+				{
+					if (!ctrlPressed && listener != null)
+					{
+						ctrlPressed = true;
+						listener.processVirtualKey(kc == KeyEvent.KEYCODE_CTRL_RIGHT ? (VK_RCONTROL | VK_EXT_KEY) : VK_LCONTROL, true);
+					}
+					return true;
+				}
+				if (kc == KeyEvent.KEYCODE_SHIFT_LEFT || kc == KeyEvent.KEYCODE_SHIFT_RIGHT)
+				{
+					if (!shiftPressed && listener != null)
+					{
+						shiftPressed = true;
+						listener.processVirtualKey(kc == KeyEvent.KEYCODE_SHIFT_RIGHT ? VK_RSHIFT : VK_LSHIFT, true);
+					}
+					return true;
+				}
+				if (kc == KeyEvent.KEYCODE_ALT_LEFT || kc == KeyEvent.KEYCODE_ALT_RIGHT)
+				{
+					if (!altPressed && listener != null)
+					{
+						altPressed = true;
+						listener.processVirtualKey(kc == KeyEvent.KEYCODE_ALT_RIGHT ? (VK_RMENU | VK_EXT_KEY) : VK_LMENU, true);
+					}
 					return true;
 				}
 

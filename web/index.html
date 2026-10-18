@@ -166,7 +166,14 @@
       position: sticky;
       top: 0;
       z-index: 60;
-      background: var(--bg);
+      background: rgba(8, 8, 10, 0.82);
+      backdrop-filter: blur(20px);
+      -webkit-backdrop-filter: blur(20px);
+      border-bottom: 1px solid rgba(255, 255, 255, 0.09);
+    }
+
+    [data-theme="light"] .topbar {
+      background: rgba(242, 243, 245, 0.85);
       border-bottom: 1px solid var(--line);
     }
 
@@ -418,7 +425,10 @@
       content: "";
       position: absolute;
       inset: 0;
-      background: linear-gradient(180deg, rgba(8, 8, 10, 0.2) 0%, rgba(8, 8, 10, 0.52) 55%, var(--bg) 100%);
+      background:
+        radial-gradient(640px 280px at 18% 12%, rgba(147, 51, 234, 0.16), transparent 68%),
+        radial-gradient(520px 260px at 82% 20%, rgba(192, 132, 252, 0.10), transparent 65%),
+        linear-gradient(180deg, rgba(8, 8, 10, 0.18) 0%, rgba(8, 8, 10, 0.54) 55%, var(--bg) 100%);
       pointer-events: none;
     }
 
@@ -430,12 +440,21 @@
     }
 
     .intro-meta {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      flex-wrap: wrap;
       font-size: clamp(11px, 1.3vw, 12px);
       font-weight: 600;
-      color: var(--text-faint);
+      color: var(--text-dim);
       letter-spacing: 0.05em;
       text-transform: uppercase;
-      margin-bottom: 12px;
+      margin-bottom: 14px;
+      padding: 5px 12px;
+      border-radius: 999px;
+      background: rgba(255, 255, 255, 0.05);
+      border: 1px solid rgba(192, 132, 252, 0.24);
+      box-shadow: 0 6px 22px rgba(147, 51, 234, 0.14);
     }
 
     .intro h1 {
@@ -1253,7 +1272,7 @@
           <img src="/favicon.png" alt="Logo XyDesk Remote" style="width:30px;height:30px;border-radius:8px;flex:none;" />
           <span style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">XyDesk Remote</span>
         </span>
-        <span class="brand-tag mono" data-dyn="ver">Ver 1.1.20</span>
+        <span class="brand-tag mono" data-dyn="ver">Ver 1.1.21</span>
       </a>
       <nav class="nav-row" aria-label="Navigasi Utama">
         <a href="#download" class="pill-btn primary" data-i18n="nav.download">Unduh</a>
@@ -1319,10 +1338,10 @@
     <!-- Editorial Intro -->
     <section class="intro">
       <div class="container">
-        <div class="intro-meta mono" data-dyn="intro-meta">Klien RDP &amp; SSH-2 Android · Windows &amp; Linux VPS · APK v1.1.20</div>
+        <div class="intro-meta mono" data-dyn="intro-meta">Klien RDP &amp; SSH-2 Android · Windows &amp; Linux VPS · APK v1.1.21 · Sovereign Founder @xykal</div>
         <h1 data-i18n="intro.title">Remote Desktop (RDP), Terminal SSH-2 &amp; Cloud RDP dari Android</h1>
         <p data-i18n="intro.lead">
-          Hubungkan perangkat Android ke PC Windows, RDP Cloud (Windows / Linux Desktop XFCE4 / Linux Polos SSH), maupun VPS Linux. Dilengkapi dukungan penuh <strong>On-Mic (Mikrofon dua arah)</strong>, <strong>Floating Chat Sesi berdesain Liquid Glass Monokrom + Stiker Custom (.webp.crypto15)</strong>, serta <strong>Windows Host Agent Native GUI</strong> dengan Clean ID/Password, Enkripsi E2EE, dan Virtual Device 120Hz.
+          Hubungkan perangkat Android ke PC Windows, RDP Cloud (Windows / Linux Desktop XFCE4 / Linux Polos SSH), maupun VPS Linux setara kompatibilitas Microsoft Windows App. Dilengkapi <strong>On-Mic dua arah</strong>, <strong>Presisi Mouse/Keyboard Fisik 1:1</strong>, <strong>Floating Chat Multitasking + AI Bubble Shape Morph &amp; Pre-Send Media Studio</strong>, serta <strong>XyRDP Cloud Anti-Disconnect v3</strong>.
         </p>
         <div class="intro-actions">
           <a href="#download" class="pill-btn primary lg" data-i18n="intro.cta.dl">

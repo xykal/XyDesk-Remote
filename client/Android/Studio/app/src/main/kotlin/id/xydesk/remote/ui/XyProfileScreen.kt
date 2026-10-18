@@ -22,6 +22,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
@@ -546,7 +547,17 @@ private fun CommunityAccountCard(
     var githubBusy by remember { mutableStateOf(false) }
     var githubWaitingCode by remember { mutableStateOf<String?>(null) }
     var githubWaitingUrl by remember { mutableStateOf<String?>(null) }
-    var githubUser by remember { mutableStateOf(getVerifiedGitHubLogin(context)) }
+    val authRev by GitHubDirectOAuthController.authRevision.collectAsState()
+    var githubUser by remember(authRev) { mutableStateOf(getVerifiedGitHubLogin(context)) }
+    LaunchedEffect(authRev) {
+        val currentGh = getVerifiedGitHubLogin(context)
+        if (!currentGh.isNullOrBlank()) {
+            githubUser = currentGh
+            if (name.isNullOrBlank()) {
+                name = api.displayName() ?: currentGh
+            }
+        }
+    }
     val isFounder = isFounderAccount(githubUser) || isFounderAccount(name)
     val pickAvatar = androidx.activity.compose.rememberLauncherForActivityResult(
         androidx.activity.result.contract.ActivityResultContracts.GetContent(),
@@ -1388,8 +1399,9 @@ internal fun XyHeaderAccountActions(
     var avatarTick by remember { mutableIntStateOf(0) }
     val avatarFile = remember { java.io.File(context.filesDir, "xy_avatar.webp") }
     var avatarBitmap by remember { mutableStateOf<android.graphics.Bitmap?>(null) }
+    val authRev by GitHubDirectOAuthController.authRevision.collectAsState()
 
-    androidx.compose.runtime.LaunchedEffect(avatarTick, quickOpen, ghUser) {
+    androidx.compose.runtime.LaunchedEffect(avatarTick, quickOpen, ghUser, authRev) {
         ghUser = getVerifiedGitHubLogin(context)
         displayName = api.displayName() ?: ghUser ?: chatNickname(context)
         val bmp = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {

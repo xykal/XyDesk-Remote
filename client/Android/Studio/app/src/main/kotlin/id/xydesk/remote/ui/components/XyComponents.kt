@@ -40,6 +40,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.ui.graphics.TransformOrigin
@@ -751,3 +752,365 @@ fun XyDialog(
         }
     }
 }
+
+/**
+ * Komponen Skeleton Shimmer Loader konsisten untuk seluruh layar aplikasi
+ * (Feed, Leaderboard, Buat RDP, Chat Global, Status, dan Perangkat).
+ */
+@Composable
+fun XyLoadingSkeletonCard(
+    lines: Int = 3,
+    showAvatar: Boolean = false,
+    modifier: Modifier = Modifier,
+) {
+    val inf = androidx.compose.animation.core.rememberInfiniteTransition(label = "xySkeletonShimmer")
+    val alpha by inf.animateFloat(
+        initialValue = 0.28f,
+        targetValue = 0.68f,
+        animationSpec = androidx.compose.animation.core.infiniteRepeatable(
+            animation = tween(850, easing = FastOutSlowInEasing),
+            repeatMode = androidx.compose.animation.core.RepeatMode.Reverse,
+        ),
+        label = "shimmerAlpha",
+    )
+    val baseColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = alpha)
+    Column(
+        modifier = modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(18.dp))
+            .background(MaterialTheme.colorScheme.surface)
+            .border(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.45f), RoundedCornerShape(18.dp))
+            .padding(16.dp),
+        verticalArrangement = Arrangement.spacedBy(10.dp),
+    ) {
+        if (showAvatar) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(10.dp),
+            ) {
+                Box(
+                    Modifier
+                        .size(36.dp)
+                        .clip(CircleShape)
+                        .background(baseColor),
+                )
+                Column(
+                    Modifier.weight(1f),
+                    verticalArrangement = Arrangement.spacedBy(6.dp),
+                ) {
+                    Box(
+                        Modifier
+                            .fillMaxWidth(0.45f)
+                            .height(11.dp)
+                            .clip(RoundedCornerShape(6.dp))
+                            .background(baseColor),
+                    )
+                    Box(
+                        Modifier
+                            .fillMaxWidth(0.28f)
+                            .height(9.dp)
+                            .clip(RoundedCornerShape(6.dp))
+                            .background(baseColor),
+                    )
+                }
+            }
+        }
+        for (i in 0 until lines.coerceAtLeast(1)) {
+            val widthFrac = when (i) {
+                0 -> 0.88f
+                lines - 1 -> 0.56f
+                else -> 0.74f
+            }
+            Box(
+                Modifier
+                    .fillMaxWidth(widthFrac)
+                    .height(if (i == 0) 13.dp else 10.dp)
+                    .clip(RoundedCornerShape(6.dp))
+                    .background(baseColor),
+            )
+        }
+    }
+}
+
+/**
+ * Indikator Loading Spinner Vektor Minimalis + Teks Status.
+ */
+@Composable
+fun XyLoadingSpinnerState(
+    title: String,
+    subtitle: String? = null,
+    compact: Boolean = false,
+    modifier: Modifier = Modifier,
+) {
+    val inf = androidx.compose.animation.core.rememberInfiniteTransition(label = "xySpinner")
+    val angle by inf.animateFloat(
+        initialValue = 0f,
+        targetValue = 360f,
+        animationSpec = androidx.compose.animation.core.infiniteRepeatable(
+            animation = tween(900, easing = androidx.compose.animation.core.LinearEasing),
+            repeatMode = androidx.compose.animation.core.RepeatMode.Restart,
+        ),
+        label = "spinAngle",
+    )
+    val ink = MaterialTheme.colorScheme.primary
+    val track = MaterialTheme.colorScheme.outline
+    Row(
+        modifier = modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(16.dp))
+            .background(MaterialTheme.colorScheme.surface)
+            .border(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.5f), RoundedCornerShape(16.dp))
+            .padding(horizontal = if (compact) 12.dp else 16.dp, vertical = if (compact) 10.dp else 14.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(12.dp),
+    ) {
+        androidx.compose.foundation.Canvas(
+            modifier = Modifier
+                .size(if (compact) 20.dp else 24.dp)
+                .graphicsLayer { rotationZ = angle },
+        ) {
+            val sw = size.minDimension * 0.14f
+            drawCircle(
+                color = track.copy(alpha = 0.35f),
+                style = androidx.compose.ui.graphics.drawscope.Stroke(width = sw),
+            )
+            drawArc(
+                color = ink,
+                startAngle = 0f,
+                sweepAngle = 250f,
+                useCenter = false,
+                style = androidx.compose.ui.graphics.drawscope.Stroke(
+                    width = sw,
+                    cap = androidx.compose.ui.graphics.StrokeCap.Round,
+                ),
+            )
+        }
+        Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+            Text(
+                text = title,
+                style = if (compact) MaterialTheme.typography.labelLarge else MaterialTheme.typography.titleSmall,
+                fontWeight = FontWeight.SemiBold,
+                color = MaterialTheme.colorScheme.onSurface,
+            )
+            if (!subtitle.isNullOrBlank()) {
+                Text(
+                    text = subtitle,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+        }
+    }
+}
+
+/**
+ * Empty State standar konsisten di seluruh layar XyDesk Remote.
+ */
+@Composable
+fun XyEmptyState(
+    title: String,
+    subtitle: String,
+    icon: ImageVector? = null,
+    actionLabel: String? = null,
+    onAction: (() -> Unit)? = null,
+    modifier: Modifier = Modifier,
+) {
+    Column(
+        modifier = modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(18.dp))
+            .background(MaterialTheme.colorScheme.surface)
+            .border(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.45f), RoundedCornerShape(18.dp))
+            .padding(horizontal = 20.dp, vertical = 24.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        if (icon != null) {
+            Box(
+                modifier = Modifier
+                    .size(44.dp)
+                    .clip(CircleShape)
+                    .background(MaterialTheme.colorScheme.surfaceVariant),
+                contentAlignment = Alignment.Center,
+            ) {
+                Icon(
+                    imageVector = icon,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.onSurface,
+                    modifier = Modifier.size(20.dp),
+                )
+            }
+        }
+        Text(
+            text = title,
+            style = MaterialTheme.typography.titleSmall,
+            fontWeight = FontWeight.Bold,
+            color = MaterialTheme.colorScheme.onSurface,
+        )
+        Text(
+            text = subtitle,
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+        )
+        if (!actionLabel.isNullOrBlank() && onAction != null) {
+            Spacer(Modifier.height(4.dp))
+            XyPillButton(
+                text = actionLabel,
+                onClick = onAction,
+                primary = true,
+                compact = true,
+            )
+        }
+    }
+}
+
+/**
+ * Error State standar konsisten lengkap dengan tombol Coba Lagi & Tutup.
+ */
+@Composable
+fun XyErrorState(
+    title: String,
+    message: String,
+    retryLabel: String? = "Coba Lagi",
+    onRetry: (() -> Unit)? = null,
+    onDismiss: (() -> Unit)? = null,
+    modifier: Modifier = Modifier,
+) {
+    Column(
+        modifier = modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(16.dp))
+            .background(Color(0xFF1F1215))
+            .border(1.dp, Color(0xFFF87171).copy(alpha = 0.42f), RoundedCornerShape(16.dp))
+            .padding(14.dp),
+        verticalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            Box(
+                modifier = Modifier
+                    .size(24.dp)
+                    .clip(CircleShape)
+                    .background(Color(0xFFF87171).copy(alpha = 0.18f)),
+                contentAlignment = Alignment.Center,
+            ) {
+                Icon(
+                    imageVector = XyIcons.Warn,
+                    contentDescription = null,
+                    tint = Color(0xFFFCA5A5),
+                    modifier = Modifier.size(14.dp),
+                )
+            }
+            Text(
+                text = title,
+                style = MaterialTheme.typography.titleSmall,
+                fontWeight = FontWeight.Bold,
+                color = Color(0xFFFECACA),
+                modifier = Modifier.weight(1f),
+            )
+            if (onDismiss != null) {
+                Box(
+                    modifier = Modifier
+                        .size(24.dp)
+                        .clip(CircleShape)
+                        .clickable { onDismiss() },
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Icon(
+                        imageVector = XyIcons.Close,
+                        contentDescription = "Tutup",
+                        tint = Color(0xFFFCA5A5),
+                        modifier = Modifier.size(13.dp),
+                    )
+                }
+            }
+        }
+        Text(
+            text = message,
+            style = MaterialTheme.typography.bodySmall,
+            color = Color(0xFFFEE2E2).copy(alpha = 0.9f),
+        )
+        if (!retryLabel.isNullOrBlank() && onRetry != null) {
+            Row(horizontalArrangement = Arrangement.End, modifier = Modifier.fillMaxWidth()) {
+                XyPillButton(
+                    text = retryLabel,
+                    onClick = onRetry,
+                    primary = false,
+                    compact = true,
+                )
+            }
+        }
+    }
+}
+
+/**
+ * Success State Banner konsisten untuk umpan balik aksi berhasil.
+ */
+@Composable
+fun XySuccessStateBanner(
+    title: String,
+    subtitle: String? = null,
+    onDismiss: (() -> Unit)? = null,
+    modifier: Modifier = Modifier,
+) {
+    Row(
+        modifier = modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(16.dp))
+            .background(Color(0xFF0E1F18))
+            .border(1.dp, Color(0xFF34D399).copy(alpha = 0.42f), RoundedCornerShape(16.dp))
+            .padding(horizontal = 14.dp, vertical = 11.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(10.dp),
+    ) {
+        Box(
+            modifier = Modifier
+                .size(24.dp)
+                .clip(CircleShape)
+                .background(Color(0xFF10B981).copy(alpha = 0.22f)),
+            contentAlignment = Alignment.Center,
+        ) {
+            Icon(
+                imageVector = XyIcons.Check,
+                contentDescription = null,
+                tint = Color(0xFF6EE7B7),
+                modifier = Modifier.size(14.dp),
+            )
+        }
+        Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+            Text(
+                text = title,
+                style = MaterialTheme.typography.labelLarge,
+                fontWeight = FontWeight.Bold,
+                color = Color(0xFFECFDF5),
+            )
+            if (!subtitle.isNullOrBlank()) {
+                Text(
+                    text = subtitle,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = Color(0xFFA7F3D0),
+                )
+            }
+        }
+        if (onDismiss != null) {
+            Box(
+                modifier = Modifier
+                    .size(24.dp)
+                    .clip(CircleShape)
+                    .clickable { onDismiss() },
+                contentAlignment = Alignment.Center,
+            ) {
+                Icon(
+                    imageVector = XyIcons.Close,
+                    contentDescription = "Tutup",
+                    tint = Color(0xFFA7F3D0),
+                    modifier = Modifier.size(13.dp),
+                )
+            }
+        }
+    }
+}
+

@@ -60,6 +60,11 @@ internal const val EXTRA_OPEN_CHAT_GLOBAL = "id.xydesk.remote.ui.extra.OPEN_CHAT
 
 class XyDeskHomeActivity : ComponentActivity() {
 
+    companion object {
+        @Volatile
+        private var splashShownInProcess: Boolean = false
+    }
+
     private val autoResumeSignal = mutableIntStateOf(0)
     private val skipAutoResumeSignal = mutableIntStateOf(-1)
     private val openChatSignal = mutableIntStateOf(0)
@@ -81,6 +86,9 @@ class XyDeskHomeActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         WindowCompat.setDecorFitsSystemWindows(window, false)
         applyScreenSecurityFlags()
+        val isOAuthReturn = intent?.data?.scheme == "xydesk"
+        val shouldShowSplash = !splashShownInProcess && savedInstanceState == null && !isOAuthReturn
+        splashShownInProcess = true
         markSkipAutoResumeIfNeeded(intent)
         handleIncomingShareIntent(intent)
         handleWidgetConnectIntent(intent)
@@ -105,8 +113,8 @@ class XyDeskHomeActivity : ComponentActivity() {
             }
             CompositionLocalProvider(LocalDensity provides normalizedDensity) {
                 XyDeskTheme(dark = isDark) {
-                    var boot by remember { mutableStateOf(true) }
-                    var ready by remember { mutableStateOf(false) }
+                    var boot by remember { mutableStateOf(shouldShowSplash) }
+                    var ready by remember { mutableStateOf(!shouldShowSplash) }
                     val sharedBanner by sharedFileBanner
                     Box(Modifier.fillMaxSize()) {
                         XyDeskHome(
@@ -120,9 +128,9 @@ class XyDeskHomeActivity : ComponentActivity() {
                             onDismissSharedNotice = { sharedFileBanner.value = null },
                             onAuthenticateConnect = { action -> authenticateBeforeConnect(action) },
                         )
-                        // Splash XyVerse menutup layar sampai data siap; home
-                        // sudah tersusun di belakangnya, jadi begitu splash hilang
-                        // tidak ada kedipan.
+                        // Splash hanya tampil sekali saat cold-start awal; saat kembali
+                        // dari OAuth GitHub di Chrome atau rotasi layar, tidak pernah
+                        // menampilkan splash ulang.
                         if (boot) {
                             XySplashScreen(
                                 ready = ready,

@@ -198,6 +198,8 @@ internal object GitHubDirectOAuthController {
         private set
     var activeSessionId by mutableStateOf("")
         private set
+    var authRevision by mutableStateOf(0)
+        private set
     private var onSuccessCallback: ((token: String, login: String) -> Unit)? = null
     private var onErrorCallback: ((String) -> Unit)? = null
 
@@ -223,6 +225,7 @@ internal object GitHubDirectOAuthController {
 
     fun complete(token: String, login: String) {
         isOpen = false
+        authRevision += 1
         val okCb = onSuccessCallback
         onSuccessCallback = null
         onErrorCallback = null
@@ -914,13 +917,13 @@ internal fun founderBorderBrush(phase: Float = 0f): Brush {
     val shift = phase * 360f
     return Brush.linearGradient(
         colors = listOf(
-            Color(0xFFFFFBEB),
-            Color(0xFFFDE047),
-            Color(0xFFF59E0B),
-            Color(0xFFE11D48),
+            Color(0xFFFAF5FF),
+            Color(0xFFE9D5FF),
             Color(0xFFC084FC),
-            Color(0xFFFBBF24),
-            Color(0xFFFFFBEB),
+            Color(0xFFA855F7),
+            Color(0xFF7E22CE),
+            Color(0xFFD8B4FE),
+            Color(0xFFFAF5FF),
         ),
         start = Offset(shift, 0f),
         end = Offset(shift + 240f, 180f),
@@ -931,11 +934,11 @@ internal fun founderBgBrush(phase: Float = 0f): Brush {
     val offset = phase * 220f
     return Brush.linearGradient(
         colors = listOf(
-            Color(0xFF09080F),
-            Color(0xFF1A102B),
-            Color(0xFF2B1610),
-            Color(0xFF130D24),
-            Color(0xFF09080F),
+            Color(0xFF16062B),
+            Color(0xFF2E1065),
+            Color(0xFF3B0764),
+            Color(0xFF4C1D95),
+            Color(0xFF190733),
         ),
         start = Offset(offset, 0f),
         end = Offset(offset + 280f, 120f),
@@ -943,7 +946,224 @@ internal fun founderBgBrush(phase: Float = 0f): Brush {
 }
 
 /**
- * Emblem Mahkota Bersayap Sovereign (Sovereign Winged Crown + Orbiting Celestial Sparks)
+ * Menghasilkan Shape kustom untuk bubble chat berdasarkan pilihan gaya shape:
+ * - "rounded"  : Klasik membulat asimetris pada ekor bubble
+ * - "sharp"    : Ujung tajam/lancip tegas (Cyber Blade)
+ * - "morph"    : Sudut organik yang terus bertransformasi halus (Liquid Morph)
+ * - "abstract" : Potongan poligon asimetris futuristik (HUD / Mecha Cut)
+ * - "cloud"    : Lekukan lembut organik (Soft Pill / Cloud Sculpt)
+ */
+internal fun resolveCustomBubbleShape(
+    shapeStyle: String,
+    isOwn: Boolean,
+    morphPhase: Float = 0f,
+    compact: Boolean = false,
+): Shape {
+    val baseRadiusDp = if (compact) 13f else 17f
+    return when (shapeStyle.lowercase(Locale.ROOT)) {
+        "sharp" -> androidx.compose.foundation.shape.GenericShape { size, _ ->
+            val w = size.width
+            val h = size.height
+            val cut = (minOf(w, h) * 0.18f).coerceIn(6f, 18f)
+            if (isOwn) {
+                moveTo(cut, 0f)
+                lineTo(w, 0f)
+                lineTo(w, h - cut * 0.35f)
+                lineTo(w - cut * 0.9f, h)
+                lineTo(0f, h)
+                lineTo(0f, cut)
+                close()
+            } else {
+                moveTo(0f, 0f)
+                lineTo(w - cut, 0f)
+                lineTo(w, cut)
+                lineTo(w, h)
+                lineTo(cut * 0.9f, h)
+                lineTo(0f, h - cut * 0.35f)
+                close()
+            }
+        }
+        "abstract" -> androidx.compose.foundation.shape.GenericShape { size, _ ->
+            val w = size.width
+            val h = size.height
+            val c1 = (minOf(w, h) * 0.22f).coerceIn(8f, 22f)
+            val c2 = (minOf(w, h) * 0.10f).coerceIn(4f, 12f)
+            if (isOwn) {
+                moveTo(c1, 0f)
+                lineTo(w - c2, 0f)
+                lineTo(w, c2)
+                lineTo(w, h)
+                lineTo(c2, h)
+                lineTo(0f, h - c1)
+                close()
+            } else {
+                moveTo(c2, 0f)
+                lineTo(w - c1, 0f)
+                lineTo(w, c1)
+                lineTo(w, h - c2)
+                lineTo(w - c2, h)
+                lineTo(0f, h)
+                close()
+            }
+        }
+        "morph" -> {
+            val wave1 = (sin(morphPhase * 2f * PI.toFloat()) * 6f)
+            val wave2 = (cos(morphPhase * 2f * PI.toFloat()) * 6f)
+            val tl = (baseRadiusDp + wave1).coerceIn(6f, 26f).dp
+            val tr = (baseRadiusDp - wave2).coerceIn(6f, 26f).dp
+            val bl = if (isOwn) (baseRadiusDp + wave2).coerceIn(6f, 26f).dp else 4.dp
+            val br = if (isOwn) 4.dp else (baseRadiusDp - wave1).coerceIn(6f, 26f).dp
+            RoundedCornerShape(topStart = tl, topEnd = tr, bottomEnd = br, bottomStart = bl)
+        }
+        "cloud" -> {
+            val r = (baseRadiusDp + 7f).dp
+            val tail = if (compact) 6.dp else 8.dp
+            RoundedCornerShape(
+                topStart = r,
+                topEnd = r,
+                bottomEnd = if (isOwn) tail else r,
+                bottomStart = if (isOwn) r else tail,
+            )
+        }
+        else -> {
+            val r = baseRadiusDp.dp
+            val tail = if (compact) 4.dp else 5.dp
+            RoundedCornerShape(
+                topStart = r,
+                topEnd = r,
+                bottomEnd = if (isOwn) tail else r,
+                bottomStart = if (isOwn) r else tail,
+            )
+        }
+    }
+}
+
+/**
+ * Menggambar elemen-elemen melayang beranimasi (Floating Animated Elements) di dalam bubble chat.
+ */
+internal fun androidx.compose.ui.graphics.drawscope.DrawScope.drawBubbleFloatingElements(
+    elementStyle: String,
+    accentColor: Color,
+    secondaryColor: Color,
+    phase: Float,
+) {
+    val style = elementStyle.lowercase(Locale.ROOT)
+    if (style == "none" || style.isBlank()) return
+    val w = size.width
+    val h = size.height
+    if (w <= 1f || h <= 1f) return
+
+    val seeds = listOf(
+        Triple(0.14f, 0.24f, 0.85f),
+        Triple(0.34f, 0.72f, 1.10f),
+        Triple(0.56f, 0.20f, 0.75f),
+        Triple(0.76f, 0.64f, 1.25f),
+        Triple(0.88f, 0.28f, 0.95f),
+        Triple(0.24f, 0.48f, 0.65f),
+    )
+
+    seeds.forEachIndexed { idx, (bx, by, scale) ->
+        val angle = (phase * 2f * PI.toFloat()) + idx * 1.15f
+        val dx = cos(angle) * (6.dp.toPx() * scale)
+        val dy = sin(angle * 1.3f) * (5.dp.toPx() * scale)
+        val cx = (w * bx + dx).coerceIn(4f, w - 4f)
+        val cy = (h * by + dy).coerceIn(4f, h - 4f)
+        val pulse = (0.45f + 0.55f * ((sin(angle) + 1f) * 0.5f)).coerceIn(0.2f, 1f)
+        val tint = if (idx % 2 == 0) accentColor else secondaryColor
+
+        when (style) {
+            "crystals" -> {
+                val r = 4.2.dp.toPx() * scale
+                val diamond = Path().apply {
+                    moveTo(cx, cy - r)
+                    lineTo(cx + r * 0.68f, cy)
+                    lineTo(cx, cy + r)
+                    lineTo(cx - r * 0.68f, cy)
+                    close()
+                }
+                drawPath(path = diamond, color = tint.copy(alpha = 0.28f * pulse))
+                drawPath(
+                    path = diamond,
+                    color = Color.White.copy(alpha = 0.34f * pulse),
+                    style = Stroke(width = 0.8.dp.toPx()),
+                )
+            }
+            "orbs" -> {
+                val r = 7.dp.toPx() * scale
+                drawCircle(
+                    brush = Brush.radialGradient(
+                        colors = listOf(
+                            tint.copy(alpha = 0.36f * pulse),
+                            tint.copy(alpha = 0.10f * pulse),
+                            Color.Transparent,
+                        ),
+                        center = Offset(cx, cy),
+                        radius = r,
+                    ),
+                    radius = r,
+                    center = Offset(cx, cy),
+                )
+                drawCircle(
+                    color = Color.White.copy(alpha = 0.45f * pulse),
+                    radius = 1.4.dp.toPx() * scale,
+                    center = Offset(cx, cy),
+                )
+            }
+            "stars" -> {
+                val r = 4.5.dp.toPx() * scale * pulse
+                val star = Path().apply {
+                    moveTo(cx, cy - r)
+                    quadraticTo(cx, cy, cx + r, cy)
+                    quadraticTo(cx, cy, cx, cy + r)
+                    quadraticTo(cx, cy, cx - r, cy)
+                    quadraticTo(cx, cy, cx, cy - r)
+                    close()
+                }
+                drawPath(path = star, color = tint.copy(alpha = 0.48f * pulse))
+                drawCircle(color = Color.White.copy(alpha = 0.65f * pulse), radius = 1.dp.toPx(), center = Offset(cx, cy))
+            }
+            "cyber" -> {
+                val s = 4.5.dp.toPx() * scale
+                drawRoundRect(
+                    color = tint.copy(alpha = 0.32f * pulse),
+                    topLeft = Offset(cx - s * 0.5f, cy - s * 0.5f),
+                    size = androidx.compose.ui.geometry.Size(s, s),
+                    cornerRadius = CornerRadius(1.2.dp.toPx(), 1.2.dp.toPx()),
+                    style = Stroke(width = 1.dp.toPx()),
+                )
+            }
+            "sakura" -> {
+                val r = 3.8.dp.toPx() * scale
+                val petal = Path().apply {
+                    moveTo(cx, cy - r)
+                    quadraticTo(cx + r, cy - r * 0.3f, cx, cy + r)
+                    quadraticTo(cx - r, cy - r * 0.3f, cx, cy - r)
+                    close()
+                }
+                drawPath(path = petal, color = tint.copy(alpha = 0.34f * pulse))
+            }
+            "fireflies" -> {
+                val r = 5.2.dp.toPx() * scale
+                drawCircle(
+                    brush = Brush.radialGradient(
+                        colors = listOf(
+                            Color(0xFFFEF08A).copy(alpha = 0.45f * pulse),
+                            tint.copy(alpha = 0.18f * pulse),
+                            Color.Transparent,
+                        ),
+                        center = Offset(cx, cy),
+                        radius = r,
+                    ),
+                    radius = r,
+                    center = Offset(cx, cy),
+                )
+            }
+        }
+    }
+}
+
+/**
+ * Emblem Mahkota Bersayap Sovereign Royal Amethyst (Sovereign Winged Crown + Orbiting Amethyst Sparks)
  * yang beranimasi secara real-time di atas Canvas.
  */
 @Composable
@@ -977,12 +1197,12 @@ internal fun FounderCrownEmblem(
         val cx = w * 0.5f
         val cy = h * 0.5f
 
-        // Halo aura emas berdenyut di belakang mahkota
+        // Halo aura ungu royal amethyst berdenyut di belakang mahkota
         drawCircle(
             brush = Brush.radialGradient(
                 colors = listOf(
-                    Color(0xFFFBBF24).copy(alpha = 0.42f * pulse.coerceIn(0.8f, 1.15f)),
-                    Color(0xFFE11D48).copy(alpha = 0.16f),
+                    Color(0xFFC084FC).copy(alpha = 0.48f * pulse.coerceIn(0.8f, 1.15f)),
+                    Color(0xFF7E22CE).copy(alpha = 0.22f),
                     Color.Transparent,
                 ),
                 center = Offset(cx, cy),
@@ -992,12 +1212,12 @@ internal fun FounderCrownEmblem(
             center = Offset(cx, cy),
         )
 
-        val goldBrush = Brush.linearGradient(
+        val amethystBrush = Brush.linearGradient(
             colors = listOf(
-                Color(0xFFFFFBEB),
-                Color(0xFFFDE047),
-                Color(0xFFF59E0B),
-                Color(0xFFD97706),
+                Color(0xFFFAF5FF),
+                Color(0xFFE9D5FF),
+                Color(0xFFC084FC),
+                Color(0xFF9333EA),
             ),
             start = Offset(0f, 0f),
             end = Offset(w, h),
@@ -1020,8 +1240,8 @@ internal fun FounderCrownEmblem(
             lineTo(w * 0.72f, h * 0.44f)
             close()
         }
-        drawPath(path = leftWing, brush = goldBrush, style = Fill)
-        drawPath(path = rightWing, brush = goldBrush, style = Fill)
+        drawPath(path = leftWing, brush = amethystBrush, style = Fill)
+        drawPath(path = rightWing, brush = amethystBrush, style = Fill)
 
         // Mahkota utama 5-puncak Sovereign
         val crown = Path().apply {
@@ -1034,48 +1254,48 @@ internal fun FounderCrownEmblem(
             lineTo(w * 0.82f, h * 0.76f)
             close()
         }
-        drawPath(path = crown, brush = goldBrush, style = Fill)
+        drawPath(path = crown, brush = amethystBrush, style = Fill)
         drawPath(
             path = crown,
-            color = Color(0xFFFFFBEB).copy(alpha = 0.85f),
+            color = Color(0xFFFAF5FF).copy(alpha = 0.88f),
             style = Stroke(width = w * 0.045f, join = StrokeJoin.Round),
         )
 
-        // Permata Ruby di tengah mahkota
+        // Permata Amethyst Ungu Neon di tengah mahkota
         drawCircle(
-            color = Color(0xFFF43F5E),
-            radius = w * 0.075f,
+            color = Color(0xFF6B21A8),
+            radius = w * 0.078f,
             center = Offset(w * 0.50f, h * 0.56f),
         )
         drawCircle(
-            color = Color(0xFFFFFBEB),
-            radius = w * 0.032f,
+            color = Color(0xFFFAF5FF),
+            radius = w * 0.034f,
             center = Offset(w * 0.48f, h * 0.54f),
         )
 
         // Pita dasar mahkota
         drawLine(
-            brush = goldBrush,
+            brush = amethystBrush,
             start = Offset(w * 0.17f, h * 0.86f),
             end = Offset(w * 0.83f, h * 0.86f),
             strokeWidth = h * 0.10f,
             cap = StrokeCap.Round,
         )
 
-        // Permata puncak + partikel bintang mengorbit
-        drawCircle(color = Color(0xFFFFFBEB), radius = w * 0.07f, center = Offset(w * 0.50f, h * 0.13f))
-        drawCircle(color = Color(0xFFFDE047), radius = w * 0.055f, center = Offset(w * 0.13f, h * 0.30f))
-        drawCircle(color = Color(0xFFFDE047), radius = w * 0.055f, center = Offset(w * 0.87f, h * 0.30f))
+        // Permata puncak + partikel bintang ungu mengorbit
+        drawCircle(color = Color(0xFFFAF5FF), radius = w * 0.07f, center = Offset(w * 0.50f, h * 0.13f))
+        drawCircle(color = Color(0xFFE9D5FF), radius = w * 0.055f, center = Offset(w * 0.13f, h * 0.30f))
+        drawCircle(color = Color(0xFFE9D5FF), radius = w * 0.055f, center = Offset(w * 0.87f, h * 0.30f))
 
         val sx = cx + cos(orbit) * (w * 0.44f)
         val sy = cy + sin(orbit) * (h * 0.38f)
-        drawCircle(color = Color(0xFFFFFBEB), radius = w * 0.048f, center = Offset(sx, sy))
+        drawCircle(color = Color(0xFFFAF5FF), radius = w * 0.048f, center = Offset(sx, sy))
     }
 }
 
 /**
- * Badge visual "SOVEREIGN FOUNDER" beranimasi penuh (Liquid Gold Shimmer + Celestial Sparks +
- * Crest Mahkota Bersayap). Tidak generik dan langsung menonjolkan pemilik utama (`@xykal`).
+ * Badge visual "SOVEREIGN FOUNDER" berwarna **Ungu Royal Amethyst** super keren
+ * (Amethyst Crystal Shimmer + Celestial Purple Sparks + Crest Mahkota Bersayap).
  */
 @Composable
 internal fun XyFounderBadge(
@@ -1088,16 +1308,16 @@ internal fun XyFounderBadge(
         initialValue = 0f,
         targetValue = 1f,
         animationSpec = infiniteRepeatable(
-            animation = tween(2400, easing = LinearEasing),
+            animation = tween(2200, easing = LinearEasing),
             repeatMode = RepeatMode.Restart,
         ),
         label = "shimmer_sweep",
     )
     val glowAlpha by infinite.animateFloat(
-        initialValue = 0.45f,
-        targetValue = 0.95f,
+        initialValue = 0.55f,
+        targetValue = 1.0f,
         animationSpec = infiniteRepeatable(
-            animation = tween(1400, easing = FastOutSlowInEasing),
+            animation = tween(1350, easing = FastOutSlowInEasing),
             repeatMode = RepeatMode.Reverse,
         ),
         label = "glow_alpha",
@@ -1109,20 +1329,20 @@ internal fun XyFounderBadge(
             .clip(shape)
             .background(founderBgBrush(shimmer), shape)
             .border(
-                width = if (compact) 1.2.dp else 1.5.dp,
+                width = if (compact) 1.25.dp else 1.5.dp,
                 brush = founderBorderBrush(shimmer),
                 shape = shape,
             )
             .drawWithContent {
                 drawContent()
-                // Sapuan kilau cahaya diagonal (specular sweep)
+                // Sapuan kilau cahaya diagonal ungu kristal (specular amethyst sweep)
                 val sweepX = (shimmer * 1.6f - 0.3f) * size.width
                 drawRoundRect(
                     brush = Brush.linearGradient(
                         colors = listOf(
                             Color.Transparent,
-                            Color(0xFFFFFBEB).copy(alpha = 0.26f),
-                            Color(0xFFFDE047).copy(alpha = 0.14f),
+                            Color(0xFFFAF5FF).copy(alpha = 0.28f),
+                            Color(0xFFD8B4FE).copy(alpha = 0.18f),
                             Color.Transparent,
                         ),
                         start = Offset(sweepX - size.width * 0.28f, 0f),
@@ -1147,9 +1367,9 @@ internal fun XyFounderBadge(
                 .background(
                     Brush.radialGradient(
                         colors = listOf(
-                            Color(0xFFF59E0B).copy(alpha = 0.42f * glowAlpha),
-                            Color(0xFFE11D48).copy(alpha = 0.24f),
-                            Color(0xFF1E1B4B).copy(alpha = 0.35f),
+                            Color(0xFFA855F7).copy(alpha = 0.52f * glowAlpha),
+                            Color(0xFF6B21A8).copy(alpha = 0.34f),
+                            Color(0xFF2E1065).copy(alpha = 0.45f),
                         ),
                     ),
                 ),
@@ -1163,10 +1383,10 @@ internal fun XyFounderBadge(
             fontSize = if (compact) 9.sp else 10.5.sp,
             fontWeight = FontWeight.Black,
             letterSpacing = 0.85.sp,
-            color = Color(0xFFFFFBEB),
+            color = Color(0xFFFAF5FF),
         )
-        // Bintang vektor kilau di sisi kanan badge
-        Canvas(modifier = Modifier.size(if (compact) 8.dp else 10.dp)) {
+        // Bintang kristal ungu di sisi kanan badge
+        Canvas(modifier = Modifier.size(if (compact) 8.5.dp else 10.5.dp)) {
             val r = size.minDimension * 0.48f * glowAlpha
             val cx = size.width * 0.5f
             val cy = size.height * 0.5f
@@ -1178,19 +1398,20 @@ internal fun XyFounderBadge(
                 quadraticTo(cx, cy, cx, cy - r)
                 close()
             }
-            drawPath(star, color = Color(0xFFFDE047))
+            drawPath(star, color = Color(0xFFE9D5FF))
         }
     }
 }
 
 /**
- * Kontainer Bubble Chat Epik Beranimasi Khusus Founder (`@xykal`).
- * Menampilkan inti Royal Obsidian-Crimson dengan tepi sapuan emas bergerak (Liquid Gold Plasma),
- * partikel bintang halus di latar bubble, dan kilau cahaya diagonal real-time.
+ * Kontainer Bubble Chat Epik Beranimasi Khusus Founder (`@xykal`) berwarna **Ungu Royal Amethyst**.
+ * Menampilkan inti Royal Amethyst (`#1A0633 -> #3B0764 -> #4C1D95 -> #240946`) dengan tepi
+ * sapuan ungu-lavender bergerak, kristal amethyst melayang, dan kilau cahaya diagonal real-time.
  */
 @Composable
 internal fun FounderAnimatedBubbleBox(
     shape: Shape,
+    floatingElementStyle: String = "crystals",
     modifier: Modifier = Modifier,
     content: @Composable BoxScope.() -> Unit,
 ) {
@@ -1220,71 +1441,66 @@ internal fun FounderAnimatedBubbleBox(
             .background(
                 brush = Brush.linearGradient(
                     colors = listOf(
-                        Color(0xFF0D0A14),
-                        Color(0xFF191124),
-                        Color(0xFF231612),
-                        Color(0xFF120E1E),
+                        Color(0xFF1A0633),
+                        Color(0xFF2E1065),
+                        Color(0xFF3B0764),
+                        Color(0xFF4C1D95),
+                        Color(0xFF1E083A),
                     ),
                 ),
                 shape = shape,
             )
             .border(
-                width = 1.35.dp,
+                width = 1.4.dp,
                 brush = founderBorderBrush(phase),
                 shape = shape,
             )
             .drawWithContent {
-                // Partikel nebula & bintang emas halus di dalam bubble Founder
                 val w = size.width
                 val h = size.height
                 drawCircle(
                     brush = Brush.radialGradient(
                         colors = listOf(
-                            Color(0xFFF59E0B).copy(alpha = 0.14f * pulse),
+                            Color(0xFFA855F7).copy(alpha = 0.22f * pulse),
                             Color.Transparent,
                         ),
                         center = Offset(w * 0.85f, h * 0.22f),
-                        radius = w * 0.45f,
+                        radius = w * 0.48f,
                     ),
-                    radius = w * 0.45f,
+                    radius = w * 0.48f,
                     center = Offset(w * 0.85f, h * 0.22f),
                 )
                 drawCircle(
                     brush = Brush.radialGradient(
                         colors = listOf(
-                            Color(0xFFE11D48).copy(alpha = 0.11f * pulse),
+                            Color(0xFFC084FC).copy(alpha = 0.16f * pulse),
                             Color.Transparent,
                         ),
                         center = Offset(w * 0.18f, h * 0.80f),
-                        radius = w * 0.40f,
+                        radius = w * 0.42f,
                     ),
-                    radius = w * 0.40f,
+                    radius = w * 0.42f,
                     center = Offset(w * 0.18f, h * 0.80f),
                 )
-                // Titik bintang emas berdenyut
-                val spark1X = w * (0.15f + 0.70f * phase)
-                val spark2X = w * (0.85f - 0.65f * phase)
-                drawCircle(
-                    color = Color(0xFFFDE047).copy(alpha = 0.35f * pulse),
-                    radius = 2.2f,
-                    center = Offset(spark1X, h * 0.24f),
-                )
-                drawCircle(
-                    color = Color(0xFFFFFBEB).copy(alpha = 0.28f * pulse),
-                    radius = 1.8f,
-                    center = Offset(spark2X, h * 0.76f),
+
+                // Elemen kristal/partikel ungu melayang di dalam bubble Founder
+                drawBubbleFloatingElements(
+                    elementStyle = floatingElementStyle.ifBlank { "crystals" },
+                    accentColor = Color(0xFFD8B4FE),
+                    secondaryColor = Color(0xFFA855F7),
+                    phase = phase,
                 )
 
                 drawContent()
 
-                // Sapuan kilau diagonal tipis
+                // Sapuan kilau diagonal tipis ungu lavender
                 val sweepX = (phase * 1.5f - 0.25f) * w
                 drawRect(
                     brush = Brush.linearGradient(
                         colors = listOf(
                             Color.Transparent,
-                            Color(0xFFFFFBEB).copy(alpha = 0.10f),
-                            Color(0xFFFDE047).copy(alpha = 0.06f),
+                            Color(0xFFFAF5FF).copy(alpha = 0.13f),
+                            Color(0xFFD8B4FE).copy(alpha = 0.09f),
                             Color.Transparent,
                         ),
                         start = Offset(sweepX - w * 0.22f, 0f),
