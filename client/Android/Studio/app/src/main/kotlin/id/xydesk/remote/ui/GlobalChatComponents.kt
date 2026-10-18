@@ -1,5 +1,7 @@
 package id.xydesk.remote.ui
 
+import androidx.compose.foundation.layout.BoxWithConstraints
+import androidx.compose.ui.platform.LocalDensity
 import id.xydesk.remote.ui.theme.XySpacing
 
 import android.content.ClipData
@@ -580,6 +582,10 @@ internal fun MessageBubble(
     val isPureSticker = msg.attachmentType == "sticker"
     val isLightBubble = msg.mine && !founderMsg && bubbleStyleMode == "monochrome"
 
+    val density = LocalDensity.current
+    val replyThresholdPx = with(density) { 56.dp.toPx() }
+    val maxSwipePx = with(density) { 110.dp.toPx() }
+
     // Swipe-to-Reply State
     var swipeOffsetX by remember(msg.id) { mutableFloatStateOf(0f) }
     var swipeTriggered by remember(msg.id) { mutableStateOf(false) }
@@ -624,23 +630,24 @@ internal fun MessageBubble(
         resolveSpecialUserRole(msg.name, msg.githubLogin)
     }
     val detectedLinkUrl = remember(msg.id, msg.text) { extractFirstUrl(msg.text) }
-    val maxBubbleWidth = if (isCompactOverlay) 204.dp else 252.dp
-    val minBubbleWidth = when {
+    BoxWithConstraints(Modifier.fillMaxWidth()) {
+    val maxBubbleWidth = chatBubbleMaxWidth(maxWidth.value, isCompactOverlay).dp
+    val minBubbleWidth = (when {
         isCompactOverlay -> if (hasMediaAttachment) 150.dp else 72.dp
         hasMediaAttachment -> 190.dp
         isPureSticker -> 96.dp
         else -> 82.dp
-    }
+    }).coerceAtMost(maxBubbleWidth)
 
     Row(
         modifier = Modifier
             .fillMaxWidth()
             .padding(horizontal = if (isCompactOverlay) 1.dp else 2.dp)
             .offset { IntOffset(swipeOffsetX.roundToInt(), 0) }
-            .pointerInput(msg.id) {
+            .pointerInput(msg.id, replyThresholdPx, maxSwipePx) {
                 detectHorizontalDragGestures(
                     onDragEnd = {
-                        if (kotlin.math.abs(swipeOffsetX) >= 56f) {
+                        if (kotlin.math.abs(swipeOffsetX) >= replyThresholdPx) {
                             onReply()
                         }
                         swipeOffsetX = 0f
@@ -652,7 +659,7 @@ internal fun MessageBubble(
                     },
                     onHorizontalDrag = { change, dragAmount ->
                         change.consume()
-                        swipeOffsetX = (swipeOffsetX + dragAmount).coerceIn(-110f, 110f)
+                        swipeOffsetX = (swipeOffsetX + dragAmount).coerceIn(-maxSwipePx, maxSwipePx)
                     },
                 )
             },
@@ -1211,6 +1218,7 @@ internal fun MessageBubble(
                 compact = isCompactOverlay,
             )
         }
+    }
     }
 }
 
