@@ -57,10 +57,12 @@ import java.util.Collections
 object ChatPushNotifier {
 
     const val ONESIGNAL_APP_ID = "e3d5adea-1c0f-4986-9ce5-e088d65f0998"
-    const val CHAT_CHANNEL_ID = "xydesk.global.chat.system.v4"
+    const val CHAT_CHANNEL_ID = "xydesk.global.chat.system.v5"
     const val MENTION_CHANNEL_ID = "xydesk.mention.reply.system.v4"
     const val FEED_CHANNEL_ID = "xydesk.feed.social.system.v4"
     const val UPDATE_CHANNEL_ID = "xydesk.app.update.system.v4"
+    const val REPLY_CHANNEL_ID = "xydesk.chat.reply.v1"
+    const val ANNOUNCEMENT_CHANNEL_ID = "xydesk.announcement.v1"
     const val CHAT_NOTIF_ID = 2005
     const val UPDATE_NOTIF_ID = 2006
     const val SOCIAL_NOTIF_BASE_ID = 2100
@@ -209,7 +211,11 @@ object ChatPushNotifier {
         val prefs = appContext.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
         prefs.edit().remove(KEY_UNREAD_STACK).apply()
         val nm = appContext.getSystemService(Context.NOTIFICATION_SERVICE) as? NotificationManager
-        nm?.cancel(CHAT_NOTIF_ID)
+        nm?.cancel(CHAT_NOTIF_ID) // remove legacy combined notification
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+            nm?.activeNotifications?.filter { it.tag?.startsWith("chat:") == true }
+                ?.forEach { nm?.cancel(it.tag, it.id) }
+        }
     }
 
     fun onIncomingChatMessage(
@@ -319,8 +325,9 @@ object ChatPushNotifier {
         val nm = appContext.getSystemService(Context.NOTIFICATION_SERVICE) as? NotificationManager ?: return
         ensureChannel(nm)
         val channelId = when (cat) {
-            "announcement" -> UPDATE_CHANNEL_ID
-            "mention", "reply" -> MENTION_CHANNEL_ID
+            "announcement" -> ANNOUNCEMENT_CHANNEL_ID
+            "mention" -> MENTION_CHANNEL_ID
+            "reply" -> REPLY_CHANNEL_ID
             else -> FEED_CHANNEL_ID
         }
         val openIntent = Intent(appContext, XyDeskHomeActivity::class.java)
@@ -340,7 +347,7 @@ object ChatPushNotifier {
             .setAutoCancel(true)
             .setContentIntent(pending)
             .build()
-        nm.notify(SOCIAL_NOTIF_BASE_ID + (notifId.hashCode() and 0x3ff), notif)
+        nm.notify("social:$cat:$notifId", SOCIAL_NOTIF_BASE_ID, notif)
     }
 
     fun appendInlineReplyAndSend(context: Context, replyText: String) {
@@ -469,8 +476,9 @@ object ChatPushNotifier {
         val lastItem = stack.last()
         val unreadCount = stack.count { !it.isMe }
         val channelId = when {
-            isAnnouncement -> UPDATE_CHANNEL_ID
-            isMention || isReply -> MENTION_CHANNEL_ID
+            isAnnouncement -> ANNOUNCEMENT_CHANNEL_ID
+            isMention -> MENTION_CHANNEL_ID
+            isReply -> REPLY_CHANNEL_ID
             else -> CHAT_CHANNEL_ID
         }
         val titleText = when {
@@ -479,19 +487,16 @@ object ChatPushNotifier {
             isReply -> "${lastItem.name} membalas pesan Anda"
             else -> lastItem.name
         }
-        val inboxLines = stack.takeLast(5).map { "${it.name}: ${it.text}" }
-        val bigText = if (inboxLines.size > 1 && !isMention && !isReply) {
-            inboxLines.joinToString("\n")
-        } else {
-            lastItem.text
-        }
+        val bigText = lastItem.text // one notification per message, never mix categories
 
         // Gunakan sistem notifikasi standar bawaan HP (mengikuti pengaturan suara/getar channel sistem HP)
         val builder = NotificationCompat.Builder(context, channelId)
             .setSmallIcon(R.drawable.ic_stat_xydesk)
             .setContentTitle(titleText)
             .setContentText(lastItem.text)
-            .setSubText(if (unreadCount > 1) "$unreadCount pesan" else "Chat Global")
+            .setSubText("Chat Global")
+            .setPriority(NotificationCompat.PRIORITY_HIGH)
+            .setVisibility(NotificationCompat.VISIBILITY_PRIVATE)
             .setStyle(NotificationCompat.BigTextStyle().bigText(bigText))
             .setCategory(NotificationCompat.CATEGORY_MESSAGE)
             .setAutoCancel(true)
@@ -502,7 +507,14 @@ object ChatPushNotifier {
             .addAction(replyAction)
             .addAction(markReadAction)
 
-        nm.notify(CHAT_NOTIF_ID, builder.build())
+        nm.cancel(CHAT_NOTIF_ID)
+        nm.notify("chat:$channelId:${lastItem.id}", CHAT_NOTIF_ID, builder.build())
+        // Keep notification tray bounded independently of the stored unread stack.
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+            nm.activeNotifications.filter { it.tag?.startsWith("chat:") == true }
+                .sortedByDescending { it.postTime }.drop(MAX_STACK_MESSAGES)
+                .forEach { nm.cancel(it.tag, it.id) }
+        }
     }
 
     fun openChatIntent(context: Context): Intent =
@@ -545,6 +557,8 @@ object ChatPushNotifier {
     private fun ensureChannel(nm: NotificationManager) {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             val channels = listOf(
+                NotificationChannel(REPLY_CHANNEL_ID, xyNow("Balasan Chat", "Chat Replies"), NotificationManager.IMPORTANCE_HIGH),
+                NotificationChannel(ANNOUNCEMENT_CHANNEL_ID, xyNow("Pengumuman", "Announcements"), NotificationManager.IMPORTANCE_HIGH),
                 NotificationChannel(
                     MENTION_CHANNEL_ID,
                     xyNow("Mention (@) & Balasan", "Mentions (@) & Replies"),
@@ -558,7 +572,7 @@ object ChatPushNotifier {
                 NotificationChannel(
                     CHAT_CHANNEL_ID,
                     xyNow("Pesan Chat Global", "Global Chat Messages"),
-                    NotificationManager.IMPORTANCE_DEFAULT,
+                    NotificationManager.IMPORTANCE_HIGH,
                 ).apply {
                     description = xyNow(
                         "Notifikasi pesan baru di ruang Chat Global XyDesk",
@@ -702,9 +716,10 @@ object ChatPushNotifier {
                 var tickCount = 0
                 while (true) {
                     try {
-                        Thread.sleep(if (seeded) 5_000L else 2_500L)
+                        Thread.sleep(if (seeded) 60_000L else 2_500L)
+                        if (isChatOpen) continue
                         tickCount += 1
-                        if (tickCount % 24 == 1) {
+                        if (tickCount % 2 == 1) {
                             kotlinx.coroutines.runBlocking {
                                 runCatching { id.xydesk.remote.ui.AppUpdate.fetch(appContext) }
                             }
