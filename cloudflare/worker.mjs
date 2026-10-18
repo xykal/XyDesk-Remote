@@ -3749,45 +3749,11 @@ export class GlobalChat {
     }
 
     const list = Object.values(entriesMap).filter((val) => val && Number(val.total_seconds) > 0);
-    // Pastikan Founder (@xykal) selalu hadir di Leaderboard
-    if (!list.some((x) => String(x.github_login || x.name || "").toLowerCase() === "xykal")) {
-      list.push({
-        key: "xykal",
-        name: "xykal",
-        github_login: "xykal",
-        avatar_url: "https://github.com/xykal.png?size=160",
-        country: "ID",
-        flag: "🇮🇩",
-        is_founder: true,
-        total_seconds: 432_000,
-        sessions_count: 185,
-        updated_at: Date.now(),
-      });
-    }
-    // Isi daftar komunitas aktif hingga 100 peringkat (Top 1, 2, 3 s.d. 100)
-    const countries = ["ID", "MY", "SG", "JP", "KR", "TH", "VN", "PH", "US", "DE", "BR", "AU"];
-    for (let i = 1; list.length < 100 && i <= 105; i++) {
-      const handle = `xydesk-player-${i}`;
-      if (list.some((x) => x.key === handle)) continue;
-      const cc = countries[i % countries.length];
-      const secs = Math.max(1800, 320_000 - i * 2850);
-      list.push({
-        key: handle,
-        name: `Player #${i}`,
-        github_login: "",
-        avatar_url: "",
-        country: cc,
-        flag: countryToFlag(cc),
-        is_founder: false,
-        total_seconds: secs,
-        sessions_count: Math.max(2, Math.floor(secs / 5400)),
-        updated_at: Date.now() - i * 60_000,
-      });
-    }
+    // Rank only stored entries. Never fabricate podium candidates or placeholder playtime.
     list.sort((a, b) => Number(b.total_seconds || 0) - Number(a.total_seconds || 0));
     const top100 = list.slice(0, 100).map((item, idx) => ({
-      rank: idx + 1,
       ...item,
+      rank: idx + 1,
     }));
     return durableObjectJson({ status: "ok", items: top100, total_ranked: top100.length }, 200, request.method);
   }
@@ -4425,8 +4391,8 @@ async function handleEdgeLeaderboard(request, env) {
   }
   list.sort((a, b) => Number(b.total_seconds || 0) - Number(a.total_seconds || 0));
   const top100 = list.slice(0, 100).map((item, idx) => ({
-    rank: idx + 1,
     ...item,
+    rank: idx + 1,
   }));
   return durableObjectJson({ status: "ok", items: top100, total_ranked: top100.length }, 200, request.method);
 }

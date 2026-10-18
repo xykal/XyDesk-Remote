@@ -1937,3 +1937,12 @@ test("chat translation keeps fast results and falls back on provider errors", as
   assert.equal(await withChatTranslationBudget(async () => "translated", () => "fallback", 500), "translated");
   assert.equal(await withChatTranslationBudget(async () => { throw new Error("offline"); }, () => "fallback", 500), "fallback");
 });
+
+
+test("empty durable leaderboard never fabricates founder or placeholder podium users", async () => {
+  const chat = new GlobalChat({ storage: { get: async () => undefined } }, {});
+  const response = await chat.handleLeaderboard(new Request("https://example.test/leaderboard"));
+  const body = await response.json();
+  assert.deepEqual(body.items, []);
+  assert.equal(body.total_ranked, 0);
+});
