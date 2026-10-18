@@ -954,18 +954,22 @@ internal fun founderBgBrush(phase: Float = 0f): Brush {
  * - "cloud"    : Lekukan lembut organik (Soft Pill / Cloud Sculpt)
  */
 internal fun resolveCustomBubbleShape(
-    shapeStyle: String,
-    isOwn: Boolean,
+    shapeStyle: String = "",
+    isOwn: Boolean = false,
+    shapePreset: String = "",
+    isMine: Boolean = false,
     morphPhase: Float = 0f,
     compact: Boolean = false,
 ): Shape {
+    val activeStyle = shapePreset.ifBlank { shapeStyle }
+    val own = isOwn || isMine
     val baseRadiusDp = if (compact) 13f else 17f
-    return when (shapeStyle.lowercase(Locale.ROOT)) {
+    return when (activeStyle.lowercase(Locale.ROOT)) {
         "sharp" -> androidx.compose.foundation.shape.GenericShape { size, _ ->
             val w = size.width
             val h = size.height
             val cut = (minOf(w, h) * 0.18f).coerceIn(6f, 18f)
-            if (isOwn) {
+            if (own) {
                 moveTo(cut, 0f)
                 lineTo(w, 0f)
                 lineTo(w, h - cut * 0.35f)
@@ -988,7 +992,7 @@ internal fun resolveCustomBubbleShape(
             val h = size.height
             val c1 = (minOf(w, h) * 0.22f).coerceIn(8f, 22f)
             val c2 = (minOf(w, h) * 0.10f).coerceIn(4f, 12f)
-            if (isOwn) {
+            if (own) {
                 moveTo(c1, 0f)
                 lineTo(w - c2, 0f)
                 lineTo(w, c2)
@@ -1011,8 +1015,8 @@ internal fun resolveCustomBubbleShape(
             val wave2 = (cos(morphPhase * 2f * PI.toFloat()) * 6f)
             val tl = (baseRadiusDp + wave1).coerceIn(6f, 26f).dp
             val tr = (baseRadiusDp - wave2).coerceIn(6f, 26f).dp
-            val bl = if (isOwn) (baseRadiusDp + wave2).coerceIn(6f, 26f).dp else 4.dp
-            val br = if (isOwn) 4.dp else (baseRadiusDp - wave1).coerceIn(6f, 26f).dp
+            val bl = if (own) (baseRadiusDp + wave2).coerceIn(6f, 26f).dp else 4.dp
+            val br = if (own) 4.dp else (baseRadiusDp - wave1).coerceIn(6f, 26f).dp
             RoundedCornerShape(topStart = tl, topEnd = tr, bottomEnd = br, bottomStart = bl)
         }
         "cloud" -> {
@@ -1021,8 +1025,8 @@ internal fun resolveCustomBubbleShape(
             RoundedCornerShape(
                 topStart = r,
                 topEnd = r,
-                bottomEnd = if (isOwn) tail else r,
-                bottomStart = if (isOwn) r else tail,
+                bottomEnd = if (own) tail else r,
+                bottomStart = if (own) r else tail,
             )
         }
         else -> {
@@ -1031,8 +1035,8 @@ internal fun resolveCustomBubbleShape(
             RoundedCornerShape(
                 topStart = r,
                 topEnd = r,
-                bottomEnd = if (isOwn) tail else r,
-                bottomStart = if (isOwn) r else tail,
+                bottomEnd = if (own) tail else r,
+                bottomStart = if (own) r else tail,
             )
         }
     }
@@ -1042,12 +1046,18 @@ internal fun resolveCustomBubbleShape(
  * Menggambar elemen-elemen melayang beranimasi (Floating Animated Elements) di dalam bubble chat.
  */
 internal fun androidx.compose.ui.graphics.drawscope.DrawScope.drawBubbleFloatingElements(
-    elementStyle: String,
-    accentColor: Color,
-    secondaryColor: Color,
-    phase: Float,
+    elementStyle: String = "",
+    preset: String = "",
+    accentColor: Color = Color(0xFFD8B4FE),
+    secondaryColor: Color = Color(0xFFA855F7),
+    phase: Float = 0f,
 ) {
-    val style = elementStyle.lowercase(Locale.ROOT)
+    val rawStyle = preset.ifBlank { elementStyle }.lowercase(Locale.ROOT)
+    val style = when (rawStyle) {
+        "sparkles" -> "crystals"
+        "plasma" -> "orbs"
+        else -> rawStyle
+    }
     if (style == "none" || style.isBlank()) return
     val w = size.width
     val h = size.height
@@ -1550,3 +1560,309 @@ internal fun GitHubLogoIcon(
         )
     }
 }
+
+// ============================================================================
+// BADGE KHUSUS XYTEAM & TESTER + CLICKABLE BLUE URL LINK RENDERER (RONDE 61)
+// ============================================================================
+
+internal val XYTEAM_DEFAULT_LOGINS = setOf("xykal", "xyverse", "xyteam", "projectkal")
+internal val XYTESTER_DEFAULT_LOGINS = setOf("xytester", "betatester")
+
+internal object XySpecialRoleRegistry {
+    var roleRevision by mutableStateOf(0)
+        private set
+
+    fun getRole(context: Context, nameOrLogin: String?): String {
+        if (nameOrLogin.isNullOrBlank()) return ""
+        val key = nameOrLogin.trim().removePrefix("@").lowercase(Locale.ROOT)
+        val prefs = context.getSharedPreferences(FOUNDER_PREFS, Context.MODE_PRIVATE)
+        val saved = prefs.getString("role_$key", null)
+        if (!saved.isNullOrBlank()) return saved
+        return when {
+            key in XYTEAM_DEFAULT_LOGINS && key !in FOUNDER_GITHUB_LOGINS -> "XYTEAM"
+            key in XYTESTER_DEFAULT_LOGINS -> "TESTER"
+            key.contains("xyteam") || key.endsWith("_xy") -> "XYTEAM"
+            key.contains("tester") || key.contains("qa_") -> "TESTER"
+            else -> ""
+        }
+    }
+
+    fun setRole(context: Context, nameOrLogin: String?, role: String) {
+        if (nameOrLogin.isNullOrBlank()) return
+        val key = nameOrLogin.trim().removePrefix("@").lowercase(Locale.ROOT)
+        context.getSharedPreferences(FOUNDER_PREFS, Context.MODE_PRIVATE)
+            .edit()
+            .putString("role_$key", role.uppercase(Locale.ROOT))
+            .apply()
+        roleRevision += 1
+    }
+}
+
+internal fun isXyTeamAccount(context: Context, nameOrLogin: String?, githubLogin: String? = null): Boolean {
+    val r1 = XySpecialRoleRegistry.getRole(context, githubLogin)
+    val r2 = XySpecialRoleRegistry.getRole(context, nameOrLogin)
+    return r1 == "XYTEAM" || r1 == "BOTH" || r2 == "XYTEAM" || r2 == "BOTH"
+}
+
+internal fun isXyTesterAccount(context: Context, nameOrLogin: String?, githubLogin: String? = null): Boolean {
+    val r1 = XySpecialRoleRegistry.getRole(context, githubLogin)
+    val r2 = XySpecialRoleRegistry.getRole(context, nameOrLogin)
+    return r1 == "TESTER" || r1 == "BOTH" || r2 == "TESTER" || r2 == "BOTH"
+}
+
+/**
+ * Badge Khusus "XYTEAM" (Tim Inti XyVerse) — Gradasi Cyber Indigo-Cyan + Perisai Bintang Vektor.
+ */
+@Composable
+internal fun XyTeamBadge(
+    modifier: Modifier = Modifier,
+    compact: Boolean = true,
+) {
+    Row(
+        modifier = modifier
+            .clip(RoundedCornerShape(50))
+            .background(
+                Brush.horizontalGradient(
+                    colors = listOf(
+                        Color(0xFF0F172A),
+                        Color(0xFF1E3A8A),
+                        Color(0xFF0369A1),
+                    ),
+                ),
+            )
+            .border(
+                width = 1.dp,
+                brush = Brush.horizontalGradient(
+                    colors = listOf(Color(0xFF38BDF8), Color(0xFF818CF8), Color(0xFF22D3EE)),
+                ),
+                shape = RoundedCornerShape(50),
+            )
+            .padding(
+                horizontal = if (compact) 6.dp else 9.dp,
+                vertical = if (compact) 2.dp else 3.5.dp,
+            ),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(3.5.dp),
+    ) {
+        Canvas(modifier = Modifier.size(if (compact) 10.dp else 12.dp)) {
+            val w = size.width
+            val h = size.height
+            val shield = Path().apply {
+                moveTo(w * 0.50f, h * 0.08f)
+                lineTo(w * 0.88f, h * 0.24f)
+                lineTo(w * 0.82f, h * 0.64f)
+                lineTo(w * 0.50f, h * 0.92f)
+                lineTo(w * 0.18f, h * 0.64f)
+                lineTo(w * 0.12f, h * 0.24f)
+                close()
+            }
+            drawPath(shield, color = Color(0xFF38BDF8), style = Fill)
+            drawCircle(color = Color(0xFFF0F9FF), radius = w * 0.18f, center = Offset(w * 0.50f, h * 0.48f))
+        }
+        Text(
+            text = "XYTEAM",
+            fontSize = if (compact) 8.5.sp else 10.sp,
+            fontWeight = FontWeight.ExtraBold,
+            color = Color(0xFFE0F2FE),
+            maxLines = 1,
+        )
+    }
+}
+
+/**
+ * Badge Khusus "TESTER" (QA & Beta Tester Terverifikasi) — Gradasi Emerald-Teal + Emblem Verified Check.
+ */
+@Composable
+internal fun XyTesterBadge(
+    modifier: Modifier = Modifier,
+    compact: Boolean = true,
+) {
+    Row(
+        modifier = modifier
+            .clip(RoundedCornerShape(50))
+            .background(
+                Brush.horizontalGradient(
+                    colors = listOf(
+                        Color(0xFF062C21),
+                        Color(0xFF065F46),
+                        Color(0xFF0F766E),
+                    ),
+                ),
+            )
+            .border(
+                width = 1.dp,
+                brush = Brush.horizontalGradient(
+                    colors = listOf(Color(0xFF34D399), Color(0xFF2DD4BF), Color(0xFF6EE7B7)),
+                ),
+                shape = RoundedCornerShape(50),
+            )
+            .padding(
+                horizontal = if (compact) 6.dp else 9.dp,
+                vertical = if (compact) 2.dp else 3.5.dp,
+            ),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(3.5.dp),
+    ) {
+        Canvas(modifier = Modifier.size(if (compact) 10.dp else 12.dp)) {
+            val w = size.width
+            val h = size.height
+            drawCircle(color = Color(0xFF10B981), radius = w * 0.44f, center = Offset(w * 0.50f, h * 0.50f))
+            val check = Path().apply {
+                moveTo(w * 0.28f, h * 0.52f)
+                lineTo(w * 0.44f, h * 0.68f)
+                lineTo(w * 0.74f, h * 0.34f)
+            }
+            drawPath(
+                check,
+                color = Color(0xFFECFDF5),
+                style = Stroke(width = w * 0.14f, cap = StrokeCap.Round, join = StrokeJoin.Round),
+            )
+        }
+        Text(
+            text = "TESTER",
+            fontSize = if (compact) 8.5.sp else 10.sp,
+            fontWeight = FontWeight.ExtraBold,
+            color = Color(0xFFD1FAE5),
+            maxLines = 1,
+        )
+    }
+}
+
+/**
+ * Menampilkan deretan badge peran khusus pengguna: FOUNDER (Ungu Royal), XYTEAM, dan/atau TESTER.
+ */
+@Composable
+internal fun XyUserRoleBadges(
+    name: String?,
+    githubLogin: String? = null,
+    compact: Boolean = true,
+) {
+    val context = LocalContext.current
+    val rev = XySpecialRoleRegistry.roleRevision
+    val isFounder = remember(name, githubLogin) {
+        isFounderAccount(githubLogin) || isFounderAccount(name)
+    }
+    val isTeam = remember(name, githubLogin, rev) {
+        isXyTeamAccount(context, name, githubLogin)
+    }
+    val isTester = remember(name, githubLogin, rev) {
+        isXyTesterAccount(context, name, githubLogin)
+    }
+    if (isFounder || isTeam || isTester) {
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(4.dp),
+        ) {
+            if (isFounder) {
+                XyFounderBadge(compact = compact)
+            }
+            if (isTeam) {
+                XyTeamBadge(compact = compact)
+            }
+            if (isTester) {
+                XyTesterBadge(compact = compact)
+            }
+        }
+    }
+}
+
+private val XY_URL_REGEX = Regex(
+    """((https?://|www\.)[^\s<>"]+|[a-zA-Z0-9.-]+\.(id|com|org|net|io|dev|app|me|xyz|co)(/[^\s<>"]*)?)""",
+    RegexOption.IGNORE_CASE,
+)
+
+/**
+ * Komponen Teks Pintar yang membuat SEMUA link/URL berwarna BIRU CERAH + bergaris bawah
+ * dan langsung BISA DIKLIK (membuka In-App Browser Chrome Custom Tab), sementara klik/tekan
+ * pada bagian teks biasa tetap meneruskan aksi normal/long-press.
+ */
+@Composable
+internal fun XyClickableLinkText(
+    text: String,
+    color: Color,
+    linkColor: Color = Color(0xFF38BDF8),
+    style: androidx.compose.ui.text.TextStyle = MaterialTheme.typography.bodyMedium,
+    maxLines: Int = Int.MAX_VALUE,
+    onNonLinkClick: (() -> Unit)? = null,
+    onLongPress: (() -> Unit)? = null,
+    modifier: Modifier = Modifier,
+) {
+    val context = LocalContext.current
+    val annotated = remember(text, color, linkColor) {
+        androidx.compose.ui.text.buildAnnotatedString {
+            append(text)
+            addStyle(
+                style = androidx.compose.ui.text.SpanStyle(color = color),
+                start = 0,
+                end = text.length,
+            )
+            XY_URL_REGEX.findAll(text).forEach { match ->
+                val rawUrl = match.value
+                val fullUrl = if (rawUrl.startsWith("http://", ignoreCase = true) ||
+                    rawUrl.startsWith("https://", ignoreCase = true)
+                ) {
+                    rawUrl
+                } else {
+                    "https://$rawUrl"
+                }
+                addStyle(
+                    style = androidx.compose.ui.text.SpanStyle(
+                        color = linkColor,
+                        fontWeight = FontWeight.SemiBold,
+                        textDecoration = androidx.compose.ui.text.style.TextDecoration.Underline,
+                    ),
+                    start = match.range.first,
+                    end = match.range.last + 1,
+                )
+                addStringAnnotation(
+                    tag = "URL",
+                    annotation = fullUrl,
+                    start = match.range.first,
+                    end = match.range.last + 1,
+                )
+            }
+        }
+    }
+
+    val hasLinks = remember(annotated) {
+        annotated.getStringAnnotations("URL", 0, annotated.length).isNotEmpty()
+    }
+
+    if (!hasLinks) {
+        Text(
+            text = text,
+            style = style,
+            color = color,
+            maxLines = maxLines,
+            overflow = TextOverflow.Ellipsis,
+            modifier = modifier,
+        )
+    } else {
+        var layoutResult by remember { mutableStateOf<androidx.compose.ui.text.TextLayoutResult?>(null) }
+        Text(
+            text = annotated,
+            style = style,
+            maxLines = maxLines,
+            overflow = TextOverflow.Ellipsis,
+            onTextLayout = { layoutResult = it },
+            modifier = modifier.pointerInput(annotated, onNonLinkClick, onLongPress) {
+                androidx.compose.foundation.gestures.detectTapGestures(
+                    onLongPress = { onLongPress?.invoke() },
+                    onTap = { pos ->
+                        val layout = layoutResult
+                        if (layout != null) {
+                            val offset = layout.getOffsetForPosition(pos)
+                            val hit = annotated.getStringAnnotations("URL", offset, offset).firstOrNull()
+                            if (hit != null) {
+                                openInAppCustomTab(context, hit.item)
+                                return@detectTapGestures
+                            }
+                        }
+                        onNonLinkClick?.invoke()
+                    },
+                )
+            },
+        )
+    }
+}
+

@@ -202,42 +202,6 @@ class PcStreamSessionActivity : ComponentActivity() {
         }
     }
 
-    override fun dispatchKeyEvent(event: KeyEvent): Boolean {
-        if (started.value && !sessionEnded.value) {
-            val src = event.source
-            val devSources = event.device?.sources ?: 0
-            val isMouse = (src and android.view.InputDevice.SOURCE_MOUSE) == android.view.InputDevice.SOURCE_MOUSE ||
-                (src and android.view.InputDevice.SOURCE_TOUCHPAD) == android.view.InputDevice.SOURCE_TOUCHPAD ||
-                ((devSources and android.view.InputDevice.SOURCE_MOUSE) == android.view.InputDevice.SOURCE_MOUSE &&
-                    event.device?.keyboardType != android.view.InputDevice.KEYBOARD_TYPE_ALPHABETIC)
-            if (isMouse && (event.keyCode == KeyEvent.KEYCODE_BACK || event.keyCode == KeyEvent.KEYCODE_FORWARD)) {
-                val down = event.action == KeyEvent.ACTION_DOWN
-                if (event.keyCode == KeyEvent.KEYCODE_BACK && (down || event.action == KeyEvent.ACTION_UP)) {
-                    if (directModeActive.value) {
-                        directClient?.sendMouseClick(2, down)
-                    } else {
-                        viewer?.sendInput(XyHostInputCodec.mouseButton(XyHostMouseButton.RIGHT, down))
-                    }
-                }
-                return true
-            }
-            val isPhysKbd = event.deviceId > 0 && event.device?.isVirtual == false &&
-                event.device?.keyboardType == android.view.InputDevice.KEYBOARD_TYPE_ALPHABETIC
-            if (isPhysKbd && (event.keyCode == KeyEvent.KEYCODE_ESCAPE || event.keyCode == KeyEvent.KEYCODE_BACK)) {
-                val down = event.action == KeyEvent.ACTION_DOWN
-                if (down || event.action == KeyEvent.ACTION_UP) {
-                    if (directModeActive.value) {
-                        directClient?.sendKey(0x1B, down)
-                    } else {
-                        viewer?.sendInput(XyHostInputCodec.key(KeyEvent.KEYCODE_ESCAPE, down))
-                    }
-                }
-                return true
-            }
-        }
-        return super.dispatchKeyEvent(event)
-    }
-
     override fun onDestroy() {
         super.onDestroy()
         directClient?.close()
@@ -566,6 +530,30 @@ class PcStreamSessionActivity : ComponentActivity() {
     }
 
     override fun dispatchKeyEvent(event: KeyEvent): Boolean {
+        if (started.value && !sessionEnded.value) {
+            val src = event.source
+            val devSources = event.device?.sources ?: 0
+            val isMouse = (src and android.view.InputDevice.SOURCE_MOUSE) == android.view.InputDevice.SOURCE_MOUSE ||
+                (src and android.view.InputDevice.SOURCE_TOUCHPAD) == android.view.InputDevice.SOURCE_TOUCHPAD ||
+                ((devSources and android.view.InputDevice.SOURCE_MOUSE) == android.view.InputDevice.SOURCE_MOUSE &&
+                    event.device?.keyboardType != android.view.InputDevice.KEYBOARD_TYPE_ALPHABETIC)
+            if (isMouse && (event.keyCode == KeyEvent.KEYCODE_BACK || event.keyCode == KeyEvent.KEYCODE_FORWARD)) {
+                val down = event.action == KeyEvent.ACTION_DOWN
+                if (event.keyCode == KeyEvent.KEYCODE_BACK && (down || event.action == KeyEvent.ACTION_UP)) {
+                    dispatchMouseButton(XyHostMouseButton.RIGHT, down)
+                }
+                return true
+            }
+            val isPhysKbd = event.deviceId > 0 && event.device?.isVirtual == false &&
+                event.device?.keyboardType == android.view.InputDevice.KEYBOARD_TYPE_ALPHABETIC
+            if (isPhysKbd && (event.keyCode == KeyEvent.KEYCODE_ESCAPE || event.keyCode == KeyEvent.KEYCODE_BACK)) {
+                val down = event.action == KeyEvent.ACTION_DOWN
+                if (down || event.action == KeyEvent.ACTION_UP) {
+                    dispatchKeyVk(VK_ESCAPE, down)
+                }
+                return true
+            }
+        }
         if (!inputOpen.value) return super.dispatchKeyEvent(event)
         val vk = windowsVirtualKey(event.keyCode)
         if (vk == 0) return super.dispatchKeyEvent(event)

@@ -761,6 +761,8 @@ fun XyDialog(
 fun XyLoadingSkeletonCard(
     lines: Int = 3,
     showAvatar: Boolean = false,
+    count: Int = 1,
+    itemHeight: Dp = 64.dp,
     modifier: Modifier = Modifier,
 ) {
     val inf = androidx.compose.animation.core.rememberInfiniteTransition(label = "xySkeletonShimmer")
@@ -768,66 +770,73 @@ fun XyLoadingSkeletonCard(
         initialValue = 0.28f,
         targetValue = 0.68f,
         animationSpec = androidx.compose.animation.core.infiniteRepeatable(
-            animation = tween(850, easing = FastOutSlowInEasing),
+            animation = tween(650, easing = FastOutSlowInEasing),
             repeatMode = androidx.compose.animation.core.RepeatMode.Reverse,
         ),
         label = "shimmerAlpha",
     )
     val baseColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = alpha)
     Column(
-        modifier = modifier
-            .fillMaxWidth()
-            .clip(RoundedCornerShape(18.dp))
-            .background(MaterialTheme.colorScheme.surface)
-            .border(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.45f), RoundedCornerShape(18.dp))
-            .padding(16.dp),
+        modifier = modifier.fillMaxWidth(),
         verticalArrangement = Arrangement.spacedBy(10.dp),
     ) {
-        if (showAvatar) {
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(10.dp),
+        repeat(count.coerceIn(1, 6)) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(18.dp))
+                    .background(MaterialTheme.colorScheme.surface)
+                    .border(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.45f), RoundedCornerShape(18.dp))
+                    .padding(16.dp),
+                verticalArrangement = Arrangement.spacedBy(10.dp),
             ) {
-                Box(
-                    Modifier
-                        .size(36.dp)
-                        .clip(CircleShape)
-                        .background(baseColor),
-                )
-                Column(
-                    Modifier.weight(1f),
-                    verticalArrangement = Arrangement.spacedBy(6.dp),
-                ) {
+                if (showAvatar) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(10.dp),
+                    ) {
+                        Box(
+                            Modifier
+                                .size(36.dp)
+                                .clip(CircleShape)
+                                .background(baseColor),
+                        )
+                        Column(
+                            Modifier.weight(1f),
+                            verticalArrangement = Arrangement.spacedBy(6.dp),
+                        ) {
+                            Box(
+                                Modifier
+                                    .fillMaxWidth(0.45f)
+                                    .height(11.dp)
+                                    .clip(RoundedCornerShape(6.dp))
+                                    .background(baseColor),
+                            )
+                            Box(
+                                Modifier
+                                    .fillMaxWidth(0.28f)
+                                    .height(9.dp)
+                                    .clip(RoundedCornerShape(6.dp))
+                                    .background(baseColor),
+                            )
+                        }
+                    }
+                }
+                for (i in 0 until lines.coerceAtLeast(1)) {
+                    val widthFrac = when (i) {
+                        0 -> 0.88f
+                        lines - 1 -> 0.56f
+                        else -> 0.74f
+                    }
                     Box(
                         Modifier
-                            .fillMaxWidth(0.45f)
-                            .height(11.dp)
-                            .clip(RoundedCornerShape(6.dp))
-                            .background(baseColor),
-                    )
-                    Box(
-                        Modifier
-                            .fillMaxWidth(0.28f)
-                            .height(9.dp)
+                            .fillMaxWidth(widthFrac)
+                            .height(if (i == 0) 13.dp else 10.dp)
                             .clip(RoundedCornerShape(6.dp))
                             .background(baseColor),
                     )
                 }
             }
-        }
-        for (i in 0 until lines.coerceAtLeast(1)) {
-            val widthFrac = when (i) {
-                0 -> 0.88f
-                lines - 1 -> 0.56f
-                else -> 0.74f
-            }
-            Box(
-                Modifier
-                    .fillMaxWidth(widthFrac)
-                    .height(if (i == 0) 13.dp else 10.dp)
-                    .clip(RoundedCornerShape(6.dp))
-                    .background(baseColor),
-            )
         }
     }
 }
@@ -837,17 +846,19 @@ fun XyLoadingSkeletonCard(
  */
 @Composable
 fun XyLoadingSpinnerState(
-    title: String,
+    title: String = "",
     subtitle: String? = null,
+    text: String? = null,
     compact: Boolean = false,
     modifier: Modifier = Modifier,
 ) {
+    val resolvedTitle = text ?: title.ifBlank { "Memuat…" }
     val inf = androidx.compose.animation.core.rememberInfiniteTransition(label = "xySpinner")
     val angle by inf.animateFloat(
         initialValue = 0f,
         targetValue = 360f,
         animationSpec = androidx.compose.animation.core.infiniteRepeatable(
-            animation = tween(900, easing = androidx.compose.animation.core.LinearEasing),
+            animation = tween(750, easing = androidx.compose.animation.core.LinearEasing),
             repeatMode = androidx.compose.animation.core.RepeatMode.Restart,
         ),
         label = "spinAngle",
@@ -887,7 +898,7 @@ fun XyLoadingSpinnerState(
         }
         Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
             Text(
-                text = title,
+                text = resolvedTitle,
                 style = if (compact) MaterialTheme.typography.labelLarge else MaterialTheme.typography.titleSmall,
                 fontWeight = FontWeight.SemiBold,
                 color = MaterialTheme.colorScheme.onSurface,
@@ -912,9 +923,11 @@ fun XyEmptyState(
     subtitle: String,
     icon: ImageVector? = null,
     actionLabel: String? = null,
+    actionText: String? = null,
     onAction: (() -> Unit)? = null,
     modifier: Modifier = Modifier,
 ) {
+    val finalAction = actionLabel ?: actionText
     Column(
         modifier = modifier
             .fillMaxWidth()
@@ -953,10 +966,10 @@ fun XyEmptyState(
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             textAlign = androidx.compose.ui.text.style.TextAlign.Center,
         )
-        if (!actionLabel.isNullOrBlank() && onAction != null) {
+        if (!finalAction.isNullOrBlank() && onAction != null) {
             Spacer(Modifier.height(4.dp))
             XyPillButton(
-                text = actionLabel,
+                text = finalAction,
                 onClick = onAction,
                 primary = true,
                 compact = true,
@@ -970,7 +983,7 @@ fun XyEmptyState(
  */
 @Composable
 fun XyErrorState(
-    title: String,
+    title: String = "Terjadi Kendala",
     message: String,
     retryLabel: String? = "Coba Lagi",
     onRetry: (() -> Unit)? = null,
@@ -998,7 +1011,7 @@ fun XyErrorState(
                 contentAlignment = Alignment.Center,
             ) {
                 Icon(
-                    imageVector = XyIcons.Warn,
+                    imageVector = XyIcons.Info,
                     contentDescription = null,
                     tint = Color(0xFFFCA5A5),
                     modifier = Modifier.size(14.dp),
@@ -1051,11 +1064,13 @@ fun XyErrorState(
  */
 @Composable
 fun XySuccessStateBanner(
-    title: String,
+    title: String = "",
     subtitle: String? = null,
+    message: String? = null,
     onDismiss: (() -> Unit)? = null,
     modifier: Modifier = Modifier,
 ) {
+    val resolvedTitle = message ?: title.ifBlank { "Berhasil" }
     Row(
         modifier = modifier
             .fillMaxWidth()
@@ -1082,7 +1097,7 @@ fun XySuccessStateBanner(
         }
         Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
             Text(
-                text = title,
+                text = resolvedTitle,
                 style = MaterialTheme.typography.labelLarge,
                 fontWeight = FontWeight.Bold,
                 color = Color(0xFFECFDF5),

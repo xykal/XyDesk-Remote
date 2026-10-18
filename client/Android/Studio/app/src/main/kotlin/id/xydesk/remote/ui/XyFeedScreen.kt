@@ -571,14 +571,17 @@ internal fun FeedNotificationsPanel(
                                     fontWeight = FontWeight.SemiBold,
                                     color = Color(0xFFF8FAFC),
                                 )
-                                if (isFounderAccount(item.actorGithub) || isFounderAccount(item.actorName)) {
-                                    XyFounderBadge(compact = true)
-                                }
+                                XyUserRoleBadges(
+                                    name = item.actorName,
+                                    githubLogin = item.actorGithub,
+                                    compact = true,
+                                )
                             }
-                            Text(
+                            XyClickableLinkText(
                                 text = item.body,
-                                style = MaterialTheme.typography.bodySmall,
                                 color = Color(0xFFCBD5E1),
+                                linkColor = Color(0xFF38BDF8),
+                                style = MaterialTheme.typography.bodySmall,
                             )
                             Text(
                                 text = "${item.actorName} · ${feedTimeAgo(item.createdAtMillis)}",
@@ -774,9 +777,11 @@ internal fun FeedLeaderboardTop100Panel(
                                 maxLines = 1,
                                 overflow = TextOverflow.Ellipsis,
                             )
-                            if (isFounder) {
-                                XyFounderBadge(compact = true)
-                            }
+                            XyUserRoleBadges(
+                                name = item.name,
+                                githubLogin = item.githubLogin,
+                                compact = true,
+                            )
                         }
                         val sub = buildString {
                             if (item.githubLogin.isNotBlank()) append("@${item.githubLogin} · ")
@@ -843,9 +848,11 @@ private fun PodiumColumn(
             overflow = TextOverflow.Ellipsis,
             textAlign = TextAlign.Center,
         )
-        if (isFounder) {
-            XyFounderBadge(compact = true)
-        }
+        XyUserRoleBadges(
+            name = entry.name,
+            githubLogin = entry.githubLogin,
+            compact = true,
+        )
         Text(
             text = formatLeaderboardDuration(entry.totalSeconds),
             fontSize = 11.sp,

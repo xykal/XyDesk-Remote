@@ -9,6 +9,7 @@ import android.content.Intent
 import android.net.Uri
 import android.widget.Toast
 import androidx.activity.compose.BackHandler
+import id.xydesk.remote.ui.components.XyEmptyState
 import id.xydesk.remote.ui.ssh.XySshTerminalScreen
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.ui.graphics.Brush

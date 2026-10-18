@@ -1,8 +1,15 @@
 package id.xydesk.remote.ui
 
 import android.content.Intent
+import android.net.Uri
+import android.util.Base64
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import id.xydesk.remote.ui.components.XyEmptyState
+import id.xydesk.remote.ui.components.XyErrorState
+import id.xydesk.remote.ui.components.XyLoadingSkeletonCard
+import id.xydesk.remote.ui.components.XySuccessStateBanner
+import java.util.Locale
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
@@ -110,9 +117,9 @@ internal fun FunHubCard(
     var commentsTarget by remember { mutableStateOf<CommunityJoke?>(null) }
     var actionsTarget by remember { mutableStateOf<CommunityJoke?>(null) }
     var deletingCommentId by remember { mutableStateOf<String?>(null) }
-    var studioUri by remember { mutableStateOf<Uri?>(null) }
+    var studioAttachment by remember { mutableStateOf<FeedAttachment?>(null) }
 
-    val authRev by GitHubDirectOAuthController.authRevision.collectAsState()
+    val authRev = GitHubDirectOAuthController.authRevision
     val myGithubLogin = remember(context, composerOpen, refreshKey, authRev) { getVerifiedGitHubLogin(context) }
     val isViewerFounder = remember(myGithubLogin) {
         isFounderAccount(myGithubLogin) || isFounderAccount(api.displayName())
@@ -129,7 +136,16 @@ internal fun FunHubCard(
                     formMessageIsError = true
                     return@launch
                 }
-                studioUri = uri
+                val att = encodePickedFeedImage(context, uri, hdMode = hdUploadEnabled)
+                if (att == null) {
+                    formMessage = xyNow(
+                        "Media tidak didukung atau melebihi batas ukuran HD (2,5 MB).",
+                        "Media unsupported or exceeds HD size limit (2.5 MB).",
+                    )
+                    formMessageIsError = true
+                } else {
+                    studioAttachment = att
+                }
             }
         }
     }
@@ -137,52 +153,37 @@ internal fun FunHubCard(
     var feedMessage by remember { mutableStateOf<String?>(null) }
     var feedMessageIsError by remember { mutableStateOf(false) }
 
-    studioUri?.let { activeUri ->
-        val mime = remember(activeUri) { context.contentResolver.getType(activeUri).orEmpty().lowercase(Locale.ROOT) }
-        val kind = remember(mime) {
-            when {
-                mime.startsWith("video/") -> "video"
-                mime.startsWith("image/") || mime.isBlank() -> "image"
-                else -> "file"
-            }
+    studioAttachment?.let { activeAtt ->
+        val initialDataUri = remember(activeAtt) {
+            "data:${activeAtt.mime};base64," + Base64.encodeToString(activeAtt.bytes, Base64.NO_WRAP)
+        }
+        val kind = remember(activeAtt.mime) {
+            if (activeAtt.mime.startsWith("video/")) "video" else "photo"
         }
         PreSendMediaStudioDialog(
-            uri = activeUri,
-            mediaKind = kind,
-            fileName = "Feed Media",
+            initialAttachmentData = initialDataUri,
+            initialAttachmentName = "Feed Media",
+            initialAttachmentType = kind,
             initialCaption = draft,
-            initialHd = hdUploadEnabled,
             initialViewOnce = false,
-            showViewOnceToggle = false,
-            onDismiss = { studioUri = null },
-            onConfirmSend = { captionText, hdSelected, _, editedBytes ->
-                studioUri = null
-                hdUploadEnabled = hdSelected
+            onDismiss = { studioAttachment = null },
+            onConfirmSend = { finalData, _, _, captionText, _ ->
+                studioAttachment = null
                 if (captionText.isNotBlank()) {
                     draft = captionText
                 }
-                scope.launch {
-                    val att = if (editedBytes != null) {
-                        val b64 = Base64.encodeToString(editedBytes, Base64.NO_WRAP)
-                        FeedAttachment(
-                            dataUrl = "data:image/jpeg;base64,$b64",
-                            mime = "image/jpeg",
-                        )
-                    } else {
-                        encodePickedFeedImage(context, activeUri, hdMode = hdSelected)
-                    }
-                    if (att == null) {
-                        formMessage = xyNow(
-                            "Media tidak didukung atau melebihi batas ukuran HD (2,5 MB).",
-                            "Media unsupported or exceeds HD size limit (2.5 MB).",
-                        )
-                        formMessageIsError = true
-                    } else {
-                        pendingAttachment = att
-                        editRemoveAttachment = false
-                        formMessage = null
-                    }
+                val updatedAtt = if (finalData != initialDataUri && finalData.startsWith("data:image/")) {
+                    runCatching {
+                        val rawB64 = finalData.substringAfter("base64,", "")
+                        val decoded = Base64.decode(rawB64, Base64.DEFAULT)
+                        FeedAttachment(mime = "image/jpeg", bytes = decoded)
+                    }.getOrNull() ?: activeAtt
+                } else {
+                    activeAtt
                 }
+                pendingAttachment = updatedAtt
+                editRemoveAttachment = false
+                formMessage = null
             },
         )
     }
@@ -1109,13 +1110,15 @@ private fun CommunityJokeItem(
                             },
                             fontSize = 13.sp,
                             fontWeight = FontWeight.Bold,
-                            color = Color(0xFFF8FAFC),
+                            color = if (isFounderAuthor) Color(0xFFE9D5FF) else Color(0xFFF8FAFC),
                             maxLines = 1,
                             overflow = TextOverflow.Ellipsis,
                         )
-                        if (isFounderAuthor) {
-                            XyFounderBadge(compact = true)
-                        }
+                        XyUserRoleBadges(
+                            name = joke.authorName,
+                            githubLogin = joke.githubLogin,
+                            compact = true,
+                        )
                         feedTimeAgo(joke.createdAtMillis).takeIf { it.isNotEmpty() }?.let { ago ->
                             Text(
                                 text = "· $ago",
@@ -1179,13 +1182,13 @@ private fun CommunityJokeItem(
                     }
                 }
 
-                // Isi Teks Postingan
+                // Isi Teks Postingan (Semua Link/URL Berwarna Biru Cerah & Bisa Diklik!)
                 if (joke.text.isNotBlank()) {
-                    Text(
+                    XyClickableLinkText(
                         text = joke.text,
-                        style = MaterialTheme.typography.bodyMedium,
                         color = Color(0xFFF1F5F9),
-                        lineHeight = 20.sp,
+                        linkColor = Color(0xFF38BDF8),
+                        style = MaterialTheme.typography.bodyMedium.copy(lineHeight = 20.sp),
                     )
                 }
 
@@ -1732,12 +1735,14 @@ private fun CommentsBottomSheet(
                                         text = cAuthor,
                                         style = MaterialTheme.typography.labelMedium,
                                         fontWeight = FontWeight.Bold,
-                                        color = if (cIsFounder) Color(0xFFFBBF24) else MaterialTheme.colorScheme.onSurface,
+                                        color = if (cIsFounder) Color(0xFFE9D5FF) else MaterialTheme.colorScheme.onSurface,
                                     )
-                                    if (cIsFounder) {
-                                        Spacer(Modifier.width(5.dp))
-                                        XyFounderBadge(compact = true)
-                                    }
+                                    Spacer(Modifier.width(5.dp))
+                                    XyUserRoleBadges(
+                                        name = c.name,
+                                        githubLogin = c.githubLogin,
+                                        compact = true,
+                                    )
                                     feedTimeAgo(c.createdAtMillis).takeIf { it.isNotEmpty() }?.let { ago ->
                                         Text(
                                             " · $ago",
@@ -1780,10 +1785,11 @@ private fun CommentsBottomSheet(
                                         color = MaterialTheme.colorScheme.primary,
                                     )
                                 }
-                                Text(
+                                XyClickableLinkText(
                                     text = c.text,
-                                    style = MaterialTheme.typography.bodyMedium,
                                     color = MaterialTheme.colorScheme.onSurface,
+                                    linkColor = Color(0xFF38BDF8),
+                                    style = MaterialTheme.typography.bodyMedium,
                                 )
                             }
                         }

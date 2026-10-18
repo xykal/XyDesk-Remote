@@ -583,7 +583,7 @@ private fun GeneralSection(
 
         XySectionLabel(xy("Keyboard & HUD", "Keyboard & HUD"))
         XyCard {
-            var hudOpacityVal by remember { mutableFloatStateOf(prefs.hudOpacity) }
+            var hudOpacityVal by remember { mutableStateOf(prefs.hudOpacity) }
             Text(
                 xy("Ukuran tombol HUD: {0} dp", "HUD button size: {0} dp", hudSize.toInt()),
                 style = MaterialTheme.typography.bodyMedium,

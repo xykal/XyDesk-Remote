@@ -112,33 +112,33 @@ fun XySplashScreen(
 
     LaunchedEffect(Unit) {
         launch {
-            logoAlpha.animateTo(1f, tween(340, easing = FastOutSlowInEasing))
+            logoAlpha.animateTo(1f, tween(200, easing = FastOutSlowInEasing))
         }
         launch {
-            logoScale.animateTo(1f, tween(380, easing = FastOutSlowInEasing))
+            logoScale.animateTo(1f, tween(220, easing = FastOutSlowInEasing))
         }
-        delay(90)
+        delay(40)
         launch {
-            textAlpha.animateTo(1f, tween(320, easing = FastOutSlowInEasing))
+            textAlpha.animateTo(1f, tween(180, easing = FastOutSlowInEasing))
         }
-        delay(70)
+        delay(30)
         launch {
-            footerAlpha.animateTo(1f, tween(320, easing = FastOutSlowInEasing))
+            footerAlpha.animateTo(1f, tween(180, easing = FastOutSlowInEasing))
         }
     }
 
     LaunchedEffect(ready) {
         if (ready) {
-            delay(820)
+            delay(320)
             visible = false
-            delay(200)
+            delay(110)
             onFinished()
         }
     }
 
     AnimatedVisibility(
         visible = visible,
-        exit = fadeOut(tween(200)),
+        exit = fadeOut(tween(110)),
     ) {
         Box(
             modifier = Modifier

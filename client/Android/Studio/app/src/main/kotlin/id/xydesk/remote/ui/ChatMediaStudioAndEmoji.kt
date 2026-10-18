@@ -87,11 +87,13 @@ import kotlin.random.Random
  */
 @Composable
 fun IosWhatsAppEmoji3D(
-    codeOrEmoji: String,
+    codeOrEmoji: String = "",
+    tag: String = "",
     size: Dp = 18.dp,
     modifier: Modifier = Modifier
 ) {
-    val norm = remember(codeOrEmoji) { normalizeReactionToIosType(codeOrEmoji) }
+    val activeInput = codeOrEmoji.ifBlank { tag }
+    val norm = remember(activeInput) { normalizeReactionToIosType(activeInput) }
     Canvas(modifier = modifier.requiredSize(size)) {
         val s = this.size.minDimension
         val cx = this.size.width / 2f
@@ -1567,3 +1569,80 @@ private fun synthesizeAiBubbleStyle(promptRaw: String): AiBubbleSynthesis {
         else -> presets[kotlin.math.abs(q.hashCode()) % presets.size].copy(shape = shape, floating = floating)
     }
 }
+
+/**
+ * Overload BubbleShapeAndAiSection untuk GlobalChatScreen (3-parameter AI preset callback).
+ */
+@Composable
+fun BubbleShapeAndAiSection(
+    selectedShape: String,
+    selectedFloating: String,
+    onSelectShape: (String) -> Unit,
+    onSelectFloating: (String) -> Unit,
+    onApplyAiPreset: (styleMode: String, shape: String, floating: String) -> Unit,
+) {
+    BubbleShapeAndAiSection(
+        currentShape = selectedShape.lowercase(),
+        currentFloating = selectedFloating.lowercase(),
+        onSelectShape = onSelectShape,
+        onSelectFloating = onSelectFloating,
+        onApplyAiPreset = { _, _, _, shape, floating, styleMode ->
+            val mappedStyle = when (styleMode.lowercase()) {
+                "aurora" -> "glass"
+                "neon" -> "amber"
+                else -> "glass"
+            }
+            onApplyAiPreset(mappedStyle, shape, floating)
+        },
+    )
+}
+
+/**
+ * Overload PreSendMediaStudioDialog berbasis Bitmap untuk GlobalChatScreen.
+ */
+@Composable
+fun PreSendMediaStudioDialog(
+    mediaKind: String,
+    mediaName: String,
+    initialBitmap: Bitmap?,
+    initialCaption: String = "",
+    initialViewOnce: Boolean = false,
+    onDismiss: () -> Unit,
+    onConfirmSend: (caption: String, editedBitmap: Bitmap?) -> Unit,
+) {
+    val initialData = remember(initialBitmap, mediaKind) {
+        if (initialBitmap != null) {
+            val out = ByteArrayOutputStream()
+            initialBitmap.compress(Bitmap.CompressFormat.JPEG, 92, out)
+            "data:image/jpeg;base64," + Base64.encodeToString(out.toByteArray(), Base64.NO_WRAP)
+        } else {
+            ""
+        }
+    }
+    val mappedType = when (mediaKind.lowercase()) {
+        "image", "photo" -> "photo"
+        "video" -> "video"
+        else -> "file"
+    }
+    PreSendMediaStudioDialog(
+        initialAttachmentData = initialData,
+        initialAttachmentName = mediaName,
+        initialAttachmentType = mappedType,
+        initialCaption = initialCaption,
+        initialViewOnce = initialViewOnce,
+        onDismiss = onDismiss,
+        onConfirmSend = { finalData, _, _, caption, _ ->
+            val decoded = if (finalData != initialData && finalData.startsWith("data:image/")) {
+                runCatching {
+                    val raw = finalData.substringAfter("base64,", "")
+                    val bytes = Base64.decode(raw, Base64.DEFAULT)
+                    BitmapFactory.decodeByteArray(bytes, 0, bytes.size)
+                }.getOrNull()
+            } else {
+                null
+            }
+            onConfirmSend(caption, decoded)
+        },
+    )
+}
+

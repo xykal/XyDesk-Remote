@@ -547,7 +547,7 @@ private fun CommunityAccountCard(
     var githubBusy by remember { mutableStateOf(false) }
     var githubWaitingCode by remember { mutableStateOf<String?>(null) }
     var githubWaitingUrl by remember { mutableStateOf<String?>(null) }
-    val authRev by GitHubDirectOAuthController.authRevision.collectAsState()
+    val authRev = GitHubDirectOAuthController.authRevision
     var githubUser by remember(authRev) { mutableStateOf(getVerifiedGitHubLogin(context)) }
     LaunchedEffect(authRev) {
         val currentGh = getVerifiedGitHubLogin(context)
@@ -710,9 +710,11 @@ private fun CommunityAccountCard(
                         maxLines = 1,
                         overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
                     )
-                    if (isFounder) {
-                        XyFounderBadge(compact = true)
-                    }
+                    XyUserRoleBadges(
+                        name = name,
+                        githubLogin = githubUser,
+                        compact = true,
+                    )
                 }
                 Text(
                     text = buildString {
@@ -1399,7 +1401,7 @@ internal fun XyHeaderAccountActions(
     var avatarTick by remember { mutableIntStateOf(0) }
     val avatarFile = remember { java.io.File(context.filesDir, "xy_avatar.webp") }
     var avatarBitmap by remember { mutableStateOf<android.graphics.Bitmap?>(null) }
-    val authRev by GitHubDirectOAuthController.authRevision.collectAsState()
+    val authRev = GitHubDirectOAuthController.authRevision
 
     androidx.compose.runtime.LaunchedEffect(avatarTick, quickOpen, ghUser, authRev) {
         ghUser = getVerifiedGitHubLogin(context)
@@ -1594,9 +1596,11 @@ internal fun XyHeaderAccountActions(
                                 style = MaterialTheme.typography.titleMedium,
                                 fontWeight = FontWeight.Bold,
                             )
-                            if (founder) {
-                                XyFounderBadge(compact = true)
-                            }
+                            XyUserRoleBadges(
+                                name = displayName,
+                                githubLogin = ghUser,
+                                compact = true,
+                            )
                         }
                         Text(
                             if (ghUser != null) "GitHub: @$ghUser (Terhubung)"

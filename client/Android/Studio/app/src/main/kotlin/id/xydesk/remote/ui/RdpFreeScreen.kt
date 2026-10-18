@@ -66,7 +66,6 @@ import id.xydesk.remote.ui.components.XyPillButton
 import id.xydesk.remote.ui.components.XySectionLabel
 import id.xydesk.remote.ui.components.XySegmented
 import id.xydesk.remote.ui.components.XySuccessStateBanner
-import id.xydesk.remote.ui.components.XyToggle
 import id.xydesk.remote.ui.components.XyTopBar
 import id.xydesk.remote.ui.rdp.XyRdpClient
 import id.xydesk.remote.ui.rdp.XyRdpConfig
@@ -572,7 +571,7 @@ fun RdpFreeScreen(onBack: () -> Unit, onConnect: (ConnectionProfile) -> Unit) {
                         XyEmptyState(
                             title = "Siapkan Repository XyRDP Milikmu",
                             subtitle = "Langkah pertama: fork template resmi xykal/XyRDP ke akun GitHub @$login agar workflow RDP 6 jam dapat berjalan di akunmu.",
-                            icon = XyIcons.Server,
+                            icon = XyIcons.Monitor,
                             actionLabel = "Fork Template Resmi xykal/XyRDP",
                             onAction = {
                                 busy = true
@@ -1730,8 +1729,9 @@ private fun RdpFlatToggleRow(
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
         }
-        XyToggle(
+        androidx.compose.material3.Switch(
             checked = checked,
+            enabled = enabled,
             onCheckedChange = { if (enabled) onCheckedChange(it) },
         )
     }

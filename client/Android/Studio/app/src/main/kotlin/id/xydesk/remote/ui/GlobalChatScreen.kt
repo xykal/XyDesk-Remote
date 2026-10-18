@@ -24,12 +24,21 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.annotation.DrawableRes
 import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.verticalScroll
+import androidx.compose.animation.core.LinearEasing
+import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.spring
+import androidx.compose.animation.core.tween
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
+import id.xydesk.remote.ui.components.XyEmptyState
+import id.xydesk.remote.ui.components.XyLoadingSkeletonCard
+import id.xydesk.remote.ui.components.XyLoadingSpinnerState
+import java.io.ByteArrayOutputStream
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.scaleIn
@@ -3047,7 +3056,7 @@ internal fun GlobalChatScreen(
                                 },
                                 bubbleStyleMode = bubbleStyleMode,
                                 bubbleShapePreset = bubbleShapePreset,
-                                floatingElementPreset = floatingElementPreset,
+                                floatingElementPreset = bubbleFloatingElement,
                                 isCompactOverlay = isOverlayMode,
                             )
                         }
@@ -3124,6 +3133,47 @@ internal fun GlobalChatScreen(
                                         shareGlobalChatInvite(snap)
                                     },
                                 )
+                                if (isViewerFounder) {
+                                    val targetRoleKey = targetMsg.githubLogin.ifBlank { targetMsg.name }
+                                    val isCurrentlyTeam = isXyTeamAccount(context, targetMsg.name, targetMsg.githubLogin)
+                                    val isCurrentlyTester = isXyTesterAccount(context, targetMsg.name, targetMsg.githubLogin)
+                                    HorizontalDivider(color = Color.White.copy(alpha = 0.08f))
+                                    ContextMenuActionRow(
+                                        label = if (isCurrentlyTeam) "Lepas Badge XYTEAM (@$targetRoleKey)" else "Beri Badge XYTEAM (@$targetRoleKey)",
+                                        icon = XyIcons.Shield,
+                                        onClick = {
+                                            XySpecialRoleRegistry.setRole(
+                                                context,
+                                                targetRoleKey,
+                                                if (isCurrentlyTeam) "" else "XYTEAM",
+                                            )
+                                            Toast.makeText(
+                                                context,
+                                                if (isCurrentlyTeam) "Badge XYTEAM dilepas" else "Badge XYTEAM diberikan ke $targetRoleKey",
+                                                Toast.LENGTH_SHORT,
+                                            ).show()
+                                            focusedContextMsg = null
+                                        },
+                                    )
+                                    HorizontalDivider(color = Color.White.copy(alpha = 0.08f))
+                                    ContextMenuActionRow(
+                                        label = if (isCurrentlyTester) "Lepas Badge TESTER (@$targetRoleKey)" else "Beri Badge TESTER (@$targetRoleKey)",
+                                        icon = XyIcons.Check,
+                                        onClick = {
+                                            XySpecialRoleRegistry.setRole(
+                                                context,
+                                                targetRoleKey,
+                                                if (isCurrentlyTester) "" else "TESTER",
+                                            )
+                                            Toast.makeText(
+                                                context,
+                                                if (isCurrentlyTester) "Badge TESTER dilepas" else "Badge TESTER diberikan ke $targetRoleKey",
+                                                Toast.LENGTH_SHORT,
+                                            ).show()
+                                            focusedContextMsg = null
+                                        },
+                                    )
+                                }
                                 HorizontalDivider(color = Color.White.copy(alpha = 0.08f))
                                 ContextMenuActionRow(
                                     label = "Info Enkripsi E2EE",
@@ -4029,7 +4079,7 @@ private fun MessageBubble(
                 )
             },
         horizontalArrangement = if (msg.mine) Arrangement.End else Arrangement.Start,
-        verticalAlignment = Alignment.Bottom,
+        verticalAlignment = Alignment.Top,
     ) {
         if (!msg.mine) {
             ChatSenderAvatar(
@@ -4232,13 +4282,15 @@ private fun MessageBubble(
                                         color = secondaryTextColor,
                                     )
                                 }
-                                if (founderMsg) {
-                                    XyFounderBadge(compact = true)
-                                }
+                                XyUserRoleBadges(
+                                    name = msg.name,
+                                    githubLogin = msg.githubLogin,
+                                    compact = true,
+                                )
                                 if (isPinned) {
                                     ChatVectorPinIcon(
                                         size = 12.dp,
-                                        tint = if (founderMsg) Color(0xFFFDE047) else secondaryTextColor,
+                                        tint = if (founderMsg) Color(0xFFD8B4FE) else secondaryTextColor,
                                     )
                                 }
                             }
@@ -4491,13 +4543,15 @@ private fun MessageBubble(
                             }
                         }
 
-                        // Teks Pesan (Hanya ditampilkan bila ada caption — pengiriman media tanpa teks tidak menampilkan nama file!)
+                        // Teks Pesan (Semua link/URL berwarna biru cerah & bisa diklik!)
                         if (msg.text.isNotBlank()) {
                             Spacer(Modifier.height(if (isCompactOverlay) 3.dp else 5.dp))
-                            Text(
+                            XyClickableLinkText(
                                 text = msg.text,
-                                style = if (isCompactOverlay) MaterialTheme.typography.bodySmall else MaterialTheme.typography.bodyMedium,
                                 color = primaryTextColor,
+                                linkColor = if (isLightBubble) Color(0xFF2563EB) else Color(0xFF38BDF8),
+                                style = if (isCompactOverlay) MaterialTheme.typography.bodySmall else MaterialTheme.typography.bodyMedium,
+                                onLongPress = onLongPress,
                             )
                             if (transBody.isNotBlank() && !transBody.equals(msg.text, ignoreCase = true)) {
                                 Spacer(Modifier.height(if (isCompactOverlay) 4.dp else 6.dp))
@@ -4518,12 +4572,15 @@ private fun MessageBubble(
                                         tint = if (founderMsg) Color(0xFFD8B4FE) else secondaryTextColor,
                                         modifier = Modifier.size(11.dp),
                                     )
-                                    Text(
+                                    XyClickableLinkText(
                                         text = "[$transLabel] · $transBody",
-                                        style = MaterialTheme.typography.bodySmall,
-                                        fontSize = if (isCompactOverlay) 11.sp else 12.sp,
-                                        fontStyle = FontStyle.Italic,
                                         color = if (founderMsg) Color(0xFFE9D5FF).copy(alpha = 0.94f) else secondaryTextColor,
+                                        linkColor = if (isLightBubble) Color(0xFF2563EB) else Color(0xFF38BDF8),
+                                        style = MaterialTheme.typography.bodySmall.copy(
+                                            fontSize = if (isCompactOverlay) 11.sp else 12.sp,
+                                            fontStyle = FontStyle.Italic,
+                                        ),
+                                        onLongPress = onLongPress,
                                     )
                                 }
                             }
@@ -4535,7 +4592,7 @@ private fun MessageBubble(
                             XyOpenGraphPreviewCard(url = detectedLinkUrl)
                         }
 
-                        // Baris Bawah: Jam + Indikator E2EE + Vektor Centang 1 / 2 (✓ / ✓✓)
+                        // Baris Bawah: Jam + Vektor Centang 1 / 2 (HANYA untuk pesan milik kita sendiri msg.mine!)
                         Spacer(Modifier.height(4.dp))
                         Row(
                             modifier = Modifier.align(Alignment.End),
@@ -4548,14 +4605,16 @@ private fun MessageBubble(
                                 fontSize = 10.sp,
                                 color = secondaryTextColor,
                             )
-                            ChatVectorDeliveryTicks(
-                                ticks = msg.deliveryTicks,
-                                tint = when {
-                                    founderMsg -> Color(0xFFD8B4FE)
-                                    isLightBubble -> Color(0xFF18181B)
-                                    else -> Color(0xFFE4E4E7)
-                                },
-                            )
+                            if (msg.mine) {
+                                ChatVectorDeliveryTicks(
+                                    ticks = msg.deliveryTicks,
+                                    tint = when {
+                                        founderMsg -> Color(0xFFD8B4FE)
+                                        isLightBubble -> Color(0xFF18181B)
+                                        else -> Color(0xFFE4E4E7)
+                                    },
+                                )
+                            }
                         }
                     }
                 }
