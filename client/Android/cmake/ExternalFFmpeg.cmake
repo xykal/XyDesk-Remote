@@ -85,11 +85,14 @@ ExternalProject_Add(
     # CATATAN URUTAN: configure FFmpeg diproses berurutan (last-wins), jadi
     # --disable-everything di bawah sengaja mematikan --enable-jni/mediacodec
     # di atas (WITH_MEDIACODEC=OFF di ExternalDeps).
+    # Divalidasi terhadap source FFmpeg n8.1 (allcodecs.c/parsers.c/configure):
+    # postproc sudah DIHAPUS di FFmpeg 8 (jangan pakai --disable-postproc),
+    # parser MP3 namanya 'mpegaudio' (bukan 'mp3'/'mpeg4audio').
     --disable-everything
-    --disable-avdevice --disable-avfilter --disable-avformat --disable-postproc
+    --disable-avdevice --disable-avfilter --disable-avformat
     --enable-decoder=aac,aac_latm,mp3,mp3float,opus,h264,gsm,gsm_ms,adpcm_ms,adpcm_ima_oki,g723_1,pcm_alaw,pcm_mulaw,pcm_s16le,pcm_u8
     --enable-encoder=aac,opus,pcm_s16le,pcm_u8,pcm_alaw,pcm_mulaw
-    --enable-parser=aac,aac_latm,h264,mpeg4audio,mp3
+    --enable-parser=aac,aac_latm,h264,mpegaudio
     --prefix=${DEPS_INSTALL_DIR} --libdir=${DEPS_INSTALL_DIR}/${CMAKE_INSTALL_LIBDIR}
   BUILD_COMMAND ${CMAKE_COMMAND} -E env "PATH=${NDK_TOOLCHAIN_BIN}:$ENV{PATH}" make -j
   INSTALL_COMMAND ${CMAKE_COMMAND} -E env "PATH=${NDK_TOOLCHAIN_BIN}:$ENV{PATH}" make -j install
