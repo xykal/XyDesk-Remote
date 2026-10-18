@@ -324,7 +324,7 @@ object ChatPushNotifier {
         )
 
         val replyAction = NotificationCompat.Action.Builder(
-            R.drawable.ic_launcher_monochrome,
+            R.drawable.ic_stat_xydesk,
             xyNow("Balas", "Reply"),
             replyPending,
         )
@@ -345,7 +345,7 @@ object ChatPushNotifier {
         )
 
         val markReadAction = NotificationCompat.Action.Builder(
-            R.drawable.ic_launcher_monochrome,
+            R.drawable.ic_stat_xydesk,
             xyNow("Tandai dibaca", "Mark as read"),
             markReadPending,
         )
@@ -365,7 +365,7 @@ object ChatPushNotifier {
         val vibPattern = longArrayOf(0L, 240L, 120L, 240L)
 
         val builder = NotificationCompat.Builder(context, CHAT_CHANNEL_ID)
-            .setSmallIcon(R.drawable.ic_launcher_monochrome)
+            .setSmallIcon(R.drawable.ic_stat_xydesk)
             .setContentTitle("${lastItem.name} · Chat Global")
             .setContentText(lastItem.text)
             .setSubText(summarySubText)
@@ -439,7 +439,7 @@ object ChatPushNotifier {
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
         )
         val notif = NotificationCompat.Builder(appContext, UPDATE_CHANNEL_ID)
-            .setSmallIcon(R.drawable.ic_launcher_monochrome)
+            .setSmallIcon(R.drawable.ic_stat_xydesk)
             .setContentTitle(title)
             .setContentText(summary)
             .setSubText(if (isDataPack) xyNow("Update Data In-App", "In-App Data Update") else xyNow("Update APK", "APK Update"))

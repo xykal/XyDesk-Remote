@@ -1,165 +1,296 @@
 package id.xydesk.remote.ui
 
-import android.content.Context
-import android.media.MediaPlayer
+import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.FastOutSlowInEasing
-import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.LinearEasing
+import androidx.compose.animation.core.RepeatMode
+import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.isSystemInDarkTheme
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
-import androidx.compose.ui.draw.scale
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.geometry.CornerRadius
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Path
+import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.graphics.StrokeJoin
+import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.ContentScale
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
-import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import id.xydesk.remote.R
+import id.xydesk.remote.ui.theme.XyDisplay
+import id.xydesk.remote.ui.theme.XyThemeState
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 
 /**
- * Splash ringkas dengan wordmark XyDesk, footer brand, dan ucapan satu kali
- * setelah instalasi. Playback ditunggu agar teks tidak terpotong saat splash
- * ditutup ketika proses boot selesai.
+ * Splash screen XyDesk Remote (Ronde 60):
+ *  - Tengah: Logo Vektor XyDesk (Monitor + Click Ripple + Cursor tajam 100% vektor) + Wordmark "XyDesk Remote"
+ *  - Bawah (Footer): "from / Pengembang · Developer" + Logo XyVerse Tech
  */
 @Composable
-fun XySplashScreen(
-    ready: Boolean,
-    dark: Boolean = true,
-    onDone: () -> Unit,
-) {
-    val context = LocalContext.current
-    var visible by remember { mutableStateOf(false) }
-    var minTimeElapsed by remember { mutableStateOf(false) }
-    var voiceComplete by remember { mutableStateOf(false) }
-    val mediaPlayerRef = remember { arrayOfNulls<MediaPlayer>(1) }
+internal fun XySplashScreen(onFinished: () -> Unit) {
+    val alpha = remember { Animatable(0f) }
+    val scale = remember { Animatable(0.92f) }
+    val footerAlpha = remember { Animatable(0f) }
 
-    val alpha by animateFloatAsState(
-        targetValue = if (visible) 1f else 0f,
-        animationSpec = tween(durationMillis = 320, easing = FastOutSlowInEasing),
-        label = "splashAlpha",
-    )
-    val scale by animateFloatAsState(
-        targetValue = if (visible) 1f else 0.94f,
-        animationSpec = tween(durationMillis = 420, easing = FastOutSlowInEasing),
-        label = "splashScale",
+    val pulseTransition = rememberInfiniteTransition(label = "splashPulse")
+    val rippleScale by pulseTransition.animateFloat(
+        initialValue = 0.92f,
+        targetValue = 1.12f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(durationMillis = 1100, easing = LinearEasing),
+            repeatMode = RepeatMode.Reverse,
+        ),
+        label = "rippleScale",
     )
 
-    DisposableEffect(Unit) {
-        onDispose {
-            mediaPlayerRef[0]?.let { player ->
-                mediaPlayerRef[0] = null
-                runCatching {
-                    player.setOnCompletionListener(null)
-                    player.setOnErrorListener(null)
-                    player.release()
-                }
-            }
-        }
+    val dark = when (XyThemeState.mode) {
+        XyThemeState.DARK -> true
+        XyThemeState.LIGHT -> false
+        else -> isSystemInDarkTheme()
     }
 
     LaunchedEffect(Unit) {
-        visible = true
-        val prefs = context.getSharedPreferences(SPLASH_PREFS, Context.MODE_PRIVATE)
-        if (prefs.getBoolean(KEY_SPLASH_VOICE_PLAYED, false)) {
-            voiceComplete = true
-        } else {
-            val player = runCatching {
-                MediaPlayer.create(context, R.raw.splash_xydesk_remote)
-            }.getOrNull()
-            if (player == null) {
-                voiceComplete = true
-            } else {
-                mediaPlayerRef[0] = player
-                player.setOnCompletionListener { finished ->
-                    if (mediaPlayerRef[0] === finished) mediaPlayerRef[0] = null
-                    runCatching { finished.release() }
-                    prefs.edit().putBoolean(KEY_SPLASH_VOICE_PLAYED, true).apply()
-                    voiceComplete = true
-                }
-                player.setOnErrorListener { failed, _, _ ->
-                    if (mediaPlayerRef[0] === failed) mediaPlayerRef[0] = null
-                    runCatching { failed.release() }
-                    voiceComplete = true
-                    true
-                }
-                runCatching { player.start() }.onFailure {
-                    if (mediaPlayerRef[0] === player) mediaPlayerRef[0] = null
-                    runCatching { player.release() }
-                    voiceComplete = true
-                }
-            }
+        launch {
+            alpha.animateTo(
+                targetValue = 1f,
+                animationSpec = tween(durationMillis = 480, easing = FastOutSlowInEasing),
+            )
         }
-        delay(650)
-        minTimeElapsed = true
+        launch {
+            scale.animateTo(
+                targetValue = 1f,
+                animationSpec = tween(durationMillis = 560, easing = FastOutSlowInEasing),
+            )
+        }
+        launch {
+            delay(180)
+            footerAlpha.animateTo(
+                targetValue = 1f,
+                animationSpec = tween(durationMillis = 450, easing = FastOutSlowInEasing),
+            )
+        }
+        delay(1500)
+        launch {
+            footerAlpha.animateTo(
+                targetValue = 0f,
+                animationSpec = tween(durationMillis = 220, easing = FastOutSlowInEasing),
+            )
+        }
+        alpha.animateTo(
+            targetValue = 0f,
+            animationSpec = tween(durationMillis = 260, easing = FastOutSlowInEasing),
+        )
+        onFinished()
     }
 
-    LaunchedEffect(ready, minTimeElapsed, voiceComplete) {
-        if (ready && minTimeElapsed && voiceComplete) onDone()
+    val bgColor = if (dark) Color(0xFF07080D) else Color(0xFFF8FAFC)
+    val cardGradient = if (dark) {
+        Brush.linearGradient(
+            colors = listOf(Color(0xFF1A102E), Color(0xFF0E0B1A)),
+        )
+    } else {
+        Brush.linearGradient(
+            colors = listOf(Color(0xFF1E1B4B), Color(0xFF0F172A)),
+        )
     }
+    val primaryTextColor = if (dark) Color(0xFFF8FAFC) else Color(0xFF0F172A)
+    val subTextColor = if (dark) Color(0xFF94A3B8) else Color(0xFF64748B)
+    val footerLogoRes = if (dark) R.drawable.xyverse_logo_h_white else R.drawable.xyverse_logo_h_black
 
     Box(
         Modifier
             .fillMaxSize()
-            .background(if (dark) Color(0xFF14161A) else Color(0xFFF6F7F9)),
-        contentAlignment = Alignment.Center,
+            .background(bgColor),
     ) {
-        Image(
-            painter = painterResource(
-                if (dark) R.drawable.xy_logo_h_white else R.drawable.xy_logo_h_black,
-            ),
-            contentDescription = "XyDesk Remote",
-            contentScale = ContentScale.Fit,
+        // TENGAH: Logo Utama XyDesk (100% Vector Crisp) + Wordmark XyDesk Remote
+        Column(
             modifier = Modifier
-                .size(width = 252.dp, height = 86.dp)
-                .alpha(alpha)
-                .scale(scale),
-        )
-        // Logo pengembang (permintaan pemilik 2026-10-15): XyVerse Technology
-        // Global tampil sebagai logo resmi brand kit, bukan teks footer.
+                .align(Alignment.Center)
+                .alpha(alpha.value)
+                .graphicsLayer {
+                    scaleX = scale.value
+                    scaleY = scale.value
+                },
+            horizontalAlignment = Alignment.CenterHorizontally,
+        ) {
+            Box(
+                modifier = Modifier
+                    .size(96.dp)
+                    .clip(RoundedCornerShape(26.dp))
+                    .background(cardGradient)
+                    .border(
+                        width = 1.2.dp,
+                        brush = Brush.linearGradient(
+                            colors = listOf(
+                                Color(0xFF818CF8).copy(alpha = 0.45f),
+                                Color.White.copy(alpha = 0.10f),
+                            ),
+                        ),
+                        shape = RoundedCornerShape(26.dp),
+                    ),
+                contentAlignment = Alignment.Center,
+            ) {
+                XyDeskVectorEmblem(
+                    modifier = Modifier.size(62.dp),
+                    tint = Color.White,
+                    rippleScale = rippleScale,
+                )
+            }
+
+            Spacer(Modifier.height(18.dp))
+
+            Text(
+                text = "XyDesk",
+                fontFamily = XyDisplay,
+                fontWeight = FontWeight.ExtraBold,
+                fontSize = 30.sp,
+                letterSpacing = (-0.6).sp,
+                color = primaryTextColor,
+            )
+            Spacer(Modifier.height(4.dp))
+            Text(
+                text = "REMOTE DESKTOP",
+                style = MaterialTheme.typography.labelSmall,
+                fontWeight = FontWeight.SemiBold,
+                fontSize = 10.5.sp,
+                letterSpacing = 2.8.sp,
+                color = subTextColor,
+            )
+        }
+
+        // BAWAH (FOOTER): Logo XyVerse Tech
         Column(
             modifier = Modifier
                 .align(Alignment.BottomCenter)
-                .padding(bottom = 20.dp)
-                .alpha(alpha),
+                .navigationBarsPadding()
+                .padding(bottom = 32.dp)
+                .alpha(footerAlpha.value),
             horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.spacedBy(6.dp),
         ) {
             Text(
-                text = "Pengembang · Developer",
-                color = if (dark) Color.White.copy(alpha = 0.45f) else Color(0xFF14161A).copy(alpha = 0.45f),
+                text = xy("Pengembang · Developer", "Developer · Pengembang"),
                 style = MaterialTheme.typography.labelSmall,
-                letterSpacing = 0.8.sp,
-                textAlign = TextAlign.Center,
+                color = subTextColor.copy(alpha = 0.78f),
+                fontSize = 10.sp,
+                letterSpacing = 1.1.sp,
             )
             Image(
-                painter = painterResource(
-                    if (dark) R.drawable.xyverse_logo_h_white else R.drawable.xyverse_logo_h_black,
-                ),
-                contentDescription = "XyVerse Technology Global",
-                contentScale = ContentScale.Fit,
-                modifier = Modifier.size(width = 168.dp, height = 50.dp),
+                painter = painterResource(footerLogoRes),
+                contentDescription = "XyVerse Tech",
+                modifier = Modifier.height(22.dp),
+                contentScale = ContentScale.FillHeight,
             )
         }
     }
 }
 
-private const val SPLASH_PREFS = "xydesk.splash"
-private const val KEY_SPLASH_VOICE_PLAYED = "xydesk_remote_voice_played"
+/**
+ * Emblem Vektor XyDesk (Monitor + Click Ripple + Cursor) tajam di segala ukuran DPI.
+ */
+@Composable
+internal fun XyDeskVectorEmblem(
+    modifier: Modifier = Modifier,
+    tint: Color = Color.White,
+    rippleScale: Float = 1f,
+) {
+    Canvas(modifier = modifier) {
+        val w = size.width
+        val h = size.height
+        val s = minOf(w, h) / 64f
+
+        // 1. Layar Monitor Rounded
+        val frameStroke = Stroke(width = 3.8f * s, cap = StrokeCap.Round, join = StrokeJoin.Round)
+        drawRoundRect(
+            color = tint,
+            topLeft = Offset(7f * s, 9f * s),
+            size = Size(50f * s, 34f * s),
+            cornerRadius = CornerRadius(5.5f * s, 5.5f * s),
+            style = frameStroke,
+        )
+
+        // 2. Leher & Kaki Stand Monitor
+        drawLine(
+            color = tint,
+            start = Offset(32f * s, 43.5f * s),
+            end = Offset(32f * s, 51.5f * s),
+            strokeWidth = 4.2f * s,
+            cap = StrokeCap.Round,
+        )
+        drawLine(
+            color = tint,
+            start = Offset(21f * s, 52f * s),
+            end = Offset(43f * s, 52f * s),
+            strokeWidth = 4.2f * s,
+            cap = StrokeCap.Round,
+        )
+
+        // 3. Click Ripple Concentric Rings di ujung kursor
+        val tipX = 24.5f * s
+        val tipY = 21.5f * s
+        drawArc(
+            color = tint.copy(alpha = 0.92f),
+            startAngle = 145f,
+            sweepAngle = 250f,
+            useCenter = false,
+            topLeft = Offset(tipX - 3.6f * s * rippleScale, tipY - 3.6f * s * rippleScale),
+            size = Size(7.2f * s * rippleScale, 7.2f * s * rippleScale),
+            style = Stroke(width = 1.8f * s, cap = StrokeCap.Round),
+        )
+        drawArc(
+            color = tint.copy(alpha = 0.65f),
+            startAngle = 145f,
+            sweepAngle = 250f,
+            useCenter = false,
+            topLeft = Offset(tipX - 6.4f * s * rippleScale, tipY - 6.4f * s * rippleScale),
+            size = Size(12.8f * s * rippleScale, 12.8f * s * rippleScale),
+            style = Stroke(width = 1.6f * s, cap = StrokeCap.Round),
+        )
+
+        // 4. Panah Kursor Presisi
+        val cursorPath = Path().apply {
+            moveTo(24.8f * s, 21.8f * s)
+            lineTo(29.8f * s, 36.2f * s)
+            lineTo(33.2f * s, 32.6f * s)
+            lineTo(37.4f * s, 36.8f * s)
+            lineTo(40.2f * s, 34.0f * s)
+            lineTo(36.0f * s, 29.8f * s)
+            lineTo(39.8f * s, 26.4f * s)
+            close()
+        }
+        drawPath(path = cursorPath, color = tint)
+    }
+}

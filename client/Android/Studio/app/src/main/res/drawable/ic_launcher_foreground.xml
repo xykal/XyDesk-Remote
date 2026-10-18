@@ -1,0 +1,44 @@
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+
+    <!-- Monitor Frame (Rounded Outer + Rounded Inner Screen) -->
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M31.5,28.5 L76.5,28.5 A6.5,6.5 0 0,1 83,35 L83,61 A6.5,6.5 0 0,1 76.5,67.5 L31.5,67.5 A6.5,6.5 0 0,1 25,61 L25,35 A6.5,6.5 0 0,1 31.5,28.5 Z M32.2,32.7 A3.0,3.0 0 0,0 29.2,35.7 L29.2,60.3 A3.0,3.0 0 0,0 32.2,63.3 L75.8,63.3 A3.0,3.0 0 0,0 78.8,60.3 L78.8,35.7 A3.0,3.0 0 0,0 75.8,32.7 Z"
+        android:fillType="evenOdd" />
+
+    <!-- Monitor Stand Neck -->
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M51.2,66.8 L56.8,66.8 L56.8,73.5 L51.2,73.5 Z" />
+
+    <!-- Monitor Stand Base Pill -->
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M42.6,72.6 L65.4,72.6 A2.7,2.7 0 0,1 68.1,75.3 A2.7,2.7 0 0,1 65.4,78.0 L42.6,78.0 A2.7,2.7 0 0,1 39.9,75.3 A2.7,2.7 0 0,1 42.6,72.6 Z" />
+
+    <!-- Click Ripple Outer Arc around Cursor Tip (44.5, 41.5) -->
+    <path
+        android:fillColor="#00000000"
+        android:strokeColor="#FFFFFF"
+        android:strokeWidth="1.9"
+        android:strokeLineCap="round"
+        android:pathData="M41.8,45.6 A5.0,5.0 0 1,1 48.8,39.4" />
+
+    <!-- Click Ripple Inner Arc -->
+    <path
+        android:fillColor="#00000000"
+        android:strokeColor="#FFFFFF"
+        android:strokeWidth="1.7"
+        android:strokeLineCap="round"
+        android:pathData="M43.0,43.8 A2.8,2.8 0 1,1 46.9,40.3" />
+
+    <!-- Pointer Cursor Arrow inside Monitor -->
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M44.6,41.6 L50.4,57.4 L54.1,53.6 L58.6,58.1 L61.7,55.0 L57.2,50.5 L61.2,46.8 Z" />
+</vector>

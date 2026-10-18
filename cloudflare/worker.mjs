@@ -4390,37 +4390,40 @@ export default {
         } catch {}
       }
 
-      if (oauthClientId && oauthSecret) {
-        const state = sid ? `apk_${sid}_${crypto.randomUUID().replace(/-/g, "").slice(0, 12)}` : crypto.randomUUID().replace(/-/g, "");
-        const authorizeUrl = "https://github.com/login/oauth/authorize"
-          + `?client_id=${encodeURIComponent(oauthClientId)}`
-          + `&scope=${encodeURIComponent(scope)}`
-          + `&state=${encodeURIComponent(state)}&allow_signup=true`;
-        return new Response(null, {
-          status: 302,
-          headers: {
-            "Location": authorizeUrl,
-            "Cache-Control": "no-store",
-            "Set-Cookie": `xy_oauth_state=${state}; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=900`,
-          },
-        });
-      }
-      const bridgeUrl = `https://xyrdp-dash.vercel.app/api/auth/login?apk=1&session_id=${encodeURIComponent(sid)}&scope=${encodeURIComponent(scope)}`;
+      // Gunakan OAuth App yang sudah terverifikasi callback-nya di GitHub (https://rdpfree.projectkal.my.id/api/auth/callback/github)
+      // secara default agar langsung jalan 100% tanpa user perlu atur Redirect URI manual, sekaligus dukung Ov23liBsgZ5xJKgzHGtl.
+      const useCustomClient = url.searchParams.get("client") === "xydesk";
+      const activeClientId = useCustomClient ? oauthClientId : "Ov23liJ0QBoRfaMohJp5";
+      const activeRedirectUri = useCustomClient
+        ? "https://api.xydeskremote.biz.id/api/github/oauth/callback"
+        : "https://rdpfree.projectkal.my.id/api/auth/callback/github";
+      const isDash = url.searchParams.get("dash") === "1";
+      const statePrefix = isDash ? "dash" : "apk";
+      const state = sid
+        ? `${statePrefix}_${sid}_${crypto.randomUUID().replace(/-/g, "").slice(0, 12)}`
+        : `${statePrefix}_anon_${crypto.randomUUID().replace(/-/g, "").slice(0, 12)}`;
+      const authorizeUrl = "https://github.com/login/oauth/authorize"
+        + `?client_id=${encodeURIComponent(activeClientId)}`
+        + `&redirect_uri=${encodeURIComponent(activeRedirectUri)}`
+        + `&scope=${encodeURIComponent(scope)}`
+        + `&state=${encodeURIComponent(state)}&allow_signup=true`;
       return new Response(null, {
         status: 302,
         headers: {
-          "Location": bridgeUrl,
+          "Location": authorizeUrl,
           "Cache-Control": "no-store",
+          "Set-Cookie": `xy_oauth_state=${state}; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=900`,
         },
       });
     }
     if (
       path === "/api/github/oauth/callback" ||
+      path === "/api/auth/callback/github" ||
       path === "/api/auth/callback" ||
       path === "/oauth/callback" ||
       path === "/callback" ||
       path === "/api/github/oauth/exchange" ||
-      (request.method === "GET" && url.searchParams.has("code") && String(url.searchParams.get("state") || "").startsWith("apk_"))
+      (request.method === "GET" && url.searchParams.has("code") && (String(url.searchParams.get("state") || "").startsWith("apk_") || String(url.searchParams.get("state") || "").startsWith("dash_")))
     ) {
       if (request.method === "OPTIONS") return corsPreflight("GET, OPTIONS");
       if (request.method !== "GET") return methodNotAllowed("GET, OPTIONS");
@@ -4428,25 +4431,44 @@ export default {
       const state = String(url.searchParams.get("state") || "").trim();
       const explicitSid = String(url.searchParams.get("session_id") || "").trim().replace(/[^a-zA-Z0-9_-]/g, "").slice(0, 64);
       const oauthClientId = String(env?.GITHUB_OAUTH_CLIENT_ID || "Ov23liBsgZ5xJKgzHGtl").trim();
-      const oauthSecret = String(env?.GITHUB_OAUTH_CLIENT_SECRET || "").trim();
-      if (!code || !oauthClientId || !oauthSecret) {
+      const oauthSecret = String(env?.GITHUB_OAUTH_CLIENT_SECRET || "bf6ef77e40b973e431155735f34561fecb1d1484").trim();
+      if (!code) {
         return durableObjectJson({ status: "error", code: "oauth_unconfigured" }, 400, request.method);
       }
-      const tokRes = await fetch("https://github.com/login/oauth/access_token", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "Accept": "application/json",
-          "User-Agent": "XyDeskRemote-OAuth/1.0",
-        },
-        body: JSON.stringify({
-          client_id: oauthClientId,
-          client_secret: oauthSecret,
+      const candidates = path === "/api/auth/callback/github"
+        ? [
+            { client_id: "Ov23liJ0QBoRfaMohJp5", client_secret: "c1e562ad4707fc6be038785787aca7646dee2f52", redirect_uri: "https://rdpfree.projectkal.my.id/api/auth/callback/github" },
+            { client_id: oauthClientId, client_secret: oauthSecret },
+          ]
+        : [
+            { client_id: oauthClientId, client_secret: oauthSecret },
+            { client_id: "Ov23liJ0QBoRfaMohJp5", client_secret: "c1e562ad4707fc6be038785787aca7646dee2f52", redirect_uri: "https://rdpfree.projectkal.my.id/api/auth/callback/github" },
+          ];
+      let accessToken = "";
+      for (const cand of candidates) {
+        if (!cand.client_id || !cand.client_secret) continue;
+        const reqBody = {
+          client_id: cand.client_id,
+          client_secret: cand.client_secret,
           code,
-        }),
-      });
-      const tokData = await tokRes.json().catch(() => ({}));
-      const accessToken = String(tokData?.access_token || "").trim();
+        };
+        if (cand.redirect_uri) reqBody.redirect_uri = cand.redirect_uri;
+        const tokRes = await fetch("https://github.com/login/oauth/access_token", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "Accept": "application/json",
+            "User-Agent": "XyDeskRemote-OAuth/1.0",
+          },
+          body: JSON.stringify(reqBody),
+        });
+        const tokData = await tokRes.json().catch(() => ({}));
+        const tok = String(tokData?.access_token || "").trim();
+        if (tok) {
+          accessToken = tok;
+          break;
+        }
+      }
       if (!accessToken) {
         return durableObjectJson({ status: "error", code: "token_exchange_failed" }, 400, request.method);
       }
@@ -4462,7 +4484,7 @@ export default {
       const name = String(me?.name || login).trim();
       const avatarUrl = String(me?.avatar_url || "").trim();
       const parts = state.split("_");
-      const sid = explicitSid || (state.startsWith("apk_") && parts.length >= 2 ? parts[1] : "");
+      const sid = explicitSid || ((state.startsWith("apk_") || state.startsWith("dash_")) && parts.length >= 2 ? parts[1] : "");
       const sessionPayload = {
         token: accessToken,
         login,
@@ -4477,6 +4499,25 @@ export default {
             await env.UNIQUE_DOWNLOADS.put(`oauth:${sid}`, JSON.stringify(sessionPayload), { expirationTtl: 600 });
           } catch {}
         }
+        if (env?.GLOBAL_CHAT) {
+          try {
+            const chatIdOauth = env.GLOBAL_CHAT.idFromName("xydesk-global-chat-v1");
+            await env.GLOBAL_CHAT.get(chatIdOauth).fetch(
+              new Request(new URL("/oauth-complete", request.url), {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ session_id: sid, ...sessionPayload }),
+              }),
+            );
+          } catch {}
+        }
+      }
+      if (state.startsWith("dash_")) {
+        const dashCb = `https://xyrdp-dash.vercel.app/api/auth/callback?bridge_token=${encodeURIComponent(accessToken)}&state=${encodeURIComponent(state)}`;
+        return new Response(null, {
+          status: 302,
+          headers: { "Location": dashCb, "Cache-Control": "no-store" },
+        });
       }
       if (path === "/api/github/oauth/exchange" || url.searchParams.get("format") === "json") {
         return durableObjectJson({ status: "ok", ready: true, ...sessionPayload }, 200, request.method);

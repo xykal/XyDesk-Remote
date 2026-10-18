@@ -138,6 +138,14 @@
                 android:resource="@xml/file_paths" />
         </provider>
 
+        <!-- Default Push Notification Icon (24dp Full-Bleed Vector XyDesk) untuk FCM & OneSignal -->
+        <meta-data
+            android:name="com.google.firebase.messaging.default_notification_icon"
+            android:resource="@drawable/ic_stat_xydesk" />
+        <meta-data
+            android:name="com.onesignal.NotificationAccentColor.DEFAULT"
+            android:value="FF6366F1" />
+
     </application>
 
 </manifest>

@@ -45,7 +45,7 @@ internal fun postDisconnectNotification(context: Context, deviceLabel: String) {
         PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
     )
     val builder = NotificationCompat.Builder(context, DISCONNECT_CHANNEL_ID)
-        .setSmallIcon(id.xydesk.remote.R.drawable.ic_launcher_monochrome)
+        .setSmallIcon(id.xydesk.remote.R.drawable.ic_stat_xydesk)
         .setContentTitle(xyNow("Koneksi terputus", "Connection lost"))
         .setContentText(
             xyNow(

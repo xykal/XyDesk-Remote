@@ -1612,11 +1612,15 @@ private fun CommentsBottomSheet(
                 )
             }
 
+            HorizontalDivider(
+                thickness = 0.5.dp,
+                color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.28f),
+            )
+
             LazyColumn(
                 Modifier
                     .fillMaxWidth()
-                    .heightIn(max = 360.dp),
-                verticalArrangement = Arrangement.spacedBy(10.dp),
+                    .heightIn(max = 370.dp),
             ) {
                 if (joke.comments.isEmpty()) {
                     item {
@@ -1624,29 +1628,26 @@ private fun CommentsBottomSheet(
                             xy("Belum ada komentar. Jadilah yang pertama berkomentar!", "No comments yet. Be the first to comment!"),
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.padding(vertical = 18.dp),
                         )
                     }
                 }
                 items(joke.comments, key = { it.id }) { c ->
                     val cAuthor = c.name ?: xy("Anonim", "Anonymous")
                     val cIsFounder = isFounderAccount(c.name) || isFounderAccount(c.githubLogin)
-                    Surface(
-                        shape = RoundedCornerShape(12.dp),
-                        color = Color(0xFF141821),
-                        border = BorderStroke(1.dp, Color(0xFF232938)),
-                        modifier = Modifier.fillMaxWidth(),
-                    ) {
+                    Column(modifier = Modifier.fillMaxWidth()) {
                         Row(
-                            modifier = Modifier.padding(10.dp),
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(vertical = 11.dp),
                             verticalAlignment = Alignment.Top,
-                            horizontalArrangement = Arrangement.spacedBy(10.dp),
+                            horizontalArrangement = Arrangement.spacedBy(11.dp),
                         ) {
-                            // Foto Profil (Avatar) di setiap komentar
                             FeedAvatarThumb(
                                 avatarUrl = c.avatarUrl,
                                 name = cAuthor,
                                 isFounder = cIsFounder,
-                                size = 32.dp,
+                                size = 34.dp,
                             )
                             Column(
                                 modifier = Modifier.weight(1f),
@@ -1655,9 +1656,9 @@ private fun CommentsBottomSheet(
                                 Row(verticalAlignment = Alignment.CenterVertically) {
                                     Text(
                                         text = cAuthor,
-                                        style = MaterialTheme.typography.labelSmall,
+                                        style = MaterialTheme.typography.labelMedium,
                                         fontWeight = FontWeight.Bold,
-                                        color = if (cIsFounder) Color(0xFFFBBF24) else MaterialTheme.colorScheme.primary,
+                                        color = if (cIsFounder) Color(0xFFFBBF24) else MaterialTheme.colorScheme.onSurface,
                                     )
                                     if (cIsFounder) {
                                         Spacer(Modifier.width(5.dp))
@@ -1683,8 +1684,8 @@ private fun CommentsBottomSheet(
                                             }
                                             .padding(horizontal = 6.dp, vertical = 2.dp),
                                         style = MaterialTheme.typography.labelSmall,
-                                        fontWeight = FontWeight.Bold,
-                                        color = Color(0xFFF59E0B),
+                                        fontWeight = FontWeight.SemiBold,
+                                        color = MaterialTheme.colorScheme.primary,
                                     )
                                     if (c.isOwn) {
                                         Text(
@@ -1699,54 +1700,56 @@ private fun CommentsBottomSheet(
                                 }
                                 if (!c.replyToName.isNullOrBlank()) {
                                     Text(
-                                        text = "↪ Membalas @${c.replyToName}",
-                                        fontSize = 10.sp,
-                                        fontWeight = FontWeight.SemiBold,
-                                        color = Color(0xFF94A3B8),
+                                        text = xy("Membalas @{0}", "Replying to @{0}", c.replyToName),
+                                        fontSize = 11.sp,
+                                        fontWeight = FontWeight.Medium,
+                                        color = MaterialTheme.colorScheme.primary,
                                     )
                                 }
                                 Text(
                                     text = c.text,
-                                    style = MaterialTheme.typography.bodySmall,
-                                    color = Color(0xFFF1F5F9),
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    color = MaterialTheme.colorScheme.onSurface,
                                 )
                             }
                         }
+                        HorizontalDivider(
+                            thickness = 0.5.dp,
+                            color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.24f),
+                        )
                     }
                 }
             }
 
-            // Indikator sedang membalas komentar tertentu
+            // Indikator sedang membalas komentar tertentu (flat tanpa border)
             replyingTo?.let { targetReply ->
-                Surface(
-                    shape = RoundedCornerShape(8.dp),
-                    color = Color(0xFF1D2230),
-                    modifier = Modifier.fillMaxWidth(),
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(10.dp))
+                        .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.45f))
+                        .padding(horizontal = 10.dp, vertical = 6.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween,
                 ) {
-                    Row(
-                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                    ) {
-                        Text(
-                            text = xy("↪ Membalas komentar @${targetReply.name ?: "Anonim"}", "↪ Replying to @${targetReply.name ?: "Anonymous"}"),
-                            fontSize = 11.sp,
-                            fontWeight = FontWeight.SemiBold,
-                            color = Color(0xFFFBBF24),
-                        )
-                        Text(
-                            text = "✕",
-                            modifier = Modifier
-                                .clickable { replyingTo = null }
-                                .padding(horizontal = 6.dp),
-                            fontSize = 12.sp,
-                            color = Color(0xFF94A3B8),
-                        )
-                    }
+                    Text(
+                        text = xy("Membalas komentar @${targetReply.name ?: "Anonim"}", "Replying to @${targetReply.name ?: "Anonymous"}"),
+                        fontSize = 11.sp,
+                        fontWeight = FontWeight.SemiBold,
+                        color = MaterialTheme.colorScheme.primary,
+                    )
+                    Text(
+                        text = "✕",
+                        modifier = Modifier
+                            .clickable { replyingTo = null }
+                            .padding(horizontal = 6.dp),
+                        fontSize = 12.sp,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
                 }
             }
 
-            // Bar Cepat @Mention
+            // Bar Cepat @Mention (flat pill selaras Feed)
             if (mentionCandidates.isNotEmpty()) {
                 Row(
                     modifier = Modifier
@@ -1758,27 +1761,27 @@ private fun CommentsBottomSheet(
                     Text(
                         text = "@Mention:",
                         fontSize = 10.sp,
-                        color = Color(0xFF94A3B8),
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
                         fontWeight = FontWeight.SemiBold,
                     )
                     mentionCandidates.forEach { handle ->
-                        Surface(
-                            onClick = {
-                                val mentionToken = "@${handle.replace(" ", "")} "
-                                if (!draft.contains(mentionToken.trim())) {
-                                    draft = (draft + (if (draft.isEmpty() || draft.endsWith(" ")) "" else " ") + mentionToken).take(140)
+                        Box(
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(999.dp))
+                                .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.55f))
+                                .clickable {
+                                    val mentionToken = "@${handle.replace(" ", "")} "
+                                    if (!draft.contains(mentionToken.trim())) {
+                                        draft = (draft + (if (draft.isEmpty() || draft.endsWith(" ")) "" else " ") + mentionToken).take(140)
+                                    }
                                 }
-                            },
-                            shape = RoundedCornerShape(999.dp),
-                            color = Color(0xFF1A1F2C),
-                            border = BorderStroke(1.dp, Color(0xFF2B3244)),
+                                .padding(horizontal = 9.dp, vertical = 4.dp),
                         ) {
                             Text(
                                 text = "@$handle",
-                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp),
                                 fontSize = 10.sp,
-                                fontWeight = FontWeight.Bold,
-                                color = Color(0xFFE2E8F0),
+                                fontWeight = FontWeight.SemiBold,
+                                color = MaterialTheme.colorScheme.onSurface,
                             )
                         }
                     }
@@ -1792,10 +1795,9 @@ private fun CommentsBottomSheet(
                 Box(
                     modifier = Modifier
                         .weight(1f)
-                        .clip(RoundedCornerShape(10.dp))
-                        .background(Color(0xFF11151E))
-                        .border(1.dp, Color(0xFF262D3D), RoundedCornerShape(10.dp))
-                        .padding(horizontal = 12.dp, vertical = 10.dp),
+                        .clip(RoundedCornerShape(999.dp))
+                        .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.52f))
+                        .padding(horizontal = 14.dp, vertical = 10.dp),
                 ) {
                     BasicTextField(
                         value = draft,

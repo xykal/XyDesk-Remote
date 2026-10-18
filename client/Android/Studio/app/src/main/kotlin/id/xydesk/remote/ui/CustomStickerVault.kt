@@ -141,21 +141,19 @@ internal object CustomStickerVault {
 
     @Suppress("DEPRECATION")
     private fun compressBitmapToWebp(src: Bitmap): ByteArray {
-        // Center-crop & scale ke ukuran stiker 240x240 dengan sudut membulat halus bila gambar penuh
-        val square = Bitmap.createBitmap(STICKER_DIM, STICKER_DIM, Bitmap.Config.ARGB_8888)
-        val canvas = Canvas(square)
+        // Pertahankan shape & rasio asli gambar stiker tanpa rounded mask / tanpa crop kotak
+        val srcW = src.width.coerceAtLeast(1)
+        val srcH = src.height.coerceAtLeast(1)
+        val maxSide = maxOf(srcW, srcH)
+        val scale = if (maxSide > STICKER_DIM) STICKER_DIM.toFloat() / maxSide.toFloat() else 1f
+        val dstW = (srcW * scale).toInt().coerceAtLeast(1)
+        val dstH = (srcH * scale).toInt().coerceAtLeast(1)
+
+        val outBmp = Bitmap.createBitmap(dstW, dstH, Bitmap.Config.ARGB_8888)
+        val canvas = Canvas(outBmp)
         val paint = Paint(Paint.ANTI_ALIAS_FLAG or Paint.FILTER_BITMAP_FLAG)
-
-        val minSide = minOf(src.width, src.height).coerceAtLeast(1)
-        val cropX = (src.width - minSide) / 2
-        val cropY = (src.height - minSide) / 2
-        val srcRect = Rect(cropX, cropY, cropX + minSide, cropY + minSide)
-        val dstRect = RectF(0f, 0f, STICKER_DIM.toFloat(), STICKER_DIM.toFloat())
-
-        if (!src.hasAlpha()) {
-            canvas.drawRoundRect(dstRect, 36f, 36f, paint)
-            paint.xfermode = PorterDuffXfermode(PorterDuff.Mode.SRC_IN)
-        }
+        val srcRect = Rect(0, 0, srcW, srcH)
+        val dstRect = RectF(0f, 0f, dstW.toFloat(), dstH.toFloat())
         canvas.drawBitmap(src, srcRect, dstRect, paint)
 
         val baos = ByteArrayOutputStream()
@@ -164,7 +162,7 @@ internal object CustomStickerVault {
         } else {
             Bitmap.CompressFormat.WEBP
         }
-        square.compress(fmt, 78, baos)
+        outBmp.compress(fmt, 82, baos)
         return baos.toByteArray()
     }
 

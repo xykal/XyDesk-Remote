@@ -134,7 +134,7 @@ class XySessionService : Service() {
             // Ikon app sendiri (mark monokrom) — dulu pakai
             // android.R.drawable.stat_sys_upload_done, ikon sistem panah
             // upload yang tidak ada hubungannya dengan remote desktop.
-            .setSmallIcon(id.xydesk.remote.R.drawable.ic_launcher_monochrome)
+            .setSmallIcon(id.xydesk.remote.R.drawable.ic_stat_xydesk)
             .setContentTitle(
                 when (lastStatus) {
                     STATUS_CONNECTING -> xyNow("Menyambungkan…", "Connecting…")
@@ -210,7 +210,7 @@ class XySessionService : Service() {
         builder.setVisibility(NotificationCompat.VISIBILITY_PRIVATE)
             .setPublicVersion(
                 NotificationCompat.Builder(this, CHANNEL_ID)
-                    .setSmallIcon(id.xydesk.remote.R.drawable.ic_launcher_monochrome)
+                    .setSmallIcon(id.xydesk.remote.R.drawable.ic_stat_xydesk)
                     .setContentTitle(xyNow("Sesi remote aktif", "Remote session active"))
                     .setContentText("XyDesk Remote")
                     .setColor(NOTIF_ACCENT)

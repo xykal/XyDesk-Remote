@@ -1891,8 +1891,8 @@ internal fun GlobalChatScreen(
                 }
             }
 
-            // Banner Pesan yang Disematkan (Pinned Message Bar) di Atas Chat Global
-            AnimatedVisibility(visible = pinnedMessage != null, enter = fadeIn(), exit = fadeOut()) {
+            // Banner Pesan yang Disematkan (Pinned Message Bar) di Atas Chat Global (disembunyikan di mode Floating Sesi agar ruang pesan lega)
+            AnimatedVisibility(visible = pinnedMessage != null && !isOverlayMode, enter = fadeIn(), exit = fadeOut()) {
                 val pin = pinnedMessage
                 if (pin != null) {
                     Row(
@@ -2248,9 +2248,7 @@ internal fun GlobalChatScreen(
                                                 Image(
                                                     bitmap = cst.bitmap.asImageBitmap(),
                                                     contentDescription = null,
-                                                    modifier = Modifier
-                                                        .size(76.dp)
-                                                        .clip(RoundedCornerShape(14.dp)),
+                                                    modifier = Modifier.size(78.dp),
                                                     contentScale = ContentScale.Fit,
                                                 )
                                                 Box(
@@ -2315,9 +2313,7 @@ internal fun GlobalChatScreen(
                                             Image(
                                                 painter = painterResource(st.drawableRes),
                                                 contentDescription = null,
-                                                modifier = Modifier
-                                                    .size(76.dp)
-                                                    .clip(RoundedCornerShape(14.dp)),
+                                                modifier = Modifier.size(78.dp),
                                                 contentScale = ContentScale.Fit,
                                             )
                                             Box(
@@ -2675,8 +2671,8 @@ internal fun GlobalChatScreen(
                     }
                 }
 
-                // Toggle Pengumuman Admin @xykal (otomatis tersemat di Global Chat)
-                if (isFounderAccount(verifiedGhLogin) || isFounderAccount(nickname)) {
+                // Toggle Pengumuman Admin @xykal (otomatis tersemat di Global Chat — disembunyikan di Floating Sesi agar ringkas)
+                if (!isOverlayMode && (isFounderAccount(verifiedGhLogin) || isFounderAccount(nickname))) {
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
@@ -2739,13 +2735,13 @@ internal fun GlobalChatScreen(
                     }
                 }
 
-                // Bar Input Pesan (100% Vector Icons, Monokrom Bersih / Liquid Glass di mode sesi)
+                // Bar Input Pesan (100% Vector Icons, Monokrom Bersih / HUD Ringkas di mode sesi)
                 Surface(
-                    color = if (isOverlayMode) Color(0xFF0E0E13).copy(alpha = 0.56f) else Color(0xFF141418),
-                    shape = RoundedCornerShape(26.dp),
+                    color = if (isOverlayMode) Color(0xFF12151E).copy(alpha = 0.92f) else Color(0xFF141418),
+                    shape = RoundedCornerShape(24.dp),
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(horizontal = 10.dp, vertical = 8.dp)
+                        .padding(horizontal = if (isOverlayMode) 8.dp else 10.dp, vertical = if (isOverlayMode) 5.dp else 8.dp)
                         .let { mod ->
                             if (isOverlayMode) {
                                 mod.border(
@@ -2926,36 +2922,39 @@ internal fun GlobalChatScreen(
                         horizontalAlignment = if (targetMsg.mine) Alignment.End else Alignment.Start,
                         verticalArrangement = Arrangement.spacedBy(10.dp),
                     ) {
-                        // 1. Bar Reaksi Cepat Mengambang di atas Bubble (gaya iPhone WhatsApp)
+                        // 1. Bar Reaksi Visual Mengambang di atas Bubble (Ikon Vektor Berwarna + Label Ringkas)
                         Surface(
-                            color = Color(0xFF1C1C22).copy(alpha = 0.96f),
+                            color = Color(0xFF161821).copy(alpha = 0.98f),
                             shape = RoundedCornerShape(50),
-                            shadowElevation = 14.dp,
+                            shadowElevation = 16.dp,
+                            border = BorderStroke(1.dp, Color.White.copy(alpha = 0.14f)),
                         ) {
                             Row(
                                 modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
-                                horizontalArrangement = Arrangement.spacedBy(6.dp),
+                                horizontalArrangement = Arrangement.spacedBy(8.dp),
                                 verticalAlignment = Alignment.CenterVertically,
                             ) {
-                                listOf("GG", "FIRE", "LOL", "+1", "RESPECT", "KING").forEach { tag ->
+                                listOf("FIRE", "LOL", "+1", "KING", "GG", "RESPECT").forEach { tag ->
                                     val isSelected = messageReactions[targetMsg.id] == tag
                                     Box(
                                         modifier = Modifier
-                                            .clip(RoundedCornerShape(50))
-                                            .background(if (isSelected) Color.White else Color(0xFF27272F))
+                                            .size(36.dp)
+                                            .clip(CircleShape)
+                                            .background(
+                                                if (isSelected) Color(0xFF6366F1).copy(alpha = 0.28f)
+                                                else Color(0xFF232734),
+                                            )
+                                            .let { mod ->
+                                                if (isSelected) mod.border(1.4.dp, Color(0xFF818CF8), CircleShape) else mod
+                                            }
                                             .clickable {
                                                 if (isSelected) messageReactions.remove(targetMsg.id)
                                                 else messageReactions[targetMsg.id] = tag
                                                 focusedContextMsg = null
-                                            }
-                                            .padding(horizontal = 10.dp, vertical = 5.dp),
+                                            },
+                                        contentAlignment = Alignment.Center,
                                     ) {
-                                        Text(
-                                            text = tag,
-                                            style = MaterialTheme.typography.labelSmall,
-                                            fontWeight = FontWeight.ExtraBold,
-                                            color = if (isSelected) Color(0xFF09090B) else Color.White,
-                                        )
+                                        ChatReactionVisualIcon(tag = tag, size = 21.dp)
                                     }
                                 }
                             }
@@ -3947,9 +3946,7 @@ private fun MessageBubble(
                             Image(
                                 bitmap = customDecoded.second.asImageBitmap(),
                                 contentDescription = null,
-                                modifier = Modifier
-                                    .size(136.dp)
-                                    .clip(RoundedCornerShape(18.dp)),
+                                modifier = Modifier.size(142.dp),
                                 contentScale = ContentScale.Fit,
                             )
                         }
@@ -3959,9 +3956,7 @@ private fun MessageBubble(
                         Image(
                             painter = painterResource(preset.drawableRes),
                             contentDescription = null,
-                            modifier = Modifier
-                                .size(136.dp)
-                                .clip(RoundedCornerShape(18.dp)),
+                            modifier = Modifier.size(142.dp),
                             contentScale = ContentScale.Fit,
                         )
                     }
@@ -4443,21 +4438,25 @@ private fun MessageBubble(
                 }
             }
 
-            // Pill Reaksi (bila ada reaksi pada bubble ini)
+            // Pill Reaksi Visual (menampilkan ikon vektor berwarna + jumlah reaksi, bukan sekadar tulisan)
             if (!reaction.isNullOrBlank()) {
-                Spacer(Modifier.height(2.dp))
-                Box(
+                Spacer(Modifier.height(3.dp))
+                Row(
                     modifier = Modifier
                         .clip(RoundedCornerShape(50))
-                        .background(Color(0xFF27272F))
-                        .padding(horizontal = 8.dp, vertical = 2.dp),
+                        .background(Color(0xFF1F2330))
+                        .border(0.8.dp, Color.White.copy(alpha = 0.16f), RoundedCornerShape(50))
+                        .padding(horizontal = 8.dp, vertical = 3.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(4.dp),
                 ) {
+                    ChatReactionVisualIcon(tag = reaction, size = 14.dp)
                     Text(
-                        text = reaction,
+                        text = "1",
                         style = MaterialTheme.typography.labelSmall,
                         fontSize = 10.sp,
                         fontWeight = FontWeight.ExtraBold,
-                        color = Color.White,
+                        color = Color(0xFFE2E8F0),
                     )
                 }
             }
@@ -4939,14 +4938,145 @@ private fun saveOrShareChatAttachment(context: Context, msg: ChatMessage) {
  *   agak transparan (layar remote di belakangnya tetap terlihat tembus), bisa digeser lewat
  *   header Liquid Glass, serta bisa diubah ukurannya (Compact / Luas).
  */
+/**
+ * Komponen Visual Vektor Berwarna untuk Reaksi Chat Global (FIRE, LOL, +1/HEART, KING, GG, RESPECT)
+ * agar reaksi tampil sebagai ikon visual ekspresif, bukan sekadar tulisan teks.
+ */
+@Composable
+private fun ChatReactionVisualIcon(
+    tag: String,
+    size: Dp = 18.dp,
+) {
+    Canvas(modifier = Modifier.size(size)) {
+        val w = this.size.width
+        val h = this.size.height
+        when (tag.uppercase(Locale.ROOT)) {
+            "FIRE" -> {
+                // Lidah Api Luar (Oranye Menyala)
+                val outer = Path().apply {
+                    moveTo(w * 0.50f, h * 0.06f)
+                    cubicTo(w * 0.82f, h * 0.30f, w * 0.90f, h * 0.58f, w * 0.78f, h * 0.80f)
+                    cubicTo(w * 0.70f, h * 0.93f, w * 0.30f, h * 0.93f, w * 0.22f, h * 0.80f)
+                    cubicTo(w * 0.10f, h * 0.58f, w * 0.18f, h * 0.32f, w * 0.42f, h * 0.20f)
+                    cubicTo(w * 0.38f, h * 0.34f, w * 0.45f, h * 0.38f, w * 0.50f, h * 0.06f)
+                    close()
+                }
+                drawPath(outer, color = Color(0xFFFF5722))
+                // Inti Api Dalam (Kuning Emas)
+                val inner = Path().apply {
+                    moveTo(w * 0.52f, h * 0.36f)
+                    cubicTo(w * 0.70f, h * 0.52f, w * 0.72f, h * 0.72f, w * 0.62f, h * 0.85f)
+                    cubicTo(w * 0.55f, h * 0.92f, w * 0.43f, h * 0.92f, w * 0.36f, h * 0.84f)
+                    cubicTo(w * 0.28f, h * 0.72f, w * 0.34f, h * 0.52f, w * 0.52f, h * 0.36f)
+                    close()
+                }
+                drawPath(inner, color = Color(0xFFFFCA28))
+            }
+            "LOL" -> {
+                // Wajah Ketawa Emas + Mata Melengkung + Air Mata Bahagia Biru
+                drawCircle(color = Color(0xFFFBBF24), radius = w * 0.44f, center = Offset(w * 0.50f, h * 0.50f))
+                val eyeStroke = Stroke(width = w * 0.085f, cap = StrokeCap.Round)
+                drawArc(
+                    color = Color(0xFF1E1B4B),
+                    startAngle = 200f,
+                    sweepAngle = 140f,
+                    useCenter = false,
+                    topLeft = Offset(w * 0.22f, h * 0.30f),
+                    size = Size(w * 0.20f, h * 0.16f),
+                    style = eyeStroke,
+                )
+                drawArc(
+                    color = Color(0xFF1E1B4B),
+                    startAngle = 200f,
+                    sweepAngle = 140f,
+                    useCenter = false,
+                    topLeft = Offset(w * 0.58f, h * 0.30f),
+                    size = Size(w * 0.20f, h * 0.16f),
+                    style = eyeStroke,
+                )
+                // Mulut Ketawa Lebar
+                drawArc(
+                    color = Color(0xFFDC2626),
+                    startAngle = 0f,
+                    sweepAngle = 180f,
+                    useCenter = true,
+                    topLeft = Offset(w * 0.25f, h * 0.42f),
+                    size = Size(w * 0.50f, h * 0.36f),
+                )
+                // Air mata ketawa kiri & kanan
+                drawCircle(color = Color(0xFF38BDF8), radius = w * 0.09f, center = Offset(w * 0.14f, h * 0.54f))
+                drawCircle(color = Color(0xFF38BDF8), radius = w * 0.09f, center = Offset(w * 0.86f, h * 0.54f))
+            }
+            "+1" -> {
+                // Hati Merah Muda Ekspresif (Love / Like)
+                val heart = Path().apply {
+                    moveTo(w * 0.50f, h * 0.86f)
+                    cubicTo(w * 0.12f, h * 0.62f, w * 0.06f, h * 0.26f, w * 0.28f, h * 0.16f)
+                    cubicTo(w * 0.42f, h * 0.10f, w * 0.50f, h * 0.24f, w * 0.50f, h * 0.28f)
+                    cubicTo(w * 0.50f, h * 0.24f, w * 0.58f, h * 0.10f, w * 0.72f, h * 0.16f)
+                    cubicTo(w * 0.94f, h * 0.26f, w * 0.88f, h * 0.62f, w * 0.50f, h * 0.86f)
+                    close()
+                }
+                drawPath(heart, color = Color(0xFFF43F5E))
+            }
+            "KING" -> {
+                // Mahkota Raja Emas + Permata Merah di Tengah
+                val crown = Path().apply {
+                    moveTo(w * 0.12f, h * 0.76f)
+                    lineTo(w * 0.18f, h * 0.26f)
+                    lineTo(w * 0.36f, h * 0.50f)
+                    lineTo(w * 0.50f, h * 0.18f)
+                    lineTo(w * 0.64f, h * 0.50f)
+                    lineTo(w * 0.82f, h * 0.26f)
+                    lineTo(w * 0.88f, h * 0.76f)
+                    close()
+                }
+                drawPath(crown, color = Color(0xFFF59E0B))
+                drawCircle(color = Color(0xFFEF4444), radius = w * 0.075f, center = Offset(w * 0.50f, h * 0.58f))
+            }
+            "GG" -> {
+                // Petir Elektrik Biru-Ungu (Fast / GGWP)
+                val bolt = Path().apply {
+                    moveTo(w * 0.58f, h * 0.08f)
+                    lineTo(w * 0.20f, h * 0.54f)
+                    lineTo(w * 0.48f, h * 0.54f)
+                    lineTo(w * 0.38f, h * 0.92f)
+                    lineTo(w * 0.80f, h * 0.44f)
+                    lineTo(w * 0.52f, h * 0.44f)
+                    close()
+                }
+                drawPath(bolt, color = Color(0xFF38BDF8))
+            }
+            else -> {
+                // RESPECT: Perisai Bintang Emerald
+                val star = Path().apply {
+                    moveTo(w * 0.50f, h * 0.08f)
+                    lineTo(w * 0.63f, h * 0.35f)
+                    lineTo(w * 0.92f, h * 0.39f)
+                    lineTo(w * 0.71f, h * 0.60f)
+                    lineTo(w * 0.76f, h * 0.89f)
+                    lineTo(w * 0.50f, h * 0.75f)
+                    lineTo(w * 0.24f, h * 0.89f)
+                    lineTo(w * 0.29f, h * 0.60f)
+                    lineTo(w * 0.08f, h * 0.39f)
+                    lineTo(w * 0.37f, h * 0.35f)
+                    close()
+                }
+                drawPath(star, color = Color(0xFF10B981))
+            }
+        }
+    }
+}
+
 @Composable
 internal fun FloatingSessionChatOverlay(
     modifier: Modifier = Modifier,
 ) {
     var chatWindowOpen by remember { mutableStateOf(false) }
     var isCompactFloating by remember { mutableStateOf(true) }
-    var bubbleOffsetX by remember { mutableFloatStateOf(20f) }
-    var bubbleOffsetY by remember { mutableFloatStateOf(160f) }
+    var isGhostOpacity by remember { mutableStateOf(false) }
+    var bubbleOffsetX by remember { mutableFloatStateOf(16f) }
+    var bubbleOffsetY by remember { mutableFloatStateOf(96f) }
     var panelOffsetX by remember { mutableFloatStateOf(0f) }
     var panelOffsetY by remember { mutableFloatStateOf(0f) }
     val onlineCount by AppUpdate.appWideOnlineCount.collectAsState()
@@ -4955,75 +5085,66 @@ internal fun FloatingSessionChatOverlay(
         modifier = modifier
             .fillMaxSize()
             .statusBarsPadding()
-            .navigationBarsPadding()
             .displayCutoutPadding(),
     ) {
         if (!chatWindowOpen) {
-            // Kapsul Liquid Glass Hitam-Putih Agak Transparan (Draggable)
+            // Tombol Kapsul Sesi Ringkas & Draggable di Tepi Layar
             Box(
                 modifier = Modifier
                     .offset { IntOffset(bubbleOffsetX.roundToInt(), bubbleOffsetY.roundToInt()) }
-                    .shadow(14.dp, RoundedCornerShape(50))
+                    .shadow(10.dp, RoundedCornerShape(50))
                     .clip(RoundedCornerShape(50))
-                    .background(
-                        Brush.verticalGradient(
-                            colors = listOf(
-                                Color.White.copy(alpha = 0.22f),
-                                Color(0xFF0C0C10).copy(alpha = 0.50f),
-                                Color(0xFF060609).copy(alpha = 0.62f),
-                            ),
-                        ),
-                    )
+                    .background(Color(0xFF10131C).copy(alpha = 0.88f))
                     .border(
-                        width = 1.1.dp,
-                        brush = Brush.linearGradient(
-                            colors = listOf(
-                                Color.White.copy(alpha = 0.62f),
-                                Color.White.copy(alpha = 0.14f),
-                                Color.White.copy(alpha = 0.42f),
-                            ),
-                        ),
+                        width = 1.dp,
+                        color = Color(0xFF6366F1).copy(alpha = 0.55f),
                         shape = RoundedCornerShape(50),
                     )
                     .pointerInput(Unit) {
                         detectDragGestures { change, dragAmount ->
                             change.consume()
-                            bubbleOffsetX = (bubbleOffsetX + dragAmount.x).coerceIn(6f, 920f)
-                            bubbleOffsetY = (bubbleOffsetY + dragAmount.y).coerceIn(36f, 1850f)
+                            bubbleOffsetX = (bubbleOffsetX + dragAmount.x).coerceIn(6f, 1800f)
+                            bubbleOffsetY = (bubbleOffsetY + dragAmount.y).coerceIn(12f, 1000f)
                         }
                     }
                     .clickable { chatWindowOpen = true }
-                    .padding(horizontal = 13.dp, vertical = 9.dp),
+                    .padding(horizontal = 12.dp, vertical = 7.dp),
                 contentAlignment = Alignment.Center,
             ) {
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(7.dp),
+                    horizontalArrangement = Arrangement.spacedBy(6.dp),
                 ) {
+                    Box(
+                        modifier = Modifier
+                            .size(7.dp)
+                            .clip(CircleShape)
+                            .background(Color(0xFF10B981)),
+                    )
                     Icon(
                         imageVector = XyIcons.Chat,
-                        contentDescription = "Buka Chat Global Liquid Glass",
+                        contentDescription = "Buka Chat Global Sesi",
                         tint = Color.White,
-                        modifier = Modifier.size(18.dp),
+                        modifier = Modifier.size(15.dp),
                     )
                     Text(
                         text = "Chat",
-                        style = MaterialTheme.typography.labelMedium,
+                        style = MaterialTheme.typography.labelSmall,
                         fontWeight = FontWeight.ExtraBold,
                         color = Color.White,
                     )
                     Box(
                         modifier = Modifier
                             .clip(RoundedCornerShape(50))
-                            .background(Color.White.copy(alpha = 0.18f))
-                            .padding(horizontal = 6.dp, vertical = 1.5.dp),
+                            .background(Color(0xFF6366F1).copy(alpha = 0.28f))
+                            .padding(horizontal = 5.dp, vertical = 1.dp),
                     ) {
                         Text(
                             text = "${onlineCount.coerceAtLeast(1)}",
                             style = MaterialTheme.typography.labelSmall,
-                            fontSize = 9.5.sp,
+                            fontSize = 9.sp,
                             fontWeight = FontWeight.ExtraBold,
-                            color = Color.White,
+                            color = Color(0xFFE0E7FF),
                         )
                     }
                 }
@@ -5031,40 +5152,28 @@ internal fun FloatingSessionChatOverlay(
         }
 
         if (chatWindowOpen) {
-            val panelShape = RoundedCornerShape(26.dp)
+            val panelShape = RoundedCornerShape(20.dp)
+            val panelAlpha = if (isGhostOpacity) 0.64f else 0.94f
             Box(
                 modifier = Modifier
                     .fillMaxSize()
-                    .padding(horizontal = 12.dp, vertical = 18.dp),
-                contentAlignment = Alignment.Center,
+                    .imePadding()
+                    .padding(horizontal = 12.dp, vertical = 10.dp),
+                contentAlignment = Alignment.CenterEnd,
             ) {
-                // Panel Mengambang Liquid Glass Hitam-Putih Agak Transparan
+                // Panel HUD Samping (Side-Docked PiP): Tidak menghalangi tengah layar RDP, nyaman digeser & diketik di landscape
                 Box(
                     modifier = Modifier
                         .offset { IntOffset(panelOffsetX.roundToInt(), panelOffsetY.roundToInt()) }
-                        .widthIn(max = if (isCompactFloating) 348.dp else 450.dp)
-                        .fillMaxWidth()
-                        .fillMaxHeight(if (isCompactFloating) 0.72f else 0.88f)
-                        .shadow(24.dp, panelShape)
+                        .width(if (isCompactFloating) 316.dp else 380.dp)
+                        .heightIn(min = 220.dp, max = if (isCompactFloating) 295.dp else 420.dp)
+                        .fillMaxHeight(if (isCompactFloating) 0.78f else 0.90f)
+                        .shadow(20.dp, panelShape)
                         .clip(panelShape)
-                        .background(
-                            Brush.verticalGradient(
-                                colors = listOf(
-                                    Color(0xFF14141B).copy(alpha = 0.54f),
-                                    Color(0xFF09090D).copy(alpha = 0.48f),
-                                    Color(0xFF0E0E14).copy(alpha = 0.58f),
-                                ),
-                            ),
-                        )
+                        .background(Color(0xFF0B0D14).copy(alpha = panelAlpha))
                         .border(
-                            width = 1.2.dp,
-                            brush = Brush.linearGradient(
-                                colors = listOf(
-                                    Color.White.copy(alpha = 0.56f),
-                                    Color.White.copy(alpha = 0.10f),
-                                    Color.White.copy(alpha = 0.34f),
-                                ),
-                            ),
+                            width = 1.dp,
+                            color = Color.White.copy(alpha = 0.18f),
                             shape = panelShape,
                         )
                         .clickable(enabled = false) {},
@@ -5073,11 +5182,20 @@ internal fun FloatingSessionChatOverlay(
                         onBack = { chatWindowOpen = false },
                         isOverlayMode = true,
                         onHeaderDrag = { dx, dy ->
-                            panelOffsetX = (panelOffsetX + dx).coerceIn(-260f, 260f)
-                            panelOffsetY = (panelOffsetY + dy).coerceIn(-340f, 340f)
+                            panelOffsetX = (panelOffsetX + dx).coerceIn(-680f, 340f)
+                            panelOffsetY = (panelOffsetY + dy).coerceIn(-260f, 260f)
                         },
                         isCompactFloating = isCompactFloating,
-                        onToggleCompactFloating = { isCompactFloating = !isCompactFloating },
+                        onToggleCompactFloating = {
+                            if (!isCompactFloating && !isGhostOpacity) {
+                                isGhostOpacity = true
+                            } else if (isGhostOpacity) {
+                                isGhostOpacity = false
+                                isCompactFloating = true
+                            } else {
+                                isCompactFloating = false
+                            }
+                        },
                     )
                 }
             }

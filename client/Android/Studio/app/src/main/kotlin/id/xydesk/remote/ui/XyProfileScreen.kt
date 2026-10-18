@@ -185,7 +185,7 @@ internal fun XyProfileScreen(
             XyGlassRow(
                 icon = XyIcons.Refresh,
                 title = if (updateChecking) xy("Memeriksa…", "Checking…")
-                else xy("Pusat Pembaruan (Download Data & APK)", "Update Center (Download Data & APK)"),
+                else xy("Pusat Pembaruan Aplikasi", "App Update Center"),
                 onClick = {
                     otaSheetOpen = true
                     if (!updateChecking) {
@@ -687,38 +687,37 @@ private fun CommunityAccountCard(
                 }
             }
 
-            Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+            Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(6.dp),
                 ) {
                     Text(
-                        name ?: githubUser ?: xy("Akun $accountId", "Account $accountId"),
+                        text = name ?: githubUser ?: xy("Akun $accountId", "Account $accountId"),
                         style = MaterialTheme.typography.titleMedium,
                         fontWeight = FontWeight.Bold,
+                        maxLines = 1,
+                        overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
                     )
                     if (isFounder) {
                         XyFounderBadge(compact = true)
                     }
                 }
                 Text(
-                    buildString {
+                    text = buildString {
                         if (!githubUser.isNullOrBlank()) {
                             append("@$githubUser  ·  ")
                         }
-                        append("ID: $accountId")
+                        append("ID $accountId")
+                        if (!versionName.isNullOrBlank()) {
+                            append("  ·  v$versionName")
+                        }
                     },
                     style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    maxLines = 1,
+                    overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
                 )
-                Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                    ProfileChip(xy("v{0}", "v{0}", versionName ?: "-"))
-                    ProfileChip(
-                        if (deviceCount == 1) xy("1 perangkat", "1 device")
-                        else xy("{0} perangkat", "{0} devices", deviceCount),
-                    )
-                    ProfileChip("⏱️ ${formatLeaderboardDuration(activeUsageSecs)}")
-                }
             }
 
             // Deret ikon aksi di pojok kanan kartu profil (Ganti nama, Pemulihan)
@@ -742,37 +741,32 @@ private fun CommunityAccountCard(
             }
         }
 
-        if (isFounder) {
-            XyFounderBadge(
-                compact = false,
-                subtitle = xy("Pemilik & Kreator XyVerse", "XyVerse Owner & Creator"),
-            )
-        }
-
-        // Baris Status & Tombol Login GitHub 1-Klik via In-App Browser (Chrome Custom Tab ⋮)
+        // Baris Status & Tombol Login GitHub 1-Klik via In-App Browser (Chrome Custom Tab)
         val ghUser = githubUser
         Row(
             modifier = Modifier
                 .fillMaxWidth()
                 .clip(RoundedCornerShape(12.dp))
-                .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.42f))
-                .padding(horizontal = 12.dp, vertical = 9.dp),
+                .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.36f))
+                .padding(horizontal = 12.dp, vertical = 10.dp),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(10.dp),
         ) {
             GitHubLogoIcon(size = 20.dp, tint = MaterialTheme.colorScheme.onSurface)
             Column(Modifier.weight(1f)) {
                 Text(
-                    if (ghUser != null) xy("GitHub Terhubung: @$ghUser", "GitHub Connected: @$ghUser")
-                    else xy("Hubungkan Akun GitHub", "Connect GitHub Account"),
+                    if (ghUser != null) xy("GitHub: @$ghUser", "GitHub: @$ghUser")
+                    else xy("Hubungkan GitHub", "Connect GitHub"),
                     style = MaterialTheme.typography.labelLarge,
                     fontWeight = FontWeight.SemiBold,
+                    maxLines = 1,
                 )
                 Text(
-                    if (ghUser != null) xy("Aktif untuk Buat RDP Cloud & Chat Global", "Active for Cloud RDP & Global Chat")
-                    else xy("Login GitHub langsung & klik Authorize (tanpa kode)", "Sign in to GitHub & tap Authorize (no code needed)"),
+                    if (ghUser != null) xy("Sinkron RDP Cloud & Chat Global aktif", "Cloud RDP & Global Chat sync active")
+                    else xy("1-klik login & Authorize otomatis", "1-tap sign in & auto Authorize"),
                     style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    maxLines = 1,
                 )
             }
             if (ghUser != null) {
@@ -794,7 +788,7 @@ private fun CommunityAccountCard(
                 )
             } else {
                 XyPillButton(
-                    text = if (githubBusy) xy("Menghubungkan…", "Connecting…") else xy("Login GitHub (Chrome)", "Login GitHub (Chrome)"),
+                    text = if (githubBusy) xy("Menghubungkan…", "Connecting…") else xy("Masuk GitHub", "Sign in"),
                     onClick = {
                         githubBusy = true
                         scope.launch {
@@ -822,14 +816,12 @@ private fun CommunityAccountCard(
             }
         }
 
-        // Statistik Aktivitas Profil (Waktu Bermain/Aktif APK, Sesi, Stiker Favorit, Proteksi XyShield)
+        // Statistik Aktivitas Profil (Flat, Rapi, Tanpa Card Bertumpuk)
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .clip(RoundedCornerShape(12.dp))
-                .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.32f))
-                .padding(horizontal = 12.dp, vertical = 10.dp),
-            horizontalArrangement = Arrangement.SpaceBetween,
+                .padding(top = 2.dp, bottom = 2.dp),
+            horizontalArrangement = Arrangement.SpaceEvenly,
             verticalAlignment = Alignment.CenterVertically,
         ) {
             Column(horizontalAlignment = Alignment.CenterHorizontally) {
@@ -845,6 +837,12 @@ private fun CommunityAccountCard(
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             }
+            Box(
+                Modifier
+                    .width(1.dp)
+                    .height(22.dp)
+                    .background(MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.35f)),
+            )
             Column(horizontalAlignment = Alignment.CenterHorizontally) {
                 Text(
                     text = "$sessionsPlayed",
@@ -857,6 +855,30 @@ private fun CommunityAccountCard(
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             }
+            Box(
+                Modifier
+                    .width(1.dp)
+                    .height(22.dp)
+                    .background(MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.35f)),
+            )
+            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                Text(
+                    text = "$deviceCount",
+                    style = MaterialTheme.typography.labelLarge,
+                    fontWeight = FontWeight.ExtraBold,
+                )
+                Text(
+                    text = xy("Perangkat", "Devices"),
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+            Box(
+                Modifier
+                    .width(1.dp)
+                    .height(22.dp)
+                    .background(MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.35f)),
+            )
             Column(horizontalAlignment = Alignment.CenterHorizontally) {
                 Text(
                     text = "$favStickersCount",
@@ -865,19 +887,6 @@ private fun CommunityAccountCard(
                 )
                 Text(
                     text = xy("Stiker Fav", "Fav Stickers"),
-                    style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-            }
-            Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                Text(
-                    text = "AKTIF",
-                    style = MaterialTheme.typography.labelLarge,
-                    fontWeight = FontWeight.ExtraBold,
-                    color = Color(0xFF10B981),
-                )
-                Text(
-                    text = "XyShield",
                     style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
