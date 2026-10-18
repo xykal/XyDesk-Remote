@@ -174,6 +174,29 @@ internal object AppUpdate {
             val outFile = File(appCtx.filesDir, "xydesk_live_data_pack.json")
             outFile.writeText(rawJson, Charsets.UTF_8)
 
+            // Sinkronkan juga konfigurasi animasi bubble & badge khusus dari paket data OTA
+            runCatching {
+                json.optJSONObject("bubble_anim_config")?.let { bcfg ->
+                    val defaultPreset = bcfg.optString("default_preset", "SPARKLES").trim()
+                    if (defaultPreset.isNotBlank()) {
+                        appCtx.getSharedPreferences("xydesk_global_chat_prefs", Context.MODE_PRIVATE)
+                            .edit()
+                            .putString("bubble_floating_element", defaultPreset)
+                            .apply()
+                    }
+                }
+                json.optJSONObject("special_roles")?.let { rolesObj ->
+                    val keys = rolesObj.keys()
+                    while (keys.hasNext()) {
+                        val k = keys.next()
+                        val roleVal = rolesObj.optString(k, "").trim()
+                        if (roleVal.isNotBlank()) {
+                            XySpecialRoleRegistry.setRole(appCtx, k, roleVal)
+                        }
+                    }
+                }
+            }
+
             appCtx.getSharedPreferences(PREFS_DATA_PACK, Context.MODE_PRIVATE)
                 .edit()
                 .putString(KEY_INSTALLED_DATA_VER, dataVer)

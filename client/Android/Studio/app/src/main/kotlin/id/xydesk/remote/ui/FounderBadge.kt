@@ -1045,7 +1045,8 @@ internal fun resolveCustomBubbleShape(
 }
 
 /**
- * Menggambar elemen-elemen melayang beranimasi (Floating Animated Elements) di dalam bubble chat.
+ * Menggambar elemen-elemen melayang beranimasi (Multi-Layer AI Floating Elements + Aurora Wave + Shooting Star)
+ * di dalam bubble chat.
  */
 internal fun androidx.compose.ui.graphics.drawscope.DrawScope.drawBubbleFloatingElements(
     elementStyle: String = "",
@@ -1054,75 +1055,190 @@ internal fun androidx.compose.ui.graphics.drawscope.DrawScope.drawBubbleFloating
     secondaryColor: Color = Color(0xFFA855F7),
     phase: Float = 0f,
 ) {
-    val rawStyle = preset.ifBlank { elementStyle }.lowercase(Locale.ROOT)
+    val rawStyle = preset.ifBlank { elementStyle }.trim().lowercase(Locale.ROOT)
+    if (rawStyle == "none") return
     val style = when (rawStyle) {
-        "sparkles" -> "crystals"
-        "plasma" -> "orbs"
-        else -> rawStyle
+        "sparkles", "crystal", "crystals", "" -> "crystals"
+        "bubbles", "bubble", "orbs", "plasma" -> "bubbles"
+        "stars", "star", "aurora", "galaxy" -> "stars"
+        "cyber", "matrix", "neon" -> "cyber"
+        "hearts", "heart", "love" -> "hearts"
+        "sakura", "petals" -> "sakura"
+        "fireflies", "firefly" -> "fireflies"
+        else -> "crystals"
     }
-    if (style == "none" || style.isBlank()) return
     val w = size.width
     val h = size.height
-    if (w <= 1f || h <= 1f) return
+    if (w <= 2f || h <= 2f) return
 
+    // 1. Pita Gelombang Aurora / Plasma Halus di Latar Bubble
+    val wavePhase = phase * 2f * PI.toFloat()
+    val auroraPath = Path().apply {
+        val yBase = h * 0.68f
+        val amp = (h * 0.16f).coerceIn(4.dp.toPx(), 18.dp.toPx())
+        moveTo(0f, h)
+        lineTo(0f, yBase + sin(wavePhase) * amp)
+        val steps = 6
+        for (i in 1..steps) {
+            val x0 = w * ((i - 0.5f) / steps)
+            val x1 = w * (i.toFloat() / steps)
+            val y0 = yBase + sin(wavePhase + i * 0.95f) * amp
+            val y1 = yBase + cos(wavePhase + i * 1.15f) * (amp * 0.85f)
+            quadraticTo(x0, y0, x1, y1)
+        }
+        lineTo(w, h)
+        close()
+    }
+    drawPath(
+        path = auroraPath,
+        brush = Brush.verticalGradient(
+            colors = listOf(
+                accentColor.copy(alpha = 0.16f),
+                secondaryColor.copy(alpha = 0.08f),
+                Color.Transparent,
+            ),
+            startY = h * 0.35f,
+            endY = h,
+        ),
+    )
+
+    // 2. Efek Bintang Jatuh / Meteor Diagonal Berkala
+    val meteorProgress = ((phase * 1.85f) % 1f)
+    if (meteorProgress in 0.08f..0.78f) {
+        val norm = (meteorProgress - 0.08f) / 0.70f
+        val headX = w * (0.12f + norm * 0.78f)
+        val headY = h * (0.14f + norm * 0.56f)
+        val tailLenX = (w * 0.20f).coerceAtMost(38.dp.toPx())
+        val tailLenY = tailLenX * 0.45f
+        val meteorAlpha = sin(norm * PI.toFloat()).coerceIn(0f, 1f)
+        drawLine(
+            brush = Brush.linearGradient(
+                colors = listOf(
+                    Color.Transparent,
+                    accentColor.copy(alpha = 0.42f * meteorAlpha),
+                    Color.White.copy(alpha = 0.85f * meteorAlpha),
+                ),
+                start = Offset(headX - tailLenX, headY - tailLenY),
+                end = Offset(headX, headY),
+            ),
+            start = Offset(headX - tailLenX, headY - tailLenY),
+            end = Offset(headX, headY),
+            strokeWidth = 1.6.dp.toPx(),
+            cap = StrokeCap.Round,
+        )
+        drawCircle(
+            color = Color.White.copy(alpha = 0.90f * meteorAlpha),
+            radius = 2.2.dp.toPx(),
+            center = Offset(headX, headY),
+        )
+    }
+
+    // 3. Partikel 3D Parallax Melayang Sesuai Preset
     val seeds = listOf(
-        Triple(0.14f, 0.24f, 0.85f),
-        Triple(0.34f, 0.72f, 1.10f),
-        Triple(0.56f, 0.20f, 0.75f),
-        Triple(0.76f, 0.64f, 1.25f),
-        Triple(0.88f, 0.28f, 0.95f),
-        Triple(0.24f, 0.48f, 0.65f),
+        Triple(0.10f, 0.22f, 0.95f),
+        Triple(0.24f, 0.74f, 1.15f),
+        Triple(0.38f, 0.28f, 0.80f),
+        Triple(0.52f, 0.68f, 1.25f),
+        Triple(0.66f, 0.20f, 1.00f),
+        Triple(0.78f, 0.72f, 1.30f),
+        Triple(0.88f, 0.30f, 1.05f),
+        Triple(0.18f, 0.50f, 0.75f),
+        Triple(0.60f, 0.46f, 0.90f),
+        Triple(0.92f, 0.58f, 0.85f),
     )
 
     seeds.forEachIndexed { idx, (bx, by, scale) ->
-        val angle = (phase * 2f * PI.toFloat()) + idx * 1.15f
-        val dx = cos(angle) * (6.dp.toPx() * scale)
-        val dy = sin(angle * 1.3f) * (5.dp.toPx() * scale)
-        val cx = (w * bx + dx).coerceIn(4f, w - 4f)
-        val cy = (h * by + dy).coerceIn(4f, h - 4f)
-        val pulse = (0.45f + 0.55f * ((sin(angle) + 1f) * 0.5f)).coerceIn(0.2f, 1f)
+        val angle = (phase * 2f * PI.toFloat()) + idx * 0.92f
+        val dx = cos(angle + idx * 0.4f) * (8.dp.toPx() * scale)
+        val driftUp = ((phase + idx * 0.13f) % 1f)
+        val rawY = h * ((by - driftUp * 0.32f + 1f) % 1f)
+        val dy = sin(angle * 1.4f) * (5.dp.toPx() * scale)
+        val cx = (w * bx + dx).coerceIn(5f, (w - 5f).coerceAtLeast(5f))
+        val cy = (rawY + dy).coerceIn(5f, (h - 5f).coerceAtLeast(5f))
+        val pulse = (0.50f + 0.50f * ((sin(angle * 1.5f) + 1f) * 0.5f)).coerceIn(0.28f, 1f)
         val tint = if (idx % 2 == 0) accentColor else secondaryColor
 
         when (style) {
             "crystals" -> {
-                val r = 4.2.dp.toPx() * scale
+                val r = 5.4.dp.toPx() * scale
+                // Halo cahaya di belakang kristal
+                drawCircle(
+                    brush = Brush.radialGradient(
+                        colors = listOf(tint.copy(alpha = 0.32f * pulse), Color.Transparent),
+                        center = Offset(cx, cy),
+                        radius = r * 1.8f,
+                    ),
+                    radius = r * 1.8f,
+                    center = Offset(cx, cy),
+                )
                 val diamond = Path().apply {
                     moveTo(cx, cy - r)
-                    lineTo(cx + r * 0.68f, cy)
+                    lineTo(cx + r * 0.72f, cy)
                     lineTo(cx, cy + r)
-                    lineTo(cx - r * 0.68f, cy)
+                    lineTo(cx - r * 0.72f, cy)
                     close()
                 }
-                drawPath(path = diamond, color = tint.copy(alpha = 0.28f * pulse))
+                drawPath(path = diamond, color = tint.copy(alpha = 0.44f * pulse))
                 drawPath(
                     path = diamond,
-                    color = Color.White.copy(alpha = 0.34f * pulse),
-                    style = Stroke(width = 0.8.dp.toPx()),
+                    color = Color.White.copy(alpha = 0.62f * pulse),
+                    style = Stroke(width = 1.dp.toPx()),
+                )
+                // Kilau silang di inti kristal
+                val sparkR = r * 0.55f * pulse
+                drawLine(
+                    color = Color.White.copy(alpha = 0.75f * pulse),
+                    start = Offset(cx - sparkR, cy),
+                    end = Offset(cx + sparkR, cy),
+                    strokeWidth = 0.9.dp.toPx(),
+                )
+                drawLine(
+                    color = Color.White.copy(alpha = 0.75f * pulse),
+                    start = Offset(cx, cy - sparkR),
+                    end = Offset(cx, cy + sparkR),
+                    strokeWidth = 0.9.dp.toPx(),
                 )
             }
-            "orbs" -> {
-                val r = 7.dp.toPx() * scale
+            "bubbles" -> {
+                val r = 7.8.dp.toPx() * scale
                 drawCircle(
                     brush = Brush.radialGradient(
                         colors = listOf(
-                            tint.copy(alpha = 0.36f * pulse),
-                            tint.copy(alpha = 0.10f * pulse),
+                            Color.White.copy(alpha = 0.20f * pulse),
+                            tint.copy(alpha = 0.38f * pulse),
+                            secondaryColor.copy(alpha = 0.14f * pulse),
                             Color.Transparent,
                         ),
-                        center = Offset(cx, cy),
+                        center = Offset(cx - r * 0.25f, cy - r * 0.25f),
                         radius = r,
                     ),
                     radius = r,
                     center = Offset(cx, cy),
                 )
                 drawCircle(
-                    color = Color.White.copy(alpha = 0.45f * pulse),
-                    radius = 1.4.dp.toPx() * scale,
+                    color = Color.White.copy(alpha = 0.50f * pulse),
+                    radius = r * 0.78f,
                     center = Offset(cx, cy),
+                    style = Stroke(width = 0.9.dp.toPx()),
+                )
+                // Titik kilau spekular 3D di pojok kiri atas gelembung
+                drawCircle(
+                    color = Color.White.copy(alpha = 0.82f * pulse),
+                    radius = 1.6.dp.toPx() * scale,
+                    center = Offset(cx - r * 0.28f, cy - r * 0.28f),
                 )
             }
             "stars" -> {
-                val r = 4.5.dp.toPx() * scale * pulse
+                val r = 6.2.dp.toPx() * scale * pulse
+                drawCircle(
+                    brush = Brush.radialGradient(
+                        colors = listOf(tint.copy(alpha = 0.38f * pulse), Color.Transparent),
+                        center = Offset(cx, cy),
+                        radius = r * 1.7f,
+                    ),
+                    radius = r * 1.7f,
+                    center = Offset(cx, cy),
+                )
                 val star = Path().apply {
                     moveTo(cx, cy - r)
                     quadraticTo(cx, cy, cx + r, cy)
@@ -1131,42 +1247,74 @@ internal fun androidx.compose.ui.graphics.drawscope.DrawScope.drawBubbleFloating
                     quadraticTo(cx, cy, cx, cy - r)
                     close()
                 }
-                drawPath(path = star, color = tint.copy(alpha = 0.48f * pulse))
-                drawCircle(color = Color.White.copy(alpha = 0.65f * pulse), radius = 1.dp.toPx(), center = Offset(cx, cy))
+                drawPath(path = star, color = tint.copy(alpha = 0.68f * pulse))
+                drawCircle(color = Color.White.copy(alpha = 0.90f * pulse), radius = 1.5.dp.toPx(), center = Offset(cx, cy))
             }
             "cyber" -> {
-                val s = 4.5.dp.toPx() * scale
+                val s = 6.2.dp.toPx() * scale
+                // Jejak partikel matriks vertikal
+                drawLine(
+                    brush = Brush.verticalGradient(
+                        colors = listOf(Color.Transparent, tint.copy(alpha = 0.55f * pulse), Color.White.copy(alpha = 0.80f * pulse)),
+                        startY = cy - s * 1.8f,
+                        endY = cy + s * 0.5f,
+                    ),
+                    start = Offset(cx, cy - s * 1.8f),
+                    end = Offset(cx, cy + s * 0.5f),
+                    strokeWidth = 1.4.dp.toPx(),
+                    cap = StrokeCap.Round,
+                )
                 drawRoundRect(
-                    color = tint.copy(alpha = 0.32f * pulse),
+                    color = tint.copy(alpha = 0.52f * pulse),
                     topLeft = Offset(cx - s * 0.5f, cy - s * 0.5f),
                     size = androidx.compose.ui.geometry.Size(s, s),
-                    cornerRadius = CornerRadius(1.2.dp.toPx(), 1.2.dp.toPx()),
-                    style = Stroke(width = 1.dp.toPx()),
+                    cornerRadius = CornerRadius(1.5.dp.toPx(), 1.5.dp.toPx()),
+                    style = Stroke(width = 1.2.dp.toPx()),
+                )
+            }
+            "hearts" -> {
+                val r = 5.2.dp.toPx() * scale * (0.85f + 0.2f * pulse)
+                val heart = Path().apply {
+                    moveTo(cx, cy + r * 0.75f)
+                    cubicTo(cx - r * 1.2f, cy + r * 0.1f, cx - r * 0.95f, cy - r * 0.85f, cx, cy - r * 0.25f)
+                    cubicTo(cx + r * 0.95f, cy - r * 0.85f, cx + r * 1.2f, cy + r * 0.1f, cx, cy + r * 0.75f)
+                    close()
+                }
+                drawPath(path = heart, color = Color(0xFFF472B6).copy(alpha = 0.52f * pulse))
+                drawPath(
+                    path = heart,
+                    color = Color.White.copy(alpha = 0.45f * pulse),
+                    style = Stroke(width = 0.8.dp.toPx()),
                 )
             }
             "sakura" -> {
-                val r = 3.8.dp.toPx() * scale
+                val r = 4.8.dp.toPx() * scale
                 val petal = Path().apply {
                     moveTo(cx, cy - r)
-                    quadraticTo(cx + r, cy - r * 0.3f, cx, cy + r)
-                    quadraticTo(cx - r, cy - r * 0.3f, cx, cy - r)
+                    quadraticTo(cx + r * 1.1f, cy - r * 0.25f, cx, cy + r)
+                    quadraticTo(cx - r * 1.1f, cy - r * 0.25f, cx, cy - r)
                     close()
                 }
-                drawPath(path = petal, color = tint.copy(alpha = 0.34f * pulse))
+                drawPath(path = petal, color = Color(0xFFF9A8D4).copy(alpha = 0.52f * pulse))
             }
             "fireflies" -> {
-                val r = 5.2.dp.toPx() * scale
+                val r = 7.2.dp.toPx() * scale
                 drawCircle(
                     brush = Brush.radialGradient(
                         colors = listOf(
-                            Color(0xFFFEF08A).copy(alpha = 0.45f * pulse),
-                            tint.copy(alpha = 0.18f * pulse),
+                            Color(0xFFFEF08A).copy(alpha = 0.72f * pulse),
+                            tint.copy(alpha = 0.34f * pulse),
                             Color.Transparent,
                         ),
                         center = Offset(cx, cy),
                         radius = r,
                     ),
                     radius = r,
+                    center = Offset(cx, cy),
+                )
+                drawCircle(
+                    color = Color(0xFFFFFEF0).copy(alpha = 0.92f * pulse),
+                    radius = 1.6.dp.toPx() * scale,
                     center = Offset(cx, cy),
                 )
             }
@@ -1453,70 +1601,81 @@ internal fun FounderAnimatedBubbleBox(
             .background(
                 brush = Brush.linearGradient(
                     colors = listOf(
-                        Color(0xFF1A0633),
+                        Color(0xFF14052B),
                         Color(0xFF2E1065),
-                        Color(0xFF3B0764),
                         Color(0xFF4C1D95),
-                        Color(0xFF1E083A),
+                        Color(0xFF6B21A8),
+                        Color(0xFF3B0764),
+                        Color(0xFF190630),
                     ),
+                    start = Offset(0f, 0f),
+                    end = Offset(420f * (0.65f + 0.35f * sin(phase * 2f * PI.toFloat())), 340f),
                 ),
                 shape = shape,
             )
             .border(
-                width = 1.4.dp,
+                width = 1.6.dp,
                 brush = founderBorderBrush(phase),
                 shape = shape,
             )
             .drawWithContent {
                 val w = size.width
                 val h = size.height
+                val orbAngle = phase * 2f * PI.toFloat()
+                val orb1X = w * (0.78f + 0.14f * cos(orbAngle))
+                val orb1Y = h * (0.26f + 0.14f * sin(orbAngle))
+                val orb2X = w * (0.22f + 0.14f * sin(orbAngle))
+                val orb2Y = h * (0.76f + 0.12f * cos(orbAngle))
+
                 drawCircle(
                     brush = Brush.radialGradient(
                         colors = listOf(
-                            Color(0xFFA855F7).copy(alpha = 0.22f * pulse),
+                            Color(0xFFC084FC).copy(alpha = 0.34f * pulse),
+                            Color(0xFF9333EA).copy(alpha = 0.14f * pulse),
                             Color.Transparent,
                         ),
-                        center = Offset(w * 0.85f, h * 0.22f),
+                        center = Offset(orb1X, orb1Y),
+                        radius = w * 0.55f,
+                    ),
+                    radius = w * 0.55f,
+                    center = Offset(orb1X, orb1Y),
+                )
+                drawCircle(
+                    brush = Brush.radialGradient(
+                        colors = listOf(
+                            Color(0xFFE879F9).copy(alpha = 0.26f * pulse),
+                            Color(0xFF7E22CE).copy(alpha = 0.12f * pulse),
+                            Color.Transparent,
+                        ),
+                        center = Offset(orb2X, orb2Y),
                         radius = w * 0.48f,
                     ),
                     radius = w * 0.48f,
-                    center = Offset(w * 0.85f, h * 0.22f),
-                )
-                drawCircle(
-                    brush = Brush.radialGradient(
-                        colors = listOf(
-                            Color(0xFFC084FC).copy(alpha = 0.16f * pulse),
-                            Color.Transparent,
-                        ),
-                        center = Offset(w * 0.18f, h * 0.80f),
-                        radius = w * 0.42f,
-                    ),
-                    radius = w * 0.42f,
-                    center = Offset(w * 0.18f, h * 0.80f),
+                    center = Offset(orb2X, orb2Y),
                 )
 
-                // Elemen kristal/partikel ungu melayang di dalam bubble Founder
+                // Elemen kristal/partikel + gelombang aurora + meteor ungu melayang di dalam bubble Founder
                 drawBubbleFloatingElements(
                     elementStyle = floatingElementStyle.ifBlank { "crystals" },
-                    accentColor = Color(0xFFD8B4FE),
-                    secondaryColor = Color(0xFFA855F7),
+                    accentColor = Color(0xFFE9D5FF),
+                    secondaryColor = Color(0xFFC084FC),
                     phase = phase,
                 )
 
                 drawContent()
 
-                // Sapuan kilau diagonal tipis ungu lavender
-                val sweepX = (phase * 1.5f - 0.25f) * w
+                // Sapuan kilau kaca spekular diagonal ungu-putih kristal
+                val sweepX = (phase * 1.65f - 0.32f) * w
                 drawRect(
                     brush = Brush.linearGradient(
                         colors = listOf(
                             Color.Transparent,
-                            Color(0xFFFAF5FF).copy(alpha = 0.13f),
-                            Color(0xFFD8B4FE).copy(alpha = 0.09f),
+                            Color(0xFFFAF5FF).copy(alpha = 0.20f),
+                            Color(0xFFE879F9).copy(alpha = 0.14f),
                             Color.Transparent,
                         ),
-                        start = Offset(sweepX - w * 0.22f, 0f),
-                        end = Offset(sweepX + w * 0.22f, h),
+                        start = Offset(sweepX - w * 0.24f, 0f),
+                        end = Offset(sweepX + w * 0.24f, h),
                     ),
                 )
             },

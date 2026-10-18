@@ -2316,8 +2316,29 @@ async function dataPackResponse(request, env) {
         { code: "xy_sad", name: "Ping 999ms", res: "sticker_xy_sad" },
         { code: "xy_king", name: "Sovereign Boss", res: "sticker_xy_king" },
       ],
+      bubble_anim_config: {
+        version: "2026.10.18.62",
+        default_preset: "SPARKLES",
+        founder_preset: "CRYSTAL",
+        speed_multiplier: 1.35,
+        intensity: 1.6,
+        aurora_waves: true,
+        shooting_stars: true,
+        neon_border_sweep: true,
+        founder_colors: ["#14052B", "#2E1065", "#581C87", "#7E22CE", "#A855F7", "#E879F9"],
+        accent_color: "#D8B4FE",
+        secondary_color: "#A855F7",
+      },
+      special_roles: {
+        xykal: "FOUNDER",
+        xyverse: "XYTEAM",
+        xyteam: "XYTEAM",
+        projectkal: "XYTEAM",
+        xytester: "TESTER",
+        betatester: "TESTER",
+      },
       changelog_summary:
-        "Paket Data OTA XyDesk: Dukungan penuh Multi-OS Cloud RDP (Windows Server & Ubuntu XFCE4 Desktop), perbaikan runtime GTA SA-MP anti-stuck, klik mouse fisik instan 0ms, E2EE AES-256-GCM Chat Global, dan koleksi stiker eksklusif XyDesk.",
+        "Paket Data OTA XyDesk 2026.10.18.62: Upgrade Animasi Bubble Aurora Plasma + Bintang Jatuh Meteor + Kristal Amethyst 3D (Server-Driven OTA tanpa perlu update APK), Badge Khusus XYTEAM & TESTER, Link Biru Bisa Diklik, dan Notifikasi Pesan Gaya WhatsApp.",
     };
     return jsonResponse(payload, 200, request.method);
   } catch {
@@ -2977,9 +2998,9 @@ const CHAT_ATTACHMENT_MAX = 2_800_000;
 const CHAT_MSG_PER_WINDOW = 200;
 const CHAT_WINDOW_MS = 20_000;
 const APP_PRESENCE_TTL_MS = 75_000;
-const LIVE_DATA_PACK_VERSION = "2026.10.17.56";
+const LIVE_DATA_PACK_VERSION = "2026.10.18.62";
 let EDGE_PINNED_MSG = null;
-const DEFAULT_ONESIGNAL_APP_ID = "ffaa87d6-8e1d-42b6-bb4f-ebbbfc0bccbb";
+const DEFAULT_ONESIGNAL_APP_ID = "e3d5adea-1c0f-4986-9ce5-e088d65f0998";
 const LEGACY_TEST_NAMES = new Set(["tesbot", "budi", "rizky"]);
 
 function isFounderChatName(name, githubLogin = "") {
@@ -3308,6 +3329,7 @@ function sanitizeChatExtras(raw) {
       : "";
   const attachmentKind = rawKind === "image" || rawKind === "photo" ? "photo"
     : rawKind === "video" ? "video"
+    : rawKind === "audio" || rawKind === "voice" ? "audio"
     : rawKind === "file" ? "file"
     : rawKind === "sticker" ? "sticker"
     : "";
@@ -3335,7 +3357,7 @@ function sanitizeChatExtras(raw) {
   const clientMsgId = typeof raw?.client_msg_id === "string"
     ? raw.client_msg_id.trim().slice(0, 64)
     : "";
-  const hasAttachment = Boolean(attachmentData || attachmentKind === "sticker" || attachmentKind === "file" || attachmentKind === "video");
+  const hasAttachment = Boolean(attachmentData || attachmentKind === "sticker" || attachmentKind === "file" || attachmentKind === "video" || attachmentKind === "audio");
   const e2eeVerified = Boolean(e2eeV && e2eeSig && e2eeSig.length >= 16);
   return {
     github_login: githubLogin,

@@ -751,7 +751,7 @@ internal fun GlobalChatScreen(
         mutableStateOf(chatPrefs.getString(KEY_BUBBLE_SHAPE, "TAIL_CLASSIC") ?: "TAIL_CLASSIC")
     }
     var bubbleFloatingElement by remember {
-        mutableStateOf(chatPrefs.getString(KEY_BUBBLE_FLOATING, "NONE") ?: "NONE")
+        mutableStateOf(chatPrefs.getString(KEY_BUBBLE_FLOATING, "SPARKLES") ?: "SPARKLES")
     }
     var autoDownloadMedia by remember {
         mutableStateOf(chatPrefs.getBoolean(KEY_AUTO_DOWNLOAD_MEDIA, true))
@@ -3122,6 +3122,30 @@ internal fun GlobalChatScreen(
                                         },
                                     )
                                 }
+                                HorizontalDivider(color = Color.White.copy(alpha = 0.08f))
+                                ContextMenuActionRow(
+                                    label = "Kirim / Bagikan ke WhatsApp",
+                                    icon = XyIcons.Share,
+                                    onClick = {
+                                        val snap = targetMsg
+                                        focusedContextMsg = null
+                                        val waText = "💬 *${snap.name}* di XyDesk Global Chat:\n\"${snap.text}\"\n\n🌐 https://xydeskremote.biz.id"
+                                        runCatching {
+                                            val waIntent = Intent(Intent.ACTION_SEND).apply {
+                                                type = "text/plain"
+                                                setPackage("com.whatsapp")
+                                                putExtra(Intent.EXTRA_TEXT, waText)
+                                                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                                            }
+                                            context.startActivity(waIntent)
+                                        }.onFailure {
+                                            openInAppCustomTab(
+                                                context,
+                                                "https://wa.me/?text=" + URLEncoder.encode(waText, "UTF-8"),
+                                            )
+                                        }
+                                    },
+                                )
                                 HorizontalDivider(color = Color.White.copy(alpha = 0.08f))
                                 ContextMenuActionRow(
                                     label = "Bagikan Pesan Ini",
