@@ -1105,7 +1105,7 @@ internal fun MessageBubble(
 
                 // Animasi fase untuk elemen melayang AI di dalam bubble
                 val activeFloatingPreset = if (floatingElementPreset != "NONE") floatingElementPreset else if (founderMsg) "SPARKLES" else "NONE"
-                val floatAnimPhase = if (activeFloatingPreset != "NONE") {
+                val floatAnimPhase = if (activeFloatingPreset != "NONE" && id.xydesk.remote.ui.theme.LocalDecorativeMotionEnabled.current) {
                     val infFloat = rememberInfiniteTransition(label = "bubbleFloatElem")
                     val p by infFloat.animateFloat(
                         initialValue = 0f,
@@ -1269,8 +1269,9 @@ internal fun ChatMediaAttachmentBox(
         // =========================================================
         // 1× SEKALI LIHAT (FROSTED SPOILER SHIMMER CARD)
         // =========================================================
-        val inf = rememberInfiniteTransition(label = "viewOnceShimmer")
-        val shimmerPhase by inf.animateFloat(
+        val inf = if (!viewedOnce && id.xydesk.remote.ui.theme.LocalDecorativeMotionEnabled.current) rememberInfiniteTransition(label = "viewOnceShimmer") else null
+        val shimmerPhase = if (inf != null) {
+            val animated by inf.animateFloat(
             initialValue = 0f,
             targetValue = 1f,
             animationSpec = infiniteRepeatable(
@@ -1279,6 +1280,8 @@ internal fun ChatMediaAttachmentBox(
             ),
             label = "viewOnceShimmerPhase",
         )
+            animated
+        } else 0f
         Box(
             modifier = Modifier
                 .fillMaxWidth()
@@ -1518,8 +1521,9 @@ internal fun ChatMediaAttachmentBox(
         // =========================================================
         val audio = rememberChatAudioController(context, msg.id, msg.attachmentData)
         val isPlaying = audio.playing
-        val infWave = rememberInfiniteTransition(label = "audioWave")
-        val wavePhase by infWave.animateFloat(
+        val infWave = if (isPlaying && id.xydesk.remote.ui.theme.LocalDecorativeMotionEnabled.current) rememberInfiniteTransition(label = "audioWave") else null
+        val wavePhase = if (infWave != null) {
+            val animated by infWave.animateFloat(
             initialValue = 0f,
             targetValue = 1f,
             animationSpec = infiniteRepeatable(
@@ -1528,6 +1532,8 @@ internal fun ChatMediaAttachmentBox(
             ),
             label = "audioWavePhase",
         )
+            animated
+        } else 0f
 
         Row(
             modifier = Modifier
