@@ -972,10 +972,22 @@ internal fun GlobalChatScreen(
                     }
 
                     override fun onFailure(webSocket: WebSocket, t: Throwable, response: Response?) {
+                        main.post {
+                            if (!closed) {
+                                lastWsActivityMs.set(0L)
+                                connected = false
+                            }
+                        }
                         scheduleReconnect()
                     }
 
                     override fun onClosed(webSocket: WebSocket, code: Int, reason: String) {
+                        main.post {
+                            if (!closed) {
+                                lastWsActivityMs.set(0L)
+                                connected = false
+                            }
+                        }
                         scheduleReconnect()
                     }
 
@@ -1087,14 +1099,7 @@ internal fun GlobalChatScreen(
         scope.launch {
             listState.animateScrollToItem((messages.size - 1).coerceAtLeast(0))
             val sentMsg = withContext(Dispatchers.IO) {
-                val clientTr = if (attachmentType == "sticker" || displayFallback.isBlank()) null
-                else translateClientSideMultiLang(
-                    text = displayFallback,
-                    senderCountry = myCountry,
-                    viewerLangPref = "auto",
-                    viewerCountry = myCountry,
-                    forServerBroadcast = true,
-                )
+                // Sending must not wait for a translation provider; enrichment is asynchronous.
                 val bodyJson = JSONObject().apply {
                     put("type", "msg")
                     put("name", nickname)
@@ -1107,11 +1112,6 @@ internal fun GlobalChatScreen(
                     put("e2ee_iv", sealed.ivBase64)
                     put("e2ee_sig", sealed.signatureHex)
                     put("client_msg_id", pending.id)
-                    if (clientTr != null && clientTr.first.isNotBlank()) {
-                        put("translated", clientTr.first)
-                        put("target_lang", clientTr.second)
-                        put("source_lang", clientTr.third)
-                    }
                     if (replySnapshot != null) {
                         put("reply_to_id", replySnapshot.id)
                         put("reply_to_name", replySnapshot.name)
@@ -1698,7 +1698,7 @@ internal fun GlobalChatScreen(
                                 .background(if (connected) Color(0xFF22C55E) else Color(0xFFF59E0B)),
                         )
                         Text(
-                            text = if (connected) "$totalOnline Online · Ketuk ke Atas" else "Menyambung…",
+                            text = if (connected) "$totalOnline Online · Ketuk ke Atas" else if (messages.isNotEmpty()) xy("Riwayat tersimpan · Menyambung…", "Saved history · Connecting…") else xy("Menyambung…", "Connecting…"),
                             style = MaterialTheme.typography.labelSmall,
                             fontWeight = FontWeight.SemiBold,
                             color = Color(0xFFD4D4D8),
