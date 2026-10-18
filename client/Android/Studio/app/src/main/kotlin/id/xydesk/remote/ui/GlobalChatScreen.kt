@@ -199,9 +199,6 @@ import kotlin.math.roundToInt
 
 private const val CHAT_WS_URL = "wss://api.xydeskremote.biz.id/ws/chat"
 private const val CHAT_HISTORY_URL = "https://api.xydeskremote.biz.id/api/chat/history"
-private const val CHAT_SEND_URL = "https://api.xydeskremote.biz.id/api/chat/send"
-private const val CHAT_PIN_URL = "https://api.xydeskremote.biz.id/api/chat/pin"
-private const val CHAT_DELETE_URL = "https://api.xydeskremote.biz.id/api/chat/delete"
 private const val CHAT_PREFS = "xydesk.global.chat"
 private const val KEY_NICKNAME = "nickname"
 private const val KEY_TARGET_LANG = "viewer_target_lang"
@@ -334,99 +331,6 @@ internal fun countryCodeToFlag(countryCode: String): String {
     val first = Character.toChars(0x1F1E6 + (cc[0].code - 'A'.code))
     val second = Character.toChars(0x1F1E6 + (cc[1].code - 'A'.code))
     return String(first) + String(second)
-}
-
-private fun parseMessageFromJson(m: JSONObject, myName: String, myGithubLogin: String?): ChatMessage {
-    val msgId = m.optString("id")
-    val sender = m.optString("name", "User")
-    val ghLogin = m.optString("github_login", "").trim().removePrefix("@")
-    val rawText = m.optString("text", "")
-    val sourceLang = m.optString("source_lang", "")
-    val rawCountry = m.optString("country", "ID").ifBlank { "ID" }
-    val e2eeCipher = m.optString("e2ee_cipher", "")
-    val e2eeIv = m.optString("e2ee_iv", "")
-    val e2eeSig = m.optString("e2ee_sig", "")
-    val e2eeProto = m.optString("e2ee_v", "XY-E2EE-GCM-v1").ifBlank { "XY-E2EE-GCM-v1" }
-
-    val (openedText, verified) = ChatE2eeCrypto.openAndVerify(
-        fallbackText = rawText,
-        senderName = sender,
-        githubLogin = ghLogin,
-        cipherBase64 = e2eeCipher,
-        ivBase64 = e2eeIv,
-        signatureHex = e2eeSig,
-    )
-
-    val smartCountry = resolveSmartCountryClient(openedText, sourceLang, rawCountry)
-    val flag = countryCodeToFlag(smartCountry)
-    val rawAttachmentType = m.optString("attachment_type", "").ifBlank {
-        val kind = m.optString("attachment_kind", "")
-        if (kind == "photo") "image" else kind
-    }
-    val cleanedMediaText = if (rawAttachmentType == "image" || rawAttachmentType == "video" || rawAttachmentType == "sticker") {
-        val trimmed = openedText.trim()
-        if (trimmed.matches(Regex("^\\[(?:Foto|Video|Stiker|Media)[^\\]]*\\]$", RegexOption.IGNORE_CASE)) ||
-            (rawAttachmentType == "sticker" && XY_STICKERS.any { it.title.equals(trimmed, ignoreCase = true) })
-        ) {
-            ""
-        } else {
-            openedText
-        }
-    } else {
-        openedText
-    }
-    val resolvedAvatar = m.optString("avatar_url", "").ifBlank {
-        if (ghLogin.isNotBlank()) "https://github.com/$ghLogin.png?size=120" else ""
-    }
-    val isMine = sender.equals(myName, ignoreCase = true) ||
-        (!myGithubLogin.isNullOrBlank() && ghLogin.equals(myGithubLogin, ignoreCase = true))
-
-    return ChatMessage(
-        id = msgId,
-        name = sender,
-        githubLogin = ghLogin,
-        country = smartCountry,
-        flag = flag,
-        text = cleanedMediaText,
-        translated = if (isMine || cleanedMediaText.isBlank()) "" else m.optString("translated", ""),
-        targetLang = m.optString("target_lang", "EN").ifBlank { "EN" },
-        sourceLang = sourceLang,
-        at = m.optLong("at", System.currentTimeMillis()),
-        mine = isMine,
-        isFounder = m.optBoolean("is_founder", isFounderAccount(sender) || isFounderAccount(ghLogin)),
-        isAnnouncement = m.optBoolean("is_announcement", false),
-        replyToId = m.optString("reply_to_id", ""),
-        replyToName = m.optString("reply_to_name", ""),
-        replyToText = m.optString("reply_to_text", ""),
-        attachmentType = rawAttachmentType,
-        attachmentName = m.optString("attachment_name", ""),
-        attachmentMime = m.optString("attachment_mime", ""),
-        attachmentSize = m.optInt("attachment_size", 0),
-        attachmentData = m.optString("attachment_data", ""),
-        viewOnce = m.optBoolean("view_once", false),
-        avatarUrl = resolvedAvatar,
-        deliveryTicks = 2,
-        e2eeProtocol = e2eeProto,
-        // Signature apa adanya dari server — jangan pernah dipabrikasi lokal,
-        // itu membuat pesan tanpa signature tampak "terverifikasi".
-        e2eeSig = e2eeSig,
-        e2eeVerified = verified,
-    )
-}
-
-private fun parsePinnedMessageFromJson(p: JSONObject?): PinnedChatMessage? {
-    if (p == null) return null
-    val id = p.optString("id", "").trim()
-    val text = p.optString("text", "").trim()
-    if (id.isEmpty() && text.isEmpty()) return null
-    return PinnedChatMessage(
-        id = id,
-        name = p.optString("name", "User"),
-        githubLogin = p.optString("github_login", ""),
-        text = text,
-        pinnedBy = p.optString("pinned_by", ""),
-        at = p.optLong("at", 0L),
-    )
 }
 
 @Composable
@@ -587,16 +491,7 @@ internal fun GlobalChatScreen(
         chatSocketSend(payload.toString())
         scope.launch(Dispatchers.IO) {
             runCatching {
-                val conn = (URL(CHAT_DELETE_URL).openConnection() as HttpURLConnection).apply {
-                    requestMethod = "POST"
-                    doOutput = true
-                    connectTimeout = 8_000
-                    readTimeout = 8_000
-                    setRequestProperty("Content-Type", "application/json; charset=utf-8")
-                }
-                conn.outputStream.use { it.write(payload.toString().toByteArray(Charsets.UTF_8)) }
-                conn.responseCode
-                conn.disconnect()
+                GlobalChatRepository.postAction(CHAT_DELETE_URL, payload)
             }
         }
         Toast.makeText(context, "Pesan dihapus untuk semua orang", Toast.LENGTH_SHORT).show()
@@ -631,16 +526,7 @@ internal fun GlobalChatScreen(
             chatSocketSend(payload.toString())
             scope.launch(Dispatchers.IO) {
                 runCatching {
-                    val conn = (URL(CHAT_PIN_URL).openConnection() as HttpURLConnection).apply {
-                        requestMethod = "POST"
-                        doOutput = true
-                        connectTimeout = 8_000
-                        readTimeout = 8_000
-                        setRequestProperty("Content-Type", "application/json; charset=utf-8")
-                    }
-                    conn.outputStream.use { it.write(payload.toString().toByteArray(Charsets.UTF_8)) }
-                    conn.responseCode
-                    conn.disconnect()
+                    GlobalChatRepository.postAction(CHAT_PIN_URL, payload)
                 }
             }
             Toast.makeText(context, "Pesan disematkan di atas Chat Global", Toast.LENGTH_SHORT).show()
@@ -653,16 +539,7 @@ internal fun GlobalChatScreen(
             chatSocketSend(payload.toString())
             scope.launch(Dispatchers.IO) {
                 runCatching {
-                    val conn = (URL(CHAT_PIN_URL).openConnection() as HttpURLConnection).apply {
-                        requestMethod = "POST"
-                        doOutput = true
-                        connectTimeout = 8_000
-                        readTimeout = 8_000
-                        setRequestProperty("Content-Type", "application/json; charset=utf-8")
-                    }
-                    conn.outputStream.use { it.write(payload.toString().toByteArray(Charsets.UTF_8)) }
-                    conn.responseCode
-                    conn.disconnect()
+                    GlobalChatRepository.postAction(CHAT_PIN_URL, payload)
                 }
             }
             Toast.makeText(context, "Sematan pesan dilepas", Toast.LENGTH_SHORT).show()
@@ -1181,19 +1058,8 @@ internal fun GlobalChatScreen(
                     if (!av.isNullOrBlank()) put("avatar_url", av)
                 }
                 runCatching {
-                    val conn = (URL(CHAT_SEND_URL).openConnection() as HttpURLConnection).apply {
-                        requestMethod = "POST"
-                        doOutput = true
-                        connectTimeout = 10_000
-                        readTimeout = 10_000
-                        setRequestProperty("Content-Type", "application/json; charset=utf-8")
-                        setRequestProperty("Accept", "application/json")
-                    }
-                    conn.outputStream.use { it.write(bodyJson.toString().toByteArray(Charsets.UTF_8)) }
-                    if (conn.responseCode in 200..299) {
-                        val resp = JSONObject(conn.inputStream.bufferedReader().use { it.readText() })
-                        resp.optJSONObject("message")?.let { parseMessageFromJson(it, nickname, currentGh) }
-                    } else null
+                    GlobalChatRepository.send(bodyJson)?.optJSONObject("message")
+                        ?.let { parseMessageFromJson(it, nickname, currentGh) }
                 }.getOrNull() ?: run {
                     chatSocketSend(bodyJson.toString())
                     null
