@@ -2236,7 +2236,10 @@ internal fun extractCachedVideoAspectRatio(
     cacheKey: String,
     videoBytes: ByteArray,
 ): Float = runCatching {
-    val file = prepareCachedVideoFile(context.cacheDir, videoBytes)
+    extractVideoAspectRatio(prepareCachedVideoFile(context.cacheDir, videoBytes))
+}.getOrDefault(9f / 16f)
+
+internal fun extractVideoAspectRatio(file: java.io.File): Float = runCatching {
     val retriever = android.media.MediaMetadataRetriever()
     try {
         retriever.setDataSource(file.absolutePath)

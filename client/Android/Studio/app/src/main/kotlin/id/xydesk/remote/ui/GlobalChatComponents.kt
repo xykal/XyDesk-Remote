@@ -194,6 +194,16 @@ internal fun FullScreenChatMediaViewer(
     var panOffsetX by remember(msg.id) { mutableFloatStateOf(0f) }
     var panOffsetY by remember(msg.id) { mutableFloatStateOf(0f) }
 
+    val lifecycle = androidx.lifecycle.compose.LocalLifecycleOwner.current.lifecycle
+    val dismissNow by androidx.compose.runtime.rememberUpdatedState(onDismiss)
+    DisposableEffect(msg.id, msg.viewOnce, lifecycle) {
+        val observer = androidx.lifecycle.LifecycleEventObserver { _, event ->
+            if (msg.viewOnce && event == androidx.lifecycle.Lifecycle.Event.ON_STOP) dismissNow()
+        }
+        lifecycle.addObserver(observer)
+        onDispose { lifecycle.removeObserver(observer) }
+    }
+
     DisposableEffect(msg.id) {
         XyVideoPlaybackCoordinator.fullscreenOpenCount.intValue += 1
         onDispose {
@@ -205,6 +215,7 @@ internal fun FullScreenChatMediaViewer(
     Dialog(
         onDismissRequest = onDismiss,
         properties = DialogProperties(
+            securePolicy = if (msg.viewOnce) androidx.compose.ui.window.SecureFlagPolicy.SecureOn else androidx.compose.ui.window.SecureFlagPolicy.Inherit,
             usePlatformDefaultWidth = false,
             decorFitsSystemWindows = false,
         ),
@@ -215,7 +226,7 @@ internal fun FullScreenChatMediaViewer(
                 .background(Color.Black),
         ) {
             if (msg.attachmentType == "video" && msg.attachmentData.isNotBlank()) {
-                val prepared = rememberPreparedChatVideo(context, msg.id, msg.attachmentData)
+                val prepared = rememberPreparedChatVideo(context, msg.id, msg.attachmentData, msg.viewOnce)
                 val videoFile = prepared.video?.file
                 Box(
                     modifier = Modifier
@@ -266,7 +277,7 @@ internal fun FullScreenChatMediaViewer(
                     }
                 }
             } else {
-                val bmp = rememberChatBitmap(msg.id, msg.attachmentData)
+                val bmp = rememberChatBitmap(msg.id, msg.attachmentData, cacheResult = !msg.viewOnce)
                 Box(
                     modifier = Modifier
                         .fillMaxSize()
@@ -1448,7 +1459,7 @@ internal fun ChatMediaAttachmentBox(
             }
         }
     } else if (msg.attachmentType == "video" && msg.attachmentData.isNotBlank()) {
-        val prepared = rememberPreparedChatVideo(context, msg.id, msg.attachmentData)
+        val prepared = rememberPreparedChatVideo(context, msg.id, msg.attachmentData, msg.viewOnce)
         val videoBytes = prepared.video?.bytes
         val videoRatio = prepared.video?.ratio ?: (9f / 16f)
         Box(

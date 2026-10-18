@@ -782,6 +782,7 @@ internal fun GlobalChatScreen(
             nickname = chatNickname(context)
             firstJoinedAtMs = ensureFirstJoinedAtMs(context, savedGh)
         }
+        launch(Dispatchers.IO) { runCatching { pruneExpiredChatViewOnceFiles(context.cacheDir) } }
         // WS-first, HTTP fallback; presence dan disk I/O stiker tetap paralel.
         launch {
             // WS already delivers history. Avoid downloading media-heavy history twice.
@@ -3669,17 +3670,17 @@ internal fun translateClientSideMultiLang(
     }.getOrNull()
 }
 
-internal fun decodeBase64Bitmap(dataUri: String): Bitmap? = runCatching {
+internal fun decodeBase64Bitmap(dataUri: String, cacheResult: Boolean = true): Bitmap? = runCatching {
     if (dataUri.isBlank()) return@runCatching null
     if (dataUri.length > 2_800_000) return@runCatching null
     val key = MessageDigest.getInstance("SHA-256").digest(dataUri.toByteArray(Charsets.UTF_8))
         .joinToString("") { "%02x".format(it) }
-    chatDecodedBitmapCache.get(key)?.let { return@runCatching it }
+    if (cacheResult) chatDecodedBitmapCache.get(key)?.let { return@runCatching it }
     val comma = dataUri.indexOf(',')
     if (comma < 0) return@runCatching null
     val bytes = Base64.decode(dataUri.substring(comma + 1), Base64.DEFAULT)
     decodeBoundedChatBitmap(bytes, 2_048)?.also { bmp ->
-        chatDecodedBitmapCache.put(key, bmp)
+        if (cacheResult) chatDecodedBitmapCache.put(key, bmp)
     }
 }.getOrNull()
 

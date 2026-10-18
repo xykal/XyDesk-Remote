@@ -6,6 +6,8 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.key
 import androidx.compose.runtime.produceState
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.NonCancellable
+import kotlinx.coroutines.awaitCancellation
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.sync.Semaphore
 import kotlinx.coroutines.sync.withPermit
@@ -17,24 +19,31 @@ internal data class ChatVideoPreparation(val loading: Boolean = true, val video:
 private val chatVideoSlots = Semaphore(2)
 
 @Composable
-internal fun rememberPreparedChatVideo(context: Context, id: String, data: String): ChatVideoPreparation = key(id, data) {
-    produceState(ChatVideoPreparation(), id, data) {
-        val video = withContext(Dispatchers.IO) {
-            chatVideoSlots.withPermit {
-                try {
-                    if (data.length > 2_800_000) return@withPermit null
-                    val comma = data.indexOf(',')
-                    if (comma < 0) return@withPermit null
-                    val bytes = Base64.decode(data.substring(comma + 1), Base64.DEFAULT)
-                    if (bytes.isEmpty()) return@withPermit null
-                    val file = prepareCachedVideoFile(context.cacheDir, bytes)
-                    val ratio = extractCachedVideoAspectRatio(context, id, bytes)
-                    PreparedChatVideo(file, bytes, ratio)
-                } catch (cancelled: CancellationException) {
-                    throw cancelled
-                } catch (_: Exception) { null }
+internal fun rememberPreparedChatVideo(context: Context, id: String, data: String, viewOnce: Boolean = false): ChatVideoPreparation = key(id, data, viewOnce) {
+    produceState(ChatVideoPreparation(), id, data, viewOnce) {
+        var temporaryFile: File? = null
+        try {
+            val video = withContext(Dispatchers.IO) {
+                chatVideoSlots.withPermit {
+                    try {
+                        if (data.length > 2_800_000) return@withPermit null
+                        val comma = data.indexOf(',')
+                        if (comma < 0) return@withPermit null
+                        val bytes = Base64.decode(data.substring(comma + 1), Base64.DEFAULT)
+                        if (bytes.isEmpty()) return@withPermit null
+                        val file = if (viewOnce) {
+                            createChatViewOnceVideo(context.cacheDir, bytes).also { temporaryFile = it }
+                        } else prepareCachedVideoFile(context.cacheDir, bytes)
+                        PreparedChatVideo(file, bytes, extractVideoAspectRatio(file))
+                    } catch (cancelled: CancellationException) {
+                        throw cancelled
+                    } catch (_: Exception) { null }
+                }
             }
+            value = ChatVideoPreparation(loading = false, video = video)
+            awaitCancellation() // producer owns the temporary file until this viewer leaves
+        } finally {
+            withContext(NonCancellable + Dispatchers.IO) { temporaryFile?.delete() }
         }
-        value = ChatVideoPreparation(loading = false, video = video)
     }.value
 }

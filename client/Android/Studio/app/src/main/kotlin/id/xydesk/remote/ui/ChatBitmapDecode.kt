@@ -15,13 +15,13 @@ internal fun decodeBoundedChatBitmap(bytes: ByteArray, maxEdge: Int): Bitmap? {
 
 /** Decode off-main and limit temporary bitmap allocations across visible messages. */
 @androidx.compose.runtime.Composable
-internal fun rememberChatBitmap(messageId: String, data: String): Bitmap? =
-    androidx.compose.runtime.key(messageId, data) {
-        val state = androidx.compose.runtime.produceState<Bitmap?>(null, messageId, data) {
+internal fun rememberChatBitmap(messageId: String, data: String, cacheResult: Boolean = true): Bitmap? =
+    androidx.compose.runtime.key(messageId, data, cacheResult) {
+        val state = androidx.compose.runtime.produceState<Bitmap?>(null, messageId, data, cacheResult) {
             value = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Default) {
                 chatBitmapSlots.withPermit {
                     kotlinx.coroutines.currentCoroutineContext().ensureActive()
-                    decodeBase64Bitmap(data)
+                    decodeBase64Bitmap(data, cacheResult)
                 }
             }
         }
