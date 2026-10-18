@@ -1741,22 +1741,7 @@ internal fun ChatSenderAvatar(
 
     LaunchedEffect(resolvedUrl) {
         if (resolvedUrl.isNotBlank() && bitmap == null) {
-            val loaded = withContext(Dispatchers.IO) {
-                runCatching {
-                    val conn = (URL(resolvedUrl).openConnection() as HttpURLConnection).apply {
-                        connectTimeout = 6_000
-                        readTimeout = 6_000
-                        instanceFollowRedirects = true
-                    }
-                    if (conn.responseCode in 200..299) {
-                        val bytes = conn.inputStream.use { it.readBytes() }
-                        BitmapFactory.decodeByteArray(bytes, 0, bytes.size)?.also {
-                            avatarMemoryCache.put(resolvedUrl, it)
-                        }
-                    } else null
-                }.getOrNull()
-            }
-            if (loaded != null) bitmap = loaded
+            ChatAvatarLoader.load(resolvedUrl)?.let { bitmap = it }
         }
     }
 

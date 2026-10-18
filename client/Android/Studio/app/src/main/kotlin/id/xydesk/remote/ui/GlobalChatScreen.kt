@@ -220,7 +220,9 @@ private const val KEY_AUTOPLAY_VIDEO = "chat_autoplay_video_v1"
 private const val KEY_NOTIF_TONE = "chat_notif_tone_v1"
 private const val KEY_VOICE_ENABLED = "chat_voice_enabled_v1"
 
-private val chatDecodedBitmapCache = android.util.LruCache<Int, Bitmap>(48)
+private val chatDecodedBitmapCache = object : android.util.LruCache<String, Bitmap>(12 * 1024 * 1024) {
+    override fun sizeOf(key: String, value: Bitmap): Int = value.allocationByteCount.coerceAtLeast(1)
+}
 
 private data class PendingStudioMedia(
     val attachmentType: String, // "image", "video", "file"
@@ -3669,12 +3671,14 @@ internal fun translateClientSideMultiLang(
 
 internal fun decodeBase64Bitmap(dataUri: String): Bitmap? = runCatching {
     if (dataUri.isBlank()) return@runCatching null
-    val key = dataUri.hashCode()
+    if (dataUri.length > 2_800_000) return@runCatching null
+    val key = MessageDigest.getInstance("SHA-256").digest(dataUri.toByteArray(Charsets.UTF_8))
+        .joinToString("") { "%02x".format(it) }
     chatDecodedBitmapCache.get(key)?.let { return@runCatching it }
     val comma = dataUri.indexOf(',')
     if (comma < 0) return@runCatching null
     val bytes = Base64.decode(dataUri.substring(comma + 1), Base64.DEFAULT)
-    BitmapFactory.decodeByteArray(bytes, 0, bytes.size)?.also { bmp ->
+    decodeBoundedChatBitmap(bytes, 2_048)?.also { bmp ->
         chatDecodedBitmapCache.put(key, bmp)
     }
 }.getOrNull()
