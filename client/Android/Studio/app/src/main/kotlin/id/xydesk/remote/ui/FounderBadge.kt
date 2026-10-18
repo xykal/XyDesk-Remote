@@ -110,23 +110,42 @@ internal fun isFounderAccount(nameOrLogin: String?): Boolean {
 
 internal fun saveVerifiedGitHubLogin(context: Context, login: String?, avatarUrl: String? = null) {
     val clean = login?.trim().orEmpty()
+    val previous = getVerifiedGitHubLogin(context)
+    val changedAccount = normalizedChatAccount(previous) != normalizedChatAccount(clean)
     val appCtx = context.applicationContext
     val resolvedAvatar = avatarUrl?.trim()?.takeIf { it.isNotEmpty() }
         ?: if (clean.isNotEmpty()) "https://github.com/$clean.png?size=160" else null
     val edit = appCtx.getSharedPreferences(FOUNDER_PREFS, Context.MODE_PRIVATE).edit()
         .putString(KEY_GH_LOGIN, clean)
-    if (resolvedAvatar != null) {
-        edit.putString(KEY_GH_AVATAR, resolvedAvatar)
-    }
+    if (clean.isEmpty()) edit.remove(KEY_GH_AVATAR)
+    else if (resolvedAvatar != null) edit.putString(KEY_GH_AVATAR, resolvedAvatar)
     edit.apply()
 
     if (clean.isNotEmpty()) {
         val chatPrefs = appCtx.getSharedPreferences("xydesk.global.chat", Context.MODE_PRIVATE)
         val currentNick = chatPrefs.getString("nickname", null)
-        if (currentNick.isNullOrBlank() || currentNick.startsWith("Tamu-") || isFounderAccount(clean)) {
+        if (changedAccount || currentNick.isNullOrBlank() || currentNick.startsWith("Tamu-") || isFounderAccount(clean)) {
             chatPrefs.edit().putString("nickname", clean).apply()
         }
+    } else if (changedAccount) {
+        appCtx.getSharedPreferences("xydesk.global.chat", Context.MODE_PRIVATE).edit().remove("nickname").apply()
     }
+    if (changedAccount) id.xydesk.remote.push.ChatPushNotifier.onAccountChanged(appCtx)
+}
+
+@Composable
+internal fun rememberVerifiedChatAccount(context: Context): String? {
+    var login by remember(context) { mutableStateOf(getVerifiedGitHubLogin(context)) }
+    androidx.compose.runtime.DisposableEffect(context) {
+        val prefs = context.applicationContext.getSharedPreferences(FOUNDER_PREFS, Context.MODE_PRIVATE)
+        val listener = android.content.SharedPreferences.OnSharedPreferenceChangeListener { _, key ->
+            if (key == KEY_GH_LOGIN || key == null) login = getVerifiedGitHubLogin(context)
+        }
+        prefs.registerOnSharedPreferenceChangeListener(listener)
+        login = getVerifiedGitHubLogin(context)
+        onDispose { prefs.unregisterOnSharedPreferenceChangeListener(listener) }
+    }
+    return login
 }
 
 internal fun getVerifiedGitHubLogin(context: Context): String? {

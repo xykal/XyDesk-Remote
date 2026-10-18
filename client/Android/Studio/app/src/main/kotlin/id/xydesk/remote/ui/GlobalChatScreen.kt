@@ -277,6 +277,7 @@ internal fun ensureFirstJoinedAtMs(context: Context, githubLogin: String?): Long
             .putLong("first_joined_at_ms", ts)
             .apply()
     }
+    prefs.edit().putLong("first_joined_at_ms", ts).apply()
     return ts
 }
 
@@ -350,6 +351,20 @@ internal fun GlobalChatScreen(
     isCompactFloating: Boolean = false,
     onToggleCompactFloating: (() -> Unit)? = null,
 ) {
+    val account = rememberVerifiedChatAccount(LocalContext.current)
+    androidx.compose.runtime.key(normalizedChatAccount(account)) {
+        GlobalChatAccountContent(onBack, isOverlayMode, onHeaderDrag, isCompactFloating, onToggleCompactFloating)
+    }
+}
+
+@Composable
+private fun GlobalChatAccountContent(
+    onBack: () -> Unit,
+    isOverlayMode: Boolean,
+    onHeaderDrag: ((Float, Float) -> Unit)?,
+    isCompactFloating: Boolean,
+    onToggleCompactFloating: (() -> Unit)?,
+) {
     val context = LocalContext.current
     val haptic = LocalHapticFeedback.current
     val scope = rememberCoroutineScope()
@@ -374,6 +389,8 @@ internal fun GlobalChatScreen(
             firstJoinedAtMs = ensureFirstJoinedAtMs(context, currentUser)
         }
     }
+    val hiddenIdsKey = chatAccountPreferenceKey(KEY_HIDDEN_MSG_IDS, verifiedGhLogin)
+    val viewedIdsKey = chatAccountPreferenceKey(KEY_VIEWED_ONCE_IDS, verifiedGhLogin)
     val myCountry = remember { chatCountryCode(context) }
     val myFlag = remember(myCountry) { countryCodeToFlag(myCountry) }
     var viewerTargetLang by remember {
@@ -455,7 +472,7 @@ internal fun GlobalChatScreen(
             GlobalChatOfflineCache.read(context.applicationContext, login, nickname)
         }
         // Network may have completed while disk was being read; don't replace fresher state.
-        val hidden = chatPrefs.getStringSet(KEY_HIDDEN_MSG_IDS, emptySet()).orEmpty()
+        val hidden = chatPrefs.getStringSet(hiddenIdsKey, chatPrefs.getStringSet(KEY_HIDDEN_MSG_IDS, emptySet())).orEmpty()
         if (messages.isEmpty()) messages.addAll(cached.filter {
             it.id !in hidden && it.at >= firstJoinedAtMs - 2_000L
         })
@@ -468,13 +485,13 @@ internal fun GlobalChatScreen(
     }
     val hiddenMessageIds = remember {
         mutableStateListOf<String>().apply {
-            val saved = chatPrefs.getStringSet(KEY_HIDDEN_MSG_IDS, emptySet()).orEmpty()
+            val saved = chatPrefs.getStringSet(hiddenIdsKey, chatPrefs.getStringSet(KEY_HIDDEN_MSG_IDS, emptySet())).orEmpty()
             addAll(saved)
         }
     }
     val viewedOnceIds = remember {
         mutableStateListOf<String>().apply {
-            val saved = chatPrefs.getStringSet(KEY_VIEWED_ONCE_IDS, emptySet()).orEmpty()
+            val saved = chatPrefs.getStringSet(viewedIdsKey, chatPrefs.getStringSet(KEY_VIEWED_ONCE_IDS, emptySet())).orEmpty()
             addAll(saved)
         }
     }
@@ -484,14 +501,14 @@ internal fun GlobalChatScreen(
     fun markMediaViewedOnce(msgId: String) {
         if (msgId.isNotBlank() && msgId !in viewedOnceIds) {
             viewedOnceIds.add(msgId)
-            chatPrefs.edit().putStringSet(KEY_VIEWED_ONCE_IDS, viewedOnceIds.toSet()).apply()
+            chatPrefs.edit().putStringSet(viewedIdsKey, viewedOnceIds.toSet()).apply()
         }
     }
 
     fun deleteMessageForMe(target: ChatMessage) {
         if (target.id.isNotBlank() && target.id !in hiddenMessageIds) {
             hiddenMessageIds.add(target.id)
-            chatPrefs.edit().putStringSet(KEY_HIDDEN_MSG_IDS, hiddenMessageIds.toSet()).apply()
+            chatPrefs.edit().putStringSet(hiddenIdsKey, hiddenMessageIds.toSet()).apply()
         }
         messages.removeAll { it.id == target.id }
         Toast.makeText(context, "Pesan dihapus untuk saya", Toast.LENGTH_SHORT).show()
@@ -500,7 +517,7 @@ internal fun GlobalChatScreen(
     fun deleteMessageForEveryone(target: ChatMessage) {
         if (target.id.isNotBlank() && target.id !in hiddenMessageIds) {
             hiddenMessageIds.add(target.id)
-            chatPrefs.edit().putStringSet(KEY_HIDDEN_MSG_IDS, hiddenMessageIds.toSet()).apply()
+            chatPrefs.edit().putStringSet(hiddenIdsKey, hiddenMessageIds.toSet()).apply()
         }
         messages.removeAll { it.id == target.id }
         if (pinnedMessage?.id == target.id) {
@@ -3417,7 +3434,7 @@ internal fun GlobalChatScreen(
                                 hiddenMessageIds.add(m.id)
                             }
                         }
-                        chatPrefs.edit().putStringSet(KEY_HIDDEN_MSG_IDS, hiddenMessageIds.toSet()).apply()
+                        chatPrefs.edit().putStringSet(hiddenIdsKey, hiddenMessageIds.toSet()).apply()
                         messages.clear()
                         showChatSettings = false
                         Toast.makeText(context, "Riwayat chat di layar berhasil dibersihkan", Toast.LENGTH_SHORT).show()

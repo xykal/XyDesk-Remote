@@ -143,6 +143,26 @@ object ChatPushNotifier {
         startBackgroundWatcherIfNeeded(appContext)
     }
 
+    private fun accountKey(context: Context, base: String): String =
+        id.xydesk.remote.ui.chatAccountPreferenceKey(base, id.xydesk.remote.ui.getVerifiedGitHubLogin(context))
+
+    /** Called by the central identity writer, not just when the chat screen is visible. */
+    fun onAccountChanged(context: Context) {
+        synchronized(seenIds) { seenIds.clear() }
+        clearNotification(context)
+        unreadNotifCountState.intValue = 0
+        context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE).edit().remove(KEY_UNREAD_STACK).apply()
+        val nm = context.getSystemService(Context.NOTIFICATION_SERVICE) as? NotificationManager
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+            nm?.activeNotifications?.filter { it.tag?.startsWith("social:") == true }
+                ?.forEach { nm?.cancel(it.tag, it.id) }
+        }
+        id.xydesk.remote.ui.ensureFirstJoinedAtMs(context, id.xydesk.remote.ui.getVerifiedGitHubLogin(context))
+        runCatching {
+            if (OneSignal.isInitialized) OneSignal.User.addTag("nickname", chatNickname(context))
+        }
+    }
+
     fun isCategoryEnabled(context: Context, key: String): Boolean {
         val prefs = context.applicationContext.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
         if (!prefs.getBoolean(KEY_PUSH_MASTER, true)) return false
@@ -198,9 +218,9 @@ object ChatPushNotifier {
         }
         if (at > 0L && context != null) {
             val prefs = context.applicationContext.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
-            val prev = prefs.getLong(KEY_LAST_SEEN_AT, 0L)
+            val prev = prefs.getLong(accountKey(context, KEY_LAST_SEEN_AT), 0L)
             if (at > prev) {
-                prefs.edit().putLong(KEY_LAST_SEEN_AT, at).apply()
+                prefs.edit().putLong(accountKey(context, KEY_LAST_SEEN_AT), at).apply()
             }
         }
     }
@@ -209,7 +229,7 @@ object ChatPushNotifier {
         val appContext = context.applicationContext
         unreadChatCountState.intValue = 0
         val prefs = appContext.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
-        prefs.edit().remove(KEY_UNREAD_STACK).apply()
+        prefs.edit().remove(accountKey(context, KEY_UNREAD_STACK)).apply()
         val nm = appContext.getSystemService(Context.NOTIFICATION_SERVICE) as? NotificationManager
         nm?.cancel(CHAT_NOTIF_ID) // remove legacy combined notification
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
@@ -666,7 +686,7 @@ object ChatPushNotifier {
 
     private fun loadStack(context: Context): List<StackedMsg> {
         val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
-        val raw = prefs.getString(KEY_UNREAD_STACK, null) ?: return emptyList()
+        val raw = prefs.getString(accountKey(context, KEY_UNREAD_STACK), null) ?: return emptyList()
         return runCatching {
             val arr = JSONArray(raw)
             val list = ArrayList<StackedMsg>(arr.length())
@@ -700,7 +720,7 @@ object ChatPushNotifier {
         }
         context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
             .edit()
-            .putString(KEY_UNREAD_STACK, arr.toString())
+            .putString(accountKey(context, KEY_UNREAD_STACK), arr.toString())
             .apply()
     }
 
@@ -724,8 +744,10 @@ object ChatPushNotifier {
                                 runCatching { id.xydesk.remote.ui.AppUpdate.fetch(appContext) }
                             }
                         }
+                        val accountSnapshot = id.xydesk.remote.ui.getVerifiedGitHubLogin(appContext)
+                        val seenAtKey = id.xydesk.remote.ui.chatAccountPreferenceKey(KEY_LAST_SEEN_AT, accountSnapshot)
                         val prefs = appContext.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
-                        var lastSeenAt = prefs.getLong(KEY_LAST_SEEN_AT, 0L)
+                        var lastSeenAt = prefs.getLong(seenAtKey, 0L)
                         val joinedAt = prefs.getLong("first_joined_at_ms", 0L)
                         if (joinedAt > lastSeenAt) lastSeenAt = joinedAt
                         val historyEndpoint = if (joinedAt > 0L) "$HISTORY_URL?joined_at=$joinedAt" else HISTORY_URL
@@ -735,8 +757,13 @@ object ChatPushNotifier {
                             readTimeout = 8_000
                             setRequestProperty("Accept", "application/json")
                         }
+                        try {
                         if (conn.responseCode in 200..299) {
+                            if (accountSnapshot != id.xydesk.remote.ui.getVerifiedGitHubLogin(appContext)) {
+                                continue
+                            }
                             val body = BufferedReader(InputStreamReader(conn.inputStream, Charsets.UTF_8)).use { it.readText() }
+                            if (accountSnapshot != id.xydesk.remote.ui.getVerifiedGitHubLogin(appContext)) continue
                             val json = JSONObject(body)
                             val onlineCount = json.optInt("online_count", 0)
                             if (onlineCount > 0) {
@@ -753,7 +780,7 @@ object ChatPushNotifier {
                                     if (id.isNotBlank()) seenIds.add(id)
                                     if (at > maxAt) maxAt = at
                                 }
-                                prefs.edit().putLong(KEY_LAST_SEEN_AT, maxAt).apply()
+                                prefs.edit().putLong(seenAtKey, maxAt).apply()
                                 seeded = true
                             } else {
                                 seeded = true
@@ -794,7 +821,9 @@ object ChatPushNotifier {
                                 }
                             }
                         }
-                        conn.disconnect()
+                        } finally {
+                            conn.disconnect()
+                        }
                     } catch (_: Throwable) {
                         // Abaikan gangguan jaringan sementara
                     }
