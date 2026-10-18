@@ -60,10 +60,20 @@ import kotlinx.coroutines.launch
  *  - Bawah (Footer): "from / Pengembang · Developer" + Logo XyVerse Tech
  */
 @Composable
-internal fun XySplashScreen(onFinished: () -> Unit) {
+internal fun XySplashScreen(
+    ready: Boolean = true,
+    dark: Boolean = when (XyThemeState.mode) {
+        XyThemeState.DARK -> true
+        XyThemeState.LIGHT -> false
+        else -> isSystemInDarkTheme()
+    },
+    onDone: () -> Unit = {},
+    onFinished: () -> Unit = onDone,
+) {
     val alpha = remember { Animatable(0f) }
     val scale = remember { Animatable(0.92f) }
     val footerAlpha = remember { Animatable(0f) }
+    val minTimeDone = remember { androidx.compose.runtime.mutableStateOf(false) }
 
     val pulseTransition = rememberInfiniteTransition(label = "splashPulse")
     val rippleScale by pulseTransition.animateFloat(
@@ -75,12 +85,6 @@ internal fun XySplashScreen(onFinished: () -> Unit) {
         ),
         label = "rippleScale",
     )
-
-    val dark = when (XyThemeState.mode) {
-        XyThemeState.DARK -> true
-        XyThemeState.LIGHT -> false
-        else -> isSystemInDarkTheme()
-    }
 
     LaunchedEffect(Unit) {
         launch {
@@ -102,18 +106,24 @@ internal fun XySplashScreen(onFinished: () -> Unit) {
                 animationSpec = tween(durationMillis = 450, easing = FastOutSlowInEasing),
             )
         }
-        delay(1500)
-        launch {
-            footerAlpha.animateTo(
+        delay(1050)
+        minTimeDone.value = true
+    }
+
+    LaunchedEffect(ready, minTimeDone.value) {
+        if (ready && minTimeDone.value) {
+            launch {
+                footerAlpha.animateTo(
+                    targetValue = 0f,
+                    animationSpec = tween(durationMillis = 220, easing = FastOutSlowInEasing),
+                )
+            }
+            alpha.animateTo(
                 targetValue = 0f,
-                animationSpec = tween(durationMillis = 220, easing = FastOutSlowInEasing),
+                animationSpec = tween(durationMillis = 260, easing = FastOutSlowInEasing),
             )
+            onFinished()
         }
-        alpha.animateTo(
-            targetValue = 0f,
-            animationSpec = tween(durationMillis = 260, easing = FastOutSlowInEasing),
-        )
-        onFinished()
     }
 
     val bgColor = if (dark) Color(0xFF07080D) else Color(0xFFF8FAFC)

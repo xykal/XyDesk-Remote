@@ -1612,7 +1612,7 @@ private fun CommentsBottomSheet(
                 )
             }
 
-            HorizontalDivider(
+            Divider(
                 thickness = 0.5.dp,
                 color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.28f),
             )
@@ -1713,7 +1713,7 @@ private fun CommentsBottomSheet(
                                 )
                             }
                         }
-                        HorizontalDivider(
+                        Divider(
                             thickness = 0.5.dp,
                             color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.24f),
                         )
