@@ -148,6 +148,10 @@ import id.xydesk.remote.ui.components.XyIconPill
 import id.xydesk.remote.ui.components.XyOverlay
 import id.xydesk.remote.ui.components.XyPillButton
 import id.xydesk.remote.ui.components.XyTopBar
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
+import kotlinx.coroutines.sync.Semaphore
+import kotlinx.coroutines.sync.withPermit
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -583,8 +587,14 @@ internal fun GlobalChatScreen(
         }
     }
 
+    // Bound network fan-out per screen; queued coroutines are cancelled on disposal.
+    val translationSlots = remember { Semaphore(2) }
+    val translatingKeys = remember { mutableSetOf<Triple<String, String, String>>() }
+    val historyInFlight = remember { java.util.concurrent.atomic.AtomicBoolean(false) }
+    val wsHistoryReceived = remember { java.util.concurrent.atomic.AtomicBoolean(false) }
+
     fun enrichTranslationIfNeeded(msg: ChatMessage, forceRetranslate: Boolean = false) {
-        if (msg.attachmentType == "sticker") return
+        if (msg.attachmentType == "sticker" || msg.text.isBlank()) return
         val prefSnapshot = viewerTargetLang
         // Ketika kita mengirim pesan sendiri (msg.mine == true) pada mode otomatis ("auto"),
         // tampilkan 1 bahasa saja di layar pengirim.
@@ -595,128 +605,148 @@ internal fun GlobalChatScreen(
             }
             return
         }
-        Thread {
-            val result = translateClientSideMultiLang(
-                text = msg.text,
-                senderCountry = msg.country,
-                viewerLangPref = prefSnapshot,
-                viewerCountry = myCountry,
-                forServerBroadcast = false,
-            ) ?: return@Thread
-            val translatedText = result.first
-            val targetLabel = result.second
-            val detectedLang = result.third
-            val updatedCountry = resolveSmartCountryClient(msg.text, detectedLang, msg.country)
-            val updatedFlag = countryCodeToFlag(updatedCountry)
-            main.post {
-                val idx = messages.indexOfFirst { it.id == msg.id }
-                if (idx >= 0) {
-                    val current = messages[idx]
-                    val resolvedTranslation = if (current.mine && (viewerTargetLang == "auto" || viewerTargetLang.isBlank())) {
-                        ""
-                    } else {
-                        translatedText
-                    }
-                    if (
-                        forceRetranslate ||
-                        current.translated != resolvedTranslation ||
-                        current.targetLang != targetLabel ||
-                        current.country != updatedCountry
-                    ) {
-                        messages[idx] = current.copy(
-                            translated = resolvedTranslation,
-                            targetLang = targetLabel,
-                            sourceLang = detectedLang,
-                            country = updatedCountry,
-                            flag = updatedFlag,
+        val translationKey = Triple(msg.id, prefSnapshot, msg.text)
+        if (!translatingKeys.add(translationKey)) return
+        scope.launch {
+            try {
+                val result = translationSlots.withPermit {
+                    withContext(Dispatchers.IO) {
+                        translateClientSideMultiLang(
+                            text = msg.text,
+                            senderCountry = msg.country,
+                            viewerLangPref = prefSnapshot,
+                            viewerCountry = myCountry,
+                            forServerBroadcast = false,
                         )
                     }
+                } ?: return@launch
+                // Do not apply a response for an obsolete language selection.
+                if (viewerTargetLang != prefSnapshot) return@launch
+                val translatedText = result.first
+                val targetLabel = result.second
+                val detectedLang = result.third
+                val updatedCountry = resolveSmartCountryClient(msg.text, detectedLang, msg.country)
+                val updatedFlag = countryCodeToFlag(updatedCountry)
+                run {
+                    val idx = messages.indexOfFirst { it.id == msg.id }
+                    if (idx >= 0) {
+                        val current = messages[idx]
+                        val resolvedTranslation = if (current.mine && (viewerTargetLang == "auto" || viewerTargetLang.isBlank())) {
+                            ""
+                        } else {
+                            translatedText
+                        }
+                        if (
+                            forceRetranslate ||
+                            current.translated != resolvedTranslation ||
+                            current.targetLang != targetLabel ||
+                            current.country != updatedCountry
+                        ) {
+                            messages[idx] = current.copy(
+                                translated = resolvedTranslation,
+                                targetLang = targetLabel,
+                                sourceLang = detectedLang,
+                                country = updatedCountry,
+                                flag = updatedFlag,
+                            )
+                        }
+                    }
                 }
+            } finally {
+                translatingKeys.remove(translationKey)
             }
-        }.start()
+        }
     }
 
     suspend fun fetchHistoryOverHttp() {
-        withContext(Dispatchers.IO) {
-            runCatching {
-                val cid = URLEncoder.encode(communityApi.accountShortId(), "UTF-8")
-                val gh = URLEncoder.encode(verifiedGhLogin.orEmpty(), "UTF-8")
-                val url = "$CHAT_HISTORY_URL?joined_at=$firstJoinedAtMs&client_id=$cid&github_login=$gh"
-                val conn = (URL(url).openConnection() as HttpURLConnection).apply {
-                    requestMethod = "GET"
-                    connectTimeout = 8_000
-                    readTimeout = 8_000
-                    setRequestProperty("Accept", "application/json")
-                }
-                if (conn.responseCode in 200..299) {
-                    val body = conn.inputStream.bufferedReader().use { it.readText() }
-                    val json = JSONObject(body)
-                    val serverOnline = json.optInt("online_count", 0)
-                    if (serverOnline > 0) {
-                        AppUpdate.updateOnlineCount(serverOnline)
+        if (!historyInFlight.compareAndSet(false, true)) return
+        try {
+            withContext(Dispatchers.IO) {
+                runCatching {
+                    val cid = URLEncoder.encode(communityApi.accountShortId(), "UTF-8")
+                    val gh = URLEncoder.encode(verifiedGhLogin.orEmpty(), "UTF-8")
+                    val url = "$CHAT_HISTORY_URL?joined_at=$firstJoinedAtMs&client_id=$cid&github_login=$gh"
+                    val conn = (URL(url).openConnection() as HttpURLConnection).apply {
+                        requestMethod = "GET"
+                        connectTimeout = 8_000
+                        readTimeout = 8_000
+                        setRequestProperty("Accept", "application/json")
                     }
-                    val serverJoinedAt = json.optLong("joined_at", 0L)
-                    if (serverJoinedAt > firstJoinedAtMs) {
-                        firstJoinedAtMs = serverJoinedAt
-                    }
-                    val serverPinned = parsePinnedMessageFromJson(json.optJSONObject("pinned_message"))
-                    val arr = json.optJSONArray("messages") ?: return@runCatching
-                    val fetched = ArrayList<ChatMessage>(arr.length())
-                    for (i in 0 until arr.length()) {
-                        val m = arr.optJSONObject(i) ?: continue
-                        val parsed = parseMessageFromJson(m, nickname, verifiedGhLogin)
-                        // Pastikan member baru tidak pernah melihat pesan sebelum waktu join
-                        if (parsed.at >= firstJoinedAtMs - 2_000L && parsed.id !in hiddenMessageIds) {
-                            fetched.add(parsed)
+                    try {
+                    if (conn.responseCode in 200..299) {
+                        val body = conn.inputStream.bufferedReader().use { it.readText() }
+                        val json = JSONObject(body)
+                        val serverOnline = json.optInt("online_count", 0)
+                        if (serverOnline > 0) {
+                            AppUpdate.updateOnlineCount(serverOnline)
                         }
-                    }
-                    withContext(Dispatchers.Main) {
-                        connected = true
-                        if (serverOnline > 0) roomPresence = serverOnline
-                        if (json.has("pinned_message")) {
-                            pinnedMessage = serverPinned
-                            GlobalChatMemoryCache.pinnedMessage = serverPinned
+                        val serverJoinedAt = json.optLong("joined_at", 0L)
+                        if (serverJoinedAt > firstJoinedAtMs) {
+                            firstJoinedAtMs = serverJoinedAt
                         }
-                        var added = false
-                        val fetchedIds = fetched.map { it.id }.toSet()
-                        if (fetched.isNotEmpty()) {
-                            val oldestFetchedAt = fetched.minOf { it.at }
-                            messages.removeAll { existing ->
-                                !existing.id.startsWith("local-") &&
-                                    existing.at >= oldestFetchedAt &&
-                                    existing.id !in fetchedIds &&
-                                    (System.currentTimeMillis() - existing.at > 4_000L)
+                        val serverPinned = parsePinnedMessageFromJson(json.optJSONObject("pinned_message"))
+                        val arr = json.optJSONArray("messages") ?: return@runCatching
+                        val fetched = ArrayList<ChatMessage>(arr.length())
+                        for (i in 0 until arr.length()) {
+                            val m = arr.optJSONObject(i) ?: continue
+                            val parsed = parseMessageFromJson(m, nickname, verifiedGhLogin)
+                            // Pastikan member baru tidak pernah melihat pesan sebelum waktu join
+                            if (parsed.at >= firstJoinedAtMs - 2_000L && parsed.id !in hiddenMessageIds) {
+                                fetched.add(parsed)
                             }
                         }
-                        for (item in fetched) {
-                            id.xydesk.remote.push.ChatPushNotifier.markSeen(item.id, item.at, context)
-                            val existingIdx = messages.indexOfFirst { it.id == item.id }
-                            if (existingIdx < 0) {
-                                val tempIdx = messages.indexOfFirst {
-                                    it.id.startsWith("local-") && it.mine && it.text == item.text
+                        withContext(Dispatchers.Main) {
+                            connected = true
+                            if (serverOnline > 0) roomPresence = serverOnline
+                            if (json.has("pinned_message")) {
+                                pinnedMessage = serverPinned
+                                GlobalChatMemoryCache.pinnedMessage = serverPinned
+                            }
+                            var added = false
+                            val fetchedIds = fetched.map { it.id }.toSet()
+                            if (fetched.isNotEmpty()) {
+                                val oldestFetchedAt = fetched.minOf { it.at }
+                                messages.removeAll { existing ->
+                                    !existing.id.startsWith("local-") &&
+                                        existing.at >= oldestFetchedAt &&
+                                        existing.id !in fetchedIds &&
+                                        (System.currentTimeMillis() - existing.at > 4_000L)
                                 }
-                                if (tempIdx >= 0) {
-                                    messages[tempIdx] = item.copy(deliveryTicks = 2)
-                                } else {
-                                    messages.add(item)
-                                    added = true
-                                }
-                                enrichTranslationIfNeeded(item)
                             }
-                        }
-                        GlobalChatMemoryCache.messages.clear()
-                        GlobalChatMemoryCache.messages.addAll(messages.takeLast(80))
-                        if (added && messages.isNotEmpty()) {
-                            val isNearBottom = !listState.canScrollForward ||
-                                listState.firstVisibleItemIndex >= (messages.size - 4).coerceAtLeast(0)
-                            if (isNearBottom) {
-                                listState.animateScrollToItem(messages.size - 1)
+                            for (item in fetched) {
+                                id.xydesk.remote.push.ChatPushNotifier.markSeen(item.id, item.at, context)
+                                val existingIdx = messages.indexOfFirst { it.id == item.id }
+                                if (existingIdx < 0) {
+                                    val tempIdx = messages.indexOfFirst {
+                                        it.id.startsWith("local-") && it.mine && it.text == item.text
+                                    }
+                                    if (tempIdx >= 0) {
+                                        messages[tempIdx] = item.copy(deliveryTicks = 2)
+                                    } else {
+                                        messages.add(item)
+                                        added = true
+                                    }
+                                    enrichTranslationIfNeeded(item)
+                                }
+                            }
+                            GlobalChatMemoryCache.messages.clear()
+                            GlobalChatMemoryCache.messages.addAll(messages.takeLast(80))
+                            if (added && messages.isNotEmpty()) {
+                                val isNearBottom = !listState.canScrollForward ||
+                                    listState.firstVisibleItemIndex >= (messages.size - 4).coerceAtLeast(0)
+                                if (isNearBottom) {
+                                    listState.animateScrollToItem(messages.size - 1)
+                                }
                             }
                         }
                     }
+                    } finally {
+                        conn.disconnect()
+                    }
                 }
-                conn.disconnect()
             }
+        } finally {
+            historyInFlight.set(false)
         }
     }
 
@@ -727,8 +757,12 @@ internal fun GlobalChatScreen(
             nickname = chatNickname(context)
             firstJoinedAtMs = ensureFirstJoinedAtMs(context, savedGh)
         }
-        // Langsung muat riwayat chat tanpa menunggu ping presence / disk I/O stiker
-        launch { fetchHistoryOverHttp() }
+        // WS-first, HTTP fallback; presence dan disk I/O stiker tetap paralel.
+        launch {
+            // WS already delivers history. Avoid downloading media-heavy history twice.
+            delay(1_500L)
+            if (!wsHistoryReceived.get()) fetchHistoryOverHttp()
+        }
         launch {
             if (savedGh.isNullOrBlank()) {
                 val pat = runCatching {
@@ -785,6 +819,8 @@ internal fun GlobalChatScreen(
         var ws: WebSocket? = null
         var attempt = 0
         var closed = false
+        // Preserve WS event order while history parsing suspends off-main.
+        val socketEventMutex = Mutex()
 
         fun connect(): WebSocket {
             val cid = URLEncoder.encode(communityApi.accountShortId(), "UTF-8")
@@ -811,7 +847,8 @@ internal fun GlobalChatScreen(
                     override fun onMessage(webSocket: WebSocket, text: String) {
                         lastWsActivityMs.set(System.currentTimeMillis())
                         val data = try { JSONObject(text) } catch (_: Exception) { return }
-                        main.post {
+                        scope.launch {
+                            socketEventMutex.withLock {
                             when (data.optString("type")) {
                                 "history" -> {
                                     val srvOnline = data.optInt("online_count", 0)
@@ -819,18 +856,32 @@ internal fun GlobalChatScreen(
                                         roomPresence = srvOnline
                                         AppUpdate.updateOnlineCount(srvOnline)
                                     }
-                                    val arr: JSONArray = data.optJSONArray("messages") ?: return@post
-                                    val batch = ArrayList<ChatMessage>(arr.length())
-                                    for (i in 0 until arr.length()) {
-                                        val m = arr.optJSONObject(i) ?: continue
-                                        val parsed = parseMessageFromJson(m, nickname, verifiedGhLogin)
-                                        if (parsed.at >= firstJoinedAtMs - 2_000L && parsed.id !in hiddenMessageIds) {
-                                            id.xydesk.remote.push.ChatPushNotifier.markSeen(parsed.id, parsed.at, context)
-                                            batch.add(parsed)
+                                    val arr: JSONArray = data.optJSONArray("messages") ?: return@launch
+                                    val nameSnapshot = nickname
+                                    val loginSnapshot = verifiedGhLogin
+                                    val joinedSnapshot = firstJoinedAtMs
+                                    val hiddenSnapshot = hiddenMessageIds.toSet()
+                                    val batch = withContext(Dispatchers.Default) {
+                                        buildList {
+                                            for (i in 0 until arr.length()) {
+                                                val m = arr.optJSONObject(i) ?: continue
+                                                val parsed = parseMessageFromJson(m, nameSnapshot, loginSnapshot)
+                                                if (parsed.at >= joinedSnapshot - 2_000L && parsed.id !in hiddenSnapshot) add(parsed)
+                                            }
                                         }
                                     }
+                                    wsHistoryReceived.set(true)
+                                    batch.forEach { id.xydesk.remote.push.ChatPushNotifier.markSeen(it.id, it.at, context) }
+                                    // Parsing suspends: preserve messages arriving meanwhile and pending sends.
+                                    val newestAt = batch.maxOfOrNull { it.at } ?: 0L
+                                    val batchIds = batch.mapTo(HashSet()) { it.id }
+                                    val retained = messages.filter {
+                                        it.id !in batchIds && (it.id.startsWith("local-") || it.at > newestAt)
+                                    }
                                     messages.clear()
-                                    messages.addAll(batch)
+                                    messages.addAll((batch + retained).filter { it.id !in hiddenMessageIds }.sortedBy { it.at })
+                                    GlobalChatMemoryCache.messages.clear()
+                                    GlobalChatMemoryCache.messages.addAll(messages.takeLast(80))
                                     if (viewerTargetLang != "auto") {
                                         batch.takeLast(8).forEach { enrichTranslationIfNeeded(it) }
                                     }
@@ -840,7 +891,7 @@ internal fun GlobalChatScreen(
                                 }
                                 "msg" -> {
                                     val incoming = parseMessageFromJson(data, nickname, verifiedGhLogin)
-                                    if (incoming.at < firstJoinedAtMs - 2_000L || incoming.id in hiddenMessageIds) return@post
+                                    if (incoming.at < firstJoinedAtMs - 2_000L || incoming.id in hiddenMessageIds) return@launch
                                     id.xydesk.remote.push.ChatPushNotifier.markSeen(incoming.id, incoming.at, context)
                                     val existingIdx = messages.indexOfFirst { it.id == incoming.id }
                                     if (existingIdx >= 0) {
@@ -895,6 +946,7 @@ internal fun GlobalChatScreen(
                                     val on = data.optBoolean("on", false)
                                     typingName = if (on && who.isNotBlank() && who != nickname) "$who ($cc)" else null
                                 }
+                            }
                             }
                         }
                     }
