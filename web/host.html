@@ -220,7 +220,7 @@
       <div class="meta mono">Windows Host Agent &amp; RDP On-Mic Setup · Native Modern GUI</div>
       <h1>XyDesk Host Agent (Native GUI) &amp; Setup On-Mic RDP</h1>
       <p class="lead">
-        Halaman ini menyediakan dua alat resmi: <strong>(1) XyDesk Host Agent (100% Native GUI tanpa terminal)</strong> untuk PC Windows pribadi dengan <em>Clean ID &amp; Password</em>, <em>Enkripsi E2EE</em>, dan <em>Virtual Device 120Hz</em>; serta <strong>(2) File Setup On-Mic Mandiri</strong> untuk RDP Windows atau VPS Linux yang kamu beli/sewa sendiri di luar GitHub.
+        Halaman ini menyediakan dua alat resmi: <strong>(1) XyDesk Host Agent (100% Native GUI tanpa terminal)</strong> untuk PC Windows pribadi dengan <em>Clean ID &amp; Password</em>, <em>Enkripsi QUIC TLS 1.3</em>, dan <em>Virtual Device 120Hz</em>; serta <strong>(2) File Setup On-Mic Mandiri</strong> untuk RDP Windows atau VPS Linux yang kamu beli/sewa sendiri di luar GitHub.
       </p>
 
       <div class="card" style="border-color: rgba(255,255,255,0.22); background: linear-gradient(155deg, rgba(255,255,255,0.06) 0%, var(--surface) 100%);">
@@ -249,7 +249,7 @@
       <div class="card">
         <h2>2. Paket Windows x64 — XyDesk Host Agent (Native GUI Modern · 1 File .EXE)</h2>
         <p>
-          Unduh <strong>XyDeskRemoteHost-Standalone.exe</strong> — <strong>antarmuka GUI Native penuh tanpa jendela terminal/CMD</strong>. Menampilkan <strong>Clean ID &amp; Password</strong> (lengkap dengan tombol lihat/salin/acak password), <strong>Enkripsi E2EE AES-256-GCM + QUIC TLS 1.3</strong> beserta sidik jari SHA-256, serta pengelola <strong>Virtual Display 120Hz &amp; Virtual Microphone On-Mic</strong>. Lihat <a href="https://github.com/xykal/XyDesk-Remote/releases" target="_blank" rel="noopener noreferrer" style="text-decoration:underline;text-underline-offset:3px;">catatan rilis resmi</a> dan <a href="/SHA256SUMS.txt" style="text-decoration:underline;text-underline-offset:3px;">checksum SHA-256</a>.
+          Unduh <strong>XyDeskRemoteHost-Standalone.exe</strong> — <strong>antarmuka GUI Native penuh tanpa jendela terminal/CMD</strong>. Menampilkan <strong>Clean ID &amp; Password</strong> (lengkap dengan tombol lihat/salin/acak password), <strong>Enkripsi QUIC TLS 1.3 (AES-256-GCM)</strong> beserta sidik jari SHA-256, serta pengelola <strong>Virtual Display 120Hz &amp; Virtual Microphone On-Mic</strong>. Lihat <a href="https://github.com/xykal/XyDesk-Remote/releases" target="_blank" rel="noopener noreferrer" style="text-decoration:underline;text-underline-offset:3px;">catatan rilis resmi</a> dan <a href="/SHA256SUMS.txt" style="text-decoration:underline;text-underline-offset:3px;">checksum SHA-256</a>.
         </p>
         <div style="margin-top: 14px; display: flex; gap: 10px; flex-wrap: wrap;">
           <a href="/XyDeskRemoteHost-Standalone.exe" download="XyDeskRemoteHost-Standalone.exe" class="pill primary">
@@ -268,7 +268,7 @@
         <h2>3. Fitur Utama di Dashboard Native GUI Host Agent</h2>
         <ul>
           <li><strong>Clean ID &amp; Password:</strong> Menampilkan ID PC LAN (10 digit), ID Global Relay (<code>XY...</code>), Windows Username, dan Password Akses bersih yang dapat dilihat, disalin satu paket, atau diacak ulang kapan saja.</li>
-          <li><strong>Enkripsi End-to-End &amp; Sidik Jari Host:</strong> Perlindungan <code>E2EE AES-256-GCM + QUIC v1 TLS 1.3</code> disertai Host Key Fingerprint <code>SHA-256</code> unik per perangkat.</li>
+          <li><strong>Enkripsi Transit &amp; Sidik Jari Host:</strong> Perlindungan <code>QUIC v1 TLS 1.3 (AES-256-GCM / ChaCha20-Poly1305)</code> disertai Host Key Fingerprint <code>SHA-256</code> unik per perangkat.</li>
           <li><strong>Virtual Device (Layar Virtual 120Hz &amp; On-Mic Audio Bridge):</strong> Mengaktifkan 120FPS DWM + GPU H.264 AVC 4:4:4 Full-Chroma, membuka kunci <code>fDisableAudioCapture=0</code> &amp; Privacy Microphone Consent, serta menjembatani suara PC (WASAPI 24kHz) dan input mikrofon HP secara otomatis tanpa jendela terminal.</li>
         </ul>
       </div>
