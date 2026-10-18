@@ -476,6 +476,7 @@ private fun FeedCompactLeaderboardStrip(
                             maxLines = 1,
                             overflow = TextOverflow.Ellipsis,
                         )
+                        if (item.rank in 1..3) LeaderboardDurationBadge(item.rank, compact = true)
                         Text(
                             text = formatLeaderboardDuration(item.totalSeconds),
                             fontSize = 10.sp,
@@ -1064,6 +1065,7 @@ private fun PodiumColumn(
             name = entry.name,
             githubLogin = entry.githubLogin,
             compact = true,
+            durationRank = entry.rank,
         )
         Text(
             text = formatLeaderboardDuration(entry.totalSeconds),

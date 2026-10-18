@@ -718,9 +718,7 @@ internal fun MessageBubble(
                             fontWeight = FontWeight.Bold,
                             color = if (founderMsg) Color(0xFFFDE047) else Color(0xFFD4D4D8),
                         )
-                        if (founderMsg) {
-                            XyFounderBadge(compact = true)
-                        }
+                        XyUserRoleBadges(name = msg.name, githubLogin = msg.githubLogin, compact = true)
                     }
                     Spacer(Modifier.height(4.dp))
                     if (msg.attachmentData.startsWith("sticker_crypto15:")) {

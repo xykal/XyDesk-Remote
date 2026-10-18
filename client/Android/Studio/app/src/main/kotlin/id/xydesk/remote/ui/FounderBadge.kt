@@ -41,6 +41,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -2137,7 +2138,11 @@ internal fun XyUserRoleBadges(
     name: String?,
     githubLogin: String? = null,
     compact: Boolean = true,
+    durationRank: Int? = null,
 ) {
+    val durationRanks by LeaderboardPodium.ranks.collectAsState()
+    val podiumRank = durationRank?.takeIf { it in 1..3 }
+        ?: durationRanks[normalizedChatAccount(githubLogin)]
     val context = LocalContext.current
     val rev = XySpecialRoleRegistry.roleRevision
     val isFounder = remember(name, githubLogin) {
@@ -2149,6 +2154,8 @@ internal fun XyUserRoleBadges(
     val isTester = remember(name, githubLogin, rev) {
         isXyTesterAccount(context, name, githubLogin)
     }
+    if (!isFounder && !isTeam && !isTester && podiumRank == null) return
+    Column(verticalArrangement = Arrangement.spacedBy(3.dp)) {
     if (isFounder || isTeam || isTester) {
         Row(
             verticalAlignment = Alignment.CenterVertically,
@@ -2164,6 +2171,8 @@ internal fun XyUserRoleBadges(
                 XyTesterBadge(compact = compact)
             }
         }
+    }
+        if (podiumRank != null) LeaderboardDurationBadge(podiumRank, compact)
     }
 }
 

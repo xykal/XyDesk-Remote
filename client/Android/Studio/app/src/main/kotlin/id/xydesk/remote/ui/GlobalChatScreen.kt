@@ -799,6 +799,7 @@ private fun GlobalChatAccountContent(
             nickname = chatNickname(context)
             firstJoinedAtMs = ensureFirstJoinedAtMs(context, savedGh)
         }
+        launch { communityApi.fetchLeaderboard(reportDeltaSec = 0L) }
         launch(Dispatchers.IO) { runCatching { pruneExpiredChatViewOnceFiles(context.cacheDir) } }
         // WS-first, HTTP fallback; presence dan disk I/O stiker tetap paralel.
         launch {

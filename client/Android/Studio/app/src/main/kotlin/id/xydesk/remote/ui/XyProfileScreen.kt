@@ -550,6 +550,7 @@ private fun CommunityAccountCard(
     val authRev = GitHubDirectOAuthController.authRevision
     var githubUser by remember(authRev) { mutableStateOf(getVerifiedGitHubLogin(context)) }
     LaunchedEffect(authRev) {
+        launch { api.fetchLeaderboard(reportDeltaSec = 0L) }
         val currentGh = getVerifiedGitHubLogin(context)
         if (!currentGh.isNullOrBlank()) {
             githubUser = currentGh
