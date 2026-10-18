@@ -36,3 +36,12 @@ User requested all tracks, incrementally. No APK assembly, deployment, version o
 PC stream virtual pad previously guarded both press and release with `enabled()`. Entering edit mode while held could skip the release; pointer coroutine cancellation also bypassed release without `finally`. Edit entry did not reset analog state.
 
 Local fix: one press/release callback transaction with `finally`, current enabled/action callbacks at gesture start, edit state read directly and neutral state sent on edit entry. Four JVM cases cover normal release, disabled-while-held, cancellation propagation and failed-down cleanup. These tests do not prove host delivery or device multi-touch behavior. Real disconnect/background/stick-neutralization checks remain pending.
+
+## Authentication feasibility audit — release blocker, not fixed yet
+Source review of `cloudflare/worker.mjs`:
+- OAuth callback/exchange branch has embedded fallback client secrets, including the alternate dashboard client. Treat embedded secrets as exposed; rotate them and migrate all supported client secrets to managed server configuration. Never include their values in reports, commits or tests. Removing a fallback alone does not revoke an exposed credential or erase history.
+- Callback/exchange reads state and uses it to derive a polling session ID; no state-cookie equality or one-time pending-session verification was observed in that branch. A random-looking state value alone is not CSRF/session-binding proof.
+- Public `/api/github/oauth/complete` accepts a token and claimed login from a JSON body and stores a polling session without resolving the token's principal against GitHub in that branch. Required non-empty strings are not authentication. A downstream client validating a token would not make this write path safe by itself.
+- `/api/leaderboard` POST still accepts claimed identity and reported total; it must not be reused as verified grant evidence.
+
+Safe next work: agree how APK polling, browser callback and dashboard bridge share a one-time session binding; validate provider identity server-side, avoid bearer tokens in URLs, reject replay/mismatched principals and fail closed when managed credentials are missing. Existing bridge consumers must be coordinated before token-delivery or session contracts change. No OAuth behavior, secret/configuration, deploy or reward grants changed by this audit. These are source findings, not a live exploit or production configuration test.
