@@ -551,27 +551,10 @@ fun AddDeviceScreen(
                 )
             }
             if (existing == null) {
-                XySegmented(
-                    options = listOf(
-                        xy("Koneksi RDP (Desktop / Server)", "RDP Session (Desktop / Server)"),
-                        xy("Koneksi PC (Direct Stream)", "PC Connect (Direct Stream)"),
-                    ),
-                    selectedIndex = if (isPcQuickMode) 1 else 0,
-                    onSelect = { idx ->
-                        val wantPc = idx == 1
-                        isPcQuickMode = wantPc
-                        if (wantPc) {
-                            options = options.withPcStreamEngine(options.pcStreamEngine)
-                        } else {
-                            options = options.withStreamProfile(XyStreamProfile.AUTO).copy(
-                                pcConnectMode = false,
-                                microphone = true,
-                                gpuProfile = XyGpuProfile.AUTO,
-                                dynamicResolution = true,
-                                consoleAdmin = false,
-                            )
-                        }
-                    },
+                XyPillButton(
+                    text = "PC Stream",
+                    onClick = { context.startActivity(PcStreamSessionActivity.intent(context)) },
+                    primary = false,
                     modifier = Modifier.fillMaxWidth(),
                 )
                 XyPillButton(

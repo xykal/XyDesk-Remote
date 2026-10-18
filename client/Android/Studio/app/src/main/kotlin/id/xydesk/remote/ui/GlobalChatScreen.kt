@@ -218,7 +218,6 @@ private const val KEY_AUTO_DOWNLOAD_MEDIA = "chat_auto_download_media_v1"
 private const val KEY_HD_MEDIA_ENABLED = "chat_hd_media_enabled_v1"
 private const val KEY_AUTOPLAY_VIDEO = "chat_autoplay_video_v1"
 private const val KEY_NOTIF_TONE = "chat_notif_tone_v1"
-private const val KEY_VOICE_ENABLED = "chat_voice_enabled_v1"
 
 private val chatDecodedBitmapCache = object : android.util.LruCache<String, Bitmap>(12 * 1024 * 1024) {
     override fun sizeOf(key: String, value: Bitmap): Int = value.allocationByteCount.coerceAtLeast(1)
@@ -427,30 +426,6 @@ private fun GlobalChatAccountContent(
     }
     var notifSoundTone by remember {
         mutableStateOf(chatPrefs.getString(KEY_NOTIF_TONE, "default") ?: "default")
-    }
-    var voiceEnabled by remember {
-        mutableStateOf(chatPrefs.getBoolean(KEY_VOICE_ENABLED, false))
-    }
-    val ttsHolder = remember { arrayOfNulls<android.speech.tts.TextToSpeech>(1) }
-    DisposableEffect(voiceEnabled) {
-        if (voiceEnabled && ttsHolder[0] == null) {
-            runCatching {
-                ttsHolder[0] = android.speech.tts.TextToSpeech(context.applicationContext) { status ->
-                    if (status == android.speech.tts.TextToSpeech.SUCCESS) {
-                        runCatching { ttsHolder[0]?.language = Locale("id", "ID") }
-                    }
-                }
-            }
-        } else if (!voiceEnabled) {
-            runCatching { ttsHolder[0]?.stop() }
-        }
-        onDispose {
-            runCatching {
-                ttsHolder[0]?.stop()
-                ttsHolder[0]?.shutdown()
-            }
-            ttsHolder[0] = null
-        }
     }
     var favoriteStickerKeys by remember {
         mutableStateOf(CustomStickerVault.loadFavoriteKeys(context))
@@ -954,19 +929,7 @@ private fun GlobalChatAccountContent(
                                             messages[tempIdx] = incoming.copy(deliveryTicks = 2)
                                         } else {
                                             messages.add(incoming)
-                                            if (!incoming.mine) {
-                                                playChatNotificationTone(notifSoundTone)
-                                                if (voiceEnabled && incoming.text.isNotBlank()) {
-                                                    runCatching {
-                                                        ttsHolder[0]?.speak(
-                                                            "${incoming.name}: ${incoming.text.take(160)}",
-                                                            android.speech.tts.TextToSpeech.QUEUE_ADD,
-                                                            null,
-                                                            "msg_${incoming.id}",
-                                                        )
-                                                    }
-                                                }
-                                            }
+                                            if (!incoming.mine) playChatNotificationTone(notifSoundTone)
                                         }
                                     }
                                     enrichTranslationIfNeeded(incoming)
@@ -1554,34 +1517,6 @@ private fun GlobalChatAccountContent(
                             verticalAlignment = Alignment.CenterVertically,
                             horizontalArrangement = Arrangement.spacedBy(6.dp),
                         ) {
-                            // Toggle Voice ON / OFF
-                            Row(
-                                modifier = Modifier
-                                    .clip(RoundedCornerShape(50))
-                                    .background(if (voiceEnabled) Color(0xFF10B981).copy(alpha = 0.25f) else Color.White.copy(alpha = 0.12f))
-                                    .border(0.7.dp, if (voiceEnabled) Color(0xFF10B981) else Color.White.copy(alpha = 0.25f), RoundedCornerShape(50))
-                                    .clickable {
-                                        voiceEnabled = !voiceEnabled
-                                        chatPrefs.edit().putBoolean(KEY_VOICE_ENABLED, voiceEnabled).apply()
-                                    }
-                                    .padding(horizontal = 8.dp, vertical = 4.dp),
-                                verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.spacedBy(4.dp),
-                            ) {
-                                Icon(
-                                    imageVector = if (voiceEnabled) XyIcons.VolumeOn else XyIcons.VolumeOff,
-                                    contentDescription = "Toggle Voice",
-                                    tint = if (voiceEnabled) Color(0xFF10B981) else Color.White,
-                                    modifier = Modifier.size(12.dp),
-                                )
-                                Text(
-                                    text = if (voiceEnabled) "VOICE ON" else "VOICE OFF",
-                                    style = MaterialTheme.typography.labelSmall,
-                                    fontSize = 9.5.sp,
-                                    fontWeight = FontWeight.Bold,
-                                    color = if (voiceEnabled) Color(0xFF10B981) else Color.White,
-                                )
-                            }
                             // Pill Bahasa Terjemahan
                             Row(
                                 modifier = Modifier
@@ -1649,38 +1584,6 @@ private fun GlobalChatAccountContent(
                     title = "Chat Global",
                     onBack = onBack,
                     actions = {
-                        // Toggle Voice ON / OFF
-                        Row(
-                            modifier = Modifier
-                                .clip(RoundedCornerShape(50))
-                                .background(if (voiceEnabled) Color(0xFF10B981).copy(alpha = 0.18f) else Color(0xFF18181D))
-                                .border(
-                                    0.75.dp,
-                                    if (voiceEnabled) Color(0xFF10B981) else Color(0xFF272730),
-                                    RoundedCornerShape(50),
-                                )
-                                .clickable {
-                                    voiceEnabled = !voiceEnabled
-                                    chatPrefs.edit().putBoolean(KEY_VOICE_ENABLED, voiceEnabled).apply()
-                                }
-                                .padding(horizontal = 9.dp, vertical = 5.dp),
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(4.dp),
-                        ) {
-                            Icon(
-                                imageVector = if (voiceEnabled) XyIcons.VolumeOn else XyIcons.VolumeOff,
-                                contentDescription = "Toggle Voice",
-                                tint = if (voiceEnabled) Color(0xFF10B981) else Color(0xFFA1A1AA),
-                                modifier = Modifier.size(13.dp),
-                            )
-                            Text(
-                                text = if (voiceEnabled) "VOICE ON" else "VOICE OFF",
-                                style = MaterialTheme.typography.labelSmall,
-                                fontSize = 10.sp,
-                                color = if (voiceEnabled) Color(0xFF10B981) else Color(0xFFD4D4D8),
-                                fontWeight = FontWeight.Bold,
-                            )
-                        }
                         // Pill Bahasa Terjemahan (Ikon Vektor Globe)
                         Row(
                             modifier = Modifier
@@ -3306,44 +3209,6 @@ private fun GlobalChatAccountContent(
                             fontSize = 11.sp,
                             fontWeight = FontWeight.ExtraBold,
                             color = if (autoplayVideoEnabled) Color(0xFF10B981) else Color(0xFF94A3B8),
-                        )
-                    }
-                }
-
-                // 4b. Toggle Voice (Suara Pembaca Pesan Masuk) ON / OFF
-                Surface(
-                    onClick = {
-                        voiceEnabled = !voiceEnabled
-                        chatPrefs.edit().putBoolean(KEY_VOICE_ENABLED, voiceEnabled).apply()
-                    },
-                    shape = RoundedCornerShape(12.dp),
-                    color = Color(0xFF171A23),
-                ) {
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(horizontal = 12.dp, vertical = 10.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                    ) {
-                        Column(modifier = Modifier.weight(1f)) {
-                            Text(
-                                xy("Voice (Suara Pesan Masuk)", "Voice (Read Incoming Messages)"),
-                                style = MaterialTheme.typography.bodySmall,
-                                fontWeight = FontWeight.Bold,
-                                color = Color.White,
-                            )
-                            Text(
-                                xy("Nyalakan atau matikan fitur suara otomatis (Voice ON/OFF)", "Toggle voice feature ON or OFF"),
-                                style = MaterialTheme.typography.labelSmall,
-                                color = Color(0xFF94A3B8),
-                            )
-                        }
-                        Text(
-                            text = if (voiceEnabled) "ON" else "OFF",
-                            fontSize = 11.sp,
-                            fontWeight = FontWeight.ExtraBold,
-                            color = if (voiceEnabled) Color(0xFF10B981) else Color(0xFF94A3B8),
                         )
                     }
                 }
