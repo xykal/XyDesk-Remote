@@ -681,6 +681,7 @@ internal fun GlobalChatScreen(
         try {
             withContext(Dispatchers.IO) {
                 runCatching {
+                    val snapshotStartedAt = System.currentTimeMillis()
                     val cid = URLEncoder.encode(communityApi.accountShortId(), "UTF-8")
                     val gh = URLEncoder.encode(verifiedGhLogin.orEmpty(), "UTF-8")
                     val url = "$CHAT_HISTORY_URL?joined_at=$firstJoinedAtMs&client_id=$cid&github_login=$gh"
@@ -722,6 +723,9 @@ internal fun GlobalChatScreen(
                             }
                             var added = false
                             val fetchedIds = fetched.map { it.id }.toSet()
+                            if (arr.length() == 0) {
+                                messages.removeAll { !keepAfterEmptyChatSnapshot(it.id, it.at, snapshotStartedAt) }
+                            }
                             if (fetched.isNotEmpty()) {
                                 val oldestFetchedAt = fetched.minOf { it.at }
                                 messages.removeAll { existing ->
@@ -866,6 +870,7 @@ internal fun GlobalChatScreen(
                     }
 
                     override fun onMessage(webSocket: WebSocket, text: String) {
+                        val snapshotReceivedAt = System.currentTimeMillis()
                         lastWsActivityMs.set(System.currentTimeMillis())
                         val data = try { JSONObject(text) } catch (_: Exception) { return }
                         scope.launch {
@@ -897,7 +902,11 @@ internal fun GlobalChatScreen(
                                     val newestAt = batch.maxOfOrNull { it.at } ?: 0L
                                     val batchIds = batch.mapTo(HashSet()) { it.id }
                                     val retained = messages.filter {
-                                        it.id !in batchIds && (it.id.startsWith("local-") || it.at > newestAt)
+                                        it.id !in batchIds && if (arr.length() == 0) {
+                                            keepAfterEmptyChatSnapshot(it.id, it.at, snapshotReceivedAt)
+                                        } else {
+                                            it.id.startsWith("local-") || it.at > newestAt
+                                        }
                                     }
                                     messages.clear()
                                     messages.addAll((batch + retained).filter { it.id !in hiddenMessageIds }.sortedBy { it.at })
