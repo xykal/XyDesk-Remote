@@ -3,7 +3,9 @@
 
 #include <stdint.h>
 
-#ifdef _WIN32
+#if defined(XYDESK_STATIC)
+#define XYDESK_QUIC_API
+#elif defined(_WIN32)
 #ifdef XYDESK_QUIC_EXPORTS
 #define XYDESK_QUIC_API __declspec(dllexport)
 #else

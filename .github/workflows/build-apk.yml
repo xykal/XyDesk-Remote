@@ -98,65 +98,10 @@ jobs:
       - name: Compile Kotlin (app + core-rdp)
         working-directory: client/Android/Studio
         run: ./gradlew --stacktrace --no-daemon --build-cache :app:compileDebugKotlin
-      - name: Compile Windows Native C++17 Host Agent & DLLs (mingw-w64)
+      - name: Verify host distribution source only (NO native compile)
         run: |
-          # apt di runner kadang menggantung tanpa batas waktu -> pasang timeout + retry
-          export DEBIAN_FRONTEND=noninteractive
-          APT_OPTS="-o Acquire::Retries=5 -o Acquire::http::Timeout=25 -o Acquire::https::Timeout=25 -o Acquire::ForceIPv4=true"
-          # Mirror apt runner kadang lambat/timeout: ulangi beberapa kali.
-          for attempt in 1 2 3; do
-            if timeout 300 sudo apt-get $APT_OPTS update -qq &&
-               timeout 900 sudo apt-get $APT_OPTS install -y -qq g++-mingw-w64-x86-64 zip; then
-              break
-            fi
-            echo "::warning::apt mingw-w64 percobaan $attempt gagal, ulangi"
-            sudo rm -f /var/lib/apt/lists/lock /var/cache/apt/archives/lock || true
-            sleep 10
-          done
-          if ! command -v x86_64-w64-mingw32-g++ >/dev/null; then
-            # Toolchain host tidak tersedia (bukan salah kode). Job Release tetap
-            # meng-compile DLL/EXE host, jadi gate cukup memberi peringatan.
-            echo "::warning::mingw-w64 tidak tersedia di runner; gate host C++ dilewati (diuji di job Release)"
-            exit 0
-          fi
-          mkdir -p /tmp/dist-host
-          x86_64-w64-mingw32-g++ -std=c++17 -O2 -shared \
-            host-agent/src/xydesk_quic.cpp -Ihost-agent/include \
-            -o /tmp/dist-host/xydesk_quic.dll \
-            -Wl,--out-implib,/tmp/dist-host/libxydesk_quic.a \
-            -static-libgcc -static-libstdc++ -Wl,-Bstatic -lstdc++ -lpthread -Wl,-Bdynamic \
-            -lws2_32 -lole32 -luser32 -lgdi32
-          x86_64-w64-mingw32-g++ -std=c++17 -O2 -shared \
-            host-agent/src/xydesk_host_core.cpp -Ihost-agent/include \
-            -o /tmp/dist-host/xydesk_host_core.dll \
-            -Wl,--out-implib,/tmp/dist-host/libxydesk_host_core.a \
-            -static-libgcc -static-libstdc++ -Wl,-Bstatic -lstdc++ -lpthread -Wl,-Bdynamic \
-            -lws2_32 -ldxgi -ladvapi32 -liphlpapi -luser32 -lgdi32
-          x86_64-w64-mingw32-g++ -std=c++17 -O2 -mwindows \
-            host-agent/src/main_host.cpp -Ihost-agent/include \
-            -L/tmp/dist-host -lxydesk_quic -lxydesk_host_core \
-            -o /tmp/dist-host/XyDeskRemoteHost.exe \
-            -static-libgcc -static-libstdc++ -Wl,-Bstatic -lstdc++ -lpthread -Wl,-Bdynamic -luser32 -lgdi32 -lshell32 -ldwmapi -lwtsapi32 -lwinhttp -ladvapi32
-          # Exe tunggal mandiri: kedua pustaka dikompilasi langsung ke dalam exe
-          # dan runtime mingw diikat statis, jadi hasilnya tidak membutuhkan
-          # xydesk_quic.dll, xydesk_host_core.dll, maupun DLL runtime mingw.
-          # Exe lama yang bergantung DLL tetap dibangun supaya tidak ada yang
-          # rusak sebelum exe tunggal ini terbukti di perangkat nyata.
-          # Dua makro *_EXPORTS wajib ada di sini. CMake mendefinisikannya
-          # otomatis untuk target SHARED (xydesk_quic, xydesk_host_core), tapi
-          # build tunggal ini tidak lewat CMake: tanpa keduanya header memilih
-          # __declspec(dllimport) dan linker gagal dengan
-          # "undefined reference to __imp_xydesk_host_inspect_system".
-          x86_64-w64-mingw32-g++ -std=c++17 -O2 -mwindows \
-            -DXYDESK_QUIC_EXPORTS -DXYDESK_HOST_CORE_EXPORTS \
-            host-agent/src/main_host.cpp \
-            host-agent/src/xydesk_quic.cpp \
-            host-agent/src/xydesk_host_core.cpp \
-            -Ihost-agent/include \
-            -o "/tmp/dist-host/XyDeskRemoteHost-Standalone.exe" \
-            -static -static-libgcc -static-libstdc++ \
-            -lws2_32 -lole32 -ldxgi -ladvapi32 -liphlpapi -luser32 -lgdi32 -lshell32 -ldwmapi -lwtsapi32 -lwinhttp -ladvapi32
-          ls -lh /tmp/dist-host/
+          bash -n ci/build_windows_host.sh
+          python3 -m unittest discover -s ci -p test_host_distribution.py
 
   # ------------------------------------------------------------------
   # DEBUG per-ABI (tiap push ke main; commit [skip-debug] khusus melewati job ini)
@@ -561,59 +506,15 @@ jobs:
             app/build/outputs/apk/release/XyDesk-Remote64bit.apk \
             app/build/outputs/apk/release/XyDesk-Remote64bit-x86.apk \
             app/build/outputs/apk/release/XyDesk-RemoteUniversal.apk
-      - name: Build Windows Native C++17 Host Agent & DLLs (xydesk_quic.dll + xydesk_host_core.dll + XyDeskRemoteHost.exe)
+      - name: Build single Windows Host application (XyDeskRemoteHost.exe)
         run: |
           set -euo pipefail
           OUT_DIR="client/Android/Studio/app/build/outputs/apk/release"
           STAGE_DIR="/tmp/xydesk-host-win64"
           rm -rf "$STAGE_DIR"
           mkdir -p "$STAGE_DIR" "$OUT_DIR"
-          x86_64-w64-mingw32-g++ -std=c++17 -O2 -shared \
-            host-agent/src/xydesk_quic.cpp -Ihost-agent/include \
-            -o "$STAGE_DIR/xydesk_quic.dll" \
-            -Wl,--out-implib,"$STAGE_DIR/libxydesk_quic.a" \
-            -static-libgcc -static-libstdc++ -Wl,-Bstatic -lstdc++ -lpthread -Wl,-Bdynamic \
-            -lws2_32 -lole32 -luser32 -lgdi32
-          x86_64-w64-mingw32-g++ -std=c++17 -O2 -shared \
-            host-agent/src/xydesk_host_core.cpp -Ihost-agent/include \
-            -o "$STAGE_DIR/xydesk_host_core.dll" \
-            -Wl,--out-implib,"$STAGE_DIR/libxydesk_host_core.a" \
-            -static-libgcc -static-libstdc++ -Wl,-Bstatic -lstdc++ -lpthread -Wl,-Bdynamic \
-            -lws2_32 -ldxgi -ladvapi32 -liphlpapi -luser32 -lgdi32
-          x86_64-w64-mingw32-g++ -std=c++17 -O2 -mwindows \
-            host-agent/src/main_host.cpp -Ihost-agent/include \
-            -L"$STAGE_DIR" -lxydesk_quic -lxydesk_host_core \
-            -o "$STAGE_DIR/XyDeskRemoteHost.exe" \
-            -static-libgcc -static-libstdc++ -Wl,-Bstatic -lstdc++ -lpthread -Wl,-Bdynamic -luser32 -lgdi32 -lshell32 -ldwmapi -lwtsapi32 -lwinhttp -ladvapi32
-          # Exe tunggal mandiri: kedua pustaka dikompilasi langsung ke dalam exe
-          # dan runtime mingw diikat statis, jadi hasilnya tidak membutuhkan
-          # xydesk_quic.dll, xydesk_host_core.dll, maupun DLL runtime mingw.
-          # Exe lama yang bergantung DLL tetap dibangun supaya tidak ada yang
-          # rusak sebelum exe tunggal ini terbukti di perangkat nyata.
-          # Dua makro *_EXPORTS wajib ada di sini. CMake mendefinisikannya
-          # otomatis untuk target SHARED (xydesk_quic, xydesk_host_core), tapi
-          # build tunggal ini tidak lewat CMake: tanpa keduanya header memilih
-          # __declspec(dllimport) dan linker gagal dengan
-          # "undefined reference to __imp_xydesk_host_inspect_system".
-          x86_64-w64-mingw32-g++ -std=c++17 -O2 -mwindows \
-            -DXYDESK_QUIC_EXPORTS -DXYDESK_HOST_CORE_EXPORTS \
-            host-agent/src/main_host.cpp \
-            host-agent/src/xydesk_quic.cpp \
-            host-agent/src/xydesk_host_core.cpp \
-            -Ihost-agent/include \
-            -o "$STAGE_DIR/XyDeskRemoteHost-Standalone.exe" \
-            -static -static-libgcc -static-libstdc++ \
-            -lws2_32 -lole32 -ldxgi -ladvapi32 -liphlpapi -luser32 -lgdi32 -lshell32 -ldwmapi -lwtsapi32 -lwinhttp -ladvapi32
-          rm -f "$STAGE_DIR"/*.a
-          cp web/XyDeskHost-Setup.bat "$STAGE_DIR/XyDeskHost-Setup.bat"
-          cp web/XyDesk-Remote-Agent-Setup.ps1 "$STAGE_DIR/XyDesk-Remote-Agent-Setup.ps1"
-          cp web/XyDesk-RDP-OnMic-Setup.bat "$STAGE_DIR/XyDesk-RDP-OnMic-Setup.bat"
-          cp web/onmic.ps1 "$STAGE_DIR/onmic.ps1"
-          cp "$STAGE_DIR/xydesk_quic.dll" "$OUT_DIR/xydesk_quic.dll"
-          cp "$STAGE_DIR/xydesk_host_core.dll" "$OUT_DIR/xydesk_host_core.dll"
+          bash ci/build_windows_host.sh "$STAGE_DIR"
           cp "$STAGE_DIR/XyDeskRemoteHost.exe" "$OUT_DIR/XyDeskRemoteHost.exe"
-          cp "$STAGE_DIR/XyDeskRemoteHost-Standalone.exe" "$OUT_DIR/XyDeskRemoteHost-Standalone.exe"
-          (cd "$STAGE_DIR" && zip -q -r "$GITHUB_WORKSPACE/$OUT_DIR/XyDesk-Remote-Host-Agent-win64.zip" .)
           ls -lh "$OUT_DIR"
       - name: Upload signed APKs & Windows Host Agent for publishing
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
@@ -621,11 +522,7 @@ jobs:
           name: xydesk-remote-release-apks
           path: |
             client/Android/Studio/app/build/outputs/apk/release/*.apk
-            client/Android/Studio/app/build/outputs/apk/release/XyDesk-Remote-Host-Agent-win64.zip
             client/Android/Studio/app/build/outputs/apk/release/XyDeskRemoteHost.exe
-            client/Android/Studio/app/build/outputs/apk/release/XyDeskRemoteHost-Standalone.exe
-            client/Android/Studio/app/build/outputs/apk/release/xydesk_quic.dll
-            client/Android/Studio/app/build/outputs/apk/release/xydesk_host_core.dll
             client/Android/Studio/app/build/outputs/apk/release/SIGNATURE-VERIFICATION.txt
           retention-days: 3
       - name: Hapus material signing sementara
@@ -670,11 +567,7 @@ jobs:
         with:
           files: |
             release-apks/*.apk
-            release-apks/XyDesk-Remote-Host-Agent-win64.zip
             release-apks/XyDeskRemoteHost.exe
-            release-apks/XyDeskRemoteHost-Standalone.exe
-            release-apks/xydesk_quic.dll
-            release-apks/xydesk_host_core.dll
             release-apks/SIGNATURE-VERIFICATION.txt
             release-apks/SHA256SUMS.txt
           generate_release_notes: true
