@@ -352,7 +352,6 @@ class SessionManager(context: Context) {
 
     fun connect(rawProfile: ConnectionProfile) {
         val profile = RdpUri.normalizeProfile(rawProfile).copy(
-            id = rawProfile.id,
             label = rawProfile.label,
             key = rawProfile.key,
         )
