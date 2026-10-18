@@ -1612,9 +1612,11 @@ private fun CommentsBottomSheet(
                 )
             }
 
-            Divider(
-                thickness = 0.5.dp,
-                color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.28f),
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(0.5.dp)
+                    .background(MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.28f)),
             )
 
             LazyColumn(
@@ -1713,9 +1715,11 @@ private fun CommentsBottomSheet(
                                 )
                             }
                         }
-                        Divider(
-                            thickness = 0.5.dp,
-                            color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.24f),
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(0.5.dp)
+                                .background(MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.24f)),
                         )
                     }
                 }
