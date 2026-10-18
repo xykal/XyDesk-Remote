@@ -1190,9 +1190,17 @@ internal fun GlobalChatScreen(
         messages.toList().forEach { enrichTranslationIfNeeded(it, forceRetranslate = true) }
     }
 
+    // XyDesk perf: timestamp aktivitas WebSocket terakhir. Saat WS hidup,
+    // polling riwayat HTTP cukup jadi fallback konsistensi (30 dtk); saat WS
+    // mati kembali ke 5 dtk supaya chat tidak macet. Sebelumnya selalu 5 dtk:
+    // 12 request/menit + re-parse SELURUH riwayat (termasuk HMAC per pesan +
+    // diff O(n^2) di main thread) meski WS sudah mengirim pesan real-time.
+    val lastWsActivityMs = remember { java.util.concurrent.atomic.AtomicLong(0L) }
+
     LaunchedEffect(Unit) {
         while (true) {
-            delay(5000)
+            val wsAlive = System.currentTimeMillis() - lastWsActivityMs.get() < 45_000L
+            delay(if (wsAlive) 30_000L else 5_000L)
             fetchHistoryOverHttp()
         }
     }
@@ -1215,6 +1223,7 @@ internal fun GlobalChatScreen(
                 Request.Builder().url(wsUrl).build(),
                 object : WebSocketListener() {
                     override fun onOpen(webSocket: WebSocket, response: Response) {
+                        lastWsActivityMs.set(System.currentTimeMillis())
                         attempt = 0
                         main.post { connected = true }
                         webSocket.send(
@@ -1229,6 +1238,7 @@ internal fun GlobalChatScreen(
                     }
 
                     override fun onMessage(webSocket: WebSocket, text: String) {
+                        lastWsActivityMs.set(System.currentTimeMillis())
                         val data = try { JSONObject(text) } catch (_: Exception) { return }
                         main.post {
                             when (data.optString("type")) {
