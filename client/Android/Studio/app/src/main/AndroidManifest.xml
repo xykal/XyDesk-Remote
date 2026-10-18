@@ -35,10 +35,8 @@
         android:fullBackupContent="false"
         android:resizeableActivity="true">
 
-        <!-- AdMob: wajib untuk play-services-ads (fitur RDP Gratis). -->
-        <meta-data
-            android:name="com.google.android.gms.ads.APPLICATION_ID"
-            android:value="ca-app-pub-7140410806476728~5239237352" />
+        <!-- (AdMob meta-data dihapus bersama dependency play-services-ads yang
+             tidak terpakai — lihat komentar di app/build.gradle.) -->
 
         <!-- OneSignal v5: intersep push Chat Global untuk dirender sebagai
              MessagingStyle (gaya WhatsApp) lengkap dengan tombol Balas
