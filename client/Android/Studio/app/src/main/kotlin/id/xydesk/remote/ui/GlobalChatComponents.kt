@@ -215,19 +215,8 @@ internal fun FullScreenChatMediaViewer(
                 .background(Color.Black),
         ) {
             if (msg.attachmentType == "video" && msg.attachmentData.isNotBlank()) {
-                val videoFile = remember(msg.id, msg.attachmentData) {
-                    runCatching {
-                        val comma = msg.attachmentData.indexOf(',')
-                        if (comma < 0) return@runCatching null
-                        val bytes = Base64.decode(msg.attachmentData.substring(comma + 1), Base64.DEFAULT)
-                        val dir = File(context.cacheDir, "chat_media").apply { mkdirs() }
-                        val safeName = msg.attachmentName.replace(Regex("[^A-Za-z0-9._-]"), "_")
-                            .ifBlank { "video_${msg.id.hashCode()}.mp4" }
-                        val f = File(dir, safeName)
-                        f.writeBytes(bytes)
-                        f
-                    }.getOrNull()
-                }
+                val prepared = rememberPreparedChatVideo(context, msg.id, msg.attachmentData)
+                val videoFile = prepared.video?.file
                 Box(
                     modifier = Modifier
                         .fillMaxSize()
@@ -270,7 +259,7 @@ internal fun FullScreenChatMediaViewer(
                         )
                     } else {
                         Text(
-                            text = "Gagal memuat berkas video.",
+                            text = if (prepared.loading) xyNow("Menyiapkan video…", "Preparing video…") else xyNow("Gagal memuat berkas video.", "Unable to load video."),
                             color = Color.White,
                             style = MaterialTheme.typography.bodyMedium,
                         )
@@ -1461,20 +1450,9 @@ internal fun ChatMediaAttachmentBox(
             }
         }
     } else if (msg.attachmentType == "video" && msg.attachmentData.isNotBlank()) {
-        val videoBytes = remember(msg.id, msg.attachmentData) {
-            runCatching {
-                val comma = msg.attachmentData.indexOf(',')
-                if (comma >= 0) Base64.decode(msg.attachmentData.substring(comma + 1), Base64.DEFAULT)
-                else null
-            }.getOrNull()
-        }
-        val videoRatio = remember(msg.id, videoBytes?.size) {
-            if (videoBytes != null && videoBytes.isNotEmpty()) {
-                extractCachedVideoAspectRatio(context, "chat_vid_${msg.id}", videoBytes)
-            } else {
-                9f / 16f
-            }
-        }
+        val prepared = rememberPreparedChatVideo(context, msg.id, msg.attachmentData)
+        val videoBytes = prepared.video?.bytes
+        val videoRatio = prepared.video?.ratio ?: (9f / 16f)
         Box(
             modifier = Modifier
                 .fillMaxWidth()

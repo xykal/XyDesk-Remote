@@ -2168,8 +2168,10 @@ internal fun FeedBinaryImage(
     val shape = if (round) CircleShape else RoundedCornerShape(12.dp)
 
     if (mime?.startsWith("video/") == true && data != null && data.isNotEmpty()) {
-        val vidRatio = remember(path, data.size) {
-            extractCachedVideoAspectRatio(context, path, data)
+        val vidRatio = androidx.compose.runtime.key(path, data) {
+            androidx.compose.runtime.produceState(9f / 16f, path, data) {
+                value = withContext(Dispatchers.IO) { extractCachedVideoAspectRatio(context, path, data) }
+            }.value
         }
         FeedAutoplayVideoPreview(
             videoBytes = data,
@@ -2234,11 +2236,7 @@ internal fun extractCachedVideoAspectRatio(
     cacheKey: String,
     videoBytes: ByteArray,
 ): Float = runCatching {
-    val safeName = "xy_vid_" + cacheKey.hashCode().toUInt().toString(16) + ".mp4"
-    val file = java.io.File(context.cacheDir, safeName)
-    if (!file.exists() || file.length() != videoBytes.size.toLong()) {
-        file.writeBytes(videoBytes)
-    }
+    val file = prepareCachedVideoFile(context.cacheDir, videoBytes)
     val retriever = android.media.MediaMetadataRetriever()
     try {
         retriever.setDataSource(file.absolutePath)
@@ -2274,15 +2272,12 @@ internal fun FeedAutoplayVideoPreview(
     var videoViewRef by remember(cacheKey) { mutableStateOf<android.widget.VideoView?>(null) }
     val fullscreenActive = XyVideoPlaybackCoordinator.fullscreenOpenCount.intValue > 0 || externalPaused
 
-    val tempFile = remember(cacheKey, videoBytes.size) {
-        runCatching {
-            val safeName = "xy_vid_" + cacheKey.hashCode().toUInt().toString(16) + ".mp4"
-            val file = java.io.File(context.cacheDir, safeName)
-            if (!file.exists() || file.length() != videoBytes.size.toLong()) {
-                file.writeBytes(videoBytes)
+    val tempFile = androidx.compose.runtime.key(cacheKey, videoBytes) {
+        androidx.compose.runtime.produceState<java.io.File?>(null, cacheKey, videoBytes) {
+            value = withContext(Dispatchers.IO) {
+                runCatching { prepareCachedVideoFile(context.cacheDir, videoBytes) }.getOrNull()
             }
-            file
-        }.getOrNull()
+        }.value
     }
 
     LaunchedEffect(fullscreenActive, muted) {
