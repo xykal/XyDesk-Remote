@@ -1,10 +1,8 @@
 package id.xydesk.remote.ui.theme
 
 import android.app.Activity
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.LocalContentColor
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Shapes
 import androidx.compose.material3.darkColorScheme
 import androidx.compose.material3.lightColorScheme
 import androidx.compose.foundation.isSystemInDarkTheme
@@ -116,16 +114,6 @@ val XyBody = FontFamily(
     Font(R.font.inter, FontWeight.Medium),
     Font(R.font.inter, FontWeight.SemiBold),
     Font(R.font.inter, FontWeight.Bold),
-)
-
-/** Radius lebih ramah sentuh; kontrol pill tetap terbaca sebagai kontrol. */
-val XyPill = RoundedCornerShape(18.dp)
-
-val XyShapes = Shapes(
-    small = RoundedCornerShape(10.dp),
-    medium = RoundedCornerShape(14.dp),
-    large = RoundedCornerShape(20.dp),
-    extraLarge = RoundedCornerShape(26.dp),
 )
 
 /**

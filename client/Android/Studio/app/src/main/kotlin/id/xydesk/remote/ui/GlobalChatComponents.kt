@@ -1,5 +1,7 @@
 package id.xydesk.remote.ui
 
+import id.xydesk.remote.ui.theme.XySpacing
+
 import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.ContentValues
@@ -405,7 +407,7 @@ internal fun FullScreenChatMediaViewer(
 
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    horizontalArrangement = Arrangement.spacedBy(XySpacing.small),
                 ) {
                     if (zoomScale > 1.05f) {
                         Box(
@@ -699,7 +701,7 @@ internal fun MessageBubble(
                 ) {
                     Row(
                         verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(4.dp),
+                        horizontalArrangement = Arrangement.spacedBy(XySpacing.compact),
                     ) {
                         Text(
                             text = msg.name,
@@ -738,7 +740,7 @@ internal fun MessageBubble(
                     // Bar Bawah Stiker: Jam + Tombol Favoritkan Stiker (Bisa Dipakai Siapa Saja)
                     Row(
                         verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        horizontalArrangement = Arrangement.spacedBy(XySpacing.small),
                     ) {
                         Row(
                             modifier = Modifier
@@ -747,7 +749,7 @@ internal fun MessageBubble(
                                 .clickable { onToggleFavoriteSticker(msg.attachmentData) }
                                 .padding(horizontal = 8.dp, vertical = 3.dp),
                             verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(4.dp),
+                            horizontalArrangement = Arrangement.spacedBy(XySpacing.compact),
                         ) {
                             Icon(
                                 imageVector = if (isFavSticker) XyIcons.StarFilled else XyIcons.Star,
@@ -855,7 +857,7 @@ internal fun MessageBubble(
                             ) {
                                 Row(
                                     verticalAlignment = Alignment.CenterVertically,
-                                    horizontalArrangement = Arrangement.spacedBy(4.dp),
+                                    horizontalArrangement = Arrangement.spacedBy(XySpacing.compact),
                                 ) {
                                     Icon(
                                         imageVector = XyIcons.Pin,
@@ -881,7 +883,7 @@ internal fun MessageBubble(
                         ) {
                             Row(
                                 verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.spacedBy(4.dp),
+                                horizontalArrangement = Arrangement.spacedBy(XySpacing.compact),
                                 modifier = Modifier.weight(1f, fill = false),
                             ) {
                                 Text(
@@ -1029,7 +1031,7 @@ internal fun MessageBubble(
                                 Spacer(Modifier.height(2.dp))
                                 Row(
                                     verticalAlignment = Alignment.CenterVertically,
-                                    horizontalArrangement = Arrangement.spacedBy(4.dp),
+                                    horizontalArrangement = Arrangement.spacedBy(XySpacing.compact),
                                 ) {
                                     Icon(
                                         imageVector = XyIcons.Globe,
@@ -1175,7 +1177,7 @@ internal fun MessageBubble(
                         .border(0.8.dp, Color.White.copy(alpha = 0.16f), RoundedCornerShape(50))
                         .padding(horizontal = 8.dp, vertical = 3.dp),
                     verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(4.dp),
+                    horizontalArrangement = Arrangement.spacedBy(XySpacing.compact),
                 ) {
                     ChatReactionVisualIcon(tag = reaction, size = 15.dp)
                     Text(
@@ -1227,7 +1229,7 @@ internal fun ChatMediaAttachmentBox(
                 .background(Color.Black.copy(alpha = 0.62f))
                 .padding(horizontal = 7.dp, vertical = 2.5.dp),
             verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(4.dp),
+            horizontalArrangement = Arrangement.spacedBy(XySpacing.compact),
         ) {
             Text(
                 text = floatingTime,
@@ -1642,7 +1644,7 @@ internal fun ChatMediaAttachmentBox(
                     if (floatingTime != null) {
                         Row(
                             verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(4.dp),
+                            horizontalArrangement = Arrangement.spacedBy(XySpacing.compact),
                         ) {
                             Text(
                                 text = floatingTime,
@@ -1667,7 +1669,7 @@ internal fun ChatMediaAttachmentBox(
                 .clickable { onOpenFile() }
                 .padding(horizontal = 10.dp, vertical = 8.dp),
             verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            horizontalArrangement = Arrangement.spacedBy(XySpacing.small),
         ) {
             Icon(
                 imageVector = XyIcons.Clip,
