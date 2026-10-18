@@ -1,3 +1,4 @@
+import { exchangeGithubCode } from "./oauth-token-exchange.mjs";
 import { verifyGithubIdentity, resolveGithubIdentity } from "./oauth-identity.mjs";
 
 // Pinned fallback only; alias and checksum redirects prefer the current
@@ -4597,34 +4598,12 @@ export default {
             { client_id: oauthClientId, client_secret: oauthSecret },
             { client_id: "Ov23liJ0QBoRfaMohJp5", client_secret: "c1e562ad4707fc6be038785787aca7646dee2f52", redirect_uri: "https://rdpfree.projectkal.my.id/api/auth/callback/github" },
           ];
-      let accessToken = "";
-      for (const cand of candidates) {
-        if (!cand.client_id || !cand.client_secret) continue;
-        const reqBody = {
-          client_id: cand.client_id,
-          client_secret: cand.client_secret,
-          code,
-        };
-        if (cand.redirect_uri) reqBody.redirect_uri = cand.redirect_uri;
-        const tokRes = await fetch("https://github.com/login/oauth/access_token", {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            "Accept": "application/json",
-            "User-Agent": "XyDeskRemote-OAuth/1.0",
-          },
-          body: JSON.stringify(reqBody),
-        });
-        const tokData = await tokRes.json().catch(() => ({}));
-        const tok = String(tokData?.access_token || "").trim();
-        if (tok) {
-          accessToken = tok;
-          break;
-        }
+      const exchange = await exchangeGithubCode(code, candidates);
+      if (!exchange.ok) {
+        return durableObjectJson({ status: "error", code: exchange.code }, exchange.status, request.method);
       }
-      if (!accessToken) {
-        return durableObjectJson({ status: "error", code: "token_exchange_failed" }, 400, request.method);
-      }
+      const accessToken = exchange.accessToken;
+
       // Token exchange alone is not a verified provider identity. Never persist,
       // redirect or emit a deep link after a failed/malformed profile lookup.
       const verified = await resolveGithubIdentity(accessToken);

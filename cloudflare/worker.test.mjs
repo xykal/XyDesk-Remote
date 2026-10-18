@@ -2118,3 +2118,23 @@ test("verified callback preserves JSON profile, storage and dashboard return sha
   assert.equal(destination.origin, "https://xyrdp-dash.vercel.app");
   assert.equal(destination.searchParams.get("bridge_token"), "verified-test-only");
 });
+
+test("OAuth token exchange provider outage cannot create or forward a callback session", async () => {
+  let writes = 0;
+  let identityCalls = 0;
+  globalThis.fetch = async url => {
+    if (String(url) === "https://github.com/login/oauth/access_token") return new Response(null, { status: 503 });
+    identityCalls++;
+    throw new Error("identity must not be queried without a token");
+  };
+  const response = await worker.fetch(new Request("https://example.test/api/github/oauth/callback?code=test-code&state=apk_exchange-failure_nonce"), envFor({}, {
+    GITHUB_OAUTH_CLIENT_ID: "test-client", GITHUB_OAUTH_CLIENT_SECRET: "test-config-not-real",
+    UNIQUE_DOWNLOADS: { put: async () => { writes++; } },
+    GLOBAL_CHAT: { idFromName() { writes++; throw new Error("must not forward"); } },
+  }));
+  assert.equal(response.status, 503);
+  assert.deepEqual(await response.json(), { status: "error", code: "oauth_provider_unavailable" });
+  assert.equal(response.headers.get("location"), null);
+  assert.equal(writes, 0);
+  assert.equal(identityCalls, 0);
+});
