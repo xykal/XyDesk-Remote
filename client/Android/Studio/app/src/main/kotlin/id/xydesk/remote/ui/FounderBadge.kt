@@ -1955,6 +1955,17 @@ internal fun isXyTesterAccount(context: Context, nameOrLogin: String?, githubLog
     return r1 == "TESTER" || r1 == "BOTH" || r2 == "TESTER" || r2 == "BOTH"
 }
 
+internal fun resolveSpecialUserRole(nameOrLogin: String?, githubLogin: String? = null): String? {
+    for (raw in listOf(githubLogin, nameOrLogin)) {
+        if (raw.isNullOrBlank()) continue
+        val key = raw.trim().removePrefix("@").lowercase(Locale.ROOT)
+        if (key in FOUNDER_GITHUB_LOGINS) return "FOUNDER"
+        if (key in XySpecialRoleRegistry.XYTEAM_DEFAULT_LOGINS || key.contains("xyteam") || key.endsWith("_xy")) return "XYTEAM"
+        if (key in XySpecialRoleRegistry.XYTESTER_DEFAULT_LOGINS || key.contains("tester") || key.contains("qa_")) return "TESTER"
+    }
+    return null
+}
+
 /**
  * Badge Khusus "XYTEAM" (Tim Inti XyVerse) — Gradasi Cyber Indigo-Cyan + Perisai Bintang Vektor.
  */

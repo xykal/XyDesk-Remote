@@ -73,6 +73,21 @@ private fun xyTwoPath(
 
 object XyIcons {
 
+    /** Emoji / Reaksi: ikon senyum vektor untuk picker reaksi. */
+    val Emoji: ImageVector = xyIcon("XyEmoji") {
+        moveTo(12f, 3f)
+        curveTo(7.03f, 3f, 3f, 7.03f, 3f, 12f)
+        curveTo(3f, 16.97f, 7.03f, 21f, 12f, 21f)
+        curveTo(16.97f, 21f, 21f, 16.97f, 21f, 12f)
+        curveTo(21f, 7.03f, 16.97f, 3f, 12f, 3f)
+        close()
+        moveTo(9f, 10f); lineTo(9.05f, 10f)
+        moveTo(15f, 10f); lineTo(15.05f, 10f)
+        moveTo(8.5f, 14.2f)
+        curveTo(9.4f, 15.8f, 10.6f, 16.5f, 12f, 16.5f)
+        curveTo(13.4f, 16.5f, 14.6f, 15.8f, 15.5f, 14.2f)
+    }
+
     /** Monitor: perangkat remote. */
     val Monitor: ImageVector = xyIcon("XyMonitor") {
         moveTo(2.5f, 4.5f); lineTo(21.5f, 4.5f); lineTo(21.5f, 16f); lineTo(2.5f, 16f); close()

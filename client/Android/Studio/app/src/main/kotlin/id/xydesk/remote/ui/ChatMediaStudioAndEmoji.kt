@@ -61,6 +61,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.scale
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
@@ -89,6 +90,7 @@ import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import java.io.ByteArrayOutputStream
+import kotlin.math.PI
 import kotlin.math.cos
 import kotlin.math.min
 import kotlin.math.sin
@@ -105,6 +107,7 @@ fun IosWhatsAppEmoji3D(
     tag: String = "",
     size: Dp = 18.dp,
     animated: Boolean = true,
+    animateTrigger: Int = 0,
     modifier: Modifier = Modifier
 ) {
     val activeInput = codeOrEmoji.ifBlank { tag }
@@ -114,7 +117,7 @@ fun IosWhatsAppEmoji3D(
     val popScale = remember(activeInput) { Animatable(if (animated) 0.38f else 1f) }
     val burstProgress = remember(activeInput) { Animatable(0f) }
 
-    LaunchedEffect(activeInput) {
+    LaunchedEffect(activeInput, animateTrigger) {
         if (animated) {
             launch {
                 popScale.snapTo(0.38f)
