@@ -47,7 +47,9 @@ android {
             // R8 aktif (minifyEnabled) + keep rules di proguard-rules.txt.
             // Rollback cepat: set MINIFY_ENABLED=false di release.properties.
             minifyEnabled rootProject.ext.minifyEnabled
-            shrinkResources false
+            // XyDesk (APK size diet): buang resource tak terpakai pasca-R8.
+            // Rollback cepat jika ada resource dinamis yang hilang: false.
+            shrinkResources true
             signingConfig signingConfigs.release
             proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.txt'
         }
