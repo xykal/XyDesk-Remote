@@ -38,7 +38,6 @@ import androidx.compose.foundation.verticalScroll
 import id.xydesk.remote.ui.components.XyEmptyState
 import id.xydesk.remote.ui.components.XyLoadingSkeletonCard
 import id.xydesk.remote.ui.components.XyLoadingSpinnerState
-import java.io.ByteArrayOutputStream
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.scaleIn
@@ -3133,7 +3132,7 @@ internal fun GlobalChatScreen(
                                         shareGlobalChatInvite(snap)
                                     },
                                 )
-                                if (isViewerFounder) {
+                                if (isFounderAccount(verifiedGhLogin) || isFounderAccount(nickname)) {
                                     val targetRoleKey = targetMsg.githubLogin.ifBlank { targetMsg.name }
                                     val isCurrentlyTeam = isXyTeamAccount(context, targetMsg.name, targetMsg.githubLogin)
                                     val isCurrentlyTester = isXyTesterAccount(context, targetMsg.name, targetMsg.githubLogin)
