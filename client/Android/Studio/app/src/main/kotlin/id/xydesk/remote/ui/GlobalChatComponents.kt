@@ -713,9 +713,7 @@ internal fun MessageBubble(
                     }
                     Spacer(Modifier.height(4.dp))
                     if (msg.attachmentData.startsWith("sticker_crypto15:")) {
-                        val customDecoded = remember(msg.id, msg.attachmentData) {
-                            CustomStickerVault.decodeAndCacheFromChatPayload(appContext, msg.attachmentData)
-                        }
+                        val customDecoded = rememberChatSticker(appContext, msg.id, msg.attachmentData)
                         if (customDecoded != null) {
                             Image(
                                 bitmap = customDecoded.second.asImageBitmap(),
@@ -1507,17 +1505,8 @@ internal fun ChatMediaAttachmentBox(
         // =========================================================
         // AUDIO / LAGU / VOICE NOTE (FRAMELESS ROUNDED WAVEFORM PLAYER)
         // =========================================================
-        var isPlaying by remember(msg.id) { mutableStateOf(false) }
-        val mediaPlayerRef = remember(msg.id) { arrayOfNulls<android.media.MediaPlayer>(1) }
-        DisposableEffect(msg.id) {
-            onDispose {
-                runCatching {
-                    mediaPlayerRef[0]?.stop()
-                    mediaPlayerRef[0]?.release()
-                }
-                mediaPlayerRef[0] = null
-            }
-        }
+        val audio = rememberChatAudioController(context, msg.id, msg.attachmentData)
+        val isPlaying = audio.playing
         val infWave = rememberInfiniteTransition(label = "audioWave")
         val wavePhase by infWave.animateFloat(
             initialValue = 0f,
@@ -1544,38 +1533,12 @@ internal fun ChatMediaAttachmentBox(
                     .size(40.dp)
                     .clip(CircleShape)
                     .background(Color.White)
-                    .clickable {
-                        val mp = mediaPlayerRef[0]
-                        if (mp != null && mp.isPlaying) {
-                            runCatching { mp.pause() }
-                            isPlaying = false
-                        } else if (mp != null) {
-                            runCatching { mp.start() }
-                            isPlaying = true
-                        } else {
-                            runCatching {
-                                val comma = msg.attachmentData.indexOf(',')
-                                val raw = if (comma >= 0) msg.attachmentData.substring(comma + 1) else msg.attachmentData
-                                val bytes = Base64.decode(raw, Base64.DEFAULT)
-                                val ext = msg.attachmentName.substringAfterLast('.', "mp3").take(5)
-                                val tempFile = File(context.cacheDir, "chat_audio_${msg.id.hashCode()}.$ext")
-                                tempFile.writeBytes(bytes)
-                                val player = android.media.MediaPlayer().apply {
-                                    setDataSource(tempFile.absolutePath)
-                                    setOnCompletionListener { isPlaying = false }
-                                    prepare()
-                                    start()
-                                }
-                                mediaPlayerRef[0] = player
-                                isPlaying = true
-                            }.onFailure {
-                                onOpenFile()
-                            }
-                        }
-                    },
+                    .clickable(enabled = !audio.preparing) { audio.toggle(onOpenFile) },
                 contentAlignment = Alignment.Center,
             ) {
-                if (isPlaying) {
+                if (audio.preparing) {
+                    Text("…", color = Color(0xFF09090B), style = MaterialTheme.typography.labelLarge)
+                } else if (isPlaying) {
                     Row(horizontalArrangement = Arrangement.spacedBy(3.dp)) {
                         Box(
                             modifier = Modifier
