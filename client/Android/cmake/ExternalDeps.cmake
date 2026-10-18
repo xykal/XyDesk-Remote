@@ -80,7 +80,14 @@ list(APPEND ANDROID_NATIVE_DEPS uriparser)
 # Also defines IMPORTED targets: freerdp3-lib, freerdp-client3-lib, winpr3-lib
 include(ExternalFreeRDP)
 
+# XyDesk (APK size diet): setelah copy, strip semua .so prebuilt dan buang
+# duplikat dev-name (libpng.so). AGP tidak melakukan stripping untuk jniLibs
+# pada pipeline ini — libfreerdp3.so sempat ter-ship 20 MB dengan debug_info.
 add_custom_target(
   copyLibs ${CMAKE_COMMAND} -E copy_directory "${DEPS_INSTALL_DIR}/${CMAKE_INSTALL_LIBDIR}" ${DEPS_INSTALL_DIR}
+  COMMAND ${CMAKE_COMMAND}
+          -DSTRIP_TOOL=${CMAKE_STRIP}
+          -DLIB_DIR=${DEPS_INSTALL_DIR}
+          -P ${CMAKE_CURRENT_LIST_DIR}/StripJniLibs.cmake
   DEPENDS freerdp
 )
