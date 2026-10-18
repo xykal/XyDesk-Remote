@@ -1099,86 +1099,86 @@ internal fun GlobalChatScreen(
         enrichTranslationIfNeeded(pending)
         scope.launch {
             try {
-            listState.animateScrollToItem((messages.size - 1).coerceAtLeast(0))
-            var queuedOnSocket = false
-            val sentMsg = withContext(Dispatchers.IO) {
-                // Sending must not wait for a translation provider; enrichment is asynchronous.
-                val bodyJson = JSONObject().apply {
-                    put("type", "msg")
-                    put("name", nickname)
-                    put("github_login", currentGh)
-                    put("country", myCountry)
-                    put("text", displayFallback)
-                    put("is_announcement", announceNow)
-                    put("e2ee_v", sealed.protocol)
-                    put("e2ee_cipher", sealed.cipherBase64)
-                    put("e2ee_iv", sealed.ivBase64)
-                    put("e2ee_sig", sealed.signatureHex)
-                    put("client_msg_id", pending.id)
-                    if (replySnapshot != null) {
-                        put("reply_to_id", replySnapshot.id)
-                        put("reply_to_name", replySnapshot.name)
-                        put("reply_to_text", replySnapshot.text.take(140))
+                listState.animateScrollToItem((messages.size - 1).coerceAtLeast(0))
+                var queuedOnSocket = false
+                val sentMsg = withContext(Dispatchers.IO) {
+                    // Sending must not wait for a translation provider; enrichment is asynchronous.
+                    val bodyJson = JSONObject().apply {
+                        put("type", "msg")
+                        put("name", nickname)
+                        put("github_login", currentGh)
+                        put("country", myCountry)
+                        put("text", displayFallback)
+                        put("is_announcement", announceNow)
+                        put("e2ee_v", sealed.protocol)
+                        put("e2ee_cipher", sealed.cipherBase64)
+                        put("e2ee_iv", sealed.ivBase64)
+                        put("e2ee_sig", sealed.signatureHex)
+                        put("client_msg_id", pending.id)
+                        if (replySnapshot != null) {
+                            put("reply_to_id", replySnapshot.id)
+                            put("reply_to_name", replySnapshot.name)
+                            put("reply_to_text", replySnapshot.text.take(140))
+                        }
+                        if (attachmentType.isNotEmpty()) {
+                            put("attachment_type", attachmentType)
+                            put("attachment_kind", if (attachmentType == "image") "photo" else attachmentType)
+                            put("attachment_name", if (attachmentType == "file") attachmentName else "")
+                            put("attachment_mime", attachmentMime)
+                            put("attachment_size", attachmentSize)
+                            put("attachment_data", attachmentData)
+                            put("view_once", viewOnce)
+                        }
+                        val av = getVerifiedGitHubAvatar(context)
+                        if (!av.isNullOrBlank()) put("avatar_url", av)
                     }
-                    if (attachmentType.isNotEmpty()) {
-                        put("attachment_type", attachmentType)
-                        put("attachment_kind", if (attachmentType == "image") "photo" else attachmentType)
-                        put("attachment_name", if (attachmentType == "file") attachmentName else "")
-                        put("attachment_mime", attachmentMime)
-                        put("attachment_size", attachmentSize)
-                        put("attachment_data", attachmentData)
-                        put("view_once", viewOnce)
+                    runCatching {
+                        GlobalChatRepository.send(bodyJson)?.optJSONObject("message")
+                            ?.let { parseMessageFromJson(it, nickname, currentGh) }
+                    }.getOrNull() ?: run {
+                        queuedOnSocket = chatSocketSend(bodyJson.toString())
+                        null
                     }
-                    val av = getVerifiedGitHubAvatar(context)
-                    if (!av.isNullOrBlank()) put("avatar_url", av)
                 }
-                runCatching {
-                    GlobalChatRepository.send(bodyJson)?.optJSONObject("message")
-                        ?.let { parseMessageFromJson(it, nickname, currentGh) }
-                }.getOrNull() ?: run {
-                    queuedOnSocket = chatSocketSend(bodyJson.toString())
-                    null
+                if (sentMsg != null) {
+                    val idx = messages.indexOfFirst { it.id == pending.id }
+                    if (idx >= 0) {
+                        messages[idx] = sentMsg.copy(deliveryTicks = 2)
+                        enrichTranslationIfNeeded(sentMsg)
+                    }
+                    if (announceNow) {
+                        pinnedMessage = PinnedChatMessage(
+                            id = sentMsg.id,
+                            name = sentMsg.name,
+                            githubLogin = sentMsg.githubLogin,
+                            text = sentMsg.text,
+                            pinnedBy = sentMsg.name,
+                            at = sentMsg.at,
+                        )
+                    }
                 }
-            }
-            if (sentMsg != null) {
-                val idx = messages.indexOfFirst { it.id == pending.id }
-                if (idx >= 0) {
-                    messages[idx] = sentMsg.copy(deliveryTicks = 2)
-                    enrichTranslationIfNeeded(sentMsg)
-                }
-                if (announceNow) {
-                    pinnedMessage = PinnedChatMessage(
-                        id = sentMsg.id,
-                        name = sentMsg.name,
-                        githubLogin = sentMsg.githubLogin,
-                        text = sentMsg.text,
-                        pinnedBy = sentMsg.name,
-                        at = sentMsg.at,
+                if (sentMsg == null) {
+                    val idx = messages.indexOfFirst { it.id == pending.id }
+                    if (idx >= 0) messages[idx] = messages[idx].copy(
+                        deliveryTicks = deliveryTicksAfterAttempt(false, queuedOnSocket),
                     )
-                }
-            }
-            if (sentMsg == null) {
-                val idx = messages.indexOfFirst { it.id == pending.id }
-                if (idx >= 0) messages[idx] = messages[idx].copy(
-                    deliveryTicks = deliveryTicksAfterAttempt(false, queuedOnSocket),
-                )
-                if (!queuedOnSocket) {
-                    Toast.makeText(context, xy("Pesan belum terkirim. Salin pesan untuk mencoba lagi.", "Message not sent. Copy it to try again."), Toast.LENGTH_LONG).show()
-                } else {
-                    // Socket queue acceptance is not server acknowledgement. Never show a sent tick yet.
-                    scope.launch {
-                        delay(25_000L)
-                        val pendingIdx = messages.indexOfFirst { it.id == pending.id }
-                        if (pendingIdx >= 0) messages[pendingIdx] = messages[pendingIdx].copy(deliveryTicks = -1)
+                    if (!queuedOnSocket) {
+                        Toast.makeText(context, xyNow("Pesan belum terkirim. Salin pesan untuk mencoba lagi.", "Message not sent. Copy it to try again."), Toast.LENGTH_LONG).show()
+                    } else {
+                        // Socket queue acceptance is not server acknowledgement. Never show a sent tick yet.
+                        scope.launch {
+                            delay(25_000L)
+                            val pendingIdx = messages.indexOfFirst { it.id == pending.id }
+                            if (pendingIdx >= 0) messages[pendingIdx] = messages[pendingIdx].copy(deliveryTicks = -1)
+                        }
                     }
                 }
-            }
             } catch (cancelled: CancellationException) {
                 throw cancelled
             } catch (_: Exception) {
                 val idx = messages.indexOfFirst { it.id == pending.id }
                 if (idx >= 0) messages[idx] = messages[idx].copy(deliveryTicks = -1)
-                Toast.makeText(context, xy("Pengiriman belum berhasil. Salin pesan untuk mencoba lagi.", "Sending did not succeed. Copy the message to try again."), Toast.LENGTH_LONG).show()
+                Toast.makeText(context, xyNow("Pengiriman belum berhasil. Salin pesan untuk mencoba lagi.", "Sending did not succeed. Copy the message to try again."), Toast.LENGTH_LONG).show()
             } finally {
                 chatSocketSend(JSONObject().put("type", "typing").put("on", false).toString())
                 sending = false
