@@ -48,15 +48,36 @@ internal fun LeaderboardDurationBadge(rank: Int, compact: Boolean = true) {
             drawPath(ribbons, metal.copy(alpha = .6f))
             drawCircle(metal, w * .35f, Offset(w / 2, h * .39f))
             drawCircle(surface, w * .25f, Offset(w / 2, h * .39f), style = Stroke(w * .035f))
-            val crown = Path().apply {
-                moveTo(w * .3f, h * .43f); lineTo(w * .27f, h * .26f)
-                lineTo(w * .42f, h * .33f); lineTo(w * .5f, h * .19f)
-                lineTo(w * .58f, h * .33f); lineTo(w * .73f, h * .26f)
-                lineTo(w * .7f, h * .43f); close()
+            // Distinct silhouettes remain identifiable without relying on metal colour.
+            val emblem = Path().apply {
+                when (rank) {
+                    1 -> { // Crown: reigning duration champion.
+                        moveTo(w * .3f, h * .43f); lineTo(w * .27f, h * .26f)
+                        lineTo(w * .42f, h * .33f); lineTo(w * .5f, h * .19f)
+                        lineTo(w * .58f, h * .33f); lineTo(w * .73f, h * .26f)
+                        lineTo(w * .7f, h * .43f); close()
+                    }
+                    2 -> { // Hourglass: master of time.
+                        moveTo(w * .34f, h * .23f); lineTo(w * .66f, h * .23f)
+                        lineTo(w * .53f, h * .38f); lineTo(w * .66f, h * .54f)
+                        lineTo(w * .34f, h * .54f); lineTo(w * .47f, h * .38f)
+                        close()
+                    }
+                    else -> { // Comet: a persistent explorer, not another crown.
+                        moveTo(w * .27f, h * .25f); lineTo(w * .56f, h * .31f)
+                        lineTo(w * .69f, h * .43f); lineTo(w * .56f, h * .53f)
+                        close()
+                    }
+                }
             }
-            drawPath(crown, surface)
-            if (rank >= 2) drawCircle(surface, w * .025f, Offset(w * .43f, h * .54f))
-            if (rank == 3) drawCircle(surface, w * .025f, Offset(w * .57f, h * .54f))
+            drawPath(emblem, surface)
+            if (rank == 1) {
+                drawLine(surface, Offset(w * .34f, h * .51f), Offset(w * .66f, h * .51f), w * .045f)
+            }
+            if (rank == 3) {
+                drawCircle(surface, w * .10f, Offset(w * .61f, h * .43f))
+                drawLine(surface, Offset(w * .27f, h * .39f), Offset(w * .38f, h * .47f), w * .035f)
+            }
         }
         Column(Modifier.weight(1f, fill = false)) {
             Text("TOP $rank · $title", color = metal, fontSize = if (compact) 8.sp else 10.sp,
