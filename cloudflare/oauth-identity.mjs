@@ -1,9 +1,20 @@
 /** Provider identity only. Does NOT bind an OAuth state/session or authorize rewards. */
-export async function verifyGithubIdentity(token, claimedLogin, { timeoutMs = 2_000 } = {}) {
+export async function verifyGithubIdentity(token, claimedLogin, options = {}) {
+  if (typeof claimedLogin !== "string" || !/^[a-z\d](?:[a-z\d-]{0,37}[a-z\d])?$/i.test(claimedLogin)) {
+    return { ok: false, status: 401, code: "invalid_identity" };
+  }
+  const result = await resolveGithubIdentity(token, options);
+  if (result.ok && result.principal.login.toLowerCase() !== claimedLogin.toLowerCase()) {
+    return { ok: false, status: 401, code: "invalid_identity" };
+  }
+  return result;
+}
+
+/** Resolve a provider-issued token without trusting an externally claimed profile. */
+export async function resolveGithubIdentity(token, { timeoutMs = 2_000 } = {}) {
   const denied = () => ({ ok: false, status: 401, code: "invalid_identity" });
   const unavailable = () => ({ ok: false, status: 503, code: "identity_provider_unavailable" });
-  if (typeof token !== "string" || !token || token.length > 4096 || /[\s\x00-\x1f\x7f]/.test(token)
-      || typeof claimedLogin !== "string" || !/^[a-z\d](?:[a-z\d-]{0,37}[a-z\d])?$/i.test(claimedLogin)) {
+  if (typeof token !== "string" || !token || token.length > 4096 || /[\s\x00-\x1f\x7f]/.test(token)) {
     return denied();
   }
   const controller = new AbortController();
@@ -28,7 +39,6 @@ export async function verifyGithubIdentity(token, claimedLogin, { timeoutMs = 2_
     if (!Number.isSafeInteger(user?.id) || user.id <= 0
         || typeof user?.login !== "string"
         || !/^[a-z\d](?:[a-z\d-]{0,37}[a-z\d])?$/i.test(user.login)) return unavailable();
-    if (user.login.toLowerCase() !== claimedLogin.toLowerCase()) return denied();
     // Trust provider metadata, never body-supplied identity/profile claims.
     const name = typeof user.name === "string" ? user.name.trim().slice(0, 80) : "";
     const avatar = typeof user.avatar_url === "string" ? user.avatar_url.trim() : "";

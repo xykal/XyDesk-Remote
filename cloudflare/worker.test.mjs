@@ -2055,3 +2055,66 @@ test("HTML OAuth callback expires legacy bearer cookie instead of minting it", a
   // Existing application return mechanism is unchanged in this step.
   assert.ok((await response.text()).includes("xydesk://github-auth?token=test-callback-token"));
 });
+
+test("OAuth callback never persists or redirects after unverified provider profile", async () => {
+  const cases = [
+    { label: "unauthorized", response: () => new Response(null, { status: 401 }), status: 401 },
+    { label: "unavailable", response: () => new Response(null, { status: 503 }), status: 503 },
+    { label: "missing-id", response: () => Response.json({ login: "alice" }), status: 503 },
+    { label: "missing-login", response: () => Response.json({ id: 123 }), status: 503 },
+    { label: "broken-json", response: () => new Response("not json"), status: 503 },
+    { label: "network", response: () => { throw new Error("offline"); }, status: 503 },
+  ];
+  for (const item of cases) {
+    for (const prefix of ["apk", "dash"]) {
+      let writes = 0;
+      globalThis.fetch = async url => {
+        if (String(url) === "https://github.com/login/oauth/access_token") return Response.json({ access_token: "callback-test-only" });
+        if (String(url) === "https://api.github.com/user") return item.response();
+        throw new Error("unexpected external request");
+      };
+      const env = envFor({}, {
+        GITHUB_OAUTH_CLIENT_ID: "test-client", GITHUB_OAUTH_CLIENT_SECRET: "test-config-not-real",
+        UNIQUE_DOWNLOADS: { put: async () => { writes++; }, get: async () => null },
+        GLOBAL_CHAT: { idFromName() { writes++; throw new Error("must not forward"); } },
+      });
+      const sid = `fail-${prefix}-${item.label}`;
+      const response = await worker.fetch(new Request(`https://example.test/api/github/oauth/callback?code=test-code&state=${prefix}_${sid}_nonce`), env);
+      assert.equal(response.status, item.status, `${prefix} ${item.label}`);
+      assert.equal(response.headers.get("location"), null);
+      assert.equal(response.headers.get("set-cookie"), null);
+      const body = await response.text();
+      assert.equal(body.includes("callback-test-only"), false);
+      assert.equal(body.includes("xydesk://"), false);
+      assert.equal(writes, 0);
+      // Check edge cache separately without a DO fallback.
+      const poll = await worker.fetch(new Request(`https://example.test/api/github/oauth/poll?session_id=${sid}`), envFor());
+      assert.equal((await poll.json()).ready, false);
+    }
+  }
+});
+
+test("verified callback preserves JSON profile, storage and dashboard return shape", async () => {
+  const stored = [];
+  globalThis.fetch = async url => {
+    if (String(url) === "https://github.com/login/oauth/access_token") return Response.json({ access_token: "verified-test-only" });
+    if (String(url) === "https://api.github.com/user") return Response.json({ id: 123, login: "Alice", name: "Provider Name", avatar_url: "https://avatars.githubusercontent.com/u/123" });
+    throw new Error("unexpected external request");
+  };
+  const env = envFor({}, {
+    GITHUB_OAUTH_CLIENT_ID: "test-client", GITHUB_OAUTH_CLIENT_SECRET: "test-config-not-real",
+    UNIQUE_DOWNLOADS: { put: async (key, value) => { stored.push([key, JSON.parse(value)]); } },
+  });
+  const response = await worker.fetch(new Request("https://example.test/api/github/oauth/exchange?code=test-code&state=apk_verified-json_nonce"), env);
+  assert.equal(response.status, 200);
+  const body = await response.json();
+  assert.equal(body.ready, true);
+  assert.equal(body.login, "Alice");
+  assert.equal(body.name, "Provider Name");
+  assert.equal(stored[0][1].login, "Alice");
+  const dash = await worker.fetch(new Request("https://example.test/api/auth/callback/github?code=test-code&state=dash_verified-dash_nonce"), env);
+  assert.equal(dash.status, 302);
+  const destination = new URL(dash.headers.get("location"));
+  assert.equal(destination.origin, "https://xyrdp-dash.vercel.app");
+  assert.equal(destination.searchParams.get("bridge_token"), "verified-test-only");
+});

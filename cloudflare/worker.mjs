@@ -1,4 +1,4 @@
-import { verifyGithubIdentity } from "./oauth-identity.mjs";
+import { verifyGithubIdentity, resolveGithubIdentity } from "./oauth-identity.mjs";
 
 // Pinned fallback only; alias and checksum redirects prefer the current
 // release_tag/downloads from release-state.json (see currentReleaseAssetUrl).
@@ -4625,17 +4625,15 @@ export default {
       if (!accessToken) {
         return durableObjectJson({ status: "error", code: "token_exchange_failed" }, 400, request.method);
       }
-      const meRes = await fetch("https://api.github.com/user", {
-        headers: {
-          "User-Agent": "XyDeskRemote-OAuth/1.0",
-          "Authorization": `Bearer ${accessToken}`,
-          "X-GitHub-Api-Version": "2022-11-28",
-        },
-      });
-      const me = meRes.ok ? await meRes.json().catch(() => ({})) : {};
-      const login = String(me?.login || "").trim();
-      const name = String(me?.name || login).trim();
-      const avatarUrl = String(me?.avatar_url || "").trim();
+      // Token exchange alone is not a verified provider identity. Never persist,
+      // redirect or emit a deep link after a failed/malformed profile lookup.
+      const verified = await resolveGithubIdentity(accessToken);
+      if (!verified.ok) {
+        return durableObjectJson({ status: "error", code: verified.code }, verified.status, request.method);
+      }
+      const login = verified.principal.login;
+      const name = verified.principal.name;
+      const avatarUrl = verified.principal.avatar_url;
       const parts = state.split("_");
       const sid = explicitSid || ((state.startsWith("apk_") || state.startsWith("dash_")) && parts.length >= 2 ? parts[1] : "");
       const sessionPayload = {
