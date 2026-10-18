@@ -75,7 +75,6 @@ internal fun PcStreamPadOverlay(
     val tracker = remember { XyVirtualPadTracker() }
     var layout by remember { mutableStateOf(XyPadLayout.resolve(prefs.virtualPadLayout(deviceId))) }
     var editMode by remember { mutableStateOf(false) }
-    val editNow by rememberUpdatedState(editMode)
 
     fun push() {
         // Snapshot penuh tiap perubahan — host tinggal menerapkan frame
@@ -156,28 +155,30 @@ internal fun PcStreamPadOverlay(
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(4.dp),
             ) {
-                PadKey("LT", mini = true, enabled = { !editNow }) {
+                PadKey("LT", mini = true, enabled = { !editMode }) {
                     tracker.setTrigger(left = if (it) 1f else 0f); push()
                 }
-                PadKey("LB", mini = true, enabled = { !editNow }) {
+                PadKey("LB", mini = true, enabled = { !editMode }) {
                     tracker.setButton(XyPadButton.LEFT_SHOULDER, it); push()
                 }
-                PadKey("ST", mini = true, enabled = { !editNow }) {
+                PadKey("ST", mini = true, enabled = { !editMode }) {
                     tracker.setButton(XyPadButton.START, it); push()
                 }
-                PadKey("BK", mini = true, enabled = { !editNow }) {
+                PadKey("BK", mini = true, enabled = { !editMode }) {
                     tracker.setButton(XyPadButton.BACK, it); push()
                 }
-                PadKey("RB", mini = true, enabled = { !editNow }) {
+                PadKey("RB", mini = true, enabled = { !editMode }) {
                     tracker.setButton(XyPadButton.RIGHT_SHOULDER, it); push()
                 }
-                PadKey("RT", mini = true, enabled = { !editNow }) {
+                PadKey("RT", mini = true, enabled = { !editMode }) {
                     tracker.setTrigger(right = if (it) 1f else 0f); push()
                 }
                 PadKey("EDIT", mini = true, enabled = { true }) { down ->
                     if (down) {
                         editMode = !editMode
-                        if (!editMode) prefs.setVirtualPadLayout(deviceId, layout)
+                        // Stop held buttons AND analog axes when editing disables input.
+                        if (editMode) releaseAll()
+                        else prefs.setVirtualPadLayout(deviceId, layout)
                     }
                 }
                 PadKey("TUTUP", mini = true, enabled = { true }) { down ->
@@ -199,19 +200,19 @@ internal fun PcStreamPadOverlay(
             editMode = editMode,
         ) {
             Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                PadKey("▲", enabled = { !editNow }) {
+                PadKey("▲", enabled = { !editMode }) {
                     tracker.setButton(XyPadButton.DPAD_UP, it); push()
                 }
                 Row {
-                    PadKey("◀", enabled = { !editNow }) {
+                    PadKey("◀", enabled = { !editMode }) {
                         tracker.setButton(XyPadButton.DPAD_LEFT, it); push()
                     }
                     Box(Modifier.size(38.dp))
-                    PadKey("▶", enabled = { !editNow }) {
+                    PadKey("▶", enabled = { !editMode }) {
                         tracker.setButton(XyPadButton.DPAD_RIGHT, it); push()
                     }
                 }
-                PadKey("▼", enabled = { !editNow }) {
+                PadKey("▼", enabled = { !editMode }) {
                     tracker.setButton(XyPadButton.DPAD_DOWN, it); push()
                 }
             }
@@ -228,7 +229,7 @@ internal fun PcStreamPadOverlay(
         ) {
             PadStick(
                 label = "L",
-                dragEnabled = { !editNow },
+                dragEnabled = { !editMode },
             ) { x, y ->
                 tracker.setLeftStick(x, y); push()
             }
@@ -245,7 +246,7 @@ internal fun PcStreamPadOverlay(
         ) {
             PadStick(
                 label = "R",
-                dragEnabled = { !editNow },
+                dragEnabled = { !editMode },
             ) { x, y ->
                 tracker.setRightStick(x, y); push()
             }
@@ -261,19 +262,19 @@ internal fun PcStreamPadOverlay(
             editMode = editMode,
         ) {
             Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                PadKey("Y", enabled = { !editNow }) {
+                PadKey("Y", enabled = { !editMode }) {
                     tracker.setButton(XyPadButton.Y, it); push()
                 }
                 Row {
-                    PadKey("X", enabled = { !editNow }) {
+                    PadKey("X", enabled = { !editMode }) {
                         tracker.setButton(XyPadButton.X, it); push()
                     }
                     Box(Modifier.size(38.dp))
-                    PadKey("B", enabled = { !editNow }) {
+                    PadKey("B", enabled = { !editMode }) {
                         tracker.setButton(XyPadButton.B, it); push()
                     }
                 }
-                PadKey("A", enabled = { !editNow }) {
+                PadKey("A", enabled = { !editMode }) {
                     tracker.setButton(XyPadButton.A, it); push()
                 }
             }
@@ -332,6 +333,8 @@ private fun PadKey(
     action: (Boolean) -> Unit,
 ) {
     val sizeDp = if (mini) 30.dp else 38.dp
+    val enabledNow by rememberUpdatedState(enabled)
+    val actionNow by rememberUpdatedState(action)
     Box(
         modifier = Modifier
             .size(sizeDp)
@@ -341,9 +344,10 @@ private fun PadKey(
             .pointerInput(label) {
                 detectTapGestures(
                     onPress = {
-                        if (enabled()) action(true)
-                        tryAwaitRelease()
-                        if (enabled()) action(false)
+                        if (enabledNow()) {
+                            // Capture one callback for both edges of this press.
+                            dispatchPadPress(actionNow) { tryAwaitRelease() }
+                        }
                     },
                 )
             },
