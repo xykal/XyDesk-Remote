@@ -55,7 +55,10 @@ public class XyApp extends com.freerdp.freerdpcore.application.GlobalApp
 		{
 			String dir = getFilesDir().getAbsolutePath();
 			android.system.Os.setenv("WLOG_APPENDER", "file", true);
-			android.system.Os.setenv("WLOG_LEVEL", "INFO", true);
+			// Default WARN: level INFO menulis terus-menerus ke file selama sesi
+			// (overhead I/O di jalur panas + menumpuk metadata host/sertifikat di
+			// storage user). Untuk diagnosa mendalam, naikkan lewat pengaturan.
+			android.system.Os.setenv("WLOG_LEVEL", "WARN", true);
 			android.system.Os.setenv("WLOG_FILEAPPENDER_OUTPUT_FILE_PATH", dir, true);
 			android.system.Os.setenv("WLOG_FILEAPPENDER_OUTPUT_FILE_NAME", "freerdp-native.log", true);
 			id.xydesk.remote.core.ConnectionLog.INSTANCE.setNativeLogFile(
