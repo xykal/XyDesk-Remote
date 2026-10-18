@@ -80,10 +80,10 @@ internal fun LeaderboardDurationBadge(rank: Int, compact: Boolean = true) {
             }
         }
         Column(Modifier.weight(1f, fill = false)) {
-            Text("TOP $rank · $title", color = metal, fontSize = if (compact) 8.sp else 10.sp,
+            Text("TOP $rank · $title", color = metal, fontSize = if (compact) 10.sp else 12.sp,
                 fontWeight = FontWeight.ExtraBold, maxLines = 1, overflow = TextOverflow.Ellipsis)
             Text("SIPALING LAMA MAIN", color = metal.copy(alpha = .85f),
-                style = MaterialTheme.typography.labelSmall, fontSize = if (compact) 7.sp else 9.sp,
+                style = MaterialTheme.typography.labelSmall, fontSize = if (compact) 9.sp else 10.sp,
                 maxLines = 1, overflow = TextOverflow.Ellipsis)
         }
     }

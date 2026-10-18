@@ -2156,22 +2156,22 @@ internal fun XyUserRoleBadges(
     }
     if (!isFounder && !isTeam && !isTester && podiumRank == null) return
     Column(verticalArrangement = Arrangement.spacedBy(3.dp)) {
-    if (isFounder || isTeam || isTester) {
-        Row(
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(4.dp),
-        ) {
-            if (isFounder) {
-                XyFounderBadge(compact = compact)
-            }
-            if (isTeam) {
-                XyTeamBadge(compact = compact)
-            }
-            if (isTester) {
-                XyTesterBadge(compact = compact)
+        if (isFounder || isTeam || isTester) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(4.dp),
+            ) {
+                if (isFounder) {
+                    XyFounderBadge(compact = compact)
+                }
+                if (isTeam) {
+                    XyTeamBadge(compact = compact)
+                }
+                if (isTester) {
+                    XyTesterBadge(compact = compact)
+                }
             }
         }
-    }
         if (podiumRank != null) LeaderboardDurationBadge(podiumRank, compact)
     }
 }

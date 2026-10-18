@@ -701,23 +701,18 @@ private fun CommunityAccountCard(
             }
 
             Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(6.dp),
-                ) {
-                    Text(
-                        text = name ?: githubUser ?: xy("Akun $accountId", "Account $accountId"),
-                        style = MaterialTheme.typography.titleMedium,
-                        fontWeight = FontWeight.Bold,
-                        maxLines = 1,
-                        overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
-                    )
-                    XyUserRoleBadges(
-                        name = name,
-                        githubLogin = githubUser,
-                        compact = true,
-                    )
-                }
+                Text(
+                    text = name ?: githubUser ?: xy("Akun $accountId", "Account $accountId"),
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Bold,
+                    maxLines = 1,
+                    overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
+                )
+                XyUserRoleBadges(
+                    name = name,
+                    githubLogin = githubUser,
+                    compact = true,
+                )
                 Text(
                     text = buildString {
                         if (!githubUser.isNullOrBlank()) {
@@ -1591,21 +1586,18 @@ internal fun XyHeaderAccountActions(
                         }
                     }
                     Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(6.dp),
-                        ) {
-                            Text(
-                                displayName,
-                                style = MaterialTheme.typography.titleMedium,
-                                fontWeight = FontWeight.Bold,
-                            )
-                            XyUserRoleBadges(
-                                name = displayName,
-                                githubLogin = ghUser,
-                                compact = true,
-                            )
-                        }
+                        Text(
+                            displayName,
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.Bold,
+                            maxLines = 1,
+                            overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
+                        )
+                        XyUserRoleBadges(
+                            name = displayName,
+                            githubLogin = ghUser,
+                            compact = true,
+                        )
                         Text(
                             if (ghUser != null) "GitHub: @$ghUser (Terhubung)"
                             else xy("GitHub belum terhubung", "GitHub not connected"),
