@@ -662,7 +662,8 @@ private fun CommunityAccountCard(
                         .background(MaterialTheme.colorScheme.onSurface.copy(alpha = 0.10f))
                         .let { mod ->
                             if (isFounder) mod.border(2.dp, founderBorderBrush(), RoundedCornerShape(28.dp)) else mod
-                        },
+                        }
+                        .podiumAvatarFrame(githubUser),
                     contentAlignment = Alignment.Center,
                 ) {
                     val bmp = avatarBitmap
@@ -1525,7 +1526,8 @@ internal fun XyHeaderAccountActions(
                     MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f),
                     androidx.compose.foundation.shape.CircleShape,
                 )
-            },
+            }
+            .podiumAvatarFrame(ghUser),
     ) {
         Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
             val bmp = avatarBitmap
@@ -1567,7 +1569,8 @@ internal fun XyHeaderAccountActions(
                             .let { m ->
                                 if (founder) m.border(2.dp, founderBorderBrush(), androidx.compose.foundation.shape.CircleShape)
                                 else m
-                            },
+                            }
+                            .podiumAvatarFrame(ghUser),
                     ) {
                         Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                             val bmp = avatarBitmap

@@ -1708,7 +1708,8 @@ internal fun ChatSenderAvatar(
             .background(if (isFounder) Color(0xFF1A0B2E) else Color(0xFF222228))
             .let { mod ->
                 if (isFounder) mod.border(1.5.dp, founderBorderBrush(), CircleShape) else mod
-            },
+            }
+            .podiumAvatarFrame(githubLogin),
         contentAlignment = Alignment.Center,
     ) {
         val bmp = bitmap

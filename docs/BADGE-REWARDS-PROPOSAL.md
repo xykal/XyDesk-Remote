@@ -1,4 +1,4 @@
-# Badge rewards — proposal, not enabled
+# Badge rewards — cosmetic frames implemented, other rewards proposed
 
 User intent: distinctive badges that encourage returning and positive community behaviour. Keep activity and helpfulness separate; duration is not a character judgement.
 
@@ -9,8 +9,8 @@ User intent: distinctive badges that encourage returning and positive community 
 - Distinct silhouettes, rank labels and accessible descriptions, no animation/download requirements.
 - Existing public leaderboard metrics, not verified RDP-only duration or anti-cheat evidence.
 
-## Suggested rewards (not implemented or granted)
-1. Current duration podium: cosmetic avatar frame/profile accent while eligible. Badge/frame follows current rank; no permanent privilege.
+## Reward status
+1. Current duration podium: cosmetic avatar frames implemented in leaderboard, profile/header/quick profile and shared chat avatars. Gold double ring / platinum segmented ring / bronze dotted ring. Cross-screen frame follows the expiring public GitHub-identity snapshot, with no permanent privilege or extra network. Profile accents are still proposed. Runtime/device visual acceptance pending.
 2. Helpful contribution: separate Sobat Penolong badge, earned through recipient-confirmed help. No points for message volume, likes alone, or time online. Define and review eligibility before enabling.
 3. Returning participation: a weekly personal cosmetic progress path, without an unbroken daily streak requirement, reset penalty, or incentive to stay connected overnight. No arbitrary completion thresholds approved yet.
 

@@ -1677,6 +1677,7 @@ internal fun FeedAvatarThumb(
     name: String,
     isFounder: Boolean = false,
     size: Dp = 30.dp,
+    durationRank: Int? = null,
 ) {
     val cleanUrl = avatarUrl?.trim().orEmpty()
     Box(
@@ -1690,7 +1691,8 @@ internal fun FeedAvatarThumb(
                 } else {
                     Modifier
                 },
-            ),
+            )
+            .podiumFrame(durationRank),
         contentAlignment = Alignment.Center,
     ) {
         when {

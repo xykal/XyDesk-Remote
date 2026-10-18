@@ -466,6 +466,7 @@ private fun FeedCompactLeaderboardStrip(
                         name = item.name,
                         isFounder = item.isFounder || isFounderAccount(item.githubLogin) || isFounderAccount(item.name),
                         size = 28.dp,
+                        durationRank = item.rank.takeIf { item.totalSeconds > 0 },
                     )
                     Column(modifier = Modifier.weight(1f)) {
                         Text(
@@ -976,6 +977,7 @@ internal fun FeedLeaderboardTop100Panel(
                         name = item.name,
                         isFounder = isFounder,
                         size = 36.dp,
+                        durationRank = item.rank.takeIf { item.totalSeconds > 0 },
                     )
                     Column(modifier = Modifier.weight(1f)) {
                         Row(
@@ -1051,6 +1053,7 @@ private fun PodiumColumn(
             name = entry.name,
             isFounder = isFounder,
             size = if (elevated) 48.dp else 38.dp,
+            durationRank = entry.rank.takeIf { entry.totalSeconds > 0 },
         )
         Text(
             text = entry.name,
