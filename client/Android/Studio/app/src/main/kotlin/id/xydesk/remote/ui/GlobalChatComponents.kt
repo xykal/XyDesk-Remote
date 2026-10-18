@@ -994,7 +994,10 @@ internal fun MessageBubble(
                         // Lampiran Foto / Video / Audio / Berkas sesuai rasio asli
                         if (hasMediaAttachment) {
                             Spacer(Modifier.height(4.dp))
-                            ChatMediaAttachmentBox(
+                            if (msg.attachmentData.isBlank()) {
+                                Text(xyNow("Media belum tersedia offline", "Media not available offline"),
+                                    style = MaterialTheme.typography.bodySmall, color = primaryTextColor)
+                            } else ChatMediaAttachmentBox(
                                 msg = msg,
                                 isAudioAttachment = isAudioAttachment,
                                 autoDownloadAllowed = autoDownloadAllowed,
@@ -1010,8 +1013,13 @@ internal fun MessageBubble(
                         // Teks Pesan (Semua link/URL berwarna biru cerah & bisa diklik!)
                         if (msg.text.isNotBlank()) {
                             Spacer(Modifier.height(2.dp))
+                            val parts = remember(msg.text) { splitChatCode(msg.text) }
+                            for (part in parts) {
+                                if (part.language != null) {
+                                    ChatCodeBlock(part.text, part.language)
+                                } else {
                             XyClickableLinkText(
-                                text = msg.text,
+                                text = part.text,
                                 color = primaryTextColor,
                                 linkColor = if (isLightBubble) Color(0xFF2563EB) else Color(0xFF38BDF8),
                                 style = MaterialTheme.typography.bodySmall.copy(
@@ -1020,6 +1028,8 @@ internal fun MessageBubble(
                                 ),
                                 onLongPress = onLongPress,
                             )
+                                }
+                            }
                             if (transBody.isNotBlank() && !transBody.equals(msg.text, ignoreCase = true)) {
                                 Spacer(Modifier.height(3.dp))
                                 Box(
