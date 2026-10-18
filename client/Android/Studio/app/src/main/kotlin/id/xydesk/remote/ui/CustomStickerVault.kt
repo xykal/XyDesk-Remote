@@ -16,7 +16,6 @@ import java.io.ByteArrayOutputStream
 import java.io.File
 import java.security.MessageDigest
 import java.security.SecureRandom
-import java.util.concurrent.ConcurrentHashMap
 import javax.crypto.Cipher
 import javax.crypto.spec.GCMParameterSpec
 import javax.crypto.spec.SecretKeySpec
@@ -51,7 +50,9 @@ internal object CustomStickerVault {
     private const val STICKER_DIM = 240
     private const val ALPHA_POOL = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz"
 
-    private val bitmapCache = ConcurrentHashMap<String, Bitmap>()
+    private val bitmapCache = object : android.util.LruCache<String, Bitmap>(4 * 1024 * 1024) {
+        override fun sizeOf(key: String, value: Bitmap): Int = value.allocationByteCount.coerceAtLeast(1)
+    }
 
     private val vaultKeySpec: SecretKeySpec by lazy {
         val digest = MessageDigest.getInstance("SHA-256")
@@ -186,7 +187,7 @@ internal object CustomStickerVault {
             }
             val finalFile = primaryFile ?: return null
             val stickerBmp = BitmapFactory.decodeByteArray(webpBytes, 0, webpBytes.size) ?: decoded
-            bitmapCache[fileName] = stickerBmp
+            bitmapCache.put(fileName, stickerBmp)
             CustomCryptoSticker(
                 fileName = fileName,
                 displayPath = "Android/media/id.xydesk.remote/globwlchat/sticker/$fileName",
@@ -209,10 +210,11 @@ internal object CustomStickerVault {
                 ?: continue
             for (f in files) {
                 if (seen.containsKey(f.name)) continue
-                val cryptoBytes = runCatching { f.readBytes() }.getOrNull() ?: continue
+                if (f.length() !in 1L..2_100_000L) continue
+                val cryptoBytes = runCatching { f.inputStream().use { it.readChatBytesAtMost(2_100_000) } }.getOrNull() ?: continue
                 val webpBytes = decryptCrypto15ToWebp(cryptoBytes) ?: continue
-                val bmp = bitmapCache[f.name] ?: BitmapFactory.decodeByteArray(webpBytes, 0, webpBytes.size)?.also {
-                    bitmapCache[f.name] = it
+                val bmp = bitmapCache.get(f.name) ?: decodeBoundedChatBitmap(webpBytes, STICKER_DIM)?.also {
+                    bitmapCache.put(f.name, it)
                 } ?: continue
                 seen[f.name] = CustomCryptoSticker(
                     fileName = f.name,
@@ -244,7 +246,7 @@ internal object CustomStickerVault {
      * `Android/media/id.xydesk.remote/globwlchat/sticker/<fileName>`.
      */
     fun decodeAndCacheFromChatPayload(context: Context, attachmentData: String): Pair<String, Bitmap>? {
-        if (!attachmentData.startsWith("sticker_crypto15:")) return null
+        if (attachmentData.length > 2_800_000 || !attachmentData.startsWith("sticker_crypto15:")) return null
         val rest = attachmentData.removePrefix("sticker_crypto15:")
         val sep = rest.indexOf(':')
         if (sep <= 0) return null
@@ -253,13 +255,14 @@ internal object CustomStickerVault {
             .replace("\\", "")
             .ifBlank { "CustomSticker+1+$+$9.webp.crypto15" }
         val fileName = if (rawFileName.endsWith(".webp.crypto15")) rawFileName else "$rawFileName.webp.crypto15"
-        bitmapCache[fileName]?.let { return fileName to it }
-
         val b64 = rest.substring(sep + 1).trim()
         val cryptoBytes = runCatching { Base64.decode(b64, Base64.DEFAULT) }.getOrNull() ?: return null
+        val payloadKey = "payload:" + MessageDigest.getInstance("SHA-256").digest(cryptoBytes)
+            .joinToString("") { "%02x".format(it) }
+        bitmapCache.get(payloadKey)?.let { return fileName to it }
         val webpBytes = decryptCrypto15ToWebp(cryptoBytes) ?: return null
-        val bmp = BitmapFactory.decodeByteArray(webpBytes, 0, webpBytes.size) ?: return null
-        bitmapCache[fileName] = bmp
+        val bmp = decodeBoundedChatBitmap(webpBytes, STICKER_DIM) ?: return null
+        bitmapCache.put(payloadKey, bmp)
 
         // Simpan otomatis ke Android/media/id.xydesk.remote/globwlchat/sticker/<fileName>
         runCatching {
