@@ -93,6 +93,7 @@ internal fun parseMessageFromJson(m: JSONObject, myName: String, myGithubLogin: 
 
     return ChatMessage(
         id = msgId,
+        clientMessageId = m.optString("client_msg_id", ""),
         name = sender,
         githubLogin = ghLogin,
         country = smartCountry,

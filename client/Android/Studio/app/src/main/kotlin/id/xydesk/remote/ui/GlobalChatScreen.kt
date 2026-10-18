@@ -742,9 +742,7 @@ internal fun GlobalChatScreen(
                                     messages[existingIdx] = item
                                 }
                                 if (existingIdx < 0) {
-                                    val tempIdx = messages.indexOfFirst {
-                                        it.id.startsWith("local-") && it.mine && it.text == item.text
-                                    }
+                                    val tempIdx = findPendingChatIndex(messages, item)
                                     if (tempIdx >= 0) {
                                         messages[tempIdx] = item.copy(deliveryTicks = 2)
                                     } else {
@@ -901,8 +899,11 @@ internal fun GlobalChatScreen(
                                     // Parsing suspends: preserve messages arriving meanwhile and pending sends.
                                     val newestAt = batch.maxOfOrNull { it.at } ?: 0L
                                     val batchIds = batch.mapTo(HashSet()) { it.id }
+                                    val acknowledgedLocalIds = batch.mapNotNull { item ->
+                                        findPendingChatIndex(messages, item).takeIf { it >= 0 }?.let { messages[it].id }
+                                    }.toSet()
                                     val retained = messages.filter {
-                                        it.id !in batchIds && if (arr.length() == 0) {
+                                        it.id !in batchIds && it.id !in acknowledgedLocalIds && if (arr.length() == 0) {
                                             keepAfterEmptyChatSnapshot(it.id, it.at, snapshotReceivedAt)
                                         } else {
                                             it.id.startsWith("local-") || it.at > newestAt
@@ -927,9 +928,7 @@ internal fun GlobalChatScreen(
                                     if (existingIdx >= 0) {
                                         messages[existingIdx] = incoming.copy(deliveryTicks = 2)
                                     } else {
-                                        val tempIdx = messages.indexOfFirst {
-                                            it.id.startsWith("local-") && it.mine && it.text == incoming.text
-                                        }
+                                        val tempIdx = findPendingChatIndex(messages, incoming)
                                         if (tempIdx >= 0) {
                                             messages[tempIdx] = incoming.copy(deliveryTicks = 2)
                                         } else {
@@ -1077,7 +1076,7 @@ internal fun GlobalChatScreen(
 
         // Optimistic UI: tampilkan 1 centang (✓) saat dikirim, otomatis berubah jadi 2 centang (✓✓) saat server memvalidasi pesan
         val pending = ChatMessage(
-            id = "local-$now",
+            id = "local-${java.util.UUID.randomUUID()}",
             name = nickname,
             githubLogin = currentGh,
             country = myCountry,

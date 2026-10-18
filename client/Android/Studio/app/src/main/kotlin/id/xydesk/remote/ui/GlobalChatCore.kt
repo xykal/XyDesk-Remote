@@ -60,6 +60,7 @@ internal data class ChatMessage(
     val e2eeSig: String = "",
     // Default TIDAK terverifikasi; hanya HMAC valid dari server yang menyalakan ini.
     val e2eeVerified: Boolean = false,
+    val clientMessageId: String = "",
 )
 
 internal data class XyStickerPreset(
