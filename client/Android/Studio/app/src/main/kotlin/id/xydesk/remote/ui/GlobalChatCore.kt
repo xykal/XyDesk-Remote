@@ -55,7 +55,7 @@ internal data class ChatMessage(
     val attachmentData: String = "",
     val viewOnce: Boolean = false,
     val avatarUrl: String = "",
-    val deliveryTicks: Int = 2, // 1 = terkirim ke antrean (✓), 2 = diterima & tervalidasi room (✓✓)
+    val deliveryTicks: Int = 2, // -1 = unconfirmed, 0 = pending, 1 = legacy queued, 2 = room acknowledged (not read)
     val e2eeProtocol: String = "XY-E2EE-GCM-v1",
     val e2eeSig: String = "",
     // Default TIDAK terverifikasi; hanya HMAC valid dari server yang menyalakan ini.

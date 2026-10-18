@@ -1,6 +1,8 @@
 package id.xydesk.remote.ui
 
 import androidx.compose.foundation.layout.BoxWithConstraints
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.platform.LocalDensity
 import id.xydesk.remote.ui.theme.XySpacing
 
@@ -1800,11 +1802,26 @@ internal fun ChatVectorDeliveryTicks(
     tint: Color,
     modifier: Modifier = Modifier,
 ) {
-    Canvas(modifier = modifier.size(width = if (ticks >= 2) 15.dp else 11.dp, height = 11.dp)) {
+    val description = when {
+        ticks < 0 -> xyNow("Belum dikonfirmasi; periksa koneksi", "Unconfirmed; check connection")
+        ticks == 0 -> xyNow("Menunggu konfirmasi", "Awaiting confirmation")
+        ticks == 1 -> xyNow("Dalam antrean", "Queued")
+        else -> xyNow("Diterima ruang chat, bukan tanda dibaca", "Room acknowledged, not a read receipt")
+    }
+    Canvas(modifier = modifier.semantics { contentDescription = description }.size(width = if (ticks >= 2) 15.dp else 11.dp, height = 11.dp)) {
         val w = size.width
         val h = size.height
         val stroke = Stroke(width = h * 0.16f, cap = StrokeCap.Round, join = StrokeJoin.Round)
-        if (ticks <= 1) {
+        if (ticks <= 0) {
+            drawCircle(color = tint, radius = h * 0.4f, center = androidx.compose.ui.geometry.Offset(w / 2, h / 2), style = stroke)
+            if (ticks < 0) {
+                drawLine(tint, androidx.compose.ui.geometry.Offset(w / 2, h * 0.27f), androidx.compose.ui.geometry.Offset(w / 2, h * 0.53f), strokeWidth = h * 0.12f)
+                drawCircle(tint, radius = h * 0.06f, center = androidx.compose.ui.geometry.Offset(w / 2, h * 0.72f))
+            } else {
+                drawLine(tint, androidx.compose.ui.geometry.Offset(w / 2, h * 0.22f), androidx.compose.ui.geometry.Offset(w / 2, h / 2), strokeWidth = h * 0.12f)
+                drawLine(tint, androidx.compose.ui.geometry.Offset(w / 2, h / 2), androidx.compose.ui.geometry.Offset(w * 0.72f, h / 2), strokeWidth = h * 0.12f)
+            }
+        } else if (ticks == 1) {
             val p1 = Path().apply {
                 moveTo(w * 0.18f, h * 0.55f)
                 lineTo(w * 0.42f, h * 0.80f)

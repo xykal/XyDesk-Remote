@@ -154,6 +154,7 @@ import kotlinx.coroutines.sync.Semaphore
 import kotlinx.coroutines.sync.withPermit
 import androidx.compose.runtime.snapshotFlow
 import kotlinx.coroutines.flow.collectLatest
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -1089,7 +1090,7 @@ internal fun GlobalChatScreen(
             attachmentData = attachmentData,
             viewOnce = viewOnce,
             avatarUrl = getVerifiedGitHubAvatar(context).orEmpty(),
-            deliveryTicks = 1,
+            deliveryTicks = 0,
             e2eeProtocol = sealed.protocol,
             e2eeSig = sealed.signatureHex,
             e2eeVerified = true,
@@ -1097,7 +1098,9 @@ internal fun GlobalChatScreen(
         messages.add(pending)
         enrichTranslationIfNeeded(pending)
         scope.launch {
+            try {
             listState.animateScrollToItem((messages.size - 1).coerceAtLeast(0))
+            var queuedOnSocket = false
             val sentMsg = withContext(Dispatchers.IO) {
                 // Sending must not wait for a translation provider; enrichment is asynchronous.
                 val bodyJson = JSONObject().apply {
@@ -1133,7 +1136,7 @@ internal fun GlobalChatScreen(
                     GlobalChatRepository.send(bodyJson)?.optJSONObject("message")
                         ?.let { parseMessageFromJson(it, nickname, currentGh) }
                 }.getOrNull() ?: run {
-                    chatSocketSend(bodyJson.toString())
+                    queuedOnSocket = chatSocketSend(bodyJson.toString())
                     null
                 }
             }
@@ -1154,8 +1157,32 @@ internal fun GlobalChatScreen(
                     )
                 }
             }
-            chatSocketSend(JSONObject().put("type", "typing").put("on", false).toString())
-            sending = false
+            if (sentMsg == null) {
+                val idx = messages.indexOfFirst { it.id == pending.id }
+                if (idx >= 0) messages[idx] = messages[idx].copy(
+                    deliveryTicks = deliveryTicksAfterAttempt(false, queuedOnSocket),
+                )
+                if (!queuedOnSocket) {
+                    Toast.makeText(context, xy("Pesan belum terkirim. Salin pesan untuk mencoba lagi.", "Message not sent. Copy it to try again."), Toast.LENGTH_LONG).show()
+                } else {
+                    // Socket queue acceptance is not server acknowledgement. Never show a sent tick yet.
+                    scope.launch {
+                        delay(25_000L)
+                        val pendingIdx = messages.indexOfFirst { it.id == pending.id }
+                        if (pendingIdx >= 0) messages[pendingIdx] = messages[pendingIdx].copy(deliveryTicks = -1)
+                    }
+                }
+            }
+            } catch (cancelled: CancellationException) {
+                throw cancelled
+            } catch (_: Exception) {
+                val idx = messages.indexOfFirst { it.id == pending.id }
+                if (idx >= 0) messages[idx] = messages[idx].copy(deliveryTicks = -1)
+                Toast.makeText(context, xy("Pengiriman belum berhasil. Salin pesan untuk mencoba lagi.", "Sending did not succeed. Copy the message to try again."), Toast.LENGTH_LONG).show()
+            } finally {
+                chatSocketSend(JSONObject().put("type", "typing").put("on", false).toString())
+                sending = false
+            }
         }
     }
 
@@ -3534,9 +3561,8 @@ internal fun GlobalChatScreen(
 
 private var activeSocket: WebSocket? = null
 
-private fun chatSocketSend(rawJson: String) {
-    runCatching { activeSocket?.send(rawJson) }
-}
+private fun chatSocketSend(rawJson: String): Boolean =
+    runCatching { activeSocket?.send(rawJson) == true }.getOrDefault(false)
 
 internal fun translateClientSideMultiLang(
     text: String,
