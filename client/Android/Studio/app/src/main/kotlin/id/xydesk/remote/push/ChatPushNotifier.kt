@@ -61,6 +61,7 @@ object ChatPushNotifier {
     const val MENTION_CHANNEL_ID = "xydesk.mention.reply.system.v4"
     const val FEED_CHANNEL_ID = "xydesk.feed.social.system.v4"
     const val UPDATE_CHANNEL_ID = "xydesk.app.update.system.v4"
+    const val SOCIAL_ANNOUNCEMENT_CHANNEL_ID = "xydesk.community.announcement.v1"
     const val SOCIAL_MENTION_CHANNEL_ID = "xydesk.community.mention.v1"
     const val SOCIAL_REPLY_CHANNEL_ID = "xydesk.community.reply.v1"
     const val REPLY_CHANNEL_ID = "xydesk.chat.reply.v1"
@@ -358,7 +359,7 @@ object ChatPushNotifier {
         val nm = appContext.getSystemService(Context.NOTIFICATION_SERVICE) as? NotificationManager ?: return
         ensureChannel(nm)
         val channelId = when (cat) {
-            "announcement" -> ANNOUNCEMENT_CHANNEL_ID
+            "announcement" -> SOCIAL_ANNOUNCEMENT_CHANNEL_ID
             "mention" -> SOCIAL_MENTION_CHANNEL_ID
             "reply" -> SOCIAL_REPLY_CHANNEL_ID
             else -> FEED_CHANNEL_ID
@@ -391,6 +392,7 @@ object ChatPushNotifier {
         val clean = replyText.trim().take(500)
         if (clean.isEmpty()) return
         val myNick = chatNickname(appContext)
+        val accountSnapshot = id.xydesk.remote.ui.getVerifiedGitHubLogin(appContext).orEmpty()
         val now = System.currentTimeMillis()
 
         // 1. Update tampilan MessagingStyle seketika agar spinner "mengirim" di
@@ -425,6 +427,7 @@ object ChatPushNotifier {
                 setRequestProperty("Accept", "application/json")
             }
             val payload = JSONObject()
+                .put("github_login", accountSnapshot)
                 .put("name", myNick)
                 .put("text", clean)
                 .put("country", id.xydesk.remote.ui.chatCountryCode())
@@ -611,6 +614,7 @@ object ChatPushNotifier {
                 android.app.NotificationChannelGroup("xydesk.app", "Aplikasi & Pembaruan"),
             ))
             val channels = listOf(
+                NotificationChannel(SOCIAL_ANNOUNCEMENT_CHANNEL_ID, "Komunitas · Pengumuman", NotificationManager.IMPORTANCE_HIGH),
                 NotificationChannel(SOCIAL_MENTION_CHANNEL_ID, "Komunitas · Sebutan", NotificationManager.IMPORTANCE_HIGH),
                 NotificationChannel(SOCIAL_REPLY_CHANNEL_ID, "Komunitas · Balasan", NotificationManager.IMPORTANCE_HIGH),
                 NotificationChannel(REPLY_CHANNEL_ID, xyNow("Balasan Chat", "Chat Replies"), NotificationManager.IMPORTANCE_HIGH),
@@ -659,7 +663,7 @@ object ChatPushNotifier {
             channels.forEach {
                 it.group = when (it.id) {
                     UPDATE_CHANNEL_ID -> "xydesk.app"
-                    FEED_CHANNEL_ID, SOCIAL_MENTION_CHANNEL_ID, SOCIAL_REPLY_CHANNEL_ID -> "xydesk.community"
+                    FEED_CHANNEL_ID, SOCIAL_MENTION_CHANNEL_ID, SOCIAL_REPLY_CHANNEL_ID, SOCIAL_ANNOUNCEMENT_CHANNEL_ID -> "xydesk.community"
                     else -> "xydesk.chat"
                 }
                 nm.createNotificationChannel(it)

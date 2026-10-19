@@ -10,6 +10,7 @@ import java.io.File
 import java.security.KeyStore
 import java.security.MessageDigest
 import java.util.Locale
+import kotlinx.coroutines.launch
 import javax.crypto.Cipher
 import javax.crypto.KeyGenerator
 import javax.crypto.SecretKey
@@ -22,6 +23,15 @@ import javax.crypto.spec.GCMParameterSpec
 internal object GlobalChatOfflineCache {
     private const val ALIAS = "xydesk.chat.offline.v1"
     private const val MAX_BYTES = 1_000_000
+    private val writeOrder = ChatCacheWriteOrder()
+    private val writer = kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.SupervisorJob() + kotlinx.coroutines.Dispatchers.IO)
+
+    fun nextWriteEpoch(login: String): Long = writeOrder.advance(account(login))
+
+    fun persistConfirmed(context: Context, login: String, messages: List<ChatMessage>, epoch: Long) {
+        val app = context.applicationContext
+        writer.launch { write(app, login, messages, epoch) }
+    }
 
     private fun account(login: String) = login.trim().removePrefix("@").lowercase(Locale.ROOT)
     private fun file(context: Context, login: String): AtomicFile {
@@ -62,11 +72,14 @@ internal object GlobalChatOfflineCache {
     }
 
     @Synchronized
-    fun write(context: Context, login: String, messages: List<ChatMessage>) {
-        if (account(login).isBlank()) return
+    fun write(context: Context, login: String, messages: List<ChatMessage>, epoch: Long) {
+        if (account(login).isBlank() || !writeOrder.isCurrent(account(login), epoch)) return
         runCatching {
             val rows = JSONArray()
-            messages.filter { !it.viewOnce && !it.mutationPending && !it.id.startsWith("local-") }.takeLast(80).forEach { msg ->
+            // Multiple chat windows may acknowledge the same account at different times.
+            val previous = read(context, login, login).associateBy { it.id }
+            val reconciled = messages.map { incoming -> previous[incoming.id]?.let { reconcileChatMessage(it, incoming) } ?: incoming }
+            reconciled.filter { !it.viewOnce && !it.mutationPending && !it.id.startsWith("local-") }.takeLast(80).forEach { msg ->
                 rows.put(JSONObject().apply {
                     put("id", msg.id); put("client_msg_id", msg.clientMessageId); put("name", msg.name); put("github_login", msg.githubLogin)
                     put("author_id", msg.authorId); put("revision", msg.revision); put("edited_at", msg.editedAt)
@@ -86,6 +99,7 @@ internal object GlobalChatOfflineCache {
             cipher.updateAAD(account(login).toByteArray(Charsets.UTF_8))
             val encrypted = cipher.iv + cipher.doFinal(rows.toString().toByteArray(Charsets.UTF_8))
             if (encrypted.size > MAX_BYTES) return
+            if (!writeOrder.isCurrent(account(login), epoch)) return
             val cache = file(context, login)
             val stream = cache.startWrite()
             try { stream.write(encrypted); cache.finishWrite(stream) }

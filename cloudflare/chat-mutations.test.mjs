@@ -90,3 +90,12 @@ test('edge mutation route forwards Authorization and never fakes success if unav
   const response=await worker.fetch(new Request('https://app.test/api/chat/edit',request('edit')),env);
   assert.equal(response.status,200); assert.equal((await response.json()).message.text,'updated');
 });
+
+test('stale pin requests cannot republish deleted plaintext', async () => {
+  const {chat,data}=fixture();
+  await chat.fetch(request('delete'));
+  const stalePin={action:'pin',message:{id:'message-1',text:'original'}};
+  assert.equal((await chat.fetch(request('pin',stalePin))).status,409);
+  await chat.onMessage({ws:{send:()=>{}}},{data:JSON.stringify({type:'pin',...stalePin})});
+  assert.equal(data.get('pinned_message'),undefined);
+});

@@ -100,7 +100,7 @@ internal fun XyBottomNav(
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(4.dp),
         ) {
-            XyTab.entries.forEach { tab ->
+            listOf(XyTab.HOME, XyTab.CHAT, XyTab.FEED, XyTab.PROFILE).forEach { tab ->
                 val active = tab == selected
                 // xy() bersifat @Composable, jadi harus dipanggil di sini, bukan di
                 // dalam lambda semantics {} yang bukan composable.

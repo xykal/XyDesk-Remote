@@ -21,7 +21,10 @@
 - History/cache/WS merge rules retain newer revisions, protect in-flight local UI,
   and prevent stale snapshots from rehydrating deleted attachments or quote text.
   Translation responses for superseded text/revision are ignored. Unacknowledged
-  optimistic mutations are not saved as confirmed offline history.
+  optimistic mutations are not saved as confirmed offline history. Canonical mutation
+  ACKs trigger immediate asynchronous cache persistence instead of the normal debounce;
+  per-account write epochs reject obsolete queued snapshots. Cached same-ID revisions
+  are reconciled for multiple chat windows. This is not a guarantee against OS/storage failure.
 - Chat messages/mentions/replies/announcements have separate conversation labels
   and notification groups. Community mentions/replies get independent channels;
   feed/social and app updates remain separate. Existing channel IDs/settings are
@@ -45,16 +48,20 @@ legacy/unowned messages, which do not receive unsafe edit/delete controls. Do no
 claim that edits now work against production until authenticated integration tests
 and an explicitly authorized backend rollout are complete.
 
-Before a release candidate/draft:
-- Kotlin/JVM, Worker routes, revision/replay/ownership tests and app compile gate.
+Release sequence: source gates → signed candidate build → signature/ABI/binary checks
+→ release draft for the owner's device testing. Device tests require a candidate;
+they must not become a circular prerequisite for building that candidate.
+
+Source gates: Kotlin/JVM, Worker routes, revision/replay/ownership tests and app compile.
+Binary gates: signed release binaries, signature continuity and existing ABI validation.
+Draft/device test matrix (not yet performed):
 - Two-account/two-device edit, delete, stale history and reconnect behavior.
 - Offline/provider rejection/401/403/409/503 and delayed-success/failure ordering.
 - Exact tombstone display after cold start and quoted/pinned/media cleanup.
 - Long-press access in full-screen and floating chat; small-screen dock entry.
 - Separate notification channels, permission-denied behavior and correct tap route;
   a deletion must not clear unrelated chat/community notifications.
-- Signed release binaries and existing signature/ABI validation before draft; no
-  public publication, production backend deployment or automatic main merge implied.
+- No public publication, production backend deployment or automatic main merge implied.
 
 32-bit device-specific installation diagnosis is deferred by the user. The user
 has reaffirmed authorization for a release draft once ready; no repeated permission

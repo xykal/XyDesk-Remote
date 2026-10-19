@@ -445,6 +445,8 @@ private fun GlobalChatAccountContent(
     val messages = remember(verifiedGhLogin) {
         mutableStateListOf<ChatMessage>()
     }
+    var cacheWriteEpoch by remember { mutableStateOf(GlobalChatOfflineCache.nextWriteEpoch(verifiedGhLogin.orEmpty())) }
+
     LaunchedEffect(verifiedGhLogin) {
         val login = verifiedGhLogin.orEmpty()
         val cached = withContext(Dispatchers.IO) {
@@ -455,10 +457,10 @@ private fun GlobalChatAccountContent(
         if (messages.isEmpty()) messages.addAll(cached.filter {
             it.id !in hidden && it.at >= firstJoinedAtMs - 2_000L
         })
-        snapshotFlow { messages.toList() }.collectLatest { snapshot ->
+        snapshotFlow { cacheWriteEpoch to messages.toList() }.collectLatest { (epoch, snapshot) ->
             delay(800L)
             withContext(Dispatchers.IO) {
-                GlobalChatOfflineCache.write(context.applicationContext, login, snapshot)
+                GlobalChatOfflineCache.write(context.applicationContext, login, snapshot, epoch)
             }
         }
     }
@@ -498,6 +500,12 @@ private fun GlobalChatAccountContent(
         if (index >= 0) {
             if (incoming.revision > messages[index].revision) failedMutations.remove(incoming.id)
             messages[index] = reconcileChatMessage(messages[index], incoming)
+        } else {
+            if (incoming.id in hiddenMessageIds || incoming.at < firstJoinedAtMs - 2_000L) return
+            // A mutation can beat initial history parsing; keep its revision so old history cannot resurrect text.
+            messages.add(incoming)
+            messages.sortBy { it.at }
+            if (messages.size > 100) messages.removeAt(0)
         }
         if (incoming.deleted) {
             id.xydesk.remote.push.ChatPushNotifier.retractMessage(context, incoming.id)
@@ -508,6 +516,9 @@ private fun GlobalChatAccountContent(
             if (fullscreenMediaMsg?.id == incoming.id) fullscreenMediaMsg = null
         }
         if (pinnedMessage?.id == incoming.id) pinnedMessage = null
+        // Persist ACK without the normal debounce; obsolete queued snapshots cannot restore old text.
+        cacheWriteEpoch = GlobalChatOfflineCache.nextWriteEpoch(verifiedGhLogin.orEmpty())
+        GlobalChatOfflineCache.persistConfirmed(context, verifiedGhLogin.orEmpty(), messages.toList(), cacheWriteEpoch)
     }
 
     fun mutateMessage(target: ChatMessage, action: String, text: String = "") {

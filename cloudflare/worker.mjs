@@ -3646,7 +3646,8 @@ export class GlobalChat {
         this.broadcast(null, JSON.stringify({ type: "pin", pinned_message: null }));
         return durableObjectJson({ status: "ok", pinned_message: null }, 200, request.method);
       }
-      const rawPin = body.message;
+      const rawPin = await this.state.storage.get(`msg:${String(body.message.id || "").slice(0, 80)}`);
+      if (!rawPin || rawPin.deleted) return durableObjectJson({ status: "error", code: "message_not_pinnable" }, 409, request.method);
       const pinned = {
         id: String(rawPin.id || ""),
         name: String(rawPin.name || "User").slice(0, 32),
@@ -4041,7 +4042,11 @@ export class GlobalChat {
         await this.state.storage.delete("pinned_message");
         this.broadcast(null, JSON.stringify({ type: "pin", pinned_message: null }));
       } else {
-        const rm = data.message;
+        const rm = await this.state.storage.get(`msg:${String(data.message.id || "").slice(0, 80)}`);
+        if (!rm || rm.deleted) {
+          try { session.ws.send(JSON.stringify({ type: "error", code: "message_not_pinnable" })); } catch {}
+          return;
+        }
         const pinned = {
           id: String(rm.id || ""),
           name: String(rm.name || "User").slice(0, 32),
