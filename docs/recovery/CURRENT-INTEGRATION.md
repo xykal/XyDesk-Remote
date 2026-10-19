@@ -24,8 +24,9 @@ Additional backend/client recovery corrections:
   left uncached by the previous history-only quota mitigation.
 
 Local checks: 108 Worker tests and 4 protected-baseline/source guards pass. Android
-Kotlin/core/app unit-test gate and Windows-host cross-compilation passed CI run
-39318872335 at 660a1be (the later 108th test covers a Worker-only correction). Live quota recovery, authenticated two-account chat, physical
+Kotlin/core/app unit-test gate passed CI run 39320409340 at 2e91f36 after the
+account/socket corrections. Earlier Windows-host cross-compilation was separately
+verified in successful run 39318872335 at 660a1be; no host source changed since. Live quota recovery, authenticated two-account chat, physical
 RDP/PC Stream frames/mic and all original required feature acceptance remain pending.
 Genuine Windows controller, secure BOTH Direct endpoints, complete durable outbox/
 full-history/media sync and full provisioning must not be marked delivered by the
@@ -41,5 +42,7 @@ rather than silently showing an empty history. Positive authenticated chat is un
 Follow-up source correction: track socketConnected independently of the HTTP/UI
 connected indicator, restart polling delays on account/transport change, and reject
 in-flight responses/events after account switch/disposal. Hidden/view-once state is
-also remembered per account. Latest Android compile is being repeated after these
-changes; the earlier successful gate is not claimed to cover them. Preserve original draft/artifacts.
+also remembered per account. Latest Android gate passed at 2e91f36 (39320409340). Windows read-only diagnostic
+script parse/execution/schema passed on the Windows CI runner in 39324792675 at
+4ebaa91. Owner target diagnostics/runtime tests are still pending; no new signed
+recovery APK was assembled and no release/tag was created. Preserve original draft/artifacts.
