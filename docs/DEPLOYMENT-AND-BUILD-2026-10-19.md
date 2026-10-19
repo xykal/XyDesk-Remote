@@ -89,3 +89,19 @@ spaces, absence of collision bypass and preservation of unrelated codecs.
 The failed rc.1 tag is retained; a corrected candidate must use a fresh tag after
 its own green checks/main merge. Success of the new full native release build is
 still required before claiming APK/draft availability.
+
+## rc.2 real signed APK validation outcome
+
+PR #20 source gates passed and merged as
+`d6d6c2811aa7ebc9882be01265f42808ec0086de`; immutable candidate tag
+`v1.1.23-rc.2` ran workflow 39297373606. The duplicate-provider correction worked:
+all native ABIs, R8, assembleRelease and pinned-signer V1/V2 verification passed.
+ZIP/ELF validation passed ARM32, ARM64 and x86_64 split APKs but rejected Universal:
+`lib/x86/libsqlcipher.so` was supplied by a dependency AAR without a matching x86
+engine. No release artifact upload/draft occurred after that rejection.
+
+App packaging now excludes only unsupported 32-bit x86 JNI payload from dependency
+AARs. Supported engine ABIs remain armeabi-v7a, arm64-v8a and x86_64. Universal
+validation is NOT weakened; a regression fixture rejects the exact unexpected-x86
+case. No supported ABI, required runtime library, version/code or protocol changed.
+A fresh rc.3 tag/build is required after green checks and main merge.
