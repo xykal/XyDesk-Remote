@@ -447,7 +447,7 @@ class SessionManager(context: Context) {
                 else "TCP ${profile.host}:${profile.port} GAGAL"
             )
             if (!reachable) {
-                cleanupTerminalSession(inst)
+                if (!cleanupTerminalSession(inst)) return@execute
                 if (!userInitiatedDisconnect && !released && connectedAtMs > 0L && autoReconnectAttempts in 1..7) {
                     autoReconnectAttempts++
                     ConnectionLog.add("CM: jaringan belum pulih, tunggu 2s untuk auto-reconnect #${autoReconnectAttempts}")
@@ -579,7 +579,6 @@ class SessionManager(context: Context) {
             released = true
             stopWatchdog()
             val inst = core?.getInstance()
-            core = null
             sink = null
             listener = null
             if (inst != null && inst != 0L) {
@@ -591,12 +590,22 @@ class SessionManager(context: Context) {
                 }
                 // Free only after any in-flight session.connect() call has
                 // crossed the same lock and registered the native worker.
-                GlobalApp.freeSession(inst)
+                try {
+                    GlobalApp.freeSession(inst)
+                    core = null
+                } catch (t: Throwable) {
+                    ConnectionLog.addThrowable("CM: release native belum terkonfirmasi inst=$inst", t)
+                    transition(SessionState.Error(
+                        "native_cleanup_unconfirmed",
+                        "Engine belum terkonfirmasi dilepas; jangan anggap capture berhenti.",
+                        connectionId = inst,
+                    ))
+                }
             }
             worker.shutdownNow()
         }
-        if (_state.value is SessionState.Connected || _state.value is SessionState.Connecting ||
-            _state.value is SessionState.Authenticating || _state.value is SessionState.Disconnecting
+        if (core == null && (_state.value is SessionState.Connected || _state.value is SessionState.Connecting ||
+            _state.value is SessionState.Authenticating || _state.value is SessionState.Disconnecting)
         ) {
             transition(SessionState.Idle)
         }
@@ -833,22 +842,28 @@ class SessionManager(context: Context) {
      * FreeRDP.freeInstance menunggu worker native berhenti;
      * lifecycleLock mencegah release/retry membebaskan instance dua kali.
      */
-    private fun cleanupTerminalSession(inst: Long) {
-        synchronized(lifecycleLock) {
-            val session = core ?: return
-            if (session.getInstance() != inst) return
-            quicAudioBridge?.stop()
-            quicAudioBridge = null
-            stopWatchdog()
-            GlobalApp.unregisterSessionListener(inst)
+    private fun cleanupTerminalSession(inst: Long): Boolean = synchronized(lifecycleLock) {
+        val session = core ?: return@synchronized false
+        if (session.getInstance() != inst) return@synchronized false
+        quicAudioBridge?.stop()
+        quicAudioBridge = null
+        stopWatchdog()
+        GlobalApp.unregisterSessionListener(inst)
+        try {
+            GlobalApp.freeSession(inst)
+            // A missing core must mean release succeeded, not merely that it was requested.
             core = null
-            try {
-                GlobalApp.freeSession(inst)
-                ConnectionLog.add("CM: terminal session freed inst=$inst")
-            } catch (t: Throwable) {
-                Log.e(TAG, "gagal melepas terminal session inst=$inst", t)
-                ConnectionLog.addThrowable("CM: gagal melepas terminal session inst=$inst", t)
-            }
+            ConnectionLog.add("CM: terminal session freed inst=$inst")
+            true
+        } catch (t: Throwable) {
+            Log.e(TAG, "gagal melepas terminal session inst=$inst", t)
+            ConnectionLog.addThrowable("CM: gagal melepas terminal session inst=$inst", t)
+            transition(SessionState.Error(
+                "native_cleanup_unconfirmed",
+                "Pelepasan engine belum terkonfirmasi. Jangan anggap mic berhenti; tutup aplikasi jika sesi tidak dapat dihentikan.",
+                connectionId = inst,
+            ))
+            false
         }
     }
 
@@ -932,7 +947,7 @@ class SessionManager(context: Context) {
                     lower.contains("logon") || lower.contains("password") ||
                         lower.contains("access_denied") || lower.contains("denied")
                 }
-                cleanupTerminalSession(inst)
+                if (!cleanupTerminalSession(inst)) return
                 if (!userInitiatedDisconnect && !released && !isAuthFailure &&
                     connectedAtMs == 0L && lastTcpReachable && compatHandshakeStage < 2 && p != null
                 ) {
@@ -1001,7 +1016,7 @@ class SessionManager(context: Context) {
                         lower.contains("server denied connection")
                 }
                 val p = lastProfile
-                cleanupTerminalSession(inst)
+                if (!cleanupTerminalSession(inst)) return
                 if (!userInitiatedDisconnect && !released && nativeDetail == null &&
                     connectedAtMs > 0L && autoReconnectAttempts < 6 && p != null
                 ) {

@@ -67,3 +67,7 @@ Lisensi distribusi akan ditetapkan saat milestone M5.
 - `channels/audin/client/opensles/audin_opensl_es.c`: pasang callback/data sebelum recorder dapat memanggilnya, tolak duplicate Open tanpa menutup recorder aktif, jaga callback kosong dan tutup recorder sebelum Free.
 - `channels/audin/client/opensles/opensl_io.c`: periksa kegagalan Enqueue/SetRecordState, tolak dimensi nol dan hentikan/hancurkan recorder sebelum membebaskan buffer yang masih dimiliki OpenSL.
 - Tidak mengubah format/DSP default, endpoint, tag protokol atau ABI interface AUDIN. Lisensi/copyright upstream dipertahankan.
+
+## Perubahan tambahan — ownership native session Java
+- `freeRDPCore` menunda pelepasan entry registry/core sampai native free sukses, menyerialisasi pelepasan owner yang sama, dan mempertahankan wait terminal saat interupsi Java.
+- Helper Java murni `SessionReleaseTransaction` dan `NativeWorkerTermination` beserta10 tes JVM ditambahkan. Tidak mengubah ABI JNI, protokol atau DSP. Bukan implementasi live microphone mute.

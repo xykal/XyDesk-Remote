@@ -73,6 +73,19 @@ class HostDistributionTest(unittest.TestCase):
         callback = activity.split('private val permissionLauncher =', 1)[1].split('private fun profileFromIntent', 1)[0]
         self.assertNotIn('.write(', callback)
 
+    def test_native_release_commits_only_after_success(self):
+        base = ROOT / 'client/Android/Studio'
+        java = base / 'freeRDPCore/src/main/java/com/freerdp/freerdpcore'
+        global_app = (java / 'application/GlobalApp.java').read_text()
+        self.assertIn('SessionReleaseTransaction.release(sessionMap, instance, LibFreeRDP::freeInstance)', global_app)
+        native = (java / 'services/LibFreeRDP.java').read_text()
+        self.assertIn('NativeWorkerTermination.releaseAfterTerminal(', native)
+        manager = (base / 'core-rdp/src/main/kotlin/id/xydesk/remote/core/SessionManager.kt').read_text()
+        terminal = manager.split('private fun cleanupTerminalSession(', 1)[1].split('/** Probe TCP', 1)[0]
+        self.assertLess(terminal.index('GlobalApp.freeSession(inst)'), terminal.index('core = null'))
+        self.assertIn('"native_cleanup_unconfirmed"', terminal)
+        self.assertEqual(manager.count('if (!cleanupTerminalSession(inst)) return'), 3)
+
     def test_chat_has_no_voice_reader_or_global_mic_switch(self):
         source = (ROOT / 'client/Android/Studio/app/src/main/kotlin/id/xydesk/remote/ui/GlobalChatScreen.kt').read_text()
         for removed in ('voiceEnabled', 'TextToSpeech', 'VOICE ON', 'VOICE OFF', 'KEY_VOICE_ENABLED'):

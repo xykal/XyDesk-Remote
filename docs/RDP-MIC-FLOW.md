@@ -29,3 +29,12 @@ Verifikasi lokal: dua harness C mengambil body fungsi produksi, memakai API Open
 **Batas bukti:** ini benar-benar kompilasi/eksekusi program UNIT TEST C host sementara, bukan pemeriksaan source saja. Bukan build APK, Android/NDK, EXE host Windows, ABI/link produksi atau pengujian perangkat OpenSL nyata. Mock tidak membuktikan seluruh threading/teardown vendor Android. Kontrol live mute/native-background masih belum diimplementasi; jangan menandai kewajiban itu selesai.
 
 Hasil CI untuk394b94f: **AUDIN lifecycle39207803271 SUCCESS**, **WebCI39207803194 SUCCESS**. Dua harness C ASan/UBSan dan8 source-contract checks lulus; ini tetap bukan NDK/link/runtime perangkat Android.
+
+## Lanjutan: pelepasan engine harus terkonfirmasi
+Audit menemukan `GlobalApp.freeSession` membuang entry registry sebelum native free kembali, dan SessionManager mengosongkan core sebelum free berhasil. Jika free melempar exception, penanda ownership hilang terlalu dini. Kini native free dijalankan terlebih dahulu; entry registry/core baru dibuang setelah sukses. Release untuk owner yang sama diserialisasi, tanpa menahan monitor registry global selama native teardown. Kegagalan cleanup terminal mempertahankan core, memberi error `native_cleanup_unconfirmed`, dan tidak diteruskan ke jalur retry/Disconnected normal.
+
+`LibFreeRDP.freeInstance` kini memakai wait helper yang tetap menunggu worker terminal ketika thread Java diinterupsi, lalu mengembalikan interrupt flag sesudahnya. Interupsi bukan bukti bahwa recorder/worker native berhenti. Ini tidak menambahkan timeout yang membebaskan memory saat native masih berjalan.
+
+Sepuluh tes JVM murni memakai helper produksi (bukan Android/JNI): worker nonaktif, interupsi saat menunggu, spurious notify, stop melempar error, interrupt awal; registry masih memiliki owner saat free, kegagalan mempertahankan owner, repeated/missing free, replacement owner, dan dua release konkuren dengan callback registry tetap bisa membaca. Lokal PASS, bersama9 source-contract checks dan2 tes C mock AUDIN. CI Kotlin/JVM integrasi belum dinyatakan lulus sebelum hasil run tersedia.
+
+**Masih terbuka:** kebijakan stop/background dan kontrol live native mic belum selesai. Wait native masih dapat lama bila engine tidak mengirim terminal; jangan menyatakan mic OFF ketika putus/free tidak terkonfirmasi. Tes ini bukan uji rekaman Android, teardown vendor OpenSL, provisioning atau game pada Windows nyata. Secure Direct dan seluruh gate draft sebelumnya tetap terbuka.
