@@ -11,7 +11,8 @@ Instruksi pemilik: mic harus tercakup pada koneksi RDP biasa juga; tinjau UI Bua
 
 ## Perubahan dan verifikasi
 - Filter izin native session-only mempertahankan pilihan tersimpan, membedakan izin camera/mic, menghindari kanal native pada profil PC lama, dan diperiksa lagi saat reconnect.
-- Ditambahkan lima JVM regression tests: izin/preferensi, AUDIN tanpa bridge, izin camera/mic independen, revoke/regrant pada sambungan berikutnya, profil PC lama tanpa native capture. Menunggu hasil compile/unit-test CI sebelum menyatakan terverifikasi.
+- Ditambahkan lima JVM regression tests: izin/preferensi, AUDIN tanpa bridge, izin camera/mic independen, revoke/regrant pada sambungan berikutnya, profil PC lama tanpa native capture. Gate Kotlin/JVM39206503863@19a5b97 **SUCCESS**, termasuk suite ini; bukan build APK atau bukti capture runtime.
+- WebCI39206504271@19a5b97 **SUCCESS**;8 source-contract tests PASS.
 - UI Buat RDP menjelaskan langkah dan kebutuhan server; menghapus label mic “dua arah” yang menyesatkan dan klaim Host Boost pasti120FPS. Tidak mengubah input provisioning atau menjanjikan keberhasilan game.
 
 ## Acceptance yang masih terbuka sebelum draft
