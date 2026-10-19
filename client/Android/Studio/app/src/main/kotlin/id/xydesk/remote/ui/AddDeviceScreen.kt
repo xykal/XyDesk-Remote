@@ -1400,7 +1400,11 @@ fun AddDeviceScreen(
                     enabled = bridgeRelevant,
                 )
                 XyToggleRow(
-                    title = xy("Mikrofon", "Microphone"),
+                    title = xy("Mic HP → RDP (AUDIN)", "Phone mic → RDP (AUDIN)"),
+                    subtitle = xy(
+                        "Kanal RDP bawaan, bukan mic bridge. Perlu izin Android dan dukungan server. Pilih input Remote Audio di Windows/game; sambung ulang setelah mengubah opsi ini.",
+                        "Native RDP channel, not bridge mic. Needs Android permission and server support. Select the Remote Audio input in Windows/the game; reconnect after changing this option.",
+                    ),
                     checked = options.microphone,
                     onCheckedChange = { options = options.copy(microphone = it) },
                     leading = XyIcons.Mic,

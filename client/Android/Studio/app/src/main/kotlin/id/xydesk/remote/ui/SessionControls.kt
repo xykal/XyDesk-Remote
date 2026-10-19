@@ -648,6 +648,13 @@ fun SessionControls(
                             toggleHudButtonVisibility()
                         }
                         RailMenuItem(
+                            icon = XyIcons.Mic,
+                            label = xy("Mic RDP · profil & izin", "RDP mic · profile & permission"),
+                        ) {
+                            railMenuOpen = false
+                            onOpenReadiness()
+                        }
+                        RailMenuItem(
                             icon = if (voiceMicEnabled) XyIcons.VolumeOn else XyIcons.VolumeOff,
                             label = if (voiceMicEnabled) {
                                 xy("Mic bridge: diminta", "Mic bridge: requested")

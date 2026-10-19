@@ -292,7 +292,11 @@ class SessionManager(context: Context) {
                 base
             }
         }
-        val options = storedOptions.resolveForActiveNetwork(appContext).forSessionProfile(profile).let { resolved ->
+        val options = storedOptions.resolveForActiveNetwork(appContext).forSessionProfile(profile)
+            .withCapturePermissions(
+                microphoneGranted = appContext.checkSelfPermission(android.Manifest.permission.RECORD_AUDIO) == android.content.pm.PackageManager.PERMISSION_GRANTED,
+                cameraGranted = appContext.checkSelfPermission(android.Manifest.permission.CAMERA) == android.content.pm.PackageManager.PERMISSION_GRANTED,
+            ).let { resolved ->
             when (compatHandshakeStage) {
                 1 -> resolved.copy(
                     tlsSecLevel = 0,

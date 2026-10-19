@@ -62,6 +62,17 @@ class HostDistributionTest(unittest.TestCase):
                               'href="/XyDeskRemoteHost-Standalone.exe"', 'irm https://'):
                 self.assertFalse(forbidden in source, f'{name} still advertises {forbidden}')
 
+    def test_rdp_capture_permission_guard_is_at_every_connection_boundary(self):
+        base = ROOT / 'client/Android/Studio'
+        manager = (base / 'core-rdp/src/main/kotlin/id/xydesk/remote/core/SessionManager.kt').read_text()
+        boundary = manager.split('private fun sessionUri(', 1)[1].split('fun connect(', 1)[0]
+        self.assertIn('.withCapturePermissions(', boundary)
+        for permission in ('RECORD_AUDIO', 'CAMERA'):
+            self.assertIn('appContext.checkSelfPermission(android.Manifest.permission.' + permission, boundary)
+        activity = (base / 'app/src/main/kotlin/id/xydesk/remote/ui/XyDeskSessionActivity.kt').read_text()
+        callback = activity.split('private val permissionLauncher =', 1)[1].split('private fun profileFromIntent', 1)[0]
+        self.assertNotIn('.write(', callback)
+
     def test_chat_has_no_voice_reader_or_global_mic_switch(self):
         source = (ROOT / 'client/Android/Studio/app/src/main/kotlin/id/xydesk/remote/ui/GlobalChatScreen.kt').read_text()
         for removed in ('voiceEnabled', 'TextToSpeech', 'VOICE ON', 'VOICE OFF', 'KEY_VOICE_ENABLED'):

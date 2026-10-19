@@ -910,8 +910,8 @@ class XyDeskSessionActivity : ComponentActivity() {
         val options = runCatching { RdpOptions.of(this, profile.id) }.getOrNull()
             ?: return false
         val wanted = buildList {
-            if (options.camera) add(Manifest.permission.CAMERA)
-            if (options.microphone) add(Manifest.permission.RECORD_AUDIO)
+            if (options.camera && !options.pcConnectMode) add(Manifest.permission.CAMERA)
+            if (options.microphone && !options.pcConnectMode) add(Manifest.permission.RECORD_AUDIO)
             if (Build.VERSION.SDK_INT >= 33) add(Manifest.permission.POST_NOTIFICATIONS)
         }.filter {
             ContextCompat.checkSelfPermission(this, it) != PackageManager.PERMISSION_GRANTED
@@ -952,13 +952,10 @@ class XyDeskSessionActivity : ComponentActivity() {
                     val microphoneGranted = ContextCompat.checkSelfPermission(
                         this, Manifest.permission.RECORD_AUDIO,
                     ) == PackageManager.PERMISSION_GRANTED
-                    val adjusted = options.copy(
-                        camera = options.camera && cameraGranted,
-                        microphone = options.microphone && microphoneGranted,
-                    )
-                    if (adjusted != options) adjusted.write(this, profile.id)
+                    // SessionManager rechecks current permissions when generating the native URI,
+                    // including reconnects initiated outside this Activity. Keep saved user intent.
                     if ((options.camera && !cameraGranted) || (options.microphone && !microphoneGranted)) {
-                        XyNoticeBus.post("Izin kamera/mikrofon ditolak; kanal dinonaktifkan di opsi profil.")
+                        XyNoticeBus.post("Izin kamera/mikrofon ditolak; kanal tidak diminta pada sambungan ini. Setelan profil tetap disimpan.")
                     }
                 }
                 connectProfile(profile)

@@ -67,3 +67,6 @@ Native source changes prepared:
 - Historical release-state.json and download aliases are unchanged: they describe old published assets, not a fabricated new release. No web deployment performed. New-host asset metadata must only change after a real approved release/artifact exists.
 - Current local source-contract suite: **7 PASS**; Worker suite: **82 PASS**. Host/index inline JavaScript syntax checked separately. Runtime/game signal and secure transport requirements remain OPEN.
 - WebCI39205892870@1bb72fd exposed an outdated Worker test expecting the retired agent BAT to still download/open a script. Updated to verify the stronger current contract: retirement notice, nonzero exit, no PowerShell/download/process/firewall/elevation commands, and unchanged downloadable route/content headers. Latest local Worker suite rerun: 82 PASS. Replacement WebCI result must be checked rather than reporting the failed run green.
+
+## Penegasan pemilik: RDP biasa dan UI Buat RDP juga wajib
+Mic tidak terbatas PC Stream: audit source Tambah/Edit RDP → izin Android → native AUDIN → input Windows/game, serta Buat RDP → validasi endpoint → profil → sambung. Rincian perubahan, lima tes JVM baru dan acceptance terbuka ada di `RDP-MIC-FLOW.md`. Draft tetap setelah pekerjaan/verifikasi, bukan sekadar setelah tombol ON atau compile gate hijau.

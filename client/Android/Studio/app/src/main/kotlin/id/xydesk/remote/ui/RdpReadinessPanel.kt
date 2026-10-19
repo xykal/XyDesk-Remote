@@ -45,7 +45,7 @@ internal fun RdpReadinessPanel(
             }
             ReadinessLine("Perangkat input Windows & pilihan mic game", "Belum diverifikasi. Target render virtual tidak membuktikan perangkat capture/input tersedia atau dipilih game.")
             ReadinessLine("Kanal mic RDP native (setelan profil)", if (nativeMicConfigured)
-                "Dikonfigurasi. Tombol Mic bridge TIDAK mengendalikan kanal native ini; ubah setelan profil dan sambung ulang untuk mengubahnya."
+                "Profil meminta AUDIN bawaan RDP; tidak memerlukan Host Agent UDP. Izin Android diperiksa pada setiap sambungan. Pilih input Remote Audio di Windows/aplikasi lalu uji level suara. Tombol Mic bridge TIDAK mengendalikan kanal ini; ubah profil dan sambung ulang."
                 else "Tidak dikonfigurasi pada profil. Negosiasi/perangkat Windows belum diperiksa.")
             ReadinessLine("Driver / GPU / encoder Windows", "Belum dipindai. Tidak ada driver, registry, firewall atau skrip yang diubah oleh panel ini.")
             ReadinessLine("Roblox menolak VM", "Gunakan lingkungan yang didukung game. PC Stream tidak mengubah VM menjadi PC fisik; tidak ada bypass proteksi.")
