@@ -61,6 +61,8 @@ object ChatPushNotifier {
     const val MENTION_CHANNEL_ID = "xydesk.mention.reply.system.v4"
     const val FEED_CHANNEL_ID = "xydesk.feed.social.system.v4"
     const val UPDATE_CHANNEL_ID = "xydesk.app.update.system.v4"
+    const val SOCIAL_MENTION_CHANNEL_ID = "xydesk.community.mention.v1"
+    const val SOCIAL_REPLY_CHANNEL_ID = "xydesk.community.reply.v1"
     const val REPLY_CHANNEL_ID = "xydesk.chat.reply.v1"
     const val ANNOUNCEMENT_CHANNEL_ID = "xydesk.announcement.v1"
     const val CHAT_NOTIF_ID = 2005
@@ -238,6 +240,17 @@ object ChatPushNotifier {
         }
     }
 
+    fun retractMessage(context: Context, id: String) {
+        if (id.isBlank()) return
+        val nm = context.getSystemService(Context.NOTIFICATION_SERVICE) as? NotificationManager
+        for (channel in listOf(CHAT_CHANNEL_ID, MENTION_CHANNEL_ID, REPLY_CHANNEL_ID, ANNOUNCEMENT_CHANNEL_ID)) {
+            nm?.cancel("chat:$channel:$id", CHAT_NOTIF_ID)
+        }
+        val remaining = loadStack(context).filterNot { it.id == id }
+        saveStack(context, remaining)
+        unreadChatCountState.intValue = remaining.count { !it.isMe }
+    }
+
     fun onIncomingChatMessage(
         context: Context,
         msgId: String,
@@ -346,8 +359,8 @@ object ChatPushNotifier {
         ensureChannel(nm)
         val channelId = when (cat) {
             "announcement" -> ANNOUNCEMENT_CHANNEL_ID
-            "mention" -> MENTION_CHANNEL_ID
-            "reply" -> REPLY_CHANNEL_ID
+            "mention" -> SOCIAL_MENTION_CHANNEL_ID
+            "reply" -> SOCIAL_REPLY_CHANNEL_ID
             else -> FEED_CHANNEL_ID
         }
         val openIntent = Intent(appContext, XyDeskHomeActivity::class.java)
@@ -362,6 +375,9 @@ object ChatPushNotifier {
         val notif = NotificationCompat.Builder(appContext, channelId)
             .setSmallIcon(R.drawable.ic_stat_xydesk)
             .setContentTitle(title)
+            .setSubText("Komunitas · ${cat.replaceFirstChar { it.uppercase() }}")
+            .setGroup("xydesk.community.$cat")
+            .setVisibility(NotificationCompat.VISIBILITY_PRIVATE)
             .setContentText(body)
             .setStyle(NotificationCompat.BigTextStyle().bigText(body))
             .setAutoCancel(true)
@@ -398,6 +414,9 @@ object ChatPushNotifier {
         // 2. Kirim ke backend Cloudflare Worker (/api/chat/send)
         runCatching {
             val conn = (URL(SEND_URL).openConnection() as HttpURLConnection).apply {
+                instanceFollowRedirects = false
+                id.xydesk.remote.ui.GlobalChatRepository.token(appContext)?.takeIf { it.isNotBlank() }
+                    ?.let { setRequestProperty("Authorization", "Bearer $it") }
                 requestMethod = "POST"
                 connectTimeout = 10_000
                 readTimeout = 10_000
@@ -486,7 +505,7 @@ object ChatPushNotifier {
 
         val markReadAction = NotificationCompat.Action.Builder(
             R.drawable.ic_stat_xydesk,
-            xyNow("Tandai dibaca", "Mark as read"),
+            xyNow("Baca semua chat", "Read all chat"),
             markReadPending,
         )
             .setSemanticAction(NotificationCompat.Action.SEMANTIC_ACTION_MARK_AS_READ)
@@ -507,17 +526,27 @@ object ChatPushNotifier {
             isReply -> "${lastItem.name} membalas pesan Anda"
             else -> lastItem.name
         }
-        val bigText = lastItem.text // one notification per message, never mix categories
+        val conversation = when {
+            isAnnouncement -> "Chat Global · Pengumuman"
+            isMention -> "Chat Global · Sebutan"
+            isReply -> "Chat Global · Balasan"
+            else -> "Chat Global · Pesan"
+        }
+        val sender = androidx.core.app.Person.Builder().setName(lastItem.name).setKey(lastItem.name).build()
+        val messaging = NotificationCompat.MessagingStyle(androidx.core.app.Person.Builder().setName("Anda").build())
+            .setConversationTitle(conversation).setGroupConversation(true)
+            .addMessage(lastItem.text, lastItem.at, sender)
 
         // Gunakan sistem notifikasi standar bawaan HP (mengikuti pengaturan suara/getar channel sistem HP)
         val builder = NotificationCompat.Builder(context, channelId)
             .setSmallIcon(R.drawable.ic_stat_xydesk)
             .setContentTitle(titleText)
             .setContentText(lastItem.text)
-            .setSubText("Chat Global")
+            .setSubText(conversation)
+            .setGroup("xydesk.chat.$channelId")
             .setPriority(NotificationCompat.PRIORITY_HIGH)
             .setVisibility(NotificationCompat.VISIBILITY_PRIVATE)
-            .setStyle(NotificationCompat.BigTextStyle().bigText(bigText))
+            .setStyle(messaging)
             .setCategory(NotificationCompat.CATEGORY_MESSAGE)
             .setAutoCancel(true)
             .setOnlyAlertOnce(lastItem.isMe)
@@ -576,12 +605,19 @@ object ChatPushNotifier {
 
     private fun ensureChannel(nm: NotificationManager) {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            nm.createNotificationChannelGroups(listOf(
+                android.app.NotificationChannelGroup("xydesk.chat", "Chat Global"),
+                android.app.NotificationChannelGroup("xydesk.community", "Komunitas & Feed"),
+                android.app.NotificationChannelGroup("xydesk.app", "Aplikasi & Pembaruan"),
+            ))
             val channels = listOf(
+                NotificationChannel(SOCIAL_MENTION_CHANNEL_ID, "Komunitas · Sebutan", NotificationManager.IMPORTANCE_HIGH),
+                NotificationChannel(SOCIAL_REPLY_CHANNEL_ID, "Komunitas · Balasan", NotificationManager.IMPORTANCE_HIGH),
                 NotificationChannel(REPLY_CHANNEL_ID, xyNow("Balasan Chat", "Chat Replies"), NotificationManager.IMPORTANCE_HIGH),
                 NotificationChannel(ANNOUNCEMENT_CHANNEL_ID, xyNow("Pengumuman", "Announcements"), NotificationManager.IMPORTANCE_HIGH),
                 NotificationChannel(
                     MENTION_CHANNEL_ID,
-                    xyNow("Mention (@) & Balasan", "Mentions (@) & Replies"),
+                    xyNow("Chat Global · Sebutan (@)", "Global Chat · Mentions (@)"),
                     NotificationManager.IMPORTANCE_HIGH,
                 ).apply {
                     description = xyNow(
@@ -611,7 +647,7 @@ object ChatPushNotifier {
                 },
                 NotificationChannel(
                     UPDATE_CHANNEL_ID,
-                    xyNow("Pengumuman & Pembaruan", "Announcements & Updates"),
+                    xyNow("Pembaruan aplikasi", "App updates"),
                     NotificationManager.IMPORTANCE_HIGH,
                 ).apply {
                     description = xyNow(
@@ -620,7 +656,14 @@ object ChatPushNotifier {
                     )
                 },
             )
-            channels.forEach { nm.createNotificationChannel(it) }
+            channels.forEach {
+                it.group = when (it.id) {
+                    UPDATE_CHANNEL_ID -> "xydesk.app"
+                    FEED_CHANNEL_ID, SOCIAL_MENTION_CHANNEL_ID, SOCIAL_REPLY_CHANNEL_ID -> "xydesk.community"
+                    else -> "xydesk.chat"
+                }
+                nm.createNotificationChannel(it)
+            }
         }
     }
 
@@ -787,6 +830,10 @@ object ChatPushNotifier {
                                 for (i in 0 until arr.length()) {
                                     val m = arr.optJSONObject(i) ?: continue
                                     val id = m.optString("id")
+                                    if (m.optBoolean("deleted", false)) {
+                                        retractMessage(appContext, id)
+                                        continue
+                                    }
                                     val rawName = m.optString("name", "Tamu")
                                     val cc = m.optString("country", "ID").ifBlank { "ID" }
                                     val text = m.optString("text", "")

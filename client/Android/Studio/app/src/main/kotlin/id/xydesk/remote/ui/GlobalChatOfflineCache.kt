@@ -66,9 +66,11 @@ internal object GlobalChatOfflineCache {
         if (account(login).isBlank()) return
         runCatching {
             val rows = JSONArray()
-            messages.filter { !it.viewOnce && !it.id.startsWith("local-") }.takeLast(80).forEach { msg ->
+            messages.filter { !it.viewOnce && !it.mutationPending && !it.id.startsWith("local-") }.takeLast(80).forEach { msg ->
                 rows.put(JSONObject().apply {
                     put("id", msg.id); put("client_msg_id", msg.clientMessageId); put("name", msg.name); put("github_login", msg.githubLogin)
+                    put("author_id", msg.authorId); put("revision", msg.revision); put("edited_at", msg.editedAt)
+                    put("deleted", msg.deleted); put("deleted_at", msg.deletedAt)
                     put("text", msg.text.take(4_000)); put("at", msg.at); put("country", msg.country)
                     put("translated", msg.translated.take(4_000)); put("target_lang", msg.targetLang)
                     put("source_lang", msg.sourceLang); put("is_founder", msg.isFounder)

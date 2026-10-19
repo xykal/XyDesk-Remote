@@ -1015,8 +1015,15 @@ internal fun MessageBubble(
                             )
                         }
 
+                        if (msg.deleted) Text("Pesan ini dihapus", fontStyle = androidx.compose.ui.text.font.FontStyle.Italic,
+                            style = MaterialTheme.typography.bodySmall, color = secondaryTextColor)
+                        if (msg.mutationPending || msg.mutationError.isNotBlank()) Text(
+                            if (msg.mutationPending) "Menyinkronkan perubahan…" else msg.mutationError,
+                            style = MaterialTheme.typography.labelSmall, color = secondaryTextColor)
+                        if (msg.editedAt > 0 && !msg.deleted) Text("diedit", style = MaterialTheme.typography.labelSmall, color = secondaryTextColor)
+
                         // Teks Pesan (Semua link/URL berwarna biru cerah & bisa diklik!)
-                        if (msg.text.isNotBlank()) {
+                        if (!msg.deleted && msg.text.isNotBlank()) {
                             Spacer(Modifier.height(2.dp))
                             val parts = remember(msg.text) { splitChatCode(msg.text) }
                             for (part in parts) {

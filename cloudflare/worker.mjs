@@ -1,3 +1,4 @@
+import { applyChatMutation } from "./chat-mutations.mjs";
 import { exchangeGithubCode } from "./oauth-token-exchange.mjs";
 import { verifyGithubIdentity, resolveGithubIdentity } from "./oauth-identity.mjs";
 
@@ -3658,21 +3659,8 @@ export class GlobalChat {
       this.broadcast(null, JSON.stringify({ type: "pin", pinned_message: pinned }));
       return durableObjectJson({ status: "ok", pinned_message: pinned }, 200, request.method);
     }
-    if (path === "/delete" && request.method === "POST") {
-      let body = null;
-      try { body = await request.json(); } catch {}
-      const msgId = String(body?.id || "").trim().slice(0, 80);
-      if (!msgId) {
-        return durableObjectJson({ status: "error", code: "missing_id" }, 400, request.method);
-      }
-      await this.state.storage.delete(`msg:${msgId}`);
-      const curPinned = await this.state.storage.get("pinned_message").catch(() => null);
-      if (curPinned && String(curPinned.id || "") === msgId) {
-        await this.state.storage.delete("pinned_message");
-        this.broadcast(null, JSON.stringify({ type: "pin", pinned_message: null }));
-      }
-      this.broadcast(null, JSON.stringify({ type: "delete", id: msgId }));
-      return durableObjectJson({ status: "ok", deleted_id: msgId }, 200, request.method);
+    if ((path === "/delete" || path === "/edit") && request.method === "POST") {
+      return this.mutateMessage(request, path.slice(1));
     }
     if (path === "/oauth-complete" && request.method === "POST") {
       let body = null;
@@ -3783,7 +3771,49 @@ export class GlobalChat {
     return durableObjectJson({ status: "ok", online_count: this.getActiveOnlineCount() }, 200, request.method);
   }
 
+  async authenticate(request, required = false) {
+    const authorization = request.headers.get("authorization") || "";
+    if (!authorization && !required) return { ok: true, principal: null };
+    const match = authorization.match(/^Bearer (\S+)$/);
+    if (!match) return { ok: false, status: 401, code: "authentication_required" };
+    return resolveGithubIdentity(match[1]);
+  }
+
+  async mutateMessage(request, action) {
+    const parsed = await readCommunityJson(request, 4096);
+    if (parsed.error) return parsed.error;
+    const auth = await this.authenticate(request, true);
+    if (!auth.ok) return durableObjectJson({ status: "error", code: auth.code }, auth.status, request.method);
+    const body = parsed.body;
+    if (typeof body?.id !== "string" || !/^[a-zA-Z0-9-]{1,80}$/.test(body.id))
+      return durableObjectJson({ status: "error", code: "invalid_id" }, 400, request.method);
+    if (action === "edit" && isMaliciousTextOrLink(String(body.text || "")))
+      return durableObjectJson({ status: "error", code: "malicious_link_blocked" }, 400, request.method);
+    const key = `msg:${body.id}`;
+    const outcome = await this.state.storage.transaction(async transaction => {
+      const current = await transaction.get(key);
+      const result = applyChatMutation(current, auth.principal, body, action, Date.now());
+      if (result.status !== 200) return result;
+      await transaction.put(key, result.message);
+      if (action === "delete") {
+        const messages = await transaction.list({ prefix: "msg:" });
+        for (const [replyKey, reply] of messages) {
+          if (reply?.reply_to_id === body.id) await transaction.put(replyKey, { ...reply, reply_to_text: "Pesan ini dihapus" });
+        }
+      }
+      const pinned = await transaction.get("pinned_message");
+      if (pinned?.id === body.id) await transaction.delete("pinned_message");
+      return result;
+    });
+    if (outcome.status !== 200) return durableObjectJson({ status: "error", code: outcome.code }, outcome.status, request.method);
+    this.broadcast(null, JSON.stringify({ type: "mutation", message: outcome.message }));
+    this.broadcast(null, JSON.stringify({ type: "pin", pinned_message: await this.state.storage.get("pinned_message") || null }));
+    return durableObjectJson({ status: "ok", message: outcome.message }, 200, request.method);
+  }
+
   async handleHttpSend(request) {
+    const auth = await this.authenticate(request);
+    if (!auth.ok) return durableObjectJson({ status: "error", code: auth.code }, auth.status, request.method);
     let body = null;
     try {
       body = await request.json();
@@ -3794,6 +3824,9 @@ export class GlobalChat {
       ? body.name.trim().slice(0, CHAT_NAME_MAX) || "Tamu"
       : "Tamu";
     const extras = sanitizeChatExtras(body);
+    if (auth.principal && extras.github_login && extras.github_login.toLowerCase() !== auth.principal.login.toLowerCase())
+      return durableObjectJson({ status: "error", code: "identity_changed" }, 401, request.method);
+    if (auth.principal) extras.github_login = auth.principal.login;
     if (isMaliciousAttachmentName(extras.attachment_name)) {
       return durableObjectJson({ status: "error", code: "malicious_attachment_blocked" }, 400, request.method);
     }
@@ -3847,6 +3880,8 @@ export class GlobalChat {
       target_lang: tr.targetLang,
       source_lang: tr.sourceLang,
       ...extras,
+      author_id: auth.principal?.id || null,
+      revision: 0,
       at: now,
     };
     await this.state.storage.put(`msg:${id}`, msg);
@@ -3859,6 +3894,7 @@ export class GlobalChat {
   async loadHistory(sinceMs = 0) {
     const entries = await this.state.storage.list({ prefix: "msg:" });
     const msgs = [];
+    const deletedIds = new Set([...entries.values()].filter(m => m?.deleted).map(m => m.id));
     for (const [k, v] of entries.entries()) {
       const senderLower = String(v?.name || "").trim().toLowerCase();
       if (LEGACY_TEST_NAMES.has(senderLower)) {
@@ -3875,7 +3911,7 @@ export class GlobalChat {
       const flag = countryToFlag(country);
       let translated = typeof v?.translated === "string" ? v.translated : "";
       let targetLang = typeof v?.target_lang === "string" ? v.target_lang : "";
-      if (!translated && text) {
+      if (!v?.deleted && !translated && text) {
         const fb = offlineTranslateFallback(text, country);
         translated = fb.translated;
         targetLang = fb.targetLang;
@@ -3884,6 +3920,7 @@ export class GlobalChat {
       msgs.push({
         id: k.slice(4),
         ...v,
+        reply_to_text: deletedIds.has(v?.reply_to_id) ? "Pesan ini dihapus" : v?.reply_to_text || "",
         is_founder: Boolean(v?.is_founder || isFounderChatName(v?.name, v?.github_login)),
         country,
         flag,
@@ -3907,7 +3944,9 @@ export class GlobalChat {
     }
   }
 
-  handleConnect(request) {
+  async handleConnect(request) {
+    const auth = await this.authenticate(request);
+    if (!auth.ok) return durableObjectJson({ status: "error", code: auth.code }, auth.status, request.method);
     const urlObj = new URL(request.url);
     const pair = new WebSocketPair();
     const [client, server] = Object.values(pair);
@@ -3922,7 +3961,8 @@ export class GlobalChat {
       ws: server,
       clientId,
       name: ghLogin || "Tamu",
-      githubLogin: ghLogin,
+      githubLogin: auth.principal?.login || ghLogin,
+      principal: auth.principal,
       country: initialCountry,
       cfCountry: initialCountry,
       sent: 0,
@@ -3968,7 +4008,7 @@ export class GlobalChat {
       if (typeof data.name === "string") {
         session.name = String(data.name).trim().slice(0, CHAT_NAME_MAX) || "Tamu";
       }
-      if (typeof data.github_login === "string") {
+      if (!session.principal && typeof data.github_login === "string") {
         session.githubLogin = String(data.github_login).trim().replace(/^@/, "").slice(0, 39);
       }
       if (typeof data.client_id === "string" && data.client_id.trim()) {
@@ -4015,21 +4055,17 @@ export class GlobalChat {
       }
       return;
     }
-    if (data.type === "delete") {
-      const msgId = String(data.id || "").trim().slice(0, 80);
-      if (msgId) {
-        await this.state.storage.delete(`msg:${msgId}`);
-        const curPinned = await this.state.storage.get("pinned_message").catch(() => null);
-        if (curPinned && String(curPinned.id || "") === msgId) {
-          await this.state.storage.delete("pinned_message");
-          this.broadcast(null, JSON.stringify({ type: "pin", pinned_message: null }));
-        }
-        this.broadcast(null, JSON.stringify({ type: "delete", id: msgId }));
-      }
+    if (data.type === "delete" || data.type === "edit") {
+      try { session.ws.send(JSON.stringify({ type: "error", code: "authenticated_http_required" })); } catch {}
       return;
     }
     if (data.type !== "msg") return;
     const extras = sanitizeChatExtras(data);
+    if (session.principal && extras.github_login && extras.github_login.toLowerCase() !== session.principal.login.toLowerCase()) {
+      try { session.ws.send(JSON.stringify({ type: "error", code: "identity_changed" })); } catch {}
+      return;
+    }
+    if (session.principal) extras.github_login = session.principal.login;
     if (!extras.github_login && session.githubLogin) {
       extras.github_login = session.githubLogin;
     }
@@ -4084,9 +4120,12 @@ export class GlobalChat {
       target_lang: tr.targetLang,
       source_lang: tr.sourceLang,
       ...extras,
+      author_id: session.principal?.id || null,
+      revision: 0,
       at: now,
     };
-    this.state.storage.put(`msg:${id}`, msg).then(() => this.trimHistory()).catch(() => {});
+    await this.state.storage.put(`msg:${id}`, msg);
+    this.trimHistory().catch(() => {});
     this.broadcast(null, JSON.stringify({ type: "msg", ...msg }));
     this.pushChatNotification(msg).catch(() => {});
   }
@@ -4507,30 +4546,19 @@ export default {
       }
       return durableObjectJson({ status: "ok", pinned_message: EDGE_PINNED_MSG }, 200, request.method);
     }
-    if (path === "/api/chat/delete") {
+    if (path === "/api/chat/delete" || path === "/api/chat/edit") {
       if (request.method === "OPTIONS") return corsPreflight("POST, OPTIONS");
       if (request.method !== "POST") return methodNotAllowed("POST, OPTIONS");
-      const bodyText = await request.text().catch(() => "");
-      let parsed = null;
-      try { parsed = JSON.parse(bodyText); } catch {}
-      const msgId = String(parsed?.id || "").trim().slice(0, 80);
-      if (!msgId) return durableObjectJson({ status: "error", code: "missing_id" }, 400, request.method);
-      if (EDGE_PINNED_MSG && String(EDGE_PINNED_MSG.id || "") === msgId) {
-        EDGE_PINNED_MSG = null;
+      if (!env.GLOBAL_CHAT) return durableObjectJson({ status: "error", code: "chat_unavailable" }, 503, request.method);
+      const chatId = env.GLOBAL_CHAT.idFromName("xydesk-global-chat-v1");
+      const response = await env.GLOBAL_CHAT.get(chatId).fetch(new Request(new URL(path.endsWith("/edit") ? "/edit" : "/delete", request.url), {
+        method: "POST", headers: request.headers, body: request.body, duplex: "half",
+      }));
+      if (response.ok) {
+        const result = await response.clone().json().catch(() => null);
+        if (result?.message?.id === EDGE_PINNED_MSG?.id) EDGE_PINNED_MSG = null;
       }
-      if (env.GLOBAL_CHAT) {
-        try {
-          const chatIdDel = env.GLOBAL_CHAT.idFromName("xydesk-global-chat-v1");
-          return await env.GLOBAL_CHAT.get(chatIdDel).fetch(
-            new Request(new URL("/delete", request.url), {
-              method: "POST",
-              headers: { "Content-Type": "application/json" },
-              body: bodyText,
-            }),
-          );
-        } catch {}
-      }
-      return durableObjectJson({ status: "ok", deleted_id: msgId }, 200, request.method);
+      return response;
     }
     if (path === "/api/github/oauth/login" || path === "/api/auth/login") {
       if (request.method === "OPTIONS") return corsPreflight("GET, OPTIONS");
@@ -4832,6 +4860,7 @@ export default {
           headers: {
             "Content-Type": "application/json",
             "x-chat-country": cfCountry,
+            "authorization": request.headers.get("authorization") || "",
           },
           body: await request.text(),
         })

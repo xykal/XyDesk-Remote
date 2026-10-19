@@ -176,7 +176,7 @@ fun XyDeskHome(
     var drawerOpen by remember { mutableStateOf(false) }
     var helpToolsOpen by remember { mutableStateOf(false) }
     var section by remember { mutableStateOf(XyHomeNavPersist.section) }
-    // Tab nav bawah (3 tujuan). `section` tetap ada karena seksi dibuka dari
+    // Tab nav bawah (4 tujuan). `section` tetap ada karena seksi dibuka dari
     // drawer maupun dari layar Profil, dan keduanya menggambar SectionScreen.
     var tab by remember { mutableStateOf(XyHomeNavPersist.tab) }
     var route by remember { mutableStateOf<XyRoute>(XyHomeNavPersist.route) }
@@ -187,7 +187,7 @@ fun XyDeskHome(
     }
     LaunchedEffect(openChatSignal) {
         if (openChatSignal > 0) {
-            tab = XyTab.FEED
+            tab = XyTab.CHAT
             route = XyRoute.ChatGlobal
         }
     }
@@ -537,10 +537,10 @@ fun XyDeskHome(
 
                 XyRoute.Feed -> XyFeedScreen(
                     onMenu = { drawerOpen = true },
-                    onOpenChat = { route = XyRoute.ChatGlobal },
+                    onOpenChat = { tab = XyTab.CHAT; route = XyRoute.ChatGlobal },
                 )
 
-                XyRoute.ChatGlobal -> GlobalChatScreen(onBack = { route = XyRoute.Feed })
+                XyRoute.ChatGlobal -> GlobalChatScreen(onBack = { tab = XyTab.HOME; route = XyRoute.Devices })
                 XyRoute.Profile -> XyProfileScreen(
                     onMenu = { drawerOpen = true },
                     onOpenSection = {
@@ -573,6 +573,7 @@ fun XyDeskHome(
                                 }
                                 XyTab.FEED -> route = XyRoute.Feed
                                 XyTab.PROFILE -> route = XyRoute.Profile
+                                XyTab.CHAT -> route = XyRoute.ChatGlobal
                             }
                         },
                     )
@@ -585,7 +586,7 @@ fun XyDeskHome(
 
     // In-App Notification Banner (Pengumuman, Balasan, Like, Reaksi, Mention, Chat, & OTA Data)
     XyInAppNotificationBannerHost(
-        onOpenChat = { route = XyRoute.ChatGlobal },
+        onOpenChat = { tab = XyTab.CHAT; route = XyRoute.ChatGlobal },
         onOpenFeed = {
             tab = XyTab.FEED
             route = XyRoute.Feed

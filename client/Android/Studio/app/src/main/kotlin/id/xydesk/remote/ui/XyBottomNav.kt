@@ -45,7 +45,7 @@ import id.xydesk.remote.ui.components.xyGlass
 /**
  * Tujuan navigasi bawah.
  *
- * Sengaja hanya **tiga** sesuai permintaan pengguna. Sebelumnya bar ini memuat
+ * Empat tujuan; Chat Global kini punya pintu masuk langsung sesuai permintaan pengguna. Sebelumnya bar ini memuat
  * enam seksi (`XySection`) sehingga penuh dan tiap item jadi sempit; seksi
  * lain sekarang hidup di drawer kiri dan di layar Profil.
  */
@@ -53,6 +53,7 @@ internal enum class XyTab(val title: String, val titleEn: String) {
     HOME("Beranda", "Home"),
     FEED("Feed", "Feed"),
     PROFILE("Profil", "Profile"),
+    CHAT("Chat Global", "Global Chat"),
 }
 
 /**
@@ -163,10 +164,11 @@ internal fun XyBottomNav(
                                         scaleY = iconScale
                                     },
                             )
-                            val unreadDot = tab == XyTab.FEED && (
-                                id.xydesk.remote.push.ChatPushNotifier.unreadChatCountState.intValue > 0 ||
-                                    id.xydesk.remote.push.ChatPushNotifier.unreadNotifCountState.intValue > 0
-                                )
+                            val unreadDot = when (tab) {
+                                XyTab.CHAT -> id.xydesk.remote.push.ChatPushNotifier.unreadChatCountState.intValue > 0
+                                XyTab.FEED -> id.xydesk.remote.push.ChatPushNotifier.unreadNotifCountState.intValue > 0
+                                else -> false
+                            }
                             if (unreadDot) {
                                 Box(
                                     modifier = Modifier
@@ -198,9 +200,10 @@ internal fun XyBottomNav(
     }
 }
 
-/** Ikon per tujuan. Tiga saja, jadi tidak ada risiko dua seksi berbagi ikon. */
+/** Ikon per tujuan. Ikon unik untuk setiap tujuan. */
 private fun tabIcon(tab: XyTab): ImageVector = when (tab) {
     XyTab.HOME -> XyIcons.Monitor
     XyTab.FEED -> XyIcons.Users
     XyTab.PROFILE -> XyIcons.Gear
+    XyTab.CHAT -> XyIcons.Chat
 }

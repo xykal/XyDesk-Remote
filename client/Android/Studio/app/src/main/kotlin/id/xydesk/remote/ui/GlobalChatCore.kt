@@ -61,6 +61,14 @@ internal data class ChatMessage(
     // Default TIDAK terverifikasi; hanya HMAC valid dari server yang menyalakan ini.
     val e2eeVerified: Boolean = false,
     val clientMessageId: String = "",
+    val authorId: Long = 0L,
+    val revision: Long = 0L,
+    val editedAt: Long = 0L,
+    val deleted: Boolean = false,
+    val deletedAt: Long = 0L,
+    val mutationPending: Boolean = false,
+    val mutationId: String = "",
+    val mutationError: String = "",
 )
 
 internal data class XyStickerPreset(

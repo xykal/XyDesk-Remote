@@ -33,6 +33,32 @@ class HostDistributionTest(unittest.TestCase):
         self.assertNotIn('tlsSecLevel = 0', uri)
         self.assertNotIn('securityProtocol = XySecurityProtocol.TLS', uri)
 
+    def test_chat_mutations_keep_tombstones_and_do_not_trust_display_names(self):
+        ui = ROOT / 'client/Android/Studio/app/src/main/kotlin/id/xydesk/remote/ui'
+        policy = (ui / 'ChatMutationPolicy.kt').read_text()
+        self.assertIn('message.authorId > 0', policy)
+        self.assertIn('incoming.revision < current.revision', policy)
+        self.assertIn('current.mutationPending', policy)
+        self.assertIn('Pesan ini dihapus', policy)
+        screen = (ui / 'GlobalChatScreen.kt').read_text()
+        mutation = screen.split('fun mutateMessage(', 1)[1].split('fun updatePinnedMessage', 1)[0]
+        self.assertNotIn('hiddenMessageIds.add', mutation)
+        self.assertNotIn('chatSocketSend(', mutation)
+        self.assertIn('messages[current].mutationId == operation', mutation)
+        self.assertIn('mutationPending = true', mutation)
+        self.assertIn('GlobalChatRepository.mutate', mutation)
+        repository = (ui / 'GlobalChatRepository.kt').read_text()
+        self.assertIn('instanceFollowRedirects = false', repository)
+        self.assertIn('status !in 200..299', repository)
+        self.assertIn('not_confirmed', repository)
+        self.assertIn('!it.mutationPending', (ui / 'GlobalChatOfflineCache.kt').read_text())
+        self.assertIn('CHAT("Chat Global"', (ui / 'XyBottomNav.kt').read_text())
+        self.assertIn('XyTab.CHAT -> route = XyRoute.ChatGlobal', (ui / 'XyDeskHome.kt').read_text())
+        notifications = (ui.parent / 'push/ChatPushNotifier.kt').read_text()
+        self.assertIn('"mention" -> SOCIAL_MENTION_CHANNEL_ID', notifications)
+        self.assertIn('"reply" -> SOCIAL_REPLY_CHANNEL_ID', notifications)
+        self.assertIn('NotificationChannelGroup', notifications)
+
     def test_one_cmake_application_without_companion_libraries(self):
         cmake = (ROOT / 'host-agent/CMakeLists.txt').read_text()
         self.assertEqual(cmake.count('add_executable('), 1)

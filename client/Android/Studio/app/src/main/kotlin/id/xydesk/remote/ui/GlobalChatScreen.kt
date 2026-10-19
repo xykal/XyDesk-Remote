@@ -435,6 +435,10 @@ private fun GlobalChatAccountContent(
     var replyingTo by remember { mutableStateOf<ChatMessage?>(null) }
     var pinnedMessage by remember(verifiedGhLogin) { mutableStateOf<PinnedChatMessage?>(null) }
     var focusedContextMsg by remember { mutableStateOf<ChatMessage?>(null) }
+    var editingMessage by remember { mutableStateOf<ChatMessage?>(null) }
+    var editText by remember { mutableStateOf("") }
+    val failedMutations = remember { mutableStateMapOf<String, Pair<String, String>>() }
+
     var inspectingE2eeMsg by remember { mutableStateOf<ChatMessage?>(null) }
     var fullscreenMediaMsg by remember { mutableStateOf<ChatMessage?>(null) }
 
@@ -489,29 +493,66 @@ private fun GlobalChatAccountContent(
         Toast.makeText(context, "Pesan dihapus untuk saya", Toast.LENGTH_SHORT).show()
     }
 
-    fun deleteMessageForEveryone(target: ChatMessage) {
-        if (target.id.isNotBlank() && target.id !in hiddenMessageIds) {
-            hiddenMessageIds.add(target.id)
-            chatPrefs.edit().putStringSet(hiddenIdsKey, hiddenMessageIds.toSet()).apply()
+    fun applyIncomingMutation(incoming: ChatMessage) {
+        val index = messages.indexOfFirst { it.id == incoming.id }
+        if (index >= 0) {
+            if (incoming.revision > messages[index].revision) failedMutations.remove(incoming.id)
+            messages[index] = reconcileChatMessage(messages[index], incoming)
         }
-        messages.removeAll { it.id == target.id }
-        if (pinnedMessage?.id == target.id) {
-            pinnedMessage = null
+        if (incoming.deleted) {
+            id.xydesk.remote.push.ChatPushNotifier.retractMessage(context, incoming.id)
+            messages.indices.forEach { i ->
+                if (messages[i].replyToId == incoming.id) messages[i] = messages[i].copy(replyToText = "Pesan ini dihapus")
+            }
+            if (replyingTo?.id == incoming.id) replyingTo = null
+            if (fullscreenMediaMsg?.id == incoming.id) fullscreenMediaMsg = null
         }
-        val payload = JSONObject().apply {
-            put("type", "delete")
-            put("id", target.id)
-            put("deleted_by", nickname)
-            put("github_login", verifiedGhLogin.orEmpty())
+        if (pinnedMessage?.id == incoming.id) pinnedMessage = null
+    }
+
+    fun mutateMessage(target: ChatMessage, action: String, text: String = "") {
+        val index = messages.indexOfFirst { it.id == target.id }
+        if (index < 0 || messages[index].revision != target.revision || !canMutateChatMessage(messages[index], verifiedGhLogin)) {
+            Toast.makeText(context, "Pesan/status sudah berubah. Salin draf edit bila perlu, lalu buka ulang pesan terbaru.", Toast.LENGTH_LONG).show()
+            return
         }
-        chatSocketSend(payload.toString())
-        scope.launch(Dispatchers.IO) {
-            runCatching {
-                GlobalChatRepository.postAction(CHAT_DELETE_URL, payload)
+        editingMessage = null
+        val original = messages[index]
+        val operation = java.util.UUID.randomUUID().toString()
+        val account = verifiedGhLogin
+        val now = System.currentTimeMillis()
+        val optimistic = if (action == "delete") original.deletedPlaceholder(now)
+            else original.copy(text = text.trim(), translated = "", editedAt = now, e2eeSig = "", e2eeVerified = false)
+        messages[index] = optimistic.copy(mutationPending = true, mutationId = operation, mutationError = "")
+        failedMutations.remove(target.id)
+        focusedContextMsg = null
+        scope.launch {
+            val outcome = withContext(Dispatchers.IO) {
+                runCatching {
+                    check(normalizedChatAccount(getVerifiedGitHubLogin(context)) == normalizedChatAccount(account))
+                    val token = GlobalChatRepository.token(context)?.takeIf { it.isNotBlank() } ?: error("Login kembali diperlukan")
+                    val body = JSONObject().put("id", original.id).put("expected_revision", original.revision)
+                        .put("operation_id", operation).put("text", text.trim())
+                    val json = GlobalChatRepository.mutate(if (action == "delete") CHAT_DELETE_URL else CHAT_EDIT_URL, body, token)
+                    parseMessageFromJson(json, nickname, account)
+                }
+            }
+            outcome.onSuccess { incoming ->
+                applyIncomingMutation(incoming)
+                failedMutations.remove(target.id)
+            }.onFailure {
+                val current = messages.indexOfFirst { it.id == original.id }
+                // A newer WS/history revision wins over a late HTTP failure.
+                if (current >= 0 && messages[current].mutationId == operation) {
+                    messages[current] = original.copy(mutationError = "Perubahan belum terkonfirmasi · coba lagi")
+                    failedMutations[original.id] = action to text
+                    Toast.makeText(context, "Perubahan belum terkonfirmasi. Tampilan dipulihkan; tekan lama untuk coba lagi. Jika ditolak, sinkronkan ulang atau login kembali.", Toast.LENGTH_LONG).show()
+                }
             }
         }
-        Toast.makeText(context, "Pesan dihapus untuk semua orang", Toast.LENGTH_SHORT).show()
     }
+
+    fun deleteMessageForEveryone(target: ChatMessage) = mutateMessage(target, "delete")
 
     fun updatePinnedMessage(target: ChatMessage?, pin: Boolean) {
         if (pin && target != null) {
@@ -606,7 +647,7 @@ private fun GlobalChatAccountContent(
     val wsHistoryReceived = remember { java.util.concurrent.atomic.AtomicBoolean(false) }
 
     fun enrichTranslationIfNeeded(msg: ChatMessage, forceRetranslate: Boolean = false) {
-        if (msg.attachmentType == "sticker" || msg.text.isBlank()) return
+        if (msg.deleted || msg.mutationPending || msg.attachmentType == "sticker" || msg.text.isBlank()) return
         val prefSnapshot = viewerTargetLang
         // Ketika kita mengirim pesan sendiri (msg.mine == true) pada mode otomatis ("auto"),
         // tampilkan 1 bahasa saja di layar pengirim.
@@ -643,6 +684,7 @@ private fun GlobalChatAccountContent(
                     val idx = messages.indexOfFirst { it.id == msg.id }
                     if (idx >= 0) {
                         val current = messages[idx]
+                        if (current.deleted || current.mutationPending || current.text != msg.text || current.revision != msg.revision) return@launch
                         val resolvedTranslation = if (current.mine && (viewerTargetLang == "auto" || viewerTargetLang.isBlank())) {
                             ""
                         } else {
@@ -732,8 +774,9 @@ private fun GlobalChatAccountContent(
                             for (item in fetched) {
                                 id.xydesk.remote.push.ChatPushNotifier.markSeen(item.id, item.at, context)
                                 val existingIdx = messages.indexOfFirst { it.id == item.id }
-                                if (existingIdx >= 0 && messages[existingIdx].attachmentData.isBlank() && item.attachmentData.isNotBlank()) {
-                                    messages[existingIdx] = item
+                                if (existingIdx >= 0) {
+                                    if (item.revision > messages[existingIdx].revision) failedMutations.remove(item.id)
+                                    messages[existingIdx] = reconcileChatMessage(messages[existingIdx], item)
                                 }
                                 if (existingIdx < 0) {
                                     val tempIdx = findPendingChatIndex(messages, item)
@@ -846,7 +889,9 @@ private fun GlobalChatAccountContent(
             val gh = URLEncoder.encode(verifiedGhLogin.orEmpty(), "UTF-8")
             val wsUrl = "$CHAT_WS_URL?joined_at=$firstJoinedAtMs&client_id=$cid&github_login=$gh"
             val socket = client.newWebSocket(
-                Request.Builder().url(wsUrl).build(),
+                Request.Builder().url(wsUrl).apply {
+                    GlobalChatRepository.token(context)?.takeIf { it.isNotBlank() }?.let { header("Authorization", "Bearer $it") }
+                }.build(),
                 object : WebSocketListener() {
                     override fun onOpen(webSocket: WebSocket, response: Response) {
                         lastWsActivityMs.set(System.currentTimeMillis())
@@ -905,8 +950,14 @@ private fun GlobalChatAccountContent(
                                             it.id.startsWith("local-") || it.at > newestAt
                                         }
                                     }
+                                    val reconciledBatch = batch.map { incoming ->
+                                        messages.firstOrNull { it.id == incoming.id }?.let {
+                                            if (incoming.revision > it.revision) failedMutations.remove(incoming.id)
+                                            reconcileChatMessage(it, incoming)
+                                        } ?: incoming
+                                    }
                                     messages.clear()
-                                    messages.addAll((batch + retained).filter { it.id !in hiddenMessageIds }.sortedBy { it.at })
+                                    messages.addAll((reconciledBatch + retained).filter { it.id !in hiddenMessageIds }.sortedBy { it.at })
                                     GlobalChatMemoryCache.messages.clear()
                                     GlobalChatMemoryCache.messages.addAll(messages.takeLast(80))
                                     if (viewerTargetLang != "auto") {
@@ -922,7 +973,8 @@ private fun GlobalChatAccountContent(
                                     id.xydesk.remote.push.ChatPushNotifier.markSeen(incoming.id, incoming.at, context)
                                     val existingIdx = messages.indexOfFirst { it.id == incoming.id }
                                     if (existingIdx >= 0) {
-                                        messages[existingIdx] = incoming.copy(deliveryTicks = 2)
+                                        if (incoming.revision > messages[existingIdx].revision) failedMutations.remove(incoming.id)
+                                        messages[existingIdx] = reconcileChatMessage(messages[existingIdx], incoming.copy(deliveryTicks = 2))
                                     } else {
                                         val tempIdx = findPendingChatIndex(messages, incoming)
                                         if (tempIdx >= 0) {
@@ -944,10 +996,19 @@ private fun GlobalChatAccountContent(
                                 "pin" -> {
                                     pinnedMessage = parsePinnedMessageFromJson(data.optJSONObject("pinned_message"))
                                 }
+                                "mutation" -> {
+                                    val payload = data.optJSONObject("message")
+                                    if (payload != null) {
+                                        val incoming = parseMessageFromJson(payload, nickname, verifiedGhLogin)
+                                        if (incoming.id !in hiddenMessageIds) applyIncomingMutation(incoming)
+                                    }
+                                }
                                 "delete" -> {
                                     val delId = data.optString("id", "").trim()
                                     if (delId.isNotEmpty()) {
-                                        messages.removeAll { it.id == delId }
+                                        val index = messages.indexOfFirst { it.id == delId }
+                                        if (index >= 0) messages[index] = messages[index].deletedPlaceholder()
+
                                         if (pinnedMessage?.id == delId) {
                                             pinnedMessage = null
                                         }
@@ -1125,7 +1186,7 @@ private fun GlobalChatAccountContent(
                         if (!av.isNullOrBlank()) put("avatar_url", av)
                     }
                     runCatching {
-                        GlobalChatRepository.send(bodyJson)?.optJSONObject("message")
+                        GlobalChatRepository.send(bodyJson, GlobalChatRepository.token(context))?.optJSONObject("message")
                             ?.let { parseMessageFromJson(it, nickname, currentGh) }
                     }.getOrNull() ?: run {
                         queuedOnSocket = chatSocketSend(bodyJson.toString())
@@ -2852,6 +2913,18 @@ private fun GlobalChatAccountContent(
                             modifier = Modifier.width(258.dp),
                         ) {
                             Column(modifier = Modifier.fillMaxWidth()) {
+                                if (canMutateChatMessage(targetMsg, verifiedGhLogin) && targetMsg.attachmentType.isBlank()) {
+                                    ContextMenuActionRow(label = "Edit Pesan", icon = XyIcons.Edit, onClick = {
+                                        editingMessage = targetMsg
+                                        editText = targetMsg.text
+                                        focusedContextMsg = null
+                                    })
+                                }
+                                failedMutations[targetMsg.id]?.let { (action, text) ->
+                                    ContextMenuActionRow(label = "Coba lagi perubahan", icon = XyIcons.Refresh, onClick = {
+                                        mutateMessage(targetMsg, action, text)
+                                    })
+                                }
                                 ContextMenuActionRow(
                                     label = "Balas Pesan",
                                     customIcon = { ChatVectorReplyIcon(size = 17.dp, tint = Color.White) },
@@ -2990,7 +3063,7 @@ private fun GlobalChatAccountContent(
                                     },
                                 )
                                 HorizontalDivider(color = Color.White.copy(alpha = 0.08f))
-                                ContextMenuActionRow(
+                                if (canMutateChatMessage(targetMsg, verifiedGhLogin)) ContextMenuActionRow(
                                     label = "Hapus untuk Semua Orang",
                                     icon = XyIcons.Trash,
                                     tint = Color(0xFFEF4444),
@@ -3015,6 +3088,22 @@ private fun GlobalChatAccountContent(
                         }
                     }
                 }
+            }
+        }
+    }
+
+    editingMessage?.let { target ->
+        XyOverlay(title = "Edit pesan", onDismiss = { editingMessage = null }) {
+            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                androidx.compose.material3.OutlinedTextField(
+                    value = editText, onValueChange = { editText = it.take(500) },
+                    label = { Text("Pesan") }, modifier = Modifier.fillMaxWidth(), minLines = 2, maxLines = 6,
+                )
+                Text("Perubahan tampil langsung; status sinkron menunggu server. Pesan media belum bisa diedit.", style = MaterialTheme.typography.bodySmall)
+                XyPillButton(text = "Simpan perubahan", enabled = editText.isNotBlank() && editText.trim() != target.text, onClick = {
+                    mutateMessage(target, "edit", editText)
+                }, modifier = Modifier.fillMaxWidth())
+                XyPillButton(text = "Batal", onClick = { editingMessage = null }, primary = false)
             }
         }
     }
