@@ -186,6 +186,7 @@ fun XyDeskTheme(
             insets.isAppearanceLightNavigationBars = !dark
         }
     }
+    val uiMotionEnabled = rememberDecorativeMotionEnabled()
     MaterialTheme(
         colorScheme = scheme,
         shapes = XyShapes,
@@ -227,8 +228,8 @@ fun XyDeskTheme(
             ),
         ),
         content = {
-            CompositionLocalProvider(LocalContentColor provides scheme.onSurface) {
-                content()
+            CompositionLocalProvider(LocalContentColor provides scheme.onSurface, LocalUiMotionEnabled provides uiMotionEnabled) {
+                id.xydesk.remote.ui.OfficialChannelNavigation { content() }
             }
         },
     )

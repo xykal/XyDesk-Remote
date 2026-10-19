@@ -2198,6 +2198,7 @@ internal fun XyClickableLinkText(
     modifier: Modifier = Modifier,
 ) {
     val context = LocalContext.current
+    val openChannel = LocalChannelNavigator.current
     val annotated = remember(text, color, linkColor) {
         androidx.compose.ui.text.buildAnnotatedString {
             append(text)
@@ -2231,11 +2232,17 @@ internal fun XyClickableLinkText(
                     end = match.range.last + 1,
                 )
             }
+            channelTags(text).forEach { match ->
+                if (XY_URL_REGEX.findAll(text).none { match.start in it.range || (match.end - 1) in it.range }) {
+                    addStyle(androidx.compose.ui.text.SpanStyle(color = linkColor, fontWeight = FontWeight.SemiBold), match.start, match.end)
+                    addStringAnnotation("CHANNEL", match.channelId, match.start, match.end)
+                }
+            }
         }
     }
 
     val hasLinks = remember(annotated) {
-        annotated.getStringAnnotations("URL", 0, annotated.length).isNotEmpty()
+        annotated.getStringAnnotations("URL", 0, annotated.length).isNotEmpty() || annotated.getStringAnnotations("CHANNEL", 0, annotated.length).isNotEmpty()
     }
 
     if (!hasLinks) {
@@ -2255,13 +2262,18 @@ internal fun XyClickableLinkText(
             maxLines = maxLines,
             overflow = TextOverflow.Ellipsis,
             onTextLayout = { layoutResult = it },
-            modifier = modifier.pointerInput(annotated, onNonLinkClick, onLongPress) {
+            modifier = modifier.pointerInput(annotated, onNonLinkClick, onLongPress, openChannel) {
                 detectTapGestures(
                     onLongPress = { onLongPress?.invoke() },
                     onTap = { pos ->
                         val layout = layoutResult
                         if (layout != null) {
                             val offset = layout.getOffsetForPosition(pos)
+                            val channel = annotated.getStringAnnotations("CHANNEL", offset, offset).firstOrNull()
+                            if (channel != null) {
+                                openChannel(channel.item)
+                                return@detectTapGestures
+                            }
                             val hit = annotated.getStringAnnotations("URL", offset, offset).firstOrNull()
                             if (hit != null) {
                                 openInAppCustomTab(context, hit.item)

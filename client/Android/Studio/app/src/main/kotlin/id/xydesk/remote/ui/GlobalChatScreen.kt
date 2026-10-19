@@ -629,6 +629,25 @@ private fun GlobalChatAccountContent(
     var sending by remember { mutableStateOf(false) }
     var draft by remember { mutableStateOf(TextFieldValue("")) }
     val listState = rememberLazyListState()
+    var didInitialScroll by remember(verifiedGhLogin) { mutableStateOf(false) }
+    var newArrivals by remember(verifiedGhLogin) { mutableIntStateOf(0) }
+    val sentSoundGate = remember(verifiedGhLogin) { ChatSentSoundGate() }
+    val sentSound = remember(verifiedGhLogin) { ChatSendSoundPlayer(context) }
+    val soundLifecycle = androidx.lifecycle.compose.LocalLifecycleOwner.current.lifecycle
+    DisposableEffect(sentSound) { onDispose { sentSound.close() } }
+    fun confirmOwnSend(serverId: String) {
+        if (sentSoundGate.accept(serverId)) sentSound.play(notifSoundTone != "silent" && soundLifecycle.currentState.isAtLeast(androidx.lifecycle.Lifecycle.State.STARTED))
+    }
+    LaunchedEffect(verifiedGhLogin, messages.isNotEmpty()) {
+        if (!didInitialScroll && messages.isNotEmpty()) {
+            listState.scrollToItem(messages.lastIndex)
+            didInitialScroll = true
+        }
+    }
+    LaunchedEffect(listState) {
+        snapshotFlow { !listState.canScrollForward }.collect { atBottom -> if (atBottom) newArrivals = 0 }
+    }
+
     val main = remember { Handler(Looper.getMainLooper()) }
     var typingSentAt by remember { mutableStateOf(0L) }
 
@@ -782,6 +801,8 @@ private fun GlobalChatAccountContent(
                                 pinnedMessage = serverPinned
                                 GlobalChatMemoryCache.pinnedMessage = serverPinned
                             }
+                            val followSnapshot = shouldFollowChat(!didInitialScroll || !listState.canScrollForward)
+                            var newlyAdded = 0
                             var added = false
                             val fetchedIds = fetched.map { it.id }.toSet()
                             if (arr.length() == 0) {
@@ -807,9 +828,11 @@ private fun GlobalChatAccountContent(
                                     val tempIdx = findPendingChatIndex(messages, item)
                                     if (tempIdx >= 0) {
                                         messages[tempIdx] = item.copy(deliveryTicks = 2)
+                                        if (item.clientMessageId.isNotBlank()) confirmOwnSend(item.id)
                                     } else {
                                         messages.add(item)
                                         added = true
+                                        newlyAdded += 1
                                     }
                                     enrichTranslationIfNeeded(item)
                                 }
@@ -817,9 +840,8 @@ private fun GlobalChatAccountContent(
                             GlobalChatMemoryCache.messages.clear()
                             GlobalChatMemoryCache.messages.addAll(messages.takeLast(80))
                             if (added && messages.isNotEmpty()) {
-                                val isNearBottom = !listState.canScrollForward ||
-                                    listState.firstVisibleItemIndex >= (messages.size - 4).coerceAtLeast(0)
-                                if (isNearBottom) {
+                                if (!followSnapshot) newArrivals += newlyAdded
+                                if (followSnapshot) {
                                     listState.animateScrollToItem(messages.size - 1)
                                 }
                             }
@@ -993,6 +1015,7 @@ private fun GlobalChatAccountContent(
                                             it.id.startsWith("local-") || it.at > newestAt
                                         }
                                     }
+                                    val followHistory = shouldFollowChat(!didInitialScroll || !listState.canScrollForward)
                                     val reconciledBatch = batch.map { incoming ->
                                         messages.firstOrNull { it.id == incoming.id }?.let {
                                             if (incoming.revision > it.revision) failedMutations.remove(incoming.id)
@@ -1006,11 +1029,12 @@ private fun GlobalChatAccountContent(
                                     if (viewerTargetLang != "auto") {
                                         batch.takeLast(8).forEach { enrichTranslationIfNeeded(it) }
                                     }
-                                    if (messages.isNotEmpty()) {
+                                    if (messages.isNotEmpty() && followHistory) {
                                         scope.launch { listState.scrollToItem(messages.size - 1) }
                                     }
                                 }
                                 "msg" -> {
+                                    val followIncoming = shouldFollowChat(!didInitialScroll || !listState.canScrollForward)
                                     val incoming = parseMessageFromJson(data, nickname, verifiedGhLogin)
                                     if (incoming.at < firstJoinedAtMs - 2_000L || incoming.id in hiddenMessageIds) return@launch
                                     id.xydesk.remote.push.ChatPushNotifier.markSeen(incoming.id, incoming.at, context)
@@ -1022,14 +1046,16 @@ private fun GlobalChatAccountContent(
                                         val tempIdx = findPendingChatIndex(messages, incoming)
                                         if (tempIdx >= 0) {
                                             messages[tempIdx] = incoming.copy(deliveryTicks = 2)
+                                            if (incoming.clientMessageId.isNotBlank()) confirmOwnSend(incoming.id)
                                         } else {
                                             messages.add(incoming)
+                                            if (!followIncoming) newArrivals += 1
                                             if (!incoming.mine) playChatNotificationTone(notifSoundTone)
                                         }
                                     }
                                     enrichTranslationIfNeeded(incoming)
                                     if (messages.size > 100) messages.removeAt(0)
-                                    scope.launch { listState.animateScrollToItem(messages.size - 1) }
+                                    if (followIncoming) scope.launch { listState.animateScrollToItem(messages.size - 1) }
                                 }
                                 "presence" -> {
                                     val cnt = data.optInt("count", 1).coerceAtLeast(1)
@@ -1239,6 +1265,7 @@ private fun GlobalChatAccountContent(
                     }
                 }
                 if (sentMsg != null) {
+                    if (chatAccountSnapshotIsCurrent(currentGh, verifiedGhLogin) && sentMsg.clientMessageId == pending.id) confirmOwnSend(sentMsg.id)
                     val idx = messages.indexOfFirst { it.id == pending.id }
                     if (idx >= 0) {
                         messages[idx] = sentMsg.copy(deliveryTicks = 2)
@@ -1892,6 +1919,8 @@ private fun GlobalChatAccountContent(
                 }
             }
 
+            OfficialChannelDirectory()
+
             // Daftar Pesan Chat Global (Wajib Login untuk Join — Tidak Boleh Tamu)
             Box(
                 modifier = Modifier
@@ -2062,6 +2091,11 @@ private fun GlobalChatAccountContent(
                         verticalArrangement = Arrangement.spacedBy(6.dp),
                         horizontalAlignment = Alignment.CenterHorizontally,
                     ) {
+                        if (newArrivals > 0 && listState.canScrollForward) {
+                            Surface(shape = MaterialTheme.shapes.small, color = MaterialTheme.colorScheme.surfaceVariant) {
+                                Text("$newArrivals pesan baru", modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp), style = MaterialTheme.typography.labelSmall)
+                            }
+                        }
                         AnimatedVisibility(
                             visible = listState.firstVisibleItemIndex > 2,
                             enter = fadeIn() + scaleIn(),

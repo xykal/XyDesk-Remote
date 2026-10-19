@@ -1,3 +1,4 @@
+import { OfficialChannels } from "./official-channels.mjs";
 import { RevisionedHistoryWindow, chatStorageFailure, chatStorageFailureEvent } from "./chat-storage-policy.mjs";
 import { applyChatMutation } from "./chat-mutations.mjs";
 import { exchangeGithubCode } from "./oauth-token-exchange.mjs";
@@ -3567,6 +3568,7 @@ export class GlobalChat {
     this.historyWindow = new RevisionedHistoryWindow();
     this.pinnedWindow = new RevisionedHistoryWindow({ ttlMs: 30_000 });
     this.joinedCache = new Map();
+    this.officialChannels = new OfficialChannels(this.state.storage, this.env);
   }
 
   getActiveOnlineCount() {
@@ -3610,6 +3612,7 @@ export class GlobalChat {
   async fetch(request) {
     const urlObj = new URL(request.url);
     const path = urlObj.pathname;
+    if (path === "/channels" || path.startsWith("/channels/")) return this.officialChannels.fetch(request);
     if (path === "/mutation-capabilities" && request.method === "GET")
       return durableObjectJson({ revisioned_mutations: 1 }, 200, request.method);
     if ((path === "/connect" || path === "/ws/chat") && request.headers.get("Upgrade") === "websocket") {
@@ -4489,6 +4492,15 @@ export default {
     const url = new URL(request.url);
     const path = url.pathname;
 
+    if (path === "/api/chat/channels" || path.startsWith("/api/chat/channels/")) {
+      if (!env.GLOBAL_CHAT) return durableObjectJson({ status: "error", code: "channels_unavailable" }, 503, request.method);
+      const target = new URL(path.replace("/api/chat/channels", "/channels"), request.url);
+      target.search = url.search;
+      try {
+        const id = env.GLOBAL_CHAT.idFromName("xydesk-global-chat-v1");
+        return await env.GLOBAL_CHAT.get(id).fetch(new Request(target, request));
+      } catch (error) { return chatStorageFailure(error, request.method); }
+    }
     if (path === "/ws/chat") {
       if (!env.GLOBAL_CHAT) return notFound(request.method);
       const chatId = env.GLOBAL_CHAT.idFromName("xydesk-global-chat-v1");
