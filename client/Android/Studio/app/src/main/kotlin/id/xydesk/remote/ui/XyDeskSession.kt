@@ -409,6 +409,7 @@ fun XyDeskSessionScreen(
     var bridgeDiagnostics by remember(manager) { mutableStateOf(manager.audioBridgeDiagnostics()) }
     var diagnosticsNow by remember { mutableStateOf(android.os.SystemClock.elapsedRealtime()) }
     var pendingMicInstance by remember { mutableStateOf<Long?>(null) }
+    var pendingNativeMicInstance by remember { mutableStateOf<Long?>(null) }
     val requestBridgeMicPermission = androidx.activity.compose.rememberLauncherForActivityResult(
         androidx.activity.result.contract.ActivityResultContracts.RequestPermission(),
     ) { granted ->
@@ -418,13 +419,14 @@ fun XyDeskSessionScreen(
                 state is SessionState.Connected && sessionLifecycleOwner.lifecycle.currentState.isAtLeast(Lifecycle.State.STARTED))) {
             manager.setVoiceMicEnabled(true)
             bridgeDiagnostics = manager.audioBridgeDiagnostics()
-            notice.show("Mic bridge diminta. Deteksi input Windows belum diverifikasi.")
+            notice.show(if (bridgeDiagnostics.requested) "Mic bridge diminta. Deteksi input Windows belum diverifikasi." else "Mic bridge tidak diaktifkan; periksa kanal RDP/status sesi.")
         } else notice.show("Mic belum diaktifkan: izin ditolak atau sesi berubah/berhenti.")
     }
     DisposableEffect(manager, activeProfile.id, sessionLifecycleOwner) {
         val observer = androidx.lifecycle.LifecycleEventObserver { _, event ->
             if (event == Lifecycle.Event.ON_STOP) {
                 pendingMicInstance = null
+                pendingNativeMicInstance = null
                 manager.setVoiceMicEnabled(false)
                 showReadiness = false
             }
@@ -433,6 +435,7 @@ fun XyDeskSessionScreen(
         onDispose {
             sessionLifecycleOwner.lifecycle.removeObserver(observer)
             pendingMicInstance = null
+            pendingNativeMicInstance = null
             manager.setVoiceMicEnabled(false)
         }
     }
@@ -447,6 +450,7 @@ fun XyDeskSessionScreen(
             }
         } else {
             pendingMicInstance = null
+            pendingNativeMicInstance = null
             manager.setVoiceMicEnabled(false)
             bridgeDiagnostics = manager.audioBridgeDiagnostics()
         }
@@ -961,7 +965,7 @@ fun XyDeskSessionScreen(
         (context as? XyDeskSessionActivity)?.backHandler = {
             when {
                 certPrompt != null || nlaPrompt != null -> true
-                showReadiness -> { showReadiness = false; true }
+                showReadiness -> { pendingNativeMicInstance = null; showReadiness = false; true }
                 showLog -> {
                     showLog = false
                     true
@@ -1294,6 +1298,30 @@ fun XyDeskSessionScreen(
     // Turbo: job pengulang per tombol HUD. Dimulai saat tombol ditahan,
     // dibatalkan saat dilepas / toggle mati / layar sesi ditutup.
     val hudTurboJobs = remember { mutableStateMapOf<String, kotlinx.coroutines.Job>() }
+
+    fun applyNativeMicChange(enabled: Boolean, owner: Long) {
+        if (owner == manager.instance() && state is SessionState.Connected) {
+            releaseLatchedKeys()
+            hudTurboJobs.values.forEach { it.cancel() }
+            hudTurboJobs.clear()
+        }
+        if (manager.requestNativeMicrophoneChange(enabled, owner)) {
+            pendingNativeMicInstance = null
+            showReadiness = false
+            notice.show("Perubahan mic RDP diminta; menunggu engine putus lalu sambung ulang. Belum bukti capture berhenti/berhasil.")
+        } else notice.show("Mic RDP tidak diubah: sesi/izin/status berubah atau kanal tidak didukung.")
+    }
+    val requestNativeMicPermission = androidx.activity.compose.rememberLauncherForActivityResult(
+        androidx.activity.result.contract.ActivityResultContracts.RequestPermission(),
+    ) { granted ->
+        val owner = pendingNativeMicInstance
+        pendingNativeMicInstance = null
+        if (owner != null && canApplySessionMicPermission(granted, owner == manager.instance(),
+                state is SessionState.Connected && sessionLifecycleOwner.lifecycle.currentState.isAtLeast(Lifecycle.State.STARTED))) {
+            applyNativeMicChange(true, owner)
+        } else notice.show("Mic RDP belum diaktifkan: izin ditolak atau sesi sudah berubah/berhenti.")
+    }
+
 
     fun updateHudTurbo(key: HudKey, active: Boolean) {
         if (!key.turbo || !active) {
@@ -1970,10 +1998,17 @@ fun XyDeskSessionScreen(
                     )
                 },
                 voiceMicEnabled = bridgeDiagnostics.requested,
+                nativeMicControl = !RdpOptions.of(context, activeProfile.id).pcConnectMode,
+                nativeMicRequested = manager.nativeMicrophoneRequested(),
                 onToggleVoiceMic = {
-                    if (manager.isVoiceMicEnabled()) {
+                    if (!RdpOptions.of(context, activeProfile.id).pcConnectMode) {
+                        diagnosticsNow = android.os.SystemClock.elapsedRealtime()
+                        showReadiness = true
+                    } else if (manager.isVoiceMicEnabled()) {
                         manager.setVoiceMicEnabled(false)
                         notice.show("Mic bridge OFF. Kanal RDP native adalah setelan terpisah.")
+                    } else if (manager.nativeMicrophoneRequested() || manager.nativeMicrophoneChangePending()) {
+                        notice.show("Mic RDP sedang diminta/diubah. Gunakan kontrol Mic RDP; dua capture sekaligus tidak diaktifkan.")
                     } else if (context.checkSelfPermission(android.Manifest.permission.RECORD_AUDIO) == android.content.pm.PackageManager.PERMISSION_GRANTED) {
                         manager.setVoiceMicEnabled(true)
                         notice.show("Mic bridge diminta. Deteksi input Windows belum diverifikasi.")
@@ -2209,12 +2244,23 @@ fun XyDeskSessionScreen(
     }
     if (showReadiness) {
         val options = RdpOptions.of(context, activeProfile.id)
+        val micOwner = manager.instance()
         RdpReadinessPanel(
             diagnostics = bridgeDiagnostics,
             nowMs = diagnosticsNow,
             micPermission = context.checkSelfPermission(android.Manifest.permission.RECORD_AUDIO) == android.content.pm.PackageManager.PERMISSION_GRANTED,
             nativeMicConfigured = options.microphone && !options.pcConnectMode,
-            onDismiss = { showReadiness = false },
+            connectionId = micOwner,
+            nativeMicRequested = manager.nativeMicrophoneRequested(),
+            nativeMicChangePending = manager.nativeMicrophoneChangePending(),
+            canChangeNativeMic = state is SessionState.Connected && !options.pcConnectMode && micOwner != 0L,
+            onChangeNativeMic = { enabled ->
+                if (enabled && context.checkSelfPermission(android.Manifest.permission.RECORD_AUDIO) != android.content.pm.PackageManager.PERMISSION_GRANTED) {
+                    pendingNativeMicInstance = micOwner.takeIf { it != 0L }
+                    requestNativeMicPermission.launch(android.Manifest.permission.RECORD_AUDIO)
+                } else applyNativeMicChange(enabled, micOwner)
+            },
+            onDismiss = { pendingNativeMicInstance = null; showReadiness = false },
         )
     }
     if (!active && !reconnecting && !applyingResolution && !userDisconnect) err?.let { e ->

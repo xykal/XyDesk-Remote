@@ -5,6 +5,23 @@ import unittest
 ROOT = Path(__file__).resolve().parents[1]
 
 class HostDistributionTest(unittest.TestCase):
+    def test_native_mic_change_waits_for_terminal_cleanup_and_uses_guarded_uri(self):
+        manager = (ROOT / 'client/Android/Studio/core-rdp/src/main/kotlin/id/xydesk/remote/core/SessionManager.kt').read_text()
+        self.assertEqual(manager.count('if (!cleanupTerminalSession(inst)) return\n                if (restartForNativeMicrophoneChange(inst, p)) return'), 2)
+        uri = manager.split('private fun sessionUri(', 1)[1].split('fun connect(', 1)[0]
+        self.assertLess(uri.index('sessionMicrophoneControl.apply'), uri.index('.withCapturePermissions('))
+        self.assertLess(uri.index('.withCapturePermissions('), uri.index('.forCaptureVisibility('))
+        self.assertIn('sessionMicrophoneControl.isCurrent(restart)', manager)
+        self.assertIn('sessionMicrophoneControl.cancel(suppressActivation = true)', manager)
+        request = manager.split('fun requestNativeMicrophoneChange(', 1)[1].split('private fun restartForNativeMicrophoneChange', 1)[0]
+        for guard in ('!captureForegroundAllowed', '!isCurrent(expectedInstance)', 'RECORD_AUDIO', 'options.pcConnectMode', 'SessionState.Connected'):
+            self.assertIn(guard, request)
+        self.assertNotIn('RdpOptions.set', request)
+        self.assertIn('setVoiceMicEnabled(false)', request)
+        panel = (ROOT / 'client/Android/Studio/app/src/main/kotlin/id/xydesk/remote/ui/RdpReadinessPanel.kt').read_text()
+        self.assertIn('Konfirmasi sambung ulang', panel)
+        self.assertIn('BUKAN live mute', panel)
+
     def test_one_cmake_application_without_companion_libraries(self):
         cmake = (ROOT / 'host-agent/CMakeLists.txt').read_text()
         self.assertEqual(cmake.count('add_executable('), 1)

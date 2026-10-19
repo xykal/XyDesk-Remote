@@ -22,3 +22,16 @@ Pemilik kembali meminta: lanjut, kalau seluruh pekerjaan sudah selesai buat rele
 - Mic/stream Direct: pasangan host/app baru, pin salah/berubah, token kadaluarsa/revoke, jaringan lemah, putus saat tombol input ditekan, tidak ada fallback plaintext.
 - Windows: startup/shutdown EXE tunggal, endpoint input/output/driver, SA-MP launcher/crash log; lingkungan Roblox yang didukung, tanpa penyamaran VM/anti-cheat bypass.
 - Log laporan: versi Android/Windows, ABI/build, langkah repro dan status perangkat. Hapus password, token, cookie, kunci dan URL bertanda tangan sebelum dibagikan.
+
+### Native mic session reconnect control (new source gate)
+- Ordinary RDP rail must show Mic RDP, not bridge OFF as if it were native OFF.
+- Enable/disable requires confirmation warning that the desktop reconnects.
+- RECORD_AUDIO denied/revoked, stale permission result, background, profile/owner
+  switch, explicit cancel and teardown failure must not start replacement capture.
+- Old AUDIN/native context must reach terminal cleanup before replacement starts;
+  no timer-based assumption of capture OFF. Test timeout and delayed callbacks.
+- Profile preference remains unchanged; only the current manager's intent changes.
+- Verify Windows Remote Audio input and level with native ON, then OFF after
+  reconnect. Bridge may not capture concurrently. Camera/playback remain separate.
+- These checks still require signed candidate/device tests. Reconnect control is
+  implemented, but an engine-supported instantaneous live mute is **not** claimed.

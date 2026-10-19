@@ -56,3 +56,30 @@ Izin draft pengujian pemilik tetap berlaku setelah pekerjaan source selesai. Ver
 Pengaman tambahan: hasil izin yang diputar ulang di dalam super.onStart tetap menunggu flag readiness Activity sebelum native connect; pembatalan selama probe juga dicek lagi sebelum worker native dimulai. Success callback setelah permintaan putus tidak boleh menghidupkan kembali sesi itu.
 
 Verifikasi3151fc1: **Kotlin/JVM gate39241778445 SUCCESS**, **WebCI39241779812 SUCCESS**. Termasuk5 tes CaptureVisibilityPolicy baru dan10 source-contract checks. Ini tidak membuktikan teardown/hardware pada Android nyata; stop background tetap berupa permintaan disconnect seluruh sambungan capture, bukan native live mute.
+
+## Session native mic controls (source implementation; runtime verification pending)
+
+The session rail uses **Mic RDP** for ordinary RDP, opening the readiness/control
+panel rather than silently switching the independent UDP bridge. Native mic can
+be enabled or disabled with explicit **reconnect confirmation**. This is not
+in-place/live mute: the desktop disconnects and may need authentication again.
+
+`SessionMicrophoneControl` keeps a session-only override scoped to the profile.
+The manager admits changes only for the expected current connected native owner,
+while foreground-eligible, and checks RECORD_AUDIO again before enabling. The
+new URI still passes the existing permission and visibility filters. Saved
+profiles are not modified. A profile switch drops the override.
+
+Bridge capture is stopped first; enabling the bridge while native mic is requested
+or a native change is pending is rejected. Native stop is requested, NOT declared
+confirmed OFF. Only a terminal event **and successful old-core cleanup** can
+schedule the replacement connection. The posted continuation is generation-bound:
+explicit cancel/disconnect/release, a new accepted connection, or backgrounding
+invalidates it. Cancelled, not-yet-committed activation is suppressed. Failed or
+unconfirmed cleanup must not open a replacement native channel.
+
+Eight pure Kotlin tests cover URI omission, immutable saved preferences, permission,
+visibility/PC restrictions, owner binding, single consumption, stale generations,
+profile changes, committed preferences and invalid handles. Source guards check
+integration ordering only. Neither these tests nor the panel prove Android
+recorder shutdown latency, Windows input routing, or game capture.

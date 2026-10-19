@@ -194,6 +194,8 @@ fun SessionControls(
     rawInputUdpAlive: Boolean = false,
     onFpsGameModeChange: (Boolean) -> Unit = {},
     voiceMicEnabled: Boolean = false,
+    nativeMicControl: Boolean = false,
+    nativeMicRequested: Boolean = false,
     onToggleVoiceMic: () -> Unit = {},
     onOpenReadiness: () -> Unit = {},
     coreInfo: List<String> = emptyList(),
@@ -655,14 +657,18 @@ fun SessionControls(
                             onOpenReadiness()
                         }
                         RailMenuItem(
-                            icon = if (voiceMicEnabled) XyIcons.VolumeOn else XyIcons.VolumeOff,
-                            label = if (voiceMicEnabled) {
+                            icon = if (if (nativeMicControl) nativeMicRequested else voiceMicEnabled) XyIcons.VolumeOn else XyIcons.VolumeOff,
+                            label = if (nativeMicControl) {
+                                if (nativeMicRequested) xy("Mic RDP: diminta", "RDP mic: requested")
+                                else xy("Mic RDP: kontrol", "RDP mic: controls")
+                            } else if (voiceMicEnabled) {
                                 xy("Mic bridge: diminta", "Mic bridge: requested")
                             } else {
                                 xy("Mic bridge: OFF", "Mic bridge: OFF")
                             },
-                            active = voiceMicEnabled,
+                            active = if (nativeMicControl) nativeMicRequested else voiceMicEnabled,
                         ) {
+                            railMenuOpen = false
                             onToggleVoiceMic()
                         }
                         RailMenuItem(icon = XyIcons.Monitor, label = xy("Kesiapan RDP · Mic & Game", "RDP readiness · Mic & Games")) {
