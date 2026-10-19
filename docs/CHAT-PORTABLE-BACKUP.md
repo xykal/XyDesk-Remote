@@ -41,3 +41,18 @@ Redirects are disabled on authenticated GitHub/dashboard requests.
 Confirmation explains quota/provider policy and that workflow backup can fail.
 Stop/cancel never claims it has saved every change. This work does not execute
 cloud runs, create user resources or change XyRDP VERSION/workflow contracts.
+
+## Custom stick keyboard presets
+
+An append-only CUSTOM mode adds named per-game keyboard direction presets (up to
+30, 40-character names). Supports letters, digits, modifiers, navigation and
+NumPad keys. Preset edits are drafts until Save & Apply; the old mapping is
+neutralized before replacing stored bindings. Existing mode ordinals and pad key
+ordinals remain stable. Key edges aggregate stick, D-pad and face-button sources,
+so duplicate/shared assignments stay down until every source releases.
+
+This is keyboard emulation, not a Windows virtual analog controller. The right
+HUD stick still controls the pointer. Native/game tests, signed supported virtual
+device integration and authenticated Direct transport remain separate unfinished
+work, not satisfied by these presets. Test preset switching while held, multitouch,
+background/disconnect release and per-game behavior on a signed candidate.

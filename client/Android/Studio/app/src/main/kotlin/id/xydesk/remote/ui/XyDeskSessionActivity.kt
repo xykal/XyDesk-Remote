@@ -460,6 +460,7 @@ class XyDeskSessionActivity : ComponentActivity() {
         // Mode stik dibaca di sini supaya sesi yang langsung memakai pad tanpa
         // membuka bar edit tetap memakai mode tersimpan, bukan default POINTER.
         padStickMode = sessionPrefs.virtualPadStickMode
+        padCustomBindings = sessionPrefs.customStickBindings()
         setContent {
             // Layar sesi ikut setelan tema app (dulu dipaksa gelap, jadi di
             // mode terang panel dan dialog di sini tidak nyambung dengan sisa
@@ -481,6 +482,7 @@ class XyDeskSessionActivity : ComponentActivity() {
                         onStickKeys = { x, y -> applyHudStickAxis(x, y) },
                         onStickModeChange = { next ->
                             applyHudStickAxis(0f, 0f) // Release keys in the OLD mapping before replacing it.
+                            padCustomBindings = sessionPrefs.customStickBindings()
                             padStickMode = next
                             sessionPrefs.virtualPadStickMode = next
                         },
@@ -736,6 +738,7 @@ class XyDeskSessionActivity : ComponentActivity() {
 
     /** Tujuan stik kiri gamepad virtual; disinkronkan dari state Compose. */
     private var padStickMode: XyStickMode = XyStickMode.POINTER
+    private var padCustomBindings = id.xydesk.remote.ui.input.XyCustomStickBindings()
 
     /**
      * Jalur keluar gamepad virtual untuk sesi RDP. Sengaja memakai hook yang sama
@@ -758,26 +761,7 @@ class XyDeskSessionActivity : ComponentActivity() {
         override fun key(key: XyPadKey, down: Boolean) {
             if (!::controller.isInitialized) return
             controller.sendVirtualKey(
-                when (key) {
-                    XyPadKey.ENTER -> KeyEvent.KEYCODE_ENTER
-                    XyPadKey.ESCAPE -> KeyEvent.KEYCODE_ESCAPE
-                    XyPadKey.ARROW_UP -> KeyEvent.KEYCODE_DPAD_UP
-                    XyPadKey.ARROW_DOWN -> KeyEvent.KEYCODE_DPAD_DOWN
-                    XyPadKey.ARROW_LEFT -> KeyEvent.KEYCODE_DPAD_LEFT
-                    XyPadKey.ARROW_RIGHT -> KeyEvent.KEYCODE_DPAD_RIGHT
-                    XyPadKey.W -> KeyEvent.KEYCODE_W
-                    XyPadKey.A -> KeyEvent.KEYCODE_A
-                    XyPadKey.S -> KeyEvent.KEYCODE_S
-                    XyPadKey.D -> KeyEvent.KEYCODE_D
-                    XyPadKey.I -> KeyEvent.KEYCODE_I
-                    XyPadKey.J -> KeyEvent.KEYCODE_J
-                    XyPadKey.K -> KeyEvent.KEYCODE_K
-                    XyPadKey.L -> KeyEvent.KEYCODE_L
-                    XyPadKey.NUMPAD_8 -> KeyEvent.KEYCODE_NUMPAD_8
-                    XyPadKey.NUMPAD_4 -> KeyEvent.KEYCODE_NUMPAD_4
-                    XyPadKey.NUMPAD_2 -> KeyEvent.KEYCODE_NUMPAD_2
-                    XyPadKey.NUMPAD_6 -> KeyEvent.KEYCODE_NUMPAD_6
-                },
+                key.androidKeyCode,
                 down,
             )
         }
@@ -795,7 +779,7 @@ class XyDeskSessionActivity : ComponentActivity() {
             leftX = (x.coerceIn(-1f, 1f) * 32_767f).toInt(),
             leftY = (y.coerceIn(-1f, 1f) * 32_767f).toInt(),
         )
-        XyGamepadActionMapper.apply(state, lastHudStickState, virtualPadOutput, padStickMode)
+        XyGamepadActionMapper.apply(state, lastHudStickState, virtualPadOutput, padStickMode, padCustomBindings)
         lastHudStickState = state
     }
 

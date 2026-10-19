@@ -2086,6 +2086,7 @@ private fun InputTab(
     openKey: String?,
     onOpenKey: (String?) -> Unit,
 ) {
+    val inputContext = androidx.compose.ui.platform.LocalContext.current
     PanelSectionGrid(openKey = openKey, onOpenKey = onOpenKey) {
     section("mode-input-klik-mouse",xy("Mode input & Klik Mouse", "Input mode & Mouse Click")) {
             XyToggleRow(
@@ -2235,11 +2236,20 @@ private fun InputTab(
                 ),
             )
             XySegmented(
-                options = listOf(xy("Pointer", "Pointer"), "WASD", xy("Panah", "Arrows"), "IJKL", "NumPad"),
+                options = listOf(xy("Pointer", "Pointer"), "WASD", xy("Panah", "Arrows"), "IJKL", "NumPad", xy("Kustom", "Custom")),
                 selectedIndex = XyStickMode.entries.indexOf(stickMode).coerceAtLeast(0),
                 onSelect = { onStickModeChange(XyStickMode.entries[it]) },
                 modifier = Modifier.fillMaxWidth(),
             )
+            if (stickMode == XyStickMode.CUSTOM) {
+                CustomStickBindingEditor(onApply = { name, bindings ->
+                    val customPrefs = SessionPrefs(context = inputContext)
+                    // Release using OLD bindings before writing/replacing the mapping.
+                    onStickModeChange(XyStickMode.POINTER)
+                    customPrefs.saveCustomStickBindings(name, bindings)
+                    onStickModeChange(XyStickMode.CUSTOM)
+                })
+            }
             XyToggleRow(
                 title = xy("Gyro Air-Mouse (sensor gerak HP)", "Gyro Air-Mouse (phone motion)"),
                 checked = gyroMouseEnabled,
