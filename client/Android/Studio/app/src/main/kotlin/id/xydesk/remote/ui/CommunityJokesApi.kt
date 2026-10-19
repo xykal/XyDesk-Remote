@@ -301,7 +301,7 @@ internal class CommunityJokesApi(context: Context) {
                         ),
                     )
                 }
-            }
+            }.also { LeaderboardPodium.publish(it) }
         }.getOrDefault(emptyList())
     }
 

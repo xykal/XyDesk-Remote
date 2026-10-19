@@ -37,3 +37,7 @@ kotlinc.zip
 /out/
 junit.jar
 hamcrest.jar
+
+# wrangler local cache (berisi metadata akun Cloudflare — jangan commit)
+.wrangler/
+**/.kotlin/

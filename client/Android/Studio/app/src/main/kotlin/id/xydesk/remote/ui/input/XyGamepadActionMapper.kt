@@ -6,17 +6,58 @@ import id.xydesk.remote.ui.XyMouseButton
 import kotlin.math.abs
 
 /** Keys the virtual pad can emit; the session translates these to Android key codes. */
-enum class XyPadKey {
-    ENTER,
-    ESCAPE,
-    ARROW_UP,
-    ARROW_DOWN,
-    ARROW_LEFT,
-    ARROW_RIGHT,
-    W,
-    A,
-    S,
-    D,
+enum class XyPadKey(val androidKeyCode: Int) {
+    ENTER(66),
+    ESCAPE(111),
+    ARROW_UP(19),
+    ARROW_DOWN(20),
+    ARROW_LEFT(21),
+    ARROW_RIGHT(22),
+    W(51),
+    A(29),
+    S(47),
+    D(32),
+    I(37),
+    J(38),
+    K(39),
+    L(40),
+    NUMPAD_8(152),
+    NUMPAD_4(148),
+    NUMPAD_2(146),
+    NUMPAD_6(150),
+    B(30),
+    C(31),
+    E(33),
+    F(34),
+    G(35),
+    H(36),
+    M(41),
+    N(42),
+    O(43),
+    P(44),
+    Q(45),
+    R(46),
+    T(48),
+    U(49),
+    V(50),
+    X(52),
+    Y(53),
+    Z(54),
+    DIGIT_0(7),
+    DIGIT_1(8),
+    DIGIT_2(9),
+    DIGIT_3(10),
+    DIGIT_4(11),
+    DIGIT_5(12),
+    DIGIT_6(13),
+    DIGIT_7(14),
+    DIGIT_8(15),
+    DIGIT_9(16),
+    SPACE(62),
+    TAB(61),
+    SHIFT(59),
+    CTRL(113),
+    ALT(57),
 }
 
 /**
@@ -28,6 +69,10 @@ enum class XyStickMode {
     POINTER,
     WASD,
     ARROWS,
+    // Append only: existing ordinals are stored in SessionPrefs.
+    IJKL,
+    NUMPAD,
+    CUSTOM,
 }
 
 /** Arah digital yang diturunkan dari simpangan stik analog. */
@@ -93,6 +138,7 @@ object XyGamepadActionMapper {
         previous: XyGamepadState?,
         out: XyGamepadOutput,
         stickMode: XyStickMode = XyStickMode.POINTER,
+        custom: XyCustomStickBindings = XyCustomStickBindings(),
     ) {
         val before = previous ?: EMPTY
 
@@ -105,18 +151,12 @@ object XyGamepadActionMapper {
                     leftY * POINTER_UNITS_PER_DEFLECTION,
                 )
             }
-        } else {
-            // Mode papan ketik: arah diturunkan dari stik, dikirim sebagai
-            // edge (turun/naik) supaya menahan stik tidak mengulang tombol.
-            val now = directions(leftX, leftY)
-            val was = directions(axis(before.leftX), axis(before.leftY))
-            for (direction in XyStickDirection.entries) {
-                val isDown = direction in now
-                if (isDown != (direction in was)) {
-                    out.key(keyFor(direction, stickMode), isDown)
-                }
-            }
         }
+        // Aggregate every keyboard source before diffing, including shared custom/D-pad keys.
+        val nowKeys = keyboardKeys(state, stickMode, custom)
+        val wasKeys = keyboardKeys(before, stickMode, custom)
+        (wasKeys - nowKeys).forEach { out.key(it, false) }
+        (nowKeys - wasKeys).forEach { out.key(it, true) }
 
         val rightY = axis(state.rightY)
         if (abs(rightY) > STICK_EPSILON) {
@@ -136,24 +176,6 @@ object XyGamepadActionMapper {
         edge(before.buttons, state.buttons, XyGamepadPacketV1.LEFT_THUMB) { down ->
             out.mouseClick(XyMouseButton.MIDDLE, down)
         }
-        edge(before.buttons, state.buttons, XyGamepadPacketV1.X) { down ->
-            out.key(XyPadKey.ENTER, down)
-        }
-        edge(before.buttons, state.buttons, XyGamepadPacketV1.Y) { down ->
-            out.key(XyPadKey.ESCAPE, down)
-        }
-        edge(before.buttons, state.buttons, XyGamepadPacketV1.DPAD_UP) { down ->
-            out.key(XyPadKey.ARROW_UP, down)
-        }
-        edge(before.buttons, state.buttons, XyGamepadPacketV1.DPAD_DOWN) { down ->
-            out.key(XyPadKey.ARROW_DOWN, down)
-        }
-        edge(before.buttons, state.buttons, XyGamepadPacketV1.DPAD_LEFT) { down ->
-            out.key(XyPadKey.ARROW_LEFT, down)
-        }
-        edge(before.buttons, state.buttons, XyGamepadPacketV1.DPAD_RIGHT) { down ->
-            out.key(XyPadKey.ARROW_RIGHT, down)
-        }
         // START/BACK have no unambiguous RDP target and are intentionally unmapped;
         // they still travel to a PC/Game Stream host inside the packet.
         edge(before.buttons, state.buttons, XyGamepadPacketV1.LEFT_SHOULDER) { down ->
@@ -162,6 +184,15 @@ object XyGamepadActionMapper {
         edge(before.buttons, state.buttons, XyGamepadPacketV1.RIGHT_SHOULDER) { down ->
             if (down) out.scrollUnits(-SHOULDER_SCROLL_UNITS)
         }
+    }
+
+    private fun keyboardKeys(state: XyGamepadState, mode: XyStickMode, custom: XyCustomStickBindings): Set<XyPadKey> = buildSet {
+        if (mode != XyStickMode.POINTER) directions(axis(state.leftX), axis(state.leftY)).forEach { add(keyFor(it, mode, custom)) }
+        for ((bit, key) in listOf(
+            XyGamepadPacketV1.X to XyPadKey.ENTER, XyGamepadPacketV1.Y to XyPadKey.ESCAPE,
+            XyGamepadPacketV1.DPAD_UP to XyPadKey.ARROW_UP, XyGamepadPacketV1.DPAD_DOWN to XyPadKey.ARROW_DOWN,
+            XyGamepadPacketV1.DPAD_LEFT to XyPadKey.ARROW_LEFT, XyGamepadPacketV1.DPAD_RIGHT to XyPadKey.ARROW_RIGHT,
+        )) if ((state.buttons and bit) != 0) add(key)
     }
 
     /**
@@ -178,11 +209,15 @@ object XyGamepadActionMapper {
     }
 
     /** Kunci untuk satu arah pada mode stik papan ketik. */
-    fun keyFor(direction: XyStickDirection, mode: XyStickMode): XyPadKey = when (direction) {
-        XyStickDirection.UP -> if (mode == XyStickMode.WASD) XyPadKey.W else XyPadKey.ARROW_UP
-        XyStickDirection.DOWN -> if (mode == XyStickMode.WASD) XyPadKey.S else XyPadKey.ARROW_DOWN
-        XyStickDirection.LEFT -> if (mode == XyStickMode.WASD) XyPadKey.A else XyPadKey.ARROW_LEFT
-        XyStickDirection.RIGHT -> if (mode == XyStickMode.WASD) XyPadKey.D else XyPadKey.ARROW_RIGHT
+    fun keyFor(direction: XyStickDirection, mode: XyStickMode, custom: XyCustomStickBindings = XyCustomStickBindings()): XyPadKey {
+        val keys = when (mode) {
+            XyStickMode.CUSTOM -> listOf(custom.up, custom.down, custom.left, custom.right)
+            XyStickMode.WASD -> listOf(XyPadKey.W, XyPadKey.S, XyPadKey.A, XyPadKey.D)
+            XyStickMode.IJKL -> listOf(XyPadKey.I, XyPadKey.K, XyPadKey.J, XyPadKey.L)
+            XyStickMode.NUMPAD -> listOf(XyPadKey.NUMPAD_8, XyPadKey.NUMPAD_2, XyPadKey.NUMPAD_4, XyPadKey.NUMPAD_6)
+            else -> listOf(XyPadKey.ARROW_UP, XyPadKey.ARROW_DOWN, XyPadKey.ARROW_LEFT, XyPadKey.ARROW_RIGHT)
+        }
+        return keys[direction.ordinal]
     }
 
     private fun axis(rawValue: Int): Float = rawValue / AXIS_DENOMINATOR
@@ -196,4 +231,19 @@ object XyGamepadActionMapper {
     /** True only on the rising edge past [TRIGGER_THRESHOLD]. */
     private fun crossed(before: Int, after: Int): Boolean =
         before < TRIGGER_THRESHOLD * 255f && after >= TRIGGER_THRESHOLD * 255f
+}
+
+/** Named keyboard mappings only; never advertised as a Windows analog device. */
+data class XyCustomStickBindings(
+    val up: XyPadKey = XyPadKey.W, val down: XyPadKey = XyPadKey.S,
+    val left: XyPadKey = XyPadKey.A, val right: XyPadKey = XyPadKey.D,
+) {
+    fun encode(): String = listOf(up, down, left, right).joinToString(",") { it.name }
+    companion object {
+        fun decode(value: String?): XyCustomStickBindings = runCatching {
+            val parts = requireNotNull(value).split(',')
+            require(parts.size == 4)
+            XyCustomStickBindings(XyPadKey.valueOf(parts[0]), XyPadKey.valueOf(parts[1]), XyPadKey.valueOf(parts[2]), XyPadKey.valueOf(parts[3]))
+        }.getOrDefault(XyCustomStickBindings())
+    }
 }

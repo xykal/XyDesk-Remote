@@ -78,9 +78,10 @@ internal data class XyRdpSetupStatus(
     val actionsEnabled: Boolean,
     val configuredSecrets: Set<String>,
     val missingSecrets: List<String>,
+    val secretsVerified: Boolean = false,
 ) {
     val isReadyToStart: Boolean
-        get() = forkExists && workflowActive && actionsEnabled && missingSecrets.isEmpty()
+        get() = forkExists && workflowActive && actionsEnabled && secretsVerified && missingSecrets.isEmpty()
 }
 
 internal enum class XyRdpPhase {
@@ -143,6 +144,7 @@ internal object XyRdpClient {
         val rawCookies = cookieToken.removePrefix("ghs_cookie:").trim()
         val conn = URL("$DASH_API$path").openConnection() as HttpURLConnection
         try {
+            conn.instanceFollowRedirects = false
             conn.requestMethod = method
             conn.setRequestProperty("Cookie", if (rawCookies.contains("ad_verified=")) rawCookies else "$rawCookies; ad_verified=1")
             conn.setRequestProperty("X-Ad-Verified", "1")
@@ -175,6 +177,7 @@ internal object XyRdpClient {
     ): Pair<Int, String> = runCatching {
         val conn = URL("$API$path").openConnection() as HttpURLConnection
         try {
+            conn.instanceFollowRedirects = false
             conn.requestMethod = method
             if (token.isNotBlank() && !isDashCookieToken(token)) {
                 conn.setRequestProperty("Authorization", "Bearer $token")
@@ -234,47 +237,19 @@ internal object XyRdpClient {
         code in 200..202 || code == 403 // 403 = fork sudah ada / rate limit lunak
     }
 
-    /**
-     * Sinkronkan fork `XyRDP` milik pengguna dengan branch `main` dari `xykal/XyRDP`
-     * supaya script & workflow di fork pengguna selalu versi terbaru.
-     * Jika `/merge-upstream` mengalami konflik (`409`), paksa fast-forward/reset
-     * `refs/heads/main` di fork ke SHA `main` terbaru dari `xykal/XyRDP`.
-     */
+    /** Non-destructive sync only. A conflict must never reset the user's branch. */
     suspend fun syncForkWithUpstream(token: String, login: String): Boolean =
         withContext(Dispatchers.IO) {
+            if (isDashCookieToken(token)) return@withContext true // dashboard owns setup/sync
             if (login.equals("xykal", ignoreCase = true)) return@withContext true
-            val body = JSONObject().put("branch", "main").toString()
-            val (code, _) = call(
-                token,
-                "/repos/$login/${XyRdpConfig.FORK_REPO_NAME}/merge-upstream",
-                "POST",
-                body,
-            )
-            if (code in 200..204) return@withContext true
-            // Fallback untuk 409 Conflict / riwayat berbeda: samakan ref heads/main ke upstream
-            val (upCode, upText) = call(
-                token,
-                "/repos/${XyRdpConfig.TEMPLATE_REPO}/git/ref/heads/main",
-            )
-            if (upCode == 200) {
-                val upSha = runCatching {
-                    JSONObject(upText).optJSONObject("object")?.optString("sha").orEmpty()
-                }.getOrDefault("")
-                if (upSha.length >= 40) {
-                    val patchBody = JSONObject()
-                        .put("sha", upSha)
-                        .put("force", true)
-                        .toString()
-                    val (patchCode, _) = call(
-                        token,
-                        "/repos/$login/${XyRdpConfig.FORK_REPO_NAME}/git/refs/heads/main",
-                        "PATCH",
-                        patchBody,
-                    )
-                    if (patchCode in 200..204) return@withContext true
-                }
+            val (code, _) = call(token,
+                "/repos/$login/${XyRdpConfig.FORK_REPO_NAME}/merge-upstream", "POST",
+                JSONObject().put("branch", "main").toString())
+            check(code in 200..204) {
+                if (code == 409) "Fork XyRDP konflik dengan template. Selesaikan konflik di GitHub; perubahan Anda tidak di-reset."
+                else "Sinkron XyRDP gagal (HTTP $code). Periksa koneksi dan izin repository."
             }
-            code == 409
+            true
         }
 
     /** Fork baru mematikan Actions; nyalakan permissions + workflow template lewat API. */
@@ -349,9 +324,11 @@ internal object XyRdpClient {
                             actionsEnabled = actEnabled,
                             configuredSecrets = secretNames,
                             missingSecrets = required.filter { it !in secretNames },
+                            secretsVerified = secArr != null,
                         )
                     }
                 }
+                error("Status dashboard belum terverifikasi (HTTP $code). Login ulang atau coba lagi; sesi tidak dikirim.")
             }
             val exists = forkExists(token, login)
             if (!exists) {
@@ -384,10 +361,12 @@ internal object XyRdpClient {
                 "/repos/$login/${XyRdpConfig.FORK_REPO_NAME}/actions/secrets?per_page=100",
             )
             val secretNames = mutableSetOf<String>()
+            var secretsVerified = false
             if (secCode == 200) {
                 runCatching {
                     val arr = JSONObject(secText).optJSONArray("secrets")
                     if (arr != null) {
+                        secretsVerified = true
                         for (i in 0 until arr.length()) {
                             val name = arr.optJSONObject(i)?.optString("name").orEmpty()
                             if (name.isNotBlank()) secretNames.add(name)
@@ -409,6 +388,7 @@ internal object XyRdpClient {
                 actionsEnabled = actionsEnabled,
                 configuredSecrets = secretNames,
                 missingSecrets = missing,
+                secretsVerified = secretsVerified,
             )
         }
 
@@ -419,6 +399,11 @@ internal object XyRdpClient {
      */
     suspend fun dispatch(token: String, login: String, inputs: JSONObject = JSONObject()): Boolean =
         withContext(Dispatchers.IO) {
+            val validation = validateRdpLaunch(
+                inputs.optString("durasi_menit", "360"), inputs.optString("runner", "windows-2022"),
+                inputs.optString("hostname", "rdpfree"), inputs.optString("rdp_user", "xyadmin"),
+                inputs.optString("akses", "tailscale"), inputs.optString("portmap_host"), inputs.optString("portmap_port"))
+            require(validation.isEmpty()) { validation.joinToString("\n") }
             val chosenRunner = inputs.optString("runner", "windows-2022").trim().ifEmpty { "windows-2022" }
             if (chosenRunner.startsWith("windows", ignoreCase = true)) {
                 inputs.put("runner", chosenRunner)
@@ -429,6 +414,9 @@ internal object XyRdpClient {
                 inputs.put("linux_mode", lMode)
             }
             if (isDashCookieToken(token)) {
+                check(inspectSetup(token, login, inputs.optString("akses", "tailscale")).isReadyToStart) {
+                    "Setup dashboard belum terverifikasi lengkap. Buka Secrets & Akses, lalu periksa ulang."
+                }
                 val startBody = JSONObject().apply {
                     put("durasi", inputs.optString("durasi_menit", "360"))
                     put("hostname", inputs.optString("hostname", "rdpfree"))
@@ -449,7 +437,11 @@ internal object XyRdpClient {
                 val (code, _) = dashCall(token, "/start", "POST", startBody.toString())
                 return@withContext code in 200..204
             }
-            runCatching { syncForkWithUpstream(token, login) }
+            syncForkWithUpstream(token, login)
+            check(enableWorkflow(token, login)) { "Actions/workflow belum aktif. Periksa izin Actions di fork GitHub Anda." }
+            val setup = inspectSetup(token, login, inputs.optString("akses", "tailscale"))
+            check(setup.secretsVerified) { "Daftar Secrets belum dapat diverifikasi. Beri izin baca Secrets repository, lalu coba lagi." }
+            check(setup.isReadyToStart) { "Setup belum lengkap: ${setup.missingSecrets.joinToString()}. Buka tab Secrets & Akses." }
             val body = JSONObject().apply {
                 put("ref", "main")
                 put("inputs", inputs)

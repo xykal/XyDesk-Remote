@@ -194,7 +194,10 @@ fun SessionControls(
     rawInputUdpAlive: Boolean = false,
     onFpsGameModeChange: (Boolean) -> Unit = {},
     voiceMicEnabled: Boolean = false,
+    nativeMicControl: Boolean = false,
+    nativeMicRequested: Boolean = false,
     onToggleVoiceMic: () -> Unit = {},
+    onOpenReadiness: () -> Unit = {},
     coreInfo: List<String> = emptyList(),
     notice: XyNoticeState,
 ) {
@@ -647,15 +650,30 @@ fun SessionControls(
                             toggleHudButtonVisibility()
                         }
                         RailMenuItem(
-                            icon = if (voiceMicEnabled) XyIcons.VolumeOn else XyIcons.VolumeOff,
-                            label = if (voiceMicEnabled) {
-                                xy("Voice / Mic: ON", "Voice / Mic: ON")
-                            } else {
-                                xy("Voice / Mic: OFF", "Voice / Mic: OFF")
-                            },
-                            active = voiceMicEnabled,
+                            icon = XyIcons.Mic,
+                            label = xy("Mic RDP · profil & izin", "RDP mic · profile & permission"),
                         ) {
+                            railMenuOpen = false
+                            onOpenReadiness()
+                        }
+                        RailMenuItem(
+                            icon = if (if (nativeMicControl) nativeMicRequested else voiceMicEnabled) XyIcons.VolumeOn else XyIcons.VolumeOff,
+                            label = if (nativeMicControl) {
+                                if (nativeMicRequested) xy("Mic RDP: diminta", "RDP mic: requested")
+                                else xy("Mic RDP: kontrol", "RDP mic: controls")
+                            } else if (voiceMicEnabled) {
+                                xy("Mic bridge: diminta", "Mic bridge: requested")
+                            } else {
+                                xy("Mic bridge: OFF", "Mic bridge: OFF")
+                            },
+                            active = if (nativeMicControl) nativeMicRequested else voiceMicEnabled,
+                        ) {
+                            railMenuOpen = false
                             onToggleVoiceMic()
+                        }
+                        RailMenuItem(icon = XyIcons.Monitor, label = xy("Kesiapan RDP · Mic & Game", "RDP readiness · Mic & Games")) {
+                            railMenuOpen = false
+                            onOpenReadiness()
                         }
                         RailMenuItem(
                             icon = XyIcons.Monitor,
@@ -2068,6 +2086,7 @@ private fun InputTab(
     openKey: String?,
     onOpenKey: (String?) -> Unit,
 ) {
+    val inputContext = androidx.compose.ui.platform.LocalContext.current
     PanelSectionGrid(openKey = openKey, onOpenKey = onOpenKey) {
     section("mode-input-klik-mouse",xy("Mode input & Klik Mouse", "Input mode & Mouse Click")) {
             XyToggleRow(
@@ -2212,16 +2231,25 @@ private fun InputTab(
             )
             PanelHint(
                 xy(
-                    "Mode stik kiri: Pointer = kursor, WASD/Panah = tombol arah. Stik kanan gamepad selalu kursor.",
-                    "Left stick mode: Pointer = cursor, WASD/Arrows = keys. The gamepad's right stick is always the cursor.",
+                    "Mode stik kiri: Pointer = kursor, WASD/Panah/IJKL/NumPad = tombol keyboard (NumPad mengikuti NumLock host). Stik kanan = kursor, bukan gamepad analog Windows.",
+                    "Left stick mode: Pointer = cursor, WASD/Arrows/IJKL/NumPad = keyboard keys (NumPad follows host NumLock). Right stick = cursor, not a Windows analog gamepad.",
                 ),
             )
             XySegmented(
-                options = listOf(xy("Pointer", "Pointer"), xy("WASD", "WASD"), xy("Panah", "Arrows")),
+                options = listOf(xy("Pointer", "Pointer"), "WASD", xy("Panah", "Arrows"), "IJKL", "NumPad", xy("Kustom", "Custom")),
                 selectedIndex = XyStickMode.entries.indexOf(stickMode).coerceAtLeast(0),
                 onSelect = { onStickModeChange(XyStickMode.entries[it]) },
                 modifier = Modifier.fillMaxWidth(),
             )
+            if (stickMode == XyStickMode.CUSTOM) {
+                CustomStickBindingEditor(onApply = { name, bindings ->
+                    val customPrefs = SessionPrefs(context = inputContext)
+                    // Release using OLD bindings before writing/replacing the mapping.
+                    onStickModeChange(XyStickMode.POINTER)
+                    customPrefs.saveCustomStickBindings(name, bindings)
+                    onStickModeChange(XyStickMode.CUSTOM)
+                })
+            }
             XyToggleRow(
                 title = xy("Gyro Air-Mouse (sensor gerak HP)", "Gyro Air-Mouse (phone motion)"),
                 checked = gyroMouseEnabled,

@@ -75,6 +75,24 @@ ExternalProject_Add(
     --pkg-config=${PKG_CONFIG_EXECUTABLE} --sysroot=${NDK_SYSROOT} --arch=${FFMPEG_ARCH} ${FFMPEG_CPU}
     --extra-ldflags="${FFMPEG_LDFLAGS}" ${FFMPEG_EXTRA_ARGS} --target-os=android --enable-cross-compile --enable-pic
     --enable-lto --enable-jni --enable-mediacodec --enable-shared --disable-static --disable-programs --disable-doc
+    # --- XyDesk slim-FFmpeg (APK size diet) -----------------------------------
+    # FreeRDP 3.32 hanya meng-include header avcodec/avutil/swresample/swscale;
+    # avformat/avfilter/avdevice/postproc tidak pernah dipakai (dead weight
+    # ~8 MB/ABI di v1.1.21). Daftar codec = pemakaian nyata di dsp_ffmpeg.c
+    # (audio rdpsnd/audin: AAC/AAC-LATM/MP3/OPUS/GSM/G723_1/ADPCM/PCM) dan
+    # h264_ffmpeg.c (decode H264 GFX; encoder H264 memang tidak ada native di
+    # FFmpeg — fallback openh264, WITH_FFMPEG_HWACCEL=OFF).
+    # CATATAN URUTAN: configure FFmpeg diproses berurutan (last-wins), jadi
+    # --disable-everything di bawah sengaja mematikan --enable-jni/mediacodec
+    # di atas (WITH_MEDIACODEC=OFF di ExternalDeps).
+    # Divalidasi terhadap source FFmpeg n8.1 (allcodecs.c/parsers.c/configure):
+    # postproc sudah DIHAPUS di FFmpeg 8 (jangan pakai --disable-postproc),
+    # parser MP3 namanya 'mpegaudio' (bukan 'mp3'/'mpeg4audio').
+    --disable-everything
+    --disable-avdevice --disable-avfilter --disable-avformat
+    --enable-decoder=aac,aac_latm,mp3,mp3float,opus,h264,gsm,gsm_ms,adpcm_ms,adpcm_ima_oki,g723_1,pcm_alaw,pcm_mulaw,pcm_s16le,pcm_u8
+    --enable-encoder=aac,opus,pcm_s16le,pcm_u8,pcm_alaw,pcm_mulaw
+    --enable-parser=aac,aac_latm,h264,mpegaudio
     --prefix=${DEPS_INSTALL_DIR} --libdir=${DEPS_INSTALL_DIR}/${CMAKE_INSTALL_LIBDIR}
   BUILD_COMMAND ${CMAKE_COMMAND} -E env "PATH=${NDK_TOOLCHAIN_BIN}:$ENV{PATH}" make -j
   INSTALL_COMMAND ${CMAKE_COMMAND} -E env "PATH=${NDK_TOOLCHAIN_BIN}:$ENV{PATH}" make -j install

@@ -82,8 +82,8 @@ enum class HudProfilePreset(
     FULLPAD(
         "Gamepad Lengkap",
         "Full Gamepad",
-        "Dua stik analog, D-Pad, A/B/X/Y, L1/R1/L2/R2, Start & Select — siap main",
-        "Two analog sticks, D-Pad, A/B/X/Y, L1/R1/L2/R2, Start & Select — ready to play",
+        "Dua stik & tombol HUD. RDP memakai mapping keyboard/mouse; bukan bukti gamepad virtual Windows tersedia.",
+        "Two HUD sticks and buttons. RDP uses keyboard/mouse mapping; this does not prove a Windows virtual gamepad is available.",
     ),
 }
 

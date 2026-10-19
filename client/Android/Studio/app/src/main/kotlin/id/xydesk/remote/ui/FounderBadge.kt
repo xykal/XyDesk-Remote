@@ -41,6 +41,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -110,23 +111,42 @@ internal fun isFounderAccount(nameOrLogin: String?): Boolean {
 
 internal fun saveVerifiedGitHubLogin(context: Context, login: String?, avatarUrl: String? = null) {
     val clean = login?.trim().orEmpty()
+    val previous = getVerifiedGitHubLogin(context)
+    val changedAccount = normalizedChatAccount(previous) != normalizedChatAccount(clean)
     val appCtx = context.applicationContext
     val resolvedAvatar = avatarUrl?.trim()?.takeIf { it.isNotEmpty() }
         ?: if (clean.isNotEmpty()) "https://github.com/$clean.png?size=160" else null
     val edit = appCtx.getSharedPreferences(FOUNDER_PREFS, Context.MODE_PRIVATE).edit()
         .putString(KEY_GH_LOGIN, clean)
-    if (resolvedAvatar != null) {
-        edit.putString(KEY_GH_AVATAR, resolvedAvatar)
-    }
+    if (clean.isEmpty()) edit.remove(KEY_GH_AVATAR)
+    else if (resolvedAvatar != null) edit.putString(KEY_GH_AVATAR, resolvedAvatar)
     edit.apply()
 
     if (clean.isNotEmpty()) {
         val chatPrefs = appCtx.getSharedPreferences("xydesk.global.chat", Context.MODE_PRIVATE)
         val currentNick = chatPrefs.getString("nickname", null)
-        if (currentNick.isNullOrBlank() || currentNick.startsWith("Tamu-") || isFounderAccount(clean)) {
+        if (changedAccount || currentNick.isNullOrBlank() || currentNick.startsWith("Tamu-") || isFounderAccount(clean)) {
             chatPrefs.edit().putString("nickname", clean).apply()
         }
+    } else if (changedAccount) {
+        appCtx.getSharedPreferences("xydesk.global.chat", Context.MODE_PRIVATE).edit().remove("nickname").apply()
     }
+    if (changedAccount) id.xydesk.remote.push.ChatPushNotifier.onAccountChanged(appCtx)
+}
+
+@Composable
+internal fun rememberVerifiedChatAccount(context: Context): String? {
+    var login by remember(context) { mutableStateOf(getVerifiedGitHubLogin(context)) }
+    androidx.compose.runtime.DisposableEffect(context) {
+        val prefs = context.applicationContext.getSharedPreferences(FOUNDER_PREFS, Context.MODE_PRIVATE)
+        val listener = android.content.SharedPreferences.OnSharedPreferenceChangeListener { _, key ->
+            if (key == KEY_GH_LOGIN || key == null) login = getVerifiedGitHubLogin(context)
+        }
+        prefs.registerOnSharedPreferenceChangeListener(listener)
+        login = getVerifiedGitHubLogin(context)
+        onDispose { prefs.unregisterOnSharedPreferenceChangeListener(listener) }
+    }
+    return login
 }
 
 internal fun getVerifiedGitHubLogin(context: Context): String? {
@@ -1343,25 +1363,31 @@ internal fun FounderCrownEmblem(
     size: Dp = 15.dp,
     modifier: Modifier = Modifier,
 ) {
-    val infinite = rememberInfiniteTransition(label = "founder_crown_anim")
-    val pulse by infinite.animateFloat(
-        initialValue = 0.88f,
-        targetValue = 1.12f,
-        animationSpec = infiniteRepeatable(
-            animation = tween(1350, easing = FastOutSlowInEasing),
-            repeatMode = RepeatMode.Reverse,
-        ),
-        label = "crown_pulse",
-    )
-    val orbit by infinite.animateFloat(
-        initialValue = 0f,
-        targetValue = (2f * PI).toFloat(),
-        animationSpec = infiniteRepeatable(
-            animation = tween(3600, easing = LinearEasing),
-            repeatMode = RepeatMode.Restart,
-        ),
-        label = "crown_orbit",
-    )
+    val infinite = if (id.xydesk.remote.ui.theme.LocalDecorativeMotionEnabled.current) rememberInfiniteTransition(label = "founder_crown_anim") else null
+    val pulse = if (infinite != null) {
+        val animated by infinite.animateFloat(
+            initialValue = 0.88f,
+            targetValue = 1.12f,
+            animationSpec = infiniteRepeatable(
+                animation = tween(1350, easing = FastOutSlowInEasing),
+                repeatMode = RepeatMode.Reverse,
+            ),
+            label = "crown_pulse",
+        )
+        animated
+    } else 1f
+    val orbit = if (infinite != null) {
+        val animated by infinite.animateFloat(
+            initialValue = 0f,
+            targetValue = (2f * PI).toFloat(),
+            animationSpec = infiniteRepeatable(
+                animation = tween(3600, easing = LinearEasing),
+                repeatMode = RepeatMode.Restart,
+            ),
+            label = "crown_orbit",
+        )
+        animated
+    } else 0f
 
     Canvas(modifier = modifier.size(size)) {
         val w = this.size.width
@@ -1475,25 +1501,31 @@ internal fun XyFounderBadge(
     compact: Boolean = false,
     subtitle: String? = null,
 ) {
-    val infinite = rememberInfiniteTransition(label = "founder_badge_shimmer")
-    val shimmer by infinite.animateFloat(
-        initialValue = 0f,
-        targetValue = 1f,
-        animationSpec = infiniteRepeatable(
-            animation = tween(2200, easing = LinearEasing),
-            repeatMode = RepeatMode.Restart,
-        ),
-        label = "shimmer_sweep",
-    )
-    val glowAlpha by infinite.animateFloat(
-        initialValue = 0.55f,
-        targetValue = 1.0f,
-        animationSpec = infiniteRepeatable(
-            animation = tween(1350, easing = FastOutSlowInEasing),
-            repeatMode = RepeatMode.Reverse,
-        ),
-        label = "glow_alpha",
-    )
+    val infinite = if (id.xydesk.remote.ui.theme.LocalDecorativeMotionEnabled.current) rememberInfiniteTransition(label = "founder_badge_shimmer") else null
+    val shimmer = if (infinite != null) {
+        val animated by infinite.animateFloat(
+            initialValue = 0f,
+            targetValue = 1f,
+            animationSpec = infiniteRepeatable(
+                animation = tween(2200, easing = LinearEasing),
+                repeatMode = RepeatMode.Restart,
+            ),
+            label = "shimmer_sweep",
+        )
+        animated
+    } else 0f
+    val glowAlpha = if (infinite != null) {
+        val animated by infinite.animateFloat(
+            initialValue = 0.55f,
+            targetValue = 1.0f,
+            animationSpec = infiniteRepeatable(
+                animation = tween(1350, easing = FastOutSlowInEasing),
+                repeatMode = RepeatMode.Reverse,
+            ),
+            label = "glow_alpha",
+        )
+        animated
+    } else 0.8f
 
     val shape = RoundedCornerShape(50)
     Row(
@@ -1716,25 +1748,31 @@ internal fun FounderAnimatedBubbleBox(
     modifier: Modifier = Modifier,
     content: @Composable BoxScope.() -> Unit,
 ) {
-    val infinite = rememberInfiniteTransition(label = "founder_bubble_fx")
-    val phase by infinite.animateFloat(
-        initialValue = 0f,
-        targetValue = 1f,
-        animationSpec = infiniteRepeatable(
-            animation = tween(2400, easing = LinearEasing),
-            repeatMode = RepeatMode.Restart,
-        ),
-        label = "bubble_phase",
-    )
-    val pulse by infinite.animateFloat(
-        initialValue = 0.62f,
-        targetValue = 1f,
-        animationSpec = infiniteRepeatable(
-            animation = tween(1100, easing = FastOutSlowInEasing),
-            repeatMode = RepeatMode.Reverse,
-        ),
-        label = "bubble_pulse",
-    )
+    val infinite = if (id.xydesk.remote.ui.theme.LocalDecorativeMotionEnabled.current) rememberInfiniteTransition(label = "founder_bubble_fx") else null
+    val phase = if (infinite != null) {
+        val animated by infinite.animateFloat(
+            initialValue = 0f,
+            targetValue = 1f,
+            animationSpec = infiniteRepeatable(
+                animation = tween(2400, easing = LinearEasing),
+                repeatMode = RepeatMode.Restart,
+            ),
+            label = "bubble_phase",
+        )
+        animated
+    } else 0f
+    val pulse = if (infinite != null) {
+        val animated by infinite.animateFloat(
+            initialValue = 0.62f,
+            targetValue = 1f,
+            animationSpec = infiniteRepeatable(
+                animation = tween(1100, easing = FastOutSlowInEasing),
+                repeatMode = RepeatMode.Reverse,
+            ),
+            label = "bubble_pulse",
+        )
+        animated
+    } else 1f
 
     Box(
         modifier = modifier
@@ -1831,16 +1869,19 @@ internal fun XyRoleAnimatedBubbleBox(
     content: @Composable BoxScope.() -> Unit,
 ) {
     val isTeam = role.equals("XYTEAM", ignoreCase = true)
-    val infinite = rememberInfiniteTransition(label = "role_bubble_fx")
-    val phase by infinite.animateFloat(
-        initialValue = 0f,
-        targetValue = 1f,
-        animationSpec = infiniteRepeatable(
-            animation = tween(3000, easing = LinearEasing),
-            repeatMode = RepeatMode.Restart,
-        ),
-        label = "role_phase",
-    )
+    val infinite = if (id.xydesk.remote.ui.theme.LocalDecorativeMotionEnabled.current) rememberInfiniteTransition(label = "role_bubble_fx") else null
+    val phase = if (infinite != null) {
+        val animated by infinite.animateFloat(
+            initialValue = 0f,
+            targetValue = 1f,
+            animationSpec = infiniteRepeatable(
+                animation = tween(3000, easing = LinearEasing),
+                repeatMode = RepeatMode.Restart,
+            ),
+            label = "role_phase",
+        )
+        animated
+    } else 0f
     val bgColors = if (isTeam) {
         listOf(Color(0xFF0A1428), Color(0xFF0F2547), Color(0xFF0C365A), Color(0xFF091931))
     } else {
@@ -2097,7 +2138,11 @@ internal fun XyUserRoleBadges(
     name: String?,
     githubLogin: String? = null,
     compact: Boolean = true,
+    durationRank: Int? = null,
 ) {
+    val durationRanks by LeaderboardPodium.ranks.collectAsState()
+    val podiumRank = durationRank?.takeIf { it in 1..3 }
+        ?: durationRanks[normalizedChatAccount(githubLogin)]
     val context = LocalContext.current
     val rev = XySpecialRoleRegistry.roleRevision
     val isFounder = remember(name, githubLogin) {
@@ -2109,21 +2154,25 @@ internal fun XyUserRoleBadges(
     val isTester = remember(name, githubLogin, rev) {
         isXyTesterAccount(context, name, githubLogin)
     }
-    if (isFounder || isTeam || isTester) {
-        Row(
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(4.dp),
-        ) {
-            if (isFounder) {
-                XyFounderBadge(compact = compact)
-            }
-            if (isTeam) {
-                XyTeamBadge(compact = compact)
-            }
-            if (isTester) {
-                XyTesterBadge(compact = compact)
+    if (!isFounder && !isTeam && !isTester && podiumRank == null) return
+    Column(verticalArrangement = Arrangement.spacedBy(3.dp)) {
+        if (isFounder || isTeam || isTester) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(4.dp),
+            ) {
+                if (isFounder) {
+                    XyFounderBadge(compact = compact)
+                }
+                if (isTeam) {
+                    XyTeamBadge(compact = compact)
+                }
+                if (isTester) {
+                    XyTesterBadge(compact = compact)
+                }
             }
         }
+        if (podiumRank != null) LeaderboardDurationBadge(podiumRank, compact)
     }
 }
 

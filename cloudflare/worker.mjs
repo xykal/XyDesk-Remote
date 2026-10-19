@@ -1,3 +1,8 @@
+import { RevisionedHistoryWindow, chatStorageFailure } from "./chat-storage-policy.mjs";
+import { applyChatMutation } from "./chat-mutations.mjs";
+import { exchangeGithubCode } from "./oauth-token-exchange.mjs";
+import { verifyGithubIdentity, resolveGithubIdentity } from "./oauth-identity.mjs";
+
 // Pinned fallback only; alias and checksum redirects prefer the current
 // release_tag/downloads from release-state.json (see currentReleaseAssetUrl).
 const RELEASE = "https://github.com/xykal/XyDesk-Remote/releases/download/v1.0.2/";
@@ -3295,11 +3300,12 @@ function offlineTranslateFallback(text, country = "ID") {
   return { translated: out, targetLang: "ID", sourceLang: "en" };
 }
 
-async function fetchGoogleClients5Translate(text, sourceLang, targetLang) {
+async function fetchGoogleClients5Translate(text, sourceLang, targetLang, signal) {
   const q = encodeURIComponent(text);
   const sl = sourceLang || "auto";
   const url = `https://clients5.google.com/translate_a/t?client=dict-chrome-ex&sl=${sl}&tl=${targetLang}&q=${q}`;
   const res = await fetch(url, {
+    signal,
     headers: {
       "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
       Accept: "application/json,text/plain,*/*",
@@ -3320,11 +3326,12 @@ async function fetchGoogleClients5Translate(text, sourceLang, targetLang) {
   throw new Error("clients5_bad_payload");
 }
 
-async function fetchGoogleTranslate(text, sourceLang, targetLang) {
+async function fetchGoogleTranslate(text, sourceLang, targetLang, signal) {
   const q = encodeURIComponent(text);
   const sl = sourceLang || "auto";
   const url = `https://translate.googleapis.com/translate_a/single?client=dict-chrome-ex&sl=${sl}&tl=${targetLang}&dt=t&q=${q}`;
   const res = await fetch(url, {
+    signal,
     headers: {
       "User-Agent": "Mozilla/5.0 (Linux; Android 15) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Mobile Safari/537.36",
       Accept: "application/json,text/plain,*/*",
@@ -3363,7 +3370,7 @@ function guessSourceLang(text, country = "") {
   return byCountry[cc] || "en";
 }
 
-async function fetchMyMemoryTranslate(text, sourceLang, targetLang) {
+async function fetchMyMemoryTranslate(text, sourceLang, targetLang, signal) {
   const q = encodeURIComponent(text);
   let sl = !sourceLang || sourceLang === "auto" ? guessSourceLang(text, "") : sourceLang;
   if (sl.toLowerCase() === String(targetLang || "").toLowerCase()) {
@@ -3371,6 +3378,7 @@ async function fetchMyMemoryTranslate(text, sourceLang, targetLang) {
   }
   const url = `https://api.mymemory.translated.net/get?q=${q}&langpair=${encodeURIComponent(sl)}%7C${encodeURIComponent(targetLang)}`;
   const res = await fetch(url, {
+    signal,
     headers: {
       "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
       Accept: "application/json",
@@ -3383,7 +3391,36 @@ async function fetchMyMemoryTranslate(text, sourceLang, targetLang) {
   return translated;
 }
 
+// One deadline for all translation providers, including response body reads.
+// Receipt/storage must not wait indefinitely on external translation services.
+export async function withChatTranslationBudget(task, fallback, timeoutMs = 2_000) {
+  const controller = new AbortController();
+  let timer;
+  const deadline = new Promise((resolve) => {
+    timer = setTimeout(() => {
+      controller.abort();
+      resolve(fallback());
+    }, timeoutMs);
+  });
+  try {
+    return await Promise.race([
+      Promise.resolve().then(() => task(controller.signal)).catch(() => fallback()),
+      deadline,
+    ]);
+  } finally {
+    clearTimeout(timer);
+    controller.abort();
+  }
+}
+
 async function translateChatText(text, country = "ID") {
+  return withChatTranslationBudget(
+    (signal) => translateChatTextWithinBudget(text, country, signal),
+    () => offlineTranslateFallback(text, country),
+  );
+}
+
+async function translateChatTextWithinBudget(text, country, signal) {
   const clean = String(text || "").trim();
   if (!clean) return { translated: "", targetLang: "EN", sourceLang: "id" };
   const guessedSl = guessSourceLang(clean, country);
@@ -3392,11 +3429,12 @@ async function translateChatText(text, country = "ID") {
   const primaryLabel = isSourceId ? "EN" : "ID";
 
   // Jalur 1: Google clients5 (client=dict-chrome-ex, bebas rate-limit 429 & deteksi semua bahasa)
+  if (signal.aborted) return offlineTranslateFallback(clean, country);
   try {
-    const c5 = await fetchGoogleClients5Translate(clean, "auto", primaryTarget);
+    const c5 = await fetchGoogleClients5Translate(clean, "auto", primaryTarget, signal);
     const det = (c5.detected || guessedSl).toLowerCase();
     if (det === "id" && primaryTarget === "id") {
-      const c5En = await fetchGoogleClients5Translate(clean, "id", "en");
+      const c5En = await fetchGoogleClients5Translate(clean, "id", "en", signal);
       if (c5En.translated) {
         return { translated: c5En.translated, targetLang: "EN", sourceLang: "id" };
       }
@@ -3413,11 +3451,12 @@ async function translateChatText(text, country = "ID") {
   }
 
   // Jalur 2: Google Translate dict-chrome-ex single
+  if (signal.aborted) return offlineTranslateFallback(clean, country);
   try {
-    const gtx = await fetchGoogleTranslate(clean, "auto", primaryTarget);
+    const gtx = await fetchGoogleTranslate(clean, "auto", primaryTarget, signal);
     const det = (gtx.detected || guessedSl).toLowerCase();
     if (det === "id" && primaryTarget === "id") {
-      const gtxEn = await fetchGoogleTranslate(clean, "id", "en");
+      const gtxEn = await fetchGoogleTranslate(clean, "id", "en", signal);
       if (gtxEn.translated) {
         return { translated: gtxEn.translated, targetLang: "EN", sourceLang: "id" };
       }
@@ -3434,8 +3473,9 @@ async function translateChatText(text, country = "ID") {
   }
 
   // Jalur 3: MyMemory API
+  if (signal.aborted) return offlineTranslateFallback(clean, country);
   try {
-    const mm = await fetchMyMemoryTranslate(clean, guessedSl, primaryTarget);
+    const mm = await fetchMyMemoryTranslate(clean, guessedSl, primaryTarget, signal);
     if (mm && mm.toLowerCase() !== clean.toLowerCase()) {
       return {
         translated: mm,
@@ -3524,6 +3564,8 @@ export class GlobalChat {
     this.sessions = new Set();
     this.httpRate = new Map();
     this.appOnlinePeers = new Map();
+    this.historyWindow = new RevisionedHistoryWindow();
+    this.joinedCache = new Map();
   }
 
   getActiveOnlineCount() {
@@ -3551,20 +3593,24 @@ export class GlobalChat {
     if (!identityKey) {
       return rawJoined > 0 ? rawJoined : 0;
     }
-    let stored = await this.state.storage.get(identityKey);
     const now = Date.now();
+    const cached = this.joinedCache.get(identityKey);
+    let stored = cached && now - cached.checkedAt < 300_000 ? cached.at : await this.state.storage.get(identityKey);
     if (!stored || typeof stored !== "number" || stored <= 0) {
       stored = rawJoined > 0 ? rawJoined : now;
       await this.state.storage.put(identityKey, stored);
-    } else if (rawJoined > stored) {
-      stored = rawJoined;
     }
+    if (this.joinedCache.size >= 1000 && !this.joinedCache.has(identityKey)) this.joinedCache.delete(this.joinedCache.keys().next().value);
+    this.joinedCache.set(identityKey, { at: stored, checkedAt: cached && now - cached.checkedAt < 300_000 ? cached.checkedAt : now });
+    if (rawJoined > stored) stored = rawJoined;
     return stored;
   }
 
   async fetch(request) {
     const urlObj = new URL(request.url);
     const path = urlObj.pathname;
+    if (path === "/mutation-capabilities" && request.method === "GET")
+      return durableObjectJson({ revisioned_mutations: 1 }, 200, request.method);
     if ((path === "/connect" || path === "/ws/chat") && request.headers.get("Upgrade") === "websocket") {
       return this.handleConnect(request);
     }
@@ -3607,7 +3653,8 @@ export class GlobalChat {
         this.broadcast(null, JSON.stringify({ type: "pin", pinned_message: null }));
         return durableObjectJson({ status: "ok", pinned_message: null }, 200, request.method);
       }
-      const rawPin = body.message;
+      const rawPin = await this.state.storage.get(`msg:${String(body.message.id || "").slice(0, 80)}`);
+      if (!rawPin || rawPin.deleted) return durableObjectJson({ status: "error", code: "message_not_pinnable" }, 409, request.method);
       const pinned = {
         id: String(rawPin.id || ""),
         name: String(rawPin.name || "User").slice(0, 32),
@@ -3620,21 +3667,8 @@ export class GlobalChat {
       this.broadcast(null, JSON.stringify({ type: "pin", pinned_message: pinned }));
       return durableObjectJson({ status: "ok", pinned_message: pinned }, 200, request.method);
     }
-    if (path === "/delete" && request.method === "POST") {
-      let body = null;
-      try { body = await request.json(); } catch {}
-      const msgId = String(body?.id || "").trim().slice(0, 80);
-      if (!msgId) {
-        return durableObjectJson({ status: "error", code: "missing_id" }, 400, request.method);
-      }
-      await this.state.storage.delete(`msg:${msgId}`);
-      const curPinned = await this.state.storage.get("pinned_message").catch(() => null);
-      if (curPinned && String(curPinned.id || "") === msgId) {
-        await this.state.storage.delete("pinned_message");
-        this.broadcast(null, JSON.stringify({ type: "pin", pinned_message: null }));
-      }
-      this.broadcast(null, JSON.stringify({ type: "delete", id: msgId }));
-      return durableObjectJson({ status: "ok", deleted_id: msgId }, 200, request.method);
+    if ((path === "/delete" || path === "/edit") && request.method === "POST") {
+      return this.mutateMessage(request, path.slice(1));
     }
     if (path === "/oauth-complete" && request.method === "POST") {
       let body = null;
@@ -3714,45 +3748,11 @@ export class GlobalChat {
     }
 
     const list = Object.values(entriesMap).filter((val) => val && Number(val.total_seconds) > 0);
-    // Pastikan Founder (@xykal) selalu hadir di Leaderboard
-    if (!list.some((x) => String(x.github_login || x.name || "").toLowerCase() === "xykal")) {
-      list.push({
-        key: "xykal",
-        name: "xykal",
-        github_login: "xykal",
-        avatar_url: "https://github.com/xykal.png?size=160",
-        country: "ID",
-        flag: "🇮🇩",
-        is_founder: true,
-        total_seconds: 432_000,
-        sessions_count: 185,
-        updated_at: Date.now(),
-      });
-    }
-    // Isi daftar komunitas aktif hingga 100 peringkat (Top 1, 2, 3 s.d. 100)
-    const countries = ["ID", "MY", "SG", "JP", "KR", "TH", "VN", "PH", "US", "DE", "BR", "AU"];
-    for (let i = 1; list.length < 100 && i <= 105; i++) {
-      const handle = `xydesk-player-${i}`;
-      if (list.some((x) => x.key === handle)) continue;
-      const cc = countries[i % countries.length];
-      const secs = Math.max(1800, 320_000 - i * 2850);
-      list.push({
-        key: handle,
-        name: `Player #${i}`,
-        github_login: "",
-        avatar_url: "",
-        country: cc,
-        flag: countryToFlag(cc),
-        is_founder: false,
-        total_seconds: secs,
-        sessions_count: Math.max(2, Math.floor(secs / 5400)),
-        updated_at: Date.now() - i * 60_000,
-      });
-    }
+    // Rank only stored entries. Never fabricate podium candidates or placeholder playtime.
     list.sort((a, b) => Number(b.total_seconds || 0) - Number(a.total_seconds || 0));
     const top100 = list.slice(0, 100).map((item, idx) => ({
-      rank: idx + 1,
       ...item,
+      rank: idx + 1,
     }));
     return durableObjectJson({ status: "ok", items: top100, total_ranked: top100.length }, 200, request.method);
   }
@@ -3779,7 +3779,50 @@ export class GlobalChat {
     return durableObjectJson({ status: "ok", online_count: this.getActiveOnlineCount() }, 200, request.method);
   }
 
+  async authenticate(request, required = false) {
+    const authorization = request.headers.get("authorization") || "";
+    if (!authorization && !required) return { ok: true, principal: null };
+    const match = authorization.match(/^Bearer (\S+)$/);
+    if (!match) return { ok: false, status: 401, code: "authentication_required" };
+    return resolveGithubIdentity(match[1]);
+  }
+
+  async mutateMessage(request, action) {
+    const parsed = await readCommunityJson(request, 4096);
+    if (parsed.error) return parsed.error;
+    const auth = await this.authenticate(request, true);
+    if (!auth.ok) return durableObjectJson({ status: "error", code: auth.code }, auth.status, request.method);
+    const body = parsed.body;
+    if (typeof body?.id !== "string" || !/^[a-zA-Z0-9-]{1,80}$/.test(body.id))
+      return durableObjectJson({ status: "error", code: "invalid_id" }, 400, request.method);
+    if (action === "edit" && isMaliciousTextOrLink(String(body.text || "")))
+      return durableObjectJson({ status: "error", code: "malicious_link_blocked" }, 400, request.method);
+    const key = `msg:${body.id}`;
+    const outcome = await this.state.storage.transaction(async transaction => {
+      const current = await transaction.get(key);
+      const result = applyChatMutation(current, auth.principal, body, action, Date.now());
+      if (result.status !== 200) return result;
+      await transaction.put(key, result.message);
+      if (action === "delete") {
+        const messages = await transaction.list({ prefix: "msg:" });
+        for (const [replyKey, reply] of messages) {
+          if (reply?.reply_to_id === body.id) await transaction.put(replyKey, { ...reply, reply_to_text: "Pesan ini dihapus" });
+        }
+      }
+      const pinned = await transaction.get("pinned_message");
+      if (pinned?.id === body.id) await transaction.delete("pinned_message");
+      return result;
+    });
+    if (outcome.status !== 200) return durableObjectJson({ status: "error", code: outcome.code }, outcome.status, request.method);
+    this.historyWindow.invalidate();
+    this.broadcast(null, JSON.stringify({ type: "mutation", message: outcome.message }));
+    this.broadcast(null, JSON.stringify({ type: "pin", pinned_message: await this.state.storage.get("pinned_message") || null }));
+    return durableObjectJson({ status: "ok", message: outcome.message }, 200, request.method);
+  }
+
   async handleHttpSend(request) {
+    const auth = await this.authenticate(request);
+    if (!auth.ok) return durableObjectJson({ status: "error", code: auth.code }, auth.status, request.method);
     let body = null;
     try {
       body = await request.json();
@@ -3790,6 +3833,9 @@ export class GlobalChat {
       ? body.name.trim().slice(0, CHAT_NAME_MAX) || "Tamu"
       : "Tamu";
     const extras = sanitizeChatExtras(body);
+    if (auth.principal && extras.github_login && extras.github_login.toLowerCase() !== auth.principal.login.toLowerCase())
+      return durableObjectJson({ status: "error", code: "identity_changed" }, 401, request.method);
+    if (auth.principal) extras.github_login = auth.principal.login;
     if (isMaliciousAttachmentName(extras.attachment_name)) {
       return durableObjectJson({ status: "error", code: "malicious_attachment_blocked" }, 400, request.method);
     }
@@ -3843,9 +3889,12 @@ export class GlobalChat {
       target_lang: tr.targetLang,
       source_lang: tr.sourceLang,
       ...extras,
+      author_id: auth.principal?.id || null,
+      revision: 0,
       at: now,
     };
     await this.state.storage.put(`msg:${id}`, msg);
+    this.historyWindow.invalidate();
     this.trimHistory().catch(() => {});
     this.broadcast(null, JSON.stringify({ type: "msg", ...msg }));
     this.pushChatNotification(msg).catch(() => {});
@@ -3853,8 +3902,14 @@ export class GlobalChat {
   }
 
   async loadHistory(sinceMs = 0) {
-    const entries = await this.state.storage.list({ prefix: "msg:" });
+    const rows = await this.historyWindow.load(() => this.readHistoryRows());
+    return rows.filter(row => !(sinceMs > 0 && Number(row.at || 0) > 0 && Number(row.at || 0) < sinceMs));
+  }
+
+  async readHistoryRows() {
+    const entries = await this.state.storage.list({ prefix: "msg:", reverse: true, limit: CHAT_HISTORY_LIMIT });
     const msgs = [];
+    const deletedIds = new Set([...entries.values()].filter(m => m?.deleted).map(m => m.id));
     for (const [k, v] of entries.entries()) {
       const senderLower = String(v?.name || "").trim().toLowerCase();
       if (LEGACY_TEST_NAMES.has(senderLower)) {
@@ -3862,16 +3917,13 @@ export class GlobalChat {
         continue;
       }
       const msgAt = Number(v?.at || 0);
-      if (sinceMs > 0 && msgAt > 0 && msgAt < sinceMs) {
-        continue;
-      }
       const text = String(v?.text || "");
       let sourceLang = typeof v?.source_lang === "string" ? v.source_lang : "";
       const country = resolveSmartCountry(text, sourceLang, v?.country, v?.country);
       const flag = countryToFlag(country);
       let translated = typeof v?.translated === "string" ? v.translated : "";
       let targetLang = typeof v?.target_lang === "string" ? v.target_lang : "";
-      if (!translated && text) {
+      if (!v?.deleted && !translated && text) {
         const fb = offlineTranslateFallback(text, country);
         translated = fb.translated;
         targetLang = fb.targetLang;
@@ -3880,6 +3932,7 @@ export class GlobalChat {
       msgs.push({
         id: k.slice(4),
         ...v,
+        reply_to_text: deletedIds.has(v?.reply_to_id) ? "Pesan ini dihapus" : v?.reply_to_text || "",
         is_founder: Boolean(v?.is_founder || isFounderChatName(v?.name, v?.github_login)),
         country,
         flag,
@@ -3903,7 +3956,9 @@ export class GlobalChat {
     }
   }
 
-  handleConnect(request) {
+  async handleConnect(request) {
+    const auth = await this.authenticate(request);
+    if (!auth.ok) return durableObjectJson({ status: "error", code: auth.code }, auth.status, request.method);
     const urlObj = new URL(request.url);
     const pair = new WebSocketPair();
     const [client, server] = Object.values(pair);
@@ -3918,7 +3973,8 @@ export class GlobalChat {
       ws: server,
       clientId,
       name: ghLogin || "Tamu",
-      githubLogin: ghLogin,
+      githubLogin: auth.principal?.login || ghLogin,
+      principal: auth.principal,
       country: initialCountry,
       cfCountry: initialCountry,
       sent: 0,
@@ -3964,7 +4020,7 @@ export class GlobalChat {
       if (typeof data.name === "string") {
         session.name = String(data.name).trim().slice(0, CHAT_NAME_MAX) || "Tamu";
       }
-      if (typeof data.github_login === "string") {
+      if (!session.principal && typeof data.github_login === "string") {
         session.githubLogin = String(data.github_login).trim().replace(/^@/, "").slice(0, 39);
       }
       if (typeof data.client_id === "string" && data.client_id.trim()) {
@@ -3997,7 +4053,11 @@ export class GlobalChat {
         await this.state.storage.delete("pinned_message");
         this.broadcast(null, JSON.stringify({ type: "pin", pinned_message: null }));
       } else {
-        const rm = data.message;
+        const rm = await this.state.storage.get(`msg:${String(data.message.id || "").slice(0, 80)}`);
+        if (!rm || rm.deleted) {
+          try { session.ws.send(JSON.stringify({ type: "error", code: "message_not_pinnable" })); } catch {}
+          return;
+        }
         const pinned = {
           id: String(rm.id || ""),
           name: String(rm.name || "User").slice(0, 32),
@@ -4011,21 +4071,17 @@ export class GlobalChat {
       }
       return;
     }
-    if (data.type === "delete") {
-      const msgId = String(data.id || "").trim().slice(0, 80);
-      if (msgId) {
-        await this.state.storage.delete(`msg:${msgId}`);
-        const curPinned = await this.state.storage.get("pinned_message").catch(() => null);
-        if (curPinned && String(curPinned.id || "") === msgId) {
-          await this.state.storage.delete("pinned_message");
-          this.broadcast(null, JSON.stringify({ type: "pin", pinned_message: null }));
-        }
-        this.broadcast(null, JSON.stringify({ type: "delete", id: msgId }));
-      }
+    if (data.type === "delete" || data.type === "edit") {
+      try { session.ws.send(JSON.stringify({ type: "error", code: "authenticated_http_required" })); } catch {}
       return;
     }
     if (data.type !== "msg") return;
     const extras = sanitizeChatExtras(data);
+    if (session.principal && extras.github_login && extras.github_login.toLowerCase() !== session.principal.login.toLowerCase()) {
+      try { session.ws.send(JSON.stringify({ type: "error", code: "identity_changed" })); } catch {}
+      return;
+    }
+    if (session.principal) extras.github_login = session.principal.login;
     if (!extras.github_login && session.githubLogin) {
       extras.github_login = session.githubLogin;
     }
@@ -4080,9 +4136,13 @@ export class GlobalChat {
       target_lang: tr.targetLang,
       source_lang: tr.sourceLang,
       ...extras,
+      author_id: session.principal?.id || null,
+      revision: 0,
       at: now,
     };
-    this.state.storage.put(`msg:${id}`, msg).then(() => this.trimHistory()).catch(() => {});
+    await this.state.storage.put(`msg:${id}`, msg);
+    this.historyWindow.invalidate();
+    this.trimHistory().catch(() => {});
     this.broadcast(null, JSON.stringify({ type: "msg", ...msg }));
     this.pushChatNotification(msg).catch(() => {});
   }
@@ -4390,8 +4450,8 @@ async function handleEdgeLeaderboard(request, env) {
   }
   list.sort((a, b) => Number(b.total_seconds || 0) - Number(a.total_seconds || 0));
   const top100 = list.slice(0, 100).map((item, idx) => ({
-    rank: idx + 1,
     ...item,
+    rank: idx + 1,
   }));
   return durableObjectJson({ status: "ok", items: top100, total_ranked: top100.length }, 200, request.method);
 }
@@ -4430,11 +4490,13 @@ export default {
       const chatId2 = env.GLOBAL_CHAT.idFromName("xydesk-global-chat-v1");
       const historyUrl = new URL("/history", request.url);
       historyUrl.search = url.search;
-      const res = await env.GLOBAL_CHAT.get(chatId2).fetch(new Request(historyUrl, { method: "GET" }));
+      let res;
+      try { res = await env.GLOBAL_CHAT.get(chatId2).fetch(new Request(historyUrl, { method: "GET" })); }
+      catch (error) { return chatStorageFailure(error, request.method); }
       if (!res.ok) return res;
       const payload = await res.json().catch(() => null);
       if (!payload || !Array.isArray(payload.messages)) {
-        return durableObjectJson({ status: "ok", messages: [], online_count: Math.max(edgeOnline, payload?.online_count || 1) }, 200, request.method);
+        return chatStorageFailure(new Error("Unconfirmed history payload"), request.method);
       }
       const effectiveJoinedAt = Math.max(reqJoinedAt, Number(payload.joined_at || 0));
       const cleaned = [];
@@ -4503,30 +4565,33 @@ export default {
       }
       return durableObjectJson({ status: "ok", pinned_message: EDGE_PINNED_MSG }, 200, request.method);
     }
-    if (path === "/api/chat/delete") {
+    if (path === "/api/chat/delete" || path === "/api/chat/edit") {
       if (request.method === "OPTIONS") return corsPreflight("POST, OPTIONS");
       if (request.method !== "POST") return methodNotAllowed("POST, OPTIONS");
-      const bodyText = await request.text().catch(() => "");
-      let parsed = null;
-      try { parsed = JSON.parse(bodyText); } catch {}
-      const msgId = String(parsed?.id || "").trim().slice(0, 80);
-      if (!msgId) return durableObjectJson({ status: "error", code: "missing_id" }, 400, request.method);
-      if (EDGE_PINNED_MSG && String(EDGE_PINNED_MSG.id || "") === msgId) {
-        EDGE_PINNED_MSG = null;
+      if (!env.GLOBAL_CHAT) return durableObjectJson({ status: "error", code: "chat_unavailable" }, 503, request.method);
+      // Reject before touching storage, including when the account is over quota.
+      const bearer = (request.headers.get("Authorization") || "").match(/^Bearer (\S+)$/);
+      if (!bearer) return durableObjectJson({ status: "error", code: "authentication_required" }, 401, request.method);
+      const auth = await resolveGithubIdentity(bearer[1]);
+      if (!auth.ok) return durableObjectJson({ status: "error", code: auth.code }, auth.status, request.method);
+      const chatId = env.GLOBAL_CHAT.idFromName("xydesk-global-chat-v1");
+      const stub = env.GLOBAL_CHAT.get(chatId);
+      let response;
+      try {
+        // Refuse old/live DO code that only knows the legacy deletion contract.
+        const capability = await stub.fetch(new Request(new URL("/mutation-capabilities", request.url)));
+        const capabilityBody = capability.ok ? await capability.json().catch(() => null) : null;
+        if (capabilityBody?.revisioned_mutations !== 1)
+          return durableObjectJson({ status: "error", code: "chat_migration_pending" }, 503, request.method);
+        response = await stub.fetch(new Request(new URL(path.endsWith("/edit") ? "/edit" : "/delete", request.url), {
+        method: "POST", headers: request.headers, body: request.body, duplex: "half",
+        }));
+      } catch (error) { return chatStorageFailure(error, request.method); }
+      if (response.ok) {
+        const result = await response.clone().json().catch(() => null);
+        if (result?.message?.id === EDGE_PINNED_MSG?.id) EDGE_PINNED_MSG = null;
       }
-      if (env.GLOBAL_CHAT) {
-        try {
-          const chatIdDel = env.GLOBAL_CHAT.idFromName("xydesk-global-chat-v1");
-          return await env.GLOBAL_CHAT.get(chatIdDel).fetch(
-            new Request(new URL("/delete", request.url), {
-              method: "POST",
-              headers: { "Content-Type": "application/json" },
-              body: bodyText,
-            }),
-          );
-        } catch {}
-      }
-      return durableObjectJson({ status: "ok", deleted_id: msgId }, 200, request.method);
+      return response;
     }
     if (path === "/api/github/oauth/login" || path === "/api/auth/login") {
       if (request.method === "OPTIONS") return corsPreflight("GET, OPTIONS");
@@ -4536,38 +4601,9 @@ export default {
       const oauthClientId = String(env?.GITHUB_OAUTH_CLIENT_ID || "Ov23liBsgZ5xJKgzHGtl").trim();
       const oauthSecret = String(env?.GITHUB_OAUTH_CLIENT_SECRET || "").trim();
 
-      // Fast-path jika browser Chrome sudah memiliki sesi cookie xy_gh_session yang valid
-      const cookieHeader = String(request.headers.get("cookie") || "");
-      const cookieMatch = cookieHeader.match(/(?:^|;\s*)xy_gh_session=([^;]+)/);
-      if (cookieMatch && cookieMatch[1] && url.searchParams.get("force") !== "1") {
-        try {
-          const decoded = JSON.parse(atob(decodeURIComponent(cookieMatch[1])));
-          if (decoded && decoded.token && decoded.login) {
-            if (sid) {
-              const sessionPayload = {
-                token: decoded.token,
-                login: decoded.login,
-                name: decoded.name || decoded.login,
-                avatar_url: decoded.avatar_url || "",
-                at: Date.now(),
-              };
-              EDGE_OAUTH_SESSIONS.set(sid, sessionPayload);
-              if (env?.UNIQUE_DOWNLOADS) {
-                try {
-                  await env.UNIQUE_DOWNLOADS.put(`oauth:${sid}`, JSON.stringify(sessionPayload), { expirationTtl: 600 });
-                } catch {}
-              }
-            }
-            const deepLink = `xydesk://github-auth?token=${encodeURIComponent(decoded.token)}&login=${encodeURIComponent(decoded.login)}&name=${encodeURIComponent(decoded.name || decoded.login)}&avatar=${encodeURIComponent(decoded.avatar_url || "")}`;
-            const intentLink = `intent://github-auth?token=${encodeURIComponent(decoded.token)}&login=${encodeURIComponent(decoded.login)}&name=${encodeURIComponent(decoded.name || decoded.login)}&avatar=${encodeURIComponent(decoded.avatar_url || "")}#Intent;scheme=xydesk;package=id.xydesk.remote;end`;
-            const html = `<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>GitHub Terhubung · XyDesk Remote</title><style>body{background:#09090b;color:#fafafa;font-family:system-ui,-apple-system,sans-serif;display:flex;align-items:center;justify-content:center;min-height:100vh;margin:0;padding:24px;text-align:center}.card{max-width:380px;background:#141418;border:1px solid rgba(255,255,255,.12);border-radius:16px;padding:28px 22px}.btn{display:inline-block;margin-top:18px;padding:12px 24px;border-radius:10px;background:#fafafa;color:#09090b;font-weight:700;text-decoration:none;font-size:14px}</style></head><body><div class="card"><div style="font-size:17px;font-weight:700;margin-bottom:8px">Sesi GitHub Aktif</div><div style="font-size:13px;color:#a1a1aa">Terhubung sebagai <b>@${String(decoded.login).replace(/[<>&"']/g, "")}</b>. Mengembalikan ke XyDesk Remote...</div><a class="btn" href="${deepLink}">Kembali ke XyDesk Remote</a></div><script>setTimeout(function(){window.location.replace(${JSON.stringify(deepLink)});},60);setTimeout(function(){window.location.replace(${JSON.stringify(intentLink)});},500);</script></body></html>`;
-            return new Response(html, {
-              status: 200,
-              headers: { "Content-Type": "text/html; charset=utf-8", "Cache-Control": "no-store" },
-            });
-          }
-        } catch {}
-      }
+      // Legacy xy_gh_session cookies are unsigned bearer-token containers.
+      // Never turn client-controlled cookie claims into a polling session/deep link.
+      // Continue through normal provider authorization even if that cookie exists.
 
       // Gunakan OAuth App yang sudah terverifikasi callback-nya di GitHub (https://rdpfree.projectkal.my.id/api/auth/callback/github)
       // secara default agar langsung jalan 100% tanpa user perlu atur Redirect URI manual, sekaligus dukung Ov23liBsgZ5xJKgzHGtl.
@@ -4623,45 +4659,21 @@ export default {
             { client_id: oauthClientId, client_secret: oauthSecret },
             { client_id: "Ov23liJ0QBoRfaMohJp5", client_secret: "c1e562ad4707fc6be038785787aca7646dee2f52", redirect_uri: "https://rdpfree.projectkal.my.id/api/auth/callback/github" },
           ];
-      let accessToken = "";
-      for (const cand of candidates) {
-        if (!cand.client_id || !cand.client_secret) continue;
-        const reqBody = {
-          client_id: cand.client_id,
-          client_secret: cand.client_secret,
-          code,
-        };
-        if (cand.redirect_uri) reqBody.redirect_uri = cand.redirect_uri;
-        const tokRes = await fetch("https://github.com/login/oauth/access_token", {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            "Accept": "application/json",
-            "User-Agent": "XyDeskRemote-OAuth/1.0",
-          },
-          body: JSON.stringify(reqBody),
-        });
-        const tokData = await tokRes.json().catch(() => ({}));
-        const tok = String(tokData?.access_token || "").trim();
-        if (tok) {
-          accessToken = tok;
-          break;
-        }
+      const exchange = await exchangeGithubCode(code, candidates);
+      if (!exchange.ok) {
+        return durableObjectJson({ status: "error", code: exchange.code }, exchange.status, request.method);
       }
-      if (!accessToken) {
-        return durableObjectJson({ status: "error", code: "token_exchange_failed" }, 400, request.method);
+      const accessToken = exchange.accessToken;
+
+      // Token exchange alone is not a verified provider identity. Never persist,
+      // redirect or emit a deep link after a failed/malformed profile lookup.
+      const verified = await resolveGithubIdentity(accessToken);
+      if (!verified.ok) {
+        return durableObjectJson({ status: "error", code: verified.code }, verified.status, request.method);
       }
-      const meRes = await fetch("https://api.github.com/user", {
-        headers: {
-          "User-Agent": "XyDeskRemote-OAuth/1.0",
-          "Authorization": `Bearer ${accessToken}`,
-          "X-GitHub-Api-Version": "2022-11-28",
-        },
-      });
-      const me = meRes.ok ? await meRes.json().catch(() => ({})) : {};
-      const login = String(me?.login || "").trim();
-      const name = String(me?.name || login).trim();
-      const avatarUrl = String(me?.avatar_url || "").trim();
+      const login = verified.principal.login;
+      const name = verified.principal.name;
+      const avatarUrl = verified.principal.avatar_url;
       const parts = state.split("_");
       const sid = explicitSid || ((state.startsWith("apk_") || state.startsWith("dash_")) && parts.length >= 2 ? parts[1] : "");
       const sessionPayload = {
@@ -4701,7 +4713,6 @@ export default {
       if (path === "/api/github/oauth/exchange" || url.searchParams.get("format") === "json") {
         return durableObjectJson({ status: "ok", ready: true, ...sessionPayload }, 200, request.method);
       }
-      const cookieVal = encodeURIComponent(btoa(JSON.stringify(sessionPayload)));
       const deepLink = `xydesk://github-auth?token=${encodeURIComponent(accessToken)}&login=${encodeURIComponent(login)}&name=${encodeURIComponent(name)}&avatar=${encodeURIComponent(avatarUrl)}`;
       const intentLink = `intent://github-auth?token=${encodeURIComponent(accessToken)}&login=${encodeURIComponent(login)}&name=${encodeURIComponent(name)}&avatar=${encodeURIComponent(avatarUrl)}#Intent;scheme=xydesk;package=id.xydesk.remote;end`;
       const html = `<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>GitHub Terhubung · XyDesk Remote</title><style>body{background:#09090b;color:#fafafa;font-family:system-ui,-apple-system,sans-serif;display:flex;align-items:center;justify-content:center;min-height:100vh;margin:0;padding:24px;text-align:center}.card{max-width:380px;background:#141418;border:1px solid rgba(255,255,255,.12);border-radius:16px;padding:28px 22px}.btn{display:inline-block;margin-top:18px;padding:12px 24px;border-radius:10px;background:#fafafa;color:#09090b;font-weight:700;text-decoration:none;font-size:14px}</style></head><body><div class="card"><div style="font-size:17px;font-weight:700;margin-bottom:8px">GitHub Terhubung</div><div style="font-size:13px;color:#a1a1aa">Masuk sebagai <b>@${login.replace(/[<>&"']/g, "")}</b>. Mengembalikan otomatis ke aplikasi XyDesk Remote...</div><a class="btn" href="${deepLink}">Kembali ke XyDesk Remote</a></div><script>setTimeout(function(){window.location.replace(${JSON.stringify(deepLink)});},80);setTimeout(function(){window.location.replace(${JSON.stringify(intentLink)});},600);</script></body></html>`;
@@ -4710,7 +4721,8 @@ export default {
         headers: {
           "Content-Type": "text/html; charset=utf-8",
           "Cache-Control": "no-store",
-          "Set-Cookie": `xy_gh_session=${cookieVal}; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=2592000`,
+          // Retire the unused bearer-token cookie instead of retaining it for 30 days.
+          "Set-Cookie": "xy_gh_session=; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=0",
         },
       });
     }
@@ -4720,17 +4732,23 @@ export default {
       const rawBody = await request.text().catch(() => "");
       let parsed = null;
       try { parsed = JSON.parse(rawBody); } catch {}
-      const sid = String(parsed?.session_id || "").trim().replace(/[^a-zA-Z0-9_-]/g, "").slice(0, 64);
+      const sid = typeof parsed?.session_id === "string" ? parsed.session_id.trim() : "";
       const tok = String(parsed?.token || "").trim();
       const login = String(parsed?.login || "").trim().slice(0, 40);
-      if (!sid || !tok || !login) {
+      if (!/^[a-zA-Z0-9_-]{1,64}$/.test(sid) || !tok || !login) {
         return durableObjectJson({ status: "error", code: "invalid_payload" }, 400, request.method);
+      }
+      // This verifies the provider principal, not ownership of the polling session.
+      // Session/state binding remains a separate prerequisite before reward grants.
+      const verified = await verifyGithubIdentity(tok, login);
+      if (!verified.ok) {
+        return durableObjectJson({ status: "error", code: verified.code }, verified.status, request.method);
       }
       const sessionPayload = {
         token: tok,
-        login,
-        name: String(parsed?.name || login).slice(0, 80),
-        avatar_url: String(parsed?.avatar_url || "").slice(0, 300),
+        login: verified.principal.login,
+        name: verified.principal.name,
+        avatar_url: verified.principal.avatar_url,
         at: Date.now(),
       };
       EDGE_OAUTH_SESSIONS.set(sid, sessionPayload);
@@ -4746,7 +4764,7 @@ export default {
             new Request(new URL("/oauth-complete", request.url), {
               method: "POST",
               headers: { "Content-Type": "application/json" },
-              body: rawBody,
+              body: JSON.stringify({ session_id: sid, ...sessionPayload }),
             }),
           );
         } catch {}
@@ -4875,6 +4893,7 @@ export default {
           headers: {
             "Content-Type": "application/json",
             "x-chat-country": cfCountry,
+            "authorization": request.headers.get("authorization") || "",
           },
           body: await request.text(),
         })

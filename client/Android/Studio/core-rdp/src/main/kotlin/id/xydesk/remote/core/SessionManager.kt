@@ -100,6 +100,71 @@ class SessionManager(context: Context) {
     @Volatile private var sink: GraphicsSink? = null
     @Volatile private var released = false
     @Volatile private var lastProfile: ConnectionProfile? = null
+    @Volatile private var captureForegroundAllowed = false
+    // Describes the native URI, NOT measured recording or server-side negotiation.
+    @Volatile private var nativeCaptureRequested = false
+    @Volatile private var nativeMicrophoneRequested = false
+    private val sessionMicrophoneControl = SessionMicrophoneControl()
+
+    /** Stop a capture-bearing connection on background; desktop-only keep-alive remains allowed. */
+    fun setCaptureForegroundAllowed(allowed: Boolean) {
+        synchronized(lifecycleLock) {
+            captureForegroundAllowed = allowed && !released
+            if (!captureForegroundAllowed) {
+                sessionMicrophoneControl.cancel(suppressActivation = true)
+                setVoiceMicEnabled(false)
+                if (nativeCaptureRequested && core != null &&
+                    (_state.value is SessionState.Connected || _state.value is SessionState.Connecting ||
+                        _state.value is SessionState.Authenticating)) {
+                    ConnectionLog.add("CM: capture background diblokir; meminta putus native, bukan mengklaim mic OFF")
+                    disconnect()
+                }
+            }
+        }
+    }
+
+    /** URI intent only; not proof of device capture or the Windows/game input level. */
+    fun nativeMicrophoneRequested(): Boolean = nativeMicrophoneRequested
+
+    fun nativeMicrophoneControlGeneration(): Long = synchronized(lifecycleLock) {
+        sessionMicrophoneControl.generation()
+    }
+
+    fun nativeMicrophoneChangePending(): Boolean = synchronized(lifecycleLock) {
+        sessionMicrophoneControl.isPending()
+    }
+
+    /** Changes only this manager/session, by terminating the old native channel then reconnecting. */
+    fun requestNativeMicrophoneChange(enabled: Boolean, expectedInstance: Long, expectedGeneration: Long): Boolean = synchronized(lifecycleLock) {
+        if (expectedGeneration != sessionMicrophoneControl.generation() ||
+            released || !captureForegroundAllowed || expectedInstance == 0L || !isCurrent(expectedInstance) ||
+            _state.value !is SessionState.Connected || sessionMicrophoneControl.isPending()) return@synchronized false
+        if (enabled && appContext.checkSelfPermission(android.Manifest.permission.RECORD_AUDIO) != android.content.pm.PackageManager.PERMISSION_GRANTED)
+            return@synchronized false
+        val profile = lastProfile ?: return@synchronized false
+        val options = runCatching { RdpOptions.of(appContext, profile.id) }.getOrNull() ?: return@synchronized false
+        if (options.pcConnectMode || nativeMicrophoneRequested == enabled) return@synchronized false
+        setVoiceMicEnabled(false)
+        sessionMicrophoneControl.plan(profile.id, expectedInstance, enabled)
+        requestDisconnect(preserveNativeMicChange = true)
+        true
+    }
+
+    /** Call only AFTER confirmed native terminal cleanup. Never reconnect from a mere timeout. */
+    private fun restartForNativeMicrophoneChange(inst: Long, profile: ConnectionProfile?): Boolean = synchronized(lifecycleLock) {
+        val restart = sessionMicrophoneControl.take(inst) ?: return@synchronized false
+        if (profile == null || profile.id != restart.profileId || released || !captureForegroundAllowed)
+            return@synchronized false
+        transition(SessionState.Connecting)
+        mainHandler.post {
+            synchronized(lifecycleLock) {
+                if (!released && captureForegroundAllowed && core == null && sessionMicrophoneControl.isCurrent(restart)) {
+                    connect(profile)
+                }
+            }
+        }
+        true
+    }
 
     // Telemetry (M2+)
     private val frameCounter = AtomicInteger(0)
@@ -130,32 +195,38 @@ class SessionManager(context: Context) {
         quicAudioBridge?.tap = tap
     }
 
+    fun audioBridgeDiagnostics(): AudioBridgeDiagnostics = quicAudioBridge?.diagnostics() ?: AudioBridgeDiagnostics()
+
     fun isVoiceMicEnabled(): Boolean = quicAudioBridge?.micActive == true
 
     fun setVoiceMicEnabled(enabled: Boolean) {
-        val bridge = quicAudioBridge
-        if (bridge != null) {
-            bridge.setVoiceMicEnabled(enabled)
-        } else if (enabled) {
-            val p = lastProfile ?: return
-            val opts = runCatching { RdpOptions.of(appContext, p.id) }.getOrDefault(RdpOptions())
-            quicAudioBridge = QuicAudioBridge(
-                host = p.host,
-                port = 4433,
-                enableSpeaker = opts.quicAudio,
-                enableMic = true,
-                micGainDb = opts.micGainDb,
-                micGateDb = opts.micGateDb,
-                micNoiseSuppression = opts.micNoiseSuppression,
-                micAgc = opts.micAgc,
-                onStatus = { st ->
-                    audioBridgeState = st
-                    listener?.onAudioBridge(st)
-                },
-                onLevel = { tx, rx -> listener?.onAudioLevel(tx, rx) },
-            ).also {
-                pendingAudioTap?.let { tap -> it.tap = tap }
-                it.start()
+        synchronized(lifecycleLock) {
+            if (enabled && (released || !captureForegroundAllowed || nativeMicrophoneRequested || sessionMicrophoneControl.isPending() || _state.value !is SessionState.Connected ||
+                    appContext.checkSelfPermission(android.Manifest.permission.RECORD_AUDIO) != android.content.pm.PackageManager.PERMISSION_GRANTED)) return
+            val bridge = quicAudioBridge
+            if (bridge != null) {
+                bridge.setVoiceMicEnabled(enabled)
+            } else if (enabled) {
+                val p = lastProfile ?: return
+                val opts = runCatching { RdpOptions.of(appContext, p.id) }.getOrDefault(RdpOptions())
+                quicAudioBridge = QuicAudioBridge(
+                    host = p.host,
+                    port = 4433,
+                    enableSpeaker = opts.quicAudio,
+                    enableMic = true,
+                    micGainDb = opts.micGainDb,
+                    micGateDb = opts.micGateDb,
+                    micNoiseSuppression = opts.micNoiseSuppression,
+                    micAgc = opts.micAgc,
+                    onStatus = { st ->
+                        audioBridgeState = st
+                        listener?.onAudioBridge(st)
+                    },
+                    onLevel = { tx, rx -> listener?.onAudioLevel(tx, rx) },
+                ).also {
+                    pendingAudioTap?.let { tap -> it.tap = tap }
+                    it.start()
+                }
             }
         }
     }
@@ -288,22 +359,14 @@ class SessionManager(context: Context) {
                 base
             }
         }
-        val options = storedOptions.resolveForActiveNetwork(appContext).forSessionProfile(profile).let { resolved ->
-            when (compatHandshakeStage) {
-                1 -> resolved.copy(
-                    tlsSecLevel = 0,
-                    udpTransport = false,
-                    securityProtocol = XySecurityProtocol.AUTO,
-                )
-                2 -> resolved.copy(
-                    tlsSecLevel = 0,
-                    udpTransport = false,
-                    securityProtocol = XySecurityProtocol.TLS,
-                    h264 = false,
-                )
-                else -> resolved
-            }
-        }
+        val options = storedOptions.resolveForActiveNetwork(appContext).forSessionProfile(profile)
+            .let { sessionMicrophoneControl.apply(profile.id, it) }
+            .withCapturePermissions(
+                microphoneGranted = appContext.checkSelfPermission(android.Manifest.permission.RECORD_AUDIO) == android.content.pm.PackageManager.PERMISSION_GRANTED,
+                cameraGranted = appContext.checkSelfPermission(android.Manifest.permission.CAMERA) == android.content.pm.PackageManager.PERMISSION_GRANTED,
+            ).forCaptureVisibility(captureForegroundAllowed).forHandshakeCompatibility(compatHandshakeStage)
+        nativeMicrophoneRequested = options.microphone
+        nativeCaptureRequested = options.microphone || options.camera
         activeCodec = options.activeCodecLabel()
         activeUdp = options.udpTransport
         activeBpp = options.colorDepth
@@ -402,6 +465,9 @@ class SessionManager(context: Context) {
                 Log.w(TAG, "connect() ditunda; instance native lama masih aktif")
                 return
             }
+            // A new accepted attempt owns fresh cancellation intent.
+            sessionMicrophoneControl.cancel()
+            userInitiatedDisconnect = false
             val uri = sessionUri(profile)
             // Never log the RDP URI: its query may contain the plaintext password.
             ConnectionLog.add("CM: native createSession mulai (${profile.host}:${profile.port}) compatStage=$compatHandshakeStage")
@@ -439,7 +505,7 @@ class SessionManager(context: Context) {
                 else "TCP ${profile.host}:${profile.port} GAGAL"
             )
             if (!reachable) {
-                cleanupTerminalSession(inst)
+                if (!cleanupTerminalSession(inst)) return@execute
                 if (!userInitiatedDisconnect && !released && connectedAtMs > 0L && autoReconnectAttempts in 1..7) {
                     autoReconnectAttempts++
                     ConnectionLog.add("CM: jaringan belum pulih, tunggu 2s untuk auto-reconnect #${autoReconnectAttempts}")
@@ -462,9 +528,7 @@ class SessionManager(context: Context) {
                 transition(
                     SessionState.Error(
                         ERROR_UNREACHABLE,
-                        "Tidak bisa menghubungi ${profile.host}:${profile.port}. Kemungkinan: " +
-                            "RDP nonaktif, firewall memblokir, nama host salah, atau target " +
-                            "Windows Home (tidak punya server RDP).",
+                        RdpConnectionDiagnostics.unreachableMessage(profile.host, profile.port),
                         errorCode = RdpFailure.codeFor(ERROR_UNREACHABLE, ""),
                     )
                 )
@@ -473,6 +537,14 @@ class SessionManager(context: Context) {
             try {
                 synchronized(lifecycleLock) {
                     if (!isCurrent(inst) || released) return@execute
+                    // Visibility may change while the TCP probe is in flight. Do not start
+                    // an old capture-bearing URI after onStop revoked foreground access.
+                    if (userInitiatedDisconnect || (nativeCaptureRequested && !captureForegroundAllowed)) {
+                        if (cleanupTerminalSession(inst)) {
+                            transition(SessionState.Disconnected("Koneksi dibatalkan sebelum engine dimulai."))
+                        }
+                        return@execute
+                    }
                     setStage(Stage.HANDSHAKE)
                     ConnectionLog.add("CM: worker: session.connect mulai (native parse args + spawn connect thread)")
                     session.connect(appContext) // native worker starts before lock is released
@@ -507,6 +579,7 @@ class SessionManager(context: Context) {
 
     /** Batalkan koneksi yang sedang berjalan (tanpa menunggu timeout server). */
     fun cancelConnection() {
+        synchronized(lifecycleLock) { sessionMicrophoneControl.cancel(suppressActivation = true) }
         userInitiatedDisconnect = true
         stopWatchdog()
         val inst = core?.getInstance() ?: return
@@ -529,13 +602,18 @@ class SessionManager(context: Context) {
     }
 
     /** Ajaikan disconnect normal (dari sisi kita). */
-    fun disconnect() {
+    fun disconnect() = requestDisconnect(preserveNativeMicChange = false)
+
+    private fun requestDisconnect(preserveNativeMicChange: Boolean) {
+        if (!preserveNativeMicChange) {
+            synchronized(lifecycleLock) { sessionMicrophoneControl.cancel(suppressActivation = true) }
+        }
         userInitiatedDisconnect = true
         stopWatchdog()
         val inst = core?.getInstance() ?: return
         transition(SessionState.Disconnecting)
         if (!LibFreeRDP.disconnect(inst)) {
-            // native menolak — anggap sudah putus dan bebaskan instance terminal
+            // Native menolak: status putus belum terbukti; pertahankan instance sampai terminal/release.
             if (isCurrent(inst)) {
                 transition(
                     SessionState.Error(
@@ -569,9 +647,9 @@ class SessionManager(context: Context) {
         synchronized(lifecycleLock) {
             if (released) return
             released = true
+            sessionMicrophoneControl.cancel(suppressActivation = true)
             stopWatchdog()
             val inst = core?.getInstance()
-            core = null
             sink = null
             listener = null
             if (inst != null && inst != 0L) {
@@ -583,12 +661,24 @@ class SessionManager(context: Context) {
                 }
                 // Free only after any in-flight session.connect() call has
                 // crossed the same lock and registered the native worker.
-                GlobalApp.freeSession(inst)
+                try {
+                    GlobalApp.freeSession(inst)
+                    core = null
+                    nativeCaptureRequested = false
+                    nativeMicrophoneRequested = false
+                } catch (t: Throwable) {
+                    ConnectionLog.addThrowable("CM: release native belum terkonfirmasi inst=$inst", t)
+                    transition(SessionState.Error(
+                        "native_cleanup_unconfirmed",
+                        "Engine belum terkonfirmasi dilepas; jangan anggap capture berhenti.",
+                        connectionId = inst,
+                    ))
+                }
             }
             worker.shutdownNow()
         }
-        if (_state.value is SessionState.Connected || _state.value is SessionState.Connecting ||
-            _state.value is SessionState.Authenticating || _state.value is SessionState.Disconnecting
+        if (core == null && (_state.value is SessionState.Connected || _state.value is SessionState.Connecting ||
+            _state.value is SessionState.Authenticating || _state.value is SessionState.Disconnecting)
         ) {
             transition(SessionState.Idle)
         }
@@ -825,22 +915,30 @@ class SessionManager(context: Context) {
      * FreeRDP.freeInstance menunggu worker native berhenti;
      * lifecycleLock mencegah release/retry membebaskan instance dua kali.
      */
-    private fun cleanupTerminalSession(inst: Long) {
-        synchronized(lifecycleLock) {
-            quicAudioBridge?.stop()
-            quicAudioBridge = null
-            val session = core ?: return
-            if (session.getInstance() != inst) return
-            stopWatchdog()
-            GlobalApp.unregisterSessionListener(inst)
+    private fun cleanupTerminalSession(inst: Long): Boolean = synchronized(lifecycleLock) {
+        val session = core ?: return@synchronized false
+        if (session.getInstance() != inst) return@synchronized false
+        quicAudioBridge?.stop()
+        quicAudioBridge = null
+        stopWatchdog()
+        GlobalApp.unregisterSessionListener(inst)
+        try {
+            GlobalApp.freeSession(inst)
+            // A missing core must mean release succeeded, not merely that it was requested.
             core = null
-            try {
-                GlobalApp.freeSession(inst)
-                ConnectionLog.add("CM: terminal session freed inst=$inst")
-            } catch (t: Throwable) {
-                Log.e(TAG, "gagal melepas terminal session inst=$inst", t)
-                ConnectionLog.addThrowable("CM: gagal melepas terminal session inst=$inst", t)
-            }
+            nativeCaptureRequested = false
+            nativeMicrophoneRequested = false
+            ConnectionLog.add("CM: terminal session freed inst=$inst")
+            true
+        } catch (t: Throwable) {
+            Log.e(TAG, "gagal melepas terminal session inst=$inst", t)
+            ConnectionLog.addThrowable("CM: gagal melepas terminal session inst=$inst", t)
+            transition(SessionState.Error(
+                "native_cleanup_unconfirmed",
+                "Pelepasan engine belum terkonfirmasi. Jangan anggap mic berhenti; tutup aplikasi jika sesi tidak dapat dihentikan.",
+                connectionId = inst,
+            ))
+            false
         }
     }
 
@@ -859,6 +957,10 @@ class SessionManager(context: Context) {
             // Callback sudah di-dispatch ke main thread oleh GlobalApp
             override fun onConnectionSuccess() {
                 if (!isCurrent(inst)) return
+                if (userInitiatedDisconnect || (nativeCaptureRequested && !captureForegroundAllowed)) {
+                    if (_state.value !is SessionState.Disconnecting) disconnect()
+                    return
+                }
                 stopWatchdog()
                 userInitiatedDisconnect = false
                 autoReconnectAttempts = 0
@@ -873,7 +975,9 @@ class SessionManager(context: Context) {
                     // kanal RDP (rdpsnd), jadi bridge hanya mengantar suara di mode
                     // "Audio di PC" (REMOTE).
                     val speakerOn = opts.quicAudio && opts.audioMode == XyAudioMode.REMOTE
-                    val micOn = opts.usesQuicMicrophone() || opts.microphone
+                    // Bridge microphone is an explicit session action, not a saved startup preference.
+                    // The separate native RDP microphone option is unchanged here.
+                    val micOn = false
                     if (speakerOn || micOn) {
                         audioBridgeState = "start…"
                         listener?.onAudioBridge(audioBridgeState)
@@ -913,7 +1017,7 @@ class SessionManager(context: Context) {
             override fun onConnectionFailure() {
                 if (!isCurrent(inst)) return
                 stopWatchdog()
-                ConnectionLog.add("koneksi GAGAL (event native)")
+                ConnectionLog.add("CM: terminal failure callback native; klasifikasi setelah cleanup")
                 val p = lastProfile
                 val nativeDetail = runCatching {
                     LibFreeRDP.getLastErrorString(inst).trim()
@@ -922,13 +1026,20 @@ class SessionManager(context: Context) {
                     lower.contains("logon") || lower.contains("password") ||
                         lower.contains("access_denied") || lower.contains("denied")
                 }
-                cleanupTerminalSession(inst)
+                if (!cleanupTerminalSession(inst)) return
+                if (restartForNativeMicrophoneChange(inst, p)) return
+                if (RdpFailure.isExpectedCancellation(userInitiatedDisconnect, nativeDetail)) {
+                    setStage(Stage.IDLE)
+                    ConnectionLog.add("CM: pembatalan/putus yang diminta selesai; bukan kegagalan login baru")
+                    transition(SessionState.Disconnected())
+                    return
+                }
                 if (!userInitiatedDisconnect && !released && !isAuthFailure &&
                     connectedAtMs == 0L && lastTcpReachable && compatHandshakeStage < 2 && p != null
                 ) {
                     compatHandshakeStage++
                     ConnectionLog.add(
-                        "CM: negosiasi awal gagal padahal TCP hidup ($nativeDetail) -> coba otomatis mode kompatibilitas Windows App #$compatHandshakeStage",
+                        "CM: negosiasi awal gagal padahal TCP hidup ($nativeDetail) -> coba ulang TCP/codec tanpa mengubah TLS/NLA #$compatHandshakeStage",
                     )
                     transition(SessionState.Connecting)
                     mainHandler.postDelayed({
@@ -991,7 +1102,8 @@ class SessionManager(context: Context) {
                         lower.contains("server denied connection")
                 }
                 val p = lastProfile
-                cleanupTerminalSession(inst)
+                if (!cleanupTerminalSession(inst)) return
+                if (restartForNativeMicrophoneChange(inst, p)) return
                 if (!userInitiatedDisconnect && !released && nativeDetail == null &&
                     connectedAtMs > 0L && autoReconnectAttempts < 6 && p != null
                 ) {

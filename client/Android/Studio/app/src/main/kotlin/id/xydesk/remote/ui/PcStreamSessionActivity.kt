@@ -94,8 +94,8 @@ import kotlin.math.roundToInt
 /**
  * Sesi PC-stream produksi XyDesk dengan 2 engine terintegrasi:
  *  1) **Engine Konsol Mandiri (`XYV1` + `XYA1` + `XYI1` via UDP :4433)**:
- *     Terhubung langsung ke `XyDeskRemoteHost-Standalone.exe` di sesi konsol
- *     fisik Windows (`SM_REMOTESESSION == 0`, bebas deteksi RDP anti-cheat)
+ *     Terhubung langsung ke `XyDeskRemoteHost.exe` di sesi konsol
+ *     fisik Windows (`SM_REMOTESESSION == 0`; bukan jaminan kompatibilitas game/anti-cheat)
  *     dengan injeksi hardware `SendInput(MOUSEEVENTF_MOVE)` 120Hz untuk Game FPS.
  *  2) **Hub WebRTC (`signal.xydesk.my.id`)**:
  *     Pairing ID host 9 digit + PIN 6 digit → video WebRTC + DataChannel `input`.
@@ -104,6 +104,57 @@ class PcStreamSessionActivity : ComponentActivity() {
     private var viewer: XyHubStreamViewer? = null
     private var eglBase: EglBase? = null
     private var directClient: XyDirectConsoleStreamClient? = null
+
+    private var privateDirectConfirmed = false
+    private val micRequested = mutableStateOf(false)
+    private var pendingMicTarget: Any? = null
+    private val requestMicPermission = registerForActivityResult(
+        androidx.activity.result.contract.ActivityResultContracts.RequestPermission(),
+    ) { granted ->
+        val target = pendingMicTarget
+        pendingMicTarget = null
+        val current = if (directModeActive.value) directClient else viewer
+        if (canApplySessionMicPermission(granted, target != null && current === target,
+            lifecycle.currentState.isAtLeast(androidx.lifecycle.Lifecycle.State.STARTED))) {
+            setSessionMicEnabled(true)
+        } else {
+            hostNotice.value = "Mikrofon belum aktif: izin ditolak atau sesi sudah berubah."
+        }
+    }
+
+    private fun setSessionMicEnabled(enabled: Boolean) {
+        if (enabled && !inputOpen.value) {
+            hostNotice.value = "Mikrofon belum siap: hubungkan sesi terlebih dahulu."
+            return
+        }
+        val accepted = if (directModeActive.value) {
+            directClient?.let { it.setVoiceMicEnabled(enabled); true } ?: false
+        } else {
+            viewer?.setVoiceMicEnabled(enabled) == true
+        }
+        micRequested.value = enabled && accepted
+        if (enabled) hostNotice.value = if (accepted) {
+            "Mic HP diminta untuk sesi. Deteksi perangkat mikrofon Windows belum diverifikasi."
+        } else "Mikrofon gagal diaktifkan pada jalur sesi ini."
+    }
+
+    private fun toggleSessionMic() {
+        if (micRequested.value) { setSessionMicEnabled(false); return }
+        if (checkSelfPermission(android.Manifest.permission.RECORD_AUDIO) == android.content.pm.PackageManager.PERMISSION_GRANTED) {
+            setSessionMicEnabled(true)
+        } else {
+            pendingMicTarget = if (directModeActive.value) directClient else viewer
+            requestMicPermission.launch(android.Manifest.permission.RECORD_AUDIO)
+        }
+    }
+
+    override fun onStop() {
+        pendingMicTarget = null
+        micRequested.value = false
+        directClient?.setVoiceMicEnabled(false)
+        viewer?.setVoiceMicEnabled(false)
+        super.onStop()
+    }
 
     /** ID host sesi berjalan — kunci penyimpanan tata letak virtual pad. */
     private var activeHostId: String = ""
@@ -213,6 +264,12 @@ class PcStreamSessionActivity : ComponentActivity() {
     }
 
     private fun startDirectConsoleSession(hostIp: String, port: Int = 4433, targetFps: Int = 120) {
+        if (!privateDirectConfirmed || !isPrivateDirectHost(hostIp)) {
+            failure.value = "Host Direct hanya untuk LAN/Tailscale privat yang Anda percayai."
+            return
+        }
+        setSessionMicEnabled(false)
+        pendingMicTarget = null
         val cleanIp = hostIp.trim()
         if (cleanIp.isEmpty()) return
         directClient?.close()
@@ -270,6 +327,8 @@ class PcStreamSessionActivity : ComponentActivity() {
     }
 
     private fun startSession(hostId: String, pin: String) {
+        setSessionMicEnabled(false)
+        pendingMicTarget = null
         directModeActive.value = false
         if (started.value) {
             val current = sessionState.value
@@ -491,6 +550,8 @@ class PcStreamSessionActivity : ComponentActivity() {
     }
 
     private fun restartSession() {
+        setSessionMicEnabled(false)
+        pendingMicTarget = null
         if (directModeActive.value) {
             val ip = lastDirectIp
             if (ip.isNotBlank()) {
@@ -619,6 +680,9 @@ class PcStreamSessionActivity : ComponentActivity() {
 
     @Composable
     private fun PairingStage() {
+        var hubMode by remember { mutableStateOf(false) }
+        var directHost by remember { mutableStateOf("") }
+        var trustedNetwork by remember { mutableStateOf(false) }
         var hostId by remember { mutableStateOf("") }
         var pin by remember { mutableStateOf("") }
         val scroll = rememberScrollState()
@@ -646,14 +710,21 @@ class PcStreamSessionActivity : ComponentActivity() {
             Spacer(Modifier.height(4.dp))
             Text(
                 xy(
-                    "Masukkan ID 9 digit dan PIN 6 digit yang tampil di aplikasi XyDesk Host pada PC Windows Anda.",
-                    "Enter the 9-digit ID and 6-digit PIN shown on the XyDesk Host app on your Windows PC.",
+                    "XyDeskRemoteHost.exe memakai Host Direct melalui LAN/Tailscale. Pairing Hub adalah jalur host lain, bukan ID dari EXE ini.",
+                    "XyDeskRemoteHost.exe uses Direct Host over LAN/Tailscale. Hub pairing is a separate host path, not this EXE's ID.",
                 ),
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
             Spacer(Modifier.height(16.dp))
-            if (true) {
+            XySegmented(
+                options = listOf("Direct lama (uji privat)", "Hub (host lain)"),
+                selectedIndex = if (hubMode) 1 else 0,
+                onSelect = { hubMode = it == 1 },
+                modifier = Modifier.fillMaxWidth(),
+            )
+            Spacer(Modifier.height(12.dp))
+            if (hubMode) {
                 XyField(
                     value = hostId,
                     onValueChange = { hostId = it.filter(Char::isDigit).take(9) },
@@ -742,6 +813,44 @@ class PcStreamSessionActivity : ComponentActivity() {
                         ),
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.error,
+                    )
+                }
+            } else {
+                Text(
+                    "Jalur UDP lama belum memiliki autentikasi/enkripsi aplikasi. Host baru menonaktifkannya secara default; hanya pengujian pemilik dengan --legacy-private-udp. Jangan buka ke internet. Pairing aman sedang dikerjakan.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.error,
+                )
+                Spacer(Modifier.height(10.dp))
+                XyField(
+                    value = directHost,
+                    onValueChange = { directHost = it.trim(); trustedNetwork = false },
+                    label = "IP privat / nama Tailscale host",
+                    hint = "192.168.1.10 atau pc.tailnet.ts.net",
+                )
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    androidx.compose.material3.Checkbox(checked = trustedNetwork, onCheckedChange = { trustedNetwork = it })
+                    Text("Saya mengendalikan host dan memakai jaringan privat terpercaya.", style = MaterialTheme.typography.bodySmall)
+                }
+                XyPillButton(
+                    text = "Sambungkan XyDeskRemoteHost.exe",
+                    onClick = { privateDirectConfirmed = trustedNetwork; startDirectConsoleSession(directHost) },
+                    enabled = trustedNetwork && isPrivateDirectHost(directHost),
+                    modifier = Modifier.fillMaxWidth(),
+                )
+                XyPillButton(
+                    text = if (scanningLan.value) "Memindai LAN…" else "Cari host di LAN",
+                    onClick = ::scanLanConsoleHosts,
+                    enabled = !scanningLan.value,
+                    primary = false,
+                    modifier = Modifier.fillMaxWidth(),
+                )
+                discoveredHosts.value.take(8).forEach { host ->
+                    XyPillButton(
+                        text = "${host.hostname} · ${host.ip}",
+                        onClick = { directHost = host.ip; trustedNetwork = false },
+                        primary = false,
+                        modifier = Modifier.fillMaxWidth(),
                     )
                 }
             }
@@ -947,14 +1056,11 @@ class PcStreamSessionActivity : ComponentActivity() {
                     color = Color.White,
                 )
                 Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                    var voiceOn by remember { mutableStateOf(false) }
                     XyPillButton(
-                        text = if (voiceOn) "VOICE ON" else "VOICE OFF",
-                        onClick = {
-                            voiceOn = !voiceOn
-                            directClient?.setVoiceMicEnabled(voiceOn)
-                        },
-                        primary = voiceOn,
+                        text = if (micRequested.value) "MIC DIMINTA" else "MIC OFF",
+                        onClick = ::toggleSessionMic,
+                        enabled = inputOpen.value,
+                        primary = micRequested.value,
                         compact = true,
                     )
                     XyPillButton(
@@ -1038,8 +1144,8 @@ class PcStreamSessionActivity : ComponentActivity() {
                     Text(
                         if (directModeActive.value) {
                             xy(
-                                "Pastikan XyDeskRemoteHost-Standalone.exe berjalan di sesi konsol PC dan port UDP 4433 terbuka di jaringan/Tailscale.",
-                                "Make sure XyDeskRemoteHost-Standalone.exe is running on the PC console session and UDP port 4433 is reachable on LAN/Tailscale.",
+                                "Pastikan XyDeskRemoteHost.exe berjalan di sesi konsol PC dan port UDP 4433 terbuka di jaringan/Tailscale.",
+                                "Make sure XyDeskRemoteHost.exe is running on the PC console session and UDP port 4433 is reachable on LAN/Tailscale.",
                             )
                         } else {
                             hostCaptureHint.value ?: xy(
@@ -1105,6 +1211,7 @@ class PcStreamSessionActivity : ComponentActivity() {
                 PcStreamPadOverlay(
                     prefs = remember { SessionPrefs(activity) },
                     deviceId = activeHostId,
+                    inputAvailable = inputOpen.value,
                     onSend = { state ->
                         if (inputOpen.value) {
                             viewer?.sendInputPacket(XyHostInputCodec.gamepad(state))

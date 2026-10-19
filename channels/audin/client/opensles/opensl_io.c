@@ -317,7 +317,7 @@ static void opensles_queue_element_free(void* obj)
 OPENSL_STREAM* android_OpenRecDevice(void* context, opensl_receive_t receive, size_t sr,
                                      size_t inchannels, size_t bufferframes, size_t bits_per_sample)
 {
-	if (!context || !receive)
+	if (!context || !receive || sr == 0 || inchannels == 0 || bufferframes == 0)
 		return nullptr;
 
 	OPENSL_STREAM* p = (OPENSL_STREAM*)calloc(1, sizeof(OPENSL_STREAM));
@@ -363,9 +363,18 @@ OPENSL_STREAM* android_OpenRecDevice(void* context, opensl_receive_t receive, si
 	if (!p->prep || !p->next)
 		goto fail;
 
-	(*p->recorderBufferQueue)->Enqueue(p->recorderBufferQueue, p->next->data, p->next->size);
-	(*p->recorderBufferQueue)->Enqueue(p->recorderBufferQueue, p->prep->data, p->prep->size);
-	(*p->recorderRecord)->SetRecordState(p->recorderRecord, SL_RECORDSTATE_RECORDING);
+	/* Never report a working recorder when queueing or recording failed. */
+	SLresult result = (*p->recorderBufferQueue)->Enqueue(
+	    p->recorderBufferQueue, p->next->data, p->next->size);
+	if (result != SL_RESULT_SUCCESS)
+		goto fail;
+	result = (*p->recorderBufferQueue)->Enqueue(
+	    p->recorderBufferQueue, p->prep->data, p->prep->size);
+	if (result != SL_RESULT_SUCCESS)
+		goto fail;
+	result = (*p->recorderRecord)->SetRecordState(p->recorderRecord, SL_RECORDSTATE_RECORDING);
+	if (result != SL_RESULT_SUCCESS)
+		goto fail;
 	return p;
 fail:
 	android_CloseRecDevice(p);
@@ -378,15 +387,24 @@ void android_CloseRecDevice(OPENSL_STREAM* p)
 	if (p == nullptr)
 		return;
 
+	/* The recorder owns the queued buffers until its callbacks have stopped. */
+	if (p->recorderRecord)
+	{
+		const SLresult result = (*p->recorderRecord)->SetRecordState(
+		    p->recorderRecord, SL_RECORDSTATE_STOPPED);
+		if (result != SL_RESULT_SUCCESS)
+			WLog_WARN(TAG, "Stopping recorder failed with %u; destroying recorder", result);
+	}
+	openSLDestroyEngine(p);
 	opensles_queue_element_free(p->next);
 	opensles_queue_element_free(p->prep);
-	openSLDestroyEngine(p);
 	free(p);
 }
 
 // this callback handler is called every time a buffer finishes recording
 static void bqRecorderCallback(SLAndroidSimpleBufferQueueItf bq, void* context)
 {
+	(void)bq;
 	OPENSL_STREAM* p = (OPENSL_STREAM*)context;
 	queue_element* e;
 

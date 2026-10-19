@@ -148,6 +148,13 @@ import id.xydesk.remote.ui.components.XyIconPill
 import id.xydesk.remote.ui.components.XyOverlay
 import id.xydesk.remote.ui.components.XyPillButton
 import id.xydesk.remote.ui.components.XyTopBar
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
+import kotlinx.coroutines.sync.Semaphore
+import kotlinx.coroutines.sync.withPermit
+import androidx.compose.runtime.snapshotFlow
+import kotlinx.coroutines.flow.collectLatest
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -170,7 +177,6 @@ import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
 import java.util.TimeZone
-import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.TimeUnit
 import javax.crypto.Cipher
 import javax.crypto.Mac
@@ -185,23 +191,21 @@ import kotlin.math.roundToInt
  * - Khusus **Founder (`@xykal`)**: Badge & Bubble Beranimasi Epik (`FounderAnimatedBubbleBox` +
  *   `XyFounderBadge` dengan sapuan Liquid Gold & mahkota bersayap).
  * - **100% Vector Icons** (tanpa emoji untuk ikon UI): centang 1 / 2 vektor (`✓` / `✓✓`),
- *   ikon balas vektor, stiker vektor, lampiran vektor, kamera vektor, bagikan vektor, dan perisai E2EE.
+ *   ikon balas vektor, stiker vektor, lampiran vektor, kamera vektor, bagikan vektor, dan perisai keamanan pesan.
  * - **Koleksi Stiker Ilustrasi AI Unik** (`sticker_xy_gg`, `sticker_xy_laugh`, `sticker_xy_fire`,
  *   `sticker_xy_chill`, `sticker_xy_sad`, `sticker_xy_king`).
  * - **Tahan (Long-Press) Bubble Chat**: otomatis memfokuskan bubble yang ditahan, memberikan
  *   efek **Blur Background** di belakangnya, dan memunculkan **Menu Konteks ala iPhone / WhatsApp**.
  * - **Privasi Member Baru (`joined_at`)**: pengguna yang baru bergabung tidak dapat melihat
  *   riwayat chat sebelum waktu bergabungnya.
- * - **End-to-End Encryption (`XY-E2EE-GCM-v1`) & Validasi Kriptografi Tingkat Lanjut** (`AES-256-GCM` + `HMAC-SHA256`).
+ * - **Proteksi Transit Pesan (`XY-E2EE-GCM-v1`: AES-256-GCM + HMAC-SHA256)** — enkripsi &
+ *   integritas saat transit via WSS/TLS; BUKAN E2EE sejati (lihat catatan di `ChatE2eeCrypto`).
  * - **Total Online Aplikasi**: dihitung dari seluruh pengguna yang sedang membuka aplikasi XyDesk Remote.
  * - **Fitur Share Chat Global** langsung dari header maupun dari menu tahan bubble.
  */
 
 private const val CHAT_WS_URL = "wss://api.xydeskremote.biz.id/ws/chat"
 private const val CHAT_HISTORY_URL = "https://api.xydeskremote.biz.id/api/chat/history"
-private const val CHAT_SEND_URL = "https://api.xydeskremote.biz.id/api/chat/send"
-private const val CHAT_PIN_URL = "https://api.xydeskremote.biz.id/api/chat/pin"
-private const val CHAT_DELETE_URL = "https://api.xydeskremote.biz.id/api/chat/delete"
 private const val CHAT_PREFS = "xydesk.global.chat"
 private const val KEY_NICKNAME = "nickname"
 private const val KEY_TARGET_LANG = "viewer_target_lang"
@@ -214,9 +218,10 @@ private const val KEY_AUTO_DOWNLOAD_MEDIA = "chat_auto_download_media_v1"
 private const val KEY_HD_MEDIA_ENABLED = "chat_hd_media_enabled_v1"
 private const val KEY_AUTOPLAY_VIDEO = "chat_autoplay_video_v1"
 private const val KEY_NOTIF_TONE = "chat_notif_tone_v1"
-private const val KEY_VOICE_ENABLED = "chat_voice_enabled_v1"
 
-private val chatDecodedBitmapCache = android.util.LruCache<Int, Bitmap>(48)
+private val chatDecodedBitmapCache = object : android.util.LruCache<String, Bitmap>(12 * 1024 * 1024) {
+    override fun sizeOf(key: String, value: Bitmap): Int = value.allocationByteCount.coerceAtLeast(1)
+}
 
 private data class PendingStudioMedia(
     val attachmentType: String, // "image", "video", "file"
@@ -228,294 +233,6 @@ private data class PendingStudioMedia(
     val viewOnce: Boolean = false,
 )
 
-private data class PinnedChatMessage(
-    val id: String,
-    val name: String,
-    val githubLogin: String = "",
-    val text: String,
-    val pinnedBy: String = "",
-    val at: Long = 0L,
-)
-
-private data class ChatMessage(
-    val id: String,
-    val name: String,
-    val githubLogin: String = "",
-    val country: String,
-    val flag: String,
-    val text: String,
-    val translated: String,
-    val targetLang: String,
-    val sourceLang: String = "",
-    val at: Long,
-    val mine: Boolean,
-    val isFounder: Boolean = isFounderAccount(name) || isFounderAccount(githubLogin),
-    val isAnnouncement: Boolean = false,
-    val replyToId: String = "",
-    val replyToName: String = "",
-    val replyToText: String = "",
-    val attachmentType: String = "", // "", "image", "video", "file", "sticker"
-    val attachmentName: String = "",
-    val attachmentMime: String = "",
-    val attachmentSize: Int = 0,
-    val attachmentData: String = "",
-    val viewOnce: Boolean = false,
-    val avatarUrl: String = "",
-    val deliveryTicks: Int = 2, // 1 = terkirim ke antrean (✓), 2 = tervalidasi E2EE & diterima room (✓✓)
-    val e2eeProtocol: String = "XY-E2EE-GCM-v1",
-    val e2eeSig: String = "",
-    val e2eeVerified: Boolean = true,
-)
-
-private data class XyStickerPreset(
-    val id: String,
-    @DrawableRes val drawableRes: Int,
-    val title: String,
-    val subtitle: String,
-    val pack: String = "Matte",
-)
-
-private val XY_STICKERS = listOf(
-    // Seri Matte Flat Expressive (No-Neon, Die-Cut Transparan)
-    XyStickerPreset("matte_cat_wave", R.drawable.sticker_matte_cat_wave, "Halo Santai", "Mochi Cat Wave", "Matte"),
-    XyStickerPreset("matte_duck_ok", R.drawable.sticker_matte_duck_ok, "Siap OK!", "Cozy Duck Thumbs Up", "Matte"),
-    XyStickerPreset("matte_shiba_love", R.drawable.sticker_matte_shiba_love, "Mantap Jiwa", "Shiba Heart Love", "Matte"),
-    XyStickerPreset("matte_bear_sleep", R.drawable.sticker_matte_bear_sleep, "Ngantuk Berat", "Sleepy Bear Zzz", "Matte"),
-    XyStickerPreset("matte_panda_shock", R.drawable.sticker_matte_panda_shock, "Waduh Kaget!", "Shocked Panda", "Matte"),
-    XyStickerPreset("matte_bunny_hype", R.drawable.sticker_matte_bunny_hype, "Cool Abis", "Sunglasses Bunny", "Matte"),
-    // Seri XyCyber Mascot
-    XyStickerPreset("xy_gg", R.drawable.sticker_xy_gg, "GGWP Mantap!", "Thumbs Up Mascot", "XyCyber"),
-    XyStickerPreset("xy_laugh", R.drawable.sticker_xy_laugh, "Ngakak Parah", "Laughing Mascot", "XyCyber"),
-    XyStickerPreset("xy_fire", R.drawable.sticker_xy_fire, "Gaskeun 120 FPS!", "On Fire Boost", "XyCyber"),
-    XyStickerPreset("xy_chill", R.drawable.sticker_xy_chill, "Santai Ngopi", "Chill Session", "XyCyber"),
-    XyStickerPreset("xy_sad", R.drawable.sticker_xy_sad, "Ping 999ms…", "Connection Drop", "XyCyber"),
-    XyStickerPreset("xy_king", R.drawable.sticker_xy_king, "Sovereign Boss", "Royal Crown Salute", "XyCyber"),
-)
-
-private object GlobalChatMemoryCache {
-    val messages = ArrayList<ChatMessage>()
-    var pinnedMessage: PinnedChatMessage? = null
-}
-
-private data class LangOption(
-    val code: String,
-    val label: String,
-    val badge: String,
-)
-
-private val SUPPORTED_VIEWER_LANGS = listOf(
-    LangOption("auto", "Otomatis Sesuai Region Negara Penonton (All Negara)", "AUTO"),
-    LangOption("id", "Bahasa Indonesia", "ID"),
-    LangOption("en", "English (Inggris)", "EN"),
-    LangOption("ms", "Bahasa Melayu (Malaysia / Brunei)", "MS"),
-    LangOption("th", "ภาษาไทย (Thailand)", "TH"),
-    LangOption("ja", "日本語 (Jepang)", "JA"),
-    LangOption("ko", "한국어 (Korea)", "KO"),
-    LangOption("zh-CN", "中文简体 (Mandarin / Tiongkok)", "ZH"),
-    LangOption("zh-TW", "中文繁體 (Taiwan / Hong Kong)", "TW"),
-    LangOption("vi", "Tiếng Việt (Vietnam)", "VI"),
-    LangOption("tl", "Filipino / Tagalog (Filipina)", "TL"),
-    LangOption("ar", "العربية (Timur Tengah / Arab)", "AR"),
-    LangOption("ru", "Русский (Rusia / CIS)", "RU"),
-    LangOption("hi", "हिन्दी (India)", "HI"),
-    LangOption("ur", "اردو (Pakistan)", "UR"),
-    LangOption("bn", "বাংলা (Bangladesh)", "BN"),
-    LangOption("es", "Español (Spanyol / Amerika Latin)", "ES"),
-    LangOption("pt", "Português (Brasil / Portugal)", "PT"),
-    LangOption("de", "Deutsch (Jerman / Austria / Swiss)", "DE"),
-    LangOption("fr", "Français (Prancis / Kanada / Afrika)", "FR"),
-    LangOption("it", "Italiano (Italia)", "IT"),
-    LangOption("nl", "Nederlands (Belanda / Belgia)", "NL"),
-    LangOption("tr", "Türkçe (Turki)", "TR"),
-    LangOption("pl", "Polski (Polandia)", "PL"),
-    LangOption("uk", "Українська (Ukraina)", "UK"),
-)
-
-private val COUNTRY_TO_PRIMARY_LANG = mapOf(
-    // Asia Tenggara & Pasifik
-    "ID" to "id", "TL" to "pt",
-    "MY" to "ms", "BN" to "ms",
-    "SG" to "en", "PH" to "tl",
-    "TH" to "th", "VN" to "vi",
-    "KH" to "km", "LA" to "lo", "MM" to "my",
-    "AU" to "en", "NZ" to "en", "FJ" to "en", "PG" to "en",
-    // Asia Timur
-    "JP" to "ja", "KR" to "ko", "KP" to "ko",
-    "CN" to "zh-CN", "TW" to "zh-TW", "HK" to "zh-TW", "MO" to "zh-TW", "MN" to "mn",
-    // Asia Selatan & Tengah
-    "IN" to "hi", "PK" to "ur", "BD" to "bn", "LK" to "si", "NP" to "ne", "MV" to "en",
-    "KZ" to "ru", "UZ" to "uz", "KG" to "ru", "TJ" to "tg", "TM" to "tk",
-    // Timur Tengah & Afrika Utara
-    "SA" to "ar", "AE" to "ar", "QA" to "ar", "KW" to "ar", "BH" to "ar", "OM" to "ar",
-    "YE" to "ar", "IQ" to "ar", "SY" to "ar", "JO" to "ar", "LB" to "ar", "PS" to "ar",
-    "EG" to "ar", "LY" to "ar", "TN" to "ar", "DZ" to "ar", "MA" to "ar", "SD" to "ar",
-    "IR" to "fa", "AF" to "fa", "IL" to "iw", "TR" to "tr", "AZ" to "az", "GE" to "ka", "AM" to "hy",
-    // Eropa
-    "GB" to "en", "IE" to "en", "MT" to "en",
-    "DE" to "de", "AT" to "de", "CH" to "de", "LI" to "de", "LU" to "fr",
-    "FR" to "fr", "MC" to "fr", "BE" to "nl", "NL" to "nl",
-    "ES" to "es", "AD" to "ca", "PT" to "pt",
-    "IT" to "it", "SM" to "it", "VA" to "it",
-    "RU" to "ru", "BY" to "ru", "UA" to "uk", "MD" to "ro", "RO" to "ro",
-    "PL" to "pl", "CZ" to "cs", "SK" to "sk", "HU" to "hu", "BG" to "bg",
-    "RS" to "sr", "HR" to "hr", "BA" to "bs", "SI" to "sl", "ME" to "sr", "MK" to "mk", "AL" to "sq",
-    "GR" to "el", "CY" to "el",
-    "SE" to "sv", "NO" to "no", "DK" to "da", "FI" to "fi", "IS" to "is",
-    "EE" to "et", "LV" to "lv", "LT" to "lt",
-    // Amerika Utara & Latin
-    "US" to "en", "CA" to "en", "JM" to "en", "TT" to "en", "BS" to "en", "BB" to "en", "BZ" to "en", "GY" to "en",
-    "MX" to "es", "GT" to "es", "SV" to "es", "HN" to "es", "NI" to "es", "CR" to "es", "PA" to "es",
-    "CU" to "es", "DO" to "es", "PR" to "es",
-    "CO" to "es", "VE" to "es", "EC" to "es", "PE" to "es", "BO" to "es", "PY" to "es", "CL" to "es", "AR" to "es", "UY" to "es",
-    "BR" to "pt", "SR" to "nl", "HT" to "fr",
-    // Afrika Sub-Sahara
-    "ZA" to "en", "NG" to "en", "KE" to "sw", "TZ" to "sw", "UG" to "en", "GH" to "en",
-    "ET" to "am", "SO" to "so", "SN" to "fr", "CI" to "fr", "CM" to "fr", "CD" to "fr",
-    "AO" to "pt", "MZ" to "pt", "ZW" to "en", "ZM" to "en", "RW" to "en",
-)
-
-internal fun resolveRegionPrimaryLanguage(countryCode: String): String {
-    val cc = countryCode.trim().uppercase(Locale.ROOT)
-    COUNTRY_TO_PRIMARY_LANG[cc]?.let { return it }
-    val devLang = Locale.getDefault().language.trim().lowercase(Locale.ROOT)
-    return when {
-        devLang == "in" || devLang == "id" -> "id"
-        devLang == "zh" -> if (cc in setOf("TW", "HK", "MO")) "zh-TW" else "zh-CN"
-        devLang.isNotBlank() -> devLang
-        else -> "en"
-    }
-}
-
-internal fun normalizeLangFamily(code: String): String {
-    val c = code.trim().lowercase(Locale.ROOT)
-    return when {
-        c == "in" || c == "id" || c == "jv" || c == "su" -> "id"
-        c == "fil" || c == "tl" -> "tl"
-        c == "he" || c == "iw" -> "iw"
-        c.startsWith("zh-tw") || c.startsWith("zh-hk") -> "zh-tw"
-        c.startsWith("zh") -> "zh-cn"
-        c.contains("-") -> c.substringBefore("-")
-        else -> c
-    }
-}
-
-private val CLIENT_LANG_TO_COUNTRY = mapOf(
-    "id" to "ID", "in" to "ID", "jv" to "ID", "su" to "ID",
-    "ms" to "MY",
-    "th" to "TH",
-    "ja" to "JP",
-    "ko" to "KR",
-    "vi" to "VN",
-    "tl" to "PH", "fil" to "PH",
-    "zh" to "CN", "zh-cn" to "CN", "zh-tw" to "TW",
-    "ru" to "RU",
-    "uk" to "UA",
-    "ar" to "SA",
-    "hi" to "IN",
-    "tr" to "TR",
-    "de" to "DE",
-    "fr" to "FR",
-    "es" to "ES",
-    "pt" to "BR",
-    "it" to "IT",
-    "nl" to "NL",
-)
-
-private val CLIENT_ID_WORD_REGEX = Regex(
-    "\\b(halo|hai|apa|gimana|bagaimana|bisa|bang|bre|bro|kak|gan|aku|kamu|saya|kita|yang|ini|itu|dari|buat|untuk|udah|sudah|belum|tidak|tak|gak|nggak|konek|koneksi|langsung|terima|kasih|makasih|mantap|keren|tolong|cara|pakai|pake|kenapa|dimana|kapan|siapa|boleh|dong|aja|saja|kok|nih|tuh|lagi|sama|kalau|kalo|bukan|dengan|di|ke|jir|anjir|wkwk|wkwkwk|gasken|gas|sip|oke|mantul)\\b",
-    RegexOption.IGNORE_CASE,
-)
-
-/**
- * Mesin Enkripsi End-to-End (`XY-E2EE-GCM-v1`) menggunakan AES-256-GCM + HMAC-SHA256.
- * Memastikan setiap pesan dienkripsi dan memiliki tanda tangan integritas kriptografis
- * yang terikat ke pengirim dan waktu pengiriman.
- */
-private object ChatE2eeCrypto {
-    private const val PROTOCOL = "XY-E2EE-GCM-v1"
-    private const val ROOM_SEED = "XyDesk-GlobalChat-E2EE-Sovereign-v1-2026"
-
-    private val aesKey: SecretKeySpec by lazy {
-        val digest = MessageDigest.getInstance("SHA-256")
-            .digest(ROOM_SEED.toByteArray(Charsets.UTF_8))
-        SecretKeySpec(digest, "AES")
-    }
-
-    private val hmacKey: SecretKeySpec by lazy {
-        val digest = MessageDigest.getInstance("SHA-256")
-            .digest("$ROOM_SEED:HMAC-AUTH".toByteArray(Charsets.UTF_8))
-        SecretKeySpec(digest, "HmacSHA256")
-    }
-
-    data class SealedPayload(
-        val protocol: String,
-        val cipherBase64: String,
-        val ivBase64: String,
-        val signatureHex: String,
-    )
-
-    fun seal(plainText: String, senderName: String, githubLogin: String, timestampMs: Long): SealedPayload {
-        return runCatching {
-            val iv = ByteArray(12)
-            SecureRandom().nextBytes(iv)
-            val cipher = Cipher.getInstance("AES/GCM/NoPadding")
-            cipher.init(Cipher.ENCRYPT_MODE, aesKey, GCMParameterSpec(128, iv))
-            val aad = "${senderName.lowercase(Locale.ROOT)}|${githubLogin.lowercase(Locale.ROOT)}"
-                .toByteArray(Charsets.UTF_8)
-            cipher.updateAAD(aad)
-            val encrypted = cipher.doFinal(plainText.toByteArray(Charsets.UTF_8))
-            val cipherB64 = Base64.encodeToString(encrypted, Base64.NO_WRAP)
-            val ivB64 = Base64.encodeToString(iv, Base64.NO_WRAP)
-            val sig = sign(plainText, senderName, githubLogin, cipherB64)
-            SealedPayload(PROTOCOL, cipherB64, ivB64, sig)
-        }.getOrElse {
-            SealedPayload(PROTOCOL, "", "", sign(plainText, senderName, githubLogin, ""))
-        }
-    }
-
-    fun openAndVerify(
-        fallbackText: String,
-        senderName: String,
-        githubLogin: String,
-        cipherBase64: String,
-        ivBase64: String,
-        signatureHex: String,
-    ): Pair<String, Boolean> {
-        if (cipherBase64.isNotBlank() && ivBase64.isNotBlank()) {
-            runCatching {
-                val iv = Base64.decode(ivBase64, Base64.DEFAULT)
-                val encrypted = Base64.decode(cipherBase64, Base64.DEFAULT)
-                val cipher = Cipher.getInstance("AES/GCM/NoPadding")
-                cipher.init(Cipher.DECRYPT_MODE, aesKey, GCMParameterSpec(128, iv))
-                val aad = "${senderName.lowercase(Locale.ROOT)}|${githubLogin.lowercase(Locale.ROOT)}"
-                    .toByteArray(Charsets.UTF_8)
-                cipher.updateAAD(aad)
-                val decrypted = String(cipher.doFinal(encrypted), Charsets.UTF_8)
-                val expectedSig = sign(decrypted, senderName, githubLogin, cipherBase64)
-                val sigOk = signatureHex.isBlank() || expectedSig.equals(signatureHex, ignoreCase = true)
-                return decrypted to sigOk
-            }
-        }
-        if (signatureHex.isNotBlank()) {
-            val expected = sign(fallbackText, senderName, githubLogin, cipherBase64)
-            return fallbackText to expected.equals(signatureHex, ignoreCase = true)
-        }
-        return fallbackText to true
-    }
-
-    fun sign(text: String, senderName: String, githubLogin: String, cipherB64: String): String {
-        return runCatching {
-            val mac = Mac.getInstance("HmacSHA256")
-            mac.init(hmacKey)
-            val raw = "${senderName.trim().lowercase(Locale.ROOT)}|${githubLogin.trim().lowercase(Locale.ROOT)}|${text.trim()}|$cipherB64"
-            val bytes = mac.doFinal(raw.toByteArray(Charsets.UTF_8))
-            bytes.take(16).joinToString("") { "%02x".format(it) }
-        }.getOrDefault("e2ee-verified")
-    }
-}
-
-/** Cache foto profil pengirim di memori agar scroll chat mulus 120 FPS. */
-private val avatarMemoryCache = ConcurrentHashMap<String, Bitmap>()
 
 internal fun chatNickname(context: Context): String {
     val prefs = context.getSharedPreferences(CHAT_PREFS, Context.MODE_PRIVATE)
@@ -559,6 +276,7 @@ internal fun ensureFirstJoinedAtMs(context: Context, githubLogin: String?): Long
             .putLong("first_joined_at_ms", ts)
             .apply()
     }
+    prefs.edit().putLong("first_joined_at_ms", ts).apply()
     return ts
 }
 
@@ -624,97 +342,6 @@ internal fun countryCodeToFlag(countryCode: String): String {
     return String(first) + String(second)
 }
 
-private fun parseMessageFromJson(m: JSONObject, myName: String, myGithubLogin: String?): ChatMessage {
-    val msgId = m.optString("id")
-    val sender = m.optString("name", "User")
-    val ghLogin = m.optString("github_login", "").trim().removePrefix("@")
-    val rawText = m.optString("text", "")
-    val sourceLang = m.optString("source_lang", "")
-    val rawCountry = m.optString("country", "ID").ifBlank { "ID" }
-    val e2eeCipher = m.optString("e2ee_cipher", "")
-    val e2eeIv = m.optString("e2ee_iv", "")
-    val e2eeSig = m.optString("e2ee_sig", "")
-    val e2eeProto = m.optString("e2ee_v", "XY-E2EE-GCM-v1").ifBlank { "XY-E2EE-GCM-v1" }
-
-    val (openedText, verified) = ChatE2eeCrypto.openAndVerify(
-        fallbackText = rawText,
-        senderName = sender,
-        githubLogin = ghLogin,
-        cipherBase64 = e2eeCipher,
-        ivBase64 = e2eeIv,
-        signatureHex = e2eeSig,
-    )
-
-    val smartCountry = resolveSmartCountryClient(openedText, sourceLang, rawCountry)
-    val flag = countryCodeToFlag(smartCountry)
-    val rawAttachmentType = m.optString("attachment_type", "").ifBlank {
-        val kind = m.optString("attachment_kind", "")
-        if (kind == "photo") "image" else kind
-    }
-    val cleanedMediaText = if (rawAttachmentType == "image" || rawAttachmentType == "video" || rawAttachmentType == "sticker") {
-        val trimmed = openedText.trim()
-        if (trimmed.matches(Regex("^\\[(?:Foto|Video|Stiker|Media)[^\\]]*\\]$", RegexOption.IGNORE_CASE)) ||
-            (rawAttachmentType == "sticker" && XY_STICKERS.any { it.title.equals(trimmed, ignoreCase = true) })
-        ) {
-            ""
-        } else {
-            openedText
-        }
-    } else {
-        openedText
-    }
-    val resolvedAvatar = m.optString("avatar_url", "").ifBlank {
-        if (ghLogin.isNotBlank()) "https://github.com/$ghLogin.png?size=120" else ""
-    }
-    val isMine = sender.equals(myName, ignoreCase = true) ||
-        (!myGithubLogin.isNullOrBlank() && ghLogin.equals(myGithubLogin, ignoreCase = true))
-
-    return ChatMessage(
-        id = msgId,
-        name = sender,
-        githubLogin = ghLogin,
-        country = smartCountry,
-        flag = flag,
-        text = cleanedMediaText,
-        translated = if (isMine || cleanedMediaText.isBlank()) "" else m.optString("translated", ""),
-        targetLang = m.optString("target_lang", "EN").ifBlank { "EN" },
-        sourceLang = sourceLang,
-        at = m.optLong("at", System.currentTimeMillis()),
-        mine = isMine,
-        isFounder = m.optBoolean("is_founder", isFounderAccount(sender) || isFounderAccount(ghLogin)),
-        isAnnouncement = m.optBoolean("is_announcement", false),
-        replyToId = m.optString("reply_to_id", ""),
-        replyToName = m.optString("reply_to_name", ""),
-        replyToText = m.optString("reply_to_text", ""),
-        attachmentType = rawAttachmentType,
-        attachmentName = m.optString("attachment_name", ""),
-        attachmentMime = m.optString("attachment_mime", ""),
-        attachmentSize = m.optInt("attachment_size", 0),
-        attachmentData = m.optString("attachment_data", ""),
-        viewOnce = m.optBoolean("view_once", false),
-        avatarUrl = resolvedAvatar,
-        deliveryTicks = 2,
-        e2eeProtocol = e2eeProto,
-        e2eeSig = e2eeSig.ifBlank { ChatE2eeCrypto.sign(openedText, sender, ghLogin, e2eeCipher) },
-        e2eeVerified = verified,
-    )
-}
-
-private fun parsePinnedMessageFromJson(p: JSONObject?): PinnedChatMessage? {
-    if (p == null) return null
-    val id = p.optString("id", "").trim()
-    val text = p.optString("text", "").trim()
-    if (id.isEmpty() && text.isEmpty()) return null
-    return PinnedChatMessage(
-        id = id,
-        name = p.optString("name", "User"),
-        githubLogin = p.optString("github_login", ""),
-        text = text,
-        pinnedBy = p.optString("pinned_by", ""),
-        at = p.optLong("at", 0L),
-    )
-}
-
 @Composable
 internal fun GlobalChatScreen(
     onBack: () -> Unit,
@@ -722,6 +349,20 @@ internal fun GlobalChatScreen(
     onHeaderDrag: ((Float, Float) -> Unit)? = null,
     isCompactFloating: Boolean = false,
     onToggleCompactFloating: (() -> Unit)? = null,
+) {
+    val account = rememberVerifiedChatAccount(LocalContext.current)
+    androidx.compose.runtime.key(normalizedChatAccount(account)) {
+        GlobalChatAccountContent(onBack, isOverlayMode, onHeaderDrag, isCompactFloating, onToggleCompactFloating)
+    }
+}
+
+@Composable
+private fun GlobalChatAccountContent(
+    onBack: () -> Unit,
+    isOverlayMode: Boolean,
+    onHeaderDrag: ((Float, Float) -> Unit)?,
+    isCompactFloating: Boolean,
+    onToggleCompactFloating: (() -> Unit)?,
 ) {
     val context = LocalContext.current
     val haptic = LocalHapticFeedback.current
@@ -741,12 +382,14 @@ internal fun GlobalChatScreen(
     val oauthRev = GitHubDirectOAuthController.authRevision
     LaunchedEffect(oauthRev) {
         val currentUser = getVerifiedGitHubLogin(context)
-        if (!currentUser.isNullOrBlank() && currentUser != verifiedGhLogin) {
+        if (currentUser != verifiedGhLogin) {
             verifiedGhLogin = currentUser
             nickname = chatNickname(context)
             firstJoinedAtMs = ensureFirstJoinedAtMs(context, currentUser)
         }
     }
+    val hiddenIdsKey = chatAccountPreferenceKey(KEY_HIDDEN_MSG_IDS, verifiedGhLogin)
+    val viewedIdsKey = chatAccountPreferenceKey(KEY_VIEWED_ONCE_IDS, verifiedGhLogin)
     val myCountry = remember { chatCountryCode(context) }
     val myFlag = remember(myCountry) { countryCodeToFlag(myCountry) }
     var viewerTargetLang by remember {
@@ -755,6 +398,8 @@ internal fun GlobalChatScreen(
 
     var showLangPicker by remember { mutableStateOf(false) }
     var showChatSettings by remember { mutableStateOf(false) }
+    var historyIssue by remember(verifiedGhLogin) { mutableStateOf<String?>(null) }
+    var historyRetryAt by remember(verifiedGhLogin) { mutableStateOf(0L) }
     var showStickerPicker by remember { mutableStateOf(false) }
     var showAttachMenu by remember { mutableStateOf(false) }
     var viewOnceMediaMode by remember { mutableStateOf(false) }
@@ -784,55 +429,52 @@ internal fun GlobalChatScreen(
     var notifSoundTone by remember {
         mutableStateOf(chatPrefs.getString(KEY_NOTIF_TONE, "default") ?: "default")
     }
-    var voiceEnabled by remember {
-        mutableStateOf(chatPrefs.getBoolean(KEY_VOICE_ENABLED, false))
-    }
-    val ttsHolder = remember { arrayOfNulls<android.speech.tts.TextToSpeech>(1) }
-    DisposableEffect(voiceEnabled) {
-        if (voiceEnabled && ttsHolder[0] == null) {
-            runCatching {
-                ttsHolder[0] = android.speech.tts.TextToSpeech(context.applicationContext) { status ->
-                    if (status == android.speech.tts.TextToSpeech.SUCCESS) {
-                        runCatching { ttsHolder[0]?.language = Locale("id", "ID") }
-                    }
-                }
-            }
-        } else if (!voiceEnabled) {
-            runCatching { ttsHolder[0]?.stop() }
-        }
-        onDispose {
-            runCatching {
-                ttsHolder[0]?.stop()
-                ttsHolder[0]?.shutdown()
-            }
-            ttsHolder[0] = null
-        }
-    }
     var favoriteStickerKeys by remember {
         mutableStateOf(CustomStickerVault.loadFavoriteKeys(context))
     }
     val manuallyDownloadedIds = remember { mutableStateListOf<String>() }
 
     var replyingTo by remember { mutableStateOf<ChatMessage?>(null) }
-    var pinnedMessage by remember { mutableStateOf<PinnedChatMessage?>(GlobalChatMemoryCache.pinnedMessage) }
+    var pinnedMessage by remember(verifiedGhLogin) { mutableStateOf<PinnedChatMessage?>(null) }
     var focusedContextMsg by remember { mutableStateOf<ChatMessage?>(null) }
+    var editingMessage by remember { mutableStateOf<ChatMessage?>(null) }
+    var editText by remember { mutableStateOf("") }
+    val failedMutations = remember { mutableStateMapOf<String, Pair<String, String>>() }
+
     var inspectingE2eeMsg by remember { mutableStateOf<ChatMessage?>(null) }
     var fullscreenMediaMsg by remember { mutableStateOf<ChatMessage?>(null) }
 
-    val messages = remember {
-        mutableStateListOf<ChatMessage>().apply {
-            addAll(GlobalChatMemoryCache.messages)
+    val messages = remember(verifiedGhLogin) {
+        mutableStateListOf<ChatMessage>()
+    }
+    var cacheWriteEpoch by remember { mutableStateOf(GlobalChatOfflineCache.nextWriteEpoch(verifiedGhLogin.orEmpty())) }
+
+    LaunchedEffect(verifiedGhLogin) {
+        val login = verifiedGhLogin.orEmpty()
+        val cached = withContext(Dispatchers.IO) {
+            GlobalChatOfflineCache.read(context.applicationContext, login, nickname)
+        }
+        // Network may have completed while disk was being read; don't replace fresher state.
+        val hidden = chatPrefs.getStringSet(hiddenIdsKey, chatPrefs.getStringSet(KEY_HIDDEN_MSG_IDS, emptySet())).orEmpty()
+        if (messages.isEmpty()) messages.addAll(cached.filter {
+            it.id !in hidden && it.at >= firstJoinedAtMs - 2_000L
+        })
+        snapshotFlow { cacheWriteEpoch to messages.toList() }.collectLatest { (epoch, snapshot) ->
+            delay(800L)
+            withContext(Dispatchers.IO) {
+                GlobalChatOfflineCache.write(context.applicationContext, login, snapshot, epoch)
+            }
         }
     }
     val hiddenMessageIds = remember {
         mutableStateListOf<String>().apply {
-            val saved = chatPrefs.getStringSet(KEY_HIDDEN_MSG_IDS, emptySet()).orEmpty()
+            val saved = chatPrefs.getStringSet(hiddenIdsKey, chatPrefs.getStringSet(KEY_HIDDEN_MSG_IDS, emptySet())).orEmpty()
             addAll(saved)
         }
     }
     val viewedOnceIds = remember {
         mutableStateListOf<String>().apply {
-            val saved = chatPrefs.getStringSet(KEY_VIEWED_ONCE_IDS, emptySet()).orEmpty()
+            val saved = chatPrefs.getStringSet(viewedIdsKey, chatPrefs.getStringSet(KEY_VIEWED_ONCE_IDS, emptySet())).orEmpty()
             addAll(saved)
         }
     }
@@ -842,51 +484,90 @@ internal fun GlobalChatScreen(
     fun markMediaViewedOnce(msgId: String) {
         if (msgId.isNotBlank() && msgId !in viewedOnceIds) {
             viewedOnceIds.add(msgId)
-            chatPrefs.edit().putStringSet(KEY_VIEWED_ONCE_IDS, viewedOnceIds.toSet()).apply()
+            chatPrefs.edit().putStringSet(viewedIdsKey, viewedOnceIds.toSet()).apply()
         }
     }
 
     fun deleteMessageForMe(target: ChatMessage) {
         if (target.id.isNotBlank() && target.id !in hiddenMessageIds) {
             hiddenMessageIds.add(target.id)
-            chatPrefs.edit().putStringSet(KEY_HIDDEN_MSG_IDS, hiddenMessageIds.toSet()).apply()
+            chatPrefs.edit().putStringSet(hiddenIdsKey, hiddenMessageIds.toSet()).apply()
         }
         messages.removeAll { it.id == target.id }
         Toast.makeText(context, "Pesan dihapus untuk saya", Toast.LENGTH_SHORT).show()
     }
 
-    fun deleteMessageForEveryone(target: ChatMessage) {
-        if (target.id.isNotBlank() && target.id !in hiddenMessageIds) {
-            hiddenMessageIds.add(target.id)
-            chatPrefs.edit().putStringSet(KEY_HIDDEN_MSG_IDS, hiddenMessageIds.toSet()).apply()
+    fun applyIncomingMutation(incoming: ChatMessage) {
+        val index = messages.indexOfFirst { it.id == incoming.id }
+        if (index >= 0) {
+            if (incoming.revision > messages[index].revision) failedMutations.remove(incoming.id)
+            messages[index] = reconcileChatMessage(messages[index], incoming)
+        } else {
+            if (incoming.id in hiddenMessageIds || incoming.at < firstJoinedAtMs - 2_000L) return
+            // A mutation can beat initial history parsing; keep its revision so old history cannot resurrect text.
+            messages.add(incoming)
+            messages.sortBy { it.at }
+            if (messages.size > 100) messages.removeAt(0)
         }
-        messages.removeAll { it.id == target.id }
-        if (pinnedMessage?.id == target.id) {
-            pinnedMessage = null
+        if (incoming.deleted) {
+            id.xydesk.remote.push.ChatPushNotifier.retractMessage(context, incoming.id)
+            messages.indices.forEach { i ->
+                if (messages[i].replyToId == incoming.id) messages[i] = messages[i].copy(replyToText = "Pesan ini dihapus")
+            }
+            if (replyingTo?.id == incoming.id) replyingTo = null
+            if (fullscreenMediaMsg?.id == incoming.id) fullscreenMediaMsg = null
         }
-        val payload = JSONObject().apply {
-            put("type", "delete")
-            put("id", target.id)
-            put("deleted_by", nickname)
-            put("github_login", verifiedGhLogin.orEmpty())
+        if (pinnedMessage?.id == incoming.id) pinnedMessage = null
+        // Persist ACK without the normal debounce; obsolete queued snapshots cannot restore old text.
+        cacheWriteEpoch = GlobalChatOfflineCache.nextWriteEpoch(verifiedGhLogin.orEmpty())
+        GlobalChatOfflineCache.persistConfirmed(context, verifiedGhLogin.orEmpty(), messages.toList(), cacheWriteEpoch)
+    }
+
+    fun mutateMessage(target: ChatMessage, action: String, text: String = "") {
+        val index = messages.indexOfFirst { it.id == target.id }
+        if (index < 0 || messages[index].revision != target.revision || !canMutateChatMessage(messages[index], verifiedGhLogin)) {
+            Toast.makeText(context, "Pesan/status sudah berubah. Salin draf edit bila perlu, lalu buka ulang pesan terbaru.", Toast.LENGTH_LONG).show()
+            return
         }
-        chatSocketSend(payload.toString())
-        scope.launch(Dispatchers.IO) {
-            runCatching {
-                val conn = (URL(CHAT_DELETE_URL).openConnection() as HttpURLConnection).apply {
-                    requestMethod = "POST"
-                    doOutput = true
-                    connectTimeout = 8_000
-                    readTimeout = 8_000
-                    setRequestProperty("Content-Type", "application/json; charset=utf-8")
+        editingMessage = null
+        val original = messages[index]
+        val operation = java.util.UUID.randomUUID().toString()
+        val account = verifiedGhLogin
+        val now = System.currentTimeMillis()
+        val optimistic = if (action == "delete") original.deletedPlaceholder(now)
+            else original.copy(text = text.trim(), translated = "", editedAt = now, e2eeSig = "", e2eeVerified = false)
+        messages[index] = optimistic.copy(mutationPending = true, mutationId = operation, mutationError = "")
+        failedMutations.remove(target.id)
+        focusedContextMsg = null
+        scope.launch {
+            val outcome = withContext(Dispatchers.IO) {
+                runCatching {
+                    check(normalizedChatAccount(getVerifiedGitHubLogin(context)) == normalizedChatAccount(account))
+                    val token = GlobalChatRepository.token(context)?.takeIf { it.isNotBlank() } ?: error("Login kembali diperlukan")
+                    val body = JSONObject().put("id", original.id).put("expected_revision", original.revision)
+                        .put("operation_id", operation).put("text", text.trim())
+                    val json = GlobalChatRepository.mutate(if (action == "delete") CHAT_DELETE_URL else CHAT_EDIT_URL, body, token)
+                    val incoming = parseMessageFromJson(json, nickname, account)
+                    check(json.optString("last_mutation_id") == operation && isConfirmedChatMutation(original, incoming, action, text))
+                    incoming
                 }
-                conn.outputStream.use { it.write(payload.toString().toByteArray(Charsets.UTF_8)) }
-                conn.responseCode
-                conn.disconnect()
+            }
+            outcome.onSuccess { incoming ->
+                applyIncomingMutation(incoming)
+                failedMutations.remove(target.id)
+            }.onFailure {
+                val current = messages.indexOfFirst { it.id == original.id }
+                // A newer WS/history revision wins over a late HTTP failure.
+                if (current >= 0 && messages[current].mutationId == operation) {
+                    messages[current] = original.copy(mutationError = "Perubahan belum terkonfirmasi · coba lagi")
+                    failedMutations[original.id] = action to text
+                    Toast.makeText(context, "Perubahan belum terkonfirmasi. Tampilan dipulihkan; tekan lama untuk coba lagi. Jika ditolak, sinkronkan ulang atau login kembali.", Toast.LENGTH_LONG).show()
+                }
             }
         }
-        Toast.makeText(context, "Pesan dihapus untuk semua orang", Toast.LENGTH_SHORT).show()
     }
+
+    fun deleteMessageForEveryone(target: ChatMessage) = mutateMessage(target, "delete")
 
     fun updatePinnedMessage(target: ChatMessage?, pin: Boolean) {
         if (pin && target != null) {
@@ -917,16 +598,7 @@ internal fun GlobalChatScreen(
             chatSocketSend(payload.toString())
             scope.launch(Dispatchers.IO) {
                 runCatching {
-                    val conn = (URL(CHAT_PIN_URL).openConnection() as HttpURLConnection).apply {
-                        requestMethod = "POST"
-                        doOutput = true
-                        connectTimeout = 8_000
-                        readTimeout = 8_000
-                        setRequestProperty("Content-Type", "application/json; charset=utf-8")
-                    }
-                    conn.outputStream.use { it.write(payload.toString().toByteArray(Charsets.UTF_8)) }
-                    conn.responseCode
-                    conn.disconnect()
+                    GlobalChatRepository.postAction(CHAT_PIN_URL, payload)
                 }
             }
             Toast.makeText(context, "Pesan disematkan di atas Chat Global", Toast.LENGTH_SHORT).show()
@@ -939,16 +611,7 @@ internal fun GlobalChatScreen(
             chatSocketSend(payload.toString())
             scope.launch(Dispatchers.IO) {
                 runCatching {
-                    val conn = (URL(CHAT_PIN_URL).openConnection() as HttpURLConnection).apply {
-                        requestMethod = "POST"
-                        doOutput = true
-                        connectTimeout = 8_000
-                        readTimeout = 8_000
-                        setRequestProperty("Content-Type", "application/json; charset=utf-8")
-                    }
-                    conn.outputStream.use { it.write(payload.toString().toByteArray(Charsets.UTF_8)) }
-                    conn.responseCode
-                    conn.disconnect()
+                    GlobalChatRepository.postAction(CHAT_PIN_URL, payload)
                 }
             }
             Toast.makeText(context, "Sematan pesan dilepas", Toast.LENGTH_SHORT).show()
@@ -976,11 +639,11 @@ internal fun GlobalChatScreen(
                 }
                 append("— ${specificMsg.name}")
                 if (specificMsg.githubLogin.isNotBlank()) append(" (@${specificMsg.githubLogin})")
-                append(" di Chat Global XyDesk Remote (E2EE AES-256-GCM)\n")
+                append(" di Chat Global XyDesk Remote\n")
                 append("Gabung sekarang: https://www.xydeskremote.biz.id")
             }
         } else {
-            "Gabung ke Chat Global XyDesk Remote! Obrolan real-time terenkripsi ujung-ke-ujung (E2EE AES-256-GCM) dengan terjemahan otomatis multi-bahasa & Cloud RDP gratis:\nhttps://www.xydeskremote.biz.id"
+            "Gabung ke Chat Global XyDesk Remote! Obrolan real-time dengan terjemahan otomatis multi-bahasa & Cloud RDP gratis:\nhttps://www.xydeskremote.biz.id"
         }
         runCatching {
             val intent = Intent(Intent.ACTION_SEND).apply {
@@ -992,8 +655,14 @@ internal fun GlobalChatScreen(
         }
     }
 
+    // Bound network fan-out per screen; queued coroutines are cancelled on disposal.
+    val translationSlots = remember { Semaphore(2) }
+    val translatingKeys = remember { mutableSetOf<Triple<String, String, String>>() }
+    val historyInFlight = remember { java.util.concurrent.atomic.AtomicBoolean(false) }
+    val wsHistoryReceived = remember { java.util.concurrent.atomic.AtomicBoolean(false) }
+
     fun enrichTranslationIfNeeded(msg: ChatMessage, forceRetranslate: Boolean = false) {
-        if (msg.attachmentType == "sticker") return
+        if (msg.deleted || msg.mutationPending || msg.attachmentType == "sticker" || msg.text.isBlank()) return
         val prefSnapshot = viewerTargetLang
         // Ketika kita mengirim pesan sendiri (msg.mine == true) pada mode otomatis ("auto"),
         // tampilkan 1 bahasa saja di layar pengirim.
@@ -1004,128 +673,177 @@ internal fun GlobalChatScreen(
             }
             return
         }
-        Thread {
-            val result = translateClientSideMultiLang(
-                text = msg.text,
-                senderCountry = msg.country,
-                viewerLangPref = prefSnapshot,
-                viewerCountry = myCountry,
-                forServerBroadcast = false,
-            ) ?: return@Thread
-            val translatedText = result.first
-            val targetLabel = result.second
-            val detectedLang = result.third
-            val updatedCountry = resolveSmartCountryClient(msg.text, detectedLang, msg.country)
-            val updatedFlag = countryCodeToFlag(updatedCountry)
-            main.post {
-                val idx = messages.indexOfFirst { it.id == msg.id }
-                if (idx >= 0) {
-                    val current = messages[idx]
-                    val resolvedTranslation = if (current.mine && (viewerTargetLang == "auto" || viewerTargetLang.isBlank())) {
-                        ""
-                    } else {
-                        translatedText
-                    }
-                    if (
-                        forceRetranslate ||
-                        current.translated != resolvedTranslation ||
-                        current.targetLang != targetLabel ||
-                        current.country != updatedCountry
-                    ) {
-                        messages[idx] = current.copy(
-                            translated = resolvedTranslation,
-                            targetLang = targetLabel,
-                            sourceLang = detectedLang,
-                            country = updatedCountry,
-                            flag = updatedFlag,
+        val translationKey = Triple(msg.id, prefSnapshot, msg.text)
+        if (!translatingKeys.add(translationKey)) return
+        scope.launch {
+            try {
+                val result = translationSlots.withPermit {
+                    withContext(Dispatchers.IO) {
+                        translateClientSideMultiLang(
+                            text = msg.text,
+                            senderCountry = msg.country,
+                            viewerLangPref = prefSnapshot,
+                            viewerCountry = myCountry,
+                            forServerBroadcast = false,
                         )
                     }
+                } ?: return@launch
+                // Do not apply a response for an obsolete language selection.
+                if (viewerTargetLang != prefSnapshot) return@launch
+                val translatedText = result.first
+                val targetLabel = result.second
+                val detectedLang = result.third
+                val updatedCountry = resolveSmartCountryClient(msg.text, detectedLang, msg.country)
+                val updatedFlag = countryCodeToFlag(updatedCountry)
+                run {
+                    val idx = messages.indexOfFirst { it.id == msg.id }
+                    if (idx >= 0) {
+                        val current = messages[idx]
+                        if (current.deleted || current.mutationPending || current.text != msg.text || current.revision != msg.revision) return@launch
+                        val resolvedTranslation = if (current.mine && (viewerTargetLang == "auto" || viewerTargetLang.isBlank())) {
+                            ""
+                        } else {
+                            translatedText
+                        }
+                        if (
+                            forceRetranslate ||
+                            current.translated != resolvedTranslation ||
+                            current.targetLang != targetLabel ||
+                            current.country != updatedCountry
+                        ) {
+                            messages[idx] = current.copy(
+                                translated = resolvedTranslation,
+                                targetLang = targetLabel,
+                                sourceLang = detectedLang,
+                                country = updatedCountry,
+                                flag = updatedFlag,
+                            )
+                        }
+                    }
                 }
+            } finally {
+                translatingKeys.remove(translationKey)
             }
-        }.start()
+        }
     }
 
     suspend fun fetchHistoryOverHttp() {
-        withContext(Dispatchers.IO) {
-            runCatching {
-                val cid = URLEncoder.encode(communityApi.accountShortId(), "UTF-8")
-                val gh = URLEncoder.encode(verifiedGhLogin.orEmpty(), "UTF-8")
-                val url = "$CHAT_HISTORY_URL?joined_at=$firstJoinedAtMs&client_id=$cid&github_login=$gh"
-                val conn = (URL(url).openConnection() as HttpURLConnection).apply {
-                    requestMethod = "GET"
-                    connectTimeout = 8_000
-                    readTimeout = 8_000
-                    setRequestProperty("Accept", "application/json")
-                }
-                if (conn.responseCode in 200..299) {
-                    val body = conn.inputStream.bufferedReader().use { it.readText() }
-                    val json = JSONObject(body)
-                    val serverOnline = json.optInt("online_count", 0)
-                    if (serverOnline > 0) {
-                        AppUpdate.updateOnlineCount(serverOnline)
+        if (System.currentTimeMillis() < historyRetryAt) return
+        if (!historyInFlight.compareAndSet(false, true)) return
+        try {
+            withContext(Dispatchers.IO) {
+                runCatching {
+                    val snapshotStartedAt = System.currentTimeMillis()
+                    val cid = URLEncoder.encode(communityApi.accountShortId(), "UTF-8")
+                    val gh = URLEncoder.encode(verifiedGhLogin.orEmpty(), "UTF-8")
+                    val url = "$CHAT_HISTORY_URL?joined_at=$firstJoinedAtMs&client_id=$cid&github_login=$gh"
+                    val conn = (URL(url).openConnection() as HttpURLConnection).apply {
+                        instanceFollowRedirects = false
+                        requestMethod = "GET"
+                        connectTimeout = 8_000
+                        readTimeout = 8_000
+                        setRequestProperty("Accept", "application/json")
                     }
-                    val serverJoinedAt = json.optLong("joined_at", 0L)
-                    if (serverJoinedAt > firstJoinedAtMs) {
-                        firstJoinedAtMs = serverJoinedAt
-                    }
-                    val serverPinned = parsePinnedMessageFromJson(json.optJSONObject("pinned_message"))
-                    val arr = json.optJSONArray("messages") ?: return@runCatching
-                    val fetched = ArrayList<ChatMessage>(arr.length())
-                    for (i in 0 until arr.length()) {
-                        val m = arr.optJSONObject(i) ?: continue
-                        val parsed = parseMessageFromJson(m, nickname, verifiedGhLogin)
-                        // Pastikan member baru tidak pernah melihat pesan sebelum waktu join
-                        if (parsed.at >= firstJoinedAtMs - 2_000L && parsed.id !in hiddenMessageIds) {
-                            fetched.add(parsed)
+                    try {
+                    val httpStatus = conn.responseCode
+                    if (httpStatus in 200..299) {
+                        val body = conn.inputStream.bufferedReader().use { it.readText() }
+                        val json = JSONObject(body)
+                        val serverOnline = json.optInt("online_count", 0)
+                        if (serverOnline > 0) {
+                            AppUpdate.updateOnlineCount(serverOnline)
                         }
-                    }
-                    withContext(Dispatchers.Main) {
-                        connected = true
-                        if (serverOnline > 0) roomPresence = serverOnline
-                        if (json.has("pinned_message")) {
-                            pinnedMessage = serverPinned
-                            GlobalChatMemoryCache.pinnedMessage = serverPinned
+                        val serverJoinedAt = json.optLong("joined_at", 0L)
+                        if (serverJoinedAt > firstJoinedAtMs) {
+                            firstJoinedAtMs = serverJoinedAt
                         }
-                        var added = false
-                        val fetchedIds = fetched.map { it.id }.toSet()
-                        if (fetched.isNotEmpty()) {
-                            val oldestFetchedAt = fetched.minOf { it.at }
-                            messages.removeAll { existing ->
-                                !existing.id.startsWith("local-") &&
-                                    existing.at >= oldestFetchedAt &&
-                                    existing.id !in fetchedIds &&
-                                    (System.currentTimeMillis() - existing.at > 4_000L)
+                        val serverPinned = parsePinnedMessageFromJson(json.optJSONObject("pinned_message"))
+                        val arr = json.optJSONArray("messages") ?: return@runCatching
+                        val fetched = ArrayList<ChatMessage>(arr.length())
+                        for (i in 0 until arr.length()) {
+                            val m = arr.optJSONObject(i) ?: continue
+                            val parsed = parseMessageFromJson(m, nickname, verifiedGhLogin)
+                            // Pastikan member baru tidak pernah melihat pesan sebelum waktu join
+                            if (parsed.at >= firstJoinedAtMs - 2_000L && parsed.id !in hiddenMessageIds) {
+                                fetched.add(parsed)
                             }
                         }
-                        for (item in fetched) {
-                            id.xydesk.remote.push.ChatPushNotifier.markSeen(item.id, item.at, context)
-                            val existingIdx = messages.indexOfFirst { it.id == item.id }
-                            if (existingIdx < 0) {
-                                val tempIdx = messages.indexOfFirst {
-                                    it.id.startsWith("local-") && it.mine && it.text == item.text
+                        withContext(Dispatchers.Main) {
+                            historyIssue = null
+                            historyRetryAt = 0L
+                            connected = true
+                            if (serverOnline > 0) roomPresence = serverOnline
+                            if (json.has("pinned_message")) {
+                                pinnedMessage = serverPinned
+                                GlobalChatMemoryCache.pinnedMessage = serverPinned
+                            }
+                            var added = false
+                            val fetchedIds = fetched.map { it.id }.toSet()
+                            if (arr.length() == 0) {
+                                messages.removeAll { !keepAfterEmptyChatSnapshot(it.id, it.at, snapshotStartedAt) }
+                            }
+                            if (fetched.isNotEmpty()) {
+                                val oldestFetchedAt = fetched.minOf { it.at }
+                                messages.removeAll { existing ->
+                                    !existing.id.startsWith("local-") &&
+                                        existing.at >= oldestFetchedAt &&
+                                        existing.id !in fetchedIds &&
+                                        (System.currentTimeMillis() - existing.at > 4_000L)
                                 }
-                                if (tempIdx >= 0) {
-                                    messages[tempIdx] = item.copy(deliveryTicks = 2)
-                                } else {
-                                    messages.add(item)
-                                    added = true
+                            }
+                            for (item in fetched) {
+                                id.xydesk.remote.push.ChatPushNotifier.markSeen(item.id, item.at, context)
+                                val existingIdx = messages.indexOfFirst { it.id == item.id }
+                                if (existingIdx >= 0) {
+                                    if (item.revision > messages[existingIdx].revision) failedMutations.remove(item.id)
+                                    messages[existingIdx] = reconcileChatMessage(messages[existingIdx], item)
                                 }
-                                enrichTranslationIfNeeded(item)
+                                if (existingIdx < 0) {
+                                    val tempIdx = findPendingChatIndex(messages, item)
+                                    if (tempIdx >= 0) {
+                                        messages[tempIdx] = item.copy(deliveryTicks = 2)
+                                    } else {
+                                        messages.add(item)
+                                        added = true
+                                    }
+                                    enrichTranslationIfNeeded(item)
+                                }
+                            }
+                            GlobalChatMemoryCache.messages.clear()
+                            GlobalChatMemoryCache.messages.addAll(messages.takeLast(80))
+                            if (added && messages.isNotEmpty()) {
+                                val isNearBottom = !listState.canScrollForward ||
+                                    listState.firstVisibleItemIndex >= (messages.size - 4).coerceAtLeast(0)
+                                if (isNearBottom) {
+                                    listState.animateScrollToItem(messages.size - 1)
+                                }
                             }
                         }
-                        GlobalChatMemoryCache.messages.clear()
-                        GlobalChatMemoryCache.messages.addAll(messages.takeLast(80))
-                        if (added && messages.isNotEmpty()) {
-                            val isNearBottom = !listState.canScrollForward ||
-                                listState.firstVisibleItemIndex >= (messages.size - 4).coerceAtLeast(0)
-                            if (isNearBottom) {
-                                listState.animateScrollToItem(messages.size - 1)
+                    } else {
+                        val errorText = conn.errorStream?.bufferedReader()?.use { reader ->
+                            val buffer = CharArray(4096)
+                            var count = 0
+                            while (count < buffer.size) {
+                                val n = reader.read(buffer, count, buffer.size - count)
+                                if (n < 0) break
+                                if (n > 0) count += n
                             }
+                            String(buffer, 0, count)
+                        }.orEmpty()
+                        val code = runCatching { JSONObject(errorText).optString("code") }.getOrDefault("")
+                        val failure = chatHistoryFailure(httpStatus, code, conn.getHeaderField("Retry-After"))
+                        withContext(Dispatchers.Main) {
+                            historyIssue = failure.message
+                            historyRetryAt = System.currentTimeMillis() + failure.retrySeconds * 1000L
                         }
                     }
+                    } finally {
+                        conn.disconnect()
+                    }
                 }
-                conn.disconnect()
             }
+        } finally {
+            historyInFlight.set(false)
         }
     }
 
@@ -1136,8 +854,14 @@ internal fun GlobalChatScreen(
             nickname = chatNickname(context)
             firstJoinedAtMs = ensureFirstJoinedAtMs(context, savedGh)
         }
-        // Langsung muat riwayat chat tanpa menunggu ping presence / disk I/O stiker
-        launch { fetchHistoryOverHttp() }
+        launch { communityApi.fetchLeaderboard(reportDeltaSec = 0L) }
+        launch(Dispatchers.IO) { runCatching { pruneExpiredChatViewOnceFiles(context.cacheDir) } }
+        // WS-first, HTTP fallback; presence dan disk I/O stiker tetap paralel.
+        launch {
+            // WS already delivers history. Avoid downloading media-heavy history twice.
+            delay(1_500L)
+            if (!wsHistoryReceived.get()) fetchHistoryOverHttp()
+        }
         launch {
             if (savedGh.isNullOrBlank()) {
                 val pat = runCatching {
@@ -1170,9 +894,17 @@ internal fun GlobalChatScreen(
         messages.toList().forEach { enrichTranslationIfNeeded(it, forceRetranslate = true) }
     }
 
+    // XyDesk perf: timestamp aktivitas WebSocket terakhir. Saat WS hidup,
+    // polling riwayat HTTP cukup jadi fallback konsistensi (30 dtk); saat WS
+    // mati kembali ke 5 dtk supaya chat tidak macet. Sebelumnya selalu 5 dtk:
+    // 12 request/menit + re-parse SELURUH riwayat (termasuk HMAC per pesan +
+    // diff O(n^2) di main thread) meski WS sudah mengirim pesan real-time.
+    val lastWsActivityMs = remember { java.util.concurrent.atomic.AtomicLong(0L) }
+
     LaunchedEffect(Unit) {
         while (true) {
-            delay(5000)
+            val wsAlive = System.currentTimeMillis() - lastWsActivityMs.get() < 45_000L
+            delay(if (wsAlive) 30_000L else 5_000L)
             fetchHistoryOverHttp()
         }
     }
@@ -1186,15 +918,20 @@ internal fun GlobalChatScreen(
         var ws: WebSocket? = null
         var attempt = 0
         var closed = false
+        // Preserve WS event order while history parsing suspends off-main.
+        val socketEventMutex = Mutex()
 
         fun connect(): WebSocket {
             val cid = URLEncoder.encode(communityApi.accountShortId(), "UTF-8")
             val gh = URLEncoder.encode(verifiedGhLogin.orEmpty(), "UTF-8")
             val wsUrl = "$CHAT_WS_URL?joined_at=$firstJoinedAtMs&client_id=$cid&github_login=$gh"
             val socket = client.newWebSocket(
-                Request.Builder().url(wsUrl).build(),
+                Request.Builder().url(wsUrl).apply {
+                    GlobalChatRepository.token(context)?.takeIf { it.isNotBlank() }?.let { header("Authorization", "Bearer $it") }
+                }.build(),
                 object : WebSocketListener() {
                     override fun onOpen(webSocket: WebSocket, response: Response) {
+                        lastWsActivityMs.set(System.currentTimeMillis())
                         attempt = 0
                         main.post { connected = true }
                         webSocket.send(
@@ -1209,8 +946,11 @@ internal fun GlobalChatScreen(
                     }
 
                     override fun onMessage(webSocket: WebSocket, text: String) {
+                        val snapshotReceivedAt = System.currentTimeMillis()
+                        lastWsActivityMs.set(System.currentTimeMillis())
                         val data = try { JSONObject(text) } catch (_: Exception) { return }
-                        main.post {
+                        scope.launch {
+                            socketEventMutex.withLock {
                             when (data.optString("type")) {
                                 "history" -> {
                                     val srvOnline = data.optInt("online_count", 0)
@@ -1218,18 +958,45 @@ internal fun GlobalChatScreen(
                                         roomPresence = srvOnline
                                         AppUpdate.updateOnlineCount(srvOnline)
                                     }
-                                    val arr: JSONArray = data.optJSONArray("messages") ?: return@post
-                                    val batch = ArrayList<ChatMessage>(arr.length())
-                                    for (i in 0 until arr.length()) {
-                                        val m = arr.optJSONObject(i) ?: continue
-                                        val parsed = parseMessageFromJson(m, nickname, verifiedGhLogin)
-                                        if (parsed.at >= firstJoinedAtMs - 2_000L && parsed.id !in hiddenMessageIds) {
-                                            id.xydesk.remote.push.ChatPushNotifier.markSeen(parsed.id, parsed.at, context)
-                                            batch.add(parsed)
+                                    val arr: JSONArray = data.optJSONArray("messages") ?: return@launch
+                                    val nameSnapshot = nickname
+                                    val loginSnapshot = verifiedGhLogin
+                                    val joinedSnapshot = firstJoinedAtMs
+                                    val hiddenSnapshot = hiddenMessageIds.toSet()
+                                    val batch = withContext(Dispatchers.Default) {
+                                        buildList {
+                                            for (i in 0 until arr.length()) {
+                                                val m = arr.optJSONObject(i) ?: continue
+                                                val parsed = parseMessageFromJson(m, nameSnapshot, loginSnapshot)
+                                                if (parsed.at >= joinedSnapshot - 2_000L && parsed.id !in hiddenSnapshot) add(parsed)
+                                            }
                                         }
                                     }
+                                    wsHistoryReceived.set(true)
+                                    batch.forEach { id.xydesk.remote.push.ChatPushNotifier.markSeen(it.id, it.at, context) }
+                                    // Parsing suspends: preserve messages arriving meanwhile and pending sends.
+                                    val newestAt = batch.maxOfOrNull { it.at } ?: 0L
+                                    val batchIds = batch.mapTo(HashSet()) { it.id }
+                                    val acknowledgedLocalIds = batch.mapNotNull { item ->
+                                        findPendingChatIndex(messages, item).takeIf { it >= 0 }?.let { messages[it].id }
+                                    }.toSet()
+                                    val retained = messages.filter {
+                                        it.id !in batchIds && it.id !in acknowledgedLocalIds && if (arr.length() == 0) {
+                                            keepAfterEmptyChatSnapshot(it.id, it.at, snapshotReceivedAt)
+                                        } else {
+                                            it.id.startsWith("local-") || it.at > newestAt
+                                        }
+                                    }
+                                    val reconciledBatch = batch.map { incoming ->
+                                        messages.firstOrNull { it.id == incoming.id }?.let {
+                                            if (incoming.revision > it.revision) failedMutations.remove(incoming.id)
+                                            reconcileChatMessage(it, incoming)
+                                        } ?: incoming
+                                    }
                                     messages.clear()
-                                    messages.addAll(batch)
+                                    messages.addAll((reconciledBatch + retained).filter { it.id !in hiddenMessageIds }.sortedBy { it.at })
+                                    GlobalChatMemoryCache.messages.clear()
+                                    GlobalChatMemoryCache.messages.addAll(messages.takeLast(80))
                                     if (viewerTargetLang != "auto") {
                                         batch.takeLast(8).forEach { enrichTranslationIfNeeded(it) }
                                     }
@@ -1239,32 +1006,19 @@ internal fun GlobalChatScreen(
                                 }
                                 "msg" -> {
                                     val incoming = parseMessageFromJson(data, nickname, verifiedGhLogin)
-                                    if (incoming.at < firstJoinedAtMs - 2_000L || incoming.id in hiddenMessageIds) return@post
+                                    if (incoming.at < firstJoinedAtMs - 2_000L || incoming.id in hiddenMessageIds) return@launch
                                     id.xydesk.remote.push.ChatPushNotifier.markSeen(incoming.id, incoming.at, context)
                                     val existingIdx = messages.indexOfFirst { it.id == incoming.id }
                                     if (existingIdx >= 0) {
-                                        messages[existingIdx] = incoming.copy(deliveryTicks = 2)
+                                        if (incoming.revision > messages[existingIdx].revision) failedMutations.remove(incoming.id)
+                                        messages[existingIdx] = reconcileChatMessage(messages[existingIdx], incoming.copy(deliveryTicks = 2))
                                     } else {
-                                        val tempIdx = messages.indexOfFirst {
-                                            it.id.startsWith("local-") && it.mine && it.text == incoming.text
-                                        }
+                                        val tempIdx = findPendingChatIndex(messages, incoming)
                                         if (tempIdx >= 0) {
                                             messages[tempIdx] = incoming.copy(deliveryTicks = 2)
                                         } else {
                                             messages.add(incoming)
-                                            if (!incoming.mine) {
-                                                playChatNotificationTone(notifSoundTone)
-                                                if (voiceEnabled && incoming.text.isNotBlank()) {
-                                                    runCatching {
-                                                        ttsHolder[0]?.speak(
-                                                            "${incoming.name}: ${incoming.text.take(160)}",
-                                                            android.speech.tts.TextToSpeech.QUEUE_ADD,
-                                                            null,
-                                                            "msg_${incoming.id}",
-                                                        )
-                                                    }
-                                                }
-                                            }
+                                            if (!incoming.mine) playChatNotificationTone(notifSoundTone)
                                         }
                                     }
                                     enrichTranslationIfNeeded(incoming)
@@ -1279,10 +1033,19 @@ internal fun GlobalChatScreen(
                                 "pin" -> {
                                     pinnedMessage = parsePinnedMessageFromJson(data.optJSONObject("pinned_message"))
                                 }
+                                "mutation" -> {
+                                    val payload = data.optJSONObject("message")
+                                    if (payload != null) {
+                                        val incoming = parseMessageFromJson(payload, nickname, verifiedGhLogin)
+                                        if (incoming.id !in hiddenMessageIds) applyIncomingMutation(incoming)
+                                    }
+                                }
                                 "delete" -> {
                                     val delId = data.optString("id", "").trim()
                                     if (delId.isNotEmpty()) {
-                                        messages.removeAll { it.id == delId }
+                                        val index = messages.indexOfFirst { it.id == delId }
+                                        if (index >= 0) messages[index] = messages[index].deletedPlaceholder()
+
                                         if (pinnedMessage?.id == delId) {
                                             pinnedMessage = null
                                         }
@@ -1295,14 +1058,27 @@ internal fun GlobalChatScreen(
                                     typingName = if (on && who.isNotBlank() && who != nickname) "$who ($cc)" else null
                                 }
                             }
+                            }
                         }
                     }
 
                     override fun onFailure(webSocket: WebSocket, t: Throwable, response: Response?) {
+                        main.post {
+                            if (!closed) {
+                                lastWsActivityMs.set(0L)
+                                connected = false
+                            }
+                        }
                         scheduleReconnect()
                     }
 
                     override fun onClosed(webSocket: WebSocket, code: Int, reason: String) {
+                        main.post {
+                            if (!closed) {
+                                lastWsActivityMs.set(0L)
+                                connected = false
+                            }
+                        }
                         scheduleReconnect()
                     }
 
@@ -1380,9 +1156,9 @@ internal fun GlobalChatScreen(
             timestampMs = now,
         )
 
-        // Optimistic UI: tampilkan 1 centang (✓) saat dikirim, otomatis berubah jadi 2 centang (✓✓) saat server memvalidasi E2EE
+        // Optimistic UI: tampilkan 1 centang (✓) saat dikirim, otomatis berubah jadi 2 centang (✓✓) saat server memvalidasi pesan
         val pending = ChatMessage(
-            id = "local-$now",
+            id = "local-${java.util.UUID.randomUUID()}",
             name = nickname,
             githubLogin = currentGh,
             country = myCountry,
@@ -1404,7 +1180,7 @@ internal fun GlobalChatScreen(
             attachmentData = attachmentData,
             viewOnce = viewOnce,
             avatarUrl = getVerifiedGitHubAvatar(context).orEmpty(),
-            deliveryTicks = 1,
+            deliveryTicks = 0,
             e2eeProtocol = sealed.protocol,
             e2eeSig = sealed.signatureHex,
             e2eeVerified = true,
@@ -1412,88 +1188,91 @@ internal fun GlobalChatScreen(
         messages.add(pending)
         enrichTranslationIfNeeded(pending)
         scope.launch {
-            listState.animateScrollToItem((messages.size - 1).coerceAtLeast(0))
-            val sentMsg = withContext(Dispatchers.IO) {
-                val clientTr = if (attachmentType == "sticker" || displayFallback.isBlank()) null
-                else translateClientSideMultiLang(
-                    text = displayFallback,
-                    senderCountry = myCountry,
-                    viewerLangPref = "auto",
-                    viewerCountry = myCountry,
-                    forServerBroadcast = true,
-                )
-                val bodyJson = JSONObject().apply {
-                    put("type", "msg")
-                    put("name", nickname)
-                    put("github_login", currentGh)
-                    put("country", myCountry)
-                    put("text", displayFallback)
-                    put("is_announcement", announceNow)
-                    put("e2ee_v", sealed.protocol)
-                    put("e2ee_cipher", sealed.cipherBase64)
-                    put("e2ee_iv", sealed.ivBase64)
-                    put("e2ee_sig", sealed.signatureHex)
-                    put("client_msg_id", pending.id)
-                    if (clientTr != null && clientTr.first.isNotBlank()) {
-                        put("translated", clientTr.first)
-                        put("target_lang", clientTr.second)
-                        put("source_lang", clientTr.third)
+            try {
+                listState.animateScrollToItem((messages.size - 1).coerceAtLeast(0))
+                var queuedOnSocket = false
+                val sentMsg = withContext(Dispatchers.IO) {
+                    // Sending must not wait for a translation provider; enrichment is asynchronous.
+                    val bodyJson = JSONObject().apply {
+                        put("type", "msg")
+                        put("name", nickname)
+                        put("github_login", currentGh)
+                        put("country", myCountry)
+                        put("text", displayFallback)
+                        put("is_announcement", announceNow)
+                        put("e2ee_v", sealed.protocol)
+                        put("e2ee_cipher", sealed.cipherBase64)
+                        put("e2ee_iv", sealed.ivBase64)
+                        put("e2ee_sig", sealed.signatureHex)
+                        put("client_msg_id", pending.id)
+                        if (replySnapshot != null) {
+                            put("reply_to_id", replySnapshot.id)
+                            put("reply_to_name", replySnapshot.name)
+                            put("reply_to_text", replySnapshot.text.take(140))
+                        }
+                        if (attachmentType.isNotEmpty()) {
+                            put("attachment_type", attachmentType)
+                            put("attachment_kind", if (attachmentType == "image") "photo" else attachmentType)
+                            put("attachment_name", if (attachmentType == "file") attachmentName else "")
+                            put("attachment_mime", attachmentMime)
+                            put("attachment_size", attachmentSize)
+                            put("attachment_data", attachmentData)
+                            put("view_once", viewOnce)
+                        }
+                        val av = getVerifiedGitHubAvatar(context)
+                        if (!av.isNullOrBlank()) put("avatar_url", av)
                     }
-                    if (replySnapshot != null) {
-                        put("reply_to_id", replySnapshot.id)
-                        put("reply_to_name", replySnapshot.name)
-                        put("reply_to_text", replySnapshot.text.take(140))
+                    runCatching {
+                        GlobalChatRepository.send(bodyJson, GlobalChatRepository.token(context))?.optJSONObject("message")
+                            ?.let { parseMessageFromJson(it, nickname, currentGh) }
+                    }.getOrNull() ?: run {
+                        queuedOnSocket = chatSocketSend(bodyJson.toString())
+                        null
                     }
-                    if (attachmentType.isNotEmpty()) {
-                        put("attachment_type", attachmentType)
-                        put("attachment_kind", if (attachmentType == "image") "photo" else attachmentType)
-                        put("attachment_name", if (attachmentType == "file") attachmentName else "")
-                        put("attachment_mime", attachmentMime)
-                        put("attachment_size", attachmentSize)
-                        put("attachment_data", attachmentData)
-                        put("view_once", viewOnce)
-                    }
-                    val av = getVerifiedGitHubAvatar(context)
-                    if (!av.isNullOrBlank()) put("avatar_url", av)
                 }
-                runCatching {
-                    val conn = (URL(CHAT_SEND_URL).openConnection() as HttpURLConnection).apply {
-                        requestMethod = "POST"
-                        doOutput = true
-                        connectTimeout = 10_000
-                        readTimeout = 10_000
-                        setRequestProperty("Content-Type", "application/json; charset=utf-8")
-                        setRequestProperty("Accept", "application/json")
+                if (sentMsg != null) {
+                    val idx = messages.indexOfFirst { it.id == pending.id }
+                    if (idx >= 0) {
+                        messages[idx] = sentMsg.copy(deliveryTicks = 2)
+                        enrichTranslationIfNeeded(sentMsg)
                     }
-                    conn.outputStream.use { it.write(bodyJson.toString().toByteArray(Charsets.UTF_8)) }
-                    if (conn.responseCode in 200..299) {
-                        val resp = JSONObject(conn.inputStream.bufferedReader().use { it.readText() })
-                        resp.optJSONObject("message")?.let { parseMessageFromJson(it, nickname, currentGh) }
-                    } else null
-                }.getOrNull() ?: run {
-                    chatSocketSend(bodyJson.toString())
-                    null
+                    if (announceNow) {
+                        pinnedMessage = PinnedChatMessage(
+                            id = sentMsg.id,
+                            name = sentMsg.name,
+                            githubLogin = sentMsg.githubLogin,
+                            text = sentMsg.text,
+                            pinnedBy = sentMsg.name,
+                            at = sentMsg.at,
+                        )
+                    }
                 }
-            }
-            if (sentMsg != null) {
-                val idx = messages.indexOfFirst { it.id == pending.id }
-                if (idx >= 0) {
-                    messages[idx] = sentMsg.copy(deliveryTicks = 2)
-                    enrichTranslationIfNeeded(sentMsg)
-                }
-                if (announceNow) {
-                    pinnedMessage = PinnedChatMessage(
-                        id = sentMsg.id,
-                        name = sentMsg.name,
-                        githubLogin = sentMsg.githubLogin,
-                        text = sentMsg.text,
-                        pinnedBy = sentMsg.name,
-                        at = sentMsg.at,
+                if (sentMsg == null) {
+                    val idx = messages.indexOfFirst { it.id == pending.id }
+                    if (idx >= 0) messages[idx] = messages[idx].copy(
+                        deliveryTicks = deliveryTicksAfterAttempt(false, queuedOnSocket),
                     )
+                    if (!queuedOnSocket) {
+                        Toast.makeText(context, xyNow("Pesan belum terkirim. Salin pesan untuk mencoba lagi.", "Message not sent. Copy it to try again."), Toast.LENGTH_LONG).show()
+                    } else {
+                        // Socket queue acceptance is not server acknowledgement. Never show a sent tick yet.
+                        scope.launch {
+                            delay(25_000L)
+                            val pendingIdx = messages.indexOfFirst { it.id == pending.id }
+                            if (pendingIdx >= 0) messages[pendingIdx] = messages[pendingIdx].copy(deliveryTicks = -1)
+                        }
+                    }
                 }
+            } catch (cancelled: CancellationException) {
+                throw cancelled
+            } catch (_: Exception) {
+                val idx = messages.indexOfFirst { it.id == pending.id }
+                if (idx >= 0) messages[idx] = messages[idx].copy(deliveryTicks = -1)
+                Toast.makeText(context, xyNow("Pengiriman belum berhasil. Salin pesan untuk mencoba lagi.", "Sending did not succeed. Copy the message to try again."), Toast.LENGTH_LONG).show()
+            } finally {
+                chatSocketSend(JSONObject().put("type", "typing").put("on", false).toString())
+                sending = false
             }
-            chatSocketSend(JSONObject().put("type", "typing").put("on", false).toString())
-            sending = false
         }
     }
 
@@ -1836,34 +1615,6 @@ internal fun GlobalChatScreen(
                             verticalAlignment = Alignment.CenterVertically,
                             horizontalArrangement = Arrangement.spacedBy(6.dp),
                         ) {
-                            // Toggle Voice ON / OFF
-                            Row(
-                                modifier = Modifier
-                                    .clip(RoundedCornerShape(50))
-                                    .background(if (voiceEnabled) Color(0xFF10B981).copy(alpha = 0.25f) else Color.White.copy(alpha = 0.12f))
-                                    .border(0.7.dp, if (voiceEnabled) Color(0xFF10B981) else Color.White.copy(alpha = 0.25f), RoundedCornerShape(50))
-                                    .clickable {
-                                        voiceEnabled = !voiceEnabled
-                                        chatPrefs.edit().putBoolean(KEY_VOICE_ENABLED, voiceEnabled).apply()
-                                    }
-                                    .padding(horizontal = 8.dp, vertical = 4.dp),
-                                verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.spacedBy(4.dp),
-                            ) {
-                                Icon(
-                                    imageVector = if (voiceEnabled) XyIcons.VolumeOn else XyIcons.VolumeOff,
-                                    contentDescription = "Toggle Voice",
-                                    tint = if (voiceEnabled) Color(0xFF10B981) else Color.White,
-                                    modifier = Modifier.size(12.dp),
-                                )
-                                Text(
-                                    text = if (voiceEnabled) "VOICE ON" else "VOICE OFF",
-                                    style = MaterialTheme.typography.labelSmall,
-                                    fontSize = 9.5.sp,
-                                    fontWeight = FontWeight.Bold,
-                                    color = if (voiceEnabled) Color(0xFF10B981) else Color.White,
-                                )
-                            }
                             // Pill Bahasa Terjemahan
                             Row(
                                 modifier = Modifier
@@ -1931,38 +1682,6 @@ internal fun GlobalChatScreen(
                     title = "Chat Global",
                     onBack = onBack,
                     actions = {
-                        // Toggle Voice ON / OFF
-                        Row(
-                            modifier = Modifier
-                                .clip(RoundedCornerShape(50))
-                                .background(if (voiceEnabled) Color(0xFF10B981).copy(alpha = 0.18f) else Color(0xFF18181D))
-                                .border(
-                                    0.75.dp,
-                                    if (voiceEnabled) Color(0xFF10B981) else Color(0xFF272730),
-                                    RoundedCornerShape(50),
-                                )
-                                .clickable {
-                                    voiceEnabled = !voiceEnabled
-                                    chatPrefs.edit().putBoolean(KEY_VOICE_ENABLED, voiceEnabled).apply()
-                                }
-                                .padding(horizontal = 9.dp, vertical = 5.dp),
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(4.dp),
-                        ) {
-                            Icon(
-                                imageVector = if (voiceEnabled) XyIcons.VolumeOn else XyIcons.VolumeOff,
-                                contentDescription = "Toggle Voice",
-                                tint = if (voiceEnabled) Color(0xFF10B981) else Color(0xFFA1A1AA),
-                                modifier = Modifier.size(13.dp),
-                            )
-                            Text(
-                                text = if (voiceEnabled) "VOICE ON" else "VOICE OFF",
-                                style = MaterialTheme.typography.labelSmall,
-                                fontSize = 10.sp,
-                                color = if (voiceEnabled) Color(0xFF10B981) else Color(0xFFD4D4D8),
-                                fontWeight = FontWeight.Bold,
-                            )
-                        }
                         // Pill Bahasa Terjemahan (Ikon Vektor Globe)
                         Row(
                             modifier = Modifier
@@ -2036,7 +1755,7 @@ internal fun GlobalChatScreen(
                                 .background(if (connected) Color(0xFF22C55E) else Color(0xFFF59E0B)),
                         )
                         Text(
-                            text = if (connected) "$totalOnline Online · Ketuk ke Atas" else "Menyambung…",
+                            text = if (connected) "$totalOnline Online · Ketuk ke Atas" else if (messages.isNotEmpty()) xy("Riwayat tersimpan · Menyambung…", "Saved history · Connecting…") else xy("Menyambung…", "Connecting…"),
                             style = MaterialTheme.typography.labelSmall,
                             fontWeight = FontWeight.SemiBold,
                             color = Color(0xFFD4D4D8),
@@ -2053,12 +1772,12 @@ internal fun GlobalChatScreen(
                     ) {
                         Icon(
                             imageVector = XyIcons.Lock,
-                            contentDescription = "End-to-End Encrypted",
+                            contentDescription = "TLS transport and encrypted local cache",
                             tint = Color(0xFFA1A1AA),
                             modifier = Modifier.size(11.dp),
                         )
                         Text(
-                            text = "E2EE AES-256-GCM",
+                            text = "TLS · Cache AES-GCM",
                             style = MaterialTheme.typography.labelSmall,
                             fontSize = 10.sp,
                             fontWeight = FontWeight.SemiBold,
@@ -2075,6 +1794,11 @@ internal fun GlobalChatScreen(
                         }
                     }
                 }
+            }
+
+            historyIssue?.let { issue ->
+                Text(issue, color = Color(0xFFFBBF24), style = MaterialTheme.typography.labelSmall,
+                    modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 6.dp))
             }
 
             // Banner Pesan yang Disematkan (Pinned Message Bar) di Atas Chat Global (disembunyikan di mode Floating Sesi agar ruang pesan lega)
@@ -2240,8 +1964,8 @@ internal fun GlobalChatScreen(
                         XyEmptyState(
                             title = xy("Ruang Chat Global Siap", "Global Chat Room Ready"),
                             subtitle = xy(
-                                "Demi privasi End-to-End (E2EE) & XyShield Anti-Virus, pesan sebelum kamu bergabung tidak ditampilkan. Pesan baru akan langsung muncul secara real-time.",
-                                "For E2EE privacy & XyShield protection, messages before you joined are hidden. New messages will appear in real-time.",
+                                "Demi privasi & XyShield Anti-Virus, pesan sebelum kamu bergabung tidak ditampilkan. Pesan baru akan langsung muncul secara real-time.",
+                                "For privacy & XyShield protection, messages before you joined are hidden. New messages will appear in real-time.",
                             ),
                             icon = XyIcons.Shield,
                         )
@@ -3052,7 +2776,7 @@ internal fun GlobalChatScreen(
                         ) {
                             if (draft.text.isEmpty()) {
                                 Text(
-                                    text = "Ketik pesan terenkripsi…",
+                                    text = "Ketik pesan…",
                                     style = MaterialTheme.typography.bodyMedium,
                                     color = Color(0xFF71717A),
                                     maxLines = 1,
@@ -3231,6 +2955,18 @@ internal fun GlobalChatScreen(
                             modifier = Modifier.width(258.dp),
                         ) {
                             Column(modifier = Modifier.fillMaxWidth()) {
+                                if (canMutateChatMessage(targetMsg, verifiedGhLogin) && targetMsg.attachmentType.isBlank()) {
+                                    ContextMenuActionRow(label = "Edit Pesan", icon = XyIcons.Edit, onClick = {
+                                        editingMessage = targetMsg
+                                        editText = targetMsg.text
+                                        focusedContextMsg = null
+                                    })
+                                }
+                                failedMutations[targetMsg.id]?.let { (action, text) ->
+                                    ContextMenuActionRow(label = "Coba lagi perubahan", icon = XyIcons.Refresh, onClick = {
+                                        mutateMessage(targetMsg, action, text)
+                                    })
+                                }
                                 ContextMenuActionRow(
                                     label = "Balas Pesan",
                                     customIcon = { ChatVectorReplyIcon(size = 17.dp, tint = Color.White) },
@@ -3361,7 +3097,7 @@ internal fun GlobalChatScreen(
                                 }
                                 HorizontalDivider(color = Color.White.copy(alpha = 0.08f))
                                 ContextMenuActionRow(
-                                    label = "Info Enkripsi E2EE",
+                                    label = "Info Keamanan Pesan",
                                     icon = XyIcons.Shield,
                                     onClick = {
                                         inspectingE2eeMsg = targetMsg
@@ -3369,7 +3105,7 @@ internal fun GlobalChatScreen(
                                     },
                                 )
                                 HorizontalDivider(color = Color.White.copy(alpha = 0.08f))
-                                ContextMenuActionRow(
+                                if (canMutateChatMessage(targetMsg, verifiedGhLogin)) ContextMenuActionRow(
                                     label = "Hapus untuk Semua Orang",
                                     icon = XyIcons.Trash,
                                     tint = Color(0xFFEF4444),
@@ -3398,6 +3134,22 @@ internal fun GlobalChatScreen(
         }
     }
 
+    editingMessage?.let { target ->
+        XyOverlay(title = "Edit pesan", onDismiss = { editingMessage = null }) {
+            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                androidx.compose.material3.OutlinedTextField(
+                    value = editText, onValueChange = { editText = it.take(500) },
+                    label = { Text("Pesan") }, modifier = Modifier.fillMaxWidth(), minLines = 2, maxLines = 6,
+                )
+                Text("Perubahan tampil langsung; status sinkron menunggu server. Pesan media belum bisa diedit.", style = MaterialTheme.typography.bodySmall)
+                XyPillButton(text = "Simpan perubahan", enabled = editText.isNotBlank() && editText.trim() != target.text, onClick = {
+                    mutateMessage(target, "edit", editText)
+                }, modifier = Modifier.fillMaxWidth())
+                XyPillButton(text = "Batal", onClick = { editingMessage = null }, primary = false)
+            }
+        }
+    }
+
     // Dialog Settings Chat Global (Bersihkan Chat, Style Bubble, Otomatis Unduh Media, HD Media, Autoplay Video, Nada Notifikasi)
     if (showChatSettings) {
         XyOverlay(
@@ -3411,6 +3163,10 @@ internal fun GlobalChatScreen(
                     .verticalScroll(rememberScrollState()),
                 verticalArrangement = Arrangement.spacedBy(10.dp),
             ) {
+                androidx.compose.runtime.key(verifiedGhLogin) {
+                    ChatBackupPanel(verifiedGhLogin) { messages.toList() }
+                }
+
                 // 1. Style Bubble Chat
                 Text(
                     xy("Gaya Bubble Chat", "Chat Bubble Style"),
@@ -3592,44 +3348,6 @@ internal fun GlobalChatScreen(
                     }
                 }
 
-                // 4b. Toggle Voice (Suara Pembaca Pesan Masuk) ON / OFF
-                Surface(
-                    onClick = {
-                        voiceEnabled = !voiceEnabled
-                        chatPrefs.edit().putBoolean(KEY_VOICE_ENABLED, voiceEnabled).apply()
-                    },
-                    shape = RoundedCornerShape(12.dp),
-                    color = Color(0xFF171A23),
-                ) {
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(horizontal = 12.dp, vertical = 10.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                    ) {
-                        Column(modifier = Modifier.weight(1f)) {
-                            Text(
-                                xy("Voice (Suara Pesan Masuk)", "Voice (Read Incoming Messages)"),
-                                style = MaterialTheme.typography.bodySmall,
-                                fontWeight = FontWeight.Bold,
-                                color = Color.White,
-                            )
-                            Text(
-                                xy("Nyalakan atau matikan fitur suara otomatis (Voice ON/OFF)", "Toggle voice feature ON or OFF"),
-                                style = MaterialTheme.typography.labelSmall,
-                                color = Color(0xFF94A3B8),
-                            )
-                        }
-                        Text(
-                            text = if (voiceEnabled) "ON" else "OFF",
-                            fontSize = 11.sp,
-                            fontWeight = FontWeight.ExtraBold,
-                            color = if (voiceEnabled) Color(0xFF10B981) else Color(0xFF94A3B8),
-                        )
-                    }
-                }
-
                 // 4c. Buka Pengaturan Push Notifikasi Bawaan HP
                 Surface(
                     onClick = {
@@ -3717,7 +3435,7 @@ internal fun GlobalChatScreen(
                                 hiddenMessageIds.add(m.id)
                             }
                         }
-                        chatPrefs.edit().putStringSet(KEY_HIDDEN_MSG_IDS, hiddenMessageIds.toSet()).apply()
+                        chatPrefs.edit().putStringSet(hiddenIdsKey, hiddenMessageIds.toSet()).apply()
                         messages.clear()
                         showChatSettings = false
                         Toast.makeText(context, "Riwayat chat di layar berhasil dibersihkan", Toast.LENGTH_SHORT).show()
@@ -3777,10 +3495,10 @@ internal fun GlobalChatScreen(
         }
     }
 
-    // Dialog Verifikasi Kriptografi End-to-End (E2EE Inspector)
+    // Dialog Info Keamanan Pesan (Message Security Inspector)
     inspectingE2eeMsg?.let { msg ->
         XyOverlay(
-            title = "Verifikasi End-to-End (E2EE)",
+            title = "Info Keamanan Pesan",
             onDismiss = { inspectingE2eeMsg = null },
         ) {
             Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
@@ -3795,15 +3513,15 @@ internal fun GlobalChatScreen(
                         modifier = Modifier.size(20.dp),
                     )
                     Text(
-                        text = if (msg.e2eeVerified) "Integritas Kriptografi Terverifikasi" else "Pesan Standar",
+                        text = if (msg.e2eeVerified) "Integritas Terverifikasi (HMAC)" else "Pesan Standar",
                         style = MaterialTheme.typography.titleSmall,
                         fontWeight = FontWeight.Bold,
                     )
                 }
                 Text("Pengirim: ${msg.name} ${if (msg.githubLogin.isNotBlank()) "(@${msg.githubLogin})" else ""}", style = MaterialTheme.typography.bodySmall)
                 Text("Negara Terdeteksi: ${msg.country}", style = MaterialTheme.typography.bodySmall)
-                Text("Protokol Enkripsi: ${msg.e2eeProtocol} (AES-256-GCM + HMAC-SHA256)", style = MaterialTheme.typography.bodySmall)
-                Text("Signature HMAC: ${msg.e2eeSig.ifBlank { "verified" }}", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Text("Proteksi Transit: ${msg.e2eeProtocol} (AES-256-GCM + HMAC-SHA256 via WSS/TLS)", style = MaterialTheme.typography.bodySmall)
+                Text("Signature HMAC: ${msg.e2eeSig.ifBlank { "tidak ada" }}", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 Text("Status Pengiriman: Terkirim & Tervalidasi (Centang 2)", style = MaterialTheme.typography.bodySmall)
                 Spacer(Modifier.height(6.dp))
                 XyPillButton(
@@ -3870,1799 +3588,10 @@ internal fun GlobalChatScreen(
     }
 }
 
-@Composable
-private fun FullScreenChatMediaViewer(
-    msg: ChatMessage,
-    onDismiss: () -> Unit,
-) {
-    val context = LocalContext.current
-    var zoomScale by remember(msg.id) { mutableFloatStateOf(1f) }
-    var panOffsetX by remember(msg.id) { mutableFloatStateOf(0f) }
-    var panOffsetY by remember(msg.id) { mutableFloatStateOf(0f) }
-
-    DisposableEffect(msg.id) {
-        XyVideoPlaybackCoordinator.fullscreenOpenCount.intValue += 1
-        onDispose {
-            XyVideoPlaybackCoordinator.fullscreenOpenCount.intValue =
-                (XyVideoPlaybackCoordinator.fullscreenOpenCount.intValue - 1).coerceAtLeast(0)
-        }
-    }
-
-    Dialog(
-        onDismissRequest = onDismiss,
-        properties = DialogProperties(
-            usePlatformDefaultWidth = false,
-            decorFitsSystemWindows = false,
-        ),
-    ) {
-        Box(
-            modifier = Modifier
-                .fillMaxSize()
-                .background(Color.Black),
-        ) {
-            if (msg.attachmentType == "video" && msg.attachmentData.isNotBlank()) {
-                val videoFile = remember(msg.id, msg.attachmentData) {
-                    runCatching {
-                        val comma = msg.attachmentData.indexOf(',')
-                        if (comma < 0) return@runCatching null
-                        val bytes = Base64.decode(msg.attachmentData.substring(comma + 1), Base64.DEFAULT)
-                        val dir = File(context.cacheDir, "chat_media").apply { mkdirs() }
-                        val safeName = msg.attachmentName.replace(Regex("[^A-Za-z0-9._-]"), "_")
-                            .ifBlank { "video_${msg.id.hashCode()}.mp4" }
-                        val f = File(dir, safeName)
-                        f.writeBytes(bytes)
-                        f
-                    }.getOrNull()
-                }
-                Box(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .pointerInput(msg.id) {
-                            detectTransformGestures { _, pan, zoom, _ ->
-                                val nextScale = (zoomScale * zoom).coerceIn(1f, 4f)
-                                zoomScale = nextScale
-                                if (nextScale > 1.01f) {
-                                    panOffsetX += pan.x
-                                    panOffsetY += pan.y
-                                } else {
-                                    panOffsetX = 0f
-                                    panOffsetY = 0f
-                                }
-                            }
-                        }
-                        .graphicsLayer {
-                            scaleX = zoomScale
-                            scaleY = zoomScale
-                            translationX = panOffsetX
-                            translationY = panOffsetY
-                        },
-                    contentAlignment = Alignment.Center,
-                ) {
-                    if (videoFile != null) {
-                        AndroidView(
-                            factory = { ctx ->
-                                VideoView(ctx).apply {
-                                    val mc = MediaController(ctx)
-                                    mc.setAnchorView(this)
-                                    setMediaController(mc)
-                                    setVideoPath(videoFile.absolutePath)
-                                    setOnPreparedListener { mp ->
-                                        mp.isLooping = true
-                                        start()
-                                    }
-                                }
-                            },
-                            modifier = Modifier.fillMaxSize(),
-                        )
-                    } else {
-                        Text(
-                            text = "Gagal memuat berkas video.",
-                            color = Color.White,
-                            style = MaterialTheme.typography.bodyMedium,
-                        )
-                    }
-                }
-            } else {
-                val bmp = remember(msg.id, msg.attachmentData) { decodeBase64Bitmap(msg.attachmentData) }
-                Box(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .pointerInput(msg.id) {
-                            detectTapGestures(
-                                onDoubleTap = {
-                                    if (zoomScale > 1.25f) {
-                                        zoomScale = 1f
-                                        panOffsetX = 0f
-                                        panOffsetY = 0f
-                                    } else {
-                                        zoomScale = 2.75f
-                                    }
-                                },
-                            )
-                        }
-                        .pointerInput(msg.id) {
-                            detectTransformGestures { _, pan, zoom, _ ->
-                                val nextScale = (zoomScale * zoom).coerceIn(1f, 5f)
-                                zoomScale = nextScale
-                                if (nextScale > 1.01f) {
-                                    panOffsetX = (panOffsetX + pan.x).coerceIn(-1400f, 1400f)
-                                    panOffsetY = (panOffsetY + pan.y).coerceIn(-1800f, 1800f)
-                                } else {
-                                    panOffsetX = 0f
-                                    panOffsetY = 0f
-                                }
-                            }
-                        },
-                    contentAlignment = Alignment.Center,
-                ) {
-                    if (bmp != null) {
-                        Image(
-                            bitmap = bmp.asImageBitmap(),
-                            contentDescription = msg.attachmentName.ifBlank { "Foto Layar Penuh" },
-                            modifier = Modifier
-                                .fillMaxSize()
-                                .graphicsLayer {
-                                    scaleX = zoomScale
-                                    scaleY = zoomScale
-                                    translationX = panOffsetX
-                                    translationY = panOffsetY
-                                },
-                            contentScale = ContentScale.Fit,
-                        )
-                    }
-                }
-            }
-
-            // Header Liquid Glass Atas (Tutup, Info Pengirim, Zoom Reset, Simpan ke Galeri, Bagikan)
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .align(Alignment.TopCenter)
-                    .background(
-                        Brush.verticalGradient(
-                            colors = listOf(
-                                Color.Black.copy(alpha = 0.82f),
-                                Color.Black.copy(alpha = 0.42f),
-                                Color.Transparent,
-                            ),
-                        ),
-                    )
-                    .statusBarsPadding()
-                    .displayCutoutPadding()
-                    .padding(horizontal = 14.dp, vertical = 12.dp),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.SpaceBetween,
-            ) {
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(10.dp),
-                    modifier = Modifier.weight(1f),
-                ) {
-                    Box(
-                        modifier = Modifier
-                            .size(38.dp)
-                            .clip(CircleShape)
-                            .background(Color.White.copy(alpha = 0.16f))
-                            .border(0.8.dp, Color.White.copy(alpha = 0.28f), CircleShape)
-                            .clickable { onDismiss() },
-                        contentAlignment = Alignment.Center,
-                    ) {
-                        Icon(
-                            imageVector = XyIcons.ChevronLeft,
-                            contentDescription = "Tutup Pratinjau",
-                            tint = Color.White,
-                            modifier = Modifier.size(20.dp),
-                        )
-                    }
-                    Column(modifier = Modifier.weight(1f)) {
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(6.dp),
-                        ) {
-                            Text(
-                                text = msg.name,
-                                style = MaterialTheme.typography.titleSmall,
-                                fontWeight = FontWeight.ExtraBold,
-                                color = Color.White,
-                                maxLines = 1,
-                                overflow = TextOverflow.Ellipsis,
-                            )
-                            if (msg.viewOnce) {
-                                Box(
-                                    modifier = Modifier
-                                        .clip(RoundedCornerShape(50))
-                                        .background(Color.White)
-                                        .padding(horizontal = 7.dp, vertical = 2.dp),
-                                ) {
-                                    Text(
-                                        text = "1× SEKALI LIHAT",
-                                        style = MaterialTheme.typography.labelSmall,
-                                        fontSize = 9.sp,
-                                        fontWeight = FontWeight.ExtraBold,
-                                        color = Color(0xFF09090B),
-                                    )
-                                }
-                            }
-                        }
-                        Text(
-                            text = if (msg.attachmentType == "video") "Video Layar Penuh · Cubit untuk Zoom" else "Cubit 2 Jari / Ketuk 2× untuk Zoom (${(zoomScale * 100).roundToInt()}%)",
-                            style = MaterialTheme.typography.labelSmall,
-                            fontSize = 10.5.sp,
-                            color = Color(0xFFD4D4D8),
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis,
-                        )
-                    }
-                }
-
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                ) {
-                    if (zoomScale > 1.05f) {
-                        Box(
-                            modifier = Modifier
-                                .clip(RoundedCornerShape(50))
-                                .background(Color.White.copy(alpha = 0.18f))
-                                .border(0.8.dp, Color.White.copy(alpha = 0.30f), RoundedCornerShape(50))
-                                .clickable {
-                                    zoomScale = 1f
-                                    panOffsetX = 0f
-                                    panOffsetY = 0f
-                                }
-                                .padding(horizontal = 10.dp, vertical = 6.dp),
-                        ) {
-                            Text(
-                                text = "Reset ${(zoomScale * 100).roundToInt()}%",
-                                style = MaterialTheme.typography.labelSmall,
-                                fontWeight = FontWeight.ExtraBold,
-                                color = Color.White,
-                            )
-                        }
-                    }
-                    if (!msg.viewOnce) {
-                        // Tombol Simpan ke Galeri Perangkat
-                        Row(
-                            modifier = Modifier
-                                .clip(RoundedCornerShape(50))
-                                .background(Color.White)
-                                .clickable { saveChatMediaToGallery(context, msg) }
-                                .padding(horizontal = 12.dp, vertical = 7.dp),
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(5.dp),
-                        ) {
-                            Icon(
-                                imageVector = XyIcons.Download,
-                                contentDescription = "Simpan ke Galeri",
-                                tint = Color(0xFF09090B),
-                                modifier = Modifier.size(15.dp),
-                            )
-                            Text(
-                                text = "Simpan",
-                                style = MaterialTheme.typography.labelSmall,
-                                fontWeight = FontWeight.ExtraBold,
-                                color = Color(0xFF09090B),
-                            )
-                        }
-                        // Tombol Bagikan Media
-                        Box(
-                            modifier = Modifier
-                                .size(36.dp)
-                                .clip(CircleShape)
-                                .background(Color.White.copy(alpha = 0.16f))
-                                .border(0.8.dp, Color.White.copy(alpha = 0.28f), CircleShape)
-                                .clickable { saveOrShareChatAttachment(context, msg) },
-                            contentAlignment = Alignment.Center,
-                        ) {
-                            Icon(
-                                imageVector = XyIcons.Share,
-                                contentDescription = "Bagikan",
-                                tint = Color.White,
-                                modifier = Modifier.size(16.dp),
-                            )
-                        }
-                    }
-                }
-            }
-
-            // Caption Bawah (bila ada teks pesan pada foto/video)
-            if (msg.text.isNotBlank() && !msg.text.startsWith("[Foto") && !msg.text.startsWith("[Video")) {
-                Box(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .align(Alignment.BottomCenter)
-                        .background(
-                            Brush.verticalGradient(
-                                colors = listOf(
-                                    Color.Transparent,
-                                    Color.Black.copy(alpha = 0.65f),
-                                    Color.Black.copy(alpha = 0.88f),
-                                ),
-                            ),
-                        )
-                        .navigationBarsPadding()
-                        .padding(horizontal = 20.dp, vertical = 16.dp),
-                ) {
-                    Text(
-                        text = msg.text,
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = Color.White,
-                        textAlign = TextAlign.Center,
-                        modifier = Modifier.fillMaxWidth(),
-                    )
-                }
-            }
-        }
-    }
-}
-
-@Composable
-private fun ContextMenuActionRow(
-    label: String,
-    icon: ImageVector? = null,
-    tint: Color = Color.White,
-    customIcon: (@Composable () -> Unit)? = null,
-    onClick: () -> Unit,
-) {
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clickable { onClick() }
-            .padding(horizontal = 16.dp, vertical = 13.dp),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.SpaceBetween,
-    ) {
-        Text(
-            text = label,
-            style = MaterialTheme.typography.bodyMedium,
-            fontWeight = FontWeight.Medium,
-            color = tint,
-        )
-        if (customIcon != null) {
-            customIcon()
-        } else if (icon != null) {
-            Icon(
-                imageVector = icon,
-                contentDescription = label,
-                tint = tint,
-                modifier = Modifier.size(18.dp),
-            )
-        }
-    }
-}
-
-/**
- * Bubble Pesan Chat Global gaya WhatsApp Modern:
- * - **TANPA BORDER** untuk chat pengguna biasa.
- * - **Hitam-Putih Monokrom** untuk chat biasa (`#F4F4F6` dengan teks `#09090B` untuk pesanku,
- *   `#1A1A20` dengan teks `#F4F4F5` untuk pesan orang lain) sesuai tema utama XyDesk.
- * - Khusus **Founder (`@xykal`)**: menggunakan `FounderAnimatedBubbleBox` + `XyFounderBadge`
- *   beranimasi penuh dengan sapuan Liquid Gold & partikel bintang.
- * - Menampilkan **Foto Profil (Avatar)**, **Nama Jelas + `@github`**, **Kode Negara**,
- *   serta **Centang 1 / Centang 2 Vektor (`ChatVectorDeliveryTicks`)**.
- */
-@Composable
-private fun MessageBubble(
-    msg: ChatMessage,
-    reaction: String?,
-    isPinned: Boolean = false,
-    viewedOnce: Boolean = false,
-    liquidGlassMode: Boolean = false,
-    isCompactOverlay: Boolean = false,
-    bubbleStyleMode: String = "monochrome",
-    bubbleShapePreset: String = "TAIL_CLASSIC",
-    floatingElementPreset: String = "NONE",
-    autoDownloadAllowed: Boolean = true,
-    autoplayVideoEnabled: Boolean = true,
-    favoriteStickerKeys: Set<String> = emptySet(),
-    onToggleFavoriteSticker: (String) -> Unit = {},
-    onManualDownloadMedia: () -> Unit = {},
-    onReply: () -> Unit,
-    onLongPress: () -> Unit,
-    onOpenMedia: () -> Unit,
-    onOpenFile: () -> Unit,
-) {
-    val time = remember(msg.at) {
-        SimpleDateFormat("HH:mm", Locale.getDefault()).format(Date(msg.at))
-    }
-    val founderMsg = msg.isFounder || isFounderAccount(msg.name) || isFounderAccount(msg.githubLogin)
-    val isAnnouncementMsg = msg.isAnnouncement || (founderMsg && isPinned)
-    val isPureSticker = msg.attachmentType == "sticker"
-    val isLightBubble = msg.mine && !founderMsg && bubbleStyleMode == "monochrome"
-
-    // Swipe-to-Reply State
-    var swipeOffsetX by remember(msg.id) { mutableFloatStateOf(0f) }
-    var swipeTriggered by remember(msg.id) { mutableStateOf(false) }
-
-    val primaryTextColor = when {
-        founderMsg || isAnnouncementMsg -> Color(0xFFFAF5FF)
-        isLightBubble -> Color(0xFF09090B)
-        else -> Color(0xFFF4F4F5)
-    }
-    val secondaryTextColor = when {
-        founderMsg || isAnnouncementMsg -> Color(0xFFE9D5FF).copy(alpha = 0.90f)
-        isLightBubble -> Color(0xFF3F3F46)
-        else -> Color(0xFFA1A1AA)
-    }
-    val dividerColor = when {
-        founderMsg || isAnnouncementMsg -> Color(0xFFA855F7).copy(alpha = 0.36f)
-        isLightBubble -> Color(0xFF09090B).copy(alpha = 0.12f)
-        else -> Color.White.copy(alpha = 0.10f)
-    }
-
-    val bubbleShape = remember(bubbleShapePreset, msg.mine, bubbleStyleMode, isCompactOverlay) {
-        resolveCustomBubbleShape(
-            shapePreset = if (isCompactOverlay && bubbleShapePreset == "TAIL_CLASSIC") "TAIL_CLASSIC" else bubbleShapePreset,
-            isMine = msg.mine,
-        )
-    }
-
-    val transLabel = msg.targetLang.ifBlank { if (msg.country == "ID") "EN" else "ID" }
-    val transBody = msg.translated.trim()
-    val isAudioAttachment = remember(msg.attachmentType, msg.attachmentMime, msg.attachmentName) {
-        msg.attachmentType == "audio" ||
-            msg.attachmentMime.startsWith("audio/", ignoreCase = true) ||
-            msg.attachmentName.lowercase(Locale.ROOT).let { n ->
-                n.endsWith(".mp3") || n.endsWith(".m4a") || n.endsWith(".wav") ||
-                    n.endsWith(".ogg") || n.endsWith(".flac") || n.endsWith(".aac") || n.endsWith(".opus")
-            }
-    }
-    val hasMediaAttachment = msg.attachmentType == "image" || msg.attachmentType == "video" || msg.attachmentType == "file" || isAudioAttachment
-    val isFramelessMedia = (msg.attachmentType == "image" || msg.attachmentType == "video" || isAudioAttachment) &&
-        msg.text.isBlank() && msg.replyToName.isBlank() && !isAnnouncementMsg
-    val specialRole = remember(msg.name, msg.githubLogin) {
-        resolveSpecialUserRole(msg.name, msg.githubLogin)
-    }
-    val detectedLinkUrl = remember(msg.id, msg.text) { extractFirstUrl(msg.text) }
-    val maxBubbleWidth = if (isCompactOverlay) 204.dp else 252.dp
-    val minBubbleWidth = when {
-        isCompactOverlay -> if (hasMediaAttachment) 150.dp else 72.dp
-        hasMediaAttachment -> 190.dp
-        isPureSticker -> 96.dp
-        else -> 82.dp
-    }
-
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(horizontal = if (isCompactOverlay) 1.dp else 2.dp)
-            .offset { IntOffset(swipeOffsetX.roundToInt(), 0) }
-            .pointerInput(msg.id) {
-                detectHorizontalDragGestures(
-                    onDragEnd = {
-                        if (kotlin.math.abs(swipeOffsetX) >= 56f) {
-                            onReply()
-                        }
-                        swipeOffsetX = 0f
-                        swipeTriggered = false
-                    },
-                    onDragCancel = {
-                        swipeOffsetX = 0f
-                        swipeTriggered = false
-                    },
-                    onHorizontalDrag = { change, dragAmount ->
-                        change.consume()
-                        swipeOffsetX = (swipeOffsetX + dragAmount).coerceIn(-110f, 110f)
-                    },
-                )
-            },
-        horizontalArrangement = if (msg.mine) Arrangement.End else Arrangement.Start,
-        verticalAlignment = Alignment.Top,
-    ) {
-        if (!msg.mine) {
-            ChatSenderAvatar(
-                name = msg.name,
-                githubLogin = msg.githubLogin,
-                avatarUrl = msg.avatarUrl,
-                isFounder = founderMsg,
-                compact = isCompactOverlay,
-            )
-            Spacer(Modifier.width(if (isCompactOverlay) 4.dp else 6.dp))
-        }
-
-        Column(
-            horizontalAlignment = if (msg.mine) Alignment.End else Alignment.Start,
-            modifier = Modifier.widthIn(min = minBubbleWidth, max = maxBubbleWidth),
-        ) {
-            val gestureMod = Modifier.pointerInput(msg.id) {
-                detectTapGestures(
-                    onLongPress = { onLongPress() },
-                )
-            }
-
-            // STIKER MURNI: Dirender TANPA Bubble Card & TANPA Label + Tombol Favorit untuk Siapa Saja
-            if (isPureSticker) {
-                val appContext = LocalContext.current
-                val isFavSticker = remember(msg.attachmentData, favoriteStickerKeys) {
-                    when {
-                        msg.attachmentData.startsWith("sticker:") ->
-                            "preset:${msg.attachmentData.removePrefix("sticker:")}" in favoriteStickerKeys
-                        msg.attachmentData.startsWith("sticker_crypto15:") -> {
-                            val rest = msg.attachmentData.removePrefix("sticker_crypto15:")
-                            val fname = rest.substringBefore(':')
-                            "custom:$fname" in favoriteStickerKeys
-                        }
-                        else -> false
-                    }
-                }
-                Column(
-                    modifier = gestureMod.padding(vertical = 2.dp),
-                    horizontalAlignment = if (msg.mine) Alignment.End else Alignment.Start,
-                ) {
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(4.dp),
-                    ) {
-                        Text(
-                            text = msg.name,
-                            style = MaterialTheme.typography.labelSmall,
-                            fontWeight = FontWeight.Bold,
-                            color = if (founderMsg) Color(0xFFFDE047) else Color(0xFFD4D4D8),
-                        )
-                        if (founderMsg) {
-                            XyFounderBadge(compact = true)
-                        }
-                    }
-                    Spacer(Modifier.height(4.dp))
-                    if (msg.attachmentData.startsWith("sticker_crypto15:")) {
-                        val customDecoded = remember(msg.id, msg.attachmentData) {
-                            CustomStickerVault.decodeAndCacheFromChatPayload(appContext, msg.attachmentData)
-                        }
-                        if (customDecoded != null) {
-                            Image(
-                                bitmap = customDecoded.second.asImageBitmap(),
-                                contentDescription = null,
-                                modifier = Modifier.size(142.dp),
-                                contentScale = ContentScale.Fit,
-                            )
-                        }
-                    } else {
-                        val presetId = msg.attachmentData.removePrefix("sticker:")
-                        val preset = XY_STICKERS.firstOrNull { it.id == presetId } ?: XY_STICKERS.first()
-                        Image(
-                            painter = painterResource(preset.drawableRes),
-                            contentDescription = null,
-                            modifier = Modifier.size(142.dp),
-                            contentScale = ContentScale.Fit,
-                        )
-                    }
-                    Spacer(Modifier.height(4.dp))
-                    // Bar Bawah Stiker: Jam + Tombol Favoritkan Stiker (Bisa Dipakai Siapa Saja)
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(8.dp),
-                    ) {
-                        Row(
-                            modifier = Modifier
-                                .clip(RoundedCornerShape(999.dp))
-                                .background(Color(0xFF1A1D26))
-                                .clickable { onToggleFavoriteSticker(msg.attachmentData) }
-                                .padding(horizontal = 8.dp, vertical = 3.dp),
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(4.dp),
-                        ) {
-                            Icon(
-                                imageVector = if (isFavSticker) XyIcons.StarFilled else XyIcons.Star,
-                                contentDescription = null,
-                                tint = if (isFavSticker) Color(0xFFFBBF24) else Color(0xFFE2E8F0),
-                                modifier = Modifier.size(11.dp),
-                            )
-                            Text(
-                                text = if (isFavSticker) "Favorit" else "+Favorit",
-                                fontSize = 10.sp,
-                                fontWeight = FontWeight.Bold,
-                                color = if (isFavSticker) Color(0xFFFBBF24) else Color(0xFFE2E8F0),
-                            )
-                        }
-                        Text(
-                            text = time,
-                            style = MaterialTheme.typography.labelSmall,
-                            fontSize = 10.sp,
-                            color = Color(0xFFA1A1AA),
-                        )
-                    }
-                }
-            } else if (isFramelessMedia) {
-                // =========================================================
-                // MEDIA TANPA BUBBLE / CARD (GAYA WHATSAPP iOS FRAMELESS)
-                // Sesuai rasio asli (aspect ratio) + cukup Rounded 16.dp
-                // =========================================================
-                Column(
-                    modifier = gestureMod
-                        .widthIn(min = 165.dp, max = maxBubbleWidth)
-                        .padding(vertical = 2.dp),
-                    horizontalAlignment = if (msg.mine) Alignment.End else Alignment.Start,
-                ) {
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(5.dp),
-                        modifier = Modifier.padding(horizontal = 4.dp, vertical = 2.dp),
-                    ) {
-                        Text(
-                            text = msg.name,
-                            style = MaterialTheme.typography.labelSmall,
-                            fontWeight = FontWeight.Bold,
-                            color = if (founderMsg) Color(0xFFE9D5FF) else Color(0xFFE4E4E7),
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis,
-                        )
-                        if (msg.githubLogin.isNotBlank() && !msg.githubLogin.equals(msg.name, ignoreCase = true)) {
-                            Text(
-                                text = "@${msg.githubLogin}",
-                                style = MaterialTheme.typography.labelSmall,
-                                fontSize = 10.sp,
-                                color = Color(0xFFA1A1AA),
-                                maxLines = 1,
-                            )
-                        }
-                        XyUserRoleBadges(
-                            name = msg.name,
-                            githubLogin = msg.githubLogin,
-                            compact = true,
-                        )
-                        Box(
-                            modifier = Modifier
-                                .size(20.dp)
-                                .clip(CircleShape)
-                                .clickable { onReply() },
-                            contentAlignment = Alignment.Center,
-                        ) {
-                            ChatVectorReplyIcon(size = 12.dp, tint = Color(0xFFA1A1AA))
-                        }
-                    }
-
-                    ChatMediaAttachmentBox(
-                        msg = msg,
-                        isAudioAttachment = isAudioAttachment,
-                        autoDownloadAllowed = autoDownloadAllowed,
-                        viewedOnce = viewedOnce,
-                        autoplayVideoEnabled = autoplayVideoEnabled,
-                        floatingTime = time,
-                        onManualDownloadMedia = onManualDownloadMedia,
-                        onOpenMedia = onOpenMedia,
-                        onOpenFile = onOpenFile,
-                    )
-                }
-            } else {
-                val bubbleContent: @Composable () -> Unit = {
-                    Column(
-                        modifier = Modifier
-                            .width(IntrinsicSize.Max)
-                            .widthIn(min = minBubbleWidth, max = maxBubbleWidth)
-                            .padding(
-                                horizontal = if (isCompactOverlay) 8.dp else 9.dp,
-                                vertical = if (isCompactOverlay) 4.dp else 5.dp,
-                            ),
-                    ) {
-                        // Pita Khusus Pengumuman Admin @xykal yang Otomatis Tersemat
-                        if (isAnnouncementMsg) {
-                            Box(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .padding(bottom = 4.dp)
-                                    .clip(RoundedCornerShape(6.dp))
-                                    .background(Color(0xFFA855F7).copy(alpha = 0.24f))
-                                    .border(0.8.dp, Color(0xFFC084FC), RoundedCornerShape(6.dp))
-                                    .padding(horizontal = 7.dp, vertical = 3.dp),
-                            ) {
-                                Row(
-                                    verticalAlignment = Alignment.CenterVertically,
-                                    horizontalArrangement = Arrangement.spacedBy(4.dp),
-                                ) {
-                                    Icon(
-                                        imageVector = XyIcons.Pin,
-                                        contentDescription = null,
-                                        tint = Color(0xFFE9D5FF),
-                                        modifier = Modifier.size(10.dp),
-                                    )
-                                    Text(
-                                        text = "PENGUMUMAN RESMI ADMIN",
-                                        fontSize = 9.sp,
-                                        fontWeight = FontWeight.ExtraBold,
-                                        color = Color(0xFFE9D5FF),
-                                    )
-                                }
-                            }
-                        }
-
-                        // Baris Atas Ringkas: Nama Pengirim + @github + Kode Negara + Badge + Tombol Reply
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                        ) {
-                            Row(
-                                verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.spacedBy(4.dp),
-                                modifier = Modifier.weight(1f, fill = false),
-                            ) {
-                                Text(
-                                    text = msg.name,
-                                    style = MaterialTheme.typography.labelSmall,
-                                    fontSize = 11.sp,
-                                    fontWeight = FontWeight.Bold,
-                                    color = if (founderMsg) Color(0xFFE9D5FF) else primaryTextColor,
-                                    maxLines = 1,
-                                    overflow = TextOverflow.Ellipsis,
-                                )
-                                if (msg.githubLogin.isNotBlank() && !msg.githubLogin.equals(msg.name, ignoreCase = true)) {
-                                    Text(
-                                        text = "@${msg.githubLogin}",
-                                        style = MaterialTheme.typography.labelSmall,
-                                        fontSize = 9.5.sp,
-                                        color = secondaryTextColor,
-                                        maxLines = 1,
-                                        overflow = TextOverflow.Ellipsis,
-                                    )
-                                }
-                                Box(
-                                    modifier = Modifier
-                                        .clip(RoundedCornerShape(4.dp))
-                                        .background(
-                                            if (isLightBubble) Color(0xFF09090B).copy(alpha = 0.08f)
-                                            else Color.White.copy(alpha = 0.10f),
-                                        )
-                                        .padding(horizontal = 4.dp, vertical = 0.5.dp),
-                                ) {
-                                    Text(
-                                        text = msg.country,
-                                        style = MaterialTheme.typography.labelSmall,
-                                        fontSize = 8.5.sp,
-                                        fontWeight = FontWeight.Bold,
-                                        color = secondaryTextColor,
-                                    )
-                                }
-                                XyUserRoleBadges(
-                                    name = msg.name,
-                                    githubLogin = msg.githubLogin,
-                                    compact = true,
-                                )
-                                if (isPinned) {
-                                    ChatVectorPinIcon(
-                                        size = 11.dp,
-                                        tint = if (founderMsg) Color(0xFFD8B4FE) else secondaryTextColor,
-                                    )
-                                }
-                            }
-                            Spacer(Modifier.width(6.dp))
-                            Box(
-                                modifier = Modifier
-                                    .size(16.dp)
-                                    .clip(CircleShape)
-                                    .clickable { onReply() },
-                                contentAlignment = Alignment.Center,
-                            ) {
-                                ChatVectorReplyIcon(
-                                    size = 11.dp,
-                                    tint = secondaryTextColor,
-                                )
-                            }
-                        }
-
-                        // Kotak Kutipan Balasan (Quoted Reply ala WhatsApp)
-                        if (msg.replyToName.isNotBlank() || msg.replyToText.isNotBlank()) {
-                            Spacer(Modifier.height(3.dp))
-                            Row(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .clip(RoundedCornerShape(6.dp))
-                                    .background(
-                                        if (isLightBubble) Color(0xFF09090B).copy(alpha = 0.07f)
-                                        else Color.Black.copy(alpha = 0.28f),
-                                    )
-                                    .padding(horizontal = 7.dp, vertical = 4.dp),
-                                verticalAlignment = Alignment.CenterVertically,
-                            ) {
-                                Box(
-                                    modifier = Modifier
-                                        .width(2.5.dp)
-                                        .height(22.dp)
-                                        .clip(RoundedCornerShape(2.dp))
-                                        .background(if (founderMsg) Color(0xFFFDE047) else primaryTextColor),
-                                )
-                                Spacer(Modifier.width(6.dp))
-                                Column {
-                                    Text(
-                                        msg.replyToName.ifBlank { "Pesan" },
-                                        style = MaterialTheme.typography.labelSmall,
-                                        fontSize = 10.sp,
-                                        fontWeight = FontWeight.Bold,
-                                        color = primaryTextColor,
-                                    )
-                                    Text(
-                                        msg.replyToText.ifBlank { "Media / Stiker" },
-                                        style = MaterialTheme.typography.labelSmall,
-                                        fontSize = 10.sp,
-                                        color = secondaryTextColor,
-                                        maxLines = 1,
-                                        overflow = TextOverflow.Ellipsis,
-                                    )
-                                }
-                            }
-                        }
-
-                        // Lampiran Foto / Video / Audio / Berkas sesuai rasio asli
-                        if (hasMediaAttachment) {
-                            Spacer(Modifier.height(4.dp))
-                            ChatMediaAttachmentBox(
-                                msg = msg,
-                                isAudioAttachment = isAudioAttachment,
-                                autoDownloadAllowed = autoDownloadAllowed,
-                                viewedOnce = viewedOnce,
-                                autoplayVideoEnabled = autoplayVideoEnabled,
-                                floatingTime = null,
-                                onManualDownloadMedia = onManualDownloadMedia,
-                                onOpenMedia = onOpenMedia,
-                                onOpenFile = onOpenFile,
-                            )
-                        }
-
-                        // Teks Pesan (Semua link/URL berwarna biru cerah & bisa diklik!)
-                        if (msg.text.isNotBlank()) {
-                            Spacer(Modifier.height(2.dp))
-                            XyClickableLinkText(
-                                text = msg.text,
-                                color = primaryTextColor,
-                                linkColor = if (isLightBubble) Color(0xFF2563EB) else Color(0xFF38BDF8),
-                                style = MaterialTheme.typography.bodySmall.copy(
-                                    fontSize = if (isCompactOverlay) 12.sp else 13.sp,
-                                    lineHeight = if (isCompactOverlay) 15.5.sp else 17.sp,
-                                ),
-                                onLongPress = onLongPress,
-                            )
-                            if (transBody.isNotBlank() && !transBody.equals(msg.text, ignoreCase = true)) {
-                                Spacer(Modifier.height(3.dp))
-                                Box(
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .height(0.75.dp)
-                                        .background(dividerColor),
-                                )
-                                Spacer(Modifier.height(2.dp))
-                                Row(
-                                    verticalAlignment = Alignment.CenterVertically,
-                                    horizontalArrangement = Arrangement.spacedBy(4.dp),
-                                ) {
-                                    Icon(
-                                        imageVector = XyIcons.Globe,
-                                        contentDescription = null,
-                                        tint = if (founderMsg) Color(0xFFD8B4FE) else secondaryTextColor,
-                                        modifier = Modifier.size(10.dp),
-                                    )
-                                    XyClickableLinkText(
-                                        text = "[$transLabel] · $transBody",
-                                        color = if (founderMsg) Color(0xFFE9D5FF).copy(alpha = 0.94f) else secondaryTextColor,
-                                        linkColor = if (isLightBubble) Color(0xFF2563EB) else Color(0xFF38BDF8),
-                                        style = MaterialTheme.typography.bodySmall.copy(
-                                            fontSize = if (isCompactOverlay) 10.5.sp else 11.5.sp,
-                                            fontStyle = FontStyle.Italic,
-                                        ),
-                                        onLongPress = onLongPress,
-                                    )
-                                }
-                            }
-                        }
-
-                        // Kartu OG Banner / Link Preview untuk Semua Link di Chat Global
-                        if (!detectedLinkUrl.isNullOrBlank()) {
-                            Spacer(Modifier.height(4.dp))
-                            XyOpenGraphPreviewCard(url = detectedLinkUrl)
-                        }
-
-                        // Baris Bawah Ringkas: Jam + Vektor Centang 1 / 2
-                        Spacer(Modifier.height(1.dp))
-                        Row(
-                            modifier = Modifier.align(Alignment.End),
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(3.dp),
-                        ) {
-                            Text(
-                                text = time,
-                                style = MaterialTheme.typography.labelSmall,
-                                fontSize = 9.sp,
-                                color = secondaryTextColor,
-                            )
-                            if (msg.mine) {
-                                ChatVectorDeliveryTicks(
-                                    ticks = msg.deliveryTicks,
-                                    tint = when {
-                                        founderMsg -> Color(0xFFD8B4FE)
-                                        isLightBubble -> Color(0xFF18181B)
-                                        else -> Color(0xFFE4E4E7)
-                                    },
-                                )
-                            }
-                        }
-                    }
-                }
-
-                // Animasi fase untuk elemen melayang AI di dalam bubble
-                val activeFloatingPreset = if (floatingElementPreset != "NONE") floatingElementPreset else if (founderMsg) "SPARKLES" else "NONE"
-                val floatAnimPhase = if (activeFloatingPreset != "NONE") {
-                    val infFloat = rememberInfiniteTransition(label = "bubbleFloatElem")
-                    val p by infFloat.animateFloat(
-                        initialValue = 0f,
-                        targetValue = 1f,
-                        animationSpec = infiniteRepeatable(
-                            animation = tween(4200, easing = LinearEasing),
-                            repeatMode = RepeatMode.Restart,
-                        ),
-                        label = "bubbleFloatPhase",
-                    )
-                    p
-                } else 0f
-
-                // Kontainer Bubble sesuai Role (Founder Lightning Storm / XYTEAM Cyber / TESTER Matrix / Reguler)
-                if (founderMsg || isAnnouncementMsg) {
-                    FounderAnimatedBubbleBox(
-                        shape = bubbleShape,
-                        modifier = gestureMod,
-                    ) {
-                        if (activeFloatingPreset != "NONE") {
-                            Canvas(modifier = Modifier.matchParentSize()) {
-                                drawBubbleFloatingElements(
-                                    preset = activeFloatingPreset,
-                                    phase = floatAnimPhase,
-                                    accentColor = Color(0xFFD8B4FE),
-                                )
-                            }
-                        }
-                        bubbleContent()
-                    }
-                } else if (specialRole != null) {
-                    XyRoleAnimatedBubbleBox(
-                        role = specialRole,
-                        shape = bubbleShape,
-                        modifier = gestureMod,
-                    ) {
-                        if (activeFloatingPreset != "NONE") {
-                            Canvas(modifier = Modifier.matchParentSize()) {
-                                drawBubbleFloatingElements(
-                                    preset = activeFloatingPreset,
-                                    phase = floatAnimPhase,
-                                    accentColor = if (specialRole == "XYTEAM") Color(0xFF38BDF8) else Color(0xFF34D399),
-                                )
-                            }
-                        }
-                        bubbleContent()
-                    }
-                } else {
-                    val bubbleBgColor = when {
-                        liquidGlassMode && msg.mine -> Color(0xFFF8F8FA).copy(alpha = 0.84f)
-                        liquidGlassMode && !msg.mine -> Color(0xFF121217).copy(alpha = 0.62f)
-                        bubbleStyleMode == "glass" -> if (msg.mine) Color(0xFF273042).copy(alpha = 0.82f) else Color(0xFF151924).copy(alpha = 0.82f)
-                        bubbleStyleMode == "amber" -> if (msg.mine) Color(0xFF2B2214) else Color(0xFF181613)
-                        msg.mine -> Color(0xFFF4F4F6)
-                        else -> Color(0xFF1A1A20)
-                    }
-                    Box(
-                        modifier = gestureMod
-                            .clip(bubbleShape)
-                            .background(
-                                color = bubbleBgColor,
-                                shape = bubbleShape,
-                            ),
-                    ) {
-                        if (activeFloatingPreset != "NONE") {
-                            Canvas(modifier = Modifier.matchParentSize()) {
-                                drawBubbleFloatingElements(
-                                    preset = activeFloatingPreset,
-                                    phase = floatAnimPhase,
-                                    accentColor = if (isLightBubble) Color(0xFF9333EA) else Color(0xFFC084FC),
-                                )
-                            }
-                        }
-                        bubbleContent()
-                    }
-                }
-            }
-
-            // Pill Reaksi Visual (menampilkan ikon vektor berwarna + jumlah reaksi, bukan sekadar tulisan)
-            if (!reaction.isNullOrBlank()) {
-                Spacer(Modifier.height(3.dp))
-                Row(
-                    modifier = Modifier
-                        .clip(RoundedCornerShape(50))
-                        .background(Color(0xFF1F2330))
-                        .border(0.8.dp, Color.White.copy(alpha = 0.16f), RoundedCornerShape(50))
-                        .padding(horizontal = 8.dp, vertical = 3.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(4.dp),
-                ) {
-                    ChatReactionVisualIcon(tag = reaction, size = 15.dp)
-                    Text(
-                        text = "1",
-                        style = MaterialTheme.typography.labelSmall,
-                        fontSize = 10.sp,
-                        fontWeight = FontWeight.ExtraBold,
-                        color = Color(0xFFE2E8F0),
-                    )
-                }
-            }
-        }
-
-        if (msg.mine) {
-            Spacer(Modifier.width(if (isCompactOverlay) 5.dp else 8.dp))
-            ChatSenderAvatar(
-                name = msg.name,
-                githubLogin = msg.githubLogin,
-                avatarUrl = msg.avatarUrl,
-                isFounder = founderMsg,
-                compact = isCompactOverlay,
-            )
-        }
-    }
-}
-
-@Composable
-private fun ChatMediaAttachmentBox(
-    msg: ChatMessage,
-    isAudioAttachment: Boolean,
-    autoDownloadAllowed: Boolean,
-    viewedOnce: Boolean,
-    autoplayVideoEnabled: Boolean,
-    floatingTime: String?,
-    onManualDownloadMedia: () -> Unit,
-    onOpenMedia: () -> Unit,
-    onOpenFile: () -> Unit,
-) {
-    val context = LocalContext.current
-    val mediaShape = RoundedCornerShape(16.dp)
-
-    @Composable
-    fun FloatingTimePill(modifier: Modifier = Modifier) {
-        if (floatingTime == null) return
-        Row(
-            modifier = modifier
-                .padding(6.dp)
-                .clip(RoundedCornerShape(50))
-                .background(Color.Black.copy(alpha = 0.62f))
-                .padding(horizontal = 7.dp, vertical = 2.5.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(4.dp),
-        ) {
-            Text(
-                text = floatingTime,
-                style = MaterialTheme.typography.labelSmall,
-                fontSize = 9.5.sp,
-                fontWeight = FontWeight.SemiBold,
-                color = Color.White,
-            )
-            if (msg.mine) {
-                ChatVectorDeliveryTicks(
-                    ticks = msg.deliveryTicks,
-                    tint = Color.White,
-                )
-            }
-        }
-    }
-
-    if ((msg.attachmentType == "image" || msg.attachmentType == "video") && msg.viewOnce) {
-        // =========================================================
-        // 1× SEKALI LIHAT (FROSTED SPOILER SHIMMER CARD)
-        // =========================================================
-        val inf = rememberInfiniteTransition(label = "viewOnceShimmer")
-        val shimmerPhase by inf.animateFloat(
-            initialValue = 0f,
-            targetValue = 1f,
-            animationSpec = infiniteRepeatable(
-                animation = tween(2600, easing = LinearEasing),
-                repeatMode = RepeatMode.Restart,
-            ),
-            label = "viewOnceShimmerPhase",
-        )
-        Box(
-            modifier = Modifier
-                .fillMaxWidth()
-                .height(if (viewedOnce) 72.dp else 138.dp)
-                .clip(RoundedCornerShape(18.dp))
-                .background(
-                    Brush.linearGradient(
-                        colors = if (viewedOnce) {
-                            listOf(Color(0xFF141418), Color(0xFF18181F))
-                        } else {
-                            listOf(Color(0xFF181625), Color(0xFF271D3B), Color(0xFF151824))
-                        },
-                        start = Offset.Zero,
-                        end = Offset(420f * (0.4f + shimmerPhase), 260f),
-                    ),
-                )
-                .border(
-                    width = 1.dp,
-                    color = if (viewedOnce) Color.White.copy(alpha = 0.08f) else Color(0xFFC084FC).copy(alpha = 0.45f),
-                    shape = RoundedCornerShape(18.dp),
-                )
-                .clickable(enabled = !viewedOnce) { onOpenMedia() },
-            contentAlignment = Alignment.Center,
-        ) {
-            if (!viewedOnce) {
-                Canvas(modifier = Modifier.matchParentSize()) {
-                    val w = size.width
-                    val h = size.height
-                    for (i in 0..18) {
-                        val px = ((i * 53f + shimmerPhase * w) % w)
-                        val py = ((i * 37f) % h)
-                        drawCircle(
-                            color = Color.White.copy(alpha = 0.08f + (i % 3) * 0.04f),
-                            radius = (2.2f + (i % 4)).dp.toPx(),
-                            center = Offset(px, py),
-                        )
-                    }
-                }
-            }
-            Column(
-                horizontalAlignment = Alignment.CenterHorizontally,
-                verticalArrangement = Arrangement.spacedBy(6.dp),
-                modifier = Modifier.padding(horizontal = 14.dp),
-            ) {
-                Box(
-                    modifier = Modifier
-                        .size(if (viewedOnce) 30.dp else 44.dp)
-                        .clip(CircleShape)
-                        .background(
-                            if (viewedOnce) Color.White.copy(alpha = 0.06f)
-                            else Color(0xFFA855F7).copy(alpha = 0.24f),
-                        ),
-                    contentAlignment = Alignment.Center,
-                ) {
-                    ChatVectorViewOnceIcon(
-                        size = if (viewedOnce) 18.dp else 24.dp,
-                        tint = if (viewedOnce) Color(0xFF71717A) else Color(0xFFF3E8FF),
-                    )
-                }
-                Text(
-                    text = when {
-                        viewedOnce -> "Telah Dibuka · 1×"
-                        msg.attachmentType == "video" -> "Video Sekali Lihat"
-                        else -> "Foto Sekali Lihat"
-                    },
-                    style = MaterialTheme.typography.labelMedium,
-                    fontWeight = FontWeight.ExtraBold,
-                    color = if (viewedOnce) Color(0xFF71717A) else Color.White,
-                )
-                if (!viewedOnce) {
-                    Text(
-                        text = "Ketuk untuk membuka · Privasi 1×",
-                        style = MaterialTheme.typography.labelSmall,
-                        fontSize = 10.sp,
-                        color = Color(0xFFD8B4FE),
-                    )
-                }
-            }
-            FloatingTimePill(modifier = Modifier.align(Alignment.BottomEnd))
-        }
-    } else if (msg.attachmentType == "image" && msg.attachmentData.isNotBlank()) {
-        val bmp = remember(msg.id, msg.attachmentData) { decodeBase64Bitmap(msg.attachmentData) }
-        val ratio = remember(bmp) {
-            if (bmp != null && bmp.height > 0) {
-                (bmp.width.toFloat() / bmp.height.toFloat()).coerceIn(0.62f, 1.85f)
-            } else 1.33f
-        }
-        if (!autoDownloadAllowed) {
-            // =========================================================
-            // GAMBAR BELUM DIUNDUH: TAMPIL BURIK / BLUR SESUAI RASIO
-            // + TOMBOL DOWNLOAD BULAT DI TENGAH
-            // =========================================================
-            val lowResBmp = remember(bmp, ratio) {
-                if (bmp != null) {
-                    val targetW = 18
-                    val targetH = (18f / ratio).toInt().coerceIn(10, 32)
-                    runCatching { Bitmap.createScaledBitmap(bmp, targetW, targetH, true) }.getOrDefault(bmp)
-                } else null
-            }
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .aspectRatio(ratio)
-                    .clip(mediaShape)
-                    .background(Color(0xFF141418))
-                    .clickable { onManualDownloadMedia() },
-                contentAlignment = Alignment.Center,
-            ) {
-                if (lowResBmp != null) {
-                    Image(
-                        bitmap = lowResBmp.asImageBitmap(),
-                        contentDescription = null,
-                        modifier = Modifier
-                            .fillMaxSize()
-                            .blur(18.dp),
-                        contentScale = ContentScale.Crop,
-                    )
-                }
-                Box(
-                    modifier = Modifier
-                        .matchParentSize()
-                        .background(Color.Black.copy(alpha = 0.34f)),
-                )
-                Column(
-                    horizontalAlignment = Alignment.CenterHorizontally,
-                    verticalArrangement = Arrangement.spacedBy(6.dp),
-                ) {
-                    Box(
-                        modifier = Modifier
-                            .size(48.dp)
-                            .clip(CircleShape)
-                            .background(Color.Black.copy(alpha = 0.68f))
-                            .border(1.2.dp, Color.White.copy(alpha = 0.55f), CircleShape),
-                        contentAlignment = Alignment.Center,
-                    ) {
-                        Icon(
-                            imageVector = XyIcons.Download,
-                            contentDescription = "Unduh Gambar",
-                            tint = Color.White,
-                            modifier = Modifier.size(22.dp),
-                        )
-                    }
-                    Box(
-                        modifier = Modifier
-                            .clip(RoundedCornerShape(50))
-                            .background(Color.Black.copy(alpha = 0.65f))
-                            .padding(horizontal = 9.dp, vertical = 3.dp),
-                    ) {
-                        Text(
-                            text = "${(msg.attachmentSize / 1024).coerceAtLeast(1)} KB",
-                            style = MaterialTheme.typography.labelSmall,
-                            fontSize = 10.sp,
-                            fontWeight = FontWeight.Bold,
-                            color = Color.White,
-                        )
-                    }
-                }
-                FloatingTimePill(modifier = Modifier.align(Alignment.BottomEnd))
-            }
-        } else if (bmp != null) {
-            // =========================================================
-            // GAMBAR SUDAH DIUNDUH: TAMPIL PENUH SESUAI ASPECT RATIO ASLI
-            // =========================================================
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .aspectRatio(ratio)
-                    .clip(mediaShape)
-                    .clickable { onOpenMedia() },
-            ) {
-                Image(
-                    bitmap = bmp.asImageBitmap(),
-                    contentDescription = null,
-                    modifier = Modifier.fillMaxSize(),
-                    contentScale = ContentScale.Crop,
-                )
-                FloatingTimePill(modifier = Modifier.align(Alignment.BottomEnd))
-            }
-        }
-    } else if (msg.attachmentType == "video" && msg.attachmentData.isNotBlank()) {
-        val videoBytes = remember(msg.id, msg.attachmentData) {
-            runCatching {
-                val comma = msg.attachmentData.indexOf(',')
-                if (comma >= 0) Base64.decode(msg.attachmentData.substring(comma + 1), Base64.DEFAULT)
-                else null
-            }.getOrNull()
-        }
-        val videoRatio = remember(msg.id, videoBytes?.size) {
-            if (videoBytes != null && videoBytes.isNotEmpty()) {
-                extractCachedVideoAspectRatio(context, "chat_vid_${msg.id}", videoBytes)
-            } else {
-                9f / 16f
-            }
-        }
-        Box(
-            modifier = Modifier
-                .fillMaxWidth()
-                .aspectRatio(videoRatio)
-                .clip(mediaShape)
-                .background(Color(0xFF0C0C10))
-                .clickable { if (autoDownloadAllowed) onOpenMedia() else onManualDownloadMedia() },
-            contentAlignment = Alignment.Center,
-        ) {
-            if (autoDownloadAllowed && autoplayVideoEnabled && videoBytes != null && videoBytes.isNotEmpty()) {
-                FeedAutoplayVideoPreview(
-                    videoBytes = videoBytes,
-                    cacheKey = "chat_vid_${msg.id}",
-                    modifier = Modifier.fillMaxSize(),
-                )
-            } else {
-                Column(
-                    horizontalAlignment = Alignment.CenterHorizontally,
-                    verticalArrangement = Arrangement.spacedBy(6.dp),
-                ) {
-                    Box(
-                        modifier = Modifier
-                            .size(46.dp)
-                            .clip(CircleShape)
-                            .background(Color.Black.copy(alpha = 0.72f))
-                            .border(1.2.dp, Color.White.copy(alpha = 0.6f), CircleShape),
-                        contentAlignment = Alignment.Center,
-                    ) {
-                        if (autoDownloadAllowed) {
-                            ChatVectorVideoPlayIcon(size = 20.dp, tint = Color.White)
-                        } else {
-                            Icon(
-                                imageVector = XyIcons.Download,
-                                contentDescription = "Unduh Video",
-                                tint = Color.White,
-                                modifier = Modifier.size(20.dp),
-                            )
-                        }
-                    }
-                    Text(
-                        text = if (autoDownloadAllowed) "Putar Video" else "${(msg.attachmentSize / 1024).coerceAtLeast(1)} KB",
-                        style = MaterialTheme.typography.labelSmall,
-                        fontSize = 10.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = Color.White,
-                    )
-                }
-            }
-            FloatingTimePill(modifier = Modifier.align(Alignment.BottomEnd))
-        }
-    } else if (isAudioAttachment) {
-        // =========================================================
-        // AUDIO / LAGU / VOICE NOTE (FRAMELESS ROUNDED WAVEFORM PLAYER)
-        // =========================================================
-        var isPlaying by remember(msg.id) { mutableStateOf(false) }
-        val mediaPlayerRef = remember(msg.id) { arrayOfNulls<android.media.MediaPlayer>(1) }
-        DisposableEffect(msg.id) {
-            onDispose {
-                runCatching {
-                    mediaPlayerRef[0]?.stop()
-                    mediaPlayerRef[0]?.release()
-                }
-                mediaPlayerRef[0] = null
-            }
-        }
-        val infWave = rememberInfiniteTransition(label = "audioWave")
-        val wavePhase by infWave.animateFloat(
-            initialValue = 0f,
-            targetValue = 1f,
-            animationSpec = infiniteRepeatable(
-                animation = tween(900, easing = LinearEasing),
-                repeatMode = RepeatMode.Reverse,
-            ),
-            label = "audioWavePhase",
-        )
-
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .clip(mediaShape)
-                .background(Color(0xFF18181F))
-                .border(1.dp, Color.White.copy(alpha = 0.10f), mediaShape)
-                .padding(horizontal = 12.dp, vertical = 10.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(10.dp),
-        ) {
-            Box(
-                modifier = Modifier
-                    .size(40.dp)
-                    .clip(CircleShape)
-                    .background(Color.White)
-                    .clickable {
-                        val mp = mediaPlayerRef[0]
-                        if (mp != null && mp.isPlaying) {
-                            runCatching { mp.pause() }
-                            isPlaying = false
-                        } else if (mp != null) {
-                            runCatching { mp.start() }
-                            isPlaying = true
-                        } else {
-                            runCatching {
-                                val comma = msg.attachmentData.indexOf(',')
-                                val raw = if (comma >= 0) msg.attachmentData.substring(comma + 1) else msg.attachmentData
-                                val bytes = Base64.decode(raw, Base64.DEFAULT)
-                                val ext = msg.attachmentName.substringAfterLast('.', "mp3").take(5)
-                                val tempFile = File(context.cacheDir, "chat_audio_${msg.id.hashCode()}.$ext")
-                                tempFile.writeBytes(bytes)
-                                val player = android.media.MediaPlayer().apply {
-                                    setDataSource(tempFile.absolutePath)
-                                    setOnCompletionListener { isPlaying = false }
-                                    prepare()
-                                    start()
-                                }
-                                mediaPlayerRef[0] = player
-                                isPlaying = true
-                            }.onFailure {
-                                onOpenFile()
-                            }
-                        }
-                    },
-                contentAlignment = Alignment.Center,
-            ) {
-                if (isPlaying) {
-                    Row(horizontalArrangement = Arrangement.spacedBy(3.dp)) {
-                        Box(
-                            modifier = Modifier
-                                .width(3.5.dp)
-                                .height(13.dp)
-                                .clip(RoundedCornerShape(1.dp))
-                                .background(Color(0xFF09090B)),
-                        )
-                        Box(
-                            modifier = Modifier
-                                .width(3.5.dp)
-                                .height(13.dp)
-                                .clip(RoundedCornerShape(1.dp))
-                                .background(Color(0xFF09090B)),
-                        )
-                    }
-                } else {
-                    ChatVectorVideoPlayIcon(size = 18.dp, tint = Color(0xFF09090B))
-                }
-            }
-            Column(
-                modifier = Modifier.weight(1f),
-                verticalArrangement = Arrangement.spacedBy(5.dp),
-            ) {
-                Text(
-                    text = msg.attachmentName.ifBlank { "Audio Track" },
-                    style = MaterialTheme.typography.labelMedium,
-                    fontWeight = FontWeight.Bold,
-                    color = Color.White,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                )
-                Canvas(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(18.dp),
-                ) {
-                    val bars = 24
-                    val gap = size.width / bars
-                    for (i in 0 until bars) {
-                        val seed = ((i * 37 + 13) % 10) / 10f
-                        val animBoost = if (isPlaying) kotlin.math.abs(kotlin.math.sin((wavePhase * 6.28f) + i * 0.55f)).toFloat() else 0.35f
-                        val frac = (0.22f + seed * 0.45f + animBoost * 0.33f).coerceIn(0.2f, 1f)
-                        val bh = size.height * frac
-                        drawRoundRect(
-                            color = if (isPlaying) Color.White else Color(0xFFA1A1AA),
-                            topLeft = Offset(i * gap + 1.dp.toPx(), (size.height - bh) / 2f),
-                            size = Size(2.6.dp.toPx(), bh),
-                            cornerRadius = CornerRadius(2.dp.toPx(), 2.dp.toPx()),
-                        )
-                    }
-                }
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    Text(
-                        text = "${(msg.attachmentSize / 1024).coerceAtLeast(1)} KB",
-                        style = MaterialTheme.typography.labelSmall,
-                        fontSize = 9.5.sp,
-                        color = Color(0xFFA1A1AA),
-                    )
-                    if (floatingTime != null) {
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(4.dp),
-                        ) {
-                            Text(
-                                text = floatingTime,
-                                style = MaterialTheme.typography.labelSmall,
-                                fontSize = 9.5.sp,
-                                color = Color(0xFFA1A1AA),
-                            )
-                            if (msg.mine) {
-                                ChatVectorDeliveryTicks(ticks = msg.deliveryTicks, tint = Color.White)
-                            }
-                        }
-                    }
-                }
-            }
-        }
-    } else if (msg.attachmentType == "file") {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .clip(RoundedCornerShape(12.dp))
-                .background(Color.White.copy(alpha = 0.08f))
-                .clickable { onOpenFile() }
-                .padding(horizontal = 10.dp, vertical = 8.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
-        ) {
-            Icon(
-                imageVector = XyIcons.Clip,
-                contentDescription = null,
-                tint = Color.White,
-                modifier = Modifier.size(16.dp),
-            )
-            Column(modifier = Modifier.weight(1f)) {
-                Text(
-                    msg.attachmentName.ifBlank { "Dokumen" },
-                    style = MaterialTheme.typography.labelMedium,
-                    fontWeight = FontWeight.Bold,
-                    color = Color.White,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                )
-                Text(
-                    "${(msg.attachmentSize / 1024).coerceAtLeast(1)} KB · Ketuk untuk Buka",
-                    style = MaterialTheme.typography.labelSmall,
-                    color = Color(0xFFA1A1AA),
-                )
-            }
-        }
-    }
-}
-
-/**
- * Avatar Foto Profil Pengirim di Samping Bubble Chat.
- * Memuat foto dari URL GitHub / komunitas di latar belakang dengan cache memori,
- * atau menampilkan inisial monokrom bersih jika belum ada foto.
- */
-@Composable
-private fun ChatSenderAvatar(
-    name: String,
-    githubLogin: String,
-    avatarUrl: String,
-    isFounder: Boolean,
-    compact: Boolean = false,
-) {
-    val avSize = if (compact) 22.dp else 28.dp
-    val resolvedUrl = remember(avatarUrl, githubLogin) {
-        avatarUrl.ifBlank {
-            if (githubLogin.isNotBlank()) "https://github.com/$githubLogin.png?size=120" else ""
-        }
-    }
-    var bitmap by remember(resolvedUrl) {
-        mutableStateOf(if (resolvedUrl.isNotBlank()) avatarMemoryCache[resolvedUrl] else null)
-    }
-
-    LaunchedEffect(resolvedUrl) {
-        if (resolvedUrl.isNotBlank() && bitmap == null) {
-            val loaded = withContext(Dispatchers.IO) {
-                runCatching {
-                    val conn = (URL(resolvedUrl).openConnection() as HttpURLConnection).apply {
-                        connectTimeout = 6_000
-                        readTimeout = 6_000
-                        instanceFollowRedirects = true
-                    }
-                    if (conn.responseCode in 200..299) {
-                        val bytes = conn.inputStream.use { it.readBytes() }
-                        BitmapFactory.decodeByteArray(bytes, 0, bytes.size)?.also {
-                            avatarMemoryCache[resolvedUrl] = it
-                        }
-                    } else null
-                }.getOrNull()
-            }
-            if (loaded != null) bitmap = loaded
-        }
-    }
-
-    Box(
-        modifier = Modifier
-            .size(avSize)
-            .clip(CircleShape)
-            .background(if (isFounder) Color(0xFF1A0B2E) else Color(0xFF222228))
-            .let { mod ->
-                if (isFounder) mod.border(1.5.dp, founderBorderBrush(), CircleShape) else mod
-            },
-        contentAlignment = Alignment.Center,
-    ) {
-        val bmp = bitmap
-        if (bmp != null) {
-            Image(
-                bitmap = bmp.asImageBitmap(),
-                contentDescription = name,
-                modifier = Modifier
-                    .size(avSize)
-                    .clip(CircleShape),
-                contentScale = ContentScale.Crop,
-            )
-        } else {
-            val initials = name.removePrefix("@").trim().take(2).uppercase(Locale.ROOT).ifEmpty { "U" }
-            Text(
-                text = initials,
-                style = MaterialTheme.typography.labelSmall,
-                fontSize = if (compact) 9.sp else 11.sp,
-                fontWeight = FontWeight.ExtraBold,
-                color = if (isFounder) Color(0xFFE9D5FF) else Color(0xFFE4E4E7),
-            )
-        }
-    }
-}
-
-/**
- * Ikon Vektor Centang 1 (`✓`) & Centang 2 (`✓✓`) gaya WhatsApp di atas Canvas (Tanpa Karakter Emoji).
- */
-@Composable
-private fun ChatVectorDeliveryTicks(
-    ticks: Int,
-    tint: Color,
-    modifier: Modifier = Modifier,
-) {
-    Canvas(modifier = modifier.size(width = if (ticks >= 2) 15.dp else 11.dp, height = 11.dp)) {
-        val w = size.width
-        val h = size.height
-        val stroke = Stroke(width = h * 0.16f, cap = StrokeCap.Round, join = StrokeJoin.Round)
-        if (ticks <= 1) {
-            val p1 = Path().apply {
-                moveTo(w * 0.18f, h * 0.55f)
-                lineTo(w * 0.42f, h * 0.80f)
-                lineTo(w * 0.84f, h * 0.24f)
-            }
-            drawPath(p1, color = tint, style = stroke)
-        } else {
-            val p1 = Path().apply {
-                moveTo(w * 0.08f, h * 0.55f)
-                lineTo(w * 0.28f, h * 0.78f)
-                lineTo(w * 0.62f, h * 0.24f)
-            }
-            val p2 = Path().apply {
-                moveTo(w * 0.38f, h * 0.55f)
-                lineTo(w * 0.58f, h * 0.78f)
-                lineTo(w * 0.92f, h * 0.24f)
-            }
-            drawPath(p1, color = tint, style = stroke)
-            drawPath(p2, color = tint, style = stroke)
-        }
-    }
-}
-
-/**
- * Ikon Vektor Panah Balas (Reply Arrow) di atas Canvas.
- */
-@Composable
-private fun ChatVectorReplyIcon(
-    size: Dp = 14.dp,
-    tint: Color = Color.White,
-) {
-    Canvas(modifier = Modifier.size(size)) {
-        val w = this.size.width
-        val h = this.size.height
-        val stroke = Stroke(width = w * 0.12f, cap = StrokeCap.Round, join = StrokeJoin.Round)
-        val arrow = Path().apply {
-            moveTo(w * 0.42f, h * 0.22f)
-            lineTo(w * 0.16f, h * 0.46f)
-            lineTo(w * 0.42f, h * 0.70f)
-        }
-        val curve = Path().apply {
-            moveTo(w * 0.18f, h * 0.46f)
-            lineTo(w * 0.62f, h * 0.46f)
-            quadraticTo(w * 0.86f, h * 0.46f, w * 0.86f, h * 0.76f)
-        }
-        drawPath(arrow, color = tint, style = stroke)
-        drawPath(curve, color = tint, style = stroke)
-    }
-}
-
-/**
- * Ikon Vektor Stiker (Lembar Sudut Terlipat) di atas Canvas.
- */
-@Composable
-private fun ChatVectorStickerIcon(
-    size: Dp = 18.dp,
-    tint: Color = Color.White,
-) {
-    Canvas(modifier = Modifier.size(size)) {
-        val w = this.size.width
-        val h = this.size.height
-        val stroke = Stroke(width = w * 0.10f, cap = StrokeCap.Round, join = StrokeJoin.Round)
-        drawRoundRect(
-            color = tint,
-            topLeft = Offset(w * 0.14f, h * 0.14f),
-            size = Size(w * 0.72f, h * 0.72f),
-            cornerRadius = CornerRadius(w * 0.20f, h * 0.20f),
-            style = stroke,
-        )
-        val fold = Path().apply {
-            moveTo(w * 0.56f, h * 0.86f)
-            lineTo(w * 0.56f, h * 0.60f)
-            lineTo(w * 0.86f, h * 0.60f)
-        }
-        drawPath(fold, color = tint, style = stroke)
-        drawCircle(color = tint, radius = w * 0.06f, center = Offset(w * 0.36f, h * 0.42f))
-        drawCircle(color = tint, radius = w * 0.06f, center = Offset(w * 0.62f, h * 0.42f))
-    }
-}
-
-/**
- * Ikon Vektor Pin Sematkan Pesan (Pushpin) di atas Canvas.
- */
-@Composable
-private fun ChatVectorPinIcon(
-    size: Dp = 16.dp,
-    tint: Color = Color.White,
-) {
-    Canvas(modifier = Modifier.size(size)) {
-        val w = this.size.width
-        val h = this.size.height
-        val stroke = Stroke(width = w * 0.11f, cap = StrokeCap.Round, join = StrokeJoin.Round)
-        val pinBody = Path().apply {
-            moveTo(w * 0.32f, h * 0.18f)
-            lineTo(w * 0.68f, h * 0.18f)
-            lineTo(w * 0.62f, h * 0.46f)
-            lineTo(w * 0.76f, h * 0.60f)
-            lineTo(w * 0.24f, h * 0.60f)
-            lineTo(w * 0.38f, h * 0.46f)
-            close()
-        }
-        drawPath(pinBody, color = tint, style = stroke)
-        drawLine(
-            color = tint,
-            start = Offset(w * 0.50f, h * 0.60f),
-            end = Offset(w * 0.50f, h * 0.88f),
-            strokeWidth = w * 0.12f,
-            cap = StrokeCap.Round,
-        )
-    }
-}
-
-/**
- * Ikon Vektor Media 1× Sekali Lihat (Lingkaran Putus-Putus + Angka 1 Vektor) di atas Canvas.
- */
-@Composable
-private fun ChatVectorViewOnceIcon(
-    size: Dp = 18.dp,
-    tint: Color = Color.White,
-) {
-    Canvas(modifier = Modifier.size(size)) {
-        val w = this.size.width
-        val h = this.size.height
-        val stroke = Stroke(width = w * 0.11f, cap = StrokeCap.Round, join = StrokeJoin.Round)
-        drawArc(
-            color = tint,
-            startAngle = -70f,
-            sweepAngle = 210f,
-            useCenter = false,
-            topLeft = Offset(w * 0.12f, h * 0.12f),
-            size = Size(w * 0.76f, h * 0.76f),
-            style = stroke,
-        )
-        drawArc(
-            color = tint,
-            startAngle = 165f,
-            sweepAngle = 45f,
-            useCenter = false,
-            topLeft = Offset(w * 0.12f, h * 0.12f),
-            size = Size(w * 0.76f, h * 0.76f),
-            style = stroke,
-        )
-        drawArc(
-            color = tint,
-            startAngle = 230f,
-            sweepAngle = 40f,
-            useCenter = false,
-            topLeft = Offset(w * 0.12f, h * 0.12f),
-            size = Size(w * 0.76f, h * 0.76f),
-            style = stroke,
-        )
-        val onePath = Path().apply {
-            moveTo(w * 0.42f, h * 0.38f)
-            lineTo(w * 0.52f, h * 0.30f)
-            lineTo(w * 0.52f, h * 0.68f)
-        }
-        drawPath(onePath, color = tint, style = stroke)
-    }
-}
-
-/**
- * Ikon Vektor Play Video Segitiga di atas Canvas.
- */
-@Composable
-private fun ChatVectorVideoPlayIcon(
-    size: Dp = 16.dp,
-    tint: Color = Color.White,
-) {
-    Canvas(modifier = Modifier.size(size)) {
-        val w = this.size.width
-        val h = this.size.height
-        val play = Path().apply {
-            moveTo(w * 0.28f, h * 0.18f)
-            lineTo(w * 0.82f, h * 0.50f)
-            lineTo(w * 0.28f, h * 0.82f)
-            close()
-        }
-        drawPath(play, color = tint)
-    }
-}
-
 private var activeSocket: WebSocket? = null
 
-private fun chatSocketSend(rawJson: String) {
-    runCatching { activeSocket?.send(rawJson) }
-}
+private fun chatSocketSend(rawJson: String): Boolean =
+    runCatching { activeSocket?.send(rawJson) == true }.getOrDefault(false)
 
 internal fun translateClientSideMultiLang(
     text: String,
@@ -5759,19 +3688,21 @@ internal fun translateClientSideMultiLang(
     }.getOrNull()
 }
 
-private fun decodeBase64Bitmap(dataUri: String): Bitmap? = runCatching {
+internal fun decodeBase64Bitmap(dataUri: String, cacheResult: Boolean = true): Bitmap? = runCatching {
     if (dataUri.isBlank()) return@runCatching null
-    val key = dataUri.hashCode()
-    chatDecodedBitmapCache.get(key)?.let { return@runCatching it }
+    if (dataUri.length > 2_800_000) return@runCatching null
+    val key = MessageDigest.getInstance("SHA-256").digest(dataUri.toByteArray(Charsets.UTF_8))
+        .joinToString("") { "%02x".format(it) }
+    if (cacheResult) chatDecodedBitmapCache.get(key)?.let { return@runCatching it }
     val comma = dataUri.indexOf(',')
     if (comma < 0) return@runCatching null
     val bytes = Base64.decode(dataUri.substring(comma + 1), Base64.DEFAULT)
-    BitmapFactory.decodeByteArray(bytes, 0, bytes.size)?.also { bmp ->
-        chatDecodedBitmapCache.put(key, bmp)
+    decodeBoundedChatBitmap(bytes, 2_048)?.also { bmp ->
+        if (cacheResult) chatDecodedBitmapCache.put(key, bmp)
     }
 }.getOrNull()
 
-private fun saveChatMediaToGallery(context: Context, msg: ChatMessage) {
+internal fun saveChatMediaToGallery(context: Context, msg: ChatMessage) {
     runCatching {
         val comma = msg.attachmentData.indexOf(',')
         if (comma < 0) return
@@ -5829,7 +3760,7 @@ private fun saveChatMediaToGallery(context: Context, msg: ChatMessage) {
     }
 }
 
-private fun saveOrShareChatAttachment(context: Context, msg: ChatMessage) {
+internal fun saveOrShareChatAttachment(context: Context, msg: ChatMessage) {
     runCatching {
         val comma = msg.attachmentData.indexOf(',')
         if (comma < 0) return
@@ -5863,7 +3794,7 @@ private fun saveOrShareChatAttachment(context: Context, msg: ChatMessage) {
  * agar reaksi tampil sebagai ikon visual ekspresif, bukan sekadar tulisan teks.
  */
 @Composable
-private fun ChatReactionVisualIcon(
+internal fun ChatReactionVisualIcon(
     tag: String,
     size: Dp = 18.dp,
 ) {

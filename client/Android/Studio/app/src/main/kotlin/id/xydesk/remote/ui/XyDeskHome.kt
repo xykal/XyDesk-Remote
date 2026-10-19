@@ -176,7 +176,7 @@ fun XyDeskHome(
     var drawerOpen by remember { mutableStateOf(false) }
     var helpToolsOpen by remember { mutableStateOf(false) }
     var section by remember { mutableStateOf(XyHomeNavPersist.section) }
-    // Tab nav bawah (3 tujuan). `section` tetap ada karena seksi dibuka dari
+    // Tab nav bawah (4 tujuan). `section` tetap ada karena seksi dibuka dari
     // drawer maupun dari layar Profil, dan keduanya menggambar SectionScreen.
     var tab by remember { mutableStateOf(XyHomeNavPersist.tab) }
     var route by remember { mutableStateOf<XyRoute>(XyHomeNavPersist.route) }
@@ -187,7 +187,7 @@ fun XyDeskHome(
     }
     LaunchedEffect(openChatSignal) {
         if (openChatSignal > 0) {
-            tab = XyTab.FEED
+            tab = XyTab.CHAT
             route = XyRoute.ChatGlobal
         }
     }
@@ -244,6 +244,12 @@ fun XyDeskHome(
     val notice = rememberXyNotice()
 
     fun connect(profile: ConnectionProfile) {
+        if (RdpOptions.of(context, profile.id).pcConnectMode) {
+            context.startActivity(PcStreamSessionActivity.intent(context))
+            notice.show(xyNow("Koneksi PC lama diganti PC Stream. Profil tersimpan tidak dihapus.",
+                "Legacy PC connection is replaced by PC Stream. Saved profile was not deleted."))
+            return
+        }
         onAuthenticateConnect {
             incrementLocalUsageSessionCount(context)
             scope.launch { repo.touch(profile) }
@@ -486,7 +492,7 @@ fun XyDeskHome(
                         onDismissSharedNotice = onDismissSharedNotice,
                         onMenu = { drawerOpen = true },
                         onAddRdp = { route = XyRoute.EditDevice(null, pcQuickMode = false) },
-                        onAddPcQuick = { route = XyRoute.EditDevice(null, pcQuickMode = true) },
+                        onAddPcQuick = { context.startActivity(PcStreamSessionActivity.intent(context)) },
                         onOpenPcStream = { context.startActivity(PcStreamSessionActivity.intent(context)) },
                         onCreateRdp = { route = XyRoute.CreateRdp },
                         onOpenSshTerminal = { route = XyRoute.SshTerminal },
@@ -531,10 +537,10 @@ fun XyDeskHome(
 
                 XyRoute.Feed -> XyFeedScreen(
                     onMenu = { drawerOpen = true },
-                    onOpenChat = { route = XyRoute.ChatGlobal },
+                    onOpenChat = { tab = XyTab.CHAT; route = XyRoute.ChatGlobal },
                 )
 
-                XyRoute.ChatGlobal -> GlobalChatScreen(onBack = { route = XyRoute.Feed })
+                XyRoute.ChatGlobal -> GlobalChatScreen(onBack = { tab = XyTab.HOME; route = XyRoute.Devices })
                 XyRoute.Profile -> XyProfileScreen(
                     onMenu = { drawerOpen = true },
                     onOpenSection = {
@@ -567,6 +573,7 @@ fun XyDeskHome(
                                 }
                                 XyTab.FEED -> route = XyRoute.Feed
                                 XyTab.PROFILE -> route = XyRoute.Profile
+                                XyTab.CHAT -> route = XyRoute.ChatGlobal
                             }
                         },
                     )
@@ -579,7 +586,7 @@ fun XyDeskHome(
 
     // In-App Notification Banner (Pengumuman, Balasan, Like, Reaksi, Mention, Chat, & OTA Data)
     XyInAppNotificationBannerHost(
-        onOpenChat = { route = XyRoute.ChatGlobal },
+        onOpenChat = { tab = XyTab.CHAT; route = XyRoute.ChatGlobal },
         onOpenFeed = {
             tab = XyTab.FEED
             route = XyRoute.Feed
@@ -1433,7 +1440,7 @@ private fun DevicesScreen(
             }
             if (showPcConnectionNotice) {
                 Banner(
-                    text = xy("Koneksi PC masih beta — RDP tetap tersedia.", "PC connection is beta — RDP still works."),
+                    text = xy("PC Stream menggantikan Koneksi PC lama. RDP tetap tersedia.", "PC Stream replaces legacy PC Connect. RDP remains available."),
                     onClick = { showPcConnectionNotice = false },
                     container = MaterialTheme.colorScheme.secondaryContainer,
                     content = MaterialTheme.colorScheme.onSecondaryContainer,
@@ -1506,14 +1513,14 @@ private fun DevicesScreen(
                         XyEmptyState(
                             title = xy("Belum Ada Perangkat Tersimpan", "No Saved Devices Yet"),
                             subtitle = xy(
-                                "Tambahkan Koneksi PC, PC Stream, atau RDP untuk mulai mengakses desktop jarak jauh.",
-                                "Add a PC, PC Stream, or RDP connection to start accessing your remote desktop.",
+                                "Tambahkan PC Stream atau RDP untuk mulai mengakses desktop jarak jauh.",
+                                "Add PC Stream or RDP to start accessing your remote desktop.",
                             ),
                             icon = XyIcons.Monitor,
                         )
                         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                             XyPillButton(
-                                xy("Koneksi PC (ID)", "PC (ID & Pass)"),
+                                xy("PC Stream", "PC Stream"),
                                 onAddPcQuick,
                                 icon = XyIcons.Plus,
                                 modifier = Modifier.weight(1f),
@@ -1562,7 +1569,7 @@ private fun DevicesScreen(
                         XySegmented(
                             options = listOf(
                                 xy("Semua ({0})", "All ({0})", favorites.size),
-                                xy("Koneksi PC", "PC Connect"),
+                                xy("PC lama", "Legacy PC"),
                                 xy("Koneksi RDP", "RDP Session"),
                             ),
                             selectedIndex = modeFilterIndex,
@@ -1661,22 +1668,6 @@ private fun DevicesScreen(
                     style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
-                )
-                XyRow(
-                    title = xy("Koneksi PC (ID & Password)", "PC Connection (ID & Password)"),
-                    modifier = Modifier.padding(horizontal = 2.dp),
-                    trailing = {
-                        Text(
-                            xy("Eksperimental", "Experimental"),
-                            style = MaterialTheme.typography.labelSmall,
-                            color = MaterialTheme.colorScheme.primary,
-                            maxLines = 1,
-                        )
-                    },
-                    onClick = {
-                        showAddBubble = false
-                        onAddPcQuick()
-                    },
                 )
                 XyRow(
                     title = xy("PC Stream & Engine Konsol Non-RDP (120Hz)", "PC Stream & Non-RDP Console Engine (120Hz)"),

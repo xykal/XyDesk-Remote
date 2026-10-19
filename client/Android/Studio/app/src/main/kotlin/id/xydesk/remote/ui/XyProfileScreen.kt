@@ -550,6 +550,7 @@ private fun CommunityAccountCard(
     val authRev = GitHubDirectOAuthController.authRevision
     var githubUser by remember(authRev) { mutableStateOf(getVerifiedGitHubLogin(context)) }
     LaunchedEffect(authRev) {
+        launch { api.fetchLeaderboard(reportDeltaSec = 0L) }
         val currentGh = getVerifiedGitHubLogin(context)
         if (!currentGh.isNullOrBlank()) {
             githubUser = currentGh
@@ -661,7 +662,8 @@ private fun CommunityAccountCard(
                         .background(MaterialTheme.colorScheme.onSurface.copy(alpha = 0.10f))
                         .let { mod ->
                             if (isFounder) mod.border(2.dp, founderBorderBrush(), RoundedCornerShape(28.dp)) else mod
-                        },
+                        }
+                        .podiumAvatarFrame(githubUser),
                     contentAlignment = Alignment.Center,
                 ) {
                     val bmp = avatarBitmap
@@ -699,23 +701,18 @@ private fun CommunityAccountCard(
             }
 
             Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(6.dp),
-                ) {
-                    Text(
-                        text = name ?: githubUser ?: xy("Akun $accountId", "Account $accountId"),
-                        style = MaterialTheme.typography.titleMedium,
-                        fontWeight = FontWeight.Bold,
-                        maxLines = 1,
-                        overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
-                    )
-                    XyUserRoleBadges(
-                        name = name,
-                        githubLogin = githubUser,
-                        compact = true,
-                    )
-                }
+                Text(
+                    text = name ?: githubUser ?: xy("Akun $accountId", "Account $accountId"),
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Bold,
+                    maxLines = 1,
+                    overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
+                )
+                XyUserRoleBadges(
+                    name = name,
+                    githubLogin = githubUser,
+                    compact = true,
+                )
                 Text(
                     text = buildString {
                         if (!githubUser.isNullOrBlank()) {
@@ -1524,7 +1521,8 @@ internal fun XyHeaderAccountActions(
                     MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f),
                     androidx.compose.foundation.shape.CircleShape,
                 )
-            },
+            }
+            .podiumAvatarFrame(ghUser),
     ) {
         Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
             val bmp = avatarBitmap
@@ -1566,7 +1564,8 @@ internal fun XyHeaderAccountActions(
                             .let { m ->
                                 if (founder) m.border(2.dp, founderBorderBrush(), androidx.compose.foundation.shape.CircleShape)
                                 else m
-                            },
+                            }
+                            .podiumAvatarFrame(ghUser),
                     ) {
                         Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                             val bmp = avatarBitmap
@@ -1587,21 +1586,18 @@ internal fun XyHeaderAccountActions(
                         }
                     }
                     Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(6.dp),
-                        ) {
-                            Text(
-                                displayName,
-                                style = MaterialTheme.typography.titleMedium,
-                                fontWeight = FontWeight.Bold,
-                            )
-                            XyUserRoleBadges(
-                                name = displayName,
-                                githubLogin = ghUser,
-                                compact = true,
-                            )
-                        }
+                        Text(
+                            displayName,
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.Bold,
+                            maxLines = 1,
+                            overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
+                        )
+                        XyUserRoleBadges(
+                            name = displayName,
+                            githubLogin = ghUser,
+                            compact = true,
+                        )
                         Text(
                             if (ghUser != null) "GitHub: @$ghUser (Terhubung)"
                             else xy("GitHub belum terhubung", "GitHub not connected"),

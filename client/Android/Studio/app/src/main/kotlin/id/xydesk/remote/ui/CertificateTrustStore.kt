@@ -6,7 +6,7 @@ import android.content.Context
  * M2.5 — "Percaya & ingat" sertifikat server.
  *
  * Menyimpan fingerprint SHA-256 per `host:port` di SharedPreferences.
- *  - Fingerprint sama pada koneksi berikutnya = auto-approve (tanpa dialog)
+ *  - Fingerprint sama tanpa warning pada koneksi berikutnya = auto-approve
  *  - Fingerprint BERBEDA dengan yang tersimpan = dialog dengan warning
  *    kuat (kemungkinan MITM / server ganti cert)
  *
@@ -22,6 +22,7 @@ class CertificateTrustStore(context: Context) {
     fun fingerprint(host: String, port: Int): String? = sp.getString(key(host, port), null)
 
     fun trust(host: String, port: Int, fingerprint: String) {
+        if (host.isBlank() || port !in 1..65535 || fingerprint.isBlank()) return
         sp.edit().putString(key(host, port), fingerprint).apply()
     }
 
@@ -34,7 +35,9 @@ class CertificateTrustStore(context: Context) {
         val prefix = "fp."
         return sp.all.entries
             .filter { it.key.startsWith(prefix) }
-            .map { it.key.removePrefix(prefix) to (it.value as String) }
+            .mapNotNull { entry ->
+                (entry.value as? String)?.takeIf { it.isNotBlank() }?.let { entry.key.removePrefix(prefix) to it }
+            }
             .sortedBy { it.first }
     }
 

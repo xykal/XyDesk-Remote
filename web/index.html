@@ -12,7 +12,7 @@
   <link rel="canonical" href="https://www.xydeskremote.biz.id/" />
   <link rel="icon" type="image/png" href="/favicon.png" />
   <link rel="apple-touch-icon" href="/favicon.png" />
-  <meta name="keywords" content="remote desktop android, rdp android, remote pc dari hp, remote windows dari android, aplikasi rdp gratis, remote desktop tanpa pc gaming, xydesk, xydesk remote, rdp github actions, remote desktop e2ee, kontrol pc dari hp" />
+  <meta name="keywords" content="remote desktop android, rdp android, remote pc dari hp, remote windows dari android, aplikasi rdp gratis, remote desktop tanpa pc gaming, xydesk, xydesk remote, rdp github actions, kontrol pc dari hp" />
   <meta property="og:site_name" content="XyDesk Remote" />
   <meta property="og:type" content="website" />
   <meta property="og:locale" content="id_ID" />
@@ -61,7 +61,7 @@
       "softwareVersion": "1.1.20",
       "url": "https://www.xydeskremote.biz.id/",
       "downloadUrl": "https://github.com/xykal/XyDesk-Remote/releases/latest",
-      "description": "Klien RDP & Terminal SSH-2 Android dengan On-Mic, Buat RDP Cloud Gratis (Windows, Linux XFCE4, Linux Polos SSH), Chat Global E2EE Liquid Glass (.webp.crypto15), dan Native GUI Host Agent.",
+      "description": "Klien RDP & Terminal SSH-2 Android dengan On-Mic, Buat RDP Cloud Gratis (Windows, Linux XFCE4, Linux Polos SSH), Chat Global Liquid Glass (.webp.crypto15), dan Native GUI Host Agent.",
       "author": {
         "@id": "https://www.xydeskremote.biz.id/#organization"
       },
@@ -1399,12 +1399,12 @@
           <div class="ledger-cell">
             <div class="ledger-k" data-i18n="led.3.k">Chat Global &amp; Sesi</div>
             <div class="ledger-v mono">Liquid Glass · .crypto15</div>
-            <div class="ledger-sub" data-i18n="led.3.s">E2EE · Stiker Custom · Floating Sesi</div>
+            <div class="ledger-sub" data-i18n="led.3.s">Proteksi Chat · Stiker Custom · Floating Sesi</div>
           </div>
           <div class="ledger-cell">
             <div class="ledger-k" data-i18n="led.4.k">Windows Host Agent</div>
-            <div class="ledger-v mono">Native GUI · Clean ID/PW</div>
-            <div class="ledger-sub">Tanpa Terminal · Virtual Device 120Hz</div>
+            <div class="ledger-v mono">Native GUI · Inventaris lokal</div>
+            <div class="ledger-sub">Mic &amp; Game · Verifikasi tertunda</div>
           </div>
         </div>
       </div>
@@ -1423,17 +1423,10 @@
 
         <div class="liquid-grid">
           <div class="liquid-card">
-            <span class="liquid-badge mono">ON-MIC · XYDESK &amp; RDP BELI SENDIRI</span>
-            <h3>On-Mic Lancar di XyRDP &amp; File Setup untuk RDP Beli / Non-GitHub</h3>
-            <p>
-              Kanal mikrofon <code>AUDIN</code> OpenSL ES kini mendukung penuh perekaman suara 16-bit mono/upmix stereo untuk Discord, Voice Chat GTA SAMP, dan rapat di dalam RDP. Punya RDP Windows atau VPS Linux yang beli sendiri? Jalankan installer mandiri 1-klik di bawah ini di dalam RDP Anda:
-            </p>
-            <div class="liquid-cmd mono" id="onmic-win-cmd">powershell -ExecutionPolicy Bypass -Command "irm https://xydeskremote.biz.id/onmic.ps1 | iex"</div>
-            <div class="liquid-actions">
-              <a href="/XyDesk-RDP-OnMic-Setup.bat" download="XyDesk-RDP-OnMic-Setup.bat" class="pill-btn primary">Unduh File Setup On-Mic (.BAT)</a>
-              <button type="button" class="pill-btn" onclick="navigator.clipboard&&navigator.clipboard.writeText(document.getElementById('onmic-win-cmd').textContent);this.textContent='Perintah Tersalin ✓';">Salin Cmd PowerShell</button>
-              <a href="/onmic.ps1" download="onmic.ps1" class="pill-btn">Unduh onmic.ps1</a>
-            </div>
+            <span class="liquid-badge mono">MIC · UJI SESI NYATA</span>
+            <h3>Mic RDP dan bridge: periksa jalur yang benar</h3>
+            <p>Keberhasilan mic harus diuji dari HP sampai input yang dipilih aplikasi/game. Native AUDIN RDP dan bridge adalah jalur berbeda. Skrip On-Mic lama ditarik; tidak ada installer otomatis atau jaminan semua RDP langsung bekerja.</p>
+            <div class="liquid-actions"><a href="host.html" class="pill-btn primary">Panduan kesiapan mic &amp; game</a></div>
           </div>
 
           <div class="liquid-card">
@@ -1449,15 +1442,10 @@
           </div>
 
           <div class="liquid-card">
-            <span class="liquid-badge mono">WINDOWS HOST AGENT · 100% NATIVE GUI</span>
-            <h3>Host Agent Modern Tanpa Terminal: Clean ID/PW, E2EE &amp; Virtual Device</h3>
-            <p>
-              <code>XyDeskRemoteHost-Standalone.exe</code> kini tampil dengan antarmuka <strong>Native GUI Modern (tanpa jendela terminal/CMD)</strong>. Dilengkapi <strong>Clean ID &amp; Password</strong> (tombol salin &amp; acak password instan), sidik jari <strong>Enkripsi E2EE AES-256-GCM + QUIC TLS 1.3</strong>, serta pengelola <strong>Virtual Display 120Hz &amp; Virtual Microphone On-Mic</strong>.
-            </p>
-            <div class="liquid-actions">
-              <a href="/XyDeskRemoteHost-Standalone.exe" download="XyDeskRemoteHost-Standalone.exe" class="pill-btn primary">Unduh Host Agent (.EXE Mandiri)</a>
-              <a href="host.html" class="pill-btn">Lihat Panduan Host Agent</a>
-            </div>
+            <span class="liquid-badge mono">WINDOWS HOST · SOURCE DALAM VERIFIKASI</span>
+            <h3>Satu EXE, status perangkat yang jujur</h3>
+            <p>Target distribusi baru adalah <code>XyDeskRemoteHost.exe</code>, tanpa varian Standalone. Panel native memeriksa inventaris mic/audio dan proses game; bukan bukti koneksi aman, suara tersalurkan atau FPS tertentu. Transport Direct terautentikasi masih dikerjakan; build baru belum tersedia untuk publik.</p>
+            <div class="liquid-actions"><a href="host.html" class="pill-btn primary">Lihat status dan batasan host</a></div>
           </div>
 
           <div class="liquid-card">
@@ -1656,10 +1644,10 @@
               <span class="cl-badge mono">17 Oktober 2026 · Feed &amp; Global Chat Overhaul, OG Preview, Top 100 Leaderboard, XyShield &amp; Chrome OAuth</span>
             </div>
             <ul class="arch-list">
-              <li><strong>On-Mic Lancar di <code>XyRDP</code>, <code>XyDesk-Remote</code> &amp; RDP Beli Sendiri (<code>audin_opensl_es.c</code>, <code>opensl_io.c</code>, <code>onmic.ps1</code>):</strong> Memperbaiki negosiasi perekaman hardware OpenSL ES Android ke 16-bit mono PCM (upmix otomatis DSP FreeRDP), membuka kunci pre-boot <code>fDisableAudioCapture=0</code> &amp; <code>ConsentStore\microphone\NonPackaged=Allow</code>, serta menyediakan installer mandiri <code>XyDesk-RDP-OnMic-Setup.bat</code> untuk RDP yang dibeli di luar GitHub.</li>
+              <li><strong>Catatan historis (installer lama sudah ditarik): On-Mic di <code>XyRDP</code>, <code>XyDesk-Remote</code> &amp; RDP Beli Sendiri (<code>audin_opensl_es.c</code>, <code>opensl_io.c</code>, <code>onmic.ps1</code>):</strong> Memperbaiki negosiasi perekaman hardware OpenSL ES Android ke 16-bit mono PCM (upmix otomatis DSP FreeRDP), membuka kunci pre-boot <code>fDisableAudioCapture=0</code> &amp; <code>ConsentStore\microphone\NonPackaged=Allow</code>, serta menyediakan installer mandiri <code>XyDesk-RDP-OnMic-Setup.bat</code> untuk RDP yang dibeli di luar GitHub.</li>
               <li><strong>Mode Linux Polos (Tanpa XFCE4) &amp; Klien Terminal SSH-2 Interaktif (<code>XySshClient.kt</code>, <code>XySshTerminalScreen.kt</code>):</strong> Menambahkan opsi <strong>Linux Polos (SSH Server tanpa XFCE4)</strong> di Buat RDP Gratis yang menyala dalam ~45 detik, dilengkapi layar Terminal SSH-2 interaktif (<code>xterm-256color</code>) di dalam aplikasi untuk terhubung ke Linux Polos maupun VPS Linux eksternal.</li>
-              <li><strong>Rombak Total UI/UX Windows Host Agent (<code>XyDeskRemoteHost.exe</code>):</strong> Menghapus tampilan terminal/console dan beralih ke <strong>100% Native GUI Modern (<code>-mwindows</code>)</strong> dengan kartu <strong>Clean ID &amp; Password</strong>, <strong>Enkripsi E2EE AES-256-GCM + QUIC TLS 1.3</strong>, dan pengelola <strong>Virtual Display 120Hz + Virtual Mic On-Mic</strong>.</li>
-              <li><strong>Chat Global E2EE, Stiker Custom Terenkripsi (<code>.webp.crypto15</code>) &amp; Floating Chat Sesi Liquid Glass:</strong> Menambahkan pembuat stiker sendiri dari galeri yang otomatis dikonversi ke WebP dan dienkripsi AES-256-GCM di <code>Android/media/id.xydesk.remote/globwlchat/sticker/&lt;Token&gt;.webp.crypto15</code>, notifikasi push bersuara aktif (OneSignal FCM v1), serta Floating Chat di dalam sesi RDP berdesain <strong>Hitam-Putih Liquid Glass</strong> yang agak transparan dan bisa digeser.</li>
+              <li><strong>Koreksi catatan Windows Host:</strong> Label enkripsi, fingerprint dan virtual device pada host lama tidak membuktikan implementasi atau keberhasilan runtime. Klaim tersebut ditarik. Host baru memakai inventaris perangkat yang jujur; pairing dan transport aman masih dikerjakan sebelum rilis.</li>
+              <li><strong>Chat Global, Stiker Custom Terenkripsi (<code>.webp.crypto15</code>) &amp; Floating Chat Sesi Liquid Glass:</strong> Menambahkan pembuat stiker sendiri dari galeri yang otomatis dikonversi ke WebP dan dienkripsi AES-256-GCM di <code>Android/media/id.xydesk.remote/globwlchat/sticker/&lt;Token&gt;.webp.crypto15</code>, notifikasi push bersuara aktif (OneSignal FCM v1), serta Floating Chat di dalam sesi RDP berdesain <strong>Hitam-Putih Liquid Glass</strong> yang agak transparan dan bisa digeser.</li>
             </ul>
           </div>
 
