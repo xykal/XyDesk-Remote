@@ -66,6 +66,12 @@ class SessionMicrophoneControlTest {
         policy.cancel(suppressActivation = true) // A committed foreground intent is not a stale prompt.
         assertTrue(policy.apply("a", RdpOptions(microphone = false)).microphone)
     }
+    @Test fun newAcceptedAttemptInvalidatesOldPermissionGenerationEvenIfNativeHandleIsReused() {
+        val policy = SessionMicrophoneControl()
+        val oldPromptGeneration = policy.generation()
+        policy.cancel() // Every newly accepted connection advances this token, independent of native address reuse.
+        assertNotEquals(oldPromptGeneration, policy.generation())
+    }
     @Test(expected = IllegalArgumentException::class) fun zeroInstanceCannotOwnRestart() {
         SessionMicrophoneControl().plan("a", 0, true)
     }

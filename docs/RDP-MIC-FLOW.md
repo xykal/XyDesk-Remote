@@ -78,8 +78,8 @@ explicit cancel/disconnect/release, a new accepted connection, or backgrounding
 invalidates it. Cancelled, not-yet-committed activation is suppressed. Failed or
 unconfirmed cleanup must not open a replacement native channel.
 
-Eight pure Kotlin tests cover URI omission, immutable saved preferences, permission,
+Nine pure Kotlin tests cover URI omission, immutable saved preferences, permission,
 visibility/PC restrictions, owner binding, single consumption, stale generations,
-profile changes, committed preferences and invalid handles. Source guards check
+profile changes, committed preferences, invalid handles and stale permission generations even if a native address is reused. Source guards check
 integration ordering only. Neither these tests nor the panel prove Android
 recorder shutdown latency, Windows input routing, or game capture.

@@ -126,13 +126,18 @@ class SessionManager(context: Context) {
     /** URI intent only; not proof of device capture or the Windows/game input level. */
     fun nativeMicrophoneRequested(): Boolean = nativeMicrophoneRequested
 
+    fun nativeMicrophoneControlGeneration(): Long = synchronized(lifecycleLock) {
+        sessionMicrophoneControl.generation()
+    }
+
     fun nativeMicrophoneChangePending(): Boolean = synchronized(lifecycleLock) {
         sessionMicrophoneControl.isPending()
     }
 
     /** Changes only this manager/session, by terminating the old native channel then reconnecting. */
-    fun requestNativeMicrophoneChange(enabled: Boolean, expectedInstance: Long): Boolean = synchronized(lifecycleLock) {
-        if (released || !captureForegroundAllowed || expectedInstance == 0L || !isCurrent(expectedInstance) ||
+    fun requestNativeMicrophoneChange(enabled: Boolean, expectedInstance: Long, expectedGeneration: Long): Boolean = synchronized(lifecycleLock) {
+        if (expectedGeneration != sessionMicrophoneControl.generation() ||
+            released || !captureForegroundAllowed || expectedInstance == 0L || !isCurrent(expectedInstance) ||
             _state.value !is SessionState.Connected || sessionMicrophoneControl.isPending()) return@synchronized false
         if (enabled && appContext.checkSelfPermission(android.Manifest.permission.RECORD_AUDIO) != android.content.pm.PackageManager.PERMISSION_GRANTED)
             return@synchronized false
@@ -625,7 +630,7 @@ class SessionManager(context: Context) {
         val inst = core?.getInstance() ?: return
         transition(SessionState.Disconnecting)
         if (!LibFreeRDP.disconnect(inst)) {
-            // native menolak — anggap sudah putus dan bebaskan instance terminal
+            // Native menolak: status putus belum terbukti; pertahankan instance sampai terminal/release.
             if (isCurrent(inst)) {
                 transition(
                     SessionState.Error(

@@ -14,7 +14,7 @@ class HostDistributionTest(unittest.TestCase):
         self.assertIn('sessionMicrophoneControl.isCurrent(restart)', manager)
         self.assertIn('sessionMicrophoneControl.cancel(suppressActivation = true)', manager)
         request = manager.split('fun requestNativeMicrophoneChange(', 1)[1].split('private fun restartForNativeMicrophoneChange', 1)[0]
-        for guard in ('!captureForegroundAllowed', '!isCurrent(expectedInstance)', 'RECORD_AUDIO', 'options.pcConnectMode', 'SessionState.Connected'):
+        for guard in ('!captureForegroundAllowed', '!isCurrent(expectedInstance)', 'RECORD_AUDIO', 'options.pcConnectMode', 'SessionState.Connected', 'expectedGeneration != sessionMicrophoneControl.generation()'):
             self.assertIn(guard, request)
         self.assertNotIn('RdpOptions.set', request)
         self.assertIn('setVoiceMicEnabled(false)', request)

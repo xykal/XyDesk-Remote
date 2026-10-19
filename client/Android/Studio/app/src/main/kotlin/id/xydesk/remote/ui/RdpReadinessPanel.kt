@@ -21,6 +21,7 @@ internal fun RdpReadinessPanel(
     micPermission: Boolean,
     nativeMicConfigured: Boolean,
     connectionId: Long,
+    connectionGeneration: Long,
     nativeMicRequested: Boolean,
     nativeMicChangePending: Boolean,
     canChangeNativeMic: Boolean,
@@ -29,7 +30,7 @@ internal fun RdpReadinessPanel(
 ) {
     val host = diagnostics.host
     val fresh = host?.isFresh(nowMs) == true
-    var confirmMicChange by remember(connectionId, nativeMicRequested, canChangeNativeMic) { mutableStateOf(false) }
+    var confirmMicChange by remember(connectionId, connectionGeneration, nativeMicRequested, canChangeNativeMic) { mutableStateOf(false) }
     XyOverlay(title = "Kesiapan RDP · Mic & Game", onDismiss = onDismiss) {
         Column(Modifier.fillMaxWidth().heightIn(max = 420.dp).verticalScroll(rememberScrollState()),
             verticalArrangement = Arrangement.spacedBy(10.dp)) {

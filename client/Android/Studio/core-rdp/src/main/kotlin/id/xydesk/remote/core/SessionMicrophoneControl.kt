@@ -39,4 +39,5 @@ internal class SessionMicrophoneControl {
     fun take(instance: Long): Restart? = pending?.takeIf { it.instance == instance }?.also { pending = null }
     fun isCurrent(restart: Restart): Boolean = restart.generation == generation && restart.profileId == profileId
     fun isPending(): Boolean = pending != null
+    fun generation(): Long = generation
 }
