@@ -62,3 +62,8 @@ Lisensi distribusi akan ditetapkan saat milestone M5.
   strip untuk target `freerdp-android` dan `xydesk-quic` pada build non-Debug.
 - `client/Android/Studio/app/build.gradle`: `shrinkResources true` (sebelumnya
   `false`).
+
+## Perubahan tambahan — lifecycle mic native Android (AUDIN)
+- `channels/audin/client/opensles/audin_opensl_es.c`: pasang callback/data sebelum recorder dapat memanggilnya, tolak duplicate Open tanpa menutup recorder aktif, jaga callback kosong dan tutup recorder sebelum Free.
+- `channels/audin/client/opensles/opensl_io.c`: periksa kegagalan Enqueue/SetRecordState, tolak dimensi nol dan hentikan/hancurkan recorder sebelum membebaskan buffer yang masih dimiliki OpenSL.
+- Tidak mengubah format/DSP default, endpoint, tag protokol atau ABI interface AUDIN. Lisensi/copyright upstream dipertahankan.

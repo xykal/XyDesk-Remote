@@ -1,0 +1,30 @@
+name: AUDIN native lifecycle checks
+on:
+  push:
+    branches: ['**']
+    paths:
+      - 'channels/audin/client/opensles/**'
+      - 'ci/test_native_audin.py'
+      - '.github/workflows/audin-checks.yml'
+  pull_request:
+    paths:
+      - 'channels/audin/client/opensles/**'
+      - 'ci/test_native_audin.py'
+      - '.github/workflows/audin-checks.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  lifecycle-tests:
+    name: Host C lifecycle tests (mock APIs, not Android/NDK build)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+        with:
+          persist-credentials: false
+      - name: Run production-body lifecycle regressions with ASan and UBSan
+        run: |
+          # Compiles and executes temporary HOST test programs with mock OpenSL/WinPR APIs.
+          # Does NOT build/link Android libraries, APKs or a Windows host EXE.
+          python3 -m unittest discover -s ci -p test_native_audin.py
