@@ -13,10 +13,6 @@ internal object XyRdpConfig {
     const val STATUS_REF = "status"
     const val STATUS_PATH = "out/rdp-status.json"
 
-    /** AdMob milik pemilik app; rewarded ad satu kali untuk buka fitur. */
-    const val ADMOB_APP_ID = "ca-app-pub-7140410806476728~5239237352"
-    const val ADMOB_REWARDED_UNIT = "ca-app-pub-7140410806476728/3019344683"
-
     /**
      * Syarat kedua unlock: gabung saluran/grup komunitas. GANTI konstanta ini
      * bila link komunitas resmi berubah — satu-satunya tempat yang dipakai.

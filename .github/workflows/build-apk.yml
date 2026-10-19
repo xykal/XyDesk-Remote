@@ -92,6 +92,8 @@ jobs:
             "platform-tools" "platforms;android-37.2" "build-tools;37.0.0"
           echo "ANDROID_HOME=$ANDROID_HOME" >> "$GITHUB_ENV"
           echo "ANDROID_SDK_ROOT=$ANDROID_HOME" >> "$GITHUB_ENV"
+      - name: Guard owner-selected connect/render/native baseline
+        run: python3 -m unittest discover -s ci -p test_recovery_baseline.py
       - name: Unit test JVM (core-rdp + core-pc-stream + IME + app UI)
         working-directory: client/Android/Studio
         run: ./gradlew --stacktrace --no-daemon --build-cache :core-rdp:testDebugUnitTest :core-pc-stream:testDebugUnitTest :freeRDPCore:testDebugUnitTest :app:testDebugUnitTest

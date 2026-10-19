@@ -67,6 +67,7 @@ import id.xydesk.remote.ui.components.XySectionLabel
 import id.xydesk.remote.ui.components.XySegmented
 import id.xydesk.remote.ui.components.XySuccessStateBanner
 import id.xydesk.remote.ui.components.XyTopBar
+import id.xydesk.remote.ui.rdp.validateRdpLaunch
 import id.xydesk.remote.ui.rdp.XyRdpClient
 import id.xydesk.remote.ui.rdp.XyRdpConfig
 import id.xydesk.remote.ui.rdp.XyRdpPhase
@@ -277,6 +278,14 @@ fun RdpFreeScreen(onBack: () -> Unit, onConnect: (ConnectionProfile) -> Unit) {
         if (busy) return
         val tok = token ?: return
         val user = login ?: return
+        if (action == "start") {
+            val errors = validateRdpLaunch(duration, runnerImage, hostname, rdpUser, akses, portmapHost, portmapPort)
+            if (errors.isNotEmpty()) {
+                activeTab = 1
+                errorMessage = errors.joinToString("\n")
+                return
+            }
+        }
         busy = true
         errorMessage = null
         scope.launch {
@@ -288,8 +297,6 @@ fun RdpFreeScreen(onBack: () -> Unit, onConnect: (ConnectionProfile) -> Unit) {
                             return@launch
                         }
                         busyLabel = "Menyinkronkan template XyRDP & mengirim workflow sesi baru…"
-                        XyRdpClient.syncForkWithUpstream(tok, user)
-                        XyRdpClient.enableWorkflow(tok, user)
                         val inputs = JSONObject().apply {
                             put("durasi_menit", duration)
                             put("runner", runnerImage)
@@ -325,10 +332,10 @@ fun RdpFreeScreen(onBack: () -> Unit, onConnect: (ConnectionProfile) -> Unit) {
                         }
                     }
                     "stop" -> {
-                        busyLabel = "Menghentikan sesi & menyimpan state ke cloud…"
+                        busyLabel = "Mengirim permintaan penghentian sesi…"
                         val id = validatedSession?.run?.id ?: XyRdpClient.latestRunId(tok, user)
                         if (id != null && XyRdpClient.cancelRun(tok, user, id)) {
-                            successMessage = "Permintaan berhenti dikirim ke Run #$id. Data sesi sedang disimpan."
+                            successMessage = "Permintaan berhenti dikirim ke Run #$id. Backup hanya tersedia jika langkah penyimpanan workflow berhasil."
                             delay(2000)
                             refreshAll(tok, user)
                         } else {
@@ -510,7 +517,8 @@ fun RdpFreeScreen(onBack: () -> Unit, onConnect: (ConnectionProfile) -> Unit) {
                                 text = when {
                                     initialLoading -> "Memuat…"
                                     !forkReady -> "Belum di-fork"
-                                    setupStatus?.workflowActive == true -> "Aktif · Siap"
+                                    setupStatus?.isReadyToStart == true -> "Setup lengkap"
+                                    setupStatus?.secretsVerified == false -> "Izin Secrets perlu dicek"
                                     else -> "Perlu sinkron"
                                 },
                                 style = MaterialTheme.typography.labelSmall,
@@ -1079,18 +1087,27 @@ fun RdpFreeScreen(onBack: () -> Unit, onConnect: (ConnectionProfile) -> Unit) {
                                         onCheckedChange = { autoRenew = it; saveSettings() },
                                     )
                                     RdpFlatToggleRow(
-                                        title = "XyDesk Host Boost (120 FPS + XyDeskTools.exe)",
-                                        subtitle = "Pasang otomatis XyDeskTools.exe di Desktop RDP, DWM 120Hz & AVC444",
+                                        title = "Opsi host & grafis (target refresh)",
+                                        subtitle = "Meminta setup host/grafis pada runner. Bukan jaminan 120 FPS; hasil bergantung runner, encoder dan jaringan.",
                                         checked = xydeskBoost,
                                         enabled = !busy,
                                         onCheckedChange = { xydeskBoost = it; saveSettings() },
                                     )
                                     RdpFlatToggleRow(
-                                        title = "Redirect Mikrofon Dua Arah (On-Mic)",
-                                        subtitle = "Teruskan suara mikrofon HP ke dalam sesi RDP Windows/Linux",
+                                        title = "Mic HP → RDP (AUDIN)",
+                                        subtitle = "Izin mic Android diminta sebelum tersambung. Gunakan input Remote Audio di Windows/game; Linux bergantung dukungan server.",
                                         checked = microphone,
                                         enabled = !busy,
                                         onCheckedChange = { microphone = it; saveSettings() },
+                                    )
+                                    Text(
+                                        text = if (microphone) {
+                                            "Alur mic: buat RDP → Sambungkan → izinkan mikrofon Android → pilih input RDP di Windows/aplikasi → uji level suara. Host Agent UDP tidak diperlukan untuk AUDIN. ON adalah permintaan, bukan bukti suara sudah masuk."
+                                        } else {
+                                            "Mic tidak diminta ketika tersambung. Audio PC ke HP adalah pengaturan terpisah. Untuk mengubah mic pada sesi aktif, ubah profil lalu sambung ulang."
+                                        },
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
                                     )
                                     RdpFlatToggleRow(
                                         title = "Storage Boost (+45 s/d 75 GB Disk Lega)",
@@ -1500,8 +1517,8 @@ fun RdpFreeScreen(onBack: () -> Unit, onConnect: (ConnectionProfile) -> Unit) {
                 else -> "Putuskan Akun GitHub?"
             },
             body = when (action) {
-                "start" -> "Menjalankan $osDesc selama $duration menit via GitHub Actions. Data sesi sebelumnya otomatis dipulihkan."
-                "stop" -> "Sesi aktif akan dihentikan dan seluruh perubahan data/profil disimpan ke cloud."
+                "start" -> "Menjalankan $osDesc selama $duration menit di akun GitHub Anda. Kuota, biaya, dan kebijakan GitHub/provider berlaku; bukan server permanen. Pemulihan data bergantung backup workflow yang berhasil."
+                "stop" -> "Meminta GitHub menghentikan run aktif. Pembatalan dapat menghentikan langkah backup; data yang belum tersimpan bisa hilang. Pastikan backup selesai sebelum Stop."
                 else -> "Melepas token GitHub dari HP ini (repository dan sesi aktif di GitHub tetap aman)."
             },
             confirmLabel = "Lanjutkan",

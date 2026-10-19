@@ -6,6 +6,7 @@ import worker, {
   CommunityJokes,
   FeedbackBoard,
   GlobalChat,
+  withChatTranslationBudget,
   PcSignalRoom,
   resetReleaseLookupCache,
 } from "./worker.mjs";
@@ -1304,10 +1305,12 @@ test("PowerShell source is downloadable as text and is not executed by the Worke
   assert.equal(await response.text(), "Write-Output 'review me'");
 });
 
-test("agent batch helper downloads and opens the script for review without piping it to execution", async () => {
+test("retired agent batch helper remains downloadable but performs no setup or network execution", async () => {
   const batch = await readFile(new URL("../web/agent.bat", import.meta.url), "utf8");
   assert.doesNotMatch(batch, /\|\s*iex/i);
-  assert.match(batch, /NOT run/i);
+  assert.match(batch, /Installer legacy ditarik/i);
+  assert.match(batch, /exit \/b 1/i);
+  assert.doesNotMatch(batch, /powershell|invoke-webrequest|start-process|netsh|runas/i);
   const response = await worker.fetch(new Request("https://rdp.xydesk.my.id/agent.bat"), envFor({ "/agent.bat": batch }));
   assert.equal(response.status, 200);
   assert.match(response.headers.get("content-disposition"), /XyDesk-Remote-Agent-Setup\.bat/);
@@ -1920,3 +1923,220 @@ test("ronde 48: global chat direct reply (/api/chat/send) + OneSignal push + Pla
   assert.ok(ogGoodJson.image.includes("opengraph.githubassets.com"));
 });
 
+
+
+test("chat translation shares a deadline even when a provider ignores abort", async () => {
+  let signal;
+  const result = await withChatTranslationBudget((s) => {
+    signal = s;
+    return new Promise(() => {});
+  }, () => "fallback", 20);
+  assert.equal(result, "fallback");
+  assert.equal(signal.aborted, true);
+});
+
+test("chat translation keeps fast results and falls back on provider errors", async () => {
+  assert.equal(await withChatTranslationBudget(async () => "translated", () => "fallback", 500), "translated");
+  assert.equal(await withChatTranslationBudget(async () => { throw new Error("offline"); }, () => "fallback", 500), "fallback");
+});
+
+
+test("empty durable leaderboard never fabricates founder or placeholder podium users", async () => {
+  const chat = new GlobalChat({ storage: { get: async () => undefined } }, {});
+  const response = await chat.handleLeaderboard(new Request("https://example.test/leaderboard"));
+  const body = await response.json();
+  assert.deepEqual(body.items, []);
+  assert.equal(body.total_ranked, 0);
+});
+
+test("OAuth complete rejects mismatched provider identity before any storage or DO write", async () => {
+  let writes = 0;
+  const env = envFor({}, {
+    UNIQUE_DOWNLOADS: { put: async () => { writes++; } },
+    GLOBAL_CHAT: { idFromName() { writes++; throw new Error("must not forward"); } },
+  });
+  globalThis.fetch = async () => Response.json({ id: 123, login: "alice" });
+  const response = await worker.fetch(new Request("https://example.test/api/github/oauth/complete", {
+    method: "POST", body: JSON.stringify({ session_id: "test-mismatch", token: "test-only", login: "bob" }),
+  }), env);
+  assert.equal(response.status, 401);
+  assert.deepEqual(await response.json(), { status: "error", code: "invalid_identity" });
+  assert.equal(writes, 0);
+});
+
+test("OAuth complete writes only provider identity and forwards canonical metadata", async () => {
+  const stored = [];
+  const forwarded = [];
+  const env = envFor({}, {
+    UNIQUE_DOWNLOADS: { put: async (key, value) => { stored.push([key, JSON.parse(value)]); } },
+    GLOBAL_CHAT: {
+      idFromName: () => "test-chat",
+      get: () => ({ fetch: async request => { forwarded.push(await request.json()); return Response.json({ status: "ok" }); } }),
+    },
+  });
+  globalThis.fetch = async () => Response.json({ id: 123, login: "Alice", name: "Verified Provider", avatar_url: "https://avatars.githubusercontent.com/u/123" });
+  const response = await worker.fetch(new Request("https://example.test/api/github/oauth/complete", {
+    method: "POST", body: JSON.stringify({ session_id: "test-canonical", token: "test-only", login: "alice", name: "Forged Founder", avatar_url: "https://example.test/forged" }),
+  }), env);
+  assert.equal(response.status, 200);
+  assert.equal(stored.length, 1);
+  assert.equal(stored[0][1].login, "Alice");
+  assert.equal(stored[0][1].name, "Verified Provider");
+  assert.equal(forwarded.length, 1);
+  assert.equal(forwarded[0].name, "Verified Provider");
+  assert.equal(forwarded[0].avatar_url, "https://avatars.githubusercontent.com/u/123");
+});
+
+test("OAuth complete provider failure cannot write session", async () => {
+  let writes = 0;
+  globalThis.fetch = async () => new Response("provider unavailable", { status: 503 });
+  const response = await worker.fetch(new Request("https://example.test/api/github/oauth/complete", {
+    method: "POST", body: JSON.stringify({ session_id: "test-unavailable", token: "test-only", login: "alice" }),
+  }), envFor({}, { UNIQUE_DOWNLOADS: { put: async () => { writes++; } } }));
+  assert.equal(response.status, 503);
+  assert.equal(writes, 0);
+  assert.deepEqual(await response.json(), { status: "error", code: "identity_provider_unavailable" });
+});
+
+test("OAuth complete rejects malformed session rather than aliasing it", async () => {
+  let calls = 0;
+  globalThis.fetch = async () => { calls++; throw new Error("must not fetch"); };
+  const response = await worker.fetch(new Request("https://example.test/api/github/oauth/complete", {
+    method: "POST", body: JSON.stringify({ session_id: "test!aliased", token: "test-only", login: "alice" }),
+  }), envFor());
+  assert.equal(response.status, 400);
+  assert.equal(calls, 0);
+});
+
+test("unsigned legacy cookie cannot create a polling session or token deep link", async () => {
+  let writes = 0;
+  let providerCalls = 0;
+  globalThis.fetch = async () => { providerCalls++; throw new Error("no provider request during authorization redirect"); };
+  const cookie = encodeURIComponent(btoa(JSON.stringify({ token: "forged-cookie-token", login: "xykal", name: "Forged Founder" })));
+  const response = await worker.fetch(new Request("https://example.test/api/github/oauth/login?session_id=cookie-guard", {
+    headers: { cookie: `xy_gh_session=${cookie}` },
+  }), envFor({}, { UNIQUE_DOWNLOADS: { put: async () => { writes++; } } }));
+  assert.equal(response.status, 302);
+  const destination = new URL(response.headers.get("location"));
+  assert.equal(destination.origin, "https://github.com");
+  assert.equal(destination.pathname, "/login/oauth/authorize");
+  assert.equal(destination.searchParams.has("access_token"), false);
+  assert.equal(response.headers.get("location").includes("forged-cookie-token"), false);
+  assert.equal(writes, 0);
+  assert.equal(providerCalls, 0);
+  assert.match(response.headers.get("set-cookie"), /xy_oauth_state=.*HttpOnly; Secure; SameSite=Lax/);
+  const poll = await worker.fetch(new Request("https://example.test/api/github/oauth/poll?session_id=cookie-guard"), envFor());
+  assert.equal((await poll.json()).ready, false);
+});
+
+test("malformed legacy cookie follows same provider flow as no cookie on login aliases", async () => {
+  for (const path of ["/api/github/oauth/login", "/api/auth/login"]) {
+    for (const cookie of ["", "xy_gh_session=not-valid-base64", `xy_gh_session=${encodeURIComponent(btoa(JSON.stringify({ token: "legacy-test", login: "alice" })))}`]) {
+      const response = await worker.fetch(new Request(`https://example.test${path}?session_id=legacy-alias`, {
+        headers: cookie ? { cookie } : {},
+      }), envFor());
+      assert.equal(response.status, 302);
+      assert.equal(new URL(response.headers.get("location")).origin, "https://github.com");
+      assert.equal((await response.text()).includes("legacy-test"), false);
+    }
+  }
+});
+
+test("HTML OAuth callback expires legacy bearer cookie instead of minting it", async () => {
+  globalThis.fetch = async url => {
+    if (String(url) === "https://github.com/login/oauth/access_token") return Response.json({ access_token: "test-callback-token" });
+    if (String(url) === "https://api.github.com/user") return Response.json({ id: 123, login: "alice", name: "Alice" });
+    throw new Error("unexpected external request");
+  };
+  const response = await worker.fetch(new Request("https://example.test/api/github/oauth/callback?code=test-code&state=apk_cookie-expire_nonce"), envFor({}, {
+    GITHUB_OAUTH_CLIENT_ID: "test-client", GITHUB_OAUTH_CLIENT_SECRET: "test-config-not-real",
+  }));
+  assert.equal(response.status, 200);
+  assert.equal(response.headers.get("set-cookie"), "xy_gh_session=; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=0");
+  assert.equal(response.headers.get("set-cookie").includes("test-callback-token"), false);
+  // Existing application return mechanism is unchanged in this step.
+  assert.ok((await response.text()).includes("xydesk://github-auth?token=test-callback-token"));
+});
+
+test("OAuth callback never persists or redirects after unverified provider profile", async () => {
+  const cases = [
+    { label: "unauthorized", response: () => new Response(null, { status: 401 }), status: 401 },
+    { label: "unavailable", response: () => new Response(null, { status: 503 }), status: 503 },
+    { label: "missing-id", response: () => Response.json({ login: "alice" }), status: 503 },
+    { label: "missing-login", response: () => Response.json({ id: 123 }), status: 503 },
+    { label: "broken-json", response: () => new Response("not json"), status: 503 },
+    { label: "network", response: () => { throw new Error("offline"); }, status: 503 },
+  ];
+  for (const item of cases) {
+    for (const prefix of ["apk", "dash"]) {
+      let writes = 0;
+      globalThis.fetch = async url => {
+        if (String(url) === "https://github.com/login/oauth/access_token") return Response.json({ access_token: "callback-test-only" });
+        if (String(url) === "https://api.github.com/user") return item.response();
+        throw new Error("unexpected external request");
+      };
+      const env = envFor({}, {
+        GITHUB_OAUTH_CLIENT_ID: "test-client", GITHUB_OAUTH_CLIENT_SECRET: "test-config-not-real",
+        UNIQUE_DOWNLOADS: { put: async () => { writes++; }, get: async () => null },
+        GLOBAL_CHAT: { idFromName() { writes++; throw new Error("must not forward"); } },
+      });
+      const sid = `fail-${prefix}-${item.label}`;
+      const response = await worker.fetch(new Request(`https://example.test/api/github/oauth/callback?code=test-code&state=${prefix}_${sid}_nonce`), env);
+      assert.equal(response.status, item.status, `${prefix} ${item.label}`);
+      assert.equal(response.headers.get("location"), null);
+      assert.equal(response.headers.get("set-cookie"), null);
+      const body = await response.text();
+      assert.equal(body.includes("callback-test-only"), false);
+      assert.equal(body.includes("xydesk://"), false);
+      assert.equal(writes, 0);
+      // Check edge cache separately without a DO fallback.
+      const poll = await worker.fetch(new Request(`https://example.test/api/github/oauth/poll?session_id=${sid}`), envFor());
+      assert.equal((await poll.json()).ready, false);
+    }
+  }
+});
+
+test("verified callback preserves JSON profile, storage and dashboard return shape", async () => {
+  const stored = [];
+  globalThis.fetch = async url => {
+    if (String(url) === "https://github.com/login/oauth/access_token") return Response.json({ access_token: "verified-test-only" });
+    if (String(url) === "https://api.github.com/user") return Response.json({ id: 123, login: "Alice", name: "Provider Name", avatar_url: "https://avatars.githubusercontent.com/u/123" });
+    throw new Error("unexpected external request");
+  };
+  const env = envFor({}, {
+    GITHUB_OAUTH_CLIENT_ID: "test-client", GITHUB_OAUTH_CLIENT_SECRET: "test-config-not-real",
+    UNIQUE_DOWNLOADS: { put: async (key, value) => { stored.push([key, JSON.parse(value)]); } },
+  });
+  const response = await worker.fetch(new Request("https://example.test/api/github/oauth/exchange?code=test-code&state=apk_verified-json_nonce"), env);
+  assert.equal(response.status, 200);
+  const body = await response.json();
+  assert.equal(body.ready, true);
+  assert.equal(body.login, "Alice");
+  assert.equal(body.name, "Provider Name");
+  assert.equal(stored[0][1].login, "Alice");
+  const dash = await worker.fetch(new Request("https://example.test/api/auth/callback/github?code=test-code&state=dash_verified-dash_nonce"), env);
+  assert.equal(dash.status, 302);
+  const destination = new URL(dash.headers.get("location"));
+  assert.equal(destination.origin, "https://xyrdp-dash.vercel.app");
+  assert.equal(destination.searchParams.get("bridge_token"), "verified-test-only");
+});
+
+test("OAuth token exchange provider outage cannot create or forward a callback session", async () => {
+  let writes = 0;
+  let identityCalls = 0;
+  globalThis.fetch = async url => {
+    if (String(url) === "https://github.com/login/oauth/access_token") return new Response(null, { status: 503 });
+    identityCalls++;
+    throw new Error("identity must not be queried without a token");
+  };
+  const response = await worker.fetch(new Request("https://example.test/api/github/oauth/callback?code=test-code&state=apk_exchange-failure_nonce"), envFor({}, {
+    GITHUB_OAUTH_CLIENT_ID: "test-client", GITHUB_OAUTH_CLIENT_SECRET: "test-config-not-real",
+    UNIQUE_DOWNLOADS: { put: async () => { writes++; } },
+    GLOBAL_CHAT: { idFromName() { writes++; throw new Error("must not forward"); } },
+  }));
+  assert.equal(response.status, 503);
+  assert.deepEqual(await response.json(), { status: "error", code: "oauth_provider_unavailable" });
+  assert.equal(response.headers.get("location"), null);
+  assert.equal(writes, 0);
+  assert.equal(identityCalls, 0);
+});
