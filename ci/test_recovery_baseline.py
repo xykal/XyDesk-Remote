@@ -39,3 +39,10 @@ class RecoveryBaselineTest(unittest.TestCase):
         self.assertNotIn('socketConnected =', http)
         self.assertIn('chatAccountSnapshotIsCurrent(requestAccount, verifiedGhLogin)', http)
         self.assertNotIn('lastWsActivityMs', screen)
+
+    def test_route_motion_never_keeps_two_chat_or_media_trees_alive(self):
+        motion = (ROOT/'client/Android/Studio/app/src/main/kotlin/id/xydesk/remote/ui/theme/XyLightMotion.kt').read_text()
+        self.assertNotIn('Crossfade', motion)
+        self.assertIn('key(target) { content(target) }', motion)
+        self.assertIn('Animatable(1f)', motion)
+        self.assertNotIn('rememberInfiniteTransition', motion)

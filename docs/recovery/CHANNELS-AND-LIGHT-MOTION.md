@@ -22,18 +22,33 @@ Implemented in this source increment:
 - Read UI follows backend can_post; backend always rechecks. Failed send preserves
   draft + nonce. expected_login rejects sending an old-account draft with a new
   account's token. These channels do not replace existing chat/feed data.
-- 140ms finite home-route fades, system reduce-motion + battery/lifecycle gates.
-  No globally enabled infinite shimmer/float loops; no native/APK-size stripping.
-- Initial chat scrolls to newest once; later arrivals/snapshots do not pull readers
+- 140ms finite single-tree home-route fades, system reduce-motion + battery/lifecycle gates.
+  No duplicate chat/media trees during transitions, no globally enabled infinite
+  shimmer/float loops; no native/APK-size stripping.
+- Initial chat scrolls to newest once; far jumps skip intermediate row animations
+  and sending no longer waits for scrolling to finish; later arrivals/snapshots do not pull readers
   away from older messages. A new-message badge/jump control remains available.
 - A short system sent tone occurs on a correlated positive server ACK only, with
   bounded ID dedupe for HTTP/WS/history races. Respects silent setting, volume,
   DND and lifecycle; reusable generator is released on screen/account disposal.
 
-Not a release-completion claim: Android CI compile/unit tests and target-device
+Validation: Worker tests 122/122 pass. Android Kotlin/core/app gates passed
+f40a3f2 (39327147211) and fc4f181 (39327719803). Single-tree motion refinement
+is being rechecked separately. Production Worker is now
+5c1f1bd7-f9e9-40b4-ae4a-e3a96ea73526: channel catalogue and empty guide posts
+return 200; anonymous forged-founder POST returns 401; unknown channel returns
+404. Positive staff publishing and populated-channel reads are not tested live.
+Existing global history still returns 503/quota/retry300; this has NOT recovered.
+The first deployment exposed a live DO routing 404 missed by stub-only tests; an
+edge-to-real-GlobalChat regression test and explicit routing headers were added.
+Official channel traffic is now isolated in xydesk-official-channels-v1 within
+the existing binding. Existing global chat still uses xydesk-global-chat-v1; no
+existing messages, namespaces or migrations were reset/changed. No public test
+messages were created. Assets/config retained current-main 5990eb9 unchanged.
+
+Not a release-completion claim: target-device
 runtime/performance/accessibility tests are required. No new signed recovery APK,
-release/tag, staff grant, storage migration or production channel deployment has
-occurred just from writing this source. Live storage quota may still block content
+release/tag, staff grant or storage migration has occurred. Live storage quota may still block content
 reads/writes; no paid upgrade or namespace/data reset is allowed. All earlier full
 outbox/history/media, genuine controller, secure BOTH Direct, mic/provisioning and
 connection/runtime requirements remain open and are not replaced by these additions.
