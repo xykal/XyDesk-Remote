@@ -47,6 +47,21 @@ class HostDistributionTest(unittest.TestCase):
         source = (ROOT / 'host-agent/src/xydesk_quic.cpp').read_text()
         self.assertLess(source.index('#define NOMINMAX'), source.index('#include <windows.h>'))
 
+    def test_legacy_web_setup_fails_closed_without_system_changes(self):
+        for name in ('onmic.ps1', 'host.ps1', 'XyDesk-Remote-Agent-Setup.ps1',
+                     'XyDesk-RDP-OnMic-Setup.bat', 'XyDeskHost-Setup.bat', 'agent.bat'):
+            source = (ROOT / 'web' / name).read_text().lower()
+            for forbidden in ('invoke-webrequest', 'start-process', 'stop-service', 'set-service',
+                              'new-itemproperty', 'set-itemproperty', 'netsh ', 'new-netfirewallrule',
+                              'executionpolicy', 'iex', 'runas'):
+                self.assertNotIn(forbidden, source, name)
+            self.assertIn('exit /b 1' if name.endswith('.bat') else 'exit 1', source)
+        for name in ('host.html', 'index.html'):
+            source = (ROOT / 'web' / name).read_text()
+            for forbidden in ('Enkripsi QUIC TLS 1.3', 'Clean ID &amp; Password',
+                              'href="/XyDeskRemoteHost-Standalone.exe"', 'irm https://'):
+                self.assertFalse(forbidden in source, f'{name} still advertises {forbidden}')
+
     def test_chat_has_no_voice_reader_or_global_mic_switch(self):
         source = (ROOT / 'client/Android/Studio/app/src/main/kotlin/id/xydesk/remote/ui/GlobalChatScreen.kt').read_text()
         for removed in ('voiceEnabled', 'TextToSpeech', 'VOICE ON', 'VOICE OFF', 'KEY_VOICE_ENABLED'):
