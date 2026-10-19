@@ -37,13 +37,23 @@ internal object GlobalChatOfflineCache {
     fun readArchive(context: Context, login: String): List<ChatMessage> =
         read(context, "archive:$login", "").map { it.copy(mine = false, authorId = 0, e2eeVerified = false) }
 
+    @Synchronized
+    fun deleteArchive(context: Context, login: String) {
+        require(login.isNotBlank())
+        val isolated = "archive:$login"
+        nextWriteEpoch(isolated)
+        val cache = file(context, isolated)
+        cache.delete()
+        check(!cache.baseFile.exists()) { "Arsip lokal gagal dihapus." }
+    }
+
     fun storeArchive(context: Context, login: String, rows: List<ChatMessage>) {
         require(login.isNotBlank())
         val isolated = "archive:$login"
         write(context, isolated, rows, nextWriteEpoch(isolated))
         // write() historically swallows storage failures: verify before reporting success.
         val stored = readArchive(context, login).associateBy { it.id }
-        check(rows.all { stored[it.id]?.revision?.let { revision -> revision >= it.revision } == true }) {
+        check(rows.all { stored[it.id]?.let { saved -> saved.revision > it.revision || saved.revision == it.revision && saved.text == it.text && saved.deleted == it.deleted } == true }) {
             "Arsip belum tersimpan. Periksa ruang penyimpanan lalu coba lagi."
         }
     }

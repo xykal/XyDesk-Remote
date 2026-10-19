@@ -11,6 +11,7 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
+import id.xydesk.remote.ui.components.XyDialog
 import id.xydesk.remote.ui.components.XyField
 import id.xydesk.remote.ui.components.XyOverlay
 import id.xydesk.remote.ui.components.XyPillButton
@@ -28,6 +29,7 @@ internal fun ChatBackupPanel(login: String?, snapshot: () -> List<ChatMessage>) 
     var busy by remember { mutableStateOf(false) }
     var pendingFile by remember { mutableStateOf<ByteArray?>(null) }
     var importPassword by remember { mutableStateOf<CharArray?>(null) }
+    var confirmDelete by remember { mutableStateOf(false) }
     var archive by remember { mutableStateOf<List<ChatMessage>?>(null) }
     fun notify(text: String) = Toast.makeText(context, text, Toast.LENGTH_LONG).show()
 
@@ -121,6 +123,27 @@ internal fun ChatBackupPanel(login: String?, snapshot: () -> List<ChatMessage>) 
             finally { busy = false }
         }
     })
+    XyPillButton(text = "Hapus arsip lokal", primary = false, enabled = !busy && !login.isNullOrBlank(), onClick = { confirmDelete = true })
+    if (confirmDelete) {
+        XyDialog(title = "Hapus arsip impor di HP ini?",
+            body = "Chat live dan file backup ekspor tidak dihapus. Hapus salinan file lama melalui pengelola file jika diperlukan.",
+            confirmLabel = "Hapus arsip lokal", dismissLabel = "Batal", onDismiss = { confirmDelete = false }, onConfirm = {
+                confirmDelete = false
+                val account = login
+                if (!account.isNullOrBlank()) {
+                    busy = true
+                    scope.launch {
+                        try {
+                            withContext(Dispatchers.IO) { GlobalChatOfflineCache.deleteArchive(context.applicationContext, account) }
+                            archive = null; notify("Arsip lokal dihapus. File ekspor tidak berubah.")
+                        } catch (e: Exception) {
+                            if (e is CancellationException) throw e
+                            notify("Arsip lokal gagal dihapus; coba lagi.")
+                        } finally { busy = false }
+                    }
+                }
+            })
+    }
     archive?.let { rows ->
         XyOverlay(title = "Arsip lokal • baca-saja (${rows.size})", onDismiss = { archive = null }) {
             Column(Modifier.heightIn(max = 460.dp).verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(12.dp)) {

@@ -29,14 +29,20 @@ internal fun decodeChatArchive(bytes: ByteArray): List<ChatMessage> {
     require(bytes.size <= ChatBackupCrypto.MAX_PLAINTEXT)
     val rows = JSONArray(String(bytes, Charsets.UTF_8))
     require(rows.length() <= 80) { "Arsip maksimal 80 pesan teks." }
+    val seen = HashSet<String>()
     return buildList {
         for (i in 0 until rows.length()) {
             val row = rows.getJSONObject(i)
             require(!row.optBoolean("view_once") && !row.optString("id").startsWith("local-"))
-            row.remove("attachment_data")
-            val message = parseMessageFromJson(row, "", null).copy(
-                mine = false, authorId = 0, isFounder = false, e2eeVerified = false, e2eeSig = "",
-                attachmentData = "", mutationPending = false, mutationError = "", mutationId = "")
+            val id = row.optString("id")
+            require(id.isNotBlank() && id.length <= 256 && seen.add(id) && row.optLong("revision", 0) >= 0)
+            // Do not pass imported crypto/authority/media fields through the live parser.
+            val message = ChatMessage(
+                id = id, name = row.optString("name").take(100), githubLogin = row.optString("github_login").take(100),
+                country = row.optString("country").take(8), flag = "", text = row.optString("text").take(4000),
+                translated = row.optString("translated").take(4000), targetLang = row.optString("target_lang").take(32),
+                at = row.optLong("at", 0), mine = false, authorId = 0, isFounder = false,
+                revision = row.optLong("revision", 0), deleted = row.optBoolean("deleted"), deletedAt = row.optLong("deleted_at", 0))
             add(if (message.deleted) message.deletedPlaceholder() else message)
         }
     }

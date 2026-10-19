@@ -56,3 +56,18 @@ HUD stick still controls the pointer. Native/game tests, signed supported virtua
 device integration and authenticated Direct transport remain separate unfinished
 work, not satisfied by these presets. Test preset switching while held, multitouch,
 background/disconnect release and per-game behavior on a signed candidate.
+
+### Local verification checkpoint
+
+A memory-bounded Kotlin compiler/JUnit subset run passed **41 tests**: existing
+mapper/mutation/cache-order/category tests, new launch/archive tests and an extra
+crypto smoke test (including Unicode passphrase, wrong account/password and tag
+tampering). Model/setup/enum declarations were extracted verbatim to avoid
+Android/Compose dependencies. This is not a full app compile, SAF/device test,
+Windows driver or native TLS interoperability proof. Full CI is pending runner
+availability; no local Gradle/native build was attempted.
+
+Archive import now constructs a restricted text model directly, never feeding
+imported ciphertext/signature/media/role fields into the live message parser.
+Blank/duplicate/local IDs and negative revisions are rejected. Local archive
+deletion has explicit confirmation; deleting it does not delete exported files.

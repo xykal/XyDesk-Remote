@@ -4,7 +4,7 @@ import org.junit.Assert.*
 import org.junit.Test
 
 class ChatPortableBackupTest {
-    private fun row(id: String = "m1") = ChatMessage(id = id, name = "Alice", githubLogin = "alice", country = "ID", flag = "", text = "secret text", at = 1, mine = true, authorId = 42)
+    private fun row(id: String = "m1") = ChatMessage(id = id, name = "Alice", githubLogin = "alice", country = "ID", flag = "", text = "secret text", translated = "", targetLang = "EN", at = 1, mine = true, authorId = 42)
     private fun rejects(action: () -> Unit) {
         try { action(); fail("Expected rejection") } catch (_: Exception) { }
     }
@@ -31,6 +31,11 @@ class ChatPortableBackupTest {
         assertEquals("m6", imported.first().id)
         assertEquals("m85", imported.last().id)
         assertTrue(imported.none { it.mine || it.authorId != 0L || it.e2eeVerified || it.mutationPending })
+    }
+    @Test fun importedIdsMustBePresentUniqueAndCanonical() {
+        rejects { decodeChatArchive("""[{"id":""}]""".toByteArray()) }
+        rejects { decodeChatArchive(encodeChatArchive(listOf(row(), row()))) }
+        rejects { decodeChatArchive("""[{"id":"m1","revision":-1}]""".toByteArray()) }
     }
     @Test fun backupNeverSerializesMediaAndScrubsDeletedContent() {
         val original = row().copy(attachmentType = "image", attachmentData = "secret-media", e2eeSig = "signature")
