@@ -163,6 +163,7 @@ internal fun XyInAppNotificationBannerHost(
 
             val categoryTag = when {
                 item.category.equals("ota", ignoreCase = true) -> "APLIKASI · $categoryTagBase"
+                item.targetRoute == "chat" && item.category.equals("chat", ignoreCase = true) -> categoryTagBase
                 item.targetRoute == "chat" -> "CHAT GLOBAL · $categoryTagBase"
                 item.targetRoute == "feed" -> "KOMUNITAS · $categoryTagBase"
                 else -> categoryTagBase

@@ -68,3 +68,14 @@ Draft/device test matrix (not yet performed):
 32-bit device-specific installation diagnosis is deferred by the user. The user
 has reaffirmed authorization for a release draft once ready; no repeated permission
 request is needed. Known unready Direct/true-gamepad features must stay disabled.
+
+## Verified source checkpoint (fc6b70d)
+
+- Android Kotlin compile/JVM gate: [39276367650](https://github.com/xykal/XyDesk-Remote/actions/runs/39276367650), success.
+- Worker checks: [39276372016](https://github.com/xykal/XyDesk-Remote/actions/runs/39276372016), success.
+- At this checkpoint the mutation policy file contains seven JVM tests (including
+  ACK identity/revision/outcome validation), cache ordering has two and notification
+  categorization has three. No signed APK or native runtime evidence is implied.
+- Follow-up regression: same-revision history must preserve a local failure badge;
+  only an authoritative newer revision/deletion clears it through reconciliation.
+  Ordinary chat banners also avoid repeating their source label.

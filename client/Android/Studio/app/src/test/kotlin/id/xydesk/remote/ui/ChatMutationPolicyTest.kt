@@ -15,6 +15,12 @@ class ChatMutationPolicyTest {
         assertTrue(isConfirmedChatMutation(original, original.copy(text = "new", revision = 1), "edit", "new"))
         assertTrue(isConfirmedChatMutation(original, original.copy(revision = 1).deletedPlaceholder(), "delete", ""))
     }
+    @Test fun unchangedHistoryKeepsFailureButNewerCanonicalRevisionClearsIt() {
+        val failed = row().copy(mutationError = "Belum terkonfirmasi")
+        assertEquals(failed.mutationError, reconcileChatMessage(failed, row()).mutationError)
+        assertEquals("", reconcileChatMessage(failed, row().copy(text = "confirmed", revision = 1)).mutationError)
+        assertEquals("", reconcileChatMessage(failed, row().copy(revision = 1).deletedPlaceholder()).mutationError)
+    }
     @Test fun deletionScrubsTextMediaQuotesAndOldVerification() {
         val deleted = row().copy(attachmentType = "image", attachmentData = "secret", replyToText = "secret", e2eeSig = "sig", e2eeVerified = true).deletedPlaceholder(10)
         assertTrue(deleted.deleted)

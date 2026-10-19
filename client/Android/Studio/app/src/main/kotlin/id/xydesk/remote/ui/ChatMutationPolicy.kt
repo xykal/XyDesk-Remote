@@ -17,6 +17,9 @@ internal fun reconcileChatMessage(current: ChatMessage, incoming: ChatMessage): 
     if (incoming.revision < current.revision) return current
     if (incoming.revision == current.revision && (current.mutationPending || current.deleted && !incoming.deleted)) return current
     var merged = if (incoming.deleted) incoming.deletedPlaceholder() else incoming
+    // An unchanged history refresh is not confirmation of a failed local operation.
+    if (incoming.revision == current.revision && !incoming.deleted && current.mutationError.isNotBlank())
+        merged = merged.copy(mutationError = current.mutationError)
     if (current.replyToId == incoming.replyToId && current.replyToText == "Pesan ini dihapus")
         merged = merged.copy(replyToText = "Pesan ini dihapus")
     return if (!merged.deleted && merged.attachmentData.isBlank() && current.attachmentData.isNotBlank())
