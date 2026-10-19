@@ -3612,7 +3612,12 @@ export class GlobalChat {
   async fetch(request) {
     const urlObj = new URL(request.url);
     const path = urlObj.pathname;
-    if (path === "/channels" || path.startsWith("/channels/")) return this.officialChannels.fetch(request);
+    if (path === "/channels" || path.startsWith("/channels/")) {
+      const upstream = await this.officialChannels.fetch(request);
+      const response = new Response(upstream.body, upstream);
+      response.headers.set("x-xydesk-channel-handler", "1");
+      return response;
+    }
     if (path === "/mutation-capabilities" && request.method === "GET")
       return durableObjectJson({ revisioned_mutations: 1 }, 200, request.method);
     if ((path === "/connect" || path === "/ws/chat") && request.headers.get("Upgrade") === "websocket") {
@@ -4498,7 +4503,13 @@ export default {
       target.search = url.search;
       try {
         const id = env.GLOBAL_CHAT.idFromName("xydesk-global-chat-v1");
-        return await env.GLOBAL_CHAT.get(id).fetch(new Request(target, request));
+        const upstream = await env.GLOBAL_CHAT.get(id).fetch(new Request(target.toString(), {
+          method: request.method, headers: request.headers,
+          body: request.method === "GET" || request.method === "HEAD" ? undefined : request.body,
+        }));
+        const response = new Response(upstream.body, upstream);
+        response.headers.set("x-xydesk-channel-router", "1");
+        return response;
       } catch (error) { return chatStorageFailure(error, request.method); }
     }
     if (path === "/ws/chat") {

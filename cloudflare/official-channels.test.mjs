@@ -82,3 +82,11 @@ test('streamed oversized bodies are rejected before any storage write',async()=>
  user={id:FOUNDER_GITHUB_ID,login:'xykal'};const f=fixture();
  assert.equal((await f.channel.fetch(req('POST','/channels/announcement/posts',post('x'.repeat(21000)),'owner'))).status,413);assert.equal(f.data.size,0);
 });
+test('real edge-to-GlobalChat-to-channel integration returns catalogue and both contract headers',async()=>{
+ const f=fixture();const chat=new GlobalChat({storage:f.storage},{});
+ const env={GLOBAL_CHAT:{idFromName:()=>1,get:()=>({fetch:r=>chat.fetch(r)})}};
+ const r=await worker.fetch(req('GET','/api/chat/channels'),env);
+ assert.equal(r.status,200);assert.equal(r.headers.get('x-xydesk-channel-router'),'1');assert.equal(r.headers.get('x-xydesk-channel-handler'),'1');
+ assert.equal((await r.json()).channels.length,3);
+ const denied=await worker.fetch(req('POST','/api/chat/channels/announcement/posts',post()),env);assert.equal(denied.status,401);
+});
