@@ -1305,10 +1305,12 @@ test("PowerShell source is downloadable as text and is not executed by the Worke
   assert.equal(await response.text(), "Write-Output 'review me'");
 });
 
-test("agent batch helper downloads and opens the script for review without piping it to execution", async () => {
+test("retired agent batch helper remains downloadable but performs no setup or network execution", async () => {
   const batch = await readFile(new URL("../web/agent.bat", import.meta.url), "utf8");
   assert.doesNotMatch(batch, /\|\s*iex/i);
-  assert.match(batch, /NOT run/i);
+  assert.match(batch, /Installer legacy ditarik/i);
+  assert.match(batch, /exit \/b 1/i);
+  assert.doesNotMatch(batch, /powershell|invoke-webrequest|start-process|netsh|runas/i);
   const response = await worker.fetch(new Request("https://rdp.xydesk.my.id/agent.bat"), envFor({ "/agent.bat": batch }));
   assert.equal(response.status, 200);
   assert.match(response.headers.get("content-disposition"), /XyDesk-Remote-Agent-Setup\.bat/);
