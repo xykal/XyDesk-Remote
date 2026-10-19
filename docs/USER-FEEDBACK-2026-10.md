@@ -65,3 +65,10 @@ attempt reached TLS. Native signed pointer values are opaque handles, not by
 was the highest advertised mode; that is not a measurement of remote game FPS.
 Old automatic UDP mic startup shown in the log is already disabled in current
 source. No real user endpoint has been probed from the development sandbox.
+
+## Verified source result — 1486fdb
+
+- Kotlin/JVM tests and app Kotlin compilation: **SUCCESS**, [39256872114](https://github.com/xykal/XyDesk-Remote/actions/runs/39256872114). Nine new Kotlin tests exercise reported diagnostics/security preservation and extra stick modes.
+- Worker/source checks: **SUCCESS**, [39256873849](https://github.com/xykal/XyDesk-Remote/actions/runs/39256873849).
+- Local: twelve source guards, six synthetic APK/ELF checks, two AUDIN C mock tests **PASS**.
+- Debug APK, release APK and publication jobs **SKIPPED**. No APK/EXE/tag/draft/deploy created. No claim that affected phones can now install.
