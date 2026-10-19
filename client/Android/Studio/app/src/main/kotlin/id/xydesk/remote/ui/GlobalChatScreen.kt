@@ -629,6 +629,7 @@ private fun GlobalChatAccountContent(
     var sending by remember { mutableStateOf(false) }
     var draft by remember { mutableStateOf(TextFieldValue("")) }
     val listState = rememberLazyListState()
+    val chatMotionEnabled by androidx.compose.runtime.rememberUpdatedState(id.xydesk.remote.ui.theme.LocalUiMotionEnabled.current)
     var didInitialScroll by remember(verifiedGhLogin) { mutableStateOf(false) }
     var newArrivals by remember(verifiedGhLogin) { mutableIntStateOf(0) }
     val sentSoundGate = remember(verifiedGhLogin) { ChatSentSoundGate() }
@@ -644,7 +645,7 @@ private fun GlobalChatAccountContent(
             didInitialScroll = true
         }
     }
-    LaunchedEffect(listState) {
+    LaunchedEffect(verifiedGhLogin, listState) {
         snapshotFlow { !listState.canScrollForward }.collect { atBottom -> if (atBottom) newArrivals = 0 }
     }
 
@@ -842,7 +843,7 @@ private fun GlobalChatAccountContent(
                             if (added && messages.isNotEmpty()) {
                                 if (!followSnapshot) newArrivals += newlyAdded
                                 if (followSnapshot) {
-                                    listState.animateScrollToItem(messages.size - 1)
+                                    listState.scrollChatTo(messages.size - 1, chatMotionEnabled)
                                 }
                             }
                         }
@@ -1005,6 +1006,9 @@ private fun GlobalChatAccountContent(
                                     // Parsing suspends: preserve messages arriving meanwhile and pending sends.
                                     val newestAt = batch.maxOfOrNull { it.at } ?: 0L
                                     val batchIds = batch.mapTo(HashSet()) { it.id }
+                                    batch.forEach { item ->
+                                        if (findPendingChatIndex(messages, item) >= 0) confirmOwnSend(item.id)
+                                    }
                                     val acknowledgedLocalIds = batch.mapNotNull { item ->
                                         findPendingChatIndex(messages, item).takeIf { it >= 0 }?.let { messages[it].id }
                                     }.toSet()
@@ -1055,7 +1059,7 @@ private fun GlobalChatAccountContent(
                                     }
                                     enrichTranslationIfNeeded(incoming)
                                     if (messages.size > 100) messages.removeAt(0)
-                                    if (followIncoming) scope.launch { listState.animateScrollToItem(messages.size - 1) }
+                                    if (followIncoming) scope.launch { listState.scrollChatTo(messages.size - 1, chatMotionEnabled) }
                                 }
                                 "presence" -> {
                                     val cnt = data.optInt("count", 1).coerceAtLeast(1)
@@ -1221,9 +1225,9 @@ private fun GlobalChatAccountContent(
         )
         messages.add(pending)
         enrichTranslationIfNeeded(pending)
+        scope.launch { listState.scrollChatTo((messages.size - 1).coerceAtLeast(0), chatMotionEnabled) }
         scope.launch {
             try {
-                listState.animateScrollToItem((messages.size - 1).coerceAtLeast(0))
                 var queuedOnSocket = false
                 val sentMsg = withContext(Dispatchers.IO) {
                     // Sending must not wait for a translation provider; enrichment is asynchronous.
@@ -1603,7 +1607,7 @@ private fun GlobalChatAccountContent(
                         Row(
                             modifier = Modifier.clickable {
                                 if (messages.isNotEmpty()) {
-                                    scope.launch { listState.animateScrollToItem(0) }
+                                    scope.launch { listState.scrollChatTo(0, chatMotionEnabled) }
                                 }
                             },
                             verticalAlignment = Alignment.CenterVertically,
@@ -1772,7 +1776,7 @@ private fun GlobalChatAccountContent(
                         .fillMaxWidth()
                         .clickable {
                             if (messages.isNotEmpty()) {
-                                scope.launch { listState.animateScrollToItem(0) }
+                                scope.launch { listState.scrollChatTo(0, chatMotionEnabled) }
                             }
                         }
                         .padding(horizontal = 16.dp, vertical = 4.dp),
@@ -1864,7 +1868,7 @@ private fun GlobalChatAccountContent(
                             .clickable {
                                 val idx = messages.indexOfFirst { it.id == pin.id }
                                 if (idx >= 0) {
-                                    scope.launch { listState.animateScrollToItem(idx) }
+                                    scope.launch { listState.scrollChatTo(idx, chatMotionEnabled) }
                                 } else {
                                     Toast.makeText(context, "Pesan disematkan: ${pin.text}", Toast.LENGTH_SHORT).show()
                                 }
@@ -2110,7 +2114,7 @@ private fun GlobalChatAccountContent(
                                     .size(34.dp)
                                     .clickable {
                                         scope.launch {
-                                            listState.animateScrollToItem(0)
+                                            listState.scrollChatTo(0, chatMotionEnabled)
                                         }
                                     },
                             ) {
@@ -2138,7 +2142,7 @@ private fun GlobalChatAccountContent(
                                     .clickable {
                                         scope.launch {
                                             if (messages.isNotEmpty()) {
-                                                listState.animateScrollToItem(messages.size - 1)
+                                                listState.scrollChatTo(messages.size - 1, chatMotionEnabled)
                                             }
                                         }
                                     },

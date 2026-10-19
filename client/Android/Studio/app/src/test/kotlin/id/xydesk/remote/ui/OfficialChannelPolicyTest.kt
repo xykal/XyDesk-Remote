@@ -28,4 +28,11 @@ class OfficialChannelPolicyTest {
         assertTrue(gate.accept("server-b")); assertTrue(gate.accept("server-c"))
         assertFalse(gate.accept("server-c")); assertTrue(gate.accept("server-a"))
     }
+    @Test fun longScrollsJumpAndAccessibilityCanDisableMotion() {
+        assertTrue(shouldAnimateChatScroll(12, true))
+        assertFalse(shouldAnimateChatScroll(13, true))
+        assertFalse(shouldAnimateChatScroll(-13, true))
+        assertFalse(shouldAnimateChatScroll(1, false))
+        assertFalse(shouldAnimateChatScroll(Int.MIN_VALUE, true))
+    }
 }

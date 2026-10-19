@@ -92,7 +92,7 @@ private fun OfficialChannelScreen(id: String, onClose: () -> Unit, onSelect: (St
     LaunchedEffect(id, account) {
         load()
         lifecycle.repeatOnLifecycle(Lifecycle.State.STARTED) {
-            while (isActive) { delay(30_000L); load() }
+            while (isActive) { delay(60_000L); load() }
         }
     }
     Column(Modifier.fillMaxSize().systemBarsPadding().imePadding().padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -112,6 +112,15 @@ private fun OfficialChannelScreen(id: String, onClose: () -> Unit, onSelect: (St
             if (cursor != null) TextButton(onClick = { load(true) }, enabled = !loading) { Text("Pesan lebih lama") }
         }
         LazyColumn(Modifier.weight(1f).fillMaxWidth(), state = listState, verticalArrangement = Arrangement.spacedBy(12.dp)) {
+            if (id == "panduan-pengguna") item(key = "bundled-guide") {
+                Surface(shape = MaterialTheme.shapes.medium, color = MaterialTheme.colorScheme.surfaceVariant) {
+                    Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Text("Panduan bawaan · tersedia offline", style = MaterialTheme.typography.labelLarge)
+                        XyClickableLinkText(text = bundledUserGuide, color = MaterialTheme.colorScheme.onSurface)
+                        Text("Dokumentasi aplikasi, bukan pesan pengguna. Pembaruan tim ditampilkan di bawah saat tersinkron.", style = MaterialTheme.typography.labelSmall)
+                    }
+                }
+            }
             if (loaded && posts.isEmpty() && error == null) item { Text("Belum ada pesan resmi di channel ini.") }
             items(posts, key = { it.id }) { post ->
                 Surface(shape = MaterialTheme.shapes.medium, color = MaterialTheme.colorScheme.surfaceVariant) {
@@ -136,7 +145,7 @@ private fun OfficialChannelScreen(id: String, onClose: () -> Unit, onSelect: (St
                     result.onSuccess { post ->
                         if (posts.none { it.id == post.id }) posts.add(post)
                         posts.sortBy { it.at }; draft = ""; nonce = java.util.UUID.randomUUID().toString(); error = null
-                        if (posts.isNotEmpty()) listState.animateScrollToItem(posts.lastIndex)
+                        if (posts.isNotEmpty()) listState.animateScrollToItem(posts.lastIndex + if (id == "panduan-pengguna") 1 else 0)
                     }.onFailure { e ->
                         error = e.message ?: "Kirim belum terkonfirmasi. Draf tetap tersedia; coba lagi."
                         retryUntil = System.currentTimeMillis() + ((e as? ChannelRequestException)?.retrySeconds ?: 0L) * 1000L
