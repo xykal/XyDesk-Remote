@@ -1,7 +1,7 @@
 #include "../include/host_readiness.h"
 #ifdef _WIN32
 #include <mmdeviceapi.h>
-#include <functiondiscoverykeys_devpkey.h>
+// Keep the Windows property key local: MinGW's uuid archive does not export it.
 #include <propsys.h>
 #include <propvarutil.h>
 #include <tlhelp32.h>
@@ -11,6 +11,8 @@
 #include <sstream>
 
 namespace {
+constexpr PROPERTYKEY kDeviceFriendlyName = {
+    {0xa45c254e, 0xdf1c, 0x4efd, {0x80, 0x20, 0x67, 0xd1, 0x46, 0xa8, 0x50, 0xe0}}, 14};
 constexpr int REPORT = 101, REFRESH = 102, SOUND = 103, PRIVACY = 104, DRIVER = 105;
 const wchar_t* kReadinessClass = L"XyDeskReadOnlyReadiness";
 std::wstring friendly(IMMDevice* device) {
@@ -19,7 +21,7 @@ std::wstring friendly(IMMDevice* device) {
     PROPVARIANT value{};
     PropVariantInit(&value);
     std::wstring name = L"(nama tidak tersedia)";
-    if (SUCCEEDED(store->GetValue(PKEY_Device_FriendlyName, &value)) && value.vt == VT_LPWSTR && value.pwszVal) name = value.pwszVal;
+    if (SUCCEEDED(store->GetValue(kDeviceFriendlyName, &value)) && value.vt == VT_LPWSTR && value.pwszVal) name = value.pwszVal;
     PropVariantClear(&value);
     store->Release();
     return name;

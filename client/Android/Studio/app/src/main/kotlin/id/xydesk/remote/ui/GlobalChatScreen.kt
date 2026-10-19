@@ -398,6 +398,8 @@ private fun GlobalChatAccountContent(
 
     var showLangPicker by remember { mutableStateOf(false) }
     var showChatSettings by remember { mutableStateOf(false) }
+    var historyIssue by remember(verifiedGhLogin) { mutableStateOf<String?>(null) }
+    var historyRetryAt by remember(verifiedGhLogin) { mutableStateOf(0L) }
     var showStickerPicker by remember { mutableStateOf(false) }
     var showAttachMenu by remember { mutableStateOf(false) }
     var viewOnceMediaMode by remember { mutableStateOf(false) }
@@ -726,6 +728,7 @@ private fun GlobalChatAccountContent(
     }
 
     suspend fun fetchHistoryOverHttp() {
+        if (System.currentTimeMillis() < historyRetryAt) return
         if (!historyInFlight.compareAndSet(false, true)) return
         try {
             withContext(Dispatchers.IO) {
@@ -735,13 +738,15 @@ private fun GlobalChatAccountContent(
                     val gh = URLEncoder.encode(verifiedGhLogin.orEmpty(), "UTF-8")
                     val url = "$CHAT_HISTORY_URL?joined_at=$firstJoinedAtMs&client_id=$cid&github_login=$gh"
                     val conn = (URL(url).openConnection() as HttpURLConnection).apply {
+                        instanceFollowRedirects = false
                         requestMethod = "GET"
                         connectTimeout = 8_000
                         readTimeout = 8_000
                         setRequestProperty("Accept", "application/json")
                     }
                     try {
-                    if (conn.responseCode in 200..299) {
+                    val httpStatus = conn.responseCode
+                    if (httpStatus in 200..299) {
                         val body = conn.inputStream.bufferedReader().use { it.readText() }
                         val json = JSONObject(body)
                         val serverOnline = json.optInt("online_count", 0)
@@ -764,6 +769,8 @@ private fun GlobalChatAccountContent(
                             }
                         }
                         withContext(Dispatchers.Main) {
+                            historyIssue = null
+                            historyRetryAt = 0L
                             connected = true
                             if (serverOnline > 0) roomPresence = serverOnline
                             if (json.has("pinned_message")) {
@@ -811,6 +818,23 @@ private fun GlobalChatAccountContent(
                                     listState.animateScrollToItem(messages.size - 1)
                                 }
                             }
+                        }
+                    } else {
+                        val errorText = conn.errorStream?.bufferedReader()?.use { reader ->
+                            val buffer = CharArray(4096)
+                            var count = 0
+                            while (count < buffer.size) {
+                                val n = reader.read(buffer, count, buffer.size - count)
+                                if (n < 0) break
+                                if (n > 0) count += n
+                            }
+                            String(buffer, 0, count)
+                        }.orEmpty()
+                        val code = runCatching { JSONObject(errorText).optString("code") }.getOrDefault("")
+                        val failure = chatHistoryFailure(httpStatus, code, conn.getHeaderField("Retry-After"))
+                        withContext(Dispatchers.Main) {
+                            historyIssue = failure.message
+                            historyRetryAt = System.currentTimeMillis() + failure.retrySeconds * 1000L
                         }
                     }
                     } finally {
@@ -1748,12 +1772,12 @@ private fun GlobalChatAccountContent(
                     ) {
                         Icon(
                             imageVector = XyIcons.Lock,
-                            contentDescription = "End-to-End Encrypted",
+                            contentDescription = "TLS transport and encrypted local cache",
                             tint = Color(0xFFA1A1AA),
                             modifier = Modifier.size(11.dp),
                         )
                         Text(
-                            text = "E2EE AES-256-GCM",
+                            text = "TLS · Cache AES-GCM",
                             style = MaterialTheme.typography.labelSmall,
                             fontSize = 10.sp,
                             fontWeight = FontWeight.SemiBold,
@@ -1770,6 +1794,11 @@ private fun GlobalChatAccountContent(
                         }
                     }
                 }
+            }
+
+            historyIssue?.let { issue ->
+                Text(issue, color = Color(0xFFFBBF24), style = MaterialTheme.typography.labelSmall,
+                    modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 6.dp))
             }
 
             // Banner Pesan yang Disematkan (Pinned Message Bar) di Atas Chat Global (disembunyikan di mode Floating Sesi agar ruang pesan lega)

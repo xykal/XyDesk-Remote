@@ -103,6 +103,7 @@ jobs:
           bash -n ci/build_windows_host.sh
           python3 -m unittest discover -s ci -p test_host_distribution.py
           python3 -m unittest discover -s ci -p test_android_apk_validation.py
+          python3 -m unittest discover -s ci -p test_windows_host_validation.py
 
   # ------------------------------------------------------------------
   # DEBUG per-ABI (tiap push ke main; commit [skip-debug] khusus melewati job ini)
@@ -195,6 +196,7 @@ jobs:
   build-release:
     if: ${{ startsWith(github.ref, 'refs/tags/v') || (github.event_name == 'workflow_dispatch' && inputs.job == 'release' && github.ref == 'refs/heads/main') }}
     name: Release per-ABI (R8 + signed) + GitHub Release
+    needs: compile-check
     runs-on: ubuntu-latest
     timeout-minutes: 400
     # Build/signing hanya memerlukan baca; publikasi dipisah ke job sempit.
@@ -515,6 +517,7 @@ jobs:
           rm -rf "$STAGE_DIR"
           mkdir -p "$STAGE_DIR" "$OUT_DIR"
           bash ci/build_windows_host.sh "$STAGE_DIR"
+          python3 ci/verify_windows_host.py "$STAGE_DIR/XyDeskRemoteHost.exe" > "$OUT_DIR/HOST-VERIFICATION.json"
           cp "$STAGE_DIR/XyDeskRemoteHost.exe" "$OUT_DIR/XyDeskRemoteHost.exe"
           ls -lh "$OUT_DIR"
       - name: Upload signed APKs & Windows Host Agent for publishing
@@ -525,6 +528,7 @@ jobs:
             client/Android/Studio/app/build/outputs/apk/release/*.apk
             client/Android/Studio/app/build/outputs/apk/release/XyDeskRemoteHost.exe
             client/Android/Studio/app/build/outputs/apk/release/SIGNATURE-VERIFICATION.txt
+            client/Android/Studio/app/build/outputs/apk/release/HOST-VERIFICATION.json
           retention-days: 3
       - name: Hapus material signing sementara
         if: always()
@@ -570,8 +574,10 @@ jobs:
             release-apks/*.apk
             release-apks/XyDeskRemoteHost.exe
             release-apks/SIGNATURE-VERIFICATION.txt
+            release-apks/HOST-VERIFICATION.json
             release-apks/SHA256SUMS.txt
           generate_release_notes: true
+          body_path: docs/RELEASE-CANDIDATE-LIMITS.md
           overwrite_files: true
           # Simpan sebagai Release Draft terlebih dahulu (draft: true) sesuai instruksi pemilik di Ronde 63
           draft: true

@@ -1,3 +1,4 @@
+import { RevisionedHistoryWindow, chatStorageFailure } from "./chat-storage-policy.mjs";
 import { applyChatMutation } from "./chat-mutations.mjs";
 import { exchangeGithubCode } from "./oauth-token-exchange.mjs";
 import { verifyGithubIdentity, resolveGithubIdentity } from "./oauth-identity.mjs";
@@ -3563,6 +3564,8 @@ export class GlobalChat {
     this.sessions = new Set();
     this.httpRate = new Map();
     this.appOnlinePeers = new Map();
+    this.historyWindow = new RevisionedHistoryWindow();
+    this.joinedCache = new Map();
   }
 
   getActiveOnlineCount() {
@@ -3590,20 +3593,24 @@ export class GlobalChat {
     if (!identityKey) {
       return rawJoined > 0 ? rawJoined : 0;
     }
-    let stored = await this.state.storage.get(identityKey);
     const now = Date.now();
+    const cached = this.joinedCache.get(identityKey);
+    let stored = cached && now - cached.checkedAt < 300_000 ? cached.at : await this.state.storage.get(identityKey);
     if (!stored || typeof stored !== "number" || stored <= 0) {
       stored = rawJoined > 0 ? rawJoined : now;
       await this.state.storage.put(identityKey, stored);
-    } else if (rawJoined > stored) {
-      stored = rawJoined;
     }
+    if (this.joinedCache.size >= 1000 && !this.joinedCache.has(identityKey)) this.joinedCache.delete(this.joinedCache.keys().next().value);
+    this.joinedCache.set(identityKey, { at: stored, checkedAt: cached && now - cached.checkedAt < 300_000 ? cached.checkedAt : now });
+    if (rawJoined > stored) stored = rawJoined;
     return stored;
   }
 
   async fetch(request) {
     const urlObj = new URL(request.url);
     const path = urlObj.pathname;
+    if (path === "/mutation-capabilities" && request.method === "GET")
+      return durableObjectJson({ revisioned_mutations: 1 }, 200, request.method);
     if ((path === "/connect" || path === "/ws/chat") && request.headers.get("Upgrade") === "websocket") {
       return this.handleConnect(request);
     }
@@ -3807,6 +3814,7 @@ export class GlobalChat {
       return result;
     });
     if (outcome.status !== 200) return durableObjectJson({ status: "error", code: outcome.code }, outcome.status, request.method);
+    this.historyWindow.invalidate();
     this.broadcast(null, JSON.stringify({ type: "mutation", message: outcome.message }));
     this.broadcast(null, JSON.stringify({ type: "pin", pinned_message: await this.state.storage.get("pinned_message") || null }));
     return durableObjectJson({ status: "ok", message: outcome.message }, 200, request.method);
@@ -3886,6 +3894,7 @@ export class GlobalChat {
       at: now,
     };
     await this.state.storage.put(`msg:${id}`, msg);
+    this.historyWindow.invalidate();
     this.trimHistory().catch(() => {});
     this.broadcast(null, JSON.stringify({ type: "msg", ...msg }));
     this.pushChatNotification(msg).catch(() => {});
@@ -3893,7 +3902,12 @@ export class GlobalChat {
   }
 
   async loadHistory(sinceMs = 0) {
-    const entries = await this.state.storage.list({ prefix: "msg:" });
+    const rows = await this.historyWindow.load(() => this.readHistoryRows());
+    return rows.filter(row => !(sinceMs > 0 && Number(row.at || 0) > 0 && Number(row.at || 0) < sinceMs));
+  }
+
+  async readHistoryRows() {
+    const entries = await this.state.storage.list({ prefix: "msg:", reverse: true, limit: CHAT_HISTORY_LIMIT });
     const msgs = [];
     const deletedIds = new Set([...entries.values()].filter(m => m?.deleted).map(m => m.id));
     for (const [k, v] of entries.entries()) {
@@ -3903,9 +3917,6 @@ export class GlobalChat {
         continue;
       }
       const msgAt = Number(v?.at || 0);
-      if (sinceMs > 0 && msgAt > 0 && msgAt < sinceMs) {
-        continue;
-      }
       const text = String(v?.text || "");
       let sourceLang = typeof v?.source_lang === "string" ? v.source_lang : "";
       const country = resolveSmartCountry(text, sourceLang, v?.country, v?.country);
@@ -4130,6 +4141,7 @@ export class GlobalChat {
       at: now,
     };
     await this.state.storage.put(`msg:${id}`, msg);
+    this.historyWindow.invalidate();
     this.trimHistory().catch(() => {});
     this.broadcast(null, JSON.stringify({ type: "msg", ...msg }));
     this.pushChatNotification(msg).catch(() => {});
@@ -4478,11 +4490,13 @@ export default {
       const chatId2 = env.GLOBAL_CHAT.idFromName("xydesk-global-chat-v1");
       const historyUrl = new URL("/history", request.url);
       historyUrl.search = url.search;
-      const res = await env.GLOBAL_CHAT.get(chatId2).fetch(new Request(historyUrl, { method: "GET" }));
+      let res;
+      try { res = await env.GLOBAL_CHAT.get(chatId2).fetch(new Request(historyUrl, { method: "GET" })); }
+      catch (error) { return chatStorageFailure(error, request.method); }
       if (!res.ok) return res;
       const payload = await res.json().catch(() => null);
       if (!payload || !Array.isArray(payload.messages)) {
-        return durableObjectJson({ status: "ok", messages: [], online_count: Math.max(edgeOnline, payload?.online_count || 1) }, 200, request.method);
+        return chatStorageFailure(new Error("Unconfirmed history payload"), request.method);
       }
       const effectiveJoinedAt = Math.max(reqJoinedAt, Number(payload.joined_at || 0));
       const cleaned = [];
@@ -4555,10 +4569,24 @@ export default {
       if (request.method === "OPTIONS") return corsPreflight("POST, OPTIONS");
       if (request.method !== "POST") return methodNotAllowed("POST, OPTIONS");
       if (!env.GLOBAL_CHAT) return durableObjectJson({ status: "error", code: "chat_unavailable" }, 503, request.method);
+      // Reject before touching storage, including when the account is over quota.
+      const bearer = (request.headers.get("Authorization") || "").match(/^Bearer (\S+)$/);
+      if (!bearer) return durableObjectJson({ status: "error", code: "authentication_required" }, 401, request.method);
+      const auth = await resolveGithubIdentity(bearer[1]);
+      if (!auth.ok) return durableObjectJson({ status: "error", code: auth.code }, auth.status, request.method);
       const chatId = env.GLOBAL_CHAT.idFromName("xydesk-global-chat-v1");
-      const response = await env.GLOBAL_CHAT.get(chatId).fetch(new Request(new URL(path.endsWith("/edit") ? "/edit" : "/delete", request.url), {
+      const stub = env.GLOBAL_CHAT.get(chatId);
+      let response;
+      try {
+        // Refuse old/live DO code that only knows the legacy deletion contract.
+        const capability = await stub.fetch(new Request(new URL("/mutation-capabilities", request.url)));
+        const capabilityBody = capability.ok ? await capability.json().catch(() => null) : null;
+        if (capabilityBody?.revisioned_mutations !== 1)
+          return durableObjectJson({ status: "error", code: "chat_migration_pending" }, 503, request.method);
+        response = await stub.fetch(new Request(new URL(path.endsWith("/edit") ? "/edit" : "/delete", request.url), {
         method: "POST", headers: request.headers, body: request.body, duplex: "half",
-      }));
+        }));
+      } catch (error) { return chatStorageFailure(error, request.method); }
       if (response.ok) {
         const result = await response.clone().json().catch(() => null);
         if (result?.message?.id === EDGE_PINNED_MSG?.id) EDGE_PINNED_MSG = null;
