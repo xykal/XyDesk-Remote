@@ -17,6 +17,8 @@ enum class XyPadKey {
     A,
     S,
     D,
+    I, J, K, L,
+    NUMPAD_8, NUMPAD_4, NUMPAD_2, NUMPAD_6,
 }
 
 /**
@@ -28,6 +30,9 @@ enum class XyStickMode {
     POINTER,
     WASD,
     ARROWS,
+    // Append only: existing ordinals are stored in SessionPrefs.
+    IJKL,
+    NUMPAD,
 }
 
 /** Arah digital yang diturunkan dari simpangan stik analog. */
@@ -178,11 +183,14 @@ object XyGamepadActionMapper {
     }
 
     /** Kunci untuk satu arah pada mode stik papan ketik. */
-    fun keyFor(direction: XyStickDirection, mode: XyStickMode): XyPadKey = when (direction) {
-        XyStickDirection.UP -> if (mode == XyStickMode.WASD) XyPadKey.W else XyPadKey.ARROW_UP
-        XyStickDirection.DOWN -> if (mode == XyStickMode.WASD) XyPadKey.S else XyPadKey.ARROW_DOWN
-        XyStickDirection.LEFT -> if (mode == XyStickMode.WASD) XyPadKey.A else XyPadKey.ARROW_LEFT
-        XyStickDirection.RIGHT -> if (mode == XyStickMode.WASD) XyPadKey.D else XyPadKey.ARROW_RIGHT
+    fun keyFor(direction: XyStickDirection, mode: XyStickMode): XyPadKey {
+        val keys = when (mode) {
+            XyStickMode.WASD -> listOf(XyPadKey.W, XyPadKey.S, XyPadKey.A, XyPadKey.D)
+            XyStickMode.IJKL -> listOf(XyPadKey.I, XyPadKey.K, XyPadKey.J, XyPadKey.L)
+            XyStickMode.NUMPAD -> listOf(XyPadKey.NUMPAD_8, XyPadKey.NUMPAD_2, XyPadKey.NUMPAD_4, XyPadKey.NUMPAD_6)
+            else -> listOf(XyPadKey.ARROW_UP, XyPadKey.ARROW_DOWN, XyPadKey.ARROW_LEFT, XyPadKey.ARROW_RIGHT)
+        }
+        return keys[direction.ordinal]
     }
 
     private fun axis(rawValue: Int): Float = rawValue / AXIS_DENOMINATOR

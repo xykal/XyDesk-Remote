@@ -2230,12 +2230,12 @@ private fun InputTab(
             )
             PanelHint(
                 xy(
-                    "Mode stik kiri: Pointer = kursor, WASD/Panah = tombol arah. Stik kanan gamepad selalu kursor.",
-                    "Left stick mode: Pointer = cursor, WASD/Arrows = keys. The gamepad's right stick is always the cursor.",
+                    "Mode stik kiri: Pointer = kursor, WASD/Panah/IJKL/NumPad = tombol keyboard (NumPad mengikuti NumLock host). Stik kanan = kursor, bukan gamepad analog Windows.",
+                    "Left stick mode: Pointer = cursor, WASD/Arrows/IJKL/NumPad = keyboard keys (NumPad follows host NumLock). Right stick = cursor, not a Windows analog gamepad.",
                 ),
             )
             XySegmented(
-                options = listOf(xy("Pointer", "Pointer"), xy("WASD", "WASD"), xy("Panah", "Arrows")),
+                options = listOf(xy("Pointer", "Pointer"), "WASD", xy("Panah", "Arrows"), "IJKL", "NumPad"),
                 selectedIndex = XyStickMode.entries.indexOf(stickMode).coerceAtLeast(0),
                 onSelect = { onStickModeChange(XyStickMode.entries[it]) },
                 modifier = Modifier.fillMaxWidth(),

@@ -22,6 +22,17 @@ class HostDistributionTest(unittest.TestCase):
         self.assertIn('Konfirmasi sambung ulang', panel)
         self.assertIn('BUKAN live mute', panel)
 
+    def test_reported_cancel_and_security_retry_do_not_hide_failures_or_downgrade(self):
+        manager = (ROOT / 'client/Android/Studio/core-rdp/src/main/kotlin/id/xydesk/remote/core/SessionManager.kt').read_text()
+        failure = manager.split('override fun onConnectionFailure()', 1)[1].split('override fun onDisconnected()', 1)[0]
+        self.assertLess(failure.index('cleanupTerminalSession(inst)'), failure.index('RdpFailure.isExpectedCancellation'))
+        self.assertIn('transition(SessionState.Disconnected())', failure)
+        self.assertIn('RdpConnectionDiagnostics.unreachableMessage', manager)
+        uri = manager.split('private fun sessionUri(', 1)[1].split('fun connect(', 1)[0]
+        self.assertIn('.forHandshakeCompatibility(compatHandshakeStage)', uri)
+        self.assertNotIn('tlsSecLevel = 0', uri)
+        self.assertNotIn('securityProtocol = XySecurityProtocol.TLS', uri)
+
     def test_one_cmake_application_without_companion_libraries(self):
         cmake = (ROOT / 'host-agent/CMakeLists.txt').read_text()
         self.assertEqual(cmake.count('add_executable('), 1)

@@ -24,6 +24,26 @@ class XyGamepadActionMapperTest {
     private fun state(buttons: Int = 0, leftX: Int = 0, leftY: Int = 0, rightY: Int = 0) =
         XyGamepadState(buttons = buttons, leftX = leftX, leftY = leftY, rightY = rightY)
 
+    @Test fun extraKeyboardStickModesSendAndReleaseDiagonalKeysWithoutSpam() {
+        for ((mode, keys) in listOf(
+            XyStickMode.IJKL to listOf(XyPadKey.I, XyPadKey.L),
+            XyStickMode.NUMPAD to listOf(XyPadKey.NUMPAD_8, XyPadKey.NUMPAD_6),
+        )) {
+            val out = Recorder()
+            val pressed = state(leftX = 32_767, leftY = -32_767)
+            XyGamepadActionMapper.apply(pressed, null, out, mode)
+            XyGamepadActionMapper.apply(pressed, pressed, out, mode)
+            XyGamepadActionMapper.apply(state(), pressed, out, mode)
+            assertEquals(keys.map { it to true } + keys.map { it to false }, out.keys)
+            assertTrue(out.pointer.isEmpty())
+        }
+    }
+    @Test fun savedStickModeOrdinalsRemainCompatible() {
+        assertEquals(0, XyStickMode.POINTER.ordinal)
+        assertEquals(1, XyStickMode.WASD.ordinal)
+        assertEquals(2, XyStickMode.ARROWS.ordinal)
+    }
+
     @Test
     fun leftStickMovesPointerAtEighteenUnitsPerDeflection() {
         val out = Recorder()

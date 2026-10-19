@@ -480,6 +480,7 @@ class XyDeskSessionActivity : ComponentActivity() {
                         stickModeProvider = { padStickMode },
                         onStickKeys = { x, y -> applyHudStickAxis(x, y) },
                         onStickModeChange = { next ->
+                            applyHudStickAxis(0f, 0f) // Release keys in the OLD mapping before replacing it.
                             padStickMode = next
                             sessionPrefs.virtualPadStickMode = next
                         },
@@ -562,6 +563,7 @@ class XyDeskSessionActivity : ComponentActivity() {
     }
 
     override fun onStop() {
+        if (::controller.isInitialized) applyHudStickAxis(0f, 0f)
         captureForegroundReady = false
         super.onStop()
         setGyroMouseActive(false)
@@ -767,6 +769,14 @@ class XyDeskSessionActivity : ComponentActivity() {
                     XyPadKey.A -> KeyEvent.KEYCODE_A
                     XyPadKey.S -> KeyEvent.KEYCODE_S
                     XyPadKey.D -> KeyEvent.KEYCODE_D
+                    XyPadKey.I -> KeyEvent.KEYCODE_I
+                    XyPadKey.J -> KeyEvent.KEYCODE_J
+                    XyPadKey.K -> KeyEvent.KEYCODE_K
+                    XyPadKey.L -> KeyEvent.KEYCODE_L
+                    XyPadKey.NUMPAD_8 -> KeyEvent.KEYCODE_NUMPAD_8
+                    XyPadKey.NUMPAD_4 -> KeyEvent.KEYCODE_NUMPAD_4
+                    XyPadKey.NUMPAD_2 -> KeyEvent.KEYCODE_NUMPAD_2
+                    XyPadKey.NUMPAD_6 -> KeyEvent.KEYCODE_NUMPAD_6
                 },
                 down,
             )

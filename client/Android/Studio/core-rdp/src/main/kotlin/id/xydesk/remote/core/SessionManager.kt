@@ -364,22 +364,7 @@ class SessionManager(context: Context) {
             .withCapturePermissions(
                 microphoneGranted = appContext.checkSelfPermission(android.Manifest.permission.RECORD_AUDIO) == android.content.pm.PackageManager.PERMISSION_GRANTED,
                 cameraGranted = appContext.checkSelfPermission(android.Manifest.permission.CAMERA) == android.content.pm.PackageManager.PERMISSION_GRANTED,
-            ).forCaptureVisibility(captureForegroundAllowed).let { resolved ->
-            when (compatHandshakeStage) {
-                1 -> resolved.copy(
-                    tlsSecLevel = 0,
-                    udpTransport = false,
-                    securityProtocol = XySecurityProtocol.AUTO,
-                )
-                2 -> resolved.copy(
-                    tlsSecLevel = 0,
-                    udpTransport = false,
-                    securityProtocol = XySecurityProtocol.TLS,
-                    h264 = false,
-                )
-                else -> resolved
-            }
-        }
+            ).forCaptureVisibility(captureForegroundAllowed).forHandshakeCompatibility(compatHandshakeStage)
         nativeMicrophoneRequested = options.microphone
         nativeCaptureRequested = options.microphone || options.camera
         activeCodec = options.activeCodecLabel()
@@ -543,9 +528,7 @@ class SessionManager(context: Context) {
                 transition(
                     SessionState.Error(
                         ERROR_UNREACHABLE,
-                        "Tidak bisa menghubungi ${profile.host}:${profile.port}. Kemungkinan: " +
-                            "RDP nonaktif, firewall memblokir, nama host salah, atau target " +
-                            "Windows Home (tidak punya server RDP).",
+                        RdpConnectionDiagnostics.unreachableMessage(profile.host, profile.port),
                         errorCode = RdpFailure.codeFor(ERROR_UNREACHABLE, ""),
                     )
                 )
@@ -1034,7 +1017,7 @@ class SessionManager(context: Context) {
             override fun onConnectionFailure() {
                 if (!isCurrent(inst)) return
                 stopWatchdog()
-                ConnectionLog.add("koneksi GAGAL (event native)")
+                ConnectionLog.add("CM: terminal failure callback native; klasifikasi setelah cleanup")
                 val p = lastProfile
                 val nativeDetail = runCatching {
                     LibFreeRDP.getLastErrorString(inst).trim()
@@ -1045,12 +1028,18 @@ class SessionManager(context: Context) {
                 }
                 if (!cleanupTerminalSession(inst)) return
                 if (restartForNativeMicrophoneChange(inst, p)) return
+                if (RdpFailure.isExpectedCancellation(userInitiatedDisconnect, nativeDetail)) {
+                    setStage(Stage.IDLE)
+                    ConnectionLog.add("CM: pembatalan/putus yang diminta selesai; bukan kegagalan login baru")
+                    transition(SessionState.Disconnected())
+                    return
+                }
                 if (!userInitiatedDisconnect && !released && !isAuthFailure &&
                     connectedAtMs == 0L && lastTcpReachable && compatHandshakeStage < 2 && p != null
                 ) {
                     compatHandshakeStage++
                     ConnectionLog.add(
-                        "CM: negosiasi awal gagal padahal TCP hidup ($nativeDetail) -> coba otomatis mode kompatibilitas Windows App #$compatHandshakeStage",
+                        "CM: negosiasi awal gagal padahal TCP hidup ($nativeDetail) -> coba ulang TCP/codec tanpa mengubah TLS/NLA #$compatHandshakeStage",
                     )
                     transition(SessionState.Connecting)
                     mainHandler.postDelayed({

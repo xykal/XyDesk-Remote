@@ -28,3 +28,4 @@ jobs:
         run: |
           bash -n ci/build_windows_host.sh
           python3 -m unittest discover -s ci -p test_host_distribution.py
+          python3 -m unittest discover -s ci -p test_android_apk_validation.py
