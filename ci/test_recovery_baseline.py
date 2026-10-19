@@ -30,3 +30,12 @@ class RecoveryBaselineTest(unittest.TestCase):
         self.assertNotIn('StripJniLibs.cmake', external)
         native = (ROOT/'client/Android/Studio/freeRDPCore/src/main/cpp/CMakeLists.txt').read_text()
         self.assertNotIn('--strip-unneeded', native)
+
+    def test_chat_polling_tracks_socket_not_http_success_or_quiet_room_age(self):
+        screen = (ROOT/'client/Android/Studio/app/src/main/kotlin/id/xydesk/remote/ui/GlobalChatScreen.kt').read_text()
+        self.assertIn('LaunchedEffect(verifiedGhLogin, socketConnected)', screen)
+        self.assertIn('chatHistoryPollDelayMs(socketConnected = socketConnected)', screen)
+        http = screen[screen.index('suspend fun fetchHistoryOverHttp()'):screen.index('    LaunchedEffect(Unit)', screen.index('suspend fun fetchHistoryOverHttp()'))]
+        self.assertNotIn('socketConnected =', http)
+        self.assertIn('chatAccountSnapshotIsCurrent(requestAccount, verifiedGhLogin)', http)
+        self.assertNotIn('lastWsActivityMs', screen)

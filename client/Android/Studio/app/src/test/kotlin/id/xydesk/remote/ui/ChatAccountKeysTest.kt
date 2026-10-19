@@ -17,4 +17,11 @@ class ChatAccountKeysTest {
         assertNotEquals(chatAccountPreferenceKey("seen", "alice"), chatAccountPreferenceKey("hidden", "alice"))
         assertFalse(chatAccountPreferenceKey("seen", "alice").contains("alice"))
     }
+    @Test fun inFlightResponsesCannotCrossAccountOrLogoutBoundaries() {
+        assertTrue(chatAccountSnapshotIsCurrent(" @Alice ", "alice"))
+        assertTrue(chatAccountSnapshotIsCurrent(null, ""))
+        assertFalse(chatAccountSnapshotIsCurrent("alice", "bob"))
+        assertFalse(chatAccountSnapshotIsCurrent("alice", null))
+        assertFalse(chatAccountSnapshotIsCurrent(null, "alice"))
+    }
 }

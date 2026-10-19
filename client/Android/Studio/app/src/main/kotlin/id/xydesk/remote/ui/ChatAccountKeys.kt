@@ -12,3 +12,7 @@ internal fun chatAccountPreferenceKey(base: String, login: String?): String {
         .joinToString("") { "%02x".format(it) }
     return "$base.account.$digest"
 }
+
+/** Reject responses started before an account switch/logout. */
+internal fun chatAccountSnapshotIsCurrent(requested: String?, current: String?): Boolean =
+    normalizedChatAccount(requested) == normalizedChatAccount(current)

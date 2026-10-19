@@ -467,13 +467,13 @@ private fun GlobalChatAccountContent(
             }
         }
     }
-    val hiddenMessageIds = remember {
+    val hiddenMessageIds = remember(verifiedGhLogin) {
         mutableStateListOf<String>().apply {
             val saved = chatPrefs.getStringSet(hiddenIdsKey, chatPrefs.getStringSet(KEY_HIDDEN_MSG_IDS, emptySet())).orEmpty()
             addAll(saved)
         }
     }
-    val viewedOnceIds = remember {
+    val viewedOnceIds = remember(verifiedGhLogin) {
         mutableStateListOf<String>().apply {
             val saved = chatPrefs.getStringSet(viewedIdsKey, chatPrefs.getStringSet(KEY_VIEWED_ONCE_IDS, emptySet())).orEmpty()
             addAll(saved)
@@ -624,7 +624,8 @@ private fun GlobalChatAccountContent(
     val totalOnline = maxOf(appWideOnline, roomPresence, 1)
 
     var typingName by remember { mutableStateOf<String?>(null) }
-    var connected by remember { mutableStateOf(false) }
+    var connected by remember(verifiedGhLogin) { mutableStateOf(false) }
+    var socketConnected by remember(verifiedGhLogin) { mutableStateOf(false) }
     var sending by remember { mutableStateOf(false) }
     var draft by remember { mutableStateOf(TextFieldValue("")) }
     val listState = rememberLazyListState()
@@ -731,13 +732,16 @@ private fun GlobalChatAccountContent(
     suspend fun fetchHistoryOverHttp() {
         if (System.currentTimeMillis() < historyRetryAt) return
         if (!historyInFlight.compareAndSet(false, true)) return
+        val requestAccount = verifiedGhLogin
+        val requestNickname = nickname
+        val requestJoinedAt = firstJoinedAtMs
         try {
             withContext(Dispatchers.IO) {
                 runCatching {
                     val snapshotStartedAt = System.currentTimeMillis()
                     val cid = URLEncoder.encode(communityApi.accountShortId(), "UTF-8")
-                    val gh = URLEncoder.encode(verifiedGhLogin.orEmpty(), "UTF-8")
-                    val url = "$CHAT_HISTORY_URL?joined_at=$firstJoinedAtMs&client_id=$cid&github_login=$gh"
+                    val gh = URLEncoder.encode(requestAccount.orEmpty(), "UTF-8")
+                    val url = "$CHAT_HISTORY_URL?joined_at=$requestJoinedAt&client_id=$cid&github_login=$gh"
                     val conn = (URL(url).openConnection() as HttpURLConnection).apply {
                         instanceFollowRedirects = false
                         requestMethod = "GET"
@@ -755,21 +759,21 @@ private fun GlobalChatAccountContent(
                             AppUpdate.updateOnlineCount(serverOnline)
                         }
                         val serverJoinedAt = json.optLong("joined_at", 0L)
-                        if (serverJoinedAt > firstJoinedAtMs) {
-                            firstJoinedAtMs = serverJoinedAt
-                        }
+                        val effectiveJoinedAt = maxOf(requestJoinedAt, serverJoinedAt)
                         val serverPinned = parsePinnedMessageFromJson(json.optJSONObject("pinned_message"))
                         val arr = json.optJSONArray("messages") ?: return@runCatching
                         val fetched = ArrayList<ChatMessage>(arr.length())
                         for (i in 0 until arr.length()) {
                             val m = arr.optJSONObject(i) ?: continue
-                            val parsed = parseMessageFromJson(m, nickname, verifiedGhLogin)
+                            val parsed = parseMessageFromJson(m, requestNickname, requestAccount)
                             // Pastikan member baru tidak pernah melihat pesan sebelum waktu join
-                            if (parsed.at >= firstJoinedAtMs - 2_000L && parsed.id !in hiddenMessageIds) {
+                            if (parsed.at >= effectiveJoinedAt - 2_000L && parsed.id !in hiddenMessageIds) {
                                 fetched.add(parsed)
                             }
                         }
                         withContext(Dispatchers.Main) {
+                            if (!chatAccountSnapshotIsCurrent(requestAccount, verifiedGhLogin)) return@withContext
+                            firstJoinedAtMs = effectiveJoinedAt
                             historyIssue = null
                             historyRetryAt = 0L
                             connected = true
@@ -834,6 +838,7 @@ private fun GlobalChatAccountContent(
                         val code = runCatching { JSONObject(errorText).optString("code") }.getOrDefault("")
                         val failure = chatHistoryFailure(httpStatus, code, conn.getHeaderField("Retry-After"))
                         withContext(Dispatchers.Main) {
+                            if (!chatAccountSnapshotIsCurrent(requestAccount, verifiedGhLogin)) return@withContext
                             historyIssue = failure.message
                             historyRetryAt = System.currentTimeMillis() + failure.retrySeconds * 1000L
                         }
@@ -895,17 +900,11 @@ private fun GlobalChatAccountContent(
         messages.toList().forEach { enrichTranslationIfNeeded(it, forceRetranslate = true) }
     }
 
-    // XyDesk perf: timestamp aktivitas WebSocket terakhir. Saat WS hidup,
-    // polling riwayat HTTP cukup jadi fallback konsistensi (30 dtk); saat WS
-    // mati kembali ke 5 dtk supaya chat tidak macet. Sebelumnya selalu 5 dtk:
-    // 12 request/menit + re-parse SELURUH riwayat (termasuk HMAC per pesan +
-    // diff O(n^2) di main thread) meski WS sudah mengirim pesan real-time.
-    val lastWsActivityMs = remember { java.util.concurrent.atomic.AtomicLong(0L) }
-
-    LaunchedEffect(Unit) {
+    // Quiet sockets remain live. Reschedule immediately when transport/account
+    // changes; an HTTP success is not proof that the WebSocket is connected.
+    LaunchedEffect(verifiedGhLogin, socketConnected) {
         while (true) {
-            // No application messages != disconnected: quiet rooms keep a live WS.
-            delay(chatHistoryPollDelayMs(socketConnected = connected))
+            delay(chatHistoryPollDelayMs(socketConnected = socketConnected))
             fetchHistoryOverHttp()
         }
     }
@@ -932,9 +931,9 @@ private fun GlobalChatAccountContent(
                 }.build(),
                 object : WebSocketListener() {
                     override fun onOpen(webSocket: WebSocket, response: Response) {
-                        lastWsActivityMs.set(System.currentTimeMillis())
+                        if (closed) { webSocket.cancel(); return }
                         attempt = 0
-                        main.post { connected = true; connectionIssue = null }
+                        main.post { if (!closed) { socketConnected = true; connected = true; connectionIssue = null } }
                         webSocket.send(
                             JSONObject()
                                 .put("type", "hello")
@@ -948,10 +947,10 @@ private fun GlobalChatAccountContent(
 
                     override fun onMessage(webSocket: WebSocket, text: String) {
                         val snapshotReceivedAt = System.currentTimeMillis()
-                        lastWsActivityMs.set(System.currentTimeMillis())
                         val data = try { JSONObject(text) } catch (_: Exception) { return }
                         scope.launch {
                             socketEventMutex.withLock {
+                            if (closed) return@withLock
                             when (data.optString("type")) {
                                 "history_unavailable" -> {
                                     val failure = chatHistoryFailure(data.optInt("http_status", 503), data.optString("code"), data.optString("retry_after"))
@@ -980,6 +979,7 @@ private fun GlobalChatAccountContent(
                                     }
                                     wsHistoryReceived.set(true)
                                     batch.forEach { id.xydesk.remote.push.ChatPushNotifier.markSeen(it.id, it.at, context) }
+                                    if (closed) return@withLock
                                     // Parsing suspends: preserve messages arriving meanwhile and pending sends.
                                     val newestAt = batch.maxOfOrNull { it.at } ?: 0L
                                     val batchIds = batch.mapTo(HashSet()) { it.id }
@@ -1072,7 +1072,7 @@ private fun GlobalChatAccountContent(
                         val failure = chatSocketFailure(response?.code ?: 0, response?.header("Retry-After"))
                         main.post {
                             if (!closed) {
-                                lastWsActivityMs.set(0L)
+                                socketConnected = false
                                 connected = false
                                 connectionIssue = failure.message
                             }
@@ -1083,7 +1083,7 @@ private fun GlobalChatAccountContent(
                     override fun onClosed(webSocket: WebSocket, code: Int, reason: String) {
                         main.post {
                             if (!closed) {
-                                lastWsActivityMs.set(0L)
+                                socketConnected = false
                                 connected = false
                             }
                         }

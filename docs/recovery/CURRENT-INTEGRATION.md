@@ -5,7 +5,7 @@ Base: exact owner-selected v1.1.23 Build87 / 9f64b47, confirmed in publish logs.
 Ported separately from later source: chat owner mutation/reconciliation, cache,
 text archive, global-chat navigation/notification separation, and Buat RDP preflight.
 Ten critical connection/render/native/build files still match the owner baseline
-byte-for-byte; three source regression checks enforce this in CI. No AdMob removal,
+byte-for-byte; four source regression checks enforce this in CI. No AdMob removal,
 native stripping, lifecycle-connect deferral or renderer rewrite is mixed in.
 
 Source-level likely black-screen path found in rc.3: onCreate queues a connection
@@ -23,7 +23,7 @@ Additional backend/client recovery corrections:
   fabricate a successful unpin when storage fails. This removes a per-poll read
   left uncached by the previous history-only quota mitigation.
 
-Local checks: 108 Worker tests and 3 protected-baseline guards pass. Android
+Local checks: 108 Worker tests and 4 protected-baseline/source guards pass. Android
 Kotlin/core/app unit-test gate and Windows-host cross-compilation passed CI run
 39318872335 at 660a1be (the later 108th test covers a Worker-only correction). Live quota recovery, authenticated two-account chat, physical
 RDP/PC Stream frames/mic and all original required feature acceptance remain pending.
@@ -31,8 +31,15 @@ Genuine Windows controller, secure BOTH Direct endpoints, complete durable outbo
 full-history/media sync and full provisioning must not be marked delivered by the
 bounded archive/preflight. No new release/tag, Android production deployment or paid upgrade
 has been performed for Android. Worker-only quota/error mitigation was deployed
-as c7e86f26-0e0f-4703-a988-1cf25005e45a; assets/config remained 5990eb9 with
+as 6c7ca142-511c-4653-9d8b-bd4dd54b642b; assets/config remained 5990eb9 with
 zero asset updates and unchanged namespaces/migrations. Live health is 200 but
 history still 503/chat_storage_quota_exceeded/Retry-After 300. This is not
-functional chat recovery. The post-commit pin-read correction (test 108) is not
-in that initial deployment. Preserve original draft/artifacts.
+functional chat recovery. The deployed Worker includes the post-commit pin-read correction (test 108).
+A live WS probe now receives history_unavailable with sanitized quota/503/retry300
+rather than silently showing an empty history. Positive authenticated chat is untested.
+
+Follow-up source correction: track socketConnected independently of the HTTP/UI
+connected indicator, restart polling delays on account/transport change, and reject
+in-flight responses/events after account switch/disposal. Hidden/view-once state is
+also remembered per account. Latest Android compile is being repeated after these
+changes; the earlier successful gate is not claimed to cover them. Preserve original draft/artifacts.
