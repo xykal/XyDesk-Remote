@@ -84,10 +84,22 @@ include(ExternalFreeRDP)
 # duplikat dev-name (libpng.so). AGP tidak melakukan stripping untuk jniLibs
 # pada pipeline ini — libfreerdp3.so sempat ter-ship 20 MB dengan debug_info.
 add_custom_target(
-  copyLibs ${CMAKE_COMMAND} -E copy_directory "${DEPS_INSTALL_DIR}/${CMAKE_INSTALL_LIBDIR}" ${DEPS_INSTALL_DIR}
+  copyLibs
+  # Strip the original IMPORTED inputs too. Verify the redundant jniLibs
+  # aliases contain the same bytes, then remove only those three copies so
+  # AGP owns their packaging. Runtime codecs still come from jniLibs.
+  COMMAND ${CMAKE_COMMAND}
+          -DSTRIP_TOOL=${CMAKE_STRIP}
+          -DLIB_DIR=${DEPS_INSTALL_DIR}/${CMAKE_INSTALL_LIBDIR}
+          -P ${CMAKE_CURRENT_LIST_DIR}/StripJniLibs.cmake
+  COMMAND ${CMAKE_COMMAND} -E copy_directory "${DEPS_INSTALL_DIR}/${CMAKE_INSTALL_LIBDIR}" ${DEPS_INSTALL_DIR}
   COMMAND ${CMAKE_COMMAND}
           -DSTRIP_TOOL=${CMAKE_STRIP}
           -DLIB_DIR=${DEPS_INSTALL_DIR}
           -P ${CMAKE_CURRENT_LIST_DIR}/StripJniLibs.cmake
+  COMMAND ${CMAKE_COMMAND}
+          -DSOURCE_LIB_DIR=${DEPS_INSTALL_DIR}/${CMAKE_INSTALL_LIBDIR}
+          -DPACKAGED_LIB_DIR=${DEPS_INSTALL_DIR}
+          -P ${CMAKE_CURRENT_LIST_DIR}/VerifyNativeAliases.cmake
   DEPENDS freerdp
 )
