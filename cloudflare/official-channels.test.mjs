@@ -58,7 +58,7 @@ test('channel history cache coalesces, invalidates after publish and preserves e
  const third=await(await f.channel.fetch(req('GET','/channels/informasi/posts?cursor='+encodeURIComponent(second.next_cursor)))).json();assert.equal(third.posts.length,5);assert.equal(third.next_cursor,null);
  assert.equal(new Set([...first.posts,...second.posts,...third.posts].map(x=>x.id)).size,65);
  await f.channel.fetch(req('POST','/channels/informasi/posts',post(),'owner'));
- const fresh=await(await f.channel.fetch(req('GET','/channels/informasi/posts'))).json();assert.equal(fresh.posts[0].id,nonce);assert.equal([...f.data.keys()].filter(x=>x.includes(':post:')).length,66);
+ const fresh=await(await f.channel.fetch(req('GET','/channels/informasi/posts'))).json();assert.equal(fresh.posts[0].text,post().text);assert.equal([...f.data.keys()].filter(x=>x.includes(':post:')).length,66);
 });
 test('storage quota is explicit 503, not fake empty successful channel',async()=>{
  const c=new OfficialChannels({list:async()=>{throw Error('Exceeded allowed rows read: private detail');}});
@@ -94,4 +94,15 @@ test('official channel traffic is isolated from the existing global-chat object'
  let name;const f=fixture();const chat=new GlobalChat({storage:f.storage},{});
  const env={GLOBAL_CHAT:{idFromName:n=>{name=n;return 1;},get:()=>({fetch:r=>chat.fetch(r)})}};
  await worker.fetch(req('GET','/api/chat/channels'),env);assert.equal(name,'xydesk-official-channels-v1');
+});
+
+test('different authorized authors cannot collide visible post IDs by reusing a client nonce',async()=>{
+ const f=fixture({CHAT_CHANNEL_ROLE_IDS:'{"team":[99,100]}'});
+ user={id:99,login:'first'};
+ const first=await(await f.channel.fetch(req('POST','/channels/informasi/posts',post('one'),'first'))).json();
+ user={id:100,login:'second'};
+ const second=await(await f.channel.fetch(req('POST','/channels/informasi/posts',post('two'),'second'))).json();
+ assert.notEqual(first.post.id,second.post.id);assert.equal(first.post.author_id,99);assert.equal(second.post.author_id,100);
+ const page=await(await f.channel.fetch(req('GET','/channels/informasi/posts'))).json();
+ assert.equal(page.posts.length,2);assert.equal(new Set(page.posts.map(x=>x.id)).size,2);
 });

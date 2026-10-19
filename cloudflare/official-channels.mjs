@@ -96,7 +96,10 @@ export class OfficialChannels {
     const rate = this.rates.get(who.id);
     if (rate && now - rate.at < 60_000 && rate.count >= 20) return json({ status: 'error', code: 'rate_limited' }, 429, { 'retry-after': '60' });
     this.rates.set(who.id, { at: rate && now-rate.at<60_000 ? rate.at : now, count: rate && now-rate.at<60_000 ? rate.count+1 : 1 });
-    const key = `${prefix}${String(now).padStart(13, '0')}:${nonce.toLowerCase()}`;
+    // Public identity is server-generated; a staff member must not shadow another
+    // author's visible post by reusing its public client nonce/ID.
+    const serverId = crypto.randomUUID();
+    const key = `${prefix}${String(now).padStart(13, '0')}:${serverId}`;
     const nonceKey = `channel:${slug}:nonce:${who.id}:${nonce.toLowerCase()}`;
     const result = await this.storage.transaction(async tx => {
       const oldKey = await tx.get(nonceKey);
@@ -105,7 +108,7 @@ export class OfficialChannels {
         if (!old || old.text !== text) return { conflict: true };
         return { post: old, inserted: false };
       }
-      const post = { id: nonce.toLowerCase(), channel_id: slug, text, at: now,
+      const post = { id: serverId, channel_id: slug, text, at: now,
         author_id: who.id, github_login: who.login, author_role: role };
       await tx.put(key, post); await tx.put(nonceKey, key);
       return { post, inserted: true };
