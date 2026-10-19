@@ -1,5 +1,12 @@
 # Recovery integration in progress — not a final release
 
+Latest addition: see CHANNELS-AND-LIGHT-MOTION.md and COMMUNITY-VALIDATION.json.
+Current source workspace is /home/user/XyDesk-Next, tracking remote branch
+agent/restore-v123-baseline. New community source has 123 passing Worker tests,
+5 source guards and a green Android gate (39328956477). Worker version is now
+68b7fc17-ed1a-4083-babc-529d417d6228; old global history is still quota-blocked.
+No new signed recovery APK/final release; the earlier phase notes below are historical.
+
 Base: exact owner-selected v1.1.23 Build87 / 9f64b47, confirmed in publish logs.
 
 Ported separately from later source: chat owner mutation/reconciliation, cache,

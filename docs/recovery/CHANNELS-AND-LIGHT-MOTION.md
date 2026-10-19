@@ -32,10 +32,10 @@ Implemented in this source increment:
   bounded ID dedupe for HTTP/WS/history races. Respects silent setting, volume,
   DND and lifecycle; reusable generator is released on screen/account disposal.
 
-Validation: Worker tests 122/122 pass. Android Kotlin/core/app gates passed
-f40a3f2 (39327147211) and fc4f181 (39327719803). Single-tree motion refinement
-is being rechecked separately. Production Worker is now
-5c1f1bd7-f9e9-40b4-ae4a-e3a96ea73526: channel catalogue and empty guide posts
+Validation: Worker tests 123/123 pass. Android Kotlin/core/app gates passed
+f40a3f2 (39327147211) and fc4f181 (39327719803). Single-tree motion refinement passed
+run 39328956477 at 3938631; later changes are Worker-only. Production Worker is now
+68b7fc17-ed1a-4083-babc-529d417d6228: channel catalogue and empty guide posts
 return 200; anonymous forged-founder POST returns 401; unknown channel returns
 404. Positive staff publishing and populated-channel reads are not tested live.
 Existing global history still returns 503/quota/retry300; this has NOT recovered.
