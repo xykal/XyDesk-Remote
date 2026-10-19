@@ -718,7 +718,7 @@ class PcStreamSessionActivity : ComponentActivity() {
             )
             Spacer(Modifier.height(16.dp))
             XySegmented(
-                options = listOf("Host Direct", "Hub (host lain)"),
+                options = listOf("Direct lama (uji privat)", "Hub (host lain)"),
                 selectedIndex = if (hubMode) 1 else 0,
                 onSelect = { hubMode = it == 1 },
                 modifier = Modifier.fillMaxWidth(),
@@ -817,7 +817,7 @@ class PcStreamSessionActivity : ComponentActivity() {
                 }
             } else {
                 Text(
-                    "Jalur UDP lama belum memiliki autentikasi/enkripsi aplikasi. Jangan buka port ini ke internet. Gunakan LAN privat atau Tailscale milik Anda.",
+                    "Jalur UDP lama belum memiliki autentikasi/enkripsi aplikasi. Host baru menonaktifkannya secara default; hanya pengujian pemilik dengan --legacy-private-udp. Jangan buka ke internet. Pairing aman sedang dikerjakan.",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.error,
                 )

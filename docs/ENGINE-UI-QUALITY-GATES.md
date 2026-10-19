@@ -1,7 +1,7 @@
 # Engine / UI quality coverage
 
 This is a coverage ledger, not a statement that the application is finished.
-No APK assembly, production deployment or automatic merge is authorized.
+Owner now authorizes compile/build and a draft release AFTER completion and verification. No premature release, production deployment or automatic merge is authorized.
 
 | Area | Current work | Required evidence still missing |
 |---|---|---|

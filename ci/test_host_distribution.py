@@ -30,6 +30,19 @@ class HostDistributionTest(unittest.TestCase):
         self.assertNotIn('bash ci/build_windows_host.sh', gate)
         self.assertIn('bash -n ci/build_windows_host.sh', gate)
 
+    def test_host_does_not_modify_password_or_run_remote_setup(self):
+        source = (ROOT / 'host-agent/src/main_host.cpp').read_text()
+        for removed in ('net.exe user', 'irm ', 'onmic.ps1', 'SHA256:', 'g_password', 'xydesk_host_apply_windows_policies();'):
+            self.assertNotIn(removed, source)
+        self.assertIn('if (g_legacy_private_udp) g_quic_rc =', source)
+        self.assertIn('xydesk_show_readiness(hwnd)', source)
+        doctor = (ROOT / 'host-agent/src/host_readiness.cpp').read_text()
+        self.assertIn('EnumAudioEndpoints', doctor)
+        self.assertIn('GetDefaultAudioEndpoint', doctor)
+        self.assertIn('Process32FirstW', doctor)
+        for forbidden in ('RegSetValue', 'CreateProcess', 'URLDownloadToFile', 'WinHttpSendRequest'):
+            self.assertNotIn(forbidden, doctor)
+
     def test_chat_has_no_voice_reader_or_global_mic_switch(self):
         source = (ROOT / 'client/Android/Studio/app/src/main/kotlin/id/xydesk/remote/ui/GlobalChatScreen.kt').read_text()
         for removed in ('voiceEnabled', 'TextToSpeech', 'VOICE ON', 'VOICE OFF', 'KEY_VOICE_ENABLED'):
