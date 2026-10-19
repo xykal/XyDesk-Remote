@@ -40,3 +40,17 @@ Sepuluh tes JVM murni memakai helper produksi (bukan Android/JNI): worker nonakt
 **Masih terbuka:** kebijakan stop/background dan kontrol live native mic belum selesai. Wait native masih dapat lama bila engine tidak mengirim terminal; jangan menyatakan mic OFF ketika putus/free tidak terkonfirmasi. Tes ini bukan uji rekaman Android, teardown vendor OpenSL, provisioning atau game pada Windows nyata. Secure Direct dan seluruh gate draft sebelumnya tetap terbuka.
 
 Hasil integrasi603793f: **Kotlin/JVM gate39235701973 SUCCESS**, **WebCI39235702481 SUCCESS**. Sepuluh tes lifecycle Java termasuk pada unit-test :freeRDPCore,9 source-contract checks PASS. Tidak ada build APK/native Android/EXE atau release draft pada verifikasi ini.
+
+## Lanjutan: pengaman background native capture
+Source kini mengikat izin capture ke visibility Activity (`STARTED`), bukan foreground service keep-alive:
+- SessionManager default tidak mengizinkan capture; onStart mengizinkan dan baru menjalankan initial connect yang tertunda. Hasil izin ketika Activity tidak tampil ditunda, bukan memulai native capture dari background.
+- Setiap URI baru/reconnect background menghilangkan mic/kamera native tanpa mengubah profil tersimpan. Audio playback/desktop-only keep-alive tetap memakai pengaturan sebelumnya.
+- onStop memblokir capture baru, mematikan mic bridge, dan meminta disconnect untuk sambungan yang URI-nya meminta native mic/kamera. Ini **memutus koneksi desktop juga**, bukan live mute AUDIN. Worker memeriksa visibility lagi setelah probe sebelum native start; success callback terlambat saat background juga diarahkan ke disconnect.
+- Jangan menyatakan recorder sudah OFF hanya karena onStop atau disconnect diminta. Konfirmasi teardown masih melalui engine/release. Kegagalan/unconfirmed state tetap belum aman untuk diklaim berhenti.
+- Sambungan BARU di foreground bisa meminta capture lagi sesuai pilihan profil dan izin saat itu. Bridge tetap butuh aksi eksplisit. Ini bukan latch izin global permanen atau pernyataan native live toggle selesai.
+
+Lima tes JVM CaptureVisibilityPolicyTest ditambahkan: background menolak capture meski izin ada (termasuk argumen AUDIN/rdpecam tidak dikirim), foreground tidak memaksa opsi ON, izin ditolak tidak dilewati, opsi desktop/playback dipertahankan, dan sambungan foreground berikutnya memakai preference+izin tanpa mutasi profil. Source-contract10 PASS lokal; hasil compile/integrasi CI perlu diperiksa. Tetap perlu uji perangkat: layar mati, pindah app, multi-window/rotasi, permission dialog, probe lambat, reconnect dan input suara Windows.
+
+Izin draft pengujian pemilik tetap berlaku setelah pekerjaan source selesai. Verifikasi runtime/signing/ukuran memang memerlukan release-candidate build; jangan membuat syarat melingkar “hardware test sebelum ada binary”. Urutannya: selesaikan fitur dan source gates → build kandidat release bertanda tangan → verifikasi binary/artifact → draft dengan batas uji yang jujur untuk tes pemilik. Saat ini secure Direct dan native live mute masih belum diimplementasikan, jadi belum boleh menyebut semua selesai atau menerbitkan draft seolah fitur itu tersedia.
+
+Pengaman tambahan: hasil izin yang diputar ulang di dalam super.onStart tetap menunggu flag readiness Activity sebelum native connect; pembatalan selama probe juga dicek lagi sebelum worker native dimulai. Success callback setelah permintaan putus tidak boleh menghidupkan kembali sesi itu.

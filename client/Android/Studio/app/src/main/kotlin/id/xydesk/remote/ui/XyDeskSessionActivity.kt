@@ -177,6 +177,8 @@ class XyDeskSessionActivity : ComponentActivity() {
     @Volatile
     private var lastRemoteClipboardAtMs: Long = 0L
     private var pendingPermissionProfile: ConnectionProfile? = null
+    private var pendingForegroundProfile: ConnectionProfile? = null
+    private var captureForegroundReady = false
     private var lastInputFailureNoticeAt = 0L
 
     fun noteRemoteClipboardText(text: String) {
@@ -526,6 +528,11 @@ class XyDeskSessionActivity : ComponentActivity() {
 
     override fun onStart() {
         super.onStart()
+        if (::manager.isInitialized) manager.setCaptureForegroundAllowed(true)
+        captureForegroundReady = true
+        val deferred = pendingForegroundProfile
+        pendingForegroundProfile = null
+        if (deferred != null && !isFinishing && !isDestroyed) connectProfile(deferred)
         // balik dari background sebelum timer jalan = cancel auto-disconnect
         bgHandler.removeCallbacks(bgDisconnect)
         // Jalankan Foreground Service sejak sesi di foreground agar Android 12–15+
@@ -555,8 +562,10 @@ class XyDeskSessionActivity : ComponentActivity() {
     }
 
     override fun onStop() {
+        captureForegroundReady = false
         super.onStop()
         setGyroMouseActive(false)
+        if (::manager.isInitialized) manager.setCaptureForegroundAllowed(false)
         if (isFinishing || isChangingConfigurations) {
             appPrefs?.clearAutoResumeSession()
             return
@@ -581,6 +590,8 @@ class XyDeskSessionActivity : ComponentActivity() {
     }
 
     override fun onDestroy() {
+        pendingForegroundProfile = null
+        pendingPermissionProfile = null
         inputManager?.unregisterInputDeviceListener(inputDeviceListener)
         inputManager = null
         super.onDestroy()
@@ -927,6 +938,10 @@ class XyDeskSessionActivity : ComponentActivity() {
     }
 
     private fun connectProfile(profile: ConnectionProfile) {
+        if (!captureForegroundReady || !lifecycle.currentState.isAtLeast(androidx.lifecycle.Lifecycle.State.STARTED)) {
+            pendingForegroundProfile = profile
+            return
+        }
         ConnectionLog.add("SES: memanggil manager.connect (native createSession + parse args)")
         try {
             manager.connect(profile)

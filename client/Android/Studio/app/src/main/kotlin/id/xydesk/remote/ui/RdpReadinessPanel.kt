@@ -28,6 +28,7 @@ internal fun RdpReadinessPanel(
         Column(Modifier.fillMaxWidth().heightIn(max = 420.dp).verticalScroll(rememberScrollState()),
             verticalArrangement = Arrangement.spacedBy(10.dp)) {
             ReadinessLine("Izin mic Android", if (micPermission) "Diberikan" else "Belum diberikan")
+            ReadinessLine("Privasi capture saat aplikasi di latar", "Koneksi yang meminta mic/kamera native diminta putus ketika layar sesi tidak tampil. Reconnect background tidak meminta mic/kamera. Ini bukan live mute: desktop bisa ikut terputus, dan berhentinya capture tetap menunggu konfirmasi engine. Sambungan baru di foreground dapat meminta capture sesuai profil dan izin.")
             ReadinessLine("Mic bridge sesi", if (diagnostics.requested) "Diminta pengguna" else "Tidak diminta")
             ReadinessLine("Rekaman mic HP (bridge)", if (diagnostics.capturing) "AudioRecord sedang merekam" else "Tidak merekam / belum mulai")
             ReadinessLine("Laporan host UDP", when {

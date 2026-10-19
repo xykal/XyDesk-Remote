@@ -86,6 +86,20 @@ class HostDistributionTest(unittest.TestCase):
         self.assertIn('"native_cleanup_unconfirmed"', terminal)
         self.assertEqual(manager.count('if (!cleanupTerminalSession(inst)) return'), 3)
 
+    def test_background_capture_gate_is_connected_to_activity_and_native_start(self):
+        base = ROOT / 'client/Android/Studio'
+        manager = (base / 'core-rdp/src/main/kotlin/id/xydesk/remote/core/SessionManager.kt').read_text()
+        self.assertIn('captureForegroundAllowed = false', manager)
+        self.assertIn('.forCaptureVisibility(captureForegroundAllowed)', manager)
+        start = manager.split('try {\n                synchronized(lifecycleLock)', 1)[1].split('session.connect(appContext)', 1)[0]
+        self.assertIn('nativeCaptureRequested && !captureForegroundAllowed', start)
+        activity = (base / 'app/src/main/kotlin/id/xydesk/remote/ui/XyDeskSessionActivity.kt').read_text()
+        self.assertIn('manager.setCaptureForegroundAllowed(true)', activity.split('override fun onStart()', 1)[1].split('override fun onResume()', 1)[0])
+        self.assertIn('manager.setCaptureForegroundAllowed(false)', activity.split('override fun onStop()', 1)[1].split('override fun onDestroy()', 1)[0])
+        self.assertIn('pendingForegroundProfile = profile', activity)
+        self.assertIn('if (!captureForegroundReady ||', activity)
+        self.assertIn('userInitiatedDisconnect ||', start)
+
     def test_chat_has_no_voice_reader_or_global_mic_switch(self):
         source = (ROOT / 'client/Android/Studio/app/src/main/kotlin/id/xydesk/remote/ui/GlobalChatScreen.kt').read_text()
         for removed in ('voiceEnabled', 'TextToSpeech', 'VOICE ON', 'VOICE OFF', 'KEY_VOICE_ENABLED'):
