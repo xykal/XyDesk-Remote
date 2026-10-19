@@ -3134,6 +3134,10 @@ private fun GlobalChatAccountContent(
                     .verticalScroll(rememberScrollState()),
                 verticalArrangement = Arrangement.spacedBy(10.dp),
             ) {
+                androidx.compose.runtime.key(verifiedGhLogin) {
+                    ChatBackupPanel(verifiedGhLogin) { messages.toList() }
+                }
+
                 // 1. Style Bubble Chat
                 Text(
                     xy("Gaya Bubble Chat", "Chat Bubble Style"),

@@ -52,7 +52,8 @@ class HostDistributionTest(unittest.TestCase):
         self.assertIn('status !in 200..299', repository)
         self.assertIn('not_confirmed', repository)
         cache = (ui / 'GlobalChatOfflineCache.kt').read_text()
-        self.assertIn('!it.mutationPending', cache)
+        self.assertIn('encodeChatArchive(reconciled)', cache)
+        self.assertIn('!it.mutationPending', (ui / 'ChatArchiveRows.kt').read_text())
         self.assertIn('writeOrder.isCurrent(account(login), epoch)', cache)
         self.assertIn('GlobalChatOfflineCache.persistConfirmed', screen)
         self.assertIn('messages.add(incoming)', screen.split('fun applyIncomingMutation', 1)[1].split('fun mutateMessage', 1)[0])
@@ -62,6 +63,21 @@ class HostDistributionTest(unittest.TestCase):
         self.assertIn('"mention" -> SOCIAL_MENTION_CHANNEL_ID', notifications)
         self.assertIn('"reply" -> SOCIAL_REPLY_CHANNEL_ID', notifications)
         self.assertIn('NotificationChannelGroup', notifications)
+
+    def test_cloud_setup_never_force_resets_and_checks_verified_secrets(self):
+        ui = ROOT / 'client/Android/Studio/app/src/main/kotlin/id/xydesk/remote/ui'
+        client = (ui / 'rdp/XyRdpClient.kt').read_text()
+        sync = client.split('suspend fun syncForkWithUpstream', 1)[1].split('/** Fork baru', 1)[0]
+        self.assertNotIn('"force"', sync)
+        self.assertNotIn('"PATCH"', sync)
+        self.assertIn('check(code in 200..204)', sync)
+        self.assertIn('check(setup.secretsVerified)', client)
+        self.assertIn('validateRdpLaunch(', client)
+        panel = (ui / 'ChatBackupPanel.kt').read_text()
+        self.assertIn('ChatBackupCrypto.MAX_FILE + 1', panel)
+        self.assertIn('GlobalChatOfflineCache.storeArchive', panel)
+        self.assertNotIn('GlobalChatRepository', panel)
+        self.assertNotIn('chatSocketSend', panel)
 
     def test_one_cmake_application_without_companion_libraries(self):
         cmake = (ROOT / 'host-agent/CMakeLists.txt').read_text()

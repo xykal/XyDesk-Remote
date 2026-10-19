@@ -33,6 +33,21 @@ internal object GlobalChatOfflineCache {
         writer.launch { write(app, login, messages, epoch) }
     }
 
+    // Imported history is never inserted into the live timeline or sent to the server.
+    fun readArchive(context: Context, login: String): List<ChatMessage> =
+        read(context, "archive:$login", "").map { it.copy(mine = false, authorId = 0, e2eeVerified = false) }
+
+    fun storeArchive(context: Context, login: String, rows: List<ChatMessage>) {
+        require(login.isNotBlank())
+        val isolated = "archive:$login"
+        write(context, isolated, rows, nextWriteEpoch(isolated))
+        // write() historically swallows storage failures: verify before reporting success.
+        val stored = readArchive(context, login).associateBy { it.id }
+        check(rows.all { stored[it.id]?.revision?.let { revision -> revision >= it.revision } == true }) {
+            "Arsip belum tersimpan. Periksa ruang penyimpanan lalu coba lagi."
+        }
+    }
+
     private fun account(login: String) = login.trim().removePrefix("@").lowercase(Locale.ROOT)
     private fun file(context: Context, login: String): AtomicFile {
         val hash = MessageDigest.getInstance("SHA-256").digest(account(login).toByteArray())
@@ -75,29 +90,14 @@ internal object GlobalChatOfflineCache {
     fun write(context: Context, login: String, messages: List<ChatMessage>, epoch: Long) {
         if (account(login).isBlank() || !writeOrder.isCurrent(account(login), epoch)) return
         runCatching {
-            val rows = JSONArray()
-            // Multiple chat windows may acknowledge the same account at different times.
+            // Multiple windows must reconcile revisions before writing an account snapshot.
             val previous = read(context, login, login).associateBy { it.id }
             val reconciled = messages.map { incoming -> previous[incoming.id]?.let { reconcileChatMessage(it, incoming) } ?: incoming }
-            reconciled.filter { !it.viewOnce && !it.mutationPending && !it.id.startsWith("local-") }.takeLast(80).forEach { msg ->
-                rows.put(JSONObject().apply {
-                    put("id", msg.id); put("client_msg_id", msg.clientMessageId); put("name", msg.name); put("github_login", msg.githubLogin)
-                    put("author_id", msg.authorId); put("revision", msg.revision); put("edited_at", msg.editedAt)
-                    put("deleted", msg.deleted); put("deleted_at", msg.deletedAt)
-                    put("text", msg.text.take(4_000)); put("at", msg.at); put("country", msg.country)
-                    put("translated", msg.translated.take(4_000)); put("target_lang", msg.targetLang)
-                    put("source_lang", msg.sourceLang); put("is_founder", msg.isFounder)
-                    put("is_announcement", msg.isAnnouncement); put("reply_to_id", msg.replyToId)
-                    put("reply_to_name", msg.replyToName); put("reply_to_text", msg.replyToText.take(500))
-                    put("attachment_type", msg.attachmentType); put("attachment_name", msg.attachmentName.take(256))
-                    put("attachment_mime", msg.attachmentMime); put("attachment_size", msg.attachmentSize)
-                    put("avatar_url", msg.avatarUrl)
-                })
-            }
+            val plain = encodeChatArchive(reconciled)
             val cipher = Cipher.getInstance("AES/GCM/NoPadding")
             cipher.init(Cipher.ENCRYPT_MODE, key())
             cipher.updateAAD(account(login).toByteArray(Charsets.UTF_8))
-            val encrypted = cipher.iv + cipher.doFinal(rows.toString().toByteArray(Charsets.UTF_8))
+            val encrypted = cipher.iv + cipher.doFinal(plain)
             if (encrypted.size > MAX_BYTES) return
             if (!writeOrder.isCurrent(account(login), epoch)) return
             val cache = file(context, login)
