@@ -4506,6 +4506,7 @@ export default {
         const upstream = await env.GLOBAL_CHAT.get(id).fetch(new Request(target.toString(), {
           method: request.method, headers: request.headers,
           body: request.method === "GET" || request.method === "HEAD" ? undefined : request.body,
+          duplex: "half",
         }));
         const response = new Response(upstream.body, upstream);
         response.headers.set("x-xydesk-channel-router", "1");
