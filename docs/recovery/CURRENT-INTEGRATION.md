@@ -23,10 +23,16 @@ Additional backend/client recovery corrections:
   fabricate a successful unpin when storage fails. This removes a per-poll read
   left uncached by the previous history-only quota mitigation.
 
-Local checks: 107 Worker tests and 3 protected-baseline guards pass. Full Android
-compile pending CI. Live quota recovery, authenticated two-account chat, physical
+Local checks: 108 Worker tests and 3 protected-baseline guards pass. Android
+Kotlin/core/app unit-test gate and Windows-host cross-compilation passed CI run
+39318872335 at 660a1be (the later 108th test covers a Worker-only correction). Live quota recovery, authenticated two-account chat, physical
 RDP/PC Stream frames/mic and all original required feature acceptance remain pending.
 Genuine Windows controller, secure BOTH Direct endpoints, complete durable outbox/
 full-history/media sync and full provisioning must not be marked delivered by the
-bounded archive/preflight. No new release/tag, production deployment or paid upgrade
-has been performed for this integration. Preserve original draft/artifacts.
+bounded archive/preflight. No new release/tag, Android production deployment or paid upgrade
+has been performed for Android. Worker-only quota/error mitigation was deployed
+as c7e86f26-0e0f-4703-a988-1cf25005e45a; assets/config remained 5990eb9 with
+zero asset updates and unchanged namespaces/migrations. Live health is 200 but
+history still 503/chat_storage_quota_exceeded/Retry-After 300. This is not
+functional chat recovery. The post-commit pin-read correction (test 108) is not
+in that initial deployment. Preserve original draft/artifacts.

@@ -3814,13 +3814,15 @@ export class GlobalChat {
       }
       const pinned = await transaction.get("pinned_message");
       if (pinned?.id === body.id) await transaction.delete("pinned_message");
-      return result;
+      // Use the committed transaction snapshot. A follow-up pin read can fail
+      // after a successful mutation and incorrectly tell the client to roll back.
+      return { ...result, pinnedAfterMutation: pinned?.id === body.id ? null : pinned || null };
     });
     if (outcome.status !== 200) return durableObjectJson({ status: "error", code: outcome.code }, outcome.status, request.method);
     this.historyWindow.invalidate();
     this.pinnedWindow.invalidate();
     this.broadcast(null, JSON.stringify({ type: "mutation", message: outcome.message }));
-    this.broadcast(null, JSON.stringify({ type: "pin", pinned_message: await this.loadPinnedMessage() || null }));
+    this.broadcast(null, JSON.stringify({ type: "pin", pinned_message: outcome.pinnedAfterMutation }));
     return durableObjectJson({ status: "ok", message: outcome.message }, 200, request.method);
   }
 
