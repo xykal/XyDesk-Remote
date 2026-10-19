@@ -21,7 +21,7 @@
 - `web/onmic.ps1` installs external VB-CABLE and modifies policies. Single application EXE does not remove Windows driver requirements. Driver packages must be official/signed, licensing checked, install consent explicit, reboot/failed checks reported. Do not silently execute remote scripts or bundle unsigned drivers.
 - Existing native UI contains unverified TLS/QUIC/E2EE/120FPS readiness claims; raw UDP paths must not inherit those security/performance promises. Audit and correct before release.
 
-## Next: readiness panel (not implemented yet)
+## Readiness panel: Android evidence view implemented; native setup still pending
 - **Read-only scan first:** session type (RDP/console), supported OS, elevation, physical/virtual audio render AND capture endpoints, selected game recording endpoint, signal level/host packet receipt; distinguish unknown/missing/available/tested.
 - Stream: actual capture backend, encoder availability, GPU driver, first frame/timeouts and loss; do not report physical console or hardware encoding by inference.
 - Actions only after disclosure/consent: Windows sound/privacy settings, official driver/install/reboot guidance, supported RDP redirection policy fixes with error handling. Never silently disable security, change firewall/RDP settings or replace game binaries.
@@ -39,3 +39,13 @@ Source inspection found the existing compile-check job, despite its “no native
 
 ## Direct-host entry point correction
 Source inspection found LAN discovery/direct-client methods existed but pairing UI exposed only the OTHER hub host (9-digit ID/PIN). Added an explicit Host Direct screen, default for this EXE, with LAN scan/host selection, private IPv4/Tailscale-name input and acknowledgement of owning/trusting the private network. Keep the distinct hub host option labelled separately; do not treat its IDs as this EXE's credentials. Public IPv4/unknown domain forms are rejected by local policy until a secure direct-host handshake exists. This is only temporary containment: DNS is not resolved/verified by the pure policy, host listener auth is not repaired, and a private LAN is NOT automatically encrypted/authenticated. Never expose the UDP listener publicly. Pure network-policy and permission-result policy cases added; device/network/native-host verification pending.
+
+
+## RDP readiness phase implemented in source
+- Session HUD menu now opens Kesiapan RDP · Mic & Game. Read-only panel samples existing evidence; no remote shell, network probe, driver install, registry/firewall change or game-binary modification is triggered by opening it.
+- Foreground/resumed session sampling shows local RECORD_AUDIO permission, bridge request and actual AudioRecord recording flag separately. Existing XYST1 version1 parsing adds flags, level, unsigned audio/mic counters and bounded endpoint text. Monotonic freshness expires reports after5seconds; stale values are not shown as current routing.
+- Connected UDP socket filters peers to configured host/port; this is source filtering, NOT cryptographic auth. Reset DatagramPacket receive length before each packet to avoid long audio truncation after short status packets. Mic sends via that pinned socket, avoiding a second DNS lookup/possibly different destination.
+- RDP bridge toggle now requests permission, binds result to current native instance and foreground lifecycle, stops bridge mic on background/dispose/profile change, and does not persist microphone preference. Bridge startup microphone is off; explicit session action required.
+- **Native RDP audio input is separate:** stored native microphone configuration and FreeRDP audin behavior remain unchanged; no supported live-disable API was found in the audited wrapper. Panel warns that bridge OFF does not disable this channel; profile change/reconnect is required to alter configured native input. Do not claim all mic capture is off or that Windows/game detection is verified. A unified supported mic-control design is still pending.
+- Prevent a stale terminal session callback from stopping a newer bridge by checking native instance ownership before bridge teardown in SessionManager.
+- Four new pure JVM cases cover existing status header/version/bounds, unsigned counters, endpoint detail cap, and monotonic freshness. No UDP/device/native endpoint or game behavior is validated by these cases. Panel viewport, permission flows, native-channel co-existence and background capture need device testing.

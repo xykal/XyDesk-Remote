@@ -46,6 +46,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
+import androidx.lifecycle.repeatOnLifecycle
 import androidx.lifecycle.Lifecycle
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -283,6 +284,7 @@ fun XyDeskSessionScreen(
     var certPrompt by remember { mutableStateOf<CertPrompt?>(null) }
     var nlaPrompt by remember { mutableStateOf<NlaPrompt?>(null) }
     var confirmCancelConnect by remember { mutableStateOf(false) }
+    var showReadiness by remember { mutableStateOf(false) }
     var showLog by remember { mutableStateOf(false) }
     var activeProfile by remember(profile.id) { mutableStateOf(profile) }
     var consoleAdminMode by remember(profile.id) {
@@ -404,6 +406,51 @@ fun XyDeskSessionScreen(
     // sedang retry/ubah-resolusi) DAN app sedang di background, kasih tahu
     // user lewat notif — di foreground layar status sudah jelas.
     val sessionLifecycleOwner = androidx.lifecycle.compose.LocalLifecycleOwner.current
+    var bridgeDiagnostics by remember(manager) { mutableStateOf(manager.audioBridgeDiagnostics()) }
+    var diagnosticsNow by remember { mutableStateOf(android.os.SystemClock.elapsedRealtime()) }
+    var pendingMicInstance by remember { mutableStateOf<Long?>(null) }
+    val requestBridgeMicPermission = androidx.activity.compose.rememberLauncherForActivityResult(
+        androidx.activity.result.contract.ActivityResultContracts.RequestPermission(),
+    ) { granted ->
+        val sameSession = pendingMicInstance != null && pendingMicInstance == manager.instance()
+        pendingMicInstance = null
+        if (canApplySessionMicPermission(granted, sameSession,
+                state is SessionState.Connected && sessionLifecycleOwner.lifecycle.currentState.isAtLeast(Lifecycle.State.STARTED))) {
+            manager.setVoiceMicEnabled(true)
+            bridgeDiagnostics = manager.audioBridgeDiagnostics()
+            notice.show("Mic bridge diminta. Deteksi input Windows belum diverifikasi.")
+        } else notice.show("Mic belum diaktifkan: izin ditolak atau sesi berubah/berhenti.")
+    }
+    DisposableEffect(manager, activeProfile.id, sessionLifecycleOwner) {
+        val observer = androidx.lifecycle.LifecycleEventObserver { _, event ->
+            if (event == Lifecycle.Event.ON_STOP) {
+                pendingMicInstance = null
+                manager.setVoiceMicEnabled(false)
+                showReadiness = false
+            }
+        }
+        sessionLifecycleOwner.lifecycle.addObserver(observer)
+        onDispose {
+            sessionLifecycleOwner.lifecycle.removeObserver(observer)
+            pendingMicInstance = null
+            manager.setVoiceMicEnabled(false)
+        }
+    }
+    LaunchedEffect(manager, sessionLifecycleOwner, state) {
+        if (state is SessionState.Connected) {
+            sessionLifecycleOwner.lifecycle.repeatOnLifecycle(Lifecycle.State.RESUMED) {
+                while (isActive) {
+                    bridgeDiagnostics = manager.audioBridgeDiagnostics()
+                    if (showReadiness) diagnosticsNow = android.os.SystemClock.elapsedRealtime()
+                    delay(500)
+                }
+            }
+        } else {
+            pendingMicInstance = null
+            manager.setVoiceMicEnabled(false)
+            bridgeDiagnostics = manager.audioBridgeDiagnostics()
+        }
+    }
     var finalDropped by remember { mutableStateOf(false) }
     LaunchedEffect(state, everConnected, userDisconnect, applyingResolution, reconnecting) {
         val dropped = everConnected && !userDisconnect && !applyingResolution && !reconnecting &&
@@ -905,15 +952,16 @@ fun XyDeskSessionScreen(
         }
     }
 
-    val overlayActive = controlsOverlayOpen || certPrompt != null || nlaPrompt != null || confirmDisconnect || confirmCancelConnect || showLog
+    val overlayActive = controlsOverlayOpen || certPrompt != null || nlaPrompt != null || confirmDisconnect || confirmCancelConnect || showLog || showReadiness
     LaunchedEffect(overlayActive) {
         controller.setOverlayActive(overlayActive)
     }
 
-    LaunchedEffect(state, certPrompt != null, nlaPrompt != null, confirmDisconnect, confirmCancelConnect, showLog, controlsBackHandler) {
+    LaunchedEffect(state, certPrompt != null, nlaPrompt != null, confirmDisconnect, confirmCancelConnect, showLog, showReadiness, controlsBackHandler) {
         (context as? XyDeskSessionActivity)?.backHandler = {
             when {
                 certPrompt != null || nlaPrompt != null -> true
+                showReadiness -> { showReadiness = false; true }
                 showLog -> {
                     showLog = false
                     true
@@ -1921,20 +1969,21 @@ fun XyDeskSessionScreen(
                         },
                     )
                 },
-                voiceMicEnabled = manager.isVoiceMicEnabled(),
+                voiceMicEnabled = bridgeDiagnostics.requested,
                 onToggleVoiceMic = {
-                    val next = !manager.isVoiceMicEnabled()
-                    manager.setVoiceMicEnabled(next)
-                    runCatching {
-                        RdpOptions.of(context, activeProfile.id)
-                            .copy(microphone = next)
-                            .write(context, activeProfile.id)
+                    if (manager.isVoiceMicEnabled()) {
+                        manager.setVoiceMicEnabled(false)
+                        notice.show("Mic bridge OFF. Kanal RDP native adalah setelan terpisah.")
+                    } else if (context.checkSelfPermission(android.Manifest.permission.RECORD_AUDIO) == android.content.pm.PackageManager.PERMISSION_GRANTED) {
+                        manager.setVoiceMicEnabled(true)
+                        notice.show("Mic bridge diminta. Deteksi input Windows belum diverifikasi.")
+                    } else {
+                        pendingMicInstance = manager.instance().takeIf { it != 0L }
+                        requestBridgeMicPermission.launch(android.Manifest.permission.RECORD_AUDIO)
                     }
-                    notice.show(
-                        if (next) xyNow("Voice / Mikrofon Sesi: ON", "Session Voice / Mic: ON")
-                        else xyNow("Voice / Mikrofon Sesi: OFF", "Session Voice / Mic: OFF"),
-                    )
+                    bridgeDiagnostics = manager.audioBridgeDiagnostics()
                 },
+                onOpenReadiness = { diagnosticsNow = android.os.SystemClock.elapsedRealtime(); showReadiness = true },
                 coreInfo = coreInfo,
                 notice = notice,
             )
@@ -2156,6 +2205,16 @@ fun XyDeskSessionScreen(
                 manager.connect(updated)
             },
             onCancel = { credentialRetry = false },
+        )
+    }
+    if (showReadiness) {
+        val options = RdpOptions.of(context, activeProfile.id)
+        RdpReadinessPanel(
+            diagnostics = bridgeDiagnostics,
+            nowMs = diagnosticsNow,
+            micPermission = context.checkSelfPermission(android.Manifest.permission.RECORD_AUDIO) == android.content.pm.PackageManager.PERMISSION_GRANTED,
+            nativeMicConfigured = options.microphone && !options.pcConnectMode,
+            onDismiss = { showReadiness = false },
         )
     }
     if (!active && !reconnecting && !applyingResolution && !userDisconnect) err?.let { e ->
