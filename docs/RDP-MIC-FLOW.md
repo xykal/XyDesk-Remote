@@ -83,3 +83,10 @@ visibility/PC restrictions, owner binding, single consumption, stale generations
 profile changes, committed preferences, invalid handles and stale permission generations even if a native address is reused. Source guards check
 integration ordering only. Neither these tests nor the panel prove Android
 recorder shutdown latency, Windows input routing, or game capture.
+
+### Verification result: 8357dbc
+
+- Kotlin/JVM + app compilation gate: **SUCCESS**, [run 39247589429](https://github.com/xykal/XyDesk-Remote/actions/runs/39247589429). Includes nine new pure mic-control tests; no APK produced.
+- Web Worker: **SUCCESS**, [run 39247590618](https://github.com/xykal/XyDesk-Remote/actions/runs/39247590618).
+- Local: eleven source integration guards and two native AUDIN C mock tests **PASS**. C mocks are not Android NDK/device validation.
+- Debug APK, release APK, and publication jobs were **SKIPPED**. No EXE/tag/draft/deploy. Secure Direct on both endpoints and signed-candidate runtime verification remain open.
