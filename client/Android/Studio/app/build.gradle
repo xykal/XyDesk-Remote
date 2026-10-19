@@ -67,6 +67,14 @@ android {
     buildFeatures {
         compose true
     }
+    packaging {
+        jniLibs {
+            // ABI splits do not filter third-party AAR payload in Universal.
+            // No engine is built for 32-bit x86; keep its dependency-only
+            // SQLCipher/WebRTC libraries out instead of claiming x86 support.
+            excludes += ['lib/x86/**']
+        }
+    }
 }
 
 dependencies {

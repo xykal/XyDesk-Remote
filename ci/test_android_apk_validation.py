@@ -50,3 +50,17 @@ class AndroidApkValidationTest(unittest.TestCase):
         del entries['lib/armeabi-v7a/libcrypto.so']
         with self.assertRaises(SystemExit):
             self.check_fixture(entries, 'XyDesk-RemoteUniversal.apk')
+
+    def test_universal_rejects_dependency_only_x86_payload(self):
+        entries = {f'lib/{abi}/libcrypto.so': elf(abi) for abi in ELF_ABIS}
+        entries['lib/x86/libsqlcipher.so'] = b'dependency without matching engine'
+        with self.assertRaises(SystemExit):
+            self.check_fixture(entries, 'XyDesk-RemoteUniversal.apk')
+
+    def test_app_excludes_unbuilt_x86_without_bypassing_native_validation(self):
+        root = Path(__file__).resolve().parents[1]
+        gradle = (root/'client/Android/Studio/app/build.gradle').read_text()
+        self.assertIn("excludes += ['lib/x86/**']", gradle)
+        self.assertNotIn('pickFirst', gradle)
+        for abi in ELF_ABIS:
+            self.assertNotIn('lib/'+abi+'/**', gradle)
