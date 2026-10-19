@@ -43,6 +43,10 @@ class HostDistributionTest(unittest.TestCase):
         for forbidden in ('RegSetValue', 'CreateProcess', 'URLDownloadToFile', 'WinHttpSendRequest'):
             self.assertNotIn(forbidden, doctor)
 
+    def test_stream_windows_headers_do_not_replace_std_min_max(self):
+        source = (ROOT / 'host-agent/src/xydesk_quic.cpp').read_text()
+        self.assertLess(source.index('#define NOMINMAX'), source.index('#include <windows.h>'))
+
     def test_chat_has_no_voice_reader_or_global_mic_switch(self):
         source = (ROOT / 'client/Android/Studio/app/src/main/kotlin/id/xydesk/remote/ui/GlobalChatScreen.kt').read_text()
         for removed in ('voiceEnabled', 'TextToSpeech', 'VOICE ON', 'VOICE OFF', 'KEY_VOICE_ENABLED'):
