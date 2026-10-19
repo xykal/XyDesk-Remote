@@ -4502,7 +4502,7 @@ export default {
       const target = new URL(path.replace("/api/chat/channels", "/channels"), request.url);
       target.search = url.search;
       try {
-        const id = env.GLOBAL_CHAT.idFromName("xydesk-global-chat-v1");
+        const id = env.GLOBAL_CHAT.idFromName("xydesk-official-channels-v1");
         const upstream = await env.GLOBAL_CHAT.get(id).fetch(new Request(target.toString(), {
           method: request.method, headers: request.headers,
           body: request.method === "GET" || request.method === "HEAD" ? undefined : request.body,

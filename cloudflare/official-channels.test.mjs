@@ -90,3 +90,8 @@ test('real edge-to-GlobalChat-to-channel integration returns catalogue and both 
  assert.equal((await r.json()).channels.length,3);
  const denied=await worker.fetch(req('POST','/api/chat/channels/announcement/posts',post()),env);assert.equal(denied.status,401);
 });
+test('official channel traffic is isolated from the existing global-chat object',async()=>{
+ let name;const f=fixture();const chat=new GlobalChat({storage:f.storage},{});
+ const env={GLOBAL_CHAT:{idFromName:n=>{name=n;return 1;},get:()=>({fetch:r=>chat.fetch(r)})}};
+ await worker.fetch(req('GET','/api/chat/channels'),env);assert.equal(name,'xydesk-official-channels-v1');
+});
