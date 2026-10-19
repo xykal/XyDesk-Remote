@@ -28,7 +28,9 @@
 - Chat messages/mentions/replies/announcements have separate conversation labels
   and notification groups. Community mentions/replies get independent channels;
   feed/social and app updates remain separate. Existing channel IDs/settings are
-  preserved where possible; the read-all action explicitly says all chat.
+  preserved where possible; the read-all action explicitly says all chat. In-app
+  community filters also separate replies/mentions and likes/reactions, show counts
+  and category chips; banner labels include the source (chat/community/app).
 
 ## Responsiveness and limitations
 

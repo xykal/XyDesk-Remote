@@ -30,14 +30,16 @@ internal object GlobalChatRepository {
 
     class MutationException(val status: Int, val code: String) : Exception("Chat mutation not confirmed ($status/$code)")
 
-    fun mutate(endpoint: String, payload: JSONObject, token: String): JSONObject =
-        post(endpoint, payload, 8_000, true, token) { connection ->
+    fun mutate(endpoint: String, payload: JSONObject, token: String): JSONObject {
+        require(endpoint == CHAT_DELETE_URL || endpoint == CHAT_EDIT_URL)
+        return post(endpoint, payload, 8_000, true, token) { connection ->
             val status = connection.responseCode
             val stream = if (status in 200..299) connection.inputStream else connection.errorStream
             val response = stream?.bufferedReader()?.use { JSONObject(it.readText()) } ?: JSONObject()
             if (status !in 200..299) throw MutationException(status, response.optString("code", "request_failed"))
             response.optJSONObject("message") ?: throw MutationException(status, "not_confirmed")
         }
+    }
 
     private fun <T> post(
         endpoint: String,

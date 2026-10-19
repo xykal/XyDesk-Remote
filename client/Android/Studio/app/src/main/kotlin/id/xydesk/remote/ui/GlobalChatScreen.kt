@@ -545,7 +545,9 @@ private fun GlobalChatAccountContent(
                     val body = JSONObject().put("id", original.id).put("expected_revision", original.revision)
                         .put("operation_id", operation).put("text", text.trim())
                     val json = GlobalChatRepository.mutate(if (action == "delete") CHAT_DELETE_URL else CHAT_EDIT_URL, body, token)
-                    parseMessageFromJson(json, nickname, account)
+                    val incoming = parseMessageFromJson(json, nickname, account)
+                    check(json.optString("last_mutation_id") == operation && isConfirmedChatMutation(original, incoming, action, text))
+                    incoming
                 }
             }
             outcome.onSuccess { incoming ->

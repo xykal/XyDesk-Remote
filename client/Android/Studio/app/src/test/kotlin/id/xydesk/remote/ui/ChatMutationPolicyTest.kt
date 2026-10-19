@@ -7,6 +7,14 @@ class ChatMutationPolicyTest {
     private fun row() = ChatMessage(id = "m-1", name = "Alice", githubLogin = "alice", country = "ID", flag = "",
         text = "original", translated = "translated", targetLang = "EN", at = 1, mine = true, authorId = 42)
 
+    @Test fun httpSuccessNeedsMatchingIdentityRevisionAndRequestedOutcome() {
+        val original = row()
+        assertFalse(isConfirmedChatMutation(original, original, "edit", "original"))
+        assertFalse(isConfirmedChatMutation(original, original.copy(id = "other", revision = 1), "edit", "original"))
+        assertFalse(isConfirmedChatMutation(original, original.copy(revision = 1), "delete", ""))
+        assertTrue(isConfirmedChatMutation(original, original.copy(text = "new", revision = 1), "edit", "new"))
+        assertTrue(isConfirmedChatMutation(original, original.copy(revision = 1).deletedPlaceholder(), "delete", ""))
+    }
     @Test fun deletionScrubsTextMediaQuotesAndOldVerification() {
         val deleted = row().copy(attachmentType = "image", attachmentData = "secret", replyToText = "secret", e2eeSig = "sig", e2eeVerified = true).deletedPlaceholder(10)
         assertTrue(deleted.deleted)

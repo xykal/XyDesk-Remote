@@ -522,13 +522,7 @@ internal fun FeedNotificationsPanel(
     }
 
     val filtered = remember(items, selectedCategory) {
-        when (selectedCategory) {
-            "announcement" -> items.filter { it.category == "announcement" }
-            "inbox" -> items.filter { it.category == "inbox" || it.category == "comment" }
-            "reply" -> items.filter { it.category == "reply" || it.category == "mention" }
-            "like" -> items.filter { it.category == "like" || it.category == "reaction" }
-            else -> items
-        }
+        items.filter { notificationCategoryMatches(selectedCategory, it.category) }
     }
 
     Column(
@@ -694,12 +688,15 @@ internal fun FeedNotificationsPanel(
             val categories = listOf(
                 Triple("all", XyIcons.Bell, xy("Semua (${items.size})", "All (${items.size})")),
                 Triple("announcement", XyIcons.Megaphone, xy("Pengumuman", "Announcements")),
-                Triple("like", XyIcons.Heart, xy("Like & Reaksi", "Likes & Reactions")),
+                Triple("like", XyIcons.Heart, xy("Suka", "Likes")),
+                Triple("reaction", XyIcons.Emoji, xy("Reaksi", "Reactions")),
                 Triple("inbox", XyIcons.Inbox, xy("Komentar", "Comments")),
                 Triple("reply", XyIcons.Chat, xy("Balasan", "Replies")),
+                Triple("mention", XyIcons.Chat, xy("Sebutan @", "Mentions @")),
             )
             categories.forEach { (key, icon, label) ->
                 val active = selectedCategory == key
+                val categoryCount = items.count { notificationCategoryMatches(key, it.category) }
                 Row(
                     modifier = Modifier
                         .clip(RoundedCornerShape(8.dp))
@@ -716,7 +713,7 @@ internal fun FeedNotificationsPanel(
                         modifier = Modifier.size(13.dp),
                     )
                     Text(
-                        text = label,
+                        text = if (key == "all") label else "$label ($categoryCount)",
                         fontSize = 12.sp,
                         fontWeight = if (active) FontWeight.SemiBold else FontWeight.Medium,
                         color = if (active) Color(0xFFF8FAFC) else Color(0xFF94A3B8),
@@ -791,6 +788,14 @@ internal fun FeedNotificationsPanel(
                                     compact = true,
                                 )
                             }
+                            val categoryLabel = notificationCategoryLabel(item.category)
+                            Text(
+                                text = xy(categoryLabel.first, categoryLabel.second),
+                                style = MaterialTheme.typography.labelSmall,
+                                color = itemTint,
+                                modifier = Modifier.clip(RoundedCornerShape(6.dp))
+                                    .background(itemTint.copy(alpha = 0.08f)).padding(horizontal = 6.dp, vertical = 2.dp),
+                            )
                             XyClickableLinkText(
                                 text = item.body,
                                 color = Color(0xFFCBD5E1),

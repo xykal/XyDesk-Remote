@@ -22,3 +22,8 @@ internal fun reconcileChatMessage(current: ChatMessage, incoming: ChatMessage): 
     return if (!merged.deleted && merged.attachmentData.isBlank() && current.attachmentData.isNotBlank())
         merged.copy(attachmentData = current.attachmentData) else merged
 }
+
+/** Never acknowledge an unrelated/unchanged row merely because HTTP returned 200. */
+internal fun isConfirmedChatMutation(original: ChatMessage, incoming: ChatMessage, action: String, text: String): Boolean =
+    incoming.id == original.id && incoming.revision > original.revision &&
+        if (action == "delete") incoming.deleted else !incoming.deleted && incoming.text == text.trim()
