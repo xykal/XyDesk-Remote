@@ -104,6 +104,7 @@ jobs:
           python3 -m unittest discover -s ci -p test_host_distribution.py
           python3 -m unittest discover -s ci -p test_android_apk_validation.py
           python3 -m unittest discover -s ci -p test_windows_host_validation.py
+          python3 -m unittest discover -s ci -p test_native_packaging.py
 
   # ------------------------------------------------------------------
   # DEBUG per-ABI (tiap push ke main; commit [skip-debug] khusus melewati job ini)
