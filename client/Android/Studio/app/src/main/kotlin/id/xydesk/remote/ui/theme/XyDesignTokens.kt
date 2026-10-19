@@ -1,3 +1,6 @@
+package id.xydesk.remote.ui.theme
+
+import androidx.compose.ui.unit.dp
 
 /** Chat geometry helper only; the owner-selected theme/shapes remain unchanged. */
 object XySpacing {
