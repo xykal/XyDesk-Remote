@@ -130,9 +130,13 @@ class SessionManager(context: Context) {
         quicAudioBridge?.tap = tap
     }
 
+    fun audioBridgeDiagnostics(): AudioBridgeDiagnostics = quicAudioBridge?.diagnostics() ?: AudioBridgeDiagnostics()
+
     fun isVoiceMicEnabled(): Boolean = quicAudioBridge?.micActive == true
 
     fun setVoiceMicEnabled(enabled: Boolean) {
+        if (enabled && (_state.value !is SessionState.Connected ||
+                appContext.checkSelfPermission(android.Manifest.permission.RECORD_AUDIO) != android.content.pm.PackageManager.PERMISSION_GRANTED)) return
         val bridge = quicAudioBridge
         if (bridge != null) {
             bridge.setVoiceMicEnabled(enabled)
@@ -827,10 +831,10 @@ class SessionManager(context: Context) {
      */
     private fun cleanupTerminalSession(inst: Long) {
         synchronized(lifecycleLock) {
-            quicAudioBridge?.stop()
-            quicAudioBridge = null
             val session = core ?: return
             if (session.getInstance() != inst) return
+            quicAudioBridge?.stop()
+            quicAudioBridge = null
             stopWatchdog()
             GlobalApp.unregisterSessionListener(inst)
             core = null
@@ -873,7 +877,9 @@ class SessionManager(context: Context) {
                     // kanal RDP (rdpsnd), jadi bridge hanya mengantar suara di mode
                     // "Audio di PC" (REMOTE).
                     val speakerOn = opts.quicAudio && opts.audioMode == XyAudioMode.REMOTE
-                    val micOn = opts.usesQuicMicrophone() || opts.microphone
+                    // Bridge microphone is an explicit session action, not a saved startup preference.
+                    // The separate native RDP microphone option is unchanged here.
+                    val micOn = false
                     if (speakerOn || micOn) {
                         audioBridgeState = "start…"
                         listener?.onAudioBridge(audioBridgeState)

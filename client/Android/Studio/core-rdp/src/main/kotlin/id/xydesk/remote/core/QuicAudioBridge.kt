@@ -63,6 +63,9 @@ class QuicAudioBridge(
         private set
     @Volatile var speakerActive: Boolean = enableSpeaker
 
+    @Volatile private var hostAudioReport: HostAudioReport? = null
+    fun diagnostics(): AudioBridgeDiagnostics = AudioBridgeDiagnostics(micActive, micCapturing, hostAudioReport)
+
     val healthy: Boolean get() = running.get() && hostFlags.get() != 0
 
     @Synchronized
@@ -84,6 +87,7 @@ class QuicAudioBridge(
             return
         }
         if (!running.compareAndSet(false, true)) return
+        hostAudioReport = null
         rxThread = Thread({ runLoopbackReceiver() }, "xydesk-quic-audio-rx").apply {
             isDaemon = true
             start()
@@ -99,6 +103,7 @@ class QuicAudioBridge(
     fun stop() {
         if (!running.compareAndSet(true, false)) return
         micActive = false
+        hostAudioReport = null
         runCatching { socket?.close() }
         socket = null
         rxThread?.interrupt()
@@ -121,6 +126,8 @@ class QuicAudioBridge(
             val addr = InetAddress.getByName(host.trim().removePrefix("[").removeSuffix("]"))
             val sock = DatagramSocket()
             sock.soTimeout = 500
+            // Source filtering is not cryptographic authentication.
+            sock.connect(addr, port)
             socket = sock
 
             val subBytes = "XYDESK_QUIC_AUDIO_SUB_V1".toByteArray(Charsets.US_ASCII)
@@ -167,6 +174,7 @@ class QuicAudioBridge(
                     lastSubMs = now
                 }
                 try {
+                    rxPkt.length = rxBuf.size // DatagramPacket retains the last received length.
                     sock.receive(rxPkt)
                     val len = rxPkt.length
                     if (len > 8 && rxBuf[0] == 'X'.code.toByte() && rxBuf[1] == 'Y'.code.toByte()) {
@@ -191,7 +199,8 @@ class QuicAudioBridge(
                                     track?.write(rxBuf, 8, pcmLength)
                                 }
                             }
-                            'S' -> if (rxBuf[3] == 'T'.code.toByte() && len >= 16) {
+                            'S' -> if (rxBuf[3] == 'T'.code.toByte() && len >= 16 && rxBuf[4] == '1'.code.toByte()) {
+                                hostAudioReport = parseHostAudioReport(rxBuf, len, android.os.SystemClock.elapsedRealtime())
                                 lastHostMs = now
                                 val flags = rxBuf[5].toInt() and 0xFF
                                 val hostMicPeak = rxBuf[6].toInt() and 0xFF
@@ -245,7 +254,6 @@ class QuicAudioBridge(
         var record: AudioRecord? = null
         try {
             if (!running.get() || !micActive) return
-            val addr = InetAddress.getByName(host.trim().removePrefix("[").removeSuffix("]"))
             val minBuf = AudioRecord.getMinBufferSize(
                 SAMPLE_RATE,
                 AudioFormat.CHANNEL_IN_MONO,
@@ -337,7 +345,7 @@ class QuicAudioBridge(
                     bb.putShort(s16.toShort())
                 }
                 micPeak.set(peak)
-                runCatching { sock.send(DatagramPacket(pktBytes, 8 + n * 2, addr, port)) }
+                runCatching { sock.send(DatagramPacket(pktBytes, 8 + n * 2)) }
             }
         } catch (_: Throwable) {
             micActive = false
