@@ -2278,11 +2278,11 @@ internal fun FeedAutoplayVideoPreview(
     var videoViewRef by remember(cacheKey) { mutableStateOf<android.widget.VideoView?>(null) }
     val fullscreenActive = XyVideoPlaybackCoordinator.fullscreenOpenCount.intValue > 0 || externalPaused
 
-    val tempFile by androidx.compose.runtime.produceState<java.io.File?>(null, cacheKey, videoBytes.size) {
+    val tempFile = androidx.compose.runtime.produceState<java.io.File?>(null, cacheKey, videoBytes.size) {
         value = withContext(Dispatchers.IO) {
             runCatching { prepareCachedVideoFile(context.cacheDir, videoBytes) }.getOrNull()
         }
-    }
+    }.value
 
     LaunchedEffect(fullscreenActive, muted) {
         val mp = mediaPlayerRef
