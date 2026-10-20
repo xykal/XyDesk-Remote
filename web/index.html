@@ -1264,10 +1264,6 @@
   </style>
   <style>
     .abi-badge[hidden] { display: none !important; }
-    /* Long release notes need not be laid out/painted until near the viewport. */
-    @supports (content-visibility: auto) {
-      main > .section { content-visibility: auto; contain-intrinsic-size: auto 600px; }
-    }
     @media (max-width: 760px) {
       .topbar, .drawer-scrim, .hero-stat, .liquid-card {
         backdrop-filter: none !important; -webkit-backdrop-filter: none !important;

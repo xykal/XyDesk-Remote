@@ -27,7 +27,7 @@ test('expired popup and chat presence polling are absent',()=>{
   assert.ok(!html.includes('xyCdWrap'));
   assert.ok(!html.includes('/api/chat/presence'));
   assert.ok(!html.includes('setInterval('));
-  assert.ok(html.includes('content-visibility: auto'));
+  assert.ok(!html.includes('content-visibility: auto')); // Must not mis-target download anchors.
 });
 test('hidden tabs do not fetch or schedule recurring work',()=>{
  const h=harness();h.ctx.document.hidden=true;h.ctx.loadActiveSessionStats();h.ctx.scheduleActiveStats();
