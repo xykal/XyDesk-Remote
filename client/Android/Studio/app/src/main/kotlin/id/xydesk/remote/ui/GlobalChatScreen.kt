@@ -658,8 +658,14 @@ private fun GlobalChatAccountContent(
                     if (index >= 0) messages[index] = messages[index].copy(
                         deliveryTicks = if (entry.nextAttemptAt == Long.MAX_VALUE) -1 else 0)
                     else if (messages.none { it.clientMessageId == entry.id && it.deliveryTicks == 2 }) {
-                        messages.add(ChatOutboxPolicy.pendingMessage(entry, nickname, verifiedGhLogin.orEmpty()))
-                        messages.sortBy { it.at }
+                        val restored = withContext(Dispatchers.IO) {
+                            ChatOutboxPolicy.pendingMessage(entry, nickname, verifiedGhLogin.orEmpty())
+                        }
+                        if (chatAccountSnapshotIsCurrent(verifiedGhLogin, getVerifiedGitHubLogin(context)) &&
+                            messages.none { it.id == entry.id || it.clientMessageId == entry.id && it.deliveryTicks == 2 }) {
+                            messages.add(restored)
+                            messages.sortBy { it.at }
+                        }
                     }
                 }
             }
@@ -673,6 +679,8 @@ private fun GlobalChatAccountContent(
             val incoming = acceptance.message?.let { raw ->
                 withContext(Dispatchers.IO) { parseMessageFromJson(raw, nickname, verifiedGhLogin) }
             }
+            if (acceptance.binding != outboxBinding ||
+                !chatAccountSnapshotIsCurrent(verifiedGhLogin, getVerifiedGitHubLogin(context))) return@collect
             messages.removeAll { it.id == acceptance.localId }
             if (incoming != null && acceptance.localId !in hiddenMessageIds && incoming.id !in hiddenMessageIds) {
                 val existing = messages.indexOfFirst { it.id == incoming.id }
