@@ -1,3 +1,4 @@
+import { persistChatSend, validateDurableSend, pruneChatSendReceipts, SEND_REPLAY_MAX_AGE_MS } from "./chat-send-persistence.mjs";
 import { OfficialChannels } from "./official-channels.mjs";
 import { RevisionedHistoryWindow, chatStorageFailure, chatStorageFailureEvent } from "./chat-storage-policy.mjs";
 import { applyChatMutation } from "./chat-mutations.mjs";
@@ -3714,6 +3715,12 @@ export class GlobalChat {
     if (path === "/leaderboard") {
       return this.handleLeaderboard(request);
     }
+    if (path === "/send-capabilities" && request.method === "GET") {
+      const auth = await this.authenticate(request, true);
+      if (!auth.ok) return durableObjectJson({ status:"error", code:auth.code }, auth.status, request.method);
+      return durableObjectJson({ status:"ok", send_protocol:1, author_id:auth.principal.id,
+        github_login:auth.principal.login, replay_max_age_ms:SEND_REPLAY_MAX_AGE_MS }, 200, request.method);
+    }
     if (path === "/send" && request.method === "POST") {
       return this.handleHttpSend(request);
     }
@@ -3843,6 +3850,8 @@ export class GlobalChat {
     } catch {
       return durableObjectJson({ status: "error", code: "invalid_json" }, 400, request.method);
     }
+    const invalidOutbox = validateDurableSend(auth.principal, body);
+    if (invalidOutbox) return durableObjectJson({ status:"error", code:invalidOutbox.code }, invalidOutbox.status, request.method);
     const name = typeof body?.name === "string"
       ? body.name.trim().slice(0, CHAT_NAME_MAX) || "Tamu"
       : "Tamu";
@@ -3864,7 +3873,7 @@ export class GlobalChat {
     }
     const prelimCountry = detectCountryFromRequest(request, body?.country, text || "id");
     const now = Date.now();
-    const rateKey = name.toLowerCase();
+    const rateKey = auth.principal ? `author:${auth.principal.id}` : name.toLowerCase();
     const bucket = this.httpRate.get(rateKey) || { sent: 0, windowAt: now };
     if (now - bucket.windowAt > CHAT_WINDOW_MS) {
       bucket.windowAt = now;
@@ -3889,7 +3898,7 @@ export class GlobalChat {
         : await translateChatText(text, prelimCountry);
     const country = detectCountryFromRequest(request, body?.country, text, tr.sourceLang);
     const flag = countryToFlag(country);
-    const id = `${now.toString(36).padStart(9, "0")}-${Math.random().toString(36).slice(2, 8)}`;
+    const id = `${now.toString(36).padStart(9, "0")}-${crypto.randomUUID()}`;
     const isFounderMsg = isFounderChatName(name, extras.github_login);
     const msg = {
       id,
@@ -3907,12 +3916,18 @@ export class GlobalChat {
       revision: 0,
       at: now,
     };
-    await this.state.storage.put(`msg:${id}`, msg);
-    this.historyWindow.invalidate();
-    this.trimHistory().catch(() => {});
-    this.broadcast(null, JSON.stringify({ type: "msg", ...msg }));
-    this.pushChatNotification(msg).catch(() => {});
-    return durableObjectJson({ status: "ok", message: msg }, 200, request.method);
+    let saved;
+    try { saved = await persistChatSend(this.state.storage, msg, auth.principal, body); }
+    catch (error) { return chatStorageFailure(error, request.method); }
+    if (saved.status !== 200) return durableObjectJson({ status:"error", code:saved.code }, saved.status, request.method);
+    if (saved.inserted) {
+      this.historyWindow.invalidate();
+      this.trimHistory().catch(() => {});
+      this.state.waitUntil?.(pruneChatSendReceipts(this.state.storage).catch(() => {}));
+      this.broadcast(null, JSON.stringify({ type:"msg", ...saved.message }));
+      this.pushChatNotification(saved.message).catch(() => {});
+    }
+    return durableObjectJson({ ...saved, status:"ok" }, 200, request.method);
   }
 
   async loadPinnedMessage() {
@@ -4098,6 +4113,12 @@ export class GlobalChat {
       return;
     }
     if (data.type !== "msg") return;
+    const invalidOutbox = validateDurableSend(session.principal, data);
+    if (invalidOutbox) {
+      try { session.ws.send(JSON.stringify({ type:"error", code:invalidOutbox.code, http_status:invalidOutbox.status,
+        client_msg_id:data.client_msg_id })); } catch {}
+      return;
+    }
     const extras = sanitizeChatExtras(data);
     if (session.principal && extras.github_login && extras.github_login.toLowerCase() !== session.principal.login.toLowerCase()) {
       try { session.ws.send(JSON.stringify({ type: "error", code: "identity_changed" })); } catch {}
@@ -4143,7 +4164,7 @@ export class GlobalChat {
         : await translateChatText(text, session.country);
     const resolvedCountry = resolveSmartCountry(text, tr.sourceLang, data.country || session.country, session.cfCountry);
     session.country = resolvedCountry;
-    const id = `${now.toString(36).padStart(9, "0")}-${Math.random().toString(36).slice(2, 8)}`;
+    const id = `${now.toString(36).padStart(9, "0")}-${crypto.randomUUID()}`;
     const flag = countryToFlag(resolvedCountry);
     const isFounderMsg = isFounderChatName(session.name, extras.github_login);
     const msg = {
@@ -4162,11 +4183,25 @@ export class GlobalChat {
       revision: 0,
       at: now,
     };
-    await this.state.storage.put(`msg:${id}`, msg);
-    this.historyWindow.invalidate();
-    this.trimHistory().catch(() => {});
-    this.broadcast(null, JSON.stringify({ type: "msg", ...msg }));
-    this.pushChatNotification(msg).catch(() => {});
+    let saved;
+    try { saved = await persistChatSend(this.state.storage, msg, session.principal, data); }
+    catch (error) {
+      try { session.ws.send(JSON.stringify({ ...(await chatStorageFailureEvent(error)), client_msg_id:data.client_msg_id })); } catch {}
+      return;
+    }
+    if (saved.status !== 200) {
+      try { session.ws.send(JSON.stringify({ type:"error", code:saved.code, http_status:saved.status, client_msg_id:data.client_msg_id })); } catch {}
+      return;
+    }
+    if (saved.inserted) {
+      this.historyWindow.invalidate();
+      this.trimHistory().catch(() => {});
+      this.state.waitUntil?.(pruneChatSendReceipts(this.state.storage).catch(() => {}));
+      this.broadcast(null, JSON.stringify({ type:"msg", ...saved.message }));
+      this.pushChatNotification(saved.message).catch(() => {});
+    }
+    // Private explicit acceptance; socket.send() on the client is NOT an ACK.
+    try { session.ws.send(JSON.stringify({ ...saved, type:"send_ack", client_msg_id:data.client_msg_id })); } catch {}
   }
 
   async pushChatNotification(msg) {
@@ -4918,6 +4953,15 @@ export default {
       if (request.method === "OPTIONS") return corsPreflight("POST, OPTIONS");
       if (request.method !== "POST") return methodNotAllowed("POST, OPTIONS");
       return pushUpdateResponse(request, env);
+    }
+    if (path === "/api/chat/send-capabilities") {
+      if (request.method === "OPTIONS") return corsPreflight("GET, OPTIONS");
+      if (request.method !== "GET") return methodNotAllowed("GET, OPTIONS");
+      if (!env.GLOBAL_CHAT) return notFound(request.method);
+      const id = env.GLOBAL_CHAT.idFromName("xydesk-global-chat-v1");
+      return env.GLOBAL_CHAT.get(id).fetch(new Request(new URL("/send-capabilities", request.url), {
+        method:"GET", headers:{ authorization:request.headers.get("authorization") || "" },
+      }));
     }
     if (path === "/api/chat/send") {
       if (request.method === "OPTIONS") return corsPreflight("POST, OPTIONS");

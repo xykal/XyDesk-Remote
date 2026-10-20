@@ -1,8 +1,9 @@
 # Recovery integration in progress — not a final release
 
-Latest addition: see CHANNELS-AND-LIGHT-MOTION.md and COMMUNITY-VALIDATION.json.
-Current source workspace is /home/user/XyDesk-Next, tracking remote branch
-agent/restore-v123-baseline. New community source has 123 passing Worker tests,
+Latest backend-only source step: see OUTBOX-SEND-CONTRACT.md (Android durable outbox still pending).
+Community evidence: see CHANNELS-AND-LIGHT-MOTION.md and COMMUNITY-VALIDATION.json.
+Current source workspace is /home/user/XyDesk-Work, tracking remote branch
+agent/restore-v123-baseline. Latest local source has 143 passing Worker tests,
 5 source guards and a green Android gate (39328956477). Worker version is now
 68b7fc17-ed1a-4083-babc-529d417d6228; old global history is still quota-blocked.
 No new signed recovery APK/final release; the earlier phase notes below are historical.
@@ -12,7 +13,7 @@ Base: exact owner-selected v1.1.23 Build87 / 9f64b47, confirmed in publish logs.
 Ported separately from later source: chat owner mutation/reconciliation, cache,
 text archive, global-chat navigation/notification separation, and Buat RDP preflight.
 Ten critical connection/render/native/build files still match the owner baseline
-byte-for-byte; four source regression checks enforce this in CI. No AdMob removal,
+byte-for-byte; five source regression checks enforce this in CI. No AdMob removal,
 native stripping, lifecycle-connect deferral or renderer rewrite is mixed in.
 
 Source-level likely black-screen path found in rc.3: onCreate queues a connection
