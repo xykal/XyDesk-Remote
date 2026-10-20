@@ -2,6 +2,10 @@
 #include "../include/xydesk_quic.h"
 #include "../include/host_readiness.h"
 
+#ifdef XYDESK_HAS_EMBEDDED_BUNDLE
+#include "embedded_bundle.h"
+#endif
+
 #include <cstdarg>
 #include <cstdint>
 #include <cstdio>
@@ -18,7 +22,12 @@
 #ifndef WIN32_LEAN_AND_MEAN
 #define WIN32_LEAN_AND_MEAN
 #endif
+#include <winsock2.h>
+#include <ws2tcpip.h>
 #include <windows.h>
+#include <iphlpapi.h>
+#include <objidl.h>
+#include <gdiplus.h>
 #include <shellapi.h>
 #include <wtsapi32.h>
 #include <winhttp.h>
@@ -27,6 +36,7 @@
 static XyQuicHostMetadata g_meta{};
 static int g_quic_rc = -1;
 static char g_global_id[16] = {0};
+static char g_tailscale_ip[64] = {0};
 static char g_username[128] = {0};
 static char g_password[64] = {0};
 static char g_enc_fingerprint[64] = {0};
@@ -34,6 +44,12 @@ static bool g_password_visible = false;
 static bool g_vdd_ready = true;
 static bool g_onmic_ready = false;
 static bool g_onmic_busy = false;
+static bool g_rdp_listening = false;
+static bool g_relay_online = false;
+static int  g_relay_http_code = 0;
+static bool g_bundle_extracted = false;
+static int  g_bundle_files_count = 0;
+static char g_bundle_dir_ascii[260] = {0};
 
 static uint32_t fnv1a32(const std::string& s) {
     uint32_t h = 2166136261u;
@@ -56,6 +72,23 @@ static uint64_t fnv1a64(const std::string& s) {
 #ifdef _WIN32
 namespace {
 
+void enable_per_monitor_dpi_v2() {
+    HMODULE user32 = GetModuleHandleW(L"user32.dll");
+    if (user32) {
+        typedef BOOL(WINAPI * PFN_SetProcessDpiAwarenessContext)(HANDLE);
+        auto fn = reinterpret_cast<PFN_SetProcessDpiAwarenessContext>(
+            (void*)GetProcAddress(user32, "SetProcessDpiAwarenessContext"));
+        if (fn) {
+            if (fn(reinterpret_cast<HANDLE>((LONG_PTR)-4))) return; // DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2
+            if (fn(reinterpret_cast<HANDLE>((LONG_PTR)-3))) return;
+        }
+        typedef BOOL(WINAPI * PFN_SetProcessDPIAware)(void);
+        auto fnLegacy = reinterpret_cast<PFN_SetProcessDPIAware>(
+            (void*)GetProcAddress(user32, "SetProcessDPIAware"));
+        if (fnLegacy) fnLegacy();
+    }
+}
+
 std::wstring machine_guid() {
     wchar_t buf[128] = {0};
     DWORD size = sizeof(buf);
@@ -71,6 +104,69 @@ std::string hostname_ascii() {
     DWORD n = sizeof(buf) - 1;
     if (!GetComputerNameA(buf, &n)) return std::string();
     return std::string(buf, n);
+}
+
+void detect_tailscale_ip() {
+    g_tailscale_ip[0] = '\0';
+    WSADATA wsa{};
+    if (WSAStartup(MAKEWORD(2, 2), &wsa) != 0) return;
+    char host_buf[256] = {};
+    if (gethostname(host_buf, sizeof(host_buf) - 1) == 0) {
+        addrinfo hints{};
+        hints.ai_family = AF_INET;
+        addrinfo* res = nullptr;
+        if (getaddrinfo(host_buf, nullptr, &hints, &res) == 0 && res) {
+            for (addrinfo* p = res; p != nullptr; p = p->ai_next) {
+                auto* sin = reinterpret_cast<sockaddr_in*>(p->ai_addr);
+                unsigned int a = 0, b = 0, c = 0, d = 0;
+                char ip[64] = {};
+                inet_ntop(AF_INET, &sin->sin_addr, ip, sizeof(ip));
+                if (sscanf(ip, "%u.%u.%u.%u", &a, &b, &c, &d) == 4) {
+                    if (a == 100 && b >= 64 && b <= 127) {
+                        snprintf(g_tailscale_ip, sizeof(g_tailscale_ip), "%s", ip);
+                        break;
+                    }
+                }
+            }
+            freeaddrinfo(res);
+        }
+    }
+    WSACleanup();
+}
+
+bool check_tcp_port_listening(uint16_t port) {
+    WSADATA wsa{};
+    if (WSAStartup(MAKEWORD(2, 2), &wsa) != 0) return false;
+    SOCKET s = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
+    if (s == INVALID_SOCKET) {
+        WSACleanup();
+        return false;
+    }
+    u_long nonBlock = 1;
+    ioctlsocket(s, FIONBIO, &nonBlock);
+    sockaddr_in addr{};
+    addr.sin_family = AF_INET;
+    addr.sin_port = htons(port);
+    addr.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
+    int rc = connect(s, reinterpret_cast<sockaddr*>(&addr), sizeof(addr));
+    bool ok = false;
+    if (rc == 0) {
+        ok = true;
+    } else if (WSAGetLastError() == WSAEWOULDBLOCK) {
+        fd_set wfds{};
+        FD_ZERO(&wfds);
+        FD_SET(s, &wfds);
+        timeval tv{0, 120000}; // 120 ms
+        if (select(0, nullptr, &wfds, nullptr, &tv) > 0) {
+            int so_err = 0;
+            int len = sizeof(so_err);
+            getsockopt(s, SOL_SOCKET, SO_ERROR, reinterpret_cast<char*>(&so_err), &len);
+            ok = (so_err == 0);
+        }
+    }
+    closesocket(s);
+    WSACleanup();
+    return ok;
 }
 
 void run_hidden_process(const std::wstring& cmdLine, DWORD waitMs = 5000) {
@@ -92,6 +188,53 @@ void run_hidden_process(const std::wstring& cmdLine, DWORD waitMs = 5000) {
     }
 }
 
+bool write_binary_file(const std::wstring& path, const unsigned char* data, size_t len) {
+    HANDLE h = CreateFileW(path.c_str(), GENERIC_WRITE, FILE_SHARE_READ, nullptr,
+                           CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, nullptr);
+    if (h == INVALID_HANDLE_VALUE) return false;
+    DWORD written = 0;
+    BOOL ok = WriteFile(h, data, (DWORD)len, &written, nullptr);
+    CloseHandle(h);
+    return ok && (written == (DWORD)len);
+}
+
+bool extract_embedded_bundle() {
+    wchar_t pd[MAX_PATH] = {0};
+    std::wstring baseDir;
+    if (GetEnvironmentVariableW(L"ProgramData", pd, MAX_PATH) > 0) {
+        baseDir = std::wstring(pd) + L"\\XyDeskRemote";
+        CreateDirectoryW(baseDir.c_str(), nullptr);
+        baseDir += L"\\bundle";
+    }
+    if (baseDir.empty() || (!CreateDirectoryW(baseDir.c_str(), nullptr) && GetLastError() != ERROR_ALREADY_EXISTS)) {
+        if (GetEnvironmentVariableW(L"APPDATA", pd, MAX_PATH) > 0) {
+            baseDir = std::wstring(pd) + L"\\XyDesk Remote";
+            CreateDirectoryW(baseDir.c_str(), nullptr);
+            baseDir += L"\\bundle";
+            CreateDirectoryW(baseDir.c_str(), nullptr);
+        }
+    }
+    if (baseDir.empty()) return false;
+    WideCharToMultiByte(CP_UTF8, 0, baseDir.c_str(), -1, g_bundle_dir_ascii, sizeof(g_bundle_dir_ascii) - 1, nullptr, nullptr);
+
+    int extracted = 0;
+#ifdef XYDESK_HAS_EMBEDDED_BUNDLE
+    if (write_binary_file(baseDir + L"\\xydesk_host_core.dll", kEmbeddedHostCoreDll, kEmbeddedHostCoreDllLen)) extracted++;
+    if (write_binary_file(baseDir + L"\\xydesk_quic.dll", kEmbeddedQuicDll, kEmbeddedQuicDllLen)) extracted++;
+    if (write_binary_file(baseDir + L"\\XyDeskVDD.inf", kEmbeddedVddInf, kEmbeddedVddInfLen)) extracted++;
+    if (write_binary_file(baseDir + L"\\XyDeskAudioMic.ps1", kEmbeddedAudioPs1, kEmbeddedAudioPs1Len)) extracted++;
+#else
+    const char* vddInf =
+        "[Version]\r\nSignature=\"$Windows NT$\"\r\nClass=Display\r\nClassGuid={4d36e968-e325-11ce-bfc1-08002be10318}\r\n"
+        "Provider=%ManufacturerName%\r\nDriverVer=10/20/2026,2.4.0.0\r\n"
+        "[Strings]\r\nManufacturerName=\"XyVerse Technology Global\"\r\nDeviceDesc=\"XyDesk Virtual Display 120Hz Adapter\"\r\n";
+    if (write_binary_file(baseDir + L"\\XyDeskVDD.inf", reinterpret_cast<const unsigned char*>(vddInf), strlen(vddInf))) extracted++;
+#endif
+    g_bundle_files_count = extracted;
+    g_bundle_extracted = (extracted > 0);
+    return g_bundle_extracted;
+}
+
 bool check_onmic_registry_unlocked() {
     DWORD val = 1;
     DWORD sz = sizeof(val);
@@ -100,17 +243,38 @@ bool check_onmic_registry_unlocked() {
         "SYSTEM\\CurrentControlSet\\Control\\Terminal Server\\WinStations\\RDP-Tcp",
         "fDisableAudioCapture",
         RRF_RT_REG_DWORD, nullptr, &val, &sz);
+    if (rc == ERROR_SUCCESS && val == 0) return true;
+    rc = RegGetValueA(
+        HKEY_LOCAL_MACHINE,
+        "SYSTEM\\CurrentControlSet\\Control\\Terminal Server",
+        "fDisableAudioCapture",
+        RRF_RT_REG_DWORD, nullptr, &val, &sz);
     return (rc == ERROR_SUCCESS && val == 0);
 }
 
+void sync_password_and_enable_rdp_access() {
+    xydesk_host_apply_windows_policies();
+    if (g_username[0] != '\0' && g_password[0] != '\0') {
+        wchar_t wuser[128] = {0};
+        wchar_t wpass[64] = {0};
+        MultiByteToWideChar(CP_UTF8, 0, g_username, -1, wuser, 127);
+        MultiByteToWideChar(CP_UTF8, 0, g_password, -1, wpass, 63);
+        run_hidden_process(L"net.exe user \"" + std::wstring(wuser) + L"\" \"" + std::wstring(wpass) + L"\" /active:yes", 3000);
+        run_hidden_process(L"net.exe localgroup \"Remote Desktop Users\" \"" + std::wstring(wuser) + L"\" /add", 2500);
+        run_hidden_process(L"net.exe localgroup \"Administrators\" \"" + std::wstring(wuser) + L"\" /add", 2500);
+    }
+    run_hidden_process(L"sc.exe config TermService start= auto", 2500);
+    run_hidden_process(L"net.exe start TermService", 3000);
+    g_rdp_listening = check_tcp_port_listening(g_meta.rdp_port);
+    g_onmic_ready = check_onmic_registry_unlocked();
+}
+
 void init_clean_credentials_and_fingerprint() {
-    // 1. Current Windows username
     DWORD ulen = sizeof(g_username) - 1;
     if (!GetUserNameA(g_username, &ulen) || g_username[0] == '\0') {
         snprintf(g_username, sizeof(g_username), "Administrator");
     }
 
-    // 2. Load or generate Clean Access Password from HKCU\Software\XyDeskRemote\HostConfig
     HKEY hKey = nullptr;
     if (RegCreateKeyExA(HKEY_CURRENT_USER, "Software\\XyDeskRemote\\HostConfig", 0, nullptr,
                         REG_OPTION_NON_VOLATILE, KEY_READ | KEY_WRITE, nullptr, &hKey, nullptr) == ERROR_SUCCESS) {
@@ -136,7 +300,6 @@ void init_clean_credentials_and_fingerprint() {
         snprintf(g_password, sizeof(g_password), "Xy!849201#A");
     }
 
-    // 3. Generate deterministic E2EE Host Key Fingerprint
     std::wstring guid = machine_guid();
     std::string seed(guid.begin(), guid.end());
     seed += "|";
@@ -154,7 +317,10 @@ void init_clean_credentials_and_fingerprint() {
              (unsigned)((h2 >> 48) & 0xFFFF),
              (unsigned)((h2 >> 32) & 0xFFFF));
 
+    detect_tailscale_ip();
+    extract_embedded_bundle();
     g_onmic_ready = check_onmic_registry_unlocked();
+    g_rdp_listening = check_tcp_port_listening(g_meta.rdp_port);
 }
 
 void rotate_clean_password(bool syncWindowsUser) {
@@ -175,49 +341,39 @@ void rotate_clean_password(bool syncWindowsUser) {
         RegCloseKey(hKey);
     }
 
-    if (syncWindowsUser && g_username[0] != '\0') {
-        wchar_t wuser[128] = {0};
-        wchar_t wpass[64] = {0};
-        MultiByteToWideChar(CP_UTF8, 0, g_username, -1, wuser, 127);
-        MultiByteToWideChar(CP_UTF8, 0, g_password, -1, wpass, 63);
-        std::wstring cmd = L"net.exe user \"" + std::wstring(wuser) + L"\" \"" + std::wstring(wpass) + L"\"";
-        run_hidden_process(cmd, 3000);
+    if (syncWindowsUser) {
+        sync_password_and_enable_rdp_access();
     }
 }
 
 void relay_post_heartbeat(const std::string& body) {
-    HINTERNET ses = WinHttpOpen(L"XyDeskHostAgent/2.0", WINHTTP_ACCESS_TYPE_DEFAULT_PROXY,
+    HINTERNET ses = WinHttpOpen(L"XyDeskHostAgent/2.4", WINHTTP_ACCESS_TYPE_DEFAULT_PROXY,
                                 WINHTTP_NO_PROXY_NAME, WINHTTP_NO_PROXY_BYPASS, 0);
     if (!ses) return;
-    WinHttpSetTimeouts(ses, 4000, 4000, 4000, 4000);
+    WinHttpSetTimeouts(ses, 5000, 5000, 5000, 5000);
     HINTERNET con = WinHttpConnect(ses, L"api.xydeskremote.biz.id", INTERNET_DEFAULT_HTTPS_PORT, 0);
     if (con) {
-        HINTERNET req = WinHttpOpenRequest(con, L"POST", L"/api/host/register", nullptr,
+        HINTERNET req = WinHttpOpenRequest(con, L"POST", L"/api/pc/relay", nullptr,
                                            WINHTTP_NO_REFERER, WINHTTP_DEFAULT_ACCEPT_TYPES,
                                            WINHTTP_FLAG_SECURE);
         if (req) {
             const wchar_t* hdr = L"Content-Type: application/json\r\n";
             if (WinHttpSendRequest(req, hdr, (DWORD)-1L, (LPVOID)body.data(),
-                                   (DWORD)body.size(), (DWORD)body.size(), 0)) {
-                WinHttpReceiveResponse(req, nullptr);
+                                   (DWORD)body.size(), (DWORD)body.size(), 0) &&
+                WinHttpReceiveResponse(req, nullptr)) {
+                DWORD statusCode = 0;
+                DWORD sz = sizeof(statusCode);
+                if (WinHttpQueryHeaders(req, WINHTTP_QUERY_STATUS_CODE | WINHTTP_QUERY_FLAG_NUMBER,
+                                        WINHTTP_HEADER_NAME_BY_INDEX, &statusCode, &sz, WINHTTP_NO_HEADER_INDEX)) {
+                    g_relay_http_code = (int)statusCode;
+                    g_relay_online = (statusCode >= 200 && statusCode < 300);
+                }
             }
             WinHttpCloseHandle(req);
         }
         WinHttpCloseHandle(con);
     }
     WinHttpCloseHandle(ses);
-}
-
-DWORD WINAPI relay_heartbeat_thread(LPVOID) {
-    for (;;) {
-        char body[512];
-        snprintf(body, sizeof(body),
-                 "{\"id\":\"%s\",\"hostname\":\"%s\",\"port\":%u}",
-                 g_global_id, g_meta.hostname, (unsigned)g_meta.rdp_port);
-        relay_post_heartbeat(body);
-        Sleep(60000);
-    }
-    return 0;
 }
 
 }  // namespace
@@ -247,6 +403,29 @@ const char* xydesk_global_pc_id() {
     return g_global_id;
 }
 
+#ifdef _WIN32
+namespace {
+
+DWORD WINAPI relay_heartbeat_thread(LPVOID) {
+    for (;;) {
+        detect_tailscale_ip();
+        char body[640];
+        snprintf(body, sizeof(body),
+                 "{\"id\":\"%s\",\"hostname\":\"%s\",\"rdp_port\":%u,\"tailnet\":\"%s\",\"lan_ip\":\"%s\"}",
+                 xydesk_global_pc_id(),
+                 g_meta.hostname,
+                 (unsigned)g_meta.rdp_port,
+                 g_tailscale_ip,
+                 g_meta.primary_ip);
+        relay_post_heartbeat(body);
+        Sleep(45000);
+    }
+    return 0;
+}
+
+}  // namespace
+#endif
+
 static void xydesk_relay_start() {
 #ifdef _WIN32
     if (xydesk_global_pc_id()[0] == '\0') return;
@@ -266,18 +445,32 @@ constexpr UINT IDM_TOGGLE   = 2002;
 constexpr UINT IDM_ONMIC    = 2003;
 constexpr UINT IDM_EXIT     = 2004;
 
-// Custom Hit-Test Button IDs (100% Owner-Rendered Modern Pills)
+enum NavTab {
+    TAB_ACCESS = 0,
+    TAB_DISPLAY_AUDIO = 1,
+    TAB_BUNDLE_DRIVER = 2,
+    TAB_DIAGNOSTICS = 3
+};
+
 enum BtnId {
     BTN_NONE = 0,
+    BTN_TAB_ACCESS,
+    BTN_TAB_DISPLAY,
+    BTN_TAB_BUNDLE,
+    BTN_TAB_DIAG,
     BTN_COPY_ID,
     BTN_COPY_GLOBAL,
     BTN_TOGGLE_PW_EYE,
     BTN_COPY_PW,
     BTN_COPY_ALL_CRED,
     BTN_ROTATE_PW,
+    BTN_SYNC_WINDOWS_RDP,
     BTN_ONMIC_SETUP,
     BTN_VDD_BOOST,
+    BTN_REEXTRACT_BUNDLE,
+    BTN_OPEN_BUNDLE_DIR,
     BTN_TOGGLE_QUIC,
+    BTN_PING_RELAY,
     BTN_HIDE_TRAY,
     BTN_EXIT_APP
 };
@@ -286,80 +479,14 @@ struct PillButton {
     BtnId id;
     RECT rc;
     const wchar_t* label;
-    bool primary;
-    bool accentGreen;
-    bool danger;
+    int style; // 0=secondary, 1=primary_cyan, 2=accent_emerald, 3=danger, 4=nav_item, 5=nav_active
 };
 
-const wchar_t* kClassName = L"XyDeskHostNativeModernUI";
-
-// Palette: Deep Carbon Obsidian + Crisp Monochrome + Emerald/Blue Accents
-constexpr COLORREF kBg          = RGB(0x0B, 0x0E, 0x14);
-constexpr COLORREF kHeaderBg    = RGB(0x10, 0x15, 0x1F);
-constexpr COLORREF kCard        = RGB(0x13, 0x18, 0x22);
-constexpr COLORREF kCardInner   = RGB(0x0E, 0x12, 0x1A);
-constexpr COLORREF kCardEdge    = RGB(0x23, 0x2C, 0x3D);
-constexpr COLORREF kCardHiEdge  = RGB(0x34, 0x45, 0x63);
-constexpr COLORREF kText        = RGB(0xF5, 0xF7, 0xFA);
-constexpr COLORREF kTextSub     = RGB(0x94, 0xA3, 0xB8);
-constexpr COLORREF kTextDim     = RGB(0x64, 0x74, 0x8B);
-constexpr COLORREF kAccent      = RGB(0x68, 0x9D, 0xFF);
-constexpr COLORREF kAccentHover = RGB(0x82, 0xB1, 0xFF);
-constexpr COLORREF kBtnBg       = RGB(0x1C, 0x24, 0x33);
-constexpr COLORREF kBtnHover    = RGB(0x28, 0x33, 0x47);
-constexpr COLORREF kOk          = RGB(0x22, 0xC5, 0x5E);
-constexpr COLORREF kOkBg        = RGB(0x0F, 0x29, 0x1E);
-constexpr COLORREF kWarn        = RGB(0xF5, 0x9E, 0x0B);
-constexpr COLORREF kDanger      = RGB(0xEF, 0x44, 0x44);
-
-HFONT g_fBrand    = nullptr;
-HFONT g_fTitle    = nullptr;
-HFONT g_fSub      = nullptr;
-HFONT g_fCardHdr  = nullptr;
-HFONT g_fBigId    = nullptr;
-HFONT g_fMono     = nullptr;
-HFONT g_fMonoSm   = nullptr;
-HFONT g_fBody     = nullptr;
-HFONT g_fBodyBold = nullptr;
-HFONT g_fSmall    = nullptr;
+const wchar_t* kClassName = L"XyDeskHostStudioDashboardV2";
 
 HWND g_ui_hwnd = nullptr;
-std::wstring g_toast_msg = L"Siap menerima koneksi 120FPS + On-Mic dari Android.";
+std::wstring g_toast_msg = L"Siap menerima koneksi 120FPS + On-Mic dari Android (1-EXE Bundled Host).";
 DWORD g_toast_tick = 0;
-
-void create_fonts() {
-    if (g_fTitle) return;
-    g_fBrand    = CreateFontW(22, 0, 0, 0, FW_EXTRABOLD, FALSE, FALSE, FALSE, DEFAULT_CHARSET,
-                              OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS, CLEARTYPE_QUALITY,
-                              DEFAULT_PITCH | FF_DONTCARE, L"Segoe UI Variable Display");
-    g_fTitle    = CreateFontW(22, 0, 0, 0, FW_BOLD, FALSE, FALSE, FALSE, DEFAULT_CHARSET,
-                              OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS, CLEARTYPE_QUALITY,
-                              DEFAULT_PITCH | FF_DONTCARE, L"Segoe UI Variable Display");
-    g_fSub      = CreateFontW(14, 0, 0, 0, FW_NORMAL, FALSE, FALSE, FALSE, DEFAULT_CHARSET,
-                              OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS, CLEARTYPE_QUALITY,
-                              DEFAULT_PITCH | FF_DONTCARE, L"Segoe UI Variable Text");
-    g_fCardHdr  = CreateFontW(13, 0, 0, 0, FW_BOLD, FALSE, FALSE, FALSE, DEFAULT_CHARSET,
-                              OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS, CLEARTYPE_QUALITY,
-                              DEFAULT_PITCH | FF_DONTCARE, L"Segoe UI Variable Text");
-    g_fBigId    = CreateFontW(28, 0, 0, 0, FW_BOLD, FALSE, FALSE, FALSE, DEFAULT_CHARSET,
-                              OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS, CLEARTYPE_QUALITY,
-                              FIXED_PITCH | FF_MODERN, L"Consolas");
-    g_fMono     = CreateFontW(18, 0, 0, 0, FW_BOLD, FALSE, FALSE, FALSE, DEFAULT_CHARSET,
-                              OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS, CLEARTYPE_QUALITY,
-                              FIXED_PITCH | FF_MODERN, L"Consolas");
-    g_fMonoSm   = CreateFontW(14, 0, 0, 0, FW_NORMAL, FALSE, FALSE, FALSE, DEFAULT_CHARSET,
-                              OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS, CLEARTYPE_QUALITY,
-                              FIXED_PITCH | FF_MODERN, L"Consolas");
-    g_fBody     = CreateFontW(15, 0, 0, 0, FW_NORMAL, FALSE, FALSE, FALSE, DEFAULT_CHARSET,
-                              OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS, CLEARTYPE_QUALITY,
-                              DEFAULT_PITCH | FF_DONTCARE, L"Segoe UI Variable Text");
-    g_fBodyBold = CreateFontW(15, 0, 0, 0, FW_SEMIBOLD, FALSE, FALSE, FALSE, DEFAULT_CHARSET,
-                              OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS, CLEARTYPE_QUALITY,
-                              DEFAULT_PITCH | FF_DONTCARE, L"Segoe UI Variable Text");
-    g_fSmall    = CreateFontW(13, 0, 0, 0, FW_NORMAL, FALSE, FALSE, FALSE, DEFAULT_CHARSET,
-                              OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS, CLEARTYPE_QUALITY,
-                              DEFAULT_PITCH | FF_DONTCARE, L"Segoe UI Variable Text");
-}
 
 void apply_dark_titlebar(HWND hwnd) {
     typedef HRESULT(WINAPI * PFN_DwmSetWindowAttribute)(HWND, DWORD, const void*, DWORD);
@@ -431,18 +558,38 @@ bool copy_to_clipboard(HWND owner, const std::wstring& text) {
 
 DWORD WINAPI onmic_installer_thread(LPVOID) {
     g_onmic_busy = true;
-    post_status_from_thread(L"Mengaktifkan kebijakan On-Mic, Privacy Consent & Virtual Audio...");
+    post_status_from_thread(L"Mengaktifkan kebijakan On-Mic, Privacy Consent & Bundled Virtual Audio...");
     xydesk_host_apply_windows_policies();
-    // Jalankan skrip onmic.ps1 lokal atau dari https://xydeskremote.biz.id/onmic.ps1 secara tersembunyi
+    extract_embedded_bundle();
+    std::wstring bundleScript = to_wide(g_bundle_dir_ascii) + L"\\XyDeskAudioMic.ps1";
     std::wstring psCmd =
-        L"powershell.exe -NoProfile -NonInteractive -WindowStyle Hidden -ExecutionPolicy Bypass -Command \""
-        L"if (Test-Path '.\\onmic.ps1') { & '.\\onmic.ps1' } "
-        L"else { try { [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12; "
-        L"irm 'https://xydeskremote.biz.id/onmic.ps1' | iex } catch {} }\"";
-    run_hidden_process(psCmd, 25000);
+        L"powershell.exe -NoProfile -NonInteractive -WindowStyle Hidden -ExecutionPolicy Bypass -File \"" +
+        bundleScript + L"\"";
+    run_hidden_process(psCmd, 15000);
     g_onmic_ready = check_onmic_registry_unlocked();
     g_onmic_busy = false;
     post_status_from_thread(L"On-Mic & Virtual Microphone siap digunakan (RDP AudioCapture + QUIC :4433 Aktif).");
+    return 0;
+}
+
+DWORD WINAPI manual_relay_ping_thread(LPVOID) {
+    post_status_from_thread(L"Menghubungi Cloud Relay api.xydeskremote.biz.id (/api/pc/relay)...");
+    detect_tailscale_ip();
+    char body[640];
+    snprintf(body, sizeof(body),
+             "{\"id\":\"%s\",\"hostname\":\"%s\",\"rdp_port\":%u,\"tailnet\":\"%s\",\"lan_ip\":\"%s\"}",
+             xydesk_global_pc_id(),
+             g_meta.hostname,
+             (unsigned)g_meta.rdp_port,
+             g_tailscale_ip,
+             g_meta.primary_ip);
+    relay_post_heartbeat(body);
+    if (g_relay_online) {
+        post_status_from_thread(fmt(L"Cloud Relay TERHUBUNG (HTTP %d) — ID Global %s siap diakses dari Android!",
+                                    g_relay_http_code, to_wide(xydesk_global_pc_id()).c_str()));
+    } else {
+        post_status_from_thread(L"Cloud Relay sedang dicoba ulang — koneksi LAN & Tailscale tetap berjalan penuh.");
+    }
     return 0;
 }
 
@@ -497,7 +644,6 @@ DWORD WINAPI tsclient_downloads_thread(LPVOID) {
     const std::wstring downloads = downloads_dir();
     if (downloads.empty()) return 0;
     const std::wstring record_path = appdata_dir() + L"\\received-files.log";
-
     std::set<std::wstring> recorded;
     {
         std::wifstream in(record_path.c_str());
@@ -571,6 +717,7 @@ DWORD WINAPI tsclient_downloads_thread(LPVOID) {
 struct UiState {
     bool quic_running = false;
     bool running = true;
+    NavTab active_tab = TAB_ACCESS;
     BtnId hovered_btn = BTN_NONE;
     std::vector<PillButton> buttons;
 };
@@ -579,61 +726,116 @@ UiState* ui_state(HWND hwnd) {
     return reinterpret_cast<UiState*>(GetWindowLongPtrW(hwnd, GWLP_USERDATA));
 }
 
-void draw_round_box(HDC hdc, int l, int t, int r, int b, int rad, COLORREF fill, COLORREF border) {
-    HBRUSH br = CreateSolidBrush(fill);
-    HPEN pen = CreatePen(PS_SOLID, 1, border);
-    HBRUSH oldBr = (HBRUSH)SelectObject(hdc, br);
-    HPEN oldPen = (HPEN)SelectObject(hdc, pen);
-    RoundRect(hdc, l, t, r, b, rad, rad);
-    SelectObject(hdc, oldBr);
-    SelectObject(hdc, oldPen);
-    DeleteObject(br);
-    DeleteObject(pen);
+// ---------------------------------------------------------------------------
+// GDI+ Anti-Aliased Vector Drawing Primitives
+// ---------------------------------------------------------------------------
+void gdi_round_rect_path(Gdiplus::GraphicsPath& path, float x, float y, float w, float h, float r) {
+    float d = r * 2.0f;
+    if (d > w) d = w;
+    if (d > h) d = h;
+    path.Reset();
+    path.AddArc(x, y, d, d, 180.0f, 90.0f);
+    path.AddArc(x + w - d, y, d, d, 270.0f, 90.0f);
+    path.AddArc(x + w - d, y + h - d, d, d, 0.0f, 90.0f);
+    path.AddArc(x, y + h - d, d, d, 90.0f, 90.0f);
+    path.CloseFigure();
 }
 
-void draw_text(HDC hdc, HFONT font, COLORREF color, int l, int t, int r, int b,
-               const std::wstring& txt, UINT flags = DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_NOPREFIX) {
-    HFONT oldF = (HFONT)SelectObject(hdc, font);
-    SetTextColor(hdc, color);
-    RECT rc{l, t, r, b};
-    DrawTextW(hdc, txt.c_str(), -1, &rc, flags);
-    SelectObject(hdc, oldF);
+void gdi_fill_card(Gdiplus::Graphics& g, int l, int t, int r, int b, float radius,
+                   Gdiplus::Color fill, Gdiplus::Color border, float borderW = 1.0f) {
+    Gdiplus::GraphicsPath path;
+    gdi_round_rect_path(path, (float)l, (float)t, (float)(r - l), (float)(b - t), radius);
+    Gdiplus::SolidBrush br(fill);
+    g.FillPath(&br, &path);
+    if (border.GetAlpha() > 0 && borderW > 0.0f) {
+        Gdiplus::Pen pen(border, borderW);
+        g.DrawPath(&pen, &path);
+    }
+}
+
+void gdi_fill_gradient_card(Gdiplus::Graphics& g, int l, int t, int r, int b, float radius,
+                            Gdiplus::Color topCol, Gdiplus::Color botCol, Gdiplus::Color border) {
+    Gdiplus::GraphicsPath path;
+    gdi_round_rect_path(path, (float)l, (float)t, (float)(r - l), (float)(b - t), radius);
+    Gdiplus::LinearGradientBrush br(
+        Gdiplus::PointF((float)l, (float)t),
+        Gdiplus::PointF((float)l, (float)b),
+        topCol, botCol);
+    g.FillPath(&br, &path);
+    Gdiplus::Pen pen(border, 1.2f);
+    g.DrawPath(&pen, &path);
+}
+
+void gdi_text(Gdiplus::Graphics& g, const wchar_t* family, float ptSize, int style,
+              Gdiplus::Color col, int l, int t, int r, int b, const std::wstring& txt,
+              Gdiplus::StringAlignment hAlign = Gdiplus::StringAlignmentNear,
+              Gdiplus::StringAlignment vAlign = Gdiplus::StringAlignmentCenter) {
+    Gdiplus::Font font(family, ptSize, style, Gdiplus::UnitPixel);
+    Gdiplus::SolidBrush br(col);
+    Gdiplus::StringFormat sf;
+    sf.SetAlignment(hAlign);
+    sf.SetLineAlignment(vAlign);
+    sf.SetTrimming(Gdiplus::StringTrimmingEllipsisCharacter);
+    sf.SetFormatFlags(Gdiplus::StringFormatFlagsNoWrap);
+    Gdiplus::RectF rc((float)l, (float)t, (float)(r - l), (float)(b - t));
+    g.DrawString(txt.c_str(), -1, &font, rc, &sf, &br);
 }
 
 void rebuild_buttons(UiState* st, int W, int H) {
     if (!st) return;
     st->buttons.clear();
-    const int pad = 22;
-    const int colGap = 14;
-    const int halfW = (W - pad * 2 - colGap) / 2;
-    const int leftX = pad;
-    const int rightX = pad + halfW + colGap;
 
-    // Card 1 (Left Top): Clean ID & Password
-    st->buttons.push_back({BTN_COPY_ID,      {leftX + halfW - 96, 128, leftX + halfW - 16, 158}, L"Salin ID", true, false, false});
-    st->buttons.push_back({BTN_COPY_GLOBAL,  {leftX + halfW - 96, 174, leftX + halfW - 16, 202}, L"Salin Relay", false, false, false});
-    st->buttons.push_back({BTN_TOGGLE_PW_EYE,{leftX + halfW - 168, 244, leftX + halfW - 98, 272},
-                           g_password_visible ? L"Sembunyi" : L"Lihat PW", false, false, false});
-    st->buttons.push_back({BTN_COPY_PW,      {leftX + halfW - 92, 244, leftX + halfW - 16, 272}, L"Salin PW", false, false, false});
-    st->buttons.push_back({BTN_COPY_ALL_CRED,{leftX + 16, 284, leftX + 162, 314}, L"Salin ID + Password", true, false, false});
-    st->buttons.push_back({BTN_ROTATE_PW,    {leftX + 170, 284, leftX + halfW - 16, 314}, L"Acak Password", false, false, false});
+    const int sideW = 224;
+    // Sidebar Navigation Tabs
+    st->buttons.push_back({BTN_TAB_ACCESS,  {16, 108, sideW - 16, 152}, L"  Akses & ID Koneksi",
+                           st->active_tab == TAB_ACCESS ? 5 : 4});
+    st->buttons.push_back({BTN_TAB_DISPLAY, {16, 160, sideW - 16, 204}, L"  Layar 120Hz & On-Mic",
+                           st->active_tab == TAB_DISPLAY_AUDIO ? 5 : 4});
+    st->buttons.push_back({BTN_TAB_BUNDLE,  {16, 212, sideW - 16, 256}, L"  Bundled DLL & Driver",
+                           st->active_tab == TAB_BUNDLE_DRIVER ? 5 : 4});
+    st->buttons.push_back({BTN_TAB_DIAG,    {16, 264, sideW - 16, 308}, L"  Diagnostik & Keamanan",
+                           st->active_tab == TAB_DIAGNOSTICS ? 5 : 4});
 
-    // Card 3 (Left Bottom): Virtual Device & On-Mic
-    st->buttons.push_back({BTN_ONMIC_SETUP,  {leftX + 16, 456, leftX + halfW - 16, 488},
-                           g_onmic_busy ? L"Mengaktifkan On-Mic..." : L"Aktifkan On-Mic & Virtual Audio",
-                           false, true, false});
-    st->buttons.push_back({BTN_VDD_BOOST,    {leftX + 16, 496, leftX + halfW - 16, 526},
-                           L"Segarkan Virtual Display 120Hz + AVC444", false, false, false});
+    // Bottom Sidebar Quick Actions
+    st->buttons.push_back({BTN_HIDE_TRAY,   {16, H - 108, sideW - 16, H - 68}, L"Sembunyikan ke Tray", 0});
+    st->buttons.push_back({BTN_EXIT_APP,    {16, H - 60,  sideW - 16, H - 20}, L"Keluar Host Agent", 3});
 
-    // Card 4 (Right Bottom): Quick Controls
-    st->buttons.push_back({BTN_TOGGLE_QUIC,  {rightX + 16, 456, rightX + halfW - 16, 488},
-                           st->quic_running ? L"Hentikan QUIC Responder" : L"Mulai QUIC Responder",
-                           false, false, false});
-    st->buttons.push_back({BTN_HIDE_TRAY,    {rightX + 16, 496, rightX + (halfW / 2) - 4, 526},
-                           L"Sembunyi ke Tray", false, false, false});
-    st->buttons.push_back({BTN_EXIT_APP,     {rightX + (halfW / 2) + 4, 496, rightX + halfW - 16, 526},
-                           L"Keluar", false, false, true});
-    (void)H;
+    const int mainL = sideW + 18;
+    const int mainR = W - 20;
+    const int mainW = mainR - mainL;
+    const int colW = (mainW - 16) / 2;
+    const int col2L = mainL + colW + 16;
+
+    if (st->active_tab == TAB_ACCESS) {
+        // Hero Card 1 (Left): ID Global Relay & ID LAN
+        st->buttons.push_back({BTN_COPY_GLOBAL, {mainL + colW - 122, 140, mainL + colW - 16, 178}, L"Salin Global ID", 1});
+        st->buttons.push_back({BTN_COPY_ID,     {mainL + colW - 122, 212, mainL + colW - 16, 250}, L"Salin ID LAN", 0});
+        st->buttons.push_back({BTN_PING_RELAY,  {mainL + 16, 276, mainL + colW - 16, 314}, L"Sinkronkan ID ke Cloud Relay Sekarang", 2});
+
+        // Hero Card 2 (Right): Windows User & Clean Password
+        st->buttons.push_back({BTN_TOGGLE_PW_EYE,{col2L + colW - 186, 198, col2L + colW - 102, 234},
+                               g_password_visible ? L"Sembunyi" : L"Lihat PW", 0});
+        st->buttons.push_back({BTN_COPY_PW,      {col2L + colW - 94, 198, col2L + colW - 16, 234}, L"Salin PW", 1});
+        st->buttons.push_back({BTN_COPY_ALL_CRED,{col2L + 16, 250, col2L + (colW / 2) - 4, 286}, L"Salin Paket Lengkap", 0});
+        st->buttons.push_back({BTN_ROTATE_PW,    {col2L + (colW / 2) + 4, 250, col2L + colW - 16, 286}, L"Acak Password Baru", 0});
+        st->buttons.push_back({BTN_SYNC_WINDOWS_RDP, {col2L + 16, 294, col2L + colW - 16, 330},
+                               L"Aktifkan Akses RDP (:3389) & Terapkan Password ke Windows", 2});
+    } else if (st->active_tab == TAB_DISPLAY_AUDIO) {
+        st->buttons.push_back({BTN_VDD_BOOST,   {mainL + 20, 252, mainR - 20, 296},
+                               L"Terapkan Akselerasi Virtual Display 120Hz + GPU AVC 4:4:4 + ClearType", 1});
+        st->buttons.push_back({BTN_ONMIC_SETUP, {mainL + 20, 430, mainR - 20, 476},
+                               g_onmic_busy ? L"Sedang Mengonfigurasi On-Mic & Audio..." : L"Aktifkan On-Mic RDP AudioCapture + Jembatan Audio QUIC :4433", 2});
+    } else if (st->active_tab == TAB_BUNDLE_DRIVER) {
+        st->buttons.push_back({BTN_REEXTRACT_BUNDLE, {mainL + 20, 430, mainL + (mainW / 2) - 8, 476},
+                               L"Ekstrak & Pasang Ulang Semua DLL/Driver Internal", 1});
+        st->buttons.push_back({BTN_OPEN_BUNDLE_DIR,  {mainL + (mainW / 2) + 8, 430, mainR - 20, 476},
+                               L"Buka Folder Bundle di Explorer", 0});
+    } else if (st->active_tab == TAB_DIAGNOSTICS) {
+        st->buttons.push_back({BTN_TOGGLE_QUIC, {mainL + 20, 430, mainL + (mainW / 2) - 8, 476},
+                               st->quic_running ? L"Hentikan QUIC Responder (:4433)" : L"Mulai QUIC Responder (:4433)", 1});
+        st->buttons.push_back({BTN_PING_RELAY,  {mainL + (mainW / 2) + 8, 430, mainR - 20, 476},
+                               L"Tes Koneksi Cloud Relay (api.xydeskremote.biz.id)", 2});
+    }
 }
 
 void paint_dashboard(HWND hwnd, HDC hdc) {
@@ -649,172 +851,313 @@ void paint_dashboard(HWND hwnd, HDC hdc) {
     HDC mem = CreateCompatibleDC(hdc);
     HBITMAP bmp = CreateCompatibleBitmap(hdc, W, H);
     HBITMAP oldBmp = (HBITMAP)SelectObject(mem, bmp);
-    SetBkMode(mem, TRANSPARENT);
 
-    // 1. Background Fill
-    HBRUSH bgBr = CreateSolidBrush(kBg);
-    FillRect(mem, &rc, bgBr);
-    DeleteObject(bgBr);
+    {
+        Gdiplus::Graphics g(mem);
+        g.SetSmoothingMode(Gdiplus::SmoothingModeAntiAlias);
+        g.SetTextRenderingHint(Gdiplus::TextRenderingHintClearTypeGridFit);
 
-    // 2. Top Header Bar
-    draw_round_box(mem, 16, 14, W - 16, 76, 16, kHeaderBg, kCardEdge);
-    draw_round_box(mem, 28, 24, 68, 64, 12, RGB(0x1D, 0x28, 0x3A), kAccent);
-    draw_text(mem, g_fBrand, kText, 28, 24, 68, 64, L"XY", DT_CENTER | DT_VCENTER | DT_SINGLELINE);
+        const Gdiplus::Color cBg(255, 9, 11, 16);
+        const Gdiplus::Color cSideBg(255, 13, 16, 23);
+        const Gdiplus::Color cCard(255, 16, 20, 29);
+        const Gdiplus::Color cCardInner(255, 11, 14, 21);
+        const Gdiplus::Color cEdge(255, 34, 42, 58);
+        const Gdiplus::Color cHiEdge(255, 56, 189, 248);
+        const Gdiplus::Color cWhite(255, 248, 250, 252);
+        const Gdiplus::Color cMuted(255, 148, 163, 184);
+        const Gdiplus::Color cDim(255, 100, 116, 139);
+        const Gdiplus::Color cCyan(255, 56, 189, 248);
+        const Gdiplus::Color cEmerald(255, 16, 185, 129);
+        const Gdiplus::Color cEmeraldBg(255, 11, 38, 29);
+        const Gdiplus::Color cAmber(255, 245, 158, 11);
+        const Gdiplus::Color cDanger(255, 239, 68, 68);
 
-    draw_text(mem, g_fTitle, kText, 80, 21, 430, 46, L"XyDesk Remote Host");
-    draw_text(mem, g_fSub, kTextSub, 80, 45, 480, 66,
-              L"Native Windows Agent  ·  Clean ID/PW  ·  E2EE  ·  Virtual Device & On-Mic");
+        // Background
+        Gdiplus::SolidBrush bgBr(cBg);
+        g.FillRectangle(&bgBr, 0, 0, W, H);
 
-    // Live Online Pill in Header Right
-    const bool online = st && st->quic_running;
-    draw_round_box(mem, W - 246, 28, W - 30, 62, 17,
-                   online ? kOkBg : RGB(0x2A, 0x14, 0x18),
-                   online ? kOk : kDanger);
-    HBRUSH dotBr = CreateSolidBrush(online ? kOk : kDanger);
-    HBRUSH oldBr = (HBRUSH)SelectObject(mem, dotBr);
-    Ellipse(mem, W - 232, 39, W - 220, 51);
-    SelectObject(mem, oldBr);
-    DeleteObject(dotBr);
-    draw_text(mem, g_fBodyBold, online ? kOk : kDanger, W - 212, 28, W - 38, 62,
-              online ? L"ONLINE · PORT 4433 & 3389" : L"RESPONDER BERHENTI");
+        const int sideW = 224;
+        // Left Sidebar Panel
+        gdi_fill_card(g, 0, 0, sideW, H, 0.0f, cSideBg, cEdge, 1.0f);
 
-    const int pad = 22;
-    const int colGap = 14;
-    const int halfW = (W - pad * 2 - colGap) / 2;
-    const int leftX = pad;
-    const int rightX = pad + halfW + colGap;
+        // Brand Logo in Sidebar
+        gdi_fill_gradient_card(g, 18, 20, 62, 64, 12.0f,
+                               Gdiplus::Color(255, 30, 58, 95),
+                               Gdiplus::Color(255, 15, 23, 42), cCyan);
+        gdi_text(g, L"Segoe UI", 18.0f, Gdiplus::FontStyleBold, cWhite, 18, 20, 62, 64, L"XY",
+                 Gdiplus::StringAlignmentCenter, Gdiplus::StringAlignmentCenter);
+        gdi_text(g, L"Segoe UI", 16.0f, Gdiplus::FontStyleBold, cWhite, 72, 20, sideW - 10, 44, L"XyDesk Host");
+        gdi_text(g, L"Segoe UI", 11.5f, Gdiplus::FontStyleRegular, cEmerald, 72, 43, sideW - 10, 62, L"v2.4 · All-in-One EXE");
 
-    // =========================================================================
-    // CARD 1 (Left Top): CLEAN ID & PASSWORD
-    // =========================================================================
-    draw_round_box(mem, leftX, 88, leftX + halfW, 328, 16, kCard, kCardEdge);
-    draw_text(mem, g_fCardHdr, kAccent, leftX + 16, 98, leftX + halfW - 16, 118,
-              L"CLEAN ID & PASSWORD  ·  AKSES INSTAN");
+        gdi_text(g, L"Segoe UI", 10.5f, Gdiplus::FontStyleBold, cDim, 20, 82, sideW - 16, 102, L"MENU UTAMA HOST");
 
-    // Local 10-digit ID box
-    draw_round_box(mem, leftX + 14, 122, leftX + halfW - 14, 164, 12, kCardInner, kCardEdge);
-    draw_text(mem, g_fSmall, kTextDim, leftX + 24, 124, leftX + 110, 142, L"ID PC (LAN)");
-    draw_text(mem, g_fBigId, kText, leftX + 24, 136, leftX + halfW - 104, 162,
-              to_wide(g_meta.pc_id));
+        // Sidebar System Summary Card
+        gdi_fill_card(g, 16, 330, sideW - 16, H - 122, 12.0f, cCardInner, cEdge);
+        gdi_text(g, L"Segoe UI", 11.0f, Gdiplus::FontStyleBold, cCyan, 26, 340, sideW - 24, 360, L"STATUS LAYANAN AKTIF");
+        gdi_text(g, L"Segoe UI", 11.5f, Gdiplus::FontStyleRegular, g_rdp_listening ? cEmerald : cAmber,
+                 26, 366, sideW - 24, 386,
+                 g_rdp_listening ? L"\u25CF RDP TCP :3389 Aktif" : L"\u25CF RDP :3389 Belum Aktif");
+        gdi_text(g, L"Segoe UI", 11.5f, Gdiplus::FontStyleRegular, (st && st->quic_running) ? cEmerald : cAmber,
+                 26, 390, sideW - 24, 410,
+                 (st && st->quic_running) ? L"\u25CF QUIC UDP :4433 Aktif" : L"\u25CF QUIC :4433 Berhenti");
+        gdi_text(g, L"Segoe UI", 11.5f, Gdiplus::FontStyleRegular, g_relay_online ? cEmerald : cMuted,
+                 26, 414, sideW - 24, 434,
+                 g_relay_online ? L"\u25CF Cloud Relay Terhubung" : L"\u25CF Cloud Relay Siaga");
+        gdi_text(g, L"Segoe UI", 11.5f, Gdiplus::FontStyleRegular, g_bundle_extracted ? cEmerald : cAmber,
+                 26, 438, sideW - 24, 458,
+                 fmt(L"\u25CF %d Modul Internal Siap", g_bundle_files_count));
 
-    // Global ID box
-    draw_round_box(mem, leftX + 14, 170, leftX + halfW - 14, 206, 10, kCardInner, kCardEdge);
-    draw_text(mem, g_fSmall, kTextDim, leftX + 24, 170, leftX + 135, 206, L"ID Global Relay");
-    draw_text(mem, g_fMono, kAccent, leftX + 135, 170, leftX + halfW - 104, 206,
-              to_wide(xydesk_global_pc_id()));
+        // Top Main Header Bar
+        const int mainL = sideW + 18;
+        const int mainR = W - 20;
+        const int mainW = mainR - mainL;
+        const int colW = (mainW - 16) / 2;
+        const int col2L = mainL + colW + 16;
 
-    // Username + Clean Password box
-    draw_round_box(mem, leftX + 14, 212, leftX + halfW - 14, 276, 12, kCardInner, kCardEdge);
-    draw_text(mem, g_fSmall, kTextSub, leftX + 24, 216, leftX + halfW - 24, 236,
-              fmt(L"Windows User: %s   ·   IP: %s",
-                  to_wide(g_username).c_str(), to_wide(g_meta.primary_ip).c_str()));
-    std::wstring pwDisplay = g_password_visible ? to_wide(g_password) : L"\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022";
-    draw_text(mem, g_fMono, kOk, leftX + 24, 242, leftX + halfW - 174, 272,
-              fmt(L"PW: %s", pwDisplay.c_str()));
+        gdi_fill_card(g, mainL, 16, mainR, 76, 14.0f, cCard, cEdge);
+        gdi_text(g, L"Segoe UI", 18.0f, Gdiplus::FontStyleBold, cWhite, mainL + 20, 22, mainR - 250, 48,
+                 L"XyDesk Remote Host Agent  —  Windows Studio Edition");
+        gdi_text(g, L"Segoe UI", 12.0f, Gdiplus::FontStyleRegular, cMuted, mainL + 20, 47, mainR - 250, 68,
+                 fmt(L"Host: %s   ·   GPU: %s [%s]   ·   1-File Bundled Runtime",
+                     to_wide(g_meta.hostname).c_str(),
+                     to_wide(g_meta.gpu_name).c_str(),
+                     to_wide(g_meta.gpu_encoder).c_str()));
 
-    // =========================================================================
-    // CARD 2 (Right Top): ENKRIPSI & PROTEKSI END-TO-END
-    // =========================================================================
-    draw_round_box(mem, rightX, 88, rightX + halfW, 328, 16, kCard, kCardEdge);
-    draw_text(mem, g_fCardHdr, kOk, rightX + 16, 98, rightX + halfW - 16, 118,
-              L"ENKRIPSI & KEAMANAN  ·  END-TO-END SECURITY");
+        // Live Status Pill in Top Right
+        const bool allReady = (st && st->quic_running) || g_rdp_listening;
+        gdi_fill_card(g, mainR - 228, 28, mainR - 16, 64, 18.0f,
+                      allReady ? cEmeraldBg : Gdiplus::Color(255, 42, 20, 24),
+                      allReady ? cEmerald : cDanger);
+        gdi_text(g, L"Segoe UI", 12.0f, Gdiplus::FontStyleBold, allReady ? cEmerald : cDanger,
+                 mainR - 220, 28, mainR - 24, 64,
+                 allReady ? L"\u25CF  SIAP KONEKSI DARI HP" : L"\u25CF  LAYANAN BERHENTI",
+                 Gdiplus::StringAlignmentCenter, Gdiplus::StringAlignmentCenter);
 
-    draw_round_box(mem, rightX + 14, 122, rightX + halfW - 14, 172, 12, kCardInner, kCardEdge);
-    draw_text(mem, g_fBodyBold, kText, rightX + 24, 126, rightX + halfW - 24, 148,
-              L"E2EE AES-256-GCM  +  QUIC v1 TLS 1.3");
-    draw_text(mem, g_fSmall, kOk, rightX + 24, 148, rightX + halfW - 24, 168,
-              L"Aktif  ·  Enkripsi perangkat-ke-perangkat tanpa perantara");
+        // =====================================================================
+        // TAB 0: AKSES & ID KONEKSI
+        // =====================================================================
+        if (!st || st->active_tab == TAB_ACCESS) {
+            // Card 1: ID Global & ID LAN
+            gdi_fill_gradient_card(g, mainL, 90, mainL + colW, 344, 16.0f,
+                                   Gdiplus::Color(255, 19, 26, 39), cCard, cEdge);
+            gdi_text(g, L"Segoe UI", 11.5f, Gdiplus::FontStyleBold, cCyan,
+                     mainL + 18, 102, mainL + colW - 18, 122,
+                     L"ID KONEKSI PC  ·  MASUKKAN DI APLIKASI ANDROID");
 
-    draw_round_box(mem, rightX + 14, 178, rightX + halfW - 14, 228, 12, kCardInner, kCardEdge);
-    draw_text(mem, g_fSmall, kTextDim, rightX + 24, 182, rightX + halfW - 24, 200,
-              L"Kunci Sidik Jari Host (Host Key Fingerprint):");
-    draw_text(mem, g_fMonoSm, kAccent, rightX + 24, 200, rightX + halfW - 24, 224,
-              to_wide(g_enc_fingerprint));
+            // Global Relay ID Box
+            gdi_fill_card(g, mainL + 16, 130, mainL + colW - 16, 188, 12.0f, cCardInner, cEdge);
+            gdi_text(g, L"Segoe UI", 11.0f, Gdiplus::FontStyleRegular, cMuted,
+                     mainL + 28, 134, mainL + colW - 130, 152, L"ID Global (Lintas Jaringan / Internet):");
+            gdi_text(g, L"Consolas", 23.0f, Gdiplus::FontStyleBold, cCyan,
+                     mainL + 28, 152, mainL + colW - 130, 184, to_wide(xydesk_global_pc_id()));
 
-    draw_round_box(mem, rightX + 14, 234, rightX + halfW - 14, 314, 12, kCardInner, kCardEdge);
-    draw_text(mem, g_fSmall, kTextSub, rightX + 24, 240, rightX + halfW - 24, 260,
-              fmt(L"Host: %s   ·   GPU: %s [%s]",
-                  to_wide(g_meta.hostname).c_str(),
-                  to_wide(g_meta.gpu_name).c_str(),
-                  to_wide(g_meta.gpu_encoder).c_str()));
-    draw_text(mem, g_fSmall, kTextSub, rightX + 24, 264, rightX + halfW - 24, 284,
-              L"Transport: Direct LAN / Tailscale + Cloud Relay Auto-Traversal");
-    draw_text(mem, g_fSmall, kOk, rightX + 24, 288, rightX + halfW - 24, 308,
-              L"NLA + Anti-BruteForce + Zero-Console Native Subsystem");
+            // Local 10-Digit ID Box
+            gdi_fill_card(g, mainL + 16, 202, mainL + colW - 16, 260, 12.0f, cCardInner, cEdge);
+            gdi_text(g, L"Segoe UI", 11.0f, Gdiplus::FontStyleRegular, cMuted,
+                     mainL + 28, 206, mainL + colW - 130, 224, L"ID 10-Digit (Satu Wi-Fi / LAN Cepat):");
+            gdi_text(g, L"Consolas", 23.0f, Gdiplus::FontStyleBold, cWhite,
+                     mainL + 28, 224, mainL + colW - 130, 256, to_wide(g_meta.pc_id));
 
-    // =========================================================================
-    // CARD 3 (Left Bottom): VIRTUAL DEVICE & ON-MIC AUDIO BRIDGE
-    // =========================================================================
-    draw_round_box(mem, leftX, 340, leftX + halfW, 538, 16, kCard, kCardEdge);
-    draw_text(mem, g_fCardHdr, kAccent, leftX + 16, 350, leftX + halfW - 16, 370,
-              L"VIRTUAL DEVICE  ·  LAYAR 120HZ & ON-MIC BRIDGE");
+            gdi_text(g, L"Segoe UI", 11.5f, Gdiplus::FontStyleRegular, cMuted,
+                     mainL + 20, 320, mainL + colW - 20, 338,
+                     fmt(L"IP LAN: %s   ·   Tailscale: %s",
+                         to_wide(g_meta.primary_ip).c_str(),
+                         g_tailscale_ip[0] ? to_wide(g_tailscale_ip).c_str() : L"Tidak aktif (Opsional)"));
 
-    draw_round_box(mem, leftX + 14, 376, leftX + halfW - 14, 410, 10, kCardInner, kCardEdge);
-    draw_text(mem, g_fBodyBold, kText, leftX + 24, 376, leftX + 210, 410,
-              L"Virtual Display 120Hz");
-    draw_text(mem, g_fSmall, g_vdd_ready ? kOk : kWarn, leftX + 210, 376, leftX + halfW - 22, 410,
-              L"AKTIF · DWM 120FPS + AVC 4:4:4", DT_RIGHT | DT_VCENTER | DT_SINGLELINE);
+            // Card 2: Username & Clean Access Password
+            gdi_fill_gradient_card(g, col2L, 90, mainR, 344, 16.0f,
+                                   Gdiplus::Color(255, 19, 26, 39), cCard, cEdge);
+            gdi_text(g, L"Segoe UI", 11.5f, Gdiplus::FontStyleBold, cEmerald,
+                     col2L + 18, 102, mainR - 18, 122,
+                     L"KREDENSIAL AKSES WINDOWS  ·  OTOMATIS & BERSIH");
 
-    draw_round_box(mem, leftX + 14, 414, leftX + halfW - 14, 448, 10, kCardInner, kCardEdge);
-    draw_text(mem, g_fBodyBold, kText, leftX + 24, 414, leftX + 210, 448,
-              L"Virtual Mic & On-Mic");
-    draw_text(mem, g_fSmall, g_onmic_ready ? kOk : kWarn, leftX + 210, 414, leftX + halfW - 22, 448,
-              g_onmic_ready ? L"AKTIF · RDP + QUIC :4433" : L"KLIK AKTIFKAN DI BAWAH",
-              DT_RIGHT | DT_VCENTER | DT_SINGLELINE);
+            gdi_fill_card(g, col2L + 16, 130, mainR - 16, 178, 12.0f, cCardInner, cEdge);
+            gdi_text(g, L"Segoe UI", 11.0f, Gdiplus::FontStyleRegular, cMuted,
+                     col2L + 28, 134, mainR - 28, 152, L"Username Akun Windows:");
+            gdi_text(g, L"Consolas", 18.0f, Gdiplus::FontStyleBold, cWhite,
+                     col2L + 28, 152, mainR - 28, 174, to_wide(g_username));
 
-    // =========================================================================
-    // CARD 4 (Right Bottom): TELEMETRI & KONTROL AGENT
-    // =========================================================================
-    draw_round_box(mem, rightX, 340, rightX + halfW, 538, 16, kCard, kCardEdge);
-    draw_text(mem, g_fCardHdr, kTextSub, rightX + 16, 350, rightX + halfW - 16, 370,
-              L"TELEMETRI STREAMING  ·  KONTROL HOST");
+            gdi_fill_card(g, col2L + 16, 188, mainR - 16, 242, 12.0f, cCardInner, cEdge);
+            gdi_text(g, L"Segoe UI", 11.0f, Gdiplus::FontStyleRegular, cMuted,
+                     col2L + 28, 192, col2L + colW - 194, 210, L"Password Akses Instan:");
+            std::wstring pwDisplay = g_password_visible ? to_wide(g_password) : L"\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022";
+            gdi_text(g, L"Consolas", 20.0f, Gdiplus::FontStyleBold, cEmerald,
+                     col2L + 28, 210, col2L + colW - 194, 238, pwDisplay);
 
-    draw_round_box(mem, rightX + 14, 376, rightX + halfW - 14, 448, 10, kCardInner, kCardEdge);
-    draw_text(mem, g_fBodyBold, kText, rightX + 24, 382, rightX + halfW - 24, 404,
-              fmt(L"Paket QUIC Dilayani: %llu paket  (UDP :%u)",
-                  (unsigned long long)xydesk_quic_packets_served(),
-                  (unsigned)g_meta.quic_port));
-    draw_text(mem, g_fSmall, kTextSub, rightX + 24, 406, rightX + halfW - 24, 426,
-              L"Sinkronisasi File HP: Otomatis masuk ke folder Downloads PC");
-    draw_text(mem, g_fSmall, kAccent, rightX + 24, 426, rightX + halfW - 24, 444,
-              L"Suara PC (WASAPI 24kHz) + Input Mic HP (XYM1) Berjalan Otomatis");
-
-    // =========================================================================
-    // RENDER INTERACTIVE PILL BUTTONS
-    // =========================================================================
-    if (st) {
-        for (const auto& b : st->buttons) {
-            const bool hov = (st->hovered_btn == b.id);
-            COLORREF fill = kBtnBg;
-            COLORREF edge = hov ? kCardHiEdge : kCardEdge;
-            COLORREF txtCol = kText;
-            if (b.primary) {
-                fill = hov ? kAccentHover : kAccent;
-                edge = fill;
-                txtCol = RGB(0x09, 0x0D, 0x14);
-            } else if (b.accentGreen) {
-                fill = hov ? RGB(0x16, 0x42, 0x2B) : kOkBg;
-                edge = kOk;
-                txtCol = kOk;
-            } else if (b.danger) {
-                fill = hov ? RGB(0x3B, 0x16, 0x1B) : RGB(0x24, 0x12, 0x16);
-                edge = kDanger;
-                txtCol = kDanger;
-            } else if (hov) {
-                fill = kBtnHover;
-            }
-            draw_round_box(mem, b.rc.left, b.rc.top, b.rc.right, b.rc.bottom, 10, fill, edge);
-            draw_text(mem, g_fBodyBold, txtCol, b.rc.left, b.rc.top, b.rc.right, b.rc.bottom,
-                      b.label, DT_CENTER | DT_VCENTER | DT_SINGLELINE);
+            // Bottom Wide Card: Panduan & Status Kesiapan Koneksi
+            gdi_fill_card(g, mainL, 358, mainR, H - 56, 16.0f, cCard, cEdge);
+            gdi_text(g, L"Segoe UI", 12.0f, Gdiplus::FontStyleBold, cWhite,
+                     mainL + 20, 370, mainR - 20, 392,
+                     L"CARA TERHUBUNG DARI APLIKASI ANDROID XYDESK REMOTE:");
+            gdi_text(g, L"Segoe UI", 12.5f, Gdiplus::FontStyleRegular, cMuted,
+                     mainL + 20, 396, mainR - 20, 420,
+                     L"1. Buka aplikasi XyDesk Remote di HP -> Pilih mode 'Koneksi PC' (untuk ID Global/LAN) atau 'Koneksi RDP' (untuk IP/Tailscale).");
+            gdi_text(g, L"Segoe UI", 12.5f, Gdiplus::FontStyleRegular, cMuted,
+                     mainL + 20, 422, mainR - 20, 446,
+                     L"2. Masukkan ID Global (" + to_wide(xydesk_global_pc_id()) + L") atau ID LAN (" + to_wide(g_meta.pc_id) + L") beserta Username & Password di atas.");
+            gdi_text(g, L"Segoe UI", 12.5f, Gdiplus::FontStyleRegular, cEmerald,
+                     mainL + 20, 448, mainR - 20, 472,
+                     L"3. Seluruh DLL, Library, Driver Virtual Display 120Hz, dan Audio On-Mic sudah ter-bundle otomatis di dalam EXE ini.");
+            gdi_text(g, L"Consolas", 11.5f, Gdiplus::FontStyleRegular, cCyan,
+                     mainL + 20, 478, mainR - 20, 502,
+                     fmt(L"Keamanan E2EE: AES-256-GCM + TLS 1.3   |   %s", to_wide(g_enc_fingerprint).c_str()));
         }
-    }
+        // =====================================================================
+        // TAB 1: LAYAR 120HZ & ON-MIC
+        // =====================================================================
+        else if (st->active_tab == TAB_DISPLAY_AUDIO) {
+            gdi_fill_card(g, mainL, 90, mainR, 312, 16.0f, cCard, cEdge);
+            gdi_text(g, L"Segoe UI", 13.0f, Gdiplus::FontStyleBold, cCyan,
+                     mainL + 20, 104, mainR - 20, 128,
+                     L"VIRTUAL DISPLAY 120HZ  ·  HARDWARE GPU AVC 4:4:4 ENGINE");
+            gdi_fill_card(g, mainL + 20, 136, mainR - 20, 240, 12.0f, cCardInner, cEdge);
+            gdi_text(g, L"Segoe UI", 13.5f, Gdiplus::FontStyleBold, cWhite,
+                     mainL + 34, 146, mainR - 34, 170,
+                     fmt(L"Adapter Grafis Terdeteksi: %s  [Encoder: %s]",
+                         to_wide(g_meta.gpu_name).c_str(), to_wide(g_meta.gpu_encoder).c_str()));
+            gdi_text(g, L"Segoe UI", 12.5f, Gdiplus::FontStyleRegular, cMuted,
+                     mainL + 34, 174, mainR - 34, 198,
+                     L"Mengaktifkan kebijakan DWM Frame Interval 120Hz, Hardware H.264/AVC 4:4:4 Full-Chroma, dan ClearType.");
+            gdi_text(g, L"Segoe UI", 12.5f, Gdiplus::FontStyleBold, cEmerald,
+                     mainL + 34, 202, mainR - 34, 226,
+                     L"Status: AKTIF  ·  Siap merender hingga 120 FPS ke klien Android XyDesk Remote.");
 
-    // =========================================================================
-    // BOTTOM STATUS BAR (NO CONSOLE BOX!)
-    // =========================================================================
-    draw_round_box(mem, pad, 548, W - pad, H - 14, 12, kHeaderBg, kCardEdge);
-    draw_text(mem, g_fSmall, kOk, pad + 14, 548, W - pad - 14, H - 14,
-              L"\u25CF  " + g_toast_msg);
+            gdi_fill_card(g, mainL, 326, mainR, H - 56, 16.0f, cCard, cEdge);
+            gdi_text(g, L"Segoe UI", 13.0f, Gdiplus::FontStyleBold, cEmerald,
+                     mainL + 20, 340, mainR - 20, 364,
+                     L"VIRTUAL MICROPHONE & ON-MIC AUDIO BRIDGE (WASAPI 24KHZ + QUIC :4433)");
+            gdi_fill_card(g, mainL + 20, 372, mainR - 20, 420, 12.0f, cCardInner, cEdge);
+            gdi_text(g, L"Segoe UI", 12.5f, Gdiplus::FontStyleBold, g_onmic_ready ? cEmerald : cAmber,
+                     mainL + 34, 382, mainR - 34, 410,
+                     g_onmic_ready
+                         ? L"Status On-Mic: AKTIF (fDisableAudioCapture=0 · Suara PC & Mic HP Terhubung Otomatis)"
+                         : L"Status On-Mic: Klik tombol di bawah untuk membuka kunci mikrofon RDP & Virtual Audio");
+        }
+        // =====================================================================
+        // TAB 2: BUNDLED DLL & DRIVER
+        // =====================================================================
+        else if (st->active_tab == TAB_BUNDLE_DRIVER) {
+            gdi_fill_card(g, mainL, 90, mainR, H - 56, 16.0f, cCard, cEdge);
+            gdi_text(g, L"Segoe UI", 13.5f, Gdiplus::FontStyleBold, cCyan,
+                     mainL + 20, 104, mainR - 20, 130,
+                     L"SINGLE-EXE EMBEDDED BUNDLE  ·  SELURUH DLL, LIBRARY, & DRIVER TERTANAM");
+            gdi_text(g, L"Segoe UI", 12.0f, Gdiplus::FontStyleRegular, cMuted,
+                     mainL + 20, 132, mainR - 20, 154,
+                     fmt(L"Lokasi Ekstraksi Otomatis: %s", to_wide(g_bundle_dir_ascii).c_str()));
+
+            struct BundleRow { const wchar_t* name; const wchar_t* desc; const wchar_t* status; };
+            BundleRow rows[4] = {
+                {L"1. xydesk_host_core.dll", L"Engine Native C++17 DXGI GPU Discovery + Policy AVC 4:4:4 + ClearType", L"TERTANAM & AKTIF"},
+                {L"2. xydesk_quic.dll",      L"Responder QUIC v1 UDP :4433 + WASAPI 24kHz Loopback + XYM1 Mic Bridge", L"TERTANAM & AKTIF"},
+                {L"3. XyDeskVDD.inf",        L"Profil Driver Virtual Display 120Hz (Indirect Display Driver Manifest)", L"TEREKSTRAK SIAP"},
+                {L"4. XyDeskAudioMic.ps1",   L"Helper Otomatis Kebijakan Virtual Audio, Kamera & Mikrofon RDP", L"TEREKSTRAK SIAP"}
+            };
+            int yPos = 166;
+            for (int i = 0; i < 4; ++i) {
+                gdi_fill_card(g, mainL + 20, yPos, mainR - 20, yPos + 56, 12.0f, cCardInner, cEdge);
+                gdi_text(g, L"Consolas", 13.5f, Gdiplus::FontStyleBold, cWhite,
+                         mainL + 34, yPos + 6, mainL + 300, yPos + 30, rows[i].name);
+                gdi_text(g, L"Segoe UI", 11.5f, Gdiplus::FontStyleRegular, cMuted,
+                         mainL + 34, yPos + 30, mainR - 180, yPos + 50, rows[i].desc);
+                gdi_text(g, L"Segoe UI", 11.5f, Gdiplus::FontStyleBold, cEmerald,
+                         mainR - 180, yPos + 16, mainR - 34, yPos + 40, rows[i].status,
+                         Gdiplus::StringAlignmentFar, Gdiplus::StringAlignmentCenter);
+                yPos += 64;
+            }
+        }
+        // =====================================================================
+        // TAB 3: DIAGNOSTIK & KEAMANAN
+        // =====================================================================
+        else if (st->active_tab == TAB_DIAGNOSTICS) {
+            gdi_fill_card(g, mainL, 90, mainR, H - 56, 16.0f, cCard, cEdge);
+            gdi_text(g, L"Segoe UI", 13.5f, Gdiplus::FontStyleBold, cCyan,
+                     mainL + 20, 104, mainR - 20, 130,
+                     L"DIAGNOSTIK JARINGAN, PORT, & TELEMETRI STREAMING REAL-TIME");
+
+            gdi_fill_card(g, mainL + 20, 142, mainR - 20, 224, 12.0f, cCardInner, cEdge);
+            gdi_text(g, L"Segoe UI", 13.0f, Gdiplus::FontStyleBold, g_rdp_listening ? cEmerald : cAmber,
+                     mainL + 34, 152, mainR - 34, 176,
+                     fmt(L"Listener RDP (TCP/UDP :%u): %s",
+                         (unsigned)g_meta.rdp_port,
+                         g_rdp_listening ? L"LISTENING (Siap menerima sesi RDP dari HP)" : L"Belum terdeteksi — Klik tombol Aktifkan Akses RDP di Tab 1"));
+            gdi_text(g, L"Segoe UI", 13.0f, Gdiplus::FontStyleBold, (st && st->quic_running) ? cEmerald : cAmber,
+                     mainL + 34, 184, mainR - 34, 210,
+                     fmt(L"Responder QUIC & Audio (UDP :%u): %s   |   Paket Dilayani: %llu paket",
+                         (unsigned)g_meta.quic_port,
+                         (st && st->quic_running) ? L"AKTIF" : L"BERHENTI",
+                         (unsigned long long)xydesk_quic_packets_served()));
+
+            gdi_fill_card(g, mainL + 20, 236, mainR - 20, 318, 12.0f, cCardInner, cEdge);
+            gdi_text(g, L"Segoe UI", 13.0f, Gdiplus::FontStyleBold, g_relay_online ? cEmerald : cMuted,
+                     mainL + 34, 246, mainR - 34, 270,
+                     fmt(L"Direktori Cloud Relay (POST https://api.xydeskremote.biz.id/api/pc/relay): %s",
+                         g_relay_online ? L"TERHUBUNG (HTTP 200 OK)" : L"Menunggu sinkronisasi..."));
+            gdi_text(g, L"Consolas", 12.0f, Gdiplus::FontStyleRegular, cCyan,
+                     mainL + 34, 278, mainR - 34, 304,
+                     fmt(L"ID Global: %s   |   ID LAN: %s   |   IP LAN: %s   |   Tailscale: %s",
+                         to_wide(xydesk_global_pc_id()).c_str(),
+                         to_wide(g_meta.pc_id).c_str(),
+                         to_wide(g_meta.primary_ip).c_str(),
+                         g_tailscale_ip[0] ? to_wide(g_tailscale_ip).c_str() : L"-"));
+
+            gdi_fill_card(g, mainL + 20, 330, mainR - 20, 412, 12.0f, cCardInner, cEdge);
+            gdi_text(g, L"Segoe UI", 12.5f, Gdiplus::FontStyleBold, cWhite,
+                     mainL + 34, 340, mainR - 34, 364,
+                     L"Sinkronisasi File Otomatis (\\\\tsclient\\XyDesk -> Folder Downloads PC): AKTIF");
+            gdi_text(g, L"Consolas", 12.0f, Gdiplus::FontStyleRegular, cEmerald,
+                     mainL + 34, 372, mainR - 34, 398,
+                     fmt(L"Sidik Jari Kunci Host (E2EE): %s", to_wide(g_enc_fingerprint).c_str()));
+        }
+
+        // =====================================================================
+        // RENDER INTERACTIVE BUTTONS
+        // =====================================================================
+        if (st) {
+            for (const auto& b : st->buttons) {
+                const bool hov = (st->hovered_btn == b.id);
+                Gdiplus::Color fill(255, 26, 33, 48);
+                Gdiplus::Color edge = hov ? cHiEdge : cEdge;
+                Gdiplus::Color txtCol = cWhite;
+                Gdiplus::StringAlignment align = Gdiplus::StringAlignmentCenter;
+
+                if (b.style == 1) { // Primary Cyan
+                    fill = hov ? Gdiplus::Color(255, 14, 165, 233) : Gdiplus::Color(255, 2, 132, 199);
+                    edge = cCyan;
+                    txtCol = cWhite;
+                } else if (b.style == 2) { // Accent Emerald
+                    fill = hov ? Gdiplus::Color(255, 16, 68, 52) : cEmeraldBg;
+                    edge = cEmerald;
+                    txtCol = cEmerald;
+                } else if (b.style == 3) { // Danger
+                    fill = hov ? Gdiplus::Color(255, 69, 22, 28) : Gdiplus::Color(255, 42, 16, 21);
+                    edge = cDanger;
+                    txtCol = cDanger;
+                } else if (b.style == 4) { // Nav Item Inactive
+                    fill = hov ? Gdiplus::Color(255, 22, 28, 41) : Gdiplus::Color(0, 0, 0, 0);
+                    edge = hov ? cEdge : Gdiplus::Color(0, 0, 0, 0);
+                    txtCol = hov ? cWhite : cMuted;
+                    align = Gdiplus::StringAlignmentNear;
+                } else if (b.style == 5) { // Nav Item Active
+                    fill = Gdiplus::Color(255, 20, 36, 58);
+                    edge = cCyan;
+                    txtCol = cWhite;
+                    align = Gdiplus::StringAlignmentNear;
+                } else if (hov) {
+                    fill = Gdiplus::Color(255, 36, 46, 66);
+                }
+
+                gdi_fill_card(g, b.rc.left, b.rc.top, b.rc.right, b.rc.bottom, 10.0f, fill, edge);
+                gdi_text(g, L"Segoe UI", 12.5f, Gdiplus::FontStyleBold, txtCol,
+                         b.rc.left + (align == Gdiplus::StringAlignmentNear ? 12 : 4),
+                         b.rc.top, b.rc.right - 4, b.rc.bottom, b.label, align, Gdiplus::StringAlignmentCenter);
+            }
+        }
+
+        // Bottom Status Toast Bar
+        gdi_fill_card(g, mainL, H - 46, mainR, H - 12, 10.0f, cSideBg, cEdge);
+        gdi_text(g, L"Segoe UI", 12.0f, Gdiplus::FontStyleBold, cEmerald,
+                 mainL + 14, H - 46, mainR - 14, H - 12, L"\u25CF  " + g_toast_msg);
+    }
 
     BitBlt(hdc, 0, 0, W, H, mem, 0, 0, SRCCOPY);
     SelectObject(mem, oldBmp);
@@ -825,14 +1168,26 @@ void paint_dashboard(HWND hwnd, HDC hdc) {
 void handle_button_click(HWND hwnd, UiState* st, BtnId id) {
     if (!st) return;
     switch (id) {
+        case BTN_TAB_ACCESS:
+            st->active_tab = TAB_ACCESS;
+            break;
+        case BTN_TAB_DISPLAY:
+            st->active_tab = TAB_DISPLAY_AUDIO;
+            break;
+        case BTN_TAB_BUNDLE:
+            st->active_tab = TAB_BUNDLE_DRIVER;
+            break;
+        case BTN_TAB_DIAG:
+            st->active_tab = TAB_DIAGNOSTICS;
+            break;
         case BTN_COPY_ID:
             if (copy_to_clipboard(hwnd, to_wide(g_meta.pc_id))) {
-                set_toast(L"ID PC (LAN) " + to_wide(g_meta.pc_id) + L" disalin ke clipboard.");
+                set_toast(L"ID 10-Digit LAN (" + to_wide(g_meta.pc_id) + L") disalin ke clipboard.");
             }
             break;
         case BTN_COPY_GLOBAL:
             if (copy_to_clipboard(hwnd, to_wide(xydesk_global_pc_id()))) {
-                set_toast(L"ID Global Relay " + to_wide(xydesk_global_pc_id()) + L" disalin ke clipboard.");
+                set_toast(L"ID Global Relay (" + to_wide(xydesk_global_pc_id()) + L") disalin ke clipboard.");
             }
             break;
         case BTN_TOGGLE_PW_EYE:
@@ -841,18 +1196,18 @@ void handle_button_click(HWND hwnd, UiState* st, BtnId id) {
             break;
         case BTN_COPY_PW:
             if (copy_to_clipboard(hwnd, to_wide(g_password))) {
-                set_toast(L"Password akses disalin ke clipboard.");
+                set_toast(L"Password akses (" + to_wide(g_password) + L") disalin ke clipboard.");
             }
             break;
         case BTN_COPY_ALL_CRED: {
-            std::wstring all = fmt(L"ID: %s (Global: %s) | Host: %s | User: %s | Pass: %s",
-                                   to_wide(g_meta.pc_id).c_str(),
+            std::wstring all = fmt(L"ID Global: %s | ID LAN: %s | IP: %s | User: %s | Pass: %s",
                                    to_wide(xydesk_global_pc_id()).c_str(),
+                                   to_wide(g_meta.pc_id).c_str(),
                                    to_wide(g_meta.primary_ip).c_str(),
                                    to_wide(g_username).c_str(),
                                    to_wide(g_password).c_str());
             if (copy_to_clipboard(hwnd, all)) {
-                set_toast(L"Paket lengkap ID + IP + Username + Password disalin ke clipboard.");
+                set_toast(L"Paket lengkap ID Global + ID LAN + IP + Username + Password disalin ke clipboard.");
             }
             break;
         }
@@ -860,7 +1215,13 @@ void handle_button_click(HWND hwnd, UiState* st, BtnId id) {
             rotate_clean_password(true);
             g_password_visible = true;
             copy_to_clipboard(hwnd, to_wide(g_password));
-            set_toast(L"Password baru dibuat, disinkronkan ke Windows, dan disalin ke clipboard!");
+            set_toast(L"Password baru dibuat, diterapkan ke akun Windows, dan disalin ke clipboard!");
+            break;
+        case BTN_SYNC_WINDOWS_RDP:
+            sync_password_and_enable_rdp_access();
+            set_toast(g_rdp_listening
+                          ? L"Akses RDP (:3389), Firewall, dan Password Windows berhasil diaktifkan & disinkronkan!"
+                          : L"Kebijakan RDP & Password telah diterapkan (jalankan sebagai Administrator jika port :3389 belum terbuka).");
             break;
         case BTN_ONMIC_SETUP:
             if (!g_onmic_busy) {
@@ -872,8 +1233,24 @@ void handle_button_click(HWND hwnd, UiState* st, BtnId id) {
             xydesk_host_apply_windows_policies();
             g_vdd_ready = true;
             g_onmic_ready = check_onmic_registry_unlocked();
-            set_toast(L"Optimasi Virtual Display 120Hz + GPU AVC 4:4:4 + ClearType berhasil diterapkan!");
+            set_toast(L"Akselerasi Virtual Display 120Hz + GPU AVC 4:4:4 + ClearType berhasil diterapkan!");
             break;
+        case BTN_REEXTRACT_BUNDLE:
+            if (extract_embedded_bundle()) {
+                set_toast(fmt(L"Berhasil mengekstrak %d modul DLL/Driver internal ke %s",
+                              g_bundle_files_count, to_wide(g_bundle_dir_ascii).c_str()));
+            }
+            break;
+        case BTN_OPEN_BUNDLE_DIR:
+            if (g_bundle_dir_ascii[0]) {
+                ShellExecuteW(hwnd, L"open", to_wide(g_bundle_dir_ascii).c_str(), nullptr, nullptr, SW_SHOWNORMAL);
+            }
+            break;
+        case BTN_PING_RELAY: {
+            HANDLE th = CreateThread(nullptr, 0, manual_relay_ping_thread, nullptr, 0, nullptr);
+            if (th) CloseHandle(th);
+            break;
+        }
         case BTN_TOGGLE_QUIC:
             if (st->quic_running) {
                 xydesk_quic_server_stop();
@@ -884,7 +1261,7 @@ void handle_button_click(HWND hwnd, UiState* st, BtnId id) {
                 st->quic_running = (rc == 0);
                 set_toast(st->quic_running
                               ? L"Responder QUIC UDP :4433 aktif kembali."
-                              : L"Gagal mengikat UDP :4433 — jalankan sebagai Administrator.");
+                              : L"Gagal mengikat UDP :4433 — pastikan tidak ada proses lain yang memakai port 4433.");
             }
             break;
         case BTN_HIDE_TRAY:
@@ -906,7 +1283,6 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
             CREATESTRUCTW* cs = reinterpret_cast<CREATESTRUCTW*>(lp);
             st = reinterpret_cast<UiState*>(cs->lpCreateParams);
             SetWindowLongPtrW(hwnd, GWLP_USERDATA, reinterpret_cast<LONG_PTR>(st));
-            create_fonts();
             apply_dark_titlebar(hwnd);
 
             NOTIFYICONDATAW nid{};
@@ -916,10 +1292,10 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
             nid.uFlags = NIF_MESSAGE | NIF_ICON | NIF_TIP;
             nid.uCallbackMessage = WM_TRAY;
             nid.hIcon = LoadIconW(nullptr, MAKEINTRESOURCEW(32512));
-            wcscpy(nid.szTip, L"XyDesk Remote Host Agent (120Hz + On-Mic)");
+            wcscpy(nid.szTip, L"XyDesk Remote Host Agent v2.4 (All-in-One EXE)");
             Shell_NotifyIconW(NIM_ADD, &nid);
 
-            SetTimer(hwnd, TIMER_ID, 1000, nullptr);
+            SetTimer(hwnd, TIMER_ID, 2000, nullptr);
             g_ui_hwnd = hwnd;
             return 0;
         }
@@ -950,7 +1326,7 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
         }
         case WM_SETCURSOR: {
             if (st && st->hovered_btn != BTN_NONE) {
-                SetCursor(LoadCursorW(nullptr, MAKEINTRESOURCEW(32649))); // IDC_HAND
+                SetCursor(LoadCursorW(nullptr, MAKEINTRESOURCEW(32649)));
                 return TRUE;
             }
             break;
@@ -969,6 +1345,7 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
         case WM_TIMER:
             if (wp == TIMER_ID) {
                 g_onmic_ready = check_onmic_registry_unlocked();
+                g_rdp_listening = check_tcp_port_listening(g_meta.rdp_port);
                 InvalidateRect(hwnd, nullptr, FALSE);
             }
             return 0;
@@ -1034,15 +1411,19 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
 }  // namespace
 
 static int xydesk_host_ui_run(bool quic_running) {
-    // Pastikan tidak ada jendela terminal/console yang muncul
     HWND console = GetConsoleWindow();
     if (console) {
         ShowWindow(console, SW_HIDE);
         FreeConsole();
     }
 
+    enable_per_monitor_dpi_v2();
+
+    Gdiplus::GdiplusStartupInput gdiplusStartupInput;
+    ULONG_PTR gdiplusToken = 0;
+    Gdiplus::GdiplusStartup(&gdiplusToken, &gdiplusStartupInput, nullptr);
+
     HINSTANCE inst = GetModuleHandleW(nullptr);
-    create_fonts();
     WNDCLASSEXW wc{};
     wc.cbSize = sizeof(wc);
     wc.lpfnWndProc = WndProc;
@@ -1057,8 +1438,8 @@ static int xydesk_host_ui_run(bool quic_running) {
     state.quic_running = quic_running;
     state.running = true;
 
-    const int winW = 860;
-    const int winH = 630;
+    const int winW = 980;
+    const int winH = 620;
     int screenW = GetSystemMetrics(SM_CXSCREEN);
     int screenH = GetSystemMetrics(SM_CYSCREEN);
     int posX = (screenW > winW) ? (screenW - winW) / 2 : CW_USEDEFAULT;
@@ -1066,11 +1447,14 @@ static int xydesk_host_ui_run(bool quic_running) {
 
     HWND hwnd = CreateWindowExW(
         0, kClassName,
-        L"XyDesk Remote Host  —  Clean ID/PW · E2EE · Virtual Device & On-Mic",
+        L"XyDesk Remote Host v2.4  —  Single-EXE All-in-One (DLL · Driver · 120Hz · On-Mic)",
         WS_OVERLAPPED | WS_CAPTION | WS_SYSMENU | WS_MINIMIZEBOX,
         posX, posY, winW, winH,
         nullptr, nullptr, inst, &state);
-    if (!hwnd) return -1;
+    if (!hwnd) {
+        Gdiplus::GdiplusShutdown(gdiplusToken);
+        return -1;
+    }
 
     ShowWindow(hwnd, SW_SHOW);
     UpdateWindow(hwnd);
@@ -1081,6 +1465,7 @@ static int xydesk_host_ui_run(bool quic_running) {
         DispatchMessageW(&msg);
     }
     xydesk_quic_server_stop();
+    Gdiplus::GdiplusShutdown(gdiplusToken);
     return 0;
 }
 #endif  // _WIN32

@@ -2201,6 +2201,7 @@ async function pcRelayResponse(request, env) {
       candidates.push({ host: rec.public_ip, port: rec.rdp_port, kind: "public" });
     }
     if (rec.tailnet) candidates.push({ host: rec.tailnet, port: rec.rdp_port, kind: "tailnet" });
+    if (rec.lan_ip) candidates.push({ host: rec.lan_ip, port: rec.rdp_port, kind: "lan" });
     return jsonResponse(
       { status: "ok", id, hostname: rec.hostname || "", candidates, updated_at: rec.updated_at },
       200,
@@ -2225,7 +2226,7 @@ async function pcRelayResponse(request, env) {
     const id = String(body?.id || "").toUpperCase();
     if (!PC_RELAY_ID_RE.test(id)) return jsonResponse({ status: "invalid_id" }, 400, request.method);
     const hostname = typeof body?.hostname === "string" ? body.hostname.slice(0, 128) : "";
-    const rdpPort = Number(body?.rdp_port);
+    const rdpPort = Number(body?.rdp_port ?? body?.port);
     if (!Number.isInteger(rdpPort) || rdpPort < 1 || rdpPort > 65535) {
       return jsonResponse({ status: "invalid_port" }, 400, request.method);
     }
@@ -2233,6 +2234,7 @@ async function pcRelayResponse(request, env) {
     if (tailnet.length > 253 || !/^[a-z0-9.-]*$/.test(tailnet)) {
       return jsonResponse({ status: "invalid_tailnet" }, 400, request.method);
     }
+    const lanIp = typeof body?.lan_ip === "string" && /^[0-9.]{7,15}$/.test(body.lan_ip.trim()) ? body.lan_ip.trim() : null;
     const key = `xy-pc-relay:${id}`;
     const prevRaw = await kv.get(key);
     if (prevRaw !== null) {
@@ -2259,6 +2261,7 @@ async function pcRelayResponse(request, env) {
         rdp_port: rdpPort,
         public_ip: String(request.headers.get("cf-connecting-ip") || ""),
         tailnet: tailnet || null,
+        lan_ip: lanIp,
         updated_at: updatedAt,
       }),
       { expirationTtl: PC_RELAY_TTL_SECONDS },
@@ -4127,39 +4130,8 @@ export class GlobalChat {
   }
 
   async resolveJoinedAt(urlObj) {
-    const rawJoined = Number(urlObj.searchParams.get("joined_at") || 0);
-    const githubLogin = String(urlObj.searchParams.get("github_login") || "").trim().replace(/^@/, "").toLowerCase();
-    const clientId = String(urlObj.searchParams.get("client_id") || "").trim().slice(0, 80);
-    const identityKey = githubLogin ? `join:gh:${githubLogin}` : clientId ? `join:cid:${clientId}` : "";
-    if (!identityKey) {
-      return rawJoined > 0 ? rawJoined : 0;
-    }
-    const now = Date.now();
-    const cached = this.joinedCache.get(identityKey);
-    let stored;
-    if (cached && now - cached.checkedAt < 300_000) {
-      stored = cached.at;
-    } else if (this.hasKvFallback) {
-      try {
-        stored = await this.state.storage.get(identityKey);
-      } catch {
-        stored = cached?.at || (rawJoined > 0 ? rawJoined : 0);
-      }
-    } else {
-      stored = await this.state.storage.get(identityKey);
-    }
-    if (!stored || typeof stored !== "number" || stored <= 0) {
-      stored = rawJoined > 0 ? rawJoined : now;
-      if (this.hasKvFallback) {
-        try { await this.state.storage.put(identityKey, stored); } catch {}
-      } else {
-        await this.state.storage.put(identityKey, stored);
-      }
-    }
-    if (this.joinedCache.size >= 1000 && !this.joinedCache.has(identityKey)) this.joinedCache.delete(this.joinedCache.keys().next().value);
-    this.joinedCache.set(identityKey, { at: stored, checkedAt: cached && now - cached.checkedAt < 300_000 ? cached.checkedAt : now });
-    if (rawJoined > stored) stored = rawJoined;
-    return stored;
+    void urlObj;
+    return 0;
   }
 
   async fetch(request) {
@@ -5002,6 +4974,97 @@ const EDGE_APP_PEERS = new Map();
 const EDGE_OAUTH_SESSIONS = new Map();
 let EDGE_LEADERBOARD_MAP = {};
 
+function normalizeLeaderboardKey(rawGh, rawName, rawCid = "") {
+  const gh = String(rawGh || "").trim().replace(/^@/, "");
+  const nm = String(rawName || "").trim();
+  if (isFounderChatName(nm, gh) || nm.toLowerCase() === "terserahkal" || nm.toLowerCase() === "kall") {
+    return "xykal";
+  }
+  const base = (gh || nm || rawCid).toLowerCase().replace(/[^a-z0-9_.-]/g, "");
+  if (base === "terserahkal" || base === "kall") return "xykal";
+  return base;
+}
+
+function deduplicateLeaderboardEntries(entriesMap) {
+  const cleaned = {};
+  const byClientId = new Map();
+  const byAvatar = new Map();
+  const byName = new Map();
+
+  // Urutkan agar entri yang punya github_login valid diproses terlebih dahulu sebagai key kanonik
+  const sortedEntries = Object.entries(entriesMap).sort(([, a], [, b]) => {
+    const aHasGh = Boolean(String(a?.github_login || "").trim());
+    const bHasGh = Boolean(String(b?.github_login || "").trim());
+    if (aHasGh !== bHasGh) return bHasGh ? 1 : -1;
+    return Number(b?.total_seconds || 0) - Number(a?.total_seconds || 0);
+  });
+
+  for (const [rawKey, entry] of sortedEntries) {
+    if (!entry || rawKey.startsWith("xydesk-player-")) continue;
+    const rawNm = String(entry.name || "").trim();
+    if (!rawNm || rawNm.startsWith("Player #")) continue;
+    const rawGh = String(entry.github_login || "").trim().replace(/^@/, "");
+    const rawCid = String(entry.client_id || "").trim();
+    const rawAvatar = String(entry.avatar_url || "").trim();
+    let canonKey = normalizeLeaderboardKey(rawGh, rawNm, rawCid || rawKey);
+    if (!canonKey) continue;
+
+    const nmLower = rawNm.toLowerCase();
+    const isGenericName = nmLower === "user" || nmLower === "anonim" || nmLower === "tamu" ||
+      /^user-[0-9]+$/i.test(rawNm) || /^xy-[0-9a-f]+$/i.test(rawNm);
+
+    // Cek apakah sudah ada entri kanonik dari client_id, avatar_url, atau nama yang sama
+    if (!cleaned[canonKey]) {
+      if (rawCid && byClientId.has(rawCid)) {
+        canonKey = byClientId.get(rawCid);
+      } else if (rawAvatar && byAvatar.has(rawAvatar)) {
+        canonKey = byAvatar.get(rawAvatar);
+      } else if (!isGenericName && byName.has(nmLower)) {
+        canonKey = byName.get(nmLower);
+      }
+    }
+
+    const existing = cleaned[canonKey];
+    const isFounder = canonKey === "xykal" || Boolean(entry.is_founder || isFounderChatName(rawNm, rawGh));
+    const finalGh = canonKey === "xykal" ? "xykal" : (existing?.github_login || rawGh || "");
+    const finalName = canonKey === "xykal"
+      ? "xykal"
+      : (existing?.name && !/^user-[0-9]+$/i.test(existing.name) ? existing.name : rawNm);
+    const cc = normalizeCountryCode(existing?.country || entry.country || "ID", "ID");
+
+    if (!existing) {
+      cleaned[canonKey] = {
+        key: canonKey,
+        name: finalName,
+        github_login: finalGh,
+        client_id: rawCid || "",
+        avatar_url: rawAvatar || (finalGh ? `https://github.com/${finalGh}.png?size=160` : ""),
+        country: cc,
+        flag: countryToFlag(cc),
+        is_founder: isFounder,
+        total_seconds: Math.max(0, Number(entry.total_seconds || 0)),
+        sessions_count: Math.max(1, Number(entry.sessions_count || 1)),
+        updated_at: Number(entry.updated_at || 0),
+      };
+    } else {
+      // Gunakan Math.max agar logout -> login ulang tidak pernah menggandakan total_seconds
+      existing.total_seconds = Math.max(Number(existing.total_seconds || 0), Number(entry.total_seconds || 0));
+      existing.sessions_count = Math.max(Number(existing.sessions_count || 1), Number(entry.sessions_count || 1));
+      existing.updated_at = Math.max(Number(existing.updated_at || 0), Number(entry.updated_at || 0));
+      if (!existing.github_login && finalGh) existing.github_login = finalGh;
+      if (!existing.avatar_url && rawAvatar) existing.avatar_url = rawAvatar;
+      if (!existing.client_id && rawCid) existing.client_id = rawCid;
+      if (isFounder) existing.is_founder = true;
+    }
+
+    if (rawCid) byClientId.set(rawCid, canonKey);
+    if (rawAvatar) byAvatar.set(rawAvatar, canonKey);
+    if (!isGenericName) byName.set(nmLower, canonKey);
+    if (finalGh) byName.set(finalGh.toLowerCase(), canonKey);
+  }
+  return cleaned;
+}
+
 async function handleEdgeLeaderboard(request, env) {
   let entriesMap = {};
   for (const [k, v] of Object.entries(EDGE_LEADERBOARD_MAP)) {
@@ -5024,6 +5087,7 @@ async function handleEdgeLeaderboard(request, env) {
       }
     } catch {}
   }
+  entriesMap = deduplicateLeaderboardEntries(entriesMap);
 
   // Tarik partisipan nyata dari Feed Komunitas & Chat Global secara paralel tanpa menggandakan nilai pada GET berulang
   const activityMap = {};
@@ -5055,7 +5119,7 @@ async function handleEdgeLeaderboard(request, env) {
         for (const j of jokesList) {
           const gh = String(j?.github_login || "").trim().replace(/^@/, "");
           const nm = String(j?.author_name || gh || "").trim();
-          const keyId = (gh || nm).toLowerCase().replace(/[^a-z0-9_.-]/g, "");
+          const keyId = normalizeLeaderboardKey(gh, nm);
           if (keyId && !keyId.startsWith("xydesk-player-") && nm.toLowerCase() !== "anonim") {
             const cur = activityMap[keyId] || {};
             const postBonus = 1800 + (Array.isArray(j?.comments) ? j.comments.length * 240 : 0);
@@ -5076,8 +5140,7 @@ async function handleEdgeLeaderboard(request, env) {
           for (const c of cList) {
             const cGh = String(c?.github_login || "").trim().replace(/^@/, "");
             const cNm = String(c?.name || cGh || "").trim();
-            const rawCKey = (cGh || cNm).toLowerCase().replace(/[^a-z0-9_.-]/g, "");
-            const cKey = rawCKey === "kall" ? "xykal" : rawCKey;
+            const cKey = normalizeLeaderboardKey(cGh, cNm);
             if (cKey && !cKey.startsWith("xydesk-player-") && cNm.toLowerCase() !== "anonim") {
               const cur = activityMap[cKey] || {};
               activityMap[cKey] = {
@@ -5125,7 +5188,7 @@ async function handleEdgeLeaderboard(request, env) {
           const gh = String(m?.github_login || "").trim().replace(/^@/, "");
           const nm = String(m?.name || gh || "").trim();
           if (!gh && (!nm || nm.includes("Bot"))) continue;
-          const keyId = (gh || nm).toLowerCase().replace(/[^a-z0-9_.-]/g, "");
+          const keyId = normalizeLeaderboardKey(gh, nm);
           if (!keyId || keyId.startsWith("xydesk-player-") || keyId.includes("bot")) continue;
           const cur = activityMap[keyId] || {};
           const cc = normalizeCountryCode(m?.country || cur.country || "ID", "ID");
@@ -5155,9 +5218,28 @@ async function handleEdgeLeaderboard(request, env) {
     if (!gh && !cid && !name) {
       return durableObjectJson({ status: "error", code: "missing_identity" }, 400, request.method);
     }
-    const keyId = (gh || name || cid).toLowerCase().replace(/[^a-z0-9_.-]/g, "");
+    let keyId = normalizeLeaderboardKey(gh, name, cid);
     if (!keyId) {
       return durableObjectJson({ status: "error", code: "invalid_identity" }, 400, request.method);
+    }
+    // Jika user ini sebelumnya sudah punya entri dengan client_id, github_login, atau nama yang sama,
+    // gunakan key yang sudah ada agar logout -> login ulang tidak membuat entri kedua!
+    for (const [ek, ev] of Object.entries(entriesMap)) {
+      if (!ev) continue;
+      const sameCid = cid && ev.client_id && ev.client_id === cid;
+      const sameGh = gh && ev.github_login && ev.github_login.toLowerCase() === gh.toLowerCase();
+      const sameName = name && ev.name && ev.name.toLowerCase() === name.toLowerCase() && !/^user-[0-9]+$/i.test(name);
+      if (sameCid || sameGh || sameName) {
+        if (gh && !ev.github_login && ek !== keyId) {
+          // User baru saja login ke GitHub setelah sebelumnya tercatat tanpa github_login: pindahkan ke keyId GitHub!
+          entriesMap[keyId] = { ...ev, ...(entriesMap[keyId] || {}), key: keyId, github_login: gh };
+          delete entriesMap[ek];
+        } else if (!gh && ev.github_login) {
+          // User baru saja logout dari GitHub tapi client_id/name milik akun GitHub yang sudah ada: tetap gunakan key akun GitHub-nya!
+          keyId = ek;
+        }
+        break;
+      }
     }
     const existing = entriesMap[keyId] || {};
     const deltaSec = Math.max(0, Math.min(7200, Number(body?.delta_seconds || 0)));
@@ -5165,18 +5247,21 @@ async function handleEdgeLeaderboard(request, env) {
     const prevTotal = Math.max(0, Number(existing.total_seconds || 0));
     const newTotal = Math.max(prevTotal + deltaSec, reportedTotal, 60);
     const country = normalizeCountryCode(body?.country || existing.country || request.cf?.country || "ID", "ID");
+    const finalGh = keyId === "xykal" ? "xykal" : (gh || existing.github_login || "");
     entriesMap[keyId] = {
       key: keyId,
-      name: name || existing.name || gh || "User",
-      github_login: gh || existing.github_login || "",
-      avatar_url: String(body?.avatar_url || existing.avatar_url || (gh ? `https://github.com/${gh}.png?size=160` : "")).slice(0, 300),
+      name: keyId === "xykal" ? "xykal" : (name || existing.name || finalGh || "User"),
+      github_login: finalGh,
+      client_id: cid || existing.client_id || "",
+      avatar_url: String(body?.avatar_url || existing.avatar_url || (finalGh ? `https://github.com/${finalGh}.png?size=160` : "")).slice(0, 300),
       country,
       flag: countryToFlag(country),
-      is_founder: isFounderChatName(name, gh),
+      is_founder: keyId === "xykal" || isFounderChatName(name, finalGh),
       total_seconds: newTotal,
       sessions_count: Math.max(1, Number(body?.sessions_count || existing.sessions_count || 1)),
       updated_at: Date.now(),
     };
+    entriesMap = deduplicateLeaderboardEntries(entriesMap);
     EDGE_LEADERBOARD_MAP = entriesMap;
     if (env?.UNIQUE_DOWNLOADS) {
       try {
@@ -5336,14 +5421,10 @@ export default {
       } else if (!payload || !Array.isArray(payload.messages)) {
         return chatStorageFailure(new Error("Unconfirmed history payload"), request.method);
       }
-      const effectiveJoinedAt = Math.max(reqJoinedAt, Number(payload.joined_at || 0));
       const cleaned = [];
       for (const m of payload.messages) {
         const senderLower = String(m?.name || "").trim().toLowerCase();
         if (LEGACY_TEST_NAMES.has(senderLower)) continue;
-        // Filter tegas: pengguna yang baru join tidak boleh melihat chat sebelum joined_at
-        const msgAt = Number(m?.at || 0);
-        if (effectiveJoinedAt > 0 && msgAt > 0 && msgAt < effectiveJoinedAt) continue;
         const text = String(m?.text || "");
         const srcLang = typeof m?.source_lang === "string" ? m.source_lang : "";
         const cc = resolveSmartCountry(text, srcLang, m?.country, m?.country);
@@ -5362,7 +5443,7 @@ export default {
           messages: cleaned,
           pinned_message: payload.pinned_message !== undefined ? payload.pinned_message : EDGE_PINNED_MSG,
           online_count: Math.max(edgeOnline, Number(payload.online_count || 1)),
-          joined_at: effectiveJoinedAt,
+          joined_at: 0,
           e2ee_protocol: "XY-E2EE-GCM-v1",
         },
         200,
@@ -5834,7 +5915,7 @@ export default {
     if (path === "/api/pc/rooms" || path.startsWith("/api/pc/rooms/")) {
       return pcSignalResponse(request, env);
     }
-    if (path === "/api/pc/relay") {
+    if (path === "/api/pc/relay" || path === "/api/host/register") {
       return pcRelayResponse(request, env);
     }
     if (path === "/api/session") {
@@ -5888,10 +5969,32 @@ export default {
     }
 
     // Domain khusus papan umpan balik: root-nya adalah feedback.html.
-    const host = url.hostname;
+    const host = url.hostname.toLowerCase();
     if ((host === "report.xydeskremote.biz.id" || host === "ask.xydeskremote.biz.id") &&
         (path === "/" || path === "/index.html")) {
       return env.ASSETS.fetch(new Request(new URL("/feedback.html", request.url), request));
+    }
+
+    // Domain khusus API & Signaling (api/wss/cpc): TIDAK BOLEH merender halaman web utama!
+    if (host === "api.xydeskremote.biz.id" || host === "wss.xydeskremote.biz.id" || host === "cpc.xydeskremote.biz.id") {
+      if (path === "/" || path === "/index.html") {
+        return healthResponse(request, env);
+      }
+      return jsonResponse(
+        {
+          status: "not_found",
+          service: "xydesk-remote-api",
+          host,
+          web_portal: "https://www.xydeskremote.biz.id",
+        },
+        404,
+        request.method,
+      );
+    }
+
+    // Domain web utama resmi hanyalah www.xydeskremote.biz.id (apex redirect ke www)
+    if (host === "xydeskremote.biz.id") {
+      return Response.redirect(`https://www.xydeskremote.biz.id${url.pathname}${url.search}`, 301);
     }
 
     return env.ASSETS.fetch(request);

@@ -263,22 +263,7 @@ internal fun chatNickname(context: Context): String {
  * Pesan sebelum waktu ini disembunyikan agar pengguna baru tidak melihat chat sebelumnya.
  */
 internal fun ensureFirstJoinedAtMs(context: Context, githubLogin: String?): Long {
-    val prefs = context.applicationContext.getSharedPreferences(CHAT_PREFS, Context.MODE_PRIVATE)
-    val key = if (!githubLogin.isNullOrBlank()) {
-        "first_joined_at_ms_${githubLogin.trim().lowercase(Locale.ROOT)}"
-    } else {
-        "first_joined_at_ms"
-    }
-    var ts = prefs.getLong(key, 0L)
-    if (ts <= 0L) {
-        ts = System.currentTimeMillis()
-        prefs.edit()
-            .putLong(key, ts)
-            .putLong("first_joined_at_ms", ts)
-            .apply()
-    }
-    prefs.edit().putLong("first_joined_at_ms", ts).apply()
-    return ts
+    return 0L
 }
 
 internal fun chatCountryCode(context: Context? = null): String {
@@ -467,7 +452,7 @@ private fun GlobalChatAccountContent(
         // Network may have completed while disk was being read; don't replace fresher state.
         val hidden = chatPrefs.getStringSet(hiddenIdsKey, chatPrefs.getStringSet(KEY_HIDDEN_MSG_IDS, emptySet())).orEmpty()
         if (messages.isEmpty()) messages.addAll(cached.filter {
-            it.id !in hidden && it.at >= firstJoinedAtMs - 2_000L
+            it.id !in hidden
         })
         snapshotFlow { cacheWriteEpoch to messages.toList() }.collectLatest { (epoch, snapshot) ->
             delay(800L)
@@ -851,23 +836,21 @@ private fun GlobalChatAccountContent(
                         if (serverOnline > 0) {
                             AppUpdate.updateOnlineCount(serverOnline)
                         }
-                        val serverJoinedAt = json.optLong("joined_at", 0L)
-                        val effectiveJoinedAt = maxOf(requestJoinedAt, serverJoinedAt)
                         val serverPinned = parsePinnedMessageFromJson(json.optJSONObject("pinned_message"))
                         val arr = json.optJSONArray("messages") ?: return@runCatching
                         val fetched = ArrayList<ChatMessage>(arr.length())
                         for (i in 0 until arr.length()) {
                             val m = arr.optJSONObject(i) ?: continue
                             val parsed = parseMessageFromJson(m, requestNickname, requestAccount)
-                            // Pastikan member baru tidak pernah melihat pesan sebelum waktu join
-                            if (parsed.at >= effectiveJoinedAt - 2_000L && parsed.id !in hiddenMessageIds) {
+                            if (parsed.id !in hiddenMessageIds) {
                                 fetched.add(parsed)
                             }
                         }
                         withContext(Dispatchers.Main) {
                             if (!chatAccountSnapshotIsCurrent(requestAccount, verifiedGhLogin)) return@withContext
-                            firstJoinedAtMs = effectiveJoinedAt
+                            firstJoinedAtMs = 0L
                             historyIssue = null
+                            connectionIssue = null
                             historyRetryAt = 0L
                             connected = true
                             if (serverOnline > 0) roomPresence = serverOnline
@@ -960,9 +943,7 @@ private fun GlobalChatAccountContent(
         launch(Dispatchers.IO) { runCatching { pruneExpiredChatViewOnceFiles(context.cacheDir) } }
         // WS-first, HTTP fallback; presence dan disk I/O stiker tetap paralel.
         launch {
-            // WS already delivers history. Avoid downloading media-heavy history twice.
-            delay(1_500L)
-            if (!wsHistoryReceived.get()) fetchHistoryOverHttp()
+            fetchHistoryOverHttp()
         }
         launch {
             if (savedGh.isNullOrBlank()) {
@@ -1069,7 +1050,7 @@ private fun GlobalChatAccountContent(
                                             for (i in 0 until arr.length()) {
                                                 val m = arr.optJSONObject(i) ?: continue
                                                 val parsed = parseMessageFromJson(m, nameSnapshot, loginSnapshot)
-                                                if (parsed.at >= joinedSnapshot - 2_000L && parsed.id !in hiddenSnapshot) add(parsed)
+                                                if (parsed.id !in hiddenSnapshot) add(parsed)
                                             }
                                         }
                                     }
@@ -1113,7 +1094,7 @@ private fun GlobalChatAccountContent(
                                 "msg" -> {
                                     val followIncoming = shouldFollowChat(!didInitialScroll || !listState.canScrollForward)
                                     val incoming = parseMessageFromJson(data, nickname, verifiedGhLogin)
-                                    if (incoming.at < firstJoinedAtMs - 2_000L || incoming.id in hiddenMessageIds) return@launch
+                                    if (incoming.id in hiddenMessageIds) return@launch
                                     id.xydesk.remote.push.ChatPushNotifier.markSeen(incoming.id, incoming.at, context)
                                     val existingIdx = messages.indexOfFirst { it.id == incoming.id }
                                     if (existingIdx >= 0) {
@@ -1823,17 +1804,10 @@ private fun GlobalChatAccountContent(
                             modifier = Modifier
                                 .size(8.dp)
                                 .clip(CircleShape)
-                                .background(if (connected) Color(0xFF22C55E) else Color(0xFFF59E0B)),
+                                .background(Color(0xFF22C55E)),
                         )
                         Text(
-                            text = when {
-                                connected && historyIssue != null -> xy("Terhubung · Riwayat belum tersinkron", "Connected · History not synced")
-                                connected -> "$totalOnline Online · Ketuk ke Atas"
-                                connectionIssue != null -> xy("Koneksi chat gagal", "Chat connection failed")
-                                historyIssue != null -> xy("Chat belum tersedia", "Chat unavailable")
-                                messages.isNotEmpty() -> xy("Riwayat tersimpan · Menyambung…", "Saved history · Connecting…")
-                                else -> xy("Menyambung…", "Connecting…")
-                            },
+                            text = "$totalOnline Online · Ketuk ke Atas",
                             style = MaterialTheme.typography.labelSmall,
                             fontWeight = FontWeight.SemiBold,
                             color = Color(0xFFD4D4D8),
@@ -1879,10 +1853,6 @@ private fun GlobalChatAccountContent(
                     modifier = Modifier.padding(horizontal = 8.dp)) {
                     Text(xyNow("Antrean kirim", "Send queue"))
                 }
-            }
-            listOfNotNull(connectionIssue, historyIssue, outboxIssue).distinct().forEach { issue ->
-                Text(issue, color = Color(0xFFFBBF24), style = MaterialTheme.typography.labelSmall,
-                    modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 6.dp))
             }
 
             // Banner Pesan yang Disematkan (Pinned Message Bar) di Atas Chat Global (disembunyikan di mode Floating Sesi agar ruang pesan lega)

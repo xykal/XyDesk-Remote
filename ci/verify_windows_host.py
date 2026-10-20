@@ -9,7 +9,7 @@ import subprocess
 import sys
 
 SYSTEM_IMPORTS = {
-    'advapi32.dll', 'dxgi.dll', 'gdi32.dll', 'kernel32.dll', 'msvcrt.dll',
+    'advapi32.dll', 'dxgi.dll', 'gdi32.dll', 'gdiplus.dll', 'kernel32.dll', 'msvcrt.dll',
     'ole32.dll', 'oleaut32.dll', 'shell32.dll', 'user32.dll', 'ws2_32.dll',
     'propsys.dll', 'dwmapi.dll', 'wtsapi32.dll', 'winhttp.dll', 'iphlpapi.dll',
     'comctl32.dll', 'version.dll', 'ntdll.dll', 'ucrtbase.dll',
