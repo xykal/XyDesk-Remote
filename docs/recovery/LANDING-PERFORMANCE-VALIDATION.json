@@ -1,0 +1,22 @@
+{
+  "before_html_bytes": 131200,
+  "after_html_bytes": 123689,
+  "removed_bytes": 7511,
+  "observed_before_running_animations": 8,
+  "observed_after_live_running_animations": 0,
+  "mobile_viewport": "390x844",
+  "mobile_horizontal_overflow": false,
+  "mobile_topbar_backdrop_filter": "none",
+  "desktop_recommendation_badges_visible": 0,
+  "browser_is_not_physical_device": true,
+  "active_sessions_api": "503 observed before and after deployment; error shown honestly, no paid upgrade/no fabricated online count",
+  "worker_tests": 160,
+  "baseline_guards": 6,
+  "candidate_safety_guards": 5,
+  "pe_validator_tests": 3,
+  "only_asset_changed": "web/index.html",
+  "worker_version": "40054b53-f29d-40a9-8f7a-5df684af2605",
+  "html_sha256": "22acb9ec52a4558badc006d78b313405649ddeaa16b02b393c962405ac0095d6",
+  "download_anchor_live_top_px": 84.203125,
+  "offscreen_content_visibility": "Rejected/removed after browser test proved broken smooth anchor targeting; accurate #download verified after correction"
+}

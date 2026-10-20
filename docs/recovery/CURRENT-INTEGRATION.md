@@ -1,5 +1,13 @@
 # Recovery integration in progress — not a final release
 
+Latest owner-requested signed candidate/landing: LANDING-AND-SIGNED-DRAFT.md and
+LANDING-AND-SIGNED-DRAFT-VALIDATION.json. PR22 merged/main6753116; tag
+v1.1.23-recovery.1/draft418497730 created, signed run39439824900 IN PROGRESS.
+Production landing40054b53, only index.html changed; live0 idle animations, accurate
+download anchor/mobile path wrap. Stats endpoint503 remains honestly unavailable.
+Candidate blocks Android raw UDP starts; safe host defaults off, single static EXE.
+No signed assets/device/full-recovery completion claim yet.
+
 Latest additive backup hardening: BACKUP-HARDENING.md, source0f29e6d; workspace
 /home/user/XyDesk-RecoveryNext. Android JVM/Kotlin and Web gates SUCCESS; no signed/device acceptance.
 

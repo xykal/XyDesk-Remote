@@ -1,0 +1,89 @@
+{
+  "source": "6261d9213507017c345f7dc9311dd6894a1208db",
+  "production_before": "c532dfc8-8abd-4c9b-b7e4-d90157da999c",
+  "production_after": "40054b53-f29d-40a9-8f7a-5df684af2605",
+  "tag": "v1.1.23-recovery.1",
+  "tag_sha": "6753116aa0440edb6cc7b82333c2e49372136d36",
+  "merge": {
+    "sha": "6753116aa0440edb6cc7b82333c2e49372136d36",
+    "merged": true,
+    "message": "Pull Request successfully merged"
+  },
+  "pr": {
+    "number": 22,
+    "html_url": "https://github.com/xykal/XyDesk-Remote/pull/22"
+  },
+  "draft": {
+    "id": 418497730,
+    "html_url": "https://github.com/xykal/XyDesk-Remote/releases/tag/untagged-cefde124a74061f5a29f",
+    "draft": true,
+    "tag_name": "v1.1.23-recovery.1"
+  },
+  "android_gate": {
+    "id": 39439319430,
+    "status": "completed",
+    "conclusion": "success",
+    "html_url": "https://github.com/xykal/XyDesk-Remote/actions/runs/39439319430",
+    "head_sha": "6261d9213507017c345f7dc9311dd6894a1208db"
+  },
+  "final_source_checks": [
+    {
+      "name": "Publish GitHub Release",
+      "status": "completed",
+      "conclusion": "skipped",
+      "html_url": "https://github.com/xykal/XyDesk-Remote/actions/runs/39439319430/job/118686327064"
+    },
+    {
+      "name": "MSVC syntax only (no EXE or object output)",
+      "status": "completed",
+      "conclusion": "success",
+      "html_url": "https://github.com/xykal/XyDesk-Remote/actions/runs/39439604740/job/118685665293"
+    },
+    {
+      "name": "Cloudflare Worker unit tests",
+      "status": "completed",
+      "conclusion": "success",
+      "html_url": "https://github.com/xykal/XyDesk-Remote/actions/runs/39439604534/job/118685664770"
+    },
+    {
+      "name": "Release per-ABI (R8 + signed) + GitHub Release",
+      "status": "completed",
+      "conclusion": "skipped",
+      "html_url": "https://github.com/xykal/XyDesk-Remote/actions/runs/39439319430/job/118684852070"
+    },
+    {
+      "name": "Debug per-ABI (armv7 + arm64 + x86_64)",
+      "status": "completed",
+      "conclusion": "skipped",
+      "html_url": "https://github.com/xykal/XyDesk-Remote/actions/runs/39439319430/job/118684851406"
+    },
+    {
+      "name": "Gate compile Kotlin (cepat, tanpa native)",
+      "status": "completed",
+      "conclusion": "success",
+      "html_url": "https://github.com/xykal/XyDesk-Remote/actions/runs/39439319430/job/118684849636"
+    },
+    {
+      "name": "MSVC syntax only (no EXE or object output)",
+      "status": "completed",
+      "conclusion": "success",
+      "html_url": "https://github.com/xykal/XyDesk-Remote/actions/runs/39439325717/job/118684699949"
+    },
+    {
+      "name": "Cloudflare Worker unit tests",
+      "status": "completed",
+      "conclusion": "success",
+      "html_url": "https://github.com/xykal/XyDesk-Remote/actions/runs/39439320892/job/118684678486"
+    }
+  ],
+  "signed_release_run": {
+    "id": 39439824900,
+    "name": "Build APK",
+    "status": "in_progress",
+    "conclusion": null,
+    "html_url": "https://github.com/xykal/XyDesk-Remote/actions/runs/39439824900",
+    "head_sha": "6753116aa0440edb6cc7b82333c2e49372136d36",
+    "head_branch": "v1.1.23-recovery.1"
+  },
+  "physical_runtime_tested": false
+}
