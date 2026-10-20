@@ -20,6 +20,13 @@
   "kv_namespaces": [
     { "binding": "UNIQUE_DOWNLOADS", "id": "909d51530b7d4e6b8ada61ec59a3e3d3" }
   ],
+  "d1_databases": [
+    {
+      "binding": "XYDESK_DB",
+      "database_name": "xydesk-news",
+      "database_id": "7ffccd9e-3432-47bf-b3e7-7492cbe56ea2"
+    }
+  ],
   "durable_objects": {
     "bindings": [
       { "name": "ACTIVE_SESSIONS", "class_name": "ActiveSessions" },

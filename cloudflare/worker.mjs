@@ -2899,10 +2899,16 @@ async function communityJokesResponse(request, env) {
 
   try {
     const id = env.COMMUNITY_JOKES.idFromName("xydesk-community-jokes-v1");
-    return await env.COMMUNITY_JOKES.get(id).fetch(internal);
+    const res = await env.COMMUNITY_JOKES.get(id).fetch(internal.clone());
+    if (res.status !== 503 || !(env.UNIQUE_DOWNLOADS && typeof env.UNIQUE_DOWNLOADS.get === "function")) {
+      return res;
+    }
   } catch {
-    return jsonResponse({ status: "unavailable" }, 503, request.method);
+    if (!(env.UNIQUE_DOWNLOADS && typeof env.UNIQUE_DOWNLOADS.get === "function")) {
+      return jsonResponse({ status: "unavailable" }, 503, request.method);
+    }
   }
+  return await getEdgeFallbackCommunityJokes(env).fetch(internal);
 }
 
 // ============================================================================
@@ -3135,10 +3141,16 @@ async function feedbackResponse(request, env) {
 
   try {
     const id = env.FEEDBACK_BOARD.idFromName("xydesk-feedback-board-v1");
-    return await env.FEEDBACK_BOARD.get(id).fetch(internal);
+    const res = await env.FEEDBACK_BOARD.get(id).fetch(internal.clone());
+    if (res.status !== 503 || !(env.UNIQUE_DOWNLOADS && typeof env.UNIQUE_DOWNLOADS.get === "function")) {
+      return res;
+    }
   } catch {
-    return jsonResponse({ status: "unavailable" }, 503, request.method);
+    if (!(env.UNIQUE_DOWNLOADS && typeof env.UNIQUE_DOWNLOADS.get === "function")) {
+      return jsonResponse({ status: "unavailable" }, 503, request.method);
+    }
   }
+  return await getEdgeFallbackFeedbackBoard(env).fetch(internal);
 }
 
 
@@ -3149,18 +3161,423 @@ const CHAT_ATTACHMENT_MAX = 2_800_000;
 const CHAT_MSG_PER_WINDOW = 200;
 const CHAT_WINDOW_MS = 20_000;
 const APP_PRESENCE_TTL_MS = 75_000;
-const LIVE_DATA_PACK_VERSION = "2026.10.20.65";
+const LIVE_DATA_PACK_VERSION = "2026.10.20.66";
 let EDGE_PINNED_MSG = null;
+const EDGE_KV_STORES = new Map();
+const EDGE_KV_WRAP_CACHE = new WeakMap();
+const EDGE_KV_MEMORY_FALLBACK = new Map();
+const EDGE_KV_LAST_RAW_PUT = new Map();
+
+function bytesToBase64Fast(bytes) {
+  const u8 = bytes instanceof Uint8Array
+    ? bytes
+    : bytes instanceof ArrayBuffer
+      ? new Uint8Array(bytes)
+      : ArrayBuffer.isView(bytes)
+        ? new Uint8Array(bytes.buffer, bytes.byteOffset, bytes.byteLength)
+        : new TextEncoder().encode(String(bytes || ""));
+  let binary = "";
+  const chunk = 0x8000;
+  for (let i = 0; i < u8.length; i += chunk) {
+    binary += String.fromCharCode.apply(null, u8.subarray(i, i + chunk));
+  }
+  return btoa(binary);
+}
+
+function base64ToArrayBufferFast(b64) {
+  const bin = atob(b64);
+  const u8 = new Uint8Array(bin.length);
+  for (let i = 0; i < bin.length; i++) {
+    u8[i] = bin.charCodeAt(i);
+  }
+  return u8.buffer;
+}
+
+function wrapKvWithEdgeCache(rawKv, d1Db = null) {
+  if (!rawKv || typeof rawKv.get !== "function" || (!globalThis.caches?.default && !d1Db)) {
+    return rawKv;
+  }
+  const existing = EDGE_KV_WRAP_CACHE.get(rawKv);
+  if (existing && (!d1Db || existing._d1Db === d1Db)) return existing;
+
+  const cache = globalThis.caches?.default || null;
+  const cacheReqFor = (key) => new Request(`https://api.xydeskremote.biz.id/__kv_cache__/v1/${encodeURIComponent(String(key))}`, { method: "GET" });
+
+  const parseBodyAs = async (res, type) => {
+    if (type === "arrayBuffer") return await res.arrayBuffer();
+    if (type === "json") return await res.json().catch(() => null);
+    return await res.text();
+  };
+
+  const decodeD1Value = (rawStr, type) => {
+    if (typeof rawStr !== "string") return null;
+    if (rawStr.startsWith("__b64__:")) {
+      const buf = base64ToArrayBufferFast(rawStr.slice(8));
+      if (type === "arrayBuffer") return buf;
+      const txt = new TextDecoder().decode(buf);
+      if (type === "json") {
+        try { return JSON.parse(txt); } catch { return null; }
+      }
+      return txt;
+    }
+    if (type === "arrayBuffer") return new TextEncoder().encode(rawStr).buffer;
+    if (type === "json") {
+      try { return JSON.parse(rawStr); } catch { return null; }
+    }
+    return rawStr;
+  };
+
+  const wrapped = {
+    _d1Db: d1Db,
+    async get(key, options) {
+      const k = String(key);
+      const type = typeof options === "string" ? options : options?.type || "text";
+      if (d1Db && !k.startsWith("dl:")) {
+        try {
+          const row = await d1Db.prepare("SELECT v FROM xydesk_kv_store WHERE k = ?1").bind(k).first();
+          if (row && typeof row.v === "string") {
+            return decodeD1Value(row.v, type);
+          }
+          if (k.startsWith("do_fallback:") || k.startsWith("oauth:") || k === "chat:prod_backup_v1") {
+            return null;
+          }
+        } catch {}
+      }
+      if (cache) {
+        try {
+          const hit = await cache.match(cacheReqFor(k));
+          if (hit && hit.status === 200) {
+            return await parseBodyAs(hit.clone(), type);
+          }
+        } catch {}
+      }
+      const mem = EDGE_KV_MEMORY_FALLBACK.get(k);
+      if (mem && (!mem.expiresAt || Date.now() < mem.expiresAt)) {
+        if (type === "arrayBuffer") {
+          if (mem.value instanceof ArrayBuffer) return mem.value;
+          if (ArrayBuffer.isView(mem.value)) return mem.value.buffer.slice(mem.value.byteOffset, mem.value.byteOffset + mem.value.byteLength);
+          return new TextEncoder().encode(String(mem.value)).buffer;
+        }
+        if (type === "json") {
+          try { return JSON.parse(typeof mem.value === "string" ? mem.value : new TextDecoder().decode(mem.value)); } catch { return null; }
+        }
+        return typeof mem.value === "string" ? mem.value : new TextDecoder().decode(mem.value);
+      }
+      try {
+        const val = await rawKv.get(k, options);
+        if (val !== null && val !== undefined) {
+          const body = type === "json" ? JSON.stringify(val) : val;
+          EDGE_KV_MEMORY_FALLBACK.set(k, { value: body, metadata: null, expiresAt: 0 });
+          if (cache) {
+            await cache.put(
+              cacheReqFor(k),
+              new Response(body, {
+                status: 200,
+                headers: {
+                  "Content-Type": "application/octet-stream",
+                  "Cache-Control": "public, max-age=604800",
+                },
+              }),
+            ).catch(() => {});
+          }
+        }
+        return val;
+      } catch {
+        return null;
+      }
+    },
+
+    async getWithMetadata(key, options) {
+      const k = String(key);
+      const type = typeof options === "string" ? options : options?.type || "text";
+      if (d1Db && !k.startsWith("dl:")) {
+        try {
+          const row = await d1Db.prepare("SELECT v, meta FROM xydesk_kv_store WHERE k = ?1").bind(k).first();
+          if (row && typeof row.v === "string") {
+            let metadata = null;
+            if (row.meta) {
+              try { metadata = JSON.parse(row.meta); } catch {}
+            }
+            return { value: decodeD1Value(row.v, type), metadata };
+          }
+        } catch {}
+      }
+      if (cache) {
+        try {
+          const hit = await cache.match(cacheReqFor(k));
+          if (hit && hit.status === 200) {
+            const metaRaw = hit.headers.get("X-KV-Meta");
+            let metadata = null;
+            if (metaRaw) {
+              try { metadata = JSON.parse(metaRaw); } catch {}
+            }
+            const value = await parseBodyAs(hit.clone(), type);
+            return { value, metadata };
+          }
+        } catch {}
+      }
+      const mem = EDGE_KV_MEMORY_FALLBACK.get(k);
+      if (mem && (!mem.expiresAt || Date.now() < mem.expiresAt)) {
+        let value = mem.value;
+        if (type === "arrayBuffer") {
+          if (value instanceof ArrayBuffer) {
+            // ok
+          } else if (ArrayBuffer.isView(value)) {
+            value = value.buffer.slice(value.byteOffset, value.byteOffset + value.byteLength);
+          } else {
+            value = new TextEncoder().encode(String(value)).buffer;
+          }
+        }
+        return { value, metadata: mem.metadata || null };
+      }
+      try {
+        if (typeof rawKv.getWithMetadata === "function") {
+          return await rawKv.getWithMetadata(k, options);
+        }
+        const value = await rawKv.get(k, options);
+        return { value, metadata: null };
+      } catch {
+        return { value: null, metadata: null };
+      }
+    },
+
+    async put(key, value, options) {
+      const k = String(key);
+      const ttl = Math.max(60, Number(options?.expirationTtl) || 604800);
+      const metadata = options?.metadata || null;
+      let storeVal = value;
+      if (ArrayBuffer.isView(value)) {
+        storeVal = value.buffer.slice(value.byteOffset, value.byteOffset + value.byteLength);
+      }
+      EDGE_KV_MEMORY_FALLBACK.set(k, {
+        value: storeVal,
+        metadata,
+        expiresAt: options?.expirationTtl ? Date.now() + ttl * 1000 : 0,
+      });
+      if (d1Db && !k.startsWith("dl:")) {
+        try {
+          const d1Val = (storeVal instanceof ArrayBuffer || ArrayBuffer.isView(storeVal))
+            ? `__b64__:${bytesToBase64Fast(storeVal)}`
+            : String(storeVal ?? "");
+          const metaStr = metadata ? JSON.stringify(metadata) : null;
+          await d1Db
+            .prepare("INSERT OR REPLACE INTO xydesk_kv_store (k, v, meta, updated_at) VALUES (?1, ?2, ?3, ?4)")
+            .bind(k, d1Val, metaStr, Date.now())
+            .run();
+        } catch {}
+      }
+      if (cache) {
+        try {
+          const headers = {
+            "Content-Type": "application/octet-stream",
+            "Cache-Control": `public, max-age=${ttl}`,
+          };
+          if (metadata) headers["X-KV-Meta"] = JSON.stringify(metadata);
+          await cache.put(cacheReqFor(k), new Response(storeVal, { status: 200, headers }));
+        } catch {}
+      }
+      // Jangan habiskan kuota 1.000 KV Write/hari untuk counter download dl:*
+      if (k.startsWith("dl:")) return;
+      // Throttle penulisan rawKv untuk key frekuensi tinggi (maks 1x per 60 detik)
+      if (k.startsWith("do_fallback:") || k.startsWith("leaderboard:") || k === "chat:prod_backup_v1") {
+        const now = Date.now();
+        const lastPut = EDGE_KV_LAST_RAW_PUT.get(k) || 0;
+        if (now - lastPut < 60_000) return;
+        EDGE_KV_LAST_RAW_PUT.set(k, now);
+      }
+      try {
+        await rawKv.put(k, value, options);
+      } catch {}
+    },
+
+    async delete(key) {
+      const k = String(key);
+      EDGE_KV_MEMORY_FALLBACK.delete(k);
+      if (d1Db && !k.startsWith("dl:")) {
+        try {
+          await d1Db.prepare("DELETE FROM xydesk_kv_store WHERE k = ?1").bind(k).run();
+        } catch {}
+      }
+      if (cache) {
+        try { await cache.delete(cacheReqFor(k)); } catch {}
+      }
+      try {
+        if (typeof rawKv.delete === "function") {
+          await rawKv.delete(k);
+        }
+      } catch {}
+    },
+  };
+
+  EDGE_KV_WRAP_CACHE.set(rawKv, wrapped);
+  return wrapped;
+}
+
+function createKvBackedStorage(env, kvKey) {
+  let stateObj = EDGE_KV_STORES.get(kvKey);
+  if (!stateObj) {
+    stateObj = { map: new Map(), loadedAt: 0 };
+    EDGE_KV_STORES.set(kvKey, stateObj);
+  }
+  const kv = env?.UNIQUE_DOWNLOADS && typeof env.UNIQUE_DOWNLOADS.get === "function"
+    ? wrapKvWithEdgeCache(env.UNIQUE_DOWNLOADS, env?.XYDESK_DB || null)
+    : null;
+
+  async function syncFromKv(force = false) {
+    if (!kv) return;
+    const now = Date.now();
+    if (!force && stateObj.loadedAt > 0 && now - stateObj.loadedAt < 80) return;
+    try {
+      const raw = await kv.get(kvKey);
+      if (raw) {
+        const parsed = JSON.parse(raw);
+        if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
+          stateObj.map = new Map(Object.entries(parsed));
+        }
+      }
+      if (kvKey === "do_fallback:global_chat_v1") {
+        const backupRaw = await kv.get("chat:prod_backup_v1");
+        if (backupRaw) {
+          const parsedBackup = JSON.parse(backupRaw);
+          const list = Array.isArray(parsedBackup?.messages) ? parsedBackup.messages : [];
+          for (const m of list) {
+            if (!m || !m.id) continue;
+            const k = `msg:${m.id}`;
+            const cur = stateObj.map.get(k);
+            if (!cur || Number(m.revision || 0) >= Number(cur.revision || 0)) {
+              stateObj.map.set(k, m);
+            }
+          }
+          if (parsedBackup?.pinned_message && !stateObj.map.has("pinned_message")) {
+            stateObj.map.set("pinned_message", parsedBackup.pinned_message);
+          }
+        }
+      }
+      stateObj.loadedAt = now;
+    } catch {}
+  }
+
+  async function flushToKv() {
+    if (!kv) return;
+    try {
+      const obj = Object.fromEntries(stateObj.map.entries());
+      await kv.put(kvKey, JSON.stringify(obj));
+      stateObj.loadedAt = Date.now();
+    } catch {}
+  }
+
+  const txApi = {
+    async get(key) {
+      await syncFromKv(false);
+      return stateObj.map.get(key);
+    },
+    async put(key, value) {
+      await syncFromKv(false);
+      stateObj.map.set(key, value);
+    },
+    async delete(key) {
+      await syncFromKv(false);
+      return stateObj.map.delete(key);
+    },
+    async list(opts = {}) {
+      await syncFromKv(false);
+      const prefix = typeof opts.prefix === "string" ? opts.prefix : "";
+      const start = typeof opts.start === "string" ? opts.start : null;
+      const end = typeof opts.end === "string" ? opts.end : null;
+      const reverse = Boolean(opts.reverse);
+      const limit = Number.isFinite(opts.limit) && opts.limit > 0 ? opts.limit : Infinity;
+      let keys = [...stateObj.map.keys()].filter((k) => {
+        if (prefix && !k.startsWith(prefix)) return false;
+        if (start !== null && k < start) return false;
+        if (end !== null && k >= end) return false;
+        return true;
+      }).sort();
+      if (reverse) keys.reverse();
+      if (keys.length > limit) keys = keys.slice(0, limit);
+      const out = new Map();
+      for (const k of keys) out.set(k, stateObj.map.get(k));
+      return out;
+    },
+    async getAlarm() { return null; },
+    async setAlarm() {},
+    async deleteAlarm() {},
+  };
+
+  return {
+    async get(key) {
+      await syncFromKv(false);
+      return stateObj.map.get(key);
+    },
+    async put(key, value) {
+      await syncFromKv(true);
+      stateObj.map.set(key, value);
+      await flushToKv();
+    },
+    async delete(key) {
+      await syncFromKv(true);
+      const res = stateObj.map.delete(key);
+      await flushToKv();
+      return res;
+    },
+    async list(opts = {}) {
+      return txApi.list(opts);
+    },
+    async transaction(fn) {
+      await syncFromKv(true);
+      const result = await fn(txApi);
+      await flushToKv();
+      return result;
+    },
+    async getAlarm() { return null; },
+    async setAlarm() {},
+    async deleteAlarm() {},
+  };
+}
+
 let EDGE_FALLBACK_CHAT_INSTANCE = null;
 function getEdgeFallbackGlobalChat(env) {
   if (!EDGE_FALLBACK_CHAT_INSTANCE || EDGE_FALLBACK_CHAT_INSTANCE.env !== env) {
-    const quotaThrow = async () => { throw new Error("exceeded free tier storage quota"); };
     EDGE_FALLBACK_CHAT_INSTANCE = new GlobalChat(
-      { storage: { get: quotaThrow, put: quotaThrow, delete: quotaThrow, list: quotaThrow, transaction: quotaThrow } },
+      { storage: createKvBackedStorage(env, "do_fallback:global_chat_v1") },
+      env,
+    );
+    EDGE_FALLBACK_CHAT_INSTANCE.historyWindow = new RevisionedHistoryWindow({ ttlMs: 80 });
+    EDGE_FALLBACK_CHAT_INSTANCE.pinnedWindow = new RevisionedHistoryWindow({ ttlMs: 80 });
+  }
+  return EDGE_FALLBACK_CHAT_INSTANCE;
+}
+
+let EDGE_FALLBACK_JOKES_INSTANCE = null;
+function getEdgeFallbackCommunityJokes(env) {
+  if (!EDGE_FALLBACK_JOKES_INSTANCE || EDGE_FALLBACK_JOKES_INSTANCE.env !== env) {
+    EDGE_FALLBACK_JOKES_INSTANCE = new CommunityJokes(
+      { storage: createKvBackedStorage(env, "do_fallback:community_jokes_v1") },
       env,
     );
   }
-  return EDGE_FALLBACK_CHAT_INSTANCE;
+  return EDGE_FALLBACK_JOKES_INSTANCE;
+}
+
+let EDGE_FALLBACK_FEEDBACK_INSTANCE = null;
+function getEdgeFallbackFeedbackBoard(env) {
+  if (!EDGE_FALLBACK_FEEDBACK_INSTANCE || EDGE_FALLBACK_FEEDBACK_INSTANCE.env !== env) {
+    EDGE_FALLBACK_FEEDBACK_INSTANCE = new FeedbackBoard(
+      { storage: createKvBackedStorage(env, "do_fallback:feedback_board_v1") },
+      env,
+    );
+  }
+  return EDGE_FALLBACK_FEEDBACK_INSTANCE;
+}
+
+let EDGE_FALLBACK_CHANNELS_INSTANCE = null;
+function getEdgeFallbackOfficialChannels(env) {
+  if (!EDGE_FALLBACK_CHANNELS_INSTANCE || EDGE_FALLBACK_CHANNELS_INSTANCE.env !== env) {
+    EDGE_FALLBACK_CHANNELS_INSTANCE = new OfficialChannels(
+      createKvBackedStorage(env, "do_fallback:official_channels_v1"),
+      env,
+    );
+  }
+  return EDGE_FALLBACK_CHANNELS_INSTANCE;
 }
 let EDGE_CHAT_MESSAGES = [];
 const DEFAULT_ONESIGNAL_APP_ID = "e3d5adea-1c0f-4986-9ce5-e088d65f0998";
@@ -3583,7 +4000,10 @@ function sanitizeChatExtras(raw) {
 export class GlobalChat {
   constructor(state, env) {
     this.state = state;
-    this.env = env || {};
+    const rawEnv = env || {};
+    this.env = (rawEnv.UNIQUE_DOWNLOADS && (globalThis.caches?.default || rawEnv.XYDESK_DB))
+      ? { ...rawEnv, UNIQUE_DOWNLOADS: wrapKvWithEdgeCache(rawEnv.UNIQUE_DOWNLOADS, rawEnv.XYDESK_DB || null) }
+      : rawEnv;
     this.sessions = new Set();
     this.httpRate = new Map();
     this.appOnlinePeers = new Map();
@@ -3594,6 +4014,7 @@ export class GlobalChat {
     this.memoryReceipts = new Map();
     this.memoryPinned = null;
     this.memoryKvLoaded = false;
+    this.memoryKvLoadedAt = 0;
     this.officialChannels = new OfficialChannels(this.state.storage, this.env);
   }
 
@@ -3601,19 +4022,23 @@ export class GlobalChat {
     return Boolean(this.env && typeof this.env.UNIQUE_DOWNLOADS?.get === "function");
   }
 
-  async ensureMemoryFallbackLoaded() {
-    if (this.memoryKvLoaded || !this.hasKvFallback) return;
+  async ensureMemoryFallbackLoaded(force = false) {
+    if (!this.hasKvFallback) return;
+    const now = Date.now();
+    if (this.memoryKvLoaded && !force && now - this.memoryKvLoadedAt < 80) return;
     this.memoryKvLoaded = true;
+    this.memoryKvLoadedAt = now;
     try {
       const raw = await this.env.UNIQUE_DOWNLOADS.get("chat:prod_backup_v1");
       if (raw) {
         const parsed = JSON.parse(raw);
         const list = Array.isArray(parsed?.messages) ? parsed.messages : (Array.isArray(parsed) ? parsed : []);
+        this.memoryMessages.clear();
         for (const m of list) {
           if (m && m.id) this.memoryMessages.set(String(m.id), m);
         }
-        if (parsed?.pinned_message && !this.memoryPinned) {
-          this.memoryPinned = parsed.pinned_message;
+        if (parsed?.pinned_message !== undefined) {
+          this.memoryPinned = parsed.pinned_message || null;
         }
       }
     } catch {}
@@ -3624,7 +4049,7 @@ export class GlobalChat {
     }
   }
 
-  syncMemoryBackup(latestMessages = null) {
+  async syncMemoryBackup(latestMessages = null) {
     try {
       const arr = Array.isArray(latestMessages)
         ? latestMessages.slice(-CHAT_HISTORY_LIMIT)
@@ -3638,11 +4063,13 @@ export class GlobalChat {
         });
         const p = this.env.UNIQUE_DOWNLOADS.put("chat:prod_backup_v1", payload).catch(() => {});
         this.state.waitUntil?.(p);
+        await p;
+        this.memoryKvLoadedAt = Date.now();
       }
     } catch {}
   }
 
-  persistChatSendInMemory(msg, principal, body) {
+  async persistChatSendInMemory(msg, principal, body) {
     const clientMsgId = typeof body?.client_msg_id === "string" ? body.client_msg_id.trim() : "";
     const receiptKey = principal?.id && clientMsgId ? `${principal.id}:${clientMsgId}` : "";
     if (receiptKey && this.memoryReceipts.has(receiptKey)) {
@@ -3675,7 +4102,7 @@ export class GlobalChat {
     if (receiptKey) {
       this.memoryReceipts.set(receiptKey, { id: msg.id, message: msg, receipt });
     }
-    this.syncMemoryBackup();
+    await this.syncMemoryBackup();
     return {
       status: 200,
       inserted: true,
@@ -3965,7 +4392,7 @@ export class GlobalChat {
       });
     } catch (error) {
       if (!this.hasKvFallback) throw error;
-      await this.ensureMemoryFallbackLoaded();
+      await this.ensureMemoryFallbackLoaded(true);
       const current = this.memoryMessages.get(body.id) || null;
       const result = applyChatMutation(current, auth.principal, body, action, Date.now());
       if (result.status !== 200) return durableObjectJson({ status: "error", code: result.code }, result.status, request.method);
@@ -3978,13 +4405,13 @@ export class GlobalChat {
         }
       }
       if (this.memoryPinned?.id === body.id) this.memoryPinned = null;
-      this.syncMemoryBackup();
+      await this.syncMemoryBackup();
       outcome = { ...result, pinnedAfterMutation: this.memoryPinned };
     }
     if (outcome.status !== 200) return durableObjectJson({ status: "error", code: outcome.code }, outcome.status, request.method);
     if (outcome.message?.id) {
       this.memoryMessages.set(outcome.message.id, outcome.message);
-      this.syncMemoryBackup();
+      await this.syncMemoryBackup();
     }
     this.historyWindow.invalidate();
     this.pinnedWindow.invalidate();
@@ -4073,12 +4500,12 @@ export class GlobalChat {
       saved = await persistChatSend(this.state.storage, msg, auth.principal, body);
       if (saved?.status === 200 && saved.message) {
         this.memoryMessages.set(saved.message.id, saved.message);
-        this.syncMemoryBackup();
+        await this.syncMemoryBackup();
       }
     } catch (error) {
       if (!this.hasKvFallback) return chatStorageFailure(error, request.method);
-      await this.ensureMemoryFallbackLoaded();
-      saved = this.persistChatSendInMemory(msg, auth.principal, body);
+      await this.ensureMemoryFallbackLoaded(true);
+      saved = await this.persistChatSendInMemory(msg, auth.principal, body);
     }
     if (saved.status !== 200) return durableObjectJson({ status:"error", code:saved.code }, saved.status, request.method);
     if (saved.inserted) {
@@ -4370,15 +4797,15 @@ export class GlobalChat {
       saved = await persistChatSend(this.state.storage, msg, session.principal, data);
       if (saved?.status === 200 && saved.message) {
         this.memoryMessages.set(saved.message.id, saved.message);
-        this.syncMemoryBackup();
+        await this.syncMemoryBackup();
       }
     } catch (error) {
       if (!this.hasKvFallback) {
         try { session.ws.send(JSON.stringify({ ...(await chatStorageFailureEvent(error)), client_msg_id:data.client_msg_id })); } catch {}
         return;
       }
-      await this.ensureMemoryFallbackLoaded();
-      saved = this.persistChatSendInMemory(msg, session.principal, data);
+      await this.ensureMemoryFallbackLoaded(true);
+      saved = await this.persistChatSendInMemory(msg, session.principal, data);
     }
     if (saved.status !== 200) {
       try { session.ws.send(JSON.stringify({ type:"error", code:saved.code, http_status:saved.status, client_msg_id:data.client_msg_id })); } catch {}
@@ -4468,6 +4895,65 @@ export class GlobalChat {
     } catch {
       // Non-fatal: kegagalan push tidak boleh mengganggu aliran chat.
     }
+
+    // Simpan juga notifikasi pengumuman/mention/reply Chat Global ke inbox notifikasi (KV fallback)
+    if (
+      (notifCategory === "announcement" || notifCategory === "mention" || notifCategory === "reply") &&
+      this.env?.UNIQUE_DOWNLOADS &&
+      typeof this.env.UNIQUE_DOWNLOADS.get === "function"
+    ) {
+      try {
+        const jokesStore = getEdgeFallbackCommunityJokes(this.env).state.storage;
+        const now = Number(msg.at || Date.now());
+        if (notifCategory === "announcement") {
+          const nId = `chat-ann-${msg.id}`;
+          await jokesStore.put(`notif:${String(now).padStart(13, "0")}:${nId}`, {
+            id: nId,
+            category: "announcement",
+            global: true,
+            actor_id: String(msg.author_id || ""),
+            actor_name: msg.name || "xykal",
+            actor_github: msg.github_login || "xykal",
+            target_route: "chat",
+            title: headingTitle,
+            body: msg.text || "",
+            created_at: now,
+          });
+        } else if (notifCategory === "reply" && replyToName && !isSelfReply) {
+          const nId = `chat-rep-${msg.id}`;
+          await jokesStore.put(`notif:${String(now).padStart(13, "0")}:${nId}`, {
+            id: nId,
+            category: "reply",
+            actor_id: String(msg.author_id || ""),
+            actor_name: msg.name || "Pengguna",
+            actor_github: msg.github_login || "",
+            target_github: replyToName,
+            target_name: replyToName,
+            target_route: "chat",
+            title: headingTitle,
+            body: msg.text || "",
+            created_at: now,
+          });
+        } else if (notifCategory === "mention" && mentions.length > 0) {
+          for (const mentioned of mentions.slice(0, 3)) {
+            const nId = `chat-men-${msg.id}-${mentioned.toLowerCase()}`;
+            await jokesStore.put(`notif:${String(now).padStart(13, "0")}:${nId}`, {
+              id: nId,
+              category: "mention",
+              actor_id: String(msg.author_id || ""),
+              actor_name: msg.name || "Pengguna",
+              actor_github: msg.github_login || "",
+              target_github: mentioned,
+              target_name: mentioned,
+              target_route: "chat",
+              title: `${msg.name} menyebut (@${mentioned}) di Chat Global`,
+              body: msg.text || "",
+              created_at: now,
+            });
+          }
+        }
+      } catch {}
+    }
   }
 
   broadcast(fromSession, payload) {
@@ -4543,11 +5029,25 @@ async function handleEdgeLeaderboard(request, env) {
     (async () => {
       if (!env?.COMMUNITY_JOKES) return;
       try {
-        const jokesId = env.COMMUNITY_JOKES.idFromName("xydesk-community-jokes-v1");
-        const jokesRes = await env.COMMUNITY_JOKES.get(jokesId).fetch(
-          new Request("https://community-jokes/feed", { method: "GET" }),
-        );
-        if (!jokesRes.ok) return;
+        let jokesRes;
+        try {
+          const jokesId = env.COMMUNITY_JOKES.idFromName("xydesk-community-jokes-v1");
+          jokesRes = await env.COMMUNITY_JOKES.get(jokesId).fetch(
+            new Request("https://community-jokes/feed", { method: "GET" }),
+          );
+          if (jokesRes.status === 503 && env?.UNIQUE_DOWNLOADS) {
+            jokesRes = await getEdgeFallbackCommunityJokes(env).fetch(
+              new Request("https://community-jokes/feed", { method: "GET" }),
+            );
+          }
+        } catch {
+          if (env?.UNIQUE_DOWNLOADS) {
+            jokesRes = await getEdgeFallbackCommunityJokes(env).fetch(
+              new Request("https://community-jokes/feed", { method: "GET" }),
+            );
+          }
+        }
+        if (!jokesRes?.ok) return;
         const jokesData = await jokesRes.json().catch(() => null);
         const jokesList = Array.isArray(jokesData?.items) ? jokesData.items : [];
         for (const j of jokesList) {
@@ -4598,11 +5098,25 @@ async function handleEdgeLeaderboard(request, env) {
     (async () => {
       if (!env?.GLOBAL_CHAT) return;
       try {
-        const chatId = env.GLOBAL_CHAT.idFromName("xydesk-global-chat-v1");
-        const chatRes = await env.GLOBAL_CHAT.get(chatId).fetch(
-          new Request("https://global-chat/history", { method: "GET" }),
-        );
-        if (!chatRes.ok) return;
+        let chatRes;
+        try {
+          const chatId = env.GLOBAL_CHAT.idFromName("xydesk-global-chat-v1");
+          chatRes = await env.GLOBAL_CHAT.get(chatId).fetch(
+            new Request("https://global-chat/history", { method: "GET" }),
+          );
+          if (chatRes.status === 503 && env?.UNIQUE_DOWNLOADS) {
+            chatRes = await getEdgeFallbackGlobalChat(env).fetch(
+              new Request("https://global-chat/history", { method: "GET" }),
+            );
+          }
+        } catch {
+          if (env?.UNIQUE_DOWNLOADS) {
+            chatRes = await getEdgeFallbackGlobalChat(env).fetch(
+              new Request("https://global-chat/history", { method: "GET" }),
+            );
+          }
+        }
+        if (!chatRes?.ok) return;
         const chatData = await chatRes.json().catch(() => null);
         const msgs = Array.isArray(chatData?.messages) ? chatData.messages : [];
         for (const m of msgs) {
@@ -4720,6 +5234,9 @@ function updateEdgeOnlinePeers(peerKey, info = null) {
 
 export default {
   async fetch(request, env) {
+    if (env && env.UNIQUE_DOWNLOADS && (globalThis.caches?.default || env.XYDESK_DB)) {
+      env = { ...env, UNIQUE_DOWNLOADS: wrapKvWithEdgeCache(env.UNIQUE_DOWNLOADS, env.XYDESK_DB || null) };
+    }
     const url = new URL(request.url);
     const path = url.pathname;
 
@@ -4727,23 +5244,27 @@ export default {
       if (!env.GLOBAL_CHAT) return durableObjectJson({ status: "error", code: "channels_unavailable" }, 503, request.method);
       const target = new URL(path.replace("/api/chat/channels", "/channels"), request.url);
       target.search = url.search;
+      const isGetOrHead = request.method === "GET" || request.method === "HEAD" || request.method === "OPTIONS";
+      const bodyText = isGetOrHead ? undefined : await request.text();
       try {
         const id = env.GLOBAL_CHAT.idFromName("xydesk-official-channels-v1");
-        const isGetOrHead = request.method === "GET" || request.method === "HEAD";
         const upstream = await env.GLOBAL_CHAT.get(id).fetch(new Request(target.toString(), {
           method: request.method,
           headers: request.headers,
-          ...(isGetOrHead ? {} : { body: request.body, duplex: "half" }),
+          ...(isGetOrHead ? {} : { body: bodyText }),
         }));
         const response = new Response(upstream.body, upstream);
         response.headers.set("x-xydesk-channel-router", "1");
         return response;
       } catch (error) {
         if (env.UNIQUE_DOWNLOADS && typeof env.UNIQUE_DOWNLOADS.get === "function") {
-          const fallbackRes = await new OfficialChannels(
-            { storage: { get: async () => undefined, list: async () => new Map(), transaction: async () => { throw error; } } },
-            env,
-          ).handle(new Request(target.toString(), { method: request.method, headers: request.headers }), target);
+          const fallbackRes = await getEdgeFallbackOfficialChannels(env).fetch(
+            new Request(target.toString(), {
+              method: request.method,
+              headers: request.headers,
+              ...(isGetOrHead ? {} : { body: bodyText }),
+            }),
+          );
           const response = new Response(fallbackRes.body, fallbackRes);
           response.headers.set("x-xydesk-channel-router", "1");
           return response;
@@ -4754,7 +5275,14 @@ export default {
     if (path === "/ws/chat") {
       if (!env.GLOBAL_CHAT) return notFound(request.method);
       const chatId = env.GLOBAL_CHAT.idFromName("xydesk-global-chat-v1");
-      return env.GLOBAL_CHAT.get(chatId).fetch(request);
+      try {
+        return await env.GLOBAL_CHAT.get(chatId).fetch(request);
+      } catch (error) {
+        if (env.UNIQUE_DOWNLOADS && typeof env.UNIQUE_DOWNLOADS.get === "function") {
+          return await getEdgeFallbackGlobalChat(env).fetch(request);
+        }
+        return chatStorageFailure(error, request.method);
+      }
     }
     if (path === "/api/chat/history") {
       if (!env.GLOBAL_CHAT) return notFound(request.method);
@@ -4776,22 +5304,30 @@ export default {
       }
       if ((!res || !res.ok || !payload || !Array.isArray(payload.messages)) && env?.UNIQUE_DOWNLOADS) {
         try {
-          const raw = await env.UNIQUE_DOWNLOADS.get("chat:prod_backup_v1");
-          const parsed = raw ? JSON.parse(raw) : null;
-          const kvMsgs = Array.isArray(parsed?.messages) ? parsed.messages : EDGE_CHAT_MESSAGES;
-          payload = {
-            messages: kvMsgs,
-            pinned_message: parsed?.pinned_message ?? EDGE_PINNED_MSG,
-            online_count: edgeOnline,
-            joined_at: reqJoinedAt,
-          };
-        } catch {
-          payload = {
-            messages: EDGE_CHAT_MESSAGES,
-            pinned_message: EDGE_PINNED_MSG,
-            online_count: edgeOnline,
-            joined_at: reqJoinedAt,
-          };
+          const fbRes = await getEdgeFallbackGlobalChat(env).fetch(new Request(historyUrl, { method: "GET" }));
+          if (fbRes.ok) {
+            payload = await fbRes.json().catch(() => null);
+          }
+        } catch {}
+        if (!payload || !Array.isArray(payload.messages)) {
+          try {
+            const raw = await env.UNIQUE_DOWNLOADS.get("chat:prod_backup_v1");
+            const parsed = raw ? JSON.parse(raw) : null;
+            const kvMsgs = Array.isArray(parsed?.messages) ? parsed.messages : EDGE_CHAT_MESSAGES;
+            payload = {
+              messages: kvMsgs,
+              pinned_message: parsed?.pinned_message ?? EDGE_PINNED_MSG,
+              online_count: edgeOnline,
+              joined_at: reqJoinedAt,
+            };
+          } catch {
+            payload = {
+              messages: EDGE_CHAT_MESSAGES,
+              pinned_message: EDGE_PINNED_MSG,
+              online_count: edgeOnline,
+              joined_at: reqJoinedAt,
+            };
+          }
         }
       } else if (!res || !res.ok) {
         return res || chatStorageFailure(new Error("Unconfirmed history payload"), request.method);
@@ -4861,7 +5397,19 @@ export default {
               body: bodyText,
             }),
           );
-        } catch {}
+        } catch {
+          if (env.UNIQUE_DOWNLOADS && typeof env.UNIQUE_DOWNLOADS.get === "function") {
+            try {
+              await getEdgeFallbackGlobalChat(env).fetch(
+                new Request(new URL("/pin", request.url), {
+                  method: "POST",
+                  headers: { "Content-Type": "application/json" },
+                  body: bodyText,
+                }),
+              );
+            } catch {}
+          }
+        }
       }
       return durableObjectJson({ status: "ok", pinned_message: EDGE_PINNED_MSG }, 200, request.method);
     }
@@ -4874,6 +5422,7 @@ export default {
       if (!bearer) return durableObjectJson({ status: "error", code: "authentication_required" }, 401, request.method);
       const auth = await resolveGithubIdentity(bearer[1]);
       if (!auth.ok) return durableObjectJson({ status: "error", code: auth.code }, auth.status, request.method);
+      const bodyText = await request.text();
       const chatId = env.GLOBAL_CHAT.idFromName("xydesk-global-chat-v1");
       const stub = env.GLOBAL_CHAT.get(chatId);
       let response;
@@ -4884,13 +5433,13 @@ export default {
         if (capabilityBody?.revisioned_mutations !== 1)
           return durableObjectJson({ status: "error", code: "chat_migration_pending" }, 503, request.method);
         response = await stub.fetch(new Request(new URL(path.endsWith("/edit") ? "/edit" : "/delete", request.url), {
-        method: "POST", headers: request.headers, body: request.body, duplex: "half",
+          method: "POST", headers: request.headers, body: bodyText,
         }));
       } catch (error) {
         if (env.UNIQUE_DOWNLOADS && typeof env.UNIQUE_DOWNLOADS.get === "function") {
           response = await getEdgeFallbackGlobalChat(env).fetch(
             new Request(new URL(path.endsWith("/edit") ? "/edit" : "/delete", request.url), {
-              method: "POST", headers: request.headers, body: request.body, duplex: "half",
+              method: "POST", headers: request.headers, body: bodyText,
             }),
           );
         } else {

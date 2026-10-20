@@ -10,6 +10,21 @@ export async function verifyGithubIdentity(token, claimedLogin, options = {}) {
   return result;
 }
 
+async function fetchNoRedirect(url, options) {
+  try {
+    return await fetch(url, { ...options, redirect: "error" });
+  } catch (err) {
+    if (err instanceof TypeError && /redirect/i.test(String(err.message || ""))) {
+      const res = await fetch(url, { ...options, redirect: "manual" });
+      if (res.status >= 300 && res.status < 400) {
+        throw new Error("redirect_blocked");
+      }
+      return res;
+    }
+    throw err;
+  }
+}
+
 /** Resolve a provider-issued token without trusting an externally claimed profile. */
 export async function resolveGithubIdentity(token, { timeoutMs = 2_000 } = {}) {
   const denied = () => ({ ok: false, status: 401, code: "invalid_identity" });
@@ -23,8 +38,7 @@ export async function resolveGithubIdentity(token, { timeoutMs = 2_000 } = {}) {
     timer = setTimeout(() => { controller.abort(); resolve(unavailable()); }, timeoutMs);
   });
   const lookup = async () => {
-    const response = await fetch("https://api.github.com/user", {
-      redirect: "error",
+    const response = await fetchNoRedirect("https://api.github.com/user", {
       headers: {
         "Authorization": `Bearer ${token}`,
         "Accept": "application/vnd.github+json",

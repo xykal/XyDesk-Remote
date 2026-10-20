@@ -1,6 +1,21 @@
 /** One deadline for all configured candidates, fetch AND response-body parsing.
  * This exchanges a code only; callers still must verify identity and bind the session.
  */
+async function fetchNoRedirect(url, options) {
+  try {
+    return await fetch(url, { ...options, redirect: "error" });
+  } catch (err) {
+    if (err instanceof TypeError && /redirect/i.test(String(err.message || ""))) {
+      const res = await fetch(url, { ...options, redirect: "manual" });
+      if (res.status >= 300 && res.status < 400) {
+        throw new Error("redirect_blocked");
+      }
+      return res;
+    }
+    throw err;
+  }
+}
+
 export async function exchangeGithubCode(code, candidates, { timeoutMs = 4_000 } = {}) {
   const failed = () => ({ ok: false, status: 400, code: "token_exchange_failed" });
   const unavailable = () => ({ ok: false, status: 503, code: "oauth_provider_unavailable" });
@@ -19,8 +34,8 @@ export async function exchangeGithubCode(code, candidates, { timeoutMs = 4_000 }
       const body = { client_id: candidate.client_id, client_secret: candidate.client_secret, code };
       if (candidate.redirect_uri) body.redirect_uri = candidate.redirect_uri;
       try {
-        const response = await fetch("https://github.com/login/oauth/access_token", {
-          method: "POST", redirect: "error", signal: controller.signal,
+        const response = await fetchNoRedirect("https://github.com/login/oauth/access_token", {
+          method: "POST", signal: controller.signal,
           headers: { "Content-Type": "application/json", "Accept": "application/json", "User-Agent": "XyDeskRemote-OAuth/1.0" },
           body: JSON.stringify(body),
         });
