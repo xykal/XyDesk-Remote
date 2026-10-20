@@ -259,9 +259,11 @@ jobs:
           path: |
             client/Android/Studio/freeRDPCore/.cxx
             client/Android/Studio/freeRDPCore/src/main/cpp/external
+            client/Android/Studio/freeRDPCore/src/main/jniLibs
             $HOME/.gradle/caches
-          key: freerdp-native-cxx-v2-${{ hashFiles('client/Android/cmake/**', 'client/Android/Studio/freeRDPCore/src/main/cpp/**', 'channels/rdpsnd/**', 'channels/audin/**', 'channels/disp/**', 'channels/client/**', 'channels/cliprdr/**', 'client/common/**', 'libfreerdp/codec/**') }}
+          key: freerdp-native-cxx-v3-${{ hashFiles('client/Android/cmake/**', 'client/Android/Studio/freeRDPCore/src/main/cpp/**', 'channels/rdpsnd/**', 'channels/audin/**', 'channels/disp/**', 'channels/client/**', 'channels/cliprdr/**', 'client/common/**', 'libfreerdp/codec/**') }}
           restore-keys: |
+            freerdp-native-cxx-v3-
             freerdp-native-cxx-v2-
       # Cache .cxx dan source ExternalProject harus selalu sepasang. Kalau .cxx
       # dipulihkan tanpa source-nya (mis. cache lama dari sebelum path external
@@ -293,7 +295,10 @@ jobs:
             while IFS= read -r gitdir; do
               repo="${gitdir%/.git}"
               git -C "$repo" checkout -q -- . 2>/dev/null || true
-              git -C "$repo" clean -fdq 2>/dev/null || true
+              case "$repo" in
+                *openh264-build*) ;;
+                *) git -C "$repo" clean -fdq 2>/dev/null || true ;;
+              esac
               echo "  pristine: $repo"
             done < <(find "$root" -maxdepth 10 -name .git -print 2>/dev/null)
           done
@@ -302,6 +307,10 @@ jobs:
           if [ -d "client/Android/Studio/freeRDPCore/.cxx" ]; then
             find client/Android/Studio/freeRDPCore/.cxx -path "*freerdp-stamp/freerdp-build*" -delete || true
             find client/Android/Studio/freeRDPCore/.cxx -path "*freerdp-stamp/freerdp-install*" -delete || true
+            if [ ! -f "client/Android/Studio/freeRDPCore/src/main/jniLibs/arm64-v8a/lib/pkgconfig/opus.pc" ]; then
+              echo "jniLibs belum terpulihkan dari cache -> hapus *-install stamp agar semua deps di-install ulang ke jniLibs."
+              find client/Android/Studio/freeRDPCore/.cxx -path "*-stamp/*-install*" -delete || true
+            fi
           fi
       - name: Install Android SDK (cmdline-tools + components)
         run: |
