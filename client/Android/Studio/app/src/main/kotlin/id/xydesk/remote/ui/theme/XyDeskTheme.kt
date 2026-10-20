@@ -228,7 +228,11 @@ fun XyDeskTheme(
             ),
         ),
         content = {
-            CompositionLocalProvider(LocalContentColor provides scheme.onSurface, LocalUiMotionEnabled provides uiMotionEnabled) {
+            CompositionLocalProvider(
+                LocalContentColor provides scheme.onSurface,
+                LocalUiMotionEnabled provides uiMotionEnabled,
+                LocalDecorativeMotionEnabled provides uiMotionEnabled,
+            ) {
                 id.xydesk.remote.ui.OfficialChannelNavigation { content() }
             }
         },

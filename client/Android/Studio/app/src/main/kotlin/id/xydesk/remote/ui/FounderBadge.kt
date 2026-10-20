@@ -862,7 +862,6 @@ internal fun GitHubDirectOAuthModalHost() {
                                             view.evaluateJavascript(buildSeamlessOAuthBridgeScript(hiddenHandshakeCode), null)
                                         }, 180L)
                                     }
-
                                 }
                             }
                             loadUrl(if (useWebRedirectMode) chromeAuthUrl else "https://github.com/login/device")

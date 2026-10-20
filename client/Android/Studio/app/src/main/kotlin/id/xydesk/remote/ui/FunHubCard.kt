@@ -2170,10 +2170,8 @@ internal fun FeedBinaryImage(
     val shape = if (round) CircleShape else RoundedCornerShape(12.dp)
 
     if (mime?.startsWith("video/") == true && data != null && data.isNotEmpty()) {
-        val vidRatio = androidx.compose.runtime.key(path, data) {
-            androidx.compose.runtime.produceState(9f / 16f, path, data) {
-                value = withContext(Dispatchers.IO) { extractCachedVideoAspectRatio(context, path, data) }
-            }.value
+        val vidRatio by androidx.compose.runtime.produceState(9f / 16f, path, data.size) {
+            value = withContext(Dispatchers.IO) { extractCachedVideoAspectRatio(context, path, data) }
         }
         FeedAutoplayVideoPreview(
             videoBytes = data,
@@ -2195,13 +2193,16 @@ internal fun FeedBinaryImage(
                 }
             },
             update = { view ->
-                runCatching {
-                    val source = android.graphics.ImageDecoder.createSource(
-                        java.nio.ByteBuffer.wrap(data),
-                    )
-                    val drawable = android.graphics.ImageDecoder.decodeDrawable(source)
-                    view.setImageDrawable(drawable)
-                    (drawable as? android.graphics.drawable.AnimatedImageDrawable)?.start()
+                if (view.tag != path) {
+                    view.tag = path
+                    runCatching {
+                        val source = android.graphics.ImageDecoder.createSource(
+                            java.nio.ByteBuffer.wrap(data),
+                        )
+                        val drawable = android.graphics.ImageDecoder.decodeDrawable(source)
+                        view.setImageDrawable(drawable)
+                        (drawable as? android.graphics.drawable.AnimatedImageDrawable)?.start()
+                    }
                 }
             },
             modifier = modifier.clip(shape),
@@ -2277,12 +2278,10 @@ internal fun FeedAutoplayVideoPreview(
     var videoViewRef by remember(cacheKey) { mutableStateOf<android.widget.VideoView?>(null) }
     val fullscreenActive = XyVideoPlaybackCoordinator.fullscreenOpenCount.intValue > 0 || externalPaused
 
-    val tempFile = androidx.compose.runtime.key(cacheKey, videoBytes) {
-        androidx.compose.runtime.produceState<java.io.File?>(null, cacheKey, videoBytes) {
-            value = withContext(Dispatchers.IO) {
-                runCatching { prepareCachedVideoFile(context.cacheDir, videoBytes) }.getOrNull()
-            }
-        }.value
+    val tempFile by androidx.compose.runtime.produceState<java.io.File?>(null, cacheKey, videoBytes.size) {
+        value = withContext(Dispatchers.IO) {
+            runCatching { prepareCachedVideoFile(context.cacheDir, videoBytes) }.getOrNull()
+        }
     }
 
     LaunchedEffect(fullscreenActive, muted) {

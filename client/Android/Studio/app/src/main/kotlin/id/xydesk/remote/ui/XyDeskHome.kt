@@ -244,12 +244,6 @@ fun XyDeskHome(
     val notice = rememberXyNotice()
 
     fun connect(profile: ConnectionProfile) {
-        if (RdpOptions.of(context, profile.id).pcConnectMode) {
-            context.startActivity(PcStreamSessionActivity.intent(context))
-            notice.show(xyNow("Koneksi PC lama diganti PC Stream. Profil tersimpan tidak dihapus.",
-                "Legacy PC connection is replaced by PC Stream. Saved profile was not deleted."))
-            return
-        }
         onAuthenticateConnect {
             incrementLocalUsageSessionCount(context)
             scope.launch { repo.touch(profile) }
@@ -493,7 +487,7 @@ fun XyDeskHome(
                         onDismissSharedNotice = onDismissSharedNotice,
                         onMenu = { drawerOpen = true },
                         onAddRdp = { route = XyRoute.EditDevice(null, pcQuickMode = false) },
-                        onAddPcQuick = { context.startActivity(PcStreamSessionActivity.intent(context)) },
+                        onAddPcQuick = { route = XyRoute.EditDevice(null, pcQuickMode = true) },
                         onOpenPcStream = { context.startActivity(PcStreamSessionActivity.intent(context)) },
                         onCreateRdp = { route = XyRoute.CreateRdp },
                         onOpenSshTerminal = { route = XyRoute.SshTerminal },
@@ -1515,14 +1509,14 @@ private fun DevicesScreen(
                         XyEmptyState(
                             title = xy("Belum Ada Perangkat Tersimpan", "No Saved Devices Yet"),
                             subtitle = xy(
-                                "Tambahkan PC Stream atau RDP untuk mulai mengakses desktop jarak jauh.",
-                                "Add PC Stream or RDP to start accessing your remote desktop.",
+                                "Tambahkan Koneksi PC, PC Stream, atau RDP untuk mulai mengakses desktop jarak jauh.",
+                                "Add a PC, PC Stream, or RDP connection to start accessing your remote desktop.",
                             ),
                             icon = XyIcons.Monitor,
                         )
                         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                             XyPillButton(
-                                xy("PC Stream", "PC Stream"),
+                                xy("Koneksi PC (ID)", "PC (ID & Pass)"),
                                 onAddPcQuick,
                                 icon = XyIcons.Plus,
                                 modifier = Modifier.weight(1f),
@@ -1571,7 +1565,7 @@ private fun DevicesScreen(
                         XySegmented(
                             options = listOf(
                                 xy("Semua ({0})", "All ({0})", favorites.size),
-                                xy("PC lama", "Legacy PC"),
+                                xy("Koneksi PC", "PC Connect"),
                                 xy("Koneksi RDP", "RDP Session"),
                             ),
                             selectedIndex = modeFilterIndex,
@@ -1670,6 +1664,22 @@ private fun DevicesScreen(
                     style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+                )
+                XyRow(
+                    title = xy("Koneksi PC (ID & Password)", "PC Connection (ID & Password)"),
+                    modifier = Modifier.padding(horizontal = 2.dp),
+                    trailing = {
+                        Text(
+                            xy("Eksperimental", "Experimental"),
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.primary,
+                            maxLines = 1,
+                        )
+                    },
+                    onClick = {
+                        showAddBubble = false
+                        onAddPcQuick()
+                    },
                 )
                 XyRow(
                     title = xy("PC Stream & Engine Konsol Non-RDP (120Hz)", "PC Stream & Non-RDP Console Engine (120Hz)"),

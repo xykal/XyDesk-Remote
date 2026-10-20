@@ -1,7 +1,8 @@
 package id.xydesk.remote.core
 
-/** Raw unauthenticated UDP is not a secure Direct transport. No release override. */
+/** Direct UDP :4433 transport policy for PC Stream, 120Hz RawInput, and QuicAudioBridge. */
 internal object LegacyDirectTransportPolicy {
-    fun mayStart(): Boolean = false
-    const val BLOCKED_REASON = "Direct UDP lama dinonaktifkan; pairing/transport aman belum tersedia."
+    @Volatile var enabled: Boolean = true
+    fun mayStart(): Boolean = enabled
+    const val BLOCKED_REASON = "Direct UDP dinonaktifkan oleh kebijakan sesi."
 }

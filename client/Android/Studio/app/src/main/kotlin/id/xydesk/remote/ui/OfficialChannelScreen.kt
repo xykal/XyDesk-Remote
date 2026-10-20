@@ -45,9 +45,29 @@ internal fun OfficialChannelNavigation(content: @Composable () -> Unit) {
 @Composable
 internal fun OfficialChannelDirectory(modifier: Modifier = Modifier) {
     val navigate = LocalChannelNavigator.current
-    Row(modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(horizontal = 12.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+    Row(
+        modifier = modifier
+            .fillMaxWidth()
+            .horizontalScroll(rememberScrollState())
+            .padding(horizontal = 12.dp, vertical = 4.dp),
+        horizontalArrangement = Arrangement.spacedBy(6.dp),
+        verticalAlignment = androidx.compose.ui.Alignment.CenterVertically,
+    ) {
         officialChannels.forEach { channel ->
-            AssistChip(onClick = { navigate(channel.id) }, label = { Text("#${channel.tag}", maxLines = 1) })
+            Surface(
+                onClick = { navigate(channel.id) },
+                shape = androidx.compose.foundation.shape.RoundedCornerShape(50),
+                color = androidx.compose.ui.graphics.Color(0xFF15161D),
+                border = androidx.compose.foundation.BorderStroke(0.8.dp, androidx.compose.ui.graphics.Color(0xFF27272F)),
+            ) {
+                Text(
+                    text = "#${channel.tag}",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = androidx.compose.ui.graphics.Color(0xFFE4E4E7),
+                    maxLines = 1,
+                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp),
+                )
+            }
         }
     }
 }

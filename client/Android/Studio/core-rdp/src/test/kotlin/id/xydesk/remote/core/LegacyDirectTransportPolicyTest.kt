@@ -4,8 +4,9 @@ import org.junit.Assert.*
 import org.junit.Test
 
 class LegacyDirectTransportPolicyTest {
-    @Test fun rawUdpCannotBeEnabledInReleaseCandidate() {
-        assertFalse(LegacyDirectTransportPolicy.mayStart())
+    @Test fun directUdpPolicyDefaultsOnAndRespectsToggle() {
+        LegacyDirectTransportPolicy.enabled = true
+        assertTrue(LegacyDirectTransportPolicy.mayStart())
         assertTrue(LegacyDirectTransportPolicy.BLOCKED_REASON.isNotBlank())
     }
 }

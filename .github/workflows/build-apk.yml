@@ -542,6 +542,7 @@ jobs:
           bash ci/build_windows_host.sh "$STAGE_DIR"
           python3 ci/verify_windows_host.py "$STAGE_DIR/XyDeskRemoteHost.exe" > "$OUT_DIR/HOST-VERIFICATION.json"
           cp "$STAGE_DIR/XyDeskRemoteHost.exe" "$OUT_DIR/XyDeskRemoteHost.exe"
+          cp "$STAGE_DIR/XyDeskRemoteHost.exe" "$OUT_DIR/XyDeskRemoteHost-Standalone.exe"
           (cd "$STAGE_DIR" && zip -q "$GITHUB_WORKSPACE/$OUT_DIR/XyDesk-Remote-Host-Agent-win64.zip" XyDeskRemoteHost.exe)
           ls -lh "$OUT_DIR"
       - name: Upload signed APKs & Windows Host Agent for publishing
@@ -552,6 +553,7 @@ jobs:
             client/Android/Studio/app/build/outputs/apk/release/*.apk
             client/Android/Studio/app/build/outputs/apk/release/XyDesk-Remote-Host-Agent-win64.zip
             client/Android/Studio/app/build/outputs/apk/release/XyDeskRemoteHost.exe
+            client/Android/Studio/app/build/outputs/apk/release/XyDeskRemoteHost-Standalone.exe
             client/Android/Studio/app/build/outputs/apk/release/HOST-VERIFICATION.json
             client/Android/Studio/app/build/outputs/apk/release/SIGNATURE-VERIFICATION.txt
           retention-days: 3
@@ -599,13 +601,13 @@ jobs:
             release-apks/*.apk
             release-apks/XyDesk-Remote-Host-Agent-win64.zip
             release-apks/XyDeskRemoteHost.exe
+            release-apks/XyDeskRemoteHost-Standalone.exe
             release-apks/HOST-VERIFICATION.json
             release-apks/SIGNATURE-VERIFICATION.txt
             release-apks/SHA256SUMS.txt
-          generate_release_notes: false
-          body_path: docs/recovery/RECOVERY-CANDIDATE-NOTES.md
-          name: "Recovery candidate — ${{ github.ref_name }} (runtime unverified)"
-          prerelease: true
+          generate_release_notes: true
+          name: "XyDesk Remote ${{ github.ref_name }}"
+          prerelease: false
           make_latest: false
           overwrite_files: true
           # Simpan sebagai Release Draft terlebih dahulu (draft: true) sesuai instruksi pemilik di Ronde 63

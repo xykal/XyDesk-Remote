@@ -37,6 +37,10 @@ async function identity(request, required) {
 export class OfficialChannels {
   constructor(storage, env = {}) {
     this.storage = storage; this.env = env; this.windows = new Map(); this.rates = new Map();
+    this.memoryPosts = new Map();
+  }
+  get hasKvFallback() {
+    return Boolean(this.env && typeof this.env.UNIQUE_DOWNLOADS?.get === 'function');
   }
   async fetch(request) {
     try { return await this.handle(request); } catch (error) { return chatStorageFailure(error, request.method); }
@@ -61,7 +65,20 @@ export class OfficialChannels {
     if (request.method === 'GET') {
       const cursor = url.searchParams.get('cursor') || '';
       if (cursor && (!cursor.startsWith(prefix) || !/^channel:[a-z-]+:post:\d{13}:[0-9a-f-]{36}$/.test(cursor))) return denied('invalid_cursor', 400);
-      const read = async () => [...(await this.storage.list({ prefix, reverse: true, limit: 31, ...(cursor ? { end: cursor } : {}) })).entries()];
+      const read = async () => {
+        try {
+          return [...(await this.storage.list({ prefix, reverse: true, limit: 31, ...(cursor ? { end: cursor } : {}) })).entries()];
+        } catch (err) {
+          if (!this.hasKvFallback) throw err;
+          try {
+            const raw = await this.env.UNIQUE_DOWNLOADS.get(`channel_backup:${slug}`);
+            const arr = raw ? JSON.parse(raw) : (this.memoryPosts.get(slug) || []);
+            return arr.map(p => [`${prefix}${String(p.at || 0).padStart(13, '0')}:${p.id}`, p]);
+          } catch {
+            return [];
+          }
+        }
+      };
       let entries;
       if (cursor) entries = await read();
       else {

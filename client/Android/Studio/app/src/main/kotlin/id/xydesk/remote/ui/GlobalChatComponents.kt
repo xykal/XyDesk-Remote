@@ -632,8 +632,10 @@ internal fun MessageBubble(
         resolveSpecialUserRole(msg.name, msg.githubLogin)
     }
     val detectedLinkUrl = remember(msg.id, msg.text) { extractFirstUrl(msg.text) }
-    BoxWithConstraints(Modifier.fillMaxWidth()) {
-    val maxBubbleWidth = chatBubbleMaxWidth(maxWidth.value, isCompactOverlay).dp
+    val screenWidthDp = androidx.compose.ui.platform.LocalConfiguration.current.screenWidthDp.toFloat()
+    val maxBubbleWidth = remember(screenWidthDp, isCompactOverlay) {
+        chatBubbleMaxWidth(screenWidthDp, isCompactOverlay).dp
+    }
     val minBubbleWidth = (when {
         isCompactOverlay -> if (hasMediaAttachment) 150.dp else 72.dp
         hasMediaAttachment -> 190.dp
@@ -1224,7 +1226,6 @@ internal fun MessageBubble(
             )
         }
     }
-    }
 }
 
 @Composable
@@ -1386,6 +1387,7 @@ internal fun ChatMediaAttachmentBox(
                     runCatching { Bitmap.createScaledBitmap(bmp, targetW, targetH, true) }.getOrDefault(bmp)
                 } else null
             }
+            val lowResImageBitmap = remember(lowResBmp) { lowResBmp?.asImageBitmap() }
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -1395,9 +1397,9 @@ internal fun ChatMediaAttachmentBox(
                     .clickable { onManualDownloadMedia() },
                 contentAlignment = Alignment.Center,
             ) {
-                if (lowResBmp != null) {
+                if (lowResImageBitmap != null) {
                     Image(
-                        bitmap = lowResBmp.asImageBitmap(),
+                        bitmap = lowResImageBitmap,
                         contentDescription = null,
                         modifier = Modifier
                             .fillMaxSize()
@@ -1450,6 +1452,7 @@ internal fun ChatMediaAttachmentBox(
             // =========================================================
             // GAMBAR SUDAH DIUNDUH: TAMPIL PENUH SESUAI ASPECT RATIO ASLI
             // =========================================================
+            val fullImageBitmap = remember(bmp) { bmp.asImageBitmap() }
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -1458,7 +1461,7 @@ internal fun ChatMediaAttachmentBox(
                     .clickable { onOpenMedia() },
             ) {
                 Image(
-                    bitmap = bmp.asImageBitmap(),
+                    bitmap = fullImageBitmap,
                     contentDescription = null,
                     modifier = Modifier.fillMaxSize(),
                     contentScale = ContentScale.Crop,

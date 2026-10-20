@@ -3141,8 +3141,20 @@ const CHAT_ATTACHMENT_MAX = 2_800_000;
 const CHAT_MSG_PER_WINDOW = 200;
 const CHAT_WINDOW_MS = 20_000;
 const APP_PRESENCE_TTL_MS = 75_000;
-const LIVE_DATA_PACK_VERSION = "2026.10.18.64";
+const LIVE_DATA_PACK_VERSION = "2026.10.20.65";
 let EDGE_PINNED_MSG = null;
+let EDGE_FALLBACK_CHAT_INSTANCE = null;
+function getEdgeFallbackGlobalChat(env) {
+  if (!EDGE_FALLBACK_CHAT_INSTANCE || EDGE_FALLBACK_CHAT_INSTANCE.env !== env) {
+    const quotaThrow = async () => { throw new Error("exceeded free tier storage quota"); };
+    EDGE_FALLBACK_CHAT_INSTANCE = new GlobalChat(
+      { storage: { get: quotaThrow, put: quotaThrow, delete: quotaThrow, list: quotaThrow, transaction: quotaThrow } },
+      env,
+    );
+  }
+  return EDGE_FALLBACK_CHAT_INSTANCE;
+}
+let EDGE_CHAT_MESSAGES = [];
 const DEFAULT_ONESIGNAL_APP_ID = "e3d5adea-1c0f-4986-9ce5-e088d65f0998";
 const LEGACY_TEST_NAMES = new Set(["tesbot", "budi", "rizky"]);
 
@@ -3570,7 +3582,99 @@ export class GlobalChat {
     this.historyWindow = new RevisionedHistoryWindow();
     this.pinnedWindow = new RevisionedHistoryWindow({ ttlMs: 30_000 });
     this.joinedCache = new Map();
+    this.memoryMessages = new Map();
+    this.memoryReceipts = new Map();
+    this.memoryPinned = null;
+    this.memoryKvLoaded = false;
     this.officialChannels = new OfficialChannels(this.state.storage, this.env);
+  }
+
+  get hasKvFallback() {
+    return Boolean(this.env && typeof this.env.UNIQUE_DOWNLOADS?.get === "function");
+  }
+
+  async ensureMemoryFallbackLoaded() {
+    if (this.memoryKvLoaded || !this.hasKvFallback) return;
+    this.memoryKvLoaded = true;
+    try {
+      const raw = await this.env.UNIQUE_DOWNLOADS.get("chat:prod_backup_v1");
+      if (raw) {
+        const parsed = JSON.parse(raw);
+        const list = Array.isArray(parsed?.messages) ? parsed.messages : (Array.isArray(parsed) ? parsed : []);
+        for (const m of list) {
+          if (m && m.id) this.memoryMessages.set(String(m.id), m);
+        }
+        if (parsed?.pinned_message && !this.memoryPinned) {
+          this.memoryPinned = parsed.pinned_message;
+        }
+      }
+    } catch {}
+    for (const m of EDGE_CHAT_MESSAGES) {
+      if (m && m.id && !this.memoryMessages.has(String(m.id))) {
+        this.memoryMessages.set(String(m.id), m);
+      }
+    }
+  }
+
+  syncMemoryBackup(latestMessages = null) {
+    try {
+      const arr = Array.isArray(latestMessages)
+        ? latestMessages.slice(-CHAT_HISTORY_LIMIT)
+        : [...this.memoryMessages.values()].sort((a, b) => Number(a.at || 0) - Number(b.at || 0)).slice(-CHAT_HISTORY_LIMIT);
+      EDGE_CHAT_MESSAGES = arr;
+      if (this.hasKvFallback) {
+        const payload = JSON.stringify({
+          messages: arr.slice(-80),
+          pinned_message: this.memoryPinned,
+          updated_at: Date.now(),
+        });
+        const p = this.env.UNIQUE_DOWNLOADS.put("chat:prod_backup_v1", payload).catch(() => {});
+        this.state.waitUntil?.(p);
+      }
+    } catch {}
+  }
+
+  persistChatSendInMemory(msg, principal, body) {
+    const clientMsgId = typeof body?.client_msg_id === "string" ? body.client_msg_id.trim() : "";
+    const receiptKey = principal?.id && clientMsgId ? `${principal.id}:${clientMsgId}` : "";
+    if (receiptKey && this.memoryReceipts.has(receiptKey)) {
+      const prev = this.memoryReceipts.get(receiptKey);
+      const currentMsg = this.memoryMessages.get(prev.id) || prev.message || msg;
+      return {
+        status: 200,
+        inserted: false,
+        deduplicated: true,
+        message: currentMsg,
+        receipt: prev.receipt,
+      };
+    }
+    this.memoryMessages.set(msg.id, msg);
+    if (this.memoryMessages.size > CHAT_HISTORY_LIMIT) {
+      const sortedKeys = [...this.memoryMessages.entries()]
+        .sort((a, b) => Number(a[1]?.at || 0) - Number(b[1]?.at || 0))
+        .map(([k]) => k);
+      while (this.memoryMessages.size > CHAT_HISTORY_LIMIT && sortedKeys.length > 0) {
+        this.memoryMessages.delete(sortedKeys.shift());
+      }
+    }
+    const receipt = {
+      id: msg.id,
+      client_msg_id: clientMsgId || null,
+      author_id: principal?.id || null,
+      revision: 0,
+      at: msg.at,
+    };
+    if (receiptKey) {
+      this.memoryReceipts.set(receiptKey, { id: msg.id, message: msg, receipt });
+    }
+    this.syncMemoryBackup();
+    return {
+      status: 200,
+      inserted: true,
+      deduplicated: false,
+      message: msg,
+      receipt,
+    };
   }
 
   getActiveOnlineCount() {
@@ -3600,10 +3704,25 @@ export class GlobalChat {
     }
     const now = Date.now();
     const cached = this.joinedCache.get(identityKey);
-    let stored = cached && now - cached.checkedAt < 300_000 ? cached.at : await this.state.storage.get(identityKey);
+    let stored;
+    if (cached && now - cached.checkedAt < 300_000) {
+      stored = cached.at;
+    } else if (this.hasKvFallback) {
+      try {
+        stored = await this.state.storage.get(identityKey);
+      } catch {
+        stored = cached?.at || (rawJoined > 0 ? rawJoined : 0);
+      }
+    } else {
+      stored = await this.state.storage.get(identityKey);
+    }
     if (!stored || typeof stored !== "number" || stored <= 0) {
       stored = rawJoined > 0 ? rawJoined : now;
-      await this.state.storage.put(identityKey, stored);
+      if (this.hasKvFallback) {
+        try { await this.state.storage.put(identityKey, stored); } catch {}
+      } else {
+        await this.state.storage.put(identityKey, stored);
+      }
     }
     if (this.joinedCache.size >= 1000 && !this.joinedCache.has(identityKey)) this.joinedCache.delete(this.joinedCache.keys().next().value);
     this.joinedCache.set(identityKey, { at: stored, checkedAt: cached && now - cached.checkedAt < 300_000 ? cached.checkedAt : now });
@@ -3817,24 +3936,48 @@ export class GlobalChat {
     if (action === "edit" && isMaliciousTextOrLink(String(body.text || "")))
       return durableObjectJson({ status: "error", code: "malicious_link_blocked" }, 400, request.method);
     const key = `msg:${body.id}`;
-    const outcome = await this.state.storage.transaction(async transaction => {
-      const current = await transaction.get(key);
+    let outcome;
+    try {
+      outcome = await this.state.storage.transaction(async transaction => {
+        const current = await transaction.get(key);
+        const result = applyChatMutation(current, auth.principal, body, action, Date.now());
+        if (result.status !== 200) return result;
+        await transaction.put(key, result.message);
+        if (action === "delete") {
+          const messages = await transaction.list({ prefix: "msg:" });
+          for (const [replyKey, reply] of messages) {
+            if (reply?.reply_to_id === body.id) await transaction.put(replyKey, { ...reply, reply_to_text: "Pesan ini dihapus" });
+          }
+        }
+        const pinned = await transaction.get("pinned_message");
+        if (pinned?.id === body.id) await transaction.delete("pinned_message");
+        // Use the committed transaction snapshot. A follow-up pin read can fail
+        // after a successful mutation and incorrectly tell the client to roll back.
+        return { ...result, pinnedAfterMutation: pinned?.id === body.id ? null : pinned || null };
+      });
+    } catch (error) {
+      if (!this.hasKvFallback) throw error;
+      await this.ensureMemoryFallbackLoaded();
+      const current = this.memoryMessages.get(body.id) || null;
       const result = applyChatMutation(current, auth.principal, body, action, Date.now());
-      if (result.status !== 200) return result;
-      await transaction.put(key, result.message);
+      if (result.status !== 200) return durableObjectJson({ status: "error", code: result.code }, result.status, request.method);
+      this.memoryMessages.set(body.id, result.message);
       if (action === "delete") {
-        const messages = await transaction.list({ prefix: "msg:" });
-        for (const [replyKey, reply] of messages) {
-          if (reply?.reply_to_id === body.id) await transaction.put(replyKey, { ...reply, reply_to_text: "Pesan ini dihapus" });
+        for (const [mId, mVal] of this.memoryMessages.entries()) {
+          if (mVal?.reply_to_id === body.id) {
+            this.memoryMessages.set(mId, { ...mVal, reply_to_text: "Pesan ini dihapus" });
+          }
         }
       }
-      const pinned = await transaction.get("pinned_message");
-      if (pinned?.id === body.id) await transaction.delete("pinned_message");
-      // Use the committed transaction snapshot. A follow-up pin read can fail
-      // after a successful mutation and incorrectly tell the client to roll back.
-      return { ...result, pinnedAfterMutation: pinned?.id === body.id ? null : pinned || null };
-    });
+      if (this.memoryPinned?.id === body.id) this.memoryPinned = null;
+      this.syncMemoryBackup();
+      outcome = { ...result, pinnedAfterMutation: this.memoryPinned };
+    }
     if (outcome.status !== 200) return durableObjectJson({ status: "error", code: outcome.code }, outcome.status, request.method);
+    if (outcome.message?.id) {
+      this.memoryMessages.set(outcome.message.id, outcome.message);
+      this.syncMemoryBackup();
+    }
     this.historyWindow.invalidate();
     this.pinnedWindow.invalidate();
     this.broadcast(null, JSON.stringify({ type: "mutation", message: outcome.message }));
@@ -3918,8 +4061,17 @@ export class GlobalChat {
       at: now,
     };
     let saved;
-    try { saved = await persistChatSend(this.state.storage, msg, auth.principal, body); }
-    catch (error) { return chatStorageFailure(error, request.method); }
+    try {
+      saved = await persistChatSend(this.state.storage, msg, auth.principal, body);
+      if (saved?.status === 200 && saved.message) {
+        this.memoryMessages.set(saved.message.id, saved.message);
+        this.syncMemoryBackup();
+      }
+    } catch (error) {
+      if (!this.hasKvFallback) return chatStorageFailure(error, request.method);
+      await this.ensureMemoryFallbackLoaded();
+      saved = this.persistChatSendInMemory(msg, auth.principal, body);
+    }
     if (saved.status !== 200) return durableObjectJson({ status:"error", code:saved.code }, saved.status, request.method);
     if (saved.inserted) {
       this.historyWindow.invalidate();
@@ -3932,7 +4084,17 @@ export class GlobalChat {
   }
 
   async loadPinnedMessage() {
-    return this.pinnedWindow.load(() => this.state.storage.get("pinned_message"));
+    return this.pinnedWindow.load(async () => {
+      try {
+        const p = await this.state.storage.get("pinned_message");
+        if (p !== undefined) this.memoryPinned = p || null;
+        return p || null;
+      } catch (error) {
+        if (!this.hasKvFallback) throw error;
+        await this.ensureMemoryFallbackLoaded();
+        return this.memoryPinned || EDGE_PINNED_MSG || null;
+      }
+    });
   }
 
   async loadHistory(sinceMs = 0) {
@@ -3941,13 +4103,20 @@ export class GlobalChat {
   }
 
   async readHistoryRows() {
-    const entries = await this.state.storage.list({ prefix: "msg:", reverse: true, limit: CHAT_HISTORY_LIMIT });
+    let entries;
+    try {
+      entries = await this.state.storage.list({ prefix: "msg:", reverse: true, limit: CHAT_HISTORY_LIMIT });
+    } catch (error) {
+      if (!this.hasKvFallback) throw error;
+      await this.ensureMemoryFallbackLoaded();
+      entries = new Map([...this.memoryMessages.entries()].map(([k, v]) => [`msg:${k}`, v]));
+    }
     const msgs = [];
     const deletedIds = new Set([...entries.values()].filter(m => m?.deleted).map(m => m.id));
     for (const [k, v] of entries.entries()) {
       const senderLower = String(v?.name || "").trim().toLowerCase();
       if (LEGACY_TEST_NAMES.has(senderLower)) {
-        this.state.storage.delete(k).catch(() => {});
+        try { this.state.storage.delete(k).catch(() => {}); } catch {}
         continue;
       }
       const msgAt = Number(v?.at || 0);
@@ -3963,7 +4132,7 @@ export class GlobalChat {
         targetLang = fb.targetLang;
         sourceLang = fb.sourceLang;
       }
-      msgs.push({
+      const normalizedMsg = {
         id: k.slice(4),
         ...v,
         reply_to_text: deletedIds.has(v?.reply_to_id) ? "Pesan ini dihapus" : v?.reply_to_text || "",
@@ -3975,10 +4144,14 @@ export class GlobalChat {
         source_lang: sourceLang || "id",
         delivery_status: v?.delivery_status || "delivered",
         e2ee_v: v?.e2ee_v || "XY-E2EE-GCM-v1",
-      });
+      };
+      this.memoryMessages.set(normalizedMsg.id, normalizedMsg);
+      msgs.push(normalizedMsg);
     }
     msgs.sort((a, b) => a.at - b.at);
-    return msgs.slice(-CHAT_HISTORY_LIMIT);
+    const sliced = msgs.slice(-CHAT_HISTORY_LIMIT);
+    if (sliced.length > 0) this.syncMemoryBackup(sliced);
+    return sliced;
   }
 
   async trimHistory() {
@@ -4185,10 +4358,19 @@ export class GlobalChat {
       at: now,
     };
     let saved;
-    try { saved = await persistChatSend(this.state.storage, msg, session.principal, data); }
-    catch (error) {
-      try { session.ws.send(JSON.stringify({ ...(await chatStorageFailureEvent(error)), client_msg_id:data.client_msg_id })); } catch {}
-      return;
+    try {
+      saved = await persistChatSend(this.state.storage, msg, session.principal, data);
+      if (saved?.status === 200 && saved.message) {
+        this.memoryMessages.set(saved.message.id, saved.message);
+        this.syncMemoryBackup();
+      }
+    } catch (error) {
+      if (!this.hasKvFallback) {
+        try { session.ws.send(JSON.stringify({ ...(await chatStorageFailureEvent(error)), client_msg_id:data.client_msg_id })); } catch {}
+        return;
+      }
+      await this.ensureMemoryFallbackLoaded();
+      saved = this.persistChatSendInMemory(msg, session.principal, data);
     }
     if (saved.status !== 200) {
       try { session.ws.send(JSON.stringify({ type:"error", code:saved.code, http_status:saved.status, client_msg_id:data.client_msg_id })); } catch {}
@@ -4539,15 +4721,27 @@ export default {
       target.search = url.search;
       try {
         const id = env.GLOBAL_CHAT.idFromName("xydesk-official-channels-v1");
+        const isGetOrHead = request.method === "GET" || request.method === "HEAD";
         const upstream = await env.GLOBAL_CHAT.get(id).fetch(new Request(target.toString(), {
-          method: request.method, headers: request.headers,
-          body: request.method === "GET" || request.method === "HEAD" ? undefined : request.body,
-          duplex: "half",
+          method: request.method,
+          headers: request.headers,
+          ...(isGetOrHead ? {} : { body: request.body, duplex: "half" }),
         }));
         const response = new Response(upstream.body, upstream);
         response.headers.set("x-xydesk-channel-router", "1");
         return response;
-      } catch (error) { return chatStorageFailure(error, request.method); }
+      } catch (error) {
+        if (env.UNIQUE_DOWNLOADS && typeof env.UNIQUE_DOWNLOADS.get === "function") {
+          const fallbackRes = await new OfficialChannels(
+            { storage: { get: async () => undefined, list: async () => new Map(), transaction: async () => { throw error; } } },
+            env,
+          ).handle(new Request(target.toString(), { method: request.method, headers: request.headers }), target);
+          const response = new Response(fallbackRes.body, fallbackRes);
+          response.headers.set("x-xydesk-channel-router", "1");
+          return response;
+        }
+        return chatStorageFailure(error, request.method);
+      }
     }
     if (path === "/ws/chat") {
       if (!env.GLOBAL_CHAT) return notFound(request.method);
@@ -4564,12 +4758,36 @@ export default {
       const chatId2 = env.GLOBAL_CHAT.idFromName("xydesk-global-chat-v1");
       const historyUrl = new URL("/history", request.url);
       historyUrl.search = url.search;
-      let res;
-      try { res = await env.GLOBAL_CHAT.get(chatId2).fetch(new Request(historyUrl, { method: "GET" })); }
-      catch (error) { return chatStorageFailure(error, request.method); }
-      if (!res.ok) return res;
-      const payload = await res.json().catch(() => null);
-      if (!payload || !Array.isArray(payload.messages)) {
+      let res = null;
+      let payload = null;
+      try {
+        res = await env.GLOBAL_CHAT.get(chatId2).fetch(new Request(historyUrl, { method: "GET" }));
+        if (res.ok) payload = await res.json().catch(() => null);
+      } catch (error) {
+        if (!env?.UNIQUE_DOWNLOADS) return chatStorageFailure(error, request.method);
+      }
+      if ((!res || !res.ok || !payload || !Array.isArray(payload.messages)) && env?.UNIQUE_DOWNLOADS) {
+        try {
+          const raw = await env.UNIQUE_DOWNLOADS.get("chat:prod_backup_v1");
+          const parsed = raw ? JSON.parse(raw) : null;
+          const kvMsgs = Array.isArray(parsed?.messages) ? parsed.messages : EDGE_CHAT_MESSAGES;
+          payload = {
+            messages: kvMsgs,
+            pinned_message: parsed?.pinned_message ?? EDGE_PINNED_MSG,
+            online_count: edgeOnline,
+            joined_at: reqJoinedAt,
+          };
+        } catch {
+          payload = {
+            messages: EDGE_CHAT_MESSAGES,
+            pinned_message: EDGE_PINNED_MSG,
+            online_count: edgeOnline,
+            joined_at: reqJoinedAt,
+          };
+        }
+      } else if (!res || !res.ok) {
+        return res || chatStorageFailure(new Error("Unconfirmed history payload"), request.method);
+      } else if (!payload || !Array.isArray(payload.messages)) {
         return chatStorageFailure(new Error("Unconfirmed history payload"), request.method);
       }
       const effectiveJoinedAt = Math.max(reqJoinedAt, Number(payload.joined_at || 0));
@@ -4660,7 +4878,17 @@ export default {
         response = await stub.fetch(new Request(new URL(path.endsWith("/edit") ? "/edit" : "/delete", request.url), {
         method: "POST", headers: request.headers, body: request.body, duplex: "half",
         }));
-      } catch (error) { return chatStorageFailure(error, request.method); }
+      } catch (error) {
+        if (env.UNIQUE_DOWNLOADS && typeof env.UNIQUE_DOWNLOADS.get === "function") {
+          response = await getEdgeFallbackGlobalChat(env).fetch(
+            new Request(new URL(path.endsWith("/edit") ? "/edit" : "/delete", request.url), {
+              method: "POST", headers: request.headers, body: request.body, duplex: "half",
+            }),
+          );
+        } else {
+          return chatStorageFailure(error, request.method);
+        }
+      }
       if (response.ok) {
         const result = await response.clone().json().catch(() => null);
         if (result?.message?.id === EDGE_PINNED_MSG?.id) EDGE_PINNED_MSG = null;
@@ -4941,9 +5169,18 @@ export default {
       if (request.method !== "GET") return methodNotAllowed("GET, OPTIONS");
       if (!env.GLOBAL_CHAT) return notFound(request.method);
       const id = env.GLOBAL_CHAT.idFromName("xydesk-global-chat-v1");
-      return env.GLOBAL_CHAT.get(id).fetch(new Request(new URL("/send-capabilities", request.url), {
-        method:"GET", headers:{ authorization:request.headers.get("authorization") || "" },
-      }));
+      try {
+        return await env.GLOBAL_CHAT.get(id).fetch(new Request(new URL("/send-capabilities", request.url), {
+          method:"GET", headers:{ authorization:request.headers.get("authorization") || "" },
+        }));
+      } catch (error) {
+        if (env.UNIQUE_DOWNLOADS && typeof env.UNIQUE_DOWNLOADS.get === "function") {
+          return getEdgeFallbackGlobalChat(env).fetch(new Request(new URL("/send-capabilities", request.url), {
+            method:"GET", headers:{ authorization:request.headers.get("authorization") || "" },
+          }));
+        }
+        return chatStorageFailure(error, request.method);
+      }
     }
     if (path === "/api/chat/send") {
       if (request.method === "OPTIONS") return corsPreflight("POST, OPTIONS");
@@ -4969,19 +5206,29 @@ export default {
           const cap = capability.ok ? await capability.json().catch(()=>null) : null;
           if (cap?.send_protocol !== 1 || cap?.author_id !== auth.principal.id)
             return durableObjectJson({status:"error",code:"chat_migration_pending"},503,request.method);
-        } catch (error) { return chatStorageFailure(error,request.method); }
+        } catch (error) {
+          if (!(env.UNIQUE_DOWNLOADS && typeof env.UNIQUE_DOWNLOADS.get === "function")) {
+            return chatStorageFailure(error,request.method);
+          }
+        }
       }
-      return stub.fetch(
-        new Request(new URL("/send", request.url), {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            "x-chat-country": cfCountry,
-            "authorization": request.headers.get("authorization") || "",
-          },
-          body: text,
-        })
-      );
+      const sendReq = new Request(new URL("/send", request.url), {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "x-chat-country": cfCountry,
+          "authorization": request.headers.get("authorization") || "",
+        },
+        body: text,
+      });
+      try {
+        return await stub.fetch(sendReq.clone());
+      } catch (error) {
+        if (env.UNIQUE_DOWNLOADS && typeof env.UNIQUE_DOWNLOADS.get === "function") {
+          return getEdgeFallbackGlobalChat(env).fetch(sendReq);
+        }
+        return chatStorageFailure(error, request.method);
+      }
     }
     if (path === "/api/chat/translate") {
       if (request.method === "OPTIONS") return corsPreflight("GET, OPTIONS");

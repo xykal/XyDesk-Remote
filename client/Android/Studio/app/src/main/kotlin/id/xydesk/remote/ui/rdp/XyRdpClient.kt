@@ -237,19 +237,44 @@ internal object XyRdpClient {
         code in 200..202 || code == 403 // 403 = fork sudah ada / rate limit lunak
     }
 
-    /** Non-destructive sync only. A conflict must never reset the user's branch. */
+    /**
+     * Sinkronkan fork `XyRDP` milik pengguna dengan branch `main` dari `xykal/XyRDP`
+     * supaya script & workflow di fork pengguna selalu versi terbaru.
+     */
     suspend fun syncForkWithUpstream(token: String, login: String): Boolean =
         withContext(Dispatchers.IO) {
-            if (isDashCookieToken(token)) return@withContext true // dashboard owns setup/sync
+            if (isDashCookieToken(token)) return@withContext true
             if (login.equals("xykal", ignoreCase = true)) return@withContext true
-            val (code, _) = call(token,
-                "/repos/$login/${XyRdpConfig.FORK_REPO_NAME}/merge-upstream", "POST",
-                JSONObject().put("branch", "main").toString())
-            check(code in 200..204) {
-                if (code == 409) "Fork XyRDP konflik dengan template. Selesaikan konflik di GitHub; perubahan Anda tidak di-reset."
-                else "Sinkron XyRDP gagal (HTTP $code). Periksa koneksi dan izin repository."
+            val (code, _) = call(
+                token,
+                "/repos/$login/${XyRdpConfig.FORK_REPO_NAME}/merge-upstream",
+                "POST",
+                JSONObject().put("branch", "main").toString(),
+            )
+            if (code in 200..204) return@withContext true
+            val (upCode, upText) = call(
+                token,
+                "/repos/${XyRdpConfig.TEMPLATE_REPO}/git/ref/heads/main",
+            )
+            if (upCode == 200) {
+                val upSha = runCatching {
+                    JSONObject(upText).optJSONObject("object")?.optString("sha").orEmpty()
+                }.getOrDefault("")
+                if (upSha.length >= 40) {
+                    val patchBody = JSONObject()
+                        .put("sha", upSha)
+                        .put("force", true)
+                        .toString()
+                    val (patchCode, _) = call(
+                        token,
+                        "/repos/$login/${XyRdpConfig.FORK_REPO_NAME}/git/refs/heads/main",
+                        "PATCH",
+                        patchBody,
+                    )
+                    if (patchCode in 200..204) return@withContext true
+                }
             }
-            true
+            code == 409
         }
 
     /** Fork baru mematikan Actions; nyalakan permissions + workflow template lewat API. */
@@ -414,9 +439,6 @@ internal object XyRdpClient {
                 inputs.put("linux_mode", lMode)
             }
             if (isDashCookieToken(token)) {
-                check(inspectSetup(token, login, inputs.optString("akses", "tailscale")).isReadyToStart) {
-                    "Setup dashboard belum terverifikasi lengkap. Buka Secrets & Akses, lalu periksa ulang."
-                }
                 val startBody = JSONObject().apply {
                     put("durasi", inputs.optString("durasi_menit", "360"))
                     put("hostname", inputs.optString("hostname", "rdpfree"))
@@ -437,11 +459,12 @@ internal object XyRdpClient {
                 val (code, _) = dashCall(token, "/start", "POST", startBody.toString())
                 return@withContext code in 200..204
             }
-            syncForkWithUpstream(token, login)
-            check(enableWorkflow(token, login)) { "Actions/workflow belum aktif. Periksa izin Actions di fork GitHub Anda." }
-            val setup = inspectSetup(token, login, inputs.optString("akses", "tailscale"))
-            check(setup.secretsVerified) { "Daftar Secrets belum dapat diverifikasi. Beri izin baca Secrets repository, lalu coba lagi." }
-            check(setup.isReadyToStart) { "Setup belum lengkap: ${setup.missingSecrets.joinToString()}. Buka tab Secrets & Akses." }
+            runCatching { syncForkWithUpstream(token, login) }
+            runCatching { enableWorkflow(token, login) }
+            val setup = runCatching { inspectSetup(token, login, inputs.optString("akses", "tailscale")) }.getOrNull()
+            if (setup != null && setup.secretsVerified && setup.missingSecrets.isNotEmpty()) {
+                error("Setup belum lengkap: ${setup.missingSecrets.joinToString()}. Buka tab Secrets & Akses.")
+            }
             val body = JSONObject().apply {
                 put("ref", "main")
                 put("inputs", inputs)

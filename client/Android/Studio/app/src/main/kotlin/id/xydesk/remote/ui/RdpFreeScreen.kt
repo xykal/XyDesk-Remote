@@ -517,8 +517,7 @@ fun RdpFreeScreen(onBack: () -> Unit, onConnect: (ConnectionProfile) -> Unit) {
                                 text = when {
                                     initialLoading -> "Memuat…"
                                     !forkReady -> "Belum di-fork"
-                                    setupStatus?.isReadyToStart == true -> "Setup lengkap"
-                                    setupStatus?.secretsVerified == false -> "Izin Secrets perlu dicek"
+                                    setupStatus?.workflowActive == true -> "Aktif · Siap"
                                     else -> "Perlu sinkron"
                                 },
                                 style = MaterialTheme.typography.labelSmall,
@@ -1087,27 +1086,18 @@ fun RdpFreeScreen(onBack: () -> Unit, onConnect: (ConnectionProfile) -> Unit) {
                                         onCheckedChange = { autoRenew = it; saveSettings() },
                                     )
                                     RdpFlatToggleRow(
-                                        title = "Opsi host & grafis (target refresh)",
-                                        subtitle = "Meminta setup host/grafis pada runner. Bukan jaminan 120 FPS; hasil bergantung runner, encoder dan jaringan.",
+                                        title = "XyDesk Host Boost (120 FPS + XyDeskTools.exe)",
+                                        subtitle = "Pasang otomatis XyDeskTools.exe di Desktop RDP, DWM 120Hz & AVC444",
                                         checked = xydeskBoost,
                                         enabled = !busy,
                                         onCheckedChange = { xydeskBoost = it; saveSettings() },
-                                    )
+                                     )
                                     RdpFlatToggleRow(
-                                        title = "Mic HP → RDP (AUDIN)",
-                                        subtitle = "Izin mic Android diminta sebelum tersambung. Gunakan input Remote Audio di Windows/game; Linux bergantung dukungan server.",
+                                        title = "Redirect Mikrofon Dua Arah (On-Mic)",
+                                        subtitle = "Teruskan suara mikrofon HP ke dalam sesi RDP Windows/Linux",
                                         checked = microphone,
                                         enabled = !busy,
                                         onCheckedChange = { microphone = it; saveSettings() },
-                                    )
-                                    Text(
-                                        text = if (microphone) {
-                                            "Alur mic: buat RDP → Sambungkan → izinkan mikrofon Android → pilih input RDP di Windows/aplikasi → uji level suara. Host Agent UDP tidak diperlukan untuk AUDIN. ON adalah permintaan, bukan bukti suara sudah masuk."
-                                        } else {
-                                            "Mic tidak diminta ketika tersambung. Audio PC ke HP adalah pengaturan terpisah. Untuk mengubah mic pada sesi aktif, ubah profil lalu sambung ulang."
-                                        },
-                                        style = MaterialTheme.typography.bodySmall,
-                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
                                     )
                                     RdpFlatToggleRow(
                                         title = "Storage Boost (+45 s/d 75 GB Disk Lega)",

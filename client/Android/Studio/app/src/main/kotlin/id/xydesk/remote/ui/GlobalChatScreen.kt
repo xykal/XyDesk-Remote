@@ -1961,7 +1961,9 @@ private fun GlobalChatAccountContent(
                 }
             }
 
-            OfficialChannelDirectory()
+            if (!isOverlayMode) {
+                OfficialChannelDirectory()
+            }
 
             // Daftar Pesan Chat Global (Wajib Login untuk Join — Tidak Boleh Tamu)
             Box(
@@ -2057,71 +2059,85 @@ private fun GlobalChatAccountContent(
                         )
                     }
                 } else {
-                    LazyColumn(
-                        state = listState,
-                        modifier = Modifier.fillMaxSize(),
-                        contentPadding = PaddingValues(
-                            horizontal = if (isOverlayMode) 7.dp else 10.dp,
-                            vertical = if (isOverlayMode) 5.dp else 8.dp,
-                        ),
-                        verticalArrangement = Arrangement.spacedBy(if (isOverlayMode) 4.dp else 6.dp),
+                    val isScrollingChat by remember {
+                        androidx.compose.runtime.derivedStateOf { listState.isScrollInProgress }
+                    }
+                    val showScrollToTop by remember {
+                        androidx.compose.runtime.derivedStateOf { listState.firstVisibleItemIndex > 2 }
+                    }
+                    val showScrollToBottom by remember(messages.size) {
+                        androidx.compose.runtime.derivedStateOf { listState.canScrollForward && messages.isNotEmpty() }
+                    }
+                    val itemDecorativeMotion = id.xydesk.remote.ui.theme.LocalDecorativeMotionEnabled.current && !isScrollingChat
+                    androidx.compose.runtime.CompositionLocalProvider(
+                        id.xydesk.remote.ui.theme.LocalDecorativeMotionEnabled provides itemDecorativeMotion,
                     ) {
-                        items(
-                            items = messages,
-                            key = { it.id },
-                            contentType = { it.attachmentType.ifBlank { "text" } },
-                        ) { m ->
-                            val isViewedOnce = m.id in viewedOnceIds
-                            val isMediaDownloaded = autoDownloadMedia || m.mine || m.id in manuallyDownloadedIds
-                            MessageBubble(
-                                msg = m,
-                                reaction = messageReactions[m.id],
-                                isPinned = pinnedMessage?.id == m.id,
-                                viewedOnce = isViewedOnce,
-                                liquidGlassMode = isOverlayMode,
-                                isCompactOverlay = isOverlayMode,
-                                bubbleStyleMode = bubbleStyleMode,
-                                bubbleShapePreset = bubbleShapePreset,
-                                floatingElementPreset = if (listState.isScrollInProgress) "NONE" else bubbleFloatingElement,
-                                autoDownloadAllowed = isMediaDownloaded,
-                                autoplayVideoEnabled = autoplayVideoEnabled,
-                                favoriteStickerKeys = favoriteStickerKeys,
-                                onToggleFavoriteSticker = { stickerPayload ->
-                                    favoriteStickerKeys = CustomStickerVault.addFavoriteFromChatSticker(context, stickerPayload)
-                                    scope.launch(Dispatchers.IO) {
-                                        val reloaded = CustomStickerVault.listCustomStickers(context)
-                                        withContext(Dispatchers.Main) {
-                                            customStickers.clear()
-                                            customStickers.addAll(reloaded)
+                        LazyColumn(
+                            state = listState,
+                            modifier = Modifier.fillMaxSize(),
+                            contentPadding = PaddingValues(
+                                horizontal = if (isOverlayMode) 7.dp else 10.dp,
+                                vertical = if (isOverlayMode) 5.dp else 8.dp,
+                            ),
+                            verticalArrangement = Arrangement.spacedBy(if (isOverlayMode) 4.dp else 6.dp),
+                        ) {
+                            items(
+                                items = messages,
+                                key = { it.id },
+                                contentType = { it.attachmentType.ifBlank { "text" } },
+                            ) { m ->
+                                val isViewedOnce = m.id in viewedOnceIds
+                                val isMediaDownloaded = autoDownloadMedia || m.mine || m.id in manuallyDownloadedIds
+                                MessageBubble(
+                                    msg = m,
+                                    reaction = messageReactions[m.id],
+                                    isPinned = pinnedMessage?.id == m.id,
+                                    viewedOnce = isViewedOnce,
+                                    liquidGlassMode = isOverlayMode,
+                                    isCompactOverlay = isOverlayMode,
+                                    bubbleStyleMode = bubbleStyleMode,
+                                    bubbleShapePreset = bubbleShapePreset,
+                                    floatingElementPreset = if (isScrollingChat) "NONE" else bubbleFloatingElement,
+                                    autoDownloadAllowed = isMediaDownloaded,
+                                    autoplayVideoEnabled = autoplayVideoEnabled,
+                                    favoriteStickerKeys = favoriteStickerKeys,
+                                    onToggleFavoriteSticker = { stickerPayload ->
+                                        favoriteStickerKeys = CustomStickerVault.addFavoriteFromChatSticker(context, stickerPayload)
+                                        scope.launch(Dispatchers.IO) {
+                                            val reloaded = CustomStickerVault.listCustomStickers(context)
+                                            withContext(Dispatchers.Main) {
+                                                customStickers.clear()
+                                                customStickers.addAll(reloaded)
+                                            }
                                         }
-                                    }
-                                    Toast.makeText(context, "Stiker diperbarui di daftar Favorit", Toast.LENGTH_SHORT).show()
-                                },
-                                onManualDownloadMedia = {
-                                    if (m.id !in manuallyDownloadedIds) manuallyDownloadedIds.add(m.id)
-                                },
-                                onReply = {
-                                    haptic.performHapticFeedback(HapticFeedbackType.LongPress)
-                                    replyingTo = m
-                                },
-                                onLongPress = {
-                                    haptic.performHapticFeedback(HapticFeedbackType.LongPress)
-                                    focusedContextMsg = m
-                                },
-                                onOpenMedia = {
-                                    if (m.viewOnce && isViewedOnce) {
-                                        Toast.makeText(
-                                            context,
-                                            "Media 1× Sekali Lihat ini sudah pernah dibuka dan tidak dapat dilihat lagi.",
-                                            Toast.LENGTH_SHORT,
-                                        ).show()
-                                    } else {
-                                        if (m.viewOnce) markMediaViewedOnce(m.id)
-                                        fullscreenMediaMsg = m
-                                    }
-                                },
-                                onOpenFile = { saveOrShareChatAttachment(context, m) },
-                            )
+                                        Toast.makeText(context, "Stiker diperbarui di daftar Favorit", Toast.LENGTH_SHORT).show()
+                                    },
+                                    onManualDownloadMedia = {
+                                        if (m.id !in manuallyDownloadedIds) manuallyDownloadedIds.add(m.id)
+                                    },
+                                    onReply = {
+                                        haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                                        replyingTo = m
+                                    },
+                                    onLongPress = {
+                                        haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                                        focusedContextMsg = m
+                                    },
+                                    onOpenMedia = {
+                                        if (m.viewOnce && isViewedOnce) {
+                                            Toast.makeText(
+                                                context,
+                                                "Media 1× Sekali Lihat ini sudah pernah dibuka dan tidak dapat dilihat lagi.",
+                                                Toast.LENGTH_SHORT,
+                                            ).show()
+                                        } else {
+                                            if (m.viewOnce) markMediaViewedOnce(m.id)
+                                            fullscreenMediaMsg = m
+                                        }
+                                    },
+                                    onOpenFile = { saveOrShareChatAttachment(context, m) },
+                                )
+                            }
                         }
                     }
 
@@ -2133,13 +2149,23 @@ private fun GlobalChatAccountContent(
                         verticalArrangement = Arrangement.spacedBy(6.dp),
                         horizontalAlignment = Alignment.CenterHorizontally,
                     ) {
-                        if (newArrivals > 0 && listState.canScrollForward) {
-                            Surface(shape = MaterialTheme.shapes.small, color = MaterialTheme.colorScheme.surfaceVariant) {
-                                Text("$newArrivals pesan baru", modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp), style = MaterialTheme.typography.labelSmall)
+                        if (newArrivals > 0 && showScrollToBottom) {
+                            Surface(
+                                shape = RoundedCornerShape(50),
+                                color = Color(0xFF18181F).copy(alpha = 0.95f),
+                                border = BorderStroke(0.8.dp, Color.White.copy(alpha = 0.22f)),
+                            ) {
+                                Text(
+                                    "$newArrivals pesan baru",
+                                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp),
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = Color.White,
+                                    fontWeight = FontWeight.Bold,
+                                )
                             }
                         }
                         AnimatedVisibility(
-                            visible = listState.firstVisibleItemIndex > 2,
+                            visible = showScrollToTop,
                             enter = fadeIn() + scaleIn(),
                             exit = fadeOut() + scaleOut(),
                         ) {
@@ -2167,7 +2193,7 @@ private fun GlobalChatAccountContent(
                             }
                         }
                         AnimatedVisibility(
-                            visible = listState.canScrollForward && messages.isNotEmpty(),
+                            visible = showScrollToBottom,
                             enter = fadeIn() + scaleIn(),
                             exit = fadeOut() + scaleOut(),
                         ) {
