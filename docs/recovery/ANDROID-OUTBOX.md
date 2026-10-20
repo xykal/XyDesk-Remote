@@ -4,6 +4,11 @@ Source `429af465c4ed8348908c9cee5c278d677af06282` builds on the exact owner-sele
 9f64 connection/render baseline and the single-directory sticker correction.
 This is NOT a new signed APK/final recovery release or proof of phone behavior.
 
+Follow-up queue-management UI: see QUEUE-CONTROLS.md and QUEUE-CONTROLS-VALIDATION.json.
+It adds explicit same-ID retry/copy/cancel and a persisted Retry-After floor, not
+unbound-account reassignment or full history/media sync. Historical gate/source
+identifiers below describe the initial queue integration.
+
 ## Implemented in source
 
 - Text/media/view-once SEND payloads are committed before transport to per-message

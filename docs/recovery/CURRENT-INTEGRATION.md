@@ -1,10 +1,18 @@
 # Recovery integration in progress — not a final release
 
+Latest Android queue controls: see QUEUE-CONTROLS.md and QUEUE-CONTROLS-VALIDATION.json.
+Source ccdb6f4 adds own-account inspector, capability-only identity recheck, SAME-ID
+retry, non-view-once text copy, durable cancellation and independent Retry-After floor.
+Current workspace /home/user/XyDesk-QueueUI; no backend deployment or new signed APK.
+Six source guards include original connection checks + one queue-control guard.
+Actual phone/credential-switch/storage/clipboard and original recovery acceptance
+remain pending. Unbound credential-rotation recovery is still intentionally blocked.
+
 Latest GitHub login correction: see GITHUB-LOGIN-API-FIX.md and GITHUB-LOGIN-VALIDATION.json.
 Worker c532dfc8-8abd-4c9b-b7e4-d90157da999c is deployed; default + login alias now
 use the canonical API OAuth callback, not RdpFree. Source 7abb70d; actual owner
 sign-in/app-return acceptance and historical secret rotation remain pending.
-Current workspace /home/user/XyDesk-Login. The outbox phase below is historical
+Previous OAuth workspace /home/user/XyDesk-Login. The outbox phase below is historical
 implementation/deployment evidence; latest live history is still HTTP200/99 rows.
 
 Latest Android outbox source: see ANDROID-OUTBOX.md and OUTBOX-VALIDATION.json.
