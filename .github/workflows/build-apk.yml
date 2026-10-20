@@ -570,52 +570,18 @@ jobs:
           STAGE_DIR="/tmp/xydesk-host-win64"
           rm -rf "$STAGE_DIR"
           mkdir -p "$STAGE_DIR" "$OUT_DIR"
-          x86_64-w64-mingw32-g++ -std=c++17 -O2 -shared \
-            host-agent/src/xydesk_quic.cpp -Ihost-agent/include \
-            -o "$STAGE_DIR/xydesk_quic.dll" \
-            -Wl,--out-implib,"$STAGE_DIR/libxydesk_quic.a" \
-            -static-libgcc -static-libstdc++ -Wl,-Bstatic -lstdc++ -lpthread -Wl,-Bdynamic \
-            -lws2_32 -lole32 -luser32 -lgdi32
-          x86_64-w64-mingw32-g++ -std=c++17 -O2 -shared \
-            host-agent/src/xydesk_host_core.cpp -Ihost-agent/include \
-            -o "$STAGE_DIR/xydesk_host_core.dll" \
-            -Wl,--out-implib,"$STAGE_DIR/libxydesk_host_core.a" \
-            -static-libgcc -static-libstdc++ -Wl,-Bstatic -lstdc++ -lpthread -Wl,-Bdynamic \
-            -lws2_32 -ldxgi -ladvapi32 -liphlpapi -luser32 -lgdi32
-          x86_64-w64-mingw32-g++ -std=c++17 -O2 -mwindows \
-            host-agent/src/main_host.cpp -Ihost-agent/include \
-            -L"$STAGE_DIR" -lxydesk_quic -lxydesk_host_core \
-            -o "$STAGE_DIR/XyDeskRemoteHost.exe" \
-            -static-libgcc -static-libstdc++ -Wl,-Bstatic -lstdc++ -lpthread -Wl,-Bdynamic -luser32 -lgdi32 -lshell32 -ldwmapi -lwtsapi32 -lwinhttp -ladvapi32
-          # Exe tunggal mandiri: kedua pustaka dikompilasi langsung ke dalam exe
-          # dan runtime mingw diikat statis, jadi hasilnya tidak membutuhkan
-          # xydesk_quic.dll, xydesk_host_core.dll, maupun DLL runtime mingw.
-          # Exe lama yang bergantung DLL tetap dibangun supaya tidak ada yang
-          # rusak sebelum exe tunggal ini terbukti di perangkat nyata.
-          # Dua makro *_EXPORTS wajib ada di sini. CMake mendefinisikannya
-          # otomatis untuk target SHARED (xydesk_quic, xydesk_host_core), tapi
-          # build tunggal ini tidak lewat CMake: tanpa keduanya header memilih
-          # __declspec(dllimport) dan linker gagal dengan
-          # "undefined reference to __imp_xydesk_host_inspect_system".
+          # One statically linked EXE only. No DLL-dependent/Standalone variants.
           x86_64-w64-mingw32-g++ -std=c++17 -O2 -mwindows \
             -DXYDESK_QUIC_EXPORTS -DXYDESK_HOST_CORE_EXPORTS \
             host-agent/src/main_host.cpp \
             host-agent/src/xydesk_quic.cpp \
             host-agent/src/xydesk_host_core.cpp \
             -Ihost-agent/include \
-            -o "$STAGE_DIR/XyDeskRemoteHost-Standalone.exe" \
+            -o "$STAGE_DIR/XyDeskRemoteHost.exe" \
             -static -static-libgcc -static-libstdc++ \
             -lws2_32 -lole32 -ldxgi -ladvapi32 -liphlpapi -luser32 -lgdi32 -lshell32 -ldwmapi -lwtsapi32 -lwinhttp -ladvapi32
-          rm -f "$STAGE_DIR"/*.a
-          cp web/XyDeskHost-Setup.bat "$STAGE_DIR/XyDeskHost-Setup.bat"
-          cp web/XyDesk-Remote-Agent-Setup.ps1 "$STAGE_DIR/XyDesk-Remote-Agent-Setup.ps1"
-          cp web/XyDesk-RDP-OnMic-Setup.bat "$STAGE_DIR/XyDesk-RDP-OnMic-Setup.bat"
-          cp web/onmic.ps1 "$STAGE_DIR/onmic.ps1"
-          cp "$STAGE_DIR/xydesk_quic.dll" "$OUT_DIR/xydesk_quic.dll"
-          cp "$STAGE_DIR/xydesk_host_core.dll" "$OUT_DIR/xydesk_host_core.dll"
           cp "$STAGE_DIR/XyDeskRemoteHost.exe" "$OUT_DIR/XyDeskRemoteHost.exe"
-          cp "$STAGE_DIR/XyDeskRemoteHost-Standalone.exe" "$OUT_DIR/XyDeskRemoteHost-Standalone.exe"
-          (cd "$STAGE_DIR" && zip -q -r "$GITHUB_WORKSPACE/$OUT_DIR/XyDesk-Remote-Host-Agent-win64.zip" .)
+          (cd "$STAGE_DIR" && zip -q "$GITHUB_WORKSPACE/$OUT_DIR/XyDesk-Remote-Host-Agent-win64.zip" XyDeskRemoteHost.exe)
           ls -lh "$OUT_DIR"
       - name: Upload signed APKs & Windows Host Agent for publishing
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
@@ -625,9 +591,6 @@ jobs:
             client/Android/Studio/app/build/outputs/apk/release/*.apk
             client/Android/Studio/app/build/outputs/apk/release/XyDesk-Remote-Host-Agent-win64.zip
             client/Android/Studio/app/build/outputs/apk/release/XyDeskRemoteHost.exe
-            client/Android/Studio/app/build/outputs/apk/release/XyDeskRemoteHost-Standalone.exe
-            client/Android/Studio/app/build/outputs/apk/release/xydesk_quic.dll
-            client/Android/Studio/app/build/outputs/apk/release/xydesk_host_core.dll
             client/Android/Studio/app/build/outputs/apk/release/SIGNATURE-VERIFICATION.txt
           retention-days: 3
       - name: Hapus material signing sementara
@@ -638,7 +601,7 @@ jobs:
   # mendapat izin membuat atau mengubah GitHub Release.
   publish-release:
     if: ${{ startsWith(github.ref, 'refs/tags/v') }}
-    needs: build-release
+    needs: [compile-check, build-release]
     name: Publish GitHub Release
     runs-on: ubuntu-latest
     permissions:
@@ -674,27 +637,13 @@ jobs:
             release-apks/*.apk
             release-apks/XyDesk-Remote-Host-Agent-win64.zip
             release-apks/XyDeskRemoteHost.exe
-            release-apks/XyDeskRemoteHost-Standalone.exe
-            release-apks/xydesk_quic.dll
-            release-apks/xydesk_host_core.dll
             release-apks/SIGNATURE-VERIFICATION.txt
             release-apks/SHA256SUMS.txt
-          generate_release_notes: true
+          generate_release_notes: false
+          body_path: docs/recovery/RECOVERY-CANDIDATE-NOTES.md
+          name: "Recovery candidate — ${{ github.ref_name }} (runtime unverified)"
+          prerelease: true
+          make_latest: false
           overwrite_files: true
           # Simpan sebagai Release Draft terlebih dahulu (draft: true) sesuai instruksi pemilik di Ronde 63
           draft: true
-      - name: Bersihkan cache, artifacts, dan output sementara Actions
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          set -euo pipefail
-          repo="$GITHUB_REPOSITORY"
-          # Draft release dan tag bukan Actions artifacts; pertahankan keduanya,
-          # juga log/riwayat run untuk audit. Hapus hanya cache/artifact sementara.
-          for art_id in $(gh api --paginate "repos/$repo/actions/artifacts" -q '.artifacts[].id'); do
-            gh api -X DELETE "repos/$repo/actions/artifacts/$art_id" </dev/null >/dev/null || true
-          done
-          for cache_id in $(gh api --paginate "repos/$repo/actions/caches" -q '.actions_caches[].id'); do
-            gh api -X DELETE "repos/$repo/actions/caches/$cache_id" </dev/null >/dev/null || true
-          done
-          rm -rf release-apks

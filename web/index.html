@@ -1262,6 +1262,18 @@
       *, *::before, *::after { animation-duration: .01ms !important; transition-duration: .01ms !important; }
     }
   </style>
+  <style>
+    .abi-badge[hidden] { display: none !important; }
+    /* Long release notes need not be laid out/painted until near the viewport. */
+    @supports (content-visibility: auto) {
+      main > .section { content-visibility: auto; contain-intrinsic-size: auto 600px; }
+    }
+    @media (max-width: 760px) {
+      .topbar, .drawer-scrim, .hero-stat, .liquid-card {
+        backdrop-filter: none !important; -webkit-backdrop-filter: none !important;
+      }
+    }
+  </style>
 </head>
 <body>
   <div class="drawer-scrim" id="drawer-scrim" aria-hidden="true"></div>
@@ -1269,7 +1281,7 @@
     <div class="container topbar-inner">
       <a href="#top" class="brand">
         <span class="brand-left" style="display:inline-flex;align-items:center;gap:9px;min-width:0;">
-          <img src="/favicon.png" alt="Logo XyDesk Remote" style="width:30px;height:30px;border-radius:8px;flex:none;" />
+          <img src="/favicon.png" alt="Logo XyDesk Remote" width="30" height="30" decoding="async" style="width:30px;height:30px;border-radius:8px;flex:none;" />
           <span style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">XyDesk Remote</span>
         </span>
         <span class="brand-tag mono" data-dyn="ver">Ver 1.1.21</span>
@@ -2027,6 +2039,8 @@
         if (!count || !updated) return;
         if (!latestActiveSessionStats) {
           count.textContent = "—";
+          var heroOnline = document.getElementById("hero-online-count");
+          if (heroOnline) heroOnline.textContent = "—";
           if (activeSessionStatsFailed) {
             updated.textContent = currentLang === "en"
               ? "Live session statistics are temporarily unavailable."
@@ -2047,29 +2061,49 @@
         updated.textContent = (currentLang === "en" ? "Checked " : "Dicek ") + dateText;
       }
 
+      var activeStatsInFlight = false;
+      var activeStatsTimer = null;
+      var activeStatsController = null;
+      function scheduleActiveStats() {
+        clearTimeout(activeStatsTimer);
+        if (!document.hidden) activeStatsTimer = setTimeout(loadActiveSessionStats, 60_000);
+      }
       function loadActiveSessionStats() {
-        Promise.allSettled([
-          fetch("/api/active-sessions", { headers: { Accept: "application/json" } }).then(function (r) { return r.json(); }),
-          fetch("/api/chat/presence", { headers: { Accept: "application/json" } }).then(function (r) { return r.json(); })
-        ]).then(function (results) {
-          var sesData = results[0].status === "fulfilled" ? results[0].value : null;
-          var chatData = results[1].status === "fulfilled" ? results[1].value : null;
-          var sesCount = (sesData && Number.isFinite(sesData.active_session_count)) ? sesData.active_session_count : 0;
-          var appOnline = (chatData && Number.isFinite(chatData.online_count)) ? chatData.online_count : 0;
-          var combined = Math.max(sesCount, appOnline, 1);
-          latestActiveSessionStats = {
-            status: "ok",
-            active_session_count: combined,
-            checked_at: (sesData && sesData.checked_at) || new Date().toISOString()
-          };
+        if (document.hidden || activeStatsInFlight) return;
+        activeStatsInFlight = true;
+        activeStatsController = new AbortController();
+        var timeout = setTimeout(function () { activeStatsController.abort(); }, 8_000);
+        fetch("/api/active-sessions", {
+          headers: { Accept: "application/json" }, signal: activeStatsController.signal
+        }).then(function (r) {
+          if (!r.ok) throw new Error("Session statistics unavailable");
+          return r.json();
+        }).then(function (data) {
+          if (!Number.isFinite(data.active_session_count) || data.active_session_count < 0) {
+            throw new Error("Invalid session statistics");
+          }
+          latestActiveSessionStats = data;
           activeSessionStatsFailed = false;
           renderActiveSessionStats();
         }).catch(function () {
-          latestActiveSessionStats = null;
-          activeSessionStatsFailed = true;
-          renderActiveSessionStats();
+          if (!document.hidden) {
+            latestActiveSessionStats = null;
+            activeSessionStatsFailed = true;
+            renderActiveSessionStats();
+          }
+        }).finally(function () {
+          clearTimeout(timeout);
+          activeStatsInFlight = false;
+          activeStatsController = null;
+          scheduleActiveStats();
         });
       }
+      document.addEventListener("visibilitychange", function () {
+        clearTimeout(activeStatsTimer);
+        if (document.hidden) {
+          if (activeStatsController) activeStatsController.abort();
+        } else loadActiveSessionStats();
+      });
 
       function renderDownloadStats() {
         var total = document.getElementById("apk-download-total");
@@ -2348,132 +2382,9 @@
       applyLang(currentLang);
       loadDownloadStats();
       loadActiveSessionStats();
-      window.setInterval(loadActiveSessionStats, 30_000);
+
     })();
   </script>
-<!-- ══ Popup hitung mundur rilis ══ -->
-<style>
-  #xyCdWrap{position:fixed;inset:0;z-index:9999;display:flex;align-items:center;justify-content:center;
-    background:radial-gradient(1200px 700px at 50% 30%,rgba(88,28,180,.38),rgba(6,3,16,.82));
-    backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px);
-    opacity:0;pointer-events:none;transition:opacity .5s ease}
-  #xyCdWrap.show{opacity:1;pointer-events:auto}
-  #xyCdWrap .fl{position:absolute;border-radius:50%;filter:blur(1px);opacity:.85;
-    box-shadow:0 0 14px rgba(190,140,255,.8);animation:xyfloat 6s ease-in-out infinite}
-  @keyframes xyfloat{0%,100%{transform:translateY(0) scale(1)}50%{transform:translateY(-30px) scale(1.12)}}
-  /* blob morph ungu di belakang kartu */
-  #xyCdBlob{position:absolute;width:520px;height:520px;left:50%;top:50%;
-    background:linear-gradient(135deg,#7c3aed,#a855f7 45%,#4c1d95);
-    filter:blur(70px);opacity:.5;transform:translate(-50%,-50%);
-    animation:xymorph 9s ease-in-out infinite}
-  @keyframes xymorph{
-    0%,100%{border-radius:58% 42% 55% 45%/45% 58% 42% 55%;transform:translate(-50%,-50%) rotate(0deg) scale(1)}
-    33%{border-radius:45% 55% 48% 52%/52% 45% 55% 48%;transform:translate(-50%,-52%) rotate(40deg) scale(1.12)}
-    66%{border-radius:52% 48% 42% 58%/58% 52% 48% 42%;transform:translate(-48%,-50%) rotate(-30deg) scale(.94)}
-  }
-  /* kartu liquid glass ungu glossy */
-  #xyCdCard{position:relative;width:min(560px,92vw);border-radius:26px;overflow:hidden;
-    background:linear-gradient(150deg,rgba(147,86,255,.30),rgba(60,20,120,.42) 40%,rgba(24,8,52,.55));
-    backdrop-filter:blur(22px) saturate(160%);-webkit-backdrop-filter:blur(22px) saturate(160%);
-    box-shadow:0 40px 90px rgba(0,0,0,.65),inset 0 1px 0 rgba(255,255,255,.35),
-      inset 0 -18px 40px rgba(70,20,160,.35),0 0 70px rgba(140,80,255,.30);
-    border:1px solid rgba(200,160,255,.38);
-    padding:36px 30px 28px;text-align:center;
-    animation:xyin .55s cubic-bezier(.2,.9,.3,1.25)}
-  @keyframes xyin{from{transform:scale(.8) translateY(34px);opacity:0;filter:blur(6px)}to{transform:none;opacity:1;filter:none}}
-  /* kilau glossy menyapu */
-  #xyCdCard::before{content:"";position:absolute;top:-70%;left:-50%;width:55%;height:140%;
-    background:linear-gradient(100deg,transparent,rgba(255,255,255,.28),transparent);
-    transform:rotate(10deg);animation:xyshine 3s ease-in-out infinite}
-  @keyframes xyshine{0%{left:-60%}55%,100%{left:135%}}
-  /* highlight cairan di puncak kartu */
-  #xyCdCard::after{content:"";position:absolute;left:8%;right:8%;top:0;height:46%;
-    background:linear-gradient(180deg,rgba(255,255,255,.16),transparent 70%);
-    border-radius:26px 26px 60% 60%/26px 26px 30% 30%;pointer-events:none}
-  #xyCdCard .badge{display:inline-block;font:700 12px/1 'Segoe UI',system-ui,sans-serif;letter-spacing:2.5px;
-    color:#efe6ff;background:linear-gradient(90deg,rgba(168,85,247,.5),rgba(124,58,237,.5));
-    border:1px solid rgba(216,180,254,.55);box-shadow:0 0 22px rgba(168,85,247,.45),inset 0 1px 0 rgba(255,255,255,.35);
-    padding:8px 16px;border-radius:999px;margin-bottom:14px;text-transform:uppercase}
-  #xyCdCard h2{margin:0 0 6px;font:800 31px/1.15 'Segoe UI',system-ui,sans-serif;color:#fff;text-shadow:0 2px 24px rgba(140,80,255,.6)}
-  #xyCdCard h2 em{font-style:normal;background:linear-gradient(90deg,#d8b4fe,#93c5fd,#d8b4fe);
-    background-size:200% 100%;-webkit-background-clip:text;background-clip:text;color:transparent;
-    animation:xygrad 4s linear infinite}
-  @keyframes xygrad{to{background-position:200% 0}}
-  #xyCdCard p{margin:0 0 20px;font:400 14px/1.5 'Segoe UI',system-ui,sans-serif;color:#cfc4e8}
-  .xyCdRow{display:flex;gap:12px;justify-content:center;margin-bottom:22px}
-  .xyCdBox{min-width:80px;padding:14px 8px;border-radius:16px;position:relative;overflow:hidden;
-    background:linear-gradient(165deg,rgba(255,255,255,.14),rgba(255,255,255,.04));
-    border:1px solid rgba(216,180,254,.4);backdrop-filter:blur(8px);
-    box-shadow:inset 0 1px 0 rgba(255,255,255,.3),0 10px 26px rgba(30,8,70,.5)}
-  .xyCdNum{font:800 34px/1 'Segoe UI',system-ui,sans-serif;color:#fff;display:block;
-    text-shadow:0 0 22px rgba(190,140,255,.95);font-variant-numeric:tabular-nums}
-  .xyCdBox small{font:700 10px/1 'Segoe UI',system-ui,sans-serif;letter-spacing:1.6px;color:#bfa8ea;text-transform:uppercase}
-  .xyCdBtn{cursor:pointer;border:0;border-radius:14px;padding:13px 26px;margin:0 6px;position:relative;overflow:hidden;
-    font:700 15px 'Segoe UI',system-ui,sans-serif;transition:transform .15s,box-shadow .15s}
-  .xyCdBtn:hover{transform:translateY(-2px) scale(1.03)}
-  #xyCdGo{background:linear-gradient(120deg,#a855f7,#7c3aed 60%,#6d28d9);color:#fff;
-    box-shadow:0 10px 30px rgba(140,70,255,.55),inset 0 1px 0 rgba(255,255,255,.4)}
-  #xyCdClose{background:rgba(255,255,255,.10);color:#ded3f5;border:1px solid rgba(255,255,255,.22);
-    backdrop-filter:blur(8px);box-shadow:inset 0 1px 0 rgba(255,255,255,.25)}
-  #xyCdX{position:absolute;top:12px;right:12px;width:32px;height:32px;border-radius:50%;border:0;cursor:pointer;z-index:2;
-    background:rgba(255,255,255,.12);color:#e6ddfa;font-size:16px;line-height:1;
-    box-shadow:inset 0 1px 0 rgba(255,255,255,.3);transition:background .15s}
-  #xyCdX:hover{background:rgba(255,255,255,.25)}
-  @media (prefers-reduced-motion:reduce){#xyCdWrap *{animation:none!important;transition:none!important}}
-</style>
-<div id="xyCdWrap" role="dialog" aria-modal="true" aria-labelledby="xyCdTitle">
-  <span id="xyCdBlob"></span>
-  <span class="fl" style="width:10px;height:10px;left:12%;top:20%;background:#8b5cf6;animation-delay:0s"></span>
-  <span class="fl" style="width:6px;height:6px;left:22%;top:70%;background:#7fd4ff;animation-delay:1.2s"></span>
-  <span class="fl" style="width:12px;height:12px;left:80%;top:24%;background:#e879f9;animation-delay:.6s"></span>
-  <span class="fl" style="width:8px;height:8px;left:88%;top:64%;background:#8b5cf6;animation-delay:2s"></span>
-  <span class="fl" style="width:7px;height:7px;left:60%;top:12%;background:#7fd4ff;animation-delay:1.6s"></span>
-  <div id="xyCdCard">
-    <span class="xyOrb" style="width:140px;height:140px;left:-40px;top:-40px;background:#7c3aed"></span>
-    <span class="xyOrb" style="width:120px;height:120px;right:-30px;bottom:-30px;background:#2563eb"></span>
-    <button id="xyCdX" aria-label="Tutup">×</button>
-    <span class="badge">Segera hadir</span>
-    <h2 id="xyCdTitle">Rilis Update <em>Besok</em> 🚀</h2>
-    <p>Versi terbaru XyDesk Remote sebentar lagi. Hitung mundur menuju peluncuran — siapkan perangkatmu!</p>
-    <div class="xyCdRow" id="xyCdRow">
-      <div class="xyCdBox"><span class="xyCdNum" id="xyCdH">00</span><small>Jam</small></div>
-      <div class="xyCdBox"><span class="xyCdNum" id="xyCdM">00</span><small>Menit</small></div>
-      <div class="xyCdBox"><span class="xyCdNum" id="xyCdS">00</span><small>Detik</small></div>
-    </div>
-    <div>
-      <button class="xyCdBtn" id="xyCdGo">Ingatkan Saya</button>
-      <button class="xyCdBtn" id="xyCdClose">Nanti Saja</button>
-    </div>
-  </div>
-</div>
-<script>
-(function(){
-  var KEY='xyCdDismissed';
-  // Target rilis: besok 09:00 WIB. Setelah lewat, popup tidak muncul lagi.
-  // Tanggal rilis tetap: 11 Okt 2026 09:00 WIB — popup berhenti setelahnya.
-  var target=new Date('2026-10-12T01:00:00+07:00');
-  var wrap=document.getElementById('xyCdWrap');
-  if(localStorage.getItem(KEY))return;
-  function pad(n){return String(n).padStart(2,'0')}
-  function tick(){
-    var diff=target-Date.now();
-    if(diff<=0){localStorage.setItem(KEY,'1');wrap.classList.remove('show');return;}
-    var h=Math.floor(diff/3600000),m=Math.floor(diff%3600000/60000),s=Math.floor(diff%60000/1000);
-    document.getElementById('xyCdH').textContent=pad(h);
-    document.getElementById('xyCdM').textContent=pad(m);
-    document.getElementById('xyCdS').textContent=pad(s);
-  }
-  tick(); setInterval(tick,1000);
-  // Muncul setelah halaman settle biar tidak ganggu first paint.
-  setTimeout(function(){ if(target-Date.now()>0 && !localStorage.getItem(KEY)) wrap.classList.add('show'); },900);
-  function dismiss(){localStorage.setItem(KEY,'1');wrap.classList.remove('show')}
-  document.getElementById('xyCdClose').onclick=dismiss;
-  document.getElementById('xyCdX').onclick=dismiss;
-  document.getElementById('xyCdGo').onclick=function(){
-    var d=document.getElementById('download'); if(d)d.scrollIntoView({behavior:'smooth'}); dismiss();
-  };
-})();
-</script>
   <script>
     // Mesin deteksi ABI (2026-10-12): memakai Client Hints (architecture +
     // bitness) di Chromium/Android; fallback ke Universal untuk Android yang
