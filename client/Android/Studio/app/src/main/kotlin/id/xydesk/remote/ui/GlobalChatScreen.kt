@@ -398,6 +398,8 @@ private fun GlobalChatAccountContent(
 
     var showLangPicker by remember { mutableStateOf(false) }
     var showChatSettings by remember { mutableStateOf(false) }
+    var outboxIssue by remember(verifiedGhLogin) { mutableStateOf<String?>(null) }
+    var outboxBinding by remember(verifiedGhLogin) { mutableStateOf("") }
     var historyIssue by remember(verifiedGhLogin) { mutableStateOf<String?>(null) }
     var connectionIssue by remember(verifiedGhLogin) { mutableStateOf<String?>(null) }
     var historyRetryAt by remember(verifiedGhLogin) { mutableStateOf(0L) }
@@ -490,6 +492,7 @@ private fun GlobalChatAccountContent(
     }
 
     fun deleteMessageForMe(target: ChatMessage) {
+        if (target.id.startsWith("local-")) GlobalChatOutbox.cancel(context, target.id)
         if (target.id.isNotBlank() && target.id !in hiddenMessageIds) {
             hiddenMessageIds.add(target.id)
             chatPrefs.edit().putStringSet(hiddenIdsKey, hiddenMessageIds.toSet()).apply()
@@ -638,6 +641,46 @@ private fun GlobalChatAccountContent(
     DisposableEffect(sentSound) { onDispose { sentSound.close() } }
     fun confirmOwnSend(serverId: String) {
         if (sentSoundGate.accept(serverId)) sentSound.play(notifSoundTone != "silent" && soundLifecycle.currentState.isAtLeast(androidx.lifecycle.Lifecycle.State.STARTED))
+    }
+    LaunchedEffect(verifiedGhLogin, oauthRev) {
+        GlobalChatOutbox.resume(context.applicationContext)
+        GlobalChatOutbox.revision.collectLatest {
+            val snapshot = withContext(Dispatchers.IO) { GlobalChatOutbox.snapshot(context.applicationContext) }
+            if (!chatAccountSnapshotIsCurrent(verifiedGhLogin, getVerifiedGitHubLogin(context))) return@collectLatest
+            outboxBinding = snapshot.binding
+            outboxIssue = snapshot.issue
+            snapshot.entries.forEach { entry ->
+                if (entry.state != "pending") {
+                    // Receipt-only acceptance/trim/cancel never reconstructs stale queued content.
+                    messages.removeAll { it.id == entry.id }
+                } else if (entry.id !in hiddenMessageIds) {
+                    val index = messages.indexOfFirst { it.id == entry.id }
+                    if (index >= 0) messages[index] = messages[index].copy(
+                        deliveryTicks = if (entry.nextAttemptAt == Long.MAX_VALUE) -1 else 0)
+                    else if (messages.none { it.clientMessageId == entry.id && it.deliveryTicks == 2 }) {
+                        messages.add(ChatOutboxPolicy.pendingMessage(entry, nickname, verifiedGhLogin.orEmpty()))
+                        messages.sortBy { it.at }
+                    }
+                }
+            }
+        }
+    }
+    LaunchedEffect(verifiedGhLogin) {
+        GlobalChatOutbox.accepted.collect { acceptance ->
+            if (!chatAccountSnapshotIsCurrent(acceptance.login, verifiedGhLogin) ||
+                !chatAccountSnapshotIsCurrent(verifiedGhLogin, getVerifiedGitHubLogin(context)) ||
+                acceptance.binding != outboxBinding) return@collect
+            val incoming = acceptance.message?.let { raw ->
+                withContext(Dispatchers.IO) { parseMessageFromJson(raw, nickname, verifiedGhLogin) }
+            }
+            messages.removeAll { it.id == acceptance.localId }
+            if (incoming != null && acceptance.localId !in hiddenMessageIds && incoming.id !in hiddenMessageIds) {
+                val existing = messages.indexOfFirst { it.id == incoming.id }
+                if (existing >= 0) messages[existing] = reconcileChatMessage(messages[existing], incoming)
+                else { messages.add(incoming); messages.sortBy { it.at } }
+            }
+            confirmOwnSend(acceptance.receipt.getString("id"))
+        }
     }
     LaunchedEffect(verifiedGhLogin, messages.isNotEmpty()) {
         if (!didInitialScroll && messages.isNotEmpty()) {
@@ -1180,11 +1223,6 @@ private fun GlobalChatAccountContent(
         if ((displayFallback.isEmpty() && attachmentType.isEmpty()) || sending) return
         val replySnapshot = replyingTo
         val announceNow = isAnnouncementMode && (isFounderAccount(nickname) || isFounderAccount(currentGh))
-        replyingTo = null
-        isAnnouncementMode = false
-        if (cleanText.isNotEmpty() && attachmentType.isEmpty()) {
-            draft = TextFieldValue("")
-        }
         sending = true
         val now = System.currentTimeMillis()
         val sealed = ChatE2eeCrypto.seal(
@@ -1226,16 +1264,15 @@ private fun GlobalChatAccountContent(
         messages.add(pending)
         enrichTranslationIfNeeded(pending)
         scope.launch { listState.scrollChatTo((messages.size - 1).coerceAtLeast(0), chatMotionEnabled) }
+        val bindingSnapshot = outboxBinding
         scope.launch {
             try {
-                var queuedOnSocket = false
-                val sentMsg = withContext(Dispatchers.IO) {
-                    // Sending must not wait for a translation provider; enrichment is asynchronous.
+                withContext(Dispatchers.IO) {
                     val bodyJson = JSONObject().apply {
                         put("type", "msg")
-                        put("name", nickname)
+                        put("name", pending.name)
                         put("github_login", currentGh)
-                        put("country", myCountry)
+                        put("country", pending.country)
                         put("text", displayFallback)
                         put("is_announcement", announceNow)
                         put("e2ee_v", sealed.protocol)
@@ -1257,57 +1294,22 @@ private fun GlobalChatAccountContent(
                             put("attachment_data", attachmentData)
                             put("view_once", viewOnce)
                         }
-                        val av = getVerifiedGitHubAvatar(context)
+                        val av = pending.avatarUrl
                         if (!av.isNullOrBlank()) put("avatar_url", av)
                     }
-                    runCatching {
-                        GlobalChatRepository.send(bodyJson, GlobalChatRepository.token(context))?.optJSONObject("message")
-                            ?.let { parseMessageFromJson(it, nickname, currentGh) }
-                    }.getOrNull() ?: run {
-                        queuedOnSocket = chatSocketSend(bodyJson.toString())
-                        null
-                    }
+                    GlobalChatOutbox.enqueue(context.applicationContext, currentGh, bindingSnapshot, bodyJson, now)
                 }
-                if (sentMsg != null) {
-                    if (chatAccountSnapshotIsCurrent(currentGh, verifiedGhLogin) && sentMsg.clientMessageId == pending.id) confirmOwnSend(sentMsg.id)
-                    val idx = messages.indexOfFirst { it.id == pending.id }
-                    if (idx >= 0) {
-                        messages[idx] = sentMsg.copy(deliveryTicks = 2)
-                        enrichTranslationIfNeeded(sentMsg)
-                    }
-                    if (announceNow) {
-                        pinnedMessage = PinnedChatMessage(
-                            id = sentMsg.id,
-                            name = sentMsg.name,
-                            githubLogin = sentMsg.githubLogin,
-                            text = sentMsg.text,
-                            pinnedBy = sentMsg.name,
-                            at = sentMsg.at,
-                        )
-                    }
-                }
-                if (sentMsg == null) {
-                    val idx = messages.indexOfFirst { it.id == pending.id }
-                    if (idx >= 0) messages[idx] = messages[idx].copy(
-                        deliveryTicks = deliveryTicksAfterAttempt(false, queuedOnSocket),
-                    )
-                    if (!queuedOnSocket) {
-                        Toast.makeText(context, xyNow("Pesan belum terkirim. Salin pesan untuk mencoba lagi.", "Message not sent. Copy it to try again."), Toast.LENGTH_LONG).show()
-                    } else {
-                        // Socket queue acceptance is not server acknowledgement. Never show a sent tick yet.
-                        scope.launch {
-                            delay(25_000L)
-                            val pendingIdx = messages.indexOfFirst { it.id == pending.id }
-                            if (pendingIdx >= 0) messages[pendingIdx] = messages[pendingIdx].copy(deliveryTicks = -1)
-                        }
-                    }
+                if (chatAccountSnapshotIsCurrent(currentGh, getVerifiedGitHubLogin(context))) {
+                    if (draft.text.trim() == cleanText && attachmentType.isEmpty()) draft = TextFieldValue("")
+                    if (replyingTo?.id == replySnapshot?.id) replyingTo = null
+                    isAnnouncementMode = false
                 }
             } catch (cancelled: CancellationException) {
                 throw cancelled
             } catch (_: Exception) {
                 val idx = messages.indexOfFirst { it.id == pending.id }
                 if (idx >= 0) messages[idx] = messages[idx].copy(deliveryTicks = -1)
-                Toast.makeText(context, xyNow("Pengiriman belum berhasil. Salin pesan untuk mencoba lagi.", "Sending did not succeed. Copy the message to try again."), Toast.LENGTH_LONG).show()
+                Toast.makeText(context, "Pesan BELUM tersimpan di antrean. Draf dipertahankan; periksa akun/ruang penyimpanan lalu coba lagi.", Toast.LENGTH_LONG).show()
             } finally {
                 chatSocketSend(JSONObject().put("type", "typing").put("on", false).toString())
                 sending = false
@@ -1842,7 +1844,7 @@ private fun GlobalChatAccountContent(
                 }
             }
 
-            listOfNotNull(connectionIssue, historyIssue).distinct().forEach { issue ->
+            listOfNotNull(connectionIssue, historyIssue, outboxIssue).distinct().forEach { issue ->
                 Text(issue, color = Color(0xFFFBBF24), style = MaterialTheme.typography.labelSmall,
                     modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 6.dp))
             }

@@ -30,6 +30,7 @@ public class XyApp extends com.freerdp.freerdpcore.application.GlobalApp
 			super.onCreate();
 			id.xydesk.remote.core.ConnectionLog.INSTANCE.add("APP: GlobalApp.onCreate completed");
 			id.xydesk.remote.push.ChatPushNotifier.init(this);
+			id.xydesk.remote.ui.GlobalChatOutbox.resume(this);
 		}
 		catch (Throwable t)
 		{

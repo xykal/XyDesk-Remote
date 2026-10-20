@@ -132,6 +132,7 @@ internal fun saveVerifiedGitHubLogin(context: Context, login: String?, avatarUrl
         appCtx.getSharedPreferences("xydesk.global.chat", Context.MODE_PRIVATE).edit().remove("nickname").apply()
     }
     if (changedAccount) id.xydesk.remote.push.ChatPushNotifier.onAccountChanged(appCtx)
+    GlobalChatOutbox.resume(appCtx)
 }
 
 @Composable

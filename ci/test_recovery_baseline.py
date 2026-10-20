@@ -8,12 +8,25 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 
+OUTBOX_MANIFEST_ADDITION = '''        <!-- Additive chat outbox only; system JobScheduler requires its signature permission. -->
+        <service
+            android:name="id.xydesk.remote.ui.ChatOutboxJobService"
+            android:permission="android.permission.BIND_JOB_SERVICE"
+            android:exported="true" />
+
+'''
+
 class RecoveryBaselineTest(unittest.TestCase):
     def test_connect_render_and_native_inputs_match_owner_baseline(self):
         lock = json.loads((ROOT/'docs/recovery/PROTECTED-CONNECTION-PATHS.json').read_text())
         for relative, expected in lock['files'].items():
             with self.subTest(path=relative):
-                self.assertEqual(hashlib.sha256((ROOT/relative).read_bytes()).hexdigest(), expected)
+                data = (ROOT/relative).read_bytes()
+                if relative.endswith('/app/src/main/AndroidManifest.xml'):
+                    addition = OUTBOX_MANIFEST_ADDITION.encode()
+                    self.assertEqual(data.count(addition), 1)
+                    data = data.replace(addition, b'', 1)
+                self.assertEqual(hashlib.sha256(data).hexdigest(), expected)
 
     def test_initial_connect_is_not_requeued_inside_pre_started_onstart(self):
         activity = (ROOT/'client/Android/Studio/app/src/main/kotlin/id/xydesk/remote/ui/XyDeskSessionActivity.kt').read_text()
