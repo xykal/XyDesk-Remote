@@ -1,6 +1,7 @@
 package id.xydesk.remote.ui
 
 import android.content.Context
+import id.xydesk.remote.push.ChatPushNotifier
 import org.json.JSONArray
 import org.json.JSONObject
 import java.net.HttpURLConnection
@@ -228,7 +229,7 @@ internal class CommunityJokesApi(context: Context) {
                     val actName = o.optString("actor_name", "Komunitas")
                     val actGh = o.optString("actor_github", "")
                     val actId = o.optString("actor_id", "")
-                    val isSelf = id.xydesk.remote.push.ChatPushNotifier.isSelfUser(
+                    val isSelf = ChatPushNotifier.isSelfUser(
                         context = appContext,
                         actorName = actName,
                         actorGithub = actGh,

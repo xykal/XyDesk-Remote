@@ -606,7 +606,7 @@ internal object AppUpdate {
                         val actorHash = it.optString("actor_id", "").trim()
                         val actorName = it.optString("actor_name", "").trim()
                         val actorGh = it.optString("actor_github", "").trim()
-                        val isSelfActor = id.xydesk.remote.push.ChatPushNotifier.isSelfUser(
+                        val isSelfActor = ChatPushNotifier.isSelfUser(
                             context = appCtx,
                             actorName = actorName,
                             actorGithub = actorGh,
