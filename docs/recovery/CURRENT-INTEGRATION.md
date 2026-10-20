@@ -1,9 +1,16 @@
 # Recovery integration in progress — not a final release
 
+Latest GitHub login correction: see GITHUB-LOGIN-API-FIX.md and GITHUB-LOGIN-VALIDATION.json.
+Worker c532dfc8-8abd-4c9b-b7e4-d90157da999c is deployed; default + login alias now
+use the canonical API OAuth callback, not RdpFree. Source 7abb70d; actual owner
+sign-in/app-return acceptance and historical secret rotation remain pending.
+Current workspace /home/user/XyDesk-Login. The outbox phase below is historical
+implementation/deployment evidence; latest live history is still HTTP200/99 rows.
+
 Latest Android outbox source: see ANDROID-OUTBOX.md and OUTBOX-VALIDATION.json.
 Source 429af46 includes private encrypted durable queue + JobScheduler + notification
 replies; positive authenticated/physical-device acceptance remains pending.
-Current source workspace /home/user/XyDesk-Outbox, branch agent/restore-v123-baseline.
+Previous outbox workspace /home/user/XyDesk-Outbox, branch agent/restore-v123-baseline.
 Worker f203a85d-65a4-4b85-b6c0-2c2e2740ac87 deployed with original assets/config/data.
 Latest global history is HTTP 200/99 rows, no paid upgrade; earlier quota 503 evidence
 below is historical. One accidentally accepted rollout probe was exactly cleaned;

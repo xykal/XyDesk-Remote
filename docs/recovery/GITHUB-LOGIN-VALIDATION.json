@@ -1,0 +1,166 @@
+{
+  "android_source": "7abb70dd2cfb82bd910a0175c711c5346dde5dd9",
+  "worker_source": "aa5afe66c79126b253ef928a05ae998ca5b5ffb5",
+  "android_gate": {
+    "id": 39378247936,
+    "name": "Build APK",
+    "status": "completed",
+    "conclusion": "success",
+    "html_url": "https://github.com/xykal/XyDesk-Remote/actions/runs/39378247936",
+    "head_sha": "7abb70dd2cfb82bd910a0175c711c5346dde5dd9"
+  },
+  "web_gate": {
+    "id": 39378248447,
+    "name": "Web Worker checks",
+    "status": "completed",
+    "conclusion": "success",
+    "html_url": "https://github.com/xykal/XyDesk-Remote/actions/runs/39378248447",
+    "head_sha": "7abb70dd2cfb82bd910a0175c711c5346dde5dd9"
+  },
+  "worker_tests": 154,
+  "new_android_tests": 2,
+  "baseline_guards": 5,
+  "jobs": [
+    {
+      "name": "Gate compile Kotlin (cepat, tanpa native)",
+      "conclusion": "success",
+      "steps": [
+        {
+          "name": "Set up job",
+          "conclusion": "success"
+        },
+        {
+          "name": "Run actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09",
+          "conclusion": "success"
+        },
+        {
+          "name": "Run actions/setup-java@b6effb05e454b25005698d916606bdc6ffcbf961",
+          "conclusion": "success"
+        },
+        {
+          "name": "Cache Android SDK gate (platform & build-tools)",
+          "conclusion": "success"
+        },
+        {
+          "name": "Install Android SDK (tanpa NDK & CMake)",
+          "conclusion": "success"
+        },
+        {
+          "name": "Guard owner-selected connect/render/native baseline",
+          "conclusion": "success"
+        },
+        {
+          "name": "Unit test JVM (core-rdp + core-pc-stream + IME + app UI)",
+          "conclusion": "success"
+        },
+        {
+          "name": "Compile Kotlin (app + core-rdp)",
+          "conclusion": "success"
+        },
+        {
+          "name": "Compile Windows Native C++17 Host Agent & DLLs (mingw-w64)",
+          "conclusion": "success"
+        },
+        {
+          "name": "Post Cache Android SDK gate (platform & build-tools)",
+          "conclusion": "success"
+        },
+        {
+          "name": "Post Run actions/setup-java@b6effb05e454b25005698d916606bdc6ffcbf961",
+          "conclusion": "success"
+        },
+        {
+          "name": "Post Run actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09",
+          "conclusion": "success"
+        },
+        {
+          "name": "Complete job",
+          "conclusion": "success"
+        }
+      ]
+    },
+    {
+      "name": "Debug per-ABI (armv7 + arm64 + x86_64)",
+      "conclusion": "skipped",
+      "steps": []
+    },
+    {
+      "name": "Publish GitHub Release",
+      "conclusion": "skipped",
+      "steps": []
+    },
+    {
+      "name": "Release per-ABI (R8 + signed) + GitHub Release",
+      "conclusion": "skipped",
+      "steps": []
+    }
+  ],
+  "production": {
+    "source": "aa5afe66c79126b253ef928a05ae998ca5b5ffb5",
+    "worker_version": "c532dfc8-8abd-4c9b-b7e4-d90157da999c",
+    "observed_at": "2026-10-20T06:02:50.070894+00:00",
+    "checks": [
+      {
+        "path": "/api/github/oauth/login",
+        "status": 302,
+        "authorize_origin": "https://github.com",
+        "client_id": "Ov23liBsgZ5xJKgzHGtl",
+        "redirect_uri": "https://api.xydeskremote.biz.id/api/github/oauth/callback",
+        "cache_control": "no-store"
+      },
+      {
+        "path": "/api/auth/login",
+        "status": 302,
+        "authorize_origin": "https://github.com",
+        "client_id": "Ov23liBsgZ5xJKgzHGtl",
+        "redirect_uri": "https://api.xydeskremote.biz.id/api/github/oauth/callback",
+        "cache_control": "no-store"
+      },
+      {
+        "path": "/api/github/oauth/login?client=legacy",
+        "status": 302,
+        "authorize_origin": "https://github.com",
+        "client_id": "Ov23liBsgZ5xJKgzHGtl",
+        "redirect_uri": "https://api.xydeskremote.biz.id/api/github/oauth/callback",
+        "cache_control": "no-store"
+      },
+      {
+        "path": "/api/github/oauth/login?client=xydesk",
+        "status": 302,
+        "authorize_origin": "https://github.com",
+        "client_id": "Ov23liBsgZ5xJKgzHGtl",
+        "redirect_uri": "https://api.xydeskremote.biz.id/api/github/oauth/callback",
+        "cache_control": "no-store"
+      },
+      {
+        "path": "/api/health",
+        "status": 200
+      },
+      {
+        "path": "/api/chat/channels",
+        "status": 200
+      },
+      {
+        "path": "/api/chat/send-capabilities",
+        "status": 401
+      },
+      {
+        "path": "/api/github/oauth/callback",
+        "status": 400
+      },
+      {
+        "path": "/api/chat/history?limit=1",
+        "status": 200,
+        "message_count": 99
+      }
+    ],
+    "actual_github_authorization_tested": false,
+    "oauth_app_callback_registration_verified": false,
+    "tokens_or_codes_used": false,
+    "saved_sessions_cleared": false
+  },
+  "real_owner_signin_tested": false,
+  "new_signed_apk": false,
+  "saved_sessions_or_data_cleared": false,
+  "historical_secret_rotation_done": false
+}
