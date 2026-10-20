@@ -3413,7 +3413,7 @@ function wrapKvWithEdgeCache(rawKv, d1Db = null) {
   return wrapped;
 }
 
-function createKvBackedStorage(env, kvKey) {
+export function createKvBackedStorage(env, kvKey) {
   let stateObj = EDGE_KV_STORES.get(kvKey);
   if (!stateObj) {
     stateObj = { map: new Map(), loadedAt: 0 };
@@ -3468,19 +3468,15 @@ function createKvBackedStorage(env, kvKey) {
 
   const txApi = {
     async get(key) {
-      await syncFromKv(false);
       return stateObj.map.get(key);
     },
     async put(key, value) {
-      await syncFromKv(false);
       stateObj.map.set(key, value);
     },
     async delete(key) {
-      await syncFromKv(false);
       return stateObj.map.delete(key);
     },
     async list(opts = {}) {
-      await syncFromKv(false);
       const prefix = typeof opts.prefix === "string" ? opts.prefix : "";
       const start = typeof opts.start === "string" ? opts.start : null;
       const end = typeof opts.end === "string" ? opts.end : null;
@@ -3520,6 +3516,7 @@ function createKvBackedStorage(env, kvKey) {
       return res;
     },
     async list(opts = {}) {
+      await syncFromKv(false);
       return txApi.list(opts);
     },
     async transaction(fn) {
@@ -4176,7 +4173,7 @@ export class GlobalChat {
     }
     if (path === "/mutation-capabilities" && request.method === "GET")
       return durableObjectJson({ revisioned_mutations: 1 }, 200, request.method);
-    if ((path === "/connect" || path === "/ws/chat") && request.headers.get("Upgrade") === "websocket") {
+    if ((path === "/connect" || path === "/ws/chat") && (request.headers.get("Upgrade") === "websocket" || typeof WebSocketPair === "undefined")) {
       return this.handleConnect(request);
     }
     if (path === "/presence") {
@@ -4601,6 +4598,9 @@ export class GlobalChat {
   async handleConnect(request) {
     const auth = await this.authenticate(request);
     if (!auth.ok) return durableObjectJson({ status: "error", code: auth.code }, auth.status, request.method);
+    if (typeof WebSocketPair === "undefined") {
+      return durableObjectJson({ status: "ok", mode: "http_polling", online_count: this.getActiveOnlineCount() }, 200, request.method);
+    }
     const urlObj = new URL(request.url);
     const pair = new WebSocketPair();
     const [client, server] = Object.values(pair);
@@ -4967,9 +4967,11 @@ export class GlobalChat {
 
 async function releasesListResponse(request, env) {
   const cacheKey = new Request(new URL("/api/releases", request.url), { method: "GET" });
-  const cache = caches.default;
-  const cached = await cache.match(cacheKey);
-  if (cached) return cached;
+  const cache = globalThis.caches?.default;
+  if (cache) {
+    const cached = await cache.match(cacheKey).catch(() => null);
+    if (cached) return cached;
+  }
   const headers = { Accept: "application/vnd.github+json", "User-Agent": "xydesk-remote-worker" };
   const tokens = githubTokenCandidates(env);
   if (tokens.length) headers.Authorization = `Bearer ${tokens[0]}`;
@@ -4992,7 +4994,7 @@ async function releasesListResponse(request, env) {
     }));
   const out = jsonResponse({ status: "ok", releases }, 200, request.method);
   out.headers.set("Cache-Control", "public, max-age=300");
-  await cache.put(cacheKey, out.clone());
+  if (cache) await cache.put(cacheKey, out.clone()).catch(() => {});
   return out;
 }
 
