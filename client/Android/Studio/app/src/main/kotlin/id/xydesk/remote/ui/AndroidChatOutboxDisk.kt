@@ -15,8 +15,19 @@ internal class AndroidChatOutboxDisk(context: Context) : OutboxDisk {
         require(name.endsWith(".queue") && ChatOutboxPolicy.LOCAL_ID.matches(name.removeSuffix(".queue")))
         return AtomicFile(File(root, name))
     }
-    override fun names(): List<String> = root.listFiles().orEmpty().filter { it.isFile }
-        .map { it.name.removeSuffix(".bak") }.filter { it.endsWith(".queue") }.distinct()
+    private fun files(): Array<File> {
+        check(root.parentFile?.canRead() == true) { "Penyimpanan antrean tidak dapat dibaca." }
+        if (!root.exists()) return emptyArray()
+        check(root.isDirectory) { "Lokasi antrean bukan direktori." }
+        return root.listFiles() ?: error("Direktori antrean tidak dapat dibaca.")
+    }
+    override fun names(): List<String> = files().mapNotNull { file ->
+        val name = file.name.removeSuffix(".bak")
+        if (!name.endsWith(".queue")) null else {
+            check(file.isFile) { "Catatan antrean tidak dapat dibaca." }
+            name
+        }
+    }.distinct()
     override fun read(name: String): ByteArray = atomic(name).openRead().use { it.readChatBytesAtMost(ChatOutboxStore.MAX_FILE_BYTES) }
     override fun writeAtomic(name: String, bytes: ByteArray) {
         check(root.isDirectory || root.mkdirs()) { "Penyimpanan antrean tidak tersedia." }
@@ -25,7 +36,7 @@ internal class AndroidChatOutboxDisk(context: Context) : OutboxDisk {
         catch (error: Exception) { file.failWrite(output); throw error }
     }
     override fun delete(name: String) = atomic(name).delete()
-    override fun sizeBytes(): Long = root.listFiles().orEmpty().filter { it.isFile }.sumOf { it.length() }
+    override fun sizeBytes(): Long = files().filter { it.isFile }.sumOf { it.length() }
 }
 
 internal fun chatOutboxKey(create: Boolean): SecretKey {

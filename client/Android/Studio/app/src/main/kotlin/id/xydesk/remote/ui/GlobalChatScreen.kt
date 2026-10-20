@@ -398,8 +398,14 @@ private fun GlobalChatAccountContent(
 
     var showLangPicker by remember { mutableStateOf(false) }
     var showChatSettings by remember { mutableStateOf(false) }
+    var showOutbox by remember(verifiedGhLogin) { mutableStateOf(false) }
     var outboxIssue by remember(verifiedGhLogin) { mutableStateOf<String?>(null) }
     var outboxBinding by remember(verifiedGhLogin) { mutableStateOf("") }
+    if (showOutbox && !verifiedGhLogin.isNullOrBlank() && outboxBinding.isNotBlank()) {
+        androidx.compose.runtime.key(verifiedGhLogin, outboxBinding) {
+            GlobalChatOutboxDialog(verifiedGhLogin.orEmpty(), outboxBinding, onClose = { showOutbox = false })
+        }
+    }
     var historyIssue by remember(verifiedGhLogin) { mutableStateOf<String?>(null) }
     var connectionIssue by remember(verifiedGhLogin) { mutableStateOf<String?>(null) }
     var historyRetryAt by remember(verifiedGhLogin) { mutableStateOf(0L) }
@@ -492,12 +498,27 @@ private fun GlobalChatAccountContent(
     }
 
     fun deleteMessageForMe(target: ChatMessage) {
-        if (target.id.startsWith("local-")) GlobalChatOutbox.cancel(context, target.id)
-        if (target.id.isNotBlank() && target.id !in hiddenMessageIds) {
-            hiddenMessageIds.add(target.id)
+        fun hideLocal(ids: Set<String>) {
+            ids.filter { it.isNotBlank() && it !in hiddenMessageIds }.forEach { hiddenMessageIds.add(it) }
             chatPrefs.edit().putStringSet(hiddenIdsKey, hiddenMessageIds.toSet()).apply()
+            messages.removeAll { it.id in ids }
         }
-        messages.removeAll { it.id == target.id }
+        if (target.id.startsWith("local-")) {
+            val account = verifiedGhLogin.orEmpty()
+            val binding = outboxBinding
+            scope.launch {
+                try {
+                    val result = withContext(Dispatchers.IO) { GlobalChatOutbox.cancelPending(context, target.id, account, binding) }
+                    if (!chatAccountSnapshotIsCurrent(account, getVerifiedGitHubLogin(context))) return@launch
+                    val serverId = result?.takeIf { it.state == "accepted" }?.receipt?.let { JSONObject(it).optString("id") }.orEmpty()
+                    hideLocal(setOf(target.id, serverId))
+                    Toast.makeText(context, "Antrean lokal dihapus setelah status tersimpan. Pesan yang sudah masuk server tidak ditarik.", Toast.LENGTH_LONG).show()
+                } catch (cancelled: CancellationException) { throw cancelled }
+                catch (_: Exception) { Toast.makeText(context, "Pembatalan belum tersimpan. Pesan tetap terlihat; buka Antrean untuk memeriksa akun/penyimpanan.", Toast.LENGTH_LONG).show() }
+            }
+            return
+        }
+        hideLocal(setOf(target.id))
         Toast.makeText(context, "Pesan dihapus untuk saya", Toast.LENGTH_SHORT).show()
     }
 
@@ -1852,6 +1873,12 @@ private fun GlobalChatAccountContent(
                 }
             }
 
+            if (!verifiedGhLogin.isNullOrBlank()) {
+                TextButton(enabled = outboxBinding.isNotBlank(), onClick = { showOutbox = true },
+                    modifier = Modifier.padding(horizontal = 8.dp)) {
+                    Text(xyNow("Antrean kirim", "Send queue"))
+                }
+            }
             listOfNotNull(connectionIssue, historyIssue, outboxIssue).distinct().forEach { issue ->
                 Text(issue, color = Color(0xFFFBBF24), style = MaterialTheme.typography.labelSmall,
                     modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 6.dp))

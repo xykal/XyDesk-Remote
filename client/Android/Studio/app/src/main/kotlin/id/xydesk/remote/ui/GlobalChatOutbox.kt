@@ -16,7 +16,7 @@ import java.net.HttpURLConnection
 import java.net.URL
 import kotlin.coroutines.coroutineContext
 
-internal data class OutboxSnapshot(val binding: String, val entries: List<OutboxEntry>, val issue: String?)
+internal data class OutboxSnapshot(val binding: String, val entries: List<OutboxEntry>, val issue: String?, val readFailed: Boolean = false, val verifiedOwner: Long = 0)
 internal data class OutboxAcceptance(val login: String, val binding: String, val localId: String, val receipt: JSONObject, val message: JSONObject?)
 private data class OutboxSession(val login: String, val token: String, val binding: String)
 private data class OutboxResponse(val status: Int, val body: JSONObject, val retrySeconds: Long)
@@ -60,8 +60,8 @@ object GlobalChatOutbox {
                 held -> "Antrean lama belum dapat dipastikan identitasnya setelah token berubah; tidak dikirim otomatis."
                 else -> null
             }
-            OutboxSnapshot(who.binding, visible, issue)
-        } catch (_: Exception) { OutboxSnapshot(who.binding, emptyList(), "Antrean lokal belum bisa dibuka. Data tidak dihapus; jangan hapus data aplikasi.") }
+            OutboxSnapshot(who.binding, visible, issue, verifiedOwner = owner(who.binding))
+        } catch (_: Exception) { OutboxSnapshot(who.binding, emptyList(), "Antrean lokal belum bisa dibuka. Data tidak dihapus; jangan hapus data aplikasi.", readFailed = true) }
     }
 
     internal fun enqueue(context: Context, expectedLogin: String, expectedBinding: String, body: JSONObject, at: Long) {
@@ -75,23 +75,62 @@ object GlobalChatOutbox {
         resume(context)
     }
 
-    internal fun cancel(context: Context, id: String) {
-        val app = context.applicationContext
-        scope.launch {
-            val who = session(app) ?: return@launch
-            runCatching {
-                store(app).update(id) { e ->
-                    if (e.state == "pending" && ChatOutboxPolicy.belongsTo(e, who.binding, owner(who.binding)))
-                        e.copy(state = "cancelled", payload = "", issue = "cancelled") else e
-                }
-            }
-            changed()
+    private fun requireSession(context: Context, expectedLogin: String, expectedBinding: String): OutboxSession {
+        val who = session(context) ?: error("Login GitHub kembali diperlukan.")
+        check(expectedBinding.isNotBlank() && who.binding == expectedBinding &&
+            normalizedChatAccount(who.login) == normalizedChatAccount(expectedLogin)) { "Akun berubah; tindakan dibatalkan." }
+        return who
+    }
+
+    /** Does not send any queued message; used to reveal same-ID queues after credential rotation. */
+    internal fun checkAccount(context: Context, expectedLogin: String, expectedBinding: String): Long {
+        val who = requireSession(context, expectedLogin, expectedBinding)
+        val result = request("send-capabilities", who.token)
+        val cap = result.body
+        check(current(context, who)) { "Akun berubah; identitas tidak diterapkan." }
+        check(result.status == 200 && cap.optInt("send_protocol") == 1 && cap.optLong("author_id") > 0 &&
+            cap.optLong("replay_max_age_ms") == ChatOutboxPolicy.MAX_AGE_MS &&
+            cap.optString("github_login").equals(who.login, ignoreCase = true)) {
+            "Identitas/protokol server belum terverifikasi. Periksa koneksi atau login kembali."
         }
+        return cap.getLong("author_id").also { identity = who.binding to it; changed() }
+    }
+
+    internal fun retryPending(context: Context, id: String, expectedLogin: String, expectedBinding: String): String {
+        val who = requireSession(context, expectedLogin, expectedBinding)
+        val original = store(context).entries().firstOrNull { it.id == id } ?: error("Antrean sudah berubah.")
+        check(ChatOutboxControlPolicy.retryState(original, who.binding, owner(who.binding), System.currentTimeMillis())
+            in setOf(OutboxRetryState.READY, OutboxRetryState.NEEDS_LOGIN)) { "Status/akun berubah atau waktu tunggu belum selesai." }
+        val verifiedOwner = checkAccount(context, expectedLogin, expectedBinding)
+        requireSession(context, expectedLogin, expectedBinding)
+        val result = store(context).update(id) { e ->
+            if (e.state != "pending") e else ChatOutboxControlPolicy.retry(e, who.binding, verifiedOwner, System.currentTimeMillis())
+        } ?: error("Antrean sudah berubah.")
+        changed()
+        if (result.state == "pending") { schedule(context, 0); resume(context) }
+        return result.state
+    }
+
+    /** Durable result, not a fire-and-forget deletion promise. Null means no local record exists. */
+    internal fun cancelPending(context: Context, id: String, expectedLogin: String, expectedBinding: String): OutboxEntry? {
+        val who = requireSession(context, expectedLogin, expectedBinding)
+        val result = store(context).update(id) { e -> ChatOutboxControlPolicy.cancel(e, who.binding, owner(who.binding)) }
+        changed()
+        return result
+    }
+
+    internal fun pendingText(context: Context, id: String, expectedLogin: String, expectedBinding: String): String {
+        val who = requireSession(context, expectedLogin, expectedBinding)
+        val entry = store(context).entries().firstOrNull { it.id == id } ?: error("Antrean sudah berubah.")
+        val text = ChatOutboxControlPolicy.copyText(entry, who.binding, owner(who.binding))
+        requireSession(context, expectedLogin, expectedBinding)
+        return text
     }
 
     @JvmStatic fun resume(context: Context) {
         val app = context.applicationContext
         scope.launch {
+            changed() // Refresh credential-scoped UI even when every pending row is paused.
             val delay = runCatching { flush(app) }.getOrElse { 300_000L }
             if (delay != null) schedule(app, delay)
         }

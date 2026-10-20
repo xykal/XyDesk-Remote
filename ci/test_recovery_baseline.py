@@ -59,3 +59,20 @@ class RecoveryBaselineTest(unittest.TestCase):
         self.assertIn('key(target) { content(target) }', motion)
         self.assertIn('Animatable(1f)', motion)
         self.assertNotIn('rememberInfiniteTransition', motion)
+
+    def test_queue_controls_do_not_hide_failed_cancellation_or_export_media(self):
+        ui = ROOT/'client/Android/Studio/app/src/main/kotlin/id/xydesk/remote/ui'
+        screen = (ui/'GlobalChatScreen.kt').read_text()
+        local_delete = screen[screen.index('    fun deleteMessageForMe('):screen.index('    fun applyIncomingMutation(')]
+        self.assertIn('GlobalChatOutbox.cancelPending(', local_delete)
+        self.assertLess(local_delete.index('GlobalChatOutbox.cancelPending('), local_delete.index('hideLocal(setOf(target.id, serverId))'))
+        dialog = (ui/'GlobalChatOutboxDialog.kt').read_text()
+        self.assertNotIn('attachment_data', dialog)
+        self.assertNotIn('Base64', dialog)
+        self.assertGreaterEqual(dialog.count('withContext(Dispatchers.IO)'), 5)
+        disk = (ui/'AndroidChatOutboxDisk.kt').read_text()
+        self.assertIn('root.listFiles() ?: error(', disk)
+        outbox = (ui/'GlobalChatOutbox.kt').read_text()
+        account_check = outbox[outbox.index('    internal fun checkAccount('):outbox.index('    internal fun retryPending(')]
+        self.assertNotIn('resume(', account_check)
+        self.assertNotIn('request("send",', account_check)
