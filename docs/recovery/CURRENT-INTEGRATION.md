@@ -1,8 +1,12 @@
 # Recovery integration in progress — not a final release
 
+Latest Android media fix: see STICKER-DIRECTORY-FIX.md and STICKER-DIRECTORY-VALIDATION.json.
+Single canonical sticker write; read-only legacy compatibility; no automatic deletion.
+Android source gate 39372922876 passed at 52dcd09 (no installed APK/device acceptance).
+
 Latest backend-only source step: see OUTBOX-SEND-CONTRACT.md (Android durable outbox still pending).
 Community evidence: see CHANNELS-AND-LIGHT-MOTION.md and COMMUNITY-VALIDATION.json.
-Current source workspace is /home/user/XyDesk-Work, tracking remote branch
+Current source workspace is /home/user/XyDesk-Media, tracking remote branch
 agent/restore-v123-baseline. Latest local source has 143 passing Worker tests,
 5 source guards and a green Android gate (39328956477). Worker version is now
 68b7fc17-ed1a-4083-babc-529d417d6228; old global history is still quota-blocked.

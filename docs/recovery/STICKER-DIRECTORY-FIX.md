@@ -26,7 +26,8 @@ phone by this source change, and genuine phone/SD-storage failure tests are pend
 
 Nine JVM policy tests cover canonical paths, read-only legacy compatibility,
 side-effect-free listing, duplicate roots, basename safety, first-success termination,
-fallback and all-failure reporting. Kotlin/app JVM gate must be checked separately.
+fallback and all-failure reporting. Kotlin/app JVM gate passed at 52dcd09: run 39372922876.
+Web Worker checks passed: run 39372923935. See STICKER-DIRECTORY-VALIDATION.json.
 143 Worker tests and five protected-baseline guards still pass locally. No Connect,
 render, native/build baseline or backend deployment change. Durable Android outbox,
 full history/media sync and protected portable backup remain separate unfinished work.
