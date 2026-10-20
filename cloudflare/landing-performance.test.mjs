@@ -25,6 +25,7 @@ function harness() {
 const settle = () => new Promise(resolve=>setImmediate(resolve));
 test('expired popup and chat presence polling are absent',()=>{
   assert.ok(!html.includes('xyCdWrap'));
+  assert.ok(html.includes('main code { overflow-wrap: anywhere;'));
   assert.ok(!html.includes('/api/chat/presence'));
   assert.ok(!html.includes('setInterval('));
   assert.ok(!html.includes('content-visibility: auto')); // Must not mis-target download anchors.
