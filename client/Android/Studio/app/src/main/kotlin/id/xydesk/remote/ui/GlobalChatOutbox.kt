@@ -171,7 +171,8 @@ object GlobalChatOutbox {
         val now = System.currentTimeMillis()
         var pending = store(context).entries().filter { it.state == "pending" }
         if (pending.isEmpty()) return@withLock null
-        fun due(e: OutboxEntry) = e.nextAttemptAt <= now || e.issue == "authentication_required" && e.lastAttemptFingerprint != who.binding
+        fun due(e: OutboxEntry) = e.retryNotBefore <= now &&
+            (e.nextAttemptAt <= now || e.issue == "authentication_required" && e.lastAttemptFingerprint != who.binding)
         if (pending.none { due(it) }) return@withLock nextDelay(pending, who)
         val capability = try { request("send-capabilities", who.token) }
             catch (_: Exception) { return@withLock 300_000L }
@@ -180,7 +181,8 @@ object GlobalChatOutbox {
         if (capability.status == 401 || capability.status == 403) {
             pending.filter { ChatOutboxPolicy.belongsTo(it, who.binding, owner(who.binding)) }.forEach { e ->
                 store(context).update(e.id) { old -> if (old.state != "pending") old else old.copy(issue = "authentication_required",
-                    nextAttemptAt = Long.MAX_VALUE, lastAttemptFingerprint = who.binding) }
+                    nextAttemptAt = Long.MAX_VALUE, lastAttemptFingerprint = who.binding,
+                    retryNotBefore = maxOf(old.retryNotBefore, now + capability.retrySeconds * 1000)) }
             }
             changed(); return@withLock null
         }
@@ -230,6 +232,7 @@ object GlobalChatOutbox {
                     attempts = (old.attempts + 1).coerceAtMost(1000),
                     issue = if (status == 401 || status == 403) "authentication_required" else code,
                     lastAttemptFingerprint = who.binding,
+                    retryNotBefore = maxOf(old.retryNotBefore, System.currentTimeMillis() + (result?.retrySeconds ?: 0) * 1000),
                     nextAttemptAt = if (blocked) Long.MAX_VALUE else System.currentTimeMillis() +
                         ChatOutboxPolicy.delayMs(old.attempts, result?.retrySeconds ?: 0)) }
             }
@@ -239,6 +242,14 @@ object GlobalChatOutbox {
     }
 
     private fun nextDelay(entries: List<OutboxEntry>, who: OutboxSession): Long? = entries
-        .filter { ChatOutboxPolicy.belongsTo(it, who.binding, owner(who.binding)) && it.nextAttemptAt != Long.MAX_VALUE }
-        .minOfOrNull { (it.nextAttemptAt - System.currentTimeMillis()).coerceAtLeast(1_000) }
+        .filter {
+            (ChatOutboxPolicy.belongsTo(it, who.binding, owner(who.binding)) ||
+                owner(who.binding) == 0L && it.ownerId > 0) &&
+                (it.nextAttemptAt != Long.MAX_VALUE || it.issue == "authentication_required" && it.lastAttemptFingerprint != who.binding)
+        }
+        .minOfOrNull {
+            val eligible = if (it.issue == "authentication_required" && it.lastAttemptFingerprint != who.binding) it.retryNotBefore
+                else maxOf(it.nextAttemptAt, it.retryNotBefore)
+            (eligible - System.currentTimeMillis()).coerceAtLeast(1_000)
+        }
 }

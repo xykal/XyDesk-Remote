@@ -98,4 +98,22 @@ class ChatOutboxStoreTest {
         fails { broken.entries() }; assertTrue(before.contentEquals(d.files.values.single()))
     }
 
+    @Test fun oldEncryptedSchemaWithoutRetryFloorStillReadsWithoutMigrationOrReset() {
+        val d=MemoryDisk();val s=store(d);val e=entry();s.enqueue(e)
+        val file=d.names().single();val bytes=d.files.getValue(file)
+        val aad="xydesk-outbox-v1:$file".toByteArray(Charsets.UTF_8)
+        val decrypt=javax.crypto.Cipher.getInstance("AES/GCM/NoPadding")
+        decrypt.init(javax.crypto.Cipher.DECRYPT_MODE,key,javax.crypto.spec.GCMParameterSpec(128,bytes.copyOfRange(0,12)))
+        decrypt.updateAAD(aad)
+        val old=JSONObject(String(decrypt.doFinal(bytes.copyOfRange(12,bytes.size)),Charsets.UTF_8))
+        old.remove("retry_not_before")
+        val encrypt=javax.crypto.Cipher.getInstance("AES/GCM/NoPadding")
+        encrypt.init(javax.crypto.Cipher.ENCRYPT_MODE,key);encrypt.updateAAD(aad)
+        d.files[file]=encrypt.iv+encrypt.doFinal(old.toString().toByteArray(Charsets.UTF_8))
+        assertEquals(e,store(d).entries().single())
+        s.update(e.id) { it.copy(retryNotBefore=123) }
+        fails { s.update(e.id) { it.copy(retryNotBefore=0) } }
+        assertEquals(123L,store(d).entries().single().retryNotBefore)
+    }
+
 }

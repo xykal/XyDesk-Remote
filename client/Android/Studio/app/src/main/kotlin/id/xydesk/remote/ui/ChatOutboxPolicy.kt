@@ -7,7 +7,7 @@ internal data class OutboxEntry(
     val id: String, val login: String, val credentialFingerprint: String, val createdAt: Long,
     val payload: String, val ownerId: Long = 0, val state: String = "pending",
     val attempts: Int = 0, val nextAttemptAt: Long = 0, val issue: String = "",
-    val lastAttemptFingerprint: String = "", val receipt: String = "",
+    val lastAttemptFingerprint: String = "", val receipt: String = "", val retryNotBefore: Long = 0,
 )
 
 internal object ChatOutboxPolicy {

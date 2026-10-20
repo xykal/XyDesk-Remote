@@ -27,21 +27,22 @@ internal class ChatOutboxStore(private val disk: OutboxDisk, private val key: (B
         .put("credential_fingerprint", e.credentialFingerprint).put("created_at", e.createdAt).put("payload", e.payload)
         .put("owner_id", e.ownerId).put("state", e.state).put("attempts", e.attempts)
         .put("next_attempt_at", e.nextAttemptAt).put("issue", e.issue)
-        .put("last_attempt_fingerprint", e.lastAttemptFingerprint).put("receipt", e.receipt).toString()
+        .put("last_attempt_fingerprint", e.lastAttemptFingerprint).put("receipt", e.receipt)
+        .put("retry_not_before", e.retryNotBefore).toString()
 
     private fun decode(text: String): OutboxEntry {
         val j = JSONObject(text); require(j.getInt("v") == 1)
         val e = OutboxEntry(j.getString("id"), j.getString("login"), j.getString("credential_fingerprint"),
             j.getLong("created_at"), j.getString("payload"), j.getLong("owner_id"), j.getString("state"),
             j.getInt("attempts"), j.getLong("next_attempt_at"), j.getString("issue"),
-            j.getString("last_attempt_fingerprint"), j.getString("receipt"))
+            j.getString("last_attempt_fingerprint"), j.getString("receipt"), j.optLong("retry_not_before", 0))
         validate(e); return e
     }
 
     private fun validate(e: OutboxEntry) {
         name(e.id); require(e.login.isNotBlank() && e.login.length <= 100)
         require(e.credentialFingerprint.matches(Regex("[0-9a-f]{64}")))
-        require(e.createdAt > 0 && e.ownerId >= 0 && e.attempts >= 0 && e.nextAttemptAt >= 0)
+        require(e.createdAt > 0 && e.ownerId >= 0 && e.attempts >= 0 && e.nextAttemptAt >= 0 && e.retryNotBefore >= 0)
         require(e.state in setOf("pending", "accepted", "cancelled") && e.issue.length <= 100)
         require(e.lastAttemptFingerprint.isEmpty() || e.lastAttemptFingerprint.matches(Regex("[0-9a-f]{64}")))
         if (e.state == "pending") {
@@ -99,6 +100,7 @@ internal class ChatOutboxStore(private val disk: OutboxDisk, private val key: (B
         val before = read(file); val after = transform(before)
         require(after.id == before.id && after.createdAt == before.createdAt && after.credentialFingerprint == before.credentialFingerprint)
         require(after.ownerId == before.ownerId || before.ownerId == 0L && after.ownerId > 0)
+        require(after.retryNotBefore >= before.retryNotBefore) // manual actions cannot erase server Retry-After
         require(after.state != "pending" || after.payload == before.payload)
         require(before.state == "pending" || after == before) // terminal states never resurrect
         if (before != after) write(after)

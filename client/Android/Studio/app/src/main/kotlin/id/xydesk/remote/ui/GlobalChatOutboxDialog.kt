@@ -40,6 +40,7 @@ internal fun GlobalChatOutboxDialog(account: String, binding: String, onClose: (
 
     LaunchedEffect(account, binding) {
         GlobalChatOutbox.revision.collectLatest {
+            delay(100L) // Coalesce metadata bursts; no repeated full queue reads per UI event.
             val loaded = withContext(Dispatchers.IO) {
                 val snapshot = GlobalChatOutbox.snapshot(context)
                 val rows = snapshot.entries.filter { it.state == "pending" }.map { entry ->
@@ -105,6 +106,7 @@ internal fun GlobalChatOutboxDialog(account: String, binding: String, onClose: (
                     items(rows, key = { it.entry.id }) { row ->
                         val entry = row.entry
                         val state = ChatOutboxControlPolicy.retryState(entry, binding, verifiedOwner, now)
+                        val waitUntil = maxOf(entry.retryNotBefore, if (entry.nextAttemptAt == Long.MAX_VALUE) 0 else entry.nextAttemptAt)
                         Surface(shape = MaterialTheme.shapes.medium, tonalElevation = 2.dp) {
                             Column(Modifier.fillMaxWidth().padding(12.dp), verticalArrangement = Arrangement.spacedBy(5.dp)) {
                                 Text(if (row.preview.viewOnce) xyNow("Media sekali lihat · tidak diekspor", "View-once media · not exported")
@@ -113,7 +115,7 @@ internal fun GlobalChatOutboxDialog(account: String, binding: String, onClose: (
                                 if (row.preview.media.isNotBlank()) Text(row.preview.media, style = MaterialTheme.typography.labelSmall)
                                 Text(when (state) {
                                     OutboxRetryState.READY -> xyNow("Menunggu konfirmasi / siap dicoba ulang", "Awaiting confirmation / ready to retry")
-                                    OutboxRetryState.WAIT -> xyNow("Tunggu ${((entry.nextAttemptAt - now).coerceAtLeast(0) / 1000) + 1} dtk; backoff server tetap dihormati", "Wait ${((entry.nextAttemptAt - now).coerceAtLeast(0) / 1000) + 1}s; server backoff is respected")
+                                    OutboxRetryState.WAIT -> xyNow("Tunggu ${((waitUntil - now).coerceAtLeast(0) / 1000) + 1} dtk; backoff server tetap dihormati", "Wait ${((waitUntil - now).coerceAtLeast(0) / 1000) + 1}s; server backoff is respected")
                                     OutboxRetryState.NEEDS_LOGIN -> xyNow("Periksa login terlebih dahulu", "Verify sign-in first")
                                     OutboxRetryState.EXPIRED -> xyNow("Batas retry 7 hari terlewati. Salin teks untuk kiriman baru secara manual, atau batalkan.", "Seven-day retry limit reached. Copy text for a manual new message, or cancel.")
                                     OutboxRetryState.CLOCK -> xyNow("Waktu perangkat perlu diperiksa; timestamp pesan tidak diubah otomatis.", "Check device time; message timestamp is not automatically changed.")

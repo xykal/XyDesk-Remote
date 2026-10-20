@@ -108,4 +108,23 @@ class ChatOutboxControlPolicyTest {
         val restored=ChatOutboxStore(disk) { key }.entries().single()
         assertEquals(entry(),restored)
     }
+    @Test fun authPausedRetryAlsoHonorsPersistedRetryAfterFloor() {
+        val e=entry().copy(issue="authentication_required",nextAttemptAt=Long.MAX_VALUE,retryNotBefore=now+300_000)
+        assertEquals(OutboxRetryState.WAIT,ChatOutboxControlPolicy.retryState(e,binding,42,now))
+        fails { ChatOutboxControlPolicy.retry(e,binding,42,now) }
+        assertEquals(OutboxRetryState.NEEDS_LOGIN,ChatOutboxControlPolicy.retryState(e,binding,42,now+300_000))
+    }
+    @Test fun verifiedTokenRotationDoesNotEraseRetryAfter() {
+        val e=entry().copy(issue="authentication_required",nextAttemptAt=Long.MAX_VALUE,retryNotBefore=now+300_000)
+        val rotated=ChatOutboxPolicy.fingerprint("rotated-test-credential")
+        fails { ChatOutboxControlPolicy.retry(e,rotated,42,now) }
+        val retried=ChatOutboxControlPolicy.retry(e,rotated,42,now+300_000)
+        assertEquals(e.retryNotBefore,retried.retryNotBefore)
+    }
+    @Test fun resettingNextAttemptAloneCannotBypassIndependentServerDeadline() {
+        val e=entry().copy(nextAttemptAt=0,retryNotBefore=now+1)
+        assertEquals(OutboxRetryState.WAIT,ChatOutboxControlPolicy.retryState(e,binding,42,now))
+        fails { ChatOutboxControlPolicy.retry(e,binding,42,now) }
+    }
+
 }

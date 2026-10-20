@@ -12,9 +12,9 @@ internal object ChatOutboxControlPolicy {
         e.state != "pending" -> OutboxRetryState.TERMINAL
         e.issue == "outbox_expired" || now >= e.createdAt && now - e.createdAt >= ChatOutboxPolicy.MAX_AGE_MS -> OutboxRetryState.EXPIRED
         e.createdAt > now && e.createdAt - now > 300_000 -> OutboxRetryState.CLOCK
+        e.nextAttemptAt == Long.MAX_VALUE && e.issue != "authentication_required" -> OutboxRetryState.PERMANENT
+        e.retryNotBefore > now || e.nextAttemptAt != Long.MAX_VALUE && e.nextAttemptAt > now -> OutboxRetryState.WAIT
         e.issue == "authentication_required" -> OutboxRetryState.NEEDS_LOGIN
-        e.nextAttemptAt == Long.MAX_VALUE -> OutboxRetryState.PERMANENT
-        e.nextAttemptAt > now -> OutboxRetryState.WAIT
         else -> OutboxRetryState.READY
     }
 
