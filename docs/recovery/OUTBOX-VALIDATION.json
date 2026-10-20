@@ -1,0 +1,160 @@
+{
+  "source": "429af465c4ed8348908c9cee5c278d677af06282",
+  "android_gate": {
+    "id": 39376611693,
+    "name": "Build APK",
+    "status": "completed",
+    "conclusion": "success",
+    "html_url": "https://github.com/xykal/XyDesk-Remote/actions/runs/39376611693",
+    "head_sha": "429af465c4ed8348908c9cee5c278d677af06282"
+  },
+  "web_gate": {
+    "id": 39376612784,
+    "name": "Web Worker checks",
+    "status": "completed",
+    "conclusion": "success",
+    "html_url": "https://github.com/xykal/XyDesk-Remote/actions/runs/39376612784",
+    "head_sha": "429af465c4ed8348908c9cee5c278d677af06282"
+  },
+  "outbox_unit_tests": 18,
+  "worker_tests": 148,
+  "baseline_guards": 5,
+  "baseline_manifest_exception": "one exact signature-protected JobService block; all other manifest bytes hash to original 9f64; other nine files byte-identical",
+  "jobs": [
+    {
+      "name": "Gate compile Kotlin (cepat, tanpa native)",
+      "conclusion": "success",
+      "steps": [
+        {
+          "name": "Set up job",
+          "conclusion": "success"
+        },
+        {
+          "name": "Run actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09",
+          "conclusion": "success"
+        },
+        {
+          "name": "Run actions/setup-java@b6effb05e454b25005698d916606bdc6ffcbf961",
+          "conclusion": "success"
+        },
+        {
+          "name": "Cache Android SDK gate (platform & build-tools)",
+          "conclusion": "success"
+        },
+        {
+          "name": "Install Android SDK (tanpa NDK & CMake)",
+          "conclusion": "success"
+        },
+        {
+          "name": "Guard owner-selected connect/render/native baseline",
+          "conclusion": "success"
+        },
+        {
+          "name": "Unit test JVM (core-rdp + core-pc-stream + IME + app UI)",
+          "conclusion": "success"
+        },
+        {
+          "name": "Compile Kotlin (app + core-rdp)",
+          "conclusion": "success"
+        },
+        {
+          "name": "Compile Windows Native C++17 Host Agent & DLLs (mingw-w64)",
+          "conclusion": "success"
+        },
+        {
+          "name": "Post Cache Android SDK gate (platform & build-tools)",
+          "conclusion": "success"
+        },
+        {
+          "name": "Post Run actions/setup-java@b6effb05e454b25005698d916606bdc6ffcbf961",
+          "conclusion": "success"
+        },
+        {
+          "name": "Post Run actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09",
+          "conclusion": "success"
+        },
+        {
+          "name": "Complete job",
+          "conclusion": "success"
+        }
+      ]
+    },
+    {
+      "name": "Debug per-ABI (armv7 + arm64 + x86_64)",
+      "conclusion": "skipped",
+      "steps": []
+    },
+    {
+      "name": "Release per-ABI (R8 + signed) + GitHub Release",
+      "conclusion": "skipped",
+      "steps": []
+    },
+    {
+      "name": "Publish GitHub Release",
+      "conclusion": "skipped",
+      "steps": []
+    }
+  ],
+  "production": {
+    "worker_version": "f203a85d-65a4-4b85-b6c0-2c2e2740ac87",
+    "source": "429af465c4ed8348908c9cee5c278d677af06282",
+    "observed_at": "2026-10-20T05:47:20.625659+00:00",
+    "checks": [
+      {
+        "path": "/api/health",
+        "status": 200,
+        "code": null,
+        "retry_after": null
+      },
+      {
+        "path": "/api/chat/send-capabilities",
+        "status": 401,
+        "code": "authentication_required",
+        "retry_after": null
+      },
+      {
+        "path": "/api/chat/channels",
+        "status": 200,
+        "code": null,
+        "retry_after": null
+      },
+      {
+        "path": "/api/chat/history?limit=1",
+        "status": 200,
+        "code": null,
+        "retry_after": null,
+        "message_count": 99,
+        "own_probe_absent": true
+      },
+      {
+        "path": "/api/chat/send",
+        "method": "POST",
+        "empty_nonpublishing_probe": true,
+        "status": 401,
+        "code": "authentication_required"
+      }
+    ],
+    "authenticated_publish_tested": false,
+    "temporary_cleanup_invocation_retired": true,
+    "namespace_reset": false,
+    "paid_upgrade": false
+  },
+  "probe_remediation": {
+    "matches": [
+      {
+        "id": "0mvg90rg2-vtvpxu",
+        "author_id": null,
+        "client_msg_id": "local-f9a41f82-e73f-4472-8802-121e45b610f1",
+        "at": 1792474473458
+      }
+    ],
+    "cleanup_event": false,
+    "still_present": false,
+    "cleanup_method": "temporary constructor invokes exact-tuple transactional cleanup; only own verified probe targeted",
+    "cleanup_observed_at": "2026-10-20T05:46:02.813658+00:00",
+    "maintenance_version": "b0e8b29a-f41e-4495-a805-f7f2c83eeb04"
+  },
+  "runtime_acceptance": false,
+  "new_signed_apk": false,
+  "full_history_media_sync_complete": false
+}

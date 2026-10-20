@@ -1,9 +1,10 @@
-# Durable send boundary — backend source, Android outbox NOT delivered
+# Durable send boundary — deployed backend; Android source integrated
 
 This is an additive, chat-only contract on `agent/restore-v123-baseline`.
 No native/RDP/Direct/audio protocol, application version, release tag or baseline
-connection/render input changes. This source has NOT been deployed in this step.
-The production Worker remains `68b7fc17-ed1a-4083-babc-529d417d6228`.
+connection/render input changes. Backend deployed as `f203a85d-65a4-4b85-b6c0-2c2e2740ac87`; Android source is
+integrated but phone/positive-authenticated acceptance is still pending.
+See ANDROID-OUTBOX.md and OUTBOX-VALIDATION.json, including rollout-probe remediation.
 
 ## Negotiation and identity
 
@@ -55,25 +56,22 @@ Legacy authenticated UUID sends also share receipts while retained; legacy clien
 have NO durable replay guarantee after expiry. Anonymous/non-UUID legacy sends keep
 their pre-existing behavior, never a promise of durable safety.
 
-## Client work still required
+## Client integration and remaining acceptance
 
-Encrypted AtomicFile + Android Keystore storage in noBackupFilesDir, bounded queue,
-no bearer tokens in queue, durable write BEFORE send, exact immutable payload,
-verified numeric account scope and fail-closed handling of token/account changes.
-An offline entry whose numeric identity is not yet verified must remain tied to
-its original credential fingerprint, not automatically migrate by username after
-credential rotation. Background scheduling/retry/backoff, restored pending UI,
-manual recovery and receipt-only handling remain to be implemented and tested.
-Neither this backend work nor the existing text cache completes full history/media
-sync, protected portable backup, or the original recovery acceptance requirements.
+The client-side encrypted queue, background scheduling, pending restoration, bounded
+retry, account/credential binding and notification replies are now integrated in
+source. See ANDROID-OUTBOX.md for implementation, exact bounds and limitations.
+Manual recovery of unbound entries after credential rotation, genuine phone and
+positive authenticated production tests remain pending. Neither this queue nor the
+existing text cache completes full history/media sync or protected portable backup.
 
 ## Validation
 
-143/143 local Worker tests; five protected-baseline guards preserve ten original
-9f64 connection/native/build inputs. Added coverage includes concurrent sends,
+148/148 Worker tests; five protected-baseline guards preserve nine original files
+and the original manifest bytes outside one exact checked additive JobService block. Added coverage includes concurrent sends,
 HTTP-to-WS retry, account isolation, payload conflicts, current edits/tombstones,
 trimmed receipt-only replies, rollback on receipt/index failure, expiry/bounded GC,
 quota failures and capability identity/namespace forwarding. CI now runs ALL
-`cloudflare/*.test.mjs`, not only `worker.test.mjs`. No live authenticated messages,
-new deployment, signed APK, device/runtime acceptance, namespace reset or paid
-upgrade was performed for this step.
+`cloudflare/*.test.mjs`, not only `worker.test.mjs`. No live authenticated messages, signed APK, device/runtime acceptance, namespace
+reset or paid upgrade. Worker deployments and one remediated anonymous rollout probe
+are documented in ANDROID-OUTBOX.md; do not describe that probe as a rejected send.

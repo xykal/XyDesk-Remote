@@ -1,23 +1,26 @@
 # Recovery integration in progress — not a final release
 
-Latest Android media fix: see STICKER-DIRECTORY-FIX.md and STICKER-DIRECTORY-VALIDATION.json.
-Single canonical sticker write; read-only legacy compatibility; no automatic deletion.
-Android source gate 39372922876 passed at 52dcd09 (no installed APK/device acceptance).
-
-Latest backend-only source step: see OUTBOX-SEND-CONTRACT.md (Android durable outbox still pending).
-Community evidence: see CHANNELS-AND-LIGHT-MOTION.md and COMMUNITY-VALIDATION.json.
-Current source workspace is /home/user/XyDesk-Media, tracking remote branch
-agent/restore-v123-baseline. Latest local source has 143 passing Worker tests,
-5 source guards and a green Android gate (39328956477). Worker version is now
-68b7fc17-ed1a-4083-babc-529d417d6228; old global history is still quota-blocked.
-No new signed recovery APK/final release; the earlier phase notes below are historical.
+Latest Android outbox source: see ANDROID-OUTBOX.md and OUTBOX-VALIDATION.json.
+Source 429af46 includes private encrypted durable queue + JobScheduler + notification
+replies; positive authenticated/physical-device acceptance remains pending.
+Current source workspace /home/user/XyDesk-Outbox, branch agent/restore-v123-baseline.
+Worker f203a85d-65a4-4b85-b6c0-2c2e2740ac87 deployed with original assets/config/data.
+Latest global history is HTTP 200/99 rows, no paid upgrade; earlier quota 503 evidence
+below is historical. One accidentally accepted rollout probe was exactly cleaned;
+no owner message reset/deletion, temporary cleanup invocation retired. Worker tests
+148 pass; five guards allow only one exact additive JobService manifest declaration.
+Single-directory sticker fix 52dcd09 and its green gate remain included.
+No signed recovery APK installed or final release; all original runtime acceptance
+and remaining features still open. Community evidence in COMMUNITY-VALIDATION.json
+is historical and is superseded for deployment state by OUTBOX-VALIDATION.json.
 
 Base: exact owner-selected v1.1.23 Build87 / 9f64b47, confirmed in publish logs.
 
 Ported separately from later source: chat owner mutation/reconciliation, cache,
 text archive, global-chat navigation/notification separation, and Buat RDP preflight.
-Ten critical connection/render/native/build files still match the owner baseline
-byte-for-byte; five source regression checks enforce this in CI. No AdMob removal,
+Nine critical connection/render/native/build files still match the owner baseline
+byte-for-byte; the manifest has one checked additive JobService block, with all
+other bytes matching the original locked hash. Five source guards enforce this. No AdMob removal,
 native stripping, lifecycle-connect deferral or renderer rewrite is mixed in.
 
 Source-level likely black-screen path found in rc.3: onCreate queues a connection
