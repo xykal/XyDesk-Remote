@@ -2,6 +2,10 @@
 #include "../include/xydesk_quic.h"
 
 #ifdef _WIN32
+// Windows min/max macros otherwise break std::min/std::max in the stream/audio code.
+#ifndef NOMINMAX
+#define NOMINMAX
+#endif
 #ifndef WIN32_LEAN_AND_MEAN
 #define WIN32_LEAN_AND_MEAN
 #endif

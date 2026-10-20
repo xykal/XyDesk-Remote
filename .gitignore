@@ -37,3 +37,6 @@ kotlinc.zip
 /out/
 junit.jar
 hamcrest.jar
+
+# Wrangler generated metadata is not source
+.wrangler/

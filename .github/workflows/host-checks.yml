@@ -1,0 +1,33 @@
+name: Windows host source checks
+on:
+  push:
+    branches: ['**']
+    paths:
+      - 'host-agent/**'
+      - 'ci/build_windows_host.sh'
+      - '.github/workflows/host-checks.yml'
+  pull_request:
+    paths:
+      - 'host-agent/**'
+      - 'ci/build_windows_host.sh'
+      - '.github/workflows/host-checks.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  windows-syntax:
+    name: MSVC syntax only (no EXE or object output)
+    runs-on: windows-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+        with:
+          persist-credentials: false
+      - name: Check Windows API code with /Zs, without linking or emitting an executable
+        shell: pwsh
+        run: |
+          $vs = & "${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer\vswhere.exe" -latest -products '*' -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 -property installationPath
+          if (-not $vs) { throw 'MSVC toolchain not found' }
+          $command = 'call "' + $vs + '\VC\Auxiliary\Build\vcvars64.bat" >nul && cl /nologo /std:c++17 /EHsc /utf-8 /Zs /DXYDESK_STATIC /Ihost-agent/include host-agent/src/main_host.cpp host-agent/src/host_readiness.cpp host-agent/src/xydesk_quic.cpp host-agent/src/xydesk_host_core.cpp'
+          cmd.exe /d /s /c $command
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }

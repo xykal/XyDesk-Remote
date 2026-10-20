@@ -9,7 +9,7 @@ Includes source fixes for canonical API GitHub OAuth, chat owner mutations/navig
 - Physical Connect/loading/render, RDP mic, account-switch/Keystore/process-death/storage/picker behavior.
 - Full Buat RDP provisioning, full history/media/protected portable backup, safe recovery of unbound rotated-credential queues.
 - Genuine Windows controller (no driver purchase/install authorized), authenticated BOTH Direct endpoints.
-- Host runtime/mic/audio/game acceptance. Raw unauthenticated legacy UDP remains OFF; no secure-Direct claim.
+- Host runtime/mic/audio/game acceptance. Android raw Direct/input/audio bridge starts/discovery are blocked; native ordinary RDP AUDIN is separate. Host UDP defaults OFF (explicit legacy-private test flag only); no secure-Direct claim.
 
 Host package contains one statically linked XyDeskRemoteHost.exe (also provided directly), no Standalone variant, DLL distribution or automatic setup scripts. No Windows code-signing claim. ARM32 installation remains deferred.
 

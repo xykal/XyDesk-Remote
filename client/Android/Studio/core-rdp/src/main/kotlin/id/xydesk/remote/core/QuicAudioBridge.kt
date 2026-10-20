@@ -76,6 +76,11 @@ class QuicAudioBridge(
     }
 
     fun start() {
+        if (!LegacyDirectTransportPolicy.mayStart()) {
+            micActive = false
+            onStatus(LegacyDirectTransportPolicy.BLOCKED_REASON)
+            return
+        }
         if (!enableSpeaker && !enableMic && !micActive) {
             onStatus("idle (audio & mic mati)")
             return

@@ -19,7 +19,7 @@ import java.util.concurrent.atomic.AtomicBoolean
  *
  * Berbeda dengan sesi RDP (`termsrv.dll` yang membuat `SM_REMOTESESSION != 0`),
  * engine ini menangkap langsung desktop konsol fisik Windows (`SM_REMOTESESSION == 0`)
- * dari `XyDeskRemoteHost-Standalone.exe`, mengenkode frame JPEG berkecepatan tinggi,
+ * dari `XyDeskRemoteHost.exe`, mengenkode frame JPEG berkecepatan tinggi,
  * dan mengalirkan audio WASAPI Loopback (`XYA1`) + input hardware `SendInput`
  * (`XYI1` `MOUSEEVENTF_MOVE`) di port UDP 4433 tanpa protokol RDP sama sekali.
  */
@@ -66,6 +66,10 @@ class XyDirectConsoleStreamClient(
     fun isVoiceMicEnabled(): Boolean = audioBridge?.micActive == true
 
     fun start() {
+        if (!LegacyDirectTransportPolicy.mayStart()) {
+            main.post { onState(false, LegacyDirectTransportPolicy.BLOCKED_REASON) }
+            return
+        }
         val cleanHost = host.trim().removePrefix("[").removeSuffix("]")
         if (cleanHost.isEmpty()) {
             main.post { onState(false, "Host kosong") }
@@ -291,9 +295,10 @@ class XyDirectConsoleStreamClient(
 
         /**
          * Pindai jaringan lokal / Tailscale di UDP :4433 untuk menemukan
-         * `XyDeskRemoteHost-Standalone.exe` yang aktif.
+         * `XyDeskRemoteHost.exe` yang aktif.
          */
         fun discoverHosts(timeoutMs: Int = 900, port: Int = 4433): List<DiscoveredHost> {
+            if (!LegacyDirectTransportPolicy.mayStart()) return emptyList()
             val found = linkedMapOf<String, DiscoveredHost>()
             runCatching {
                 DatagramSocket().use { sock ->
