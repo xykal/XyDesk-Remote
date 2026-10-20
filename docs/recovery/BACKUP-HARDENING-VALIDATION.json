@@ -1,0 +1,31 @@
+{
+  "source": "0f29e6d0f86fa0a5284245b107cafc505fea5494",
+  "comment": 6292683592,
+  "source_guards": 6,
+  "new_input_tests": 4,
+  "repo": "/home/user/XyDesk-RecoveryNext",
+  "Web Worker checks": {
+    "id": 39435668629,
+    "name": "Web Worker checks",
+    "status": "completed",
+    "conclusion": "success",
+    "html_url": "https://github.com/xykal/XyDesk-Remote/actions/runs/39435668629",
+    "head_sha": "0f29e6d0f86fa0a5284245b107cafc505fea5494"
+  },
+  "Build APK": {
+    "id": 39435667699,
+    "name": "Build APK",
+    "status": "completed",
+    "conclusion": "success",
+    "html_url": "https://github.com/xykal/XyDesk-Remote/actions/runs/39435667699",
+    "head_sha": "0f29e6d0f86fa0a5284245b107cafc505fea5494"
+  },
+  "android_gate": {
+    "id": 39435667699,
+    "name": "Build APK",
+    "status": "completed",
+    "conclusion": "success",
+    "html_url": "https://github.com/xykal/XyDesk-Remote/actions/runs/39435667699",
+    "head_sha": "0f29e6d0f86fa0a5284245b107cafc505fea5494"
+  }
+}

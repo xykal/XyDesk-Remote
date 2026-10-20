@@ -1,5 +1,8 @@
 # Recovery integration in progress — not a final release
 
+Latest additive backup hardening: BACKUP-HARDENING.md, source0f29e6d; workspace
+/home/user/XyDesk-RecoveryNext. Android JVM/Kotlin and Web gates SUCCESS; no signed/device acceptance.
+
 Latest Android queue controls: see QUEUE-CONTROLS.md and QUEUE-CONTROLS-VALIDATION.json.
 Source ccdb6f4 adds own-account inspector, capability-only identity recheck, SAME-ID
 retry, non-view-once text copy, durable cancellation and independent Retry-After floor.
