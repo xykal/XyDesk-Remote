@@ -24,6 +24,7 @@ import androidx.compose.animation.scaleIn
 import androidx.compose.animation.scaleOut
 import androidx.compose.animation.slideInHorizontally
 import androidx.compose.animation.slideOutHorizontally
+import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.width
 import androidx.compose.ui.zIndex
 import androidx.compose.foundation.background
@@ -988,47 +989,43 @@ private fun HomeRdpFreeBannerCard(
         Box(
             modifier = Modifier
                 .fillMaxWidth()
-                .height(132.dp)
+                .aspectRatio(1280f / 440f)
                 .clickable { onCreateRdp() },
         ) {
             androidx.compose.foundation.Image(
                 painter = androidx.compose.ui.res.painterResource(id.xydesk.remote.R.drawable.xyrdp_banner),
-                contentDescription = "Buat RDP Cloud Gratis",
+                contentDescription = "Buat RDP Cloud Gratis (XyRDP)",
                 contentScale = androidx.compose.ui.layout.ContentScale.Crop,
                 modifier = Modifier.fillMaxSize(),
             )
             Box(
                 modifier = Modifier
-                    .fillMaxSize()
+                    .align(Alignment.BottomCenter)
+                    .fillMaxWidth()
+                    .height(44.dp)
                     .background(
                         Brush.verticalGradient(
                             colors = listOf(
                                 Color.Transparent,
-                                Color(0xFF090D16).copy(alpha = 0.78f),
+                                Color(0xFF07090F).copy(alpha = 0.88f),
                             ),
                         ),
                     ),
             )
-            Column(
+            Text(
+                text = xy(
+                    "Buat RDP Cloud Gratis · Windows Server · Linux XFCE4 · SSH · 120 FPS",
+                    "Free Cloud RDP · Windows Server · Linux XFCE4 · SSH · 120 FPS",
+                ),
+                style = MaterialTheme.typography.labelSmall,
+                fontWeight = FontWeight.SemiBold,
+                color = Color.White.copy(alpha = 0.92f),
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
                 modifier = Modifier
                     .align(Alignment.BottomStart)
-                    .padding(horizontal = 14.dp, vertical = 10.dp),
-            ) {
-                Text(
-                    xy("Buat RDP Cloud Gratis (XyRDP)", "Free Cloud RDP (XyRDP)"),
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.Bold,
-                    color = Color.White,
-                )
-                Text(
-                    xy(
-                        "Windows Server · Linux XFCE4 · Linux Polos SSH · 120 FPS & On-Mic",
-                        "Windows Server · Linux XFCE4 · Plain Linux SSH · 120 FPS & On-Mic",
-                    ),
-                    style = MaterialTheme.typography.labelSmall,
-                    color = Color.White.copy(alpha = 0.85f),
-                )
-            }
+                    .padding(horizontal = 14.dp, vertical = 7.dp),
+            )
         }
         Row(
             modifier = Modifier

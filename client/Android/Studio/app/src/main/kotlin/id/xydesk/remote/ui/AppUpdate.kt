@@ -605,10 +605,13 @@ internal object AppUpdate {
                         if (ts > maxTs) maxTs = ts
                         val actorHash = it.optString("actor_id", "").trim()
                         val actorName = it.optString("actor_name", "").trim()
-                        val actorClean = actorName.removePrefix("@").trim()
-                        val isSelfActor = (actorHash.isNotBlank() && actorHash.equals(clientId, ignoreCase = true)) ||
-                            (actorClean.isNotBlank() && displayName.isNotBlank() && actorClean.equals(displayName.removePrefix("@"), ignoreCase = true)) ||
-                            (actorClean.isNotBlank() && ghLogin.isNotBlank() && actorClean.equals(ghLogin.removePrefix("@"), ignoreCase = true))
+                        val actorGh = it.optString("actor_github", "").trim()
+                        val isSelfActor = id.xydesk.remote.push.ChatPushNotifier.isSelfUser(
+                            context = appCtx,
+                            actorName = actorName,
+                            actorGithub = actorGh,
+                            actorClientId = actorHash,
+                        )
                         if (isSelfActor) continue
                         val cat = it.optString("category", "info")
                         val title = it.optString("title", "Notifikasi Baru")
@@ -637,6 +640,9 @@ internal object AppUpdate {
                                 category = cat,
                                 title = title,
                                 body = msg,
+                                actorName = actorName,
+                                actorGithub = actorGh,
+                                actorClientId = actorHash,
                             )
                         }
                     }

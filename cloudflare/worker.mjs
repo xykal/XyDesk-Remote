@@ -1207,18 +1207,16 @@ export class CommunityJokes {
         const targetGh = String(n.target_github || "").trim().toLowerCase();
         const targetName = String(n.target_name || "").trim().toLowerCase();
         const isGlobal = cat === "announcement" || n.global === true;
-        if (!isGlobal) {
-          const actorHash = String(n.actor_hash || "");
-          const actorGh = String(n.actor_github || "").trim().replace(/^@/, "").toLowerCase();
-          const actorName = String(n.actor_name || "").trim().replace(/^@/, "").toLowerCase();
-          const isSelfActor =
-            (clientHash && actorHash && clientHash === actorHash) ||
-            (viewerGh && actorGh && viewerGh === actorGh) ||
-            (viewerName && actorName && viewerName === actorName) ||
-            (viewerGh && actorName && viewerGh === actorName) ||
-            (viewerName && actorGh && viewerName === actorGh);
-          if (isSelfActor) continue;
-        }
+        const actorHash = String(n.actor_hash || "");
+        const actorGh = String(n.actor_github || "").trim().replace(/^@/, "").toLowerCase();
+        const actorName = String(n.actor_name || "").trim().replace(/^@/, "").toLowerCase();
+        const isSelfActor =
+          (clientHash && actorHash && clientHash === actorHash) ||
+          (viewerGh && actorGh && viewerGh === actorGh) ||
+          (viewerName && actorName && viewerName === actorName) ||
+          (viewerGh && actorName && viewerGh === actorName) ||
+          (viewerName && actorGh && viewerName === actorGh);
+        if (isSelfActor) continue;
         const isForMe = isGlobal ||
           (clientHash && targetHash && clientHash === targetHash) ||
           (viewerGh && targetGh && viewerGh === targetGh) ||
@@ -1932,7 +1930,17 @@ export class CommunityJokes {
             included_segments: ["All"],
             headings: { en: headingText, id: headingText },
             contents: { en: text, id: text },
-            data: { type: "feed_comment", joke_id: jokeId, actor: outcome.actor_label },
+            data: {
+              type: "feed_comment",
+              category: replyToName ? "reply" : "comment",
+              joke_id: jokeId,
+              notif_id: outcome.comment?.id || jokeId,
+              actor: outcome.actor_label,
+              actor_name: outcome.actor_label,
+              actor_github: githubLogin,
+            },
+            android_group: `xydesk_feed_${replyToName ? "reply" : "comment"}_${outcome.comment?.id || jokeId}`,
+            priority: 10,
           }),
         }).catch(() => {});
       }
@@ -4453,7 +4461,7 @@ export class GlobalChat {
             target_lang: msg.target_lang || "EN",
             at: msg.at,
           },
-          android_group: "xydesk_global_chat",
+          android_group: `xydesk_${notifCategory}_${msg.id}`,
           priority: 10,
         }),
       });

@@ -57,15 +57,18 @@ import java.util.Collections
 object ChatPushNotifier {
 
     const val ONESIGNAL_APP_ID = "e3d5adea-1c0f-4986-9ce5-e088d65f0998"
-    const val CHAT_CHANNEL_ID = "xydesk.global.chat.system.v5"
-    const val MENTION_CHANNEL_ID = "xydesk.mention.reply.system.v4"
-    const val FEED_CHANNEL_ID = "xydesk.feed.social.system.v4"
-    const val UPDATE_CHANNEL_ID = "xydesk.app.update.system.v4"
-    const val SOCIAL_ANNOUNCEMENT_CHANNEL_ID = "xydesk.community.announcement.v1"
-    const val SOCIAL_MENTION_CHANNEL_ID = "xydesk.community.mention.v1"
-    const val SOCIAL_REPLY_CHANNEL_ID = "xydesk.community.reply.v1"
-    const val REPLY_CHANNEL_ID = "xydesk.chat.reply.v1"
-    const val ANNOUNCEMENT_CHANNEL_ID = "xydesk.announcement.v1"
+    const val CHAT_CHANNEL_ID = "xydesk.global.chat.system.v6"
+    const val MENTION_CHANNEL_ID = "xydesk.chat.mention.system.v6"
+    const val REPLY_CHANNEL_ID = "xydesk.chat.reply.system.v6"
+    const val ANNOUNCEMENT_CHANNEL_ID = "xydesk.chat.announcement.system.v6"
+    const val SOCIAL_ANNOUNCEMENT_CHANNEL_ID = "xydesk.community.announcement.v6"
+    const val SOCIAL_MENTION_CHANNEL_ID = "xydesk.community.mention.v6"
+    const val SOCIAL_REPLY_CHANNEL_ID = "xydesk.community.reply.v6"
+    const val SOCIAL_COMMENT_CHANNEL_ID = "xydesk.community.comment.v6"
+    const val SOCIAL_LIKE_CHANNEL_ID = "xydesk.community.like.v6"
+    const val SOCIAL_REACTION_CHANNEL_ID = "xydesk.community.reaction.v6"
+    const val FEED_CHANNEL_ID = "xydesk.feed.social.system.v6"
+    const val UPDATE_CHANNEL_ID = "xydesk.app.update.system.v6"
     const val CHAT_NOTIF_ID = 2005
     const val UPDATE_NOTIF_ID = 2006
     const val SOCIAL_NOTIF_BASE_ID = 2100
@@ -240,10 +243,42 @@ object ChatPushNotifier {
         }
     }
 
+    fun isSelfUser(
+        context: Context,
+        actorName: String = "",
+        actorGithub: String = "",
+        actorClientId: String = "",
+    ): Boolean {
+        val appCtx = context.applicationContext
+        val myNick = chatNickname(appCtx).trim().removePrefix("@")
+        val myGh = id.xydesk.remote.ui.getVerifiedGitHubLogin(appCtx).orEmpty().trim().removePrefix("@")
+        val feedPrefs = appCtx.getSharedPreferences("xydesk_community_jokes", Context.MODE_PRIVATE)
+        val myFeedName = feedPrefs.getString("display_name", null).orEmpty().trim().removePrefix("@")
+        val myClientId = feedPrefs.getString("client_id", null).orEmpty().trim()
+
+        val cleanName = actorName.substringBefore(" [").substringBefore(" (").trim().removePrefix("@")
+        val cleanGh = actorGithub.trim().removePrefix("@")
+        val cleanCid = actorClientId.trim()
+
+        if (cleanCid.isNotBlank() && myClientId.isNotBlank() && cleanCid.equals(myClientId, ignoreCase = true)) {
+            return true
+        }
+        val selfIdentities = listOf(myGh, myNick, myFeedName).filter { it.isNotBlank() }
+        for (me in selfIdentities) {
+            if (cleanGh.isNotBlank() && cleanGh.equals(me, ignoreCase = true)) return true
+            if (cleanName.isNotBlank() && cleanName.equals(me, ignoreCase = true)) return true
+        }
+        return false
+    }
+
+    private fun uniqueNotifId(channelId: String, itemId: String): Int =
+        (((channelId.hashCode() * 31) xor itemId.hashCode()) and 0x3fffffff) + 3000
+
     fun retractMessage(context: Context, id: String) {
         if (id.isBlank()) return
         val nm = context.getSystemService(Context.NOTIFICATION_SERVICE) as? NotificationManager
         for (channel in listOf(CHAT_CHANNEL_ID, MENTION_CHANNEL_ID, REPLY_CHANNEL_ID, ANNOUNCEMENT_CHANNEL_ID)) {
+            nm?.cancel("chat:$channel:$id", uniqueNotifId(channel, id))
             nm?.cancel("chat:$channel:$id", CHAT_NOTIF_ID)
         }
         val remaining = loadStack(context).filterNot { it.id == id }
@@ -272,8 +307,11 @@ object ChatPushNotifier {
         val senderBase = rawSender.ifBlank {
             senderName.substringBefore(" [").substringBefore(" (").trim()
         }
-        val isFromMe = (myNick.isNotBlank() && senderBase.equals(myNick, ignoreCase = true)) ||
-            (myGh.isNotBlank() && (senderBase.equals(myGh, ignoreCase = true) || githubLogin.equals(myGh, ignoreCase = true)))
+        val isFromMe = isSelfUser(
+            context = appContext,
+            actorName = senderBase,
+            actorGithub = githubLogin,
+        )
 
         // Jangan tampilkan notifikasi jika pesan berasal dari pengguna sendiri.
         if (isFromMe) {
@@ -345,8 +383,12 @@ object ChatPushNotifier {
         category: String,
         title: String,
         body: String,
+        actorName: String = "",
+        actorGithub: String = "",
+        actorClientId: String = "",
     ) {
         val appContext = context.applicationContext
+        if (isSelfUser(appContext, actorName, actorGithub, actorClientId)) return
         val cat = category.lowercase()
         val allowed = when (cat) {
             "announcement" -> isCategoryEnabled(appContext, KEY_PUSH_ANNOUNCEMENT)
@@ -361,29 +403,50 @@ object ChatPushNotifier {
             "announcement" -> SOCIAL_ANNOUNCEMENT_CHANNEL_ID
             "mention" -> SOCIAL_MENTION_CHANNEL_ID
             "reply" -> SOCIAL_REPLY_CHANNEL_ID
+            "comment", "inbox" -> SOCIAL_COMMENT_CHANNEL_ID
+            "like" -> SOCIAL_LIKE_CHANNEL_ID
+            "reaction" -> SOCIAL_REACTION_CHANNEL_ID
             else -> FEED_CHANNEL_ID
         }
+        val categoryLabel = when (cat) {
+            "announcement" -> "Pengumuman Resmi"
+            "mention" -> "Sebutan @"
+            "reply" -> "Balasan Komentar"
+            "comment", "inbox" -> "Komentar Feed"
+            "like" -> "Suka (Like)"
+            "reaction" -> "Reaksi Emoji"
+            else -> "Komunitas"
+        }
+        val now = System.currentTimeMillis()
+        val distinctId = uniqueNotifId(channelId, notifId)
         val openIntent = Intent(appContext, XyDeskHomeActivity::class.java)
             .addFlags(Intent.FLAG_ACTIVITY_REORDER_TO_FRONT or Intent.FLAG_ACTIVITY_SINGLE_TOP or Intent.FLAG_ACTIVITY_NEW_TASK)
             .putExtra(EXTRA_SKIP_AUTO_RESUME, true)
         val pending = PendingIntent.getActivity(
             appContext,
-            (notifId.hashCode() and 0x7fffffff),
+            distinctId,
             openIntent,
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
         )
         val notif = NotificationCompat.Builder(appContext, channelId)
             .setSmallIcon(R.drawable.ic_stat_xydesk)
             .setContentTitle(title)
-            .setSubText("Komunitas · ${cat.replaceFirstChar { it.uppercase() }}")
-            .setGroup("xydesk.community.$cat")
-            .setVisibility(NotificationCompat.VISIBILITY_PRIVATE)
+            .setSubText("Komunitas · $categoryLabel")
+            .setGroup("xydesk_sep_social_${cat}_$notifId")
+            .setSortKey(String.format("%019d", Long.MAX_VALUE - now))
+            .setPriority(NotificationCompat.PRIORITY_MAX)
+            .setDefaults(NotificationCompat.DEFAULT_ALL)
+            .setCategory(NotificationCompat.CATEGORY_SOCIAL)
+            .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
             .setContentText(body)
-            .setStyle(NotificationCompat.BigTextStyle().bigText(body))
+            .setStyle(NotificationCompat.BigTextStyle().bigText(body).setSummaryText("Komunitas · $categoryLabel"))
+            .setWhen(now)
+            .setShowWhen(true)
             .setAutoCancel(true)
+            .setOnlyAlertOnce(false)
             .setContentIntent(pending)
             .build()
-        nm.notify("social:$cat:$notifId", SOCIAL_NOTIF_BASE_ID, notif)
+        nm.notify("social:$cat:$notifId", distinctId, notif)
     }
 
     fun appendInlineReplyAndSend(context: Context, replyText: String) {
@@ -521,27 +584,31 @@ object ChatPushNotifier {
             .setConversationTitle(conversation).setGroupConversation(true)
             .addMessage(lastItem.text, lastItem.at, sender)
 
-        // Gunakan sistem notifikasi standar bawaan HP (mengikuti pengaturan suara/getar channel sistem HP)
+        val now = System.currentTimeMillis()
+        val distinctId = uniqueNotifId(channelId, lastItem.id)
+        // Gunakan sistem notifikasi standar bawaan HP (paling atas / Heads-Up & terpisah per pesan/channel)
         val builder = NotificationCompat.Builder(context, channelId)
             .setSmallIcon(R.drawable.ic_stat_xydesk)
             .setContentTitle(titleText)
             .setContentText(lastItem.text)
             .setSubText(conversation)
-            .setGroup("xydesk.chat.$channelId")
-            .setPriority(NotificationCompat.PRIORITY_HIGH)
-            .setVisibility(NotificationCompat.VISIBILITY_PRIVATE)
+            .setGroup("xydesk_sep_chat_${channelId}_${lastItem.id}")
+            .setSortKey(String.format("%019d", Long.MAX_VALUE - now))
+            .setPriority(NotificationCompat.PRIORITY_MAX)
+            .setDefaults(NotificationCompat.DEFAULT_ALL)
+            .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
             .setStyle(messaging)
             .setCategory(NotificationCompat.CATEGORY_MESSAGE)
             .setAutoCancel(true)
             .setOnlyAlertOnce(lastItem.isMe)
-            .setWhen(lastItem.at)
+            .setWhen(now)
             .setShowWhen(true)
             .setContentIntent(openPending)
             .addAction(replyAction)
             .addAction(markReadAction)
 
         nm.cancel(CHAT_NOTIF_ID)
-        nm.notify("chat:$channelId:${lastItem.id}", CHAT_NOTIF_ID, builder.build())
+        nm.notify("chat:$channelId:${lastItem.id}", distinctId, builder.build())
         // Keep notification tray bounded independently of the stored unread stack.
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
             nm.activeNotifications.filter { it.tag?.startsWith("chat:") == true }
@@ -596,23 +663,26 @@ object ChatPushNotifier {
             ))
             val channels = listOf(
                 NotificationChannel(SOCIAL_ANNOUNCEMENT_CHANNEL_ID, "Komunitas · Pengumuman", NotificationManager.IMPORTANCE_HIGH),
-                NotificationChannel(SOCIAL_MENTION_CHANNEL_ID, "Komunitas · Sebutan", NotificationManager.IMPORTANCE_HIGH),
-                NotificationChannel(SOCIAL_REPLY_CHANNEL_ID, "Komunitas · Balasan", NotificationManager.IMPORTANCE_HIGH),
-                NotificationChannel(REPLY_CHANNEL_ID, xyNow("Balasan Chat", "Chat Replies"), NotificationManager.IMPORTANCE_HIGH),
-                NotificationChannel(ANNOUNCEMENT_CHANNEL_ID, xyNow("Pengumuman", "Announcements"), NotificationManager.IMPORTANCE_HIGH),
+                NotificationChannel(SOCIAL_MENTION_CHANNEL_ID, "Komunitas · Sebutan (@)", NotificationManager.IMPORTANCE_HIGH),
+                NotificationChannel(SOCIAL_REPLY_CHANNEL_ID, "Komunitas · Balasan Komentar", NotificationManager.IMPORTANCE_HIGH),
+                NotificationChannel(SOCIAL_COMMENT_CHANNEL_ID, "Komunitas · Komentar Postingan", NotificationManager.IMPORTANCE_HIGH),
+                NotificationChannel(SOCIAL_LIKE_CHANNEL_ID, "Komunitas · Suka (Like)", NotificationManager.IMPORTANCE_HIGH),
+                NotificationChannel(SOCIAL_REACTION_CHANNEL_ID, "Komunitas · Reaksi Emoji", NotificationManager.IMPORTANCE_HIGH),
+                NotificationChannel(REPLY_CHANNEL_ID, xyNow("Chat Global · Balasan Pesan", "Global Chat · Replies"), NotificationManager.IMPORTANCE_HIGH),
+                NotificationChannel(ANNOUNCEMENT_CHANNEL_ID, xyNow("Chat Global · Pengumuman", "Global Chat · Announcements"), NotificationManager.IMPORTANCE_HIGH),
                 NotificationChannel(
                     MENTION_CHANNEL_ID,
                     xyNow("Chat Global · Sebutan (@)", "Global Chat · Mentions (@)"),
                     NotificationManager.IMPORTANCE_HIGH,
                 ).apply {
                     description = xyNow(
-                        "Notifikasi saat nama Anda disebut (@mention) atau pesan/komentar Anda dibalas",
-                        "Notifications when you are @mentioned or your message/comment is replied to",
+                        "Notifikasi saat nama Anda disebut (@mention) di Chat Global",
+                        "Notifications when you are @mentioned in Global Chat",
                     )
                 },
                 NotificationChannel(
                     CHAT_CHANNEL_ID,
-                    xyNow("Pesan Chat Global", "Global Chat Messages"),
+                    xyNow("Chat Global · Pesan Baru", "Global Chat · New Messages"),
                     NotificationManager.IMPORTANCE_HIGH,
                 ).apply {
                     description = xyNow(
@@ -622,32 +692,42 @@ object ChatPushNotifier {
                 },
                 NotificationChannel(
                     FEED_CHANNEL_ID,
-                    xyNow("Like, Reaksi & Komentar Feed", "Feed Likes, Reactions & Comments"),
-                    NotificationManager.IMPORTANCE_DEFAULT,
+                    xyNow("Komunitas · Aktivitas Feed", "Community · Feed Activity"),
+                    NotificationManager.IMPORTANCE_HIGH,
                 ).apply {
                     description = xyNow(
-                        "Notifikasi saat postingan Anda disukai, diberi reaksi, atau dikomentari",
-                        "Notifications when your posts receive likes, reactions, or comments",
+                        "Notifikasi aktivitas komunitas lainnya di Feed",
+                        "Other community activity notifications on Feed",
                     )
                 },
                 NotificationChannel(
                     UPDATE_CHANNEL_ID,
-                    xyNow("Pembaruan aplikasi", "App updates"),
+                    xyNow("Pembaruan Aplikasi & Info", "App Updates & Info"),
                     NotificationManager.IMPORTANCE_HIGH,
                 ).apply {
                     description = xyNow(
-                        "Notifikasi pengumuman resmi dan pembaruan aplikasi",
-                        "Official announcements and app update notifications",
+                        "Notifikasi pembaruan aplikasi dan paket data",
+                        "App and data pack update notifications",
                     )
                 },
             )
-            channels.forEach {
-                it.group = when (it.id) {
+            channels.forEach { ch ->
+                ch.enableVibration(true)
+                ch.vibrationPattern = longArrayOf(0, 220, 100, 220)
+                ch.lockscreenVisibility = android.app.Notification.VISIBILITY_PUBLIC
+                ch.group = when (ch.id) {
                     UPDATE_CHANNEL_ID -> "xydesk.app"
-                    FEED_CHANNEL_ID, SOCIAL_MENTION_CHANNEL_ID, SOCIAL_REPLY_CHANNEL_ID, SOCIAL_ANNOUNCEMENT_CHANNEL_ID -> "xydesk.community"
+                    FEED_CHANNEL_ID,
+                    SOCIAL_MENTION_CHANNEL_ID,
+                    SOCIAL_REPLY_CHANNEL_ID,
+                    SOCIAL_ANNOUNCEMENT_CHANNEL_ID,
+                    SOCIAL_COMMENT_CHANNEL_ID,
+                    SOCIAL_LIKE_CHANNEL_ID,
+                    SOCIAL_REACTION_CHANNEL_ID,
+                    -> "xydesk.community"
                     else -> "xydesk.chat"
                 }
-                nm.createNotificationChannel(it)
+                nm.createNotificationChannel(ch)
             }
         }
     }

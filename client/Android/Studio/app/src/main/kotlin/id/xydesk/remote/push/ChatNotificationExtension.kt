@@ -7,8 +7,11 @@ import com.onesignal.notifications.INotificationServiceExtension
 /**
  * Interseptor push OneSignal v5:
  * 1. Mengubah notifikasi `global_chat` menjadi `NotificationCompat.MessagingStyle` gaya WhatsApp
- *    lengkap dengan kode negara, terjemahan otomatis, tombol Balas langsung (`RemoteInput`), dan Tandai dibaca.
- * 2. Menangani notifikasi `app_update` (Update Data Ringan OTA / Update APK Baru).
+ *    lengkap dengan kode negara, terjemahan otomatis, tombol Balas langsung (`RemoteInput`), dan Tandai dibaca,
+ *    serta memisahkannya ke channel khusus (`Pesan Baru`, `Sebutan (@)`, `Balasan`, `Pengumuman`).
+ * 2. Menangani notifikasi aktivitas komunitas (`feed_comment`, `feed_like`, `feed_reaction`, `social_notif`)
+ *    ke channel terpisah per kategori dan memblokir notifikasi yang berasal dari diri sendiri (`isSelfUser`).
+ * 3. Menangani notifikasi `app_update` (Update Data Ringan OTA / Update APK Baru).
  */
 @Keep
 class ChatNotificationExtension : INotificationServiceExtension {
@@ -17,7 +20,7 @@ class ChatNotificationExtension : INotificationServiceExtension {
         val type = data?.optString("type").orEmpty()
         if (type == "app_update") {
             event.preventDefault(true)
-            val version = data?.optString("version", "v1.1.17").orEmpty()
+            val version = data?.optString("version", "v1.1.23").orEmpty()
             val mode = data?.optString("update_mode", "data_pack").orEmpty()
             val summary = data?.optString("summary").orEmpty().ifBlank {
                 event.notification.body.orEmpty()
@@ -64,6 +67,41 @@ class ChatNotificationExtension : INotificationServiceExtension {
                 replyToName = replyToName,
                 isAnnouncement = isAnnouncement,
             )
+            return
+        }
+        if (type == "feed_comment" || type == "feed_like" || type == "feed_reaction" || type == "social_notif" || data?.has("category") == true) {
+            event.preventDefault(true)
+            val actorName = data?.optString("actor").orEmpty().ifBlank { data?.optString("actor_name").orEmpty() }
+            val actorGh = data?.optString("actor_github").orEmpty()
+            val actorClientId = data?.optString("actor_id").orEmpty()
+            if (ChatPushNotifier.isSelfUser(event.context, actorName, actorGh, actorClientId)) {
+                return
+            }
+            val cat = data?.optString("category").orEmpty().ifBlank {
+                when (type) {
+                    "feed_like" -> "like"
+                    "feed_reaction" -> "reaction"
+                    "feed_comment" -> "comment"
+                    else -> "inbox"
+                }
+            }
+            val notifId = data?.optString("notif_id").orEmpty()
+                .ifBlank { data?.optString("joke_id").orEmpty() }
+                .ifBlank { "onesignal-${System.currentTimeMillis()}" }
+            val title = event.notification.title?.takeIf { it.isNotBlank() } ?: "Komunitas XyDesk"
+            val body = event.notification.body?.takeIf { it.isNotBlank() } ?: ""
+            if (body.isNotBlank()) {
+                ChatPushNotifier.notifySocialEvent(
+                    context = event.context,
+                    notifId = notifId,
+                    category = cat,
+                    title = title,
+                    body = body,
+                    actorName = actorName,
+                    actorGithub = actorGh,
+                    actorClientId = actorClientId,
+                )
+            }
         }
     }
 }

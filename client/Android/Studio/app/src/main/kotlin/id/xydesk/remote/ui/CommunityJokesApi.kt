@@ -227,15 +227,15 @@ internal class CommunityJokesApi(context: Context) {
                     val cat = o.optString("category", "inbox")
                     val actName = o.optString("actor_name", "Komunitas")
                     val actGh = o.optString("actor_github", "")
-                    if (cat != "announcement") {
-                        val isSelfByGh = myGhLower.isNotBlank() &&
-                            (actGh.trim().removePrefix("@").lowercase() == myGhLower ||
-                                actName.trim().removePrefix("@").lowercase() == myGhLower)
-                        val isSelfByName = myDispLower.isNotBlank() &&
-                            (actName.trim().removePrefix("@").lowercase() == myDispLower ||
-                                actGh.trim().removePrefix("@").lowercase() == myDispLower)
-                        if (isSelfByGh || isSelfByName) continue
-                    }
+                    val actId = o.optString("actor_id", "")
+                    val isSelf = id.xydesk.remote.push.ChatPushNotifier.isSelfUser(
+                        context = appContext,
+                        actorName = actName,
+                        actorGithub = actGh,
+                        actorClientId = actId,
+                    ) || (myGhLower.isNotBlank() && (actGh.trim().removePrefix("@").lowercase() == myGhLower || actName.trim().removePrefix("@").lowercase() == myGhLower)) ||
+                        (myDispLower.isNotBlank() && (actName.trim().removePrefix("@").lowercase() == myDispLower || actGh.trim().removePrefix("@").lowercase() == myDispLower))
+                    if (isSelf) continue
                     add(
                         XyNotificationItem(
                             id = o.optString("id"),
@@ -250,7 +250,7 @@ internal class CommunityJokesApi(context: Context) {
                         ),
                     )
                 }
-            }
+            }.sortedByDescending { it.createdAtMillis }
         }.getOrDefault(emptyList())
     }
 
