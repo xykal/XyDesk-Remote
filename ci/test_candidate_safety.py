@@ -12,6 +12,11 @@ class CandidateSafetyTest(unittest.TestCase):
    self.assertLess(body.index('LegacyDirectTransportPolicy.mayStart()'),body.index('running.compareAndSet'))
   discovery=(core/'XyDirectConsoleStreamClient.kt').read_text().split('fun discoverHosts(',1)[1]
   self.assertLess(discovery.index('LegacyDirectTransportPolicy.mayStart()'),discovery.index('DatagramSocket('))
+ def test_blocked_audio_cannot_claim_microphone_enabled(self):
+  audio=(ROOT/'client/Android/Studio/core-rdp/src/main/kotlin/id/xydesk/remote/core/QuicAudioBridge.kt').read_text()
+  setter=audio.split('fun setVoiceMicEnabled(enabled: Boolean) {',1)[1].split('fun start()',1)[0]
+  self.assertLess(setter.index('LegacyDirectTransportPolicy.mayStart()'),setter.index('micActive = enabled'))
+  self.assertIn('micActive = false',setter)
  def test_host_defaults_off_without_fake_crypto_or_setup(self):
   host=(ROOT/'host-agent/src/main_host.cpp').read_text()
   self.assertIn('static bool g_legacy_private_udp = false;',host)

@@ -57,13 +57,18 @@ class QuicAudioBridge(
     @Volatile private var txThread: Thread? = null
     private val micPeak = java.util.concurrent.atomic.AtomicInteger(0)
     private val hostFlags = java.util.concurrent.atomic.AtomicInteger(0)
-    @Volatile var micActive: Boolean = enableMic
+    @Volatile var micActive: Boolean = enableMic && LegacyDirectTransportPolicy.mayStart()
         private set
     @Volatile var speakerActive: Boolean = enableSpeaker
 
     val healthy: Boolean get() = running.get() && hostFlags.get() != 0
 
     fun setVoiceMicEnabled(enabled: Boolean) {
+        if (!LegacyDirectTransportPolicy.mayStart()) {
+            micActive = false
+            onStatus(LegacyDirectTransportPolicy.BLOCKED_REASON)
+            return
+        }
         micActive = enabled
         if (!enabled) {
             micPeak.set(0)
