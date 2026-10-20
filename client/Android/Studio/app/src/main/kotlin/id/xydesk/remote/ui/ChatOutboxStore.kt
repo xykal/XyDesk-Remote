@@ -51,6 +51,7 @@ internal class ChatOutboxStore(private val disk: OutboxDisk, private val key: (B
         } else require(e.payload.isEmpty())
         if (e.state == "accepted") {
             val receipt = JSONObject(e.receipt)
+            require(receipt.optString("id").matches(Regex("[a-zA-Z0-9-]{1,80}")) && !receipt.optString("id").startsWith("local-"))
             require(receipt.optLong("author_id") == e.ownerId && e.ownerId > 0 && receipt.optString("client_msg_id") == e.id)
             require(receipt.keys().asSequence().all { it in setOf("id", "author_id", "client_msg_id", "at", "github_login") })
         }

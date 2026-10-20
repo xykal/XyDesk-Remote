@@ -4969,7 +4969,27 @@ export default {
       if (!env.GLOBAL_CHAT) return notFound(request.method);
       const chatId3 = env.GLOBAL_CHAT.idFromName("xydesk-global-chat-v1");
       const cfCountry = request.cf?.country || request.headers.get("cf-ipcountry") || "";
-      return env.GLOBAL_CHAT.get(chatId3).fetch(
+      const text = await request.text();
+      let parsed;
+      try { parsed = JSON.parse(text); } catch { return durableObjectJson({status:"error",code:"invalid_json"},400,request.method); }
+      const stub = env.GLOBAL_CHAT.get(chatId3);
+      if (parsed?.outbox_v != null) {
+        const bearer = (request.headers.get("authorization") || "").match(/^Bearer (\S+)$/);
+        if (!bearer) return durableObjectJson({status:"error",code:"authentication_required"},401,request.method);
+        const auth = await resolveGithubIdentity(bearer[1]);
+        if (!auth.ok) return durableObjectJson({status:"error",code:auth.code},auth.status,request.method);
+        const invalid = validateDurableSend(auth.principal, parsed);
+        if (invalid) return durableObjectJson({status:"error",code:invalid.code},invalid.status,request.method);
+        try {
+          const capability = await stub.fetch(new Request(new URL("/send-capabilities",request.url), {
+            headers:{authorization:request.headers.get("authorization")},
+          }));
+          const cap = capability.ok ? await capability.json().catch(()=>null) : null;
+          if (cap?.send_protocol !== 1 || cap?.author_id !== auth.principal.id)
+            return durableObjectJson({status:"error",code:"chat_migration_pending"},503,request.method);
+        } catch (error) { return chatStorageFailure(error,request.method); }
+      }
+      return stub.fetch(
         new Request(new URL("/send", request.url), {
           method: "POST",
           headers: {
@@ -4977,7 +4997,7 @@ export default {
             "x-chat-country": cfCountry,
             "authorization": request.headers.get("authorization") || "",
           },
-          body: await request.text(),
+          body: text,
         })
       );
     }

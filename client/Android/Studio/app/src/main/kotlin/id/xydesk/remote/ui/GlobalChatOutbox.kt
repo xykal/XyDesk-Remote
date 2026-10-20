@@ -178,8 +178,11 @@ object GlobalChatOutbox {
                 // Replaces payload with metadata atomically. No view-once/media export or stale plaintext journal.
                 val accepted = store(context).update(entry.id) { old -> if (old.state != "pending") old else old.copy(
                     state = "accepted", payload = "", receipt = receipt.toString(), issue = "", nextAttemptAt = 0) }
-                if (accepted?.state == "accepted") mutableAccepted.emit(OutboxAcceptance(who.login, who.binding, entry.id,
-                    receipt, result?.body?.optJSONObject("message")))
+                if (accepted?.state == "accepted") {
+                    if (current(context, who)) id.xydesk.remote.push.ChatPushNotifier.markSeen(receipt.getString("id"), receipt.optLong("at"), context)
+                    mutableAccepted.emit(OutboxAcceptance(who.login, who.binding, entry.id,
+                        receipt, result?.body?.optJSONObject("message")))
+                }
             } else {
                 val code = result?.body?.optString("code")?.take(80)?.ifBlank { null } ?: "menunggu jaringan/konfirmasi"
                 val status = result?.status ?: 0

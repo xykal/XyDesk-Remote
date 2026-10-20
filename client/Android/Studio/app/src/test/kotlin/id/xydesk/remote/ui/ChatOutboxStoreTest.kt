@@ -87,4 +87,15 @@ class ChatOutboxStoreTest {
         val d=MemoryDisk(); val s=store(d); s.enqueue(entry()); d.files[d.names().single()]=ByteArray(35)
         fails { s.enqueue(entry(1)) }; assertEquals(1,d.files.size)
     }
+    @Test fun oversizedPayloadIsRejectedWithoutEvictingExistingQueue() {
+        val d=MemoryDisk(); val s=store(d); s.enqueue(entry())
+        fails { s.enqueue(entry(1,"x".repeat(ChatOutboxStore.MAX_FILE_BYTES))) }
+        assertEquals(1,s.entries().size)
+    }
+    @Test fun missingKeystoreKeyDoesNotRegenerateOrDeleteExistingData() {
+        val d=MemoryDisk(); store(d).enqueue(entry()); val before=d.files.values.single().clone()
+        val broken=ChatOutboxStore(d) { create -> check(!create) { "must not regenerate" }; error("key unavailable") }
+        fails { broken.entries() }; assertTrue(before.contentEquals(d.files.values.single()))
+    }
+
 }

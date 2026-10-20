@@ -185,3 +185,18 @@ test('stale expiry index cannot delete a replacement receipt with a later expiry
   await pruneChatSendReceipts(f.storage,NOW+SEND_REPLAY_MAX_AGE_MS);
   assert.ok(await f.storage.get(key)); assert.equal(savedRows(f).length,1);
 });
+test('edge rejects anonymous durable send BEFORE an old object can accept it',async()=>{
+ let called=false;
+ const response=await worker.fetch(new Request('https://chat.test/api/chat/send',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify(payload({outbox_created_at:Date.now()}))}),{
+  GLOBAL_CHAT:{idFromName:()=> 'original',get:()=>({fetch:async()=>{called=true;return new Response('{}');}})},
+ });
+ assert.equal(response.status,401);assert.equal(called,false);
+});
+test('edge holds authenticated durable send when live object lacks capability',async()=>{
+ const paths=[];
+ const response=await worker.fetch(new Request('https://chat.test/api/chat/send',{method:'POST',headers:{'content-type':'application/json',authorization:'Bearer outbox-test-token'},body:JSON.stringify(payload({outbox_created_at:Date.now()}))}),{
+  GLOBAL_CHAT:{idFromName:()=> 'original',get:()=>({fetch:async req=>{paths.push(new URL(req.url).pathname);return new Response('{}',{status:404});}})},
+ });
+ assert.equal(response.status,503);assert.deepEqual(paths,['/send-capabilities']);
+ assert.equal((await response.json()).code,'chat_migration_pending');
+});

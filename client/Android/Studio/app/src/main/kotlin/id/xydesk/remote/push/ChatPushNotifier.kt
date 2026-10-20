@@ -94,7 +94,6 @@ object ChatPushNotifier {
     private const val MAX_STACK_MESSAGES = 12
 
     private const val HISTORY_URL = "https://api.xydeskremote.biz.id/api/chat/history"
-    private const val SEND_URL = "https://api.xydeskremote.biz.id/api/chat/send"
 
     @Volatile
     var isChatOpen: Boolean = false
@@ -395,12 +394,27 @@ object ChatPushNotifier {
         val accountSnapshot = id.xydesk.remote.ui.getVerifiedGitHubLogin(appContext).orEmpty()
         val now = System.currentTimeMillis()
 
+        // Durable commit before showing a local echo. No legacy HTTP fallback.
+        val localId = "local-${java.util.UUID.randomUUID()}"
+        val queued = runCatching {
+            val snapshot = id.xydesk.remote.ui.GlobalChatOutbox.snapshot(appContext)
+            val payload = JSONObject().put("type", "msg").put("client_msg_id", localId)
+                .put("github_login", accountSnapshot).put("name", myNick).put("text", clean)
+                .put("country", id.xydesk.remote.ui.chatCountryCode())
+            id.xydesk.remote.ui.GlobalChatOutbox.enqueue(appContext, accountSnapshot, snapshot.binding, payload, now)
+        }.isSuccess
+        if (!queued) {
+            android.os.Handler(android.os.Looper.getMainLooper()).post {
+                android.widget.Toast.makeText(appContext, "Balasan belum tersimpan. Buka Chat Global untuk memeriksa akun/penyimpanan.", android.widget.Toast.LENGTH_LONG).show()
+            }
+            return
+        }
         // 1. Update tampilan MessagingStyle seketika agar spinner "mengirim" di
         //    notifikasi Android berhenti dan balasan tampil seperti WhatsApp.
         val stack = loadStack(appContext).toMutableList()
         stack.add(
             StackedMsg(
-                id = "local-reply-$now",
+                id = localId,
                 name = myNick,
                 text = clean,
                 at = now,
@@ -413,39 +427,6 @@ object ChatPushNotifier {
         saveStack(appContext, stack)
         renderMessagingNotification(appContext, stack)
 
-        // 2. Kirim ke backend Cloudflare Worker (/api/chat/send)
-        runCatching {
-            val conn = (URL(SEND_URL).openConnection() as HttpURLConnection).apply {
-                instanceFollowRedirects = false
-                id.xydesk.remote.ui.GlobalChatRepository.token(appContext)?.takeIf { it.isNotBlank() }
-                    ?.let { setRequestProperty("Authorization", "Bearer $it") }
-                requestMethod = "POST"
-                connectTimeout = 10_000
-                readTimeout = 10_000
-                doOutput = true
-                setRequestProperty("Content-Type", "application/json; charset=utf-8")
-                setRequestProperty("Accept", "application/json")
-            }
-            val payload = JSONObject()
-                .put("github_login", accountSnapshot)
-                .put("name", myNick)
-                .put("text", clean)
-                .put("country", id.xydesk.remote.ui.chatCountryCode())
-                .toString()
-            OutputStreamWriter(conn.outputStream, Charsets.UTF_8).use { it.write(payload) }
-            val code = conn.responseCode
-            if (code in 200..299) {
-                val body = BufferedReader(InputStreamReader(conn.inputStream, Charsets.UTF_8)).use { it.readText() }
-                val json = JSONObject(body)
-                val msgObj = json.optJSONObject("message")
-                if (msgObj != null) {
-                    val serverId = msgObj.optString("id")
-                    val serverAt = msgObj.optLong("at", now)
-                    markSeen(serverId, serverAt, appContext)
-                }
-            }
-            conn.disconnect()
-        }
     }
 
     private fun renderMessagingNotification(context: Context, stack: List<StackedMsg>) {
