@@ -92,6 +92,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
@@ -509,7 +510,7 @@ private fun GlobalChatAccountContent(
             scope.launch {
                 try {
                     val result = withContext(Dispatchers.IO) { GlobalChatOutbox.cancelPending(context, target.id, account, binding) }
-                    if (!chatAccountSnapshotIsCurrent(account, getVerifiedGitHubLogin(context))) return@launch
+                    if (binding != outboxBinding || !chatAccountSnapshotIsCurrent(account, getVerifiedGitHubLogin(context))) return@launch
                     val serverId = result?.takeIf { it.state == "accepted" }?.receipt?.let { JSONObject(it).optString("id") }.orEmpty()
                     hideLocal(setOf(target.id, serverId))
                     Toast.makeText(context, "Antrean lokal dihapus setelah status tersimpan. Pesan yang sudah masuk server tidak ditarik.", Toast.LENGTH_LONG).show()

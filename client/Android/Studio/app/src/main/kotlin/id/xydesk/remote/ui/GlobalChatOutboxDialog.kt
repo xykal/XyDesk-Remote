@@ -92,7 +92,7 @@ internal fun GlobalChatOutboxDialog(account: String, binding: String, onClose: (
                             "Account identity verified; queues are not migrated to another account.")
                     }
                 }) { Text(xyNow("Periksa identitas akun", "Verify account identity")) }
-                if (data == null) LinearProgressIndicator(Modifier.fillMaxWidth())
+                if (data == null || busy) LinearProgressIndicator(Modifier.fillMaxWidth())
                 if (data?.snapshot?.readFailed == true) {
                     Text(xyNow("Antrean tidak dapat dibuka. Data lama tetap disimpan; jangan hapus data aplikasi.",
                         "Queue could not be opened. Existing data is retained; do not clear app data."), color = MaterialTheme.colorScheme.error)
