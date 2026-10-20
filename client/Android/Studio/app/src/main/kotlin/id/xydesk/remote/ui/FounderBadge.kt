@@ -865,7 +865,7 @@ internal fun GitHubDirectOAuthModalHost() {
 
                                 }
                             }
-                            loadUrl("https://github.com/login/device")
+                            loadUrl(if (useWebRedirectMode) chromeAuthUrl else "https://github.com/login/device")
                             webViewRef = this
                         }
                     },

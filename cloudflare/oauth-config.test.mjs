@@ -50,6 +50,7 @@ test('provider rejection never retries a legacy OAuth app',async()=>{
 test('Android login source has no legacy dashboard polling or cookie login fallback',async()=>{
  const source=await readFile(new URL('../client/Android/Studio/app/src/main/kotlin/id/xydesk/remote/ui/FounderBadge.kt',import.meta.url),'utf8');
  assert.ok(source.includes('GitHubOAuthEndpoints.login(sessionId)'));
+ assert.ok(source.includes('loadUrl(if (useWebRedirectMode) chromeAuthUrl else "https://github.com/login/device")'));
  assert.ok(!source.includes('xyrdp-dash.vercel.app'));assert.ok(!source.includes('rdpfree.projectkal'));
 });
 test('Worker source contains no fixed legacy callback or embedded OAuth client secret',async()=>{
