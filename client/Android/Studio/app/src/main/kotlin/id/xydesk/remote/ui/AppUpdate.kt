@@ -149,7 +149,7 @@ internal fun XyInAppNotificationBannerHost(
                 "ota" -> XyIcons.Check
                 else -> XyIcons.Bell
             }
-            val categoryTagBase = when (item.category.lowercase()) {
+            val categoryTag = when (item.category.lowercase()) {
                 "announcement" -> "PENGUMUMAN"
                 "like" -> "LIKE BARU"
                 "reaction" -> "REAKSI"
@@ -159,14 +159,6 @@ internal fun XyInAppNotificationBannerHost(
                 "chat" -> "CHAT GLOBAL"
                 "ota" -> "DATA UPDATE"
                 else -> "NOTIFIKASI"
-            }
-
-            val categoryTag = when {
-                item.category.equals("ota", ignoreCase = true) -> "APLIKASI · $categoryTagBase"
-                item.targetRoute == "chat" && item.category.equals("chat", ignoreCase = true) -> categoryTagBase
-                item.targetRoute == "chat" -> "CHAT GLOBAL · $categoryTagBase"
-                item.targetRoute == "feed" -> "KOMUNITAS · $categoryTagBase"
-                else -> categoryTagBase
             }
 
             Surface(

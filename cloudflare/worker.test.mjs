@@ -41,6 +41,8 @@ const releaseState = {
 
 function envFor(files = {}, extra = {}) {
   return {
+    // Explicit test-only OAuth configuration; production has NO source fallback secret.
+    GITHUB_OAUTH_CLIENT_ID: "test-client", GITHUB_OAUTH_CLIENT_SECRET: "test-config-not-real",
     ...extra,
     ASSETS: {
       async fetch(request) {

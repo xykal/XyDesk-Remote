@@ -1,0 +1,126 @@
+{
+  "source": "ccdb6f4fff3f18a38ca52f6e71885cb9752642ac",
+  "android_gate": {
+    "id": 39431730480,
+    "name": "Build APK",
+    "status": "completed",
+    "conclusion": "success",
+    "html_url": "https://github.com/xykal/XyDesk-Remote/actions/runs/39431730480",
+    "head_sha": "ccdb6f4fff3f18a38ca52f6e71885cb9752642ac"
+  },
+  "web_gate": {
+    "id": 39431731182,
+    "name": "Web Worker checks",
+    "status": "completed",
+    "conclusion": "success",
+    "html_url": "https://github.com/xykal/XyDesk-Remote/actions/runs/39431731182",
+    "head_sha": "ccdb6f4fff3f18a38ca52f6e71885cb9752642ac"
+  },
+  "new_control_policy_tests": 17,
+  "new_crypto_old_schema_test": 1,
+  "all_outbox_tests": 36,
+  "worker_tests": 154,
+  "source_guards": 6,
+  "initial_failed_gate": {
+    "id": 39430682983,
+    "name": "Build APK",
+    "status": "completed",
+    "conclusion": "failure",
+    "html_url": "https://github.com/xykal/XyDesk-Remote/actions/runs/39430682983",
+    "head_sha": "015cd72ef9929027d910a0ec99a4000a4aced183"
+  },
+  "jobs": [
+    {
+      "name": "Gate compile Kotlin (cepat, tanpa native)",
+      "conclusion": "success",
+      "steps": [
+        {
+          "name": "Set up job",
+          "conclusion": "success"
+        },
+        {
+          "name": "Run actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09",
+          "conclusion": "success"
+        },
+        {
+          "name": "Run actions/setup-java@b6effb05e454b25005698d916606bdc6ffcbf961",
+          "conclusion": "success"
+        },
+        {
+          "name": "Cache Android SDK gate (platform & build-tools)",
+          "conclusion": "success"
+        },
+        {
+          "name": "Install Android SDK (tanpa NDK & CMake)",
+          "conclusion": "success"
+        },
+        {
+          "name": "Guard owner-selected connect/render/native baseline",
+          "conclusion": "success"
+        },
+        {
+          "name": "Unit test JVM (core-rdp + core-pc-stream + IME + app UI)",
+          "conclusion": "success"
+        },
+        {
+          "name": "Compile Kotlin (app + core-rdp)",
+          "conclusion": "success"
+        },
+        {
+          "name": "Compile Windows Native C++17 Host Agent & DLLs (mingw-w64)",
+          "conclusion": "success"
+        },
+        {
+          "name": "Post Cache Android SDK gate (platform & build-tools)",
+          "conclusion": "success"
+        },
+        {
+          "name": "Post Run actions/setup-java@b6effb05e454b25005698d916606bdc6ffcbf961",
+          "conclusion": "success"
+        },
+        {
+          "name": "Post Run actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09",
+          "conclusion": "success"
+        },
+        {
+          "name": "Complete job",
+          "conclusion": "success"
+        }
+      ]
+    },
+    {
+      "name": "Publish GitHub Release",
+      "conclusion": "skipped",
+      "steps": []
+    },
+    {
+      "name": "Release per-ABI (R8 + signed) + GitHub Release",
+      "conclusion": "skipped",
+      "steps": []
+    },
+    {
+      "name": "Debug per-ABI (armv7 + arm64 + x86_64)",
+      "conclusion": "skipped",
+      "steps": []
+    }
+  ],
+  "production_versions_observed": [
+    {
+      "id": "c532dfc8-8abd-4c9b-b7e4-d90157da999c",
+      "percentage": 100
+    }
+  ],
+  "backend_modified": false,
+  "login_route_check": {
+    "observed_at": "2026-10-20T13:37:31.963695+00:00",
+    "status": 302,
+    "authorize_host": "github.com",
+    "callback": "https://api.xydeskremote.biz.id/api/github/oauth/callback",
+    "no_tokens_codes_or_user_login_used": true,
+    "backend_modified_in_controls_phase": false
+  },
+  "new_signed_apk": false,
+  "actual_device_ui_or_background_tested": false,
+  "unbound_rotation_recovery_complete": false,
+  "oauth_secret_rotated": false
+}

@@ -23,6 +23,13 @@ import kotlinx.coroutines.withContext
 /** SAF destinations are chosen by the owner. No broad storage permission or auto upload. */
 @Composable
 internal fun ChatBackupPanel(login: String?, snapshot: () -> List<ChatMessage>) {
+    // Recreate launchers, scope and secret/UI state on account changes. A suspended
+    // result from the old panel must never populate the new account's archive.
+    key(login) { ChatBackupAccountPanel(login, snapshot) }
+}
+
+@Composable
+private fun ChatBackupAccountPanel(login: String?, snapshot: () -> List<ChatMessage>) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     var passphrase by remember { mutableStateOf("") }
@@ -61,16 +68,7 @@ internal fun ChatBackupPanel(login: String?, snapshot: () -> List<ChatMessage>) 
             try {
                 val restored = withContext(Dispatchers.IO) {
                     val bytes = context.contentResolver.openInputStream(uri)?.use { input ->
-                        val buffer = ByteArray(ChatBackupCrypto.MAX_FILE + 1)
-                        var count = 0
-                        while (count < buffer.size) {
-                            val n = input.read(buffer, count, buffer.size - count)
-                            if (n < 0) break
-                            if (n == 0) continue
-                            count += n
-                        }
-                        require(count <= ChatBackupCrypto.MAX_FILE)
-                        buffer.copyOf(count).also { buffer.fill(0) }
+                        ChatBackupInput.read(input)
                     } ?: error("File tidak dapat dibuka.")
                     val plain = try { ChatBackupCrypto.decrypt(bytes, password, login) } finally { bytes.fill(0) }
                     val rows = try { decodeChatArchive(plain) } finally { plain.fill(0) }
@@ -120,6 +118,10 @@ internal fun ChatBackupPanel(login: String?, snapshot: () -> List<ChatMessage>) 
         busy = true
         scope.launch {
             try { archive = withContext(Dispatchers.IO) { GlobalChatOfflineCache.readArchive(context.applicationContext, account) } }
+            catch (e: Exception) {
+                if (e is CancellationException) throw e
+                notify("Arsip gagal dibaca; file lokal tidak dihapus. Coba lagi.")
+            }
             finally { busy = false }
         }
     })

@@ -92,6 +92,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
@@ -398,7 +399,16 @@ private fun GlobalChatAccountContent(
 
     var showLangPicker by remember { mutableStateOf(false) }
     var showChatSettings by remember { mutableStateOf(false) }
+    var showOutbox by remember(verifiedGhLogin) { mutableStateOf(false) }
+    var outboxIssue by remember(verifiedGhLogin) { mutableStateOf<String?>(null) }
+    var outboxBinding by remember(verifiedGhLogin) { mutableStateOf("") }
+    if (showOutbox && !verifiedGhLogin.isNullOrBlank() && outboxBinding.isNotBlank()) {
+        androidx.compose.runtime.key(verifiedGhLogin, outboxBinding) {
+            GlobalChatOutboxDialog(verifiedGhLogin.orEmpty(), outboxBinding, onClose = { showOutbox = false })
+        }
+    }
     var historyIssue by remember(verifiedGhLogin) { mutableStateOf<String?>(null) }
+    var connectionIssue by remember(verifiedGhLogin) { mutableStateOf<String?>(null) }
     var historyRetryAt by remember(verifiedGhLogin) { mutableStateOf(0L) }
     var showStickerPicker by remember { mutableStateOf(false) }
     var showAttachMenu by remember { mutableStateOf(false) }
@@ -466,13 +476,13 @@ private fun GlobalChatAccountContent(
             }
         }
     }
-    val hiddenMessageIds = remember {
+    val hiddenMessageIds = remember(verifiedGhLogin) {
         mutableStateListOf<String>().apply {
             val saved = chatPrefs.getStringSet(hiddenIdsKey, chatPrefs.getStringSet(KEY_HIDDEN_MSG_IDS, emptySet())).orEmpty()
             addAll(saved)
         }
     }
-    val viewedOnceIds = remember {
+    val viewedOnceIds = remember(verifiedGhLogin) {
         mutableStateListOf<String>().apply {
             val saved = chatPrefs.getStringSet(viewedIdsKey, chatPrefs.getStringSet(KEY_VIEWED_ONCE_IDS, emptySet())).orEmpty()
             addAll(saved)
@@ -489,11 +499,27 @@ private fun GlobalChatAccountContent(
     }
 
     fun deleteMessageForMe(target: ChatMessage) {
-        if (target.id.isNotBlank() && target.id !in hiddenMessageIds) {
-            hiddenMessageIds.add(target.id)
+        fun hideLocal(ids: Set<String>) {
+            ids.filter { it.isNotBlank() && it !in hiddenMessageIds }.forEach { hiddenMessageIds.add(it) }
             chatPrefs.edit().putStringSet(hiddenIdsKey, hiddenMessageIds.toSet()).apply()
+            messages.removeAll { it.id in ids }
         }
-        messages.removeAll { it.id == target.id }
+        if (target.id.startsWith("local-")) {
+            val account = verifiedGhLogin.orEmpty()
+            val binding = outboxBinding
+            scope.launch {
+                try {
+                    val result = withContext(Dispatchers.IO) { GlobalChatOutbox.cancelPending(context, target.id, account, binding) }
+                    if (binding != outboxBinding || !chatAccountSnapshotIsCurrent(account, getVerifiedGitHubLogin(context))) return@launch
+                    val serverId = result?.takeIf { it.state == "accepted" }?.receipt?.let { JSONObject(it).optString("id") }.orEmpty()
+                    hideLocal(setOf(target.id, serverId))
+                    Toast.makeText(context, "Antrean lokal dihapus setelah status tersimpan. Pesan yang sudah masuk server tidak ditarik.", Toast.LENGTH_LONG).show()
+                } catch (cancelled: CancellationException) { throw cancelled }
+                catch (_: Exception) { Toast.makeText(context, "Pembatalan belum tersimpan. Pesan tetap terlihat; buka Antrean untuk memeriksa akun/penyimpanan.", Toast.LENGTH_LONG).show() }
+            }
+            return
+        }
+        hideLocal(setOf(target.id))
         Toast.makeText(context, "Pesan dihapus untuk saya", Toast.LENGTH_SHORT).show()
     }
 
@@ -623,10 +649,79 @@ private fun GlobalChatAccountContent(
     val totalOnline = maxOf(appWideOnline, roomPresence, 1)
 
     var typingName by remember { mutableStateOf<String?>(null) }
-    var connected by remember { mutableStateOf(false) }
+    var connected by remember(verifiedGhLogin) { mutableStateOf(false) }
+    var socketConnected by remember(verifiedGhLogin) { mutableStateOf(false) }
     var sending by remember { mutableStateOf(false) }
     var draft by remember { mutableStateOf(TextFieldValue("")) }
     val listState = rememberLazyListState()
+    val chatMotionEnabled by androidx.compose.runtime.rememberUpdatedState(id.xydesk.remote.ui.theme.LocalUiMotionEnabled.current)
+    var didInitialScroll by remember(verifiedGhLogin) { mutableStateOf(false) }
+    var newArrivals by remember(verifiedGhLogin) { mutableIntStateOf(0) }
+    val sentSoundGate = remember(verifiedGhLogin) { ChatSentSoundGate() }
+    val sentSound = remember(verifiedGhLogin) { ChatSendSoundPlayer(context) }
+    val soundLifecycle = androidx.lifecycle.compose.LocalLifecycleOwner.current.lifecycle
+    DisposableEffect(sentSound) { onDispose { sentSound.close() } }
+    fun confirmOwnSend(serverId: String) {
+        if (sentSoundGate.accept(serverId)) sentSound.play(notifSoundTone != "silent" && soundLifecycle.currentState.isAtLeast(androidx.lifecycle.Lifecycle.State.STARTED))
+    }
+    LaunchedEffect(verifiedGhLogin, oauthRev) {
+        GlobalChatOutbox.resume(context.applicationContext)
+        GlobalChatOutbox.revision.collectLatest {
+            val snapshot = withContext(Dispatchers.IO) { GlobalChatOutbox.snapshot(context.applicationContext) }
+            if (!chatAccountSnapshotIsCurrent(verifiedGhLogin, getVerifiedGitHubLogin(context))) return@collectLatest
+            outboxBinding = snapshot.binding
+            outboxIssue = snapshot.issue
+            snapshot.entries.forEach { entry ->
+                if (entry.state != "pending") {
+                    // Receipt-only acceptance/trim/cancel never reconstructs stale queued content.
+                    messages.removeAll { it.id == entry.id }
+                } else if (entry.id !in hiddenMessageIds) {
+                    val index = messages.indexOfFirst { it.id == entry.id }
+                    if (index >= 0) messages[index] = messages[index].copy(
+                        deliveryTicks = if (entry.nextAttemptAt == Long.MAX_VALUE) -1 else 0)
+                    else if (messages.none { it.clientMessageId == entry.id && it.deliveryTicks == 2 }) {
+                        val restored = withContext(Dispatchers.IO) {
+                            ChatOutboxPolicy.pendingMessage(entry, nickname, verifiedGhLogin.orEmpty())
+                        }
+                        if (chatAccountSnapshotIsCurrent(verifiedGhLogin, getVerifiedGitHubLogin(context)) &&
+                            messages.none { it.id == entry.id || it.clientMessageId == entry.id && it.deliveryTicks == 2 }) {
+                            messages.add(restored)
+                            messages.sortBy { it.at }
+                        }
+                    }
+                }
+            }
+        }
+    }
+    LaunchedEffect(verifiedGhLogin) {
+        GlobalChatOutbox.accepted.collect { acceptance ->
+            if (!chatAccountSnapshotIsCurrent(acceptance.login, verifiedGhLogin) ||
+                !chatAccountSnapshotIsCurrent(verifiedGhLogin, getVerifiedGitHubLogin(context)) ||
+                acceptance.binding != outboxBinding) return@collect
+            val incoming = acceptance.message?.let { raw ->
+                withContext(Dispatchers.IO) { parseMessageFromJson(raw, nickname, verifiedGhLogin) }
+            }
+            if (acceptance.binding != outboxBinding ||
+                !chatAccountSnapshotIsCurrent(verifiedGhLogin, getVerifiedGitHubLogin(context))) return@collect
+            messages.removeAll { it.id == acceptance.localId }
+            if (incoming != null && acceptance.localId !in hiddenMessageIds && incoming.id !in hiddenMessageIds) {
+                val existing = messages.indexOfFirst { it.id == incoming.id }
+                if (existing >= 0) messages[existing] = reconcileChatMessage(messages[existing], incoming)
+                else { messages.add(incoming); messages.sortBy { it.at } }
+            }
+            confirmOwnSend(acceptance.receipt.getString("id"))
+        }
+    }
+    LaunchedEffect(verifiedGhLogin, messages.isNotEmpty()) {
+        if (!didInitialScroll && messages.isNotEmpty()) {
+            listState.scrollToItem(messages.lastIndex)
+            didInitialScroll = true
+        }
+    }
+    LaunchedEffect(verifiedGhLogin, listState) {
+        snapshotFlow { !listState.canScrollForward }.collect { atBottom -> if (atBottom) newArrivals = 0 }
+    }
+
     val main = remember { Handler(Looper.getMainLooper()) }
     var typingSentAt by remember { mutableStateOf(0L) }
 
@@ -730,13 +825,16 @@ private fun GlobalChatAccountContent(
     suspend fun fetchHistoryOverHttp() {
         if (System.currentTimeMillis() < historyRetryAt) return
         if (!historyInFlight.compareAndSet(false, true)) return
+        val requestAccount = verifiedGhLogin
+        val requestNickname = nickname
+        val requestJoinedAt = firstJoinedAtMs
         try {
             withContext(Dispatchers.IO) {
                 runCatching {
                     val snapshotStartedAt = System.currentTimeMillis()
                     val cid = URLEncoder.encode(communityApi.accountShortId(), "UTF-8")
-                    val gh = URLEncoder.encode(verifiedGhLogin.orEmpty(), "UTF-8")
-                    val url = "$CHAT_HISTORY_URL?joined_at=$firstJoinedAtMs&client_id=$cid&github_login=$gh"
+                    val gh = URLEncoder.encode(requestAccount.orEmpty(), "UTF-8")
+                    val url = "$CHAT_HISTORY_URL?joined_at=$requestJoinedAt&client_id=$cid&github_login=$gh"
                     val conn = (URL(url).openConnection() as HttpURLConnection).apply {
                         instanceFollowRedirects = false
                         requestMethod = "GET"
@@ -754,21 +852,21 @@ private fun GlobalChatAccountContent(
                             AppUpdate.updateOnlineCount(serverOnline)
                         }
                         val serverJoinedAt = json.optLong("joined_at", 0L)
-                        if (serverJoinedAt > firstJoinedAtMs) {
-                            firstJoinedAtMs = serverJoinedAt
-                        }
+                        val effectiveJoinedAt = maxOf(requestJoinedAt, serverJoinedAt)
                         val serverPinned = parsePinnedMessageFromJson(json.optJSONObject("pinned_message"))
                         val arr = json.optJSONArray("messages") ?: return@runCatching
                         val fetched = ArrayList<ChatMessage>(arr.length())
                         for (i in 0 until arr.length()) {
                             val m = arr.optJSONObject(i) ?: continue
-                            val parsed = parseMessageFromJson(m, nickname, verifiedGhLogin)
+                            val parsed = parseMessageFromJson(m, requestNickname, requestAccount)
                             // Pastikan member baru tidak pernah melihat pesan sebelum waktu join
-                            if (parsed.at >= firstJoinedAtMs - 2_000L && parsed.id !in hiddenMessageIds) {
+                            if (parsed.at >= effectiveJoinedAt - 2_000L && parsed.id !in hiddenMessageIds) {
                                 fetched.add(parsed)
                             }
                         }
                         withContext(Dispatchers.Main) {
+                            if (!chatAccountSnapshotIsCurrent(requestAccount, verifiedGhLogin)) return@withContext
+                            firstJoinedAtMs = effectiveJoinedAt
                             historyIssue = null
                             historyRetryAt = 0L
                             connected = true
@@ -777,6 +875,8 @@ private fun GlobalChatAccountContent(
                                 pinnedMessage = serverPinned
                                 GlobalChatMemoryCache.pinnedMessage = serverPinned
                             }
+                            val followSnapshot = shouldFollowChat(!didInitialScroll || !listState.canScrollForward)
+                            var newlyAdded = 0
                             var added = false
                             val fetchedIds = fetched.map { it.id }.toSet()
                             if (arr.length() == 0) {
@@ -802,9 +902,11 @@ private fun GlobalChatAccountContent(
                                     val tempIdx = findPendingChatIndex(messages, item)
                                     if (tempIdx >= 0) {
                                         messages[tempIdx] = item.copy(deliveryTicks = 2)
+                                        if (item.clientMessageId.isNotBlank()) confirmOwnSend(item.id)
                                     } else {
                                         messages.add(item)
                                         added = true
+                                        newlyAdded += 1
                                     }
                                     enrichTranslationIfNeeded(item)
                                 }
@@ -812,10 +914,9 @@ private fun GlobalChatAccountContent(
                             GlobalChatMemoryCache.messages.clear()
                             GlobalChatMemoryCache.messages.addAll(messages.takeLast(80))
                             if (added && messages.isNotEmpty()) {
-                                val isNearBottom = !listState.canScrollForward ||
-                                    listState.firstVisibleItemIndex >= (messages.size - 4).coerceAtLeast(0)
-                                if (isNearBottom) {
-                                    listState.animateScrollToItem(messages.size - 1)
+                                if (!followSnapshot) newArrivals += newlyAdded
+                                if (followSnapshot) {
+                                    listState.scrollChatTo(messages.size - 1, chatMotionEnabled)
                                 }
                             }
                         }
@@ -833,6 +934,7 @@ private fun GlobalChatAccountContent(
                         val code = runCatching { JSONObject(errorText).optString("code") }.getOrDefault("")
                         val failure = chatHistoryFailure(httpStatus, code, conn.getHeaderField("Retry-After"))
                         withContext(Dispatchers.Main) {
+                            if (!chatAccountSnapshotIsCurrent(requestAccount, verifiedGhLogin)) return@withContext
                             historyIssue = failure.message
                             historyRetryAt = System.currentTimeMillis() + failure.retrySeconds * 1000L
                         }
@@ -894,17 +996,11 @@ private fun GlobalChatAccountContent(
         messages.toList().forEach { enrichTranslationIfNeeded(it, forceRetranslate = true) }
     }
 
-    // XyDesk perf: timestamp aktivitas WebSocket terakhir. Saat WS hidup,
-    // polling riwayat HTTP cukup jadi fallback konsistensi (30 dtk); saat WS
-    // mati kembali ke 5 dtk supaya chat tidak macet. Sebelumnya selalu 5 dtk:
-    // 12 request/menit + re-parse SELURUH riwayat (termasuk HMAC per pesan +
-    // diff O(n^2) di main thread) meski WS sudah mengirim pesan real-time.
-    val lastWsActivityMs = remember { java.util.concurrent.atomic.AtomicLong(0L) }
-
-    LaunchedEffect(Unit) {
+    // Quiet sockets remain live. Reschedule immediately when transport/account
+    // changes; an HTTP success is not proof that the WebSocket is connected.
+    LaunchedEffect(verifiedGhLogin, socketConnected) {
         while (true) {
-            val wsAlive = System.currentTimeMillis() - lastWsActivityMs.get() < 45_000L
-            delay(if (wsAlive) 30_000L else 5_000L)
+            delay(chatHistoryPollDelayMs(socketConnected = socketConnected))
             fetchHistoryOverHttp()
         }
     }
@@ -931,9 +1027,9 @@ private fun GlobalChatAccountContent(
                 }.build(),
                 object : WebSocketListener() {
                     override fun onOpen(webSocket: WebSocket, response: Response) {
-                        lastWsActivityMs.set(System.currentTimeMillis())
+                        if (closed) { webSocket.cancel(); return }
                         attempt = 0
-                        main.post { connected = true }
+                        main.post { if (!closed) { socketConnected = true; connected = true; connectionIssue = null } }
                         webSocket.send(
                             JSONObject()
                                 .put("type", "hello")
@@ -947,11 +1043,16 @@ private fun GlobalChatAccountContent(
 
                     override fun onMessage(webSocket: WebSocket, text: String) {
                         val snapshotReceivedAt = System.currentTimeMillis()
-                        lastWsActivityMs.set(System.currentTimeMillis())
                         val data = try { JSONObject(text) } catch (_: Exception) { return }
                         scope.launch {
                             socketEventMutex.withLock {
+                            if (closed) return@withLock
                             when (data.optString("type")) {
+                                "history_unavailable" -> {
+                                    val failure = chatHistoryFailure(data.optInt("http_status", 503), data.optString("code"), data.optString("retry_after"))
+                                    historyIssue = failure.message
+                                    historyRetryAt = System.currentTimeMillis() + failure.retrySeconds * 1000L
+                                }
                                 "history" -> {
                                     val srvOnline = data.optInt("online_count", 0)
                                     if (srvOnline > 0) {
@@ -974,9 +1075,13 @@ private fun GlobalChatAccountContent(
                                     }
                                     wsHistoryReceived.set(true)
                                     batch.forEach { id.xydesk.remote.push.ChatPushNotifier.markSeen(it.id, it.at, context) }
+                                    if (closed) return@withLock
                                     // Parsing suspends: preserve messages arriving meanwhile and pending sends.
                                     val newestAt = batch.maxOfOrNull { it.at } ?: 0L
                                     val batchIds = batch.mapTo(HashSet()) { it.id }
+                                    batch.forEach { item ->
+                                        if (findPendingChatIndex(messages, item) >= 0) confirmOwnSend(item.id)
+                                    }
                                     val acknowledgedLocalIds = batch.mapNotNull { item ->
                                         findPendingChatIndex(messages, item).takeIf { it >= 0 }?.let { messages[it].id }
                                     }.toSet()
@@ -987,6 +1092,7 @@ private fun GlobalChatAccountContent(
                                             it.id.startsWith("local-") || it.at > newestAt
                                         }
                                     }
+                                    val followHistory = shouldFollowChat(!didInitialScroll || !listState.canScrollForward)
                                     val reconciledBatch = batch.map { incoming ->
                                         messages.firstOrNull { it.id == incoming.id }?.let {
                                             if (incoming.revision > it.revision) failedMutations.remove(incoming.id)
@@ -1000,11 +1106,12 @@ private fun GlobalChatAccountContent(
                                     if (viewerTargetLang != "auto") {
                                         batch.takeLast(8).forEach { enrichTranslationIfNeeded(it) }
                                     }
-                                    if (messages.isNotEmpty()) {
+                                    if (messages.isNotEmpty() && followHistory) {
                                         scope.launch { listState.scrollToItem(messages.size - 1) }
                                     }
                                 }
                                 "msg" -> {
+                                    val followIncoming = shouldFollowChat(!didInitialScroll || !listState.canScrollForward)
                                     val incoming = parseMessageFromJson(data, nickname, verifiedGhLogin)
                                     if (incoming.at < firstJoinedAtMs - 2_000L || incoming.id in hiddenMessageIds) return@launch
                                     id.xydesk.remote.push.ChatPushNotifier.markSeen(incoming.id, incoming.at, context)
@@ -1016,14 +1123,16 @@ private fun GlobalChatAccountContent(
                                         val tempIdx = findPendingChatIndex(messages, incoming)
                                         if (tempIdx >= 0) {
                                             messages[tempIdx] = incoming.copy(deliveryTicks = 2)
+                                            if (incoming.clientMessageId.isNotBlank()) confirmOwnSend(incoming.id)
                                         } else {
                                             messages.add(incoming)
+                                            if (!followIncoming) newArrivals += 1
                                             if (!incoming.mine) playChatNotificationTone(notifSoundTone)
                                         }
                                     }
                                     enrichTranslationIfNeeded(incoming)
                                     if (messages.size > 100) messages.removeAt(0)
-                                    scope.launch { listState.animateScrollToItem(messages.size - 1) }
+                                    if (followIncoming) scope.launch { listState.scrollChatTo(messages.size - 1, chatMotionEnabled) }
                                 }
                                 "presence" -> {
                                     val cnt = data.optInt("count", 1).coerceAtLeast(1)
@@ -1063,29 +1172,31 @@ private fun GlobalChatAccountContent(
                     }
 
                     override fun onFailure(webSocket: WebSocket, t: Throwable, response: Response?) {
+                        val failure = chatSocketFailure(response?.code ?: 0, response?.header("Retry-After"))
                         main.post {
                             if (!closed) {
-                                lastWsActivityMs.set(0L)
+                                socketConnected = false
                                 connected = false
+                                connectionIssue = failure.message
                             }
                         }
-                        scheduleReconnect()
+                        scheduleReconnect(failure.retrySeconds * 1000L)
                     }
 
                     override fun onClosed(webSocket: WebSocket, code: Int, reason: String) {
                         main.post {
                             if (!closed) {
-                                lastWsActivityMs.set(0L)
+                                socketConnected = false
                                 connected = false
                             }
                         }
                         scheduleReconnect()
                     }
 
-                    private fun scheduleReconnect() {
+                    private fun scheduleReconnect(minWaitMs: Long = 0L) {
                         if (closed) return
                         attempt += 1
-                        val waitMs = minOf(12_000L, 1000L * (1 shl minOf(attempt, 3)))
+                        val waitMs = maxOf(minWaitMs, minOf(12_000L, 1000L * (1 shl minOf(attempt, 3))))
                         main.postDelayed(
                             {
                                 if (!closed) ws = connect()
@@ -1142,11 +1253,6 @@ private fun GlobalChatAccountContent(
         if ((displayFallback.isEmpty() && attachmentType.isEmpty()) || sending) return
         val replySnapshot = replyingTo
         val announceNow = isAnnouncementMode && (isFounderAccount(nickname) || isFounderAccount(currentGh))
-        replyingTo = null
-        isAnnouncementMode = false
-        if (cleanText.isNotEmpty() && attachmentType.isEmpty()) {
-            draft = TextFieldValue("")
-        }
         sending = true
         val now = System.currentTimeMillis()
         val sealed = ChatE2eeCrypto.seal(
@@ -1187,17 +1293,16 @@ private fun GlobalChatAccountContent(
         )
         messages.add(pending)
         enrichTranslationIfNeeded(pending)
+        scope.launch { listState.scrollChatTo((messages.size - 1).coerceAtLeast(0), chatMotionEnabled) }
+        val bindingSnapshot = outboxBinding
         scope.launch {
             try {
-                listState.animateScrollToItem((messages.size - 1).coerceAtLeast(0))
-                var queuedOnSocket = false
-                val sentMsg = withContext(Dispatchers.IO) {
-                    // Sending must not wait for a translation provider; enrichment is asynchronous.
+                withContext(Dispatchers.IO) {
                     val bodyJson = JSONObject().apply {
                         put("type", "msg")
-                        put("name", nickname)
+                        put("name", pending.name)
                         put("github_login", currentGh)
-                        put("country", myCountry)
+                        put("country", pending.country)
                         put("text", displayFallback)
                         put("is_announcement", announceNow)
                         put("e2ee_v", sealed.protocol)
@@ -1219,56 +1324,22 @@ private fun GlobalChatAccountContent(
                             put("attachment_data", attachmentData)
                             put("view_once", viewOnce)
                         }
-                        val av = getVerifiedGitHubAvatar(context)
+                        val av = pending.avatarUrl
                         if (!av.isNullOrBlank()) put("avatar_url", av)
                     }
-                    runCatching {
-                        GlobalChatRepository.send(bodyJson, GlobalChatRepository.token(context))?.optJSONObject("message")
-                            ?.let { parseMessageFromJson(it, nickname, currentGh) }
-                    }.getOrNull() ?: run {
-                        queuedOnSocket = chatSocketSend(bodyJson.toString())
-                        null
-                    }
+                    GlobalChatOutbox.enqueue(context.applicationContext, currentGh, bindingSnapshot, bodyJson, now)
                 }
-                if (sentMsg != null) {
-                    val idx = messages.indexOfFirst { it.id == pending.id }
-                    if (idx >= 0) {
-                        messages[idx] = sentMsg.copy(deliveryTicks = 2)
-                        enrichTranslationIfNeeded(sentMsg)
-                    }
-                    if (announceNow) {
-                        pinnedMessage = PinnedChatMessage(
-                            id = sentMsg.id,
-                            name = sentMsg.name,
-                            githubLogin = sentMsg.githubLogin,
-                            text = sentMsg.text,
-                            pinnedBy = sentMsg.name,
-                            at = sentMsg.at,
-                        )
-                    }
-                }
-                if (sentMsg == null) {
-                    val idx = messages.indexOfFirst { it.id == pending.id }
-                    if (idx >= 0) messages[idx] = messages[idx].copy(
-                        deliveryTicks = deliveryTicksAfterAttempt(false, queuedOnSocket),
-                    )
-                    if (!queuedOnSocket) {
-                        Toast.makeText(context, xyNow("Pesan belum terkirim. Salin pesan untuk mencoba lagi.", "Message not sent. Copy it to try again."), Toast.LENGTH_LONG).show()
-                    } else {
-                        // Socket queue acceptance is not server acknowledgement. Never show a sent tick yet.
-                        scope.launch {
-                            delay(25_000L)
-                            val pendingIdx = messages.indexOfFirst { it.id == pending.id }
-                            if (pendingIdx >= 0) messages[pendingIdx] = messages[pendingIdx].copy(deliveryTicks = -1)
-                        }
-                    }
+                if (chatAccountSnapshotIsCurrent(currentGh, getVerifiedGitHubLogin(context))) {
+                    if (draft.text.trim() == cleanText && attachmentType.isEmpty()) draft = TextFieldValue("")
+                    if (replyingTo?.id == replySnapshot?.id) replyingTo = null
+                    isAnnouncementMode = false
                 }
             } catch (cancelled: CancellationException) {
                 throw cancelled
             } catch (_: Exception) {
                 val idx = messages.indexOfFirst { it.id == pending.id }
                 if (idx >= 0) messages[idx] = messages[idx].copy(deliveryTicks = -1)
-                Toast.makeText(context, xyNow("Pengiriman belum berhasil. Salin pesan untuk mencoba lagi.", "Sending did not succeed. Copy the message to try again."), Toast.LENGTH_LONG).show()
+                Toast.makeText(context, "Pesan BELUM tersimpan di antrean. Draf dipertahankan; periksa akun/ruang penyimpanan lalu coba lagi.", Toast.LENGTH_LONG).show()
             } finally {
                 chatSocketSend(JSONObject().put("type", "typing").put("on", false).toString())
                 sending = false
@@ -1568,7 +1639,7 @@ private fun GlobalChatAccountContent(
                         Row(
                             modifier = Modifier.clickable {
                                 if (messages.isNotEmpty()) {
-                                    scope.launch { listState.animateScrollToItem(0) }
+                                    scope.launch { listState.scrollChatTo(0, chatMotionEnabled) }
                                 }
                             },
                             verticalAlignment = Alignment.CenterVertically,
@@ -1737,7 +1808,7 @@ private fun GlobalChatAccountContent(
                         .fillMaxWidth()
                         .clickable {
                             if (messages.isNotEmpty()) {
-                                scope.launch { listState.animateScrollToItem(0) }
+                                scope.launch { listState.scrollChatTo(0, chatMotionEnabled) }
                             }
                         }
                         .padding(horizontal = 16.dp, vertical = 4.dp),
@@ -1755,7 +1826,14 @@ private fun GlobalChatAccountContent(
                                 .background(if (connected) Color(0xFF22C55E) else Color(0xFFF59E0B)),
                         )
                         Text(
-                            text = if (connected) "$totalOnline Online · Ketuk ke Atas" else if (messages.isNotEmpty()) xy("Riwayat tersimpan · Menyambung…", "Saved history · Connecting…") else xy("Menyambung…", "Connecting…"),
+                            text = when {
+                                connected && historyIssue != null -> xy("Terhubung · Riwayat belum tersinkron", "Connected · History not synced")
+                                connected -> "$totalOnline Online · Ketuk ke Atas"
+                                connectionIssue != null -> xy("Koneksi chat gagal", "Chat connection failed")
+                                historyIssue != null -> xy("Chat belum tersedia", "Chat unavailable")
+                                messages.isNotEmpty() -> xy("Riwayat tersimpan · Menyambung…", "Saved history · Connecting…")
+                                else -> xy("Menyambung…", "Connecting…")
+                            },
                             style = MaterialTheme.typography.labelSmall,
                             fontWeight = FontWeight.SemiBold,
                             color = Color(0xFFD4D4D8),
@@ -1796,7 +1874,13 @@ private fun GlobalChatAccountContent(
                 }
             }
 
-            historyIssue?.let { issue ->
+            if (!verifiedGhLogin.isNullOrBlank()) {
+                TextButton(enabled = outboxBinding.isNotBlank(), onClick = { showOutbox = true },
+                    modifier = Modifier.padding(horizontal = 8.dp)) {
+                    Text(xyNow("Antrean kirim", "Send queue"))
+                }
+            }
+            listOfNotNull(connectionIssue, historyIssue, outboxIssue).distinct().forEach { issue ->
                 Text(issue, color = Color(0xFFFBBF24), style = MaterialTheme.typography.labelSmall,
                     modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 6.dp))
             }
@@ -1822,7 +1906,7 @@ private fun GlobalChatAccountContent(
                             .clickable {
                                 val idx = messages.indexOfFirst { it.id == pin.id }
                                 if (idx >= 0) {
-                                    scope.launch { listState.animateScrollToItem(idx) }
+                                    scope.launch { listState.scrollChatTo(idx, chatMotionEnabled) }
                                 } else {
                                     Toast.makeText(context, "Pesan disematkan: ${pin.text}", Toast.LENGTH_SHORT).show()
                                 }
@@ -1876,6 +1960,8 @@ private fun GlobalChatAccountContent(
                     }
                 }
             }
+
+            OfficialChannelDirectory()
 
             // Daftar Pesan Chat Global (Wajib Login untuk Join — Tidak Boleh Tamu)
             Box(
@@ -2047,6 +2133,11 @@ private fun GlobalChatAccountContent(
                         verticalArrangement = Arrangement.spacedBy(6.dp),
                         horizontalAlignment = Alignment.CenterHorizontally,
                     ) {
+                        if (newArrivals > 0 && listState.canScrollForward) {
+                            Surface(shape = MaterialTheme.shapes.small, color = MaterialTheme.colorScheme.surfaceVariant) {
+                                Text("$newArrivals pesan baru", modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp), style = MaterialTheme.typography.labelSmall)
+                            }
+                        }
                         AnimatedVisibility(
                             visible = listState.firstVisibleItemIndex > 2,
                             enter = fadeIn() + scaleIn(),
@@ -2061,7 +2152,7 @@ private fun GlobalChatAccountContent(
                                     .size(34.dp)
                                     .clickable {
                                         scope.launch {
-                                            listState.animateScrollToItem(0)
+                                            listState.scrollChatTo(0, chatMotionEnabled)
                                         }
                                     },
                             ) {
@@ -2089,7 +2180,7 @@ private fun GlobalChatAccountContent(
                                     .clickable {
                                         scope.launch {
                                             if (messages.isNotEmpty()) {
-                                                listState.animateScrollToItem(messages.size - 1)
+                                                listState.scrollChatTo(messages.size - 1, chatMotionEnabled)
                                             }
                                         }
                                     },

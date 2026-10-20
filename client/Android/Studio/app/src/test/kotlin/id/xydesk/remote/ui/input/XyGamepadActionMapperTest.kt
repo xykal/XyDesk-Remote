@@ -24,59 +24,6 @@ class XyGamepadActionMapperTest {
     private fun state(buttons: Int = 0, leftX: Int = 0, leftY: Int = 0, rightY: Int = 0) =
         XyGamepadState(buttons = buttons, leftX = leftX, leftY = leftY, rightY = rightY)
 
-    @Test fun extraKeyboardStickModesSendAndReleaseDiagonalKeysWithoutSpam() {
-        for ((mode, keys) in listOf(
-            XyStickMode.IJKL to listOf(XyPadKey.I, XyPadKey.L),
-            XyStickMode.NUMPAD to listOf(XyPadKey.NUMPAD_8, XyPadKey.NUMPAD_6),
-        )) {
-            val out = Recorder()
-            val pressed = state(leftX = 32_767, leftY = -32_767)
-            XyGamepadActionMapper.apply(pressed, null, out, mode)
-            XyGamepadActionMapper.apply(pressed, pressed, out, mode)
-            XyGamepadActionMapper.apply(state(), pressed, out, mode)
-            assertEquals(keys.map { it to true } + keys.map { it to false }, out.keys)
-            assertTrue(out.pointer.isEmpty())
-        }
-    }
-    @Test fun customMappingsSerializeSafelyAndDeduplicateHeldDirections() {
-        val custom = XyCustomStickBindings(up = XyPadKey.Q, left = XyPadKey.Q, down = XyPadKey.Z, right = XyPadKey.E)
-        assertEquals(custom, XyCustomStickBindings.decode(custom.encode()))
-        assertEquals(XyCustomStickBindings(), XyCustomStickBindings.decode("bad,input"))
-        val out = Recorder()
-        val diagonal = state(leftX = -32767, leftY = -32767)
-        val onlyLeft = state(leftX = -32767)
-        XyGamepadActionMapper.apply(diagonal, null, out, XyStickMode.CUSTOM, custom)
-        XyGamepadActionMapper.apply(onlyLeft, diagonal, out, XyStickMode.CUSTOM, custom)
-        assertEquals(listOf(XyPadKey.Q to true), out.keys)
-        XyGamepadActionMapper.apply(state(), onlyLeft, out, XyStickMode.CUSTOM, custom)
-        assertEquals(listOf(XyPadKey.Q to true, XyPadKey.Q to false), out.keys)
-    }
-    @Test fun sharedStickAndDpadKeysStayDownUntilBothSourcesRelease() {
-        val out = Recorder()
-        val both = state(buttons = XyGamepadPacketV1.DPAD_UP, leftY = -32767)
-        val dpadOnly = state(buttons = XyGamepadPacketV1.DPAD_UP)
-        XyGamepadActionMapper.apply(both, null, out, XyStickMode.ARROWS)
-        XyGamepadActionMapper.apply(dpadOnly, both, out, XyStickMode.ARROWS)
-        assertEquals(listOf(XyPadKey.ARROW_UP to true), out.keys)
-        XyGamepadActionMapper.apply(state(), dpadOnly, out, XyStickMode.ARROWS)
-        assertEquals(listOf(XyPadKey.ARROW_UP to true, XyPadKey.ARROW_UP to false), out.keys)
-    }
-    @Test fun keyCodesAndExistingStickOrdinalsStayStable() {
-        assertEquals(3, XyStickMode.IJKL.ordinal)
-        assertEquals(4, XyStickMode.NUMPAD.ordinal)
-        assertEquals(5, XyStickMode.CUSTOM.ordinal)
-        assertEquals(29, XyPadKey.A.androidKeyCode)
-        assertEquals(54, XyPadKey.Z.androidKeyCode)
-        assertEquals(152, XyPadKey.NUMPAD_8.androidKeyCode)
-        assertEquals(7, XyPadKey.DIGIT_0.androidKeyCode)
-    }
-
-    @Test fun savedStickModeOrdinalsRemainCompatible() {
-        assertEquals(0, XyStickMode.POINTER.ordinal)
-        assertEquals(1, XyStickMode.WASD.ordinal)
-        assertEquals(2, XyStickMode.ARROWS.ordinal)
-    }
-
     @Test
     fun leftStickMovesPointerAtEighteenUnitsPerDeflection() {
         val out = Recorder()

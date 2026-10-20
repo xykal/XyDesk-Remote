@@ -132,6 +132,7 @@ internal fun saveVerifiedGitHubLogin(context: Context, login: String?, avatarUrl
         appCtx.getSharedPreferences("xydesk.global.chat", Context.MODE_PRIVATE).edit().remove("nickname").apply()
     }
     if (changedAccount) id.xydesk.remote.push.ChatPushNotifier.onAccountChanged(appCtx)
+    GlobalChatOutbox.resume(appCtx)
 }
 
 @Composable
@@ -368,7 +369,7 @@ internal fun GitHubDirectOAuthModalHost() {
         remember { java.util.UUID.randomUUID().toString().replace("-", "").take(22) }
     }
     val chromeAuthUrl = remember(sessionId) {
-        "https://api.xydeskremote.biz.id/api/github/oauth/login?apk=1&session_id=$sessionId"
+        GitHubOAuthEndpoints.login(sessionId)
     }
 
     var currentUrl by remember(chromeAuthUrl) { mutableStateOf(chromeAuthUrl) }
@@ -469,7 +470,6 @@ internal fun GitHubDirectOAuthModalHost() {
         val deadline = System.currentTimeMillis() + 10 * 60 * 1000L
         val pollUrls = listOf(
             "https://api.xydeskremote.biz.id/api/github/oauth/poll?session_id=$sessionId",
-            "https://xyrdp-dash.vercel.app/api/auth/apk-poll?session_id=$sessionId",
         )
         while (isActive && !completed && System.currentTimeMillis() < deadline) {
             delay(1_200L)
@@ -862,38 +862,10 @@ internal fun GitHubDirectOAuthModalHost() {
                                             view.evaluateJavascript(buildSeamlessOAuthBridgeScript(hiddenHandshakeCode), null)
                                         }, 180L)
                                     }
-                                    // Deteksi callback sukses pada Mode OAuth Web Redirect (xyrdp-dash.vercel.app)
-                                    if (u.startsWith("https://xyrdp-dash.vercel.app") && !u.contains("/api/auth/")) {
-                                        val cookies = android.webkit.CookieManager.getInstance()
-                                            .getCookie("https://xyrdp-dash.vercel.app").orEmpty()
-                                        if (cookies.contains("ghs=")) {
-                                            scope.launch(Dispatchers.IO) {
-                                                runCatching {
-                                                    val conn = (URL("https://xyrdp-dash.vercel.app/api/me").openConnection() as HttpURLConnection).apply {
-                                                        requestMethod = "GET"
-                                                        setRequestProperty("Cookie", cookies)
-                                                        setRequestProperty("Accept", "application/json")
-                                                        connectTimeout = 10_000
-                                                        readTimeout = 10_000
-                                                    }
-                                                    if (conn.responseCode == 200) {
-                                                        val obj = JSONObject(conn.inputStream.bufferedReader().use { it.readText() })
-                                                        val lgn = obj.optString("login", "").trim()
-                                                        val nm = obj.optString("name", "").trim()
-                                                        val av = obj.optString("avatar", "").trim()
-                                                        if (lgn.isNotEmpty()) {
-                                                            withContext(Dispatchers.Main) {
-                                                                finishLoginSuccess("ghs_cookie:$cookies", lgn, nm, av)
-                                                            }
-                                                        }
-                                                    }
-                                                }
-                                            }
-                                        }
-                                    }
+
                                 }
                             }
-                            loadUrl("https://github.com/login/device")
+                            loadUrl(if (useWebRedirectMode) chromeAuthUrl else "https://github.com/login/device")
                             webViewRef = this
                         }
                     },
@@ -2198,6 +2170,7 @@ internal fun XyClickableLinkText(
     modifier: Modifier = Modifier,
 ) {
     val context = LocalContext.current
+    val openChannel = LocalChannelNavigator.current
     val annotated = remember(text, color, linkColor) {
         androidx.compose.ui.text.buildAnnotatedString {
             append(text)
@@ -2231,11 +2204,17 @@ internal fun XyClickableLinkText(
                     end = match.range.last + 1,
                 )
             }
+            channelTags(text).forEach { match ->
+                if (XY_URL_REGEX.findAll(text).none { match.start in it.range || (match.end - 1) in it.range }) {
+                    addStyle(androidx.compose.ui.text.SpanStyle(color = linkColor, fontWeight = FontWeight.SemiBold), match.start, match.end)
+                    addStringAnnotation("CHANNEL", match.channelId, match.start, match.end)
+                }
+            }
         }
     }
 
     val hasLinks = remember(annotated) {
-        annotated.getStringAnnotations("URL", 0, annotated.length).isNotEmpty()
+        annotated.getStringAnnotations("URL", 0, annotated.length).isNotEmpty() || annotated.getStringAnnotations("CHANNEL", 0, annotated.length).isNotEmpty()
     }
 
     if (!hasLinks) {
@@ -2255,13 +2234,18 @@ internal fun XyClickableLinkText(
             maxLines = maxLines,
             overflow = TextOverflow.Ellipsis,
             onTextLayout = { layoutResult = it },
-            modifier = modifier.pointerInput(annotated, onNonLinkClick, onLongPress) {
+            modifier = modifier.pointerInput(annotated, onNonLinkClick, onLongPress, openChannel) {
                 detectTapGestures(
                     onLongPress = { onLongPress?.invoke() },
                     onTap = { pos ->
                         val layout = layoutResult
                         if (layout != null) {
                             val offset = layout.getOffsetForPosition(pos)
+                            val channel = annotated.getStringAnnotations("CHANNEL", offset, offset).firstOrNull()
+                            if (channel != null) {
+                                openChannel(channel.item)
+                                return@detectTapGestures
+                            }
                             val hit = annotated.getStringAnnotations("URL", offset, offset).firstOrNull()
                             if (hit != null) {
                                 openInAppCustomTab(context, hit.item)

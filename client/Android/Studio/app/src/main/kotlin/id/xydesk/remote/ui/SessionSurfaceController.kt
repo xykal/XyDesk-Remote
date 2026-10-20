@@ -146,17 +146,6 @@ class SessionSurfaceController(private val activity: Activity) : GraphicsSink {
         onGraphicsInvalidated?.invoke()
     }
 
-    private fun clearPendingGraphics() {
-        uiHandler.removeCallbacks(flushDirtyRunnable)
-        synchronized(dirtyLock) {
-            pendingDirtyRect.setEmpty()
-            hasPendingDirty = false
-            flushScheduled = false
-            batchStartNs = 0L
-            pendingUpdates = 0
-        }
-    }
-
     private fun asciiToAndroidKeyCode(codePoint: Int): Int = when (codePoint) {
         in 'a'.code..'z'.code -> KeyEvent.KEYCODE_A + (codePoint - 'a'.code)
         in 'A'.code..'Z'.code -> KeyEvent.KEYCODE_A + (codePoint - 'A'.code)
@@ -202,10 +191,6 @@ class SessionSurfaceController(private val activity: Activity) : GraphicsSink {
     /** Dipanggil (idempotent) sesegera mungkin setelah view tree siap. */
     fun setInstance(inst: Long) {
         if (inst == 0L) return
-        if (this.inst != inst) {
-            clearPendingGraphics()
-            bitmap = null
-        }
         this.inst = inst
         if (viewReady) catchUpSurface()
     }
@@ -367,12 +352,9 @@ class SessionSurfaceController(private val activity: Activity) : GraphicsSink {
     fun bind(inst: Long) {
         if (inst == 0L) return
         if (this.inst != inst) {
-            clearPendingGraphics()
-            bitmap = null
             this.inst = inst
         }
         uiHandler.post {
-            if (this.inst != inst) return@post
             val session = GlobalApp.getSession(inst) ?: return@post
             var surface = session.getSurface()
             if (surface == null) {
@@ -438,12 +420,7 @@ class SessionSurfaceController(private val activity: Activity) : GraphicsSink {
      * keyboard XyDesk tidak perlu tahu tabel scancode.
      */
     fun sendVirtualKey(keyCode: Int, down: Boolean) {
-        val expectedInstance = inst
         uiHandler.post {
-            if (expectedInstance == 0L || inst != expectedInstance) {
-                reportInputDispatchFailure()
-                return@post
-            }
             val im = inputManager
             if (im == null) {
                 reportInputDispatchFailure()
@@ -456,27 +433,13 @@ class SessionSurfaceController(private val activity: Activity) : GraphicsSink {
     /** Tekan beberapa tombol sekaligus (mis. Ctrl+Alt+Del) lalu lepas terbalik. */
     fun sendCombo(keyCodes: List<Int>) {
         if (keyCodes.isEmpty()) return
-        val keys = keyCodes.toList()
-        val expectedInstance = inst
-        uiHandler.post {
-            val manager = inputManager
-            if (expectedInstance == 0L || inst != expectedInstance || manager == null) {
-                reportInputDispatchFailure()
-                return@post
-            }
-            if (!dispatchHudKeyCombo(keys) { key, down -> manager.sendAndroidKeyCode(key, down) }) {
-                reportInputDispatchFailure()
-            }
-        }
+        keyCodes.forEach { sendVirtualKey(it, true) }
+        keyCodes.reversed().forEach { sendVirtualKey(it, false) }
     }
 
     /** Kirim karakter unicode (dipakai kalau server tidak paham scancode-nya). */
     fun sendUnicode(ch: Int) {
-        val expectedInstance = inst
-        uiHandler.post {
-            if (expectedInstance != 0L && inst == expectedInstance) inputManager?.processUnicodeKey(ch)
-            else reportInputDispatchFailure()
-        }
+        uiHandler.post { inputManager?.processUnicodeKey(ch) }
     }
 
     /**
@@ -711,9 +674,7 @@ class SessionSurfaceController(private val activity: Activity) : GraphicsSink {
     }
 
     fun release() {
-        inst = 0L // reject queued/new input and graphics work before detaching views
         uiHandler.removeCallbacksAndMessages(null)
-        clearPendingGraphics()
         inputManager?.cancelPendingEvents()
         inputManager?.hideKeyboards()
         inputManager = null
@@ -737,7 +698,6 @@ class SessionSurfaceController(private val activity: Activity) : GraphicsSink {
     override fun onSessionInstanceBound(inst: Long) {
         if (inst == 0L) return
         if (this.inst != inst) {
-            clearPendingGraphics()
             this.inst = inst
             bitmap = null
         }
@@ -763,14 +723,12 @@ class SessionSurfaceController(private val activity: Activity) : GraphicsSink {
         val stats = frameStats
         val copyStartNs = if (stats != null) System.nanoTime() else 0L
         synchronized(bm) {
-            if (inst != i || bitmap !== bm || bm.isRecycled) return
             LibFreeRDP.updateGraphics(i, bm, left, top, right - left, bottom - top)
         }
         val copyDurationNs = if (stats != null) System.nanoTime() - copyStartNs else 0L
         stats?.recordUpdate(copyDurationNs)
         val shouldSchedule: Boolean
         synchronized(dirtyLock) {
-            if (inst != i || bitmap !== bm) return
             if (!hasPendingDirty) {
                 pendingDirtyRect.set(left, top, right, bottom)
                 hasPendingDirty = true
@@ -813,8 +771,6 @@ class SessionSurfaceController(private val activity: Activity) : GraphicsSink {
                 return
             }
         }
-        if (inst != i) return
-        clearPendingGraphics()
         bitmap = newBitmap
         val session = GlobalApp.getSession(i) ?: return
         val drawable = BitmapDrawable(activity.getResources(), newBitmap).apply {
@@ -835,7 +791,7 @@ class SessionSurfaceController(private val activity: Activity) : GraphicsSink {
             stats.recordFlush(copyStartNs, 1)
         }
         uiHandler.post {
-            if (!viewReady || inst != i || bitmap !== newBitmap) return@post
+            if (!viewReady) return@post
             val sv = sessionView ?: return@post
             sv.onSurfaceChange(session)
             sv.invalidate()

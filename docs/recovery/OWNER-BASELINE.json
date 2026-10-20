@@ -1,0 +1,26 @@
+{
+  "owner_selected_draft_url": "https://github.com/xykal/XyDesk-Remote/releases#release-untagged-82555f79a435a07e082d",
+  "release_id": 416426283,
+  "release_name": "XyDesk Remote v1.1.23 (Build 87)",
+  "source_commit": "9f64b474d02f2b3d6a13c65c7b77f15b045dfbca",
+  "source_workflow_run": "https://github.com/xykal/XyDesk-Remote/actions/runs/39123868039",
+  "exact_draft_url_confirmed_in_publish_log": true,
+  "apk_baselines": {
+    "XyDesk-Remote32bit.apk": {
+      "bytes": 81054894,
+      "sha256": "1334da9b2a46f234ef18267a58c9b7d6de2c5a07d0d87d700b2851dbabb67b82"
+    },
+    "XyDesk-Remote64bit-x86.apk": {
+      "bytes": 109808664,
+      "sha256": "480bd21e2c713aebe6b59135400d8c883a8b006b93390e6938fb6bd3ba8dbacc"
+    },
+    "XyDesk-Remote64bit.apk": {
+      "bytes": 100543602,
+      "sha256": "f4d9006252ae94dbb746b449607c61c6724562bd520e19103b163a80bb8af638"
+    },
+    "XyDesk-RemoteUniversal.apk": {
+      "bytes": 291155633,
+      "sha256": "63c56d544d29a7ce087a2bbb9960a2d2a9833876ab37f645da5c67097eeed0ef"
+    }
+  }
+}

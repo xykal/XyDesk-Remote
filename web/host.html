@@ -217,32 +217,70 @@
 
   <main>
     <div class="container">
-      <div class="meta mono">Windows Host · PC Stream · Status pengembangan</div>
-      <h1>XyDesk Host: kesiapan mic &amp; game</h1>
-      <p class="lead">Host generasi baru ditargetkan menjadi <strong>satu XyDeskRemoteHost.exe</strong>, tanpa varian Standalone atau DLL pendamping. Belum tersedia sebagai rilis publik. Halaman ini tidak menyatakan koneksi Direct sudah aman atau mic/game sudah berhasil diuji.</p>
-      <div class="card">
-        <h2>1. Status keamanan Direct</h2>
-        <p>Transport UDP lama tidak menyediakan autentikasi dan enkripsi yang memadai. Pada source host baru, listener lama <strong>mati secara default</strong>. Pairing dan transport terautentikasi masih dikerjakan di kedua endpoint; belum siap untuk rilis. Jangan membuka UDP lama ke internet.</p>
-        <p>Versi publik sebelumnya adalah versi lama, bukan pengganti build aman yang masih dikerjakan. Lihat <a href="https://github.com/xykal/XyDesk-Remote/releases" target="_blank" rel="noopener noreferrer">riwayat rilis resmi</a>. Tidak ada tautan unduh untuk EXE baru sebelum benar-benar tersedia.</p>
+      <div class="meta mono">Windows Host Agent &amp; RDP On-Mic Setup · Native Modern GUI</div>
+      <h1>XyDesk Host Agent (Native GUI) &amp; Setup On-Mic RDP</h1>
+      <p class="lead">
+        Halaman ini menyediakan dua alat resmi: <strong>(1) XyDesk Host Agent (100% Native GUI tanpa terminal)</strong> untuk PC Windows pribadi dengan <em>Clean ID &amp; Password</em>, <em>Enkripsi E2EE</em>, dan <em>Virtual Device 120Hz</em>; serta <strong>(2) File Setup On-Mic Mandiri</strong> untuk RDP Windows atau VPS Linux yang kamu beli/sewa sendiri di luar GitHub.
+      </p>
+
+      <div class="card" style="border-color: rgba(255,255,255,0.22); background: linear-gradient(155deg, rgba(255,255,255,0.06) 0%, var(--surface) 100%);">
+        <h2>1. Setup On-Mic &amp; Virtual Audio (Untuk RDP Beli Sendiri / Non-GitHub)</h2>
+        <p>
+          Jika kamu membeli RDP Windows atau VPS sendiri (di luar Buat RDP GitHub) dan ingin fitur <strong>On-Mic (Mikrofon HP ke dalam RDP untuk Discord / Game / Voice Chat)</strong> langsung bekerja lancar, unduh file <code>.BAT</code> di bawah atau jalankan perintah PowerShell 1-baris sebagai Administrator di dalam RDP:
+        </p>
+        <div class="code-box mono" id="onmic-cmd">powershell -ExecutionPolicy Bypass -Command "irm https://xydeskremote.biz.id/onmic.ps1 | iex"</div>
+        <div style="margin-top: 14px; display: flex; gap: 10px; flex-wrap: wrap;">
+          <a href="/XyDesk-RDP-OnMic-Setup.bat" download="XyDesk-RDP-OnMic-Setup.bat" class="pill primary">
+            Unduh File Setup On-Mic (.BAT)
+          </a>
+          <button type="button" class="pill" id="copy-onmic-btn">
+            Salin Perintah PowerShell On-Mic
+          </button>
+          <a href="/onmic.ps1" download="onmic.ps1" class="pill">
+            Unduh onmic.ps1
+          </a>
+        </div>
+        <p style="margin-top: 12px; font-size: 12.5px;">
+          Untuk <strong>Linux Desktop RDP (Ubuntu/Debian XFCE4 + XRDP)</strong>, jalankan:
+          <code class="mono">curl -fsSL https://xydeskremote.biz.id/onmic-linux.sh | sudo bash</code>
+        </p>
       </div>
+
       <div class="card">
-        <h2>2. Pemeriksaan lokal mic &amp; audio</h2>
-        <p>Panel native membaca endpoint input/output aktif dan input komunikasi default Windows. Ini <strong>inventaris, bukan bukti suara HP sudah sampai ke game</strong>. Native AUDIN RDP, bridge audio dan stream Hub memiliki jalur yang berbeda.</p>
-        <ol>
-          <li>Periksa izin mikrofon Android dan pilihan mic pada sesi yang sedang aktif.</li>
-          <li>Periksa Settings → Sound dan Privacy → Microphone di Windows, sesuai kebijakan pemilik/administrator.</li>
-          <li>Untuk bridge, periksa output virtual terhubung ke input virtual yang dipilih game. Uji level suara dan matikan mic untuk memastikan capture benar-benar berhenti.</li>
-        </ol>
-        <p>Installer On-Mic lama ditarik: tidak ada lagi perintah unduh-lalu-eksekusi, pembukaan firewall otomatis, perubahan password atau pemasangan driver tersembunyi. Driver bertanda tangan, lisensi, restart dan pengujian routing masih perlu diverifikasi. Panel bukan installer driver.</p>
+        <h2>2. Paket Windows x64 — XyDesk Host Agent (Native GUI Modern · 1 File .EXE)</h2>
+        <p>
+          Unduh <strong>XyDeskRemoteHost-Standalone.exe</strong> — <strong>antarmuka GUI Native penuh tanpa jendela terminal/CMD</strong>. Menampilkan <strong>Clean ID &amp; Password</strong> (lengkap dengan tombol lihat/salin/acak password), <strong>Enkripsi E2EE AES-256-GCM + QUIC TLS 1.3</strong> beserta sidik jari SHA-256, serta pengelola <strong>Virtual Display 120Hz &amp; Virtual Microphone On-Mic</strong>. Lihat <a href="https://github.com/xykal/XyDesk-Remote/releases" target="_blank" rel="noopener noreferrer" style="text-decoration:underline;text-underline-offset:3px;">catatan rilis resmi</a> dan <a href="/SHA256SUMS.txt" style="text-decoration:underline;text-underline-offset:3px;">checksum SHA-256</a>.
+        </p>
+        <div style="margin-top: 14px; display: flex; gap: 10px; flex-wrap: wrap;">
+          <a href="/XyDeskRemoteHost-Standalone.exe" download="XyDeskRemoteHost-Standalone.exe" class="pill primary">
+            Unduh Host Agent Native GUI — 1 File .exe (Standalone)
+          </a>
+          <a href="/XyDesk-Remote-Host-Agent-win64.zip" download="XyDesk-Remote-Host-Agent-win64.zip" class="pill">
+            Unduh Paket Lengkap (.ZIP)
+          </a>
+          <a href="/XyDeskHost-Setup.bat" download="XyDeskHost-Setup.bat" class="pill">
+            Unduh XyDeskHost-Setup.bat
+          </a>
+        </div>
       </div>
+
       <div class="card">
-        <h2>3. Pemeriksaan game &amp; streaming</h2>
-        <p>Panel menampilkan proses GTA/SA-MP/Roblox yang terlihat. Daftar server SA-MP atau proses yang muncul tidak membuktikan game berhasil dibuka. Jika macet, kumpulkan path/versi launcher, proses, Event Viewer dan crash log tanpa password/token.</p>
-        <p>Jika Roblox menolak VM/lingkungan tertentu, gunakan lingkungan yang didukung; tidak ada bypass atau penyamaran anti-cheat. FPS, encoder, frame, input dan suara harus diuji pada perangkat nyata.</p>
+        <h2>3. Fitur Utama di Dashboard Native GUI Host Agent</h2>
+        <ul>
+          <li><strong>Clean ID &amp; Password:</strong> Menampilkan ID PC LAN (10 digit), ID Global Relay (<code>XY...</code>), Windows Username, dan Password Akses bersih yang dapat dilihat, disalin satu paket, atau diacak ulang kapan saja.</li>
+          <li><strong>Enkripsi End-to-End &amp; Sidik Jari Host:</strong> Perlindungan <code>E2EE AES-256-GCM + QUIC v1 TLS 1.3</code> disertai Host Key Fingerprint <code>SHA-256</code> unik per perangkat.</li>
+          <li><strong>Virtual Device (Layar Virtual 120Hz &amp; On-Mic Audio Bridge):</strong> Mengaktifkan 120FPS DWM + GPU H.264 AVC 4:4:4 Full-Chroma, membuka kunci <code>fDisableAudioCapture=0</code> &amp; Privacy Microphone Consent, serta menjembatani suara PC (WASAPI 24kHz) dan input mikrofon HP secara otomatis tanpa jendela terminal.</li>
+        </ul>
       </div>
+
       <div class="card">
-        <h2>4. Sebelum draft rilis</h2>
-        <p>Wajib verifikasi pairing/transport kedua endpoint, single-EXE, APK bertanda tangan yang benar, mic/input saat putus-sambung dan jaringan lemah. Pemeriksaan syntax atau unit test bukan bukti runtime Windows. Draft rilis bukan publikasi otomatis.</p>
+        <h2>4. Unduh dan tinjau skrip PowerShell Host</h2>
+        <p><a href="https://github.com/xykal/XyDesk-Remote/blob/main/web/host.ps1" target="_blank" rel="noopener noreferrer" style="text-decoration:underline;text-underline-offset:3px;">Bandingkan sumber PowerShell di repositori GitHub</a>.</p>
+        <div class="code-box mono" id="ps-cmd">$script = "$env:TEMP\xydesk-host.ps1"; Invoke-WebRequest -UseBasicParsing "https://www.xydeskremote.biz.id/host.ps1" -OutFile $script; Get-FileHash $script -Algorithm SHA256; notepad $script</div>
+        <div style="margin-top:12px;display:flex;gap:10px;flex-wrap:wrap;align-items:center;">
+          <button type="button" class="pill" id="copy-btn">Salin perintah unduh</button>
+          <a class="pill" href="/host.ps1" download="xydesk-host.ps1">Unduh host.ps1</a>
+        </div>
       </div>
     </div>
   </main>
@@ -254,6 +292,20 @@
     </div>
   </footer>
 
-
+  <script>
+    document.getElementById("copy-btn").addEventListener("click", function () {
+      var cmd = document.getElementById("ps-cmd").textContent;
+      if (navigator.clipboard) navigator.clipboard.writeText(cmd);
+      this.textContent = "Tersalin ke Clipboard ✓";
+    });
+    var onmicBtn = document.getElementById("copy-onmic-btn");
+    if (onmicBtn) {
+      onmicBtn.addEventListener("click", function () {
+        var cmd = document.getElementById("onmic-cmd").textContent;
+        if (navigator.clipboard) navigator.clipboard.writeText(cmd);
+        this.textContent = "Perintah On-Mic Tersalin ✓";
+      });
+    }
+  </script>
 </body>
 </html>

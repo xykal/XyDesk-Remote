@@ -30,10 +30,8 @@ internal object RdpErrors {
                 Pair("Host tidak ditemukan", "Host not found")
             code == "connect_failed" && (m.contains("logon failed") || m.contains("logon failure") ||
                 m.contains("authentication")) ->
-                Pair("Logon ditolak server", "Server rejected logon")
+                Pair("Username atau password salah", "Wrong username or password")
             code == "connect_failed" && m.contains("server denied") -> Pair("Ditolak server", "Denied by server")
-            id.xydesk.remote.core.RdpFailure.codeFor(code, message) == id.xydesk.remote.core.RdpFailure.SECURITY_NEGOTIATION ->
-                Pair("Negosiasi keamanan gagal", "Security negotiation failed")
             code == "connect_failed" || code == "connect_exception" -> Pair("Gagal koneksi", "Connection failed")
             else -> Pair("Koneksi gagal", "Connection error")
         }
@@ -55,9 +53,9 @@ internal object RdpErrors {
             // Probe TCP gagal: host/port tidak menjawab, bukan diagnosis penyebabnya.
             code == "unreachable" -> Pair(
                 "Host tidak menjawab di port RDP. Periksa alamat dan port, status host, " +
-                    "RDP diaktifkan, serta firewall/jaringan. Untuk alamat 100.64–100.127.x.x, periksa VPN/overlay, rute dan ACL bila digunakan.",
+                    "RDP diaktifkan, serta firewall/jaringan.",
                 "The host did not answer on the RDP port. Check the address and port, " +
-                    "host availability, enabled RDP, and the firewall/network. For 100.64–100.127.x.x, check VPN/overlay connectivity, routes and ACLs if used.",
+                    "host availability, enabled RDP, and the firewall/network.",
             )
 
             // Watchdog: hanya menyatakan proses koneksi tidak selesai tepat waktu.
@@ -108,10 +106,6 @@ internal object RdpErrors {
                 "The server explicitly denied the connection. Check the host's RDP policy and session limits.",
             )
 
-            id.xydesk.remote.core.RdpFailure.codeFor(code, message) == id.xydesk.remote.core.RdpFailure.SECURITY_NEGOTIATION -> Pair(
-                "TCP terhubung, tetapi TLS/NLA atau protokol keamanan tidak berhasil dinegosiasikan. Periksa dukungan dan kebijakan host, format akun/domain serta log server. Jangan mematikan NLA atau verifikasi sertifikat sebagai perbaikan otomatis.",
-                "TCP connected, but TLS/NLA or the security protocol could not be negotiated. Check host support/policy, account/domain format and server logs. Do not automatically disable NLA or certificate verification.",
-            )
             code == "connect_failed" -> Pair(
                 "XyDesk gagal menyelesaikan jabat tangan (handshake). Periksa Detail, " +
                     "jaringan, host, dan konfigurasi RDP.",

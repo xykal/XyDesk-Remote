@@ -177,8 +177,6 @@ class XyDeskSessionActivity : ComponentActivity() {
     @Volatile
     private var lastRemoteClipboardAtMs: Long = 0L
     private var pendingPermissionProfile: ConnectionProfile? = null
-    private var pendingForegroundProfile: ConnectionProfile? = null
-    private var captureForegroundReady = false
     private var lastInputFailureNoticeAt = 0L
 
     fun noteRemoteClipboardText(text: String) {
@@ -460,7 +458,6 @@ class XyDeskSessionActivity : ComponentActivity() {
         // Mode stik dibaca di sini supaya sesi yang langsung memakai pad tanpa
         // membuka bar edit tetap memakai mode tersimpan, bukan default POINTER.
         padStickMode = sessionPrefs.virtualPadStickMode
-        padCustomBindings = sessionPrefs.customStickBindings()
         setContent {
             // Layar sesi ikut setelan tema app (dulu dipaksa gelap, jadi di
             // mode terang panel dan dialog di sini tidak nyambung dengan sisa
@@ -481,8 +478,6 @@ class XyDeskSessionActivity : ComponentActivity() {
                         stickModeProvider = { padStickMode },
                         onStickKeys = { x, y -> applyHudStickAxis(x, y) },
                         onStickModeChange = { next ->
-                            applyHudStickAxis(0f, 0f) // Release keys in the OLD mapping before replacing it.
-                            padCustomBindings = sessionPrefs.customStickBindings()
                             padStickMode = next
                             sessionPrefs.virtualPadStickMode = next
                         },
@@ -531,11 +526,6 @@ class XyDeskSessionActivity : ComponentActivity() {
 
     override fun onStart() {
         super.onStart()
-        if (::manager.isInitialized) manager.setCaptureForegroundAllowed(true)
-        captureForegroundReady = true
-        val deferred = pendingForegroundProfile
-        pendingForegroundProfile = null
-        if (deferred != null && !isFinishing && !isDestroyed) connectProfile(deferred)
         // balik dari background sebelum timer jalan = cancel auto-disconnect
         bgHandler.removeCallbacks(bgDisconnect)
         // Jalankan Foreground Service sejak sesi di foreground agar Android 12–15+
@@ -565,11 +555,8 @@ class XyDeskSessionActivity : ComponentActivity() {
     }
 
     override fun onStop() {
-        if (::controller.isInitialized) applyHudStickAxis(0f, 0f)
-        captureForegroundReady = false
         super.onStop()
         setGyroMouseActive(false)
-        if (::manager.isInitialized) manager.setCaptureForegroundAllowed(false)
         if (isFinishing || isChangingConfigurations) {
             appPrefs?.clearAutoResumeSession()
             return
@@ -594,8 +581,6 @@ class XyDeskSessionActivity : ComponentActivity() {
     }
 
     override fun onDestroy() {
-        pendingForegroundProfile = null
-        pendingPermissionProfile = null
         inputManager?.unregisterInputDeviceListener(inputDeviceListener)
         inputManager = null
         super.onDestroy()
@@ -738,7 +723,6 @@ class XyDeskSessionActivity : ComponentActivity() {
 
     /** Tujuan stik kiri gamepad virtual; disinkronkan dari state Compose. */
     private var padStickMode: XyStickMode = XyStickMode.POINTER
-    private var padCustomBindings = id.xydesk.remote.ui.input.XyCustomStickBindings()
 
     /**
      * Jalur keluar gamepad virtual untuk sesi RDP. Sengaja memakai hook yang sama
@@ -761,7 +745,18 @@ class XyDeskSessionActivity : ComponentActivity() {
         override fun key(key: XyPadKey, down: Boolean) {
             if (!::controller.isInitialized) return
             controller.sendVirtualKey(
-                key.androidKeyCode,
+                when (key) {
+                    XyPadKey.ENTER -> KeyEvent.KEYCODE_ENTER
+                    XyPadKey.ESCAPE -> KeyEvent.KEYCODE_ESCAPE
+                    XyPadKey.ARROW_UP -> KeyEvent.KEYCODE_DPAD_UP
+                    XyPadKey.ARROW_DOWN -> KeyEvent.KEYCODE_DPAD_DOWN
+                    XyPadKey.ARROW_LEFT -> KeyEvent.KEYCODE_DPAD_LEFT
+                    XyPadKey.ARROW_RIGHT -> KeyEvent.KEYCODE_DPAD_RIGHT
+                    XyPadKey.W -> KeyEvent.KEYCODE_W
+                    XyPadKey.A -> KeyEvent.KEYCODE_A
+                    XyPadKey.S -> KeyEvent.KEYCODE_S
+                    XyPadKey.D -> KeyEvent.KEYCODE_D
+                },
                 down,
             )
         }
@@ -779,7 +774,7 @@ class XyDeskSessionActivity : ComponentActivity() {
             leftX = (x.coerceIn(-1f, 1f) * 32_767f).toInt(),
             leftY = (y.coerceIn(-1f, 1f) * 32_767f).toInt(),
         )
-        XyGamepadActionMapper.apply(state, lastHudStickState, virtualPadOutput, padStickMode, padCustomBindings)
+        XyGamepadActionMapper.apply(state, lastHudStickState, virtualPadOutput, padStickMode)
         lastHudStickState = state
     }
 
@@ -915,8 +910,8 @@ class XyDeskSessionActivity : ComponentActivity() {
         val options = runCatching { RdpOptions.of(this, profile.id) }.getOrNull()
             ?: return false
         val wanted = buildList {
-            if (options.camera && !options.pcConnectMode) add(Manifest.permission.CAMERA)
-            if (options.microphone && !options.pcConnectMode) add(Manifest.permission.RECORD_AUDIO)
+            if (options.camera) add(Manifest.permission.CAMERA)
+            if (options.microphone) add(Manifest.permission.RECORD_AUDIO)
             if (Build.VERSION.SDK_INT >= 33) add(Manifest.permission.POST_NOTIFICATIONS)
         }.filter {
             ContextCompat.checkSelfPermission(this, it) != PackageManager.PERMISSION_GRANTED
@@ -932,10 +927,6 @@ class XyDeskSessionActivity : ComponentActivity() {
     }
 
     private fun connectProfile(profile: ConnectionProfile) {
-        if (!captureForegroundReady || !lifecycle.currentState.isAtLeast(androidx.lifecycle.Lifecycle.State.STARTED)) {
-            pendingForegroundProfile = profile
-            return
-        }
         ConnectionLog.add("SES: memanggil manager.connect (native createSession + parse args)")
         try {
             manager.connect(profile)
@@ -961,10 +952,13 @@ class XyDeskSessionActivity : ComponentActivity() {
                     val microphoneGranted = ContextCompat.checkSelfPermission(
                         this, Manifest.permission.RECORD_AUDIO,
                     ) == PackageManager.PERMISSION_GRANTED
-                    // SessionManager rechecks current permissions when generating the native URI,
-                    // including reconnects initiated outside this Activity. Keep saved user intent.
+                    val adjusted = options.copy(
+                        camera = options.camera && cameraGranted,
+                        microphone = options.microphone && microphoneGranted,
+                    )
+                    if (adjusted != options) adjusted.write(this, profile.id)
                     if ((options.camera && !cameraGranted) || (options.microphone && !microphoneGranted)) {
-                        XyNoticeBus.post("Izin kamera/mikrofon ditolak; kanal tidak diminta pada sambungan ini. Setelan profil tetap disimpan.")
+                        XyNoticeBus.post("Izin kamera/mikrofon ditolak; kanal dinonaktifkan di opsi profil.")
                     }
                 }
                 connectProfile(profile)

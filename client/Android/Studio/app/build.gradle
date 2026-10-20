@@ -47,9 +47,7 @@ android {
             // R8 aktif (minifyEnabled) + keep rules di proguard-rules.txt.
             // Rollback cepat: set MINIFY_ENABLED=false di release.properties.
             minifyEnabled rootProject.ext.minifyEnabled
-            // XyDesk (APK size diet): buang resource tak terpakai pasca-R8.
-            // Rollback cepat jika ada resource dinamis yang hilang: false.
-            shrinkResources true
+            shrinkResources false
             signingConfig signingConfigs.release
             proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.txt'
         }
@@ -67,14 +65,6 @@ android {
     buildFeatures {
         compose true
     }
-    packaging {
-        jniLibs {
-            // ABI splits do not filter third-party AAR payload in Universal.
-            // No engine is built for 32-bit x86; keep its dependency-only
-            // SQLCipher/WebRTC libraries out instead of claiming x86 support.
-            excludes += ['lib/x86/**']
-        }
-    }
 }
 
 dependencies {
@@ -88,11 +78,8 @@ dependencies {
     // dan setShuffleMode/setRepeatMode (@hide), jadi tanpa library ini dua
     // kontrol itu tidak bisa dikirim ke pemutar mana pun.
     implementation 'androidx.media:media:1.7.0'
-    // (Dihapus — diet APK: play-services-ads/AdMob tidak pernah dipakai kode:
-    //  tidak ada MobileAds/RewardedAd/AdRequest; unlock RdpFree kini lewat
-    //  GitHub OAuth. Menghilangkan juga auto-init MobileAdsInitProvider saat
-    //  cold start. Kalau rewarded ads dibutuhkan lagi, tambah kembali
-    //  play-services-ads + meta-data APPLICATION_ID di manifest.)
+    // Iklan rewarded untuk buka fitur RDP Gratis (create-RDP dari app).
+    implementation 'com.google.android.gms:play-services-ads:23.6.0'
     // Ronde 47 — WebSocket client untuk Chat Global (Durable Object worker).
     implementation 'com.squareup.okhttp3:okhttp:4.12.0'
     // Ronde 48 — Push notification OneSignal v5 untuk Chat Global.

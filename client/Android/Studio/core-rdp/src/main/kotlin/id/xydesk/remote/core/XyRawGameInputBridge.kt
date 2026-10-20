@@ -17,7 +17,7 @@ import java.util.concurrent.atomic.AtomicLong
  *
  * Mengirim delta mouse relatif (`SendInput` `MOUSEEVENTF_MOVE` tanpa
  * `MOUSEEVENTF_ABSOLUTE`), tombol mouse, scroll, serta virtual-key langsung ke
- * `XyDeskRemoteHost-Standalone.exe` atau daemon UDP `XyRDP` di port 4433.
+ * `XyDeskRemoteHost.exe` atau daemon UDP `XyRDP` di port 4433.
  *
  * Kenapa dibutuhkan untuk Game FPS:
  * - Jalur mouse RDP standar mengirim koordinat kursor absolut yang mentok di
@@ -58,6 +58,7 @@ class XyRawGameInputBridge(
         get() = isAlive && (remoteFlags and FLAG_CONSOLE_NON_RDP) != 0
 
     fun start() {
+        if (!LegacyDirectTransportPolicy.mayStart()) return
         val cleanHost = host.trim().removePrefix("[").removeSuffix("]")
         if (cleanHost.isEmpty()) return
         if (!running.compareAndSet(false, true)) return

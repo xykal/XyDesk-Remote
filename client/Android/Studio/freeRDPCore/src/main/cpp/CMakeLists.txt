@@ -116,18 +116,3 @@ target_link_libraries(xydesk-quic PRIVATE ${log-lib})
 target_link_libraries(
   ${MODULE_NAME} PRIVATE xydesk-quic freerdp3-lib freerdp-client3-lib winpr3-lib ${log-lib} ${dl-lib} ${jnigraphics-lib}
 )
-
-# --- XyDesk: strip output build sendiri (APK size diet) -----------------------
-# AGP pada pipeline ini tidak men-strip .so hasil externalNativeBuild
-# (libfreerdp-android.so rilis ter-ship dengan debug_info). Strip setelah
-# build untuk semua varian non-Debug; build Debug tetap punya symbol untuk
-# ndk-gdb/lldb.
-if(NOT CMAKE_BUILD_TYPE STREQUAL "Debug")
-  foreach(_xy_tgt IN ITEMS ${MODULE_NAME} xydesk-quic)
-    add_custom_command(
-      TARGET ${_xy_tgt} POST_BUILD
-      COMMAND ${CMAKE_STRIP} --strip-unneeded "$<TARGET_FILE:${_xy_tgt}>"
-      COMMENT "Strip $<TARGET_FILE_NAME:${_xy_tgt}> (XyDesk APK size diet)"
-    )
-  endforeach()
-endif()

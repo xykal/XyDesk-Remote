@@ -66,6 +66,10 @@ class XyDirectConsoleStreamClient(
     fun isVoiceMicEnabled(): Boolean = audioBridge?.micActive == true
 
     fun start() {
+        if (!LegacyDirectTransportPolicy.mayStart()) {
+            main.post { onState(false, LegacyDirectTransportPolicy.BLOCKED_REASON) }
+            return
+        }
         val cleanHost = host.trim().removePrefix("[").removeSuffix("]")
         if (cleanHost.isEmpty()) {
             main.post { onState(false, "Host kosong") }
@@ -294,6 +298,7 @@ class XyDirectConsoleStreamClient(
          * `XyDeskRemoteHost.exe` yang aktif.
          */
         fun discoverHosts(timeoutMs: Int = 900, port: Int = 4433): List<DiscoveredHost> {
+            if (!LegacyDirectTransportPolicy.mayStart()) return emptyList()
             val found = linkedMapOf<String, DiscoveredHost>()
             runCatching {
                 DatagramSocket().use { sock ->

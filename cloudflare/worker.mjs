@@ -1,4 +1,7 @@
-import { RevisionedHistoryWindow, chatStorageFailure } from "./chat-storage-policy.mjs";
+import { githubOAuthConfig, GITHUB_CALLBACK } from "./oauth-config.mjs";
+import { persistChatSend, validateDurableSend, pruneChatSendReceipts, SEND_REPLAY_MAX_AGE_MS } from "./chat-send-persistence.mjs";
+import { OfficialChannels } from "./official-channels.mjs";
+import { RevisionedHistoryWindow, chatStorageFailure, chatStorageFailureEvent } from "./chat-storage-policy.mjs";
 import { applyChatMutation } from "./chat-mutations.mjs";
 import { exchangeGithubCode } from "./oauth-token-exchange.mjs";
 import { verifyGithubIdentity, resolveGithubIdentity } from "./oauth-identity.mjs";
@@ -3565,7 +3568,9 @@ export class GlobalChat {
     this.httpRate = new Map();
     this.appOnlinePeers = new Map();
     this.historyWindow = new RevisionedHistoryWindow();
+    this.pinnedWindow = new RevisionedHistoryWindow({ ttlMs: 30_000 });
     this.joinedCache = new Map();
+    this.officialChannels = new OfficialChannels(this.state.storage, this.env);
   }
 
   getActiveOnlineCount() {
@@ -3609,6 +3614,12 @@ export class GlobalChat {
   async fetch(request) {
     const urlObj = new URL(request.url);
     const path = urlObj.pathname;
+    if (path === "/channels" || path.startsWith("/channels/")) {
+      const upstream = await this.officialChannels.fetch(request);
+      const response = new Response(upstream.body, upstream);
+      response.headers.set("x-xydesk-channel-handler", "1");
+      return response;
+    }
     if (path === "/mutation-capabilities" && request.method === "GET")
       return durableObjectJson({ revisioned_mutations: 1 }, 200, request.method);
     if ((path === "/connect" || path === "/ws/chat") && request.headers.get("Upgrade") === "websocket") {
@@ -3629,7 +3640,7 @@ export class GlobalChat {
       }
       const sinceMs = await this.resolveJoinedAt(urlObj);
       const messages = await this.loadHistory(sinceMs);
-      const pinnedMsg = await this.state.storage.get("pinned_message").catch(() => null);
+      const pinnedMsg = await this.loadPinnedMessage();
       const onlineCount = this.getActiveOnlineCount();
       return durableObjectJson(
         {
@@ -3650,6 +3661,7 @@ export class GlobalChat {
       const action = String(body?.action || "pin").toLowerCase();
       if (action === "unpin" || !body?.message) {
         await this.state.storage.delete("pinned_message");
+        this.pinnedWindow.invalidate();
         this.broadcast(null, JSON.stringify({ type: "pin", pinned_message: null }));
         return durableObjectJson({ status: "ok", pinned_message: null }, 200, request.method);
       }
@@ -3664,6 +3676,7 @@ export class GlobalChat {
         at: Number(rawPin.at || Date.now()),
       };
       await this.state.storage.put("pinned_message", pinned);
+      this.pinnedWindow.invalidate();
       this.broadcast(null, JSON.stringify({ type: "pin", pinned_message: pinned }));
       return durableObjectJson({ status: "ok", pinned_message: pinned }, 200, request.method);
     }
@@ -3702,6 +3715,12 @@ export class GlobalChat {
     }
     if (path === "/leaderboard") {
       return this.handleLeaderboard(request);
+    }
+    if (path === "/send-capabilities" && request.method === "GET") {
+      const auth = await this.authenticate(request, true);
+      if (!auth.ok) return durableObjectJson({ status:"error", code:auth.code }, auth.status, request.method);
+      return durableObjectJson({ status:"ok", send_protocol:1, author_id:auth.principal.id,
+        github_login:auth.principal.login, replay_max_age_ms:SEND_REPLAY_MAX_AGE_MS }, 200, request.method);
     }
     if (path === "/send" && request.method === "POST") {
       return this.handleHttpSend(request);
@@ -3811,12 +3830,15 @@ export class GlobalChat {
       }
       const pinned = await transaction.get("pinned_message");
       if (pinned?.id === body.id) await transaction.delete("pinned_message");
-      return result;
+      // Use the committed transaction snapshot. A follow-up pin read can fail
+      // after a successful mutation and incorrectly tell the client to roll back.
+      return { ...result, pinnedAfterMutation: pinned?.id === body.id ? null : pinned || null };
     });
     if (outcome.status !== 200) return durableObjectJson({ status: "error", code: outcome.code }, outcome.status, request.method);
     this.historyWindow.invalidate();
+    this.pinnedWindow.invalidate();
     this.broadcast(null, JSON.stringify({ type: "mutation", message: outcome.message }));
-    this.broadcast(null, JSON.stringify({ type: "pin", pinned_message: await this.state.storage.get("pinned_message") || null }));
+    this.broadcast(null, JSON.stringify({ type: "pin", pinned_message: outcome.pinnedAfterMutation }));
     return durableObjectJson({ status: "ok", message: outcome.message }, 200, request.method);
   }
 
@@ -3829,6 +3851,8 @@ export class GlobalChat {
     } catch {
       return durableObjectJson({ status: "error", code: "invalid_json" }, 400, request.method);
     }
+    const invalidOutbox = validateDurableSend(auth.principal, body);
+    if (invalidOutbox) return durableObjectJson({ status:"error", code:invalidOutbox.code }, invalidOutbox.status, request.method);
     const name = typeof body?.name === "string"
       ? body.name.trim().slice(0, CHAT_NAME_MAX) || "Tamu"
       : "Tamu";
@@ -3850,7 +3874,7 @@ export class GlobalChat {
     }
     const prelimCountry = detectCountryFromRequest(request, body?.country, text || "id");
     const now = Date.now();
-    const rateKey = name.toLowerCase();
+    const rateKey = auth.principal ? `author:${auth.principal.id}` : name.toLowerCase();
     const bucket = this.httpRate.get(rateKey) || { sent: 0, windowAt: now };
     if (now - bucket.windowAt > CHAT_WINDOW_MS) {
       bucket.windowAt = now;
@@ -3875,7 +3899,7 @@ export class GlobalChat {
         : await translateChatText(text, prelimCountry);
     const country = detectCountryFromRequest(request, body?.country, text, tr.sourceLang);
     const flag = countryToFlag(country);
-    const id = `${now.toString(36).padStart(9, "0")}-${Math.random().toString(36).slice(2, 8)}`;
+    const id = `${now.toString(36).padStart(9, "0")}-${crypto.randomUUID()}`;
     const isFounderMsg = isFounderChatName(name, extras.github_login);
     const msg = {
       id,
@@ -3893,12 +3917,22 @@ export class GlobalChat {
       revision: 0,
       at: now,
     };
-    await this.state.storage.put(`msg:${id}`, msg);
-    this.historyWindow.invalidate();
-    this.trimHistory().catch(() => {});
-    this.broadcast(null, JSON.stringify({ type: "msg", ...msg }));
-    this.pushChatNotification(msg).catch(() => {});
-    return durableObjectJson({ status: "ok", message: msg }, 200, request.method);
+    let saved;
+    try { saved = await persistChatSend(this.state.storage, msg, auth.principal, body); }
+    catch (error) { return chatStorageFailure(error, request.method); }
+    if (saved.status !== 200) return durableObjectJson({ status:"error", code:saved.code }, saved.status, request.method);
+    if (saved.inserted) {
+      this.historyWindow.invalidate();
+      this.trimHistory().catch(() => {});
+      this.state.waitUntil?.(pruneChatSendReceipts(this.state.storage).catch(() => {}));
+      this.broadcast(null, JSON.stringify({ type:"msg", ...saved.message }));
+      this.pushChatNotification(saved.message).catch(() => {});
+    }
+    return durableObjectJson({ ...saved, status:"ok" }, 200, request.method);
+  }
+
+  async loadPinnedMessage() {
+    return this.pinnedWindow.load(() => this.state.storage.get("pinned_message"));
   }
 
   async loadHistory(sinceMs = 0) {
@@ -3999,7 +4033,9 @@ export class GlobalChat {
       .then((messages) => {
         try { server.send(JSON.stringify({ type: "history", messages, online_count: this.getActiveOnlineCount() })); } catch {}
       })
-      .catch(() => {});
+      .catch(async (error) => {
+        try { server.send(JSON.stringify(await chatStorageFailureEvent(error))); } catch {}
+      });
     const totalOnline = this.getActiveOnlineCount();
     this.broadcast(null, JSON.stringify({ type: "presence", count: totalOnline }));
     try { server.send(JSON.stringify({ type: "presence", count: totalOnline })); } catch {}
@@ -4051,6 +4087,7 @@ export class GlobalChat {
       const action = String(data.action || "pin").toLowerCase();
       if (action === "unpin" || !data.message) {
         await this.state.storage.delete("pinned_message");
+        this.pinnedWindow.invalidate();
         this.broadcast(null, JSON.stringify({ type: "pin", pinned_message: null }));
       } else {
         const rm = await this.state.storage.get(`msg:${String(data.message.id || "").slice(0, 80)}`);
@@ -4067,6 +4104,7 @@ export class GlobalChat {
           at: Number(rm.at || Date.now()),
         };
         await this.state.storage.put("pinned_message", pinned);
+        this.pinnedWindow.invalidate();
         this.broadcast(null, JSON.stringify({ type: "pin", pinned_message: pinned }));
       }
       return;
@@ -4076,6 +4114,12 @@ export class GlobalChat {
       return;
     }
     if (data.type !== "msg") return;
+    const invalidOutbox = validateDurableSend(session.principal, data);
+    if (invalidOutbox) {
+      try { session.ws.send(JSON.stringify({ type:"error", code:invalidOutbox.code, http_status:invalidOutbox.status,
+        client_msg_id:data.client_msg_id })); } catch {}
+      return;
+    }
     const extras = sanitizeChatExtras(data);
     if (session.principal && extras.github_login && extras.github_login.toLowerCase() !== session.principal.login.toLowerCase()) {
       try { session.ws.send(JSON.stringify({ type: "error", code: "identity_changed" })); } catch {}
@@ -4121,7 +4165,7 @@ export class GlobalChat {
         : await translateChatText(text, session.country);
     const resolvedCountry = resolveSmartCountry(text, tr.sourceLang, data.country || session.country, session.cfCountry);
     session.country = resolvedCountry;
-    const id = `${now.toString(36).padStart(9, "0")}-${Math.random().toString(36).slice(2, 8)}`;
+    const id = `${now.toString(36).padStart(9, "0")}-${crypto.randomUUID()}`;
     const flag = countryToFlag(resolvedCountry);
     const isFounderMsg = isFounderChatName(session.name, extras.github_login);
     const msg = {
@@ -4140,11 +4184,25 @@ export class GlobalChat {
       revision: 0,
       at: now,
     };
-    await this.state.storage.put(`msg:${id}`, msg);
-    this.historyWindow.invalidate();
-    this.trimHistory().catch(() => {});
-    this.broadcast(null, JSON.stringify({ type: "msg", ...msg }));
-    this.pushChatNotification(msg).catch(() => {});
+    let saved;
+    try { saved = await persistChatSend(this.state.storage, msg, session.principal, data); }
+    catch (error) {
+      try { session.ws.send(JSON.stringify({ ...(await chatStorageFailureEvent(error)), client_msg_id:data.client_msg_id })); } catch {}
+      return;
+    }
+    if (saved.status !== 200) {
+      try { session.ws.send(JSON.stringify({ type:"error", code:saved.code, http_status:saved.status, client_msg_id:data.client_msg_id })); } catch {}
+      return;
+    }
+    if (saved.inserted) {
+      this.historyWindow.invalidate();
+      this.trimHistory().catch(() => {});
+      this.state.waitUntil?.(pruneChatSendReceipts(this.state.storage).catch(() => {}));
+      this.broadcast(null, JSON.stringify({ type:"msg", ...saved.message }));
+      this.pushChatNotification(saved.message).catch(() => {});
+    }
+    // Private explicit acceptance; socket.send() on the client is NOT an ACK.
+    try { session.ws.send(JSON.stringify({ ...saved, type:"send_ack", client_msg_id:data.client_msg_id })); } catch {}
   }
 
   async pushChatNotification(msg) {
@@ -4475,6 +4533,22 @@ export default {
     const url = new URL(request.url);
     const path = url.pathname;
 
+    if (path === "/api/chat/channels" || path.startsWith("/api/chat/channels/")) {
+      if (!env.GLOBAL_CHAT) return durableObjectJson({ status: "error", code: "channels_unavailable" }, 503, request.method);
+      const target = new URL(path.replace("/api/chat/channels", "/channels"), request.url);
+      target.search = url.search;
+      try {
+        const id = env.GLOBAL_CHAT.idFromName("xydesk-official-channels-v1");
+        const upstream = await env.GLOBAL_CHAT.get(id).fetch(new Request(target.toString(), {
+          method: request.method, headers: request.headers,
+          body: request.method === "GET" || request.method === "HEAD" ? undefined : request.body,
+          duplex: "half",
+        }));
+        const response = new Response(upstream.body, upstream);
+        response.headers.set("x-xydesk-channel-router", "1");
+        return response;
+      } catch (error) { return chatStorageFailure(error, request.method); }
+    }
     if (path === "/ws/chat") {
       if (!env.GLOBAL_CHAT) return notFound(request.method);
       const chatId = env.GLOBAL_CHAT.idFromName("xydesk-global-chat-v1");
@@ -4598,20 +4672,11 @@ export default {
       if (request.method !== "GET") return methodNotAllowed("GET, OPTIONS");
       const sid = String(url.searchParams.get("session_id") || "").trim().replace(/[^a-zA-Z0-9_-]/g, "").slice(0, 64);
       const scope = String(url.searchParams.get("scope") || "repo workflow read:user user:email");
-      const oauthClientId = String(env?.GITHUB_OAUTH_CLIENT_ID || "Ov23liBsgZ5xJKgzHGtl").trim();
-      const oauthSecret = String(env?.GITHUB_OAUTH_CLIENT_SECRET || "").trim();
-
-      // Legacy xy_gh_session cookies are unsigned bearer-token containers.
-      // Never turn client-controlled cookie claims into a polling session/deep link.
-      // Continue through normal provider authorization even if that cookie exists.
-
-      // Gunakan OAuth App yang sudah terverifikasi callback-nya di GitHub (https://rdpfree.projectkal.my.id/api/auth/callback/github)
-      // secara default agar langsung jalan 100% tanpa user perlu atur Redirect URI manual, sekaligus dukung Ov23liBsgZ5xJKgzHGtl.
-      const useCustomClient = url.searchParams.get("client") === "xydesk";
-      const activeClientId = useCustomClient ? oauthClientId : "Ov23liJ0QBoRfaMohJp5";
-      const activeRedirectUri = useCustomClient
-        ? "https://api.xydeskremote.biz.id/api/github/oauth/callback"
-        : "https://rdpfree.projectkal.my.id/api/auth/callback/github";
+      const configured = githubOAuthConfig(env);
+      if (!configured) return durableObjectJson({ status:"error", code:"oauth_unconfigured" }, 503, request.method);
+      // Ignore legacy client selectors. Android/browser login always returns to our API.
+      const activeClientId = configured.client_id;
+      const activeRedirectUri = GITHUB_CALLBACK;
       const isDash = url.searchParams.get("dash") === "1";
       const statePrefix = isDash ? "dash" : "apk";
       const state = sid
@@ -4645,21 +4710,10 @@ export default {
       const code = String(url.searchParams.get("code") || "").trim();
       const state = String(url.searchParams.get("state") || "").trim();
       const explicitSid = String(url.searchParams.get("session_id") || "").trim().replace(/[^a-zA-Z0-9_-]/g, "").slice(0, 64);
-      const oauthClientId = String(env?.GITHUB_OAUTH_CLIENT_ID || "Ov23liBsgZ5xJKgzHGtl").trim();
-      const oauthSecret = String(env?.GITHUB_OAUTH_CLIENT_SECRET || "bf6ef77e40b973e431155735f34561fecb1d1484").trim();
-      if (!code) {
-        return durableObjectJson({ status: "error", code: "oauth_unconfigured" }, 400, request.method);
-      }
-      const candidates = path === "/api/auth/callback/github"
-        ? [
-            { client_id: "Ov23liJ0QBoRfaMohJp5", client_secret: "c1e562ad4707fc6be038785787aca7646dee2f52", redirect_uri: "https://rdpfree.projectkal.my.id/api/auth/callback/github" },
-            { client_id: oauthClientId, client_secret: oauthSecret },
-          ]
-        : [
-            { client_id: oauthClientId, client_secret: oauthSecret },
-            { client_id: "Ov23liJ0QBoRfaMohJp5", client_secret: "c1e562ad4707fc6be038785787aca7646dee2f52", redirect_uri: "https://rdpfree.projectkal.my.id/api/auth/callback/github" },
-          ];
-      const exchange = await exchangeGithubCode(code, candidates);
+      if (!code) return durableObjectJson({ status:"error", code:"invalid_oauth_code" }, 400, request.method);
+      const configured = githubOAuthConfig(env);
+      if (!configured) return durableObjectJson({ status:"error", code:"oauth_unconfigured" }, 503, request.method);
+      const exchange = await exchangeGithubCode(code, [configured]);
       if (!exchange.ok) {
         return durableObjectJson({ status: "error", code: exchange.code }, exchange.status, request.method);
       }
@@ -4721,6 +4775,7 @@ export default {
         headers: {
           "Content-Type": "text/html; charset=utf-8",
           "Cache-Control": "no-store",
+          "Referrer-Policy": "no-referrer",
           // Retire the unused bearer-token cookie instead of retaining it for 30 days.
           "Set-Cookie": "xy_gh_session=; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=0",
         },
@@ -4881,13 +4936,42 @@ export default {
       if (request.method !== "POST") return methodNotAllowed("POST, OPTIONS");
       return pushUpdateResponse(request, env);
     }
+    if (path === "/api/chat/send-capabilities") {
+      if (request.method === "OPTIONS") return corsPreflight("GET, OPTIONS");
+      if (request.method !== "GET") return methodNotAllowed("GET, OPTIONS");
+      if (!env.GLOBAL_CHAT) return notFound(request.method);
+      const id = env.GLOBAL_CHAT.idFromName("xydesk-global-chat-v1");
+      return env.GLOBAL_CHAT.get(id).fetch(new Request(new URL("/send-capabilities", request.url), {
+        method:"GET", headers:{ authorization:request.headers.get("authorization") || "" },
+      }));
+    }
     if (path === "/api/chat/send") {
       if (request.method === "OPTIONS") return corsPreflight("POST, OPTIONS");
       if (request.method !== "POST") return methodNotAllowed("POST, OPTIONS");
       if (!env.GLOBAL_CHAT) return notFound(request.method);
       const chatId3 = env.GLOBAL_CHAT.idFromName("xydesk-global-chat-v1");
       const cfCountry = request.cf?.country || request.headers.get("cf-ipcountry") || "";
-      return env.GLOBAL_CHAT.get(chatId3).fetch(
+      const text = await request.text();
+      let parsed;
+      try { parsed = JSON.parse(text); } catch { return durableObjectJson({status:"error",code:"invalid_json"},400,request.method); }
+      const stub = env.GLOBAL_CHAT.get(chatId3);
+      if (parsed?.outbox_v != null) {
+        const bearer = (request.headers.get("authorization") || "").match(/^Bearer (\S+)$/);
+        if (!bearer) return durableObjectJson({status:"error",code:"authentication_required"},401,request.method);
+        const auth = await resolveGithubIdentity(bearer[1]);
+        if (!auth.ok) return durableObjectJson({status:"error",code:auth.code},auth.status,request.method);
+        const invalid = validateDurableSend(auth.principal, parsed);
+        if (invalid) return durableObjectJson({status:"error",code:invalid.code},invalid.status,request.method);
+        try {
+          const capability = await stub.fetch(new Request(new URL("/send-capabilities",request.url), {
+            headers:{authorization:request.headers.get("authorization")},
+          }));
+          const cap = capability.ok ? await capability.json().catch(()=>null) : null;
+          if (cap?.send_protocol !== 1 || cap?.author_id !== auth.principal.id)
+            return durableObjectJson({status:"error",code:"chat_migration_pending"},503,request.method);
+        } catch (error) { return chatStorageFailure(error,request.method); }
+      }
+      return stub.fetch(
         new Request(new URL("/send", request.url), {
           method: "POST",
           headers: {
@@ -4895,7 +4979,7 @@ export default {
             "x-chat-country": cfCountry,
             "authorization": request.headers.get("authorization") || "",
           },
-          body: await request.text(),
+          body: text,
         })
       );
     }

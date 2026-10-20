@@ -1,0 +1,35 @@
+name: Windows read-only diagnostics check
+on:
+  push:
+    paths:
+      - 'host-agent/tools/ReadOnly-Readiness.ps1'
+      - '.github/workflows/readiness-check.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  read-only-inventory:
+    runs-on: windows-2025
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09
+        with:
+          persist-credentials: false
+      - name: Parse script and run inventory without changing Windows
+        shell: powershell
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $scriptPath = Join-Path $PWD 'host-agent/tools/ReadOnly-Readiness.ps1'
+          $tokens = $null
+          $parseErrors = $null
+          [System.Management.Automation.Language.Parser]::ParseFile($scriptPath, [ref]$tokens, [ref]$parseErrors) | Out-Null
+          if ($parseErrors.Count) { throw ($parseErrors | Out-String) }
+          $out = Join-Path $env:RUNNER_TEMP 'XyDesk-Readiness.json'
+          & $scriptPath -OutputPath $out
+          $report = Get-Content -LiteralPath $out -Raw | ConvertFrom-Json
+          if (!$report.read_only -or !$report.windows.build) { throw 'Invalid diagnostic report' }
+          if ($report.controller.gamepad_creation_attempted -or $report.controller.actual_device_verified -or $report.audio.actual_mic_recording_tested) { throw 'Inventory must not claim hardware runtime acceptance' }
+          foreach ($field in $report.runtime_acceptance.PSObject.Properties) {
+            if ($field.Value -ne 'not_tested') { throw 'Inventory cannot pass a runtime acceptance gate' }
+          }
+          Write-Output 'Read-only report schema passed. This is not RDP/mic/controller runtime acceptance.'

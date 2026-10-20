@@ -1,0 +1,76 @@
+{
+  "source": "07501d977fe22e3fb41ea5263effe6e627055fb3",
+  "android_source": "39386319f67484074fe5c9993f8b25965ed50179",
+  "android_gate_run": 39328956477,
+  "android_gate": "success",
+  "worker_tests": 123,
+  "baseline_source_guards": 5,
+  "baseline_paths_preserved": 10,
+  "worker_version": "68b7fc17-ed1a-4083-babc-529d417d6228",
+  "live_smoke": {
+    "observed_at": "2026-10-19T21:41:56.841702+00:00",
+    "worker_version": "68b7fc17-ed1a-4083-babc-529d417d6228",
+    "checks": [
+      {
+        "method": "GET",
+        "path": "/api/health",
+        "status": 200,
+        "code": null,
+        "retry_after": null
+      },
+      {
+        "method": "GET",
+        "path": "/api/chat/channels",
+        "status": 200,
+        "code": null,
+        "retry_after": null,
+        "channels": [
+          "PanduanPengguna",
+          "Informasi",
+          "Announcement"
+        ],
+        "can_post": false
+      },
+      {
+        "method": "GET",
+        "path": "/api/chat/channels/panduan-pengguna/posts",
+        "status": 200,
+        "code": null,
+        "retry_after": null,
+        "post_count": 0
+      },
+      {
+        "method": "POST",
+        "path": "/api/chat/channels/announcement/posts",
+        "status": 401,
+        "code": "authentication_required",
+        "retry_after": null
+      },
+      {
+        "method": "GET",
+        "path": "/api/chat/channels/not-a-channel/posts",
+        "status": 404,
+        "code": "channel_not_found",
+        "retry_after": null
+      },
+      {
+        "method": "GET",
+        "path": "/api/chat/history?limit=1",
+        "status": 503,
+        "code": "chat_storage_quota_exceeded",
+        "retry_after": "300"
+      }
+    ],
+    "positive_authenticated_staff_publish_tested": false,
+    "test_messages_published": 0,
+    "assets_updated": 0,
+    "namespace_or_migration_changes": 0,
+    "global_chat_object_name_unchanged": true,
+    "official_channels_object": "xydesk-official-channels-v1"
+  },
+  "new_signed_recovery_apk_assembled": false,
+  "new_release_tag_created": false,
+  "staff_grants_added": false,
+  "physical_android_runtime_tested": false,
+  "full_original_scope_complete": false
+}

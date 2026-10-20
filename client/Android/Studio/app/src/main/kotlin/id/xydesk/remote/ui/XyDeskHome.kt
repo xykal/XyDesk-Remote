@@ -464,7 +464,8 @@ fun XyDeskHome(
             Column(Modifier.fillMaxSize()) {
                 Box(Modifier.fillMaxSize().weight(1f)) {
 
-            when (val current = route) {
+            id.xydesk.remote.ui.theme.XyRouteMotion(target = route) { current ->
+            when (current) {
                 XyRoute.CreateRdp -> RdpFreeScreen(
                     onBack = { route = XyRoute.Devices },
                     onConnect = { connect(it) },
@@ -554,6 +555,7 @@ fun XyDeskHome(
                 )
 
                 XyRoute.Section -> Unit
+            }
             }
                 }
 

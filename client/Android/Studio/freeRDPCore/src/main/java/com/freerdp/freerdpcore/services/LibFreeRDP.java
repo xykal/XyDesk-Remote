@@ -257,9 +257,25 @@ public class LibFreeRDP
 
 	public static void freeInstance(long inst)
 	{
-		NativeWorkerTermination.releaseAfterTerminal(
-		    mInstanceState, () -> mInstanceState.get(inst, false),
-		    () -> freerdp_disconnect(inst), () -> freerdp_free(inst));
+		synchronized (mInstanceState)
+		{
+			if (mInstanceState.get(inst, false))
+			{
+				freerdp_disconnect(inst);
+			}
+			while (mInstanceState.get(inst, false))
+			{
+				try
+				{
+					mInstanceState.wait();
+				}
+				catch (InterruptedException e)
+				{
+					throw new RuntimeException();
+				}
+			}
+		}
+		freerdp_free(inst);
 	}
 
 	public static boolean connect(long inst)

@@ -24,7 +24,6 @@ class RdpFailureTest {
         assertEquals(0x09, RdpFailure.SERVER_DENIED)
         assertEquals(0x0A, RdpFailure.ENGINE)
         assertEquals(0x0B, RdpFailure.HANDSHAKE)
-        assertEquals(0x0C, RdpFailure.SECURITY_NEGOTIATION)
     }
 
     @Test
@@ -128,7 +127,7 @@ class RdpFailureTest {
             RdpFailure.UNKNOWN, RdpFailure.UNREACHABLE, RdpFailure.TIMEOUT, RdpFailure.DNS,
             RdpFailure.TLS, RdpFailure.AUTH_PASSWORD, RdpFailure.AUTH_LOGON,
             RdpFailure.ACCOUNT_LOCKED, RdpFailure.PASSWORD_EXPIRED, RdpFailure.SERVER_DENIED,
-            RdpFailure.ENGINE, RdpFailure.HANDSHAKE, RdpFailure.SECURITY_NEGOTIATION,
+            RdpFailure.ENGINE, RdpFailure.HANDSHAKE,
         )
         assertEquals("kode duplikat", codes.size, codes.distinct().size)
         assertTrue(codes.all { it in 0x00..0xFF })

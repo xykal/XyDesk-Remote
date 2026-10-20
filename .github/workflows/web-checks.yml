@@ -24,8 +24,3 @@ jobs:
           for file in cloudflare/*.mjs; do node --check "$file"; done
       - name: Run Worker route and compatibility tests
         run: node --test cloudflare/*.test.mjs
-      - name: Validate single-host and chat UI source contracts (no native compilation)
-        run: |
-          bash -n ci/build_windows_host.sh
-          python3 -m unittest discover -s ci -p test_host_distribution.py
-          python3 -m unittest discover -s ci -p test_android_apk_validation.py

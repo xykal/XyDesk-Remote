@@ -66,7 +66,7 @@ static void audin_receive(void* context, const void* data, size_t size)
 	UINT error;
 	AudinOpenSLESDevice* opensles = (AudinOpenSLESDevice*)context;
 
-	if (!opensles || !data || !opensles->receive || !opensles->user_data)
+	if (!opensles || !data)
 	{
 		WLog_ERR(TAG, "Invalid arguments context=%p, data=%p", opensles, data);
 		return;
@@ -92,8 +92,6 @@ static UINT audin_opensles_free(IAudinDevice* device)
 
 	WLog_Print(opensles->log, WLOG_DEBUG, "device=%p", (void*)device);
 
-	/* Also safe when the channel did not call Close before Free. */
-	audin_opensles_close(device);
 	free(opensles->device_name);
 	free(opensles);
 	return CHANNEL_RC_OK;
@@ -201,13 +199,9 @@ static UINT audin_opensles_open(IAudinDevice* device, AudinReceive receive, void
 	WLog_Print(opensles->log, WLOG_DEBUG, "device=%p, receive=%p, user_data=%p", (void*)device,
 	           (void*)receive, (void*)user_data);
 
-	/* A duplicate Open must not close an already running recorder. */
 	if (opensles->stream)
-		return ERROR_ALREADY_EXISTS;
+		goto error_out;
 
-	/* OpenRecDevice starts recording and may invoke us before it returns. */
-	opensles->receive = receive;
-	opensles->user_data = user_data;
 	if (!(opensles->stream = android_OpenRecDevice(
 	          opensles, audin_receive, opensles->format.nSamplesPerSec, opensles->format.nChannels,
 	          opensles->frames_per_packet, opensles->format.wBitsPerSample)))
@@ -216,6 +210,8 @@ static UINT audin_opensles_open(IAudinDevice* device, AudinReceive receive, void
 		goto error_out;
 	}
 
+	opensles->receive = receive;
+	opensles->user_data = user_data;
 	return CHANNEL_RC_OK;
 error_out:
 	audin_opensles_close(device);

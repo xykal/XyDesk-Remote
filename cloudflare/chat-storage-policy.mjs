@@ -27,3 +27,10 @@ export function chatStorageFailure(error, method = 'GET') {
     'access-control-allow-origin': '*', 'retry-after': '300', 'x-content-type-options': 'nosniff',
   } });
 }
+
+/** Explicit failure event: never disguise unavailable storage as empty history. */
+export async function chatStorageFailureEvent(error) {
+  const response = chatStorageFailure(error);
+  return { ...(await response.json()), type: 'history_unavailable',
+    http_status: response.status, retry_after: response.headers.get('retry-after') };
+}

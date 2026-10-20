@@ -53,16 +53,6 @@ object RdpFailure {
     /** Handshake gagal tanpa alasan spesifik dari native. */
     const val HANDSHAKE = 0x0B
 
-    /** Security protocol negotiation failed; does not prove a bad password or certificate. */
-    const val SECURITY_NEGOTIATION = 0x0C
-
-    fun isExpectedCancellation(requested: Boolean, detail: String): Boolean {
-        val m = detail.trim().lowercase(Locale.ROOT)
-        return requested && (m.isEmpty() || m == "the connection was cancelled." ||
-            m == "the connection was canceled." || m == "the connection was cancelled" ||
-            m == "the connection was canceled")
-    }
-
     /**
      * Menentukan kategori kegagalan.
      *
@@ -88,8 +78,6 @@ object RdpFailure {
             code == "connect_failed" && (m.contains("logon failed") || m.contains("logon failure") ||
                 m.contains("authentication")) -> AUTH_LOGON
             code == "connect_failed" && m.contains("server denied") -> SERVER_DENIED
-            code == "connect_failed" && (m.contains("negotiating security settings") ||
-                m.contains("security negotiation") || m.contains("security protocol negotiation")) -> SECURITY_NEGOTIATION
             code == "connect_failed" -> HANDSHAKE
             else -> UNKNOWN
         }

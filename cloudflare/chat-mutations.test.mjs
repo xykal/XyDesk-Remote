@@ -99,3 +99,14 @@ test('stale pin requests cannot republish deleted plaintext', async () => {
   await chat.onMessage({ws:{send:()=>{}}},{data:JSON.stringify({type:'pin',...stalePin})});
   assert.equal(data.get('pinned_message'),undefined);
 });
+
+test('post-commit pin read failure cannot turn a committed mutation into an apparent failure', async () => {
+  const {chat, storage, data}=fixture();let committed=false;
+  const rawTransaction=storage.transaction.bind(storage), rawGet=storage.get;
+  storage.transaction=async fn=>{const result=await rawTransaction(fn);committed=true;return result;};
+  storage.get=async key=>{if(committed)throw Error('Exceeded allowed rows read');return rawGet(key);};
+  const events=[];chat.sessions.add({ws:{send:t=>events.push(JSON.parse(t))}});
+  const response=await chat.fetch(request('delete'));
+  assert.equal(response.status,200);assert.equal(data.get('msg:message-1').deleted,true);
+  assert.deepEqual(events.find(x=>x.type==='pin'),{type:'pin',pinned_message:null});
+});

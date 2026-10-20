@@ -1,6 +1,6 @@
 import test, { beforeEach, afterEach } from 'node:test';
 import assert from 'node:assert/strict';
-import { RevisionedHistoryWindow, chatStorageFailure } from './chat-storage-policy.mjs';
+import { RevisionedHistoryWindow, chatStorageFailure, chatStorageFailureEvent } from './chat-storage-policy.mjs';
 import worker, { GlobalChat } from './worker.mjs';
 const originalFetch = globalThis.fetch;
 beforeEach(() => { globalThis.fetch = async () => new Response(JSON.stringify({id:42,login:'alice'})); });
@@ -66,4 +66,38 @@ test('join lookups cache separately per identity and remain bounded', async () =
   assert.equal(await chat.resolveJoinedAt(new URL('https://x/history?client_id=b')),20);assert.equal(reads,2);
   for(let i=0;i<1001;i++)await chat.resolveJoinedAt(new URL('https://x/history?client_id=c'+i));
   assert.equal(chat.joinedCache.size,1000);
+});
+
+test('WebSocket history failures are explicit, sanitized, never empty success', async () => {
+  const event=await chatStorageFailureEvent(Error('Exceeded allowed rows read in Durable Objects free tier. private-payload'));
+  assert.equal(event.type,'history_unavailable'); assert.equal(event.http_status,503);
+  assert.equal(event.code,'chat_storage_quota_exceeded'); assert.equal(event.retry_after,'300');
+  assert.equal('messages' in event,false); assert.equal(JSON.stringify(event).includes('private-payload'),false);
+});
+test('non-quota WebSocket history failure is not mislabeled quota or successful history', async () => {
+  const event=await chatStorageFailureEvent(Error('internal-private-exception'));
+  assert.equal(event.type,'history_unavailable'); assert.equal(event.code,'chat_temporarily_unavailable');
+  assert.equal(event.status,'error'); assert.equal(JSON.stringify(event).includes('internal-private'),false);
+});
+
+test('pinned reads coalesce across callers and do not scan on every history request', async () => {
+  let reads=0;
+  const chat=new GlobalChat({storage:{get:async key=>{assert.equal(key,'pinned_message');reads++;return {id:'pin1'};}}},{});
+  const results=await Promise.all(Array.from({length:40},()=>chat.loadPinnedMessage()));
+  assert.equal(reads,1); assert.equal(results.every(x=>x.id==='pin1'),true);
+  chat.pinnedWindow.invalidate(); await chat.loadPinnedMessage(); assert.equal(reads,2);
+});
+test('pinned read failures propagate and are not fabricated as empty/unpinned success', async () => {
+  let fail=true;
+  const chat=new GlobalChat({storage:{get:async()=>{if(fail)throw Error('Exceeded allowed rows read');return null;}}},{});
+  await assert.rejects(chat.loadPinnedMessage());fail=false;
+  assert.equal(await chat.loadPinnedMessage(),null);
+});
+test('old in-flight pin cannot refill the cache after unpin invalidation', async () => {
+  let resolve, calls=0;
+  const chat=new GlobalChat({storage:{get:async()=>{calls++;if(calls===1)return await new Promise(r=>{resolve=r;});return null;}}},{});
+  const old=chat.loadPinnedMessage(); await Promise.resolve();await Promise.resolve();
+  chat.pinnedWindow.invalidate(); assert.equal(await chat.loadPinnedMessage(),null);
+  resolve({id:'deleted-pin'}); await old;
+  assert.equal(await chat.loadPinnedMessage(),null); assert.equal(calls,2);
 });

@@ -38,6 +38,5 @@ kotlinc.zip
 junit.jar
 hamcrest.jar
 
-# wrangler local cache (berisi metadata akun Cloudflare — jangan commit)
+# Wrangler generated metadata is not source
 .wrangler/
-**/.kotlin/

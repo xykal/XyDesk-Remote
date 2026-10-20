@@ -551,10 +551,27 @@ fun AddDeviceScreen(
                 )
             }
             if (existing == null) {
-                XyPillButton(
-                    text = "PC Stream",
-                    onClick = { context.startActivity(PcStreamSessionActivity.intent(context)) },
-                    primary = false,
+                XySegmented(
+                    options = listOf(
+                        xy("Koneksi RDP (Desktop / Server)", "RDP Session (Desktop / Server)"),
+                        xy("Koneksi PC (Direct Stream)", "PC Connect (Direct Stream)"),
+                    ),
+                    selectedIndex = if (isPcQuickMode) 1 else 0,
+                    onSelect = { idx ->
+                        val wantPc = idx == 1
+                        isPcQuickMode = wantPc
+                        if (wantPc) {
+                            options = options.withPcStreamEngine(options.pcStreamEngine)
+                        } else {
+                            options = options.withStreamProfile(XyStreamProfile.AUTO).copy(
+                                pcConnectMode = false,
+                                microphone = true,
+                                gpuProfile = XyGpuProfile.AUTO,
+                                dynamicResolution = true,
+                                consoleAdmin = false,
+                            )
+                        }
+                    },
                     modifier = Modifier.fillMaxWidth(),
                 )
                 XyPillButton(
@@ -675,8 +692,8 @@ fun AddDeviceScreen(
                     Spacer(Modifier.height(6.dp))
                     Text(
                         xy(
-                            "Berbeda dari RDP standar: Koneksi PC tidak memakai kredensial akun/domain Windows dan mengunci resolusi + DPI 1:1 mengikuti monitor fisik PC (DXGI Desktop Duplication). Seluruh paket terenkripsi saat transit (TLS 1.3) dengan jalur Ultra-Low Latency untuk game FPS.",
-                            "Unlike standard RDP: PC Connection does not use Windows account/domain credentials and locks resolution + DPI 1:1 to the physical PC monitor (DXGI Desktop Duplication). All traffic is encrypted in transit (TLS 1.3) with an Ultra-Low Latency path for FPS games.",
+                            "Berbeda dari RDP standar: Koneksi PC tidak memakai kredensial akun/domain Windows dan mengunci resolusi + DPI 1:1 mengikuti monitor fisik PC (DXGI Desktop Duplication). Seluruh paket dienkripsi End-to-End (TLS 1.3 + Pinning Keystore) dengan jalur Ultra-Low Latency untuk game FPS.",
+                            "Unlike standard RDP: PC Connection does not use Windows account/domain credentials and locks resolution + DPI 1:1 to the physical PC monitor (DXGI Desktop Duplication). All traffic is End-to-End Encrypted (TLS 1.3 + Keystore Pinning) with an Ultra-Low Latency path for FPS games.",
                         ),
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -1400,11 +1417,7 @@ fun AddDeviceScreen(
                     enabled = bridgeRelevant,
                 )
                 XyToggleRow(
-                    title = xy("Mic HP → RDP (AUDIN)", "Phone mic → RDP (AUDIN)"),
-                    subtitle = xy(
-                        "Kanal RDP bawaan, bukan mic bridge. Perlu izin Android dan dukungan server. Pilih input Remote Audio di Windows/game; sambung ulang setelah mengubah opsi ini.",
-                        "Native RDP channel, not bridge mic. Needs Android permission and server support. Select the Remote Audio input in Windows/the game; reconnect after changing this option.",
-                    ),
+                    title = xy("Mikrofon", "Microphone"),
                     checked = options.microphone,
                     onCheckedChange = { options = options.copy(microphone = it) },
                     leading = XyIcons.Mic,

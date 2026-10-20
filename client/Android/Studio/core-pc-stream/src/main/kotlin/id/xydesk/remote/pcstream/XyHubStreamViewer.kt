@@ -71,7 +71,6 @@ class XyHubStreamViewer(
     @Volatile private var inputChannel: DataChannel? = null
     @Volatile private var remoteVideoTrack: VideoTrack? = null
     @Volatile private var micAudioSource: org.webrtc.AudioSource? = null
-    @Volatile private var micAudioTrack: org.webrtc.AudioTrack? = null
     @Volatile private var hostId: String = ""
     private var videoSink: VideoSink? = null
     private val pendingRemoteCandidates = mutableListOf<IceCandidate>()
@@ -167,24 +166,6 @@ class XyHubStreamViewer(
 
     override fun close() = stop()
 
-    /** Enables the existing negotiated xy-mic sender; not proof of Windows mic routing. */
-    fun setVoiceMicEnabled(enabled: Boolean): Boolean = resourceLock.withLock {
-        if (closed.get()) return@withLock false
-        if (enabled && applicationContext.checkSelfPermission(android.Manifest.permission.RECORD_AUDIO)
-            != android.content.pm.PackageManager.PERMISSION_GRANTED) return@withLock false
-        val track = micAudioTrack ?: return@withLock false
-        val peer = peerConnection ?: return@withLock false
-        try {
-            if (!track.setEnabled(enabled)) return@withLock false
-            peer.setAudioRecording(enabled)
-            true
-        } catch (_: Exception) {
-            runCatching { track.setEnabled(false) }
-            runCatching { peer.setAudioRecording(false) }
-            false
-        }
-    }
-
     // ── Negosiasi media ─────────────────────────────────────────────────────
 
     private fun negotiate(iceServers: List<XyHubIceServer>) {
@@ -217,7 +198,6 @@ class XyHubStreamViewer(
                     ?: throw IOException("PeerConnection gagal dibuat")
                 peerConnection = peer
                 peer.setAudioPlayout(true)
-                peer.setAudioRecording(false)
 
                 // Susunan transceiver meniru klien referensi RtcSession.kt supaya
                 // offer berbentuk sama di mata host produksi.
@@ -228,7 +208,6 @@ class XyHubStreamViewer(
                 val micSource = factory.createAudioSource(MediaConstraints())
                 micAudioSource = micSource
                 val mic = factory.createAudioTrack("xy-mic", micSource).apply { setEnabled(false) }
-                micAudioTrack = mic
                 peer.addTransceiver(
                     mic,
                     RtpTransceiver.RtpTransceiverInit(RtpTransceiver.RtpTransceiverDirection.SEND_RECV),
@@ -329,12 +308,8 @@ class XyHubStreamViewer(
             inputChannel?.close()
             inputChannel?.dispose()
             inputChannel = null
-            runCatching { micAudioTrack?.setEnabled(false) }
-            runCatching { peerConnection?.setAudioRecording(false) }
             peerConnection?.close()
             peerConnection = null
-            micAudioTrack?.dispose()
-            micAudioTrack = null
             micAudioSource?.dispose()
             micAudioSource = null
             peerConnectionFactory?.dispose()

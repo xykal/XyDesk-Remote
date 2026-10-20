@@ -11,6 +11,7 @@ import android.graphics.Rect
 import android.graphics.RectF
 import android.net.Uri
 import android.os.Build
+import android.util.AtomicFile
 import android.util.Base64
 import java.io.ByteArrayOutputStream
 import java.io.File
@@ -25,8 +26,8 @@ import javax.crypto.spec.SecretKeySpec
  * - Mengonversi gambar pilihan pengguna menjadi stiker WebP (256x256) secara otomatis.
  * - Mengenkripsi payload WebP dengan AES-256-GCM (`crypto15` envelope: magic `"XYC15\u0001"` + IV 12B + Ciphertext).
  * - Menyimpan file stiker terenkripsi langsung di:
- *   `Android/media/id.xydesk.remote/globwlchat/sticker/<Token>+2+$+$8.webp.crypto15`
- *   (dan mirror di `Android/media/id.xydesk.remote/globalchat/sticker/...`).
+ *   `Android/media/id.xydesk.remote/globalchat/sticker/<Token>+2+$+$8.webp.crypto15`.
+ * - Folder typo lama tetap dibaca, tetapi tidak dibuat atau dijadikan mirror lagi.
  */
 internal data class CustomCryptoSticker(
     val fileName: String,
@@ -60,32 +61,36 @@ internal object CustomStickerVault {
         SecretKeySpec(digest, "AES")
     }
 
-    /**
-     * Direktori utama `Android/media/id.xydesk.remote/globwlchat/sticker`
-     * beserta mirror `Android/media/id.xydesk.remote/globalchat/sticker`.
-     */
     @Suppress("DEPRECATION")
-    private fun resolveStickerDirs(context: Context): List<File> {
-        val dirs = mutableListOf<File>()
-        val extRoot = runCatching {
-            context.externalMediaDirs?.firstOrNull { it != null }
-        }.getOrNull()
+    private fun mediaRoots(context: Context): List<File> =
+        runCatching { context.externalMediaDirs.filterNotNull() }.getOrDefault(emptyList())
 
-        if (extRoot != null) {
-            val dirGlobwl = File(extRoot, "globwlchat/sticker")
-            val dirGlobal = File(extRoot, "globalchat/sticker")
-            runCatching { dirGlobwl.mkdirs() }
-            runCatching { dirGlobal.mkdirs() }
-            if (dirGlobwl.exists()) dirs.add(dirGlobwl)
-            if (dirGlobal.exists()) dirs.add(dirGlobal)
-        }
+    private fun readStickerDirs(context: Context): List<File> =
+        StickerDirectoryPolicy.readDirectories(mediaRoots(context), context.filesDir)
 
-        val fallback = File(context.filesDir, "globwlchat/sticker")
-        runCatching { fallback.mkdirs() }
-        if (dirs.isEmpty()) {
-            dirs.add(fallback)
+    /** One successful write, never a mirror. Failure may fall back to internal storage. */
+    @Synchronized
+    private fun persistSticker(context: Context, fileName: String, bytes: ByteArray, overwrite: Boolean = false): File? {
+        if (!StickerDirectoryPolicy.isSafeFileName(fileName) || bytes.size !in 1..2_100_000) return null
+        return StickerDirectoryPolicy.writeFirstAvailable(mediaRoots(context), context.filesDir) { dir ->
+            runCatching {
+                check(dir.isDirectory || dir.mkdirs()) { "Sticker directory unavailable" }
+                val target = File(dir, fileName)
+                val atomic = AtomicFile(target)
+                if (!overwrite && target.isFile) return@runCatching target
+                val output = atomic.startWrite()
+                try {
+                    output.write(bytes)
+                    atomic.finishWrite(output)
+                } catch (error: Exception) {
+                    runCatching { atomic.failWrite(output) }
+                    throw error
+                }
+                val stored = atomic.openRead().use { it.readChatBytesAtMost(2_100_000) }
+                check(stored.contentEquals(bytes)) { "Sticker write incomplete" }
+                target
+            }.getOrNull()
         }
-        return dirs
     }
 
     /**
@@ -169,7 +174,7 @@ internal object CustomStickerVault {
 
     /**
      * Membuat stiker `.webp.crypto15` dari Uri galeri/file dan menyimpannya ke
-     * `Android/media/id.xydesk.remote/globwlchat/sticker/<Token>.webp.crypto15`.
+     * `Android/media/id.xydesk.remote/globalchat/sticker/<Token>.webp.crypto15`.
      */
     fun createStickerFromUri(context: Context, uri: Uri): CustomCryptoSticker? {
         return runCatching {
@@ -178,19 +183,12 @@ internal object CustomStickerVault {
             val webpBytes = compressBitmapToWebp(decoded)
             val fileName = buildCrypto15FileName(webpBytes)
             val crypto15Bytes = encryptWebpToCrypto15(webpBytes)
-            val dirs = resolveStickerDirs(context)
-            var primaryFile: File? = null
-            for (dir in dirs) {
-                val target = File(dir, fileName)
-                runCatching { target.writeBytes(crypto15Bytes) }
-                if (primaryFile == null) primaryFile = target
-            }
-            val finalFile = primaryFile ?: return null
+            val finalFile = persistSticker(context, fileName, crypto15Bytes, overwrite = true) ?: return null
             val stickerBmp = BitmapFactory.decodeByteArray(webpBytes, 0, webpBytes.size) ?: decoded
             bitmapCache.put(fileName, stickerBmp)
             CustomCryptoSticker(
                 fileName = fileName,
-                displayPath = "Android/media/id.xydesk.remote/globwlchat/sticker/$fileName",
+                displayPath = finalFile.absolutePath,
                 file = finalFile,
                 crypto15Bytes = crypto15Bytes,
                 bitmap = stickerBmp,
@@ -202,7 +200,7 @@ internal object CustomStickerVault {
      * Memuat semua stiker `.webp.crypto15` yang tersimpan di perangkat.
      */
     fun listCustomStickers(context: Context): List<CustomCryptoSticker> {
-        val dirs = resolveStickerDirs(context)
+        val dirs = readStickerDirs(context)
         val seen = LinkedHashMap<String, CustomCryptoSticker>()
         for (dir in dirs) {
             val files = dir.listFiles { f -> f.isFile && f.name.endsWith(".webp.crypto15", ignoreCase = true) }
@@ -218,7 +216,7 @@ internal object CustomStickerVault {
                 } ?: continue
                 seen[f.name] = CustomCryptoSticker(
                     fileName = f.name,
-                    displayPath = "Android/media/id.xydesk.remote/globwlchat/sticker/${f.name}",
+                    displayPath = f.absolutePath,
                     file = f,
                     crypto15Bytes = cryptoBytes,
                     bitmap = bmp,
@@ -229,8 +227,9 @@ internal object CustomStickerVault {
     }
 
     fun deleteCustomSticker(context: Context, fileName: String) {
+        if (!StickerDirectoryPolicy.isSafeFileName(fileName)) return
         bitmapCache.remove(fileName)
-        for (dir in resolveStickerDirs(context)) {
+        for (dir in readStickerDirs(context)) {
             runCatching { File(dir, fileName).delete() }
         }
     }
@@ -243,7 +242,7 @@ internal object CustomStickerVault {
     /**
      * Mendekode payload `"sticker_crypto15:<fileName>:<b64>"` dari pesan Chat Global
      * dan otomatis menyimpannya sebagai `.webp.crypto15` di folder
-     * `Android/media/id.xydesk.remote/globwlchat/sticker/<fileName>`.
+     * `Android/media/id.xydesk.remote/globalchat/sticker/<fileName>`.
      */
     fun decodeAndCacheFromChatPayload(context: Context, attachmentData: String): Pair<String, Bitmap>? {
         if (attachmentData.length > 2_800_000 || !attachmentData.startsWith("sticker_crypto15:")) return null
@@ -264,15 +263,8 @@ internal object CustomStickerVault {
         val bmp = decodeBoundedChatBitmap(webpBytes, STICKER_DIM) ?: return null
         bitmapCache.put(payloadKey, bmp)
 
-        // Simpan otomatis ke Android/media/id.xydesk.remote/globwlchat/sticker/<fileName>
-        runCatching {
-            for (dir in resolveStickerDirs(context)) {
-                val f = File(dir, fileName)
-                if (!f.exists()) {
-                    f.writeBytes(cryptoBytes)
-                }
-            }
-        }
+        // Save once to the canonical folder, never mirror into the typo directory.
+        persistSticker(context, fileName, cryptoBytes)
         return fileName to bmp
     }
 

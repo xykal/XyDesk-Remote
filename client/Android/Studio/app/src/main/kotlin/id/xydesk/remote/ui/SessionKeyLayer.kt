@@ -452,14 +452,6 @@ private fun HudKeyButton(
                     "W" to Alignment.TopCenter, "D" to Alignment.CenterEnd,
                     "S" to Alignment.BottomCenter, "A" to Alignment.CenterStart,
                 )
-                XyStickMode.IJKL -> listOf(
-                    "I" to Alignment.TopCenter, "L" to Alignment.CenterEnd,
-                    "K" to Alignment.BottomCenter, "J" to Alignment.CenterStart,
-                )
-                XyStickMode.NUMPAD -> listOf(
-                    "8" to Alignment.TopCenter, "6" to Alignment.CenterEnd,
-                    "2" to Alignment.BottomCenter, "4" to Alignment.CenterStart,
-                )
                 XyStickMode.ARROWS -> listOf(
                     "↑" to Alignment.TopCenter, "→" to Alignment.CenterEnd,
                     "↓" to Alignment.BottomCenter, "←" to Alignment.CenterStart,

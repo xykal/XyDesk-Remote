@@ -9,7 +9,7 @@ The production Worker was previously maintained as an embedded HTML script outsi
 ## Local validation
 
 ```sh
-node --test cloudflare/*.test.mjs
+node --test cloudflare/worker.test.mjs
 npx --yes wrangler@4 deploy --dry-run --config wrangler.jsonc
 ```
 

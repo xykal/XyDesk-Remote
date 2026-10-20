@@ -193,19 +193,6 @@ class SessionPrefs(context: Context) {
         }
         set(v) = input.edit().putInt(KEY_VIRTUAL_PAD_STICK, v.ordinal).apply()
 
-    val customStickProfile: String get() = input.getString("custom_stick_active", "Default") ?: "Default"
-    fun customStickProfiles(): List<String> = input.getStringSet("custom_stick_names", setOf("Default")).orEmpty().sorted().take(30)
-    fun customStickBindings(name: String = customStickProfile): id.xydesk.remote.ui.input.XyCustomStickBindings =
-        id.xydesk.remote.ui.input.XyCustomStickBindings.decode(input.getString("custom_stick.$name", null))
-    fun saveCustomStickBindings(name: String, bindings: id.xydesk.remote.ui.input.XyCustomStickBindings) {
-        require(Regex("[A-Za-z0-9 _.-]{1,40}").matches(name)) { "Nama preset: 1–40 huruf/angka/spasi/titik/tanda hubung." }
-        val names = customStickProfiles().toMutableSet()
-        require(name in names || names.size < 30) { "Maksimal 30 preset." }
-        names.add(name)
-        input.edit().putString("custom_stick_active", name).putString("custom_stick.$name", bindings.encode())
-            .putStringSet("custom_stick_names", names).apply()
-    }
-
     /** Skala ukuran gamepad virtual (0.7x - 1.4x). */
     var virtualPadScale: Float
         get() = input.getFloat(KEY_VIRTUAL_PAD_SCALE, 1f)

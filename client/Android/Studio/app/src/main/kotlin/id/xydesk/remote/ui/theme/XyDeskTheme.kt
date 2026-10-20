@@ -1,8 +1,10 @@
 package id.xydesk.remote.ui.theme
 
 import android.app.Activity
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.LocalContentColor
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Shapes
 import androidx.compose.material3.darkColorScheme
 import androidx.compose.material3.lightColorScheme
 import androidx.compose.foundation.isSystemInDarkTheme
@@ -116,6 +118,16 @@ val XyBody = FontFamily(
     Font(R.font.inter, FontWeight.Bold),
 )
 
+/** Radius lebih ramah sentuh; kontrol pill tetap terbaca sebagai kontrol. */
+val XyPill = RoundedCornerShape(18.dp)
+
+val XyShapes = Shapes(
+    small = RoundedCornerShape(10.dp),
+    medium = RoundedCornerShape(14.dp),
+    large = RoundedCornerShape(20.dp),
+    extraLarge = RoundedCornerShape(26.dp),
+)
+
 /**
  * Mode tema sebagai state Compose yang di-share lintas activity.
  *
@@ -163,7 +175,6 @@ fun XyDeskTheme(
     dark: Boolean,
     content: @Composable () -> Unit,
 ) {
-    val decorativeMotion = rememberDecorativeMotionEnabled()
     val scheme = if (dark) DarkScheme else LightScheme
     val view = LocalView.current
     if (!view.isInEditMode) {
@@ -175,6 +186,7 @@ fun XyDeskTheme(
             insets.isAppearanceLightNavigationBars = !dark
         }
     }
+    val uiMotionEnabled = rememberDecorativeMotionEnabled()
     MaterialTheme(
         colorScheme = scheme,
         shapes = XyShapes,
@@ -216,8 +228,8 @@ fun XyDeskTheme(
             ),
         ),
         content = {
-            CompositionLocalProvider(LocalContentColor provides scheme.onSurface, LocalDecorativeMotionEnabled provides decorativeMotion) {
-                content()
+            CompositionLocalProvider(LocalContentColor provides scheme.onSurface, LocalUiMotionEnabled provides uiMotionEnabled) {
+                id.xydesk.remote.ui.OfficialChannelNavigation { content() }
             }
         },
     )

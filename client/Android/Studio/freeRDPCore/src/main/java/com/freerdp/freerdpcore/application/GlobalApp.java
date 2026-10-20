@@ -127,7 +127,11 @@ public class GlobalApp extends Application implements LibFreeRDP.EventListener
 
 	static public void freeSession(long instance)
 	{
-		SessionReleaseTransaction.release(sessionMap, instance, LibFreeRDP::freeInstance);
+		if (GlobalApp.sessionMap.containsKey(instance))
+		{
+			GlobalApp.sessionMap.remove(instance);
+			LibFreeRDP.freeInstance(instance);
+		}
 	}
 
 	@Override public void onCreate()

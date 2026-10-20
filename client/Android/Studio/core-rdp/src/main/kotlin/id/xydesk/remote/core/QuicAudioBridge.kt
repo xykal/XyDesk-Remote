@@ -57,19 +57,18 @@ class QuicAudioBridge(
     @Volatile private var txThread: Thread? = null
     private val micPeak = java.util.concurrent.atomic.AtomicInteger(0)
     private val hostFlags = java.util.concurrent.atomic.AtomicInteger(0)
-    @Volatile var micCapturing: Boolean = false
-        private set
-    @Volatile var micActive: Boolean = enableMic
+    @Volatile var micActive: Boolean = enableMic && LegacyDirectTransportPolicy.mayStart()
         private set
     @Volatile var speakerActive: Boolean = enableSpeaker
 
-    @Volatile private var hostAudioReport: HostAudioReport? = null
-    fun diagnostics(): AudioBridgeDiagnostics = AudioBridgeDiagnostics(micActive, micCapturing, hostAudioReport)
-
     val healthy: Boolean get() = running.get() && hostFlags.get() != 0
 
-    @Synchronized
     fun setVoiceMicEnabled(enabled: Boolean) {
+        if (!LegacyDirectTransportPolicy.mayStart()) {
+            micActive = false
+            onStatus(LegacyDirectTransportPolicy.BLOCKED_REASON)
+            return
+        }
         micActive = enabled
         if (!enabled) {
             micPeak.set(0)
@@ -82,12 +81,16 @@ class QuicAudioBridge(
     }
 
     fun start() {
+        if (!LegacyDirectTransportPolicy.mayStart()) {
+            micActive = false
+            onStatus(LegacyDirectTransportPolicy.BLOCKED_REASON)
+            return
+        }
         if (!enableSpeaker && !enableMic && !micActive) {
             onStatus("idle (audio & mic mati)")
             return
         }
         if (!running.compareAndSet(false, true)) return
-        hostAudioReport = null
         rxThread = Thread({ runLoopbackReceiver() }, "xydesk-quic-audio-rx").apply {
             isDaemon = true
             start()
@@ -102,8 +105,6 @@ class QuicAudioBridge(
 
     fun stop() {
         if (!running.compareAndSet(true, false)) return
-        micActive = false
-        hostAudioReport = null
         runCatching { socket?.close() }
         socket = null
         rxThread?.interrupt()
@@ -126,8 +127,6 @@ class QuicAudioBridge(
             val addr = InetAddress.getByName(host.trim().removePrefix("[").removeSuffix("]"))
             val sock = DatagramSocket()
             sock.soTimeout = 500
-            // Source filtering is not cryptographic authentication.
-            sock.connect(addr, port)
             socket = sock
 
             val subBytes = "XYDESK_QUIC_AUDIO_SUB_V1".toByteArray(Charsets.US_ASCII)
@@ -174,7 +173,6 @@ class QuicAudioBridge(
                     lastSubMs = now
                 }
                 try {
-                    rxPkt.length = rxBuf.size // DatagramPacket retains the last received length.
                     sock.receive(rxPkt)
                     val len = rxPkt.length
                     if (len > 8 && rxBuf[0] == 'X'.code.toByte() && rxBuf[1] == 'Y'.code.toByte()) {
@@ -199,8 +197,7 @@ class QuicAudioBridge(
                                     track?.write(rxBuf, 8, pcmLength)
                                 }
                             }
-                            'S' -> if (rxBuf[3] == 'T'.code.toByte() && len >= 16 && rxBuf[4] == '1'.code.toByte()) {
-                                hostAudioReport = parseHostAudioReport(rxBuf, len, android.os.SystemClock.elapsedRealtime())
+                            'S' -> if (rxBuf[3] == 'T'.code.toByte() && len >= 16) {
                                 lastHostMs = now
                                 val flags = rxBuf[5].toInt() and 0xFF
                                 val hostMicPeak = rxBuf[6].toInt() and 0xFF
@@ -253,7 +250,7 @@ class QuicAudioBridge(
     private fun runMicSender() {
         var record: AudioRecord? = null
         try {
-            if (!running.get() || !micActive) return
+            val addr = InetAddress.getByName(host.trim().removePrefix("[").removeSuffix("]"))
             val minBuf = AudioRecord.getMinBufferSize(
                 SAMPLE_RATE,
                 AudioFormat.CHANNEL_IN_MONO,
@@ -268,7 +265,6 @@ class QuicAudioBridge(
                 minBuf,
             )
             if (record.state != AudioRecord.STATE_INITIALIZED) {
-                record.release()
                 record = AudioRecord(
                     MediaRecorder.AudioSource.MIC,
                     SAMPLE_RATE,
@@ -278,18 +274,10 @@ class QuicAudioBridge(
                 )
             }
             if (record.state != AudioRecord.STATE_INITIALIZED) {
-                micActive = false
                 onStatus("mic HP tidak bisa dibuka (AudioRecord gagal init)")
                 return
             }
-            if (!running.get() || !micActive) return
             record.startRecording()
-            if (record.recordingState != AudioRecord.RECORDSTATE_RECORDING) {
-                micActive = false
-                onStatus("mic HP gagal mulai merekam")
-                return
-            }
-            micCapturing = true
 
             val frameSamples = 240 // 10 ms @ 24 kHz mono
             val pcmShorts = ShortArray(frameSamples)
@@ -305,11 +293,14 @@ class QuicAudioBridge(
             val gateLinear = 10.0.pow(micGateDb / 20.0).toFloat()
             val gainLinear = 10.0.pow(micGainDb / 20.0).toFloat()
 
-            while (running.get() && micActive) {
+            while (running.get()) {
+                if (!micActive) {
+                    micPeak.set(0)
+                    Thread.sleep(40)
+                    continue
+                }
                 val n = record.read(pcmShorts, 0, frameSamples)
-                if (!running.get() || !micActive) break
-                if (n < 0) throw IllegalStateException("AudioRecord read failed")
-                if (n == 0) {
+                if (n <= 0) {
                     Thread.sleep(5)
                     continue
                 }
@@ -345,21 +336,13 @@ class QuicAudioBridge(
                     bb.putShort(s16.toShort())
                 }
                 micPeak.set(peak)
-                runCatching { sock.send(DatagramPacket(pktBytes, 8 + n * 2)) }
+                runCatching { sock.send(DatagramPacket(pktBytes, 8 + n * 2, addr, port)) }
             }
         } catch (_: Throwable) {
-            micActive = false
             onStatus("mic HP berhenti (izin/perangkat)")
         } finally {
             runCatching { record?.stop() }
             runCatching { record?.release() }
-            synchronized(this) {
-                micCapturing = false
-                micPeak.set(0)
-                if (txThread === Thread.currentThread()) txThread = null
-                // If OFF/ON raced cleanup, start only after the old recorder is released.
-                if (running.get() && micActive) setVoiceMicEnabled(true)
-            }
         }
     }
 

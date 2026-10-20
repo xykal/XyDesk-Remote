@@ -1,0 +1,93 @@
+{
+  "source": "52dcd098e7ee22ed4bca5bd7be16f00764e5bb2a",
+  "worker_tests": 143,
+  "baseline_guards": 5,
+  "policy_test_count": 9,
+  "deployed": false,
+  "android_gate": {
+    "id": 39372922876,
+    "name": "Build APK",
+    "status": "completed",
+    "conclusion": "success",
+    "html_url": "https://github.com/xykal/XyDesk-Remote/actions/runs/39372922876",
+    "head_sha": "52dcd098e7ee22ed4bca5bd7be16f00764e5bb2a"
+  },
+  "jobs": [
+    {
+      "name": "Gate compile Kotlin (cepat, tanpa native)",
+      "conclusion": "success",
+      "steps": [
+        {
+          "name": "Set up job",
+          "conclusion": "success"
+        },
+        {
+          "name": "Run actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09",
+          "conclusion": "success"
+        },
+        {
+          "name": "Run actions/setup-java@b6effb05e454b25005698d916606bdc6ffcbf961",
+          "conclusion": "success"
+        },
+        {
+          "name": "Cache Android SDK gate (platform & build-tools)",
+          "conclusion": "success"
+        },
+        {
+          "name": "Install Android SDK (tanpa NDK & CMake)",
+          "conclusion": "success"
+        },
+        {
+          "name": "Guard owner-selected connect/render/native baseline",
+          "conclusion": "success"
+        },
+        {
+          "name": "Unit test JVM (core-rdp + core-pc-stream + IME + app UI)",
+          "conclusion": "success"
+        },
+        {
+          "name": "Compile Kotlin (app + core-rdp)",
+          "conclusion": "success"
+        },
+        {
+          "name": "Compile Windows Native C++17 Host Agent & DLLs (mingw-w64)",
+          "conclusion": "success"
+        },
+        {
+          "name": "Post Cache Android SDK gate (platform & build-tools)",
+          "conclusion": "success"
+        },
+        {
+          "name": "Post Run actions/setup-java@b6effb05e454b25005698d916606bdc6ffcbf961",
+          "conclusion": "success"
+        },
+        {
+          "name": "Post Run actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09",
+          "conclusion": "success"
+        },
+        {
+          "name": "Complete job",
+          "conclusion": "success"
+        }
+      ]
+    },
+    {
+      "name": "Release per-ABI (R8 + signed) + GitHub Release",
+      "conclusion": "skipped",
+      "steps": []
+    },
+    {
+      "name": "Debug per-ABI (armv7 + arm64 + x86_64)",
+      "conclusion": "skipped",
+      "steps": []
+    },
+    {
+      "name": "Publish GitHub Release",
+      "conclusion": "skipped",
+      "steps": []
+    }
+  ],
+  "owner_phone_tested": false,
+  "automatic_legacy_file_deletion": false,
+  "android_outbox_delivered": false
+}

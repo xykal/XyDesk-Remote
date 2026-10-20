@@ -4,7 +4,7 @@ Dokumen spesifikasi teknis untuk agen host native Windows (`XyDeskHost.exe` + `x
 
 ## 1. Tujuan Utama
 1. **Kemudahan Akses (ID PC & Password):** Menyediakan pairing instan berbasis 10-Digit ID PC (`XXX-XXX-XXXX`) dan kredensial terisolasi tanpa konfigurasi port-forwarding rumit.
-2. **Keamanan Transport (point-to-point, bukan "E2EE" ala messaging):** Seluruh aliran frame, audio, dan input dienkripsi langsung antara perangkat Android dan PC target (tanpa server di tengah) menggunakan **TLS 1.3 / QUIC (X25519 + ChaCha20-Poly1305 / AES-256-GCM)** dengan *certificate fingerprint pinning* di dalam **Android Keystore**.
+2. **Keamanan End-to-End (E2EE):** Seluruh aliran frame, audio, dan input dienkripsi ujung-ke-ujung antara perangkat Android dan PC target menggunakan **TLS 1.3 / QUIC (X25519 + ChaCha20-Poly1305 / AES-256-GCM)** dengan *certificate fingerprint pinning* di dalam **Android Keystore**.
 3. **Ultra-Low Latency untuk Game FPS (<8 ms LAN / <20 ms Tailnet):** Mengatasi keterbatasan RDP standar pada game 3D/FPS melalui tangkapan layar zero-copy di VRAM GPU, transport QUIC Unreliable Datagram, dan injeksi mouse relatif (`RawInput`).
 
 ## 2. Komponen Native Windows (`XyDeskHost.exe` + `.dll`)
