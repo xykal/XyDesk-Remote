@@ -1,3 +1,4 @@
+import { githubOAuthConfig, GITHUB_CALLBACK } from "./oauth-config.mjs";
 import { persistChatSend, validateDurableSend, pruneChatSendReceipts, SEND_REPLAY_MAX_AGE_MS } from "./chat-send-persistence.mjs";
 import { OfficialChannels } from "./official-channels.mjs";
 import { RevisionedHistoryWindow, chatStorageFailure, chatStorageFailureEvent } from "./chat-storage-policy.mjs";
@@ -4671,20 +4672,11 @@ export default {
       if (request.method !== "GET") return methodNotAllowed("GET, OPTIONS");
       const sid = String(url.searchParams.get("session_id") || "").trim().replace(/[^a-zA-Z0-9_-]/g, "").slice(0, 64);
       const scope = String(url.searchParams.get("scope") || "repo workflow read:user user:email");
-      const oauthClientId = String(env?.GITHUB_OAUTH_CLIENT_ID || "Ov23liBsgZ5xJKgzHGtl").trim();
-      const oauthSecret = String(env?.GITHUB_OAUTH_CLIENT_SECRET || "").trim();
-
-      // Legacy xy_gh_session cookies are unsigned bearer-token containers.
-      // Never turn client-controlled cookie claims into a polling session/deep link.
-      // Continue through normal provider authorization even if that cookie exists.
-
-      // Gunakan OAuth App yang sudah terverifikasi callback-nya di GitHub (https://rdpfree.projectkal.my.id/api/auth/callback/github)
-      // secara default agar langsung jalan 100% tanpa user perlu atur Redirect URI manual, sekaligus dukung Ov23liBsgZ5xJKgzHGtl.
-      const useCustomClient = url.searchParams.get("client") === "xydesk";
-      const activeClientId = useCustomClient ? oauthClientId : "Ov23liJ0QBoRfaMohJp5";
-      const activeRedirectUri = useCustomClient
-        ? "https://api.xydeskremote.biz.id/api/github/oauth/callback"
-        : "https://rdpfree.projectkal.my.id/api/auth/callback/github";
+      const configured = githubOAuthConfig(env);
+      if (!configured) return durableObjectJson({ status:"error", code:"oauth_unconfigured" }, 503, request.method);
+      // Ignore legacy client selectors. Android/browser login always returns to our API.
+      const activeClientId = configured.client_id;
+      const activeRedirectUri = GITHUB_CALLBACK;
       const isDash = url.searchParams.get("dash") === "1";
       const statePrefix = isDash ? "dash" : "apk";
       const state = sid
@@ -4718,21 +4710,10 @@ export default {
       const code = String(url.searchParams.get("code") || "").trim();
       const state = String(url.searchParams.get("state") || "").trim();
       const explicitSid = String(url.searchParams.get("session_id") || "").trim().replace(/[^a-zA-Z0-9_-]/g, "").slice(0, 64);
-      const oauthClientId = String(env?.GITHUB_OAUTH_CLIENT_ID || "Ov23liBsgZ5xJKgzHGtl").trim();
-      const oauthSecret = String(env?.GITHUB_OAUTH_CLIENT_SECRET || "bf6ef77e40b973e431155735f34561fecb1d1484").trim();
-      if (!code) {
-        return durableObjectJson({ status: "error", code: "oauth_unconfigured" }, 400, request.method);
-      }
-      const candidates = path === "/api/auth/callback/github"
-        ? [
-            { client_id: "Ov23liJ0QBoRfaMohJp5", client_secret: "c1e562ad4707fc6be038785787aca7646dee2f52", redirect_uri: "https://rdpfree.projectkal.my.id/api/auth/callback/github" },
-            { client_id: oauthClientId, client_secret: oauthSecret },
-          ]
-        : [
-            { client_id: oauthClientId, client_secret: oauthSecret },
-            { client_id: "Ov23liJ0QBoRfaMohJp5", client_secret: "c1e562ad4707fc6be038785787aca7646dee2f52", redirect_uri: "https://rdpfree.projectkal.my.id/api/auth/callback/github" },
-          ];
-      const exchange = await exchangeGithubCode(code, candidates);
+      if (!code) return durableObjectJson({ status:"error", code:"invalid_oauth_code" }, 400, request.method);
+      const configured = githubOAuthConfig(env);
+      if (!configured) return durableObjectJson({ status:"error", code:"oauth_unconfigured" }, 503, request.method);
+      const exchange = await exchangeGithubCode(code, [configured]);
       if (!exchange.ok) {
         return durableObjectJson({ status: "error", code: exchange.code }, exchange.status, request.method);
       }
@@ -4794,6 +4775,7 @@ export default {
         headers: {
           "Content-Type": "text/html; charset=utf-8",
           "Cache-Control": "no-store",
+          "Referrer-Policy": "no-referrer",
           // Retire the unused bearer-token cookie instead of retaining it for 30 days.
           "Set-Cookie": "xy_gh_session=; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=0",
         },
