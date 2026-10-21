@@ -336,7 +336,7 @@ internal suspend fun warmUpGlobalChatAndFeedCache(context: Context) {
             if (CommunityJokesApi.inMemoryFeedCache.isNullOrEmpty()) {
                 api.cachedFeed()
             }
-            val freshFeed = runCatching { api.fetchFeed() }.getOrNull()
+            val freshFeed = runCatching { api.latest() }.getOrNull()
             if (!freshFeed.isNullOrEmpty()) {
                 api.cacheFeed(freshFeed)
             }

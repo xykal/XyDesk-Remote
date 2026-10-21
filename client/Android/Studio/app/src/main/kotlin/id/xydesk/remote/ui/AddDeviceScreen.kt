@@ -1680,7 +1680,7 @@ fun AddDeviceScreen(
                     text = xy("⚡ Terapkan Preset Zero-Lag Gaming (120Hz · 1ms · Anti-Blur)", "⚡ Apply Zero-Lag Gaming Preset (120Hz · 1ms · Crisp)"),
                     onClick = {
                         options = options.copy(
-                            streamProfile = XyStreamProfile.GAME_SMOOTH_60,
+                            streamProfile = XyStreamProfile.ULTRA_LOW_LATENCY,
                             h264 = true,
                             videoRemoting = true,
                             asyncUpdate = true,
@@ -1689,7 +1689,6 @@ fun AddDeviceScreen(
                             frameAck = 1,
                             targetFps = 120,
                             pcTargetFps = 120,
-                            pcVideoBitrateMbps = 25,
                             rawInputMouse = true,
                             responsiveLoopMs = 2,
                             compressionLevel = 2,
