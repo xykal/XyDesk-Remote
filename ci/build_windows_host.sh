@@ -26,9 +26,7 @@ COMMON_FLAGS=(
   -DWINVER=0x0A00
   -DWIN32_LEAN_AND_MEAN
   -I"${INC_DIR}"
-  -static
-  -static-libgcc
-  -static-libstdc++
+  -static -static-libgcc -static-libstdc++
 )
 
 echo "[1/3] Compiling embedded native modules (xydesk_host_core.dll & xydesk_quic.dll)..."
@@ -118,7 +116,7 @@ echo "[3/3] Compiling single-file XyDeskRemoteHost.exe (all DLLs, libraries & dr
   "${SRC_DIR}/host_readiness.cpp" \
   "${SRC_DIR}/main_host.cpp" \
   -o "${OUT_DIR}/XyDeskRemoteHost.exe" \
-  -lws2_32 -liphlpapi -ldxgi -ladvapi32 -luser32 -lgdi32 -lgdiplus -lshell32 -lwtsapi32 -lwinhttp -lole32 -lmmdevapi -lavrt -lksuser
+  -lws2_32 -liphlpapi -ldxgi -ladvapi32 -luser32 -lgdi32 -lgdiplus -lshell32 -lwtsapi32 -lwinhttp -lole32 -lmmdevapi -lavrt -lksuser -luuid -lpropsys
 
 "${STRIP}" --strip-unneeded "${OUT_DIR}/XyDeskRemoteHost.exe" || true
 
