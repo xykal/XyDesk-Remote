@@ -36,7 +36,8 @@ class ChatNotificationExtension : INotificationServiceExtension {
             return
         }
         if (type == "global_chat" || data?.has("msg_id") == true) {
-            event.preventDefault(true)
+            runCatching { event.preventDefault(true) }
+            runCatching { event.preventDefault() }
             val msgId = data?.optString("msg_id").orEmpty()
             val senderName = data?.optString("sender_name").orEmpty().ifBlank {
                 event.notification.title?.substringBefore("·")?.trim().orEmpty().ifBlank { "Tamu" }
@@ -54,6 +55,7 @@ class ChatNotificationExtension : INotificationServiceExtension {
             val at = data?.optLong("at", 0L)?.takeIf { it > 0L } ?: System.currentTimeMillis()
             val rawSender = data?.optString("raw_sender").orEmpty()
             val githubLogin = data?.optString("github_login").orEmpty()
+            val avatarUrl = data?.optString("avatar_url").orEmpty()
             val replyToName = data?.optString("reply_to_name").orEmpty()
             val isAnnouncement = data?.optString("category") == "announcement"
             ChatPushNotifier.onIncomingChatMessage(
@@ -66,11 +68,13 @@ class ChatNotificationExtension : INotificationServiceExtension {
                 githubLogin = githubLogin,
                 replyToName = replyToName,
                 isAnnouncement = isAnnouncement,
+                avatarUrl = avatarUrl,
             )
             return
         }
         if (type == "feed_comment" || type == "feed_like" || type == "feed_reaction" || type == "social_notif" || data?.has("category") == true) {
-            event.preventDefault(true)
+            runCatching { event.preventDefault(true) }
+            runCatching { event.preventDefault() }
             val actorName = data?.optString("actor").orEmpty().ifBlank { data?.optString("actor_name").orEmpty() }
             val actorGh = data?.optString("actor_github").orEmpty()
             val actorClientId = data?.optString("actor_id").orEmpty()

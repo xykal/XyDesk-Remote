@@ -1049,11 +1049,35 @@ private fun AboutSection() {
             XyRow(title = t("about.version"), subtitle = appVersionName(context))
             XyRow(
                 title = t("about.engine"),
-                subtitle = native ?: xy("FreeRDP (dimuat saat connect)", "FreeRDP (loaded on connect)"),
+                subtitle = XyRuntimeCatalog.ENGINE_VERSION + (native?.let { " · core $it" } ?: ""),
+            )
+            XyRow(
+                title = xy("Proteksi Keamanan", "Security Shield"),
+                subtitle = XyRuntimeCatalog.SHIELD_VERSION,
             )
             XyRow(
                 title = t("about.developer"),
             )
+        }
+
+        // ---- Katalog Modul Native (.so), Library & Driver (.dll / .sys) Versi XyDesk ----
+        XyCard {
+            XySectionLabel(xy("MODUL NATIVE (.SO) & DRIVER (.DLL / .SYS) XYDESK", "XYDESK NATIVE (.SO) & DRIVER (.DLL / .SYS) STACK"))
+            Text(
+                xy(
+                    "Seluruh pustaka inti Android JNI dan driver Windows Host dikemas dengan build khusus XyDesk untuk latensi terendah (60–120 FPS).",
+                    "All Android JNI core libraries and Windows Host drivers are packaged with custom XyDesk builds for ultra-low latency (60–120 FPS).",
+                ),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            Spacer(Modifier.height(8.dp))
+            (XyRuntimeCatalog.androidNativeModules + XyRuntimeCatalog.windowsHostDrivers).forEach { mod ->
+                XyRow(
+                    title = "${mod.binaryName} · ${mod.version}",
+                    subtitle = xy(mod.roleId, mod.roleEn),
+                )
+            }
         }
 
         // ---- Bahasa: satu klik, langsung ganti seluruh teks app ----

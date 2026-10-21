@@ -107,9 +107,11 @@ internal fun parseMessageFromJson(m: JSONObject, myName: String, myGithubLogin: 
     } else {
         openedText
     }
-    val resolvedAvatar = m.optString("avatar_url", "").ifBlank {
-        if (ghLogin.isNotBlank()) "https://github.com/$ghLogin.png?size=120" else ""
-    }
+    val resolvedAvatar = ChatAvatarLoader.normalizeAvatarUrl(
+        rawAvatarUrl = m.optString("avatar_url", ""),
+        githubLogin = ghLogin,
+        fallbackName = sender,
+    )
     val isMine = if (!myGithubLogin.isNullOrBlank()) ghLogin.equals(myGithubLogin, ignoreCase = true)
         else sender.equals(myName, ignoreCase = true)
 

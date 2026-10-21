@@ -61,6 +61,18 @@ enum class HudProfilePreset(
         "D-pad WASD di kiri, Space/Shift/E/Esc & klik di kanan",
         "WASD cluster on left, Space/Shift/E/Esc & mouse clicks on right",
     ),
+    SAMP_GTA(
+        "SA-MP / GTA RP",
+        "SA-MP / GTA RP",
+        "WASD, T (Chat), F (Kendaraan), Y/N/H, Alt, Tab, Space, C & Tembak/Aim",
+        "WASD, T (Chat), F (Vehicle), Y/N/H, Alt, Tab, Space, C & Shoot/Aim",
+    ),
+    MINECRAFT(
+        "Minecraft",
+        "Minecraft",
+        "WASD, Space, Shift (Sneak), E (Inventory), Q (Drop), F5 & Klik Kiri/Kanan",
+        "WASD, Space, Shift (Sneak), E (Inventory), Q (Drop), F5 & Left/Right Click",
+    ),
     OFFICE(
         "Office / Kerja",
         "Office / Work",
@@ -243,6 +255,39 @@ data class HudKey(
                     HudKey("g_e", HudKind.KEY, "E", keyCode = KeyEvent.KEYCODE_E, x = 0.84f, y = 0.28f, size = s),
                     HudKey("kiri", HudKind.MOUSE_LEFT, "Kiri", action = HudAction.HOLD, x = 0.72f, y = 0.52f, size = d),
                     HudKey("kanan", HudKind.MOUSE_RIGHT, "Kanan", action = HudAction.TAP, x = 0.84f, y = 0.52f, size = d),
+                )
+                HudProfilePreset.SAMP_GTA -> listOf(
+                    HudKey("sp_w", HudKind.KEY, "W", keyCode = KeyEvent.KEYCODE_W, action = HudAction.HOLD, x = 0.12f, y = 0.50f, size = s),
+                    HudKey("sp_a", HudKind.KEY, "A", keyCode = KeyEvent.KEYCODE_A, action = HudAction.HOLD, x = 0.03f, y = 0.66f, size = s),
+                    HudKey("sp_s", HudKind.KEY, "S", keyCode = KeyEvent.KEYCODE_S, action = HudAction.HOLD, x = 0.12f, y = 0.66f, size = s),
+                    HudKey("sp_d", HudKind.KEY, "D", keyCode = KeyEvent.KEYCODE_D, action = HudAction.HOLD, x = 0.21f, y = 0.66f, size = s),
+                    HudKey("sp_alt", HudKind.KEY, "Alt", keyCode = alt, action = HudAction.TAP, x = 0.03f, y = 0.84f, size = s),
+                    HudKey("sp_space", HudKind.KEY, "Sprint", keyCode = KeyEvent.KEYCODE_SPACE, action = HudAction.HOLD, turbo = true, x = 0.13f, y = 0.84f, size = s),
+                    HudKey("sp_c", HudKind.KEY, "C", keyCode = KeyEvent.KEYCODE_C, action = HudAction.TAP, x = 0.23f, y = 0.84f, size = s),
+                    HudKey("sp_esc", HudKind.KEY, "Esc", keyCode = KeyEvent.KEYCODE_ESCAPE, x = 0.03f, y = 0.14f, size = s),
+                    HudKey("sp_tab", HudKind.KEY, "Tab", keyCode = KeyEvent.KEYCODE_TAB, action = HudAction.HOLD, x = 0.13f, y = 0.14f, size = s),
+                    HudKey("sp_t", HudKind.KEY, "T Chat", keyCode = KeyEvent.KEYCODE_T, action = HudAction.TAP, x = 0.23f, y = 0.14f, size = s),
+                    HudKey("sp_y", HudKind.KEY, "Y", keyCode = KeyEvent.KEYCODE_Y, action = HudAction.TAP, x = 0.72f, y = 0.14f, size = s),
+                    HudKey("sp_n", HudKind.KEY, "N", keyCode = KeyEvent.KEYCODE_N, action = HudAction.TAP, x = 0.81f, y = 0.14f, size = s),
+                    HudKey("sp_h", HudKind.KEY, "H", keyCode = KeyEvent.KEYCODE_H, action = HudAction.TAP, x = 0.90f, y = 0.14f, size = s),
+                    HudKey("sp_f", HudKind.KEY, "F Mobil", keyCode = KeyEvent.KEYCODE_F, action = HudAction.TAP, x = 0.86f, y = 0.32f, size = s),
+                    HudKey("kiri", HudKind.MOUSE_LEFT, "Tembak", action = HudAction.HOLD, x = 0.74f, y = 0.56f, size = d),
+                    HudKey("kanan", HudKind.MOUSE_RIGHT, "Aim", action = HudAction.HOLD, x = 0.88f, y = 0.56f, size = d),
+                )
+                HudProfilePreset.MINECRAFT -> listOf(
+                    HudKey("mc_w", HudKind.KEY, "W", keyCode = KeyEvent.KEYCODE_W, action = HudAction.HOLD, x = 0.12f, y = 0.50f, size = s),
+                    HudKey("mc_a", HudKind.KEY, "A", keyCode = KeyEvent.KEYCODE_A, action = HudAction.HOLD, x = 0.03f, y = 0.66f, size = s),
+                    HudKey("mc_s", HudKind.KEY, "S", keyCode = KeyEvent.KEYCODE_S, action = HudAction.HOLD, x = 0.12f, y = 0.66f, size = s),
+                    HudKey("mc_d", HudKind.KEY, "D", keyCode = KeyEvent.KEYCODE_D, action = HudAction.HOLD, x = 0.21f, y = 0.66f, size = s),
+                    HudKey("mc_shift", HudKind.KEY, "Sneak", keyCode = shift, action = HudAction.TOGGLE, x = 0.03f, y = 0.84f, size = s),
+                    HudKey("mc_space", HudKind.KEY, "Jump", keyCode = KeyEvent.KEYCODE_SPACE, action = HudAction.HOLD, x = 0.16f, y = 0.84f, size = s),
+                    HudKey("mc_esc", HudKind.KEY, "Esc", keyCode = KeyEvent.KEYCODE_ESCAPE, x = 0.03f, y = 0.14f, size = s),
+                    HudKey("mc_f3", HudKind.KEY, "F3", keyCode = KeyEvent.KEYCODE_F3, x = 0.13f, y = 0.14f, size = s),
+                    HudKey("mc_f5", HudKind.KEY, "F5", keyCode = KeyEvent.KEYCODE_F5, x = 0.23f, y = 0.14f, size = s),
+                    HudKey("mc_q", HudKind.KEY, "Q Drop", keyCode = KeyEvent.KEYCODE_Q, x = 0.76f, y = 0.28f, size = s),
+                    HudKey("mc_e", HudKind.KEY, "E Inv", keyCode = KeyEvent.KEYCODE_E, x = 0.88f, y = 0.28f, size = s),
+                    HudKey("kiri", HudKind.MOUSE_LEFT, "Serang", action = HudAction.HOLD, x = 0.74f, y = 0.56f, size = d),
+                    HudKey("kanan", HudKind.MOUSE_RIGHT, "Pasang", action = HudAction.HOLD, x = 0.88f, y = 0.56f, size = d),
                 )
                 HudProfilePreset.OFFICE -> listOf(
                     HudKey("o_copy", HudKind.COMBO, "Ctrl+C", combo = listOf(ctrl, KeyEvent.KEYCODE_C), x = 0.04f, y = 0.16f, size = s),

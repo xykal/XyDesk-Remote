@@ -22,8 +22,21 @@ internal fun reconcileChatMessage(current: ChatMessage, incoming: ChatMessage): 
         merged = merged.copy(mutationError = current.mutationError)
     if (current.replyToId == incoming.replyToId && current.replyToText == "Pesan ini dihapus")
         merged = merged.copy(replyToText = "Pesan ini dihapus")
-    return if (!merged.deleted && merged.attachmentData.isBlank() && current.attachmentData.isNotBlank())
-        merged.copy(attachmentData = current.attachmentData) else merged
+    if (!merged.deleted) {
+        if (merged.avatarUrl.isBlank() && current.avatarUrl.isNotBlank()) {
+            merged = merged.copy(avatarUrl = current.avatarUrl)
+        }
+        if (merged.githubLogin.isBlank() && current.githubLogin.isNotBlank()) {
+            merged = merged.copy(githubLogin = current.githubLogin)
+        }
+        if (merged.translated.isBlank() && current.translated.isNotBlank() && merged.text == current.text) {
+            merged = merged.copy(translated = current.translated)
+        }
+        if (merged.attachmentData.isBlank() && current.attachmentData.isNotBlank()) {
+            merged = merged.copy(attachmentData = current.attachmentData)
+        }
+    }
+    return merged
 }
 
 /** Never acknowledge an unrelated/unchanged row merely because HTTP returned 200. */

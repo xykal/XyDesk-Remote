@@ -21,6 +21,8 @@ import androidx.core.graphics.drawable.IconCompat
 import com.onesignal.OneSignal
 import com.onesignal.notifications.INotificationClickEvent
 import com.onesignal.notifications.INotificationClickListener
+import com.onesignal.notifications.INotificationLifecycleListener
+import com.onesignal.notifications.INotificationWillDisplayEvent
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -114,6 +116,8 @@ object ChatPushNotifier {
         val text: String,
         val at: Long,
         val isMe: Boolean,
+        val githubLogin: String = "",
+        val avatarUrl: String = "",
     )
 
     @JvmStatic
@@ -132,6 +136,19 @@ object ChatPushNotifier {
             CoroutineScope(Dispatchers.IO).launch {
                 runCatching { OneSignal.Notifications.requestPermission(false) }
             }
+            // Cegah OneSignal merender notifikasi standar (versi lama) di foreground
+            // agar tidak pernah terjadi double notifikasi dengan kartu Grup WA MessagingStyle.
+            OneSignal.Notifications.addForegroundLifecycleListener(
+                object : INotificationLifecycleListener {
+                    override fun onWillDisplay(event: INotificationWillDisplayEvent) {
+                        val data = event.notification.additionalData
+                        val type = data?.optString("type").orEmpty()
+                        if (type == "global_chat" || data?.has("msg_id") == true || type == "feed_comment" || type == "feed_like" || type == "feed_reaction" || type == "social_notif" || type == "app_update") {
+                            runCatching { event.preventDefault() }
+                        }
+                    }
+                },
+            )
             OneSignal.Notifications.addClickListener(
                 object : INotificationClickListener {
                     override fun onClick(event: INotificationClickEvent) {
@@ -302,6 +319,7 @@ object ChatPushNotifier {
         githubLogin: String = "",
         replyToName: String = "",
         isAnnouncement: Boolean = false,
+        avatarUrl: String = "",
     ) {
         val appContext = context.applicationContext
         val cleanText = text.trim()
@@ -341,6 +359,13 @@ object ChatPushNotifier {
         }
         markSeen(msgId, ts, appContext)
 
+        val cleanGh = githubLogin.trim().removePrefix("@").ifBlank {
+            senderBase.removePrefix("@").takeIf {
+                it.isNotBlank() && !it.contains(" ") && !it.startsWith("Tamu", ignoreCase = true) && !it.startsWith("Guest", ignoreCase = true)
+            }.orEmpty()
+        }
+        val resolvedAvatar = id.xydesk.remote.ui.ChatAvatarLoader.normalizeAvatarUrl(avatarUrl, cleanGh, senderBase)
+
         val stack = loadStack(appContext).toMutableList()
         if (msgId.isNotBlank() && stack.any { it.id == msgId }) return
         stack.add(
@@ -350,6 +375,8 @@ object ChatPushNotifier {
                 text = cleanText,
                 at = ts,
                 isMe = false,
+                githubLogin = cleanGh,
+                avatarUrl = resolvedAvatar,
             ),
         )
         while (stack.size > MAX_STACK_MESSAGES) {
@@ -585,10 +612,13 @@ object ChatPushNotifier {
             else -> "Grup Chat Global · XyDesk"
         }
 
+        val myGh = id.xydesk.remote.ui.getVerifiedGitHubLogin(context).orEmpty()
+        val myAvatarUrl = id.xydesk.remote.ui.getVerifiedGitHubAvatar(context).orEmpty()
+        val meBmp = resolveSenderAvatarBitmap(context, xyNow("Anda", "You"), myGh, myAvatarUrl, true)
         val mePerson = Person.Builder()
             .setName(xyNow("Anda", "You"))
             .setKey("me_self")
-            .setIcon(IconCompat.createWithBitmap(createAvatarBitmap(xyNow("Anda", "You"), true)))
+            .setIcon(IconCompat.createWithBitmap(meBmp))
             .build()
 
         val personCache = HashMap<String, Person>()
@@ -602,10 +632,17 @@ object ChatPushNotifier {
                 mePerson
             } else {
                 personCache.getOrPut(item.name) {
+                    val senderBmp = resolveSenderAvatarBitmap(
+                        context = context,
+                        name = item.name,
+                        githubLogin = item.githubLogin,
+                        avatarUrl = item.avatarUrl,
+                        isMe = false,
+                    )
                     Person.Builder()
                         .setName(item.name)
                         .setKey(item.name)
-                        .setIcon(IconCompat.createWithBitmap(createAvatarBitmap(item.name, false)))
+                        .setIcon(IconCompat.createWithBitmap(senderBmp))
                         .build()
                 }
             }
@@ -613,11 +650,17 @@ object ChatPushNotifier {
         }
 
         val now = System.currentTimeMillis()
-        val groupIcon = createAvatarBitmap("XY", false)
+        val lastSenderBmp = resolveSenderAvatarBitmap(
+            context = context,
+            name = lastItem.name,
+            githubLogin = lastItem.githubLogin,
+            avatarUrl = lastItem.avatarUrl,
+            isMe = lastItem.isMe,
+        )
         // Satu kartu percakapan Grup WhatsApp terpadu (menumpuk semua chat baru di 1 notifikasi grup)
         val builder = NotificationCompat.Builder(context, channelId)
             .setSmallIcon(R.drawable.ic_stat_xydesk)
-            .setLargeIcon(groupIcon)
+            .setLargeIcon(lastSenderBmp)
             .setContentTitle(groupTitle)
             .setContentText("${lastItem.name}: ${lastItem.text}")
             .setSubText(subSummary)
@@ -638,11 +681,18 @@ object ChatPushNotifier {
             .addAction(replyAction)
             .addAction(markReadAction)
 
-        // Bersihkan notifikasi chat lama yang terpecah satu-satu agar selalu tergabung menjadi 1 kartu Grup WA
+        // Bersihkan notifikasi chat versi lama / duplikat (termasuk notifikasi bawaan OneSignal tanpa tag)
+        // agar selalu hanya ada 1 kartu Grup WA (chat:global_group).
         nm.cancel(CHAT_NOTIF_ID)
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+            val protectedIds = setOf(CHAT_NOTIF_ID, UPDATE_NOTIF_ID, 1001, 4401)
             nm.activeNotifications
-                .filter { it.tag?.startsWith("chat:") == true && it.tag != "chat:global_group" }
+                .filter { sbn ->
+                    val t = sbn.tag
+                    (t != null && t.startsWith("chat:") && t != "chat:global_group") ||
+                        (t != null && t.startsWith("social:") && t.contains(":chat-")) ||
+                        (t == null && sbn.id !in protectedIds)
+                }
                 .forEach { nm.cancel(it.tag, it.id) }
         }
         nm.notify("chat:global_group", CHAT_NOTIF_ID, builder.build())
@@ -785,6 +835,25 @@ object ChatPushNotifier {
         }
     }
 
+    private fun resolveSenderAvatarBitmap(
+        context: Context,
+        name: String,
+        githubLogin: String,
+        avatarUrl: String,
+        isMe: Boolean,
+    ): Bitmap {
+        val loaded = runCatching {
+            id.xydesk.remote.ui.ChatAvatarLoader.loadCachedOrSyncForNotification(
+                context = context,
+                rawAvatarUrl = avatarUrl,
+                githubLogin = githubLogin,
+                fallbackName = name,
+                isMe = isMe,
+            )
+        }.getOrNull()
+        return loaded ?: createAvatarBitmap(name, isMe)
+    }
+
     private fun createAvatarBitmap(name: String, isMe: Boolean): Bitmap {
         val size = 128
         val bmp = Bitmap.createBitmap(size, size, Bitmap.Config.ARGB_8888)
@@ -838,6 +907,8 @@ object ChatPushNotifier {
                         text = o.optString("text"),
                         at = o.optLong("at"),
                         isMe = o.optBoolean("isMe", false),
+                        githubLogin = o.optString("githubLogin"),
+                        avatarUrl = o.optString("avatarUrl"),
                     ),
                 )
             }
@@ -854,7 +925,9 @@ object ChatPushNotifier {
                     .put("name", m.name)
                     .put("text", m.text)
                     .put("at", m.at)
-                    .put("isMe", m.isMe),
+                    .put("isMe", m.isMe)
+                    .put("githubLogin", m.githubLogin)
+                    .put("avatarUrl", m.avatarUrl),
             )
         }
         context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
@@ -959,6 +1032,7 @@ object ChatPushNotifier {
                                             githubLogin = m.optString("github_login"),
                                             replyToName = m.optString("reply_to_name"),
                                             isAnnouncement = m.optBoolean("is_announcement", false),
+                                            avatarUrl = m.optString("avatar_url"),
                                         )
                                     }
                                 }

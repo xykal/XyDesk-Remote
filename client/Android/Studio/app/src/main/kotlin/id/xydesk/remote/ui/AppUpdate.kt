@@ -876,16 +876,21 @@ internal object AppUpdate {
                             if (cat == "mention" || cat == "reply") {
                                 ChatPushNotifier.unreadChatCountState.intValue = (ChatPushNotifier.unreadChatCountState.intValue + 1).coerceAtMost(99)
                             }
-                            ChatPushNotifier.notifySocialEvent(
-                                context = appCtx,
-                                notifId = id,
-                                category = cat,
-                                title = title,
-                                body = msg,
-                                actorName = actorName,
-                                actorGithub = actorGh,
-                                actorClientId = actorHash,
-                            )
+                            // Hanya tampilkan kartu notifikasi sosial terpisah untuk aktivitas Feed.
+                            // Semua notifikasi Chat Global (route == "chat" / id "chat-*") sudah digabung
+                            // ke dalam 1 kartu Grup WhatsApp (MessagingStyle) agar tidak double!
+                            if (route != "chat" && !id.startsWith("chat-")) {
+                                ChatPushNotifier.notifySocialEvent(
+                                    context = appCtx,
+                                    notifId = id,
+                                    category = cat,
+                                    title = title,
+                                    body = msg,
+                                    actorName = actorName,
+                                    actorGithub = actorGh,
+                                    actorClientId = actorHash,
+                                )
+                            }
                         }
                     }
                 }

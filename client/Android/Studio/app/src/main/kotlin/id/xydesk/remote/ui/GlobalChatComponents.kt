@@ -888,78 +888,83 @@ internal fun MessageBubble(
                             }
                         }
 
-                        // Baris Atas Ringkas: Nama Pengirim + @github + Kode Negara + Badge + Tombol Reply
-                        Row(
+                        // Header Pengirim Rapi: Baris 1 (Nama + @github + Kode Negara + Reply), Baris 2 (Badge Peran/Rank)
+                        Column(
                             modifier = Modifier.fillMaxWidth(),
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalArrangement = Arrangement.spacedBy(2.dp),
                         ) {
                             Row(
+                                modifier = Modifier.fillMaxWidth(),
                                 verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.spacedBy(XySpacing.compact),
-                                modifier = Modifier.weight(1f, fill = false),
+                                horizontalArrangement = Arrangement.SpaceBetween,
                             ) {
-                                Text(
-                                    text = msg.name,
-                                    style = MaterialTheme.typography.labelSmall,
-                                    fontSize = 11.sp,
-                                    fontWeight = FontWeight.Bold,
-                                    color = if (founderMsg) Color(0xFFE9D5FF) else primaryTextColor,
-                                    maxLines = 1,
-                                    overflow = TextOverflow.Ellipsis,
-                                )
-                                if (msg.githubLogin.isNotBlank() && !msg.githubLogin.equals(msg.name, ignoreCase = true)) {
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(XySpacing.compact),
+                                    modifier = Modifier.weight(1f, fill = false),
+                                ) {
                                     Text(
-                                        text = "@${msg.githubLogin}",
+                                        text = msg.name,
                                         style = MaterialTheme.typography.labelSmall,
-                                        fontSize = 9.5.sp,
-                                        color = secondaryTextColor,
+                                        fontSize = 11.5.sp,
+                                        fontWeight = FontWeight.ExtraBold,
+                                        color = if (founderMsg) Color(0xFFE9D5FF) else primaryTextColor,
                                         maxLines = 1,
                                         overflow = TextOverflow.Ellipsis,
                                     )
+                                    if (msg.githubLogin.isNotBlank() && !msg.githubLogin.equals(msg.name, ignoreCase = true)) {
+                                        Text(
+                                            text = "@${msg.githubLogin}",
+                                            style = MaterialTheme.typography.labelSmall,
+                                            fontSize = 9.5.sp,
+                                            color = secondaryTextColor,
+                                            maxLines = 1,
+                                            overflow = TextOverflow.Ellipsis,
+                                        )
+                                    }
+                                    Box(
+                                        modifier = Modifier
+                                            .clip(RoundedCornerShape(4.dp))
+                                            .background(
+                                                if (isLightBubble) Color(0xFF09090B).copy(alpha = 0.08f)
+                                                else Color.White.copy(alpha = 0.10f),
+                                            )
+                                            .padding(horizontal = 4.dp, vertical = 0.5.dp),
+                                    ) {
+                                        Text(
+                                            text = msg.country,
+                                            style = MaterialTheme.typography.labelSmall,
+                                            fontSize = 8.5.sp,
+                                            fontWeight = FontWeight.Bold,
+                                            color = secondaryTextColor,
+                                        )
+                                    }
+                                    if (isPinned) {
+                                        ChatVectorPinIcon(
+                                            size = 11.dp,
+                                            tint = if (founderMsg) Color(0xFFD8B4FE) else secondaryTextColor,
+                                        )
+                                    }
                                 }
+                                Spacer(Modifier.width(6.dp))
                                 Box(
                                     modifier = Modifier
-                                        .clip(RoundedCornerShape(4.dp))
-                                        .background(
-                                            if (isLightBubble) Color(0xFF09090B).copy(alpha = 0.08f)
-                                            else Color.White.copy(alpha = 0.10f),
-                                        )
-                                        .padding(horizontal = 4.dp, vertical = 0.5.dp),
+                                        .size(18.dp)
+                                        .clip(CircleShape)
+                                        .clickable { onReply() },
+                                    contentAlignment = Alignment.Center,
                                 ) {
-                                    Text(
-                                        text = msg.country,
-                                        style = MaterialTheme.typography.labelSmall,
-                                        fontSize = 8.5.sp,
-                                        fontWeight = FontWeight.Bold,
-                                        color = secondaryTextColor,
-                                    )
-                                }
-                                XyUserRoleBadges(
-                                    name = msg.name,
-                                    githubLogin = msg.githubLogin,
-                                    compact = true,
-                                )
-                                if (isPinned) {
-                                    ChatVectorPinIcon(
+                                    ChatVectorReplyIcon(
                                         size = 11.dp,
-                                        tint = if (founderMsg) Color(0xFFD8B4FE) else secondaryTextColor,
+                                        tint = secondaryTextColor,
                                     )
                                 }
                             }
-                            Spacer(Modifier.width(6.dp))
-                            Box(
-                                modifier = Modifier
-                                    .size(16.dp)
-                                    .clip(CircleShape)
-                                    .clickable { onReply() },
-                                contentAlignment = Alignment.Center,
-                            ) {
-                                ChatVectorReplyIcon(
-                                    size = 11.dp,
-                                    tint = secondaryTextColor,
-                                )
-                            }
+                            XyUserRoleBadges(
+                                name = msg.name,
+                                githubLogin = msg.githubLogin,
+                                compact = true,
+                            )
                         }
 
                         // Kotak Kutipan Balasan (Quoted Reply ala WhatsApp)
@@ -1699,19 +1704,23 @@ internal fun ChatSenderAvatar(
     isFounder: Boolean,
     compact: Boolean = false,
 ) {
-    val avSize = if (compact) 22.dp else 28.dp
-    val resolvedUrl = remember(avatarUrl, githubLogin) {
-        avatarUrl.ifBlank {
-            if (githubLogin.isNotBlank()) "https://github.com/$githubLogin.png?size=120" else ""
-        }
+    val context = LocalContext.current
+    val avSize = if (compact) 24.dp else 30.dp
+    val resolvedUrl = remember(avatarUrl, githubLogin, name) {
+        ChatAvatarLoader.normalizeAvatarUrl(avatarUrl, githubLogin, name)
     }
     var bitmap by remember(resolvedUrl) {
         mutableStateOf(if (resolvedUrl.isNotBlank()) avatarMemoryCache.get(resolvedUrl) else null)
     }
 
-    LaunchedEffect(resolvedUrl) {
-        if (resolvedUrl.isNotBlank() && bitmap == null) {
-            ChatAvatarLoader.load(resolvedUrl)?.let { bitmap = it }
+    LaunchedEffect(resolvedUrl, githubLogin, name) {
+        if (bitmap == null && (resolvedUrl.isNotBlank() || githubLogin.isNotBlank() || name.isNotBlank())) {
+            ChatAvatarLoader.load(
+                url = resolvedUrl,
+                context = context,
+                githubLogin = githubLogin,
+                fallbackName = name,
+            )?.let { bitmap = it }
         }
     }
 

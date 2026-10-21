@@ -382,21 +382,22 @@ fun RdpFreeScreen(onBack: () -> Unit, onConnect: (ConnectionProfile) -> Unit) {
             .navigationBarsPadding(),
     ) {
         XyTopBar(
-            title = "Buat RDP Cloud",
+            title = "XyRDP Cloud",
             onBack = onBack,
             actions = {
                 if (token != null && login != null) {
                     XyPillButton(
-                        text = "Segarkan",
+                        text = "Refresh",
+                        icon = XyIcons.Refresh,
                         onClick = {
                             val tok = token ?: return@XyPillButton
                             val usr = login ?: return@XyPillButton
                             scope.launch {
                                 busy = true
-                                busyLabel = "Memperbarui status repository & sesi…"
+                                busyLabel = "Memperbarui status…"
                                 try {
                                     refreshAll(tok, usr)
-                                    successMessage = "Status sesi & telemetri diperbarui."
+                                    successMessage = "Status sesi diperbarui."
                                 } finally {
                                     busy = false
                                 }
@@ -547,7 +548,8 @@ fun RdpFreeScreen(onBack: () -> Unit, onConnect: (ConnectionProfile) -> Unit) {
                         }
                         if (forkReady) {
                             XyPillButton(
-                                text = "Sinkron",
+                                text = "Sync",
+                                icon = XyIcons.Refresh,
                                 onClick = {
                                     busy = true
                                     busyLabel = "Menyinkronkan…"
@@ -571,6 +573,7 @@ fun RdpFreeScreen(onBack: () -> Unit, onConnect: (ConnectionProfile) -> Unit) {
                         }
                         XyPillButton(
                             text = "Keluar",
+                            icon = XyIcons.Power,
                             onClick = { confirmAction = "logout" },
                             primary = false,
                             compact = true,
@@ -584,7 +587,7 @@ fun RdpFreeScreen(onBack: () -> Unit, onConnect: (ConnectionProfile) -> Unit) {
                     } else if (!forkReady) {
                         XyEmptyState(
                             title = "Fork Repository XyRDP",
-                            subtitle = "Buat fork template XyRDP ke akun @$login untuk mulai.",
+                            subtitle = "Buat fork XyRDP ke akun @$login untuk mulai.",
                             icon = XyIcons.Monitor,
                             actionLabel = "Fork XyRDP",
                             onAction = {
@@ -610,7 +613,7 @@ fun RdpFreeScreen(onBack: () -> Unit, onConnect: (ConnectionProfile) -> Unit) {
                         )
                     } else {
                         XySegmented(
-                            options = listOf("Sesi & Statistik", "Konfigurasi RDP", "Setup Secrets & Panduan"),
+                            options = listOf("Sesi RDP", "OS & Fitur", "Secrets"),
                             selectedIndex = activeTab,
                             onSelect = { activeTab = it },
                             modifier = Modifier.fillMaxWidth(),
@@ -618,7 +621,7 @@ fun RdpFreeScreen(onBack: () -> Unit, onConnect: (ConnectionProfile) -> Unit) {
 
                         when (activeTab) {
                             // ---------------------------------------------------------
-                            // TAB 0: SESI LIVE, PANDUAN PEMULA, STATISTIK PENGGUNAAN & KONEKSI 1-KLIK
+                            // TAB 0: SESI LIVE, INFO RINGKAS, STATISTIK & KONEKSI 1-KLIK
                             // ---------------------------------------------------------
                             0 -> {
                                 val vs = validatedSession
@@ -641,7 +644,7 @@ fun RdpFreeScreen(onBack: () -> Unit, onConnect: (ConnectionProfile) -> Unit) {
                                     mutableStateOf(!hasRdpPass || !hasAccessSecret)
                                 }
 
-                                // 1. KARTU PANDUAN MUDAH 3 LANGKAH (UNTUK PENGGUNA BARU YANG BELUM MENGERTI XYRDP)
+                                // 1. KARTU PANDUAN RINGKAS + PENJELASAN PORTMAP (FREEMAP) VS TAILSCALE
                                 XyCard(Modifier.fillMaxWidth()) {
                                     Row(
                                         modifier = Modifier
@@ -663,18 +666,22 @@ fun RdpFreeScreen(onBack: () -> Unit, onConnect: (ConnectionProfile) -> Unit) {
                                             )
                                             Column {
                                                 Text(
-                                                    text = "Apa itu XyRDP & Cara Pakainya? (3 Langkah Mudah)",
+                                                    text = "Panduan Cepat & Info Tailscale vs Portmap (FreeMap)",
                                                     style = MaterialTheme.typography.titleSmall,
                                                     fontWeight = FontWeight.ExtraBold,
+                                                    maxLines = 1,
+                                                    overflow = TextOverflow.Ellipsis,
                                                 )
                                                 Text(
                                                     text = if (hasRdpPass && hasAccessSecret) {
-                                                        "Semua syarat sudah lengkap ✓ · Ketuk untuk lihat/tutup penjelasan"
+                                                        "Syarat lengkap ✓ · Ketuk untuk detail"
                                                     } else {
-                                                        "Baru pertama kali? Baca panduan singkat di bawah ini agar langsung paham"
+                                                        "Langkah: 1. Fork · 2. Isi Secrets · 3. Mulai RDP"
                                                     },
                                                     style = MaterialTheme.typography.labelSmall,
                                                     color = if (hasRdpPass && hasAccessSecret) Color(0xFF10B981) else Color(0xFFFBBF24),
+                                                    maxLines = 1,
+                                                    overflow = TextOverflow.Ellipsis,
                                                 )
                                             }
                                         }
@@ -693,77 +700,64 @@ fun RdpFreeScreen(onBack: () -> Unit, onConnect: (ConnectionProfile) -> Unit) {
                                                 .padding(top = 10.dp),
                                             verticalArrangement = Arrangement.spacedBy(8.dp),
                                         ) {
-                                            Text(
-                                                text = "XyRDP membuat Komputer Cloud Gratis (Windows Server / Linux Ubuntu, 4 CPU, 16 GB RAM, SSD 75 GB) menggunakan mesin GitHub Actions di akun GitHub Anda sendiri.",
-                                                style = MaterialTheme.typography.bodySmall,
-                                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                            )
-                                            // Langkah 1
                                             Row(
-                                                modifier = Modifier
-                                                    .fillMaxWidth()
-                                                    .clip(RoundedCornerShape(10.dp))
-                                                    .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f))
-                                                    .padding(10.dp),
-                                                horizontalArrangement = Arrangement.spacedBy(10.dp),
-                                                verticalAlignment = Alignment.CenterVertically,
+                                                modifier = Modifier.fillMaxWidth(),
+                                                horizontalArrangement = Arrangement.spacedBy(8.dp),
                                             ) {
-                                                Text(
-                                                    text = if (forkReady) "✓ 1" else "1",
-                                                    fontWeight = FontWeight.ExtraBold,
-                                                    color = if (forkReady) Color(0xFF10B981) else Color(0xFFFBBF24),
-                                                )
-                                                Column(Modifier.weight(1f)) {
-                                                    Text("Langkah 1: Fork Repository XyRDP", fontWeight = FontWeight.Bold, fontSize = 12.sp)
-                                                    Text("Menyalin mesin pembuat RDP ke akun GitHub @$login Anda (Sudah otomatis aktif).", fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                                                }
-                                            }
-                                            // Langkah 2
-                                            Row(
-                                                modifier = Modifier
-                                                    .fillMaxWidth()
-                                                    .clip(RoundedCornerShape(10.dp))
-                                                    .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f))
-                                                    .clickable { activeTab = 2 }
-                                                    .padding(10.dp),
-                                                horizontalArrangement = Arrangement.spacedBy(10.dp),
-                                                verticalAlignment = Alignment.CenterVertically,
-                                            ) {
-                                                val step2Done = hasRdpPass && hasAccessSecret
-                                                Text(
-                                                    text = if (step2Done) "✓ 2" else "2",
-                                                    fontWeight = FontWeight.ExtraBold,
-                                                    color = if (step2Done) Color(0xFF10B981) else Color(0xFFFBBF24),
-                                                )
-                                                Column(Modifier.weight(1f)) {
-                                                    Text("Langkah 2: Pasang Password & Jalur Koneksi (Tab Setup Secrets)", fontWeight = FontWeight.Bold, fontSize = 12.sp)
+                                                Column(
+                                                    modifier = Modifier
+                                                        .weight(1f)
+                                                        .clip(RoundedCornerShape(10.dp))
+                                                        .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f))
+                                                        .padding(10.dp),
+                                                    verticalArrangement = Arrangement.spacedBy(3.dp),
+                                                ) {
+                                                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(5.dp)) {
+                                                        Icon(XyIcons.Shield, null, tint = Color(0xFF10B981), modifier = Modifier.size(14.dp))
+                                                        Text("Tailscale (P2P)", fontWeight = FontWeight.Bold, fontSize = 11.5.sp)
+                                                    }
                                                     Text(
-                                                        if (step2Done) "RDP_PASSWORD & Jalur Koneksi sudah terpasang!"
-                                                        else "Ketuk di sini untuk membuka Tab Setup Secrets: buat RDP_PASSWORD (sandi masuk PC) & pasang konfigurasi Portmap.io / Tailscale.",
-                                                        fontSize = 11.sp,
+                                                        "Jalur privat tercepat (IP 100.x). Wajib aktifkan aplikasi Tailscale di HP.",
+                                                        fontSize = 10.5.sp,
+                                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                                    )
+                                                }
+                                                Column(
+                                                    modifier = Modifier
+                                                        .weight(1f)
+                                                        .clip(RoundedCornerShape(10.dp))
+                                                        .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f))
+                                                        .padding(10.dp),
+                                                    verticalArrangement = Arrangement.spacedBy(3.dp),
+                                                ) {
+                                                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(5.dp)) {
+                                                        Icon(XyIcons.Globe, null, tint = Color(0xFF38BDF8), modifier = Modifier.size(14.dp))
+                                                        Text("Portmap / FreeMap", fontWeight = FontWeight.Bold, fontSize = 11.5.sp)
+                                                    }
+                                                    Text(
+                                                        "Tunnel publik Portmap.io (.ovpn). Masuk RDP langsung tanpa aplikasi VPN di HP.",
+                                                        fontSize = 10.5.sp,
                                                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                                                     )
                                                 }
                                             }
-                                            // Langkah 3
-                                            Row(
-                                                modifier = Modifier
-                                                    .fillMaxWidth()
-                                                    .clip(RoundedCornerShape(10.dp))
-                                                    .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f))
-                                                    .padding(10.dp),
-                                                horizontalArrangement = Arrangement.spacedBy(10.dp),
-                                                verticalAlignment = Alignment.CenterVertically,
-                                            ) {
-                                                Text(
-                                                    text = if (vs?.isVerifiedLive == true) "✓ 3" else "3",
-                                                    fontWeight = FontWeight.ExtraBold,
-                                                    color = if (vs?.isVerifiedLive == true) Color(0xFF10B981) else Color(0xFF38BDF8),
+                                            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                                XyPillButton(
+                                                    text = "OS & Fitur",
+                                                    icon = XyIcons.Sliders,
+                                                    onClick = { activeTab = 1 },
+                                                    primary = false,
+                                                    compact = true,
+                                                    modifier = Modifier.weight(1f),
                                                 )
-                                                Column(Modifier.weight(1f)) {
-                                                    Text("Langkah 3: Klik 'Mulai' & Tunggu 2–3 Menit", fontWeight = FontWeight.Bold, fontSize = 12.sp)
-                                                    Text("Pilih OS (Windows / Linux) & Durasi di bawah, lalu tekan Mulai. Saat indikator berubah Hijau (SIAP TERHUBUNG), klik tombol 'Hubungkan ke Desktop RDP Sekarang'!", fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                                                }
+                                                XyPillButton(
+                                                    text = "Atur Secrets",
+                                                    icon = XyIcons.Key,
+                                                    onClick = { activeTab = 2 },
+                                                    primary = !(hasRdpPass && hasAccessSecret),
+                                                    compact = true,
+                                                    modifier = Modifier.weight(1f),
+                                                )
                                             }
                                         }
                                     }
@@ -964,7 +958,7 @@ fun RdpFreeScreen(onBack: () -> Unit, onConnect: (ConnectionProfile) -> Unit) {
                                     }
 
                                     Spacer(Modifier.height(10.dp))
-                                    // Konfirmasi Mulai / Stop / Logout secara Inline (Tanpa Popup!)
+                                    // Konfirmasi Mulai / Stop / Logout secara Inline (Ber-ikon & Ringkas)
                                     if (confirmAction != null) {
                                         Column(
                                             modifier = Modifier
@@ -977,9 +971,9 @@ fun RdpFreeScreen(onBack: () -> Unit, onConnect: (ConnectionProfile) -> Unit) {
                                         ) {
                                             Text(
                                                 text = when (confirmAction) {
-                                                    "start" -> "Konfirmasi: Mulai Sesi RDP Baru ($runnerImage · $duration menit · Jalur $akses)?"
-                                                    "stop" -> "Konfirmasi: Hentikan paksa sesi RDP yang sedang berjalan?"
-                                                    else -> "Konfirmasi: Keluar dari akun GitHub @$login?"
+                                                    "start" -> "Mulai sesi RDP baru ($runnerImage · ${duration}m · $akses)?"
+                                                    "stop" -> "Hentikan sesi RDP yang sedang berjalan?"
+                                                    else -> "Keluar dari akun GitHub @$login?"
                                                 },
                                                 style = MaterialTheme.typography.bodySmall,
                                                 fontWeight = FontWeight.Bold,
@@ -987,13 +981,15 @@ fun RdpFreeScreen(onBack: () -> Unit, onConnect: (ConnectionProfile) -> Unit) {
                                             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                                                 XyPillButton(
                                                     text = "Batal",
+                                                    icon = XyIcons.Close,
                                                     onClick = { confirmAction = null },
                                                     primary = false,
                                                     compact = true,
                                                     modifier = Modifier.weight(1f),
                                                 )
                                                 XyPillButton(
-                                                    text = "Ya, Lanjutkan",
+                                                    text = "Lanjutkan",
+                                                    icon = XyIcons.Check,
                                                     onClick = {
                                                         val act = confirmAction
                                                         confirmAction = null
@@ -1008,18 +1004,20 @@ fun RdpFreeScreen(onBack: () -> Unit, onConnect: (ConnectionProfile) -> Unit) {
                                     } else {
                                         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                                             XyPillButton(
-                                                text = if (isRunningOrQueued) "Sesi Sedang Berjalan" else "Mulai RDP Sekarang ($duration mnt)",
+                                                text = if (isRunningOrQueued) "Sesi Aktif" else "Mulai (${duration}m)",
+                                                icon = XyIcons.Play,
                                                 onClick = { confirmAction = "start" },
                                                 primary = true,
                                                 enabled = !busy && !isRunningOrQueued,
-                                                modifier = Modifier.weight(1.35f),
+                                                modifier = Modifier.weight(1.25f),
                                             )
                                             XyPillButton(
-                                                text = "Stop Sesi",
+                                                text = "Stop",
+                                                icon = XyIcons.Power,
                                                 onClick = { confirmAction = "stop" },
                                                 primary = false,
                                                 enabled = !busy && isRunningOrQueued,
-                                                modifier = Modifier.weight(0.65f),
+                                                modifier = Modifier.weight(0.75f),
                                             )
                                         }
                                     }
@@ -1048,7 +1046,7 @@ fun RdpFreeScreen(onBack: () -> Unit, onConnect: (ConnectionProfile) -> Unit) {
                                         ) {
                                             Column(Modifier.weight(1f)) {
                                                 Text(
-                                                    text = "SESI AKTIF · SIAP TERHUBUNG",
+                                                    text = "SESI AKTIF · SIAP MASUK",
                                                     style = MaterialTheme.typography.labelSmall,
                                                     fontFamily = FontFamily.Monospace,
                                                     color = Color(0xFF34D399),
@@ -1059,6 +1057,8 @@ fun RdpFreeScreen(onBack: () -> Unit, onConnect: (ConnectionProfile) -> Unit) {
                                                     style = MaterialTheme.typography.titleMedium,
                                                     fontFamily = FontFamily.Monospace,
                                                     fontWeight = FontWeight.ExtraBold,
+                                                    maxLines = 1,
+                                                    overflow = TextOverflow.Ellipsis,
                                                 )
                                             }
                                             Box(
@@ -1077,9 +1077,11 @@ fun RdpFreeScreen(onBack: () -> Unit, onConnect: (ConnectionProfile) -> Unit) {
                                         }
                                         Spacer(Modifier.height(4.dp))
                                         Text(
-                                            text = "User: ${a.rdpUser} · OS: ${a.osName} · Jalur: ${vsReady.validatedTransport ?: a.mode}",
+                                            text = "${a.rdpUser} · ${a.osName} · ${(vsReady.validatedTransport ?: a.mode).uppercase()}",
                                             style = MaterialTheme.typography.bodySmall,
                                             color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                            maxLines = 1,
+                                            overflow = TextOverflow.Ellipsis,
                                         )
                                         Spacer(Modifier.height(10.dp))
                                         XyField(
@@ -1091,13 +1093,14 @@ fun RdpFreeScreen(onBack: () -> Unit, onConnect: (ConnectionProfile) -> Unit) {
                                                 }
                                             },
                                             label = "Password Sesi (RDP_PASSWORD)",
-                                            hint = "Masukkan RDP_PASSWORD untuk terhubung",
+                                            hint = "Masukkan RDP_PASSWORD",
                                             isPassword = true,
                                         )
                                         Spacer(Modifier.height(10.dp))
                                         if (isSessionPolos) {
                                             XyPillButton(
-                                                text = "Buka Terminal SSH (Linux Polos)",
+                                                text = "Masuk SSH",
+                                                icon = XyIcons.Terminal,
                                                 onClick = {
                                                     if (rememberPasswordLocal && password.isNotBlank()) {
                                                         vault.put("xyrdp.saved.rdp_password", password)
@@ -1114,10 +1117,11 @@ fun RdpFreeScreen(onBack: () -> Unit, onConnect: (ConnectionProfile) -> Unit) {
                                             )
                                         } else {
                                             XyPillButton(
-                                                text = "Hubungkan ke Desktop RDP Sekarang",
+                                                text = "Masuk RDP",
+                                                icon = XyIcons.Monitor,
                                                 onClick = {
                                                     busy = true
-                                                    busyLabel = "Memvalidasi endpoint & membuka sesi RDP…"
+                                                    busyLabel = "Membuka sesi RDP…"
                                                     scope.launch {
                                                         try {
                                                             val fresh = XyRdpClient.pollValidatedSession(token!!, login!!)
@@ -1151,7 +1155,8 @@ fun RdpFreeScreen(onBack: () -> Unit, onConnect: (ConnectionProfile) -> Unit) {
                                             if (isSessionLinux) {
                                                 Spacer(Modifier.height(8.dp))
                                                 XyPillButton(
-                                                    text = "Buka Terminal SSH Pendamping (:22)",
+                                                    text = "Terminal SSH (:22)",
+                                                    icon = XyIcons.Terminal,
                                                     onClick = {
                                                         if (rememberPasswordLocal && password.isNotBlank()) {
                                                             vault.put("xyrdp.saved.rdp_password", password)
@@ -1688,20 +1693,22 @@ fun RdpFreeScreen(onBack: () -> Unit, onConnect: (ConnectionProfile) -> Unit) {
                                     Spacer(Modifier.height(8.dp))
                                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                                         XyPillButton(
-                                            text = "Buat Password Kuat",
+                                            text = "Acak Sandi",
+                                            icon = XyIcons.Key,
                                             onClick = {
                                                 val generated = generateStrongPassword()
                                                 password = generated
                                                 copyToClipboard("RDP_PASSWORD", generated)
                                                 if (rememberPasswordLocal) vault.put("xyrdp.saved.rdp_password", generated)
-                                                successMessage = "Password kuat dibuat & disalin ke clipboard."
+                                                successMessage = "Password kuat dibuat & disalin."
                                             },
                                             primary = false,
                                             compact = true,
                                             modifier = Modifier.weight(1f),
                                         )
                                         XyPillButton(
-                                            text = "Pasang RDP_PASSWORD ↗",
+                                            text = "Pasang Sandi ↗",
+                                            icon = XyIcons.Globe,
                                             onClick = {
                                                 if (password.isNotBlank()) copyToClipboard("RDP_PASSWORD", password)
                                                 openBrowser("https://github.com/$login/${XyRdpConfig.FORK_REPO_NAME}/settings/secrets/actions/new")
@@ -1713,8 +1720,8 @@ fun RdpFreeScreen(onBack: () -> Unit, onConnect: (ConnectionProfile) -> Unit) {
                                     }
                                     Spacer(Modifier.height(8.dp))
                                     RdpFlatToggleRow(
-                                        title = "Simpan RDP_PASSWORD Terenkripsi di HP",
-                                        subtitle = "Otomatis mengisi password saat sesi RDP siap disambungkan",
+                                        title = "Simpan RDP_PASSWORD di HP",
+                                        subtitle = "Otomatis isi sandi saat masuk RDP",
                                         checked = rememberPasswordLocal,
                                         enabled = true,
                                         onCheckedChange = {
@@ -1734,14 +1741,16 @@ fun RdpFreeScreen(onBack: () -> Unit, onConnect: (ConnectionProfile) -> Unit) {
                                         Spacer(Modifier.height(8.dp))
                                         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                                             XyPillButton(
-                                                text = "Ambil Key Tailscale ↗",
+                                                text = "Ambil Key ↗",
+                                                icon = XyIcons.Key,
                                                 onClick = { openBrowser("https://login.tailscale.com/admin/settings/keys") },
                                                 primary = !hasTsKey,
                                                 compact = true,
                                                 modifier = Modifier.weight(1f),
                                             )
                                             XyPillButton(
-                                                text = "Pasang di GitHub ↗",
+                                                text = "Simpan GitHub ↗",
+                                                icon = XyIcons.Globe,
                                                 onClick = {
                                                     if (secretTailscaleDraft.isNotBlank()) {
                                                         copyToClipboard("TAILSCALE_AUTH_KEY", secretTailscaleDraft)
@@ -1766,13 +1775,15 @@ fun RdpFreeScreen(onBack: () -> Unit, onConnect: (ConnectionProfile) -> Unit) {
                                         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                                             XyPillButton(
                                                 text = "Buat .ovpn ↗",
+                                                icon = XyIcons.Globe,
                                                 onClick = { openBrowser("https://portmap.io/configs") },
                                                 primary = !hasOvpn,
                                                 compact = true,
                                                 modifier = Modifier.weight(1f),
                                             )
                                             XyPillButton(
-                                                text = "Pasang di GitHub ↗",
+                                                text = "Simpan GitHub ↗",
+                                                icon = XyIcons.Key,
                                                 onClick = {
                                                     if (secretOvpnDraft.isNotBlank()) {
                                                         copyToClipboard("PORTMAP_OVPN_CONFIG", secretOvpnDraft)
@@ -1791,14 +1802,16 @@ fun RdpFreeScreen(onBack: () -> Unit, onConnect: (ConnectionProfile) -> Unit) {
                                     Spacer(Modifier.height(8.dp))
                                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                                         XyPillButton(
-                                            text = "Halaman Secrets GitHub ↗",
+                                            text = "Secrets GitHub ↗",
+                                            icon = XyIcons.Lock,
                                             onClick = { openBrowser("https://github.com/$login/${XyRdpConfig.FORK_REPO_NAME}/settings/secrets/actions") },
                                             primary = false,
                                             compact = true,
                                             modifier = Modifier.weight(1f),
                                         )
                                         XyPillButton(
-                                            text = if (showSecretGuide) "Tutup Panduan" else "Panduan Cepat",
+                                            text = if (showSecretGuide) "Tutup" else "Panduan",
+                                            icon = XyIcons.Info,
                                             onClick = { showSecretGuide = !showSecretGuide },
                                             primary = false,
                                             compact = true,
@@ -1895,11 +1908,11 @@ private fun SecretStatusRow(
                 else MaterialTheme.colorScheme.onSurfaceVariant,
             )
         }
-        Text(
-            text = "Salin",
-            style = MaterialTheme.typography.labelSmall,
-            fontWeight = FontWeight.Bold,
-            color = MaterialTheme.colorScheme.primary,
+        Icon(
+            imageVector = XyIcons.Copy,
+            contentDescription = "Salin",
+            tint = MaterialTheme.colorScheme.primary,
+            modifier = Modifier.size(15.dp),
         )
     }
 }

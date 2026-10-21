@@ -630,6 +630,15 @@ fun SessionControls(
                         verticalArrangement = Arrangement.spacedBy(2.dp),
                     ) {
                         RailMenuItem(
+                            icon = XyIcons.Sliders,
+                            label = xy("Menu utama & kontrol HUD", "Main menu & HUD controls"),
+                            active = panelOpen,
+                        ) {
+                            railMenuOpen = false
+                            scrollPillOpen = false
+                            panelOpen = true
+                        }
+                        RailMenuItem(
                             icon = XyIcons.ScrollSlide,
                             label = xy("Kontrol scroll", "Scroll control"),
                             active = scrollPillOpen,
@@ -729,6 +738,23 @@ fun SessionControls(
                 HudMappingBanner(
                     keyCount = keys.size,
                     onAdd = { pickerOpen = true },
+                    onScaleAll = { deltaDp ->
+                        val scaled = keys.map { k ->
+                            k.copy(size = (k.size + deltaDp).coerceIn(HudKey.MIN_SIZE, HudKey.MAX_SIZE))
+                        }
+                        onKeysChange(scaled)
+                        prefs.setCustomHudKeys(deviceId, scaled)
+                    },
+                    onSnapGrid = {
+                        val snapped = keys.map { k ->
+                            val sx = ((k.x * 50f).roundToInt() / 50f).coerceIn(0f, 1f)
+                            val sy = ((k.y * 50f).roundToInt() / 50f).coerceIn(0f, 1f)
+                            k.copy(x = sx, y = sy)
+                        }
+                        onKeysChange(snapped)
+                        prefs.setCustomHudKeys(deviceId, snapped)
+                        notice.show(xyNow("Semua tombol diratakan ke grid presisi", "All buttons snapped to precision grid"))
+                    },
                     onReset = { confirmResetHud = true },
                     onDone = { onMappingModeChange(false) },
                 )
@@ -1315,96 +1341,130 @@ fun SessionControls(
     }
 }
 
+private fun shortenStatText(raw: String, maxChars: Int = 12): String {
+    val clean = raw.trim()
+        .replace("Direct Stream", "Direct", ignoreCase = true)
+        .replace("Tailscale P2P", "TS-P2P", ignoreCase = true)
+        .replace("Tailscale", "TS", ignoreCase = true)
+        .replace("Portmap Tunnel", "Portmap", ignoreCase = true)
+        .replace("RemoteFX", "RFX", ignoreCase = true)
+        .replace("Automatic", "Auto", ignoreCase = true)
+        .replace("Low-Latency", "LL", ignoreCase = true)
+        .replace("  ", " ")
+    if (clean.length <= maxChars) return clean
+    return clean.take((maxChars - 1).coerceAtLeast(4)).trimEnd() + "…"
+}
+
 @Composable
 private fun LiveTelemetryPill(
     telemetry: id.xydesk.remote.core.TelemetrySample,
     modifier: Modifier = Modifier,
 ) {
+    var expanded by remember { mutableStateOf(false) }
     val rtt = telemetry.rttMs
     val rttColor = when {
-        rtt <= 0 -> Color(0xFFF2F2F4)
-        rtt < 45 -> Color(0xFFE4E4E8)
-        rtt < 120 -> Color(0xFFA9A9B0)
-        else -> Color(0xFF7C7C84)
+        rtt <= 0 -> Color(0xFF34D399)
+        rtt < 45 -> Color(0xFF34D399)
+        rtt < 120 -> Color(0xFFFBBF24)
+        else -> Color(0xFFFB7185)
+    }
+    val fpsColor = when {
+        telemetry.fps >= 45 -> Color(0xFF34D399)
+        telemetry.fps >= 24 -> Color(0xFFFBBF24)
+        telemetry.fps > 0 -> Color(0xFFFB923C)
+        else -> Color(0xFFE4E4E8)
     }
     val textShadow = Shadow(
         color = Color(0xF2000000),
-        offset = Offset(1.2f, 1.2f),
-        blurRadius = 3f,
+        offset = Offset(1f, 1f),
+        blurRadius = 2.5f,
     )
     val labelStyle = TextStyle(
-        color = Color(0xB8D9D9DE),
-        fontSize = 7.sp,
+        color = Color(0xFFD4D4D8),
+        fontSize = 8.sp,
         fontWeight = FontWeight.SemiBold,
         fontFamily = FontFamily.Monospace,
-        letterSpacing = 0.4.sp,
-        lineHeight = 8.sp,
+        letterSpacing = 0.3.sp,
+        lineHeight = 10.sp,
         shadow = textShadow,
     )
     val valueStyle = TextStyle(
-        color = Color(0xFFF2F2F4),
-        fontSize = 8.5.sp,
-        fontWeight = FontWeight.Bold,
+        color = Color(0xFFFFFFFF),
+        fontSize = 9.sp,
+        fontWeight = FontWeight.ExtraBold,
         fontFamily = FontFamily.Monospace,
-        lineHeight = 10.sp,
+        lineHeight = 11.sp,
         shadow = textShadow,
     )
     val isSessionConnected = telemetry.state is SessionState.Connected
     val rttLabel = when {
-        rtt >= 0 -> "${rtt.coerceAtLeast(1)} ms"
-        isSessionConnected -> "1 ms"
-        else -> "-- ms"
-    }
-    val resLabel = if (telemetry.width > 0) "${telemetry.width}x${telemetry.height}" else "--"
-    // Latensi pipeline sisi HP: tibanya frame di thread RDP sampai digambar.
-    // Hijau muda = di bawah satu vsync (~16 ms), kuning = 1-2 vsync, oranye
-    // = lebih lambat — antrean coalescing menumpuk dan terasa jank.
-    val pipeline = telemetry.pipelineLatencyMs
-    val pipelineColor = when {
-        pipeline <= 0 -> Color(0xFFF2F2F4)
-        pipeline < 17 -> Color(0xFFE4E4E8)
-        pipeline < 34 -> Color(0xFFE8C468)
-        else -> Color(0xFFE88E58)
-    }
-    val pipelineLabel = when {
-        pipeline >= 0 -> "${pipeline.coerceAtLeast(1)} ms"
-        isSessionConnected -> "1 ms"
-        else -> "-- ms"
-    }
-    // Antrean coalescing: "rata-rata / puncak" update per flush. Puncak > 1
-    // berarti beberapa frame digabung (UI tertinggal) — disorot kuning.
-    val queueColor = if (telemetry.queuePeak > 1) Color(0xFFE8C468) else Color(0xFFF2F2F4)
-    val queueLabel = when {
-        telemetry.queueDepth >= 0f -> "%.1f / %d".format(telemetry.queueDepth, telemetry.queuePeak.coerceAtLeast(1))
-        isSessionConnected -> "0.0 / 0"
+        rtt >= 0 -> "${rtt.coerceAtLeast(1)}ms"
+        isSessionConnected -> "1ms"
         else -> "--"
     }
-    val items = listOf(
-        Triple("FPS", "${telemetry.fps}", Color(0xFFF2F2F4)),
-        Triple("LATENCY", rttLabel, rttColor),
-        Triple("RESOLUSI", resLabel, Color(0xFFF2F2F4)),
-        Triple("PIPELINE", pipelineLabel, pipelineColor),
-        Triple("ANTREAN", queueLabel, queueColor),
-        Triple("ENCODE", telemetry.codecLabel, Color(0xFFF2F2F4)),
-        Triple("RELAY", telemetry.relayLabel, Color(0xFFF2F2F4)),
-        Triple("NETWORK", telemetry.networkLabel, Color(0xFFF2F2F4)),
-        // Transport sesi aktif: UDP (cepat) atau TCP (fallback aman). Kuning
-        // saat TCP supaya langsung kelihatan kenapa sesi terasa berat.
-        Triple(
-            "TRANSPORT",
-            if (telemetry.udpActive) "UDP" else "TCP",
-            if (telemetry.udpActive) Color(0xFFF2F2F4) else Color(0xFFE8C468),
-        ),
+    val resLabel = if (telemetry.width > 0) "${telemetry.width}×${telemetry.height}" else "--"
+    val pipeline = telemetry.pipelineLatencyMs
+    val pipelineColor = when {
+        pipeline <= 0 -> Color(0xFF34D399)
+        pipeline < 17 -> Color(0xFF34D399)
+        pipeline < 34 -> Color(0xFFFBBF24)
+        else -> Color(0xFFFB923C)
+    }
+    val pipelineLabel = when {
+        pipeline >= 0 -> "${pipeline.coerceAtLeast(1)}ms"
+        isSessionConnected -> "1ms"
+        else -> "--"
+    }
+    val queueColor = if (telemetry.queuePeak > 1) Color(0xFFFBBF24) else Color(0xFFF4F4F5)
+    val queueLabel = when {
+        telemetry.queueDepth >= 0f -> "%.1f/%d".format(telemetry.queueDepth, telemetry.queuePeak.coerceAtLeast(1))
+        isSessionConnected -> "0/0"
+        else -> "--"
+    }
+    val transportLabel = if (telemetry.udpActive) "UDP" else "TCP"
+    val transportColor = if (telemetry.udpActive) Color(0xFF38BDF8) else Color(0xFFFBBF24)
+
+    val coreItems = listOf(
+        Triple("FPS", "${telemetry.fps}", fpsColor),
+        Triple("PING", rttLabel, rttColor),
+        Triple("RES", shortenStatText(resLabel, 11), Color(0xFFF4F4F5)),
+        Triple("ENC", shortenStatText(telemetry.codecLabel, 11), Color(0xFFF4F4F5)),
+        Triple("NET", "$transportLabel·${shortenStatText(telemetry.networkLabel, 8)}", transportColor),
+    )
+    val extraItems = listOf(
+        Triple("PIPE", pipelineLabel, pipelineColor),
+        Triple("QUEUE", queueLabel, queueColor),
+        Triple("RELAY", shortenStatText(telemetry.relayLabel, 11), Color(0xFFF4F4F5)),
     )
 
     Column(
-        modifier = modifier.padding(horizontal = 2.dp, vertical = 2.dp),
-        verticalArrangement = Arrangement.spacedBy(3.dp),
+        modifier = modifier
+            .widthIn(min = 104.dp, max = 148.dp)
+            .clip(RoundedCornerShape(10.dp))
+            .background(Color(0xCC090B10))
+            .border(0.8.dp, Color(0x38FFFFFF), RoundedCornerShape(10.dp))
+            .clickable { expanded = !expanded }
+            .padding(horizontal = 7.dp, vertical = 5.dp),
+        verticalArrangement = Arrangement.spacedBy(2.dp),
     ) {
-        items.forEach { (label, value, color) ->
-            Column(verticalArrangement = Arrangement.spacedBy(0.dp)) {
-                Text(text = label, style = labelStyle)
-                Text(text = value, style = valueStyle.copy(color = color))
+        (if (expanded) coreItems + extraItems else coreItems).forEach { (label, value, color) ->
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Text(
+                    text = label,
+                    style = labelStyle,
+                    maxLines = 1,
+                )
+                Spacer(Modifier.width(6.dp))
+                Text(
+                    text = value,
+                    style = valueStyle.copy(color = color),
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
             }
         }
     }
@@ -1846,127 +1906,150 @@ private fun SessionPanel(
                 PanelChip(xy("Tutup", "Close"), onClose)
             }
 
-            PanelTabTiles(tab = tab, onTab = onTab, modifier = Modifier.fillMaxWidth())
-
-            val tabScroll = androidx.compose.runtime.key(tab) { rememberScrollState() }
-            Column(
+            // Area konten utama dengan animasi perpindahan tab halus +
+            // Floating Rounded Full Bottom Navigation Bar di bagian bawah popup
+            Box(
                 Modifier
                     .weight(1f)
-                    .verticalScroll(tabScroll),
-                // Jarak antar kartu dirapatkan; kartu kini punya padding sendiri.
-                verticalArrangement = Arrangement.spacedBy(7.dp),
+                    .fillMaxWidth(),
             ) {
-                when (tab) {
-                    PanelTab.SCREEN -> ScreenTab(
-                        openKey = openSection,
-                        onOpenKey = { openSection = it },
-                        deviceId = deviceId,
-                        remoteSize = remoteSize,
-                        zoomPercent = zoomPercent,
-                        remoteDpi = remoteDpi,
-                        resolution = resolution,
-                        rotation = rotation,
-                        custom = custom,
-                        autoFit = autoFit,
-                        onAutoFitChange = onAutoFitChange,
-                        onCustomChange = onCustomChange,
-                        onCustomApply = onCustomApply,
-                        onResolution = onResolution,
-                        onRotation = onRotation,
-                        onZoomIn = onZoomIn,
-                        onZoomOut = onZoomOut,
-                        onFit = onFit,
-                        onZoomActual = onZoomActual,
-                        onZoomScale = onZoomScale,
-                        onRemoteDpiChange = onRemoteDpiChange,
-                        onDisplayRefreshPreferenceChange = onDisplayRefreshPreferenceChange,
-                        showTelemetryPill = showTelemetryPill,
-                        onShowTelemetryPillChange = onShowTelemetryPillChange,
-                        onOpenMonitorGrid = onOpenMonitorGrid,
-                        pcConnectMode = pcConnectMode,
-                        notice = notice,
-                    )
+                androidx.compose.animation.AnimatedContent(
+                    targetState = tab,
+                    label = "sessionPopupTabAnim",
+                    modifier = Modifier.fillMaxSize(),
+                ) { activeTab ->
+                    val tabScroll = rememberScrollState()
+                    Column(
+                        Modifier
+                            .fillMaxSize()
+                            .verticalScroll(tabScroll)
+                            .padding(bottom = 74.dp),
+                        verticalArrangement = Arrangement.spacedBy(7.dp),
+                    ) {
+                        when (activeTab) {
+                            PanelTab.SCREEN -> ScreenTab(
+                                openKey = openSection,
+                                onOpenKey = { openSection = it },
+                                deviceId = deviceId,
+                                remoteSize = remoteSize,
+                                zoomPercent = zoomPercent,
+                                remoteDpi = remoteDpi,
+                                resolution = resolution,
+                                rotation = rotation,
+                                custom = custom,
+                                autoFit = autoFit,
+                                onAutoFitChange = onAutoFitChange,
+                                onCustomChange = onCustomChange,
+                                onCustomApply = onCustomApply,
+                                onResolution = onResolution,
+                                onRotation = onRotation,
+                                onZoomIn = onZoomIn,
+                                onZoomOut = onZoomOut,
+                                onFit = onFit,
+                                onZoomActual = onZoomActual,
+                                onZoomScale = onZoomScale,
+                                onRemoteDpiChange = onRemoteDpiChange,
+                                onDisplayRefreshPreferenceChange = onDisplayRefreshPreferenceChange,
+                                showTelemetryPill = showTelemetryPill,
+                                onShowTelemetryPillChange = onShowTelemetryPillChange,
+                                onOpenMonitorGrid = onOpenMonitorGrid,
+                                pcConnectMode = pcConnectMode,
+                                notice = notice,
+                            )
 
-                    PanelTab.INPUT -> InputTab(
-                        openKey = openSection,
-                        onOpenKey = { openSection = it },
-                        inputMode = inputMode,
-                        onInputModeChange = onInputModeChange,
-                        swapMouseButtons = swapMouseButtons,
-                        onSwapMouseButtonsChange = onSwapMouseButtonsChange,
-                        onSendTextClick = onSendTextClick,
-                        lastClipboard = lastClipboard,
-                        clipboardSyncEnabled = clipboardSyncEnabled,
-                        pointerVisible = pointerVisible,
-                        onPointerVisibilityChange = onPointerVisibilityChange,
-                        pointerStyle = pointerStyle,
-                        onPointerStyle = onPointerStyle,
-                        pointerSize = pointerSize,
-                        onPointerSize = onPointerSize,
-                        pointerSensitivity = pointerSensitivity,
-                        onPointerSensitivity = onPointerSensitivity,
-                        pointerAcceleration = pointerAcceleration,
-                        onPointerAcceleration = onPointerAcceleration,
-                        inertialScroll = inertialScroll,
-                        onInertialScroll = onInertialScroll,
-                        edgeScrollZone = edgeScrollZone,
-                        onEdgeScrollZone = onEdgeScrollZone,
-                        gamepadEnabled = gamepadEnabled,
-                        stickMode = stickMode,
-                        onStickModeChange = onStickModeChange,
-                        onGamepadEnabled = onGamepadEnabled,
-                        gyroMouseEnabled = gyroMouseEnabled,
-                        onGyroMouseEnabled = onGyroMouseEnabled,
-                        fpsGameMode = fpsGameMode,
-                        rawInputUdpAlive = rawInputUdpAlive,
-                        onFpsGameModeChange = onFpsGameModeChange,
-                    )
+                            PanelTab.INPUT -> InputTab(
+                                openKey = openSection,
+                                onOpenKey = { openSection = it },
+                                inputMode = inputMode,
+                                onInputModeChange = onInputModeChange,
+                                swapMouseButtons = swapMouseButtons,
+                                onSwapMouseButtonsChange = onSwapMouseButtonsChange,
+                                onSendTextClick = onSendTextClick,
+                                lastClipboard = lastClipboard,
+                                clipboardSyncEnabled = clipboardSyncEnabled,
+                                pointerVisible = pointerVisible,
+                                onPointerVisibilityChange = onPointerVisibilityChange,
+                                pointerStyle = pointerStyle,
+                                onPointerStyle = onPointerStyle,
+                                pointerSize = pointerSize,
+                                onPointerSize = onPointerSize,
+                                pointerSensitivity = pointerSensitivity,
+                                onPointerSensitivity = onPointerSensitivity,
+                                pointerAcceleration = pointerAcceleration,
+                                onPointerAcceleration = onPointerAcceleration,
+                                inertialScroll = inertialScroll,
+                                onInertialScroll = onInertialScroll,
+                                edgeScrollZone = edgeScrollZone,
+                                onEdgeScrollZone = onEdgeScrollZone,
+                                gamepadEnabled = gamepadEnabled,
+                                stickMode = stickMode,
+                                onStickModeChange = onStickModeChange,
+                                onGamepadEnabled = onGamepadEnabled,
+                                gyroMouseEnabled = gyroMouseEnabled,
+                                onGyroMouseEnabled = onGyroMouseEnabled,
+                                fpsGameMode = fpsGameMode,
+                                rawInputUdpAlive = rawInputUdpAlive,
+                                onFpsGameModeChange = onFpsGameModeChange,
+                            )
 
-                    PanelTab.BUTTONS -> ButtonsTab(
-                        openKey = openSection,
-                        onOpenKey = { openSection = it },
-                        keys = keys,
-                        hudProfile = hudProfile,
-                        onSelectHudProfile = onSelectHudProfile,
-                        onAddKey = onAddKey,
-                        onEditKey = onEditKey,
-                        onDeleteKey = onDeleteKey,
-                        mappingMode = mappingMode,
-                        onMappingModeChange = onMappingModeChange,
-                        plate = plate,
-                        onPlate = onPlate,
-                        haptics = haptics,
-                        onHaptics = onHaptics,
-                        onResetCluster = onResetCluster,
-                        onExportLayoutJson = onExportLayoutJson,
-                        onOpenLayoutJson = onOpenLayoutJson,
-                        showHudButtons = showHudButtons,
-                        onShowHudButtonsChange = onShowHudButtonsChange,
-                        autoHideHudOnExternalInput = autoHideHudOnExternalInput,
-                        onAutoHideHudOnExternalInputChange = onAutoHideHudOnExternalInputChange,
-                        hudOpacity = hudOpacity,
-                        onHudOpacityChange = onHudOpacityChange,
-                    )
+                            PanelTab.BUTTONS -> ButtonsTab(
+                                openKey = openSection,
+                                onOpenKey = { openSection = it },
+                                keys = keys,
+                                hudProfile = hudProfile,
+                                onSelectHudProfile = onSelectHudProfile,
+                                onAddKey = onAddKey,
+                                onEditKey = onEditKey,
+                                onDeleteKey = onDeleteKey,
+                                mappingMode = mappingMode,
+                                onMappingModeChange = onMappingModeChange,
+                                plate = plate,
+                                onPlate = onPlate,
+                                haptics = haptics,
+                                onHaptics = onHaptics,
+                                onResetCluster = onResetCluster,
+                                onExportLayoutJson = onExportLayoutJson,
+                                onOpenLayoutJson = onOpenLayoutJson,
+                                showHudButtons = showHudButtons,
+                                onShowHudButtonsChange = onShowHudButtonsChange,
+                                autoHideHudOnExternalInput = autoHideHudOnExternalInput,
+                                onAutoHideHudOnExternalInputChange = onAutoHideHudOnExternalInputChange,
+                                hudOpacity = hudOpacity,
+                                onHudOpacityChange = onHudOpacityChange,
+                            )
 
-                    PanelTab.SESSION -> SessionTab(
-                        deviceId = deviceId,
-                        notice = notice,
-                        openKey = openSection,
-                        onOpenKey = { openSection = it },
-                        onScreenshot = onScreenshot,
-                        onLockRemotePc = onLockRemotePc,
-                        onActivatePrivacyCurtain = onActivatePrivacyCurtain,
-                        onDisconnect = onDisconnect,
-                        recordingLabel = recordingLabel,
-                        recordingStatus = recordingStatus,
-                        recordingActionEnabled = recordingActionEnabled,
-                        recordingActive = recordingActive,
-                        onToggleRecording = onToggleRecording,
-                        coreInfo = coreInfo,
-                        onCopyCoreInfo = onCopyCoreInfo,
-                    )
+                            PanelTab.SESSION -> SessionTab(
+                                deviceId = deviceId,
+                                notice = notice,
+                                openKey = openSection,
+                                onOpenKey = { openSection = it },
+                                onScreenshot = onScreenshot,
+                                onLockRemotePc = onLockRemotePc,
+                                onActivatePrivacyCurtain = onActivatePrivacyCurtain,
+                                onDisconnect = onDisconnect,
+                                recordingLabel = recordingLabel,
+                                recordingStatus = recordingStatus,
+                                recordingActionEnabled = recordingActionEnabled,
+                                recordingActive = recordingActive,
+                                onToggleRecording = onToggleRecording,
+                                coreInfo = coreInfo,
+                                onCopyCoreInfo = onCopyCoreInfo,
+                            )
+                        }
+                        Spacer(Modifier.height(16.dp))
+                    }
                 }
-                Spacer(Modifier.height(16.dp))
+
+                // FLOATING ROUNDED FULL BOTTOM NAVIGATION BAR
+                PanelTabTiles(
+                    tab = tab,
+                    onTab = onTab,
+                    modifier = Modifier
+                        .align(Alignment.BottomCenter)
+                        .padding(horizontal = 6.dp, vertical = 4.dp)
+                        .widthIn(max = 560.dp)
+                        .fillMaxWidth(),
+                )
             }
         }
     }
@@ -2649,23 +2732,32 @@ private fun SessionTab(
                 modifier = Modifier.fillMaxWidth(),
             )
         }
-        if (coreInfo.isNotEmpty()) {
-            PanelSection(xy("Info teknis", "Technical info")) {
-                coreInfo.forEach { line ->
-                    Text(
-                        line,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        fontSize = 11.sp,
-                    )
-                }
-                XyPillButton(
-                    xy("Salin info teknis", "Copy technical info"),
-                    onCopyCoreInfo,
-                    primary = false,
-                    compact = true,
-                    modifier = Modifier.fillMaxWidth(),
+        PanelSection(xy("Info teknis & modul XyCore (.so / .dll)", "Technical info & XyCore modules (.so / .dll)")) {
+            XyRuntimeCatalog.sessionSummaryLines(
+                coreInfo.firstOrNull() ?: "v3.4.23-xy",
+            ).forEach { line ->
+                Text(
+                    line,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    fontSize = 10.5.sp,
+                    fontFamily = FontFamily.Monospace,
                 )
             }
+            coreInfo.drop(1).forEach { line ->
+                Text(
+                    line,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    fontSize = 10.5.sp,
+                )
+            }
+            XyPillButton(
+                xy("Salin info teknis & driver", "Copy technical & driver info"),
+                onCopyCoreInfo,
+                icon = XyIcons.Copy,
+                primary = false,
+                compact = true,
+                modifier = Modifier.fillMaxWidth(),
+            )
         }
     }
 }
@@ -2694,11 +2786,9 @@ internal fun PanelHint(text: String) {
 }
 
 /**
- * Tab panel sebagai deretan kotak kaca, bukan strip tersegmentasi.
- *
- * Tinggi dan jejak kakinya sama dengan [XySegmented] yang digantikannya, jadi
- * isi panel tidak bertambah panjang dan tidak menambah scroll — yang berubah
- * hanya bentuknya jadi kotak, sesuai permintaan pengguna.
+ * Floating Rounded Full Bottom Navigation Bar di bagian bawah Popup Menu Sesi.
+ * Berbentuk kapsul penuh (`RoundedCornerShape(50)`) dengan pill aktif beranimasi
+ * untuk berpindah antar tab Layar, Input, Kontrol/HUD, dan Sesi.
  */
 @Composable
 private fun PanelTabTiles(
@@ -2707,53 +2797,59 @@ private fun PanelTabTiles(
     modifier: Modifier = Modifier,
 ) {
     Row(
-        modifier = modifier,
-        horizontalArrangement = Arrangement.spacedBy(7.dp),
+        modifier = modifier
+            .shadow(14.dp, RoundedCornerShape(50))
+            .clip(RoundedCornerShape(50))
+            .background(Color(0xF011131A))
+            .border(1.2.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.45f), RoundedCornerShape(50))
+            .padding(horizontal = 6.dp, vertical = 5.dp),
+        horizontalArrangement = Arrangement.spacedBy(6.dp),
+        verticalAlignment = Alignment.CenterVertically,
     ) {
         PanelTab.entries.forEach { entry ->
             val active = entry == tab
             val bg by animateColorAsState(
                 targetValue = if (active) {
-                    MaterialTheme.colorScheme.onSurface
+                    MaterialTheme.colorScheme.primary
                 } else {
                     Color.Transparent
                 },
-                animationSpec = tween(durationMillis = 150),
+                animationSpec = tween(durationMillis = 190),
                 label = "panelTabBg",
             )
             val fg by animateColorAsState(
                 targetValue = if (active) {
-                    MaterialTheme.colorScheme.surface
+                    MaterialTheme.colorScheme.onPrimary
                 } else {
                     MaterialTheme.colorScheme.onSurfaceVariant
                 },
-                animationSpec = tween(durationMillis = 150),
+                animationSpec = tween(durationMillis = 190),
                 label = "panelTabFg",
             )
             val label = xy(entry.id, entry.en)
-            Column(
+            Row(
                 modifier = Modifier
                     .weight(1f)
-                    .xyGlass(shape = RoundedCornerShape(13.dp), strength = 0.9f)
-                    .clip(RoundedCornerShape(13.dp))
+                    .clip(RoundedCornerShape(50))
                     .background(bg)
                     .clickable { onTab(entry) }
                     .semantics { contentDescription = label }
-                    .padding(vertical = 7.dp),
-                horizontalAlignment = Alignment.CenterHorizontally,
-                verticalArrangement = Arrangement.spacedBy(3.dp),
+                    .padding(horizontal = 8.dp, vertical = 9.dp),
+                horizontalArrangement = Arrangement.Center,
+                verticalAlignment = Alignment.CenterVertically,
             ) {
                 Icon(
                     panelTabIcon(entry),
                     contentDescription = null,
                     tint = fg,
-                    modifier = Modifier.size(16.dp),
+                    modifier = Modifier.size(15.dp),
                 )
+                Spacer(Modifier.width(5.dp))
                 Text(
                     label,
                     color = fg,
-                    fontSize = 10.sp,
-                    fontWeight = if (active) FontWeight.SemiBold else FontWeight.Normal,
+                    fontSize = 11.sp,
+                    fontWeight = if (active) FontWeight.ExtraBold else FontWeight.Medium,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
                 )

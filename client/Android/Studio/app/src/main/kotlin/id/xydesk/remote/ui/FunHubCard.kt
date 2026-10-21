@@ -1749,16 +1749,21 @@ internal fun FeedAvatarThumb(
     size: Dp = 30.dp,
     durationRank: Int? = null,
 ) {
+    val context = LocalContext.current
     val resolvedUrl = remember(avatarUrl, githubLogin, name) {
-        val raw = avatarUrl?.trim().orEmpty()
-        if (raw.isNotEmpty()) {
-            raw
-        } else {
-            val candidate = githubLogin?.trim()?.removePrefix("@")?.takeIf { it.isNotEmpty() }
-                ?: name.trim().removePrefix("@").takeIf {
-                    it.isNotEmpty() && !it.contains(" ") && !it.startsWith("Tamu-", ignoreCase = true) && !it.equals("Anonim", ignoreCase = true)
-                }
-            if (!candidate.isNullOrBlank()) "https://github.com/$candidate.png?size=120" else ""
+        ChatAvatarLoader.normalizeAvatarUrl(avatarUrl, githubLogin, name)
+    }
+    var avatarBmp by remember(resolvedUrl) {
+        mutableStateOf(if (resolvedUrl.isNotBlank()) avatarMemoryCache.get(resolvedUrl) else null)
+    }
+    LaunchedEffect(resolvedUrl, githubLogin, name) {
+        if (avatarBmp == null && (resolvedUrl.isNotBlank() || !githubLogin.isNullOrBlank() || name.isNotBlank())) {
+            ChatAvatarLoader.load(
+                url = resolvedUrl,
+                context = context,
+                githubLogin = githubLogin,
+                fallbackName = name,
+            )?.let { avatarBmp = it }
         }
     }
     val topTen by LeaderboardPodium.topTen.collectAsState()
@@ -1797,18 +1802,30 @@ internal fun FeedAvatarThumb(
             .podiumFrame(effectiveRank?.takeIf { it in 1..3 }),
         contentAlignment = Alignment.Center,
     ) {
-        Text(
-            text = name.trim().removePrefix("@").take(1).uppercase().ifEmpty { "U" },
-            fontSize = (size.value * 0.40f).sp,
-            fontWeight = FontWeight.ExtraBold,
-            color = if (isFounder) Color(0xFFFEF08A) else Color.White,
-        )
-        when {
-            resolvedUrl.startsWith("/api/jokes/avatar/") -> {
-                FeedBinaryImage(path = resolvedUrl, modifier = Modifier.fillMaxSize(), round = true)
-            }
-            resolvedUrl.startsWith("https://") -> {
-                FeedRemoteUrlBannerImage(imageUrl = resolvedUrl, modifier = Modifier.fillMaxSize())
+        val bmp = avatarBmp
+        if (bmp != null) {
+            Image(
+                bitmap = bmp.asImageBitmap(),
+                contentDescription = name,
+                modifier = Modifier
+                    .fillMaxSize()
+                    .clip(CircleShape),
+                contentScale = ContentScale.Crop,
+            )
+        } else {
+            Text(
+                text = name.trim().removePrefix("@").take(1).uppercase().ifEmpty { "U" },
+                fontSize = (size.value * 0.40f).sp,
+                fontWeight = FontWeight.ExtraBold,
+                color = if (isFounder) Color(0xFFFEF08A) else Color.White,
+            )
+            when {
+                resolvedUrl.startsWith("/api/jokes/avatar/") -> {
+                    FeedBinaryImage(path = resolvedUrl, modifier = Modifier.fillMaxSize(), round = true)
+                }
+                resolvedUrl.startsWith("https://") -> {
+                    FeedRemoteUrlBannerImage(imageUrl = resolvedUrl, modifier = Modifier.fillMaxSize())
+                }
             }
         }
     }

@@ -2439,30 +2439,47 @@ async function sessionReportResponse(request, env) {
 
 async function serveCommunityBinary(request, env, url) {
   if (request.method !== "GET" && request.method !== "HEAD") return methodNotAllowed("GET, HEAD");
-  if (!env.UNIQUE_DOWNLOADS) return jsonResponse({ status: "unavailable" }, 503, request.method);
   const m = url.pathname.match(/^\/api\/jokes\/(attachment|avatar)\/([^/]+)$/i);
   if (!m) return jsonResponse({ status: "not_found" }, 404, request.method);
-  const key = m[1] === "attachment" ? `feed-att:${m[2]}` : null;
-  const avatarKey = m[1] === "avatar" && /^[0-9a-f]{64}$/i.test(m[2]) ? `feed-avatar:${m[2].toLowerCase()}` : null;
+  const kind = m[1].toLowerCase();
+  const rawSlug = decodeURIComponent(m[2]).trim();
+  const key = kind === "attachment" ? `feed-att:${rawSlug}` : null;
+  const avatarKey = kind === "avatar" && /^[0-9a-f]{64}$/i.test(rawSlug) ? `feed-avatar:${rawSlug.toLowerCase()}` : null;
   const kvKey = key || avatarKey;
-  if (!kvKey) return jsonResponse({ status: "not_found" }, 404, request.method);
-  try {
-    const value = await env.UNIQUE_DOWNLOADS.getWithMetadata(kvKey, { type: "arrayBuffer" });
-    if (!value || value.value === null || value.value === undefined) {
-      return jsonResponse({ status: "not_found" }, 404, request.method);
+  if (kvKey && env.UNIQUE_DOWNLOADS) {
+    try {
+      const value = await env.UNIQUE_DOWNLOADS.getWithMetadata(kvKey, { type: "arrayBuffer" });
+      if (value && value.value !== null && value.value !== undefined) {
+        const mime = COMMUNITY_ATTACHMENT_MIMES.includes(value.metadata?.mime) ? value.metadata.mime : "application/octet-stream";
+        return new Response(request.method === "HEAD" ? null : value.value, {
+          status: 200,
+          headers: {
+            "content-type": mime,
+            "cache-control": "public, max-age=86400",
+            "access-control-allow-origin": "*",
+          },
+        });
+      }
+    } catch {
+      return jsonResponse({ status: "unavailable" }, 503, request.method);
     }
-    const mime = COMMUNITY_ATTACHMENT_MIMES.includes(value.metadata?.mime) ? value.metadata.mime : "application/octet-stream";
-    return new Response(request.method === "HEAD" ? null : value.value, {
-      status: 200,
-      headers: {
-        "content-type": mime,
-        "cache-control": "public, max-age=86400",
-        "access-control-allow-origin": "*",
-      },
-    });
-  } catch {
-    return jsonResponse({ status: "unavailable" }, 503, request.method);
   }
+  if (kind === "avatar") {
+    const ghParam = String(url.searchParams.get("github") || "").trim().replace(/^@+/, "");
+    const candidateGh = ghParam || (/^[A-Za-z0-9](?:[A-Za-z0-9]|-(?=[A-Za-z0-9])){0,38}$/.test(rawSlug) && !/^[0-9a-f]{12,}$/i.test(rawSlug) ? rawSlug : "");
+    if (candidateGh) {
+      return new Response(null, {
+        status: 302,
+        headers: {
+          location: `https://avatars.githubusercontent.com/${encodeURIComponent(candidateGh)}?size=120`,
+          "cache-control": "public, max-age=1800",
+          "access-control-allow-origin": "*",
+        },
+      });
+    }
+  }
+  if (!env.UNIQUE_DOWNLOADS) return jsonResponse({ status: "unavailable" }, 503, request.method);
+  return jsonResponse({ status: "not_found" }, 404, request.method);
 }
 
 // Pemeriksaan pembaruan untuk app: tag rilis publik terbaru + ringkasan
@@ -4914,6 +4931,8 @@ export class GlobalChat {
         : (replyToName && !isSelfReply)
           ? "reply"
           : "global_chat";
+    const pushAvatarUrl = String(msg.avatar_url || "").trim() ||
+      (msg.github_login ? `https://avatars.githubusercontent.com/${encodeURIComponent(String(msg.github_login).replace(/^@+/, ""))}?size=120` : "");
     try {
       await fetch("https://api.onesignal.com/notifications", {
         method: "POST",
@@ -4941,6 +4960,7 @@ export class GlobalChat {
             sender_name: senderLabel,
             raw_sender: msg.name,
             github_login: msg.github_login || "",
+            avatar_url: pushAvatarUrl,
             reply_to_name: isSelfReply ? "" : replyToName,
             mentioned_users: mentions.join(","),
             country: msg.country || "ID",
@@ -4950,6 +4970,7 @@ export class GlobalChat {
             target_lang: msg.target_lang || "EN",
             at: msg.at,
           },
+          collapse_id: "xydesk_global_chat_latest",
           android_group: "xydesk_global_chat_group",
           android_group_message: {
             en: "$[notif_count] new messages in Chat Global · XyDesk",

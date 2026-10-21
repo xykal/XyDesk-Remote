@@ -1048,16 +1048,53 @@ fun HudKeyEditor(
                     onValueChange = { onChange(key.copy(size = it)) },
                     valueRange = HudKey.MIN_SIZE..HudKey.MAX_SIZE,
                 )
-                Text(
-                    xy(
-                        "Posisi: {0}% , {1}% — geser tombolnya langsung di layar untuk memindah.",
-                        "Position: {0}% , {1}% — drag the button on screen to move it.",
-                        (key.x * 100).toInt(),
-                        (key.y * 100).toInt(),
-                    ),
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    fontSize = 10.5.sp,
+                id.xydesk.remote.ui.components.XyToggleRow(
+                    title = xy("Mode Turbo (Tekan berulang otomatis saat ditahan)", "Turbo Mode (Rapid repeat while held)"),
+                    checked = key.turbo,
+                    onCheckedChange = { onChange(key.copy(turbo = it)) },
                 )
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                ) {
+                    Text(
+                        xy(
+                            "Posisi: {0}% , {1}%",
+                            "Position: {0}% , {1}%",
+                            (key.x * 100).toInt(),
+                            (key.y * 100).toInt(),
+                        ),
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        fontSize = 10.5.sp,
+                    )
+                    Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                        listOf(
+                            "◀" to (-0.01f to 0f),
+                            "▲" to (0f to -0.01f),
+                            "▼" to (0f to 0.01f),
+                            "▶" to (0.01f to 0f),
+                        ).forEach { (lbl, delta) ->
+                            Box(
+                                Modifier
+                                    .clip(RoundedCornerShape(8.dp))
+                                    .background(MaterialTheme.colorScheme.surfaceVariant)
+                                    .border(1.dp, MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(8.dp))
+                                    .clickable {
+                                        onChange(
+                                            key.copy(
+                                                x = (key.x + delta.first).coerceIn(0f, 1f),
+                                                y = (key.y + delta.second).coerceIn(0f, 1f),
+                                            ),
+                                        )
+                                    }
+                                    .padding(horizontal = 9.dp, vertical = 4.dp),
+                            ) {
+                                Text(lbl, fontSize = 10.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurface)
+                            }
+                        }
+                    }
+                }
             }
             if (onDuplicate != null) {
                 XyPillButton(
@@ -1123,49 +1160,87 @@ fun HudKeyEditor(
     }
 }
 
-/** Banner mode atur posisi di bagian atas: tambah tombol, reset, atau selesai. */
+/** Banner mode atur posisi di bagian atas: tambah tombol, snap grid, skala ukuran, reset, atau selesai. */
 @Composable
 fun HudMappingBanner(
     keyCount: Int = 0,
     onAdd: () -> Unit,
+    onScaleAll: ((Float) -> Unit)? = null,
+    onSnapGrid: (() -> Unit)? = null,
     onReset: (() -> Unit)? = null,
     onDone: () -> Unit,
 ) {
     Row(
         Modifier
-            .widthIn(max = 520.dp)
+            .widthIn(max = 640.dp)
             .fillMaxWidth()
-            .padding(horizontal = 12.dp, vertical = 6.dp)
-            .shadow(8.dp, RoundedCornerShape(14.dp))
-            .clip(RoundedCornerShape(14.dp))
-            .background(MaterialTheme.colorScheme.surface)
-            .border(1.dp, MaterialTheme.colorScheme.outline, RoundedCornerShape(14.dp))
+            .padding(horizontal = 10.dp, vertical = 6.dp)
+            .shadow(10.dp, RoundedCornerShape(50))
+            .clip(RoundedCornerShape(50))
+            .background(MaterialTheme.colorScheme.surface.copy(alpha = 0.96f))
+            .border(1.2.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.45f), RoundedCornerShape(50))
             .consumeBackgroundPointer {}
-            .padding(horizontal = 12.dp, vertical = 8.dp),
+            .padding(horizontal = 14.dp, vertical = 8.dp),
         verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(8.dp),
+        horizontalArrangement = Arrangement.spacedBy(6.dp),
     ) {
         Column(Modifier.weight(1f)) {
             Text(
                 xy(
-                    "Atur posisi ({0})",
-                    "Edit layout ({0})",
+                    "HUD Studio ({0} tombol)",
+                    "HUD Studio ({0} keys)",
                     keyCount,
                 ),
                 color = MaterialTheme.colorScheme.onSurface,
-                fontSize = 11.5.sp,
-                fontWeight = FontWeight.SemiBold,
+                fontSize = 11.sp,
+                fontWeight = FontWeight.Bold,
                 maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
             )
             Text(
                 xy(
-                    "Geser tombol · Ketuk untuk ubah",
-                    "Drag to move · Tap to edit",
+                    "Geser posisi · Ketuk tombol untuk edit/turbo",
+                    "Drag to move · Tap key to edit/turbo",
                 ),
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
-                fontSize = 10.sp,
+                fontSize = 9.5.sp,
                 maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
             )
+        }
+        if (onScaleAll != null) {
+            Box(
+                Modifier
+                    .clip(XyPill)
+                    .background(MaterialTheme.colorScheme.surfaceVariant)
+                    .border(1.dp, MaterialTheme.colorScheme.outlineVariant, XyPill)
+                    .clickable { onScaleAll(-4f) }
+                    .padding(horizontal = 8.dp, vertical = 6.dp),
+            ) {
+                Text("A-", color = MaterialTheme.colorScheme.onSurface, fontSize = 10.5.sp, fontWeight = FontWeight.Bold)
+            }
+            Box(
+                Modifier
+                    .clip(XyPill)
+                    .background(MaterialTheme.colorScheme.surfaceVariant)
+                    .border(1.dp, MaterialTheme.colorScheme.outlineVariant, XyPill)
+                    .clickable { onScaleAll(4f) }
+                    .padding(horizontal = 8.dp, vertical = 6.dp),
+            ) {
+                Text("A+", color = MaterialTheme.colorScheme.onSurface, fontSize = 10.5.sp, fontWeight = FontWeight.Bold)
+            }
+        }
+        if (onSnapGrid != null) {
+            Box(
+                Modifier
+                    .clip(XyPill)
+                    .background(MaterialTheme.colorScheme.surfaceVariant)
+                    .border(1.dp, MaterialTheme.colorScheme.outlineVariant, XyPill)
+                    .clickable(onClick = onSnapGrid)
+                    .padding(horizontal = 9.dp, vertical = 6.dp),
+            ) {
+                Text(xy("Grid", "Grid"), color = MaterialTheme.colorScheme.onSurface, fontSize = 10.5.sp, fontWeight = FontWeight.SemiBold)
+            }
         }
         Box(
             Modifier
@@ -1173,13 +1248,13 @@ fun HudMappingBanner(
                 .background(MaterialTheme.colorScheme.primaryContainer)
                 .border(1.dp, MaterialTheme.colorScheme.primary, XyPill)
                 .clickable(onClick = onAdd)
-                .padding(horizontal = 12.dp, vertical = 7.dp),
+                .padding(horizontal = 11.dp, vertical = 6.dp),
         ) {
             Text(
-                xy("+ Tambah", "+ Add"),
+                xy("+ Tombol", "+ Key"),
                 color = MaterialTheme.colorScheme.onPrimaryContainer,
-                fontSize = 11.sp,
-                fontWeight = FontWeight.SemiBold,
+                fontSize = 10.5.sp,
+                fontWeight = FontWeight.Bold,
             )
         }
         if (onReset != null) {
@@ -1188,28 +1263,27 @@ fun HudMappingBanner(
                     .clip(XyPill)
                     .border(1.dp, MaterialTheme.colorScheme.outlineVariant, XyPill)
                     .clickable(onClick = onReset)
-                    .padding(horizontal = 10.dp, vertical = 7.dp),
+                    .padding(horizontal = 9.dp, vertical = 6.dp),
             ) {
                 Text(
                     xy("Reset", "Reset"),
                     color = MaterialTheme.colorScheme.onSurface,
-                    fontSize = 11.sp,
+                    fontSize = 10.5.sp,
                 )
             }
         }
         Box(
             Modifier
                 .clip(XyPill)
-                .background(MaterialTheme.colorScheme.surfaceVariant)
-                .border(1.dp, MaterialTheme.colorScheme.outline, XyPill)
+                .background(MaterialTheme.colorScheme.primary)
                 .clickable(onClick = onDone)
-                .padding(horizontal = 12.dp, vertical = 7.dp),
+                .padding(horizontal = 12.dp, vertical = 6.dp),
         ) {
             Text(
                 xy("Selesai", "Done"),
-                color = MaterialTheme.colorScheme.onSurface,
-                fontSize = 11.sp,
-                fontWeight = FontWeight.SemiBold,
+                color = MaterialTheme.colorScheme.onPrimary,
+                fontSize = 10.5.sp,
+                fontWeight = FontWeight.Bold,
             )
         }
     }
