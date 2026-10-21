@@ -874,12 +874,18 @@ private fun GlobalChatAccountContent(
                                         (System.currentTimeMillis() - existing.at > 4_000L)
                                 }
                             }
+                            val newItemsToTranslate = ArrayList<ChatMessage>()
+                            fetched.maxByOrNull { it.at }?.let { newest ->
+                                id.xydesk.remote.push.ChatPushNotifier.markSeen(newest.id, newest.at, context)
+                            }
                             for (item in fetched) {
-                                id.xydesk.remote.push.ChatPushNotifier.markSeen(item.id, item.at, context)
                                 val existingIdx = messages.indexOfFirst { it.id == item.id }
                                 if (existingIdx >= 0) {
                                     if (item.revision > messages[existingIdx].revision) failedMutations.remove(item.id)
-                                    messages[existingIdx] = reconcileChatMessage(messages[existingIdx], item)
+                                    val reconciled = reconcileChatMessage(messages[existingIdx], item)
+                                    if (reconciled != messages[existingIdx]) {
+                                        messages[existingIdx] = reconciled
+                                    }
                                 }
                                 if (existingIdx < 0) {
                                     val tempIdx = findPendingChatIndex(messages, item)
@@ -890,7 +896,12 @@ private fun GlobalChatAccountContent(
                                         messages.add(item)
                                         added = true
                                         newlyAdded += 1
+                                        newItemsToTranslate.add(item)
                                     }
+                                }
+                            }
+                            newItemsToTranslate.takeLast(8).forEach { item ->
+                                if (item.translated.isBlank() || viewerTargetLang != "auto") {
                                     enrichTranslationIfNeeded(item)
                                 }
                             }
@@ -1055,7 +1066,9 @@ private fun GlobalChatAccountContent(
                                         }
                                     }
                                     wsHistoryReceived.set(true)
-                                    batch.forEach { id.xydesk.remote.push.ChatPushNotifier.markSeen(it.id, it.at, context) }
+                                    batch.maxByOrNull { it.at }?.let { newest ->
+                                        id.xydesk.remote.push.ChatPushNotifier.markSeen(newest.id, newest.at, context)
+                                    }
                                     if (closed) return@withLock
                                     // Parsing suspends: preserve messages arriving meanwhile and pending sends.
                                     val newestAt = batch.maxOfOrNull { it.at } ?: 0L
@@ -1080,12 +1093,18 @@ private fun GlobalChatAccountContent(
                                             reconcileChatMessage(it, incoming)
                                         } ?: incoming
                                     }
-                                    messages.clear()
-                                    messages.addAll((reconciledBatch + retained).filter { it.id !in hiddenMessageIds }.distinctBy { it.id }.sortedBy { it.at })
+                                    val mergedList = (reconciledBatch + retained)
+                                        .filter { it.id !in hiddenMessageIds }
+                                        .distinctBy { it.id }
+                                        .sortedBy { it.at }
+                                    if (mergedList != messages.toList()) {
+                                        messages.clear()
+                                        messages.addAll(mergedList)
+                                    }
                                     GlobalChatMemoryCache.messages.clear()
                                     GlobalChatMemoryCache.messages.addAll(messages.takeLast(80))
-                                    messages.lastOrNull { !it.deleted }?.let { latest ->
-                                        InAppLiveNotificationBus.updateLatestSnapshot(latest)
+                                    messages.forEach { msgItem ->
+                                        if (!msgItem.deleted) InAppLiveNotificationBus.updateLatestSnapshot(msgItem)
                                     }
                                     if (viewerTargetLang != "auto") {
                                         batch.takeLast(8).forEach { enrichTranslationIfNeeded(it) }
@@ -1273,63 +1292,81 @@ private fun GlobalChatAccountContent(
             attachmentData = attachmentData,
             viewOnce = viewOnce,
             avatarUrl = getVerifiedGitHubAvatar(context).orEmpty(),
-            deliveryTicks = 0,
+            deliveryTicks = 1,
             e2eeProtocol = sealed.protocol,
             e2eeSig = sealed.signatureHex,
             e2eeVerified = true,
         )
+        if (attachmentType.isEmpty()) draft = TextFieldValue("")
+        replyingTo = null
+        isAnnouncementMode = false
+        sending = false
         messages.add(pending)
         enrichTranslationIfNeeded(pending)
         scope.launch { listState.scrollChatTo((messages.size - 1).coerceAtLeast(0), chatMotionEnabled) }
         val bindingSnapshot = outboxBinding
         scope.launch {
             try {
-                withContext(Dispatchers.IO) {
-                    val bodyJson = JSONObject().apply {
-                        put("type", "msg")
-                        put("name", pending.name)
-                        put("github_login", currentGh)
-                        put("country", pending.country)
-                        put("text", displayFallback)
-                        put("is_announcement", announceNow)
-                        put("e2ee_v", sealed.protocol)
-                        put("e2ee_cipher", sealed.cipherBase64)
-                        put("e2ee_iv", sealed.ivBase64)
-                        put("e2ee_sig", sealed.signatureHex)
-                        put("client_msg_id", pending.id)
-                        if (replySnapshot != null) {
-                            put("reply_to_id", replySnapshot.id)
-                            put("reply_to_name", replySnapshot.name)
-                            put("reply_to_text", replySnapshot.text.take(140))
-                        }
-                        if (attachmentType.isNotEmpty()) {
-                            put("attachment_type", attachmentType)
-                            put("attachment_kind", if (attachmentType == "image") "photo" else attachmentType)
-                            put("attachment_name", if (attachmentType == "file") attachmentName else "")
-                            put("attachment_mime", attachmentMime)
-                            put("attachment_size", attachmentSize)
-                            put("attachment_data", attachmentData)
-                            put("view_once", viewOnce)
-                        }
-                        val av = pending.avatarUrl
-                        if (!av.isNullOrBlank()) put("avatar_url", av)
+                val bodyJson = JSONObject().apply {
+                    put("type", "msg")
+                    put("name", pending.name)
+                    put("github_login", currentGh)
+                    put("country", pending.country)
+                    put("text", displayFallback)
+                    put("is_announcement", announceNow)
+                    put("e2ee_v", sealed.protocol)
+                    put("e2ee_cipher", sealed.cipherBase64)
+                    put("e2ee_iv", sealed.ivBase64)
+                    put("e2ee_sig", sealed.signatureHex)
+                    put("client_msg_id", pending.id)
+                    if (replySnapshot != null) {
+                        put("reply_to_id", replySnapshot.id)
+                        put("reply_to_name", replySnapshot.name)
+                        put("reply_to_text", replySnapshot.text.take(140))
                     }
-                    GlobalChatOutbox.enqueue(context.applicationContext, currentGh, bindingSnapshot, bodyJson, now)
+                    if (attachmentType.isNotEmpty()) {
+                        put("attachment_type", attachmentType)
+                        put("attachment_kind", if (attachmentType == "image") "photo" else attachmentType)
+                        put("attachment_name", if (attachmentType == "file") attachmentName else "")
+                        put("attachment_mime", attachmentMime)
+                        put("attachment_size", attachmentSize)
+                        put("attachment_data", attachmentData)
+                        put("view_once", viewOnce)
+                    }
+                    val av = pending.avatarUrl
+                    if (!av.isNullOrBlank()) put("avatar_url", av)
                 }
-                if (chatAccountSnapshotIsCurrent(currentGh, getVerifiedGitHubLogin(context))) {
-                    if (draft.text.trim() == cleanText && attachmentType.isEmpty()) draft = TextFieldValue("")
-                    if (replyingTo?.id == replySnapshot?.id) replyingTo = null
-                    isAnnouncementMode = false
+                val directResponse = withContext(Dispatchers.IO) {
+                    runCatching {
+                        GlobalChatRepository.send(bodyJson, GlobalChatRepository.token(context.applicationContext))
+                    }.getOrNull()
+                }
+                val confirmedMsgJson = directResponse?.optJSONObject("message")
+                if (confirmedMsgJson != null) {
+                    val parsedConfirmed = withContext(Dispatchers.IO) {
+                        parseMessageFromJson(confirmedMsgJson, nickname, currentGh).copy(deliveryTicks = 2)
+                    }
+                    val idx = messages.indexOfFirst { it.id == pending.id || it.id == parsedConfirmed.id }
+                    if (idx >= 0) {
+                        messages[idx] = parsedConfirmed
+                    }
+                    confirmOwnSend(parsedConfirmed.id)
+                } else {
+                    withContext(Dispatchers.IO) {
+                        if (bindingSnapshot.isNotBlank()) {
+                            GlobalChatOutbox.enqueue(context.applicationContext, currentGh, bindingSnapshot, bodyJson, now)
+                        } else {
+                            chatSocketSend(bodyJson.toString())
+                        }
+                    }
                 }
             } catch (cancelled: CancellationException) {
                 throw cancelled
             } catch (_: Exception) {
                 val idx = messages.indexOfFirst { it.id == pending.id }
                 if (idx >= 0) messages[idx] = messages[idx].copy(deliveryTicks = -1)
-                Toast.makeText(context, "Pesan BELUM tersimpan di antrean. Draf dipertahankan; periksa akun/ruang penyimpanan lalu coba lagi.", Toast.LENGTH_LONG).show()
             } finally {
                 chatSocketSend(JSONObject().put("type", "typing").put("on", false).toString())
-                sending = false
             }
         }
     }
@@ -2044,8 +2081,10 @@ private fun GlobalChatAccountContent(
                     val showScrollToBottom by remember(messages.size) {
                         androidx.compose.runtime.derivedStateOf { listState.canScrollForward && messages.isNotEmpty() }
                     }
-                    val uniqueMessages = remember(messages.size, messages.toList()) {
-                        messages.distinctBy { it.id }
+                    val uniqueMessages by remember {
+                        androidx.compose.runtime.derivedStateOf {
+                            messages.distinctBy { it.id }
+                        }
                     }
                     val itemDecorativeMotion = id.xydesk.remote.ui.theme.LocalDecorativeMotionEnabled.current && !isScrollingChat
                     androidx.compose.runtime.CompositionLocalProvider(
@@ -4201,37 +4240,31 @@ internal object InAppLiveNotificationBus {
         private set
     var latestFloatingChat by mutableStateOf<InAppLiveNotificationItem?>(null)
         private set
+    var floatingChatSeq by mutableIntStateOf(0)
+        private set
     var unreadFloatingCount by mutableIntStateOf(0)
         private set
     private val seenIds = LinkedHashSet<String>()
     private var initialSnapshotSeeded = false
 
+    fun markInitialSeeded() {
+        initialSnapshotSeeded = true
+    }
+
     fun updateLatestSnapshot(msg: ChatMessage) {
         if (msg.id.isBlank() || msg.deleted) return
         seenIds.add(msg.id)
-        if (latestFloatingChat == null) {
-            latestFloatingChat = InAppLiveNotificationItem(
-                id = msg.id,
-                senderName = msg.name.ifBlank { "Komunitas" },
-                githubLogin = msg.githubLogin,
-                avatarUrl = msg.avatarUrl,
-                text = msg.text.ifBlank {
-                    when (msg.attachmentType) {
-                        "sticker" -> "[Stiker]"
-                        "image", "photo" -> "📷 Mengirim Foto"
-                        "video" -> "🎬 Mengirim Video"
-                        else -> "📎 Mengirim Lampiran"
-                    }
-                },
-                createdAt = msg.at,
-            )
-        }
         initialSnapshotSeeded = true
     }
 
     fun pushIncomingChat(msg: ChatMessage) {
         if (msg.id.isBlank() || msg.deleted || msg.mine) return
         val isNew = seenIds.add(msg.id)
+        if (!initialSnapshotSeeded) {
+            initialSnapshotSeeded = true
+            return
+        }
+        if (!isNew) return
         val item = InAppLiveNotificationItem(
             id = msg.id,
             senderName = msg.name.ifBlank { "Komunitas" },
@@ -4249,25 +4282,23 @@ internal object InAppLiveNotificationBus {
             category = "CHAT",
         )
         latestFloatingChat = item
-        if (isNew && initialSnapshotSeeded) {
-            unreadFloatingCount = (unreadFloatingCount + 1).coerceAtMost(99)
-            if (inAppBannerEnabled) {
-                activeBanner = item
-                XyInAppNotificationBus.push(
-                    XyInAppNotificationItem(
-                        id = "livechat-${msg.id}",
-                        title = "${item.senderName} · Chat Global",
-                        body = item.text,
-                        category = if (msg.isAnnouncement) "announcement" else "chat",
-                        actorName = msg.githubLogin.ifBlank { item.senderName },
-                        isFounder = isFounderAccount(msg.githubLogin) || isFounderAccount(item.senderName),
-                        targetRoute = "chat",
-                        createdAt = msg.at.takeIf { it > 0L } ?: System.currentTimeMillis(),
-                    ),
-                )
-            }
+        floatingChatSeq += 1
+        unreadFloatingCount = (unreadFloatingCount + 1).coerceAtMost(99)
+        if (inAppBannerEnabled) {
+            activeBanner = item
+            XyInAppNotificationBus.push(
+                XyInAppNotificationItem(
+                    id = "livechat-${msg.id}",
+                    title = "${item.senderName} · Chat Global",
+                    body = item.text,
+                    category = if (msg.isAnnouncement) "announcement" else "chat",
+                    actorName = msg.githubLogin.ifBlank { item.senderName },
+                    isFounder = isFounderAccount(msg.githubLogin) || isFounderAccount(item.senderName),
+                    targetRoute = "chat",
+                    createdAt = msg.at.takeIf { it > 0L } ?: System.currentTimeMillis(),
+                ),
+            )
         }
-        initialSnapshotSeeded = true
     }
 
     fun pushCustomBanner(
@@ -4292,8 +4323,13 @@ internal object InAppLiveNotificationBus {
         activeBanner = null
     }
 
+    fun hideFloatingPreviewBubble() {
+        latestFloatingChat = null
+    }
+
     fun clearFloatingUnread() {
         unreadFloatingCount = 0
+        latestFloatingChat = null
     }
 
     fun dismissFloatingBubblePreview() {
@@ -4319,7 +4355,16 @@ internal fun FloatingSessionChatOverlay(
     var panelOffsetY by remember { mutableFloatStateOf(floatPrefs.getFloat("panel_y", 0f)) }
     val onlineCount by AppUpdate.appWideOnlineCount.collectAsState()
     val latestLiveChat = InAppLiveNotificationBus.latestFloatingChat
+    val floatingSeq = InAppLiveNotificationBus.floatingChatSeq
     val unreadCount = InAppLiveNotificationBus.unreadFloatingCount
+
+    // Auto-hide: ketika ada chat baru muncul di bawah floating bubble, tampilkan sebentar (3,5 detik) lalu otomatis hilang!
+    LaunchedEffect(latestLiveChat?.id, floatingSeq) {
+        if (latestLiveChat != null) {
+            delay(3_500L)
+            InAppLiveNotificationBus.hideFloatingPreviewBubble()
+        }
+    }
 
     // Background poller ringan saat jendela chat floating tertutup agar mini bubble Live TikTok di bawah kapsul selalu real-time
     LaunchedEffect(chatWindowOpen) {
@@ -4342,7 +4387,7 @@ internal fun FloatingSessionChatOverlay(
                     if (conn.responseCode in 200..299) {
                         val root = JSONObject(conn.inputStream.bufferedReader().use { it.readText() })
                         val arr = root.optJSONArray("messages")
-                        if (arr != null && arr.length() > 0) {
+                        if (arr != null) {
                             for (i in 0 until arr.length()) {
                                 val m = parseMessageFromJson(arr.getJSONObject(i), myNick, myGh)
                                 if (firstFetch) {
@@ -4351,12 +4396,13 @@ internal fun FloatingSessionChatOverlay(
                                     InAppLiveNotificationBus.pushIncomingChat(m)
                                 }
                             }
+                            InAppLiveNotificationBus.markInitialSeeded()
                             firstFetch = false
                         }
                     }
                 }
             }
-            delay(6_500L)
+            delay(4_500L)
         }
     }
 
@@ -4484,83 +4530,90 @@ internal fun FloatingSessionChatOverlay(
                     }
                 }
 
-                // 2. Mini Bubble Chat Baru di Bawah Kapsul Floating ala Live TikTok (Ketuk untuk Buka Chat Global!)
-                if (latestLiveChat != null) {
-                    val isFounderSender = isFounderAccount(latestLiveChat.senderName) || isFounderAccount(latestLiveChat.githubLogin)
-                    Row(
-                        modifier = Modifier
-                            .widthIn(min = 175.dp, max = 265.dp)
-                            .shadow(10.dp, RoundedCornerShape(16.dp))
-                            .clip(RoundedCornerShape(16.dp))
-                            .background(Color(0xFF0A0D14).copy(alpha = 0.86f))
-                            .border(
-                                width = 0.9.dp,
-                                brush = Brush.horizontalGradient(
-                                    if (unreadCount > 0) {
-                                        listOf(Color(0xFFFE2C55), Color(0xFFA855F7))
-                                    } else {
-                                        listOf(Color(0xFF334155), Color(0xFF475569))
-                                    },
-                                ),
-                                shape = RoundedCornerShape(16.dp),
-                            )
-                            .clickable {
-                                InAppLiveNotificationBus.clearFloatingUnread()
-                                chatWindowOpen = true
-                            }
-                            .padding(horizontal = 9.dp, vertical = 6.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(7.dp),
-                    ) {
-                        FeedAvatarThumb(
-                            avatarUrl = latestLiveChat.avatarUrl,
-                            name = latestLiveChat.senderName,
-                            githubLogin = latestLiveChat.githubLogin,
-                            isFounder = isFounderSender,
-                            size = 22.dp,
-                        )
-                        Column(
-                            modifier = Modifier.weight(1f),
-                            verticalArrangement = Arrangement.spacedBy(1.dp),
+                // 2. Mini Bubble Chat Baru di Bawah Kapsul Floating ala Live TikTok (Muncul sebentar 3,5 detik lalu otomatis hilang!)
+                AnimatedVisibility(
+                    visible = latestLiveChat != null,
+                    enter = fadeIn() + scaleIn(initialScale = 0.92f),
+                    exit = fadeOut() + scaleOut(targetScale = 0.92f),
+                ) {
+                    val chatItem = latestLiveChat
+                    if (chatItem != null) {
+                        val isFounderSender = isFounderAccount(chatItem.senderName) || isFounderAccount(chatItem.githubLogin)
+                        Row(
+                            modifier = Modifier
+                                .widthIn(min = 175.dp, max = 265.dp)
+                                .shadow(10.dp, RoundedCornerShape(16.dp))
+                                .clip(RoundedCornerShape(16.dp))
+                                .background(Color(0xFF0A0D14).copy(alpha = 0.88f))
+                                .border(
+                                    width = 0.9.dp,
+                                    brush = Brush.horizontalGradient(
+                                        listOf(Color(0xFFFE2C55), Color(0xFFA855F7)),
+                                    ),
+                                    shape = RoundedCornerShape(16.dp),
+                                )
+                                .clickable {
+                                    InAppLiveNotificationBus.clearFloatingUnread()
+                                    chatWindowOpen = true
+                                }
+                                .padding(horizontal = 9.dp, vertical = 6.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(7.dp),
                         ) {
-                            Row(
-                                verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.spacedBy(4.dp),
+                            FeedAvatarThumb(
+                                avatarUrl = chatItem.avatarUrl,
+                                name = chatItem.senderName,
+                                githubLogin = chatItem.githubLogin,
+                                isFounder = isFounderSender,
+                                size = 22.dp,
+                            )
+                            Column(
+                                modifier = Modifier.weight(1f),
+                                verticalArrangement = Arrangement.spacedBy(1.dp),
                             ) {
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(4.dp),
+                                ) {
+                                    Text(
+                                        text = chatItem.senderName,
+                                        fontSize = 10.sp,
+                                        fontWeight = FontWeight.ExtraBold,
+                                        color = if (isFounderSender) Color(0xFFFDE047) else Color(0xFF38BDF8),
+                                        maxLines = 1,
+                                        overflow = TextOverflow.Ellipsis,
+                                    )
+                                    XyUserRoleBadges(
+                                        name = chatItem.senderName,
+                                        githubLogin = chatItem.githubLogin,
+                                        compact = true,
+                                    )
+                                }
                                 Text(
-                                    text = latestLiveChat.senderName,
-                                    fontSize = 10.sp,
-                                    fontWeight = FontWeight.ExtraBold,
-                                    color = if (isFounderSender) Color(0xFFFDE047) else Color(0xFF38BDF8),
+                                    text = chatItem.text,
+                                    fontSize = 10.5.sp,
+                                    color = Color(0xFFF8FAFC),
                                     maxLines = 1,
                                     overflow = TextOverflow.Ellipsis,
                                 )
-                                XyUserRoleBadges(
-                                    name = latestLiveChat.senderName,
-                                    githubLogin = latestLiveChat.githubLogin,
-                                    compact = true,
+                            }
+                            Box(
+                                modifier = Modifier
+                                    .size(18.dp)
+                                    .clip(CircleShape)
+                                    .background(Color.White.copy(alpha = 0.12f))
+                                    .clickable {
+                                        InAppLiveNotificationBus.hideFloatingPreviewBubble()
+                                    },
+                                contentAlignment = Alignment.Center,
+                            ) {
+                                Icon(
+                                    imageVector = XyIcons.Close,
+                                    contentDescription = "Tutup",
+                                    tint = Color(0xFFCBD5E1),
+                                    modifier = Modifier.size(10.dp),
                                 )
                             }
-                            Text(
-                                text = latestLiveChat.text,
-                                fontSize = 10.5.sp,
-                                color = Color(0xFFF8FAFC),
-                                maxLines = 1,
-                                overflow = TextOverflow.Ellipsis,
-                            )
-                        }
-                        Box(
-                            modifier = Modifier
-                                .clip(RoundedCornerShape(50))
-                                .background(Color(0xFFFE2C55).copy(alpha = 0.22f))
-                                .padding(horizontal = 6.dp, vertical = 2.dp),
-                        ) {
-                            Text(
-                                text = "Buka ▸",
-                                fontSize = 8.5.sp,
-                                fontWeight = FontWeight.ExtraBold,
-                                color = Color(0xFFFF6B8B),
-                            )
                         }
                     }
                 }

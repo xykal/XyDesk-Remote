@@ -905,92 +905,44 @@ private fun CommunityAccountCard(
             }
         }
 
-        // Showcase Koleksi Badge & Status Kehormatan XyVerse
-        val topTenMap by LeaderboardPodium.topTen.collectAsState()
-        val myRank = topTenMap[normalizedChatAccount(githubUser)] ?: topTenMap[normalizedChatAccount(name)]
+        // Status Badge Akun (Hanya menampilkan badge resmi yang benar-benar dimiliki akun ini)
+        val podiumMap by LeaderboardPodium.ranks.collectAsState()
+        val myPodiumRank = if (!githubUser.isNullOrBlank()) podiumMap[normalizedChatAccount(githubUser)] else null
         val roleRev = XySpecialRoleRegistry.roleRevision
         val isTeamActive = remember(name, githubUser, roleRev) { isXyTeamAccount(context, name, githubUser) }
         val isTesterActive = remember(name, githubUser, roleRev) { isXyTesterAccount(context, name, githubUser) }
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .clip(RoundedCornerShape(12.dp))
-                .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.28f))
-                .border(0.8.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.35f), RoundedCornerShape(12.dp))
-                .padding(11.dp),
-            verticalArrangement = Arrangement.spacedBy(8.dp),
-        ) {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically,
+        if (isFounder || isTeamActive || isTesterActive || myPodiumRank != null) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(12.dp))
+                    .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.28f))
+                    .border(0.8.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.35f), RoundedCornerShape(12.dp))
+                    .padding(11.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp),
             ) {
-                Text(
-                    text = xy("KOLEKSI BADGE & GELAR KOMUNITAS", "BADGE COLLECTION & COMMUNITY TITLES"),
-                    style = MaterialTheme.typography.labelSmall,
-                    fontWeight = FontWeight.ExtraBold,
-                    color = MaterialTheme.colorScheme.primary,
-                )
-                Text(
-                    text = if (myRank != null) "Peringkat #$myRank" else xy("Aktif di Chat & Feed", "Active in Chat & Feed"),
-                    style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-            }
-            // Baris showcase semua badge XyVerse (dengan penanda status milik akun)
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(6.dp),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                XyFounderBadge(compact = true)
-                XyTeamBadge(compact = true)
-                XyTesterBadge(compact = true)
-                LeaderboardDurationBadge(rank = myRank ?: 1, compact = true)
-            }
-            if (isFounder || isTeamActive || isTesterActive || myRank != null) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Text(
+                        text = xy("BADGE KEHORMATAN AKUN", "ACCOUNT HONOR BADGES"),
+                        style = MaterialTheme.typography.labelSmall,
+                        fontWeight = FontWeight.ExtraBold,
+                        color = MaterialTheme.colorScheme.primary,
+                    )
+                    Text(
+                        text = if (myPodiumRank != null) "Podium #$myPodiumRank" else xy("Terverifikasi", "Verified"),
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
                 XyUserRoleBadges(
                     name = name,
                     githubLogin = githubUser,
                     compact = false,
-                    durationRank = myRank,
-                )
-            }
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                Text(
-                    text = if (isTesterActive) {
-                        xy("Status QA Beta Tester aktif di profil, Chat Global & Komentar Feed", "QA Beta Tester badge active on profile, Global Chat & Feed Comments")
-                    } else {
-                        xy("Gabung program QA Beta Tester untuk memasang badge TESTER", "Join QA Beta Tester program to equip TESTER badge")
-                    },
-                    style = MaterialTheme.typography.bodySmall,
-                    fontSize = 11.sp,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.weight(1f),
-                )
-                Spacer(Modifier.width(8.dp))
-                XyPillButton(
-                    text = if (isTesterActive) xy("Lepas TESTER", "Unequip TESTER") else xy("Pakai TESTER", "Equip TESTER"),
-                    onClick = {
-                        val targetKey = githubUser?.takeIf { it.isNotBlank() } ?: name
-                        if (targetKey.isNullOrBlank()) {
-                            message = xyNow("Login GitHub atau atur nama terlebih dahulu.", "Sign in with GitHub or set a name first.")
-                        } else {
-                            val nextRole = if (isTesterActive) "NONE" else "TESTER"
-                            XySpecialRoleRegistry.setRole(context, targetKey, nextRole)
-                            message = if (nextRole == "TESTER") {
-                                xyNow("Badge TESTER diaktifkan! Akan tampil di Profil, Chat Global & Komentar Feed.", "TESTER badge activated! Shown on Profile, Global Chat & Feed Comments.")
-                            } else {
-                                xyNow("Badge TESTER dinonaktifkan.", "TESTER badge deactivated.")
-                            }
-                        }
-                    },
-                    primary = !isTesterActive,
-                    compact = true,
+                    durationRank = myPodiumRank,
                 )
             }
         }

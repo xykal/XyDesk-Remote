@@ -555,6 +555,10 @@ internal fun ContextMenuActionRow(
  * - Menampilkan **Foto Profil (Avatar)**, **Nama Jelas + `@github`**, **Kode Negara**,
  *   serta **Centang 1 / Centang 2 Vektor (`ChatVectorDeliveryTicks`)**.
  */
+private val CHAT_TIME_FORMATTER = object : ThreadLocal<SimpleDateFormat>() {
+    override fun initialValue(): SimpleDateFormat = SimpleDateFormat("HH:mm", Locale.getDefault())
+}
+
 @Composable
 internal fun MessageBubble(
     msg: ChatMessage,
@@ -576,8 +580,9 @@ internal fun MessageBubble(
     onOpenMedia: () -> Unit,
     onOpenFile: () -> Unit,
 ) {
+    val context = LocalContext.current
     val time = remember(msg.at) {
-        SimpleDateFormat("HH:mm", Locale.getDefault()).format(Date(msg.at))
+        CHAT_TIME_FORMATTER.get()?.format(Date(msg.at)) ?: ""
     }
     val founderMsg = msg.isFounder || isFounderAccount(msg.name) || isFounderAccount(msg.githubLogin)
     val isAnnouncementMsg = msg.isAnnouncement || (founderMsg && isPinned)
@@ -628,8 +633,9 @@ internal fun MessageBubble(
     val hasMediaAttachment = msg.attachmentType == "image" || msg.attachmentType == "video" || msg.attachmentType == "file" || isAudioAttachment
     val isFramelessMedia = (msg.attachmentType == "image" || msg.attachmentType == "video" || isAudioAttachment) &&
         msg.text.isBlank() && msg.replyToName.isBlank() && !isAnnouncementMsg
-    val specialRole = remember(msg.name, msg.githubLogin) {
-        resolveSpecialUserRole(msg.name, msg.githubLogin)
+    val roleRev = XySpecialRoleRegistry.roleRevision
+    val specialRole = remember(msg.name, msg.githubLogin, roleRev) {
+        resolveSpecialUserRole(msg.name, msg.githubLogin, context)
     }
     val detectedLinkUrl = remember(msg.id, msg.text) { extractFirstUrl(msg.text) }
     val screenWidthDp = androidx.compose.ui.platform.LocalConfiguration.current.screenWidthDp.toFloat()
@@ -1110,8 +1116,8 @@ internal fun MessageBubble(
                     }
                 }
 
-                // Animasi fase untuk elemen melayang AI di dalam bubble
-                val activeFloatingPreset = if (floatingElementPreset != "NONE") floatingElementPreset else if (founderMsg) "SPARKLES" else "NONE"
+                // Animasi fase untuk elemen melayang AI di dalam bubble (hanya jika diaktifkan di Pengaturan Chat)
+                val activeFloatingPreset = floatingElementPreset
                 val floatAnimPhase = if (activeFloatingPreset != "NONE" && id.xydesk.remote.ui.theme.LocalDecorativeMotionEnabled.current) {
                     val infFloat = rememberInfiniteTransition(label = "bubbleFloatElem")
                     val p by infFloat.animateFloat(

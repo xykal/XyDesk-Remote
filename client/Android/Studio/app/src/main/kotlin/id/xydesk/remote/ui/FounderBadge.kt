@@ -1924,71 +1924,77 @@ internal fun GitHubLogoIcon(
 }
 
 // ============================================================================
-// BADGE KHUSUS XYTEAM & TESTER + CLICKABLE BLUE URL LINK RENDERER (RONDE 61)
+// BADGE KHUSUS XYTEAM & TESTER + CLICKABLE BLUE URL LINK RENDERER (RONDE 61/70)
 // ============================================================================
 
-internal val XYTEAM_DEFAULT_LOGINS = setOf("xykal", "xyverse", "xyteam", "projectkal", "ryeenzydevs", "hydra-devils")
-internal val XYTESTER_DEFAULT_LOGINS = setOf(
-    "xytester",
-    "betatester",
-    "buatgame333221-droid",
-    "kirovnoname",
-    "satriyabagas39-sudo",
-    "zentih-alt",
-    "jellyjd16-crypto",
-    "yandraxx",
-    "darreljulianorafandra-droid",
-)
+internal val XYTEAM_DEFAULT_LOGINS = emptySet<String>()
+internal val XYTESTER_DEFAULT_LOGINS = emptySet<String>()
 
 internal object XySpecialRoleRegistry {
+    private const val ROLE_KEY_PREFIX = "staff_role_v2_"
+
     var roleRevision by mutableStateOf(0)
         private set
 
-    fun getRole(context: Context, nameOrLogin: String?): String {
+    private fun normalizeValidRoleTarget(nameOrLogin: String?): String {
         if (nameOrLogin.isNullOrBlank()) return ""
         val key = nameOrLogin.trim().removePrefix("@").lowercase(Locale.ROOT)
-        val prefs = context.getSharedPreferences(FOUNDER_PREFS, Context.MODE_PRIVATE)
-        val saved = prefs.getString("role_$key", null)
-        if (!saved.isNullOrBlank()) return saved
-        return when {
-            key in XYTEAM_DEFAULT_LOGINS && key !in FOUNDER_GITHUB_LOGINS -> "XYTEAM"
-            key in XYTESTER_DEFAULT_LOGINS -> "TESTER"
-            key.contains("xyteam") || key.endsWith("_xy") -> "XYTEAM"
-            key.contains("tester") || key.contains("qa_") -> "TESTER"
-            else -> ""
+        if (key.isEmpty() || key.startsWith("user-") || key.startsWith("tamu-") || key == "komunitas" || key == "anonim") {
+            return ""
         }
+        return key
+    }
+
+    fun getRole(context: Context, nameOrLogin: String?): String {
+        val key = normalizeValidRoleTarget(nameOrLogin)
+        if (key.isEmpty() || key in FOUNDER_GITHUB_LOGINS) return ""
+        val prefs = context.getSharedPreferences(FOUNDER_PREFS, Context.MODE_PRIVATE)
+        val saved = prefs.getString("$ROLE_KEY_PREFIX$key", null)?.trim()?.uppercase(Locale.ROOT).orEmpty()
+        return if (saved == "XYTEAM" || saved == "TESTER" || saved == "BOTH") saved else ""
     }
 
     fun setRole(context: Context, nameOrLogin: String?, role: String) {
-        if (nameOrLogin.isNullOrBlank()) return
-        val key = nameOrLogin.trim().removePrefix("@").lowercase(Locale.ROOT)
-        context.getSharedPreferences(FOUNDER_PREFS, Context.MODE_PRIVATE)
-            .edit()
-            .putString("role_$key", role.uppercase(Locale.ROOT))
-            .apply()
+        val key = normalizeValidRoleTarget(nameOrLogin)
+        if (key.isEmpty()) return
+        val cleanRole = role.trim().uppercase(Locale.ROOT)
+        val edit = context.getSharedPreferences(FOUNDER_PREFS, Context.MODE_PRIVATE).edit()
+        if (cleanRole == "XYTEAM" || cleanRole == "TESTER" || cleanRole == "BOTH") {
+            edit.putString("$ROLE_KEY_PREFIX$key", cleanRole)
+        } else {
+            edit.remove("$ROLE_KEY_PREFIX$key")
+        }
+        edit.apply()
         roleRevision += 1
     }
 }
 
 internal fun isXyTeamAccount(context: Context, nameOrLogin: String?, githubLogin: String? = null): Boolean {
-    val r1 = XySpecialRoleRegistry.getRole(context, githubLogin)
-    val r2 = XySpecialRoleRegistry.getRole(context, nameOrLogin)
+    val ghKey = githubLogin?.trim()?.removePrefix("@").orEmpty()
+    val r1 = if (ghKey.isNotEmpty()) XySpecialRoleRegistry.getRole(context, ghKey) else ""
+    val r2 = if (ghKey.isEmpty()) XySpecialRoleRegistry.getRole(context, nameOrLogin) else ""
     return r1 == "XYTEAM" || r1 == "BOTH" || r2 == "XYTEAM" || r2 == "BOTH"
 }
 
 internal fun isXyTesterAccount(context: Context, nameOrLogin: String?, githubLogin: String? = null): Boolean {
-    val r1 = XySpecialRoleRegistry.getRole(context, githubLogin)
-    val r2 = XySpecialRoleRegistry.getRole(context, nameOrLogin)
+    val ghKey = githubLogin?.trim()?.removePrefix("@").orEmpty()
+    val r1 = if (ghKey.isNotEmpty()) XySpecialRoleRegistry.getRole(context, ghKey) else ""
+    val r2 = if (ghKey.isEmpty()) XySpecialRoleRegistry.getRole(context, nameOrLogin) else ""
     return r1 == "TESTER" || r1 == "BOTH" || r2 == "TESTER" || r2 == "BOTH"
 }
 
-internal fun resolveSpecialUserRole(nameOrLogin: String?, githubLogin: String? = null): String? {
+internal fun resolveSpecialUserRole(
+    nameOrLogin: String?,
+    githubLogin: String? = null,
+    context: Context? = null,
+): String? {
     for (raw in listOf(githubLogin, nameOrLogin)) {
         if (raw.isNullOrBlank()) continue
         val key = raw.trim().removePrefix("@").lowercase(Locale.ROOT)
         if (key in FOUNDER_GITHUB_LOGINS) return "FOUNDER"
-        if (key in XYTEAM_DEFAULT_LOGINS || key.contains("xyteam") || key.endsWith("_xy")) return "XYTEAM"
-        if (key in XYTESTER_DEFAULT_LOGINS || key.contains("tester") || key.contains("qa_")) return "TESTER"
+    }
+    if (context != null) {
+        if (isXyTeamAccount(context, nameOrLogin, githubLogin)) return "XYTEAM"
+        if (isXyTesterAccount(context, nameOrLogin, githubLogin)) return "TESTER"
     }
     return null
 }
@@ -2169,7 +2175,8 @@ internal fun XyTesterBadge(
 }
 
 /**
- * Menampilkan deretan badge peran khusus pengguna: FOUNDER (Ungu Royal), XYTEAM, TESTER, dan TOP Leaderboard (#1..#10).
+ * Menampilkan deretan badge peran khusus pengguna: FOUNDER (Ungu Royal), XYTEAM, TESTER, dan Podium Top 1–3 Leaderboard.
+ * Hanya pengguna yang benar-benar berhak (Founder @xykal, Podium Top 1–3 ber-GitHub terverifikasi, atau XYTEAM/TESTER yang ditunjuk Founder) yang mendapatkan badge.
  */
 @Composable
 internal fun XyUserRoleBadges(
@@ -2179,23 +2186,19 @@ internal fun XyUserRoleBadges(
     durationRank: Int? = null,
 ) {
     val durationRanks by LeaderboardPodium.ranks.collectAsState()
-    val topTenRanks by LeaderboardPodium.topTen.collectAsState()
     val normGh = normalizedChatAccount(githubLogin)
-    val normName = normalizedChatAccount(name)
-    val podiumRank = durationRank?.takeIf { it in 1..10 }
-        ?: durationRanks[normGh]
-        ?: topTenRanks[normGh]
-        ?: topTenRanks[normName]
+    val podiumRank = durationRank?.takeIf { it in 1..3 }
+        ?: if (normGh.isNotEmpty()) durationRanks[normGh] else null
     val context = LocalContext.current
     val rev = XySpecialRoleRegistry.roleRevision
     val isFounder = remember(name, githubLogin) {
         isFounderAccount(githubLogin) || isFounderAccount(name)
     }
     val isTeam = remember(name, githubLogin, rev) {
-        isXyTeamAccount(context, name, githubLogin)
+        !isFounder && isXyTeamAccount(context, name, githubLogin)
     }
     val isTester = remember(name, githubLogin, rev) {
-        isXyTesterAccount(context, name, githubLogin)
+        !isFounder && isXyTesterAccount(context, name, githubLogin)
     }
     if (!isFounder && !isTeam && !isTester && podiumRank == null) return
     if (compact) {
@@ -2203,10 +2206,13 @@ internal fun XyUserRoleBadges(
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(4.dp),
         ) {
-            if (isFounder) XyFounderBadge(compact = true)
-            if (isTeam && !isFounder) XyTeamBadge(compact = true)
-            if (isTester) XyTesterBadge(compact = true)
-            if (podiumRank != null) LeaderboardDurationBadge(podiumRank, compact = true)
+            if (isFounder) {
+                XyFounderBadge(compact = true)
+            } else {
+                if (isTeam) XyTeamBadge(compact = true)
+                if (isTester) XyTesterBadge(compact = true)
+                if (podiumRank != null) LeaderboardDurationBadge(podiumRank, compact = true)
+            }
         }
     } else {
         Column(verticalArrangement = Arrangement.spacedBy(5.dp)) {
