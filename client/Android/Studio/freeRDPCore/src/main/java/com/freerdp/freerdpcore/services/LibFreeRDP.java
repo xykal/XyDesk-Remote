@@ -257,25 +257,57 @@ public class LibFreeRDP
 
 	public static void freeInstance(long inst)
 	{
+		if (inst == 0L)
+		{
+			return;
+		}
+		boolean readyToFree = true;
 		synchronized (mInstanceState)
 		{
 			if (mInstanceState.get(inst, false))
 			{
-				freerdp_disconnect(inst);
+				try
+				{
+					freerdp_disconnect(inst);
+				}
+				catch (Throwable ignored)
+				{
+				}
 			}
-			while (mInstanceState.get(inst, false))
+			int spins = 0;
+			while (mInstanceState.get(inst, false) && spins < 12)
 			{
 				try
 				{
-					mInstanceState.wait();
+					mInstanceState.wait(250L);
+					spins++;
 				}
 				catch (InterruptedException e)
 				{
-					throw new RuntimeException();
+					Thread.currentThread().interrupt();
+					break;
 				}
 			}
+			if (mInstanceState.get(inst, false))
+			{
+				// Native worker thread is still winding down a blocking socket;
+				// detach state and avoid freeing rdpContext underneath it.
+				mInstanceState.delete(inst);
+				mInstanceState.notifyAll();
+				readyToFree = false;
+			}
 		}
-		freerdp_free(inst);
+		if (readyToFree)
+		{
+			try
+			{
+				freerdp_free(inst);
+			}
+			catch (Throwable t)
+			{
+				Log.w(TAG, "freerdp_free ignored exception", t);
+			}
+		}
 	}
 
 	public static boolean connect(long inst)

@@ -657,6 +657,26 @@ fun SessionControls(
                         ) {
                             onToggleVoiceMic()
                         }
+                        val floatingChatHidden = InAppLiveNotificationBus.floatingOverlayHidden
+                        RailMenuItem(
+                            icon = XyIcons.Chat,
+                            label = if (floatingChatHidden) {
+                                xy("Tampilkan Floating Chat", "Show Floating Chat")
+                            } else {
+                                xy("Sembunyikan Floating Chat", "Hide Floating Chat")
+                            },
+                            active = !floatingChatHidden,
+                        ) {
+                            val nextHidden = !floatingChatHidden
+                            InAppLiveNotificationBus.setFloatingHidden(context, nextHidden)
+                            notice.show(
+                                if (nextHidden) {
+                                    xyNow("Floating Chat disembunyikan dari layar sesi", "Floating Chat hidden from session screen")
+                                } else {
+                                    xyNow("Floating Chat ditampilkan kembali", "Floating Chat restored")
+                                },
+                            )
+                        }
                         RailMenuItem(
                             icon = XyIcons.Monitor,
                             label = xy("Monitor & sesi", "Monitors & sessions"),
@@ -2582,11 +2602,35 @@ private fun SessionTab(
         }
 
     section("sesi",xy("Sesi", "Session")) {
+            val ctx = LocalContext.current
+            val floatingHidden = InAppLiveNotificationBus.floatingOverlayHidden
             PanelHint(
                 xy(
                     "Tombol bulat kanan bawah (ikon power) juga memutus — langsung kembali ke beranda setelah konfirmasi.",
                     "The bottom-right round button (power icon) also disconnects — returns straight to home after confirmation.",
                 ),
+            )
+            XyPillButton(
+                text = if (floatingHidden) {
+                    xy("Tampilkan Floating Chat Global", "Show Floating Global Chat")
+                } else {
+                    xy("Sembunyikan Floating Chat Global", "Hide Floating Global Chat")
+                },
+                onClick = {
+                    val nextHidden = !floatingHidden
+                    InAppLiveNotificationBus.setFloatingHidden(ctx, nextHidden)
+                    notice.show(
+                        if (nextHidden) {
+                            xyNow("Floating Chat disembunyikan dari layar sesi", "Floating Chat hidden from session screen")
+                        } else {
+                            xyNow("Floating Chat ditampilkan kembali", "Floating Chat restored")
+                        },
+                    )
+                },
+                icon = XyIcons.Chat,
+                primary = !floatingHidden,
+                compact = true,
+                modifier = Modifier.fillMaxWidth(),
             )
             XyPillButton(
                 xy("Ambil screenshot", "Take screenshot"),

@@ -248,7 +248,21 @@ fun XyDeskHome(
         onAuthenticateConnect {
             incrementLocalUsageSessionCount(context)
             scope.launch { repo.touch(profile) }
-            context.startActivity(XyDeskSessionActivity.connectIntent(context, profile))
+            val opts = runCatching { RdpOptions.of(context, profile.id) }.getOrNull()
+            if (opts?.pcConnectMode == true &&
+                (profile.port == 4433 || (profile.username.isNullOrBlank() && profile.password.isNullOrBlank()))
+            ) {
+                context.startActivity(
+                    PcStreamSessionActivity.intent(
+                        context = context,
+                        directHost = profile.host,
+                        directPort = 4433,
+                        directFps = opts.pcTargetFps.coerceIn(60, 120),
+                    ),
+                )
+            } else {
+                context.startActivity(XyDeskSessionActivity.connectIntent(context, profile))
+            }
         }
     }
 

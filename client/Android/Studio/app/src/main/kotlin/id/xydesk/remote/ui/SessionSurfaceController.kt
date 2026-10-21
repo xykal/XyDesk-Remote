@@ -119,19 +119,11 @@ class SessionSurfaceController(private val activity: Activity) : GraphicsSink {
     private var pendingUpdates = 0
 
     private val flushDirtyRunnable = Runnable {
-        val left: Int
-        val top: Int
-        val right: Int
-        val bottom: Int
         val startNs: Long
         val updates: Int
         synchronized(dirtyLock) {
             flushScheduled = false
             if (!hasPendingDirty) return@Runnable
-            left = pendingDirtyRect.left
-            top = pendingDirtyRect.top
-            right = pendingDirtyRect.right
-            bottom = pendingDirtyRect.bottom
             pendingDirtyRect.setEmpty()
             hasPendingDirty = false
             startNs = batchStartNs
@@ -140,10 +132,15 @@ class SessionSurfaceController(private val activity: Activity) : GraphicsSink {
             pendingUpdates = 0
         }
         val sv = sessionView ?: return@Runnable
-        sv.addInvalidRegion(Rect(left, top, right, bottom))
-        sv.invalidateRegion()
+        sv.invalidate()
         frameStats?.recordFlush(startNs, updates)
         onGraphicsInvalidated?.invoke()
+    }
+
+    private fun postFlushNextVsync() {
+        val msg = android.os.Message.obtain(uiHandler, flushDirtyRunnable)
+        msg.isAsynchronous = true
+        uiHandler.sendMessage(msg)
     }
 
     private fun asciiToAndroidKeyCode(codePoint: Int): Int = when (codePoint) {
@@ -683,7 +680,8 @@ class SessionSurfaceController(private val activity: Activity) : GraphicsSink {
         scrollView = null
         rootView = null
         bitmap = null
-        remoteCursorBitmap?.let { if (!it.isRecycled) it.recycle() }
+        // Jangan pernah memanggil .recycle() manual pada remoteCursorBitmap karena
+        // state Compose di XyDeskSession mungkin masih merendernya pada frame keluar Activity.
         remoteCursorBitmap = null
         onRemoteCursor?.invoke(RemoteCursor(null, 0, 0, true))
         onGraphicsInvalidated = null
@@ -723,7 +721,10 @@ class SessionSurfaceController(private val activity: Activity) : GraphicsSink {
         val stats = frameStats
         val copyStartNs = if (stats != null) System.nanoTime() else 0L
         synchronized(bm) {
-            LibFreeRDP.updateGraphics(i, bm, left, top, right - left, bottom - top)
+            if (!bm.isRecycled) {
+                LibFreeRDP.updateGraphics(i, bm, left, top, right - left, bottom - top)
+                bm.prepareToDraw()
+            }
         }
         val copyDurationNs = if (stats != null) System.nanoTime() - copyStartNs else 0L
         stats?.recordUpdate(copyDurationNs)
@@ -743,7 +744,7 @@ class SessionSurfaceController(private val activity: Activity) : GraphicsSink {
         }
         if (shouldSchedule) {
             if (!batterySaverMode) {
-                uiHandler.post(flushDirtyRunnable)
+                postFlushNextVsync()
             } else {
                 uiHandler.postDelayed(flushDirtyRunnable, 28L)
             }
@@ -843,12 +844,8 @@ class SessionSurfaceController(private val activity: Activity) : GraphicsSink {
     // ------------------------------------------------------------------
 
     private fun publishRemoteCursor(cursor: RemoteCursor) {
-        val previous = remoteCursorBitmap
         remoteCursorBitmap = cursor.bitmap
         onRemoteCursor?.invoke(cursor)
-        if (previous != null && previous !== cursor.bitmap && !previous.isRecycled) {
-            previous.recycle()
-        }
     }
 
     private fun catchUpSurface() {

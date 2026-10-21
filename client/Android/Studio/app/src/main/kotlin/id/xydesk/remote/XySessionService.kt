@@ -51,18 +51,34 @@ class XySessionService : Service() {
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
+        isServiceRunning = true
+        pendingForegroundStart = false
         intent?.getStringExtra(EXTRA_LABEL)?.let { lastLabel = it }
         intent?.getStringExtra(EXTRA_STATUS)?.let { lastStatus = it }
+        // Kontrak Android 8.0-15: setiap pemanggilan startForegroundService() WAJIB
+        // diikuti startForeground() di onStartCommand sebelum stopSelf() boleh dipanggil,
+        // kalau tidak sistem melempar RemoteServiceException / ForegroundServiceDidNotStartInTimeException.
+        promoteToForeground(intent?.getStringExtra(EXTRA_LABEL))
         when (intent?.action) {
             ACTION_STOP -> {
-                if (XySessionRegistry.count() == 0) stopSelf()
-                else XySessionRegistry.disconnectAll()
+                if (XySessionRegistry.count() == 0) {
+                    stopForegroundSafely()
+                    stopSelf()
+                } else {
+                    XySessionRegistry.disconnectAll()
+                    if (XySessionRegistry.activeCount() == 0) {
+                        stopForegroundSafely()
+                        stopSelf()
+                    }
+                }
                 return START_NOT_STICKY
             }
 
             ACTION_PING -> {
-                // Sudah jalan: cukup perbarui teksnya.
-                startForeground(NOTIF_ID, buildNotification(intent.getStringExtra(EXTRA_LABEL)))
+                if (XySessionRegistry.activeCount() == 0) {
+                    stopForegroundSafely()
+                    stopSelf()
+                }
                 return START_NOT_STICKY
             }
 
@@ -85,8 +101,45 @@ class XySessionService : Service() {
             }
 
             else -> {
-                startForeground(NOTIF_ID, buildNotification(intent?.getStringExtra(EXTRA_LABEL)))
+                if (XySessionRegistry.activeCount() == 0 && stopRequestedWhileStarting) {
+                    stopRequestedWhileStarting = false
+                    stopForegroundSafely()
+                    stopSelf()
+                }
                 return START_NOT_STICKY
+            }
+        }
+    }
+
+    override fun onDestroy() {
+        isServiceRunning = false
+        pendingForegroundStart = false
+        stopRequestedWhileStarting = false
+        super.onDestroy()
+    }
+
+    private fun promoteToForeground(label: String?) {
+        runCatching {
+            val notif = buildNotification(label)
+            if (Build.VERSION.SDK_INT >= 34) {
+                startForeground(
+                    NOTIF_ID,
+                    notif,
+                    android.content.pm.ServiceInfo.FOREGROUND_SERVICE_TYPE_SPECIAL_USE,
+                )
+            } else {
+                startForeground(NOTIF_ID, notif)
+            }
+        }
+    }
+
+    private fun stopForegroundSafely() {
+        runCatching {
+            if (Build.VERSION.SDK_INT >= 24) {
+                stopForeground(STOP_FOREGROUND_REMOVE)
+            } else {
+                @Suppress("DEPRECATION")
+                stopForeground(true)
             }
         }
     }
@@ -248,6 +301,10 @@ class XySessionService : Service() {
         const val STATUS_CONNECTING = "connecting"
         const val STATUS_RECONNECTING = "reconnecting"
 
+        @Volatile private var isServiceRunning = false
+        @Volatile private var pendingForegroundStart = false
+        @Volatile private var stopRequestedWhileStarting = false
+
         /** Mulai/perbarui service. Aman dipanggil berulang. */
         fun start(
             context: Context,
@@ -255,23 +312,40 @@ class XySessionService : Service() {
             ping: Boolean = false,
             status: String = STATUS_CONNECTED,
         ) {
-            val intent = Intent(context, XySessionService::class.java).apply {
+            stopRequestedWhileStarting = false
+            val appCtx = context.applicationContext
+            val intent = Intent(appCtx, XySessionService::class.java).apply {
                 putExtra(EXTRA_LABEL, label)
                 putExtra(EXTRA_STATUS, status)
                 if (ping) action = ACTION_PING
             }
             runCatching {
-                if (Build.VERSION.SDK_INT >= 26) {
-                    context.startForegroundService(intent)
+                if (Build.VERSION.SDK_INT >= 26 && !isServiceRunning) {
+                    pendingForegroundStart = true
+                    appCtx.startForegroundService(intent)
                 } else {
-                    context.startService(intent)
+                    appCtx.startService(intent)
                 }
+            }.onFailure {
+                pendingForegroundStart = false
             }
         }
 
         fun stop(context: Context) {
+            val appCtx = context.applicationContext
+            if (pendingForegroundStart) {
+                // Jangan memanggil stopService() ketika startForegroundService() masih in-flight
+                // dan belum mengeksekusi onStartCommand -> startForeground()!
+                stopRequestedWhileStarting = true
+                return
+            }
+            if (!isServiceRunning) return
             runCatching {
-                context.stopService(Intent(context, XySessionService::class.java))
+                appCtx.startService(Intent(appCtx, XySessionService::class.java).setAction(ACTION_STOP))
+            }.onFailure {
+                runCatching {
+                    appCtx.stopService(Intent(appCtx, XySessionService::class.java))
+                }
             }
         }
     }

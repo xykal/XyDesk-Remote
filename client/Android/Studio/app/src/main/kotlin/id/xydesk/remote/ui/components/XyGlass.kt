@@ -79,11 +79,10 @@ fun Modifier.xyGlass(
     strength: Float = 1f,
     edge: Boolean = true,
 ): Modifier = this
-    .shadow(elevation = 6.dp, shape = shape, clip = false)
     .clip(shape)
-    .background(MaterialTheme.colorScheme.surface.copy(alpha = (0.97f * opacity).coerceIn(0f, 1f)))
+    .background(MaterialTheme.colorScheme.surface, shape)
     .then(
-        if (edge) Modifier.border(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.45f), shape)
+        if (edge) Modifier.border(1.dp, MaterialTheme.colorScheme.outline, shape)
         else Modifier
     )
 

@@ -1574,69 +1574,25 @@ private fun GlobalChatAccountContent(
         }
     }
 
-    val isBlurActive = focusedContextMsg != null
-
     Box(
         modifier = Modifier
             .fillMaxSize()
-            .background(if (isOverlayMode) Color.Transparent else Color(0xFF09090B)),
+            .background(if (isOverlayMode) Color(0xFF0E1118) else Color(0xFF09090B)),
     ) {
-        // Efek Refleksi Kaca Cair (Liquid Glass Specular Sheen) khusus Mode Floating Sesi
-        if (isOverlayMode) {
-            Canvas(modifier = Modifier.fillMaxSize()) {
-                // Kilau kaca cair diagonal monokrom putih-perak lembut
-                drawRect(
-                    brush = Brush.linearGradient(
-                        colors = listOf(
-                            Color.White.copy(alpha = 0.14f),
-                            Color.White.copy(alpha = 0.03f),
-                            Color.Transparent,
-                            Color.White.copy(alpha = 0.07f),
-                        ),
-                        start = Offset.Zero,
-                        end = Offset(size.width, size.height),
-                    ),
-                )
-                // Meniskus cahaya kaca di tepi atas
-                drawRoundRect(
-                    brush = Brush.verticalGradient(
-                        colors = listOf(
-                            Color.White.copy(alpha = 0.22f),
-                            Color.Transparent,
-                        ),
-                        startY = 0f,
-                        endY = size.height * 0.16f,
-                    ),
-                    size = Size(size.width, size.height * 0.16f),
-                    cornerRadius = CornerRadius(24.dp.toPx(), 24.dp.toPx()),
-                )
-            }
-        }
-
-        // Lapisan Utama Chat Global (otomatis Blur saat pengguna menahan / long-press bubble chat)
+        // Lapisan Utama Chat Global (Solid Matte tanpa blur/glassmorphism agar zero-lag)
         Column(
             modifier = Modifier
                 .fillMaxSize()
-                .let { mod ->
-                    if (isBlurActive) mod.blur(18.dp) else mod
-                }
                 .let { mod ->
                     if (isOverlayMode) mod else mod.navigationBarsPadding().imePadding()
                 },
         ) {
             if (isOverlayMode) {
-                // Header Liquid Glass Hitam-Putih (bisa di-drag untuk menggeser jendela floating chat di sesi)
+                // Header Solid Matte Dark (bisa di-drag untuk menggeser jendela floating chat di sesi)
                 Column(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .background(
-                            Brush.verticalGradient(
-                                listOf(
-                                    Color.White.copy(alpha = 0.11f),
-                                    Color(0xFF0A0A0E).copy(alpha = 0.36f),
-                                ),
-                            ),
-                        )
+                        .background(Color(0xFF141822))
                         .pointerInput(Unit) {
                             detectDragGestures { change, dragAmount ->
                                 change.consume()
@@ -1645,14 +1601,14 @@ private fun GlobalChatAccountContent(
                         }
                         .padding(horizontal = 12.dp, vertical = 8.dp),
                 ) {
-                    // Handle Bar Geser Kaca Cair di Tengah Atas
+                    // Handle Bar Geser di Tengah Atas
                     Box(
                         modifier = Modifier
                             .align(Alignment.CenterHorizontally)
                             .width(38.dp)
                             .height(4.dp)
                             .clip(RoundedCornerShape(50))
-                            .background(Color.White.copy(alpha = 0.45f)),
+                            .background(Color(0xFF3F475A)),
                     )
                     Spacer(Modifier.height(6.dp))
                     Row(
@@ -1681,11 +1637,11 @@ private fun GlobalChatAccountContent(
                                 fontWeight = FontWeight.ExtraBold,
                                 color = Color.White,
                             )
-                            // Pill Online Monokrom Liquid Glass
+                            // Pill Online Solid Matte
                             Row(
                                 modifier = Modifier
                                     .clip(RoundedCornerShape(50))
-                                    .background(Color.White.copy(alpha = 0.12f))
+                                    .background(Color(0xFF23293A))
                                     .padding(horizontal = 7.dp, vertical = 2.dp),
                                 verticalAlignment = Alignment.CenterVertically,
                                 horizontalArrangement = Arrangement.spacedBy(4.dp),
@@ -1694,7 +1650,7 @@ private fun GlobalChatAccountContent(
                                     modifier = Modifier
                                         .size(6.dp)
                                         .clip(CircleShape)
-                                        .background(Color.White),
+                                        .background(Color(0xFF10B981)),
                                 )
                                 Text(
                                     text = "$totalOnline",
@@ -3540,7 +3496,7 @@ private fun GlobalChatAccountContent(
                 ) {
                     listOf(
                         "monochrome" to "Monokrom",
-                        "glass" to "Liquid Glass",
+                        "glass" to "Matte Slate",
                         "compact" to "Kompak",
                         "amber" to "Warm Gold",
                     ).forEach { (modeKey, modeLabel) ->
@@ -4336,6 +4292,24 @@ internal object InAppLiveNotificationBus {
         latestFloatingChat = null
         unreadFloatingCount = 0
     }
+
+    var floatingOverlayHidden by mutableStateOf(false)
+
+    fun syncFloatingHiddenFromPrefs(context: Context) {
+        val sp = context.getSharedPreferences("xydesk_floating_chat_prefs", Context.MODE_PRIVATE)
+        floatingOverlayHidden = sp.getBoolean("hidden_in_session", false)
+    }
+
+    fun setFloatingHidden(context: Context, hidden: Boolean) {
+        floatingOverlayHidden = hidden
+        if (hidden) {
+            latestFloatingChat = null
+        }
+        context.getSharedPreferences("xydesk_floating_chat_prefs", Context.MODE_PRIVATE)
+            .edit()
+            .putBoolean("hidden_in_session", hidden)
+            .apply()
+    }
 }
 
 @Composable
@@ -4346,7 +4320,12 @@ internal fun FloatingSessionChatOverlay(
     val cfg = androidx.compose.ui.platform.LocalConfiguration.current
     val floatPrefs = remember { context.getSharedPreferences("xydesk_floating_chat_prefs", Context.MODE_PRIVATE) }
 
+    LaunchedEffect(Unit) {
+        InAppLiveNotificationBus.syncFloatingHiddenFromPrefs(context)
+    }
+
     var chatWindowOpen by remember { mutableStateOf(false) }
+    val isFloatingHidden = InAppLiveNotificationBus.floatingOverlayHidden
     var isCompactFloating by remember { mutableStateOf(floatPrefs.getBoolean("compact_mode", false)) }
     var isGhostOpacity by remember { mutableStateOf(floatPrefs.getBoolean("ghost_opacity", false)) }
     var bubbleOffsetX by remember { mutableFloatStateOf(floatPrefs.getFloat("bubble_x", 16f)) }
@@ -4366,16 +4345,19 @@ internal fun FloatingSessionChatOverlay(
         }
     }
 
-    // Background poller ringan saat jendela chat floating tertutup agar mini bubble Live TikTok di bawah kapsul selalu real-time
-    LaunchedEffect(chatWindowOpen) {
+    // Background poller ringan saat jendela chat floating tertutup & tidak di-hide
+    LaunchedEffect(chatWindowOpen, isFloatingHidden) {
         if (chatWindowOpen) {
             InAppLiveNotificationBus.clearFloatingUnread()
+            return@LaunchedEffect
+        }
+        if (isFloatingHidden) {
             return@LaunchedEffect
         }
         val myNick = chatNickname(context)
         val myGh = getVerifiedGitHubLogin(context)
         var firstFetch = true
-        while (!chatWindowOpen) {
+        while (!chatWindowOpen && !InAppLiveNotificationBus.floatingOverlayHidden) {
             withContext(Dispatchers.IO) {
                 runCatching {
                     val conn = (URL("https://api.xydeskremote.biz.id/api/chat/history?limit=15&joined_at=0").openConnection() as HttpURLConnection).apply {
@@ -4425,8 +4407,8 @@ internal fun FloatingSessionChatOverlay(
             .statusBarsPadding()
             .displayCutoutPadding(),
     ) {
-        if (!chatWindowOpen) {
-            // Grup Floating Kapsul Sesi + Mini Bubble Chat Baru di Bawahnya ala Live TikTok!
+        if (!isFloatingHidden && !chatWindowOpen) {
+            // Grup Floating Kapsul Sesi Solid Matte + Mini Bubble Chat Baru di Bawahnya!
             Column(
                 modifier = Modifier
                     .offset { IntOffset(bubbleOffsetX.roundToInt(), bubbleOffsetY.roundToInt()) }
@@ -4448,84 +4430,97 @@ internal fun FloatingSessionChatOverlay(
                 verticalArrangement = Arrangement.spacedBy(5.dp),
                 horizontalAlignment = Alignment.Start,
             ) {
-                // 1. Kapsul Floating Utama (Liquid Glass Cyber Neon)
+                // 1. Kapsul Floating Utama (Solid Matte Dark + Tombol Hide 'X')
                 Box(
                     modifier = Modifier
-                        .shadow(14.dp, RoundedCornerShape(50))
                         .clip(RoundedCornerShape(50))
-                        .background(
-                            Brush.horizontalGradient(
-                                listOf(
-                                    Color(0xFF0E121D).copy(alpha = 0.92f),
-                                    Color(0xFF1A142E).copy(alpha = 0.92f),
-                                ),
-                            ),
-                        )
+                        .background(Color(0xFF12151E))
                         .border(
-                            width = 1.1.dp,
-                            brush = Brush.horizontalGradient(
-                                listOf(Color(0xFF38BDF8), Color(0xFFA855F7), Color(0xFFEC4899)),
-                            ),
+                            width = 1.dp,
+                            color = Color(0xFF2A3246),
                             shape = RoundedCornerShape(50),
                         )
-                        .clickable {
-                            InAppLiveNotificationBus.clearFloatingUnread()
-                            chatWindowOpen = true
-                        }
-                        .padding(horizontal = 12.dp, vertical = 7.dp),
+                        .padding(start = 11.dp, end = 6.dp, top = 5.dp, bottom = 5.dp),
                     contentAlignment = Alignment.Center,
                 ) {
                     Row(
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.spacedBy(6.dp),
                     ) {
-                        Box(
-                            modifier = Modifier
-                                .size(7.5.dp)
-                                .clip(CircleShape)
-                                .background(Color(0xFF10B981)),
-                        )
-                        Icon(
-                            imageVector = XyIcons.Chat,
-                            contentDescription = "Buka Chat Global Sesi",
-                            tint = Color.White,
-                            modifier = Modifier.size(15.dp),
-                        )
-                        Text(
-                            text = "LIVE CHAT",
-                            style = MaterialTheme.typography.labelSmall,
-                            fontSize = 10.5.sp,
-                            fontWeight = FontWeight.ExtraBold,
-                            color = Color.White,
-                        )
-                        Box(
-                            modifier = Modifier
-                                .clip(RoundedCornerShape(50))
-                                .background(Color(0xFFA855F7).copy(alpha = 0.32f))
-                                .padding(horizontal = 5.5.dp, vertical = 1.dp),
+                        Row(
+                            modifier = Modifier.clickable {
+                                InAppLiveNotificationBus.clearFloatingUnread()
+                                chatWindowOpen = true
+                            },
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(6.dp),
                         ) {
-                            Text(
-                                text = "${onlineCount.coerceAtLeast(1)} online",
-                                style = MaterialTheme.typography.labelSmall,
-                                fontSize = 9.sp,
-                                fontWeight = FontWeight.ExtraBold,
-                                color = Color(0xFFF3E8FF),
+                            Box(
+                                modifier = Modifier
+                                    .size(7.5.dp)
+                                    .clip(CircleShape)
+                                    .background(Color(0xFF10B981)),
                             )
-                        }
-                        if (unreadCount > 0) {
+                            Icon(
+                                imageVector = XyIcons.Chat,
+                                contentDescription = "Buka Chat Global Sesi",
+                                tint = Color.White,
+                                modifier = Modifier.size(14.dp),
+                            )
+                            Text(
+                                text = "LIVE CHAT",
+                                style = MaterialTheme.typography.labelSmall,
+                                fontSize = 10.5.sp,
+                                fontWeight = FontWeight.ExtraBold,
+                                color = Color.White,
+                            )
                             Box(
                                 modifier = Modifier
                                     .clip(RoundedCornerShape(50))
-                                    .background(Color(0xFFFE2C55))
+                                    .background(Color(0xFF222838))
                                     .padding(horizontal = 5.5.dp, vertical = 1.dp),
                             ) {
                                 Text(
-                                    text = "+$unreadCount",
+                                    text = "${onlineCount.coerceAtLeast(1)} online",
+                                    style = MaterialTheme.typography.labelSmall,
                                     fontSize = 9.sp,
                                     fontWeight = FontWeight.ExtraBold,
-                                    color = Color.White,
+                                    color = Color(0xFFCBD5E1),
                                 )
                             }
+                            if (unreadCount > 0) {
+                                Box(
+                                    modifier = Modifier
+                                        .clip(RoundedCornerShape(50))
+                                        .background(Color(0xFFFE2C55))
+                                        .padding(horizontal = 5.5.dp, vertical = 1.dp),
+                                ) {
+                                    Text(
+                                        text = "+$unreadCount",
+                                        fontSize = 9.sp,
+                                        fontWeight = FontWeight.ExtraBold,
+                                        color = Color.White,
+                                    )
+                                }
+                            }
+                        }
+                        // Tombol Hide ('X') untuk menyembunyikan Floating Chat dari layar sesi
+                        Box(
+                            modifier = Modifier
+                                .size(20.dp)
+                                .clip(CircleShape)
+                                .background(Color(0xFF23293A))
+                                .clickable {
+                                    InAppLiveNotificationBus.setFloatingHidden(context, true)
+                                },
+                            contentAlignment = Alignment.Center,
+                        ) {
+                            Icon(
+                                imageVector = XyIcons.Close,
+                                contentDescription = "Sembunyikan Floating Chat",
+                                tint = Color(0xFFCBD5E1),
+                                modifier = Modifier.size(11.dp),
+                            )
                         }
                     }
                 }
@@ -4542,15 +4537,12 @@ internal fun FloatingSessionChatOverlay(
                         Row(
                             modifier = Modifier
                                 .widthIn(min = 175.dp, max = 265.dp)
-                                .shadow(10.dp, RoundedCornerShape(16.dp))
-                                .clip(RoundedCornerShape(16.dp))
-                                .background(Color(0xFF0A0D14).copy(alpha = 0.88f))
+                                .clip(RoundedCornerShape(14.dp))
+                                .background(Color(0xFF12151E))
                                 .border(
-                                    width = 0.9.dp,
-                                    brush = Brush.horizontalGradient(
-                                        listOf(Color(0xFFFE2C55), Color(0xFFA855F7)),
-                                    ),
-                                    shape = RoundedCornerShape(16.dp),
+                                    width = 1.dp,
+                                    color = Color(0xFF2A3246),
+                                    shape = RoundedCornerShape(14.dp),
                                 )
                                 .clickable {
                                     InAppLiveNotificationBus.clearFloatingUnread()
@@ -4621,8 +4613,7 @@ internal fun FloatingSessionChatOverlay(
         }
 
         if (chatWindowOpen) {
-            val panelShape = RoundedCornerShape(20.dp)
-            val panelAlpha = if (isGhostOpacity) 0.64f else 0.94f
+            val panelShape = RoundedCornerShape(18.dp)
             Box(
                 modifier = Modifier
                     .fillMaxSize()
@@ -4630,19 +4621,18 @@ internal fun FloatingSessionChatOverlay(
                     .padding(horizontal = 10.dp, vertical = 8.dp),
                 contentAlignment = Alignment.CenterEnd,
             ) {
-                // Panel Multitasking Sesi (Side-Docked PiP): ukuran, posisi, & opasitas tersimpan penuh
+                // Panel Multitasking Sesi (Side-Docked PiP): Solid Matte Dark
                 Box(
                     modifier = Modifier
                         .offset { IntOffset(panelOffsetX.roundToInt(), panelOffsetY.roundToInt()) }
                         .width(adaptivePanelWidth)
                         .heightIn(min = 320.dp, max = adaptivePanelMaxHeight)
                         .fillMaxHeight(if (isCompactFloating) 0.88f else 0.95f)
-                        .shadow(20.dp, panelShape)
                         .clip(panelShape)
-                        .background(Color(0xFF0B0D14).copy(alpha = panelAlpha))
+                        .background(Color(0xFF0E1118))
                         .border(
                             width = 1.dp,
-                            color = Color(0xFFC084FC).copy(alpha = 0.28f),
+                            color = Color(0xFF283044),
                             shape = panelShape,
                         )
                         .clickable(enabled = false) {},

@@ -130,9 +130,12 @@ class SessionManager(context: Context) {
         quicAudioBridge?.tap = tap
     }
 
-    fun isVoiceMicEnabled(): Boolean = quicAudioBridge?.micActive == true
+    @Volatile private var rdpMicEnabledFlag: Boolean = false
+
+    fun isVoiceMicEnabled(): Boolean = rdpMicEnabledFlag || (quicAudioBridge?.micActive == true)
 
     fun setVoiceMicEnabled(enabled: Boolean) {
+        rdpMicEnabledFlag = enabled
         val bridge = quicAudioBridge
         if (bridge != null) {
             bridge.setVoiceMicEnabled(enabled)
@@ -142,12 +145,13 @@ class SessionManager(context: Context) {
             quicAudioBridge = QuicAudioBridge(
                 host = p.host,
                 port = 4433,
-                enableSpeaker = opts.quicAudio,
+                enableSpeaker = opts.quicAudio && opts.audioMode == XyAudioMode.REMOTE,
                 enableMic = true,
                 micGainDb = opts.micGainDb,
                 micGateDb = opts.micGateDb,
                 micNoiseSuppression = opts.micNoiseSuppression,
                 micAgc = opts.micAgc,
+                waitForHostVerifyBeforeMic = !opts.pcConnectMode,
                 onStatus = { st ->
                     audioBridgeState = st
                     listener?.onAudioBridge(st)
@@ -570,22 +574,36 @@ class SessionManager(context: Context) {
             if (released) return
             released = true
             stopWatchdog()
+            runCatching { quicAudioBridge?.stop() }
+            quicAudioBridge = null
             val inst = core?.getInstance()
             core = null
             sink = null
             listener = null
             if (inst != null && inst != 0L) {
-                GlobalApp.unregisterSessionListener(inst)
+                runCatching { GlobalApp.unregisterSessionListener(inst) }
                 try {
                     LibFreeRDP.disconnect(inst)
                 } catch (t: Throwable) {
                     Log.w(TAG, "disconnect on release gagal", t)
                 }
-                // Free only after any in-flight session.connect() call has
-                // crossed the same lock and registered the native worker.
-                GlobalApp.freeSession(inst)
+                // Lepas session native di thread daemon terpisah agar Main Thread
+                // tidak pernah terblokir (ANR) atau force close saat onDestroy/disconnect.
+                Thread(
+                    {
+                        try {
+                            GlobalApp.freeSession(inst)
+                        } catch (t: Throwable) {
+                            Log.w(TAG, "freeSession background diabaikan", t)
+                        }
+                    },
+                    "xydesk-rdp-release",
+                ).apply {
+                    isDaemon = true
+                    start()
+                }
             }
-            worker.shutdownNow()
+            runCatching { worker.shutdown() }
         }
         if (_state.value is SessionState.Connected || _state.value is SessionState.Connecting ||
             _state.value is SessionState.Authenticating || _state.value is SessionState.Disconnecting
@@ -874,6 +892,7 @@ class SessionManager(context: Context) {
                     // "Audio di PC" (REMOTE).
                     val speakerOn = opts.quicAudio && opts.audioMode == XyAudioMode.REMOTE
                     val micOn = opts.usesQuicMicrophone() || opts.microphone
+                    rdpMicEnabledFlag = micOn
                     if (speakerOn || micOn) {
                         audioBridgeState = "start…"
                         listener?.onAudioBridge(audioBridgeState)
@@ -890,6 +909,7 @@ class SessionManager(context: Context) {
                             micGateDb = opts.micGateDb,
                             micNoiseSuppression = opts.micNoiseSuppression,
                             micAgc = opts.micAgc,
+                            waitForHostVerifyBeforeMic = !opts.pcConnectMode,
                             onStatus = { st ->
                                 audioBridgeState = st
                                 ConnectionLog.add("AUDIO: $st")

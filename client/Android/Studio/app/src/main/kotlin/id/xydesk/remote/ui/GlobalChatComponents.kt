@@ -1168,9 +1168,7 @@ internal fun MessageBubble(
                     }
                 } else {
                     val bubbleBgColor = when {
-                        liquidGlassMode && msg.mine -> Color(0xFFF8F8FA).copy(alpha = 0.84f)
-                        liquidGlassMode && !msg.mine -> Color(0xFF121217).copy(alpha = 0.62f)
-                        bubbleStyleMode == "glass" -> if (msg.mine) Color(0xFF273042).copy(alpha = 0.82f) else Color(0xFF151924).copy(alpha = 0.82f)
+                        bubbleStyleMode == "glass" -> if (msg.mine) Color(0xFF273042) else Color(0xFF151924)
                         bubbleStyleMode == "amber" -> if (msg.mine) Color(0xFF2B2214) else Color(0xFF181613)
                         msg.mine -> Color(0xFFF4F4F6)
                         else -> Color(0xFF1A1A20)

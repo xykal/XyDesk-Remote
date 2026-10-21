@@ -437,7 +437,7 @@ fun AddDeviceScreen(
                 clipboard = options.clipboard,
                 batterySaver = options.batterySaver,
                 audioMode = XyAudioMode.entries[audioIndex],
-                microphone = false,
+                microphone = options.microphone,
                 localDrive = false,
                 camera = false,
                 dynamicResolution = false,

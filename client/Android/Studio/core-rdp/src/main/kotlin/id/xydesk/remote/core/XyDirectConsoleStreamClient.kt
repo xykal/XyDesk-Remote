@@ -54,13 +54,45 @@ class XyDirectConsoleStreamClient(
     private val running = AtomicBoolean(false)
     private val main = Handler(Looper.getMainLooper())
     @Volatile private var videoSocket: DatagramSocket? = null
+    @Volatile private var resolvedHostAddr: InetAddress? = null
     private var rxThread: Thread? = null
+
+    private data class PendingVideoFrame(
+        val bitmap: Bitmap,
+        val width: Int,
+        val height: Int,
+        val hostFps: Int,
+        val nonRdp: Boolean,
+    )
+
+    @Volatile private var pendingFrame: PendingVideoFrame? = null
+    private val framePosted = AtomicBoolean(false)
+    private val deliverFrameRunnable = Runnable {
+        framePosted.set(false)
+        val f = pendingFrame ?: return@Runnable
+        pendingFrame = null
+        if (running.get() && !f.bitmap.isRecycled) {
+            onFrame(f.bitmap, f.width, f.height, f.hostFps, f.nonRdp)
+        }
+    }
 
     val inputBridge = XyRawGameInputBridge(host = host, port = port)
     private var audioBridge: QuicAudioBridge? = null
 
     fun setVoiceMicEnabled(enabled: Boolean) {
-        audioBridge?.setVoiceMicEnabled(enabled)
+        val bridge = audioBridge
+        if (bridge != null) {
+            bridge.setVoiceMicEnabled(enabled)
+        } else if (enabled && running.get()) {
+            val cleanHost = host.trim().removePrefix("[").removeSuffix("]")
+            audioBridge = QuicAudioBridge(
+                host = cleanHost,
+                port = port,
+                enableSpeaker = enableAudio,
+                enableMic = true,
+                waitForHostVerifyBeforeMic = false,
+            ).also { it.start() }
+        }
     }
 
     fun isVoiceMicEnabled(): Boolean = audioBridge?.micActive == true
@@ -83,6 +115,7 @@ class XyDirectConsoleStreamClient(
                 port = port,
                 enableSpeaker = true,
                 enableMic = false,
+                waitForHostVerifyBeforeMic = false,
             ).also { it.start() }
         }
         rxThread = Thread({ runVideoLoop(cleanHost) }, "xydesk-console-video-rx").apply {
@@ -94,18 +127,34 @@ class XyDirectConsoleStreamClient(
 
     fun stop() {
         if (!running.compareAndSet(true, false)) return
-        val unsub = encodeSubscribe(enable = false, fps = targetFps, quality = jpegQuality, scalePct = scalePct)
-        runCatching {
-            val sock = videoSocket
-            val addr = InetAddress.getByName(host.trim().removePrefix("[").removeSuffix("]"))
-            sock?.send(DatagramPacket(unsub, unsub.size, addr, port))
-        }
-        runCatching { videoSocket?.close() }
+        pendingFrame = null
+        framePosted.set(false)
+        main.removeCallbacks(deliverFrameRunnable)
+        val sock = videoSocket
+        val addr = resolvedHostAddr
         videoSocket = null
+        resolvedHostAddr = null
+        val unsub = encodeSubscribe(enable = false, fps = targetFps, quality = jpegQuality, scalePct = scalePct)
+        if (sock != null) {
+            Thread(
+                {
+                    runCatching {
+                        val targetAddr = addr
+                            ?: InetAddress.getByName(host.trim().removePrefix("[").removeSuffix("]"))
+                        sock.send(DatagramPacket(unsub, unsub.size, targetAddr, port))
+                    }
+                    runCatching { sock.close() }
+                },
+                "xydesk-console-video-stop",
+            ).apply {
+                isDaemon = true
+                start()
+            }
+        }
         rxThread?.interrupt()
         rxThread = null
-        inputBridge.stop()
-        audioBridge?.stop()
+        runCatching { inputBridge.stop() }
+        runCatching { audioBridge?.stop() }
         audioBridge = null
     }
 
@@ -114,8 +163,9 @@ class XyDirectConsoleStreamClient(
     private fun runVideoLoop(cleanHost: String) {
         try {
             val addr = InetAddress.getByName(cleanHost)
+            resolvedHostAddr = addr
             val sock = DatagramSocket()
-            sock.receiveBufferSize = 2 * 1024 * 1024
+            sock.receiveBufferSize = 4 * 1024 * 1024
             sock.trafficClass = 0x10
             sock.soTimeout = 450
             videoSocket = sock
@@ -230,6 +280,7 @@ class XyDirectConsoleStreamClient(
                             BitmapFactory.decodeByteArray(reassemblyBuffer, 0, totalBytes, decodeOpts)
                         }.getOrNull()
                         if (bmp != null) {
+                            runCatching { bmp.prepareToDraw() }
                             val nonRdp = (frameFlags and FLAG_CONSOLE_NON_RDP) != 0
                             val w = if (frameWidth > 0) frameWidth else bmp.width
                             val h = if (frameHeight > 0) frameHeight else bmp.height
@@ -244,8 +295,11 @@ class XyDirectConsoleStreamClient(
                                     )
                                 }
                             }
-                            main.post {
-                                onFrame(bmp, w, h, fps, nonRdp)
+                            pendingFrame = PendingVideoFrame(bmp, w, h, fps, nonRdp)
+                            if (framePosted.compareAndSet(false, true)) {
+                                val msg = android.os.Message.obtain(main, deliverFrameRunnable)
+                                msg.isAsynchronous = true
+                                main.sendMessage(msg)
                             }
                         }
                     }
@@ -303,10 +357,23 @@ class XyDirectConsoleStreamClient(
             runCatching {
                 DatagramSocket().use { sock ->
                     sock.broadcast = true
-                    sock.soTimeout = 220
+                    sock.soTimeout = 200
                     val probe = "XYDESK_QUIC_DISCOVER_V1".toByteArray(Charsets.US_ASCII)
-                    val bcast = InetAddress.getByName("255.255.255.255")
-                    runCatching { sock.send(DatagramPacket(probe, probe.size, bcast, port)) }
+                    val targets = linkedSetOf<InetAddress>()
+                    runCatching { targets.add(InetAddress.getByName("255.255.255.255")) }
+                    runCatching {
+                        val ifaces = java.net.NetworkInterface.getNetworkInterfaces()
+                        while (ifaces != null && ifaces.hasMoreElements()) {
+                            val nif = ifaces.nextElement()
+                            if (!nif.isUp || nif.isLoopback) continue
+                            for (ia in nif.interfaceAddresses) {
+                                ia.broadcast?.let { targets.add(it) }
+                            }
+                        }
+                    }
+                    for (t in targets) {
+                        runCatching { sock.send(DatagramPacket(probe, probe.size, t, port)) }
+                    }
 
                     val deadline = SystemClock.elapsedRealtime() + timeoutMs
                     val rxBuf = ByteArray(1024)
@@ -340,6 +407,43 @@ class XyDirectConsoleStreamClient(
                 }
             }
             return found.values.toList()
+        }
+
+        /**
+         * Probe langsung (unicast P2P) ke satu IP (LAN / Tailscale 100.x / Public)
+         * untuk memastikan `XyDeskRemoteHost.exe` aktif di UDP :4433.
+         */
+        fun probeHost(ip: String, port: Int = 4433, timeoutMs: Int = 600): DiscoveredHost? {
+            if (!LegacyDirectTransportPolicy.mayStart()) return null
+            val cleanIp = ip.trim().removePrefix("[").removeSuffix("]")
+            if (cleanIp.isEmpty()) return null
+            return runCatching {
+                DatagramSocket().use { sock ->
+                    sock.soTimeout = timeoutMs.coerceIn(150, 2500)
+                    val probe = "XYDESK_QUIC_DISCOVER_V1".toByteArray(Charsets.US_ASCII)
+                    val addr = InetAddress.getByName(cleanIp)
+                    sock.send(DatagramPacket(probe, probe.size, addr, port))
+                    val rxBuf = ByteArray(1024)
+                    val rxPkt = DatagramPacket(rxBuf, rxBuf.size)
+                    sock.receive(rxPkt)
+                    val text = String(rxBuf, 0, rxPkt.length, Charsets.UTF_8)
+                    val obj = JSONObject(text)
+                    if (obj.optString("proto") == "XYDESK-QUIC-1") {
+                        DiscoveredHost(
+                            hostname = obj.optString("hostname", "PC"),
+                            ip = cleanIp,
+                            rdpPort = obj.optInt("rdp_port", 3389),
+                            quicPort = obj.optInt("quic_port", port),
+                            gpu = obj.optString("gpu", "GPU"),
+                            encoder = obj.optString("encoder", "Auto"),
+                            pcId = obj.optString("pc_id", ""),
+                            consoleStreamReady = obj.optBoolean("console_stream", true),
+                        )
+                    } else {
+                        null
+                    }
+                }
+            }.getOrNull()
         }
     }
 }

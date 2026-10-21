@@ -288,10 +288,14 @@ public class SessionView extends View
 
 		canvas.save();
 		canvas.concat(scaleMatrix);
-		canvas.drawColor(Color.BLACK);
-		if (!railMode && surface != null)
+		Bitmap bmp = (!railMode && surface != null) ? surface.getBitmap() : null;
+		if (bmp != null && !bmp.isRecycled())
 		{
 			surface.draw(canvas);
+		}
+		else
+		{
+			canvas.drawColor(Color.BLACK);
 		}
 		canvas.restore();
 	}

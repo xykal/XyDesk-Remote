@@ -601,8 +601,12 @@ class XyDeskSessionActivity : ComponentActivity() {
             }
         }
         clipboardReader.shutdownNow()
-        controller.release()
-        manager.release()
+        runCatching {
+            if (::controller.isInitialized) controller.release()
+        }
+        runCatching {
+            if (::manager.isInitialized) manager.release()
+        }
     }
 
     /**

@@ -703,11 +703,14 @@ fun XyDeskSessionScreen(
 
     // Foreground service: sesi tetap hidup saat app ditinggal ke latar, dan
     // notifikasinya memberi jalan pulang + tombol putus.
-    LaunchedEffect(state) {
+    LaunchedEffect(state, userDisconnect) {
         val label = profile.label ?: "${profile.host}:${profile.port}"
-        val active = manager.instance() != 0L || state is SessionState.Connecting ||
-            state is SessionState.Authenticating || state is SessionState.Connected ||
-            state is SessionState.Disconnecting
+        val active = !userDisconnect &&
+            state !is SessionState.Disconnecting &&
+            state !is SessionState.Disconnected &&
+            state !is SessionState.Failed &&
+            (manager.instance() != 0L || state is SessionState.Connecting ||
+                state is SessionState.Authenticating || state is SessionState.Connected)
         XySessionRegistry.setActive(profile.id, active)
         if (active) manager.instance().takeIf { it != 0L }?.let(controller::setInstance)
         if (active) {
@@ -1226,13 +1229,18 @@ fun XyDeskSessionScreen(
         confirmDisconnect = false
         userDisconnect = true
         reconnecting = false
+        remoteCursor = null
         (context as? XyDeskSessionActivity)?.markExplicitDisconnect(profile.id)
         appPrefs.clearAutoResumeSession(profile.id)
+        XySessionRegistry.setActive(profile.id, false)
+        if (XySessionRegistry.activeCount() == 0) {
+            runCatching { XySessionService.stop(context) }
+        }
         releaseLatchedKeys()
         if (context.let { runCatching { AppPrefs(it).autoLockRemoteOnLeave }.getOrDefault(false) }) {
-            manager.lockRemoteSession()
+            runCatching { manager.lockRemoteSession() }
         }
-        manager.disconnect()
+        runCatching { manager.disconnect() }
         exitSession()
     }
     SideEffect { requestDisconnect = { performDisconnect() } }
@@ -1921,19 +1929,50 @@ fun XyDeskSessionScreen(
                         },
                     )
                 },
-                voiceMicEnabled = manager.isVoiceMicEnabled(),
+                voiceMicEnabled = run {
+                    val isMicActive = manager.isVoiceMicEnabled() ||
+                        runCatching { RdpOptions.of(context, activeProfile.id).microphone }.getOrDefault(false)
+                    isMicActive
+                },
                 onToggleVoiceMic = {
-                    val next = !manager.isVoiceMicEnabled()
-                    manager.setVoiceMicEnabled(next)
+                    val currentMic = manager.isVoiceMicEnabled() ||
+                        runCatching { RdpOptions.of(context, activeProfile.id).microphone }.getOrDefault(false)
+                    val next = !currentMic
+                    val hasRecordPerm = androidx.core.content.ContextCompat.checkSelfPermission(
+                        context,
+                        android.Manifest.permission.RECORD_AUDIO,
+                    ) == android.content.pm.PackageManager.PERMISSION_GRANTED
+                    if (next && !hasRecordPerm) {
+                        (context as? Activity)?.let { act ->
+                            androidx.core.app.ActivityCompat.requestPermissions(
+                                act,
+                                arrayOf(android.Manifest.permission.RECORD_AUDIO),
+                                9401,
+                            )
+                        }
+                    }
+                    val prevOpts = runCatching { RdpOptions.of(context, activeProfile.id) }.getOrNull()
+                    val wasChannelConfigured = prevOpts?.microphone == true
                     runCatching {
-                        RdpOptions.of(context, activeProfile.id)
+                        (prevOpts ?: RdpOptions())
                             .copy(microphone = next)
                             .write(context, activeProfile.id)
                     }
-                    notice.show(
-                        if (next) xyNow("Voice / Mikrofon Sesi: ON", "Session Voice / Mic: ON")
-                        else xyNow("Voice / Mikrofon Sesi: OFF", "Session Voice / Mic: OFF"),
-                    )
+                    manager.setVoiceMicEnabled(next)
+                    if (next && !wasChannelConfigured && state is SessionState.Connected) {
+                        notice.show(
+                            xyNow(
+                                "Mikrofon Sesi: ON (menyambungkan kanal audio input RDP…)",
+                                "Session Mic: ON (connecting RDP audio input channel…)",
+                            ),
+                        )
+                        manager.reconnect()
+                    } else {
+                        notice.show(
+                            if (next) xyNow("Voice / Mikrofon Sesi: ON", "Session Voice / Mic: ON")
+                            else xyNow("Voice / Mikrofon Sesi: OFF", "Session Voice / Mic: OFF"),
+                        )
+                    }
                 },
                 coreInfo = coreInfo,
                 notice = notice,

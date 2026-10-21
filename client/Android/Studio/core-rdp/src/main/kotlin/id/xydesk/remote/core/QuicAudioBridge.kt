@@ -46,12 +46,19 @@ class QuicAudioBridge(
     private val micGateDb: Int = -42,
     private val micNoiseSuppression: Boolean = true,
     private val micAgc: Boolean = true,
+    /**
+     * Bila true (mode sesi RDP standar), jangan membuka AudioRecord sebelum
+     * host UDP :4433 benar-benar merespons paket XYST1/XYA1, supaya tidak
+     * membajak mikrofon dari kanal resmi FreeRDP OpenSLES (/microphone).
+     */
+    private val waitForHostVerifyBeforeMic: Boolean = false,
     /** Status bridge untuk log/UI: "audio:on mic:on peers:1". */
     private val onStatus: (String) -> Unit = {},
     /** Level meter 0..100 untuk HUD (tx = mic HP, rx = suara PC). */
     private val onLevel: (tx: Int, rx: Int) -> Unit = { _, _ -> },
 ) {
     private val running = AtomicBoolean(false)
+    private val hostAnswered = AtomicBoolean(false)
     @Volatile private var socket: DatagramSocket? = null
     private var rxThread: Thread? = null
     @Volatile private var txThread: Thread? = null
@@ -61,7 +68,7 @@ class QuicAudioBridge(
         private set
     @Volatile var speakerActive: Boolean = enableSpeaker
 
-    val healthy: Boolean get() = running.get() && hostFlags.get() != 0
+    val healthy: Boolean get() = running.get() && (hostFlags.get() != 0 || hostAnswered.get())
 
     fun setVoiceMicEnabled(enabled: Boolean) {
         if (!LegacyDirectTransportPolicy.mayStart()) {
@@ -179,6 +186,7 @@ class QuicAudioBridge(
                         when (rxBuf[2].toInt().toChar()) {
                             'A' -> if (rxBuf[3] == '1'.code.toByte()) {
                                 lastHostMs = now
+                                hostAnswered.set(true)
                                 var lp = 0
                                 var i = 8
                                 while (i + 1 < len) {
@@ -199,6 +207,7 @@ class QuicAudioBridge(
                             }
                             'S' -> if (rxBuf[3] == 'T'.code.toByte() && len >= 16) {
                                 lastHostMs = now
+                                hostAnswered.set(true)
                                 val flags = rxBuf[5].toInt() and 0xFF
                                 val hostMicPeak = rxBuf[6].toInt() and 0xFF
                                 hostFlags.set(flags)
@@ -251,6 +260,14 @@ class QuicAudioBridge(
         var record: AudioRecord? = null
         try {
             val addr = InetAddress.getByName(host.trim().removePrefix("[").removeSuffix("]"))
+            // Pada sesi RDP standar (waitForHostVerifyBeforeMic = true), tunggu sampai
+            // host UDP :4433 benar-benar membalas paket XYST1/XYA1. Jika host adalah
+            // Windows RDP / XyRDP tanpa daemon audio :4433, jangan buka AudioRecord
+            // agar mikrofon tetap eksklusif milik kanal RDP OpenSLES (/microphone).
+            while (running.get() && waitForHostVerifyBeforeMic && !hostAnswered.get()) {
+                Thread.sleep(120)
+            }
+            if (!running.get()) return
             val minBuf = AudioRecord.getMinBufferSize(
                 SAMPLE_RATE,
                 AudioFormat.CHANNEL_IN_MONO,

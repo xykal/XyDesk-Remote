@@ -60,11 +60,15 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
+import androidx.core.app.ActivityCompat
+import androidx.core.content.ContextCompat
 import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.WindowInsetsControllerCompat
 import id.xydesk.remote.core.RefreshRatePolicy
 import id.xydesk.remote.core.XyDirectConsoleStreamClient
+import id.xydesk.remote.core.isGlobalPcId
+import id.xydesk.remote.core.parsePcIdOrEndpoint
 import id.xydesk.remote.pcstream.XyHostInputCodec
 import id.xydesk.remote.pcstream.XyHostMouseButton
 import id.xydesk.remote.pcstream.XyHubSessionState
@@ -159,6 +163,7 @@ class PcStreamSessionActivity : ComponentActivity() {
     private var lastDirectIp: String = ""
     private var lastDirectPort: Int = 4433
     private var lastDirectFps: Int = 120
+    private val resolvingP2P = mutableStateOf(false)
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -168,6 +173,12 @@ class PcStreamSessionActivity : ComponentActivity() {
         val controller = WindowInsetsControllerCompat(window, window.decorView)
         controller.systemBarsBehavior = WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
         controller.hide(WindowInsetsCompat.Type.systemBars())
+        val initialDirectHost = intent?.getStringExtra(EXTRA_DIRECT_HOST)?.trim().orEmpty()
+        val initialDirectPort = intent?.getIntExtra(EXTRA_DIRECT_PORT, 4433) ?: 4433
+        val initialDirectFps = intent?.getIntExtra(EXTRA_DIRECT_FPS, 120) ?: 120
+        if (initialDirectHost.isNotEmpty()) {
+            connectP2PTarget(initialDirectHost, initialDirectPort, initialDirectFps)
+        }
         setContent {
             XyThemeState.init(AppPrefs(this))
             XyDeskTheme(dark = xyDark()) {
@@ -204,12 +215,67 @@ class PcStreamSessionActivity : ComponentActivity() {
 
     override fun onDestroy() {
         super.onDestroy()
-        directClient?.close()
+        runCatching { directClient?.close() }
         directClient = null
-        viewer?.close()
+        runCatching { viewer?.close() }
         viewer = null
         runCatching { eglBase?.release() }
         eglBase = null
+    }
+
+    private fun connectP2PTarget(rawTarget: String, defaultPort: Int = 4433, targetFps: Int = 120) {
+        val trimmed = rawTarget.trim()
+        if (trimmed.isEmpty()) return
+        failure.value = null
+        if (isGlobalPcId(trimmed)) {
+            resolvingP2P.value = true
+            scope.launch {
+                val relay = runCatching {
+                    CommunityJokesApi(this@PcStreamSessionActivity).pcRelayResolve(trimmed)
+                }.getOrNull()
+                val arr = relay?.optJSONArray("candidates")
+                if (arr == null || arr.length() == 0) {
+                    resolvingP2P.value = false
+                    failure.value = xyNow(
+                        "ID Global $trimmed tidak ditemukan di direktori P2P — pastikan XyDeskRemoteHost.exe berjalan di PC.",
+                        "Global ID $trimmed not found in P2P directory — make sure XyDeskRemoteHost.exe is running on the PC.",
+                    )
+                    return@launch
+                }
+                val candidates = buildList {
+                    for (i in 0 until arr.length()) {
+                        val c = arr.optJSONObject(i) ?: continue
+                        val h = c.optString("host").trim()
+                        if (h.isNotEmpty()) add(h)
+                    }
+                }
+                val bestHost = withContext(Dispatchers.IO) {
+                    var responsive: String? = null
+                    for (cand in candidates) {
+                        val probed = XyDirectConsoleStreamClient.probeHost(cand, defaultPort, timeoutMs = 420)
+                        if (probed != null) {
+                            responsive = probed.ip
+                            break
+                        }
+                    }
+                    responsive ?: candidates.firstOrNull()
+                }
+                resolvingP2P.value = false
+                if (bestHost.isNullOrBlank()) {
+                    failure.value = xyNow(
+                        "Kandidat IP P2P kosong untuk ID $trimmed.",
+                        "No P2P IP candidate found for ID $trimmed.",
+                    )
+                } else {
+                    startDirectConsoleSession(bestHost, defaultPort, targetFps)
+                }
+            }
+            return
+        }
+        val ep = parsePcIdOrEndpoint(trimmed, defaultPort = defaultPort)
+        val hostIp = ep?.host ?: trimmed.substringBefore(':')
+        val hostPort = ep?.port?.let { if (it == 3389) defaultPort else it } ?: defaultPort
+        startDirectConsoleSession(hostIp, hostPort, targetFps)
     }
 
     private fun startDirectConsoleSession(hostIp: String, port: Int = 4433, targetFps: Int = 120) {
@@ -619,13 +685,20 @@ class PcStreamSessionActivity : ComponentActivity() {
 
     @Composable
     private fun PairingStage() {
+        var modeTab by remember { mutableIntStateOf(0) } // 0 = P2P Direct / Host PC, 1 = Hub 9-Digit + PIN
+        var p2pInput by remember { mutableStateOf(lastDirectIp) }
+        var p2pFpsIdx by remember { mutableIntStateOf(2) } // 0=60, 1=90, 2=120
         var hostId by remember { mutableStateOf("") }
         var pin by remember { mutableStateOf("") }
         val scroll = rememberScrollState()
         val state = sessionState.value
-        val busy = (state == XyHubSessionState.AUTHENTICATING ||
+        val busy = resolvingP2P.value || ((state == XyHubSessionState.AUTHENTICATING ||
             state == XyHubSessionState.CONNECTING ||
-            state == XyHubSessionState.PAIRING) && !pairingTimedOut.value
+            state == XyHubSessionState.PAIRING) && !pairingTimedOut.value)
+
+        LaunchedEffect(Unit) {
+            scanLanConsoleHosts()
+        }
 
         Column(
             modifier = Modifier
@@ -639,21 +712,172 @@ class PcStreamSessionActivity : ComponentActivity() {
                 .imePadding(),
         ) {
             Text(
-                xy("PC Stream", "PC Stream"),
+                xy("PC Stream P2P & Game Console", "P2P PC Stream & Game Console"),
                 style = MaterialTheme.typography.titleLarge,
                 color = MaterialTheme.colorScheme.onBackground,
             )
             Spacer(Modifier.height(4.dp))
             Text(
                 xy(
-                    "Masukkan ID 9 digit dan PIN 6 digit yang tampil di aplikasi XyDesk Host pada PC Windows Anda.",
-                    "Enter the 9-digit ID and 6-digit PIN shown on the XyDesk Host app on your Windows PC.",
+                    "Streaming konsol fisik Windows (SM_REMOTESESSION=0, anti-delay 60–120 FPS, RawInput 360° & audio/mic dua arah) via P2P Langsung atau Hub Pairing.",
+                    "Direct Windows physical console streaming (SM_REMOTESESSION=0, zero-lag 60–120 FPS, 360° RawInput & 2-way audio/mic) via P2P Direct or Hub Pairing.",
                 ),
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
+            Spacer(Modifier.height(14.dp))
+            XySegmented(
+                options = listOf(
+                    xy("P2P Direct / Host PC", "P2P Direct / Host PC"),
+                    xy("Hub 9-Digit + PIN", "9-Digit Hub + PIN"),
+                ),
+                selected = modeTab,
+                onSelect = {
+                    modeTab = it
+                    failure.value = null
+                },
+            )
             Spacer(Modifier.height(16.dp))
-            if (true) {
+            if (modeTab == 0) {
+                XyField(
+                    value = p2pInput,
+                    onValueChange = { p2pInput = it.trim() },
+                    label = xy(
+                        "ID Global (XY…) / ID PC 10-Digit / IP Tailscale / LAN",
+                        "Global ID (XY…) / 10-Digit PC ID / Tailscale / LAN IP",
+                    ),
+                    hint = xy(
+                        "Contoh: XYA1B2C3D4, 323-223-5826, 100.84.12.9, atau 192.168.1.50",
+                        "Example: XYA1B2C3D4, 323-223-5826, 100.84.12.9, or 192.168.1.50",
+                    ),
+                    keyboardType = KeyboardType.Ascii,
+                )
+                Spacer(Modifier.height(10.dp))
+                Text(
+                    xy("Target Frame Rate (Zero-Lag Stream)", "Target Frame Rate (Zero-Lag Stream)"),
+                    style = MaterialTheme.typography.labelMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                Spacer(Modifier.height(6.dp))
+                XySegmented(
+                    options = listOf("60 FPS", "90 FPS", "120 FPS"),
+                    selected = p2pFpsIdx,
+                    onSelect = { p2pFpsIdx = it },
+                )
+                Spacer(Modifier.height(14.dp))
+                val targetFps = when (p2pFpsIdx) {
+                    0 -> 60
+                    1 -> 90
+                    else -> 120
+                }
+                XyPillButton(
+                    text = if (resolvingP2P.value) {
+                        xy("Menyambungkan Jalur P2P…", "Connecting P2P Path…")
+                    } else {
+                        xy("Sambungkan P2P Sekarang ($targetFps FPS)", "Connect P2P Now ($targetFps FPS)")
+                    },
+                    onClick = {
+                        connectP2PTarget(p2pInput, defaultPort = 4433, targetFps = targetFps)
+                    },
+                    enabled = p2pInput.isNotBlank() && !busy,
+                    icon = XyIcons.Bolt,
+                    modifier = Modifier.fillMaxWidth(),
+                )
+                failure.value?.let { message ->
+                    Spacer(Modifier.height(8.dp))
+                    Text(
+                        message,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.error,
+                    )
+                }
+                Spacer(Modifier.height(18.dp))
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Text(
+                        xy("Host P2P Terdeteksi di Jaringan / Tailscale", "P2P Hosts Detected on LAN / Tailscale"),
+                        style = MaterialTheme.typography.labelMedium,
+                        fontWeight = FontWeight.SemiBold,
+                        color = MaterialTheme.colorScheme.onBackground,
+                    )
+                    TextButton(
+                        onClick = { scanLanConsoleHosts() },
+                        enabled = !scanningLan.value,
+                    ) {
+                        Text(
+                            if (scanningLan.value) xy("Memindai…", "Scanning…")
+                            else xy("Pindai Ulang", "Rescan"),
+                        )
+                    }
+                }
+                val hosts = discoveredHosts.value
+                if (hosts.isEmpty()) {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .background(Color(0xFF141821), RoundedCornerShape(12.dp))
+                            .border(1.dp, Color(0xFF252B3B), RoundedCornerShape(12.dp))
+                            .padding(14.dp),
+                    ) {
+                        Text(
+                            if (scanningLan.value) {
+                                xy("Mencari XyDeskRemoteHost.exe di UDP :4433…", "Searching for XyDeskRemoteHost.exe on UDP :4433…")
+                            } else {
+                                xy(
+                                    "Belum ada host terdeteksi via broadcast lokal. Jika beda jaringan/Wi-Fi, masukkan ID Global (XY…) atau IP Tailscale (100.x.y.z) di atas.",
+                                    "No host detected via local broadcast yet. If on a different network, enter the Global ID (XY…) or Tailscale IP (100.x.y.z) above.",
+                                )
+                            },
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                } else {
+                    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        hosts.forEach { h ->
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .clip(RoundedCornerShape(12.dp))
+                                    .background(Color(0xFF141821))
+                                    .border(1.dp, Color(0xFF2A3246), RoundedCornerShape(12.dp))
+                                    .clickable {
+                                        p2pInput = h.ip
+                                        startDirectConsoleSession(h.ip, h.quicPort, targetFps)
+                                    }
+                                    .padding(horizontal = 14.dp, vertical = 12.dp),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically,
+                            ) {
+                                Column(modifier = Modifier.weight(1f)) {
+                                    Text(
+                                        h.hostname + (if (h.pcId.isNotBlank()) " · ${h.pcId}" else ""),
+                                        style = MaterialTheme.typography.bodyMedium,
+                                        fontWeight = FontWeight.SemiBold,
+                                        color = Color.White,
+                                    )
+                                    Text(
+                                        "${h.ip}:${h.quicPort} · ${h.gpu} · P2P Zero-Lag",
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = Color(0xFF3DD68C),
+                                    )
+                                }
+                                XyPillButton(
+                                    text = xy("Konek", "Connect"),
+                                    onClick = {
+                                        p2pInput = h.ip
+                                        startDirectConsoleSession(h.ip, h.quicPort, targetFps)
+                                    },
+                                    compact = true,
+                                )
+                            }
+                        }
+                    }
+                }
+            } else {
                 XyField(
                     value = hostId,
                     onValueChange = { hostId = it.filter(Char::isDigit).take(9) },
@@ -949,10 +1173,22 @@ class PcStreamSessionActivity : ComponentActivity() {
                 Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                     var voiceOn by remember { mutableStateOf(false) }
                     XyPillButton(
-                        text = if (voiceOn) "VOICE ON" else "VOICE OFF",
+                        text = if (voiceOn) "MIC ON" else "MIC OFF",
                         onClick = {
-                            voiceOn = !voiceOn
-                            directClient?.setVoiceMicEnabled(voiceOn)
+                            val next = !voiceOn
+                            if (next && ContextCompat.checkSelfPermission(
+                                    this@PcStreamSessionActivity,
+                                    android.Manifest.permission.RECORD_AUDIO,
+                                ) != android.content.pm.PackageManager.PERMISSION_GRANTED
+                            ) {
+                                ActivityCompat.requestPermissions(
+                                    this@PcStreamSessionActivity,
+                                    arrayOf(android.Manifest.permission.RECORD_AUDIO),
+                                    9402,
+                                )
+                            }
+                            voiceOn = next
+                            directClient?.setVoiceMicEnabled(next)
                         },
                         primary = voiceOn,
                         compact = true,
@@ -986,6 +1222,21 @@ class PcStreamSessionActivity : ComponentActivity() {
                         )
                     }
                     XyPillButton(
+                        text = if (InAppLiveNotificationBus.floatingOverlayHidden) {
+                            xy("CHAT OFF", "CHAT OFF")
+                        } else {
+                            xy("CHAT ON", "CHAT ON")
+                        },
+                        onClick = {
+                            InAppLiveNotificationBus.setFloatingHidden(
+                                this@PcStreamSessionActivity,
+                                !InAppLiveNotificationBus.floatingOverlayHidden,
+                            )
+                        },
+                        primary = !InAppLiveNotificationBus.floatingOverlayHidden,
+                        compact = true,
+                    )
+                    XyPillButton(
                         text = xy("TEKS", "TEXT"),
                         onClick = { showTextDialog = true },
                         primary = false,
@@ -1011,8 +1262,9 @@ class PcStreamSessionActivity : ComponentActivity() {
                     XyPillButton(
                         text = xy("PUTUS", "DISCONNECT"),
                         onClick = {
-                            directClient?.close()
-                            viewer?.stop()
+                            runCatching { directClient?.close() }
+                            directClient = null
+                            runCatching { viewer?.stop() }
                             finish()
                         },
                         primary = false,
@@ -1280,6 +1532,21 @@ class PcStreamSessionActivity : ComponentActivity() {
         private const val VK_W = 0x57
         private const val VK_DELETE = 0x2E
 
-        fun intent(context: Context): Intent = Intent(context, PcStreamSessionActivity::class.java)
+        const val EXTRA_DIRECT_HOST = "xydesk.pcstream.direct_host"
+        const val EXTRA_DIRECT_PORT = "xydesk.pcstream.direct_port"
+        const val EXTRA_DIRECT_FPS = "xydesk.pcstream.direct_fps"
+
+        fun intent(
+            context: Context,
+            directHost: String? = null,
+            directPort: Int = 4433,
+            directFps: Int = 120,
+        ): Intent = Intent(context, PcStreamSessionActivity::class.java).apply {
+            if (!directHost.isNullOrBlank()) {
+                putExtra(EXTRA_DIRECT_HOST, directHost.trim())
+                putExtra(EXTRA_DIRECT_PORT, directPort)
+                putExtra(EXTRA_DIRECT_FPS, directFps)
+            }
+        }
     }
 }
