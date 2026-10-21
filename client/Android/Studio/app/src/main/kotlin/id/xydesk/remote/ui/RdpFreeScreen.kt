@@ -634,17 +634,24 @@ fun RdpFreeScreen(onBack: () -> Unit, onConnect: (ConnectionProfile) -> Unit) {
 
                                 // Peringatan cepat bila Secret wajib belum dipasang
                                 val st = setupStatus
+                                val isRailwayEndpoint = portmapHost.trim().let {
+                                    it.endsWith(".rlwy.net", ignoreCase = true) || it.endsWith(".railway.app", ignoreCase = true)
+                                }
                                 val hasRdpPass = st?.configuredSecrets?.contains("RDP_PASSWORD") == true
-                                val hasAccessSecret = if (akses == "tailscale") {
-                                    st?.configuredSecrets?.contains("TAILSCALE_AUTH_KEY") == true
-                                } else {
-                                    st?.configuredSecrets?.contains("PORTMAP_OVPN_CONFIG") == true
+                                val hasAccessSecret = when {
+                                    isRailwayEndpoint -> true
+                                    akses == "tailscale" -> st?.configuredSecrets?.contains("TAILSCALE_AUTH_KEY") == true
+                                    else -> st?.configuredSecrets?.contains("PORTMAP_OVPN_CONFIG") == true ||
+                                        st?.configuredSecrets?.contains("TAILSCALE_AUTH_KEY") == true
                                 }
                                 var showBeginnerGuide by remember {
-                                    mutableStateOf(!hasRdpPass || !hasAccessSecret)
+                                    mutableStateOf(false)
+                                }
+                                var antiSuspendNewAccount by remember {
+                                    mutableStateOf(prefs.getBoolean("anti_suspend_guard", true))
                                 }
 
-                                // 1. KARTU PANDUAN RINGKAS + PENJELASAN PORTMAP (FREEMAP) VS TAILSCALE
+                                // 1. KARTU PROTEKSI AKUN BARU (ANTI-SUSPEND GUARD) & PANDUAN TUNNEL
                                 XyCard(Modifier.fillMaxWidth()) {
                                     Row(
                                         modifier = Modifier
@@ -655,31 +662,39 @@ fun RdpFreeScreen(onBack: () -> Unit, onConnect: (ConnectionProfile) -> Unit) {
                                     ) {
                                         Row(
                                             verticalAlignment = Alignment.CenterVertically,
-                                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                            horizontalArrangement = Arrangement.spacedBy(10.dp),
                                             modifier = Modifier.weight(1f),
                                         ) {
-                                            Icon(
-                                                imageVector = XyIcons.Info,
-                                                contentDescription = null,
-                                                tint = Color(0xFF38BDF8),
-                                                modifier = Modifier.size(18.dp),
-                                            )
+                                            Box(
+                                                modifier = Modifier
+                                                    .size(34.dp)
+                                                    .clip(RoundedCornerShape(10.dp))
+                                                    .background(Color(0xFF10B981).copy(alpha = 0.16f)),
+                                                contentAlignment = Alignment.Center,
+                                            ) {
+                                                Icon(
+                                                    imageVector = XyIcons.Shield,
+                                                    contentDescription = null,
+                                                    tint = Color(0xFF10B981),
+                                                    modifier = Modifier.size(18.dp),
+                                                )
+                                            }
                                             Column {
                                                 Text(
-                                                    text = "Panduan Cepat & Info Tailscale vs Portmap (FreeMap)",
+                                                    text = "Anti-Suspend Guard & Info Jalur Tunnel",
                                                     style = MaterialTheme.typography.titleSmall,
                                                     fontWeight = FontWeight.ExtraBold,
                                                     maxLines = 1,
                                                     overflow = TextOverflow.Ellipsis,
                                                 )
                                                 Text(
-                                                    text = if (hasRdpPass && hasAccessSecret) {
-                                                        "Syarat lengkap ✓ · Ketuk untuk detail"
+                                                    text = if (antiSuspendNewAccount) {
+                                                        "Proteksi Akun Baru Aktif ✓ · Tailscale / Railway / Portmap"
                                                     } else {
-                                                        "Langkah: 1. Fork · 2. Isi Secrets · 3. Mulai RDP"
+                                                        "Ketuk untuk atur Anti-Suspend & panduan Tunnel"
                                                     },
                                                     style = MaterialTheme.typography.labelSmall,
-                                                    color = if (hasRdpPass && hasAccessSecret) Color(0xFF10B981) else Color(0xFFFBBF24),
+                                                    color = Color(0xFF10B981),
                                                     maxLines = 1,
                                                     overflow = TextOverflow.Ellipsis,
                                                 )
@@ -700,25 +715,39 @@ fun RdpFreeScreen(onBack: () -> Unit, onConnect: (ConnectionProfile) -> Unit) {
                                                 .padding(top = 10.dp),
                                             verticalArrangement = Arrangement.spacedBy(8.dp),
                                         ) {
+                                            RdpFlatToggleRow(
+                                                title = "Mode Aman Akun Baru (Anti-Suspend GitHub)",
+                                                subtitle = "Jeda request API natural, hemat upload checkpoint & cegah loop retrigger pada akun baru (<7 hari)",
+                                                checked = antiSuspendNewAccount,
+                                                enabled = !busy,
+                                                onCheckedChange = {
+                                                    antiSuspendNewAccount = it
+                                                    prefs.edit().putBoolean("anti_suspend_guard", it).apply()
+                                                    if (it && duration == "360") {
+                                                        duration = "180"
+                                                        saveSettings()
+                                                    }
+                                                },
+                                            )
                                             Row(
                                                 modifier = Modifier.fillMaxWidth(),
-                                                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                                horizontalArrangement = Arrangement.spacedBy(6.dp),
                                             ) {
                                                 Column(
                                                     modifier = Modifier
                                                         .weight(1f)
                                                         .clip(RoundedCornerShape(10.dp))
                                                         .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f))
-                                                        .padding(10.dp),
+                                                        .padding(9.dp),
                                                     verticalArrangement = Arrangement.spacedBy(3.dp),
                                                 ) {
-                                                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(5.dp)) {
-                                                        Icon(XyIcons.Shield, null, tint = Color(0xFF10B981), modifier = Modifier.size(14.dp))
-                                                        Text("Tailscale (P2P)", fontWeight = FontWeight.Bold, fontSize = 11.5.sp)
+                                                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                                                        Icon(XyIcons.Shield, null, tint = Color(0xFF10B981), modifier = Modifier.size(13.dp))
+                                                        Text("Tailscale", fontWeight = FontWeight.Bold, fontSize = 11.sp)
                                                     }
                                                     Text(
-                                                        "Jalur privat tercepat (IP 100.x). Wajib aktifkan aplikasi Tailscale di HP.",
-                                                        fontSize = 10.5.sp,
+                                                        "P2P tercepat (IP 100.x). Paling stabil & aman.",
+                                                        fontSize = 10.sp,
                                                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                                                     )
                                                 }
@@ -727,23 +756,41 @@ fun RdpFreeScreen(onBack: () -> Unit, onConnect: (ConnectionProfile) -> Unit) {
                                                         .weight(1f)
                                                         .clip(RoundedCornerShape(10.dp))
                                                         .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f))
-                                                        .padding(10.dp),
+                                                        .padding(9.dp),
                                                     verticalArrangement = Arrangement.spacedBy(3.dp),
                                                 ) {
-                                                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(5.dp)) {
-                                                        Icon(XyIcons.Globe, null, tint = Color(0xFF38BDF8), modifier = Modifier.size(14.dp))
-                                                        Text("Portmap / FreeMap", fontWeight = FontWeight.Bold, fontSize = 11.5.sp)
+                                                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                                                        Icon(XyIcons.Link, null, tint = Color(0xFFA855F7), modifier = Modifier.size(13.dp))
+                                                        Text("Railway", fontWeight = FontWeight.Bold, fontSize = 11.sp)
                                                     }
                                                     Text(
-                                                        "Tunnel publik Portmap.io (.ovpn). Masuk RDP langsung tanpa aplikasi VPN di HP.",
-                                                        fontSize = 10.5.sp,
+                                                        "TCP Proxy (*.rlwy.net) tanpa VPN di HP.",
+                                                        fontSize = 10.sp,
+                                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                                    )
+                                                }
+                                                Column(
+                                                    modifier = Modifier
+                                                        .weight(1f)
+                                                        .clip(RoundedCornerShape(10.dp))
+                                                        .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f))
+                                                        .padding(9.dp),
+                                                    verticalArrangement = Arrangement.spacedBy(3.dp),
+                                                ) {
+                                                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                                                        Icon(XyIcons.Globe, null, tint = Color(0xFF38BDF8), modifier = Modifier.size(13.dp))
+                                                        Text("Portmap", fontWeight = FontWeight.Bold, fontSize = 11.sp)
+                                                    }
+                                                    Text(
+                                                        "Opsional (.ovpn). Host/Port otomatis.",
+                                                        fontSize = 10.sp,
                                                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                                                     )
                                                 }
                                             }
                                             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                                                 XyPillButton(
-                                                    text = "OS & Fitur",
+                                                    text = "OS & Tunnel",
                                                     icon = XyIcons.Sliders,
                                                     onClick = { activeTab = 1 },
                                                     primary = false,
@@ -952,6 +999,91 @@ fun RdpFreeScreen(onBack: () -> Unit, onConnect: (ConnectionProfile) -> Unit) {
                                                     fontSize = 10.5.sp,
                                                     fontWeight = FontWeight.ExtraBold,
                                                     color = if (selectedDur) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurface,
+                                                )
+                                            }
+                                        }
+                                    }
+
+                                    Spacer(Modifier.height(10.dp))
+                                    Text(
+                                        text = "3. Pilih Jalur Tunnel (Portmap Opsional / Bisa Pakai Railway):",
+                                        style = MaterialTheme.typography.labelSmall,
+                                        fontWeight = FontWeight.Bold,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    )
+                                    Spacer(Modifier.height(6.dp))
+                                    Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                                        XyPillButton(
+                                            text = "Tailscale",
+                                            icon = XyIcons.Shield,
+                                            onClick = {
+                                                akses = "tailscale"
+                                                saveSettings()
+                                            },
+                                            primary = akses == "tailscale",
+                                            compact = true,
+                                            enabled = !busy && !isRunningOrQueued,
+                                            modifier = Modifier.weight(1f),
+                                        )
+                                        XyPillButton(
+                                            text = "Railway",
+                                            icon = XyIcons.Link,
+                                            onClick = {
+                                                akses = "portmap"
+                                                if (!isRailwayEndpoint) {
+                                                    portmapHost = "monorail.proxy.rlwy.net"
+                                                }
+                                                saveSettings()
+                                            },
+                                            primary = akses == "portmap" && isRailwayEndpoint,
+                                            compact = true,
+                                            enabled = !busy && !isRunningOrQueued,
+                                            modifier = Modifier.weight(1f),
+                                        )
+                                        XyPillButton(
+                                            text = "Portmap",
+                                            icon = XyIcons.Globe,
+                                            onClick = {
+                                                akses = "portmap"
+                                                if (isRailwayEndpoint) {
+                                                    portmapHost = ""
+                                                }
+                                                saveSettings()
+                                            },
+                                            primary = akses == "portmap" && !isRailwayEndpoint,
+                                            compact = true,
+                                            enabled = !busy && !isRunningOrQueued,
+                                            modifier = Modifier.weight(1f),
+                                        )
+                                    }
+                                    AnimatedVisibility(visible = akses == "portmap" && isRailwayEndpoint) {
+                                        Column(
+                                            modifier = Modifier
+                                                .fillMaxWidth()
+                                                .padding(top = 8.dp)
+                                                .clip(RoundedCornerShape(10.dp))
+                                                .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f))
+                                                .padding(10.dp),
+                                            verticalArrangement = Arrangement.spacedBy(6.dp),
+                                        ) {
+                                            Text(
+                                                text = "Tunnel Railway Aktif (Mendukung TCP Proxy *.rlwy.net & WebSocket *.up.railway.app):",
+                                                fontSize = 10.5.sp,
+                                                fontWeight = FontWeight.Bold,
+                                                color = Color(0xFFC084FC),
+                                            )
+                                            Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                                                XyField(
+                                                    value = portmapHost,
+                                                    onValueChange = { portmapHost = it.take(120); saveSettings() },
+                                                    label = "Host Railway (*.rlwy.net / *.railway.app)",
+                                                    modifier = Modifier.weight(1.6f),
+                                                )
+                                                XyField(
+                                                    value = portmapPort,
+                                                    onValueChange = { portmapPort = it.filter { c -> c.isDigit() }.take(5); saveSettings() },
+                                                    label = "Port TCP",
+                                                    modifier = Modifier.weight(0.9f),
                                                 )
                                             }
                                         }
@@ -1441,9 +1573,21 @@ fun RdpFreeScreen(onBack: () -> Unit, onConnect: (ConnectionProfile) -> Unit) {
                                         }
                                     }
                                     Spacer(Modifier.height(8.dp))
+                                    val isRailwayMode = akses == "portmap" && (
+                                        portmapHost.endsWith(".rlwy.net", ignoreCase = true) ||
+                                            portmapHost.endsWith(".railway.app", ignoreCase = true)
+                                        )
+                                    val aksesLabel = when {
+                                        isRailwayMode -> "Railway"
+                                        akses == "portmap" -> "Portmap (Opsional)"
+                                        else -> "Tailscale"
+                                    }
+                                    var showOptionalPortmapFields by remember {
+                                        mutableStateOf(isRailwayMode || portmapHost.isNotBlank())
+                                    }
                                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                                         XyPillButton(
-                                            text = "Jalur: $akses ▾",
+                                            text = "Tunnel: $aksesLabel ▾",
                                             onClick = { chooseAkses = !chooseAkses },
                                             primary = chooseAkses,
                                             compact = true,
@@ -1467,18 +1611,45 @@ fun RdpFreeScreen(onBack: () -> Unit, onConnect: (ConnectionProfile) -> Unit) {
                                                 .padding(10.dp),
                                             verticalArrangement = Arrangement.spacedBy(6.dp),
                                         ) {
-                                            listOf(
-                                                "portmap" to "Portmap.io OpenVPN (Tanpa aplikasi tambahan di HP)",
-                                                "tailscale" to "Tailscale Mesh VPN (Koneksi P2P paling cepat & stabil)",
-                                            ).forEach { (m, lbl) ->
-                                                XyPillButton(
-                                                    text = lbl,
-                                                    onClick = { akses = m; saveSettings(); chooseAkses = false },
-                                                    primary = akses == m,
-                                                    compact = true,
-                                                    modifier = Modifier.fillMaxWidth(),
-                                                )
-                                            }
+                                            XyPillButton(
+                                                text = "Tailscale P2P (Rekomendasi Utama · Paling Cepat & Stabil)",
+                                                onClick = {
+                                                    akses = "tailscale"
+                                                    saveSettings()
+                                                    chooseAkses = false
+                                                },
+                                                primary = akses == "tailscale",
+                                                compact = true,
+                                                modifier = Modifier.fillMaxWidth(),
+                                            )
+                                            XyPillButton(
+                                                text = "Railway Cloud Tunnel (TCP Proxy *.rlwy.net / *.up.railway.app)",
+                                                onClick = {
+                                                    akses = "portmap"
+                                                    showOptionalPortmapFields = true
+                                                    if (portmapHost.isBlank()) {
+                                                        portmapHost = "monorail.proxy.rlwy.net"
+                                                    }
+                                                    saveSettings()
+                                                    chooseAkses = false
+                                                },
+                                                primary = isRailwayMode,
+                                                compact = true,
+                                                modifier = Modifier.fillMaxWidth(),
+                                            )
+                                            XyPillButton(
+                                                text = "Portmap / OpenVPN (Opsional · Host & Port Otomatis dari .ovpn)",
+                                                onClick = {
+                                                    akses = "portmap"
+                                                    if (isRailwayMode) portmapHost = ""
+                                                    showOptionalPortmapFields = false
+                                                    saveSettings()
+                                                    chooseAkses = false
+                                                },
+                                                primary = akses == "portmap" && !isRailwayMode,
+                                                compact = true,
+                                                modifier = Modifier.fillMaxWidth(),
+                                            )
                                         }
                                     }
                                     AnimatedVisibility(visible = chooseDebloat) {
@@ -1541,9 +1712,36 @@ fun RdpFreeScreen(onBack: () -> Unit, onConnect: (ConnectionProfile) -> Unit) {
                                     }
                                     if (akses == "portmap") {
                                         Spacer(Modifier.height(8.dp))
-                                        XyField(portmapHost, { portmapHost = it.take(120); saveSettings() }, "Host Portmap (tanpa tcp://)")
-                                        Spacer(Modifier.height(8.dp))
-                                        XyField(portmapPort, { portmapPort = it.filter { c -> c.isDigit() }.take(5); saveSettings() }, "Port Publik Portmap")
+                                        XyPillButton(
+                                            text = if (showOptionalPortmapFields) {
+                                                "Sembunyikan Host/Port Railway & Portmap (Opsional) ▴"
+                                            } else {
+                                                "Atur Host/Port Railway atau Portmap (Opsional · Boleh Kosong) ▾"
+                                            },
+                                            onClick = { showOptionalPortmapFields = !showOptionalPortmapFields },
+                                            primary = false,
+                                            compact = true,
+                                            modifier = Modifier.fillMaxWidth(),
+                                        )
+                                        AnimatedVisibility(visible = showOptionalPortmapFields) {
+                                            Column(
+                                                modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
+                                                verticalArrangement = Arrangement.spacedBy(8.dp),
+                                            ) {
+                                                XyField(
+                                                    value = portmapHost,
+                                                    onValueChange = { portmapHost = it.take(120); saveSettings() },
+                                                    label = "Host Railway / Portmap (Opsional — contoh: monorail.proxy.rlwy.net)",
+                                                    hint = "Kosongkan bila pakai .ovpn otomatis, atau isi domain *.rlwy.net / *.up.railway.app",
+                                                )
+                                                XyField(
+                                                    value = portmapPort,
+                                                    onValueChange = { portmapPort = it.filter { c -> c.isDigit() }.take(5); saveSettings() },
+                                                    label = "Port Publik Railway / Portmap (Opsional — contoh: 3389 / 12345)",
+                                                    hint = "Kosongkan bila pakai port otomatis",
+                                                )
+                                            }
+                                        }
                                     }
                                 }
 
@@ -1555,15 +1753,15 @@ fun RdpFreeScreen(onBack: () -> Unit, onConnect: (ConnectionProfile) -> Unit) {
                                     )
                                     Spacer(Modifier.height(8.dp))
                                     RdpFlatToggleRow(
-                                        title = "Anti-Reset Cloud Persistence v3",
-                                        subtitle = "Simpan otomatis sesi login Chrome/Edge, Desktop, Documents & lanjutkan sesi berikutnya",
+                                        title = "Anti-Reset Cloud Persistence v4 (CreateProfile + SQLite WAL)",
+                                        subtitle = "Simpan otomatis sesi login Google Chrome/Edge, Downloads, Desktop & lanjutkan sesi berikutnya",
                                         checked = autoRenew,
                                         enabled = !busy,
                                         onCheckedChange = { autoRenew = it; saveSettings() },
                                     )
                                     RdpFlatToggleRow(
-                                        title = "XyDesk Host Boost (120 FPS + XyDeskTools.exe)",
-                                        subtitle = "Pasang otomatis XyDeskTools.exe di Desktop RDP, DWM 120Hz & AVC444",
+                                        title = "XyDeskRemote Dashboard + Extreme Gaming Boost (120 FPS)",
+                                        subtitle = "Buka otomatis XyDeskRemote Dashboard saat masuk RDP, Ultimate Power Plan & Anti-VM",
                                         checked = xydeskBoost,
                                         enabled = !busy,
                                         onCheckedChange = { xydeskBoost = it; saveSettings() },
@@ -1669,8 +1867,8 @@ fun RdpFreeScreen(onBack: () -> Unit, onConnect: (ConnectionProfile) -> Unit) {
                                     SecretStatusRow(
                                         name = "PORTMAP_OVPN_CONFIG",
                                         configured = hasOvpn,
-                                        required = akses == "portmap",
-                                        desc = "Isi konfigurasi .ovpn untuk mode Portmap publik",
+                                        required = false,
+                                        desc = "Opsional — Isi .ovpn Portmap (tidak wajib jika pakai Tailscale / Railway)",
                                         onCopyName = {
                                             copyToClipboard("Secret Name", "PORTMAP_OVPN_CONFIG")
                                             successMessage = "Nama secret 'PORTMAP_OVPN_CONFIG' disalin."

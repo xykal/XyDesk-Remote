@@ -561,115 +561,157 @@ internal fun GitHubDirectOAuthModalHost() {
     if (!showEmbeddedWebView) {
         Dialog(
             onDismissRequest = { GitHubDirectOAuthController.dismiss() },
-            properties = DialogProperties(dismissOnBackPress = true, dismissOnClickOutside = false),
+            properties = DialogProperties(dismissOnBackPress = true, dismissOnClickOutside = true),
         ) {
             Surface(
                 modifier = Modifier
                     .fillMaxWidth()
                     .padding(horizontal = 16.dp),
-                shape = RoundedCornerShape(24.dp),
-                color = Color(0xFF0E0E14),
+                shape = RoundedCornerShape(26.dp),
+                color = Color(0xFF0E1017),
                 border = BorderStroke(1.dp, Color.White.copy(alpha = 0.12f)),
-                tonalElevation = 10.dp,
+                tonalElevation = 12.dp,
             ) {
-                Column(
-                    modifier = Modifier.padding(22.dp),
-                    verticalArrangement = Arrangement.spacedBy(12.dp),
-                ) {
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(10.dp),
-                    ) {
-                        Box(
-                            modifier = Modifier
-                                .size(38.dp)
-                                .clip(CircleShape)
-                                .background(Color.White.copy(alpha = 0.1f)),
-                            contentAlignment = Alignment.Center,
-                        ) {
-                            GitHubLogoIcon(size = 20.dp, tint = Color.White)
-                        }
-                        Column(modifier = Modifier.weight(1f)) {
-                            Text(
-                                text = xyNow("Sinkron Login GitHub via Chrome", "Sync GitHub Sign-In via Chrome"),
-                                style = MaterialTheme.typography.titleSmall,
-                                fontWeight = FontWeight.ExtraBold,
-                                color = Color.White,
-                            )
-                            Text(
-                                text = xyNow("Otomatis memakai sesi GitHub & Google di browser Anda", "Uses your existing GitHub & Google session in Chrome"),
-                                style = MaterialTheme.typography.bodySmall,
-                                color = Color(0xFFA1A1AA),
-                            )
-                        }
-                    }
-
-                    Text(
-                        text = xyNow(
-                            "Halaman OAuth GitHub telah dibuka di Chrome Custom Tabs. Jika Anda sudah login GitHub atau Google di Chrome, cukup klik tombol hijau 'Authorize' — aplikasi akan otomatis tersambung tanpa mengetik kode.",
-                            "GitHub OAuth opened in Chrome Custom Tabs. If you're already signed in to GitHub or Google in Chrome, just tap the green 'Authorize' button — the app connects automatically with no code required.",
-                        ),
-                        style = MaterialTheme.typography.bodySmall,
-                        color = Color(0xFFD4D4D8),
-                    )
-
+                Box(modifier = Modifier.fillMaxWidth()) {
+                    // Tombol X kecil di pojok kanan atas untuk tutup tanpa menambah tombol di bawah
                     Box(
                         modifier = Modifier
-                            .fillMaxWidth()
-                            .clip(RoundedCornerShape(14.dp))
-                            .background(Color.White)
-                            .clickable { openInAppCustomTab(context, chromeAuthUrl) }
-                            .padding(vertical = 12.dp),
+                            .align(Alignment.TopEnd)
+                            .padding(12.dp)
+                            .size(30.dp)
+                            .clip(CircleShape)
+                            .background(Color.White.copy(alpha = 0.06f))
+                            .clickable { GitHubDirectOAuthController.dismiss() },
                         contentAlignment = Alignment.Center,
                     ) {
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(8.dp),
-                        ) {
-                            GitHubLogoIcon(size = 16.dp, tint = Color(0xFF09090B))
-                            Text(
-                                text = xyNow("Buka Chrome / Browser (Authorize)", "Open Chrome / Browser (Authorize)"),
-                                style = MaterialTheme.typography.labelLarge,
-                                fontWeight = FontWeight.ExtraBold,
-                                color = Color(0xFF09090B),
-                            )
-                        }
+                        Icon(
+                            imageVector = XyIcons.Close,
+                            contentDescription = xyNow("Tutup", "Close"),
+                            tint = Color(0xFFA1A1AA),
+                            modifier = Modifier.size(15.dp),
+                        )
                     }
 
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 24.dp, vertical = 26.dp),
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        verticalArrangement = Arrangement.spacedBy(14.dp),
                     ) {
-                        Box(
-                            modifier = Modifier
-                                .weight(1f)
-                                .clip(RoundedCornerShape(12.dp))
-                                .background(Color.White.copy(alpha = 0.07f))
-                                .border(1.dp, Color.White.copy(alpha = 0.12f), RoundedCornerShape(12.dp))
-                                .clickable { showEmbeddedWebView = true }
-                                .padding(vertical = 10.dp),
-                            contentAlignment = Alignment.Center,
+                        // Ilustrasi Koneksi: [Ikon XyDesk] ── [Ikon Link] ── [Ikon GitHub]
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.Center,
+                        ) {
+                            Box(
+                                modifier = Modifier
+                                    .size(52.dp)
+                                    .clip(RoundedCornerShape(16.dp))
+                                    .background(Color(0xFF0284C7).copy(alpha = 0.18f))
+                                    .border(1.dp, Color(0xFF38BDF8).copy(alpha = 0.45f), RoundedCornerShape(16.dp)),
+                                contentAlignment = Alignment.Center,
+                            ) {
+                                Icon(
+                                    imageVector = XyIcons.Monitor,
+                                    contentDescription = "XyDesk",
+                                    tint = Color(0xFF38BDF8),
+                                    modifier = Modifier.size(26.dp),
+                                )
+                            }
+
+                            Box(
+                                modifier = Modifier
+                                    .width(18.dp)
+                                    .height(2.dp)
+                                    .background(Color.White.copy(alpha = 0.22f)),
+                            )
+
+                            Box(
+                                modifier = Modifier
+                                    .size(34.dp)
+                                    .clip(CircleShape)
+                                    .background(Color(0xFF10B981).copy(alpha = 0.16f))
+                                    .border(1.dp, Color(0xFF34D399).copy(alpha = 0.45f), CircleShape),
+                                contentAlignment = Alignment.Center,
+                            ) {
+                                Icon(
+                                    imageVector = XyIcons.Link,
+                                    contentDescription = "Link",
+                                    tint = Color(0xFF34D399),
+                                    modifier = Modifier.size(16.dp),
+                                )
+                            }
+
+                            Box(
+                                modifier = Modifier
+                                    .width(18.dp)
+                                    .height(2.dp)
+                                    .background(Color.White.copy(alpha = 0.22f)),
+                            )
+
+                            Box(
+                                modifier = Modifier
+                                    .size(52.dp)
+                                    .clip(RoundedCornerShape(16.dp))
+                                    .background(Color.White.copy(alpha = 0.09f))
+                                    .border(1.dp, Color.White.copy(alpha = 0.24f), RoundedCornerShape(16.dp)),
+                                contentAlignment = Alignment.Center,
+                            ) {
+                                GitHubLogoIcon(size = 26.dp, tint = Color.White)
+                            }
+                        }
+
+                        Column(
+                            horizontalAlignment = Alignment.CenterHorizontally,
+                            verticalArrangement = Arrangement.spacedBy(6.dp),
                         ) {
                             Text(
-                                text = xyNow("Browser Internal", "Built-in Browser"),
-                                style = MaterialTheme.typography.labelMedium,
-                                fontWeight = FontWeight.SemiBold,
-                                color = Color(0xFFE4E4E7),
+                                text = xyNow("Hubungkan XyDesk & GitHub", "Connect XyDesk & GitHub"),
+                                style = MaterialTheme.typography.titleMedium,
+                                fontWeight = FontWeight.ExtraBold,
+                                color = Color.White,
+                                textAlign = TextAlign.Center,
+                            )
+                            Text(
+                                text = xyNow(
+                                    "Otorisasi satu klik melalui browser utama Anda. Cukup tekan tombol hijau 'Authorize' untuk masuk otomatis.",
+                                    "One-click authorization via your main browser. Just tap the green 'Authorize' button to sign in automatically.",
+                                ),
+                                style = MaterialTheme.typography.bodySmall,
+                                color = Color(0xFFA1A1AA),
+                                textAlign = TextAlign.Center,
                             )
                         }
+
+                        // HANYA 1 Tombol Utama: Login di Browser (dengan Ikon)
                         Box(
                             modifier = Modifier
-                                .clip(RoundedCornerShape(12.dp))
-                                .background(Color.White.copy(alpha = 0.05f))
-                                .clickable { GitHubDirectOAuthController.dismiss() }
-                                .padding(horizontal = 16.dp, vertical = 10.dp),
+                                .fillMaxWidth()
+                                .clip(RoundedCornerShape(14.dp))
+                                .background(Color.White)
+                                .clickable { openInAppCustomTab(context, chromeAuthUrl) }
+                                .padding(vertical = 13.dp, horizontal = 16.dp),
                             contentAlignment = Alignment.Center,
                         ) {
-                            Text(
-                                text = xyNow("Tutup", "Close"),
-                                style = MaterialTheme.typography.labelMedium,
-                                color = Color(0xFFA1A1AA),
-                            )
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(10.dp),
+                            ) {
+                                GitHubLogoIcon(size = 18.dp, tint = Color(0xFF09090B))
+                                Text(
+                                    text = xyNow("Lanjutkan di Browser", "Continue in Browser"),
+                                    style = MaterialTheme.typography.labelLarge,
+                                    fontWeight = FontWeight.ExtraBold,
+                                    color = Color(0xFF09090B),
+                                )
+                                Icon(
+                                    imageVector = XyIcons.Link,
+                                    contentDescription = null,
+                                    tint = Color(0xFF09090B),
+                                    modifier = Modifier.size(16.dp),
+                                )
+                            }
                         }
                     }
                 }

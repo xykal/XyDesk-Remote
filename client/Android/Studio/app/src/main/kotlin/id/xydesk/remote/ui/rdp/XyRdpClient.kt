@@ -399,10 +399,13 @@ internal object XyRdpClient {
                     }
                 }
             }
-            val required = listOf(
-                "RDP_PASSWORD",
-                if (aksesMode == "portmap") "PORTMAP_OVPN_CONFIG" else "TAILSCALE_AUTH_KEY",
-            )
+            val hasAnyTunnelSecret = "TAILSCALE_AUTH_KEY" in secretNames || "PORTMAP_OVPN_CONFIG" in secretNames
+            val required = buildList {
+                add("RDP_PASSWORD")
+                if (!hasAnyTunnelSecret) {
+                    add(if (aksesMode == "portmap") "PORTMAP_OVPN_CONFIG" else "TAILSCALE_AUTH_KEY")
+                }
+            }
             val missing = if (secCode == 200) {
                 required.filter { it !in secretNames }
             } else emptyList()
@@ -459,11 +462,23 @@ internal object XyRdpClient {
                 val (code, _) = dashCall(token, "/start", "POST", startBody.toString())
                 return@withContext code in 200..204
             }
+            // Anti-Suspend Pacing: beri jeda sopan antar mutasi API GitHub agar akun baru aman dari flag bot
             runCatching { syncForkWithUpstream(token, login) }
+            kotlinx.coroutines.delay(500L)
             runCatching { enableWorkflow(token, login) }
+            kotlinx.coroutines.delay(450L)
+            val isRailwayHost = inputs.optString("portmap_host").trim()
+                .let { it.endsWith(".rlwy.net", ignoreCase = true) || it.endsWith(".railway.app", ignoreCase = true) }
             val setup = runCatching { inspectSetup(token, login, inputs.optString("akses", "tailscale")) }.getOrNull()
-            if (setup != null && setup.secretsVerified && setup.missingSecrets.isNotEmpty()) {
-                error("Setup belum lengkap: ${setup.missingSecrets.joinToString()}. Buka tab Secrets & Akses.")
+            if (setup != null && setup.secretsVerified) {
+                val realMissing = if (isRailwayHost) {
+                    setup.missingSecrets.filter { it == "RDP_PASSWORD" }
+                } else {
+                    setup.missingSecrets
+                }
+                if (realMissing.isNotEmpty()) {
+                    error("Setup belum lengkap: ${realMissing.joinToString()}. Buka tab Secrets & Akses.")
+                }
             }
             val body = JSONObject().apply {
                 put("ref", "main")
