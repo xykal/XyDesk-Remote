@@ -708,7 +708,7 @@ fun XyDeskSessionScreen(
         val active = !userDisconnect &&
             state !is SessionState.Disconnecting &&
             state !is SessionState.Disconnected &&
-            state !is SessionState.Failed &&
+            state !is SessionState.Error &&
             (manager.instance() != 0L || state is SessionState.Connecting ||
                 state is SessionState.Authenticating || state is SessionState.Connected)
         XySessionRegistry.setActive(profile.id, active)
@@ -1966,7 +1966,8 @@ fun XyDeskSessionScreen(
                                 "Session Mic: ON (connecting RDP audio input channel…)",
                             ),
                         )
-                        manager.reconnect()
+                        applyingResolution = true
+                        manager.disconnect()
                     } else {
                         notice.show(
                             if (next) xyNow("Voice / Mikrofon Sesi: ON", "Session Voice / Mic: ON")

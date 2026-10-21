@@ -731,7 +731,7 @@ class PcStreamSessionActivity : ComponentActivity() {
                     xy("P2P Direct / Host PC", "P2P Direct / Host PC"),
                     xy("Hub 9-Digit + PIN", "9-Digit Hub + PIN"),
                 ),
-                selected = modeTab,
+                selectedIndex = modeTab,
                 onSelect = {
                     modeTab = it
                     failure.value = null
@@ -761,7 +761,7 @@ class PcStreamSessionActivity : ComponentActivity() {
                 Spacer(Modifier.height(6.dp))
                 XySegmented(
                     options = listOf("60 FPS", "90 FPS", "120 FPS"),
-                    selected = p2pFpsIdx,
+                    selectedIndex = p2pFpsIdx,
                     onSelect = { p2pFpsIdx = it },
                 )
                 Spacer(Modifier.height(14.dp))
