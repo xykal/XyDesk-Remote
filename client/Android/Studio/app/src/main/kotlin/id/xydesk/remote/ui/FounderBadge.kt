@@ -1069,8 +1069,8 @@ internal fun resolveCustomBubbleShape(
             RoundedCornerShape(topStart = tl, topEnd = tr, bottomEnd = br, bottomStart = bl)
         }
         "cloud", "cloud_soft" -> {
-            val r = (baseRadiusDp + 6f).dp
-            val sharpTop = 2.dp
+            val r = (baseRadiusDp + 4f).dp
+            val sharpTop = 3.dp
             RoundedCornerShape(
                 topStart = if (own) r else sharpTop,
                 topEnd = if (own) sharpTop else r,
@@ -1078,16 +1078,50 @@ internal fun resolveCustomBubbleShape(
                 bottomStart = r,
             )
         }
-        else -> {
-            // Ujung tajam (2.dp) tepat di sudut atas yang menghadap ke Foto Profil (Alignment.Top)
-            val r = baseRadiusDp.dp
-            val sharpTop = 2.dp
-            RoundedCornerShape(
-                topStart = if (own) r else sharpTop,
-                topEnd = if (own) sharpTop else r,
-                bottomEnd = r,
-                bottomStart = r,
-            )
+        else -> androidx.compose.foundation.shape.GenericShape { size, _ ->
+            // Bentuk Fisik Bubble Persis WhatsApp (Sudut 22f px + Ekor Segitiga Melengkung Khas WA di Pojok Atas)
+            val w = size.width
+            val h = size.height
+            val tailW = (minOf(w, h) * 0.14f).coerceIn(10f, 18f)
+            val tailH = (minOf(w, h) * 0.22f).coerceIn(13f, 22f)
+            val r = (minOf(w - tailW, h) * 0.24f).coerceIn(14f, 24f)
+            if (own) {
+                // Bubble Pesan Kita (Ekor Lancip Melengkung WA di Pojok Kanan Atas)
+                val bodyRight = (w - tailW).coerceAtLeast(r * 2f)
+                moveTo(r, 0f)
+                // Garis atas lurus sampai ke ujung ekor kanan atas
+                lineTo(w - 2f, 0f)
+                // Kurva lekukan bawah ekor WhatsApp masuk ke dinding kanan bubble
+                quadraticBezierTo(bodyRight + tailW * 0.22f, tailH * 0.45f, bodyRight, tailH)
+                // Dinding kanan turun ke pojok kanan bawah
+                lineTo(bodyRight, (h - r).coerceAtLeast(tailH))
+                quadraticBezierTo(bodyRight, h, (bodyRight - r).coerceAtLeast(r), h)
+                // Garis bawah ke pojok kiri bawah
+                lineTo(r, h)
+                quadraticBezierTo(0f, h, 0f, (h - r).coerceAtLeast(r))
+                // Dinding kiri naik ke pojok kiri atas
+                lineTo(0f, r)
+                quadraticBezierTo(0f, 0f, r, 0f)
+                close()
+            } else {
+                // Bubble Pesan Orang Lain (Ekor Lancip Melengkung WA di Pojok Kiri Atas)
+                val bodyLeft = tailW.coerceAtMost(w * 0.25f)
+                moveTo(2f, 0f)
+                // Garis atas lurus dari ujung ekor kiri atas ke pojok kanan atas
+                lineTo((w - r).coerceAtLeast(bodyLeft + r), 0f)
+                quadraticBezierTo(w, 0f, w, r)
+                // Dinding kanan turun ke pojok kanan bawah
+                lineTo(w, (h - r).coerceAtLeast(r))
+                quadraticBezierTo(w, h, (w - r).coerceAtLeast(bodyLeft + r), h)
+                // Garis bawah ke pojok kiri bawah
+                lineTo(bodyLeft + r, h)
+                quadraticBezierTo(bodyLeft, h, bodyLeft, (h - r).coerceAtLeast(tailH))
+                // Dinding kiri naik sampai pangkal ekor
+                lineTo(bodyLeft, tailH)
+                // Kurva lekukan ekor WhatsApp kembali ke ujung lancip kiri atas
+                quadraticBezierTo(bodyLeft - tailW * 0.22f, tailH * 0.45f, 2f, 0f)
+                close()
+            }
         }
     }
 }
@@ -2220,8 +2254,123 @@ internal fun XyTesterBadge(
 }
 
 /**
- * Menampilkan deretan badge peran khusus pengguna: FOUNDER (Ungu Royal), XYTEAM, TESTER, dan Podium Top 1–3 Leaderboard.
- * Hanya pengguna yang benar-benar berhak (Founder @xykal, Podium Top 1–3 ber-GitHub terverifikasi, atau XYTEAM/TESTER yang ditunjuk Founder) yang mendapatkan badge.
+ * Badge Prestasi Otomatis (Auto-Earned Achievement Badges) berdasarkan aktivitas nyata
+ * pengguna di XyDesk Remote (durasi streaming RDP/PC, jumlah sesi, & verifikasi GitHub).
+ */
+internal data class XyAutoAchievementSpec(
+    val id: String,
+    val shortLabel: String,
+    val fullLabel: String,
+    val bgColors: List<Color>,
+    val borderColor: Color,
+    val textColor: Color,
+    val iconColor: Color,
+)
+
+internal fun resolveAutoAchievementBadges(
+    totalSeconds: Long,
+    sessionsCount: Int,
+    hasVerifiedGithub: Boolean,
+): List<XyAutoAchievementSpec> {
+    val list = ArrayList<XyAutoAchievementSpec>(3)
+    if (totalSeconds >= 86_400L || sessionsCount >= 50) {
+        list.add(
+            XyAutoAchievementSpec(
+                id = "legend_24h",
+                shortLabel = "LEGEND 24H+",
+                fullLabel = "LEGEND MARATHON · 24+ JAM AKTIF",
+                bgColors = listOf(Color(0xFF450A0A), Color(0xFF991B1B), Color(0xFFD97706)),
+                borderColor = Color(0xFFFDE047),
+                textColor = Color(0xFFFEF08A),
+                iconColor = Color(0xFFFBBF24),
+            ),
+        )
+    } else if (totalSeconds >= 28_800L || sessionsCount >= 20) {
+        list.add(
+            XyAutoAchievementSpec(
+                id = "pro_streamer",
+                shortLabel = "PRO STREAMER",
+                fullLabel = "PRO STREAMER · 8+ JAM REMOTE",
+                bgColors = listOf(Color(0xFF082F49), Color(0xFF0369A1), Color(0xFF0284C7)),
+                borderColor = Color(0xFF38BDF8),
+                textColor = Color(0xFFE0F2FE),
+                iconColor = Color(0xFF7DD3FC),
+            ),
+        )
+    } else if (totalSeconds >= 7_200L || sessionsCount >= 8) {
+        list.add(
+            XyAutoAchievementSpec(
+                id = "gamer_elite",
+                shortLabel = "GAMER ELITE",
+                fullLabel = "GAMER ELITE · ZERO-LAG PLAYER",
+                bgColors = listOf(Color(0xFF1E1B4B), Color(0xFF3730A3), Color(0xFF4F46E5)),
+                borderColor = Color(0xFFA5B4FC),
+                textColor = Color(0xFFE0E7FF),
+                iconColor = Color(0xFFC7D2FE),
+            ),
+        )
+    } else if (totalSeconds >= 600L || sessionsCount >= 2 || hasVerifiedGithub) {
+        list.add(
+            XyAutoAchievementSpec(
+                id = "cloud_pioneer",
+                shortLabel = "PIONEER",
+                fullLabel = "CLOUD PIONEER · VERIFIED MEMBER",
+                bgColors = listOf(Color(0xFF064E3B), Color(0xFF047857), Color(0xFF0D9488)),
+                borderColor = Color(0xFF6EE7B7),
+                textColor = Color(0xFFD1FAE5),
+                iconColor = Color(0xFF34D399),
+            ),
+        )
+    }
+    return list
+}
+
+@Composable
+internal fun XyAutoAchievementBadge(
+    spec: XyAutoAchievementSpec,
+    compact: Boolean = true,
+) {
+    val pillShape = RoundedCornerShape(50)
+    Row(
+        modifier = Modifier
+            .clip(pillShape)
+            .background(Brush.horizontalGradient(spec.bgColors), pillShape)
+            .border(0.8.dp, spec.borderColor, pillShape)
+            .padding(
+                horizontal = if (compact) 6.dp else 9.dp,
+                vertical = if (compact) 1.8.dp else 3.5.dp,
+            ),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(3.5.dp),
+    ) {
+        Canvas(modifier = Modifier.size(if (compact) 9.5.dp else 12.dp)) {
+            val w = size.width
+            val h = size.height
+            val diamond = Path().apply {
+                moveTo(w * 0.50f, h * 0.08f)
+                lineTo(w * 0.92f, h * 0.50f)
+                lineTo(w * 0.50f, h * 0.92f)
+                lineTo(w * 0.08f, h * 0.50f)
+                close()
+            }
+            drawPath(diamond, color = spec.iconColor, style = Fill)
+        }
+        Text(
+            text = if (compact) spec.shortLabel else spec.fullLabel,
+            fontSize = if (compact) 8.sp else 9.5.sp,
+            fontWeight = FontWeight.ExtraBold,
+            color = spec.textColor,
+            maxLines = 1,
+        )
+    }
+}
+
+/**
+ * Menampilkan deretan badge peran khusus & prestasi otomatis pengguna:
+ * - FOUNDER (Ungu Royal @xykal)
+ * - XYTEAM & TESTER
+ * - Top 1–10 Leaderboard (`TOP #1` s/d `TOP #10`)
+ * - Badge Prestasi Otomatis (`LEGEND 24H+`, `PRO STREAMER`, `GAMER ELITE`, `PIONEER`)
  */
 @Composable
 internal fun XyUserRoleBadges(
@@ -2230,10 +2379,16 @@ internal fun XyUserRoleBadges(
     compact: Boolean = true,
     durationRank: Int? = null,
 ) {
-    val durationRanks by LeaderboardPodium.ranks.collectAsState()
+    val topTenRanks by LeaderboardPodium.topTen.collectAsState()
+    val byIdentity by LeaderboardPodium.byIdentity.collectAsState()
     val normGh = normalizedChatAccount(githubLogin)
-    val podiumRank = durationRank?.takeIf { it in 1..3 }
-        ?: if (normGh.isNotEmpty()) durationRanks[normGh] else null
+    val normName = normalizedChatAccount(name)
+    val podiumRank = durationRank?.takeIf { it in 1..10 }
+        ?: (if (normGh.isNotEmpty()) topTenRanks[normGh] else null)
+        ?: (if (normName.isNotEmpty()) topTenRanks[normName] else null)
+    val lbEntry = (if (normGh.isNotEmpty()) byIdentity[normGh] else null)
+        ?: (if (normName.isNotEmpty()) byIdentity[normName] else null)
+
     val context = LocalContext.current
     val rev = XySpecialRoleRegistry.roleRevision
     val isFounder = remember(name, githubLogin) {
@@ -2245,7 +2400,15 @@ internal fun XyUserRoleBadges(
     val isTester = remember(name, githubLogin, rev) {
         !isFounder && isXyTesterAccount(context, name, githubLogin)
     }
-    if (!isFounder && !isTeam && !isTester && podiumRank == null) return
+    val autoBadges = remember(lbEntry, normGh, isFounder) {
+        if (isFounder) emptyList()
+        else resolveAutoAchievementBadges(
+            totalSeconds = lbEntry?.totalSeconds ?: 0L,
+            sessionsCount = lbEntry?.sessionsCount ?: 0,
+            hasVerifiedGithub = normGh.isNotEmpty(),
+        )
+    }
+    if (!isFounder && !isTeam && !isTester && podiumRank == null && autoBadges.isEmpty()) return
     if (compact) {
         Row(
             verticalAlignment = Alignment.CenterVertically,
@@ -2257,6 +2420,9 @@ internal fun XyUserRoleBadges(
                 if (isTeam) XyTeamBadge(compact = true)
                 if (isTester) XyTesterBadge(compact = true)
                 if (podiumRank != null) LeaderboardDurationBadge(podiumRank, compact = true)
+                autoBadges.firstOrNull()?.let { badge ->
+                    XyAutoAchievementBadge(spec = badge, compact = true)
+                }
             }
         }
     } else {
@@ -2272,6 +2438,9 @@ internal fun XyUserRoleBadges(
                 }
             }
             if (podiumRank != null) LeaderboardDurationBadge(podiumRank, compact = false)
+            autoBadges.forEach { badge ->
+                XyAutoAchievementBadge(spec = badge, compact = false)
+            }
         }
     }
 }

@@ -203,6 +203,7 @@ fun XyDeskHome(
     var dataPackProgress by remember { mutableStateOf<Int?>(null) }
     var dataPackStatus by remember { mutableStateOf<String?>(null) }
     LaunchedEffect(Unit) {
+        launch { warmUpGlobalChatAndFeedCache(context) }
         val now = System.currentTimeMillis()
         appPrefs.lastUpdateCheckAt = now
         val info = AppUpdate.fetch(context)
@@ -250,7 +251,7 @@ fun XyDeskHome(
             scope.launch { repo.touch(profile) }
             val opts = runCatching { RdpOptions.of(context, profile.id) }.getOrNull()
             if (opts?.pcConnectMode == true &&
-                (profile.port == 4433 || (profile.username.isNullOrBlank() && profile.password.isNullOrBlank()))
+                (profile.port == 4433 || profile.username.isNullOrBlank() || profile.username.equals("XyDesk", ignoreCase = true))
             ) {
                 context.startActivity(
                     PcStreamSessionActivity.intent(

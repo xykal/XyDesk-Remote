@@ -346,8 +346,8 @@ class XyDeskSessionActivity : ComponentActivity() {
         val showNotice = {
             if (!isFinishing && !isDestroyed) {
                 XyNoticeBus.post(xyNow(
-                    "Aksi belum masuk antrean input FreeRDP. Periksa koneksi dan coba lagi.",
-                    "Input was not queued by FreeRDP. Check the connection and try again.",
+                    "Aksi belum masuk antrean input XyRDP. Periksa koneksi dan coba lagi.",
+                    "Input was not queued by XyRDP. Check the connection and try again.",
                 ))
             }
         }

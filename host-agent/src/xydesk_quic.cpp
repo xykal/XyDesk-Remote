@@ -780,8 +780,9 @@ std::mutex g_video_mutex;
 sockaddr_in g_video_sub_addr{};
 uint64_t g_video_sub_until_ms = 0;
 int g_video_target_fps = 60;
-int g_video_jpeg_quality = 72;
-int g_video_scale_pct = 85;
+int g_video_jpeg_quality = 88;
+int g_video_scale_pct = 100;
+std::mutex g_send_mutex;
 std::thread g_video_worker;
 
 void HandleRawInputPacket(const uint8_t* rx, int n, const sockaddr_in& peer, int peer_len) {
@@ -977,7 +978,8 @@ void ConsoleVideoCaptureThread() {
         if (dstW == srcW && dstH == srcH) {
             BitBlt(hMem, 0, 0, dstW, dstH, hScreen, 0, 0, SRCCOPY);
         } else {
-            SetStretchBltMode(hMem, COLORONCOLOR);
+            SetStretchBltMode(hMem, HALFTONE);
+            SetBrushOrgEx(hMem, 0, 0, nullptr);
             StretchBlt(hMem, 0, 0, dstW, dstH, hScreen, 0, 0, srcW, srcH, SRCCOPY);
         }
 
@@ -998,7 +1000,7 @@ void ConsoleVideoCaptureThread() {
         if (fnCreateBmp(hBmp, nullptr, &gpBitmap) == 0 && gpBitmap) {
             IStream* stream = nullptr;
             if (SUCCEEDED(CreateStreamOnHGlobal(nullptr, TRUE, &stream)) && stream) {
-                ULONG qVal = static_cast<ULONG>(std::clamp(quality, 35, 92));
+                ULONG qVal = static_cast<ULONG>(std::clamp(quality, 40, 95));
                 EncoderParametersFlat encParams{};
                 encParams.Count = 1;
                 encParams.Parameter[0].Guid = kGuidEncoderQuality;
@@ -1011,7 +1013,7 @@ void ConsoleVideoCaptureThread() {
                     if (SUCCEEDED(GetHGlobalFromStream(stream, &hGlobal)) && hGlobal) {
                         const SIZE_T totalBytes = GlobalSize(hGlobal);
                         const auto* jpgPtr = static_cast<const uint8_t*>(GlobalLock(hGlobal));
-                        if (jpgPtr && totalBytes > 0 && totalBytes <= 300 * 1024) {
+                        if (jpgPtr && totalBytes > 0 && totalBytes <= 512 * 1024) {
                             constexpr size_t kChunkPayload = 1360;
                             const uint16_t chunkCount = static_cast<uint16_t>(
                                 (totalBytes + kChunkPayload - 1) / kChunkPayload);
@@ -1041,14 +1043,17 @@ void ConsoleVideoCaptureThread() {
                             pkt[14] = flags;
                             pkt[15] = measured_fps;
 
-                            for (uint16_t c = 0; c < chunkCount && g_sock != INVALID_SOCKET; ++c) {
-                                const size_t off = static_cast<size_t>(c) * kChunkPayload;
-                                const size_t rem = std::min(kChunkPayload, static_cast<size_t>(totalBytes) - off);
-                                memcpy(pkt + 6, &c, 2);
-                                memcpy(pkt + 16, jpgPtr + off, rem);
-                                sendto(g_sock, reinterpret_cast<const char*>(pkt),
-                                       static_cast<int>(16 + rem), 0,
-                                       reinterpret_cast<const sockaddr*>(&sub_addr), sizeof(sub_addr));
+                            {
+                                std::lock_guard<std::mutex> sendLk(g_send_mutex);
+                                for (uint16_t c = 0; c < chunkCount && g_sock != INVALID_SOCKET; ++c) {
+                                    const size_t off = static_cast<size_t>(c) * kChunkPayload;
+                                    const size_t rem = std::min(kChunkPayload, static_cast<size_t>(totalBytes) - off);
+                                    memcpy(pkt + 6, &c, 2);
+                                    memcpy(pkt + 16, jpgPtr + off, rem);
+                                    sendto(g_sock, reinterpret_cast<const char*>(pkt),
+                                           static_cast<int>(16 + rem), 0,
+                                           reinterpret_cast<const sockaddr*>(&sub_addr), sizeof(sub_addr));
+                                }
                             }
                             g_packets_served.fetch_add(chunkCount);
                         }
@@ -1112,8 +1117,8 @@ void QuicServerLoop() {
                     g_video_sub_addr = peer;
                     g_video_sub_until_ms = GetTickCount64() + 5000;
                     g_video_target_fps = std::clamp<int>(rx[5], 15, 120);
-                    g_video_jpeg_quality = std::clamp<int>(rx[6], 35, 92);
-                    g_video_scale_pct = std::clamp<int>(rx[7], 40, 100);
+                    g_video_jpeg_quality = std::clamp<int>(rx[6], 40, 95);
+                    g_video_scale_pct = std::clamp<int>(rx[7], 50, 100);
                 } else {
                     g_video_sub_until_ms = 0;
                 }
@@ -1145,6 +1150,61 @@ void QuicServerLoop() {
                     }
                     if (peak > g_mic_peak.load()) g_mic_peak.store(peak);
                 }
+                continue;
+            }
+            if (n >= 24 && memcmp(rx, "XYDESK_QUIC_WALLPAPER_V1", 24) == 0) {
+                wchar_t wallPath[MAX_PATH] = {};
+                SystemParametersInfoW(SPI_GETDESKWALLPAPER, MAX_PATH, wallPath, 0);
+                if (wallPath[0] == L'\0' || GetFileAttributesW(wallPath) == INVALID_FILE_ATTRIBUTES) {
+                    ExpandEnvironmentStringsW(L"%APPDATA%\\Microsoft\\Windows\\Themes\\TranscodedWallpaper", wallPath, MAX_PATH);
+                }
+                if (GetFileAttributesW(wallPath) == INVALID_FILE_ATTRIBUTES) {
+                    wcscpy_s(wallPath, L"C:\\Windows\\Web\\Wallpaper\\Windows\\img0.jpg");
+                }
+                Gdiplus::Bitmap* srcBmp = Gdiplus::Bitmap::FromFile(wallPath);
+                if (srcBmp && srcBmp->GetLastStatus() == Gdiplus::Ok && srcBmp->GetWidth() > 0) {
+                    const int tw = 480;
+                    const int th = 270;
+                    Gdiplus::Bitmap thumb(tw, th, PixelFormat24bppRGB);
+                    {
+                        Gdiplus::Graphics g(&thumb);
+                        g.SetInterpolationMode(Gdiplus::InterpolationModeHighQualityBilinear);
+                        g.DrawImage(srcBmp, 0, 0, tw, th);
+                    }
+                    CLSID jpegClsid{};
+                    if (GetJpegEncoderClsid(&jpegClsid)) {
+                        IStream* memStream = nullptr;
+                        if (SUCCEEDED(CreateStreamOnHGlobal(nullptr, TRUE, &memStream)) && memStream) {
+                            ULONG q = 78;
+                            Gdiplus::EncoderParameters ep{};
+                            ep.Count = 1;
+                            ep.Parameter[0].Guid = Gdiplus::EncoderQuality;
+                            ep.Parameter[0].Type = Gdiplus::EncoderParameterValueTypeLong;
+                            ep.Parameter[0].NumberOfValues = 1;
+                            ep.Parameter[0].Value = &q;
+                            if (thumb.Save(memStream, &jpegClsid, &ep) == Gdiplus::Ok) {
+                                HGLOBAL hg = nullptr;
+                                if (SUCCEEDED(GetHGlobalFromStream(memStream, &hg)) && hg) {
+                                    const size_t jsize = GlobalSize(hg);
+                                    const uint8_t* jptr = static_cast<const uint8_t*>(GlobalLock(hg));
+                                    if (jptr && jsize > 256 && jsize <= 60000) {
+                                        std::vector<uint8_t> pkt(4 + jsize);
+                                        pkt[0] = 'X'; pkt[1] = 'Y'; pkt[2] = 'W'; pkt[3] = 'L';
+                                        memcpy(pkt.data() + 4, jptr, jsize);
+                                        std::lock_guard<std::mutex> slk(g_send_mutex);
+                                        sendto(g_sock, reinterpret_cast<const char*>(pkt.data()),
+                                               static_cast<int>(pkt.size()), 0,
+                                               reinterpret_cast<const sockaddr*>(&peer), peer_len);
+                                        g_packets_served.fetch_add(1);
+                                    }
+                                    if (jptr) GlobalUnlock(hg);
+                                }
+                            }
+                            memStream->Release();
+                        }
+                    }
+                }
+                delete srcBmp;
                 continue;
             }
             if (n >= static_cast<int>(sizeof(kDiscoverMagic) - 1) &&

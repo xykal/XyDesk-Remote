@@ -347,23 +347,53 @@ fun AddDeviceScreen(
 
     fun submit(connect: Boolean, resolved: RdpEndpoint? = null) {
         if (resolved == null && isGlobalPcId(host)) {
-            // ID global tidak berisi alamat — selesaikan dulu lewat relay.
+            // ID global tidak berisi alamat — selesaikan lewat relay + probe LAN.
             relayResolving = true
             scope.launch {
                 val relay = runCatching { CommunityJokesApi(context).pcRelayResolve(host.trim()) }.getOrNull()
-                relayResolving = false
                 val arr = relay?.optJSONArray("candidates")
-                if (arr == null || arr.length() == 0) {
+                val bestEndpoint = withContext(Dispatchers.IO) {
+                    val candidates = mutableListOf<RdpEndpoint>()
+                    if (arr != null) {
+                        for (i in 0 until arr.length()) {
+                            val c = arr.optJSONObject(i) ?: continue
+                            val h = c.optString("host").trim()
+                            val p = c.optInt("port", 3389).coerceIn(1, 65535)
+                            if (h.isNotEmpty()) candidates.add(RdpEndpoint(h, p))
+                        }
+                    }
+                    var responsive: RdpEndpoint? = null
+                    for (cand in candidates) {
+                        val probed = id.xydesk.remote.core.XyDirectConsoleStreamClient.probeHost(
+                            cand.host,
+                            4433,
+                            timeoutMs = 380,
+                        )
+                        if (probed != null) {
+                            responsive = RdpEndpoint(probed.ip, cand.port)
+                            break
+                        }
+                    }
+                    if (responsive == null) {
+                        val lanFound = id.xydesk.remote.core.XyDirectConsoleStreamClient.discoverHosts(timeoutMs = 600)
+                        val match = lanFound.firstOrNull()
+                        if (match != null) {
+                            responsive = RdpEndpoint(match.ip, match.rdpPort.coerceIn(1, 65535))
+                        }
+                    }
+                    responsive ?: candidates.firstOrNull()
+                }
+                relayResolving = false
+                if (bestEndpoint == null) {
                     val msg = xyNow(
-                        "ID Global tidak ditemukan di relay — pastikan Host Agent di PC berjalan dan online.",
-                        "Global ID not found in relay — make sure the Host Agent on the PC is running and online.",
+                        "ID Global tidak ditemukan di relay maupun LAN — pastikan XyDeskRemoteHost.exe berjalan di PC.",
+                        "Global ID not found in relay or LAN — make sure XyDeskRemoteHost.exe is running on the PC.",
                     )
                     error = msg
                     validationPopup = msg
                     return@launch
                 }
-                val cand = arr.getJSONObject(0)
-                submit(connect, RdpEndpoint(cand.getString("host"), cand.optInt("port", 3389)))
+                submit(connect, bestEndpoint)
             }
             return
         }
@@ -406,7 +436,7 @@ fun AddDeviceScreen(
             return
         }
         val effectiveUser = if (isPcQuickMode) {
-            if (pass.isNotBlank()) "XyDesk" else null
+            user.trim().ifEmpty { null }
         } else {
             user.trim().ifEmpty { null }
         }
@@ -1634,16 +1664,41 @@ fun AddDeviceScreen(
                 )
                 Spacer(Modifier.height(10.dp))
                 Text(
-                    xy("Engine Performa Lanjutan", "Advanced Engine Performance"),
+                    xy("XyRDP Zero-Lag Gaming Engine", "XyRDP Zero-Lag Gaming Engine"),
                     style = MaterialTheme.typography.titleSmall,
                 )
                 Text(
                     xy(
-                        "Tuning level engine FreeRDP — asli mengubah perilaku native, bukan dekorasi.",
-                        "FreeRDP engine-level tuning — these change real native behavior.",
+                        "Tuning level engine XyRDP (Zero-Lag / Zero-Latency) — mengubah perilaku native secara langsung untuk RDP, PC, & VPS.",
+                        "XyRDP Zero-Lag engine tuning — changes real native behavior for RDP, PC, & VPS.",
                     ),
                     style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                Spacer(Modifier.height(6.dp))
+                XyPillButton(
+                    text = xy("⚡ Terapkan Preset Zero-Lag Gaming (120Hz · 1ms · Anti-Blur)", "⚡ Apply Zero-Lag Gaming Preset (120Hz · 1ms · Crisp)"),
+                    onClick = {
+                        options = options.copy(
+                            streamProfile = XyStreamProfile.GAME_SMOOTH_60,
+                            h264 = true,
+                            videoRemoting = true,
+                            asyncUpdate = true,
+                            asyncChannels = true,
+                            gfxSmallCache = true,
+                            frameAck = 1,
+                            targetFps = 120,
+                            pcTargetFps = 120,
+                            pcVideoBitrateMbps = 25,
+                            rawInputMouse = true,
+                            responsiveLoopMs = 2,
+                            compressionLevel = 2,
+                            colorDepth = 32,
+                        )
+                    },
+                    primary = true,
+                    compact = true,
+                    modifier = Modifier.fillMaxWidth(),
                 )
                 Spacer(Modifier.height(6.dp))
                 XyToggleRow(

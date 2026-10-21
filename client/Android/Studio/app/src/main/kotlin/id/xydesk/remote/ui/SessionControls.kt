@@ -220,7 +220,7 @@ fun SessionControls(
     var panelOpen by remember { mutableStateOf(false) }
     var monitorGridOpen by remember { mutableStateOf(false) }
     var railMenuOpen by remember { mutableStateOf(false) }
-    var drawerMode by remember { mutableStateOf(prefs.menuDrawer) }
+    var drawerMode by remember { mutableStateOf(false) }
     var tab by remember { mutableStateOf(PanelTab.SCREEN) }
     var pickerOpen by remember { mutableStateOf(false) }
     var editing by remember { mutableStateOf<HudKey?>(null) }
@@ -725,11 +725,15 @@ fun SessionControls(
                     }
                 }
                 RailButton(
-                    icon = if (railMenuOpen) XyIcons.ChevronDown else XyIcons.ChevronUp,
-                    active = railMenuOpen,
+                    icon = if (panelOpen) XyIcons.Close else XyIcons.Sliders,
+                    active = panelOpen,
                     description = xy("Menu sesi", "Session menu"),
                     plate = plate,
-                    onClick = { railMenuOpen = !railMenuOpen },
+                    onClick = {
+                        railMenuOpen = false
+                        drawerMode = false
+                        panelOpen = !panelOpen
+                    },
                 )
                 RailButton(
                     icon = XyIcons.Keyboard,
@@ -1156,6 +1160,14 @@ fun SessionControls(
                     panelOpen = false
                     onDisconnect()
                 },
+                voiceMicEnabled = voiceMicEnabled,
+                onToggleVoiceMic = onToggleVoiceMic,
+                scrollPillOpen = scrollPillOpen,
+                onToggleScrollPill = { scrollPillOpen = !scrollPillOpen },
+                onGoHome = {
+                    panelOpen = false
+                    onGoHome()
+                },
                 coreInfo = coreInfo,
                 onCopyCoreInfo = { copyCoreInfo() },
                 onClose = { panelOpen = false },
@@ -1355,26 +1367,11 @@ fun SessionControls(
     }
 }
 
-private fun shortenStatText(raw: String, maxChars: Int = 12): String {
-    val clean = raw.trim()
-        .replace("Direct Stream", "Direct", ignoreCase = true)
-        .replace("Tailscale P2P", "TS-P2P", ignoreCase = true)
-        .replace("Tailscale", "TS", ignoreCase = true)
-        .replace("Portmap Tunnel", "Portmap", ignoreCase = true)
-        .replace("RemoteFX", "RFX", ignoreCase = true)
-        .replace("Automatic", "Auto", ignoreCase = true)
-        .replace("Low-Latency", "LL", ignoreCase = true)
-        .replace("  ", " ")
-    if (clean.length <= maxChars) return clean
-    return clean.take((maxChars - 1).coerceAtLeast(4)).trimEnd() + "…"
-}
-
 @Composable
 private fun LiveTelemetryPill(
     telemetry: id.xydesk.remote.core.TelemetrySample,
     modifier: Modifier = Modifier,
 ) {
-    var expanded by remember { mutableStateOf(false) }
     val rtt = telemetry.rttMs
     val rttColor = when {
         rtt <= 0 -> Color(0xFF34D399)
@@ -1390,95 +1387,46 @@ private fun LiveTelemetryPill(
     }
     val textShadow = Shadow(
         color = Color(0xF2000000),
-        offset = Offset(1f, 1f),
-        blurRadius = 2.5f,
+        offset = Offset(1.2f, 1.2f),
+        blurRadius = 3f,
     )
     val labelStyle = TextStyle(
-        color = Color(0xFFD4D4D8),
-        fontSize = 8.sp,
+        color = Color(0xB8D9D9DE),
+        fontSize = 7.sp,
         fontWeight = FontWeight.SemiBold,
         fontFamily = FontFamily.Monospace,
-        letterSpacing = 0.3.sp,
-        lineHeight = 10.sp,
+        letterSpacing = 0.4.sp,
+        lineHeight = 8.sp,
         shadow = textShadow,
     )
     val valueStyle = TextStyle(
-        color = Color(0xFFFFFFFF),
-        fontSize = 9.sp,
-        fontWeight = FontWeight.ExtraBold,
+        color = Color(0xFFF2F2F4),
+        fontSize = 8.5.sp,
+        fontWeight = FontWeight.Bold,
         fontFamily = FontFamily.Monospace,
-        lineHeight = 11.sp,
+        lineHeight = 10.sp,
         shadow = textShadow,
     )
-    val isSessionConnected = telemetry.state is SessionState.Connected
-    val rttLabel = when {
-        rtt >= 0 -> "${rtt.coerceAtLeast(1)}ms"
-        isSessionConnected -> "1ms"
-        else -> "--"
-    }
-    val resLabel = if (telemetry.width > 0) "${telemetry.width}×${telemetry.height}" else "--"
-    val pipeline = telemetry.pipelineLatencyMs
-    val pipelineColor = when {
-        pipeline <= 0 -> Color(0xFF34D399)
-        pipeline < 17 -> Color(0xFF34D399)
-        pipeline < 34 -> Color(0xFFFBBF24)
-        else -> Color(0xFFFB923C)
-    }
-    val pipelineLabel = when {
-        pipeline >= 0 -> "${pipeline.coerceAtLeast(1)}ms"
-        isSessionConnected -> "1ms"
-        else -> "--"
-    }
-    val queueColor = if (telemetry.queuePeak > 1) Color(0xFFFBBF24) else Color(0xFFF4F4F5)
-    val queueLabel = when {
-        telemetry.queueDepth >= 0f -> "%.1f/%d".format(telemetry.queueDepth, telemetry.queuePeak.coerceAtLeast(1))
-        isSessionConnected -> "0/0"
-        else -> "--"
-    }
-    val transportLabel = if (telemetry.udpActive) "UDP" else "TCP"
-    val transportColor = if (telemetry.udpActive) Color(0xFF38BDF8) else Color(0xFFFBBF24)
-
-    val coreItems = listOf(
-        Triple("FPS", "${telemetry.fps}", fpsColor),
-        Triple("PING", rttLabel, rttColor),
-        Triple("RES", shortenStatText(resLabel, 11), Color(0xFFF4F4F5)),
-        Triple("ENC", shortenStatText(telemetry.codecLabel, 11), Color(0xFFF4F4F5)),
-        Triple("NET", "$transportLabel·${shortenStatText(telemetry.networkLabel, 8)}", transportColor),
-    )
-    val extraItems = listOf(
-        Triple("PIPE", pipelineLabel, pipelineColor),
-        Triple("QUEUE", queueLabel, queueColor),
-        Triple("RELAY", shortenStatText(telemetry.relayLabel, 11), Color(0xFFF4F4F5)),
+    val rttLabel = if (rtt > 0) "${rtt} ms" else "-- ms"
+    val resLabel = if (telemetry.width > 0) "${telemetry.width}x${telemetry.height}" else "--"
+    val netColor = if (telemetry.udpActive) Color(0xFF38BDF8) else Color(0xFFFBBF24)
+    val items = listOf(
+        Triple("UI/s", "${telemetry.fps}", fpsColor),
+        Triple("LATENCY", rttLabel, rttColor),
+        Triple("RESOLUSI", resLabel, Color(0xFFE0F2FE)),
+        Triple("ENCODE", telemetry.codecLabel.replace("FreeRDP", "XyRDP"), Color(0xFF38BDF8)),
+        Triple("RELAY", telemetry.relayLabel.replace("FreeRDP", "XyRDP"), Color(0xFFC084FC)),
+        Triple("NETWORK", telemetry.networkLabel, netColor),
     )
 
     Column(
-        modifier = modifier
-            .widthIn(min = 104.dp, max = 148.dp)
-            .clip(RoundedCornerShape(10.dp))
-            .background(Color(0xCC090B10))
-            .border(0.8.dp, Color(0x38FFFFFF), RoundedCornerShape(10.dp))
-            .clickable { expanded = !expanded }
-            .padding(horizontal = 7.dp, vertical = 5.dp),
-        verticalArrangement = Arrangement.spacedBy(2.dp),
+        modifier = modifier.padding(horizontal = 2.dp, vertical = 2.dp),
+        verticalArrangement = Arrangement.spacedBy(3.dp),
     ) {
-        (if (expanded) coreItems + extraItems else coreItems).forEach { (label, value, color) ->
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                Text(
-                    text = label,
-                    style = labelStyle,
-                    maxLines = 1,
-                )
-                Spacer(Modifier.width(6.dp))
-                Text(
-                    text = value,
-                    style = valueStyle.copy(color = color),
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                )
+        items.forEach { (label, value, color) ->
+            Column(verticalArrangement = Arrangement.spacedBy(0.dp)) {
+                Text(text = label, style = labelStyle)
+                Text(text = value, style = valueStyle.copy(color = color))
             }
         }
     }
@@ -1782,34 +1730,35 @@ private fun SessionPanel(
     onLockRemotePc: () -> Unit,
     onActivatePrivacyCurtain: () -> Unit,
     onDisconnect: () -> Unit,
+    voiceMicEnabled: Boolean = false,
+    onToggleVoiceMic: () -> Unit = {},
+    scrollPillOpen: Boolean = false,
+    onToggleScrollPill: () -> Unit = {},
+    onGoHome: () -> Unit = {},
     coreInfo: List<String>,
     onCopyCoreInfo: () -> Unit,
 ) {
-    // Kunci seksi yang sedang dibuka di grid drill-in. Di-key pada `tab` supaya
-    // pindah tab otomatis kembali ke daftar kotak, bukan membuka seksi lama.
-    var openSection by remember(tab) { mutableStateOf<String?>(null) }
-    // Panel muncul halus: membesar dari titik handle (kanan-atas) seperti
-    // keluar dari tombolnya, bukan sekadar tampil seketika.
+    val context = LocalContext.current
+    // Buka seksi pertama secara otomatis saat berpindah tab agar tidak kosong.
+    var openSection by remember(tab) { mutableStateOf<String?>("__FIRST__") }
     var panelShown by remember { mutableStateOf(false) }
     LaunchedEffect(Unit) { panelShown = true }
     val panelScale by animateFloatAsState(
-        targetValue = if (panelShown) 1f else 0.9f,
-        animationSpec = tween(240, easing = FastOutSlowInEasing),
+        targetValue = if (panelShown) 1f else 0.92f,
+        animationSpec = tween(200, easing = FastOutSlowInEasing),
     )
     val panelAlpha by animateFloatAsState(
         targetValue = if (panelShown) 1f else 0f,
-        animationSpec = tween(180),
+        animationSpec = tween(160),
     )
-    // Varian sidebar: meluncur masuk dari tepi kanan seperti versi awal
-    // (permintaan pemilik 2026-10-13), bukan cuma memudar di tempat.
     val panelSlide by animateFloatAsState(
         targetValue = if (panelShown) 0f else 1f,
-        animationSpec = tween(280, easing = FastOutSlowInEasing),
+        animationSpec = tween(240, easing = FastOutSlowInEasing),
     )
     val panelShape = if (drawerMode) {
-        RoundedCornerShape(topStart = 28.dp, bottomStart = 28.dp)
+        RoundedCornerShape(topStart = 26.dp, bottomStart = 26.dp)
     } else {
-        RoundedCornerShape(28.dp)
+        RoundedCornerShape(26.dp)
     }
     Box(
         Modifier
@@ -1817,34 +1766,23 @@ private fun SessionPanel(
             .zIndex(30f),
         contentAlignment = if (drawerMode) Alignment.CenterEnd else Alignment.Center,
     ) {
-        // Scrim dipertahankan (lebih tipis) karena pemisahan utama sekarang
-        // datang dari blur permukaan remote; di Android < 12 blur tidak jalan
-        // sehingga scrim inilah yang menjaga keterbacaan.
         Box(
             Modifier
                 .fillMaxSize()
-                .background(MaterialTheme.colorScheme.scrim.copy(alpha = 0.34f))
+                .background(Color(0x9904060A))
                 .consumeBackgroundPointer(onClose),
         )
-        // Dua varian menu (permintaan pemilik 2026-10-10): popup tengah gaya
-        // jendela, atau drawer menempel sisi kanan setinggi layar.
         Column(
             if (drawerMode) {
-                // Sidebar kanan sungguhan (laporan pemilik 2026-10-12): dulu
-                // 0.92f hampir menutup seluruh layar sehingga terasa seperti
-                // popup yang digeser ke kanan. Sekarang ramping, menempel tepi
-                // kanan, setinggi layar.
                 Modifier
                     .fillMaxHeight()
                     .fillMaxWidth(0.76f)
                     .widthIn(min = 280.dp, max = 360.dp)
             } else {
                 Modifier
-                    // Popup diperluas atas permintaan pemilik ("masih kurang"):
-                    // hampir penuh di layar HP maupun tablet.
-                    .fillMaxHeight(0.94f)
-                    .fillMaxWidth(0.97f)
-                    .widthIn(max = 900.dp)
+                    .fillMaxHeight(0.92f)
+                    .fillMaxWidth(0.95f)
+                    .widthIn(max = 860.dp)
             }
                 .graphicsLayer {
                     scaleX = panelScale
@@ -1853,41 +1791,12 @@ private fun SessionPanel(
                     transformOrigin = TransformOrigin(1f, 0f)
                     if (drawerMode) translationX = panelSlide * size.width
                 }
-                // Gaya kaca panel sesi. Opacity dinaikkan
-                // (0.55 * 1.6 = 0.88) karena panel berisi banyak teks; kaca
-                // setipis pemutar akan membuat tulisan sulit dibaca.
-                .xyGlass(
-                    shape = panelShape,
-                    opacity = 1.6f,
-                    strength = 1f,
-                )
-                // Kilau atas (gloss) tipis biar panel terasa premium tanpa
-                // mengorbankan keterbacaan (permintaan pemilik 2026-10-12).
-                .background(
-                    brush = Brush.verticalGradient(
-                        0f to MaterialTheme.colorScheme.primary.copy(alpha = 0.16f),
-                        0.10f to Color.Transparent,
-                    ),
-                    shape = panelShape,
-                )
-                // Sidebar: aksen garis cahaya di tepi kiri penanda sisi.
-                .then(
-                    if (drawerMode) {
-                        Modifier.background(
-                            brush = Brush.horizontalGradient(
-                                0f to MaterialTheme.colorScheme.primary.copy(alpha = 0.30f),
-                                0.03f to Color.Transparent,
-                            ),
-                            shape = panelShape,
-                        )
-                    } else {
-                        Modifier
-                    },
-                )
-                .border(1.3.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.45f), panelShape)
+                .clip(panelShape)
+                .background(Color(0xFF10131C), panelShape)
+                .border(1.2.dp, Color(0xFF28324B), panelShape)
                 .pointerInput(Unit) {}
-                .padding(horizontal = 20.dp, vertical = 16.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp),
+                .padding(horizontal = 18.dp, vertical = 14.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp),
         ) {
             Row(
                 verticalAlignment = Alignment.CenterVertically,
@@ -1898,7 +1807,7 @@ private fun SessionPanel(
                         hostLabel,
                         color = MaterialTheme.colorScheme.onSurface,
                         fontSize = 15.sp,
-                        fontWeight = FontWeight.SemiBold,
+                        fontWeight = FontWeight.Bold,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis,
                     )
@@ -1914,10 +1823,67 @@ private fun SessionPanel(
                     PanelChip(xy("+ Tombol", "+ Add"), onAddKey)
                 }
                 PanelChip(
-                    if (drawerMode) xy("Popup", "Popup") else xy("Drawer", "Drawer"),
+                    if (drawerMode) xy("Popup", "Popup") else xy("Sidebar", "Sidebar"),
                     { onDrawerModeChange(!drawerMode) },
                 )
                 PanelChip(xy("Tutup", "Close"), onClose)
+            }
+
+            // Quick Control Center Bar (1-Tap Aksi Sesi Cepat)
+            val floatingChatHidden = InAppLiveNotificationBus.floatingOverlayHidden
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .horizontalScroll(rememberScrollState()),
+                horizontalArrangement = Arrangement.spacedBy(7.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                QuickActionPill(
+                    icon = if (voiceMicEnabled) XyIcons.VolumeOn else XyIcons.VolumeOff,
+                    label = if (voiceMicEnabled) "Mic: ON" else "Mic: OFF",
+                    active = voiceMicEnabled,
+                    onClick = onToggleVoiceMic,
+                )
+                QuickActionPill(
+                    icon = if (showHudButtons) XyIcons.Eye else XyIcons.EyeOff,
+                    label = if (showHudButtons) "HUD: ON" else "HUD: OFF",
+                    active = showHudButtons,
+                    onClick = { onShowHudButtonsChange(!showHudButtons) },
+                )
+                QuickActionPill(
+                    icon = XyIcons.Chat,
+                    label = if (!floatingChatHidden) "Chat: ON" else "Chat: OFF",
+                    active = !floatingChatHidden,
+                    onClick = {
+                        val nextHidden = !floatingChatHidden
+                        InAppLiveNotificationBus.setFloatingHidden(context, nextHidden)
+                    },
+                )
+                QuickActionPill(
+                    icon = XyIcons.ScrollSlide,
+                    label = xy("Scroll", "Scroll"),
+                    active = scrollPillOpen,
+                    onClick = onToggleScrollPill,
+                )
+                QuickActionPill(
+                    icon = XyIcons.Monitor,
+                    label = xy("Sesi/Layar", "Sessions"),
+                    active = false,
+                    onClick = onOpenMonitorGrid,
+                )
+                QuickActionPill(
+                    icon = XyIcons.Home,
+                    label = xy("Beranda", "Home"),
+                    active = false,
+                    onClick = onGoHome,
+                )
+                QuickActionPill(
+                    icon = XyIcons.Power,
+                    label = xy("Putuskan", "Disconnect"),
+                    active = false,
+                    danger = true,
+                    onClick = onDisconnect,
+                )
             }
 
             // Area konten utama dengan animasi perpindahan tab halus +
@@ -1940,6 +1906,7 @@ private fun SessionPanel(
                             .padding(bottom = 74.dp),
                         verticalArrangement = Arrangement.spacedBy(7.dp),
                     ) {
+                        XyDiscordVoiceStageBar(compact = true)
                         when (activeTab) {
                             PanelTab.SCREEN -> ScreenTab(
                                 openKey = openSection,
@@ -3018,6 +2985,50 @@ internal class PanelSectionScope {
  * baru tiap kali supaya seksi dari komposisi sebelumnya tidak tertinggal.
  */
 @Composable
+private fun QuickActionPill(
+    icon: ImageVector,
+    label: String,
+    active: Boolean,
+    danger: Boolean = false,
+    onClick: () -> Unit,
+) {
+    val bg = when {
+        danger -> Color(0xFF3F151C)
+        active -> MaterialTheme.colorScheme.primary.copy(alpha = 0.24f)
+        else -> Color(0xFF181C28)
+    }
+    val borderCol = when {
+        danger -> Color(0xFFF43F5E).copy(alpha = 0.65f)
+        active -> MaterialTheme.colorScheme.primary
+        else -> Color(0xFF2A3248)
+    }
+    val fg = when {
+        danger -> Color(0xFFFDA4AF)
+        active -> Color(0xFFFFFFFF)
+        else -> Color(0xFFD4D4D8)
+    }
+    Row(
+        modifier = Modifier
+            .clip(RoundedCornerShape(50))
+            .background(bg)
+            .border(1.dp, borderCol, RoundedCornerShape(50))
+            .clickable(onClick = onClick)
+            .padding(horizontal = 11.dp, vertical = 7.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(5.dp),
+    ) {
+        Icon(icon, contentDescription = null, tint = fg, modifier = Modifier.size(14.dp))
+        Text(
+            text = label,
+            color = fg,
+            fontSize = 11.sp,
+            fontWeight = if (active || danger) FontWeight.Bold else FontWeight.Medium,
+            maxLines = 1,
+        )
+    }
+}
+
+@Composable
 internal fun PanelSectionGrid(
     openKey: String?,
     onOpenKey: (String?) -> Unit,
@@ -3027,30 +3038,22 @@ internal fun PanelSectionGrid(
     scope.builder()
     val allSpecs = scope.specs
     if (allSpecs.isEmpty()) return
-    // Menu utama hanya seksi inti; seksi lanjutan muncul setelah ubin
-    // "Lanjutan" diketuk supaya tiap tab singkat dilihat sekilas.
     val advancedCount = allSpecs.count { it.advanced }
-    var showAdvanced by remember { mutableStateOf(false) }
+    var showAdvanced by remember { mutableStateOf(true) }
     val specs = if (showAdvanced) allSpecs else allSpecs.filter { !it.advanced }
     if (specs.isEmpty()) return
-    // Grid dua kolom, dan seksi yang terbuka MELEBAR TEPAT DI BAWAH barisnya.
-    //
-    // Sebelumnya versi ini memakai drill-in: mengetuk kotak mengganti seluruh
-    // tab dengan satu seksi plus tombol kembali. Pengguna menolaknya —
-    // "lebih gampang malah makin susah" — karena menambah satu lapis ketukan
-    // dan menyembunyikan seksi lain. Di sini satu ketukan langsung membuka isi
-    // di tempat, kotak lain tetap terlihat, dan ketukan kedua menutupnya lagi.
+    val resolvedOpenKey = if (openKey == "__FIRST__") specs.firstOrNull()?.key else openKey
     Column(
         Modifier.fillMaxWidth().animateContentSize(),
-        verticalArrangement = Arrangement.spacedBy(12.dp),
+        verticalArrangement = Arrangement.spacedBy(10.dp),
     ) {
         specs.chunked(2).forEach { rowSpecs ->
             Row(
                 Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(12.dp),
+                horizontalArrangement = Arrangement.spacedBy(10.dp),
             ) {
                 rowSpecs.forEach { spec ->
-                    val selected = spec.key == openKey
+                    val selected = spec.key == resolvedOpenKey
                     Box(Modifier.weight(1f)) {
                         XyGlassTile(
                             icon = panelSectionIcon(spec.key),
@@ -3073,25 +3076,25 @@ internal fun PanelSectionGrid(
                         )
                     }
                 }
-                // Pengisi baris ganjil: tanpa ini ubin sendirian melebar
-                // sepenuh baris dan grid terlihat berantakan.
                 repeat(2 - rowSpecs.size) { Spacer(Modifier.weight(1f)) }
             }
-            val open = rowSpecs.firstOrNull { it.key == openKey }
+            val open = rowSpecs.firstOrNull { it.key == resolvedOpenKey }
             if (open != null) {
                 Column(
                     Modifier
                         .fillMaxWidth()
-                        .xyGlass(shape = RoundedCornerShape(14.dp), opacity = 1.25f, strength = 0.9f)
+                        .clip(RoundedCornerShape(14.dp))
+                        .background(Color(0xFF161A26), RoundedCornerShape(14.dp))
+                        .border(1.dp, Color(0xFF28324B), RoundedCornerShape(14.dp))
                         .padding(horizontal = 16.dp, vertical = 14.dp),
                     verticalArrangement = Arrangement.spacedBy(10.dp),
                 ) {
                     Text(
                         open.title.uppercase(),
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        color = MaterialTheme.colorScheme.primary,
                         fontSize = 10.sp,
                         letterSpacing = 1.2.sp,
-                        fontWeight = FontWeight.SemiBold,
+                        fontWeight = FontWeight.Bold,
                     )
                     open.content()
                 }

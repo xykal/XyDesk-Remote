@@ -19,17 +19,18 @@ import androidx.compose.ui.unit.dp
 internal fun Modifier.podiumAvatarFrame(githubLogin: String?): Modifier {
     val identity = normalizedChatAccount(githubLogin)
     if (identity.isEmpty()) return this
-    val ranks by LeaderboardPodium.ranks.collectAsState()
-    return podiumFrame(ranks[identity])
+    val topTen by LeaderboardPodium.topTen.collectAsState()
+    return podiumFrame(topTen[identity])
 }
 
 /** Draw inside existing bounds, after the image; leave avatar size and touch target unchanged. */
 internal fun Modifier.podiumFrame(rank: Int?): Modifier {
-    if (rank == null || rank !in 1..3) return this
+    if (rank == null || rank !in 1..10) return this
     val metal = when (rank) {
         1 -> Color(0xFFF5CF72)
         2 -> Color(0xFFCDDEEF)
-        else -> Color(0xFFE7AD86)
+        3 -> Color(0xFFE7AD86)
+        else -> Color(0xFF818CF8)
     }
     return semantics { stateDescription = "Bingkai Top $rank Sipaling Lama Main" }
         .drawWithCache {
@@ -52,12 +53,17 @@ internal fun Modifier.podiumFrame(rank: Int?): Modifier {
                                 Offset(center.x - radius, center.y - radius),
                                 Size(radius * 2f, radius * 2f), style = Stroke(stroke))
                         }
-                        else -> repeat(12) { dot ->
+                        3 -> repeat(12) { dot ->
                             val angle = dot * Math.PI / 6.0
                             drawCircle(metal, stroke * .7f, Offset(
                                 center.x + radius * kotlin.math.cos(angle).toFloat(),
                                 center.y + radius * kotlin.math.sin(angle).toFloat(),
                             ))
+                        }
+                        else -> repeat(6) { segment ->
+                            drawArc(brush, segment * 60f + 6f, 46f, false,
+                                Offset(center.x - radius, center.y - radius),
+                                Size(radius * 2f, radius * 2f), style = Stroke(stroke * 0.9f))
                         }
                     }
                 }

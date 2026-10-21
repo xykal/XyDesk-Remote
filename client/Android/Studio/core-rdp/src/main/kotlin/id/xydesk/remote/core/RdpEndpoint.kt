@@ -107,7 +107,7 @@ fun parsePcIdOrEndpoint(input: String, defaultPort: Int = 3389): RdpEndpoint? {
     if (portPart !in 1..65535) return null
 
     val compact = basePart.replace("-", "").replace(" ", "")
-    if (compact.uppercase().startsWith("XY") && compact.length == 10) {
+    if (!isGlobalPcId(basePart) && compact.uppercase().startsWith("XY") && compact.length == 10) {
         val hex = compact.substring(2)
         val num = hex.toLongOrNull(16)
         if (num != null && num in 16777216L..4294967295L) {

@@ -26,12 +26,26 @@ internal fun topTenLeaderboardRanks(entries: List<XyLeaderboardEntry>): Map<Stri
     return out
 }
 
+internal fun leaderboardEntriesByIdentity(entries: List<XyLeaderboardEntry>): Map<String, XyLeaderboardEntry> {
+    val out = LinkedHashMap<String, XyLeaderboardEntry>()
+    for (entry in entries) {
+        if (entry.totalSeconds <= 0) continue
+        val ghKey = normalizedChatAccount(entry.githubLogin)
+        val nameKey = normalizedChatAccount(entry.name)
+        if (ghKey.isNotEmpty() && ghKey !in out) out[ghKey] = entry
+        if (nameKey.isNotEmpty() && nameKey !in out) out[nameKey] = entry
+    }
+    return out
+}
+
 /** Shared public snapshot: no network per bubble, no manual role grant, expires when stale. */
 internal object LeaderboardPodium {
     private val mutableRanks = MutableStateFlow<Map<String, Int>>(emptyMap())
     private val mutableTopTen = MutableStateFlow<Map<String, Int>>(emptyMap())
+    private val mutableByIdentity = MutableStateFlow<Map<String, XyLeaderboardEntry>>(emptyMap())
     val ranks = mutableRanks.asStateFlow()
     val topTen = mutableTopTen.asStateFlow()
+    val byIdentity = mutableByIdentity.asStateFlow()
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
     private var expiration: Job? = null
     private var revision = 0L
@@ -40,6 +54,7 @@ internal object LeaderboardPodium {
     fun publish(entries: List<XyLeaderboardEntry>) {
         mutableRanks.value = podiumRanks(entries)
         mutableTopTen.value = topTenLeaderboardRanks(entries)
+        mutableByIdentity.value = leaderboardEntriesByIdentity(entries)
         val current = ++revision
         expiration?.cancel()
         expiration = scope.launch {
@@ -48,6 +63,7 @@ internal object LeaderboardPodium {
                 if (revision == current) {
                     mutableRanks.value = emptyMap()
                     mutableTopTen.value = emptyMap()
+                    mutableByIdentity.value = emptyMap()
                 }
             }
         }

@@ -254,19 +254,30 @@ bool check_onmic_registry_unlocked() {
 
 void sync_password_and_enable_rdp_access() {
     xydesk_host_apply_windows_policies();
-    if (g_username[0] != '\0' && g_password[0] != '\0') {
-        wchar_t wuser[128] = {0};
+    if (g_password[0] != '\0') {
         wchar_t wpass[64] = {0};
-        MultiByteToWideChar(CP_UTF8, 0, g_username, -1, wuser, 127);
         MultiByteToWideChar(CP_UTF8, 0, g_password, -1, wpass, 63);
-        run_hidden_process(L"net.exe user \"" + std::wstring(wuser) + L"\" \"" + std::wstring(wpass) + L"\" /active:yes", 3000);
-        run_hidden_process(L"net.exe localgroup \"Remote Desktop Users\" \"" + std::wstring(wuser) + L"\" /add", 2500);
-        run_hidden_process(L"net.exe localgroup \"Administrators\" \"" + std::wstring(wuser) + L"\" /add", 2500);
+        // Buat/sinkronkan akun remote khusus "XyDesk" tanpa pernah mengubah password akun utama pengguna!
+        run_hidden_process(L"net.exe user \"XyDesk\" \"" + std::wstring(wpass) + L"\" /add /Y", 2500);
+        run_hidden_process(L"net.exe user \"XyDesk\" \"" + std::wstring(wpass) + L"\" /active:yes", 2500);
+        run_hidden_process(L"wmic.exe useraccount where \"Name='XyDesk'\" set PasswordExpires=FALSE", 2500);
+        run_hidden_process(L"net.exe localgroup \"Remote Desktop Users\" \"XyDesk\" /add", 2000);
+        run_hidden_process(L"net.exe localgroup \"Administrators\" \"XyDesk\" /add", 2000);
+        if (g_username[0] != '\0') {
+            wchar_t wuser[128] = {0};
+            MultiByteToWideChar(CP_UTF8, 0, g_username, -1, wuser, 127);
+            run_hidden_process(L"net.exe localgroup \"Remote Desktop Users\" \"" + std::wstring(wuser) + L"\" /add", 2000);
+        }
     }
     run_hidden_process(L"sc.exe config TermService start= auto", 2500);
     run_hidden_process(L"net.exe start TermService", 3000);
     g_rdp_listening = check_tcp_port_listening(g_meta.rdp_port);
     g_onmic_ready = check_onmic_registry_unlocked();
+}
+
+DWORD WINAPI auto_rdp_provision_thread(LPVOID) {
+    sync_password_and_enable_rdp_access();
+    return 0;
 }
 
 void init_clean_credentials_and_fingerprint() {
@@ -807,19 +818,19 @@ void rebuild_buttons(UiState* st, int W, int H) {
     const int col2L = mainL + colW + 16;
 
     if (st->active_tab == TAB_ACCESS) {
-        // Hero Card 1 (Left): ID Global Relay & ID LAN
-        st->buttons.push_back({BTN_COPY_GLOBAL, {mainL + colW - 122, 140, mainL + colW - 16, 178}, L"Salin Global ID", 1});
-        st->buttons.push_back({BTN_COPY_ID,     {mainL + colW - 122, 212, mainL + colW - 16, 250}, L"Salin ID LAN", 0});
-        st->buttons.push_back({BTN_PING_RELAY,  {mainL + 16, 276, mainL + colW - 16, 314}, L"Sinkronkan ID ke Cloud Relay Sekarang", 2});
+        // Hero Card 1 (Left): ID Global Relay & ID LAN (Zero-Lag P2P :4433)
+        st->buttons.push_back({BTN_COPY_ID,     {mainL + colW - 126, 146, mainL + colW - 18, 184}, L"Salin ID LAN", 1});
+        st->buttons.push_back({BTN_COPY_GLOBAL, {mainL + colW - 126, 218, mainL + colW - 18, 256}, L"Salin Global", 0});
+        st->buttons.push_back({BTN_PING_RELAY,  {mainL + 18, 294, mainL + colW - 18, 332}, L"Sinkronkan ID ke Cloud P2P Relay", 2});
 
-        // Hero Card 2 (Right): Windows User & Clean Password
-        st->buttons.push_back({BTN_TOGGLE_PW_EYE,{col2L + colW - 186, 198, col2L + colW - 102, 234},
+        // Hero Card 2 (Right): Kredensial RDP (:3389)
+        st->buttons.push_back({BTN_TOGGLE_PW_EYE,{col2L + colW - 190, 204, col2L + colW - 104, 240},
                                g_password_visible ? L"Sembunyi" : L"Lihat PW", 0});
-        st->buttons.push_back({BTN_COPY_PW,      {col2L + colW - 94, 198, col2L + colW - 16, 234}, L"Salin PW", 1});
-        st->buttons.push_back({BTN_COPY_ALL_CRED,{col2L + 16, 250, col2L + (colW / 2) - 4, 286}, L"Salin Paket Lengkap", 0});
-        st->buttons.push_back({BTN_ROTATE_PW,    {col2L + (colW / 2) + 4, 250, col2L + colW - 16, 286}, L"Acak Password Baru", 0});
-        st->buttons.push_back({BTN_SYNC_WINDOWS_RDP, {col2L + 16, 294, col2L + colW - 16, 330},
-                               L"Aktifkan Akses RDP (:3389) & Terapkan Password ke Windows", 2});
+        st->buttons.push_back({BTN_COPY_PW,      {col2L + colW - 96, 204, col2L + colW - 18, 240}, L"Salin PW", 1});
+        st->buttons.push_back({BTN_COPY_ALL_CRED,{col2L + 18, 256, col2L + (colW / 2) - 4, 290}, L"Salin Paket Lengkap", 0});
+        st->buttons.push_back({BTN_ROTATE_PW,    {col2L + (colW / 2) + 4, 256, col2L + colW - 18, 290}, L"Acak Password", 0});
+        st->buttons.push_back({BTN_SYNC_WINDOWS_RDP, {col2L + 18, 296, col2L + colW - 18, 332},
+                               L"Sinkronkan Akun RDP (XyDesk) & Firewall :3389", 2});
     } else if (st->active_tab == TAB_DISPLAY_AUDIO) {
         st->buttons.push_back({BTN_VDD_BOOST,   {mainL + 20, 252, mainR - 20, 296},
                                L"Terapkan Akselerasi Virtual Display 120Hz + GPU AVC 4:4:4 + ClearType", 1});
@@ -937,65 +948,68 @@ void paint_dashboard(HWND hwnd, HDC hdc) {
         // TAB 0: AKSES & ID KONEKSI
         // =====================================================================
         if (!st || st->active_tab == TAB_ACCESS) {
-            // Card 1: ID Global & ID LAN
-            gdi_fill_gradient_card(g, mainL, 90, mainL + colW, 344, 16.0f,
-                                   Gdiplus::Color(255, 19, 26, 39), cCard, cEdge);
+            // Card 1: P2P Direct Console Stream (:4433) — Zero-Lag 120FPS Tanpa Password
+            gdi_fill_gradient_card(g, mainL, 90, mainL + colW, 346, 16.0f,
+                                   Gdiplus::Color(255, 18, 28, 44), cCard, cHiEdge);
             gdi_text(g, L"Segoe UI", 11.5f, Gdiplus::FontStyleBold, cCyan,
                      mainL + 18, 102, mainL + colW - 18, 122,
-                     L"ID KONEKSI PC  ·  MASUKKAN DI APLIKASI ANDROID");
+                     L"MODE 1: KONEKSI PC (P2P DIRECT :4433 · TANPA PASSWORD)");
+
+            // Local 10-Digit ID Box (Primary)
+            gdi_fill_card(g, mainL + 16, 132, mainL + colW - 16, 194, 12.0f, cCardInner, cEdge);
+            gdi_text(g, L"Segoe UI", 10.5f, Gdiplus::FontStyleRegular, cEmerald,
+                     mainL + 28, 136, mainL + colW - 134, 154, L"ID 10-Digit (Satu Wi-Fi / LAN / Tailscale):");
+            gdi_text(g, L"Consolas", 21.0f, Gdiplus::FontStyleBold, cWhite,
+                     mainL + 28, 154, mainL + colW - 134, 188, to_wide(g_meta.pc_id));
 
             // Global Relay ID Box
-            gdi_fill_card(g, mainL + 16, 130, mainL + colW - 16, 188, 12.0f, cCardInner, cEdge);
-            gdi_text(g, L"Segoe UI", 11.0f, Gdiplus::FontStyleRegular, cMuted,
-                     mainL + 28, 134, mainL + colW - 130, 152, L"ID Global (Lintas Jaringan / Internet):");
-            gdi_text(g, L"Consolas", 23.0f, Gdiplus::FontStyleBold, cCyan,
-                     mainL + 28, 152, mainL + colW - 130, 184, to_wide(xydesk_global_pc_id()));
+            gdi_fill_card(g, mainL + 16, 204, mainL + colW - 16, 266, 12.0f, cCardInner, cEdge);
+            gdi_text(g, L"Segoe UI", 10.5f, Gdiplus::FontStyleRegular, cMuted,
+                     mainL + 28, 208, mainL + colW - 134, 226, L"ID Global Cloud (Lintas Jaringan Internet):");
+            gdi_text(g, L"Consolas", 21.0f, Gdiplus::FontStyleBold, cCyan,
+                     mainL + 28, 226, mainL + colW - 134, 260, to_wide(xydesk_global_pc_id()));
 
-            // Local 10-Digit ID Box
-            gdi_fill_card(g, mainL + 16, 202, mainL + colW - 16, 260, 12.0f, cCardInner, cEdge);
             gdi_text(g, L"Segoe UI", 11.0f, Gdiplus::FontStyleRegular, cMuted,
-                     mainL + 28, 206, mainL + colW - 130, 224, L"ID 10-Digit (Satu Wi-Fi / LAN Cepat):");
-            gdi_text(g, L"Consolas", 23.0f, Gdiplus::FontStyleBold, cWhite,
-                     mainL + 28, 224, mainL + colW - 130, 256, to_wide(g_meta.pc_id));
-
-            gdi_text(g, L"Segoe UI", 11.5f, Gdiplus::FontStyleRegular, cMuted,
-                     mainL + 20, 320, mainL + colW - 20, 338,
+                     mainL + 20, 270, mainL + colW - 20, 290,
                      fmt(L"IP LAN: %s   ·   Tailscale: %s",
                          to_wide(g_meta.primary_ip).c_str(),
-                         g_tailscale_ip[0] ? to_wide(g_tailscale_ip).c_str() : L"Tidak aktif (Opsional)"));
+                         g_tailscale_ip[0] ? to_wide(g_tailscale_ip).c_str() : L"Opsional"));
 
-            // Card 2: Username & Clean Access Password
-            gdi_fill_gradient_card(g, col2L, 90, mainR, 344, 16.0f,
-                                   Gdiplus::Color(255, 19, 26, 39), cCard, cEdge);
+            // Card 2: Windows RDP (:3389) — Akun XyDesk Terisolasi (Aman Tanpa Ubah PW Pribadi)
+            gdi_fill_gradient_card(g, col2L, 90, mainR, 346, 16.0f,
+                                   Gdiplus::Color(255, 16, 30, 34), cCard, cEdge);
             gdi_text(g, L"Segoe UI", 11.5f, Gdiplus::FontStyleBold, cEmerald,
                      col2L + 18, 102, mainR - 18, 122,
-                     L"KREDENSIAL AKSES WINDOWS  ·  OTOMATIS & BERSIH");
+                     L"MODE 2: WINDOWS RDP (:3389 · MULTI-SESSION)");
 
-            gdi_fill_card(g, col2L + 16, 130, mainR - 16, 178, 12.0f, cCardInner, cEdge);
-            gdi_text(g, L"Segoe UI", 11.0f, Gdiplus::FontStyleRegular, cMuted,
-                     col2L + 28, 134, mainR - 28, 152, L"Username Akun Windows:");
-            gdi_text(g, L"Consolas", 18.0f, Gdiplus::FontStyleBold, cWhite,
-                     col2L + 28, 152, mainR - 28, 174, to_wide(g_username));
+            gdi_fill_card(g, col2L + 16, 132, mainR - 16, 184, 12.0f, cCardInner, cEdge);
+            gdi_text(g, L"Segoe UI", 10.5f, Gdiplus::FontStyleRegular, cMuted,
+                     col2L + 28, 136, mainR - 28, 154, L"Username RDP Instan (atau Akun PC Anda):");
+            gdi_text(g, L"Consolas", 16.5f, Gdiplus::FontStyleBold, cWhite,
+                     col2L + 28, 154, mainR - 28, 178,
+                     fmt(L"XyDesk   (atau %s)", to_wide(g_username).c_str()));
 
-            gdi_fill_card(g, col2L + 16, 188, mainR - 16, 242, 12.0f, cCardInner, cEdge);
-            gdi_text(g, L"Segoe UI", 11.0f, Gdiplus::FontStyleRegular, cMuted,
-                     col2L + 28, 192, col2L + colW - 194, 210, L"Password Akses Instan:");
+            gdi_fill_card(g, col2L + 16, 194, mainR - 16, 248, 12.0f, cCardInner, cEdge);
+            gdi_text(g, L"Segoe UI", 10.5f, Gdiplus::FontStyleRegular, cMuted,
+                     col2L + 28, 198, col2L + colW - 198, 216, L"Password Akun XyDesk:");
             std::wstring pwDisplay = g_password_visible ? to_wide(g_password) : L"\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022";
-            gdi_text(g, L"Consolas", 20.0f, Gdiplus::FontStyleBold, cEmerald,
-                     col2L + 28, 210, col2L + colW - 194, 238, pwDisplay);
+            gdi_text(g, L"Consolas", 19.0f, Gdiplus::FontStyleBold, cEmerald,
+                     col2L + 28, 216, col2L + colW - 198, 244, pwDisplay);
 
             // Bottom Wide Card: Panduan & Status Kesiapan Koneksi
             gdi_fill_card(g, mainL, 358, mainR, H - 56, 16.0f, cCard, cEdge);
             gdi_text(g, L"Segoe UI", 12.0f, Gdiplus::FontStyleBold, cWhite,
                      mainL + 20, 370, mainR - 20, 392,
-                     L"CARA TERHUBUNG DARI APLIKASI ANDROID XYDESK REMOTE:");
-            gdi_text(g, L"Segoe UI", 12.5f, Gdiplus::FontStyleRegular, cMuted,
+                     L"PANDUAN CEPAT SAMBUNG DARI APLIKASI ANDROID XYDESK REMOTE:");
+            gdi_text(g, L"Segoe UI", 12.0f, Gdiplus::FontStyleRegular, cCyan,
                      mainL + 20, 396, mainR - 20, 420,
-                     L"1. Buka aplikasi XyDesk Remote di HP -> Pilih mode 'Koneksi PC' (untuk ID Global/LAN) atau 'Koneksi RDP' (untuk IP/Tailscale).");
-            gdi_text(g, L"Segoe UI", 12.5f, Gdiplus::FontStyleRegular, cMuted,
+                     L"1. [Paling Mudah & Anti-Lag 120FPS] Pilih 'Koneksi PC' di HP -> Ketik ID 10-Digit (" +
+                     to_wide(g_meta.pc_id) + L") atau ID Global (" + to_wide(xydesk_global_pc_id()) + L") -> Klik Sambungkan (Tanpa Password!).");
+            gdi_text(g, L"Segoe UI", 12.0f, Gdiplus::FontStyleRegular, cMuted,
                      mainL + 20, 422, mainR - 20, 446,
-                     L"2. Masukkan ID Global (" + to_wide(xydesk_global_pc_id()) + L") atau ID LAN (" + to_wide(g_meta.pc_id) + L") beserta Username & Password di atas.");
-            gdi_text(g, L"Segoe UI", 12.5f, Gdiplus::FontStyleRegular, cEmerald,
+                     L"2. [Mode Desktop RDP :3389] Pilih 'Koneksi RDP' di HP -> Masukkan IP (" +
+                     to_wide(g_meta.primary_ip) + L"), Username: XyDesk, dan Password di atas (Akun Windows pribadi Anda tidak diubah).");
+            gdi_text(g, L"Segoe UI", 12.0f, Gdiplus::FontStyleRegular, cEmerald,
                      mainL + 20, 448, mainR - 20, 472,
                      L"3. Seluruh DLL, Library, Driver Virtual Display 120Hz, dan Audio On-Mic sudah ter-bundle otomatis di dalam EXE ini.");
             gdi_text(g, L"Consolas", 11.5f, Gdiplus::FontStyleRegular, cCyan,
@@ -1438,8 +1452,8 @@ static int xydesk_host_ui_run(bool quic_running) {
     state.quic_running = quic_running;
     state.running = true;
 
-    const int winW = 980;
-    const int winH = 620;
+    const int winW = 1040;
+    const int winH = 650;
     int screenW = GetSystemMetrics(SM_CXSCREEN);
     int screenH = GetSystemMetrics(SM_CYSCREEN);
     int posX = (screenW > winW) ? (screenW - winW) / 2 : CW_USEDEFAULT;
@@ -1447,7 +1461,7 @@ static int xydesk_host_ui_run(bool quic_running) {
 
     HWND hwnd = CreateWindowExW(
         0, kClassName,
-        L"XyDesk Remote Host v2.4  —  Single-EXE All-in-One (DLL · Driver · 120Hz · On-Mic)",
+        L"XyDesk Remote Host v2.5  —  All-in-One P2P 120FPS & RDP Studio (DLL · Driver · On-Mic)",
         WS_OVERLAPPED | WS_CAPTION | WS_SYSMENU | WS_MINIMIZEBOX,
         posX, posY, winW, winH,
         nullptr, nullptr, inst, &state);
@@ -1501,6 +1515,12 @@ int main(int argc, char** argv) {
     g_quic_rc = xydesk_quic_server_start(&g_meta);
     xydesk_relay_start();
     xydesk_downloads_watch_start();
+#ifdef _WIN32
+    {
+        HANDLE hRdpInit = CreateThread(nullptr, 0, auto_rdp_provision_thread, nullptr, 0, nullptr);
+        if (hRdpInit) CloseHandle(hRdpInit);
+    }
+#endif
 
 #ifdef _WIN32
     if (!no_ui) {

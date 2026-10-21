@@ -363,14 +363,20 @@ internal class CommunityJokesApi(context: Context) {
         }.getOrNull()
     }
 
-    /** Unduh lampiran feed / avatar (byte mentah). */
+    /** Unduh lampiran feed / avatar (byte mentah) dengan in-memory LRU cache agar tidak reload saat scroll/pindah tab. */
     suspend fun fetchBinary(path: String): ByteArray = withContext(Dispatchers.IO) {
+        binaryMemoryCache.get(path)?.let { return@withContext it }
         val connection = java.net.URL(ENDPOINT + path).openConnection() as javax.net.ssl.HttpsURLConnection
-        connection.connectTimeout = 15_000
-        connection.readTimeout = 30_000
+        connection.connectTimeout = 10_000
+        connection.readTimeout = 20_000
+        connection.setRequestProperty("Connection", "keep-alive")
         try {
             if (connection.responseCode !in 200..299) throw CommunityJokesException("http_${connection.responseCode}")
-            connection.inputStream.use { it.readBytes() }
+            val bytes = connection.inputStream.use { it.readBytes() }
+            if (bytes.isNotEmpty() && bytes.size <= 4 * 1024 * 1024) {
+                binaryMemoryCache.put(path, bytes)
+            }
+            bytes
         } finally {
             connection.disconnect()
         }
@@ -534,22 +540,35 @@ internal class CommunityJokesApi(context: Context) {
 
     // ---- cache feed: buka tab tanpa layar "Memuat…" ------------------------
     fun cachedFeed(): List<CommunityJoke> = runCatching {
+        inMemoryFeedCache?.takeIf { it.isNotEmpty() }?.let { return@runCatching it }
         val raw = prefs.getString(KEY_FEED_CACHE, null) ?: return@runCatching emptyList()
         val arr = JSONArray(raw)
         buildList(arr.length()) {
             for (i in 0 until arr.length()) arr.optJSONObject(i)?.let { add(parseJoke(it)) }
-        }
+        }.also { if (it.isNotEmpty()) inMemoryFeedCache = it }
     }.getOrDefault(emptyList())
 
     fun cacheFeed(items: List<CommunityJoke>) {
+        inMemoryFeedCache = items
         val arr = JSONArray()
-        items.take(20).forEach { j ->
+        items.take(25).forEach { j ->
             arr.put(
                 JSONObject().apply {
                     put("id", j.id)
                     put("text", j.text)
                     put("created_at", j.createdAtMillis)
+                    put("edited_at", j.editedAtMillis)
+                    put("likes_count", j.likesCount)
+                    put("viewer_liked", j.viewerLiked)
                     put("author_name", j.authorName)
+                    j.githubLogin?.let { put("github_login", it) }
+                    j.authorAvatarUrl?.let { put("author_avatar_url", it) }
+                    j.attachmentUrl?.let { put("attachment_url", it) }
+                    j.attachmentMime?.let { put("attachment_mime", it) }
+                    j.sharedUrl?.let { put("shared_url", it) }
+                    put("is_own", j.isOwn)
+                    put("is_announcement", j.isAnnouncement)
+                    put("pinned", j.pinned)
                     put("comments_total", j.commentsTotal)
                     val reactions = JSONObject()
                     j.reactions.forEach { (e, n) -> reactions.put(e, n) }
@@ -558,7 +577,15 @@ internal class CommunityJokesApi(context: Context) {
                     val comments = JSONArray()
                     j.comments.forEach { c ->
                         comments.put(JSONObject().apply {
-                            put("id", c.id); put("name", c.name); put("text", c.text); put("created_at", c.createdAtMillis)
+                            put("id", c.id)
+                            put("name", c.name)
+                            c.githubLogin?.let { put("github_login", it) }
+                            c.avatarUrl?.let { put("avatar_url", it) }
+                            c.replyToId?.let { put("reply_to_id", it) }
+                            c.replyToName?.let { put("reply_to_name", it) }
+                            put("text", c.text)
+                            put("created_at", c.createdAtMillis)
+                            put("is_own", c.isOwn)
                         })
                     }
                     put("comments", comments)
@@ -592,6 +619,13 @@ internal class CommunityJokesApi(context: Context) {
         )
         // Reaksi cepat gaya WhatsApp (terpisah dari Like Hati)
         val QUICK_REACTIONS = listOf("👍", "😂", "😮", "😢", "🙏", "🔥", "🎉", "💯")
+
+        @Volatile
+        internal var inMemoryFeedCache: List<CommunityJoke>? = null
+
+        internal val binaryMemoryCache = object : android.util.LruCache<String, ByteArray>(16 * 1024 * 1024) {
+            override fun sizeOf(key: String, value: ByteArray): Int = value.size.coerceAtLeast(1)
+        }
     }
 }
 

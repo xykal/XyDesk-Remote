@@ -3045,6 +3045,209 @@ function decodeHtmlEntities(str) {
     .trim();
 }
 
+const EDGE_VOICE_STAGE = {
+  participants: new Map(), // key -> { key, name, github_login, avatar_url, muted, speaking, sharing_screen, updated_at }
+  audioChunks: [],         // [{ seq, sender_key, sender_name, pcm_b64, at }]
+  audioSeq: 1,
+  screenShare: null,       // { streamer_key, streamer_name, github_login, title, frame_b64, width, height, fps, seq, updated_at }
+  screenSeq: 1,
+};
+
+function pruneVoiceStage() {
+  const now = Date.now();
+  for (const [k, p] of EDGE_VOICE_STAGE.participants.entries()) {
+    if (now - (p.updated_at || 0) > 28_000) {
+      EDGE_VOICE_STAGE.participants.delete(k);
+    } else if (now - (p.speaking_at || 0) > 3_500) {
+      p.speaking = false;
+    }
+  }
+  EDGE_VOICE_STAGE.audioChunks = EDGE_VOICE_STAGE.audioChunks.filter((c) => now - c.at < 8_000).slice(-24);
+  if (EDGE_VOICE_STAGE.screenShare && now - (EDGE_VOICE_STAGE.screenShare.updated_at || 0) > 15_000) {
+    EDGE_VOICE_STAGE.screenShare = null;
+  }
+}
+
+async function hydrateVoiceStageFromKv(env) {
+  if (!env?.UNIQUE_DOWNLOADS || typeof env.UNIQUE_DOWNLOADS.get !== "function") return;
+  try {
+    const raw = await env.UNIQUE_DOWNLOADS.get("voice_stage:v1");
+    if (!raw) return;
+    const parsed = JSON.parse(raw);
+    if (Array.isArray(parsed.participants)) {
+      for (const p of parsed.participants) {
+        if (!p || !p.key) continue;
+        const cur = EDGE_VOICE_STAGE.participants.get(p.key);
+        if (!cur || (p.updated_at || 0) > (cur.updated_at || 0)) {
+          EDGE_VOICE_STAGE.participants.set(p.key, p);
+        }
+      }
+    }
+    if (Array.isArray(parsed.audioChunks)) {
+      const knownSeqs = new Set(EDGE_VOICE_STAGE.audioChunks.map((c) => c.seq));
+      for (const c of parsed.audioChunks) {
+        if (c && c.seq && !knownSeqs.has(c.seq)) {
+          EDGE_VOICE_STAGE.audioChunks.push(c);
+          if (c.seq > EDGE_VOICE_STAGE.audioSeq) EDGE_VOICE_STAGE.audioSeq = c.seq;
+        }
+      }
+      EDGE_VOICE_STAGE.audioChunks.sort((a, b) => a.seq - b.seq);
+    }
+    if (parsed.screenShare && (!EDGE_VOICE_STAGE.screenShare || (parsed.screenShare.updated_at || 0) >= (EDGE_VOICE_STAGE.screenShare.updated_at || 0))) {
+      EDGE_VOICE_STAGE.screenShare = parsed.screenShare;
+      if (parsed.screenShare.seq > EDGE_VOICE_STAGE.screenSeq) {
+        EDGE_VOICE_STAGE.screenSeq = parsed.screenShare.seq;
+      }
+    }
+  } catch {}
+}
+
+async function persistVoiceStageToKv(env) {
+  if (!env?.UNIQUE_DOWNLOADS || typeof env.UNIQUE_DOWNLOADS.put !== "function") return;
+  try {
+    pruneVoiceStage();
+    const payload = {
+      participants: Array.from(EDGE_VOICE_STAGE.participants.values()),
+      audioChunks: EDGE_VOICE_STAGE.audioChunks.slice(-12),
+      audioSeq: EDGE_VOICE_STAGE.audioSeq,
+      screenShare: EDGE_VOICE_STAGE.screenShare,
+      screenSeq: EDGE_VOICE_STAGE.screenSeq,
+    };
+    await env.UNIQUE_DOWNLOADS.put("voice_stage:v1", JSON.stringify(payload), { expirationTtl: 60 });
+  } catch {}
+}
+
+async function handleVoiceStage(request, env) {
+  await hydrateVoiceStageFromKv(env);
+  pruneVoiceStage();
+  const reqUrl = new URL(request.url);
+  if (request.method === "GET") {
+    const sinceAudioSeq = Number(reqUrl.searchParams.get("since_audio") || 0);
+    const includeFrame = reqUrl.searchParams.get("include_frame") !== "0";
+    const participants = Array.from(EDGE_VOICE_STAGE.participants.values()).map((p) => ({
+      key: p.key,
+      name: p.name,
+      github_login: p.github_login,
+      avatar_url: p.avatar_url,
+      muted: Boolean(p.muted),
+      speaking: Boolean(p.speaking),
+      sharing_screen: Boolean(EDGE_VOICE_STAGE.screenShare && EDGE_VOICE_STAGE.screenShare.streamer_key === p.key),
+    }));
+    const chunks = EDGE_VOICE_STAGE.audioChunks.filter((c) => c.seq > sinceAudioSeq);
+    const scr = EDGE_VOICE_STAGE.screenShare;
+    return jsonResponse({
+      status: "ok",
+      room_name: "XyVoice Global Lounge & Live RDP Stage",
+      participants,
+      participant_count: participants.length,
+      audio_seq: EDGE_VOICE_STAGE.audioSeq,
+      audio_chunks: chunks,
+      screen_share: scr
+        ? {
+            active: true,
+            streamer_key: scr.streamer_key,
+            streamer_name: scr.streamer_name,
+            github_login: scr.github_login,
+            title: scr.title,
+            width: scr.width,
+            height: scr.height,
+            fps: scr.fps,
+            seq: scr.seq,
+            updated_at: scr.updated_at,
+            frame_b64: includeFrame ? scr.frame_b64 : "",
+          }
+        : { active: false },
+    }, 200, request.method, { "cache-control": "no-store" });
+  }
+
+  let body = {};
+  try {
+    body = await request.json();
+  } catch {
+    return jsonResponse({ status: "error", code: "invalid_json" }, 400, request.method);
+  }
+  const action = String(body.action || "heartbeat").trim();
+  const rawLogin = String(body.github_login || "").trim().replace(/^@/, "");
+  const rawName = String(body.name || rawLogin || "User").trim().slice(0, 40);
+  const key = (rawLogin || rawName).toLowerCase();
+  if (!key) return jsonResponse({ status: "error", code: "missing_identity" }, 400, request.method);
+  const now = Date.now();
+
+  if (action === "leave") {
+    EDGE_VOICE_STAGE.participants.delete(key);
+    if (EDGE_VOICE_STAGE.screenShare?.streamer_key === key) {
+      EDGE_VOICE_STAGE.screenShare = null;
+    }
+    await persistVoiceStageToKv(env);
+    return jsonResponse({ status: "ok", left: true }, 200, request.method);
+  }
+
+  const existing = EDGE_VOICE_STAGE.participants.get(key) || {
+    key,
+    name: rawName,
+    github_login: rawLogin,
+    avatar_url: rawLogin ? `https://github.com/${rawLogin}.png?size=120` : "",
+    muted: false,
+    speaking: false,
+    speaking_at: 0,
+    updated_at: now,
+  };
+  existing.name = rawName || existing.name;
+  if (rawLogin) {
+    existing.github_login = rawLogin;
+    existing.avatar_url = `https://github.com/${rawLogin}.png?size=120`;
+  }
+  if (typeof body.muted === "boolean") existing.muted = body.muted;
+  if (typeof body.speaking === "boolean") {
+    existing.speaking = body.speaking && !existing.muted;
+    if (existing.speaking) existing.speaking_at = now;
+  }
+  existing.updated_at = now;
+  EDGE_VOICE_STAGE.participants.set(key, existing);
+
+  if (action === "voice_chunk" && typeof body.pcm_b64 === "string" && body.pcm_b64.length > 16 && body.pcm_b64.length <= 48_000) {
+    existing.speaking = true;
+    existing.speaking_at = now;
+    const seq = ++EDGE_VOICE_STAGE.audioSeq;
+    EDGE_VOICE_STAGE.audioChunks.push({
+      seq,
+      sender_key: key,
+      sender_name: existing.name,
+      pcm_b64: body.pcm_b64,
+      at: now,
+    });
+    if (EDGE_VOICE_STAGE.audioChunks.length > 24) {
+      EDGE_VOICE_STAGE.audioChunks.shift();
+    }
+  } else if (action === "screen_frame" && typeof body.frame_b64 === "string" && body.frame_b64.length > 64 && body.frame_b64.length <= 360_000) {
+    const seq = ++EDGE_VOICE_STAGE.screenSeq;
+    EDGE_VOICE_STAGE.screenShare = {
+      streamer_key: key,
+      streamer_name: existing.name,
+      github_login: existing.github_login,
+      title: String(body.title || `Sesi XyRDP ${existing.name}`).slice(0, 80),
+      frame_b64: body.frame_b64,
+      width: Number(body.width || 1280),
+      height: Number(body.height || 720),
+      fps: Number(body.fps || 60),
+      seq,
+      updated_at: now,
+    };
+  } else if (action === "stop_screen") {
+    if (EDGE_VOICE_STAGE.screenShare?.streamer_key === key) {
+      EDGE_VOICE_STAGE.screenShare = null;
+    }
+  }
+
+  await persistVoiceStageToKv(env);
+  return jsonResponse({
+    status: "ok",
+    participant_count: EDGE_VOICE_STAGE.participants.size,
+    audio_seq: EDGE_VOICE_STAGE.audioSeq,
+    screen_active: Boolean(EDGE_VOICE_STAGE.screenShare),
+  }, 200, request.method, { "cache-control": "no-store" });
+}
+
 async function openGraphPreviewResponse(request) {
   const reqUrl = new URL(request.url);
   let target = (reqUrl.searchParams.get("url") || "").trim();
@@ -3127,6 +3330,123 @@ async function openGraphPreviewResponse(request) {
     }, 200, request.method, { "cache-control": "public, max-age=900" });
   }
 
+  // TikTok (tiktok.com / vm.tiktok.com / vt.tiktok.com) via TikTok oEmbed
+  if (host.includes("tiktok.com")) {
+    try {
+      const oembedRes = await fetch(`https://www.tiktok.com/oembed?url=${encodeURIComponent(target)}`, {
+        headers: { "User-Agent": "Mozilla/5.0 (compatible; XyDeskLinkPreview/1.1)" },
+      });
+      if (oembedRes.ok) {
+        const tj = await oembedRes.json();
+        const ttAuthor = tj?.author_name ? `@${String(tj.author_name).replace(/^@/, "")}` : "TikTok Creator";
+        const ttTitle = tj?.title ? String(tj.title).slice(0, 140) : `Video TikTok oleh ${ttAuthor}`;
+        return jsonResponse({
+          status: "ok",
+          url: target,
+          domain: "tiktok.com",
+          site_name: `TikTok · ${ttAuthor}`,
+          title: ttTitle,
+          description: `Tonton video pendek TikTok dari ${ttAuthor}`,
+          image: tj?.thumbnail_url ? String(tj.thumbnail_url).slice(0, 400) : "",
+          safe: true,
+          shield_badge: "XyShield Verified",
+        }, 200, request.method, { "cache-control": "public, max-age=900" });
+      }
+    } catch {}
+  }
+
+  // X / Twitter (x.com / twitter.com) via FxTwitter API
+  const xStatusMatch = target.match(/(?:x\.com|twitter\.com)\/([A-Za-z0-9_]+)\/status\/(\d+)/i);
+  if (xStatusMatch) {
+    const xUser = xStatusMatch[1];
+    const xId = xStatusMatch[2];
+    try {
+      const fxRes = await fetch(`https://api.fxtwitter.com/${xUser}/status/${xId}`, {
+        headers: { "User-Agent": "XyDeskBot/1.1" },
+      });
+      if (fxRes.ok) {
+        const fx = await fxRes.json();
+        const tw = fx?.tweet;
+        if (tw) {
+          const authorName = tw.author?.name || `@${xUser}`;
+          const mediaImg = tw.media?.all?.[0]?.thumbnail_url || tw.media?.all?.[0]?.url || tw.author?.avatar_url || "";
+          return jsonResponse({
+            status: "ok",
+            url: target,
+            domain: "x.com",
+            site_name: `X (Twitter) · @${tw.author?.screen_name || xUser}`,
+            title: `${authorName} (@${tw.author?.screen_name || xUser}) di X`,
+            description: String(tw.text || `Postingan X oleh @${xUser}`).slice(0, 220),
+            image: String(mediaImg).slice(0, 400),
+            safe: true,
+            shield_badge: "XyShield Verified",
+          }, 200, request.method, { "cache-control": "public, max-age=900" });
+        }
+      }
+    } catch {}
+  }
+
+  // Discord Server Invite (discord.gg / discord.com/invite)
+  const dcMatch = target.match(/(?:discord\.gg\/|discord\.com\/invite\/)([A-Za-z0-9-]+)/i);
+  if (dcMatch) {
+    const code = dcMatch[1];
+    try {
+      const dcRes = await fetch(`https://discord.com/api/v9/invites/${code}?with_counts=true`, {
+        headers: { "User-Agent": "XyDeskBot/1.1" },
+      });
+      if (dcRes.ok) {
+        const dj = await dcRes.json();
+        const g = dj?.guild;
+        if (g) {
+          const gName = String(g.name || "Discord Server").slice(0, 100);
+          const online = dj.approximate_presence_count || 0;
+          const total = dj.approximate_member_count || 0;
+          const iconUrl = g.splash
+            ? `https://cdn.discordapp.com/splashes/${g.id}/${g.splash}.jpg?size=600`
+            : g.banner
+              ? `https://cdn.discordapp.com/banners/${g.id}/${g.banner}.jpg?size=600`
+              : g.icon
+                ? `https://cdn.discordapp.com/icons/${g.id}/${g.icon}.png?size=256`
+                : "";
+          return jsonResponse({
+            status: "ok",
+            url: target,
+            domain: "discord.gg",
+            site_name: "Discord Server Invite",
+            title: `${gName} · Discord`,
+            description: `${g.description ? g.description + " · " : ""}${online} Online · ${total} Member`,
+            image: iconUrl,
+            safe: true,
+            shield_badge: "XyShield Verified",
+          }, 200, request.method, { "cache-control": "public, max-age=900" });
+        }
+      }
+    } catch {}
+  }
+
+  // Spotify (open.spotify.com) via Spotify oEmbed
+  if (host.includes("spotify.com")) {
+    try {
+      const spRes = await fetch(`https://open.spotify.com/oembed?url=${encodeURIComponent(target)}`, {
+        headers: { "User-Agent": "XyDeskBot/1.1" },
+      });
+      if (spRes.ok) {
+        const sj = await spRes.json();
+        return jsonResponse({
+          status: "ok",
+          url: target,
+          domain: "open.spotify.com",
+          site_name: "Spotify",
+          title: String(sj?.title || "Spotify Audio").slice(0, 140),
+          description: "Dengarkan lagu, playlist, atau podcast di Spotify",
+          image: String(sj?.thumbnail_url || "").slice(0, 400),
+          safe: true,
+          shield_badge: "XyShield Verified",
+        }, 200, request.method, { "cache-control": "public, max-age=900" });
+      }
+    } catch {}
+  }
+
   let title = "";
   let description = "";
   let image = "";
@@ -3136,7 +3456,7 @@ async function openGraphPreviewResponse(request) {
       method: "GET",
       redirect: "follow",
       headers: {
-        "User-Agent": "Mozilla/5.0 (compatible; XyDeskLinkPreview/1.1; +https://xydeskremote.biz.id)",
+        "User-Agent": "facebookexternalhit/1.1 (+http://www.facebook.com/externalhit_uatext.php); WhatsApp/2.24.16.78",
         Accept: "text/html,application/xhtml+xml",
       },
     });
@@ -3502,45 +3822,66 @@ function wrapKvWithEdgeCache(rawKv, d1Db = null) {
 export function createKvBackedStorage(env, kvKey) {
   let stateObj = EDGE_KV_STORES.get(kvKey);
   if (!stateObj) {
-    stateObj = { map: new Map(), loadedAt: 0 };
+    stateObj = { map: new Map(), loadedAt: 0, inFlightSync: null, backupMerged: false, lastKvRef: null };
     EDGE_KV_STORES.set(kvKey, stateObj);
   }
   const kv = env?.UNIQUE_DOWNLOADS && typeof env.UNIQUE_DOWNLOADS.get === "function"
     ? wrapKvWithEdgeCache(env.UNIQUE_DOWNLOADS, env?.XYDESK_DB || null)
     : null;
+  if (stateObj.lastKvRef !== kv) {
+    stateObj.lastKvRef = kv;
+    stateObj.loadedAt = 0;
+    stateObj.inFlightSync = null;
+    stateObj.backupMerged = false;
+    stateObj.map = new Map();
+  }
+  const syncTtlMs = env?.XYDESK_DB ? 1500 : 80;
 
   async function syncFromKv(force = false) {
     if (!kv) return;
     const now = Date.now();
-    if (!force && stateObj.loadedAt > 0 && now - stateObj.loadedAt < 80) return;
-    try {
-      const raw = await kv.get(kvKey);
-      if (raw) {
-        const parsed = JSON.parse(raw);
-        if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
-          stateObj.map = new Map(Object.entries(parsed));
+    if (!force && stateObj.loadedAt > 0 && now - stateObj.loadedAt < syncTtlMs) return;
+    if (!force && stateObj.inFlightSync) {
+      await stateObj.inFlightSync;
+      return;
+    }
+    const doSync = (async () => {
+      try {
+        const raw = await kv.get(kvKey);
+        if (raw) {
+          const parsed = JSON.parse(raw);
+          if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
+            stateObj.map = new Map(Object.entries(parsed));
+          }
         }
-      }
-      if (kvKey === "do_fallback:global_chat_v1") {
-        const backupRaw = await kv.get("chat:prod_backup_v1");
-        if (backupRaw) {
-          const parsedBackup = JSON.parse(backupRaw);
-          const list = Array.isArray(parsedBackup?.messages) ? parsedBackup.messages : [];
-          for (const m of list) {
-            if (!m || !m.id) continue;
-            const k = `msg:${m.id}`;
-            const cur = stateObj.map.get(k);
-            if (!cur || Number(m.revision || 0) >= Number(cur.revision || 0)) {
-              stateObj.map.set(k, m);
+        if (kvKey === "do_fallback:global_chat_v1" && (!stateObj.backupMerged || !env?.XYDESK_DB)) {
+          const backupRaw = await kv.get("chat:prod_backup_v1");
+          if (backupRaw) {
+            const parsedBackup = JSON.parse(backupRaw);
+            const list = Array.isArray(parsedBackup?.messages) ? parsedBackup.messages : [];
+            for (const m of list) {
+              if (!m || !m.id || m.deleted) continue;
+              const senderLower = String(m.name || "").trim().toLowerCase();
+              if (LEGACY_TEST_NAMES.has(senderLower)) continue;
+              const k = `msg:${m.id}`;
+              const cur = stateObj.map.get(k);
+              if (!cur || Number(m.revision || 0) >= Number(cur.revision || 0)) {
+                stateObj.map.set(k, m);
+              }
+            }
+            if (parsedBackup?.pinned_message && !stateObj.map.has("pinned_message")) {
+              stateObj.map.set("pinned_message", parsedBackup.pinned_message);
             }
           }
-          if (parsedBackup?.pinned_message && !stateObj.map.has("pinned_message")) {
-            stateObj.map.set("pinned_message", parsedBackup.pinned_message);
-          }
+          stateObj.backupMerged = true;
         }
+        stateObj.loadedAt = Date.now();
+      } catch {} finally {
+        stateObj.inFlightSync = null;
       }
-      stateObj.loadedAt = now;
-    } catch {}
+    })();
+    stateObj.inFlightSync = doSync;
+    await doSync;
   }
 
   async function flushToKv() {
@@ -4269,8 +4610,19 @@ export class GlobalChat {
         });
       }
       const sinceMs = 0;
-      const messages = await this.loadHistory(sinceMs);
-      const pinnedMsg = await this.loadPinnedMessage();
+      const sinceAt = Number(urlObj.searchParams.get("since_at") || 0);
+      const limitParam = Number(urlObj.searchParams.get("limit") || 0);
+      const [allMessages, pinnedMsg] = await Promise.all([
+        this.loadHistory(sinceMs),
+        this.loadPinnedMessage(),
+      ]);
+      let messages = allMessages;
+      if (Number.isFinite(sinceAt) && sinceAt > 0) {
+        messages = messages.filter((m) => Number(m?.at || 0) >= sinceAt || Number(m?.edited_at || 0) >= sinceAt);
+      }
+      if (Number.isFinite(limitParam) && limitParam > 0 && messages.length > limitParam) {
+        messages = messages.slice(-limitParam);
+      }
       const onlineCount = this.getActiveOnlineCount();
       return durableObjectJson(
         {
@@ -4627,7 +4979,9 @@ export class GlobalChat {
     for (const [k, v] of entries.entries()) {
       const senderLower = String(v?.name || "").trim().toLowerCase();
       if (LEGACY_TEST_NAMES.has(senderLower)) {
-        try { this.state.storage.delete(k).catch(() => {}); } catch {}
+        if (!this.env?.XYDESK_DB) {
+          try { this.state.storage.delete(k).catch(() => {}); } catch {}
+        }
         continue;
       }
       const msgAt = Number(v?.at || 0);
@@ -5904,6 +6258,11 @@ export default {
       if (request.method === "OPTIONS") return corsPreflight("GET, OPTIONS");
       if (request.method !== "GET" && request.method !== "HEAD") return methodNotAllowed("GET, HEAD, OPTIONS");
       return openGraphPreviewResponse(request);
+    }
+    if (path === "/api/voice-stage") {
+      if (request.method === "OPTIONS") return corsPreflight("GET, POST, OPTIONS");
+      if (request.method !== "GET" && request.method !== "POST") return methodNotAllowed("GET, POST, OPTIONS");
+      return handleVoiceStage(request, env);
     }
     if (path === "/api/leaderboard") {
       if (request.method === "OPTIONS") return corsPreflight("GET, POST, OPTIONS");

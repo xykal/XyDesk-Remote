@@ -1542,50 +1542,99 @@ internal fun XyOpenGraphPreviewCard(
 ) {
     val context = LocalContext.current
     val api = remember(context) { CommunityJokesApi(context) }
-    var og by remember(url) { mutableStateOf<XyOpenGraphData?>(null) }
-    var loading by remember(url) { mutableStateOf(true) }
+    val normalizedUrl = remember(url) {
+        val clean = url.trim()
+        if (clean.startsWith("http://", ignoreCase = true) || clean.startsWith("https://", ignoreCase = true)) clean
+        else "https://$clean"
+    }
+    var og by remember(normalizedUrl) { mutableStateOf<XyOpenGraphData?>(null) }
+    var loading by remember(normalizedUrl) { mutableStateOf(true) }
 
-    LaunchedEffect(url) {
+    LaunchedEffect(normalizedUrl) {
         loading = true
-        og = api.fetchOpenGraph(url)
+        og = api.fetchOpenGraph(normalizedUrl)
         loading = false
     }
 
     val data = og
-    val socialBrand = remember(url) { detectSocialBrandLabel(url) }
+    val socialBrand = remember(normalizedUrl) { detectSocialBrandStyle(normalizedUrl) }
+    val instantThumbUrl = remember(normalizedUrl, data?.image) {
+        val apiImg = data?.image.orEmpty()
+        if (apiImg.isNotBlank()) return@remember apiImg
+        val ytMatch = Regex("(?:youtube\\.com/(?:watch\\?v=|shorts/|live/)|youtu\\.be/)([A-Za-z0-9_-]{11})", RegexOption.IGNORE_CASE)
+            .find(normalizedUrl)
+        if (ytMatch != null) {
+            return@remember "https://i.ytimg.com/vi/${ytMatch.groupValues[1]}/hqdefault.jpg"
+        }
+        val ghMatch = Regex("github\\.com/([A-Za-z0-9_.-]+)(?:/([A-Za-z0-9_.-]+))?", RegexOption.IGNORE_CASE)
+            .find(normalizedUrl)
+        if (ghMatch != null) {
+            val owner = ghMatch.groupValues[1]
+            val repo = ghMatch.groupValues.getOrNull(2).orEmpty()
+            return@remember if (repo.isNotBlank()) {
+                "https://opengraph.githubassets.com/1/$owner/$repo"
+            } else {
+                "https://github.com/$owner.png?size=240"
+            }
+        }
+        ""
+    }
 
     Surface(
         onClick = {
             if (data?.safe != false) {
-                openInAppCustomTab(context, data?.url ?: url)
+                openInAppCustomTab(context, data?.url ?: normalizedUrl)
             }
         },
         shape = RoundedCornerShape(14.dp),
         color = if (data?.safe == false) Color(0xFF2A1215) else Color(0xFF10131A),
         border = BorderStroke(
             1.dp,
-            if (data?.safe == false) Color(0xFFEF4444) else Color(0xFF293040),
+            if (data?.safe == false) Color(0xFFEF4444) else socialBrand.accentColor.copy(alpha = 0.45f),
         ),
         modifier = modifier.fillMaxWidth(),
     ) {
         Column(modifier = Modifier.fillMaxWidth()) {
             // Gambar OG Banner jika tersedia
-            val imageUrl = data?.image.orEmpty()
-            if (imageUrl.isNotBlank() && data?.safe != false) {
-                FeedRemoteUrlBannerImage(
-                    imageUrl = imageUrl,
+            if (instantThumbUrl.isNotBlank() && data?.safe != false) {
+                Box(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .height(148.dp),
-                )
+                        .height(152.dp),
+                ) {
+                    FeedRemoteUrlBannerImage(
+                        imageUrl = instantThumbUrl,
+                        modifier = Modifier.fillMaxSize(),
+                    )
+                    // Badge Sosmed Mengambang di Pojok Kiri Atas Banner
+                    Box(
+                        modifier = Modifier
+                            .align(Alignment.TopStart)
+                            .padding(8.dp)
+                            .clip(RoundedCornerShape(50))
+                            .background(Color(0xD9090B10))
+                            .border(0.8.dp, socialBrand.accentColor, RoundedCornerShape(50))
+                            .padding(horizontal = 8.dp, vertical = 3.dp),
+                    ) {
+                        Text(
+                            text = "${socialBrand.badge} · ${socialBrand.name}",
+                            fontSize = 9.5.sp,
+                            fontWeight = FontWeight.ExtraBold,
+                            color = socialBrand.accentColor,
+                        )
+                    }
+                }
             } else if (data?.safe != false) {
-                // Header Visual Brand Sosmed/Web jika situs tidak menyediakan og:image
+                // Header Visual Brand Sosmed/Web Berwarna jika situs belum mengembalikan og:image
                 Box(
                     modifier = Modifier
                         .fillMaxWidth()
                         .background(
                             Brush.horizontalGradient(
-                                listOf(Color(0xFF1A202C), Color(0xFF131722)),
+                                listOf(
+                                    socialBrand.accentColor.copy(alpha = 0.24f),
+                                    Color(0xFF131722),
+                                ),
                             ),
                         )
                         .padding(horizontal = 12.dp, vertical = 10.dp),
@@ -1594,21 +1643,29 @@ internal fun XyOpenGraphPreviewCard(
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.spacedBy(8.dp),
                     ) {
-                        androidx.compose.material3.Icon(
-                            imageVector = id.xydesk.remote.ui.components.XyIcons.Globe,
-                            contentDescription = null,
-                            tint = Color(0xFF94A3B8),
-                            modifier = Modifier.size(16.dp),
-                        )
-                        Column {
+                        Box(
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(6.dp))
+                                .background(socialBrand.accentColor.copy(alpha = 0.22f))
+                                .border(0.8.dp, socialBrand.accentColor, RoundedCornerShape(6.dp))
+                                .padding(horizontal = 6.dp, vertical = 2.dp),
+                        ) {
                             Text(
-                                text = data?.siteName?.ifBlank { socialBrand.second } ?: socialBrand.second,
+                                text = socialBrand.badge,
+                                fontSize = 10.sp,
+                                fontWeight = FontWeight.ExtraBold,
+                                color = socialBrand.accentColor,
+                            )
+                        }
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                text = data?.siteName?.ifBlank { socialBrand.name } ?: socialBrand.name,
                                 fontSize = 12.sp,
                                 fontWeight = FontWeight.ExtraBold,
                                 color = Color(0xFFF8FAFC),
                             )
                             Text(
-                                text = data?.domain?.ifBlank { url } ?: url,
+                                text = data?.domain?.ifBlank { normalizedUrl } ?: normalizedUrl,
                                 fontSize = 10.sp,
                                 color = Color(0xFF94A3B8),
                                 maxLines = 1,
@@ -1629,10 +1686,10 @@ internal fun XyOpenGraphPreviewCard(
                     horizontalArrangement = Arrangement.SpaceBetween,
                 ) {
                     Text(
-                        text = (data?.siteName?.ifBlank { socialBrand.second } ?: socialBrand.second).uppercase(),
+                        text = (data?.siteName?.ifBlank { socialBrand.name } ?: socialBrand.name).uppercase(),
                         fontSize = 10.sp,
                         fontWeight = FontWeight.ExtraBold,
-                        color = Color(0xFFF59E0B),
+                        color = socialBrand.accentColor,
                     )
                     Text(
                         text = if (data?.safe == false) "DIBLOKIR XYSHIELD" else "XyShield Aman",
@@ -1643,11 +1700,11 @@ internal fun XyOpenGraphPreviewCard(
                 }
                 Text(
                     text = when {
-                        loading && data == null -> url
+                        loading && data == null -> "${socialBrand.name} · ${normalizedUrl.removePrefix("https://").removePrefix("http://")}"
                         !data?.title.isNullOrBlank() -> data?.title.orEmpty()
-                        else -> url
+                        else -> normalizedUrl
                     },
-                    fontSize = 13.sp,
+                    fontSize = 12.5.sp,
                     fontWeight = FontWeight.Bold,
                     color = Color(0xFFF8FAFC),
                     maxLines = 2,
@@ -1663,7 +1720,7 @@ internal fun XyOpenGraphPreviewCard(
                     )
                 }
                 Text(
-                    text = data?.domain?.ifBlank { url } ?: url,
+                    text = data?.domain?.ifBlank { normalizedUrl } ?: normalizedUrl,
                     fontSize = 10.sp,
                     fontFamily = FontFamily.Monospace,
                     color = Color(0xFF64748B),
@@ -1675,19 +1732,29 @@ internal fun XyOpenGraphPreviewCard(
     }
 }
 
-private fun detectSocialBrandLabel(url: String): Pair<String, String> {
+private data class SocialBrandStyle(
+    val badge: String,
+    val name: String,
+    val accentColor: Color,
+)
+
+private fun detectSocialBrandStyle(url: String): SocialBrandStyle {
     val u = url.lowercase()
     return when {
-        "youtube.com" in u || "youtu.be" in u -> "YT" to "YouTube"
-        "tiktok.com" in u -> "TT" to "TikTok"
-        "instagram.com" in u -> "IG" to "Instagram"
-        "twitter.com" in u || "x.com" in u -> "X" to "X / Twitter"
-        "github.com" in u -> "GH" to "GitHub"
-        "discord.gg" in u || "discord.com" in u -> "DC" to "Discord"
-        "facebook.com" in u || "fb.watch" in u -> "FB" to "Facebook"
-        "reddit.com" in u -> "RD" to "Reddit"
-        "t.me" in u || "telegram.org" in u -> "TG" to "Telegram"
-        else -> "WEB" to "Web Link"
+        "youtube.com" in u || "youtu.be" in u -> SocialBrandStyle("YT", "YouTube", Color(0xFFEF4444))
+        "tiktok.com" in u -> SocialBrandStyle("TT", "TikTok", Color(0xFF22D3EE))
+        "instagram.com" in u -> SocialBrandStyle("IG", "Instagram", Color(0xFFEC4899))
+        "twitter.com" in u || "x.com" in u -> SocialBrandStyle("X", "X / Twitter", Color(0xFF38BDF8))
+        "github.com" in u -> SocialBrandStyle("GH", "GitHub", Color(0xFFA855F7))
+        "discord.gg" in u || "discord.com" in u -> SocialBrandStyle("DC", "Discord", Color(0xFF818CF8))
+        "facebook.com" in u || "fb.watch" in u || "fb.com" in u -> SocialBrandStyle("FB", "Facebook", Color(0xFF3B82F6))
+        "spotify.com" in u -> SocialBrandStyle("SP", "Spotify", Color(0xFF22C55E))
+        "reddit.com" in u || "redd.it" in u -> SocialBrandStyle("RD", "Reddit", Color(0xFFF97316))
+        "t.me" in u || "telegram.org" in u -> SocialBrandStyle("TG", "Telegram", Color(0xFF0EA5E9))
+        "twitch.tv" in u -> SocialBrandStyle("TW", "Twitch", Color(0xFFC084FC))
+        "threads.net" in u -> SocialBrandStyle("TH", "Threads", Color(0xFFF43F5E))
+        "linkedin.com" in u -> SocialBrandStyle("IN", "LinkedIn", Color(0xFF60A5FA))
+        else -> SocialBrandStyle("WEB", "Web Link", Color(0xFFF59E0B))
     }
 }
 
@@ -1799,7 +1866,7 @@ internal fun FeedAvatarThumb(
                     Modifier.border(0.8.dp, Color.White.copy(alpha = 0.18f), CircleShape)
                 },
             )
-            .podiumFrame(effectiveRank?.takeIf { it in 1..3 }),
+            .podiumFrame(effectiveRank?.takeIf { it in 1..10 }),
         contentAlignment = Alignment.Center,
     ) {
         val bmp = avatarBmp
@@ -2355,14 +2422,24 @@ private fun ActionsBottomSheet(
     }
 }
 
-private val URL_EXTRACT_REGEX = Regex("https?://[^\\s\"'<>]+", RegexOption.IGNORE_CASE)
+private val URL_EXTRACT_REGEX = Regex(
+    """((?:https?://|www\.)[^\s"'<>]+|(?:[a-zA-Z0-9-]+\.)+(?:com|id|org|net|io|dev|app|me|xyz|co|gg|tv|ly|be)(?:/[^\s"'<>]*)?)""",
+    RegexOption.IGNORE_CASE,
+)
 private val MALICIOUS_URL_OR_EXT_REGEX = Regex(
     "(?:\\.(?:exe|msi|bat|cmd|scr|pif|vbs|vbe|js|jse|wsf|wsh|ps1|apk|dex|jar|hta|reg|dll|sys)(?:[?#\\s]|$)|javascript:|vbscript:|data:text/html|grabify\\.|iplogger\\.|bit\\.ly/virus|discord-nitro-free)",
     RegexOption.IGNORE_CASE,
 )
 
-internal fun extractFirstUrl(text: String): String? =
-    URL_EXTRACT_REGEX.find(text)?.value?.trimEnd('.', ',', ')', ']', ';')
+internal fun extractFirstUrl(text: String): String? {
+    val raw = URL_EXTRACT_REGEX.find(text)?.value?.trimEnd('.', ',', ')', ']', ';') ?: return null
+    if (raw.contains('@') && !raw.startsWith("http", ignoreCase = true) && !raw.contains('/')) return null
+    return if (raw.startsWith("http://", ignoreCase = true) || raw.startsWith("https://", ignoreCase = true)) {
+        raw
+    } else {
+        "https://$raw"
+    }
+}
 
 internal fun isClientSideMaliciousText(text: String): Boolean =
     MALICIOUS_URL_OR_EXT_REGEX.containsMatchIn(text)

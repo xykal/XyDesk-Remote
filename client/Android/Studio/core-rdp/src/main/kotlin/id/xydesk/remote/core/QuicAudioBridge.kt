@@ -131,7 +131,9 @@ class QuicAudioBridge(
     private fun runLoopbackReceiver() {
         var track: AudioTrack? = null
         try {
-            val addr = InetAddress.getByName(host.trim().removePrefix("[").removeSuffix("]"))
+            val rawHost = host.trim().removePrefix("[").removeSuffix("]")
+            val resolvedHost = parsePcIdOrEndpoint(rawHost)?.host ?: rawHost
+            val addr = InetAddress.getByName(resolvedHost)
             val sock = DatagramSocket()
             sock.soTimeout = 500
             socket = sock
@@ -207,24 +209,26 @@ class QuicAudioBridge(
                             }
                             'S' -> if (rxBuf[3] == 'T'.code.toByte() && len >= 16) {
                                 lastHostMs = now
-                                hostAnswered.set(true)
+                                val firstAnswer = !hostAnswered.getAndSet(true)
                                 val flags = rxBuf[5].toInt() and 0xFF
                                 val hostMicPeak = rxBuf[6].toInt() and 0xFF
-                                hostFlags.set(flags)
-                                val aud = if (flags and 0x01 != 0) "terkunci" else "cari endpoint"
-                                val mic = if (flags and 0x02 != 0) "render" else "idle"
-                                val virt = if (flags and 0x04 != 0) "virtual-mic" else "default"
-                                val detail = if (len > 16) {
-                                    String(rxBuf, 16, len - 16, Charsets.UTF_8)
-                                } else {
-                                    ""
+                                val prevFlags = hostFlags.getAndSet(flags)
+                                if (firstAnswer || flags != prevFlags) {
+                                    val aud = if (flags and 0x01 != 0) "terkunci" else "cari endpoint"
+                                    val mic = if (flags and 0x02 != 0) "render" else "idle"
+                                    val virt = if (flags and 0x04 != 0) "virtual-mic" else "default"
+                                    val detail = if (len > 16) {
+                                        String(rxBuf, 16, len - 16, Charsets.UTF_8)
+                                    } else {
+                                        ""
+                                    }
+                                    val pkt = ByteBuffer.wrap(rxBuf, 8, 4)
+                                        .order(ByteOrder.LITTLE_ENDIAN).int
+                                    onStatus(
+                                        "host ok · audio:$aud · mic:$mic/$virt · lvl:$hostMicPeak " +
+                                            "· pkt:$pkt · $detail"
+                                    )
                                 }
-                                val pkt = ByteBuffer.wrap(rxBuf, 8, 4)
-                                    .order(ByteOrder.LITTLE_ENDIAN).int
-                                onStatus(
-                                    "host ok · audio:$aud · mic:$mic/$virt · lvl:$hostMicPeak " +
-                                        "· pkt:$pkt · $detail"
-                                )
                             }
                         }
                     }
@@ -259,7 +263,9 @@ class QuicAudioBridge(
     private fun runMicSender() {
         var record: AudioRecord? = null
         try {
-            val addr = InetAddress.getByName(host.trim().removePrefix("[").removeSuffix("]"))
+            val rawHost = host.trim().removePrefix("[").removeSuffix("]")
+            val resolvedHost = parsePcIdOrEndpoint(rawHost)?.host ?: rawHost
+            val addr = InetAddress.getByName(resolvedHost)
             // Pada sesi RDP standar (waitForHostVerifyBeforeMic = true), tunggu sampai
             // host UDP :4433 benar-benar membalas paket XYST1/XYA1. Jika host adalah
             // Windows RDP / XyRDP tanpa daemon audio :4433, jangan buka AudioRecord

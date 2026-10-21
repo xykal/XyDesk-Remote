@@ -27,8 +27,8 @@ class XyDirectConsoleStreamClient(
     private val host: String,
     private val port: Int = 4433,
     private val targetFps: Int = 120,
-    private val jpegQuality: Int = 72,
-    private val scalePct: Int = 85,
+    private val jpegQuality: Int = 88,
+    private val scalePct: Int = 100,
     private val enableAudio: Boolean = true,
     private val onFrame: (
         bitmap: Bitmap,
@@ -162,7 +162,8 @@ class XyDirectConsoleStreamClient(
 
     private fun runVideoLoop(cleanHost: String) {
         try {
-            val addr = InetAddress.getByName(cleanHost)
+            val resolvedIp = parsePcIdOrEndpoint(cleanHost)?.host ?: cleanHost
+            val addr = InetAddress.getByName(resolvedIp)
             resolvedHostAddr = addr
             val sock = DatagramSocket()
             sock.receiveBufferSize = 4 * 1024 * 1024
@@ -173,7 +174,7 @@ class XyDirectConsoleStreamClient(
             val subPktBytes = encodeSubscribe(
                 enable = true,
                 fps = targetFps.coerceIn(30, 120),
-                quality = jpegQuality.coerceIn(40, 92),
+                quality = jpegQuality.coerceIn(40, 95),
                 scalePct = scalePct.coerceIn(50, 100),
             )
             val subPkt = DatagramPacket(subPktBytes, subPktBytes.size, addr, port)
@@ -193,12 +194,12 @@ class XyDirectConsoleStreamClient(
             var frameHostFps = 0
             val chunkBuffers = arrayOfNulls<ByteArray>(MAX_CHUNKS_PER_FRAME)
             val chunkLengths = IntArray(MAX_CHUNKS_PER_FRAME)
-            var reassemblyBuffer = ByteArray(256 * 1024)
+            var reassemblyBuffer = ByteArray(512 * 1024)
 
-            val decodeOpts = BitmapFactory.Options().apply {
-                inPreferredConfig = Bitmap.Config.ARGB_8888
-                inMutable = true
-            }
+            // Triple-buffered inBitmap pool: mencegah alokasi ratusan MB Bitmap/detik (OOM)
+            // dan memastikan buffer yang sedang dirender Compose tidak ditimpa rxThread.
+            val bitmapPool = arrayOfNulls<Bitmap>(3)
+            var poolIndex = 0
 
             main.post { onState(false, "Menghubungi Engine Konsol UDP :$port...") }
 
@@ -276,10 +277,28 @@ class XyDirectConsoleStreamClient(
                             System.arraycopy(cbuf, 0, reassemblyBuffer, pos, clen)
                             pos += clen
                         }
+                        val candidateReuse = bitmapPool[poolIndex]
                         val bmp = runCatching {
-                            BitmapFactory.decodeByteArray(reassemblyBuffer, 0, totalBytes, decodeOpts)
+                            val opts = BitmapFactory.Options().apply {
+                                inPreferredConfig = Bitmap.Config.ARGB_8888
+                                inMutable = true
+                                if (candidateReuse != null && !candidateReuse.isRecycled) {
+                                    inBitmap = candidateReuse
+                                }
+                            }
+                            try {
+                                BitmapFactory.decodeByteArray(reassemblyBuffer, 0, totalBytes, opts)
+                            } catch (_: IllegalArgumentException) {
+                                val fallbackOpts = BitmapFactory.Options().apply {
+                                    inPreferredConfig = Bitmap.Config.ARGB_8888
+                                    inMutable = true
+                                }
+                                BitmapFactory.decodeByteArray(reassemblyBuffer, 0, totalBytes, fallbackOpts)
+                            }
                         }.getOrNull()
                         if (bmp != null) {
+                            bitmapPool[poolIndex] = bmp
+                            poolIndex = (poolIndex + 1) % bitmapPool.size
                             runCatching { bmp.prepareToDraw() }
                             val nonRdp = (frameFlags and FLAG_CONSOLE_NON_RDP) != 0
                             val w = if (frameWidth > 0) frameWidth else bmp.width

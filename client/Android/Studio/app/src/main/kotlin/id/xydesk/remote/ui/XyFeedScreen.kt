@@ -477,7 +477,7 @@ private fun FeedCompactLeaderboardStrip(
                             maxLines = 1,
                             overflow = TextOverflow.Ellipsis,
                         )
-                        if (item.rank in 1..3) LeaderboardDurationBadge(item.rank, compact = true)
+                        if (item.rank in 1..10) LeaderboardDurationBadge(item.rank, compact = true)
                         Text(
                             text = formatLeaderboardDuration(item.totalSeconds),
                             fontSize = 10.sp,
@@ -910,6 +910,158 @@ internal fun FeedLeaderboardTop100Panel(
                 color = Color(0xFF10B981),
                 fontWeight = FontWeight.SemiBold,
             )
+        }
+
+        // Kartu Hadiah Eksklusif Top 1–10 Leaderboard + Badge Prestasi Otomatis
+        run {
+            val chatPrefs = remember(context) {
+                context.getSharedPreferences("xydesk.global.chat", android.content.Context.MODE_PRIVATE)
+            }
+            var claimedRank by remember {
+                mutableIntStateOf(chatPrefs.getInt("top_reward_claimed_rank", 0))
+            }
+            val eligibleTop10 = myRank != null && myRank in 1..10
+            val autoEarned = remember(mySeconds, myGithub) {
+                resolveAutoAchievementBadges(
+                    totalSeconds = mySeconds,
+                    sessionsCount = entries.firstOrNull { myGithub.isNotBlank() && it.githubLogin.lowercase() == myGithub }?.sessionsCount ?: 1,
+                    hasVerifiedGithub = myGithub.isNotBlank(),
+                )
+            }
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(12.dp))
+                    .background(
+                        Brush.verticalGradient(
+                            listOf(Color(0xFF181528), Color(0xFF111420)),
+                        ),
+                    )
+                    .border(
+                        0.9.dp,
+                        if (eligibleTop10) Color(0xFFF59E0B) else Color(0xFF2B3147),
+                        RoundedCornerShape(12.dp),
+                    )
+                    .padding(horizontal = 14.dp, vertical = 12.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                ) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(7.dp),
+                    ) {
+                        Icon(
+                            imageVector = XyIcons.Trophy,
+                            contentDescription = null,
+                            tint = Color(0xFFFBBF24),
+                            modifier = Modifier.size(16.dp),
+                        )
+                        Text(
+                            text = xy("Hadiah Top 1–10 & Badge Otomatis", "Top 1–10 Rewards & Auto Badges"),
+                            fontSize = 12.5.sp,
+                            fontWeight = FontWeight.ExtraBold,
+                            color = Color(0xFFFEF08A),
+                        )
+                    }
+                    if (eligibleTop10) {
+                        LeaderboardDurationBadge(rank = myRank!!, compact = true)
+                    }
+                }
+
+                // Daftar Hadiah Top 1-10
+                Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                    Text(
+                        text = xy(
+                            "• TOP #1: Imperial Gold Bubble + Bingkai Mahkota Emas + Badge TOP #1 + Preset Gaming 120FPS",
+                            "• TOP #1: Imperial Gold Bubble + Gold Crown Frame + TOP #1 Badge + 120FPS Gaming Preset",
+                        ),
+                        fontSize = 10.5.sp,
+                        color = Color(0xFFFDE68A),
+                    )
+                    Text(
+                        text = xy(
+                            "• TOP #2–#3: Podium Platinum/Bronze Bubble + Bingkai Avatar Podium + Efek Bintang Chat",
+                            "• TOP #2–#3: Platinum/Bronze Podium Bubble + Podium Avatar Frame + Star Chat Effect",
+                        ),
+                        fontSize = 10.5.sp,
+                        color = Color(0xFFE2E8F0),
+                    )
+                    Text(
+                        text = xy(
+                            "• TOP #4–#10: Cyber Indigo Top-10 Bubble Glow + Bingkai Avatar Top-10 + Badge TOP #4..#10",
+                            "• TOP #4–#10: Cyber Indigo Top-10 Bubble Glow + Top-10 Avatar Frame + TOP #4..#10 Badge",
+                        ),
+                        fontSize = 10.5.sp,
+                        color = Color(0xFFC7D2FE),
+                    )
+                }
+
+                if (autoEarned.isNotEmpty()) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(6.dp),
+                    ) {
+                        Text(
+                            text = xy("Badge Otomatis Aktif:", "Active Auto Badges:"),
+                            fontSize = 10.5.sp,
+                            color = Color(0xFF94A3B8),
+                        )
+                        autoEarned.forEach { b ->
+                            XyAutoAchievementBadge(spec = b, compact = true)
+                        }
+                    }
+                }
+
+                if (eligibleTop10) {
+                    val isClaimed = claimedRank == myRank
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clip(RoundedCornerShape(8.dp))
+                            .background(if (isClaimed) Color(0xFF065F46) else Color(0xFFD97706))
+                            .clickable {
+                                chatPrefs.edit()
+                                    .putInt("top_reward_claimed_rank", myRank!!)
+                                    .putString("bubble_style_mode", if (myRank == 1) "amber" else "glass")
+                                    .putString("bubble_floating_element", "STARS")
+                                    .apply()
+                                claimedRank = myRank!!
+                                android.widget.Toast.makeText(
+                                    context,
+                                    "Hadiah Eksklusif TOP #$myRank berhasil diklaim & diaktifkan di Chat Global & Profil!",
+                                    android.widget.Toast.LENGTH_LONG,
+                                ).show()
+                            }
+                            .padding(horizontal = 12.dp, vertical = 8.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.Center,
+                    ) {
+                        Text(
+                            text = if (isClaimed) {
+                                xy("Hadiah TOP #$myRank Aktif (Ketuk untuk Terapkan Ulang)", "TOP #$myRank Reward Active (Tap to Re-Apply)")
+                            } else {
+                                xy("Klaim & Aktifkan Hadiah Eksklusif TOP #$myRank Sekarang", "Claim & Activate TOP #$myRank Exclusive Reward Now")
+                            },
+                            fontSize = 11.5.sp,
+                            fontWeight = FontWeight.ExtraBold,
+                            color = Color.White,
+                        )
+                    }
+                } else {
+                    Text(
+                        text = xy(
+                            "Masuk Peringkat Top 1–10 untuk membuka klaim hadiah Bubble & Bingkai Eksklusif secara otomatis!",
+                            "Reach Top 1–10 on the leaderboard to automatically unlock Exclusive Bubble & Avatar Frame rewards!",
+                        ),
+                        fontSize = 10.5.sp,
+                        color = Color(0xFF94A3B8),
+                    )
+                }
+            }
         }
 
         if (top3.isNotEmpty()) {

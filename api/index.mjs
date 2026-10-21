@@ -34,14 +34,74 @@ const MIME_TYPES = {
 
 function createRemoteD1Adapter(accountId, databaseId, apiToken) {
   const endpoint = `https://api.cloudflare.com/client/v4/accounts/${accountId}/d1/database/${databaseId}/query`;
+  const rowCache = new Map();
+  const inFlightQueries = new Map();
+
+  function getCacheTtlMs(key) {
+    if (!key) return 0;
+    if (key.startsWith("feed-att:")) return 300_000;
+    if (key.startsWith("feed-avatar:") || key.startsWith("xy-settings:") || key.startsWith("leaderboard:")) return 30_000;
+    if (key === "chat:prod_backup_v1") return 120_000;
+    if (key.startsWith("do_fallback:")) return 1_500;
+    return 2_000;
+  }
 
   async function executeSql(sql, params = []) {
     if (!accountId || !databaseId || !apiToken) return null;
+    const normSql = String(sql || "").trim().toUpperCase();
+    const isSelectByKey = normSql.startsWith("SELECT ") && normSql.includes("FROM XYDESK_KV_STORE WHERE K = ?1") && params.length === 1;
+    const isWriteByKey = (normSql.startsWith("INSERT ") || normSql.startsWith("DELETE ")) && normSql.includes("XYDESK_KV_STORE") && params.length >= 1;
+    const targetKey = params.length >= 1 && params[0] !== null && params[0] !== undefined ? String(params[0]) : "";
+
+    if (isWriteByKey && targetKey) {
+      rowCache.delete(`v:${targetKey}`);
+      rowCache.delete(`vm:${targetKey}`);
+    }
+
+    if (isSelectByKey && targetKey) {
+      const cacheKey = `${normSql.includes("META") ? "vm" : "v"}:${targetKey}`;
+      const ttl = getCacheTtlMs(targetKey);
+      const now = Date.now();
+      const hit = rowCache.get(cacheKey);
+      if (hit && now < hit.expiresAt) {
+        return hit.data;
+      }
+      const pending = inFlightQueries.get(cacheKey);
+      if (pending) {
+        return await pending;
+      }
+      const reqPromise = (async () => {
+        try {
+          const res = await fetch(endpoint, {
+            method: "POST",
+            headers: {
+              Authorization: `Bearer ${apiToken}`,
+              "Content-Type": "application/json",
+              Connection: "keep-alive",
+            },
+            body: JSON.stringify({ sql, params }),
+          });
+          if (!res.ok) return null;
+          const data = await res.json().catch(() => null);
+          const resultObj = data?.result?.[0] || null;
+          if (resultObj && ttl > 0) {
+            rowCache.set(cacheKey, { data: resultObj, expiresAt: Date.now() + ttl });
+          }
+          return resultObj;
+        } finally {
+          inFlightQueries.delete(cacheKey);
+        }
+      })();
+      inFlightQueries.set(cacheKey, reqPromise);
+      return await reqPromise;
+    }
+
     const res = await fetch(endpoint, {
       method: "POST",
       headers: {
         Authorization: `Bearer ${apiToken}`,
         "Content-Type": "application/json",
+        Connection: "keep-alive",
       },
       body: JSON.stringify({ sql, params }),
     });
@@ -76,17 +136,11 @@ function createRemoteD1Adapter(accountId, databaseId, apiToken) {
   };
 }
 
-function createD1BackedRawKv(d1Db) {
+function createD1BackedRawKv(_d1Db) {
   const mem = new Map();
   return {
     async get(key) {
       const k = String(key);
-      if (d1Db && !k.startsWith("dl:")) {
-        try {
-          const row = await d1Db.prepare("SELECT v FROM xydesk_kv_store WHERE k = ?1").bind(k).first();
-          if (row && typeof row.v === "string") return row.v;
-        } catch {}
-      }
       return mem.has(k) ? mem.get(k) : null;
     },
     async put(key, value) {

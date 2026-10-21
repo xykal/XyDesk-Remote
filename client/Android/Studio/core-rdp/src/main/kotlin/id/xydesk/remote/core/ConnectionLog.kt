@@ -139,8 +139,8 @@ object ConnectionLog {
     @Synchronized
     fun add(msg: String) {
         val cleanedMsg = msg
-            .replace("Detail FreeRDP:", "Detail Engine XyDesk:")
-            .replace("FreeRDP", "XyDesk Engine")
+            .replace("Detail FreeRDP:", "Detail XyRDP Engine:")
+            .replace("FreeRDP", "XyRDP Engine")
         val line = "${fmt.format(Date())}  $cleanedMsg"
         buf.add(line)
         while (buf.size > MAX_ENTRIES) buf.removeAt(0)
@@ -251,8 +251,8 @@ object ConnectionLog {
             line.trim()
         }
         val cleanBody = body
-            .replace("Detail FreeRDP:", "Detail Engine:")
-            .replace("FreeRDP", "XyDesk Engine")
+            .replace("Detail FreeRDP:", "Detail XyRDP Engine:")
+            .replace("FreeRDP", "XyRDP Engine")
             .replace("APP: diagnostics initialized;", "[Aplikasi] Diagnostik XyDesk aktif ·")
             .replace("APP: entering GlobalApp.onCreate", "[Aplikasi] Memulai mesin XyDesk Remote")
             .replace("APP: GlobalApp.onCreate completed", "[Aplikasi] Mesin XyDesk siap digunakan")

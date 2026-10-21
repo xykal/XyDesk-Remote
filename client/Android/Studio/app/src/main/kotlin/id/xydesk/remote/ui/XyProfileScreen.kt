@@ -905,13 +905,13 @@ private fun CommunityAccountCard(
             }
         }
 
-        // Status Badge Akun (Hanya menampilkan badge resmi yang benar-benar dimiliki akun ini)
-        val podiumMap by LeaderboardPodium.ranks.collectAsState()
+        // Status Badge Akun (Menampilkan badge resmi & prestasi otomatis yang dimiliki akun ini)
+        val podiumMap by LeaderboardPodium.topTen.collectAsState()
         val myPodiumRank = if (!githubUser.isNullOrBlank()) podiumMap[normalizedChatAccount(githubUser)] else null
         val roleRev = XySpecialRoleRegistry.roleRevision
         val isTeamActive = remember(name, githubUser, roleRev) { isXyTeamAccount(context, name, githubUser) }
         val isTesterActive = remember(name, githubUser, roleRev) { isXyTesterAccount(context, name, githubUser) }
-        if (isFounder || isTeamActive || isTesterActive || myPodiumRank != null) {
+        if (isFounder || isTeamActive || isTesterActive || myPodiumRank != null || !githubUser.isNullOrBlank()) {
             Column(
                 modifier = Modifier
                     .fillMaxWidth()

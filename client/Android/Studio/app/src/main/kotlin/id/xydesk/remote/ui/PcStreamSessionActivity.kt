@@ -127,6 +127,7 @@ class PcStreamSessionActivity : ComponentActivity() {
     // State khusus Engine Konsol Mandiri UDP :4433 (SM_REMOTESESSION == 0)
     private val directModeActive = mutableStateOf(false)
     private val directFrame = mutableStateOf<Bitmap?>(null)
+    private val directFrameSeq = mutableIntStateOf(0)
     private val directStatus = mutableStateOf<String?>(null)
     private val directHostFps = mutableIntStateOf(0)
     private val directNonRdpVerified = mutableStateOf(false)
@@ -234,19 +235,13 @@ class PcStreamSessionActivity : ComponentActivity() {
                     CommunityJokesApi(this@PcStreamSessionActivity).pcRelayResolve(trimmed)
                 }.getOrNull()
                 val arr = relay?.optJSONArray("candidates")
-                if (arr == null || arr.length() == 0) {
-                    resolvingP2P.value = false
-                    failure.value = xyNow(
-                        "ID Global $trimmed tidak ditemukan di direktori P2P — pastikan XyDeskRemoteHost.exe berjalan di PC.",
-                        "Global ID $trimmed not found in P2P directory — make sure XyDeskRemoteHost.exe is running on the PC.",
-                    )
-                    return@launch
-                }
                 val candidates = buildList {
-                    for (i in 0 until arr.length()) {
-                        val c = arr.optJSONObject(i) ?: continue
-                        val h = c.optString("host").trim()
-                        if (h.isNotEmpty()) add(h)
+                    if (arr != null) {
+                        for (i in 0 until arr.length()) {
+                            val c = arr.optJSONObject(i) ?: continue
+                            val h = c.optString("host").trim()
+                            if (h.isNotEmpty()) add(h)
+                        }
                     }
                 }
                 val bestHost = withContext(Dispatchers.IO) {
@@ -258,13 +253,17 @@ class PcStreamSessionActivity : ComponentActivity() {
                             break
                         }
                     }
+                    if (responsive == null) {
+                        val lanFound = XyDirectConsoleStreamClient.discoverHosts(timeoutMs = 700, port = defaultPort)
+                        responsive = lanFound.firstOrNull()?.ip
+                    }
                     responsive ?: candidates.firstOrNull()
                 }
                 resolvingP2P.value = false
                 if (bestHost.isNullOrBlank()) {
                     failure.value = xyNow(
-                        "Kandidat IP P2P kosong untuk ID $trimmed.",
-                        "No P2P IP candidate found for ID $trimmed.",
+                        "ID Global $trimmed tidak ditemukan di direktori P2P maupun LAN — pastikan XyDeskRemoteHost.exe berjalan di PC.",
+                        "Global ID $trimmed not found in P2P directory or LAN — make sure XyDeskRemoteHost.exe is running on the PC.",
                     )
                 } else {
                     startDirectConsoleSession(bestHost, defaultPort, targetFps)
@@ -299,8 +298,8 @@ class PcStreamSessionActivity : ComponentActivity() {
             host = cleanIp,
             port = port,
             targetFps = targetFps,
-            jpegQuality = 72,
-            scalePct = 85,
+            jpegQuality = 88,
+            scalePct = 100,
             enableAudio = true,
             onFrame = { bmp, _, _, hostFps, nonRdp ->
                 if (!firstFrameSeen) {
@@ -310,6 +309,7 @@ class PcStreamSessionActivity : ComponentActivity() {
                     firstFrameWatchdog?.cancel()
                 }
                 directFrame.value = bmp
+                directFrameSeq.intValue++
                 directHostFps.intValue = hostFps
                 directNonRdpVerified.value = nonRdp
                 SessionPreviewStore.saveDesktopSnapshotThrottled(
@@ -1007,8 +1007,9 @@ class PcStreamSessionActivity : ComponentActivity() {
         val isFps = fpsGameMode.value
         Box(modifier = Modifier.fillMaxSize().background(Color.Black)) {
             if (directModeActive.value) {
+                val seq = directFrameSeq.intValue
                 val bmp = directFrame.value
-                if (bmp != null) {
+                if (bmp != null && !bmp.isRecycled && seq >= 0) {
                     Image(
                         bitmap = bmp.asImageBitmap(),
                         contentDescription = null,

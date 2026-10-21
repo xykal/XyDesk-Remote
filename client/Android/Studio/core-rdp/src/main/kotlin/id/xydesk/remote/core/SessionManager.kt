@@ -1226,5 +1226,5 @@ class SessionManager(context: Context) {
  * bukan dari tebakan.
  */
 fun coreBuildInfo(): String = runCatching {
-    "FreeRDP ${LibFreeRDP.getVersion()} | ${LibFreeRDP.getFeatureSummary()} | ${LibFreeRDP.getQuicEngineInfo()}"
-}.getOrDefault("FreeRDP (info build tidak terbaca)")
+    "XyRDP ${LibFreeRDP.getVersion().replace("FreeRDP", "XyRDP")} | ${LibFreeRDP.getFeatureSummary()} | ${LibFreeRDP.getQuicEngineInfo()}"
+}.getOrDefault("XyRDP Engine (Zero-Lag Native)")

@@ -128,7 +128,8 @@ class XyRawGameInputBridge(
 
     private fun runSender(cleanHost: String) {
         try {
-            val addr = InetAddress.getByName(cleanHost)
+            val resolvedHost = parsePcIdOrEndpoint(cleanHost)?.host ?: cleanHost
+            val addr = InetAddress.getByName(resolvedHost)
             val sock = DatagramSocket()
             sock.trafficClass = 0x10 // IPTOS_LOWDELAY
             sock.soTimeout = 400

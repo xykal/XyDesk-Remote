@@ -49,10 +49,20 @@ import java.util.concurrent.ConcurrentHashMap
  */
 object SessionPreviewStore {
     val revision = mutableIntStateOf(0)
+    private val mainHandler = android.os.Handler(android.os.Looper.getMainLooper())
     private val ioScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private val memoryCache = ConcurrentHashMap<String, Bitmap>()
+    private val diskCheckedKeys = java.util.Collections.newSetFromMap(ConcurrentHashMap<String, Boolean>())
     private val lastCaptureMsByHost = ConcurrentHashMap<String, Long>()
     @Volatile private var remoteWallSyncAttempted = false
+
+    private fun bumpRevisionOnMain() {
+        if (android.os.Looper.myLooper() == android.os.Looper.getMainLooper()) {
+            revision.intValue++
+        } else {
+            mainHandler.post { revision.intValue++ }
+        }
+    }
 
     private fun normalizeKey(raw: String?): String {
         val clean = raw?.trim()?.lowercase().orEmpty()
@@ -68,30 +78,34 @@ object SessionPreviewStore {
     private fun isMeaningfulDesktopFrame(bmp: Bitmap): Boolean {
         if (bmp.isRecycled || bmp.width < 64 || bmp.height < 64) return false
         return runCatching {
-            var nonBlackSamples = 0
-            val stepX = (bmp.width / 6).coerceAtLeast(1)
-            val stepY = (bmp.height / 6).coerceAtLeast(1)
-            for (gx in 1..5) {
-                for (gy in 1..5) {
-                    val px = bmp.getPixel(
-                        (gx * stepX).coerceIn(0, bmp.width - 1),
-                        (gy * stepY).coerceIn(0, bmp.height - 1),
-                    )
-                    val r = (px shr 16) and 0xFF
-                    val g = (px shr 8) and 0xFF
-                    val b = px and 0xFF
-                    if (r + g + b > 28) {
-                        nonBlackSamples++
-                        if (nonBlackSamples >= 3) return@runCatching true
+            synchronized(bmp) {
+                if (bmp.isRecycled) return@runCatching false
+                var nonBlackSamples = 0
+                val stepX = (bmp.width / 6).coerceAtLeast(1)
+                val stepY = (bmp.height / 6).coerceAtLeast(1)
+                for (gx in 1..5) {
+                    for (gy in 1..5) {
+                        val px = bmp.getPixel(
+                            (gx * stepX).coerceIn(0, bmp.width - 1),
+                            (gy * stepY).coerceIn(0, bmp.height - 1),
+                        )
+                        val r = (px shr 16) and 0xFF
+                        val g = (px shr 8) and 0xFF
+                        val b = px and 0xFF
+                        if (r + g + b > 28) {
+                            nonBlackSamples++
+                            if (nonBlackSamples >= 3) return@runCatching true
+                        }
                     }
                 }
+                false
             }
-            false
         }.getOrDefault(false)
     }
 
     /**
-     * Simpan tangkapan layar desktop / wallpaper PC atau RDP (throttled agar hemat CPU).
+     * Dinonaktifkan sesuai permintaan pemilik: preview kartu di Beranda hanya
+     * menampilkan Wallpaper murni (bukan tangkapan layar jendela sesi aktif).
      */
     fun saveDesktopSnapshotThrottled(
         context: Context,
@@ -99,89 +113,59 @@ object SessionPreviewStore {
         bitmap: Bitmap?,
         minIntervalMs: Long = 10_000L,
     ) {
-        if (bitmap == null || bitmap.isRecycled) return
-        val key = normalizeKey(hostKey)
-        val now = SystemClock.elapsedRealtime()
-        val prev = lastCaptureMsByHost[key] ?: 0L
-        if (now - prev < minIntervalMs) return
-        if (!isMeaningfulDesktopFrame(bitmap)) return
-        lastCaptureMsByHost[key] = now
-
-        val scaled = runCatching {
-            val targetW = 640
-            val targetH = ((bitmap.height.toFloat() / bitmap.width.toFloat()) * targetW)
-                .toInt()
-                .coerceIn(320, 420)
-            Bitmap.createScaledBitmap(bitmap, targetW, targetH, true)
-        }.getOrNull() ?: return
-
-        memoryCache[key] = scaled
-        memoryCache["latest_active"] = scaled
-        revision.intValue++
-
-        val appCtx = context.applicationContext
-        ioScope.launch {
-            runCatching {
-                val dir = previewDir(appCtx)
-                FileOutputStream(File(dir, "$key.jpg")).use { out ->
-                    scaled.compress(Bitmap.CompressFormat.JPEG, 84, out)
-                }
-                FileOutputStream(File(dir, "latest_active.jpg")).use { out ->
-                    scaled.compress(Bitmap.CompressFormat.JPEG, 84, out)
-                }
-            }
-        }
+        // Sengaja tidak menyimpan screenshot layar sesi agar preview di Home
+        // selalu menampilkan Wallpaper bersih, bukan isi jendela yang sedang dibuka.
     }
 
     /**
-     * Tangkap otomatis framebuffer desktop dari sesi FreeRDP yang sedang aktif.
+     * Pastikan wallpaper remote tersinkron tanpa memotret layar sesi aktif.
      */
     fun captureFromActiveRdpSessions(context: Context, force: Boolean = false) {
-        runCatching {
-            val sessions = GlobalApp.getSessions() ?: return
-            for (session in sessions) {
-                val bmp = session?.surface?.bitmap ?: continue
-                val host = session.openUri?.host
-                    ?.takeIf { it.isNotBlank() }
-                    ?: session.bookmark?.let { bm ->
-                        runCatching {
-                            val m = bm.javaClass.getMethod("getHostname")
-                            m.invoke(bm) as? String
-                        }.getOrNull()
-                    }
-                    ?: "latest_active"
-                saveDesktopSnapshotThrottled(
-                    context = context,
-                    hostKey = host,
-                    bitmap = bmp,
-                    minIntervalMs = if (force) 0L else 10_000L,
-                )
-            }
-        }
+        ensureRemoteWallpaperSynced(context)
     }
 
     /**
-     * Ambil bitmap preview untuk perangkat tertentu (dari memori -> disk -> wallpaper XyRDP).
+     * Ambil bitmap WALLPAPER murni untuk perangkat (murni dari RAM di UI thread,
+     * dan memicu pembacaan file wallpaper di disk secara asinkron agar UI 0ms bebas lag).
      */
     fun getPreviewBitmap(context: Context, host: String?, label: String?): Bitmap? {
         val hostKey = normalizeKey(host)
         val labelKey = normalizeKey(label)
-        memoryCache[hostKey]?.takeIf { !it.isRecycled }?.let { return it }
-        memoryCache[labelKey]?.takeIf { !it.isRecycled }?.let { return it }
+        val isXyRdp = label?.contains("xyrdp", ignoreCase = true) == true ||
+            label?.contains("rdpfree", ignoreCase = true) == true ||
+            host?.startsWith("100.") == true ||
+            host?.contains("bore.pub", ignoreCase = true) == true ||
+            host?.contains("ngrok", ignoreCase = true) == true
 
-        val dir = previewDir(context)
-        val candidates = listOf(
-            File(dir, "$hostKey.jpg"),
-            File(dir, "$labelKey.jpg"),
-            File(dir, "xyrdp_wallpaper.jpg"),
-            File(dir, "latest_active.jpg"),
-        )
-        for (file in candidates) {
-            if (file.exists() && file.length() > 512L) {
-                val decoded = runCatching { BitmapFactory.decodeFile(file.absolutePath) }.getOrNull()
-                if (decoded != null) {
-                    memoryCache[hostKey] = decoded
-                    return decoded
+        memoryCache["wall_$hostKey"]?.takeIf { !it.isRecycled }?.let { return it }
+        memoryCache["wall_$labelKey"]?.takeIf { !it.isRecycled }?.let { return it }
+        if (isXyRdp) {
+            memoryCache["xyrdp_wallpaper"]?.takeIf { !it.isRecycled }?.let { return it }
+        }
+
+        if (diskCheckedKeys.add(hostKey)) {
+            val appCtx = context.applicationContext
+            ioScope.launch {
+                val dir = previewDir(appCtx)
+                // Bersihkan file screenshot layar lama ($hostKey.jpg / latest_active.jpg)
+                runCatching { File(dir, "latest_active.jpg").delete() }
+                runCatching { File(dir, "$hostKey.jpg").delete() }
+                val candidates = buildList {
+                    add("wall_$hostKey" to File(dir, "wall_$hostKey.jpg"))
+                    add("wall_$labelKey" to File(dir, "wall_$labelKey.jpg"))
+                    if (isXyRdp) {
+                        add("xyrdp_wallpaper" to File(dir, "xyrdp_wallpaper.jpg"))
+                    }
+                }
+                for ((cacheKey, file) in candidates) {
+                    if (file.exists() && file.length() > 512L) {
+                        val decoded = runCatching { BitmapFactory.decodeFile(file.absolutePath) }.getOrNull()
+                        if (decoded != null) {
+                            memoryCache[cacheKey] = decoded
+                            bumpRevisionOnMain()
+                            break
+                        }
+                    }
                 }
             }
         }
@@ -237,13 +221,59 @@ object SessionPreviewStore {
                                         scaled.compress(Bitmap.CompressFormat.JPEG, 86, out)
                                     }
                                     memoryCache["xyrdp_wallpaper"] = scaled
-                                    revision.intValue++
+                                    bumpRevisionOnMain()
                                     break
                                 }
                             }
                         }
                     } finally {
                         conn.disconnect()
+                    }
+                }
+            }
+        }
+    }
+
+    /**
+     * Ambil file Wallpaper desktop asli dari PC / RDP via paket ringan UDP :4433
+     * (mengambil file TranscodedWallpaper / wallpaper.jpg, BUKAN screenshot layar sesi).
+     */
+    fun fetchHostWallpaperIfAvailable(context: Context, host: String?) {
+        val rawHost = host?.trim()?.substringBefore(':').orEmpty()
+        if (rawHost.isEmpty() || rawHost == "localhost" || rawHost == "127.0.0.1") return
+        val hostKey = normalizeKey(rawHost)
+        val now = SystemClock.elapsedRealtime()
+        val prev = lastCaptureMsByHost["wall_$hostKey"] ?: 0L
+        if (now - prev < 60_000L) return
+        lastCaptureMsByHost["wall_$hostKey"] = now
+
+        val appCtx = context.applicationContext
+        ioScope.launch {
+            runCatching {
+                java.net.DatagramSocket().use { sock ->
+                    sock.soTimeout = 1800
+                    val addr = java.net.InetAddress.getByName(rawHost)
+                    val req = "XYDESK_QUIC_WALLPAPER_V1".toByteArray(Charsets.UTF_8)
+                    sock.send(java.net.DatagramPacket(req, req.size, addr, 4433))
+                    val buf = ByteArray(65507)
+                    val pkt = java.net.DatagramPacket(buf, buf.size)
+                    sock.receive(pkt)
+                    if (pkt.length > 512 &&
+                        buf[0] == 0x58.toByte() &&
+                        buf[1] == 0x59.toByte() &&
+                        buf[2] == 0x57.toByte() &&
+                        buf[3] == 0x4C.toByte()
+                    ) {
+                        val decoded = BitmapFactory.decodeByteArray(buf, 4, pkt.length - 4)
+                        if (decoded != null && decoded.width >= 64) {
+                            val dir = previewDir(appCtx)
+                            val outFile = File(dir, "wall_$hostKey.jpg")
+                            FileOutputStream(outFile).use { out ->
+                                decoded.compress(Bitmap.CompressFormat.JPEG, 86, out)
+                            }
+                            memoryCache["wall_$hostKey"] = decoded
+                            bumpRevisionOnMain()
+                        }
                     }
                 }
             }
@@ -418,8 +448,8 @@ fun DevicePreviewArt(
     val rev = SessionPreviewStore.revision.intValue
 
     LaunchedEffect(seed) {
-        SessionPreviewStore.captureFromActiveRdpSessions(context)
         SessionPreviewStore.ensureRemoteWallpaperSynced(context)
+        SessionPreviewStore.fetchHostWallpaperIfAvailable(context, hostPart)
     }
 
     val liveOrSavedBitmap = remember(seed, rev) {

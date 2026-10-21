@@ -847,14 +847,30 @@ internal fun MessageBubble(
                     )
                 }
             } else {
+                val hasWaTail = bubbleShapePreset.isBlank() ||
+                    bubbleShapePreset.equals("TAIL_CLASSIC", ignoreCase = true) ||
+                    bubbleShapePreset.equals("rounded", ignoreCase = true) ||
+                    bubbleShapePreset.equals("whatsapp", ignoreCase = true)
+                val basePadH = if (isCompactOverlay) 8.dp else 9.dp
+                val tailPadExtra = if (hasWaTail) (if (isCompactOverlay) 4.dp else 5.5.dp) else 0.dp
+                val topTenRanks by LeaderboardPodium.topTen.collectAsState()
+                val senderTopRank = remember(msg.githubLogin, msg.name, topTenRanks) {
+                    val gh = normalizedChatAccount(msg.githubLogin)
+                    val nm = normalizedChatAccount(msg.name)
+                    (if (gh.isNotEmpty()) topTenRanks[gh] else null)
+                        ?: (if (nm.isNotEmpty()) topTenRanks[nm] else null)
+                }
+
                 val bubbleContent: @Composable () -> Unit = {
                     Column(
                         modifier = Modifier
                             .width(IntrinsicSize.Max)
                             .widthIn(min = minBubbleWidth, max = maxBubbleWidth)
                             .padding(
-                                horizontal = if (isCompactOverlay) 8.dp else 9.dp,
-                                vertical = if (isCompactOverlay) 4.dp else 5.dp,
+                                start = basePadH + (if (!msg.mine) tailPadExtra else 0.dp),
+                                end = basePadH + (if (msg.mine) tailPadExtra else 0.dp),
+                                top = if (isCompactOverlay) 4.dp else 5.5.dp,
+                                bottom = if (isCompactOverlay) 4.dp else 5.5.dp,
                             ),
                     ) {
                         // Pita Khusus Pengumuman Admin @xykal yang Otomatis Tersemat
@@ -1178,12 +1194,30 @@ internal fun MessageBubble(
                         msg.mine -> Color(0xFFF4F4F6)
                         else -> Color(0xFF1A1A20)
                     }
+                    val topRankBorderColor = when (senderTopRank) {
+                        1 -> Color(0xFFFBBF24)
+                        2 -> Color(0xFFCBD5E1)
+                        3 -> Color(0xFFFB923C)
+                        in 4..10 -> Color(0xFF818CF8).copy(alpha = 0.72f)
+                        else -> null
+                    }
                     Box(
                         modifier = gestureMod
                             .clip(bubbleShape)
                             .background(
                                 color = bubbleBgColor,
                                 shape = bubbleShape,
+                            )
+                            .then(
+                                if (topRankBorderColor != null) {
+                                    Modifier.border(
+                                        width = if (senderTopRank == 1) 1.3.dp else 0.9.dp,
+                                        color = topRankBorderColor,
+                                        shape = bubbleShape,
+                                    )
+                                } else {
+                                    Modifier
+                                },
                             ),
                     ) {
                         if (activeFloatingPreset != "NONE") {

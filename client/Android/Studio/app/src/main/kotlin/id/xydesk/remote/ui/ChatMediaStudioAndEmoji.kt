@@ -115,16 +115,17 @@ fun IosWhatsAppEmoji3D(
     val norm = remember(activeInput) { normalizeReactionToIosType(activeInput) }
     val glyph = remember(norm, activeInput) { resolveNativeEmojiGlyph(norm, activeInput) }
 
-    val popScale = remember(activeInput) { Animatable(if (animated) 0.38f else 1f) }
+    val popScale = remember(activeInput) { Animatable(if (animated) 0.45f else 1f) }
+    val popTilt = remember(activeInput) { Animatable(0f) }
     val burstProgress = remember(activeInput) { Animatable(0f) }
 
     LaunchedEffect(activeInput, animateTrigger) {
         if (animated) {
             launch {
-                popScale.snapTo(0.38f)
+                popScale.snapTo(0.45f)
                 popScale.animateTo(
-                    targetValue = 1.28f,
-                    animationSpec = tween(durationMillis = 170, easing = FastOutSlowInEasing)
+                    targetValue = 1.24f,
+                    animationSpec = tween(durationMillis = 150, easing = FastOutSlowInEasing)
                 )
                 popScale.animateTo(
                     targetValue = 1f,
@@ -135,38 +136,18 @@ fun IosWhatsAppEmoji3D(
                 )
             }
             launch {
+                popTilt.snapTo(-11f)
+                popTilt.animateTo(11f, tween(durationMillis = 140, easing = FastOutSlowInEasing))
+                popTilt.animateTo(0f, spring(dampingRatio = Spring.DampingRatioMediumBouncy, stiffness = Spring.StiffnessMedium))
+            }
+            launch {
                 burstProgress.snapTo(0f)
                 burstProgress.animateTo(
                     targetValue = 1f,
-                    animationSpec = tween(durationMillis = 480, easing = FastOutSlowInEasing)
+                    animationSpec = tween(durationMillis = 420, easing = FastOutSlowInEasing)
                 )
             }
         }
-    }
-
-    val infinite = rememberInfiniteTransition(label = "emojiLiveAnim")
-    val phase by infinite.animateFloat(
-        initialValue = 0f,
-        targetValue = 1f,
-        animationSpec = infiniteRepeatable(
-            animation = tween(durationMillis = 1400, easing = LinearEasing),
-            repeatMode = RepeatMode.Restart
-        ),
-        label = "emojiPhase"
-    )
-
-    val angleRad = phase * 2f * PI.toFloat()
-    val liveScale = if (!animated) 1f else when (norm) {
-        "heart", "love_eyes" -> 1f + 0.14f * kotlin.math.abs(sin(angleRad * 1.5f))
-        "fire", "bolt", "hundred" -> 1f + 0.10f * sin(angleRad * 2f)
-        "party", "crown" -> 1f + 0.09f * cos(angleRad)
-        else -> 1f + 0.06f * sin(angleRad)
-    }
-    val liveRotation = if (!animated) 0f else when (norm) {
-        "laugh", "rofl", "party", "clap" -> sin(angleRad * 2f) * 10f
-        "like", "dislike", "pray" -> sin(angleRad) * 7f
-        "think", "wow", "mindblown" -> cos(angleRad) * 6f
-        else -> sin(angleRad) * 4f
     }
 
     Box(
@@ -195,13 +176,19 @@ fun IosWhatsAppEmoji3D(
             text = glyph,
             fontSize = (size.value * 0.78f).sp,
             modifier = Modifier
-                .scale(popScale.value * liveScale)
-                .rotate(liveRotation)
+                .scale(popScale.value)
+                .rotate(popTilt.value)
         )
     }
 }
 
 private fun resolveNativeEmojiGlyph(norm: String, raw: String): String {
+    val trimmed = raw.trim()
+    // Jika input sudah berupa karakter emoji Unicode (bukan tag ASCII), pertahankan karakter aslinya 1:1
+    // supaya tidak ada 2 emoji berbeda yang dipaksa berubah menjadi 1 gambar yang sama.
+    if (trimmed.isNotEmpty() && trimmed.any { it.code > 0x2000 || Character.isSurrogate(it) }) {
+        return trimmed
+    }
     return when (norm) {
         "heart" -> "\u2764\uFE0F"
         "fire" -> "\uD83D\uDD25"
@@ -211,22 +198,32 @@ private fun resolveNativeEmojiGlyph(norm: String, raw: String): String {
         "rofl" -> "\uD83E\uDD23"
         "sob" -> "\uD83D\uDE2D"
         "love_eyes" -> "\uD83D\uDE0D"
+        "smiling_hearts" -> "\uD83E\uDD70"
         "cool" -> "\uD83D\uDE0E"
         "think" -> "\uD83E\uDD14"
         "party" -> "\uD83C\uDF89"
+        "partying_face" -> "\uD83E\uDD73"
         "wow" -> "\uD83D\uDE2E"
+        "scream" -> "\uD83D\uDE31"
         "angry" -> "\uD83D\uDE21"
         "cold" -> "\uD83E\uDD76"
         "mindblown" -> "\uD83E\uDD2F"
         "skull" -> "\uD83D\uDC80"
         "hundred" -> "\uD83D\uDCAF"
         "pray" -> "\uD83D\uDE4F"
+        "respect" -> "\uD83E\uDEE1"
         "clap" -> "\uD83D\uDC4F"
         "bolt" -> "\u26A1"
+        "rocket" -> "\uD83D\uDE80"
         "gem" -> "\uD83D\uDC8E"
-        "crown", "trophy" -> "\uD83D\uDC51"
+        "star" -> "\u2B50"
+        "sparkle" -> "\u2728"
+        "crown" -> "\uD83D\uDC51"
+        "trophy" -> "\uD83C\uDFC6"
         "check" -> "\u2705"
-        else -> if (raw.any { it.code > 0x2000 }) raw.trim() else "\uD83D\uDD25"
+        "sleep" -> "\uD83D\uDE34"
+        "popcorn" -> "\uD83C\uDF7F"
+        else -> "\uD83D\uDD25"
     }
 }
 
@@ -234,28 +231,38 @@ fun normalizeReactionToIosType(raw: String): String {
     return when (raw.trim().lowercase()) {
         "heart", "❤️", "❤", "💜", "💖", "💘", "💕" -> "heart"
         "fire", "🔥" -> "fire"
-        "like", "👍", "👍🏻", "👍🏼" -> "like"
-        "dislike", "👎" -> "dislike"
-        "laugh", "😂" -> "laugh"
+        "like", "+1", "👍", "👍🏻", "👍🏼" -> "like"
+        "dislike", "-1", "👎" -> "dislike"
+        "laugh", "lol", "😂" -> "laugh"
         "rofl", "🤣" -> "rofl"
         "sob", "😭", "😢" -> "sob"
-        "love_eyes", "😍", "🥰" -> "love_eyes"
+        "love_eyes", "😍" -> "love_eyes"
+        "smiling_hearts", "🥰" -> "smiling_hearts"
         "cool", "😎" -> "cool"
         "think", "🤔" -> "think"
-        "party", "🎉", "🥳" -> "party"
-        "wow", "😮", "😱" -> "wow"
+        "party", "🎉" -> "party"
+        "partying_face", "🥳" -> "partying_face"
+        "wow", "😮" -> "wow"
+        "scream", "😱" -> "scream"
         "angry", "😡" -> "angry"
         "cold", "🥶" -> "cold"
         "mindblown", "🤯" -> "mindblown"
         "skull", "💀", "☠️" -> "skull"
-        "hundred", "💯" -> "hundred"
+        "hundred", "100", "💯" -> "hundred"
         "pray", "🙏" -> "pray"
+        "respect", "salute", "🫡" -> "respect"
         "clap", "👏" -> "clap"
-        "bolt", "⚡", "rocket", "🚀" -> "bolt"
-        "gem", "💎", "star", "⭐", "✨" -> "gem"
-        "crown", "👑", "trophy", "🏆" -> "crown"
+        "bolt", "⚡" -> "bolt"
+        "rocket", "🚀" -> "rocket"
+        "gem", "💎" -> "gem"
+        "star", "⭐" -> "star"
+        "sparkle", "✨" -> "sparkle"
+        "crown", "king", "👑" -> "crown"
+        "trophy", "gg", "🏆" -> "trophy"
         "check", "✅" -> "check"
-        else -> "laugh"
+        "sleep", "😴" -> "sleep"
+        "popcorn", "🍿" -> "popcorn"
+        else -> "fire"
     }
 }
 

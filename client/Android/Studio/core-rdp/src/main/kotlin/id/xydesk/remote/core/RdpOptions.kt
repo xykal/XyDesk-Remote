@@ -604,21 +604,16 @@ data class RdpOptions(
     }
 
     fun resolveForActiveNetwork(context: Context): RdpOptions {
-        if (lowBandwidth || !networkAutoDetect || streamProfile == XyStreamProfile.CUSTOM) return this
-        return runCatching {
-            val cm = context.applicationContext
-                .getSystemService(Context.CONNECTIVITY_SERVICE) as? ConnectivityManager
-                ?: return@runCatching this
-            val caps = cm.activeNetwork?.let { cm.getNetworkCapabilities(it) }
-            val hasWifiOrEthernet = caps?.hasTransport(NetworkCapabilities.TRANSPORT_WIFI) == true ||
-                caps?.hasTransport(NetworkCapabilities.TRANSPORT_ETHERNET) == true
-            val isCellular = caps?.hasTransport(NetworkCapabilities.TRANSPORT_CELLULAR) == true && !hasWifiOrEthernet
-            val downstream = caps?.linkDownstreamBandwidthKbps ?: Int.MAX_VALUE
-            val isMetered = isCellular && (cm.isActiveNetworkMetered ||
-                (caps != null && !caps.hasCapability(NetworkCapabilities.NET_CAPABILITY_NOT_METERED)) ||
-                downstream in 1..4_999)
-            resolveForLink(isMetered = isMetered, isCellular = isCellular, downstreamKbps = if (hasWifiOrEthernet) Int.MAX_VALUE else downstream)
-        }.getOrDefault(this)
+        if (streamProfile == XyStreamProfile.DATA_SAVER) return copy(lowBandwidth = true)
+        if (streamProfile == XyStreamProfile.CUSTOM) return this
+        // Jangan pernah menurunkan kualitas ke broadband-low / AVC420 / /network:auto throttler
+        // saat jaringan mengalami lag atau lonjakan ping sesaat; pertahankan AVC444 32-bit.
+        return copy(
+            lowBandwidth = false,
+            networkAutoDetect = false,
+            h264 = true,
+            colorDepth = 32,
+        )
     }
 
     /** Label singkat codec aktif untuk indikator telemetri. */
@@ -680,7 +675,7 @@ data class RdpOptions(
         sp.putInt("$deviceId.frame_ack", frameAck)
         sp.putInt("$deviceId.loop_ms", responsiveLoopMs)
         sp.putBoolean("$deviceId.gfx_smallcache", gfxSmallCache)
-        sp.putInt("$deviceId.clarity_v2", 2)
+        sp.putInt("$deviceId.clarity_v2", 3)
         sp.putInt("$deviceId.audio_dsp_v1", 1)
         sp.putInt("$deviceId.sec_proto", securityProtocol.ordinal)
         sp.putInt("$deviceId.tls_sec", tlsSecLevel)
@@ -738,16 +733,13 @@ data class RdpOptions(
          * grafis kompatibel (H.264/GFX mati, warna 16-bit). Tanda dihapus lagi
          * begitu frame terlihat normal.
          */
-        fun graphicsFallback(context: Context, deviceId: String): Boolean =
-            context.applicationContext
-                .getSharedPreferences(FILE, Context.MODE_PRIVATE)
-                .getBoolean("$deviceId.gfx_fallback", false)
+        fun graphicsFallback(context: Context, deviceId: String): Boolean = false
 
         fun setGraphicsFallback(context: Context, deviceId: String, enabled: Boolean) {
             context.applicationContext
                 .getSharedPreferences(FILE, Context.MODE_PRIVATE)
                 .edit()
-                .putBoolean("$deviceId.gfx_fallback", enabled)
+                .remove("$deviceId.gfx_fallback")
                 .apply()
         }
 
@@ -781,7 +773,7 @@ data class RdpOptions(
                     domain = sp.getString("$deviceId.gdomain", "")?.ifBlank { null },
                 )
             }
-            val migratedV2 = sp.getInt("$deviceId.clarity_v2", 0) >= 2
+            val migratedV3 = sp.getInt("$deviceId.clarity_v2", 0) >= 3
             val isDataSaver = streamProfile == XyStreamProfile.DATA_SAVER
             return RdpOptions(
                 pcConnectMode = sp.getBoolean("$deviceId.pc_mode", false),
@@ -800,16 +792,16 @@ data class RdpOptions(
                 localDrive = sp.getBoolean("$deviceId.drive", false),
                 camera = sp.getBoolean("$deviceId.camera", false),
                 udpTransport = sp.getBoolean("$deviceId.udp", true),
-                networkAutoDetect = sp.getBoolean("$deviceId.netauto", true),
-                lowBandwidth = if (migratedV2 || isDataSaver) sp.getBoolean("$deviceId.lowbw", false) else false,
-                h264 = sp.getBoolean("$deviceId.h264", true),
+                networkAutoDetect = if (migratedV3) sp.getBoolean("$deviceId.netauto", false) else false,
+                lowBandwidth = if (isDataSaver) sp.getBoolean("$deviceId.lowbw", true) else false,
+                h264 = if (migratedV3) sp.getBoolean("$deviceId.h264", true) else true,
                 dynamicResolution = sp.getBoolean("$deviceId.dynres", true),
                 gateway = gateway,
-                streamProfile = streamProfile,
+                streamProfile = if (streamProfile == XyStreamProfile.ULTRA_LOW_LATENCY && !migratedV3) XyStreamProfile.AUTO else streamProfile,
                 gpuProfile = gpuProfile,
                 batterySaver = sp.getBoolean("$deviceId.bat_saver", false),
-                colorDepth = if (migratedV2 || isDataSaver) {
-                    sp.getInt("$deviceId.bpp", 32).let { if (it in setOf(16, 24, 32)) it else 32 }
+                colorDepth = if (isDataSaver) {
+                    sp.getInt("$deviceId.bpp", 16).let { if (it in setOf(16, 24, 32)) it else 16 }
                 } else {
                     32
                 },

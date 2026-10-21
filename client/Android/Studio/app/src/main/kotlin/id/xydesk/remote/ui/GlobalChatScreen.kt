@@ -328,6 +328,70 @@ internal fun countryCodeToFlag(countryCode: String): String {
     return String(first) + String(second)
 }
 
+internal suspend fun warmUpGlobalChatAndFeedCache(context: Context) {
+    val appCtx = context.applicationContext
+    withContext(Dispatchers.IO) {
+        runCatching {
+            val api = CommunityJokesApi(appCtx)
+            if (CommunityJokesApi.inMemoryFeedCache.isNullOrEmpty()) {
+                api.cachedFeed()
+            }
+            val freshFeed = runCatching { api.fetchFeed() }.getOrNull()
+            if (!freshFeed.isNullOrEmpty()) {
+                api.cacheFeed(freshFeed)
+            }
+        }
+        runCatching {
+            val login = getVerifiedGitHubLogin(appCtx).orEmpty()
+            val nick = chatNickname(appCtx)
+            if (GlobalChatMemoryCache.messages.isEmpty()) {
+                val disk = GlobalChatOfflineCache.read(appCtx, login, nick)
+                if (disk.isNotEmpty()) {
+                    GlobalChatMemoryCache.messages.clear()
+                    GlobalChatMemoryCache.messages.addAll(disk.takeLast(80))
+                }
+            }
+            val cid = URLEncoder.encode(CommunityJokesApi(appCtx).accountShortId(), "UTF-8")
+            val gh = URLEncoder.encode(login, "UTF-8")
+            val url = "$CHAT_HISTORY_URL?joined_at=0&client_id=$cid&github_login=$gh"
+            val conn = (URL(url).openConnection() as HttpURLConnection).apply {
+                instanceFollowRedirects = false
+                requestMethod = "GET"
+                connectTimeout = 7_000
+                readTimeout = 7_000
+                setRequestProperty("Accept", "application/json")
+                setRequestProperty("Connection", "keep-alive")
+            }
+            try {
+                if (conn.responseCode in 200..299) {
+                    val body = conn.inputStream.bufferedReader().use { it.readText() }
+                    val json = JSONObject(body)
+                    val pinned = parsePinnedMessageFromJson(json.optJSONObject("pinned_message"))
+                    if (json.has("pinned_message")) {
+                        GlobalChatMemoryCache.pinnedMessage = pinned
+                    }
+                    val arr = json.optJSONArray("messages")
+                    if (arr != null && arr.length() > 0) {
+                        val parsedList = ArrayList<ChatMessage>(arr.length())
+                        for (i in 0 until arr.length()) {
+                            val m = arr.optJSONObject(i) ?: continue
+                            parsedList.add(parseMessageFromJson(m, nick, login))
+                        }
+                        if (parsedList.isNotEmpty()) {
+                            GlobalChatMemoryCache.messages.clear()
+                            GlobalChatMemoryCache.messages.addAll(parsedList.takeLast(80))
+                            val epoch = GlobalChatOfflineCache.nextWriteEpoch(login)
+                            GlobalChatOfflineCache.write(appCtx, login, parsedList.takeLast(80), epoch)
+                        }
+                    }
+                }
+            } finally {
+                conn.disconnect()
+            }
+        }
+    }
+}
+
 @Composable
 internal fun GlobalChatScreen(
     onBack: () -> Unit,
@@ -430,7 +494,9 @@ private fun GlobalChatAccountContent(
     val manuallyDownloadedIds = remember { mutableStateListOf<String>() }
 
     var replyingTo by remember { mutableStateOf<ChatMessage?>(null) }
-    var pinnedMessage by remember(verifiedGhLogin) { mutableStateOf<PinnedChatMessage?>(null) }
+    var pinnedMessage by remember(verifiedGhLogin) {
+        mutableStateOf<PinnedChatMessage?>(GlobalChatMemoryCache.pinnedMessage)
+    }
     var focusedContextMsg by remember { mutableStateOf<ChatMessage?>(null) }
     var editingMessage by remember { mutableStateOf<ChatMessage?>(null) }
     var editText by remember { mutableStateOf("") }
@@ -439,8 +505,24 @@ private fun GlobalChatAccountContent(
     var inspectingE2eeMsg by remember { mutableStateOf<ChatMessage?>(null) }
     var fullscreenMediaMsg by remember { mutableStateOf<ChatMessage?>(null) }
 
+    val hiddenMessageIds = remember(verifiedGhLogin) {
+        mutableStateListOf<String>().apply {
+            val saved = chatPrefs.getStringSet(hiddenIdsKey, chatPrefs.getStringSet(KEY_HIDDEN_MSG_IDS, emptySet())).orEmpty()
+            addAll(saved)
+        }
+    }
+
     val messages = remember(verifiedGhLogin) {
-        mutableStateListOf<ChatMessage>()
+        mutableStateListOf<ChatMessage>().apply {
+            if (GlobalChatMemoryCache.messages.isNotEmpty()) {
+                val hiddenSet = hiddenMessageIds.toSet()
+                addAll(
+                    GlobalChatMemoryCache.messages
+                        .filter { it.id !in hiddenSet }
+                        .distinctBy { it.id },
+                )
+            }
+        }
     }
     var cacheWriteEpoch by remember { mutableStateOf(GlobalChatOfflineCache.nextWriteEpoch(verifiedGhLogin.orEmpty())) }
 
@@ -451,20 +533,17 @@ private fun GlobalChatAccountContent(
         }
         // Network may have completed while disk was being read; don't replace fresher state.
         val hidden = chatPrefs.getStringSet(hiddenIdsKey, chatPrefs.getStringSet(KEY_HIDDEN_MSG_IDS, emptySet())).orEmpty()
-        if (messages.isEmpty()) messages.addAll(cached.filter {
-            it.id !in hidden
-        }.distinctBy { it.id })
+        if (messages.isEmpty() && cached.isNotEmpty()) {
+            val filtered = cached.filter { it.id !in hidden }.distinctBy { it.id }
+            messages.addAll(filtered)
+            GlobalChatMemoryCache.messages.clear()
+            GlobalChatMemoryCache.messages.addAll(filtered.takeLast(80))
+        }
         snapshotFlow { cacheWriteEpoch to messages.toList() }.collectLatest { (epoch, snapshot) ->
-            delay(800L)
+            delay(1200L)
             withContext(Dispatchers.IO) {
                 GlobalChatOfflineCache.write(context.applicationContext, login, snapshot, epoch)
             }
-        }
-    }
-    val hiddenMessageIds = remember(verifiedGhLogin) {
-        mutableStateListOf<String>().apply {
-            val saved = chatPrefs.getStringSet(hiddenIdsKey, chatPrefs.getStringSet(KEY_HIDDEN_MSG_IDS, emptySet())).orEmpty()
-            addAll(saved)
         }
     }
     val viewedOnceIds = remember(verifiedGhLogin) {
@@ -984,8 +1063,17 @@ private fun GlobalChatAccountContent(
         }
     }
 
+    var lastAppliedLang by remember { mutableStateOf(viewerTargetLang) }
     LaunchedEffect(viewerTargetLang) {
-        messages.toList().forEach { enrichTranslationIfNeeded(it, forceRetranslate = true) }
+        val langChanged = lastAppliedLang != viewerTargetLang
+        lastAppliedLang = viewerTargetLang
+        if (langChanged || viewerTargetLang != "auto") {
+            messages.takeLast(18).forEach { enrichTranslationIfNeeded(it, forceRetranslate = true) }
+        } else {
+            messages.takeLast(10).filter { it.translated.isBlank() }.forEach {
+                enrichTranslationIfNeeded(it, forceRetranslate = false)
+            }
+        }
     }
 
     // Quiet sockets remain live. Reschedule immediately when transport/account
@@ -1848,6 +1936,7 @@ private fun GlobalChatAccountContent(
             }
 
             if (!verifiedGhLogin.isNullOrBlank()) {
+                XyDiscordVoiceStageBar(compact = isOverlayMode)
                 TextButton(enabled = outboxBinding.isNotBlank(), onClick = { showOutbox = true },
                     modifier = Modifier.padding(horizontal = 8.dp)) {
                     Text(xyNow("Antrean kirim", "Send queue"))

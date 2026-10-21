@@ -127,6 +127,12 @@ class XySshSession(
     private var encMac: Mac? = null
     private val txSeq = AtomicInteger(0)
     private val writeLock = Any()
+    private val txExecutor = java.util.concurrent.Executors.newSingleThreadExecutor { r ->
+        Thread(r, "xydesk-ssh-zerolag-tx").apply {
+            isDaemon = true
+            priority = Thread.MAX_PRIORITY
+        }
+    }
 
     @Volatile
     private var remoteChannelId: Int = 0
@@ -146,6 +152,7 @@ class XySshSession(
         if (!running.compareAndSet(false, true)) return
         Thread({ runSessionLoop() }, "xydesk-ssh-client").apply {
             isDaemon = true
+            priority = Thread.MAX_PRIORITY
             start()
         }
     }
@@ -153,6 +160,7 @@ class XySshSession(
     fun disconnect() {
         if (!running.compareAndSet(true, false)) return
         channelReady = false
+        runCatching { txExecutor.shutdownNow() }
         runCatching {
             sendPacket(
                 SshBuf().apply {
@@ -173,7 +181,7 @@ class XySshSession(
 
     fun sendRawData(bytes: ByteArray) {
         if (!running.get() || !channelReady || bytes.isEmpty()) return
-        Thread({
+        txExecutor.execute {
             runCatching {
                 val pkt = SshBuf().apply {
                     writeByte(SSH_MSG_CHANNEL_DATA)
@@ -184,15 +192,12 @@ class XySshSession(
             }.onFailure { e ->
                 onOutput("\n[SSH] Gagal mengirim input: ${e.message}\n")
             }
-        }, "xydesk-ssh-tx").apply {
-            isDaemon = true
-            start()
         }
     }
 
     fun sendWindowChange(cols: Int, rows: Int) {
         if (!running.get() || !channelReady) return
-        Thread({
+        txExecutor.execute {
             runCatching {
                 val pkt = SshBuf().apply {
                     writeByte(SSH_MSG_CHANNEL_REQUEST)
@@ -206,18 +211,21 @@ class XySshSession(
                 }.toByteArray()
                 sendPacket(pkt)
             }
-        }, "xydesk-ssh-winch").apply {
-            isDaemon = true
-            start()
         }
     }
 
     private fun runSessionLoop() {
         try {
-            onStateChange(false, "Menghubungi $host:$port…", "")
+            onStateChange(false, "Menghubungi $host:$port (Zero-Lag SSH)…", "")
             val sock = Socket()
+            runCatching { sock.setPerformancePreferences(0, 2, 1) }
             sock.tcpNoDelay = true
             sock.keepAlive = true
+            runCatching { sock.trafficClass = 0x10 } // IPTOS_LOWDELAY
+            runCatching {
+                sock.receiveBufferSize = 262_144
+                sock.sendBufferSize = 131_072
+            }
             sock.connect(InetSocketAddress(host.trim(), port.coerceIn(1, 65535)), 12_000)
             sock.soTimeout = 30_000
             socket = sock
@@ -227,7 +235,7 @@ class XySshSession(
             outStream = outs
 
             // 1. Pertukaran identifikasi versi SSH-2.0
-            val clientVersion = "SSH-2.0-XyDeskRemote_1.1.17"
+            val clientVersion = "SSH-2.0-XyRDP_ZeroLag_1.1.23"
             outs.write("$clientVersion\r\n".toByteArray(StandardCharsets.US_ASCII))
             outs.flush()
 
