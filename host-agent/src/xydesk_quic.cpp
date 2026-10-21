@@ -892,6 +892,8 @@ struct EncoderParametersFlat {
 typedef int (WINAPI* PFN_GdiplusStartup)(ULONG_PTR*, const GdiplusStartupInputFlat*, void*);
 typedef void (WINAPI* PFN_GdiplusShutdown)(ULONG_PTR);
 typedef int (WINAPI* PFN_GdipCreateBitmapFromHBITMAP)(HBITMAP, HPALETTE, void**);
+typedef int (WINAPI* PFN_GdipCreateBitmapFromFile)(const wchar_t*, void**);
+typedef int (WINAPI* PFN_GdipGetImageThumbnail)(void*, UINT, UINT, void**, void*, void*);
 typedef int (WINAPI* PFN_GdipSaveImageToStream)(void*, IStream*, const CLSID*, const EncoderParametersFlat*);
 typedef int (WINAPI* PFN_GdipDisposeImage)(void*);
 
@@ -1159,52 +1161,67 @@ void QuicServerLoop() {
                     ExpandEnvironmentStringsW(L"%APPDATA%\\Microsoft\\Windows\\Themes\\TranscodedWallpaper", wallPath, MAX_PATH);
                 }
                 if (GetFileAttributesW(wallPath) == INVALID_FILE_ATTRIBUTES) {
-                    wcscpy_s(wallPath, L"C:\\Windows\\Web\\Wallpaper\\Windows\\img0.jpg");
+                    lstrcpyW(wallPath, L"C:\\Windows\\Web\\Wallpaper\\Windows\\img0.jpg");
                 }
-                Gdiplus::Bitmap* srcBmp = Gdiplus::Bitmap::FromFile(wallPath);
-                if (srcBmp && srcBmp->GetLastStatus() == Gdiplus::Ok && srcBmp->GetWidth() > 0) {
-                    const int tw = 480;
-                    const int th = 270;
-                    Gdiplus::Bitmap thumb(tw, th, PixelFormat24bppRGB);
-                    {
-                        Gdiplus::Graphics g(&thumb);
-                        g.SetInterpolationMode(Gdiplus::InterpolationModeHighQualityBilinear);
-                        g.DrawImage(srcBmp, 0, 0, tw, th);
-                    }
-                    CLSID jpegClsid{};
-                    if (GetJpegEncoderClsid(&jpegClsid)) {
-                        IStream* memStream = nullptr;
-                        if (SUCCEEDED(CreateStreamOnHGlobal(nullptr, TRUE, &memStream)) && memStream) {
-                            ULONG q = 78;
-                            Gdiplus::EncoderParameters ep{};
-                            ep.Count = 1;
-                            ep.Parameter[0].Guid = Gdiplus::EncoderQuality;
-                            ep.Parameter[0].Type = Gdiplus::EncoderParameterValueTypeLong;
-                            ep.Parameter[0].NumberOfValues = 1;
-                            ep.Parameter[0].Value = &q;
-                            if (thumb.Save(memStream, &jpegClsid, &ep) == Gdiplus::Ok) {
-                                HGLOBAL hg = nullptr;
-                                if (SUCCEEDED(GetHGlobalFromStream(memStream, &hg)) && hg) {
-                                    const size_t jsize = GlobalSize(hg);
-                                    const uint8_t* jptr = static_cast<const uint8_t*>(GlobalLock(hg));
-                                    if (jptr && jsize > 256 && jsize <= 60000) {
-                                        std::vector<uint8_t> pkt(4 + jsize);
-                                        pkt[0] = 'X'; pkt[1] = 'Y'; pkt[2] = 'W'; pkt[3] = 'L';
-                                        memcpy(pkt.data() + 4, jptr, jsize);
-                                        std::lock_guard<std::mutex> slk(g_send_mutex);
-                                        sendto(g_sock, reinterpret_cast<const char*>(pkt.data()),
-                                               static_cast<int>(pkt.size()), 0,
-                                               reinterpret_cast<const sockaddr*>(&peer), peer_len);
-                                        g_packets_served.fetch_add(1);
+                HMODULE hGdipW = LoadLibraryW(L"gdiplus.dll");
+                if (hGdipW) {
+                    auto fnStartW = reinterpret_cast<PFN_GdiplusStartup>(
+                        reinterpret_cast<void*>(GetProcAddress(hGdipW, "GdiplusStartup")));
+                    auto fnShutW = reinterpret_cast<PFN_GdiplusShutdown>(
+                        reinterpret_cast<void*>(GetProcAddress(hGdipW, "GdiplusShutdown")));
+                    auto fnFromFile = reinterpret_cast<PFN_GdipCreateBitmapFromFile>(
+                        reinterpret_cast<void*>(GetProcAddress(hGdipW, "GdipCreateBitmapFromFile")));
+                    auto fnThumb = reinterpret_cast<PFN_GdipGetImageThumbnail>(
+                        reinterpret_cast<void*>(GetProcAddress(hGdipW, "GdipGetImageThumbnail")));
+                    auto fnSaveW = reinterpret_cast<PFN_GdipSaveImageToStream>(
+                        reinterpret_cast<void*>(GetProcAddress(hGdipW, "GdipSaveImageToStream")));
+                    auto fnDispW = reinterpret_cast<PFN_GdipDisposeImage>(
+                        reinterpret_cast<void*>(GetProcAddress(hGdipW, "GdipDisposeImage")));
+                    ULONG_PTR tokW = 0;
+                    GdiplusStartupInputFlat inpW{1, nullptr, FALSE, FALSE};
+                    if (fnStartW && fnShutW && fnFromFile && fnThumb && fnSaveW && fnDispW &&
+                        fnStartW(&tokW, &inpW, nullptr) == 0) {
+                        void* srcImg = nullptr;
+                        if (fnFromFile(wallPath, &srcImg) == 0 && srcImg) {
+                            void* thumbImg = nullptr;
+                            if (fnThumb(srcImg, 480, 270, &thumbImg, nullptr, nullptr) == 0 && thumbImg) {
+                                IStream* memStream = nullptr;
+                                if (SUCCEEDED(CreateStreamOnHGlobal(nullptr, TRUE, &memStream)) && memStream) {
+                                    ULONG q = 78;
+                                    EncoderParametersFlat ep{};
+                                    ep.Count = 1;
+                                    ep.Parameter[0].Guid = kGuidEncoderQuality;
+                                    ep.Parameter[0].Type = 4; // EncoderParameterValueTypeLong
+                                    ep.Parameter[0].NumberOfValues = 1;
+                                    ep.Parameter[0].Value = &q;
+                                    if (fnSaveW(thumbImg, memStream, &kClsidJpegEncoder, &ep) == 0) {
+                                        HGLOBAL hg = nullptr;
+                                        if (SUCCEEDED(GetHGlobalFromStream(memStream, &hg)) && hg) {
+                                            const size_t jsize = GlobalSize(hg);
+                                            const uint8_t* jptr = static_cast<const uint8_t*>(GlobalLock(hg));
+                                            if (jptr && jsize > 256 && jsize <= 60000) {
+                                                std::vector<uint8_t> pkt(4 + jsize);
+                                                pkt[0] = 'X'; pkt[1] = 'Y'; pkt[2] = 'W'; pkt[3] = 'L';
+                                                memcpy(pkt.data() + 4, jptr, jsize);
+                                                std::lock_guard<std::mutex> slk(g_send_mutex);
+                                                sendto(g_sock, reinterpret_cast<const char*>(pkt.data()),
+                                                       static_cast<int>(pkt.size()), 0,
+                                                       reinterpret_cast<const sockaddr*>(&peer), peer_len);
+                                                g_packets_served.fetch_add(1);
+                                            }
+                                            if (jptr) GlobalUnlock(hg);
+                                        }
                                     }
-                                    if (jptr) GlobalUnlock(hg);
+                                    memStream->Release();
                                 }
+                                fnDispW(thumbImg);
                             }
-                            memStream->Release();
+                            fnDispW(srcImg);
                         }
+                        fnShutW(tokW);
                     }
+                    FreeLibrary(hGdipW);
                 }
-                delete srcBmp;
                 continue;
             }
             if (n >= static_cast<int>(sizeof(kDiscoverMagic) - 1) &&

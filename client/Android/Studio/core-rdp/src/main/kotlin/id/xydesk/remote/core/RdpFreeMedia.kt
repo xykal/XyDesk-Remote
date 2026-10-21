@@ -18,7 +18,7 @@ fun RdpOptions.usesQuicMicrophone(): Boolean = quicAudio && microphone
 
 /** Reconnect/favorites must also keep the RdpFree wallpaper, not just the pairing screen. */
 fun RdpOptions.forSessionProfile(profile: ConnectionProfile): RdpOptions =
-    if (profile.key?.startsWith("rdpfree:") == true || profile.key?.startsWith("xyrdp:") == true || profile.label.startsWith("XyRDP") || profile.label == "RdpFree")
+    if (profile.key?.startsWith("rdpfree:") == true || profile.key?.startsWith("xyrdp:") == true || profile.label?.startsWith("XyRDP") == true || profile.label == "RdpFree")
         copy(
             desktopWallpaper = true,
             lowBandwidth = false,
