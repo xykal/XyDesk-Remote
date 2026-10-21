@@ -1,11 +1,11 @@
 {
   "baseline": "9f64b474d02f2b3d6a13c65c7b77f15b045dfbca",
   "files": {
-    "client/Android/Studio/core-rdp/src/main/kotlin/id/xydesk/remote/core/SessionManager.kt": "a81f5ce359a78dc4628da950dd81d452c7d1fc98251ccb5f4d57743a0bad6b04",
-    "client/Android/Studio/app/src/main/kotlin/id/xydesk/remote/ui/XyDeskSessionActivity.kt": "df70bfb3514132ff8a29e43a60372b6a82cde1495fbf4d89efa0e950c168d7ff",
-    "client/Android/Studio/app/src/main/kotlin/id/xydesk/remote/ui/XyDeskSession.kt": "4c0f0d63126c5668fb0072eb3a2d96e83aa3a0315343301a11645616a7422d7a",
-    "client/Android/Studio/app/src/main/kotlin/id/xydesk/remote/ui/SessionSurfaceController.kt": "481e33a90f652c8e4cbb000298820f31fe7eef279be87c00d9b508b90cb2f6bc",
-    "client/Android/Studio/app/src/main/kotlin/id/xydesk/remote/ui/PcStreamSessionActivity.kt": "21c7c54c217fecdad525386d0e64b958d1756f3ebaff3a87b06673d9a6d9c2a0",
+    "client/Android/Studio/core-rdp/src/main/kotlin/id/xydesk/remote/core/SessionManager.kt": "96eda7880ca08900ef5661bf68dc500241bd87e5436f86fe6d431bf1995b768a",
+    "client/Android/Studio/app/src/main/kotlin/id/xydesk/remote/ui/XyDeskSessionActivity.kt": "008e1f4e061f710625bcaae5513abd6179335fd5471f3fd45bc7f4e44899d601",
+    "client/Android/Studio/app/src/main/kotlin/id/xydesk/remote/ui/XyDeskSession.kt": "3f4b4f3b9a7949280a44b942123e3ea60f7d77d1c7cd0eaebbd7733ab1712b96",
+    "client/Android/Studio/app/src/main/kotlin/id/xydesk/remote/ui/SessionSurfaceController.kt": "e8db24bf86a7551331218cfd261cfe94a4d5a3aba0e6bcb7e7a47d8482c965e6",
+    "client/Android/Studio/app/src/main/kotlin/id/xydesk/remote/ui/PcStreamSessionActivity.kt": "0ebfcd5e8b8b6244f89b6c77b40467a7d09bdc3244d03aa612e8a95f7ef618d1",
     "client/Android/Studio/core-pc-stream/src/main/kotlin/id/xydesk/remote/pcstream/PcStreamViewer.kt": "a5eedd3703628bdf87983ef389a3daec76b090c4fdab8f8802476b3d80140c2d",
     "client/Android/Studio/freeRDPCore/src/main/cpp/CMakeLists.txt": "6661cc3529f14d8609e3d0617d59a7cf0e3b0aa203fb9566041693b2daded90b",
     "client/Android/cmake/ExternalDeps.cmake": "d19e75ee01e55b48cd997810d271d067546bc3350e7e75cbd022cb8b1cb1ae86",
