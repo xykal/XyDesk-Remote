@@ -4950,7 +4950,11 @@ export class GlobalChat {
             target_lang: msg.target_lang || "EN",
             at: msg.at,
           },
-          android_group: `xydesk_${notifCategory}_${msg.id}`,
+          android_group: "xydesk_global_chat_group",
+          android_group_message: {
+            en: "$[notif_count] new messages in Chat Global · XyDesk",
+            id: "$[notif_count] pesan baru di Chat Global · XyDesk",
+          },
           priority: 10,
         }),
       });

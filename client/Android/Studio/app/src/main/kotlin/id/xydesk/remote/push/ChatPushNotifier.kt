@@ -284,6 +284,12 @@ object ChatPushNotifier {
         val remaining = loadStack(context).filterNot { it.id == id }
         saveStack(context, remaining)
         unreadChatCountState.intValue = remaining.count { !it.isMe }
+        if (remaining.isEmpty()) {
+            nm?.cancel("chat:global_group", CHAT_NOTIF_ID)
+            nm?.cancel(CHAT_NOTIF_ID)
+        } else {
+            renderMessagingNotification(context.applicationContext, remaining)
+        }
     }
 
     fun onIncomingChatMessage(
@@ -560,39 +566,64 @@ object ChatPushNotifier {
             .build()
 
         val lastItem = stack.last()
-        val unreadCount = stack.count { !it.isMe }
+        val unreadCount = stack.count { !it.isMe }.coerceAtLeast(1)
         val channelId = when {
             isAnnouncement -> ANNOUNCEMENT_CHANNEL_ID
             isMention -> MENTION_CHANNEL_ID
             isReply -> REPLY_CHANNEL_ID
             else -> CHAT_CHANNEL_ID
         }
-        val titleText = when {
-            isAnnouncement -> "Pengumuman · ${lastItem.name}"
-            isMention -> "${lastItem.name} menyebut Anda"
-            isReply -> "${lastItem.name} membalas pesan Anda"
-            else -> lastItem.name
-        }
-        val conversation = when {
+        val groupTitle = when {
             isAnnouncement -> "Chat Global · Pengumuman"
-            isMention -> "Chat Global · Sebutan"
-            isReply -> "Chat Global · Balasan"
-            else -> "Chat Global · Pesan"
+            isMention -> if (unreadCount > 1) "Chat Global · XyDesk ($unreadCount pesan · menyebut Anda)" else "Chat Global · XyDesk (menyebut Anda)"
+            isReply -> if (unreadCount > 1) "Chat Global · XyDesk ($unreadCount pesan · membalas Anda)" else "Chat Global · XyDesk (membalas Anda)"
+            unreadCount > 1 -> "Chat Global · XyDesk ($unreadCount pesan baru)"
+            else -> "Chat Global · XyDesk"
         }
-        val sender = androidx.core.app.Person.Builder().setName(lastItem.name).setKey(lastItem.name).build()
-        val messaging = NotificationCompat.MessagingStyle(androidx.core.app.Person.Builder().setName("Anda").build())
-            .setConversationTitle(conversation).setGroupConversation(true)
-            .addMessage(lastItem.text, lastItem.at, sender)
+        val subSummary = when {
+            unreadCount > 1 -> "$unreadCount pesan belum dibaca di grup Chat Global"
+            else -> "Grup Chat Global · XyDesk"
+        }
+
+        val mePerson = Person.Builder()
+            .setName(xyNow("Anda", "You"))
+            .setKey("me_self")
+            .setIcon(IconCompat.createWithBitmap(createAvatarBitmap(xyNow("Anda", "You"), true)))
+            .build()
+
+        val personCache = HashMap<String, Person>()
+        val messaging = NotificationCompat.MessagingStyle(mePerson)
+            .setConversationTitle(groupTitle)
+            .setGroupConversation(true)
+
+        // Tampilkan hingga 8 pesan terakhir secara berurutan di dalam 1 kartu grup ala Grup WhatsApp
+        for (item in stack.takeLast(8)) {
+            val senderPerson = if (item.isMe) {
+                mePerson
+            } else {
+                personCache.getOrPut(item.name) {
+                    Person.Builder()
+                        .setName(item.name)
+                        .setKey(item.name)
+                        .setIcon(IconCompat.createWithBitmap(createAvatarBitmap(item.name, false)))
+                        .build()
+                }
+            }
+            messaging.addMessage(item.text, item.at, senderPerson)
+        }
 
         val now = System.currentTimeMillis()
-        val distinctId = uniqueNotifId(channelId, lastItem.id)
-        // Gunakan sistem notifikasi standar bawaan HP (paling atas / Heads-Up & terpisah per pesan/channel)
+        val groupIcon = createAvatarBitmap("XY", false)
+        // Satu kartu percakapan Grup WhatsApp terpadu (menumpuk semua chat baru di 1 notifikasi grup)
         val builder = NotificationCompat.Builder(context, channelId)
             .setSmallIcon(R.drawable.ic_stat_xydesk)
-            .setContentTitle(titleText)
-            .setContentText(lastItem.text)
-            .setSubText(conversation)
-            .setGroup("xydesk_sep_chat_${channelId}_${lastItem.id}")
+            .setLargeIcon(groupIcon)
+            .setContentTitle(groupTitle)
+            .setContentText("${lastItem.name}: ${lastItem.text}")
+            .setSubText(subSummary)
+            .setNumber(unreadCount)
+            .setGroup("xydesk_global_chat_group")
+            .setGroupSummary(true)
             .setSortKey(String.format("%019d", Long.MAX_VALUE - now))
             .setPriority(NotificationCompat.PRIORITY_MAX)
             .setDefaults(NotificationCompat.DEFAULT_ALL)
@@ -601,20 +632,20 @@ object ChatPushNotifier {
             .setCategory(NotificationCompat.CATEGORY_MESSAGE)
             .setAutoCancel(true)
             .setOnlyAlertOnce(lastItem.isMe)
-            .setWhen(now)
+            .setWhen(lastItem.at.takeIf { it > 0L } ?: now)
             .setShowWhen(true)
             .setContentIntent(openPending)
             .addAction(replyAction)
             .addAction(markReadAction)
 
+        // Bersihkan notifikasi chat lama yang terpecah satu-satu agar selalu tergabung menjadi 1 kartu Grup WA
         nm.cancel(CHAT_NOTIF_ID)
-        nm.notify("chat:$channelId:${lastItem.id}", distinctId, builder.build())
-        // Keep notification tray bounded independently of the stored unread stack.
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
-            nm.activeNotifications.filter { it.tag?.startsWith("chat:") == true }
-                .sortedByDescending { it.postTime }.drop(MAX_STACK_MESSAGES)
+            nm.activeNotifications
+                .filter { it.tag?.startsWith("chat:") == true && it.tag != "chat:global_group" }
                 .forEach { nm.cancel(it.tag, it.id) }
         }
+        nm.notify("chat:global_group", CHAT_NOTIF_ID, builder.build())
     }
 
     fun openChatIntent(context: Context): Intent =
