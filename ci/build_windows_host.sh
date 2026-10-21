@@ -34,7 +34,7 @@ echo "[1/3] Compiling embedded native modules (xydesk_host_core.dll & xydesk_qui
   -DXYDESK_QUIC_EXPORTS \
   "${SRC_DIR}/xydesk_quic.cpp" \
   -o "${BUNDLE_TMP}/xydesk_quic.dll" \
-  -lws2_32 -lole32 -lmmdevapi -lavrt -lksuser
+  -lws2_32 -lole32 -lmmdevapi -lavrt -lksuser -lgdi32 -luser32
 "${STRIP}" --strip-unneeded "${BUNDLE_TMP}/xydesk_quic.dll" || true
 
 "${CXX}" "${COMMON_FLAGS[@]}" -shared \

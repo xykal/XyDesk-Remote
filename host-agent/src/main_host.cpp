@@ -1,3 +1,18 @@
+#ifdef _WIN32
+#ifndef WIN32_LEAN_AND_MEAN
+#define WIN32_LEAN_AND_MEAN
+#endif
+#include <winsock2.h>
+#include <ws2tcpip.h>
+#include <windows.h>
+#include <iphlpapi.h>
+#include <objidl.h>
+#include <gdiplus.h>
+#include <shellapi.h>
+#include <wtsapi32.h>
+#include <winhttp.h>
+#endif
+
 #include "../include/xydesk_host_core.h"
 #include "../include/xydesk_quic.h"
 #include "../include/host_readiness.h"
@@ -17,21 +32,6 @@
 #include <set>
 #include <string>
 #include <vector>
-
-#ifdef _WIN32
-#ifndef WIN32_LEAN_AND_MEAN
-#define WIN32_LEAN_AND_MEAN
-#endif
-#include <winsock2.h>
-#include <ws2tcpip.h>
-#include <windows.h>
-#include <iphlpapi.h>
-#include <objidl.h>
-#include <gdiplus.h>
-#include <shellapi.h>
-#include <wtsapi32.h>
-#include <winhttp.h>
-#endif
 
 static XyQuicHostMetadata g_meta{};
 static int g_quic_rc = -1;
