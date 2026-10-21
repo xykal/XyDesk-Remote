@@ -635,7 +635,10 @@ fun RdpFreeScreen(onBack: () -> Unit, onConnect: (ConnectionProfile) -> Unit) {
                                 // Peringatan cepat bila Secret wajib belum dipasang
                                 val st = setupStatus
                                 val isRailwayEndpoint = portmapHost.trim().let {
-                                    it.endsWith(".rlwy.net", ignoreCase = true) || it.endsWith(".railway.app", ignoreCase = true)
+                                    it.endsWith(".rlwy.net", ignoreCase = true) ||
+                                        it.endsWith(".railway.app", ignoreCase = true) ||
+                                        it.equals("bore.pub", ignoreCase = true) ||
+                                        it.equals("auto", ignoreCase = true)
                                 }
                                 val hasRdpPass = st?.configuredSecrets?.contains("RDP_PASSWORD") == true
                                 val hasAccessSecret = when {
@@ -1012,6 +1015,10 @@ fun RdpFreeScreen(onBack: () -> Unit, onConnect: (ConnectionProfile) -> Unit) {
                                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                                     )
                                     Spacer(Modifier.height(6.dp))
+                                    val isAutoBore = portmapHost.trim().equals("bore.pub", ignoreCase = true)
+                                    val isRwHostOnly = portmapHost.trim().let {
+                                        it.endsWith(".rlwy.net", ignoreCase = true) || it.endsWith(".railway.app", ignoreCase = true)
+                                    }
                                     Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                                         XyPillButton(
                                             text = "Tailscale",
@@ -1030,12 +1037,26 @@ fun RdpFreeScreen(onBack: () -> Unit, onConnect: (ConnectionProfile) -> Unit) {
                                             icon = XyIcons.Link,
                                             onClick = {
                                                 akses = "portmap"
-                                                if (!isRailwayEndpoint) {
+                                                if (!isRwHostOnly) {
                                                     portmapHost = "monorail.proxy.rlwy.net"
                                                 }
                                                 saveSettings()
                                             },
-                                            primary = akses == "portmap" && isRailwayEndpoint,
+                                            primary = akses == "portmap" && isRwHostOnly,
+                                            compact = true,
+                                            enabled = !busy && !isRunningOrQueued,
+                                            modifier = Modifier.weight(1f),
+                                        )
+                                        XyPillButton(
+                                            text = "Bore.pub",
+                                            icon = XyIcons.Bolt,
+                                            onClick = {
+                                                akses = "portmap"
+                                                portmapHost = "bore.pub"
+                                                portmapPort = ""
+                                                saveSettings()
+                                            },
+                                            primary = akses == "portmap" && isAutoBore,
                                             compact = true,
                                             enabled = !busy && !isRunningOrQueued,
                                             modifier = Modifier.weight(1f),
@@ -1056,7 +1077,7 @@ fun RdpFreeScreen(onBack: () -> Unit, onConnect: (ConnectionProfile) -> Unit) {
                                             modifier = Modifier.weight(1f),
                                         )
                                     }
-                                    AnimatedVisibility(visible = akses == "portmap" && isRailwayEndpoint) {
+                                    AnimatedVisibility(visible = akses == "portmap" && isRwHostOnly) {
                                         Column(
                                             modifier = Modifier
                                                 .fillMaxWidth()

@@ -73,6 +73,12 @@ enum class HudProfilePreset(
         "WASD, Space, Shift (Sneak), E (Inventory), Q (Drop), F5 & Klik Kiri/Kanan",
         "WASD, Space, Shift (Sneak), E (Inventory), Q (Drop), F5 & Left/Right Click",
     ),
+    ROBLOX(
+        "Roblox / Obby",
+        "Roblox / Obby",
+        "WASD, Space (Jump), ShiftLock, / (Chat), E/R/F (Skill), 1-3 & Kamera",
+        "WASD, Space (Jump), ShiftLock, / (Chat), E/R/F (Skills), 1-3 & Camera",
+    ),
     OFFICE(
         "Office / Kerja",
         "Office / Work",
@@ -270,6 +276,8 @@ data class HudKey(
                     HudKey("sp_y", HudKind.KEY, "Y", keyCode = KeyEvent.KEYCODE_Y, action = HudAction.TAP, x = 0.72f, y = 0.14f, size = s),
                     HudKey("sp_n", HudKind.KEY, "N", keyCode = KeyEvent.KEYCODE_N, action = HudAction.TAP, x = 0.81f, y = 0.14f, size = s),
                     HudKey("sp_h", HudKind.KEY, "H", keyCode = KeyEvent.KEYCODE_H, action = HudAction.TAP, x = 0.90f, y = 0.14f, size = s),
+                    HudKey("sp_eng", HudKind.MACRO, "/engine", macroText = "t/engine", macroSendEnter = true, action = HudAction.TAP, x = 0.65f, y = 0.32f, size = s),
+                    HudKey("sp_lck", HudKind.MACRO, "/lock", macroText = "t/lock", macroSendEnter = true, action = HudAction.TAP, x = 0.755f, y = 0.32f, size = s),
                     HudKey("sp_f", HudKind.KEY, "F Mobil", keyCode = KeyEvent.KEYCODE_F, action = HudAction.TAP, x = 0.86f, y = 0.32f, size = s),
                     HudKey("kiri", HudKind.MOUSE_LEFT, "Tembak", action = HudAction.HOLD, x = 0.74f, y = 0.56f, size = d),
                     HudKey("kanan", HudKind.MOUSE_RIGHT, "Aim", action = HudAction.HOLD, x = 0.88f, y = 0.56f, size = d),
@@ -288,6 +296,22 @@ data class HudKey(
                     HudKey("mc_e", HudKind.KEY, "E Inv", keyCode = KeyEvent.KEYCODE_E, x = 0.88f, y = 0.28f, size = s),
                     HudKey("kiri", HudKind.MOUSE_LEFT, "Serang", action = HudAction.HOLD, x = 0.74f, y = 0.56f, size = d),
                     HudKey("kanan", HudKind.MOUSE_RIGHT, "Pasang", action = HudAction.HOLD, x = 0.88f, y = 0.56f, size = d),
+                )
+                HudProfilePreset.ROBLOX -> listOf(
+                    HudKey("rb_w", HudKind.KEY, "W", keyCode = KeyEvent.KEYCODE_W, action = HudAction.HOLD, x = 0.12f, y = 0.50f, size = s),
+                    HudKey("rb_a", HudKind.KEY, "A", keyCode = KeyEvent.KEYCODE_A, action = HudAction.HOLD, x = 0.03f, y = 0.66f, size = s),
+                    HudKey("rb_s", HudKind.KEY, "S", keyCode = KeyEvent.KEYCODE_S, action = HudAction.HOLD, x = 0.12f, y = 0.66f, size = s),
+                    HudKey("rb_d", HudKind.KEY, "D", keyCode = KeyEvent.KEYCODE_D, action = HudAction.HOLD, x = 0.21f, y = 0.66f, size = s),
+                    HudKey("rb_shift", HudKind.KEY, "ShiftLock", keyCode = shift, action = HudAction.TAP, x = 0.03f, y = 0.84f, size = s),
+                    HudKey("rb_space", HudKind.KEY, "Jump", keyCode = KeyEvent.KEYCODE_SPACE, action = HudAction.HOLD, x = 0.16f, y = 0.84f, size = s),
+                    HudKey("rb_esc", HudKind.KEY, "Esc", keyCode = KeyEvent.KEYCODE_ESCAPE, x = 0.03f, y = 0.14f, size = s),
+                    HudKey("rb_chat", HudKind.KEY, "/ Chat", keyCode = KeyEvent.KEYCODE_SLASH, x = 0.13f, y = 0.14f, size = s),
+                    HudKey("rb_1", HudKind.KEY, "1", keyCode = KeyEvent.KEYCODE_1, x = 0.23f, y = 0.14f, size = s),
+                    HudKey("rb_e", HudKind.KEY, "E", keyCode = KeyEvent.KEYCODE_E, x = 0.70f, y = 0.28f, size = s),
+                    HudKey("rb_r", HudKind.KEY, "R", keyCode = KeyEvent.KEYCODE_R, x = 0.80f, y = 0.28f, size = s),
+                    HudKey("rb_f", HudKind.KEY, "F", keyCode = KeyEvent.KEYCODE_F, x = 0.90f, y = 0.28f, size = s),
+                    HudKey("kiri", HudKind.MOUSE_LEFT, "Aksi", action = HudAction.HOLD, x = 0.74f, y = 0.56f, size = d),
+                    HudKey("kanan", HudKind.MOUSE_RIGHT, "Kamera", action = HudAction.HOLD, x = 0.88f, y = 0.56f, size = d),
                 )
                 HudProfilePreset.OFFICE -> listOf(
                     HudKey("o_copy", HudKind.COMBO, "Ctrl+C", combo = listOf(ctrl, KeyEvent.KEYCODE_C), x = 0.04f, y = 0.16f, size = s),

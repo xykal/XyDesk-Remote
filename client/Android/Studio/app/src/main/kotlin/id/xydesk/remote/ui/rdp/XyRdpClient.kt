@@ -468,7 +468,12 @@ internal object XyRdpClient {
             runCatching { enableWorkflow(token, login) }
             kotlinx.coroutines.delay(450L)
             val isRailwayHost = inputs.optString("portmap_host").trim()
-                .let { it.endsWith(".rlwy.net", ignoreCase = true) || it.endsWith(".railway.app", ignoreCase = true) }
+                .let {
+                    it.endsWith(".rlwy.net", ignoreCase = true) ||
+                        it.endsWith(".railway.app", ignoreCase = true) ||
+                        it.equals("bore.pub", ignoreCase = true) ||
+                        it.equals("auto", ignoreCase = true)
+                }
             val setup = runCatching { inspectSetup(token, login, inputs.optString("akses", "tailscale")) }.getOrNull()
             if (setup != null && setup.secretsVerified) {
                 val realMissing = if (isRailwayHost) {

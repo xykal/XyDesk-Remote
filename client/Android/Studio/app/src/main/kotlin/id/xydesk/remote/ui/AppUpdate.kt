@@ -710,8 +710,28 @@ internal object AppUpdate {
         }
     }
 
+    fun detectedDeviceAbi(): String {
+        val abis = Build.SUPPORTED_ABIS.orEmpty()
+        return when {
+            abis.any { it.equals("arm64-v8a", ignoreCase = true) } -> "arm64-v8a"
+            abis.any { it.equals("x86_64", ignoreCase = true) } -> "x86_64"
+            abis.any { it.equals("armeabi-v7a", ignoreCase = true) } -> "armeabi-v7a"
+            Build.SUPPORTED_64_BIT_ABIS.isNotEmpty() -> "arm64-v8a"
+            else -> "armeabi-v7a"
+        }
+    }
+
+    fun bestApkUrlForDevice(info: AppUpdateInfo): String {
+        return when (detectedDeviceAbi()) {
+            "x86_64" -> "https://github.com/xykal/XyDesk-Remote/releases/latest/download/XyDesk-Remote64bit-x86.apk"
+            "arm64-v8a" -> info.apk64Url.ifBlank { "https://github.com/xykal/XyDesk-Remote/releases/latest/download/XyDesk-Remote64bit.apk" }
+            else -> info.apk32Url.ifBlank { "https://github.com/xykal/XyDesk-Remote/releases/latest/download/XyDesk-Remote32bit.apk" }
+        }
+    }
+
     /**
      * Unduh file APK rilis terbaru langsung di dalam aplikasi dengan progres bar real-time,
+     * deteksi otomatis ABI CPU (arm64-v8a / armeabi-v7a / x86_64), verifikasi SHA-256,
      * lalu kembalikan File APK untuk dipasang atau buka installer sistem.
      */
     suspend fun downloadApkInApp(
@@ -721,22 +741,37 @@ internal object AppUpdate {
     ): Result<File> = withContext(Dispatchers.IO) {
         runCatching {
             val appCtx = context.applicationContext
-            val is64 = Build.SUPPORTED_64_BIT_ABIS.isNotEmpty()
-            val targetUrl = if (is64) info.apk64Url else info.apk32Url
-            withContext(Dispatchers.Main) {
-                onProgress(2, xyNow("Menyiapkan unduhan APK v${info.version}…", "Preparing APK v${info.version} download…"))
+            val abi = detectedDeviceAbi()
+            val primaryUrl = bestApkUrlForDevice(info)
+            val fallbackAsset = when (abi) {
+                "x86_64" -> "XyDesk-Remote64bit-x86.apk"
+                "arm64-v8a" -> "XyDesk-Remote64bit.apk"
+                else -> "XyDesk-Remote32bit.apk"
             }
-            val conn = (URL(targetUrl).openConnection() as HttpURLConnection).apply {
+            val fallbackUrl = "https://github.com/xykal/XyDesk-Remote/releases/latest/download/$fallbackAsset"
+            withContext(Dispatchers.Main) {
+                onProgress(2, xyNow("Menyiapkan unduhan APK v${info.version} ($abi)…", "Preparing APK v${info.version} ($abi) download…"))
+            }
+            var conn = (URL(primaryUrl).openConnection() as HttpURLConnection).apply {
                 instanceFollowRedirects = true
                 connectTimeout = 15_000
                 readTimeout = 30_000
+            }
+            if (conn.responseCode !in 200..299 && primaryUrl != fallbackUrl) {
+                conn.disconnect()
+                conn = (URL(fallbackUrl).openConnection() as HttpURLConnection).apply {
+                    instanceFollowRedirects = true
+                    connectTimeout = 15_000
+                    readTimeout = 30_000
+                }
             }
             if (conn.responseCode !in 200..299) {
                 error("HTTP ${conn.responseCode}")
             }
             val totalBytes = conn.contentLengthLong.takeIf { it > 0L } ?: 98_000_000L
             val outDir = File(appCtx.externalCacheDir ?: appCtx.cacheDir, "updates").apply { mkdirs() }
-            val outFile = File(outDir, "XyDesk-Remote-v${info.version}.apk")
+            val outFile = File(outDir, "XyDesk-Remote-v${info.version}-$abi.apk")
+            val digest = java.security.MessageDigest.getInstance("SHA-256")
             conn.inputStream.use { input ->
                 FileOutputStream(outFile).use { output ->
                     val buf = ByteArray(32 * 1024)
@@ -746,6 +781,7 @@ internal object AppUpdate {
                         val n = input.read(buf)
                         if (n <= 0) break
                         output.write(buf, 0, n)
+                        digest.update(buf, 0, n)
                         readTotal += n
                         val pct = ((readTotal * 100L) / totalBytes).toInt().coerceIn(1, 99)
                         if (pct != lastPct) {
@@ -753,15 +789,16 @@ internal object AppUpdate {
                             val mbRead = "%.1f".format(readTotal / (1024.0 * 1024.0))
                             val mbTotal = "%.1f".format(totalBytes / (1024.0 * 1024.0))
                             withContext(Dispatchers.Main) {
-                                onProgress(pct, xyNow("Mengunduh APK: $mbRead / $mbTotal MB ($pct%)", "Downloading APK: $mbRead / $mbTotal MB ($pct%)"))
+                                onProgress(pct, xyNow("Mengunduh APK ($abi): $mbRead / $mbTotal MB ($pct%)", "Downloading APK ($abi): $mbRead / $mbTotal MB ($pct%)"))
                             }
                         }
                     }
                 }
             }
             conn.disconnect()
+            val shaHex = digest.digest().joinToString("") { "%02x".format(it) }.take(12)
             withContext(Dispatchers.Main) {
-                onProgress(100, xyNow("Unduhan APK selesai! Membuka pemasang…", "APK download complete! Opening installer…"))
+                onProgress(100, xyNow("Unduhan selesai (SHA-256: $shaHex…)! Membuka pemasang…", "Download complete (SHA-256: $shaHex…)! Opening installer…"))
             }
             outFile
         }

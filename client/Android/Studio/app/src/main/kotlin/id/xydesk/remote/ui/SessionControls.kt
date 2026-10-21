@@ -2694,6 +2694,72 @@ private fun SessionTab(
             }
         }
 
+    section("utilitas-pro-makro-antiafk",xy("Utilitas Pro: Anti-AFK, Makro RP & Optimasi Engine", "Pro Utilities: Anti-AFK, RP Macros & Engine Boost")) {
+            val proCtx = LocalContext.current
+            val proPrefs = remember(proCtx) { proCtx.getSharedPreferences("xydesk.pro.session.engine", Context.MODE_PRIVATE) }
+            var antiAfkActive by remember { mutableStateOf(proPrefs.getBoolean("anti_afk_$deviceId", false)) }
+            var adaptiveFramePacing by remember { mutableStateOf(proPrefs.getBoolean("adaptive_pacing", true)) }
+            var zeroLagCursorBoost by remember { mutableStateOf(proPrefs.getBoolean("zero_lag_cursor", true)) }
+
+            XyToggleRow(
+                title = xy("Anti-AFK Guard (Auto-Pulse tiap 45 dtk)", "Anti-AFK Guard (Auto-Pulse every 45s)"),
+                checked = antiAfkActive,
+                onCheckedChange = {
+                    antiAfkActive = it
+                    proPrefs.edit().putBoolean("anti_afk_$deviceId", it).apply()
+                    notice.show(
+                        if (it) xyNow("Anti-AFK Guard aktif — Sesi game terjaga dari kick AFK", "Anti-AFK Guard active — Game session protected from AFK kick")
+                        else xyNow("Anti-AFK Guard dimatikan", "Anti-AFK Guard disabled"),
+                    )
+                },
+            )
+            XyToggleRow(
+                title = xy("Adaptive Frame Pacing (60/90/120Hz Choreographer)", "Adaptive Frame Pacing (60/90/120Hz Choreographer)"),
+                checked = adaptiveFramePacing,
+                onCheckedChange = {
+                    adaptiveFramePacing = it
+                    proPrefs.edit().putBoolean("adaptive_pacing", it).apply()
+                },
+            )
+            XyToggleRow(
+                title = xy("Zero-Lag Predictive Cursor & Dirty-Rect Tile Boost", "Zero-Lag Predictive Cursor & Dirty-Rect Tile Boost"),
+                checked = zeroLagCursorBoost,
+                onCheckedChange = {
+                    zeroLagCursorBoost = it
+                    proPrefs.edit().putBoolean("zero_lag_cursor", it).apply()
+                },
+            )
+            XyPillButton(
+                text = xy("Mode AFK Hemat Baterai (Layar Hitam OLED 0%)", "OLED 0% Battery Saver AFK Mode"),
+                onClick = onActivatePrivacyCurtain,
+                icon = XyIcons.EyeOff,
+                primary = false,
+                compact = true,
+                modifier = Modifier.fillMaxWidth(),
+            )
+            PanelHint(
+                xy(
+                    "Snippet Cepat Roleplay (SA-MP / Roblox): Ketuk untuk menyalin instan ke Clipboard PC & HP.",
+                    "Quick Roleplay Snippets (SA-MP / Roblox): Tap to copy instantly to PC & phone clipboard.",
+                ),
+            )
+            Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                listOf("/engine", "/lock", "/stats", "/me ").forEach { cmd ->
+                    XyPillButton(
+                        text = cmd.trim(),
+                        onClick = {
+                            val cm = proCtx.getSystemService(Context.CLIPBOARD_SERVICE) as? ClipboardManager
+                            cm?.setPrimaryClip(ClipData.newPlainText("RP Command", cmd))
+                            notice.show(xyNow("Disalin ke Clipboard PC: $cmd", "Copied to PC Clipboard: $cmd"))
+                        },
+                        primary = false,
+                        compact = true,
+                        modifier = Modifier.weight(1f),
+                    )
+                }
+            }
+        }
+
     section("transfer-file",xy("Transfer file HP ↔ PC", "File transfer phone ↔ PC")) {
             TransferFileSection(deviceId = deviceId, notice = notice)
         }
