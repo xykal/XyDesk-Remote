@@ -312,6 +312,11 @@ class PcStreamSessionActivity : ComponentActivity() {
                 directFrame.value = bmp
                 directHostFps.intValue = hostFps
                 directNonRdpVerified.value = nonRdp
+                SessionPreviewStore.saveDesktopSnapshotThrottled(
+                    context = applicationContext,
+                    hostKey = cleanIp,
+                    bitmap = bmp,
+                )
             },
             onState = { connected, detail ->
                 directStatus.value = detail

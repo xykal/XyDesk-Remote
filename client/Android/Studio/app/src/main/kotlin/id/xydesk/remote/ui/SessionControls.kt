@@ -203,6 +203,19 @@ fun SessionControls(
     val configuration = LocalConfiguration.current
     val view = androidx.compose.ui.platform.LocalView.current
     val prefs = remember { SessionPrefs(context) }
+
+    // Tangkap otomatis tampilan desktop / wallpaper sesi RDP yang sedang berjalan
+    // supaya kartu Preview Sesi di Beranda (Home) sesuai dengan wallpaper/desktop PC/RDP pengguna.
+    LaunchedEffect(deviceId) {
+        delay(2500L)
+        SessionPreviewStore.captureFromActiveRdpSessions(context, force = true)
+        delay(5500L)
+        SessionPreviewStore.captureFromActiveRdpSessions(context, force = true)
+        while (true) {
+            delay(15_000L)
+            SessionPreviewStore.captureFromActiveRdpSessions(context, force = false)
+        }
+    }
     var scrollPillOpen by remember { mutableStateOf(false) }
     var panelOpen by remember { mutableStateOf(false) }
     var monitorGridOpen by remember { mutableStateOf(false) }
