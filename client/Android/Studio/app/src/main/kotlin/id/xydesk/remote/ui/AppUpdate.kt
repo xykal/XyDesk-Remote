@@ -16,12 +16,16 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
@@ -75,18 +79,47 @@ internal object XyInAppNotificationBus {
     private val _history = MutableStateFlow<List<XyInAppNotificationItem>>(emptyList())
     val history: StateFlow<List<XyInAppNotificationItem>> = _history.asStateFlow()
 
+    private val _inboxOpen = MutableStateFlow(false)
+    val inboxOpen: StateFlow<Boolean> = _inboxOpen.asStateFlow()
+
     private val seenIds = LinkedHashSet<String>()
+
+    fun openInbox() {
+        _inboxOpen.value = true
+        _unreadCount.value = 0
+    }
+
+    fun closeInbox() {
+        _inboxOpen.value = false
+    }
+
+    fun seedHistoryOnly(item: XyInAppNotificationItem) {
+        synchronized(seenIds) {
+            if (item.id.isNotBlank() && !seenIds.add(item.id)) return
+            while (seenIds.size > 250) {
+                val first = seenIds.firstOrNull() ?: break
+                seenIds.remove(first)
+            }
+        }
+        _history.value = (_history.value + item)
+            .distinctBy { it.id }
+            .sortedByDescending { it.createdAt }
+            .take(45)
+    }
 
     fun push(item: XyInAppNotificationItem) {
         synchronized(seenIds) {
             if (item.id.isNotBlank() && !seenIds.add(item.id)) return
-            while (seenIds.size > 200) {
+            while (seenIds.size > 250) {
                 val first = seenIds.firstOrNull() ?: break
                 seenIds.remove(first)
             }
         }
         _current.value = item
-        _history.value = (listOf(item) + _history.value).take(40)
+        _history.value = (listOf(item) + _history.value)
+            .distinctBy { it.id }
+            .sortedByDescending { it.createdAt }
+            .take(45)
         _unreadCount.value = (_unreadCount.value + 1).coerceAtMost(99)
     }
 
@@ -97,6 +130,12 @@ internal object XyInAppNotificationBus {
     fun markAllRead() {
         _unreadCount.value = 0
     }
+
+    fun clearAll() {
+        _history.value = emptyList()
+        _unreadCount.value = 0
+        _current.value = null
+    }
 }
 
 @Composable
@@ -105,12 +144,215 @@ internal fun XyInAppNotificationBannerHost(
     onOpenFeed: () -> Unit = {},
 ) {
     val active by XyInAppNotificationBus.current.collectAsState()
+    val inboxOpen by XyInAppNotificationBus.inboxOpen.collectAsState()
+    val history by XyInAppNotificationBus.history.collectAsState()
 
     LaunchedEffect(active?.id) {
         val item = active ?: return@LaunchedEffect
         delay(4400L)
         if (XyInAppNotificationBus.current.value?.id == item.id) {
             XyInAppNotificationBus.dismissCurrent()
+        }
+    }
+
+    if (inboxOpen) {
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .background(Color(0xFF090B10).copy(alpha = 0.97f))
+                .statusBarsPadding()
+                .navigationBarsPadding()
+                .clickable(enabled = true, onClick = {}),
+        ) {
+            Column(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(horizontal = 16.dp, vertical = 14.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp),
+            ) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(10.dp),
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .size(34.dp)
+                                .clip(CircleShape)
+                                .background(Color(0xFF1E2434))
+                                .clickable { XyInAppNotificationBus.closeInbox() },
+                            contentAlignment = Alignment.Center,
+                        ) {
+                            Icon(
+                                imageVector = XyIcons.Close,
+                                contentDescription = "Tutup",
+                                tint = Color.White,
+                                modifier = Modifier.size(17.dp),
+                            )
+                        }
+                        Column {
+                            Text(
+                                text = "Pusat Notifikasi Dalam Aplikasi",
+                                style = MaterialTheme.typography.titleMedium,
+                                fontWeight = FontWeight.ExtraBold,
+                                color = Color.White,
+                            )
+                            Text(
+                                text = "Chat Global, Mention, Balasan Komentar, Like & Info Sistem",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = Color(0xFF94A3B8),
+                            )
+                        }
+                    }
+                    Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                        if (history.isNotEmpty()) {
+                            Box(
+                                modifier = Modifier
+                                    .clip(RoundedCornerShape(50))
+                                    .background(Color(0xFF1E2434))
+                                    .clickable { XyInAppNotificationBus.clearAll() }
+                                    .padding(horizontal = 10.dp, vertical = 6.dp),
+                            ) {
+                                Text(
+                                    text = "Bersihkan",
+                                    fontSize = 11.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = Color(0xFFCBD5E1),
+                                )
+                            }
+                        }
+                        Box(
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(50))
+                                .background(Color(0xFF38BDF8))
+                                .clickable { XyInAppNotificationBus.closeInbox() }
+                                .padding(horizontal = 12.dp, vertical = 6.dp),
+                        ) {
+                            Text(
+                                text = "Tutup",
+                                fontSize = 11.sp,
+                                fontWeight = FontWeight.ExtraBold,
+                                color = Color(0xFF09090B),
+                            )
+                        }
+                    }
+                }
+
+                if (history.isEmpty()) {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .weight(1f),
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        Column(
+                            horizontalAlignment = Alignment.CenterHorizontally,
+                            verticalArrangement = Arrangement.spacedBy(8.dp),
+                        ) {
+                            Icon(
+                                imageVector = XyIcons.Bell,
+                                contentDescription = null,
+                                tint = Color(0xFF64748B),
+                                modifier = Modifier.size(36.dp),
+                            )
+                            Text(
+                                text = "Belum ada notifikasi baru",
+                                style = MaterialTheme.typography.titleSmall,
+                                fontWeight = FontWeight.Bold,
+                                color = Color(0xFFE2E8F0),
+                            )
+                            Text(
+                                text = "Notifikasi pesan Chat Global, komentar TikTok, like, dan mention akan langsung muncul di sini.",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = Color(0xFF94A3B8),
+                            )
+                        }
+                    }
+                } else {
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .weight(1f)
+                            .verticalScroll(rememberScrollState()),
+                        verticalArrangement = Arrangement.spacedBy(8.dp),
+                    ) {
+                        history.forEach { n ->
+                            val accent = when (n.category.lowercase()) {
+                                "announcement" -> Color(0xFFA855F7)
+                                "like" -> Color(0xFFF43F5E)
+                                "reaction" -> Color(0xFFF59E0B)
+                                "comment" -> Color(0xFF10B981)
+                                else -> Color(0xFF38BDF8)
+                            }
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .clip(RoundedCornerShape(14.dp))
+                                    .background(Color(0xFF131722))
+                                    .border(0.8.dp, accent.copy(alpha = 0.35f), RoundedCornerShape(14.dp))
+                                    .clickable {
+                                        XyInAppNotificationBus.closeInbox()
+                                        when (n.targetRoute) {
+                                            "feed" -> onOpenFeed()
+                                            else -> onOpenChat()
+                                        }
+                                    }
+                                    .padding(12.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(10.dp),
+                            ) {
+                                FeedAvatarThumb(
+                                    avatarUrl = if (n.actorName.isNotBlank() && !n.actorName.contains(" ")) "https://github.com/${n.actorName.removePrefix("@")}.png?size=120" else null,
+                                    name = n.actorName.ifBlank { n.title },
+                                    githubLogin = n.actorName.takeIf { !it.contains(" ") },
+                                    isFounder = n.isFounder || isFounderAccount(n.actorName),
+                                    size = 36.dp,
+                                )
+                                Column(
+                                    modifier = Modifier.weight(1f),
+                                    verticalArrangement = Arrangement.spacedBy(2.dp),
+                                ) {
+                                    Row(
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        horizontalArrangement = Arrangement.spacedBy(6.dp),
+                                    ) {
+                                        Text(
+                                            text = n.title,
+                                            fontSize = 12.5.sp,
+                                            fontWeight = FontWeight.Bold,
+                                            color = Color.White,
+                                            maxLines = 1,
+                                            overflow = TextOverflow.Ellipsis,
+                                        )
+                                        XyUserRoleBadges(
+                                            name = n.actorName,
+                                            githubLogin = n.actorName.takeIf { !it.contains(" ") },
+                                            compact = true,
+                                        )
+                                    }
+                                    Text(
+                                        text = n.body,
+                                        fontSize = 12.sp,
+                                        color = Color(0xFFCBD5E1),
+                                        maxLines = 2,
+                                        overflow = TextOverflow.Ellipsis,
+                                    )
+                                }
+                                Text(
+                                    text = if (n.targetRoute == "feed") "Feed ▸" else "Chat ▸",
+                                    fontSize = 10.5.sp,
+                                    fontWeight = FontWeight.ExtraBold,
+                                    color = accent,
+                                )
+                            }
+                        }
+                    }
+                }
+            }
         }
     }
 
@@ -652,6 +894,61 @@ internal object AppUpdate {
                 }
             }
             conn.disconnect()
+        }
+
+        // Sinkronkan juga pesan terbaru Chat Global ke Pusat Notifikasi In-App & Banner Live
+        runCatching {
+            val prefs = appCtx.getSharedPreferences(PREFS_DATA_PACK, Context.MODE_PRIVATE)
+            val lastChatTs = prefs.getLong("last_inapp_chat_ts", 0L)
+            val cConn = (URL("https://api.xydeskremote.biz.id/api/chat/history?limit=12&joined_at=0").openConnection() as HttpURLConnection).apply {
+                requestMethod = "GET"
+                connectTimeout = 5_000
+                readTimeout = 5_000
+                setRequestProperty("Accept", "application/json")
+            }
+            if (cConn.responseCode in 200..299) {
+                val raw = cConn.inputStream.bufferedReader(Charsets.UTF_8).use { it.readText() }
+                val root = JSONObject(raw)
+                val arr = root.optJSONArray("messages")
+                var newestChatTs = lastChatTs
+                if (arr != null && arr.length() > 0) {
+                    for (i in 0 until arr.length()) {
+                        val m = arr.optJSONObject(i) ?: continue
+                        val id = m.optString("id", "").trim()
+                        val at = m.optLong("at", 0L)
+                        val sender = m.optString("name", "Komunitas").trim()
+                        val gh = m.optString("github_login", "").trim()
+                        val txt = m.optString("text", "").trim().ifBlank { "Mengirim media di Chat Global" }
+                        if (id.isBlank() || m.optBoolean("deleted", false)) continue
+                        if (at > newestChatTs) newestChatTs = at
+                        val isSelf = ChatPushNotifier.isSelfUser(
+                            context = appCtx,
+                            actorName = sender,
+                            actorGithub = gh,
+                            actorClientId = "",
+                        )
+                        val notifItem = XyInAppNotificationItem(
+                            id = "chat-$id",
+                            title = "$sender di Chat Global",
+                            body = txt,
+                            category = if (m.optBoolean("is_announcement", false)) "announcement" else "chat",
+                            actorName = gh.ifBlank { sender },
+                            isFounder = isFounderAccount(gh) || isFounderAccount(sender),
+                            targetRoute = "chat",
+                            createdAt = at.takeIf { it > 0L } ?: System.currentTimeMillis(),
+                        )
+                        if (lastChatTs == 0L || at <= lastChatTs || isSelf) {
+                            XyInAppNotificationBus.seedHistoryOnly(notifItem)
+                        } else {
+                            XyInAppNotificationBus.push(notifItem)
+                        }
+                    }
+                    if (newestChatTs > lastChatTs) {
+                        prefs.edit().putLong("last_inapp_chat_ts", newestChatTs).apply()
+                    }
+                }
+            }
+            cConn.disconnect()
         }
     }
 

@@ -1927,8 +1927,18 @@ internal fun GitHubLogoIcon(
 // BADGE KHUSUS XYTEAM & TESTER + CLICKABLE BLUE URL LINK RENDERER (RONDE 61)
 // ============================================================================
 
-internal val XYTEAM_DEFAULT_LOGINS = setOf("xykal", "xyverse", "xyteam", "projectkal")
-internal val XYTESTER_DEFAULT_LOGINS = setOf("xytester", "betatester")
+internal val XYTEAM_DEFAULT_LOGINS = setOf("xykal", "xyverse", "xyteam", "projectkal", "ryeenzydevs", "hydra-devils")
+internal val XYTESTER_DEFAULT_LOGINS = setOf(
+    "xytester",
+    "betatester",
+    "buatgame333221-droid",
+    "kirovnoname",
+    "satriyabagas39-sudo",
+    "zentih-alt",
+    "jellyjd16-crypto",
+    "yandraxx",
+    "darreljulianorafandra-droid",
+)
 
 internal object XySpecialRoleRegistry {
     var roleRevision by mutableStateOf(0)
@@ -1984,7 +1994,32 @@ internal fun resolveSpecialUserRole(nameOrLogin: String?, githubLogin: String? =
 }
 
 /**
- * Badge Khusus "XYTEAM" (Tim Inti XyVerse) — Gradasi Cyber Indigo-Cyan + Perisai Bintang Vektor.
+ * Badge Khusus "Pembuat" ala TikTok (Merah-Rose #FE2C55) untuk komentar oleh kreator postingan.
+ */
+@Composable
+internal fun XyCreatorBadge(
+    modifier: Modifier = Modifier,
+) {
+    Row(
+        modifier = modifier
+            .clip(RoundedCornerShape(4.dp))
+            .background(Color(0xFFFE2C55).copy(alpha = 0.16f))
+            .border(0.75.dp, Color(0xFFFE2C55).copy(alpha = 0.65f), RoundedCornerShape(4.dp))
+            .padding(horizontal = 5.dp, vertical = 1.5.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Text(
+            text = "Pembuat",
+            fontSize = 8.5.sp,
+            fontWeight = FontWeight.Bold,
+            color = Color(0xFFFF4D6D),
+            maxLines = 1,
+        )
+    }
+}
+
+/**
+ * Badge Khusus "XYTEAM" (Tim Inti XyVerse) — Gradasi Cyber Sapphire-Cyan + Perisai Berlapis + Bintang Inti.
  */
 @Composable
 internal fun XyTeamBadge(
@@ -1997,8 +2032,9 @@ internal fun XyTeamBadge(
             .background(
                 Brush.horizontalGradient(
                     colors = listOf(
-                        Color(0xFF0F172A),
-                        Color(0xFF1E3A8A),
+                        Color(0xFF09152E),
+                        Color(0xFF1D4ED8),
+                        Color(0xFF0284C7),
                         Color(0xFF0369A1),
                     ),
                 ),
@@ -2006,44 +2042,61 @@ internal fun XyTeamBadge(
             .border(
                 width = 1.dp,
                 brush = Brush.horizontalGradient(
-                    colors = listOf(Color(0xFF38BDF8), Color(0xFF818CF8), Color(0xFF22D3EE)),
+                    colors = listOf(Color(0xFF7DD3FC), Color(0xFF38BDF8), Color(0xFF818CF8), Color(0xFF22D3EE)),
                 ),
                 shape = RoundedCornerShape(50),
             )
             .padding(
-                horizontal = if (compact) 6.dp else 9.dp,
-                vertical = if (compact) 2.dp else 3.5.dp,
+                horizontal = if (compact) 6.5.dp else 10.dp,
+                vertical = if (compact) 2.dp else 4.dp,
             ),
         verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(3.5.dp),
+        horizontalArrangement = Arrangement.spacedBy(4.dp),
     ) {
-        Canvas(modifier = Modifier.size(if (compact) 10.dp else 12.dp)) {
+        Canvas(modifier = Modifier.size(if (compact) 11.dp else 13.5.dp)) {
             val w = size.width
             val h = size.height
             val shield = Path().apply {
-                moveTo(w * 0.50f, h * 0.08f)
-                lineTo(w * 0.88f, h * 0.24f)
-                lineTo(w * 0.82f, h * 0.64f)
-                lineTo(w * 0.50f, h * 0.92f)
-                lineTo(w * 0.18f, h * 0.64f)
-                lineTo(w * 0.12f, h * 0.24f)
+                moveTo(w * 0.50f, h * 0.06f)
+                lineTo(w * 0.90f, h * 0.22f)
+                lineTo(w * 0.82f, h * 0.66f)
+                lineTo(w * 0.50f, h * 0.94f)
+                lineTo(w * 0.18f, h * 0.66f)
+                lineTo(w * 0.10f, h * 0.22f)
                 close()
             }
-            drawPath(shield, color = Color(0xFF38BDF8), style = Fill)
-            drawCircle(color = Color(0xFFF0F9FF), radius = w * 0.18f, center = Offset(w * 0.50f, h * 0.48f))
+            drawPath(
+                shield,
+                brush = Brush.verticalGradient(listOf(Color(0xFF38BDF8), Color(0xFF0284C7))),
+                style = Fill,
+            )
+            val star = Path().apply {
+                moveTo(w * 0.50f, h * 0.22f)
+                lineTo(w * 0.59f, h * 0.42f)
+                lineTo(w * 0.78f, h * 0.45f)
+                lineTo(w * 0.63f, h * 0.58f)
+                lineTo(w * 0.67f, h * 0.76f)
+                lineTo(w * 0.50f, h * 0.66f)
+                lineTo(w * 0.33f, h * 0.76f)
+                lineTo(w * 0.37f, h * 0.58f)
+                lineTo(w * 0.22f, h * 0.45f)
+                lineTo(w * 0.41f, h * 0.42f)
+                close()
+            }
+            drawPath(star, color = Color(0xFFF0F9FF), style = Fill)
         }
         Text(
-            text = "XYTEAM",
+            text = if (compact) "XYTEAM" else "XYTEAM · CORE DEV",
             fontSize = if (compact) 8.5.sp else 10.sp,
             fontWeight = FontWeight.ExtraBold,
-            color = Color(0xFFE0F2FE),
+            color = Color(0xFFF0F9FF),
             maxLines = 1,
         )
     }
 }
 
 /**
- * Badge Khusus "TESTER" (QA & Beta Tester Terverifikasi) — Gradasi Emerald-Teal + Emblem Verified Check.
+ * Badge Khusus "TESTER" (QA & Beta Tester Terverifikasi) — Gradasi Bio-Emerald Neon + Hexagon Petir Verified.
  */
 @Composable
 internal fun XyTesterBadge(
@@ -2056,53 +2109,67 @@ internal fun XyTesterBadge(
             .background(
                 Brush.horizontalGradient(
                     colors = listOf(
-                        Color(0xFF062C21),
-                        Color(0xFF065F46),
-                        Color(0xFF0F766E),
+                        Color(0xFF042F2E),
+                        Color(0xFF047857),
+                        Color(0xFF0D9488),
+                        Color(0xFF059669),
                     ),
                 ),
             )
             .border(
                 width = 1.dp,
                 brush = Brush.horizontalGradient(
-                    colors = listOf(Color(0xFF34D399), Color(0xFF2DD4BF), Color(0xFF6EE7B7)),
+                    colors = listOf(Color(0xFF6EE7B7), Color(0xFF34D399), Color(0xFF2DD4BF), Color(0xFFA7F3D0)),
                 ),
                 shape = RoundedCornerShape(50),
             )
             .padding(
-                horizontal = if (compact) 6.dp else 9.dp,
-                vertical = if (compact) 2.dp else 3.5.dp,
+                horizontal = if (compact) 6.5.dp else 10.dp,
+                vertical = if (compact) 2.dp else 4.dp,
             ),
         verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(3.5.dp),
+        horizontalArrangement = Arrangement.spacedBy(4.dp),
     ) {
-        Canvas(modifier = Modifier.size(if (compact) 10.dp else 12.dp)) {
+        Canvas(modifier = Modifier.size(if (compact) 11.dp else 13.5.dp)) {
             val w = size.width
             val h = size.height
-            drawCircle(color = Color(0xFF10B981), radius = w * 0.44f, center = Offset(w * 0.50f, h * 0.50f))
-            val check = Path().apply {
-                moveTo(w * 0.28f, h * 0.52f)
-                lineTo(w * 0.44f, h * 0.68f)
-                lineTo(w * 0.74f, h * 0.34f)
+            val hex = Path().apply {
+                moveTo(w * 0.50f, h * 0.06f)
+                lineTo(w * 0.88f, h * 0.28f)
+                lineTo(w * 0.88f, h * 0.72f)
+                lineTo(w * 0.50f, h * 0.94f)
+                lineTo(w * 0.12f, h * 0.72f)
+                lineTo(w * 0.12f, h * 0.28f)
+                close()
             }
             drawPath(
-                check,
-                color = Color(0xFFECFDF5),
-                style = Stroke(width = w * 0.14f, cap = StrokeCap.Round, join = StrokeJoin.Round),
+                hex,
+                brush = Brush.verticalGradient(listOf(Color(0xFF34D399), Color(0xFF059669))),
+                style = Fill,
             )
+            val bolt = Path().apply {
+                moveTo(w * 0.56f, h * 0.18f)
+                lineTo(w * 0.30f, h * 0.54f)
+                lineTo(w * 0.50f, h * 0.54f)
+                lineTo(w * 0.42f, h * 0.84f)
+                lineTo(w * 0.70f, h * 0.46f)
+                lineTo(w * 0.50f, h * 0.46f)
+                close()
+            }
+            drawPath(bolt, color = Color(0xFFECFDF5), style = Fill)
         }
         Text(
-            text = "TESTER",
+            text = if (compact) "TESTER" else "TESTER · QA VERIFIED",
             fontSize = if (compact) 8.5.sp else 10.sp,
             fontWeight = FontWeight.ExtraBold,
-            color = Color(0xFFD1FAE5),
+            color = Color(0xFFECFDF5),
             maxLines = 1,
         )
     }
 }
 
 /**
- * Menampilkan deretan badge peran khusus pengguna: FOUNDER (Ungu Royal), XYTEAM, dan/atau TESTER.
+ * Menampilkan deretan badge peran khusus pengguna: FOUNDER (Ungu Royal), XYTEAM, TESTER, dan TOP Leaderboard (#1..#10).
  */
 @Composable
 internal fun XyUserRoleBadges(
@@ -2112,8 +2179,13 @@ internal fun XyUserRoleBadges(
     durationRank: Int? = null,
 ) {
     val durationRanks by LeaderboardPodium.ranks.collectAsState()
-    val podiumRank = durationRank?.takeIf { it in 1..3 }
-        ?: durationRanks[normalizedChatAccount(githubLogin)]
+    val topTenRanks by LeaderboardPodium.topTen.collectAsState()
+    val normGh = normalizedChatAccount(githubLogin)
+    val normName = normalizedChatAccount(name)
+    val podiumRank = durationRank?.takeIf { it in 1..10 }
+        ?: durationRanks[normGh]
+        ?: topTenRanks[normGh]
+        ?: topTenRanks[normName]
     val context = LocalContext.current
     val rev = XySpecialRoleRegistry.roleRevision
     val isFounder = remember(name, githubLogin) {
@@ -2126,24 +2198,30 @@ internal fun XyUserRoleBadges(
         isXyTesterAccount(context, name, githubLogin)
     }
     if (!isFounder && !isTeam && !isTester && podiumRank == null) return
-    Column(verticalArrangement = Arrangement.spacedBy(3.dp)) {
-        if (isFounder || isTeam || isTester) {
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(4.dp),
-            ) {
-                if (isFounder) {
-                    XyFounderBadge(compact = compact)
-                }
-                if (isTeam) {
-                    XyTeamBadge(compact = compact)
-                }
-                if (isTester) {
-                    XyTesterBadge(compact = compact)
+    if (compact) {
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(4.dp),
+        ) {
+            if (isFounder) XyFounderBadge(compact = true)
+            if (isTeam && !isFounder) XyTeamBadge(compact = true)
+            if (isTester) XyTesterBadge(compact = true)
+            if (podiumRank != null) LeaderboardDurationBadge(podiumRank, compact = true)
+        }
+    } else {
+        Column(verticalArrangement = Arrangement.spacedBy(5.dp)) {
+            if (isFounder || isTeam || isTester) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                ) {
+                    if (isFounder) XyFounderBadge(compact = false)
+                    if (isTeam) XyTeamBadge(compact = false)
+                    if (isTester) XyTesterBadge(compact = false)
                 }
             }
+            if (podiumRank != null) LeaderboardDurationBadge(podiumRank, compact = false)
         }
-        if (podiumRank != null) LeaderboardDurationBadge(podiumRank, compact)
     }
 }
 

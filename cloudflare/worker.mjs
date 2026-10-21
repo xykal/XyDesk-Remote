@@ -1238,7 +1238,73 @@ export class CommunityJokes {
         });
         if (items.length >= 60) break;
       }
-      return durableObjectJson({ status: "ok", items }, 200, request.method);
+
+      if (items.length < 30 && sinceMs === 0) {
+        const seenIds = new Set(items.map((x) => x.id));
+        const jokeEntries = await this.state.storage.list({ prefix: "joke:", reverse: true, limit: 25 });
+        for (const [, j] of jokeEntries) {
+          if (!j || j.hidden) continue;
+          const jAuthorGh = String(j.github_login || "").trim().replace(/^@/, "");
+          const jAuthorName = String(j.author_name || jAuthorGh || "Komunitas").trim();
+          const jIsSelf =
+            (viewerGh && jAuthorGh.toLowerCase() === viewerGh) ||
+            (viewerName && jAuthorName.toLowerCase() === viewerName);
+          if (!jIsSelf && (j.is_announcement || j.pinned || j.likes > 0)) {
+            const postNotifId = `post-${j.id}`;
+            if (!seenIds.has(postNotifId)) {
+              seenIds.add(postNotifId);
+              items.push({
+                id: postNotifId,
+                category: j.is_announcement ? "announcement" : "inbox",
+                title: j.is_announcement
+                  ? `Pengumuman Resmi oleh ${jAuthorName}`
+                  : `${jAuthorName} membagikan postingan di Feed`,
+                body: String(j.text || "").slice(0, 180),
+                actor_id: j.author_hash || "",
+                actor_name: jAuthorName,
+                actor_github: jAuthorGh,
+                actor_avatar: j.author_avatar || (jAuthorGh ? `https://github.com/${jAuthorGh}.png?size=120` : ""),
+                target_route: "feed",
+                joke_id: j.id,
+                created_at: Number(j.created_at || Date.now()),
+              });
+            }
+          }
+          const cEntries = await this.state.storage.list({ prefix: `joke-comments:${j.id}:`, reverse: true, limit: 15 });
+          for (const [, c] of cEntries) {
+            if (!c) continue;
+            const cGh = String(c.github_login || "").trim().replace(/^@/, "");
+            const cName = String(c.name || cGh || "Komunitas").trim();
+            const cIsSelf =
+              (viewerGh && cGh.toLowerCase() === viewerGh) ||
+              (viewerName && cName.toLowerCase() === viewerName);
+            if (cIsSelf) continue;
+            const cNotifId = `comment-${c.id}`;
+            if (seenIds.has(cNotifId)) continue;
+            seenIds.add(cNotifId);
+            const hasReply = Boolean(c.reply_to_name);
+            const hasMention = /@[A-Za-z0-9_.-]+/.test(String(c.text || ""));
+            const cCat = hasReply ? "reply" : hasMention ? "mention" : "inbox";
+            items.push({
+              id: cNotifId,
+              category: cCat,
+              title: hasReply
+                ? `${cName} membalas @${c.reply_to_name} di Feed`
+                : `${cName} mengomentari postingan ${jAuthorName}`,
+              body: String(c.text || "").slice(0, 180),
+              actor_id: c.author_hash || "",
+              actor_name: cName,
+              actor_github: cGh,
+              actor_avatar: c.avatar_url || (cGh ? `https://github.com/${cGh}.png?size=120` : ""),
+              target_route: "feed",
+              joke_id: j.id,
+              created_at: Number(c.created_at || j.created_at || Date.now()),
+            });
+          }
+        }
+        items.sort((a, b) => Number(b.created_at || 0) - Number(a.created_at || 0));
+      }
+      return durableObjectJson({ status: "ok", items: items.slice(0, 60) }, 200, request.method);
     } catch {
       return durableObjectJson({ status: "ok", items: [] }, 200, request.method);
     }
@@ -4130,8 +4196,32 @@ export class GlobalChat {
   }
 
   async resolveJoinedAt(urlObj) {
-    void urlObj;
-    return 0;
+    const clientId = String(urlObj.searchParams.get("client_id") || "").trim().slice(0, 80);
+    const ghLogin = String(urlObj.searchParams.get("github_login") || "").trim().toLowerCase().slice(0, 40);
+    const rawJoined = Number(urlObj.searchParams.get("joined_at") || 0);
+    const key = ghLogin ? `join:gh:${ghLogin}` : clientId ? `join:cid:${clientId}` : "";
+    if (!key) return Number.isFinite(rawJoined) && rawJoined > 0 ? rawJoined : 0;
+    let stored = this.joinedCache.get(key);
+    if (!Number.isFinite(stored) || stored <= 0) {
+      try {
+        stored = Number((await this.state.storage.get(key)) || 0);
+      } catch {
+        stored = 0;
+      }
+      if (!Number.isFinite(stored) || stored <= 0) {
+        stored = Number.isFinite(rawJoined) && rawJoined > 0 ? rawJoined : Date.now();
+        try { await this.state.storage.put(key, stored); } catch {}
+      }
+      if (this.joinedCache.size >= 1000 && !this.joinedCache.has(key)) {
+        const oldest = this.joinedCache.keys().next().value;
+        if (oldest !== undefined) this.joinedCache.delete(oldest);
+      }
+      this.joinedCache.set(key, stored);
+    }
+    if (Number.isFinite(rawJoined) && rawJoined > stored) {
+      return rawJoined;
+    }
+    return stored;
   }
 
   async fetch(request) {
@@ -4161,7 +4251,7 @@ export class GlobalChat {
           screen: "chat",
         });
       }
-      const sinceMs = await this.resolveJoinedAt(urlObj);
+      const sinceMs = 0;
       const messages = await this.loadHistory(sinceMs);
       const pinnedMsg = await this.loadPinnedMessage();
       const onlineCount = this.getActiveOnlineCount();
@@ -4608,7 +4698,7 @@ export class GlobalChat {
     const close = () => this.onClose(session);
     server.addEventListener("close", close);
     server.addEventListener("error", close);
-    this.resolveJoinedAt(urlObj)
+    Promise.resolve(0)
       .then((sinceMs) => this.loadHistory(sinceMs))
       .then((messages) => {
         try { server.send(JSON.stringify({ type: "history", messages, online_count: this.getActiveOnlineCount() })); } catch {}

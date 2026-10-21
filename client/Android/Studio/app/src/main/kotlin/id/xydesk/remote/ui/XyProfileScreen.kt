@@ -38,6 +38,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import id.xydesk.remote.ui.components.XyCard
 import id.xydesk.remote.ui.components.XyDialog
 import id.xydesk.remote.ui.components.XyGlassCard
 import id.xydesk.remote.ui.components.XyGlassRow
@@ -206,6 +207,96 @@ internal fun XyProfileScreen(
                 },
             )
 
+            if (otaSheetOpen) {
+                XyCard(modifier = Modifier.fillMaxWidth()) {
+                    Text(
+                        text = xy("PUSAT PEMBARUAN LANGSUNG", "DIRECT UPDATE CENTER"),
+                        style = MaterialTheme.typography.labelSmall,
+                        fontWeight = FontWeight.ExtraBold,
+                        color = MaterialTheme.colorScheme.primary,
+                    )
+                    Text(
+                        text = "APK: v${versionName ?: "-"}  ·  Paket Data OTA: ${AppUpdate.installedDataVersion(context)}",
+                        style = MaterialTheme.typography.titleSmall,
+                        fontWeight = FontWeight.Bold,
+                    )
+                    Text(
+                        text = otaStatusText ?: xy(
+                            "Untuk update ringan (konfigurasi, runner OS, stiker, patch protokol) gunakan Download Data di bawah tanpa perlu instal ulang APK. Untuk rilis besar gunakan Unduh APK.",
+                            "For lightweight updates (configs, OS runners, stickers, protocol patches) use Download Data below without reinstalling the APK. For major releases use Download APK.",
+                        ),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                    otaProgress?.let { pct ->
+                        Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                            Box(
+                                Modifier
+                                    .fillMaxWidth()
+                                    .height(8.dp)
+                                    .clip(RoundedCornerShape(4.dp))
+                                    .background(MaterialTheme.colorScheme.onSurface.copy(alpha = 0.14f)),
+                            ) {
+                                Box(
+                                    Modifier
+                                        .fillMaxWidth((pct / 100f).coerceIn(0f, 1f))
+                                        .height(8.dp)
+                                        .clip(RoundedCornerShape(4.dp))
+                                        .background(MaterialTheme.colorScheme.primary),
+                                )
+                            }
+                            Text(
+                                "$pct%",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.primary,
+                            )
+                        }
+                    }
+                    XyPillButton(
+                        text = xy("Download Data Update (OTA Ringan In-App)", "Download Data Update (Lightweight In-App OTA)"),
+                        onClick = {
+                            profileScope.launch {
+                                otaProgress = 8
+                                AppUpdate.downloadAndApplyDataPack(context) { pct, lbl ->
+                                    otaProgress = pct
+                                    otaStatusText = lbl
+                                }.onFailure { err ->
+                                    otaStatusText = err.message
+                                }
+                            }
+                        },
+                        primary = true,
+                        compact = true,
+                        modifier = Modifier.fillMaxWidth(),
+                    )
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        XyPillButton(
+                            text = xy("Unduh APK (Update Besar)", "Download APK (Major Update)"),
+                            onClick = {
+                                openInAppCustomTab(context, "https://api.xydeskremote.biz.id/XyDesk-Remote64bit.apk")
+                            },
+                            primary = false,
+                            compact = true,
+                            modifier = Modifier.weight(1f),
+                        )
+                        XyPillButton(
+                            text = xy("Sembunyikan", "Hide"),
+                            onClick = { otaSheetOpen = false },
+                            primary = false,
+                            compact = true,
+                            modifier = Modifier.weight(1f),
+                        )
+                    }
+                }
+            }
+            updateMessage?.let { msg ->
+                XyCard(modifier = Modifier.fillMaxWidth()) {
+                    Text(xy("Pembaruan", "Updates"), style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold)
+                    Text(msg, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    XyPillButton(text = xy("Tutup", "Close"), compact = true, primary = false, onClick = { updateMessage = null })
+                }
+            }
+
             // ---- identitas app: footer ringkas, bukan kartu (rapi & clean) ----
             Row(
                 Modifier
@@ -229,95 +320,6 @@ internal fun XyProfileScreen(
                 )
             }
         }
-    }
-
-    if (otaSheetOpen) {
-        XyOverlay(
-            title = xy("Pusat Pembaruan Langsung", "Direct Update Center"),
-            onDismiss = { otaSheetOpen = false },
-        ) {
-            Text(
-                text = "APK: v${versionName ?: "-"}  ·  Paket Data OTA: ${AppUpdate.installedDataVersion(context)}",
-                style = MaterialTheme.typography.titleSmall,
-                fontWeight = FontWeight.Bold,
-            )
-            Text(
-                text = otaStatusText ?: xy(
-                    "Untuk update ringan (konfigurasi, runner OS, stiker, patch protokol) gunakan Download Data di bawah tanpa perlu instal ulang APK. Untuk rilis besar gunakan Unduh APK.",
-                    "For lightweight updates (configs, OS runners, stickers, protocol patches) use Download Data below without reinstalling the APK. For major releases use Download APK.",
-                ),
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-            otaProgress?.let { pct ->
-                Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                    Box(
-                        Modifier
-                            .fillMaxWidth()
-                            .height(8.dp)
-                            .clip(RoundedCornerShape(4.dp))
-                            .background(MaterialTheme.colorScheme.onSurface.copy(alpha = 0.14f)),
-                    ) {
-                        Box(
-                            Modifier
-                                .fillMaxWidth((pct / 100f).coerceIn(0f, 1f))
-                                .height(8.dp)
-                                .clip(RoundedCornerShape(4.dp))
-                                .background(MaterialTheme.colorScheme.primary),
-                        )
-                    }
-                    Text(
-                        "$pct%",
-                        style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.primary,
-                    )
-                }
-            }
-            XyPillButton(
-                text = xy("Download Data Update (OTA Ringan In-App)", "Download Data Update (Lightweight In-App OTA)"),
-                onClick = {
-                    profileScope.launch {
-                        otaProgress = 8
-                        AppUpdate.downloadAndApplyDataPack(context) { pct, lbl ->
-                            otaProgress = pct
-                            otaStatusText = lbl
-                        }.onFailure { err ->
-                            otaStatusText = err.message
-                        }
-                    }
-                },
-                primary = true,
-                compact = true,
-                modifier = Modifier.fillMaxWidth(),
-            )
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                XyPillButton(
-                    text = xy("Unduh APK (Update Besar)", "Download APK (Major Update)"),
-                    onClick = {
-                        openInAppCustomTab(context, "https://api.xydeskremote.biz.id/XyDesk-Remote64bit.apk")
-                    },
-                    primary = false,
-                    compact = true,
-                    modifier = Modifier.weight(1f),
-                )
-                XyPillButton(
-                    text = xy("Tutup", "Close"),
-                    onClick = { otaSheetOpen = false },
-                    primary = false,
-                    compact = true,
-                    modifier = Modifier.weight(1f),
-                )
-            }
-        }
-    }
-    updateMessage?.let { msg ->
-        XyDialog(
-            title = xy("Pembaruan", "Updates"),
-            body = msg,
-            confirmLabel = xy("Tutup", "Close"),
-            onConfirm = { updateMessage = null },
-            onDismiss = { updateMessage = null },
-        )
     }
     updateAvailable?.let { info ->
         XyDialog(
@@ -899,6 +901,96 @@ private fun CommunityAccountCard(
                     text = xy("Stiker Fav", "Fav Stickers"),
                     style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+        }
+
+        // Showcase Koleksi Badge & Status Kehormatan XyVerse
+        val topTenMap by LeaderboardPodium.topTen.collectAsState()
+        val myRank = topTenMap[normalizedChatAccount(githubUser)] ?: topTenMap[normalizedChatAccount(name)]
+        val roleRev = XySpecialRoleRegistry.roleRevision
+        val isTeamActive = remember(name, githubUser, roleRev) { isXyTeamAccount(context, name, githubUser) }
+        val isTesterActive = remember(name, githubUser, roleRev) { isXyTesterAccount(context, name, githubUser) }
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .clip(RoundedCornerShape(12.dp))
+                .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.28f))
+                .border(0.8.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.35f), RoundedCornerShape(12.dp))
+                .padding(11.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Text(
+                    text = xy("KOLEKSI BADGE & GELAR KOMUNITAS", "BADGE COLLECTION & COMMUNITY TITLES"),
+                    style = MaterialTheme.typography.labelSmall,
+                    fontWeight = FontWeight.ExtraBold,
+                    color = MaterialTheme.colorScheme.primary,
+                )
+                Text(
+                    text = if (myRank != null) "Peringkat #$myRank" else xy("Aktif di Chat & Feed", "Active in Chat & Feed"),
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+            // Baris showcase semua badge XyVerse (dengan penanda status milik akun)
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(6.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                XyFounderBadge(compact = true)
+                XyTeamBadge(compact = true)
+                XyTesterBadge(compact = true)
+                LeaderboardDurationBadge(rank = myRank ?: 1, compact = true)
+            }
+            if (isFounder || isTeamActive || isTesterActive || myRank != null) {
+                XyUserRoleBadges(
+                    name = name,
+                    githubLogin = githubUser,
+                    compact = false,
+                    durationRank = myRank,
+                )
+            }
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Text(
+                    text = if (isTesterActive) {
+                        xy("Status QA Beta Tester aktif di profil, Chat Global & Komentar Feed", "QA Beta Tester badge active on profile, Global Chat & Feed Comments")
+                    } else {
+                        xy("Gabung program QA Beta Tester untuk memasang badge TESTER", "Join QA Beta Tester program to equip TESTER badge")
+                    },
+                    style = MaterialTheme.typography.bodySmall,
+                    fontSize = 11.sp,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.weight(1f),
+                )
+                Spacer(Modifier.width(8.dp))
+                XyPillButton(
+                    text = if (isTesterActive) xy("Lepas TESTER", "Unequip TESTER") else xy("Pakai TESTER", "Equip TESTER"),
+                    onClick = {
+                        val targetKey = githubUser?.takeIf { it.isNotBlank() } ?: name
+                        if (targetKey.isNullOrBlank()) {
+                            message = xyNow("Login GitHub atau atur nama terlebih dahulu.", "Sign in with GitHub or set a name first.")
+                        } else {
+                            val nextRole = if (isTesterActive) "NONE" else "TESTER"
+                            XySpecialRoleRegistry.setRole(context, targetKey, nextRole)
+                            message = if (nextRole == "TESTER") {
+                                xyNow("Badge TESTER diaktifkan! Akan tampil di Profil, Chat Global & Komentar Feed.", "TESTER badge activated! Shown on Profile, Global Chat & Feed Comments.")
+                            } else {
+                                xyNow("Badge TESTER dinonaktifkan.", "TESTER badge deactivated.")
+                            }
+                        }
+                    },
+                    primary = !isTesterActive,
+                    compact = true,
                 )
             }
         }

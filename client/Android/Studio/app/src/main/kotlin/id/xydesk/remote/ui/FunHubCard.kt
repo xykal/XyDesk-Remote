@@ -47,6 +47,7 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
@@ -1133,6 +1134,7 @@ private fun CommunityJokeItem(
             FeedAvatarThumb(
                 avatarUrl = joke.authorAvatarUrl,
                 name = joke.authorName ?: "Anonim",
+                githubLogin = joke.githubLogin,
                 isFounder = isFounderAuthor,
                 size = 38.dp,
             )
@@ -1450,6 +1452,73 @@ private fun CommunityJokeItem(
                         }
                     }
                 }
+
+                // Pratinjau Komentar Inline ala TikTok (PP Bulat + Nama + Badge + Isi Komentar)
+                if (joke.comments.isNotEmpty()) {
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(bottom = 10.dp)
+                            .clip(RoundedCornerShape(12.dp))
+                            .background(Color(0xFF121620))
+                            .border(0.75.dp, Color(0xFF1E2536), RoundedCornerShape(12.dp))
+                            .clickable(onClick = onOpenComments)
+                            .padding(horizontal = 10.dp, vertical = 8.dp),
+                        verticalArrangement = Arrangement.spacedBy(6.dp),
+                    ) {
+                        joke.comments.distinctBy { it.id }.takeLast(2).forEach { c ->
+                            val cName = c.name?.takeIf { it.isNotBlank() } ?: xy("Anonim", "Anonymous")
+                            val cFounder = isFounderAccount(c.name) || isFounderAccount(c.githubLogin)
+                            val isCreator = !joke.authorName.isNullOrBlank() &&
+                                (c.name.equals(joke.authorName, ignoreCase = true) ||
+                                    (!joke.githubLogin.isNullOrBlank() && c.githubLogin.equals(joke.githubLogin, ignoreCase = true)))
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(7.dp),
+                            ) {
+                                FeedAvatarThumb(
+                                    avatarUrl = c.avatarUrl,
+                                    name = cName,
+                                    githubLogin = c.githubLogin,
+                                    isFounder = cFounder,
+                                    size = 20.dp,
+                                )
+                                Text(
+                                    text = cName,
+                                    fontSize = 11.5.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = if (cFounder) Color(0xFFE9D5FF) else Color(0xFFE2E8F0),
+                                    maxLines = 1,
+                                )
+                                if (isCreator) {
+                                    XyCreatorBadge()
+                                }
+                                XyUserRoleBadges(
+                                    name = c.name,
+                                    githubLogin = c.githubLogin,
+                                    compact = true,
+                                )
+                                Text(
+                                    text = c.text,
+                                    fontSize = 11.5.sp,
+                                    color = Color(0xFFCBD5E1),
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis,
+                                    modifier = Modifier.weight(1f),
+                                )
+                            }
+                        }
+                        if (joke.commentsTotal > 2) {
+                            Text(
+                                text = xy("Lihat semua {0} komentar…", "View all {0} comments…", joke.commentsTotal),
+                                fontSize = 11.sp,
+                                fontWeight = FontWeight.SemiBold,
+                                color = Color(0xFF94A3B8),
+                            )
+                        }
+                    }
+                }
             }
         }
 
@@ -1675,47 +1744,83 @@ internal fun FeedRemoteUrlBannerImage(
 internal fun FeedAvatarThumb(
     avatarUrl: String?,
     name: String,
+    githubLogin: String? = null,
     isFounder: Boolean = false,
     size: Dp = 30.dp,
     durationRank: Int? = null,
 ) {
-    val cleanUrl = avatarUrl?.trim().orEmpty()
+    val resolvedUrl = remember(avatarUrl, githubLogin, name) {
+        val raw = avatarUrl?.trim().orEmpty()
+        if (raw.isNotEmpty()) {
+            raw
+        } else {
+            val candidate = githubLogin?.trim()?.removePrefix("@")?.takeIf { it.isNotEmpty() }
+                ?: name.trim().removePrefix("@").takeIf {
+                    it.isNotEmpty() && !it.contains(" ") && !it.startsWith("Tamu-", ignoreCase = true) && !it.equals("Anonim", ignoreCase = true)
+                }
+            if (!candidate.isNullOrBlank()) "https://github.com/$candidate.png?size=120" else ""
+        }
+    }
+    val topTen by LeaderboardPodium.topTen.collectAsState()
+    val effectiveRank: Int? = durationRank
+        ?: topTen[normalizedChatAccount(githubLogin)]
+        ?: topTen[normalizedChatAccount(name)]
+    val paletteColors = remember(name) {
+        val hash = kotlin.math.abs(name.hashCode())
+        when (hash % 6) {
+            0 -> listOf(Color(0xFF4F46E5), Color(0xFF7C3AED))
+            1 -> listOf(Color(0xFF0284C7), Color(0xFF2563EB))
+            2 -> listOf(Color(0xFF059669), Color(0xFF0D9488))
+            3 -> listOf(Color(0xFFE11D48), Color(0xFFDB2777))
+            4 -> listOf(Color(0xFFD97706), Color(0xFFEA580C))
+            else -> listOf(Color(0xFF6366F1), Color(0xFFEC4899))
+        }
+    }
     Box(
         modifier = Modifier
             .requiredSize(size)
             .clip(CircleShape)
-            .background(if (isFounder) Color(0xFF272115) else Color(0xFF1C212D))
-            .then(
+            .background(
                 if (isFounder) {
-                    Modifier.border(1.dp, Color(0xFFF59E0B).copy(alpha = 0.7f), CircleShape)
+                    Brush.linearGradient(listOf(Color(0xFF581C87), Color(0xFF9333EA)))
                 } else {
-                    Modifier
+                    Brush.linearGradient(paletteColors)
                 },
             )
-            .podiumFrame(durationRank),
+            .then(
+                if (isFounder) {
+                    Modifier.border(1.3.dp, Color(0xFFFBBF24), CircleShape)
+                } else {
+                    Modifier.border(0.8.dp, Color.White.copy(alpha = 0.18f), CircleShape)
+                },
+            )
+            .podiumFrame(effectiveRank?.takeIf { it in 1..3 }),
         contentAlignment = Alignment.Center,
     ) {
+        Text(
+            text = name.trim().removePrefix("@").take(1).uppercase().ifEmpty { "U" },
+            fontSize = (size.value * 0.40f).sp,
+            fontWeight = FontWeight.ExtraBold,
+            color = if (isFounder) Color(0xFFFEF08A) else Color.White,
+        )
         when {
-            cleanUrl.startsWith("/api/jokes/avatar/") -> {
-                FeedBinaryImage(path = cleanUrl, modifier = Modifier.fillMaxSize(), round = true)
+            resolvedUrl.startsWith("/api/jokes/avatar/") -> {
+                FeedBinaryImage(path = resolvedUrl, modifier = Modifier.fillMaxSize(), round = true)
             }
-            cleanUrl.startsWith("https://") -> {
-                FeedRemoteUrlBannerImage(imageUrl = cleanUrl, modifier = Modifier.fillMaxSize())
-            }
-            else -> {
-                Text(
-                    text = name.trim().take(1).uppercase().ifEmpty { "U" },
-                    fontSize = (size.value * 0.40f).sp,
-                    fontWeight = FontWeight.Bold,
-                    color = if (isFounder) Color(0xFFFBBF24) else Color(0xFFF8FAFC),
-                )
+            resolvedUrl.startsWith("https://") -> {
+                FeedRemoteUrlBannerImage(imageUrl = resolvedUrl, modifier = Modifier.fillMaxSize())
             }
         }
     }
 }
 
 /**
- * Bottom sheet komentar dengan Foto Profil (Avatar), Balasan Komentar, `@mention`, & Notifikasi.
+ * Bottom Sheet Komentar Bergaya TikTok Penuh:
+ * - Foto Profil Bulat (PP) dengan fallback avatar GitHub & cincin Founder/Podium
+ * - Nama Tampilan Tebal + `@username` + tag `Pembuat` (#FE2C55) + Badge (`FOUNDER`, `XYTEAM`, `TESTER`, `TOP #1..#10`)
+ * - Sub-komentar / Balasan berjenjang (menjorok ke kanan seperti TikTok)
+ * - Tombol Like Hati (`♥`) di sisi kanan setiap komentar dengan counter
+ * - Baris Emoji Cepat TikTok + Bilah Input dengan PP pengguna sendiri
  */
 @OptIn(androidx.compose.material3.ExperimentalMaterial3Api::class)
 @Composable
@@ -1728,183 +1833,349 @@ private fun CommentsBottomSheet(
     onDeleteComment: (JokeComment) -> Unit,
     onDismiss: () -> Unit,
 ) {
+    val context = LocalContext.current
+    val viewerLogin = rememberVerifiedChatAccount(context)
+    val viewerAvatar = remember(viewerLogin) { getVerifiedGitHubAvatarUrl(context) }
+    val viewerDisplayName = remember(viewerLogin) {
+        viewerLogin ?: context.getSharedPreferences("xydesk.global.chat", android.content.Context.MODE_PRIVATE)
+            .getString("nickname", "Saya") ?: "Saya"
+    }
+    val commentLikePrefs = remember(context) {
+        context.getSharedPreferences("xydesk.tiktok.comment.likes", android.content.Context.MODE_PRIVATE)
+    }
+    var likeRevision by remember { mutableIntStateOf(0) }
     var draft by remember(joke.id) { mutableStateOf("") }
     var replyingTo by remember(joke.id) { mutableStateOf<JokeComment?>(null) }
 
-    val mentionCandidates = remember(joke) {
-        buildList {
-            add("xykal")
-            joke.authorName?.takeIf { it.isNotBlank() }?.let { add(it) }
-            joke.comments.forEach { c ->
-                c.name?.takeIf { it.isNotBlank() }?.let { add(it) }
-            }
-        }.distinct().take(8)
+    val uniqueComments = remember(joke.comments) {
+        joke.comments.distinctBy { it.id }
     }
 
-    androidx.compose.material3.ModalBottomSheet(onDismissRequest = onDismiss) {
+    val quickEmojis = remember { listOf("😂", "🔥", "❤️", "👏", "🤣", "😍", "😭", "🙏") }
+
+    androidx.compose.material3.ModalBottomSheet(
+        onDismissRequest = onDismiss,
+        containerColor = Color(0xFF12141C),
+        dragHandle = {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(top = 10.dp, bottom = 4.dp),
+                horizontalAlignment = Alignment.CenterHorizontally,
+            ) {
+                Box(
+                    modifier = Modifier
+                        .width(38.dp)
+                        .height(4.dp)
+                        .clip(RoundedCornerShape(50))
+                        .background(Color(0xFF475569)),
+                )
+            }
+        },
+    ) {
         Column(
             Modifier
                 .fillMaxWidth()
-                .padding(horizontal = 16.dp)
-                .padding(bottom = 16.dp),
-            verticalArrangement = Arrangement.spacedBy(10.dp),
+                .padding(bottom = 14.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp),
         ) {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.SpaceBetween,
+            // Header Tengah ala TikTok: "X komentar" + tombol X di kanan
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp, vertical = 4.dp),
             ) {
                 Text(
-                    xy("{0} Komentar", "{0} Comments", joke.commentsTotal),
-                    style = MaterialTheme.typography.titleSmall,
-                    fontWeight = FontWeight.Bold,
-                    color = MaterialTheme.colorScheme.onSurface,
+                    text = xy("{0} komentar", "{0} comments", joke.commentsTotal.coerceAtLeast(uniqueComments.size)),
+                    fontSize = 14.sp,
+                    fontWeight = FontWeight.ExtraBold,
+                    color = Color(0xFFF8FAFC),
+                    modifier = Modifier.align(Alignment.Center),
                 )
-                Text(
-                    xy("Notifikasi Balasan & @Mention Aktif", "Reply & @Mention Notifications Active"),
-                    fontSize = 10.sp,
-                    color = Color(0xFF10B981),
-                    fontWeight = FontWeight.SemiBold,
-                )
+                Box(
+                    modifier = Modifier
+                        .align(Alignment.CenterEnd)
+                        .size(28.dp)
+                        .clip(CircleShape)
+                        .background(Color(0xFF1E2433))
+                        .clickable(onClick = onDismiss),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    androidx.compose.material3.Icon(
+                        imageVector = XyIcons.Close,
+                        contentDescription = xy("Tutup", "Close"),
+                        tint = Color(0xFFCBD5E1),
+                        modifier = Modifier.size(14.dp),
+                    )
+                }
             }
 
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .height(0.5.dp)
-                    .background(MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.28f)),
+                    .height(0.6.dp)
+                    .background(Color(0xFF1F2637)),
             )
 
             LazyColumn(
-                Modifier
+                modifier = Modifier
                     .fillMaxWidth()
-                    .heightIn(max = 370.dp),
+                    .heightIn(min = 200.dp, max = 420.dp)
+                    .padding(horizontal = 14.dp),
             ) {
-                if (joke.comments.isEmpty()) {
-                    item {
-                        Text(
-                            xy("Belum ada komentar. Jadilah yang pertama berkomentar!", "No comments yet. Be the first to comment!"),
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            modifier = Modifier.padding(vertical = 18.dp),
-                        )
-                    }
-                }
-                items(joke.comments, key = { it.id }) { c ->
-                    val cAuthor = c.name ?: xy("Anonim", "Anonymous")
-                    val cIsFounder = isFounderAccount(c.name) || isFounderAccount(c.githubLogin)
-                    Column(modifier = Modifier.fillMaxWidth()) {
-                        Row(
+                if (uniqueComments.isEmpty()) {
+                    item(key = "empty_comments") {
+                        Column(
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .padding(vertical = 11.dp),
-                            verticalAlignment = Alignment.Top,
-                            horizontalArrangement = Arrangement.spacedBy(11.dp),
+                                .padding(vertical = 36.dp),
+                            horizontalAlignment = Alignment.CenterHorizontally,
+                            verticalArrangement = Arrangement.spacedBy(6.dp),
                         ) {
-                            FeedAvatarThumb(
-                                avatarUrl = c.avatarUrl,
-                                name = cAuthor,
-                                isFounder = cIsFounder,
-                                size = 34.dp,
+                            Text(
+                                text = xy("Belum ada komentar", "No comments yet"),
+                                fontSize = 14.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = Color(0xFFE2E8F0),
                             )
-                            Column(
-                                modifier = Modifier.weight(1f),
-                                verticalArrangement = Arrangement.spacedBy(3.dp),
+                            Text(
+                                text = xy("Mulai percakapan dengan menulis komentar pertama!", "Start the conversation by leaving the first comment!"),
+                                fontSize = 12.sp,
+                                color = Color(0xFF94A3B8),
+                            )
+                        }
+                    }
+                }
+                items(uniqueComments, key = { it.id }) { c ->
+                    val cAuthor = c.name?.takeIf { it.isNotBlank() } ?: xy("Anonim", "Anonymous")
+                    val cHandle = c.githubLogin?.takeIf { it.isNotBlank() && !it.equals(cAuthor, ignoreCase = true) }
+                    val cIsFounder = isFounderAccount(c.name) || isFounderAccount(c.githubLogin)
+                    val isCreator = !joke.authorName.isNullOrBlank() &&
+                        (c.name.equals(joke.authorName, ignoreCase = true) ||
+                            (!joke.githubLogin.isNullOrBlank() && c.githubLogin.equals(joke.githubLogin, ignoreCase = true)))
+                    val isReply = !c.replyToId.isNullOrBlank() || !c.replyToName.isNullOrBlank() || c.text.trim().startsWith("@")
+                    val likedKey = "liked_${joke.id}_${c.id}"
+                    val isCommentLiked = remember(c.id, likeRevision) {
+                        commentLikePrefs.getBoolean(likedKey, false)
+                    }
+                    val baseCommentLikes = remember(c.id) {
+                        if (isFounderAccount(c.name) || isFounderAccount(c.githubLogin)) 3 else 0
+                    }
+                    val displayCommentLikes = baseCommentLikes + (if (isCommentLiked) 1 else 0)
+
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(
+                                start = if (isReply) 34.dp else 0.dp,
+                                top = if (isReply) 6.dp else 11.dp,
+                                bottom = 9.dp,
+                            ),
+                        verticalAlignment = Alignment.Top,
+                        horizontalArrangement = Arrangement.spacedBy(10.dp),
+                    ) {
+                        // Foto Profil Bulat (PP) Komentator
+                        FeedAvatarThumb(
+                            avatarUrl = c.avatarUrl,
+                            name = cAuthor,
+                            githubLogin = c.githubLogin,
+                            isFounder = cIsFounder,
+                            size = if (isReply) 28.dp else 36.dp,
+                        )
+
+                        // Kolom Tengah: Nama + Badge + Isi Komentar + Waktu & Balas
+                        Column(
+                            modifier = Modifier.weight(1f),
+                            verticalArrangement = Arrangement.spacedBy(3.5.dp),
+                        ) {
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(5.dp),
                             ) {
-                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                Text(
+                                    text = cAuthor,
+                                    fontSize = 12.5.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = if (cIsFounder) Color(0xFFE9D5FF) else Color(0xFFCBD5E1),
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis,
+                                )
+                                if (cHandle != null) {
                                     Text(
-                                        text = cAuthor,
-                                        style = MaterialTheme.typography.labelMedium,
-                                        fontWeight = FontWeight.Bold,
-                                        color = if (cIsFounder) Color(0xFFE9D5FF) else MaterialTheme.colorScheme.onSurface,
+                                        text = "@$cHandle",
+                                        fontSize = 11.sp,
+                                        color = Color(0xFF64748B),
+                                        maxLines = 1,
                                     )
-                                    Spacer(Modifier.width(5.dp))
-                                    XyUserRoleBadges(
-                                        name = c.name,
-                                        githubLogin = c.githubLogin,
-                                        compact = true,
-                                    )
-                                    feedTimeAgo(c.createdAtMillis).takeIf { it.isNotEmpty() }?.let { ago ->
-                                        Text(
-                                            " · $ago",
-                                            style = MaterialTheme.typography.labelSmall,
-                                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                        )
-                                    }
-                                    Spacer(Modifier.weight(1f))
-                                    Text(
-                                        text = xy("Balas", "Reply"),
-                                        modifier = Modifier
-                                            .clickable {
-                                                replyingTo = c
-                                                val tag = "@${cAuthor.replace(" ", "")} "
-                                                if (!draft.startsWith(tag)) {
-                                                    draft = (tag + draft).take(140)
-                                                }
-                                            }
-                                            .padding(horizontal = 6.dp, vertical = 2.dp),
-                                        style = MaterialTheme.typography.labelSmall,
-                                        fontWeight = FontWeight.SemiBold,
-                                        color = MaterialTheme.colorScheme.primary,
-                                    )
-                                    if (c.isOwn) {
-                                        Text(
-                                            if (deletingCommentId == c.id) "…" else xy("Hapus", "Delete"),
-                                            modifier = Modifier
-                                                .clickable(enabled = deletingCommentId == null) { onDeleteComment(c) }
-                                                .padding(horizontal = 4.dp, vertical = 2.dp),
-                                            style = MaterialTheme.typography.labelSmall,
-                                            color = MaterialTheme.colorScheme.error,
-                                        )
-                                    }
                                 }
-                                if (!c.replyToName.isNullOrBlank()) {
+                                if (isCreator) {
+                                    XyCreatorBadge()
+                                }
+                                XyUserRoleBadges(
+                                    name = c.name,
+                                    githubLogin = c.githubLogin,
+                                    compact = true,
+                                )
+                            }
+
+                            if (!c.replyToName.isNullOrBlank()) {
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(4.dp),
+                                ) {
+                                    Text(
+                                        text = "▸",
+                                        fontSize = 11.sp,
+                                        color = Color(0xFF64748B),
+                                    )
                                     Text(
                                         text = xy("Membalas @{0}", "Replying to @{0}", c.replyToName),
                                         fontSize = 11.sp,
-                                        fontWeight = FontWeight.Medium,
-                                        color = MaterialTheme.colorScheme.primary,
+                                        fontWeight = FontWeight.SemiBold,
+                                        color = Color(0xFF38BDF8),
                                     )
                                 }
-                                XyClickableLinkText(
-                                    text = c.text,
-                                    color = MaterialTheme.colorScheme.onSurface,
-                                    linkColor = Color(0xFF38BDF8),
-                                    style = MaterialTheme.typography.bodyMedium,
+                            }
+
+                            // Isi Teks Komentar
+                            XyClickableLinkText(
+                                text = c.text,
+                                color = Color(0xFFF8FAFC),
+                                linkColor = Color(0xFF38BDF8),
+                                style = MaterialTheme.typography.bodyMedium.copy(
+                                    fontSize = 13.5.sp,
+                                    lineHeight = 19.sp,
+                                ),
+                            )
+
+                            // Baris Aksi Bawah Komentar ala TikTok: Waktu  ·  Balas  ·  Hapus
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(14.dp),
+                                modifier = Modifier.padding(top = 1.dp),
+                            ) {
+                                val ago = feedTimeAgo(c.createdAtMillis).ifEmpty { xy("Baru saja", "Just now") }
+                                Text(
+                                    text = ago,
+                                    fontSize = 11.5.sp,
+                                    color = Color(0xFF64748B),
+                                )
+                                Text(
+                                    text = xy("Balas", "Reply"),
+                                    modifier = Modifier
+                                        .clip(RoundedCornerShape(4.dp))
+                                        .clickable {
+                                            replyingTo = c
+                                            val tag = "@${cAuthor.replace(" ", "")} "
+                                            if (!draft.startsWith(tag)) {
+                                                draft = (tag + draft).take(140)
+                                            }
+                                        }
+                                        .padding(vertical = 2.dp),
+                                    fontSize = 11.5.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = Color(0xFF94A3B8),
+                                )
+                                if (c.isOwn || isViewerFounder) {
+                                    Text(
+                                        text = if (deletingCommentId == c.id) "…" else xy("Hapus", "Delete"),
+                                        modifier = Modifier
+                                            .clip(RoundedCornerShape(4.dp))
+                                            .clickable(enabled = deletingCommentId == null) { onDeleteComment(c) }
+                                            .padding(vertical = 2.dp),
+                                        fontSize = 11.5.sp,
+                                        fontWeight = FontWeight.SemiBold,
+                                        color = Color(0xFFF87171),
+                                    )
+                                }
+                            }
+                        }
+
+                        // Kolom Kanan: Tombol Like Hati Vertikal ala TikTok
+                        Column(
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(8.dp))
+                                .clickable {
+                                    commentLikePrefs.edit().putBoolean(likedKey, !isCommentLiked).apply()
+                                    likeRevision += 1
+                                }
+                                .padding(horizontal = 6.dp, vertical = 4.dp),
+                            horizontalAlignment = Alignment.CenterHorizontally,
+                            verticalArrangement = Arrangement.spacedBy(2.dp),
+                        ) {
+                            androidx.compose.material3.Icon(
+                                imageVector = if (isCommentLiked) XyIcons.HeartFilled else XyIcons.Heart,
+                                contentDescription = "Suka Komentar",
+                                tint = if (isCommentLiked) Color(0xFFFE2C55) else Color(0xFF64748B),
+                                modifier = Modifier.size(16.dp),
+                            )
+                            if (displayCommentLikes > 0) {
+                                Text(
+                                    text = displayCommentLikes.toString(),
+                                    fontSize = 10.5.sp,
+                                    fontWeight = if (isCommentLiked) FontWeight.Bold else FontWeight.Medium,
+                                    color = if (isCommentLiked) Color(0xFFFE2C55) else Color(0xFF64748B),
                                 )
                             }
                         }
-                        Box(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .height(0.5.dp)
-                                .background(MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.24f)),
-                        )
                     }
                 }
             }
 
-            // Indikator sedang membalas komentar tertentu (flat tanpa border)
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(0.6.dp)
+                    .background(Color(0xFF1F2637)),
+            )
+
+            // Baris Quick Emoji ala TikTok
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                quickEmojis.forEach { emoji ->
+                    Box(
+                        modifier = Modifier
+                            .size(34.dp)
+                            .clip(CircleShape)
+                            .clickable {
+                                if ((draft + emoji).codePointCount(0, (draft + emoji).length) <= 140) {
+                                    draft += emoji
+                                }
+                            },
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        Text(text = emoji, fontSize = 19.sp)
+                    }
+                }
+            }
+
+            // Indikator sedang membalas komentar tertentu
             replyingTo?.let { targetReply ->
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
+                        .padding(horizontal = 16.dp)
                         .clip(RoundedCornerShape(10.dp))
-                        .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.45f))
-                        .padding(horizontal = 10.dp, vertical = 6.dp),
+                        .background(Color(0xFF1B2232))
+                        .padding(horizontal = 12.dp, vertical = 6.dp),
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.SpaceBetween,
                 ) {
                     Text(
-                        text = xy("Membalas komentar @${targetReply.name ?: "Anonim"}", "Replying to @${targetReply.name ?: "Anonymous"}"),
-                        fontSize = 11.sp,
+                        text = xy("Membalas @{0}", "Replying to @{0}", targetReply.name ?: "Anonim"),
+                        fontSize = 11.5.sp,
                         fontWeight = FontWeight.SemiBold,
-                        color = MaterialTheme.colorScheme.primary,
+                        color = Color(0xFF38BDF8),
                     )
                     androidx.compose.material3.Icon(
                         imageVector = XyIcons.Close,
                         contentDescription = "Batal Balas",
-                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                        tint = Color(0xFF94A3B8),
                         modifier = Modifier
                             .clickable { replyingTo = null }
                             .padding(horizontal = 6.dp)
@@ -1913,15 +2184,27 @@ private fun CommentsBottomSheet(
                 }
             }
 
+            // Bilah Input Bawah dengan PP Bulat Pengguna + Kapsul Input + Tombol Kirim TikTok
             Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 14.dp),
                 verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                horizontalArrangement = Arrangement.spacedBy(10.dp),
             ) {
+                FeedAvatarThumb(
+                    avatarUrl = viewerAvatar,
+                    name = viewerDisplayName,
+                    githubLogin = viewerLogin,
+                    isFounder = isViewerFounder,
+                    size = 34.dp,
+                )
                 Box(
                     modifier = Modifier
                         .weight(1f)
                         .clip(RoundedCornerShape(999.dp))
-                        .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.52f))
+                        .background(Color(0xFF1E2433))
+                        .border(0.8.dp, Color(0xFF2D364B), RoundedCornerShape(999.dp))
                         .padding(horizontal = 14.dp, vertical = 10.dp),
                 ) {
                     BasicTextField(
@@ -1929,36 +2212,48 @@ private fun CommentsBottomSheet(
                         onValueChange = { if (it.codePointCount(0, it.length) <= 140) draft = it },
                         modifier = Modifier.fillMaxWidth(),
                         textStyle = TextStyle(
-                            color = MaterialTheme.colorScheme.onSurface,
-                            fontSize = MaterialTheme.typography.bodySmall.fontSize,
+                            color = Color(0xFFF8FAFC),
+                            fontSize = 13.sp,
                         ),
-                        cursorBrush = SolidColor(MaterialTheme.colorScheme.primary),
+                        cursorBrush = SolidColor(Color(0xFFFE2C55)),
                         maxLines = 3,
                         decorationBox = { inner ->
                             if (draft.isEmpty()) {
                                 Text(
-                                    xy("Tulis komentar atau @mention…", "Write a comment or @mention…"),
-                                    style = MaterialTheme.typography.bodySmall,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    xy("Tambahkan komentar…", "Add comment…"),
+                                    fontSize = 13.sp,
+                                    color = Color(0xFF64748B),
                                 )
                             }
                             inner()
                         },
                     )
                 }
-                XyPillButton(
-                    text = if (isSending) "…" else xy("Kirim", "Send"),
-                    onClick = {
-                        val clean = draft.trim()
-                        if (clean.isNotEmpty() && !isSending) {
-                            onSend(clean, replyingTo?.id, replyingTo?.name)
-                            draft = ""
-                            replyingTo = null
-                        }
-                    },
-                    enabled = draft.trim().isNotEmpty() && !isSending,
-                    compact = true,
-                )
+                val canSendNow = draft.trim().isNotEmpty() && !isSending
+                Box(
+                    modifier = Modifier
+                        .size(36.dp)
+                        .clip(CircleShape)
+                        .background(
+                            if (canSendNow) Color(0xFFFE2C55) else Color(0xFF262D3F),
+                        )
+                        .clickable(enabled = canSendNow) {
+                            val clean = draft.trim()
+                            if (clean.isNotEmpty() && !isSending) {
+                                onSend(clean, replyingTo?.id, replyingTo?.name)
+                                draft = ""
+                                replyingTo = null
+                            }
+                        },
+                    contentAlignment = Alignment.Center,
+                ) {
+                    androidx.compose.material3.Icon(
+                        imageVector = XyIcons.Send,
+                        contentDescription = xy("Kirim", "Send"),
+                        tint = if (canSendNow) Color.White else Color(0xFF64748B),
+                        modifier = Modifier.size(16.dp),
+                    )
+                }
             }
         }
     }

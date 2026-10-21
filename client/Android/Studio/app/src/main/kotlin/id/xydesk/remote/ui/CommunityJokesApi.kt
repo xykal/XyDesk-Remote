@@ -237,21 +237,52 @@ internal class CommunityJokesApi(context: Context) {
                     ) || (myGhLower.isNotBlank() && (actGh.trim().removePrefix("@").lowercase() == myGhLower || actName.trim().removePrefix("@").lowercase() == myGhLower)) ||
                         (myDispLower.isNotBlank() && (actName.trim().removePrefix("@").lowercase() == myDispLower || actGh.trim().removePrefix("@").lowercase() == myDispLower))
                     if (isSelf) continue
-                    add(
-                        XyNotificationItem(
-                            id = o.optString("id"),
-                            category = cat,
-                            title = o.optString("title"),
-                            body = o.optString("body"),
-                            actorName = actName,
-                            actorGithub = actGh,
-                            actorAvatar = o.optString("actor_avatar"),
-                            jokeId = o.optString("joke_id"),
-                            createdAtMillis = o.optLong("created_at", 0L),
+                    val item = XyNotificationItem(
+                        id = o.optString("id"),
+                        category = cat,
+                        title = o.optString("title"),
+                        body = o.optString("body"),
+                        actorName = actName,
+                        actorGithub = actGh,
+                        actorAvatar = o.optString("actor_avatar"),
+                        jokeId = o.optString("joke_id"),
+                        createdAtMillis = o.optLong("created_at", 0L),
+                    )
+                    add(item)
+                    XyInAppNotificationBus.seedHistoryOnly(
+                        XyInAppNotificationItem(
+                            id = item.id,
+                            title = item.title,
+                            body = item.body,
+                            category = item.category,
+                            actorName = item.actorGithub.ifBlank { item.actorName },
+                            isFounder = isFounderAccount(item.actorGithub) || isFounderAccount(item.actorName),
+                            targetRoute = "feed",
+                            createdAt = item.createdAtMillis.takeIf { it > 0L } ?: System.currentTimeMillis(),
                         ),
                     )
                 }
-            }.sortedByDescending { it.createdAtMillis }
+                // Gabungkan juga riwayat notifikasi in-app (Chat Global, Mention, Balasan)
+                XyInAppNotificationBus.history.value.forEach { live ->
+                    if (none { it.id == live.id }) {
+                        add(
+                            XyNotificationItem(
+                                id = live.id,
+                                category = if (live.category == "chat") "reply" else live.category,
+                                title = live.title,
+                                body = live.body,
+                                actorName = live.actorName,
+                                actorGithub = live.actorName.takeIf { !it.contains(" ") }.orEmpty(),
+                                actorAvatar = if (live.actorName.isNotBlank() && !live.actorName.contains(" ")) {
+                                    "https://github.com/${live.actorName.removePrefix("@")}.png?size=120"
+                                } else "",
+                                jokeId = "",
+                                createdAtMillis = live.createdAt,
+                            ),
+                        )
+                    }
+                }
+            }.distinctBy { it.id }.sortedByDescending { it.createdAtMillis }
         }.getOrDefault(emptyList())
     }
 

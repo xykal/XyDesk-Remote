@@ -1,169 +1,272 @@
 package id.xydesk.remote.ui
 
 import android.content.ClipData
-import android.content.ClipDescription
 import android.content.ClipboardManager
 import android.content.Context
-import android.os.Build
-import android.os.PersistableBundle
-import android.widget.Toast
+import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.text.font.FontFamily
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import kotlinx.coroutines.CancellationException
+import androidx.compose.ui.unit.sp
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
-import kotlinx.coroutines.flow.collectLatest
-import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
-private data class OutboxControlRow(val entry: OutboxEntry, val preview: OutboxTextPreview)
-private data class OutboxPanelData(val snapshot: OutboxSnapshot, val rows: List<OutboxControlRow>)
-
-/** Local own-account controls only; no media decoder, image export or new send nonce. */
 @Composable
-internal fun GlobalChatOutboxDialog(account: String, binding: String, onClose: () -> Unit) {
-    val context = LocalContext.current.applicationContext
+internal fun GlobalChatOutboxDialog(
+    expectedLogin: String,
+    expectedBinding: String,
+    onClose: () -> Unit,
+) {
+    val context = LocalContext.current
     val scope = rememberCoroutineScope()
-    var data by remember(account, binding) { mutableStateOf<OutboxPanelData?>(null) }
-    var error by remember(account, binding) { mutableStateOf<String?>(null) }
-    var busy by remember(account, binding) { mutableStateOf(false) }
-    var cancelId by remember(account, binding) { mutableStateOf<String?>(null) }
+    val revision by GlobalChatOutbox.revision.collectAsState()
+    var snapshot by remember(expectedLogin, expectedBinding) {
+        mutableStateOf(OutboxSnapshot(expectedBinding, emptyList(), null))
+    }
+    var busyId by remember { mutableStateOf<String?>(null) }
+    var statusBanner by remember { mutableStateOf<String?>(null) }
     var now by remember { mutableStateOf(System.currentTimeMillis()) }
 
-    LaunchedEffect(account, binding) {
-        GlobalChatOutbox.revision.collectLatest {
-            delay(100L) // Coalesce metadata bursts; no repeated full queue reads per UI event.
-            val loaded = withContext(Dispatchers.IO) {
-                val snapshot = GlobalChatOutbox.snapshot(context)
-                val rows = snapshot.entries.filter { it.state == "pending" }.map { entry ->
-                    OutboxControlRow(entry.copy(payload = ""), ChatOutboxControlPolicy.preview(entry))
-                }
-                // Never hold base64 media/ciphertext payloads in dialog state.
-                OutboxPanelData(snapshot.copy(entries = emptyList()), rows)
-            }
-            if (loaded.snapshot.binding != binding || !chatAccountSnapshotIsCurrent(account, getVerifiedGitHubLogin(context))) {
-                onClose(); return@collectLatest
-            }
-            data = loaded
+    LaunchedEffect(Unit) {
+        while (true) {
             now = System.currentTimeMillis()
-        }
-    }
-    val rows = data?.rows.orEmpty()
-    val verifiedOwner = data?.snapshot?.verifiedOwner ?: 0
-    val waiting = rows.any { ChatOutboxControlPolicy.retryState(it.entry, binding, verifiedOwner, now) == OutboxRetryState.WAIT }
-    LaunchedEffect(waiting) {
-        while (waiting && isActive) { delay(1_000); now = System.currentTimeMillis() }
-    }
-    fun act(action: suspend () -> String) {
-        if (busy) return
-        busy = true; error = null
-        scope.launch {
-            try {
-                val message = action()
-                Toast.makeText(context, message, Toast.LENGTH_LONG).show()
-            } catch (cancelled: CancellationException) { throw cancelled }
-            catch (_: Exception) {
-                error = xyNow("Tindakan belum terkonfirmasi. Periksa akun, koneksi atau penyimpanan; data tidak direset.",
-                    "Action not confirmed. Check account, connection or storage; data was not reset.")
-            } finally { busy = false }
+            delay(1_000L)
         }
     }
 
-    AlertDialog(
-        onDismissRequest = onClose,
-        title = { Text(xyNow("Antrean kirim", "Send queue")) },
-        text = {
-            Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                Text("@$account", style = MaterialTheme.typography.labelMedium)
-                Text(xyNow("Coba ulang memakai ID dan isi yang sama. Pesan baru dianggap terkirim setelah receipt server valid.",
-                    "Retries keep the same ID and content. A message is sent only after a valid server receipt."),
-                    style = MaterialTheme.typography.bodySmall)
-                TextButton(enabled = !busy && binding.isNotBlank(), onClick = {
-                    act {
-                        withContext(Dispatchers.IO) { GlobalChatOutbox.checkAccount(context, account, binding) }
-                        xyNow("Identitas akun terverifikasi; antrean tidak otomatis dipindah ke akun lain.",
-                            "Account identity verified; queues are not migrated to another account.")
-                    }
-                }) { Text(xyNow("Periksa identitas akun", "Verify account identity")) }
-                if (data == null || busy) LinearProgressIndicator(Modifier.fillMaxWidth())
-                if (data?.snapshot?.readFailed == true) {
-                    Text(xyNow("Antrean tidak dapat dibuka. Data lama tetap disimpan; jangan hapus data aplikasi.",
-                        "Queue could not be opened. Existing data is retained; do not clear app data."), color = MaterialTheme.colorScheme.error)
-                } else if (data != null && rows.isEmpty()) {
-                    Text(xyNow("Tidak ada pesan tertunda yang dapat diakses dengan identitas saat ini. Antrean akun/token lain tidak ditampilkan.",
-                        "No pending messages accessible to this identity. Other account/token queues are not shown."))
+    LaunchedEffect(revision, expectedLogin, expectedBinding) {
+        val loaded = withContext(Dispatchers.IO) { GlobalChatOutbox.snapshot(context) }
+        if (loaded.binding == expectedBinding) {
+            snapshot = loaded
+        }
+    }
+
+    val pending = remember(snapshot.entries) {
+        snapshot.entries.filter { it.state == "pending" }.sortedBy { it.createdAt }
+    }
+
+    Surface(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 12.dp, vertical = 6.dp),
+        shape = RoundedCornerShape(16.dp),
+        color = Color(0xFF141824),
+        border = BorderStroke(1.dp, Color(0xFF2B354F)),
+        shadowElevation = 6.dp,
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(14.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp),
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween,
+            ) {
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        text = "Antrean Outbox Chat Global (${pending.size})",
+                        fontSize = 13.sp,
+                        fontWeight = FontWeight.ExtraBold,
+                        color = Color.White,
+                    )
+                    Text(
+                        text = snapshot.issue ?: "Pesan yang tertunda akan dikirim dengan ID pesan asli tanpa duplikat.",
+                        fontSize = 11.sp,
+                        color = Color(0xFF94A3B8),
+                    )
                 }
-                error?.let { Text(it, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall) }
-                LazyColumn(Modifier.fillMaxWidth().heightIn(max = 340.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    items(rows, key = { it.entry.id }) { row ->
-                        val entry = row.entry
-                        val state = ChatOutboxControlPolicy.retryState(entry, binding, verifiedOwner, now)
-                        val waitUntil = maxOf(entry.retryNotBefore, if (entry.nextAttemptAt == Long.MAX_VALUE) 0 else entry.nextAttemptAt)
-                        Surface(shape = MaterialTheme.shapes.medium, tonalElevation = 2.dp) {
-                            Column(Modifier.fillMaxWidth().padding(12.dp), verticalArrangement = Arrangement.spacedBy(5.dp)) {
-                                Text(if (row.preview.viewOnce) xyNow("Media sekali lihat · tidak diekspor", "View-once media · not exported")
-                                    else row.preview.text.ifBlank { xyNow("Media tertunda", "Pending media") },
-                                    maxLines = 4, overflow = TextOverflow.Ellipsis, style = MaterialTheme.typography.bodyMedium)
-                                if (row.preview.media.isNotBlank()) Text(row.preview.media, style = MaterialTheme.typography.labelSmall)
-                                Text(when (state) {
-                                    OutboxRetryState.READY -> xyNow("Menunggu konfirmasi / siap dicoba ulang", "Awaiting confirmation / ready to retry")
-                                    OutboxRetryState.WAIT -> xyNow("Tunggu ${((waitUntil - now).coerceAtLeast(0) / 1000) + 1} dtk; backoff server tetap dihormati", "Wait ${((waitUntil - now).coerceAtLeast(0) / 1000) + 1}s; server backoff is respected")
-                                    OutboxRetryState.NEEDS_LOGIN -> xyNow("Periksa login terlebih dahulu", "Verify sign-in first")
-                                    OutboxRetryState.EXPIRED -> xyNow("Batas retry 7 hari terlewati. Salin teks untuk kiriman baru secara manual, atau batalkan.", "Seven-day retry limit reached. Copy text for a manual new message, or cancel.")
-                                    OutboxRetryState.CLOCK -> xyNow("Waktu perangkat perlu diperiksa; timestamp pesan tidak diubah otomatis.", "Check device time; message timestamp is not automatically changed.")
-                                    else -> xyNow("Status menahan retry. Tidak dibuat ID baru otomatis; salin teks atau batalkan.", "Retry is blocked. A new ID is never created automatically; copy text or cancel.")
-                                }, style = MaterialTheme.typography.bodySmall)
-                                Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                                    TextButton(enabled = !busy && state in setOf(OutboxRetryState.READY, OutboxRetryState.NEEDS_LOGIN), onClick = {
-                                        act {
-                                            val result = withContext(Dispatchers.IO) { GlobalChatOutbox.retryPending(context, entry.id, account, binding) }
-                                            if (result == "pending") xyNow("Retry dijadwalkan; belum berarti terkirim.", "Retry scheduled; this is not a sent receipt.")
-                                            else xyNow("Status pesan sudah berubah; tampilan akan diperbarui.", "Message state changed; the view will refresh.")
-                                        }
-                                    }) { Text(xyNow("Coba lagi", "Retry")) }
-                                    TextButton(enabled = !busy && !row.preview.viewOnce && row.preview.text.isNotBlank(), onClick = {
-                                        act {
-                                            val text = withContext(Dispatchers.IO) { GlobalChatOutbox.pendingText(context, entry.id, account, binding) }
-                                            val clip = ClipData.newPlainText("XyDesk pending message", text)
-                                            if (Build.VERSION.SDK_INT >= 33) clip.description.extras = PersistableBundle().apply {
-                                                putBoolean(ClipDescription.EXTRA_IS_SENSITIVE, true)
-                                            }
-                                            (context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager).setPrimaryClip(clip)
-                                            xyNow("Teks disalin. Mengirimnya dari composer adalah kiriman baru yang kamu pilih sendiri.", "Text copied. Sending from the composer is an explicit new message.")
-                                        }
-                                    }) { Text(xyNow("Salin teks", "Copy text")) }
+                Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    TextButton(
+                        enabled = busyId == null,
+                        onClick = {
+                            busyId = "__check__"
+                            scope.launch {
+                                val msg = withContext(Dispatchers.IO) {
+                                    runCatching {
+                                        GlobalChatOutbox.checkAccount(context, expectedLogin, expectedBinding)
+                                        "Identitas akun terverifikasi."
+                                    }.getOrElse { it.message ?: "Verifikasi gagal." }
                                 }
-                                TextButton(enabled = !busy, onClick = { cancelId = entry.id }) { Text(xyNow("Batalkan", "Cancel")) }
+                                statusBanner = msg
+                                busyId = null
+                            }
+                        },
+                    ) {
+                        Text("Verifikasi", fontSize = 11.sp, color = Color(0xFF38BDF8))
+                    }
+                    TextButton(onClick = onClose) {
+                        Text("Tutup", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = Color(0xFFCBD5E1))
+                    }
+                }
+            }
+
+            if (!statusBanner.isNullOrBlank()) {
+                Text(
+                    text = statusBanner.orEmpty(),
+                    fontSize = 11.sp,
+                    color = Color(0xFF38BDF8),
+                    fontWeight = FontWeight.SemiBold,
+                )
+            }
+
+            if (pending.isEmpty()) {
+                Text(
+                    text = "Tidak ada pesan yang tertahan di antrean lokal.",
+                    fontSize = 11.sp,
+                    color = Color(0xFF64748B),
+                )
+            } else {
+                pending.forEach { entry ->
+                    val retryState = ChatOutboxControlPolicy.retryState(
+                        entry,
+                        expectedBinding,
+                        snapshot.verifiedOwner,
+                        now,
+                    )
+                    val preview = remember(entry.id, entry.payload, entry.state) {
+                        runCatching { ChatOutboxControlPolicy.preview(entry) }
+                            .getOrElse { OutboxTextPreview("(Pesan terenkripsi)", "", false) }
+                    }
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .background(Color.White.copy(alpha = 0.03f), RoundedCornerShape(12.dp))
+                            .padding(10.dp),
+                        verticalArrangement = Arrangement.spacedBy(6.dp),
+                    ) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            Text(
+                                text = "ID ${entry.id.takeLast(8)}",
+                                fontSize = 10.sp,
+                                fontFamily = FontFamily.Monospace,
+                                color = Color(0xFF64748B),
+                            )
+                            Text(
+                                text = "${retryState.name} · percobaan #${entry.attempts}",
+                                fontSize = 10.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = if (retryState == OutboxRetryState.READY) Color(0xFF10B981) else Color(0xFFF59E0B),
+                            )
+                        }
+                        Text(
+                            text = preview.text.ifBlank { "[Lampiran ${preview.media.ifBlank { "media" }}]" },
+                            fontSize = 12.sp,
+                            color = Color.White,
+                            maxLines = 2,
+                        )
+                        if (entry.issue.isNotBlank()) {
+                            Text(
+                                text = "Status: ${entry.issue}",
+                                fontSize = 10.sp,
+                                color = Color(0xFF94A3B8),
+                            )
+                        }
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.End),
+                        ) {
+                            if (!preview.viewOnce && preview.text.isNotBlank()) {
+                                OutlinedButton(
+                                    enabled = busyId == null,
+                                    onClick = {
+                                        scope.launch {
+                                            val copied = withContext(Dispatchers.IO) {
+                                                runCatching {
+                                                    GlobalChatOutbox.pendingText(
+                                                        context,
+                                                        entry.id,
+                                                        expectedLogin,
+                                                        expectedBinding,
+                                                    )
+                                                }.getOrNull()
+                                            }
+                                            if (!copied.isNullOrBlank()) {
+                                                val cm = context.getSystemService(Context.CLIPBOARD_SERVICE) as? ClipboardManager
+                                                cm?.setPrimaryClip(ClipData.newPlainText("xydesk_outbox", copied))
+                                                statusBanner = "Teks pesan disalin ke clipboard."
+                                            }
+                                        }
+                                    },
+                                    modifier = Modifier.height(30.dp),
+                                    contentPadding = PaddingValues(horizontal = 10.dp, vertical = 0.dp),
+                                ) {
+                                    Text("Salin", fontSize = 10.sp, color = Color.White)
+                                }
+                            }
+                            OutlinedButton(
+                                enabled = busyId == null,
+                                onClick = {
+                                    busyId = entry.id
+                                    scope.launch {
+                                        withContext(Dispatchers.IO) {
+                                            runCatching {
+                                                GlobalChatOutbox.cancelPending(
+                                                    context,
+                                                    entry.id,
+                                                    expectedLogin,
+                                                    expectedBinding,
+                                                )
+                                            }
+                                        }
+                                        busyId = null
+                                    }
+                                },
+                                modifier = Modifier.height(30.dp),
+                                contentPadding = PaddingValues(horizontal = 10.dp, vertical = 0.dp),
+                            ) {
+                                Text("Batalkan", fontSize = 10.sp, color = Color(0xFFEF4444))
+                            }
+                            Button(
+                                enabled = busyId == null && retryState in setOf(OutboxRetryState.READY, OutboxRetryState.NEEDS_LOGIN),
+                                onClick = {
+                                    busyId = entry.id
+                                    scope.launch {
+                                        val msg = withContext(Dispatchers.IO) {
+                                            runCatching {
+                                                GlobalChatOutbox.retryPending(
+                                                    context,
+                                                    entry.id,
+                                                    expectedLogin,
+                                                    expectedBinding,
+                                                )
+                                                "Mencoba mengirim ulang..."
+                                            }.getOrElse { it.message ?: "Gagal mengirim ulang." }
+                                        }
+                                        statusBanner = msg
+                                        busyId = null
+                                    }
+                                },
+                                modifier = Modifier.height(30.dp),
+                                contentPadding = PaddingValues(horizontal = 12.dp, vertical = 0.dp),
+                                colors = ButtonDefaults.buttonColors(
+                                    containerColor = Color(0xFF38BDF8),
+                                    contentColor = Color.Black,
+                                ),
+                            ) {
+                                Text("Kirim Ulang", fontSize = 10.sp, fontWeight = FontWeight.Bold)
                             }
                         }
                     }
                 }
-                Text(xyNow("Pembatalan menghentikan percobaan berikutnya, bukan menarik pesan yang mungkin sudah diterima server.",
-                    "Cancellation stops future attempts; it cannot recall a message the server may already have received."), style = MaterialTheme.typography.labelSmall)
             }
-        },
-        confirmButton = { TextButton(onClick = onClose) { Text(xyNow("Tutup", "Close")) } },
-    )
-    cancelId?.let { id ->
-        AlertDialog(onDismissRequest = { cancelId = null }, title = { Text(xyNow("Batalkan antrean?", "Cancel queued message?")) },
-            text = { Text(xyNow("Payload lokal pesan ini akan dilepas setelah pembatalan tersimpan. Kiriman yang sudah masuk server tidak ditarik.",
-                "This local payload is released after durable cancellation. Already received server messages are not recalled.")) },
-            confirmButton = { TextButton(enabled = !busy, onClick = {
-                cancelId = null
-                act {
-                    val result = withContext(Dispatchers.IO) { GlobalChatOutbox.cancelPending(context, id, account, binding) }
-                    if (result?.state == "cancelled") xyNow("Percobaan kirim berikutnya dibatalkan.", "Future send attempts cancelled.")
-                    else xyNow("Status antrean sudah berubah; tidak ada pesan server yang dihapus.", "Queue state changed; no server message was deleted.")
-                }
-            }) { Text(xyNow("Ya, batalkan", "Yes, cancel")) } },
-            dismissButton = { TextButton(onClick = { cancelId = null }) { Text(xyNow("Kembali", "Back")) } })
+        }
     }
 }

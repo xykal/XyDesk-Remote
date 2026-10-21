@@ -10,9 +10,14 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
+import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.graphics.StrokeJoin
+import androidx.compose.ui.graphics.drawscope.Fill
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
@@ -21,70 +26,159 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 
-/** Vector-only medal; no downloads, looping animation or entitlement attached. */
+/**
+ * Badge Top Leaderboard (Top 1..10).
+ * - Mode `compact = true` (sebaris dengan nama di Komentar TikTok, Feed, & Chat Global):
+ *   Pill metalik berkilau 1-baris ("TOP #1", "TOP #2", "TOP #3", "TOP #N") dengan ikon Mahkota/Medali.
+ * - Mode `compact = false` (Kartu Profil & Detail Podium):
+ *   Kartu medali lengkap dengan julukan ("RAJA MARATON", "MASTER DURASI", "VETERAN MAIN", "ELITE PLAYER").
+ */
 @Composable
 internal fun LeaderboardDurationBadge(rank: Int, compact: Boolean = true) {
-    if (rank !in 1..3) return
-    val metal = when (rank) { 1 -> Color(0xFFF5CF72); 2 -> Color(0xFFCDDEEF); else -> Color(0xFFE7AD86) }
-    val surface = when (rank) { 1 -> Color(0xFF302619); 2 -> Color(0xFF202B38); else -> Color(0xFF33251F) }
-    val title = when (rank) { 1 -> "RAJA MARATON"; 2 -> "MASTER DURASI"; else -> "VETERAN MAIN" }
-    val shape = RoundedCornerShape(if (compact) 7.dp else 10.dp)
-    Row(
-        Modifier.widthIn(max = if (compact) 144.dp else 260.dp)
-            .semantics { contentDescription = "Top $rank Sipaling Lama Main, $title" }
-            .background(surface, shape).border(0.8.dp, metal.copy(alpha = 0.6f), shape)
-            .padding(horizontal = if (compact) 6.dp else 10.dp, vertical = if (compact) 4.dp else 7.dp),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(if (compact) 4.dp else 7.dp),
-    ) {
-        Canvas(Modifier.size(if (compact) 17.dp else 26.dp)) {
-            val w = size.width; val h = size.height
-            val ribbons = Path().apply {
-                moveTo(w * .18f, h * .45f); lineTo(w * .16f, h * .97f)
-                lineTo(w * .43f, h * .78f); lineTo(w * .5f, h * .5f); close()
-                moveTo(w * .82f, h * .45f); lineTo(w * .84f, h * .97f)
-                lineTo(w * .57f, h * .78f); lineTo(w * .5f, h * .5f); close()
-            }
-            drawPath(ribbons, metal.copy(alpha = .6f))
-            drawCircle(metal, w * .35f, Offset(w / 2, h * .39f))
-            drawCircle(surface, w * .25f, Offset(w / 2, h * .39f), style = Stroke(w * .035f))
-            // Distinct silhouettes remain identifiable without relying on metal colour.
-            val emblem = Path().apply {
-                when (rank) {
-                    1 -> { // Crown: reigning duration champion.
-                        moveTo(w * .3f, h * .43f); lineTo(w * .27f, h * .26f)
-                        lineTo(w * .42f, h * .33f); lineTo(w * .5f, h * .19f)
-                        lineTo(w * .58f, h * .33f); lineTo(w * .73f, h * .26f)
-                        lineTo(w * .7f, h * .43f); close()
-                    }
-                    2 -> { // Hourglass: master of time.
-                        moveTo(w * .34f, h * .23f); lineTo(w * .66f, h * .23f)
-                        lineTo(w * .53f, h * .38f); lineTo(w * .66f, h * .54f)
-                        lineTo(w * .34f, h * .54f); lineTo(w * .47f, h * .38f)
+    if (rank !in 1..10) return
+
+    val bgBrush = when (rank) {
+        1 -> Brush.horizontalGradient(listOf(Color(0xFF451A03), Color(0xFFB45309), Color(0xFFD97706)))
+        2 -> Brush.horizontalGradient(listOf(Color(0xFF0F172A), Color(0xFF334155), Color(0xFF475569)))
+        3 -> Brush.horizontalGradient(listOf(Color(0xFF431407), Color(0xFF9A3412), Color(0xFFC2410C)))
+        else -> Brush.horizontalGradient(listOf(Color(0xFF1E1B4B), Color(0xFF312E81), Color(0xFF4338CA)))
+    }
+    val borderBrush = when (rank) {
+        1 -> Brush.horizontalGradient(listOf(Color(0xFFFDE68A), Color(0xFFF59E0B), Color(0xFFFEF08A)))
+        2 -> Brush.horizontalGradient(listOf(Color(0xFFF8FAFC), Color(0xFF94A3B8), Color(0xFFE2E8F0)))
+        3 -> Brush.horizontalGradient(listOf(Color(0xFFFED7AA), Color(0xFFFB923C), Color(0xFFFDBA74)))
+        else -> Brush.horizontalGradient(listOf(Color(0xFF818CF8), Color(0xFF38BDF8), Color(0xFFC084FC)))
+    }
+    val metal = when (rank) {
+        1 -> Color(0xFFFEF08A)
+        2 -> Color(0xFFF1F5F9)
+        3 -> Color(0xFFFED7AA)
+        else -> Color(0xFFE0E7FF)
+    }
+    val iconAccent = when (rank) {
+        1 -> Color(0xFFFBBF24)
+        2 -> Color(0xFFCBD5E1)
+        3 -> Color(0xFFFB923C)
+        else -> Color(0xFF818CF8)
+    }
+    val title = when (rank) {
+        1 -> "RAJA MARATON"
+        2 -> "MASTER DURASI"
+        3 -> "VETERAN MAIN"
+        else -> "ELITE MARATON"
+    }
+
+    if (compact) {
+        val pillShape = RoundedCornerShape(50)
+        Row(
+            modifier = Modifier
+                .semantics { contentDescription = "Top $rank Sipaling Lama Main, $title" }
+                .clip(pillShape)
+                .background(bgBrush, pillShape)
+                .border(0.9.dp, borderBrush, pillShape)
+                .padding(horizontal = 6.5.dp, vertical = 2.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(3.5.dp),
+        ) {
+            Canvas(Modifier.size(10.5.dp)) {
+                val w = size.width
+                val h = size.height
+                if (rank == 1) {
+                    val crown = Path().apply {
+                        moveTo(w * 0.12f, h * 0.80f)
+                        lineTo(w * 0.08f, h * 0.28f)
+                        lineTo(w * 0.34f, h * 0.52f)
+                        lineTo(w * 0.50f, h * 0.14f)
+                        lineTo(w * 0.66f, h * 0.52f)
+                        lineTo(w * 0.92f, h * 0.28f)
+                        lineTo(w * 0.88f, h * 0.80f)
                         close()
                     }
-                    else -> { // Comet: a persistent explorer, not another crown.
-                        moveTo(w * .27f, h * .25f); lineTo(w * .56f, h * .31f)
-                        lineTo(w * .69f, h * .43f); lineTo(w * .56f, h * .53f)
+                    drawPath(crown, color = iconAccent, style = Fill)
+                    drawCircle(color = Color.White, radius = w * 0.09f, center = Offset(w * 0.50f, h * 0.14f))
+                } else {
+                    drawCircle(color = iconAccent, radius = w * 0.42f, center = Offset(w * 0.50f, h * 0.50f))
+                    val star = Path().apply {
+                        moveTo(w * 0.50f, h * 0.20f)
+                        lineTo(w * 0.62f, h * 0.42f)
+                        lineTo(w * 0.84f, h * 0.46f)
+                        lineTo(w * 0.66f, h * 0.62f)
+                        lineTo(w * 0.72f, h * 0.84f)
+                        lineTo(w * 0.50f, h * 0.72f)
+                        lineTo(w * 0.28f, h * 0.84f)
+                        lineTo(w * 0.34f, h * 0.62f)
+                        lineTo(w * 0.16f, h * 0.46f)
+                        lineTo(w * 0.38f, h * 0.42f)
                         close()
                     }
+                    drawPath(star, color = Color(0xFF09090B), style = Fill)
                 }
             }
-            drawPath(emblem, surface)
-            if (rank == 1) {
-                drawLine(surface, Offset(w * .34f, h * .51f), Offset(w * .66f, h * .51f), w * .045f)
+            Text(
+                text = "TOP #$rank",
+                color = metal,
+                fontSize = 8.5.sp,
+                fontWeight = FontWeight.ExtraBold,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+        }
+        return
+    }
+
+    val shape = RoundedCornerShape(11.dp)
+    Row(
+        Modifier
+            .widthIn(max = 260.dp)
+            .semantics { contentDescription = "Top $rank Sipaling Lama Main, $title" }
+            .clip(shape)
+            .background(bgBrush, shape)
+            .border(1.dp, borderBrush, shape)
+            .padding(horizontal = 10.dp, vertical = 6.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        Canvas(Modifier.size(24.dp)) {
+            val w = size.width
+            val h = size.height
+            val ribbons = Path().apply {
+                moveTo(w * .18f, h * .45f); lineTo(w * .16f, h * .96f)
+                lineTo(w * .43f, h * .78f); lineTo(w * .5f, h * .5f); close()
+                moveTo(w * .82f, h * .45f); lineTo(w * .84f, h * .96f)
+                lineTo(w * .57f, h * .78f); lineTo(w * .5f, h * .5f); close()
             }
-            if (rank == 3) {
-                drawCircle(surface, w * .10f, Offset(w * .61f, h * .43f))
-                drawLine(surface, Offset(w * .27f, h * .39f), Offset(w * .38f, h * .47f), w * .035f)
+            drawPath(ribbons, iconAccent.copy(alpha = .75f))
+            drawCircle(iconAccent, w * .36f, Offset(w / 2, h * .39f))
+            drawCircle(Color(0xFF09090B), w * .26f, Offset(w / 2, h * .39f), style = Stroke(w * .045f))
+            val emblem = Path().apply {
+                moveTo(w * .31f, h * .46f)
+                lineTo(w * .27f, h * .26f)
+                lineTo(w * .42f, h * .35f)
+                lineTo(w * .5f, h * .20f)
+                lineTo(w * .58f, h * .35f)
+                lineTo(w * .73f, h * .26f)
+                lineTo(w * .69f, h * .46f)
+                close()
             }
+            drawPath(emblem, Color(0xFF09090B), style = Fill)
         }
         Column(Modifier.weight(1f, fill = false)) {
-            Text("TOP $rank · $title", color = metal, fontSize = if (compact) 10.sp else 12.sp,
-                fontWeight = FontWeight.ExtraBold, maxLines = 1, overflow = TextOverflow.Ellipsis)
-            Text("SIPALING LAMA MAIN", color = metal.copy(alpha = .85f),
-                style = MaterialTheme.typography.labelSmall, fontSize = if (compact) 9.sp else 10.sp,
-                maxLines = 1, overflow = TextOverflow.Ellipsis)
+            Text(
+                "TOP #$rank · $title",
+                color = metal,
+                fontSize = 11.5.sp,
+                fontWeight = FontWeight.ExtraBold,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+            Text(
+                "SIPALING LAMA MAIN · LEADERBOARD",
+                color = metal.copy(alpha = .85f),
+                style = MaterialTheme.typography.labelSmall,
+                fontSize = 9.5.sp,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
         }
     }
 }

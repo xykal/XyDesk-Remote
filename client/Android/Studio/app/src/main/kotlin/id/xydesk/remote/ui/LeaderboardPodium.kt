@@ -14,10 +14,24 @@ internal fun podiumRanks(entries: List<XyLeaderboardEntry>): Map<String, Int> {
         .mapValues { it.value.single().rank }
 }
 
+internal fun topTenLeaderboardRanks(entries: List<XyLeaderboardEntry>): Map<String, Int> {
+    val out = LinkedHashMap<String, Int>()
+    for (entry in entries) {
+        if (entry.rank !in 1..10 || entry.totalSeconds <= 0) continue
+        val ghKey = normalizedChatAccount(entry.githubLogin)
+        val nameKey = normalizedChatAccount(entry.name)
+        if (ghKey.isNotEmpty() && ghKey !in out) out[ghKey] = entry.rank
+        if (nameKey.isNotEmpty() && nameKey !in out) out[nameKey] = entry.rank
+    }
+    return out
+}
+
 /** Shared public snapshot: no network per bubble, no manual role grant, expires when stale. */
 internal object LeaderboardPodium {
     private val mutableRanks = MutableStateFlow<Map<String, Int>>(emptyMap())
+    private val mutableTopTen = MutableStateFlow<Map<String, Int>>(emptyMap())
     val ranks = mutableRanks.asStateFlow()
+    val topTen = mutableTopTen.asStateFlow()
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
     private var expiration: Job? = null
     private var revision = 0L
@@ -25,12 +39,16 @@ internal object LeaderboardPodium {
     @Synchronized
     fun publish(entries: List<XyLeaderboardEntry>) {
         mutableRanks.value = podiumRanks(entries)
+        mutableTopTen.value = topTenLeaderboardRanks(entries)
         val current = ++revision
         expiration?.cancel()
         expiration = scope.launch {
             delay(10 * 60_000L)
             synchronized(this@LeaderboardPodium) {
-                if (revision == current) mutableRanks.value = emptyMap()
+                if (revision == current) {
+                    mutableRanks.value = emptyMap()
+                    mutableTopTen.value = emptyMap()
+                }
             }
         }
     }

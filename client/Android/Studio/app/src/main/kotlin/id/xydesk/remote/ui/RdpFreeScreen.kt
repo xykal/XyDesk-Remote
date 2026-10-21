@@ -610,7 +610,7 @@ fun RdpFreeScreen(onBack: () -> Unit, onConnect: (ConnectionProfile) -> Unit) {
                         )
                     } else {
                         XySegmented(
-                            options = listOf("Sesi", "Opsi", "Secrets"),
+                            options = listOf("Sesi & Statistik", "Konfigurasi RDP", "Setup Secrets & Panduan"),
                             selectedIndex = activeTab,
                             onSelect = { activeTab = it },
                             modifier = Modifier.fillMaxWidth(),
@@ -618,7 +618,7 @@ fun RdpFreeScreen(onBack: () -> Unit, onConnect: (ConnectionProfile) -> Unit) {
 
                         when (activeTab) {
                             // ---------------------------------------------------------
-                            // TAB 0: SESI LIVE, KONTROL MULAI/STOP, & KONEKSI 1-KLIK
+                            // TAB 0: SESI LIVE, PANDUAN PEMULA, STATISTIK PENGGUNAAN & KONEKSI 1-KLIK
                             // ---------------------------------------------------------
                             0 -> {
                                 val vs = validatedSession
@@ -637,12 +637,145 @@ fun RdpFreeScreen(onBack: () -> Unit, onConnect: (ConnectionProfile) -> Unit) {
                                 } else {
                                     st?.configuredSecrets?.contains("PORTMAP_OVPN_CONFIG") == true
                                 }
+                                var showBeginnerGuide by remember {
+                                    mutableStateOf(!hasRdpPass || !hasAccessSecret)
+                                }
+
+                                // 1. KARTU PANDUAN MUDAH 3 LANGKAH (UNTUK PENGGUNA BARU YANG BELUM MENGERTI XYRDP)
+                                XyCard(Modifier.fillMaxWidth()) {
+                                    Row(
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .clickable { showBeginnerGuide = !showBeginnerGuide },
+                                        horizontalArrangement = Arrangement.SpaceBetween,
+                                        verticalAlignment = Alignment.CenterVertically,
+                                    ) {
+                                        Row(
+                                            verticalAlignment = Alignment.CenterVertically,
+                                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                            modifier = Modifier.weight(1f),
+                                        ) {
+                                            Icon(
+                                                imageVector = XyIcons.Info,
+                                                contentDescription = null,
+                                                tint = Color(0xFF38BDF8),
+                                                modifier = Modifier.size(18.dp),
+                                            )
+                                            Column {
+                                                Text(
+                                                    text = "Apa itu XyRDP & Cara Pakainya? (3 Langkah Mudah)",
+                                                    style = MaterialTheme.typography.titleSmall,
+                                                    fontWeight = FontWeight.ExtraBold,
+                                                )
+                                                Text(
+                                                    text = if (hasRdpPass && hasAccessSecret) {
+                                                        "Semua syarat sudah lengkap ✓ · Ketuk untuk lihat/tutup penjelasan"
+                                                    } else {
+                                                        "Baru pertama kali? Baca panduan singkat di bawah ini agar langsung paham"
+                                                    },
+                                                    style = MaterialTheme.typography.labelSmall,
+                                                    color = if (hasRdpPass && hasAccessSecret) Color(0xFF10B981) else Color(0xFFFBBF24),
+                                                )
+                                            }
+                                        }
+                                        Icon(
+                                            imageVector = if (showBeginnerGuide) XyIcons.ChevronUp else XyIcons.ChevronDown,
+                                            contentDescription = null,
+                                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                                            modifier = Modifier.size(16.dp),
+                                        )
+                                    }
+
+                                    AnimatedVisibility(visible = showBeginnerGuide) {
+                                        Column(
+                                            modifier = Modifier
+                                                .fillMaxWidth()
+                                                .padding(top = 10.dp),
+                                            verticalArrangement = Arrangement.spacedBy(8.dp),
+                                        ) {
+                                            Text(
+                                                text = "XyRDP membuat Komputer Cloud Gratis (Windows Server / Linux Ubuntu, 4 CPU, 16 GB RAM, SSD 75 GB) menggunakan mesin GitHub Actions di akun GitHub Anda sendiri.",
+                                                style = MaterialTheme.typography.bodySmall,
+                                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                            )
+                                            // Langkah 1
+                                            Row(
+                                                modifier = Modifier
+                                                    .fillMaxWidth()
+                                                    .clip(RoundedCornerShape(10.dp))
+                                                    .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f))
+                                                    .padding(10.dp),
+                                                horizontalArrangement = Arrangement.spacedBy(10.dp),
+                                                verticalAlignment = Alignment.CenterVertically,
+                                            ) {
+                                                Text(
+                                                    text = if (forkReady) "✓ 1" else "1",
+                                                    fontWeight = FontWeight.ExtraBold,
+                                                    color = if (forkReady) Color(0xFF10B981) else Color(0xFFFBBF24),
+                                                )
+                                                Column(Modifier.weight(1f)) {
+                                                    Text("Langkah 1: Fork Repository XyRDP", fontWeight = FontWeight.Bold, fontSize = 12.sp)
+                                                    Text("Menyalin mesin pembuat RDP ke akun GitHub @$login Anda (Sudah otomatis aktif).", fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                                }
+                                            }
+                                            // Langkah 2
+                                            Row(
+                                                modifier = Modifier
+                                                    .fillMaxWidth()
+                                                    .clip(RoundedCornerShape(10.dp))
+                                                    .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f))
+                                                    .clickable { activeTab = 2 }
+                                                    .padding(10.dp),
+                                                horizontalArrangement = Arrangement.spacedBy(10.dp),
+                                                verticalAlignment = Alignment.CenterVertically,
+                                            ) {
+                                                val step2Done = hasRdpPass && hasAccessSecret
+                                                Text(
+                                                    text = if (step2Done) "✓ 2" else "2",
+                                                    fontWeight = FontWeight.ExtraBold,
+                                                    color = if (step2Done) Color(0xFF10B981) else Color(0xFFFBBF24),
+                                                )
+                                                Column(Modifier.weight(1f)) {
+                                                    Text("Langkah 2: Pasang Password & Jalur Koneksi (Tab Setup Secrets)", fontWeight = FontWeight.Bold, fontSize = 12.sp)
+                                                    Text(
+                                                        if (step2Done) "RDP_PASSWORD & Jalur Koneksi sudah terpasang!"
+                                                        else "Ketuk di sini untuk membuka Tab Setup Secrets: buat RDP_PASSWORD (sandi masuk PC) & pasang konfigurasi Portmap.io / Tailscale.",
+                                                        fontSize = 11.sp,
+                                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                                    )
+                                                }
+                                            }
+                                            // Langkah 3
+                                            Row(
+                                                modifier = Modifier
+                                                    .fillMaxWidth()
+                                                    .clip(RoundedCornerShape(10.dp))
+                                                    .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f))
+                                                    .padding(10.dp),
+                                                horizontalArrangement = Arrangement.spacedBy(10.dp),
+                                                verticalAlignment = Alignment.CenterVertically,
+                                            ) {
+                                                Text(
+                                                    text = if (vs?.isVerifiedLive == true) "✓ 3" else "3",
+                                                    fontWeight = FontWeight.ExtraBold,
+                                                    color = if (vs?.isVerifiedLive == true) Color(0xFF10B981) else Color(0xFF38BDF8),
+                                                )
+                                                Column(Modifier.weight(1f)) {
+                                                    Text("Langkah 3: Klik 'Mulai' & Tunggu 2–3 Menit", fontWeight = FontWeight.Bold, fontSize = 12.sp)
+                                                    Text("Pilih OS (Windows / Linux) & Durasi di bawah, lalu tekan Mulai. Saat indikator berubah Hijau (SIAP TERHUBUNG), klik tombol 'Hubungkan ke Desktop RDP Sekarang'!", fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+
                                 if (st != null && (!hasRdpPass || !hasAccessSecret)) {
                                     Row(
                                         modifier = Modifier
                                             .fillMaxWidth()
                                             .clip(RoundedCornerShape(12.dp))
-                                            .background(MaterialTheme.colorScheme.surface)
+                                            .background(Color(0xFF3B1D11))
+                                            .border(1.dp, Color(0xFFF59E0B).copy(alpha = 0.55f), RoundedCornerShape(12.dp))
                                             .clickable { activeTab = 2 }
                                             .padding(horizontal = 12.dp, vertical = 10.dp),
                                         verticalAlignment = Alignment.CenterVertically,
@@ -651,25 +784,32 @@ fun RdpFreeScreen(onBack: () -> Unit, onConnect: (ConnectionProfile) -> Unit) {
                                         Icon(
                                             imageVector = XyIcons.Key,
                                             contentDescription = null,
-                                            tint = MaterialTheme.colorScheme.primary,
+                                            tint = Color(0xFFFBBF24),
                                             modifier = Modifier.size(16.dp),
                                         )
-                                        Text(
-                                            text = "Secrets belum lengkap · Ketuk untuk atur",
-                                            style = MaterialTheme.typography.labelMedium,
-                                            fontWeight = FontWeight.SemiBold,
-                                            modifier = Modifier.weight(1f),
-                                        )
+                                        Column(modifier = Modifier.weight(1f)) {
+                                            Text(
+                                                text = "Wajib Diisi Sebelum Mulai: Setup Secrets Belum Lengkap",
+                                                style = MaterialTheme.typography.labelMedium,
+                                                fontWeight = FontWeight.ExtraBold,
+                                                color = Color(0xFFFEF08A),
+                                            )
+                                            Text(
+                                                text = "Belum ada ${if (!hasRdpPass) "RDP_PASSWORD" else ""}${if (!hasRdpPass && !hasAccessSecret) " & " else ""}${if (!hasAccessSecret) (if (akses == "tailscale") "TAILSCALE_AUTH_KEY" else "PORTMAP_OVPN_CONFIG") else ""} · Ketuk di sini untuk mengatur",
+                                                style = MaterialTheme.typography.labelSmall,
+                                                color = Color(0xFFFDE68A),
+                                            )
+                                        }
                                         Icon(
                                             imageVector = XyIcons.ChevronRight,
                                             contentDescription = null,
-                                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                                            tint = Color(0xFFFBBF24),
                                             modifier = Modifier.size(15.dp),
                                         )
                                     }
                                 }
 
-                                // Kartu Utama Status Sesi & Kontrol Cepat
+                                // 2. KARTU UTAMA KONTROL PEMBUATAN RDP (PILIH OS + DURASI LANGSUNG TANPA POPUP)
                                 XyCard(Modifier.fillMaxWidth()) {
                                     Row(
                                         modifier = Modifier.fillMaxWidth(),
@@ -683,30 +823,45 @@ fun RdpFreeScreen(onBack: () -> Unit, onConnect: (ConnectionProfile) -> Unit) {
                                         ) {
                                             Box(
                                                 modifier = Modifier
-                                                    .size(9.dp)
+                                                    .size(10.dp)
                                                     .clip(CircleShape)
                                                     .background(
                                                         when (vs?.phase) {
                                                             XyRdpPhase.READY -> Color(0xFF10B981)
                                                             XyRdpPhase.PREPARING, XyRdpPhase.QUEUED -> Color(0xFFF59E0B)
                                                             XyRdpPhase.FAILED -> Color(0xFFEF4444)
-                                                            else -> MaterialTheme.colorScheme.outlineVariant
+                                                            else -> Color(0xFF38BDF8)
                                                         },
                                                     ),
                                             )
-                                            Text(
-                                                text = vs?.phaseLabel ?: "Siap Mulai",
-                                                style = MaterialTheme.typography.titleSmall,
-                                                fontWeight = FontWeight.Bold,
-                                            )
+                                            Column {
+                                                Text(
+                                                    text = vs?.phaseLabel ?: "Siap Membuat Server RDP Baru",
+                                                    style = MaterialTheme.typography.titleSmall,
+                                                    fontWeight = FontWeight.ExtraBold,
+                                                )
+                                                Text(
+                                                    text = "Spesifikasi Cloud: 4 vCPU · 16 GB RAM · SSD 75 GB · 120 FPS",
+                                                    style = MaterialTheme.typography.labelSmall,
+                                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                                )
+                                            }
                                         }
                                         if (r != null) {
-                                            Text(
-                                                text = "#${r.number}",
-                                                style = MaterialTheme.typography.labelSmall,
-                                                fontFamily = FontFamily.Monospace,
-                                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                            )
+                                            Box(
+                                                modifier = Modifier
+                                                    .clip(RoundedCornerShape(8.dp))
+                                                    .background(MaterialTheme.colorScheme.surfaceVariant)
+                                                    .padding(horizontal = 8.dp, vertical = 4.dp),
+                                            ) {
+                                                Text(
+                                                    text = "Sesi #${r.number}",
+                                                    style = MaterialTheme.typography.labelSmall,
+                                                    fontFamily = FontFamily.Monospace,
+                                                    fontWeight = FontWeight.Bold,
+                                                    color = MaterialTheme.colorScheme.primary,
+                                                )
+                                            }
                                         }
                                     }
 
@@ -715,18 +870,24 @@ fun RdpFreeScreen(onBack: () -> Unit, onConnect: (ConnectionProfile) -> Unit) {
                                         if (prog.totalSteps > 0) {
                                             Spacer(Modifier.height(8.dp))
                                             StatBar(
-                                                prog.currentStep ?: "Booting",
-                                                "${prog.completedSteps}/${prog.totalSteps}",
+                                                prog.currentStep ?: "Menyiapkan Server Cloud…",
+                                                "Tahap ${prog.completedSteps}/${prog.totalSteps}",
                                                 fraction(prog.completedSteps.toDouble(), prog.totalSteps.toDouble()),
                                             )
                                         }
                                     }
 
                                     Spacer(Modifier.height(10.dp))
-
+                                    Text(
+                                        text = "1. Pilih Sistem Operasi Server:",
+                                        style = MaterialTheme.typography.labelSmall,
+                                        fontWeight = FontWeight.Bold,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    )
+                                    Spacer(Modifier.height(6.dp))
                                     Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                                         XyPillButton(
-                                            text = "Windows",
+                                            text = "Windows Server",
                                             onClick = {
                                                 runnerImage = "windows-2022"
                                                 linuxMode = "desktop"
@@ -738,7 +899,7 @@ fun RdpFreeScreen(onBack: () -> Unit, onConnect: (ConnectionProfile) -> Unit) {
                                             modifier = Modifier.weight(1f),
                                         )
                                         XyPillButton(
-                                            text = "Linux XFCE",
+                                            text = "Linux Desktop",
                                             onClick = {
                                                 if (!runnerImage.startsWith("ubuntu", ignoreCase = true)) runnerImage = "ubuntu-24.04"
                                                 linuxMode = "desktop"
@@ -763,22 +924,104 @@ fun RdpFreeScreen(onBack: () -> Unit, onConnect: (ConnectionProfile) -> Unit) {
                                         )
                                     }
 
-                                    Spacer(Modifier.height(8.dp))
-                                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                                        XyPillButton(
-                                            text = if (isRunningOrQueued) "Berjalan" else "Mulai ($duration mnt)",
-                                            onClick = { confirmAction = "start" },
-                                            primary = true,
-                                            enabled = !busy && !isRunningOrQueued,
-                                            modifier = Modifier.weight(1.3f),
-                                        )
-                                        XyPillButton(
-                                            text = "Stop",
-                                            onClick = { confirmAction = "stop" },
-                                            primary = false,
-                                            enabled = !busy && isRunningOrQueued,
-                                            modifier = Modifier.weight(0.7f),
-                                        )
+                                    Spacer(Modifier.height(10.dp))
+                                    Text(
+                                        text = "2. Pilih Durasi Sesi Aktif (Menit):",
+                                        style = MaterialTheme.typography.labelSmall,
+                                        fontWeight = FontWeight.Bold,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    )
+                                    Spacer(Modifier.height(6.dp))
+                                    Row(
+                                        modifier = Modifier.fillMaxWidth(),
+                                        horizontalArrangement = Arrangement.spacedBy(6.dp),
+                                    ) {
+                                        listOf("60" to "1 Jam", "180" to "3 Jam", "300" to "5 Jam", "360" to "6 Jam").forEach { (mins, lbl) ->
+                                            val selectedDur = duration == mins
+                                            Box(
+                                                modifier = Modifier
+                                                    .weight(1f)
+                                                    .clip(RoundedCornerShape(10.dp))
+                                                    .background(
+                                                        if (selectedDur) MaterialTheme.colorScheme.primary
+                                                        else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.45f),
+                                                    )
+                                                    .clickable(enabled = !busy && !isRunningOrQueued) {
+                                                        duration = mins
+                                                        saveSettings()
+                                                    }
+                                                    .padding(vertical = 7.dp),
+                                                contentAlignment = Alignment.Center,
+                                            ) {
+                                                Text(
+                                                    text = "$lbl ($mins m)",
+                                                    fontSize = 10.5.sp,
+                                                    fontWeight = FontWeight.ExtraBold,
+                                                    color = if (selectedDur) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurface,
+                                                )
+                                            }
+                                        }
+                                    }
+
+                                    Spacer(Modifier.height(10.dp))
+                                    // Konfirmasi Mulai / Stop / Logout secara Inline (Tanpa Popup!)
+                                    if (confirmAction != null) {
+                                        Column(
+                                            modifier = Modifier
+                                                .fillMaxWidth()
+                                                .clip(RoundedCornerShape(12.dp))
+                                                .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.55f))
+                                                .border(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.5f), RoundedCornerShape(12.dp))
+                                                .padding(12.dp),
+                                            verticalArrangement = Arrangement.spacedBy(8.dp),
+                                        ) {
+                                            Text(
+                                                text = when (confirmAction) {
+                                                    "start" -> "Konfirmasi: Mulai Sesi RDP Baru ($runnerImage · $duration menit · Jalur $akses)?"
+                                                    "stop" -> "Konfirmasi: Hentikan paksa sesi RDP yang sedang berjalan?"
+                                                    else -> "Konfirmasi: Keluar dari akun GitHub @$login?"
+                                                },
+                                                style = MaterialTheme.typography.bodySmall,
+                                                fontWeight = FontWeight.Bold,
+                                            )
+                                            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                                XyPillButton(
+                                                    text = "Batal",
+                                                    onClick = { confirmAction = null },
+                                                    primary = false,
+                                                    compact = true,
+                                                    modifier = Modifier.weight(1f),
+                                                )
+                                                XyPillButton(
+                                                    text = "Ya, Lanjutkan",
+                                                    onClick = {
+                                                        val act = confirmAction
+                                                        confirmAction = null
+                                                        if (act != null) operate(act)
+                                                    },
+                                                    primary = true,
+                                                    compact = true,
+                                                    modifier = Modifier.weight(1f),
+                                                )
+                                            }
+                                        }
+                                    } else {
+                                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                            XyPillButton(
+                                                text = if (isRunningOrQueued) "Sesi Sedang Berjalan" else "Mulai RDP Sekarang ($duration mnt)",
+                                                onClick = { confirmAction = "start" },
+                                                primary = true,
+                                                enabled = !busy && !isRunningOrQueued,
+                                                modifier = Modifier.weight(1.35f),
+                                            )
+                                            XyPillButton(
+                                                text = "Stop Sesi",
+                                                onClick = { confirmAction = "stop" },
+                                                primary = false,
+                                                enabled = !busy && isRunningOrQueued,
+                                                modifier = Modifier.weight(0.65f),
+                                            )
+                                        }
                                     }
                                 }
 
@@ -929,44 +1172,140 @@ fun RdpFreeScreen(onBack: () -> Unit, onConnect: (ConnectionProfile) -> Unit) {
                                     }
                                 }
 
-                                // TELEMETRI & MONITOR RESOURCE LIVE
+                                // KARTU STATISTIK PENGGUNAAN & KUOTA CLOUD XYRDP (LENGKAP & MUDAH DIPAHAMI)
                                 val liveAcc = validatedSession?.access
-                                if (liveAcc != null) {
-                                    XyCard(Modifier.fillMaxWidth()) {
-                                        Text(
-                                            text = "Telemetri & Resource Server",
-                                            style = MaterialTheme.typography.titleSmall,
-                                            fontWeight = FontWeight.Bold,
-                                        )
-                                        Spacer(Modifier.height(8.dp))
-                                        val stMonitor = liveAcc.stats
-                                        if (stMonitor != null && stMonitor.ramTotalGb > 0.0) {
-                                            StatBar(
-                                                "RAM",
-                                                "${"%.1f".format(stMonitor.ramUsedGb)} / ${"%.1f".format(stMonitor.ramTotalGb)} GB",
-                                                fraction(stMonitor.ramUsedGb, stMonitor.ramTotalGb),
-                                            )
-                                            Spacer(Modifier.height(8.dp))
-                                            StatBar(
-                                                "Disk C:",
-                                                "Bebas ${"%.1f".format(stMonitor.diskFreeGb)} / ${"%.1f".format(stMonitor.diskTotalGb)} GB",
-                                                1f - fraction(stMonitor.diskFreeGb, stMonitor.diskTotalGb),
-                                            )
-                                            Spacer(Modifier.height(8.dp))
-                                            StatBar("CPU", "${stMonitor.cpuPercent}%", (stMonitor.cpuPercent / 100f).coerceIn(0f, 1f))
-                                            Spacer(Modifier.height(6.dp))
+                                val totalSessionsCount = (r?.number ?: 0).coerceAtLeast(if (liveAcc != null) 1 else 0)
+                                val localActiveSec = remember(r?.id, nowTickMillis) {
+                                    recordAndGetLocalUsageSeconds(context, 0L)
+                                }
+                                val activeUptimeMin = liveAcc?.stats?.uptimeMinutes ?: 0
+                                val estimatedMinutesUsed = remember(totalSessionsCount, activeUptimeMin, localActiveSec) {
+                                    ((totalSessionsCount * 120) + activeUptimeMin + (localActiveSec / 60).toInt()).coerceIn(0, 2000)
+                                }
+                                XyCard(Modifier.fillMaxWidth()) {
+                                    Row(
+                                        modifier = Modifier.fillMaxWidth(),
+                                        horizontalArrangement = Arrangement.SpaceBetween,
+                                        verticalAlignment = Alignment.CenterVertically,
+                                    ) {
+                                        Column {
                                             Text(
-                                                text = "Uptime: ${stMonitor.uptimeMinutes / 60}j ${stMonitor.uptimeMinutes % 60}m · Anti-Disconnect Keepalive Aktif",
+                                                text = "Statistik Penggunaan & Resource XyRDP",
+                                                style = MaterialTheme.typography.titleSmall,
+                                                fontWeight = FontWeight.ExtraBold,
+                                            )
+                                            Text(
+                                                text = "Pantau pemakaian sesi cloud, performa CPU/RAM/Disk & estimasi kuota GitHub",
                                                 style = MaterialTheme.typography.labelSmall,
                                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                                             )
-                                        } else {
+                                        }
+                                        Box(
+                                            modifier = Modifier
+                                                .clip(RoundedCornerShape(8.dp))
+                                                .background(Color(0xFF10B981).copy(alpha = 0.16f))
+                                                .padding(horizontal = 8.dp, vertical = 4.dp),
+                                        ) {
                                             Text(
-                                                text = "${liveAcc.initialCpuThreads} vCPU · RAM ${"%.1f".format(liveAcc.initialRamGb)} GB · Disk bebas ${"%.1f".format(liveAcc.initialDiskFreeGb)} GB",
-                                                style = MaterialTheme.typography.bodySmall,
-                                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                                text = if (liveAcc != null) "LIVE MONITOR" else "SIAP PAKAI",
+                                                fontSize = 9.5.sp,
+                                                fontWeight = FontWeight.ExtraBold,
+                                                color = Color(0xFF10B981),
                                             )
                                         }
+                                    }
+
+                                    Spacer(Modifier.height(10.dp))
+                                    // 4 Kotak Ringkasan Statistik Penggunaan
+                                    Row(
+                                        modifier = Modifier.fillMaxWidth(),
+                                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                    ) {
+                                        Column(
+                                            modifier = Modifier
+                                                .weight(1f)
+                                                .clip(RoundedCornerShape(10.dp))
+                                                .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.38f))
+                                                .padding(10.dp),
+                                            horizontalAlignment = Alignment.CenterHorizontally,
+                                        ) {
+                                            Text(
+                                                text = "${totalSessionsCount}x",
+                                                style = MaterialTheme.typography.titleMedium,
+                                                fontWeight = FontWeight.ExtraBold,
+                                                color = Color(0xFF38BDF8),
+                                            )
+                                            Text("Total Sesi RDP", fontSize = 10.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                        }
+                                        Column(
+                                            modifier = Modifier
+                                                .weight(1f)
+                                                .clip(RoundedCornerShape(10.dp))
+                                                .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.38f))
+                                                .padding(10.dp),
+                                            horizontalAlignment = Alignment.CenterHorizontally,
+                                        ) {
+                                            Text(
+                                                text = "${activeUptimeMin / 60}j ${activeUptimeMin % 60}m",
+                                                style = MaterialTheme.typography.titleMedium,
+                                                fontWeight = FontWeight.ExtraBold,
+                                                color = Color(0xFF10B981),
+                                            )
+                                            Text("Uptime Sesi Ini", fontSize = 10.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                        }
+                                        Column(
+                                            modifier = Modifier
+                                                .weight(1f)
+                                                .clip(RoundedCornerShape(10.dp))
+                                                .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.38f))
+                                                .padding(10.dp),
+                                            horizontalAlignment = Alignment.CenterHorizontally,
+                                        ) {
+                                            Text(
+                                                text = formatLeaderboardDuration(localActiveSec),
+                                                style = MaterialTheme.typography.titleMedium,
+                                                fontWeight = FontWeight.ExtraBold,
+                                                color = Color(0xFFFBBF24),
+                                            )
+                                            Text("Total Waktu Main", fontSize = 10.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                        }
+                                    }
+
+                                    Spacer(Modifier.height(10.dp))
+                                    StatBar(
+                                        "Estimasi Pemakaian Kuota GitHub Actions",
+                                        "$estimatedMinutesUsed / 2.000 mnt (Repo Publik Unlimited)",
+                                        fraction(estimatedMinutesUsed.toDouble(), 2000.0),
+                                    )
+
+                                    Spacer(Modifier.height(10.dp))
+                                    val stMonitor = liveAcc?.stats
+                                    if (stMonitor != null && stMonitor.ramTotalGb > 0.0) {
+                                        StatBar(
+                                            "Pemakaian RAM Server",
+                                            "${"%.1f".format(stMonitor.ramUsedGb)} / ${"%.1f".format(stMonitor.ramTotalGb)} GB",
+                                            fraction(stMonitor.ramUsedGb, stMonitor.ramTotalGb),
+                                        )
+                                        Spacer(Modifier.height(8.dp))
+                                        StatBar(
+                                            "Penyimpanan SSD Disk C:",
+                                            "Bebas ${"%.1f".format(stMonitor.diskFreeGb)} / ${"%.1f".format(stMonitor.diskTotalGb)} GB",
+                                            1f - fraction(stMonitor.diskFreeGb, stMonitor.diskTotalGb),
+                                        )
+                                        Spacer(Modifier.height(8.dp))
+                                        StatBar("Beban CPU (4 vCPU)", "${stMonitor.cpuPercent}%", (stMonitor.cpuPercent / 100f).coerceIn(0f, 1f))
+                                        Spacer(Modifier.height(6.dp))
+                                        Text(
+                                            text = "Jalur Aktif: ${akses.uppercase()} · Keepalive Anti-Disconnect & Auto-Heal Shortcut Desktop Aktif",
+                                            style = MaterialTheme.typography.labelSmall,
+                                            color = Color(0xFF10B981),
+                                        )
+                                    } else {
+                                        Text(
+                                            text = "Spesifikasi Standar Sesi: ${liveAcc?.initialCpuThreads ?: 4} vCPU · RAM ${"%.1f".format(liveAcc?.initialRamGb ?: 16.0)} GB · SSD bebas ${"%.1f".format(liveAcc?.initialDiskFreeGb ?: 75.0)} GB · Jalur Koneksi: ${akses.uppercase()}",
+                                            style = MaterialTheme.typography.bodySmall,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                        )
                                     }
                                 }
                             }
@@ -1029,45 +1368,157 @@ fun RdpFreeScreen(onBack: () -> Unit, onConnect: (ConnectionProfile) -> Unit) {
                                     Spacer(Modifier.height(10.dp))
                                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                                         XyPillButton(
-                                            text = "Durasi: $duration mnt",
-                                            onClick = { chooseDuration = true },
-                                            primary = false,
+                                            text = "Durasi: $duration mnt ▾",
+                                            onClick = { chooseDuration = !chooseDuration },
+                                            primary = chooseDuration,
                                             compact = true,
                                             modifier = Modifier.weight(1f),
                                         )
                                         XyPillButton(
-                                            text = "Image: $runnerImage",
-                                            onClick = { chooseRunner = true },
-                                            primary = false,
+                                            text = "OS: $runnerImage ▾",
+                                            onClick = { chooseRunner = !chooseRunner },
+                                            primary = chooseRunner,
                                             compact = true,
                                             modifier = Modifier.weight(1f),
                                         )
+                                    }
+                                    AnimatedVisibility(visible = chooseDuration) {
+                                        Column(
+                                            modifier = Modifier
+                                                .fillMaxWidth()
+                                                .padding(top = 8.dp)
+                                                .clip(RoundedCornerShape(12.dp))
+                                                .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f))
+                                                .padding(10.dp),
+                                            verticalArrangement = Arrangement.spacedBy(6.dp),
+                                        ) {
+                                            Text("Pilih Durasi Sesi RDP:", style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold)
+                                            listOf("30", "60", "120", "180", "240", "300", "360").chunked(4).forEach { rowMins ->
+                                                Row(horizontalArrangement = Arrangement.spacedBy(6.dp), modifier = Modifier.fillMaxWidth()) {
+                                                    rowMins.forEach { m ->
+                                                        XyPillButton(
+                                                            text = "$m mnt",
+                                                            onClick = { duration = m; saveSettings(); chooseDuration = false },
+                                                            primary = duration == m,
+                                                            compact = true,
+                                                            modifier = Modifier.weight(1f),
+                                                        )
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    }
+                                    AnimatedVisibility(visible = chooseRunner) {
+                                        Column(
+                                            modifier = Modifier
+                                                .fillMaxWidth()
+                                                .padding(top = 8.dp)
+                                                .clip(RoundedCornerShape(12.dp))
+                                                .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f))
+                                                .padding(10.dp),
+                                            verticalArrangement = Arrangement.spacedBy(6.dp),
+                                        ) {
+                                            Text("Pilih Sistem Operasi & Versi Image:", style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold)
+                                            listOf(
+                                                Triple("windows-2022", "desktop", "Windows Server 2022 (Stabil · GTA SA-MP & Minecraft)"),
+                                                Triple("windows-2025", "desktop", "Windows Server 2025 (Kernel Terbaru & Cepat)"),
+                                                Triple("ubuntu-24.04", "desktop", "Ubuntu 24.04 LTS Desktop (XFCE4 + XRDP :3389)"),
+                                                Triple("ubuntu-24.04", "polos", "Ubuntu 24.04 LTS Polos (Headless SSH :22)"),
+                                            ).forEach { (img, mode, lbl) ->
+                                                XyPillButton(
+                                                    text = lbl,
+                                                    onClick = { runnerImage = img; linuxMode = mode; saveSettings(); chooseRunner = false },
+                                                    primary = runnerImage == img && linuxMode == mode,
+                                                    compact = true,
+                                                    modifier = Modifier.fillMaxWidth(),
+                                                )
+                                            }
+                                        }
                                     }
                                     Spacer(Modifier.height(8.dp))
                                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                                         XyPillButton(
-                                            text = "Akses: $akses",
-                                            onClick = { chooseAkses = true },
-                                            primary = false,
+                                            text = "Jalur: $akses ▾",
+                                            onClick = { chooseAkses = !chooseAkses },
+                                            primary = chooseAkses,
                                             compact = true,
                                             modifier = Modifier.weight(1f),
                                         )
                                         XyPillButton(
-                                            text = "Debloat: $debloat",
-                                            onClick = { chooseDebloat = true },
-                                            primary = false,
+                                            text = "Debloat: $debloat ▾",
+                                            onClick = { chooseDebloat = !chooseDebloat },
+                                            primary = chooseDebloat,
                                             compact = true,
                                             modifier = Modifier.weight(1f),
                                         )
                                     }
+                                    AnimatedVisibility(visible = chooseAkses) {
+                                        Column(
+                                            modifier = Modifier
+                                                .fillMaxWidth()
+                                                .padding(top = 8.dp)
+                                                .clip(RoundedCornerShape(12.dp))
+                                                .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f))
+                                                .padding(10.dp),
+                                            verticalArrangement = Arrangement.spacedBy(6.dp),
+                                        ) {
+                                            listOf(
+                                                "portmap" to "Portmap.io OpenVPN (Tanpa aplikasi tambahan di HP)",
+                                                "tailscale" to "Tailscale Mesh VPN (Koneksi P2P paling cepat & stabil)",
+                                            ).forEach { (m, lbl) ->
+                                                XyPillButton(
+                                                    text = lbl,
+                                                    onClick = { akses = m; saveSettings(); chooseAkses = false },
+                                                    primary = akses == m,
+                                                    compact = true,
+                                                    modifier = Modifier.fillMaxWidth(),
+                                                )
+                                            }
+                                        }
+                                    }
+                                    AnimatedVisibility(visible = chooseDebloat) {
+                                        Row(
+                                            modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
+                                            horizontalArrangement = Arrangement.spacedBy(6.dp),
+                                        ) {
+                                            listOf("ringan" to "Ringan", "full" to "Full Debloat", "tidak" to "Tanpa Debloat").forEach { (m, lbl) ->
+                                                XyPillButton(
+                                                    text = lbl,
+                                                    onClick = { debloat = m; saveSettings(); chooseDebloat = false },
+                                                    primary = debloat == m,
+                                                    compact = true,
+                                                    modifier = Modifier.weight(1f),
+                                                )
+                                            }
+                                        }
+                                    }
                                     Spacer(Modifier.height(8.dp))
                                     XyPillButton(
-                                        text = "Driver Grafis OpenGL/Mesa: $grafis",
-                                        onClick = { chooseGrafis = true },
-                                        primary = false,
+                                        text = "Driver Grafis OpenGL/Mesa: $grafis ▾",
+                                        onClick = { chooseGrafis = !chooseGrafis },
+                                        primary = chooseGrafis,
                                         compact = true,
                                         modifier = Modifier.fillMaxWidth(),
                                     )
+                                    AnimatedVisibility(visible = chooseGrafis) {
+                                        Row(
+                                            modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
+                                            horizontalArrangement = Arrangement.spacedBy(6.dp),
+                                        ) {
+                                            listOf(
+                                                "software" to "Mesa3D OpenGL 4.6 (Wajib Game)",
+                                                "tidak" to "Driver Standar Windows",
+                                            ).forEach { (m, lbl) ->
+                                                XyPillButton(
+                                                    text = lbl,
+                                                    onClick = { grafis = m; saveSettings(); chooseGrafis = false },
+                                                    primary = grafis == m,
+                                                    compact = true,
+                                                    modifier = Modifier.weight(1f),
+                                                )
+                                            }
+                                        }
+                                    }
                                     Spacer(Modifier.height(10.dp))
                                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                                         XyField(
@@ -1377,165 +1828,6 @@ fun RdpFreeScreen(onBack: () -> Unit, onConnect: (ConnectionProfile) -> Unit) {
                 }
             }
         }
-    }
-
-    if (chooseDuration) {
-        XyOverlay(title = "Durasi Sesi RDP", onDismiss = { chooseDuration = false }) {
-            Column(
-                Modifier.heightIn(max = 360.dp).verticalScroll(rememberScrollState()),
-                verticalArrangement = Arrangement.spacedBy(8.dp),
-            ) {
-                listOf("15", "30", "60", "120", "180", "240", "300", "330", "360").forEach { minutes ->
-                    XyPillButton(
-                        "$minutes menit (${if (minutes == "360") "Maksimal 6 Jam" else "${minutes.toInt() / 60}j ${minutes.toInt() % 60}m"})",
-                        { duration = minutes; saveSettings(); chooseDuration = false },
-                        primary = duration == minutes,
-                        modifier = Modifier.fillMaxWidth(),
-                    )
-                }
-            }
-        }
-    }
-    if (chooseRunner) {
-        XyOverlay(title = "Pilih OS & Image Runner", onDismiss = { chooseRunner = false }) {
-            Column(
-                Modifier.heightIn(max = 420.dp).verticalScroll(rememberScrollState()),
-                verticalArrangement = Arrangement.spacedBy(8.dp),
-            ) {
-                Text(
-                    "Windows Server (Desktop Penuh + Game Win64)",
-                    style = MaterialTheme.typography.labelMedium,
-                    fontWeight = FontWeight.Bold,
-                    color = MaterialTheme.colorScheme.primary,
-                )
-                listOf(
-                    "windows-2022" to "Windows Server 2022 (Stabil · GTA SA-MP & Minecraft)",
-                    "windows-2025" to "Windows Server 2025 (Kernel Terbaru & Performa I/O Tinggi)",
-                    "windows-latest" to "windows-latest (Image Windows Terbaru GitHub)",
-                ).forEach { (id, label) ->
-                    XyPillButton(
-                        label,
-                        { runnerImage = id; linuxMode = "desktop"; saveSettings(); chooseRunner = false },
-                        primary = runnerImage == id && !runnerImage.startsWith("ubuntu"),
-                        modifier = Modifier.fillMaxWidth(),
-                    )
-                }
-                Spacer(Modifier.height(6.dp))
-                Text(
-                    "Linux Desktop (XFCE4 + XRDP :3389 · Boot ~90 Detik)",
-                    style = MaterialTheme.typography.labelMedium,
-                    fontWeight = FontWeight.Bold,
-                    color = MaterialTheme.colorScheme.primary,
-                )
-                listOf(
-                    "ubuntu-24.04" to "Ubuntu 24.04 LTS Desktop (XFCE4 + XRDP + SSH :22)",
-                    "ubuntu-22.04" to "Ubuntu 22.04 LTS Desktop (XFCE4 LTS Klasik)",
-                    "ubuntu-latest" to "ubuntu-latest Desktop (Otomatis Image Terbaru)",
-                ).forEach { (id, label) ->
-                    XyPillButton(
-                        label,
-                        { runnerImage = id; linuxMode = "desktop"; saveSettings(); chooseRunner = false },
-                        primary = runnerImage == id && linuxMode == "desktop",
-                        modifier = Modifier.fillMaxWidth(),
-                    )
-                }
-                Spacer(Modifier.height(6.dp))
-                Text(
-                    "Linux Polos Tanpa XFCE4 (Headless SSH VPS · Boot ~20 Detik)",
-                    style = MaterialTheme.typography.labelMedium,
-                    fontWeight = FontWeight.Bold,
-                    color = MaterialTheme.colorScheme.primary,
-                )
-                listOf(
-                    "ubuntu-24.04" to "Ubuntu 24.04 LTS Polos (Server SSH Murni)",
-                    "ubuntu-22.04" to "Ubuntu 22.04 LTS Polos (Server SSH Murni)",
-                    "ubuntu-latest" to "ubuntu-latest Polos (Server SSH Murni)",
-                ).forEach { (id, label) ->
-                    XyPillButton(
-                        label,
-                        { runnerImage = id; linuxMode = "polos"; saveSettings(); chooseRunner = false },
-                        primary = runnerImage == id && linuxMode == "polos",
-                        modifier = Modifier.fillMaxWidth(),
-                    )
-                }
-            }
-        }
-    }
-    if (chooseAkses) {
-        XyOverlay(title = "Jalur Akses Koneksi", onDismiss = { chooseAkses = false }) {
-            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                listOf(
-                    "tailscale" to "Tailscale (Jaringan Privat Paling Cepat & Stabil)",
-                    "portmap" to "Portmap.io (TCP Publik Tanpa VPN di HP)",
-                ).forEach { (mode, label) ->
-                    XyPillButton(
-                        label,
-                        { akses = mode; saveSettings(); chooseAkses = false },
-                        primary = akses == mode,
-                        modifier = Modifier.fillMaxWidth(),
-                    )
-                }
-            }
-        }
-    }
-    if (chooseDebloat) {
-        XyOverlay(title = "Mode Debloat Windows", onDismiss = { chooseDebloat = false }) {
-            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                listOf(
-                    "ringan" to "Ringan (Hapus OneDrive/Xbox/Bloatware Appx)",
-                    "full" to "Full (Ringan + Hapus Edge bila Chrome ada)",
-                    "tidak" to "Tidak (Biarkan bawaan runner)",
-                ).forEach { (mode, label) ->
-                    XyPillButton(
-                        label,
-                        { debloat = mode; saveSettings(); chooseDebloat = false },
-                        primary = debloat == mode,
-                        modifier = Modifier.fillMaxWidth(),
-                    )
-                }
-            }
-        }
-    }
-    if (chooseGrafis) {
-        XyOverlay(title = "Driver Grafis OpenGL / Mesa", onDismiss = { chooseGrafis = false }) {
-            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                listOf(
-                    "software" to "Software (Mesa3D OpenGL 4.6 D3D12 — Wajib untuk Game)",
-                    "tidak" to "Tidak (Gunakan driver bawaan Windows)",
-                ).forEach { (mode, label) ->
-                    XyPillButton(
-                        label,
-                        { grafis = mode; saveSettings(); chooseGrafis = false },
-                        primary = grafis == mode,
-                        modifier = Modifier.fillMaxWidth(),
-                    )
-                }
-            }
-        }
-    }
-    confirmAction?.let { action ->
-        val isLin = runnerImage.startsWith("ubuntu", ignoreCase = true)
-        val osDesc = when {
-            isLin && linuxMode == "polos" -> "Linux Polos SSH ($runnerImage · Port :22)"
-            isLin -> "Linux Desktop XFCE4 ($runnerImage · RDP :3389)"
-            else -> "Windows Server RDP ($runnerImage · RDP :3389)"
-        }
-        XyDialog(
-            title = when (action) {
-                "start" -> "Mulai Sesi Cloud RDP?"
-                "stop" -> "Hentikan Sesi Aktif?"
-                else -> "Putuskan Akun GitHub?"
-            },
-            body = when (action) {
-                "start" -> "Menjalankan $osDesc selama $duration menit di akun GitHub Anda. Kuota, biaya, dan kebijakan GitHub/provider berlaku; bukan server permanen. Pemulihan data bergantung backup workflow yang berhasil."
-                "stop" -> "Meminta GitHub menghentikan run aktif. Pembatalan dapat menghentikan langkah backup; data yang belum tersimpan bisa hilang. Pastikan backup selesai sebelum Stop."
-                else -> "Melepas token GitHub dari HP ini (repository dan sesi aktif di GitHub tetap aman)."
-            },
-            confirmLabel = "Lanjutkan",
-            onConfirm = { confirmAction = null; operate(action) },
-            dismissLabel = "Batal",
-            onDismiss = { confirmAction = null },
-        )
     }
 }
 

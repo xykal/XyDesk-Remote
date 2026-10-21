@@ -127,32 +127,56 @@ private fun ChatBackupAccountPanel(login: String?, snapshot: () -> List<ChatMess
     })
     XyPillButton(text = "Hapus arsip lokal", primary = false, enabled = !busy && !login.isNullOrBlank(), onClick = { confirmDelete = true })
     if (confirmDelete) {
-        XyDialog(title = "Hapus arsip impor di HP ini?",
-            body = "Chat live dan file backup ekspor tidak dihapus. Hapus salinan file lama melalui pengelola file jika diperlukan.",
-            confirmLabel = "Hapus arsip lokal", dismissLabel = "Batal", onDismiss = { confirmDelete = false }, onConfirm = {
-                confirmDelete = false
-                val account = login
-                if (!account.isNullOrBlank()) {
-                    busy = true
-                    scope.launch {
-                        try {
-                            withContext(Dispatchers.IO) { GlobalChatOfflineCache.deleteArchive(context.applicationContext, account) }
-                            archive = null; notify("Arsip lokal dihapus. File ekspor tidak berubah.")
-                        } catch (e: Exception) {
-                            if (e is CancellationException) throw e
-                            notify("Arsip lokal gagal dihapus; coba lagi.")
-                        } finally { busy = false }
-                    }
-                }
-            })
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(vertical = 6.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            Text("Hapus arsip impor di HP ini? Chat live dan file backup ekspor tidak dihapus.")
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                XyPillButton(
+                    text = "Ya, Hapus Arsip Lokal",
+                    onClick = {
+                        confirmDelete = false
+                        val account = login
+                        if (!account.isNullOrBlank()) {
+                            busy = true
+                            scope.launch {
+                                try {
+                                    withContext(Dispatchers.IO) { GlobalChatOfflineCache.deleteArchive(context.applicationContext, account) }
+                                    archive = null; notify("Arsip lokal dihapus. File ekspor tidak berubah.")
+                                } catch (e: Exception) {
+                                    if (e is CancellationException) throw e
+                                    notify("Arsip lokal gagal dihapus; coba lagi.")
+                                } finally { busy = false }
+                            }
+                        }
+                    },
+                    compact = true,
+                )
+                XyPillButton(
+                    text = "Batal",
+                    primary = false,
+                    compact = true,
+                    onClick = { confirmDelete = false },
+                )
+            }
+        }
     }
     archive?.let { rows ->
-        XyOverlay(title = "Arsip lokal • baca-saja (${rows.size})", onDismiss = { archive = null }) {
-            Column(Modifier.heightIn(max = 460.dp).verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                if (rows.isEmpty()) Text("Belum ada arsip. Impor file backup terlebih dahulu.")
-                rows.forEach { row -> Text("${row.name.take(100)}: ${if (row.deleted) "Pesan ini dihapus" else row.text.take(4000)}") }
-                XyPillButton(text = "Tutup", onClick = { archive = null })
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(vertical = 6.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            Text("Arsip lokal • baca-saja (${rows.size})")
+            if (rows.isEmpty()) Text("Belum ada arsip. Impor file backup terlebih dahulu.")
+            rows.take(50).forEach { row ->
+                Text("${row.name.take(100)}: ${if (row.deleted) "Pesan ini dihapus" else row.text.take(4000)}")
             }
+            XyPillButton(text = "Sembunyikan Arsip", primary = false, compact = true, onClick = { archive = null })
         }
     }
 }

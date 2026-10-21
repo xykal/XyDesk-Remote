@@ -1468,10 +1468,40 @@ private fun DevicesScreen(
                 )
             }
 
+            val inAppUnread by XyInAppNotificationBus.unreadCount.collectAsState()
+            val inAppHistory by XyInAppNotificationBus.history.collectAsState()
             XyTopBar(
                 title = xy("Perangkat", "Devices"),
                 onBack = null,
                 actions = {
+                    // Tombol Lonceng Pusat Notifikasi Dalam Aplikasi (In-App Notification Center)
+                    Box(contentAlignment = Alignment.TopEnd) {
+                        XyIconPill(
+                            XyIcons.Bell,
+                            { XyInAppNotificationBus.openInbox() },
+                            active = inAppUnread > 0,
+                            flat = true,
+                            contentDescription = xy("Notifikasi Dalam Aplikasi", "In-App Notifications"),
+                        )
+                        val badgeCount = if (inAppUnread > 0) inAppUnread else inAppHistory.size
+                        if (badgeCount > 0) {
+                            Box(
+                                modifier = Modifier
+                                    .padding(top = 2.dp, end = 2.dp)
+                                    .clip(RoundedCornerShape(50))
+                                    .background(if (inAppUnread > 0) Color(0xFFFE2C55) else Color(0xFF38BDF8))
+                                    .padding(horizontal = 4.5.dp, vertical = 1.dp),
+                                contentAlignment = Alignment.Center,
+                            ) {
+                                Text(
+                                    text = if (badgeCount > 99) "99+" else "$badgeCount",
+                                    fontSize = 8.5.sp,
+                                    fontWeight = FontWeight.ExtraBold,
+                                    color = Color.White,
+                                )
+                            }
+                        }
+                    }
                     XyIconPill(
                         XyIcons.Grid,
                         {

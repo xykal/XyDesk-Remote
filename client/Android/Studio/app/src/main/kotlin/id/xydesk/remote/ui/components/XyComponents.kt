@@ -634,59 +634,68 @@ fun XyOverlay(
     fun requestDismiss() {
         if (!leaving && onDismiss != null) leaving = true
     }
-    Box(
-        Modifier.fillMaxSize().zIndex(50f),
-        contentAlignment = Alignment.Center,
+    androidx.compose.ui.window.Dialog(
+        onDismissRequest = { requestDismiss() },
+        properties = androidx.compose.ui.window.DialogProperties(
+            usePlatformDefaultWidth = false,
+            dismissOnBackPress = onDismiss != null,
+            dismissOnClickOutside = false,
+        ),
     ) {
         Box(
-            Modifier
-                .fillMaxSize()
-                .background(Color.Black.copy(alpha = scrimAlpha))
-                .pointerInput(onDismiss) {
-                    awaitEachGesture {
-                        val down = awaitFirstDown(requireUnconsumed = false)
-                        down.consume()
-                        var moved = false
-                        val slop = viewConfiguration.touchSlop
-                        var total = 0f
-                        while (true) {
-                            val event = awaitPointerEvent()
-                            event.changes.forEach { change ->
-                                total += (change.position - change.previousPosition).getDistance()
-                                if (total > slop) moved = true
-                                change.consume()
-                            }
-                            if (event.changes.none { it.pressed }) break
-                        }
-                        if (!moved) requestDismiss()
-                    }
-                },
-        )
-        Column(
-            modifier
-                .padding(24.dp)
-                .widthIn(max = maxWidth)
-                .fillMaxWidth()
-                .graphicsLayer {
-                    scaleX = cardScale
-                    scaleY = cardScale
-                    alpha = cardAlpha
-                    transformOrigin = popOrigin
-                }
-                .clip(RoundedCornerShape(24.dp))
-                .background(MaterialTheme.colorScheme.surface)
-                .pointerInput(Unit) {}
-                .padding(20.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp),
+            Modifier.fillMaxSize().zIndex(50f),
+            contentAlignment = Alignment.Center,
         ) {
-            Text(
-                title.uppercase(),
-                fontFamily = XyDisplay,
-                fontSize = 11.sp,
-                letterSpacing = 1.3.sp,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            Box(
+                Modifier
+                    .fillMaxSize()
+                    .background(Color.Black.copy(alpha = scrimAlpha))
+                    .pointerInput(onDismiss) {
+                        awaitEachGesture {
+                            val down = awaitFirstDown(requireUnconsumed = false)
+                            down.consume()
+                            var moved = false
+                            val slop = viewConfiguration.touchSlop
+                            var total = 0f
+                            while (true) {
+                                val event = awaitPointerEvent()
+                                event.changes.forEach { change ->
+                                    total += (change.position - change.previousPosition).getDistance()
+                                    if (total > slop) moved = true
+                                    change.consume()
+                                }
+                                if (event.changes.none { it.pressed }) break
+                            }
+                            if (!moved) requestDismiss()
+                        }
+                    },
             )
-            content()
+            Column(
+                modifier
+                    .padding(24.dp)
+                    .widthIn(max = maxWidth)
+                    .fillMaxWidth()
+                    .graphicsLayer {
+                        scaleX = cardScale
+                        scaleY = cardScale
+                        alpha = cardAlpha
+                        transformOrigin = popOrigin
+                    }
+                    .clip(RoundedCornerShape(24.dp))
+                    .background(MaterialTheme.colorScheme.surface)
+                    .pointerInput(Unit) {}
+                    .padding(20.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp),
+            ) {
+                Text(
+                    title.uppercase(),
+                    fontFamily = XyDisplay,
+                    fontSize = 11.sp,
+                    letterSpacing = 1.3.sp,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                content()
+            }
         }
     }
 }
