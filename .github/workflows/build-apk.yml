@@ -105,18 +105,18 @@ jobs:
         run: ./gradlew --stacktrace --no-daemon --build-cache :app:compileDebugKotlin
       - name: Compile static Windows Host Agent (mingw-w64)
         run: |
-          # apt di runner kadang menggantung tanpa batas waktu -> pasang timeout + retry
           export DEBIAN_FRONTEND=noninteractive
-          APT_OPTS="-o Acquire::Retries=5 -o Acquire::http::Timeout=25 -o Acquire::https::Timeout=25 -o Acquire::ForceIPv4=true"
-          # Mirror apt runner kadang lambat/timeout: ulangi beberapa kali.
+          sudo sed -i 's|http://azure.archive.ubuntu.com/ubuntu|https://mirrors.edge.kernel.org/ubuntu|g' /etc/apt/sources.list /etc/apt/sources.list.d/*.sources 2>/dev/null || true
+          APT_OPTS="-o Acquire::Retries=3 -o Acquire::http::Timeout=15 -o Acquire::https::Timeout=15 -o Acquire::ForceIPv4=true"
           for attempt in 1 2 3; do
-            if timeout 300 sudo apt-get $APT_OPTS update -qq &&
-               timeout 900 sudo apt-get $APT_OPTS install -y -qq g++-mingw-w64-x86-64 zip; then
+            if timeout 120 sudo apt-get $APT_OPTS update -qq &&
+               timeout 240 sudo apt-get $APT_OPTS install -y --no-install-recommends -qq g++-mingw-w64-x86-64 zip; then
               break
             fi
+            sudo sed -i 's|https://mirrors.edge.kernel.org/ubuntu|http://archive.ubuntu.com/ubuntu|g' /etc/apt/sources.list /etc/apt/sources.list.d/*.sources 2>/dev/null || true
             echo "::warning::apt mingw-w64 percobaan $attempt gagal, ulangi"
             sudo rm -f /var/lib/apt/lists/lock /var/cache/apt/archives/lock || true
-            sleep 10
+            sleep 5
           done
           if ! command -v x86_64-w64-mingw32-g++ >/dev/null; then
             # Toolchain host tidak tersedia (bukan salah kode). Job Release tetap
@@ -329,15 +329,17 @@ jobs:
       - name: Host dependencies (pkg-config + nasm + mingw-w64)
         run: |
           export DEBIAN_FRONTEND=noninteractive
-          APT_OPTS="-o Acquire::Retries=5 -o Acquire::http::Timeout=25 -o Acquire::https::Timeout=25 -o Acquire::ForceIPv4=true"
+          sudo sed -i 's|http://azure.archive.ubuntu.com/ubuntu|https://mirrors.edge.kernel.org/ubuntu|g' /etc/apt/sources.list /etc/apt/sources.list.d/*.sources 2>/dev/null || true
+          APT_OPTS="-o Acquire::Retries=3 -o Acquire::http::Timeout=15 -o Acquire::https::Timeout=15 -o Acquire::ForceIPv4=true"
           for attempt in 1 2 3; do
-            if timeout 300 sudo apt-get $APT_OPTS update -qq &&
-               timeout 1200 sudo apt-get $APT_OPTS install -y -qq pkg-config nasm g++-mingw-w64-x86-64 zip; then
+            if timeout 120 sudo apt-get $APT_OPTS update -qq &&
+               timeout 240 sudo apt-get $APT_OPTS install -y --no-install-recommends -qq pkg-config nasm g++-mingw-w64-x86-64 zip; then
               break
             fi
+            sudo sed -i 's|https://mirrors.edge.kernel.org/ubuntu|http://archive.ubuntu.com/ubuntu|g' /etc/apt/sources.list /etc/apt/sources.list.d/*.sources 2>/dev/null || true
             echo "::warning::apt host deps percobaan $attempt gagal, ulangi"
             sudo rm -f /var/lib/apt/lists/lock /var/cache/apt/archives/lock || true
-            sleep 10
+            sleep 5
           done
           x86_64-w64-mingw32-g++ --version | head -n 1
           nasm -v
