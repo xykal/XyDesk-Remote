@@ -1677,7 +1677,8 @@ fun AddDeviceScreen(
                 )
                 Spacer(Modifier.height(6.dp))
                 XyPillButton(
-                    text = xy("⚡ Terapkan Preset Zero-Lag Gaming (120Hz · 1ms · Anti-Blur)", "⚡ Apply Zero-Lag Gaming Preset (120Hz · 1ms · Crisp)"),
+                    text = xy("Preset Zero-Lag Gaming (120Hz · 1ms)", "Zero-Lag Gaming Preset (120Hz · 1ms)"),
+                    icon = XyIcons.Bolt,
                     onClick = {
                         options = options.copy(
                             streamProfile = XyStreamProfile.ULTRA_LOW_LATENCY,

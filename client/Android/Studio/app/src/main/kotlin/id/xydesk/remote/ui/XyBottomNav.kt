@@ -53,7 +53,7 @@ internal enum class XyTab(val title: String, val titleEn: String) {
     HOME("Beranda", "Home"),
     FEED("Feed", "Feed"),
     PROFILE("Profil", "Profile"),
-    CHAT("Chat Global", "Global Chat"),
+    CHAT("Chat", "Chat"),
 }
 
 /**
@@ -87,23 +87,19 @@ internal fun XyBottomNav(
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                // Bayangan lembut di bawah kapsul supaya "melayang" terbaca
-                // di latar tema terang maupun gelap.
                 .shadow(
                     elevation = 16.dp,
-                    shape = RoundedCornerShape(30.dp),
+                    shape = RoundedCornerShape(50),
                     ambientColor = Color.Black.copy(alpha = 0.18f),
                     spotColor = Color.Black.copy(alpha = 0.22f),
                 )
-                .xyGlass(shape = RoundedCornerShape(30.dp), opacity = 0.94f)
-                .padding(horizontal = 10.dp, vertical = 8.dp),
+                .xyGlass(shape = RoundedCornerShape(50), opacity = 0.94f)
+                .padding(horizontal = 10.dp, vertical = 7.dp),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(4.dp),
         ) {
             listOf(XyTab.HOME, XyTab.CHAT, XyTab.FEED, XyTab.PROFILE).forEach { tab ->
                 val active = tab == selected
-                // xy() bersifat @Composable, jadi harus dipanggil di sini, bukan di
-                // dalam lambda semantics {} yang bukan composable.
                 val title = xy(tab.title, tab.titleEn)
                 val pillColor by animateColorAsState(
                     targetValue = if (active) ink else Color.Transparent,
@@ -111,7 +107,7 @@ internal fun XyBottomNav(
                     label = "navPillColor",
                 )
                 val iconTint by animateColorAsState(
-                    targetValue = if (active) MaterialTheme.colorScheme.surface else ink.copy(alpha = 0.45f),
+                    targetValue = if (active) MaterialTheme.colorScheme.surface else ink.copy(alpha = 0.48f),
                     animationSpec = tween(durationMillis = 200),
                     label = "navIconTint",
                 )
@@ -120,9 +116,8 @@ internal fun XyBottomNav(
                     animationSpec = tween(durationMillis = 200),
                     label = "navLabelColor",
                 )
-                // Magnify dock macOS: ikon aktif membesar dengan pegas memantul.
                 val iconScale by animateFloatAsState(
-                    targetValue = if (active) 1.14f else 1f,
+                    targetValue = if (active) 1.12f else 1f,
                     animationSpec = spring(
                         dampingRatio = Spring.DampingRatioMediumBouncy,
                         stiffness = Spring.StiffnessMediumLow,
@@ -130,15 +125,15 @@ internal fun XyBottomNav(
                     label = "navIconScale",
                 )
                 val pillHPadding by animateDpAsState(
-                    targetValue = if (active) 16.dp else 0.dp,
+                    targetValue = if (active) 14.dp else 10.dp,
                     animationSpec = tween(durationMillis = 200),
                     label = "navPillPad",
                 )
 
                 Box(
                     modifier = Modifier
-                        .weight(1f)
-                        .clip(RoundedCornerShape(20.dp))
+                        .weight(if (active) 1.38f else 0.88f)
+                        .clip(RoundedCornerShape(50))
                         .clickable(onClick = { onSelect(tab) })
                         .semantics { contentDescription = title }
                         .padding(vertical = 2.dp),
@@ -146,11 +141,11 @@ internal fun XyBottomNav(
                 ) {
                     Row(
                         modifier = Modifier
-                            .clip(RoundedCornerShape(20.dp))
+                            .clip(RoundedCornerShape(50))
                             .background(pillColor)
-                            .padding(horizontal = pillHPadding, vertical = 9.dp),
+                            .padding(horizontal = pillHPadding, vertical = 8.dp),
                         verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(7.dp),
+                        horizontalArrangement = Arrangement.spacedBy(6.dp),
                     ) {
                         Box {
                             Icon(
@@ -175,7 +170,7 @@ internal fun XyBottomNav(
                                         .align(Alignment.TopEnd)
                                         .size(7.dp)
                                         .clip(androidx.compose.foundation.shape.CircleShape)
-                                        .background(Color(0xFFEF4444)),
+                                        .background(Color(0xFF777777)),
                                 )
                             }
                         }

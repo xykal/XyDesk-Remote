@@ -287,10 +287,10 @@ internal fun FunHubCard(
         if (composerOpen) {
             Surface(
                 shape = RoundedCornerShape(16.dp),
-                color = Color(0xFF131720),
+                color = Color(0xFF171717),
                 border = BorderStroke(
                     1.dp,
-                    if (editingJoke != null || isAnnouncementDraft) Color(0xFFF59E0B) else Color(0xFF282E3D),
+                    if (editingJoke != null || isAnnouncementDraft) Color(0xFFA7A7A7) else Color(0xFF2E2E2E),
                 ),
                 modifier = Modifier.fillMaxWidth(),
             ) {
@@ -334,10 +334,10 @@ internal fun FunHubCard(
                         Surface(
                             onClick = { isAnnouncementDraft = !isAnnouncementDraft },
                             shape = RoundedCornerShape(10.dp),
-                            color = if (isAnnouncementDraft) Color(0xFFF59E0B).copy(alpha = 0.2f) else Color(0xFF1B202C),
+                            color = if (isAnnouncementDraft) Color(0xFFA7A7A7).copy(alpha = 0.2f) else Color(0xFF202020),
                             border = BorderStroke(
                                 1.dp,
-                                if (isAnnouncementDraft) Color(0xFFF59E0B) else Color(0xFF2E3546),
+                                if (isAnnouncementDraft) Color(0xFFA7A7A7) else Color(0xFF353535),
                             ),
                         ) {
                             Row(
@@ -354,13 +354,13 @@ internal fun FunHubCard(
                                     ),
                                     fontSize = 11.sp,
                                     fontWeight = FontWeight.SemiBold,
-                                    color = if (isAnnouncementDraft) Color(0xFFF4F4F5) else Color(0xFFCBD5E1),
+                                    color = if (isAnnouncementDraft) Color(0xFFF4F4F5) else Color(0xFFD3D3D3),
                                 )
                                 Text(
                                     text = if (isAnnouncementDraft) "AKTIF" else "NONAKTIF",
                                     fontSize = 10.sp,
                                     fontWeight = FontWeight.ExtraBold,
-                                    color = if (isAnnouncementDraft) Color(0xFF10B981) else Color(0xFF64748B),
+                                    color = if (isAnnouncementDraft) Color(0xFF808080) else Color(0xFF727272),
                                 )
                             }
                         }
@@ -402,10 +402,10 @@ internal fun FunHubCard(
                         Surface(
                             onClick = { hdUploadEnabled = !hdUploadEnabled },
                             shape = RoundedCornerShape(999.dp),
-                            color = if (hdUploadEnabled) Color(0xFF10B981).copy(alpha = 0.18f) else Color(0xFF1C202B),
+                            color = if (hdUploadEnabled) Color(0xFF808080).copy(alpha = 0.18f) else Color(0xFF202020),
                             border = BorderStroke(
                                 1.dp,
-                                if (hdUploadEnabled) Color(0xFF10B981) else Color(0xFF2D3343),
+                                if (hdUploadEnabled) Color(0xFF808080) else Color(0xFF333333),
                             ),
                         ) {
                             Text(
@@ -413,14 +413,14 @@ internal fun FunHubCard(
                                 modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
                                 fontSize = 11.sp,
                                 fontWeight = FontWeight.Bold,
-                                color = if (hdUploadEnabled) Color(0xFF6EE7B7) else Color(0xFF94A3B8),
+                                color = if (hdUploadEnabled) Color(0xFFBDBDBD) else Color(0xFFA1A1A1),
                             )
                         }
                         pendingAttachment?.let { att ->
                             if (att.mime.startsWith("video/")) {
                                 Surface(
                                     shape = RoundedCornerShape(8.dp),
-                                    color = Color(0xFF1E293B),
+                                    color = Color(0xFF282828),
                                 ) {
                                     Text(
                                         text = "Video Siap (${att.bytes.size / 1024} KB)",
@@ -570,7 +570,7 @@ internal fun FunHubCard(
                     Text(
                         text = xy("Apa yang ingin kamu bagikan?", "What's on your mind?"),
                         fontSize = 13.sp,
-                        color = Color(0xFF64748B),
+                        color = Color(0xFF727272),
                         modifier = Modifier.weight(1f),
                     )
                     if (isViewerFounder) {
@@ -591,7 +591,7 @@ internal fun FunHubCard(
                             androidx.compose.material3.Icon(
                                 imageVector = id.xydesk.remote.ui.components.XyIcons.Megaphone,
                                 contentDescription = "Pengumuman",
-                                tint = Color(0xFFFBBF24),
+                                tint = Color(0xFFBFBFBF),
                                 modifier = Modifier.size(16.dp),
                             )
                         }
@@ -605,7 +605,7 @@ internal fun FunHubCard(
                         androidx.compose.material3.Icon(
                             imageVector = id.xydesk.remote.ui.components.XyIcons.Edit,
                             contentDescription = null,
-                            tint = Color(0xFF94A3B8),
+                            tint = Color(0xFFA1A1A1),
                             modifier = Modifier.size(16.dp),
                         )
                     }
@@ -614,7 +614,7 @@ internal fun FunHubCard(
                     modifier = Modifier
                         .fillMaxWidth()
                         .height(0.75.dp)
-                        .background(Color(0xFF1D222D)),
+                        .background(Color(0xFF222222)),
                 )
             }
         }
@@ -1023,8 +1023,8 @@ private fun CommunityJokeInput(
             .fillMaxWidth()
             .heightIn(min = 76.dp)
             .clip(RoundedCornerShape(12.dp))
-            .background(Color(0xFF0E1117))
-            .border(1.dp, Color(0xFF232938), RoundedCornerShape(12.dp))
+            .background(Color(0xFF111111))
+            .border(1.dp, Color(0xFF292929), RoundedCornerShape(12.dp))
             .padding(horizontal = 12.dp, vertical = 10.dp),
         contentAlignment = Alignment.TopStart,
     ) {
@@ -1114,14 +1114,14 @@ private fun CommunityJokeItem(
                 androidx.compose.material3.Icon(
                     imageVector = id.xydesk.remote.ui.components.XyIcons.Pin,
                     contentDescription = null,
-                    tint = Color(0xFFFBBF24),
+                    tint = Color(0xFFBFBFBF),
                     modifier = Modifier.size(12.dp),
                 )
                 Text(
                     text = xy("Pengumuman Tersemat", "Pinned Announcement"),
                     fontSize = 11.sp,
                     fontWeight = FontWeight.SemiBold,
-                    color = Color(0xFFFBBF24),
+                    color = Color(0xFFBFBFBF),
                 )
             }
         }
@@ -1160,7 +1160,7 @@ private fun CommunityJokeItem(
                             },
                             fontSize = 13.sp,
                             fontWeight = FontWeight.Bold,
-                            color = if (isFounderAuthor) Color(0xFFE9D5FF) else Color(0xFFF8FAFC),
+                            color = MaterialTheme.colorScheme.onSurface,
                             maxLines = 1,
                             overflow = TextOverflow.Ellipsis,
                         )
@@ -1173,7 +1173,7 @@ private fun CommunityJokeItem(
                             Text(
                                 text = "· $ago",
                                 fontSize = 11.sp,
-                                color = Color(0xFF64748B),
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
                                 maxLines = 1,
                             )
                         }
@@ -1181,7 +1181,7 @@ private fun CommunityJokeItem(
                             Text(
                                 text = xy("(diedit)", "(edited)"),
                                 fontSize = 10.sp,
-                                color = Color(0xFF475569),
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
                             )
                         }
                     }
@@ -1197,7 +1197,7 @@ private fun CommunityJokeItem(
                             androidx.compose.material3.Icon(
                                 imageVector = id.xydesk.remote.ui.components.XyIcons.Edit,
                                 contentDescription = "Edit",
-                                tint = Color(0xFF94A3B8),
+                                tint = MaterialTheme.colorScheme.onSurfaceVariant,
                                 modifier = Modifier.size(14.dp),
                             )
                         }
@@ -1211,7 +1211,7 @@ private fun CommunityJokeItem(
                             androidx.compose.material3.Icon(
                                 imageVector = id.xydesk.remote.ui.components.XyIcons.Trash,
                                 contentDescription = "Hapus",
-                                tint = Color(0xFFF87171),
+                                tint = MaterialTheme.colorScheme.onSurfaceVariant,
                                 modifier = Modifier.size(14.dp),
                             )
                         }
@@ -1226,18 +1226,18 @@ private fun CommunityJokeItem(
                         androidx.compose.material3.Icon(
                             imageVector = id.xydesk.remote.ui.components.XyIcons.MoreHorizontal,
                             contentDescription = "Lainnya",
-                            tint = Color(0xFF64748B),
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
                             modifier = Modifier.size(15.dp),
                         )
                     }
                 }
 
-                // Isi Teks Postingan (Semua Link/URL Berwarna Biru Cerah & Bisa Diklik!)
+                // Isi Teks Postingan
                 if (joke.text.isNotBlank()) {
                     XyClickableLinkText(
                         text = joke.text,
-                        color = Color(0xFFF1F5F9),
-                        linkColor = Color(0xFF38BDF8),
+                        color = MaterialTheme.colorScheme.onSurface,
+                        linkColor = MaterialTheme.colorScheme.primary,
                         style = MaterialTheme.typography.bodyMedium.copy(lineHeight = 20.sp),
                     )
                 }
@@ -1264,7 +1264,7 @@ private fun CommunityJokeItem(
                         modifier = Modifier
                             .fillMaxWidth()
                             .clip(RoundedCornerShape(14.dp))
-                            .background(Color(0xFF151923))
+                            .background(Color(0xFF191919))
                             .horizontalScroll(rememberScrollState())
                             .padding(horizontal = 10.dp, vertical = 7.dp),
                         horizontalArrangement = Arrangement.spacedBy(10.dp),
@@ -1276,7 +1276,7 @@ private fun CommunityJokeItem(
                                 modifier = Modifier
                                     .size(34.dp)
                                     .clip(CircleShape)
-                                    .background(if (isSelectedEmoji) Color(0xFF2E364F) else Color(0xFF1E2433))
+                                    .background(if (isSelectedEmoji) Color(0xFF363636) else Color(0xFF242424))
                                     .clickable(enabled = !isReactionBusy) {
                                         reactAnimTrigger += 1
                                         onReact(emoji)
@@ -1325,7 +1325,7 @@ private fun CommunityJokeItem(
                                     id.xydesk.remote.ui.components.XyIcons.Heart
                                 },
                                 contentDescription = "Suka",
-                                tint = if (joke.viewerLiked) Color(0xFFF43F5E) else Color(0xFF94A3B8),
+                                tint = if (joke.viewerLiked) Color(0xFF797979) else Color(0xFFA1A1A1),
                                 modifier = Modifier
                                     .size(17.dp)
                                     .scale(likePopAnim.value),
@@ -1335,7 +1335,7 @@ private fun CommunityJokeItem(
                                     text = joke.likesCount.toString(),
                                     fontSize = 12.sp,
                                     fontWeight = if (joke.viewerLiked) FontWeight.Bold else FontWeight.Medium,
-                                    color = if (joke.viewerLiked) Color(0xFFF43F5E) else Color(0xFF94A3B8),
+                                    color = if (joke.viewerLiked) Color(0xFF797979) else Color(0xFFA1A1A1),
                                 )
                             }
                         }
@@ -1361,7 +1361,7 @@ private fun CommunityJokeItem(
                                 androidx.compose.material3.Icon(
                                     imageVector = id.xydesk.remote.ui.components.XyIcons.Emoji,
                                     contentDescription = "Reaksi Emoji",
-                                    tint = if (fullEmojiPickerOpen) Color.White else Color(0xFF94A3B8),
+                                    tint = if (fullEmojiPickerOpen) Color.White else Color(0xFFA1A1A1),
                                     modifier = Modifier.size(17.dp),
                                 )
                             }
@@ -1370,7 +1370,7 @@ private fun CommunityJokeItem(
                                     text = totalEmojiReactions.toString(),
                                     fontSize = 12.sp,
                                     fontWeight = if (activeReaction != null) FontWeight.Bold else FontWeight.Medium,
-                                    color = if (activeReaction != null) Color(0xFFFBBF24) else Color(0xFF94A3B8),
+                                    color = if (activeReaction != null) Color(0xFFBFBFBF) else Color(0xFFA1A1A1),
                                 )
                             }
                         }
@@ -1387,7 +1387,7 @@ private fun CommunityJokeItem(
                             androidx.compose.material3.Icon(
                                 imageVector = id.xydesk.remote.ui.components.XyIcons.Chat,
                                 contentDescription = "Komentar",
-                                tint = Color(0xFF94A3B8),
+                                tint = Color(0xFFA1A1A1),
                                 modifier = Modifier.size(17.dp),
                             )
                             if (joke.commentsTotal > 0) {
@@ -1395,7 +1395,7 @@ private fun CommunityJokeItem(
                                     text = joke.commentsTotal.toString(),
                                     fontSize = 12.sp,
                                     fontWeight = FontWeight.Medium,
-                                    color = Color(0xFF94A3B8),
+                                    color = Color(0xFFA1A1A1),
                                 )
                             }
                         }
@@ -1412,7 +1412,7 @@ private fun CommunityJokeItem(
                             androidx.compose.material3.Icon(
                                 imageVector = id.xydesk.remote.ui.components.XyIcons.Share,
                                 contentDescription = "Bagikan",
-                                tint = Color(0xFF94A3B8),
+                                tint = Color(0xFFA1A1A1),
                                 modifier = Modifier.size(16.dp),
                             )
                         }
@@ -1446,7 +1446,7 @@ private fun CommunityJokeItem(
                                 Text(
                                     text = count.toString(),
                                     fontSize = 11.sp,
-                                    color = Color(0xFF94A3B8),
+                                    color = Color(0xFFA1A1A1),
                                 )
                             }
                         }
@@ -1460,8 +1460,8 @@ private fun CommunityJokeItem(
                             .fillMaxWidth()
                             .padding(bottom = 10.dp)
                             .clip(RoundedCornerShape(12.dp))
-                            .background(Color(0xFF121620))
-                            .border(0.75.dp, Color(0xFF1E2536), RoundedCornerShape(12.dp))
+                            .background(Color(0xFF161616))
+                            .border(0.75.dp, Color(0xFF252525), RoundedCornerShape(12.dp))
                             .clickable(onClick = onOpenComments)
                             .padding(horizontal = 10.dp, vertical = 8.dp),
                         verticalArrangement = Arrangement.spacedBy(6.dp),
@@ -1488,7 +1488,7 @@ private fun CommunityJokeItem(
                                     text = cName,
                                     fontSize = 11.5.sp,
                                     fontWeight = FontWeight.Bold,
-                                    color = if (cFounder) Color(0xFFE9D5FF) else Color(0xFFE2E8F0),
+                                    color = if (cFounder) Color(0xFFE0E0E0) else Color(0xFFE7E7E7),
                                     maxLines = 1,
                                 )
                                 if (isCreator) {
@@ -1502,7 +1502,7 @@ private fun CommunityJokeItem(
                                 Text(
                                     text = c.text,
                                     fontSize = 11.5.sp,
-                                    color = Color(0xFFCBD5E1),
+                                    color = Color(0xFFD3D3D3),
                                     maxLines = 1,
                                     overflow = TextOverflow.Ellipsis,
                                     modifier = Modifier.weight(1f),
@@ -1514,7 +1514,7 @@ private fun CommunityJokeItem(
                                 text = xy("Lihat semua {0} komentar…", "View all {0} comments…", joke.commentsTotal),
                                 fontSize = 11.sp,
                                 fontWeight = FontWeight.SemiBold,
-                                color = Color(0xFF94A3B8),
+                                color = Color(0xFFA1A1A1),
                             )
                         }
                     }
@@ -1526,7 +1526,7 @@ private fun CommunityJokeItem(
             modifier = Modifier
                 .fillMaxWidth()
                 .height(0.75.dp)
-                .background(Color(0xFF1D222D)),
+                .background(Color(0xFF222222)),
         )
     }
 }
@@ -1587,10 +1587,10 @@ internal fun XyOpenGraphPreviewCard(
             }
         },
         shape = RoundedCornerShape(14.dp),
-        color = if (data?.safe == false) Color(0xFF2A1215) else Color(0xFF10131A),
+        color = if (data?.safe == false) Color(0xFF1A1A1A) else Color(0xFF131313),
         border = BorderStroke(
             1.dp,
-            if (data?.safe == false) Color(0xFFEF4444) else socialBrand.accentColor.copy(alpha = 0.45f),
+            if (data?.safe == false) Color(0xFF777777) else socialBrand.accentColor.copy(alpha = 0.45f),
         ),
         modifier = modifier.fillMaxWidth(),
     ) {
@@ -1612,7 +1612,7 @@ internal fun XyOpenGraphPreviewCard(
                             .align(Alignment.TopStart)
                             .padding(8.dp)
                             .clip(RoundedCornerShape(50))
-                            .background(Color(0xD9090B10))
+                            .background(Color(0xD90B0B0B))
                             .border(0.8.dp, socialBrand.accentColor, RoundedCornerShape(50))
                             .padding(horizontal = 8.dp, vertical = 3.dp),
                     ) {
@@ -1633,7 +1633,7 @@ internal fun XyOpenGraphPreviewCard(
                             Brush.horizontalGradient(
                                 listOf(
                                     socialBrand.accentColor.copy(alpha = 0.24f),
-                                    Color(0xFF131722),
+                                    Color(0xFF171717),
                                 ),
                             ),
                         )
@@ -1667,7 +1667,7 @@ internal fun XyOpenGraphPreviewCard(
                             Text(
                                 text = data?.domain?.ifBlank { normalizedUrl } ?: normalizedUrl,
                                 fontSize = 10.sp,
-                                color = Color(0xFF94A3B8),
+                                color = Color(0xFFA1A1A1),
                                 maxLines = 1,
                                 overflow = TextOverflow.Ellipsis,
                             )
@@ -1695,7 +1695,7 @@ internal fun XyOpenGraphPreviewCard(
                         text = if (data?.safe == false) "DIBLOKIR XYSHIELD" else "XyShield Aman",
                         fontSize = 10.sp,
                         fontWeight = FontWeight.Bold,
-                        color = if (data?.safe == false) Color(0xFFEF4444) else Color(0xFF10B981),
+                        color = if (data?.safe == false) Color(0xFF777777) else Color(0xFF808080),
                     )
                 }
                 Text(
@@ -1714,7 +1714,7 @@ internal fun XyOpenGraphPreviewCard(
                     Text(
                         text = data?.description.orEmpty(),
                         fontSize = 11.sp,
-                        color = Color(0xFF94A3B8),
+                        color = Color(0xFFA1A1A1),
                         maxLines = 2,
                         overflow = TextOverflow.Ellipsis,
                     )
@@ -1723,7 +1723,7 @@ internal fun XyOpenGraphPreviewCard(
                     text = data?.domain?.ifBlank { normalizedUrl } ?: normalizedUrl,
                     fontSize = 10.sp,
                     fontFamily = FontFamily.Monospace,
-                    color = Color(0xFF64748B),
+                    color = Color(0xFF727272),
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
                 )
@@ -1741,20 +1741,20 @@ private data class SocialBrandStyle(
 private fun detectSocialBrandStyle(url: String): SocialBrandStyle {
     val u = url.lowercase()
     return when {
-        "youtube.com" in u || "youtu.be" in u -> SocialBrandStyle("YT", "YouTube", Color(0xFFEF4444))
-        "tiktok.com" in u -> SocialBrandStyle("TT", "TikTok", Color(0xFF22D3EE))
-        "instagram.com" in u -> SocialBrandStyle("IG", "Instagram", Color(0xFFEC4899))
-        "twitter.com" in u || "x.com" in u -> SocialBrandStyle("X", "X / Twitter", Color(0xFF38BDF8))
-        "github.com" in u -> SocialBrandStyle("GH", "GitHub", Color(0xFFA855F7))
-        "discord.gg" in u || "discord.com" in u -> SocialBrandStyle("DC", "Discord", Color(0xFF818CF8))
-        "facebook.com" in u || "fb.watch" in u || "fb.com" in u -> SocialBrandStyle("FB", "Facebook", Color(0xFF3B82F6))
-        "spotify.com" in u -> SocialBrandStyle("SP", "Spotify", Color(0xFF22C55E))
-        "reddit.com" in u || "redd.it" in u -> SocialBrandStyle("RD", "Reddit", Color(0xFFF97316))
-        "t.me" in u || "telegram.org" in u -> SocialBrandStyle("TG", "Telegram", Color(0xFF0EA5E9))
-        "twitch.tv" in u -> SocialBrandStyle("TW", "Twitch", Color(0xFFC084FC))
-        "threads.net" in u -> SocialBrandStyle("TH", "Threads", Color(0xFFF43F5E))
-        "linkedin.com" in u -> SocialBrandStyle("IN", "LinkedIn", Color(0xFF60A5FA))
-        else -> SocialBrandStyle("WEB", "Web Link", Color(0xFFF59E0B))
+        "youtube.com" in u || "youtu.be" in u -> SocialBrandStyle("YT", "YouTube", Color(0xFF777777))
+        "tiktok.com" in u -> SocialBrandStyle("TT", "TikTok", Color(0xFFA1A1A1))
+        "instagram.com" in u -> SocialBrandStyle("IG", "Instagram", Color(0xFF828282))
+        "twitter.com" in u || "x.com" in u -> SocialBrandStyle("X", "X / Twitter", Color(0xFF9C9C9C))
+        "github.com" in u -> SocialBrandStyle("GH", "GitHub", Color(0xFF808080))
+        "discord.gg" in u || "discord.com" in u -> SocialBrandStyle("DC", "Discord", Color(0xFF959595))
+        "facebook.com" in u || "fb.watch" in u || "fb.com" in u -> SocialBrandStyle("FB", "Facebook", Color(0xFF7A7A7A))
+        "spotify.com" in u -> SocialBrandStyle("SP", "Spotify", Color(0xFF898989))
+        "reddit.com" in u || "redd.it" in u -> SocialBrandStyle("RD", "Reddit", Color(0xFF909090))
+        "t.me" in u || "telegram.org" in u -> SocialBrandStyle("TG", "Telegram", Color(0xFF808080))
+        "twitch.tv" in u -> SocialBrandStyle("TW", "Twitch", Color(0xFFA4A4A4))
+        "threads.net" in u -> SocialBrandStyle("TH", "Threads", Color(0xFF797979))
+        "linkedin.com" in u -> SocialBrandStyle("IN", "LinkedIn", Color(0xFF9A9A9A))
+        else -> SocialBrandStyle("WEB", "Web Link", Color(0xFFA7A7A7))
     }
 }
 
@@ -1840,12 +1840,12 @@ internal fun FeedAvatarThumb(
     val paletteColors = remember(name) {
         val hash = kotlin.math.abs(name.hashCode())
         when (hash % 6) {
-            0 -> listOf(Color(0xFF4F46E5), Color(0xFF7C3AED))
-            1 -> listOf(Color(0xFF0284C7), Color(0xFF2563EB))
-            2 -> listOf(Color(0xFF059669), Color(0xFF0D9488))
-            3 -> listOf(Color(0xFFE11D48), Color(0xFFDB2777))
-            4 -> listOf(Color(0xFFD97706), Color(0xFFEA580C))
-            else -> listOf(Color(0xFF6366F1), Color(0xFFEC4899))
+            0 -> listOf(Color(0xFF5B5B5B), Color(0xFF626262))
+            1 -> listOf(Color(0xFF656565), Color(0xFF606060))
+            2 -> listOf(Color(0xFF666666), Color(0xFF6A6A6A))
+            3 -> listOf(Color(0xFF5D5D5D), Color(0xFF666666))
+            4 -> listOf(Color(0xFF878787), Color(0xFF7B7B7B))
+            else -> listOf(Color(0xFF757575), Color(0xFF828282))
         }
     }
     Box(
@@ -1854,14 +1854,14 @@ internal fun FeedAvatarThumb(
             .clip(CircleShape)
             .background(
                 if (isFounder) {
-                    Brush.linearGradient(listOf(Color(0xFF581C87), Color(0xFF9333EA)))
+                    Brush.linearGradient(listOf(Color(0xFF3A3A3A), Color(0xFF656565)))
                 } else {
                     Brush.linearGradient(paletteColors)
                 },
             )
             .then(
                 if (isFounder) {
-                    Modifier.border(1.3.dp, Color(0xFFFBBF24), CircleShape)
+                    Modifier.border(1.3.dp, Color(0xFFBFBFBF), CircleShape)
                 } else {
                     Modifier.border(0.8.dp, Color.White.copy(alpha = 0.18f), CircleShape)
                 },
@@ -1884,7 +1884,7 @@ internal fun FeedAvatarThumb(
                 text = name.trim().removePrefix("@").take(1).uppercase().ifEmpty { "U" },
                 fontSize = (size.value * 0.40f).sp,
                 fontWeight = FontWeight.ExtraBold,
-                color = if (isFounder) Color(0xFFFEF08A) else Color.White,
+                color = if (isFounder) Color(0xFFE9E9E9) else Color.White,
             )
             when {
                 resolvedUrl.startsWith("/api/jokes/avatar/") -> {
@@ -1939,7 +1939,7 @@ private fun CommentsBottomSheet(
 
     androidx.compose.material3.ModalBottomSheet(
         onDismissRequest = onDismiss,
-        containerColor = Color(0xFF12141C),
+        containerColor = Color(0xFF141414),
         dragHandle = {
             Column(
                 modifier = Modifier
@@ -1952,7 +1952,7 @@ private fun CommentsBottomSheet(
                         .width(38.dp)
                         .height(4.dp)
                         .clip(RoundedCornerShape(50))
-                        .background(Color(0xFF475569)),
+                        .background(Color(0xFF535353)),
                 )
             }
         },
@@ -1981,14 +1981,14 @@ private fun CommentsBottomSheet(
                         .align(Alignment.CenterEnd)
                         .size(28.dp)
                         .clip(CircleShape)
-                        .background(Color(0xFF1E2433))
+                        .background(Color(0xFF242424))
                         .clickable(onClick = onDismiss),
                     contentAlignment = Alignment.Center,
                 ) {
                     androidx.compose.material3.Icon(
                         imageVector = XyIcons.Close,
                         contentDescription = xy("Tutup", "Close"),
-                        tint = Color(0xFFCBD5E1),
+                        tint = Color(0xFFD3D3D3),
                         modifier = Modifier.size(14.dp),
                     )
                 }
@@ -1998,7 +1998,7 @@ private fun CommentsBottomSheet(
                 modifier = Modifier
                     .fillMaxWidth()
                     .height(0.6.dp)
-                    .background(Color(0xFF1F2637)),
+                    .background(Color(0xFF262626)),
             )
 
             LazyColumn(
@@ -2020,12 +2020,12 @@ private fun CommentsBottomSheet(
                                 text = xy("Belum ada komentar", "No comments yet"),
                                 fontSize = 14.sp,
                                 fontWeight = FontWeight.Bold,
-                                color = Color(0xFFE2E8F0),
+                                color = Color(0xFFE7E7E7),
                             )
                             Text(
                                 text = xy("Mulai percakapan dengan menulis komentar pertama!", "Start the conversation by leaving the first comment!"),
                                 fontSize = 12.sp,
-                                color = Color(0xFF94A3B8),
+                                color = Color(0xFFA1A1A1),
                             )
                         }
                     }
@@ -2080,7 +2080,7 @@ private fun CommentsBottomSheet(
                                     text = cAuthor,
                                     fontSize = 12.5.sp,
                                     fontWeight = FontWeight.Bold,
-                                    color = if (cIsFounder) Color(0xFFE9D5FF) else Color(0xFFCBD5E1),
+                                    color = if (cIsFounder) Color(0xFFE0E0E0) else Color(0xFFD3D3D3),
                                     maxLines = 1,
                                     overflow = TextOverflow.Ellipsis,
                                 )
@@ -2088,7 +2088,7 @@ private fun CommentsBottomSheet(
                                     Text(
                                         text = "@$cHandle",
                                         fontSize = 11.sp,
-                                        color = Color(0xFF64748B),
+                                        color = Color(0xFF727272),
                                         maxLines = 1,
                                     )
                                 }
@@ -2110,13 +2110,13 @@ private fun CommentsBottomSheet(
                                     Text(
                                         text = "▸",
                                         fontSize = 11.sp,
-                                        color = Color(0xFF64748B),
+                                        color = Color(0xFF727272),
                                     )
                                     Text(
                                         text = xy("Membalas @{0}", "Replying to @{0}", c.replyToName),
                                         fontSize = 11.sp,
                                         fontWeight = FontWeight.SemiBold,
-                                        color = Color(0xFF38BDF8),
+                                        color = Color(0xFF9C9C9C),
                                     )
                                 }
                             }
@@ -2125,7 +2125,7 @@ private fun CommentsBottomSheet(
                             XyClickableLinkText(
                                 text = c.text,
                                 color = Color(0xFFF8FAFC),
-                                linkColor = Color(0xFF38BDF8),
+                                linkColor = Color(0xFF9C9C9C),
                                 style = MaterialTheme.typography.bodyMedium.copy(
                                     fontSize = 13.5.sp,
                                     lineHeight = 19.sp,
@@ -2142,7 +2142,7 @@ private fun CommentsBottomSheet(
                                 Text(
                                     text = ago,
                                     fontSize = 11.5.sp,
-                                    color = Color(0xFF64748B),
+                                    color = Color(0xFF727272),
                                 )
                                 Text(
                                     text = xy("Balas", "Reply"),
@@ -2158,7 +2158,7 @@ private fun CommentsBottomSheet(
                                         .padding(vertical = 2.dp),
                                     fontSize = 11.5.sp,
                                     fontWeight = FontWeight.Bold,
-                                    color = Color(0xFF94A3B8),
+                                    color = Color(0xFFA1A1A1),
                                 )
                                 if (c.isOwn || isViewerFounder) {
                                     Text(
@@ -2169,7 +2169,7 @@ private fun CommentsBottomSheet(
                                             .padding(vertical = 2.dp),
                                         fontSize = 11.5.sp,
                                         fontWeight = FontWeight.SemiBold,
-                                        color = Color(0xFFF87171),
+                                        color = Color(0xFF999999),
                                     )
                                 }
                             }
@@ -2190,7 +2190,7 @@ private fun CommentsBottomSheet(
                             androidx.compose.material3.Icon(
                                 imageVector = if (isCommentLiked) XyIcons.HeartFilled else XyIcons.Heart,
                                 contentDescription = "Suka Komentar",
-                                tint = if (isCommentLiked) Color(0xFFFE2C55) else Color(0xFF64748B),
+                                tint = if (isCommentLiked) Color(0xFF6F6F6F) else Color(0xFF727272),
                                 modifier = Modifier.size(16.dp),
                             )
                             if (displayCommentLikes > 0) {
@@ -2198,7 +2198,7 @@ private fun CommentsBottomSheet(
                                     text = displayCommentLikes.toString(),
                                     fontSize = 10.5.sp,
                                     fontWeight = if (isCommentLiked) FontWeight.Bold else FontWeight.Medium,
-                                    color = if (isCommentLiked) Color(0xFFFE2C55) else Color(0xFF64748B),
+                                    color = if (isCommentLiked) Color(0xFF6F6F6F) else Color(0xFF727272),
                                 )
                             }
                         }
@@ -2210,7 +2210,7 @@ private fun CommentsBottomSheet(
                 modifier = Modifier
                     .fillMaxWidth()
                     .height(0.6.dp)
-                    .background(Color(0xFF1F2637)),
+                    .background(Color(0xFF262626)),
             )
 
             // Baris Quick Emoji ala TikTok
@@ -2233,7 +2233,7 @@ private fun CommentsBottomSheet(
                             },
                         contentAlignment = Alignment.Center,
                     ) {
-                        Text(text = emoji, fontSize = 19.sp)
+                        IosWhatsAppEmoji3D(tag = emoji, size = 20.dp)
                     }
                 }
             }
@@ -2245,7 +2245,7 @@ private fun CommentsBottomSheet(
                         .fillMaxWidth()
                         .padding(horizontal = 16.dp)
                         .clip(RoundedCornerShape(10.dp))
-                        .background(Color(0xFF1B2232))
+                        .background(Color(0xFF222222))
                         .padding(horizontal = 12.dp, vertical = 6.dp),
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.SpaceBetween,
@@ -2254,12 +2254,12 @@ private fun CommentsBottomSheet(
                         text = xy("Membalas @{0}", "Replying to @{0}", targetReply.name ?: "Anonim"),
                         fontSize = 11.5.sp,
                         fontWeight = FontWeight.SemiBold,
-                        color = Color(0xFF38BDF8),
+                        color = Color(0xFF9C9C9C),
                     )
                     androidx.compose.material3.Icon(
                         imageVector = XyIcons.Close,
                         contentDescription = "Batal Balas",
-                        tint = Color(0xFF94A3B8),
+                        tint = Color(0xFFA1A1A1),
                         modifier = Modifier
                             .clickable { replyingTo = null }
                             .padding(horizontal = 6.dp)
@@ -2287,8 +2287,8 @@ private fun CommentsBottomSheet(
                     modifier = Modifier
                         .weight(1f)
                         .clip(RoundedCornerShape(999.dp))
-                        .background(Color(0xFF1E2433))
-                        .border(0.8.dp, Color(0xFF2D364B), RoundedCornerShape(999.dp))
+                        .background(Color(0xFF242424))
+                        .border(0.8.dp, Color(0xFF363636), RoundedCornerShape(999.dp))
                         .padding(horizontal = 14.dp, vertical = 10.dp),
                 ) {
                     BasicTextField(
@@ -2299,14 +2299,14 @@ private fun CommentsBottomSheet(
                             color = Color(0xFFF8FAFC),
                             fontSize = 13.sp,
                         ),
-                        cursorBrush = SolidColor(Color(0xFFFE2C55)),
+                        cursorBrush = SolidColor(Color(0xFF6F6F6F)),
                         maxLines = 3,
                         decorationBox = { inner ->
                             if (draft.isEmpty()) {
                                 Text(
                                     xy("Tambahkan komentar…", "Add comment…"),
                                     fontSize = 13.sp,
-                                    color = Color(0xFF64748B),
+                                    color = Color(0xFF727272),
                                 )
                             }
                             inner()
@@ -2319,7 +2319,7 @@ private fun CommentsBottomSheet(
                         .size(36.dp)
                         .clip(CircleShape)
                         .background(
-                            if (canSendNow) Color(0xFFFE2C55) else Color(0xFF262D3F),
+                            if (canSendNow) Color(0xFF6F6F6F) else Color(0xFF2D2D2D),
                         )
                         .clickable(enabled = canSendNow) {
                             val clean = draft.trim()
@@ -2334,7 +2334,7 @@ private fun CommentsBottomSheet(
                     androidx.compose.material3.Icon(
                         imageVector = XyIcons.Send,
                         contentDescription = xy("Kirim", "Send"),
-                        tint = if (canSendNow) Color.White else Color(0xFF64748B),
+                        tint = if (canSendNow) Color.White else Color(0xFF727272),
                         modifier = Modifier.size(16.dp),
                     )
                 }

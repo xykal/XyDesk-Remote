@@ -587,7 +587,13 @@ internal fun MessageBubble(
     val founderMsg = msg.isFounder || isFounderAccount(msg.name) || isFounderAccount(msg.githubLogin)
     val isAnnouncementMsg = msg.isAnnouncement || (founderMsg && isPinned)
     val isPureSticker = msg.attachmentType == "sticker"
-    val isLightBubble = msg.mine && !founderMsg && bubbleStyleMode == "monochrome"
+    val isDarkUi = id.xydesk.remote.ui.theme.xyDark() || liquidGlassMode
+    val isLightBubble = when {
+        founderMsg || isAnnouncementMsg -> false
+        bubbleStyleMode == "glass" || bubbleStyleMode == "amber" -> false
+        isDarkUi -> msg.mine
+        else -> !msg.mine
+    }
 
     val density = LocalDensity.current
     val replyThresholdPx = with(density) { 56.dp.toPx() }
@@ -598,17 +604,17 @@ internal fun MessageBubble(
     var swipeTriggered by remember(msg.id) { mutableStateOf(false) }
 
     val primaryTextColor = when {
-        founderMsg || isAnnouncementMsg -> Color(0xFFFAF5FF)
-        isLightBubble -> Color(0xFF09090B)
-        else -> Color(0xFFF4F4F5)
+        founderMsg || isAnnouncementMsg -> Color(0xFFF8F8F8)
+        isLightBubble -> Color(0xFF0A0A0E)
+        else -> Color(0xFFF4F4F6)
     }
     val secondaryTextColor = when {
-        founderMsg || isAnnouncementMsg -> Color(0xFFE9D5FF).copy(alpha = 0.90f)
-        isLightBubble -> Color(0xFF3F3F46)
-        else -> Color(0xFFA1A1AA)
+        founderMsg || isAnnouncementMsg -> Color(0xFFE0E0E0).copy(alpha = 0.90f)
+        isLightBubble -> Color(0xFF4A4A52)
+        else -> Color(0xFFA8A8B2)
     }
     val dividerColor = when {
-        founderMsg || isAnnouncementMsg -> Color(0xFFA855F7).copy(alpha = 0.36f)
+        founderMsg || isAnnouncementMsg -> Color(0xFF808080).copy(alpha = 0.36f)
         isLightBubble -> Color(0xFF09090B).copy(alpha = 0.12f)
         else -> Color.White.copy(alpha = 0.10f)
     }
@@ -617,6 +623,7 @@ internal fun MessageBubble(
         resolveCustomBubbleShape(
             shapePreset = if (isCompactOverlay && bubbleShapePreset == "TAIL_CLASSIC") "TAIL_CLASSIC" else bubbleShapePreset,
             isMine = msg.mine,
+            compact = isCompactOverlay,
         )
     }
 
@@ -640,13 +647,15 @@ internal fun MessageBubble(
     val detectedLinkUrl = remember(msg.id, msg.text) { extractFirstUrl(msg.text) }
     val screenWidthDp = androidx.compose.ui.platform.LocalConfiguration.current.screenWidthDp.toFloat()
     val maxBubbleWidth = remember(screenWidthDp, isCompactOverlay) {
-        chatBubbleMaxWidth(screenWidthDp, isCompactOverlay).dp
+        chatBubbleMaxWidth(screenWidthDp, isCompactOverlay)
+            .coerceAtMost(if (isCompactOverlay) 204f else 286f)
+            .dp
     }
     val minBubbleWidth = (when {
-        isCompactOverlay -> if (hasMediaAttachment) 150.dp else 72.dp
-        hasMediaAttachment -> 190.dp
-        isPureSticker -> 96.dp
-        else -> 82.dp
+        isCompactOverlay -> if (hasMediaAttachment) 144.dp else 64.dp
+        hasMediaAttachment -> 184.dp
+        isPureSticker -> 92.dp
+        else -> 68.dp
     }).coerceAtMost(maxBubbleWidth)
 
     Row(
@@ -724,7 +733,7 @@ internal fun MessageBubble(
                             text = msg.name,
                             style = MaterialTheme.typography.labelSmall,
                             fontWeight = FontWeight.Bold,
-                            color = if (founderMsg) Color(0xFFFDE047) else Color(0xFFD4D4D8),
+                            color = if (founderMsg) Color(0xFFD7D7D7) else Color(0xFFD4D4D8),
                         )
                         XyUserRoleBadges(name = msg.name, githubLogin = msg.githubLogin, compact = true)
                     }
@@ -758,7 +767,7 @@ internal fun MessageBubble(
                         Row(
                             modifier = Modifier
                                 .clip(RoundedCornerShape(999.dp))
-                                .background(Color(0xFF1A1D26))
+                                .background(Color(0xFF1D1D1D))
                                 .clickable { onToggleFavoriteSticker(msg.attachmentData) }
                                 .padding(horizontal = 8.dp, vertical = 3.dp),
                             verticalAlignment = Alignment.CenterVertically,
@@ -767,21 +776,21 @@ internal fun MessageBubble(
                             Icon(
                                 imageVector = if (isFavSticker) XyIcons.StarFilled else XyIcons.Star,
                                 contentDescription = null,
-                                tint = if (isFavSticker) Color(0xFFFBBF24) else Color(0xFFE2E8F0),
+                                tint = if (isFavSticker) Color(0xFFBFBFBF) else Color(0xFFE7E7E7),
                                 modifier = Modifier.size(11.dp),
                             )
                             Text(
                                 text = if (isFavSticker) "Favorit" else "+Favorit",
                                 fontSize = 10.sp,
                                 fontWeight = FontWeight.Bold,
-                                color = if (isFavSticker) Color(0xFFFBBF24) else Color(0xFFE2E8F0),
+                                color = if (isFavSticker) Color(0xFFBFBFBF) else Color(0xFFE7E7E7),
                             )
                         }
                         Text(
                             text = time,
                             style = MaterialTheme.typography.labelSmall,
                             fontSize = 10.sp,
-                            color = Color(0xFFA1A1AA),
+                            color = Color(0xFFA2A2A2),
                         )
                     }
                 }
@@ -805,7 +814,7 @@ internal fun MessageBubble(
                             text = msg.name,
                             style = MaterialTheme.typography.labelSmall,
                             fontWeight = FontWeight.Bold,
-                            color = if (founderMsg) Color(0xFFE9D5FF) else Color(0xFFE4E4E7),
+                            color = if (founderMsg) Color(0xFFE0E0E0) else Color(0xFFE4E4E7),
                             maxLines = 1,
                             overflow = TextOverflow.Ellipsis,
                         )
@@ -814,7 +823,7 @@ internal fun MessageBubble(
                                 text = "@${msg.githubLogin}",
                                 style = MaterialTheme.typography.labelSmall,
                                 fontSize = 10.sp,
-                                color = Color(0xFFA1A1AA),
+                                color = Color(0xFFA2A2A2),
                                 maxLines = 1,
                             )
                         }
@@ -830,7 +839,7 @@ internal fun MessageBubble(
                                 .clickable { onReply() },
                             contentAlignment = Alignment.Center,
                         ) {
-                            ChatVectorReplyIcon(size = 12.dp, tint = Color(0xFFA1A1AA))
+                            ChatVectorReplyIcon(size = 12.dp, tint = Color(0xFFA2A2A2))
                         }
                     }
 
@@ -847,12 +856,8 @@ internal fun MessageBubble(
                     )
                 }
             } else {
-                val hasWaTail = bubbleShapePreset.isBlank() ||
-                    bubbleShapePreset.equals("TAIL_CLASSIC", ignoreCase = true) ||
-                    bubbleShapePreset.equals("rounded", ignoreCase = true) ||
-                    bubbleShapePreset.equals("whatsapp", ignoreCase = true)
-                val basePadH = if (isCompactOverlay) 8.dp else 9.dp
-                val tailPadExtra = if (hasWaTail) (if (isCompactOverlay) 4.dp else 5.5.dp) else 0.dp
+                val padH = if (isCompactOverlay) 8.5.dp else 11.dp
+                val padV = if (isCompactOverlay) 5.dp else 6.5.dp
                 val topTenRanks by LeaderboardPodium.topTen.collectAsState()
                 val senderTopRank = remember(msg.githubLogin, msg.name, topTenRanks) {
                     val gh = normalizedChatAccount(msg.githubLogin)
@@ -867,10 +872,8 @@ internal fun MessageBubble(
                             .width(IntrinsicSize.Max)
                             .widthIn(min = minBubbleWidth, max = maxBubbleWidth)
                             .padding(
-                                start = basePadH + (if (!msg.mine) tailPadExtra else 0.dp),
-                                end = basePadH + (if (msg.mine) tailPadExtra else 0.dp),
-                                top = if (isCompactOverlay) 4.dp else 5.5.dp,
-                                bottom = if (isCompactOverlay) 4.dp else 5.5.dp,
+                                horizontal = padH,
+                                vertical = padV,
                             ),
                     ) {
                         // Pita Khusus Pengumuman Admin @xykal yang Otomatis Tersemat
@@ -879,10 +882,10 @@ internal fun MessageBubble(
                                 modifier = Modifier
                                     .fillMaxWidth()
                                     .padding(bottom = 4.dp)
-                                    .clip(RoundedCornerShape(6.dp))
-                                    .background(Color(0xFFA855F7).copy(alpha = 0.24f))
-                                    .border(0.8.dp, Color(0xFFC084FC), RoundedCornerShape(6.dp))
-                                    .padding(horizontal = 7.dp, vertical = 3.dp),
+                                    .clip(RoundedCornerShape(50))
+                                    .background(Color(0xFF808080).copy(alpha = 0.24f))
+                                    .border(0.8.dp, Color(0xFFA4A4A4), RoundedCornerShape(50))
+                                    .padding(horizontal = 8.dp, vertical = 3.dp),
                             ) {
                                 Row(
                                     verticalAlignment = Alignment.CenterVertically,
@@ -891,32 +894,29 @@ internal fun MessageBubble(
                                     Icon(
                                         imageVector = XyIcons.Pin,
                                         contentDescription = null,
-                                        tint = Color(0xFFE9D5FF),
+                                        tint = Color(0xFFE0E0E0),
                                         modifier = Modifier.size(10.dp),
                                     )
                                     Text(
-                                        text = "PENGUMUMAN RESMI ADMIN",
-                                        fontSize = 9.sp,
+                                        text = "PENGUMUMAN",
+                                        fontSize = 8.5.sp,
                                         fontWeight = FontWeight.ExtraBold,
-                                        color = Color(0xFFE9D5FF),
+                                        color = Color(0xFFE0E0E0),
                                     )
                                 }
                             }
                         }
 
-                        // Header Pengirim Rapi: Baris 1 (Nama + @github + Kode Negara + Reply), Baris 2 (Badge Peran/Rank)
-                        Column(
-                            modifier = Modifier.fillMaxWidth(),
-                            verticalArrangement = Arrangement.spacedBy(2.dp),
-                        ) {
+                        // Header Pengirim: Hanya untuk pesan orang lain (atau Founder/Announcement) seperti WhatsApp
+                        if (!msg.mine || founderMsg || isAnnouncementMsg) {
                             Row(
-                                modifier = Modifier.fillMaxWidth(),
+                                modifier = Modifier.fillMaxWidth().padding(bottom = 1.dp),
                                 verticalAlignment = Alignment.CenterVertically,
                                 horizontalArrangement = Arrangement.SpaceBetween,
                             ) {
                                 Row(
                                     verticalAlignment = Alignment.CenterVertically,
-                                    horizontalArrangement = Arrangement.spacedBy(XySpacing.compact),
+                                    horizontalArrangement = Arrangement.spacedBy(4.dp),
                                     modifier = Modifier.weight(1f, fill = false),
                                 ) {
                                     Text(
@@ -924,28 +924,23 @@ internal fun MessageBubble(
                                         style = MaterialTheme.typography.labelSmall,
                                         fontSize = 11.5.sp,
                                         fontWeight = FontWeight.ExtraBold,
-                                        color = if (founderMsg) Color(0xFFE9D5FF) else primaryTextColor,
+                                        color = if (founderMsg) Color(0xFFE0E0E0) else primaryTextColor,
                                         maxLines = 1,
                                         overflow = TextOverflow.Ellipsis,
                                     )
-                                    if (msg.githubLogin.isNotBlank() && !msg.githubLogin.equals(msg.name, ignoreCase = true)) {
-                                        Text(
-                                            text = "@${msg.githubLogin}",
-                                            style = MaterialTheme.typography.labelSmall,
-                                            fontSize = 9.5.sp,
-                                            color = secondaryTextColor,
-                                            maxLines = 1,
-                                            overflow = TextOverflow.Ellipsis,
-                                        )
-                                    }
+                                    XyUserRoleBadges(
+                                        name = msg.name,
+                                        githubLogin = msg.githubLogin,
+                                        compact = true,
+                                    )
                                     Box(
                                         modifier = Modifier
-                                            .clip(RoundedCornerShape(4.dp))
+                                            .clip(RoundedCornerShape(50))
                                             .background(
                                                 if (isLightBubble) Color(0xFF09090B).copy(alpha = 0.08f)
                                                 else Color.White.copy(alpha = 0.10f),
                                             )
-                                            .padding(horizontal = 4.dp, vertical = 0.5.dp),
+                                            .padding(horizontal = 5.dp, vertical = 0.5.dp),
                                     ) {
                                         Text(
                                             text = msg.country,
@@ -958,29 +953,26 @@ internal fun MessageBubble(
                                     if (isPinned) {
                                         ChatVectorPinIcon(
                                             size = 11.dp,
-                                            tint = if (founderMsg) Color(0xFFD8B4FE) else secondaryTextColor,
+                                            tint = if (founderMsg) Color(0xFFC7C7C7) else secondaryTextColor,
                                         )
                                     }
                                 }
-                                Spacer(Modifier.width(6.dp))
-                                Box(
-                                    modifier = Modifier
-                                        .size(18.dp)
-                                        .clip(CircleShape)
-                                        .clickable { onReply() },
-                                    contentAlignment = Alignment.Center,
-                                ) {
-                                    ChatVectorReplyIcon(
-                                        size = 11.dp,
-                                        tint = secondaryTextColor,
-                                    )
+                                if (!msg.mine) {
+                                    Spacer(Modifier.width(6.dp))
+                                    Box(
+                                        modifier = Modifier
+                                            .size(18.dp)
+                                            .clip(CircleShape)
+                                            .clickable { onReply() },
+                                        contentAlignment = Alignment.Center,
+                                    ) {
+                                        ChatVectorReplyIcon(
+                                            size = 11.dp,
+                                            tint = secondaryTextColor,
+                                        )
+                                    }
                                 }
                             }
-                            XyUserRoleBadges(
-                                name = msg.name,
-                                githubLogin = msg.githubLogin,
-                                compact = true,
-                            )
                         }
 
                         // Kotak Kutipan Balasan (Quoted Reply ala WhatsApp)
@@ -1002,7 +994,7 @@ internal fun MessageBubble(
                                         .width(2.5.dp)
                                         .height(22.dp)
                                         .clip(RoundedCornerShape(2.dp))
-                                        .background(if (founderMsg) Color(0xFFFDE047) else primaryTextColor),
+                                        .background(if (founderMsg) Color(0xFFD7D7D7) else primaryTextColor),
                                 )
                                 Spacer(Modifier.width(6.dp))
                                 Column {
@@ -1062,7 +1054,7 @@ internal fun MessageBubble(
                             XyClickableLinkText(
                                 text = part.text,
                                 color = primaryTextColor,
-                                linkColor = if (isLightBubble) Color(0xFF2563EB) else Color(0xFF38BDF8),
+                                linkColor = if (isLightBubble) Color(0xFF606060) else Color(0xFF9C9C9C),
                                 style = MaterialTheme.typography.bodySmall.copy(
                                     fontSize = if (isCompactOverlay) 12.sp else 13.sp,
                                     lineHeight = if (isCompactOverlay) 15.5.sp else 17.sp,
@@ -1087,13 +1079,13 @@ internal fun MessageBubble(
                                     Icon(
                                         imageVector = XyIcons.Globe,
                                         contentDescription = null,
-                                        tint = if (founderMsg) Color(0xFFD8B4FE) else secondaryTextColor,
+                                        tint = if (founderMsg) Color(0xFFC7C7C7) else secondaryTextColor,
                                         modifier = Modifier.size(10.dp),
                                     )
                                     XyClickableLinkText(
                                         text = "[$transLabel] · $transBody",
-                                        color = if (founderMsg) Color(0xFFE9D5FF).copy(alpha = 0.94f) else secondaryTextColor,
-                                        linkColor = if (isLightBubble) Color(0xFF2563EB) else Color(0xFF38BDF8),
+                                        color = if (founderMsg) Color(0xFFE0E0E0).copy(alpha = 0.94f) else secondaryTextColor,
+                                        linkColor = if (isLightBubble) Color(0xFF606060) else Color(0xFF9C9C9C),
                                         style = MaterialTheme.typography.bodySmall.copy(
                                             fontSize = if (isCompactOverlay) 10.5.sp else 11.5.sp,
                                             fontStyle = FontStyle.Italic,
@@ -1127,7 +1119,7 @@ internal fun MessageBubble(
                                 ChatVectorDeliveryTicks(
                                     ticks = msg.deliveryTicks,
                                     tint = when {
-                                        founderMsg -> Color(0xFFD8B4FE)
+                                        founderMsg -> Color(0xFFC7C7C7)
                                         isLightBubble -> Color(0xFF18181B)
                                         else -> Color(0xFFE4E4E7)
                                     },
@@ -1164,7 +1156,7 @@ internal fun MessageBubble(
                                 drawBubbleFloatingElements(
                                     preset = activeFloatingPreset,
                                     phase = floatAnimPhase,
-                                    accentColor = Color(0xFFD8B4FE),
+                                    accentColor = Color(0xFFC7C7C7),
                                 )
                             }
                         }
@@ -1181,7 +1173,7 @@ internal fun MessageBubble(
                                 drawBubbleFloatingElements(
                                     preset = activeFloatingPreset,
                                     phase = floatAnimPhase,
-                                    accentColor = if (specialRole == "XYTEAM") Color(0xFF38BDF8) else Color(0xFF34D399),
+                                    accentColor = if (specialRole == "XYTEAM") Color(0xFF9C9C9C) else Color(0xFF9D9D9D),
                                 )
                             }
                         }
@@ -1189,16 +1181,16 @@ internal fun MessageBubble(
                     }
                 } else {
                     val bubbleBgColor = when {
-                        bubbleStyleMode == "glass" -> if (msg.mine) Color(0xFF273042) else Color(0xFF151924)
-                        bubbleStyleMode == "amber" -> if (msg.mine) Color(0xFF2B2214) else Color(0xFF181613)
-                        msg.mine -> Color(0xFFF4F4F6)
-                        else -> Color(0xFF1A1A20)
+                        bubbleStyleMode == "glass" -> if (msg.mine) Color(0xFF2F2F2F) else Color(0xFF191919)
+                        bubbleStyleMode == "amber" -> if (msg.mine) Color(0xFF232323) else Color(0xFF181613)
+                        isDarkUi -> if (msg.mine) Color(0xFFF2F2F5) else Color(0xFF1C1C22)
+                        else -> if (msg.mine) Color(0xFF18181D) else Color(0xFFEAECEF)
                     }
                     val topRankBorderColor = when (senderTopRank) {
-                        1 -> Color(0xFFFBBF24)
-                        2 -> Color(0xFFCBD5E1)
-                        3 -> Color(0xFFFB923C)
-                        in 4..10 -> Color(0xFF818CF8).copy(alpha = 0.72f)
+                        1 -> Color(0xFFBFBFBF)
+                        2 -> Color(0xFFD3D3D3)
+                        3 -> Color(0xFFA8A8A8)
+                        in 4..10 -> Color(0xFF959595).copy(alpha = 0.72f)
                         else -> null
                     }
                     Box(
@@ -1225,7 +1217,7 @@ internal fun MessageBubble(
                                 drawBubbleFloatingElements(
                                     preset = activeFloatingPreset,
                                     phase = floatAnimPhase,
-                                    accentColor = if (isLightBubble) Color(0xFF9333EA) else Color(0xFFC084FC),
+                                    accentColor = if (isLightBubble) Color(0xFF656565) else Color(0xFFA4A4A4),
                                 )
                             }
                         }
@@ -1240,8 +1232,8 @@ internal fun MessageBubble(
                 Row(
                     modifier = Modifier
                         .clip(RoundedCornerShape(50))
-                        .background(Color(0xFF1F2330))
-                        .border(0.8.dp, Color.White.copy(alpha = 0.16f), RoundedCornerShape(50))
+                        .background(MaterialTheme.colorScheme.surfaceVariant)
+                        .border(0.8.dp, MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(50))
                         .padding(horizontal = 8.dp, vertical = 3.dp),
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(XySpacing.compact),
@@ -1252,21 +1244,10 @@ internal fun MessageBubble(
                         style = MaterialTheme.typography.labelSmall,
                         fontSize = 10.sp,
                         fontWeight = FontWeight.ExtraBold,
-                        color = Color(0xFFE2E8F0),
+                        color = MaterialTheme.colorScheme.onSurface,
                     )
                 }
             }
-        }
-
-        if (msg.mine) {
-            Spacer(Modifier.width(if (isCompactOverlay) 5.dp else 8.dp))
-            ChatSenderAvatar(
-                name = msg.name,
-                githubLogin = msg.githubLogin,
-                avatarUrl = msg.avatarUrl,
-                isFounder = founderMsg,
-                compact = isCompactOverlay,
-            )
         }
     }
 }
@@ -1339,9 +1320,9 @@ internal fun ChatMediaAttachmentBox(
                 .background(
                     Brush.linearGradient(
                         colors = if (viewedOnce) {
-                            listOf(Color(0xFF141418), Color(0xFF18181F))
+                            listOf(Color(0xFF141418), Color(0xFF191919))
                         } else {
-                            listOf(Color(0xFF181625), Color(0xFF271D3B), Color(0xFF151824))
+                            listOf(Color(0xFF181818), Color(0xFF232323), Color(0xFF181818))
                         },
                         start = Offset.Zero,
                         end = Offset(420f * (0.4f + shimmerPhase), 260f),
@@ -1349,7 +1330,7 @@ internal fun ChatMediaAttachmentBox(
                 )
                 .border(
                     width = 1.dp,
-                    color = if (viewedOnce) Color.White.copy(alpha = 0.08f) else Color(0xFFC084FC).copy(alpha = 0.45f),
+                    color = if (viewedOnce) Color.White.copy(alpha = 0.08f) else Color(0xFFA4A4A4).copy(alpha = 0.45f),
                     shape = RoundedCornerShape(18.dp),
                 )
                 .clickable(enabled = !viewedOnce) { onOpenMedia() },
@@ -1381,13 +1362,13 @@ internal fun ChatMediaAttachmentBox(
                         .clip(CircleShape)
                         .background(
                             if (viewedOnce) Color.White.copy(alpha = 0.06f)
-                            else Color(0xFFA855F7).copy(alpha = 0.24f),
+                            else Color(0xFF808080).copy(alpha = 0.24f),
                         ),
                     contentAlignment = Alignment.Center,
                 ) {
                     ChatVectorViewOnceIcon(
                         size = if (viewedOnce) 18.dp else 24.dp,
-                        tint = if (viewedOnce) Color(0xFF71717A) else Color(0xFFF3E8FF),
+                        tint = if (viewedOnce) Color(0xFF727272) else Color(0xFFEEEEEE),
                     )
                 }
                 Text(
@@ -1398,14 +1379,14 @@ internal fun ChatMediaAttachmentBox(
                     },
                     style = MaterialTheme.typography.labelMedium,
                     fontWeight = FontWeight.ExtraBold,
-                    color = if (viewedOnce) Color(0xFF71717A) else Color.White,
+                    color = if (viewedOnce) Color(0xFF727272) else Color.White,
                 )
                 if (!viewedOnce) {
                     Text(
                         text = "Ketuk untuk membuka · Privasi 1×",
                         style = MaterialTheme.typography.labelSmall,
                         fontSize = 10.sp,
-                        color = Color(0xFFD8B4FE),
+                        color = Color(0xFFC7C7C7),
                     )
                 }
             }
@@ -1590,7 +1571,7 @@ internal fun ChatMediaAttachmentBox(
             modifier = Modifier
                 .fillMaxWidth()
                 .clip(mediaShape)
-                .background(Color(0xFF18181F))
+                .background(Color(0xFF191919))
                 .border(1.dp, Color.White.copy(alpha = 0.10f), mediaShape)
                 .padding(horizontal = 12.dp, vertical = 10.dp),
             verticalAlignment = Alignment.CenterVertically,
@@ -1652,7 +1633,7 @@ internal fun ChatMediaAttachmentBox(
                         val frac = (0.22f + seed * 0.45f + animBoost * 0.33f).coerceIn(0.2f, 1f)
                         val bh = size.height * frac
                         drawRoundRect(
-                            color = if (isPlaying) Color.White else Color(0xFFA1A1AA),
+                            color = if (isPlaying) Color.White else Color(0xFFA2A2A2),
                             topLeft = Offset(i * gap + 1.dp.toPx(), (size.height - bh) / 2f),
                             size = Size(2.6.dp.toPx(), bh),
                             cornerRadius = CornerRadius(2.dp.toPx(), 2.dp.toPx()),
@@ -1668,7 +1649,7 @@ internal fun ChatMediaAttachmentBox(
                         text = "${(msg.attachmentSize / 1024).coerceAtLeast(1)} KB",
                         style = MaterialTheme.typography.labelSmall,
                         fontSize = 9.5.sp,
-                        color = Color(0xFFA1A1AA),
+                        color = Color(0xFFA2A2A2),
                     )
                     if (floatingTime != null) {
                         Row(
@@ -1679,7 +1660,7 @@ internal fun ChatMediaAttachmentBox(
                                 text = floatingTime,
                                 style = MaterialTheme.typography.labelSmall,
                                 fontSize = 9.5.sp,
-                                color = Color(0xFFA1A1AA),
+                                color = Color(0xFFA2A2A2),
                             )
                             if (msg.mine) {
                                 ChatVectorDeliveryTicks(ticks = msg.deliveryTicks, tint = Color.White)
@@ -1718,7 +1699,7 @@ internal fun ChatMediaAttachmentBox(
                 Text(
                     "${(msg.attachmentSize / 1024).coerceAtLeast(1)} KB · Ketuk untuk Buka",
                     style = MaterialTheme.typography.labelSmall,
-                    color = Color(0xFFA1A1AA),
+                    color = Color(0xFFA2A2A2),
                 )
             }
         }
@@ -1739,7 +1720,12 @@ internal fun ChatSenderAvatar(
     compact: Boolean = false,
 ) {
     val context = LocalContext.current
-    val avSize = if (compact) 24.dp else 30.dp
+    val avSize = if (compact) 25.dp else 32.dp
+    val topTenRanks by LeaderboardPodium.topTen.collectAsState()
+    val normGh = normalizedChatAccount(githubLogin)
+    val normName = normalizedChatAccount(name)
+    val rank = (if (normGh.isNotEmpty()) topTenRanks[normGh] else null)
+        ?: (if (normName.isNotEmpty()) topTenRanks[normName] else null)
     val resolvedUrl = remember(avatarUrl, githubLogin, name) {
         ChatAvatarLoader.normalizeAvatarUrl(avatarUrl, githubLogin, name)
     }
@@ -1759,34 +1745,45 @@ internal fun ChatSenderAvatar(
     }
 
     Box(
-        modifier = Modifier
-            .size(avSize)
-            .clip(CircleShape)
-            .background(if (isFounder) Color(0xFF1A0B2E) else Color(0xFF222228))
-            .let { mod ->
-                if (isFounder) mod.border(1.5.dp, founderBorderBrush(), CircleShape) else mod
-            }
-            .podiumAvatarFrame(githubLogin),
+        modifier = Modifier.size(avSize),
         contentAlignment = Alignment.Center,
     ) {
-        val bmp = bitmap
-        if (bmp != null) {
-            Image(
-                bitmap = bmp.asImageBitmap(),
-                contentDescription = name,
-                modifier = Modifier
-                    .size(avSize)
-                    .clip(CircleShape),
-                contentScale = ContentScale.Crop,
-            )
-        } else {
-            val initials = name.removePrefix("@").trim().take(2).uppercase(Locale.ROOT).ifEmpty { "U" }
-            Text(
-                text = initials,
-                style = MaterialTheme.typography.labelSmall,
-                fontSize = if (compact) 9.sp else 11.sp,
-                fontWeight = FontWeight.ExtraBold,
-                color = if (isFounder) Color(0xFFE9D5FF) else Color(0xFFE4E4E7),
+        Box(
+            modifier = Modifier
+                .size(avSize)
+                .clip(CircleShape)
+                .background(if (isFounder) Color(0xFF131313) else MaterialTheme.colorScheme.surfaceVariant)
+                .let { mod ->
+                    if (isFounder) mod.border(1.5.dp, founderBorderBrush(), CircleShape) else mod
+                }
+                .podiumAvatarFrame(githubLogin),
+            contentAlignment = Alignment.Center,
+        ) {
+            val bmp = bitmap
+            if (bmp != null) {
+                Image(
+                    bitmap = bmp.asImageBitmap(),
+                    contentDescription = name,
+                    modifier = Modifier
+                        .size(avSize)
+                        .clip(CircleShape),
+                    contentScale = ContentScale.Crop,
+                )
+            } else {
+                val initials = name.removePrefix("@").trim().take(2).uppercase(Locale.ROOT).ifEmpty { "U" }
+                Text(
+                    text = initials,
+                    style = MaterialTheme.typography.labelSmall,
+                    fontSize = if (compact) 9.sp else 11.sp,
+                    fontWeight = FontWeight.ExtraBold,
+                    color = if (isFounder) Color(0xFFE0E0E0) else MaterialTheme.colorScheme.onSurface,
+                )
+            }
+        }
+        if ((rank != null && rank in 1..10) || isFounder) {
+            AnimatedAvatarEffectOverlay(
+                style = if (rank == 1 || isFounder) XyAnimatedAvatarStyle.ORBITAL_CROWN else XyAnimatedAvatarStyle.STARLIGHT_AURA,
+                modifier = Modifier.size(avSize + 4.dp),
             )
         }
     }

@@ -132,6 +132,18 @@ internal object XyRdpClient {
         "^(?=.{1,253}\$)(?:[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?\\.)+[a-zA-Z]{2,63}\$",
     )
 
+    private val confirmedForkLogins = java.util.concurrent.ConcurrentHashMap.newKeySet<String>()
+
+    fun markForkConfirmed(login: String?) {
+        val clean = login?.trim()?.lowercase().orEmpty()
+        if (clean.isNotEmpty()) confirmedForkLogins.add(clean)
+    }
+
+    fun isForkConfirmed(login: String?): Boolean {
+        val clean = login?.trim()?.lowercase().orEmpty()
+        return clean.isNotEmpty() && confirmedForkLogins.contains(clean)
+    }
+
     private fun isDashCookieToken(token: String): Boolean =
         token.startsWith("ghs_cookie:")
 
@@ -144,7 +156,7 @@ internal object XyRdpClient {
         val rawCookies = cookieToken.removePrefix("ghs_cookie:").trim()
         val conn = URL("$DASH_API$path").openConnection() as HttpURLConnection
         try {
-            conn.instanceFollowRedirects = false
+            conn.instanceFollowRedirects = true
             conn.requestMethod = method
             conn.setRequestProperty("Cookie", if (rawCookies.contains("ad_verified=")) rawCookies else "$rawCookies; ad_verified=1")
             conn.setRequestProperty("X-Ad-Verified", "1")
@@ -177,7 +189,7 @@ internal object XyRdpClient {
     ): Pair<Int, String> = runCatching {
         val conn = URL("$API$path").openConnection() as HttpURLConnection
         try {
-            conn.instanceFollowRedirects = false
+            conn.instanceFollowRedirects = true
             conn.requestMethod = method
             if (token.isNotBlank() && !isDashCookieToken(token)) {
                 conn.setRequestProperty("Authorization", "Bearer $token")
@@ -218,23 +230,99 @@ internal object XyRdpClient {
 
     suspend fun forkExists(token: String, login: String): Boolean =
         withContext(Dispatchers.IO) {
+            val cleanLogin = login.trim()
+            if (cleanLogin.isEmpty()) return@withContext false
+            if (isForkConfirmed(cleanLogin)) return@withContext true
+
             if (isDashCookieToken(token)) {
                 val (code, text) = dashCall(token, "/me")
                 if (code == 200) {
                     val exists = runCatching { JSONObject(text).optBoolean("repo_exists", false) }.getOrDefault(false)
-                    if (exists) return@withContext true
+                    if (exists) {
+                        markForkConfirmed(cleanLogin)
+                        return@withContext true
+                    }
                 }
             }
-            call(token, "/repos/$login/${XyRdpConfig.FORK_REPO_NAME}").first == 200
+
+            // 1. Cek langsung /repos/$login/XyRDP (dengan token atau public fallback)
+            val directCode = call(token, "/repos/$cleanLogin/${XyRdpConfig.FORK_REPO_NAME}").first
+            if (directCode in 200..299) {
+                markForkConfirmed(cleanLogin)
+                return@withContext true
+            }
+            if (!isDashCookieToken(token) && token.isNotBlank()) {
+                val pubCode = call("", "/repos/$cleanLogin/${XyRdpConfig.FORK_REPO_NAME}").first
+                if (pubCode in 200..299) {
+                    markForkConfirmed(cleanLogin)
+                    return@withContext true
+                }
+            }
+
+            // 2. Fallback: cek daftar repo milik user (/users/$login/repos) jika case berbeda atau baru di-fork
+            val (reposCode, reposBody) = call(token, "/users/$cleanLogin/repos?type=owner&sort=updated&per_page=100")
+            if (reposCode in 200..299 && reposBody.isNotBlank()) {
+                val foundInList = runCatching {
+                    val arr = org.json.JSONArray(reposBody)
+                    var matched = false
+                    for (i in 0 until arr.length()) {
+                        val repoObj = arr.optJSONObject(i) ?: continue
+                        val name = repoObj.optString("name", "")
+                        val fullName = repoObj.optString("full_name", "")
+                        val isFork = repoObj.optBoolean("fork", false)
+                        if (name.equals(XyRdpConfig.FORK_REPO_NAME, ignoreCase = true) ||
+                            fullName.endsWith("/${XyRdpConfig.FORK_REPO_NAME}", ignoreCase = true) ||
+                            (isFork && name.contains("xyrdp", ignoreCase = true))
+                        ) {
+                            matched = true
+                            break
+                        }
+                    }
+                    matched
+                }.getOrDefault(false)
+                if (foundInList) {
+                    markForkConfirmed(cleanLogin)
+                    return@withContext true
+                }
+            }
+
+            // 3. Fallback kedua untuk token OAuth/PAT: cek /user/repos (termasuk private fork bila ada)
+            if (!isDashCookieToken(token) && token.isNotBlank()) {
+                val (uCode, uBody) = call(token, "/user/repos?affiliation=owner&sort=updated&per_page=100")
+                if (uCode in 200..299 && uBody.isNotBlank()) {
+                    val foundPrivate = runCatching {
+                        val arr = org.json.JSONArray(uBody)
+                        var matched = false
+                        for (i in 0 until arr.length()) {
+                            val repoObj = arr.optJSONObject(i) ?: continue
+                            val name = repoObj.optString("name", "")
+                            if (name.equals(XyRdpConfig.FORK_REPO_NAME, ignoreCase = true)) {
+                                matched = true
+                                break
+                            }
+                        }
+                        matched
+                    }.getOrDefault(false)
+                    if (foundPrivate) {
+                        markForkConfirmed(cleanLogin)
+                        return@withContext true
+                    }
+                }
+            }
+            false
         }
 
-    suspend fun createFork(token: String): Boolean = withContext(Dispatchers.IO) {
+    suspend fun createFork(token: String, login: String? = null): Boolean = withContext(Dispatchers.IO) {
         if (isDashCookieToken(token)) {
             val (code, _) = dashCall(token, "/setup", "POST", """{"name":"${XyRdpConfig.FORK_REPO_NAME}","private":false}""")
-            return@withContext code in 200..204
+            val ok = code in 200..204 || code == 409 || code == 422
+            if (ok) markForkConfirmed(login)
+            return@withContext ok
         }
         val code = call(token, "/repos/${XyRdpConfig.TEMPLATE_REPO}/forks", "POST", "{}").first
-        code in 200..202 || code == 403 // 403 = fork sudah ada / rate limit lunak
+        val ok = code in 200..204 || code == 403 || code == 409 || code == 422 // 403/409/422 = fork sudah ada
+        if (ok) markForkConfirmed(login)
+        ok
     }
 
     /**
@@ -329,7 +417,8 @@ internal object XyRdpClient {
                 if (code == 200) {
                     val obj = runCatching { JSONObject(text) }.getOrNull()
                     if (obj != null) {
-                        val exists = obj.optBoolean("repo_exists", false)
+                        val exists = obj.optBoolean("repo_exists", false) || forkExists(token, login)
+                        if (exists) markForkConfirmed(login)
                         val actEnabled = obj.optBoolean("actions_enabled", true)
                         val secArr = obj.optJSONArray("secrets")
                         val secretNames = mutableSetOf<String>()

@@ -30,6 +30,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
+import id.xydesk.remote.ui.components.XySwitch
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -210,10 +211,21 @@ fun RdpFreeScreen(onBack: () -> Unit, onConnect: (ConnectionProfile) -> Unit) {
     suspend fun refreshAll(tok: String, user: String, showSkeleton: Boolean = false) {
         if (showSkeleton) initialLoading = true
         try {
+            val forkPrefKey = "fork_confirmed_${user.trim().lowercase()}"
+            val cachedForkReady = prefs.getBoolean(forkPrefKey, false)
+            if (cachedForkReady) {
+                XyRdpClient.markForkConfirmed(user)
+                forkReady = true
+            }
             val setup = XyRdpClient.inspectSetup(tok, user, akses)
-            setupStatus = setup
-            forkReady = setup.forkExists
-            if (setup.forkExists) {
+            val resolvedFork = setup.forkExists || cachedForkReady || XyRdpClient.isForkConfirmed(user)
+            if (resolvedFork) {
+                prefs.edit().putBoolean(forkPrefKey, true).apply()
+                XyRdpClient.markForkConfirmed(user)
+            }
+            setupStatus = setup.copy(forkExists = resolvedFork)
+            forkReady = resolvedFork
+            if (resolvedFork) {
                 validatedSession = XyRdpClient.pollValidatedSession(tok, user)
                 nowTickMillis = System.currentTimeMillis()
             } else {
@@ -586,22 +598,28 @@ fun RdpFreeScreen(onBack: () -> Unit, onConnect: (ConnectionProfile) -> Unit) {
                         XyLoadingSkeletonCard(lines = 3, showAvatar = false)
                     } else if (!forkReady) {
                         XyEmptyState(
-                            title = "Fork Repository XyRDP",
-                            subtitle = "Buat fork XyRDP ke akun @$login untuk mulai.",
+                            title = "Siapkan Repository XyRDP",
+                            subtitle = "Buat fork XyRDP ke @$login sekali saja untuk mulai.",
                             icon = XyIcons.Monitor,
-                            actionLabel = "Fork XyRDP",
+                            actionLabel = "Siapkan XyRDP",
                             onAction = {
                                 busy = true
-                                busyLabel = "Membuat fork…"
+                                busyLabel = "Menyiapkan XyRDP…"
                                 scope.launch {
                                     try {
-                                        if (XyRdpClient.createFork(token!!)) {
-                                            delay(2000)
+                                        val okFork = XyRdpClient.createFork(token!!, login) ||
+                                            XyRdpClient.forkExists(token!!, login!!)
+                                        if (okFork) {
+                                            val forkPrefKey = "fork_confirmed_${login!!.trim().lowercase()}"
+                                            prefs.edit().putBoolean(forkPrefKey, true).apply()
+                                            XyRdpClient.markForkConfirmed(login)
+                                            forkReady = true
+                                            delay(1500)
                                             XyRdpClient.enableWorkflow(token!!, login!!)
                                             refreshAll(token!!, login!!)
-                                            successMessage = "Fork siap digunakan"
+                                            successMessage = "Repository XyRDP siap digunakan"
                                         } else {
-                                            errorMessage = "Gagal membuat fork XyRDP."
+                                            errorMessage = "Gagal menyiapkan fork XyRDP."
                                         }
                                     } catch (e: Exception) {
                                         reportError(e)
@@ -654,7 +672,7 @@ fun RdpFreeScreen(onBack: () -> Unit, onConnect: (ConnectionProfile) -> Unit) {
                                     mutableStateOf(prefs.getBoolean("anti_suspend_guard", true))
                                 }
 
-                                // 1. KARTU PROTEKSI AKUN BARU (ANTI-SUSPEND GUARD) & PANDUAN TUNNEL
+                                // 1. KARTU PROTEKSI AKUN & PANDUAN RINGKAS
                                 XyCard(Modifier.fillMaxWidth()) {
                                     Row(
                                         modifier = Modifier
@@ -671,20 +689,20 @@ fun RdpFreeScreen(onBack: () -> Unit, onConnect: (ConnectionProfile) -> Unit) {
                                             Box(
                                                 modifier = Modifier
                                                     .size(34.dp)
-                                                    .clip(RoundedCornerShape(10.dp))
-                                                    .background(Color(0xFF10B981).copy(alpha = 0.16f)),
+                                                    .clip(CircleShape)
+                                                    .background(MaterialTheme.colorScheme.surfaceVariant),
                                                 contentAlignment = Alignment.Center,
                                             ) {
                                                 Icon(
                                                     imageVector = XyIcons.Shield,
                                                     contentDescription = null,
-                                                    tint = Color(0xFF10B981),
+                                                    tint = MaterialTheme.colorScheme.onSurface,
                                                     modifier = Modifier.size(18.dp),
                                                 )
                                             }
                                             Column {
                                                 Text(
-                                                    text = "Anti-Suspend Guard & Info Jalur Tunnel",
+                                                    text = "Anti-Suspend Guard",
                                                     style = MaterialTheme.typography.titleSmall,
                                                     fontWeight = FontWeight.ExtraBold,
                                                     maxLines = 1,
@@ -692,12 +710,12 @@ fun RdpFreeScreen(onBack: () -> Unit, onConnect: (ConnectionProfile) -> Unit) {
                                                 )
                                                 Text(
                                                     text = if (antiSuspendNewAccount) {
-                                                        "Proteksi Akun Baru Aktif ✓ · Tailscale / Railway / Portmap"
+                                                        "Aktif · Tailscale / Railway / Portmap"
                                                     } else {
-                                                        "Ketuk untuk atur Anti-Suspend & panduan Tunnel"
+                                                        "Nonaktif · Ketuk untuk mengatur"
                                                     },
                                                     style = MaterialTheme.typography.labelSmall,
-                                                    color = Color(0xFF10B981),
+                                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
                                                     maxLines = 1,
                                                     overflow = TextOverflow.Ellipsis,
                                                 )
@@ -719,8 +737,8 @@ fun RdpFreeScreen(onBack: () -> Unit, onConnect: (ConnectionProfile) -> Unit) {
                                             verticalArrangement = Arrangement.spacedBy(8.dp),
                                         ) {
                                             RdpFlatToggleRow(
-                                                title = "Mode Aman Akun Baru (Anti-Suspend GitHub)",
-                                                subtitle = "Jeda request API natural, hemat upload checkpoint & cegah loop retrigger pada akun baru (<7 hari)",
+                                                title = "Mode Aman Akun Baru",
+                                                subtitle = "Jeda request API natural",
                                                 checked = antiSuspendNewAccount,
                                                 enabled = !busy,
                                                 onCheckedChange = {
@@ -732,68 +750,9 @@ fun RdpFreeScreen(onBack: () -> Unit, onConnect: (ConnectionProfile) -> Unit) {
                                                     }
                                                 },
                                             )
-                                            Row(
-                                                modifier = Modifier.fillMaxWidth(),
-                                                horizontalArrangement = Arrangement.spacedBy(6.dp),
-                                            ) {
-                                                Column(
-                                                    modifier = Modifier
-                                                        .weight(1f)
-                                                        .clip(RoundedCornerShape(10.dp))
-                                                        .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f))
-                                                        .padding(9.dp),
-                                                    verticalArrangement = Arrangement.spacedBy(3.dp),
-                                                ) {
-                                                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                                                        Icon(XyIcons.Shield, null, tint = Color(0xFF10B981), modifier = Modifier.size(13.dp))
-                                                        Text("Tailscale", fontWeight = FontWeight.Bold, fontSize = 11.sp)
-                                                    }
-                                                    Text(
-                                                        "P2P tercepat (IP 100.x). Paling stabil & aman.",
-                                                        fontSize = 10.sp,
-                                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                                    )
-                                                }
-                                                Column(
-                                                    modifier = Modifier
-                                                        .weight(1f)
-                                                        .clip(RoundedCornerShape(10.dp))
-                                                        .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f))
-                                                        .padding(9.dp),
-                                                    verticalArrangement = Arrangement.spacedBy(3.dp),
-                                                ) {
-                                                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                                                        Icon(XyIcons.Link, null, tint = Color(0xFFA855F7), modifier = Modifier.size(13.dp))
-                                                        Text("Railway", fontWeight = FontWeight.Bold, fontSize = 11.sp)
-                                                    }
-                                                    Text(
-                                                        "TCP Proxy (*.rlwy.net) tanpa VPN di HP.",
-                                                        fontSize = 10.sp,
-                                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                                    )
-                                                }
-                                                Column(
-                                                    modifier = Modifier
-                                                        .weight(1f)
-                                                        .clip(RoundedCornerShape(10.dp))
-                                                        .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f))
-                                                        .padding(9.dp),
-                                                    verticalArrangement = Arrangement.spacedBy(3.dp),
-                                                ) {
-                                                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                                                        Icon(XyIcons.Globe, null, tint = Color(0xFF38BDF8), modifier = Modifier.size(13.dp))
-                                                        Text("Portmap", fontWeight = FontWeight.Bold, fontSize = 11.sp)
-                                                    }
-                                                    Text(
-                                                        "Opsional (.ovpn). Host/Port otomatis.",
-                                                        fontSize = 10.sp,
-                                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                                    )
-                                                }
-                                            }
                                             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                                                 XyPillButton(
-                                                    text = "OS & Tunnel",
+                                                    text = "OS & Fitur",
                                                     icon = XyIcons.Sliders,
                                                     onClick = { activeTab = 1 },
                                                     primary = false,
@@ -801,7 +760,7 @@ fun RdpFreeScreen(onBack: () -> Unit, onConnect: (ConnectionProfile) -> Unit) {
                                                     modifier = Modifier.weight(1f),
                                                 )
                                                 XyPillButton(
-                                                    text = "Atur Secrets",
+                                                    text = "Secrets",
                                                     icon = XyIcons.Key,
                                                     onClick = { activeTab = 2 },
                                                     primary = !(hasRdpPass && hasAccessSecret),
@@ -817,37 +776,45 @@ fun RdpFreeScreen(onBack: () -> Unit, onConnect: (ConnectionProfile) -> Unit) {
                                     Row(
                                         modifier = Modifier
                                             .fillMaxWidth()
-                                            .clip(RoundedCornerShape(12.dp))
-                                            .background(Color(0xFF3B1D11))
-                                            .border(1.dp, Color(0xFFF59E0B).copy(alpha = 0.55f), RoundedCornerShape(12.dp))
+                                            .clip(RoundedCornerShape(20.dp))
+                                            .background(MaterialTheme.colorScheme.surface)
+                                            .border(1.dp, MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(20.dp))
                                             .clickable { activeTab = 2 }
-                                            .padding(horizontal = 12.dp, vertical = 10.dp),
+                                            .padding(horizontal = 14.dp, vertical = 10.dp),
                                         verticalAlignment = Alignment.CenterVertically,
-                                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                        horizontalArrangement = Arrangement.spacedBy(10.dp),
                                     ) {
-                                        Icon(
-                                            imageVector = XyIcons.Key,
-                                            contentDescription = null,
-                                            tint = Color(0xFFFBBF24),
-                                            modifier = Modifier.size(16.dp),
-                                        )
+                                        Box(
+                                            modifier = Modifier
+                                                .size(30.dp)
+                                                .clip(CircleShape)
+                                                .background(MaterialTheme.colorScheme.surfaceVariant),
+                                            contentAlignment = Alignment.Center,
+                                        ) {
+                                            Icon(
+                                                imageVector = XyIcons.Key,
+                                                contentDescription = null,
+                                                tint = MaterialTheme.colorScheme.onSurface,
+                                                modifier = Modifier.size(15.dp),
+                                            )
+                                        }
                                         Column(modifier = Modifier.weight(1f)) {
                                             Text(
-                                                text = "Wajib Diisi Sebelum Mulai: Setup Secrets Belum Lengkap",
+                                                text = "Lengkapi GitHub Secrets",
                                                 style = MaterialTheme.typography.labelMedium,
                                                 fontWeight = FontWeight.ExtraBold,
-                                                color = Color(0xFFFEF08A),
+                                                color = MaterialTheme.colorScheme.onSurface,
                                             )
                                             Text(
-                                                text = "Belum ada ${if (!hasRdpPass) "RDP_PASSWORD" else ""}${if (!hasRdpPass && !hasAccessSecret) " & " else ""}${if (!hasAccessSecret) (if (akses == "tailscale") "TAILSCALE_AUTH_KEY" else "PORTMAP_OVPN_CONFIG") else ""} · Ketuk di sini untuk mengatur",
+                                                text = "${if (!hasRdpPass) "RDP_PASSWORD" else ""}${if (!hasRdpPass && !hasAccessSecret) " · " else ""}${if (!hasAccessSecret) (if (akses == "tailscale") "TAILSCALE_AUTH_KEY" else "PORTMAP_OVPN_CONFIG") else ""}",
                                                 style = MaterialTheme.typography.labelSmall,
-                                                color = Color(0xFFFDE68A),
+                                                color = MaterialTheme.colorScheme.onSurfaceVariant,
                                             )
                                         }
                                         Icon(
                                             imageVector = XyIcons.ChevronRight,
                                             contentDescription = null,
-                                            tint = Color(0xFFFBBF24),
+                                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
                                             modifier = Modifier.size(15.dp),
                                         )
                                     }
@@ -871,21 +838,21 @@ fun RdpFreeScreen(onBack: () -> Unit, onConnect: (ConnectionProfile) -> Unit) {
                                                     .clip(CircleShape)
                                                     .background(
                                                         when (vs?.phase) {
-                                                            XyRdpPhase.READY -> Color(0xFF10B981)
-                                                            XyRdpPhase.PREPARING, XyRdpPhase.QUEUED -> Color(0xFFF59E0B)
-                                                            XyRdpPhase.FAILED -> Color(0xFFEF4444)
-                                                            else -> Color(0xFF38BDF8)
+                                                            XyRdpPhase.READY -> Color(0xFF808080)
+                                                            XyRdpPhase.PREPARING, XyRdpPhase.QUEUED -> Color(0xFFA7A7A7)
+                                                            XyRdpPhase.FAILED -> Color(0xFF777777)
+                                                            else -> Color(0xFF9C9C9C)
                                                         },
                                                     ),
                                             )
                                             Column {
                                                 Text(
-                                                    text = vs?.phaseLabel ?: "Siap Membuat Server RDP Baru",
+                                                    text = vs?.phaseLabel ?: "Server Cloud RDP",
                                                     style = MaterialTheme.typography.titleSmall,
                                                     fontWeight = FontWeight.ExtraBold,
                                                 )
                                                 Text(
-                                                    text = "Spesifikasi Cloud: 4 vCPU · 16 GB RAM · SSD 75 GB · 120 FPS",
+                                                    text = "4 vCPU · 16 GB RAM · SSD 75 GB · 120 FPS",
                                                     style = MaterialTheme.typography.labelSmall,
                                                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                                                 )
@@ -894,12 +861,12 @@ fun RdpFreeScreen(onBack: () -> Unit, onConnect: (ConnectionProfile) -> Unit) {
                                         if (r != null) {
                                             Box(
                                                 modifier = Modifier
-                                                    .clip(RoundedCornerShape(8.dp))
+                                                    .clip(RoundedCornerShape(50))
                                                     .background(MaterialTheme.colorScheme.surfaceVariant)
-                                                    .padding(horizontal = 8.dp, vertical = 4.dp),
+                                                    .padding(horizontal = 10.dp, vertical = 4.dp),
                                             ) {
                                                 Text(
-                                                    text = "Sesi #${r.number}",
+                                                    text = "#${r.number}",
                                                     style = MaterialTheme.typography.labelSmall,
                                                     fontFamily = FontFamily.Monospace,
                                                     fontWeight = FontWeight.Bold,
@@ -914,8 +881,8 @@ fun RdpFreeScreen(onBack: () -> Unit, onConnect: (ConnectionProfile) -> Unit) {
                                         if (prog.totalSteps > 0) {
                                             Spacer(Modifier.height(8.dp))
                                             StatBar(
-                                                prog.currentStep ?: "Menyiapkan Server Cloud…",
-                                                "Tahap ${prog.completedSteps}/${prog.totalSteps}",
+                                                prog.currentStep ?: "Menyiapkan Server…",
+                                                "${prog.completedSteps}/${prog.totalSteps}",
                                                 fraction(prog.completedSteps.toDouble(), prog.totalSteps.toDouble()),
                                             )
                                         }
@@ -923,7 +890,7 @@ fun RdpFreeScreen(onBack: () -> Unit, onConnect: (ConnectionProfile) -> Unit) {
 
                                     Spacer(Modifier.height(10.dp))
                                     Text(
-                                        text = "1. Pilih Sistem Operasi Server:",
+                                        text = "Sistem Operasi",
                                         style = MaterialTheme.typography.labelSmall,
                                         fontWeight = FontWeight.Bold,
                                         color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -931,7 +898,7 @@ fun RdpFreeScreen(onBack: () -> Unit, onConnect: (ConnectionProfile) -> Unit) {
                                     Spacer(Modifier.height(6.dp))
                                     Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                                         XyPillButton(
-                                            text = "Windows Server",
+                                            text = "Windows",
                                             onClick = {
                                                 runnerImage = "windows-2022"
                                                 linuxMode = "desktop"
@@ -943,7 +910,7 @@ fun RdpFreeScreen(onBack: () -> Unit, onConnect: (ConnectionProfile) -> Unit) {
                                             modifier = Modifier.weight(1f),
                                         )
                                         XyPillButton(
-                                            text = "Linux Desktop",
+                                            text = "Linux GUI",
                                             onClick = {
                                                 if (!runnerImage.startsWith("ubuntu", ignoreCase = true)) runnerImage = "ubuntu-24.04"
                                                 linuxMode = "desktop"
@@ -970,7 +937,7 @@ fun RdpFreeScreen(onBack: () -> Unit, onConnect: (ConnectionProfile) -> Unit) {
 
                                     Spacer(Modifier.height(10.dp))
                                     Text(
-                                        text = "2. Pilih Durasi Sesi Aktif (Menit):",
+                                        text = "Durasi",
                                         style = MaterialTheme.typography.labelSmall,
                                         fontWeight = FontWeight.Bold,
                                         color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -985,21 +952,21 @@ fun RdpFreeScreen(onBack: () -> Unit, onConnect: (ConnectionProfile) -> Unit) {
                                             Box(
                                                 modifier = Modifier
                                                     .weight(1f)
-                                                    .clip(RoundedCornerShape(10.dp))
+                                                    .clip(RoundedCornerShape(50))
                                                     .background(
                                                         if (selectedDur) MaterialTheme.colorScheme.primary
-                                                        else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.45f),
+                                                        else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.55f),
                                                     )
                                                     .clickable(enabled = !busy && !isRunningOrQueued) {
                                                         duration = mins
                                                         saveSettings()
                                                     }
-                                                    .padding(vertical = 7.dp),
+                                                    .padding(vertical = 8.dp),
                                                 contentAlignment = Alignment.Center,
                                             ) {
                                                 Text(
-                                                    text = "$lbl ($mins m)",
-                                                    fontSize = 10.5.sp,
+                                                    text = lbl,
+                                                    fontSize = 11.sp,
                                                     fontWeight = FontWeight.ExtraBold,
                                                     color = if (selectedDur) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurface,
                                                 )
@@ -1009,7 +976,7 @@ fun RdpFreeScreen(onBack: () -> Unit, onConnect: (ConnectionProfile) -> Unit) {
 
                                     Spacer(Modifier.height(10.dp))
                                     Text(
-                                        text = "3. Pilih Jalur Tunnel (Portmap Opsional / Bisa Pakai Railway):",
+                                        text = "Tunnel",
                                         style = MaterialTheme.typography.labelSmall,
                                         fontWeight = FontWeight.Bold,
                                         color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -1091,7 +1058,7 @@ fun RdpFreeScreen(onBack: () -> Unit, onConnect: (ConnectionProfile) -> Unit) {
                                                 text = "Tunnel Railway Aktif (Mendukung TCP Proxy *.rlwy.net & WebSocket *.up.railway.app):",
                                                 fontSize = 10.5.sp,
                                                 fontWeight = FontWeight.Bold,
-                                                color = Color(0xFFC084FC),
+                                                color = Color(0xFFA4A4A4),
                                             )
                                             Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                                                 XyField(
@@ -1202,7 +1169,7 @@ fun RdpFreeScreen(onBack: () -> Unit, onConnect: (ConnectionProfile) -> Unit) {
                                                     text = "SESI AKTIF · SIAP MASUK",
                                                     style = MaterialTheme.typography.labelSmall,
                                                     fontFamily = FontFamily.Monospace,
-                                                    color = Color(0xFF34D399),
+                                                    color = Color(0xFF9D9D9D),
                                                     fontWeight = FontWeight.Bold,
                                                 )
                                                 Text(
@@ -1348,27 +1315,27 @@ fun RdpFreeScreen(onBack: () -> Unit, onConnect: (ConnectionProfile) -> Unit) {
                                     ) {
                                         Column {
                                             Text(
-                                                text = "Statistik Penggunaan & Resource XyRDP",
+                                                text = "Statistik & Resource",
                                                 style = MaterialTheme.typography.titleSmall,
                                                 fontWeight = FontWeight.ExtraBold,
                                             )
                                             Text(
-                                                text = "Pantau pemakaian sesi cloud, performa CPU/RAM/Disk & estimasi kuota GitHub",
+                                                text = "Performa cloud & kuota GitHub Actions",
                                                 style = MaterialTheme.typography.labelSmall,
                                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                                             )
                                         }
                                         Box(
                                             modifier = Modifier
-                                                .clip(RoundedCornerShape(8.dp))
-                                                .background(Color(0xFF10B981).copy(alpha = 0.16f))
-                                                .padding(horizontal = 8.dp, vertical = 4.dp),
+                                                .clip(RoundedCornerShape(50))
+                                                .background(MaterialTheme.colorScheme.surfaceVariant)
+                                                .padding(horizontal = 10.dp, vertical = 4.dp),
                                         ) {
                                             Text(
-                                                text = if (liveAcc != null) "LIVE MONITOR" else "SIAP PAKAI",
+                                                text = if (liveAcc != null) "LIVE" else "READY",
                                                 fontSize = 9.5.sp,
                                                 fontWeight = FontWeight.ExtraBold,
-                                                color = Color(0xFF10B981),
+                                                color = MaterialTheme.colorScheme.onSurface,
                                             )
                                         }
                                     }
@@ -1391,7 +1358,7 @@ fun RdpFreeScreen(onBack: () -> Unit, onConnect: (ConnectionProfile) -> Unit) {
                                                 text = "${totalSessionsCount}x",
                                                 style = MaterialTheme.typography.titleMedium,
                                                 fontWeight = FontWeight.ExtraBold,
-                                                color = Color(0xFF38BDF8),
+                                                color = Color(0xFF9C9C9C),
                                             )
                                             Text("Total Sesi RDP", fontSize = 10.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
                                         }
@@ -1407,7 +1374,7 @@ fun RdpFreeScreen(onBack: () -> Unit, onConnect: (ConnectionProfile) -> Unit) {
                                                 text = "${activeUptimeMin / 60}j ${activeUptimeMin % 60}m",
                                                 style = MaterialTheme.typography.titleMedium,
                                                 fontWeight = FontWeight.ExtraBold,
-                                                color = Color(0xFF10B981),
+                                                color = Color(0xFF808080),
                                             )
                                             Text("Uptime Sesi Ini", fontSize = 10.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
                                         }
@@ -1423,7 +1390,7 @@ fun RdpFreeScreen(onBack: () -> Unit, onConnect: (ConnectionProfile) -> Unit) {
                                                 text = formatLeaderboardDuration(localActiveSec),
                                                 style = MaterialTheme.typography.titleMedium,
                                                 fontWeight = FontWeight.ExtraBold,
-                                                color = Color(0xFFFBBF24),
+                                                color = Color(0xFFBFBFBF),
                                             )
                                             Text("Total Waktu Main", fontSize = 10.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
                                         }
@@ -1456,7 +1423,7 @@ fun RdpFreeScreen(onBack: () -> Unit, onConnect: (ConnectionProfile) -> Unit) {
                                         Text(
                                             text = "Jalur Aktif: ${akses.uppercase()} · Keepalive Anti-Disconnect & Auto-Heal Shortcut Desktop Aktif",
                                             style = MaterialTheme.typography.labelSmall,
-                                            color = Color(0xFF10B981),
+                                            color = Color(0xFF808080),
                                         )
                                     } else {
                                         Text(
@@ -2078,8 +2045,8 @@ private fun SecretStatusRow(
             .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.45f))
             .border(
                 width = 1.dp,
-                color = if (configured) Color(0xFF34D399).copy(alpha = 0.45f)
-                else if (required) Color(0xFFF87171).copy(alpha = 0.45f)
+                color = if (configured) Color(0xFF9D9D9D).copy(alpha = 0.45f)
+                else if (required) Color(0xFF999999).copy(alpha = 0.45f)
                 else MaterialTheme.colorScheme.outline.copy(alpha = 0.4f),
                 shape = RoundedCornerShape(14.dp),
             )
@@ -2093,8 +2060,8 @@ private fun SecretStatusRow(
                 .size(22.dp)
                 .clip(CircleShape)
                 .background(
-                    if (configured) Color(0xFF10B981).copy(alpha = 0.22f)
-                    else if (required) Color(0xFFEF4444).copy(alpha = 0.20f)
+                    if (configured) Color(0xFF808080).copy(alpha = 0.22f)
+                    else if (required) Color(0xFF777777).copy(alpha = 0.20f)
                     else MaterialTheme.colorScheme.surface,
                 ),
             contentAlignment = Alignment.Center,
@@ -2102,8 +2069,8 @@ private fun SecretStatusRow(
             Icon(
                 imageVector = if (configured) XyIcons.Check else XyIcons.Key,
                 contentDescription = null,
-                tint = if (configured) Color(0xFF6EE7B7)
-                else if (required) Color(0xFFFCA5A5)
+                tint = if (configured) Color(0xFFBDBDBD)
+                else if (required) Color(0xFFBFBFBF)
                 else MaterialTheme.colorScheme.onSurfaceVariant,
                 modifier = Modifier.size(13.dp),
             )
@@ -2122,8 +2089,8 @@ private fun SecretStatusRow(
             Text(
                 text = if (configured) "Aktif" else if (required) "Wajib" else "Opsional",
                 style = MaterialTheme.typography.labelSmall,
-                color = if (configured) Color(0xFF6EE7B7)
-                else if (required) Color(0xFFFCA5A5)
+                color = if (configured) Color(0xFFBDBDBD)
+                else if (required) Color(0xFFBFBFBF)
                 else MaterialTheme.colorScheme.onSurfaceVariant,
             )
         }
@@ -2147,9 +2114,9 @@ private fun RdpFlatToggleRow(
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .clip(RoundedCornerShape(10.dp))
+            .clip(RoundedCornerShape(16.dp))
             .clickable(enabled = enabled) { onCheckedChange(!checked) }
-            .padding(vertical = 6.dp, horizontal = 4.dp),
+            .padding(vertical = 8.dp, horizontal = 6.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(10.dp),
     ) {
@@ -2158,11 +2125,12 @@ private fun RdpFlatToggleRow(
             style = MaterialTheme.typography.bodyMedium,
             fontWeight = FontWeight.Medium,
             color = MaterialTheme.colorScheme.onSurface,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
             modifier = Modifier.weight(1f),
         )
-        androidx.compose.material3.Switch(
+        XySwitch(
             checked = checked,
-            enabled = enabled,
             onCheckedChange = { if (enabled) onCheckedChange(it) },
         )
     }

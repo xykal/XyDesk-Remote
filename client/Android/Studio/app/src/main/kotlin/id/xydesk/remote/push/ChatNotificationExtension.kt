@@ -18,8 +18,9 @@ class ChatNotificationExtension : INotificationServiceExtension {
     override fun onNotificationReceived(event: INotificationReceivedEvent) {
         val data = event.notification.additionalData
         val type = data?.optString("type").orEmpty()
-        if (type == "app_update") {
-            event.preventDefault(true)
+        ChatPushNotifier.ensureChannel(event.context)
+        if (type == "app_update" || type == "data_update") {
+            runCatching { event.preventDefault() }
             val version = data?.optString("version", "v1.1.23").orEmpty()
             val mode = data?.optString("update_mode", "data_pack").orEmpty()
             val summary = data?.optString("summary").orEmpty().ifBlank {
@@ -36,7 +37,6 @@ class ChatNotificationExtension : INotificationServiceExtension {
             return
         }
         if (type == "global_chat" || data?.has("msg_id") == true) {
-            runCatching { event.preventDefault(true) }
             runCatching { event.preventDefault() }
             val msgId = data?.optString("msg_id").orEmpty()
             val senderName = data?.optString("sender_name").orEmpty().ifBlank {
@@ -58,22 +58,25 @@ class ChatNotificationExtension : INotificationServiceExtension {
             val avatarUrl = data?.optString("avatar_url").orEmpty()
             val replyToName = data?.optString("reply_to_name").orEmpty()
             val isAnnouncement = data?.optString("category") == "announcement"
-            ChatPushNotifier.onIncomingChatMessage(
-                context = event.context,
-                msgId = msgId,
-                senderName = senderName,
-                text = fullText,
-                at = at,
-                rawSender = rawSender,
-                githubLogin = githubLogin,
-                replyToName = replyToName,
-                isAnnouncement = isAnnouncement,
-                avatarUrl = avatarUrl,
-            )
+            try {
+                ChatPushNotifier.onIncomingChatMessage(
+                    context = event.context,
+                    msgId = msgId,
+                    senderName = senderName,
+                    text = fullText,
+                    at = at,
+                    rawSender = rawSender,
+                    githubLogin = githubLogin,
+                    replyToName = replyToName,
+                    isAnnouncement = isAnnouncement,
+                    avatarUrl = avatarUrl,
+                )
+            } catch (_: Throwable) {
+                runCatching { event.notification.display() }
+            }
             return
         }
         if (type == "feed_comment" || type == "feed_like" || type == "feed_reaction" || type == "social_notif" || data?.has("category") == true) {
-            runCatching { event.preventDefault(true) }
             runCatching { event.preventDefault() }
             val actorName = data?.optString("actor").orEmpty().ifBlank { data?.optString("actor_name").orEmpty() }
             val actorGh = data?.optString("actor_github").orEmpty()

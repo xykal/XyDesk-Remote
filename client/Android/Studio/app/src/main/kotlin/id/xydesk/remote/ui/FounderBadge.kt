@@ -43,6 +43,8 @@ import androidx.compose.ui.text.style.TextAlign
 import id.xydesk.remote.ui.components.XyIcons
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.graphics.nativeCanvas
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.LaunchedEffect
@@ -571,7 +573,7 @@ internal fun GitHubDirectOAuthModalHost() {
                     .fillMaxWidth()
                     .padding(horizontal = 16.dp),
                 shape = RoundedCornerShape(26.dp),
-                color = Color(0xFF0E1017),
+                color = Color(0xFF101010),
                 border = BorderStroke(1.dp, Color.White.copy(alpha = 0.12f)),
                 tonalElevation = 12.dp,
             ) {
@@ -590,7 +592,7 @@ internal fun GitHubDirectOAuthModalHost() {
                         Icon(
                             imageVector = XyIcons.Close,
                             contentDescription = xyNow("Tutup", "Close"),
-                            tint = Color(0xFFA1A1AA),
+                            tint = Color(0xFFA2A2A2),
                             modifier = Modifier.size(15.dp),
                         )
                     }
@@ -611,14 +613,14 @@ internal fun GitHubDirectOAuthModalHost() {
                                 modifier = Modifier
                                     .size(52.dp)
                                     .clip(RoundedCornerShape(16.dp))
-                                    .background(Color(0xFF0284C7).copy(alpha = 0.18f))
-                                    .border(1.dp, Color(0xFF38BDF8).copy(alpha = 0.45f), RoundedCornerShape(16.dp)),
+                                    .background(Color(0xFF656565).copy(alpha = 0.18f))
+                                    .border(1.dp, Color(0xFF9C9C9C).copy(alpha = 0.45f), RoundedCornerShape(16.dp)),
                                 contentAlignment = Alignment.Center,
                             ) {
                                 Icon(
                                     imageVector = XyIcons.Monitor,
                                     contentDescription = "XyDesk",
-                                    tint = Color(0xFF38BDF8),
+                                    tint = Color(0xFF9C9C9C),
                                     modifier = Modifier.size(26.dp),
                                 )
                             }
@@ -634,14 +636,14 @@ internal fun GitHubDirectOAuthModalHost() {
                                 modifier = Modifier
                                     .size(34.dp)
                                     .clip(CircleShape)
-                                    .background(Color(0xFF10B981).copy(alpha = 0.16f))
-                                    .border(1.dp, Color(0xFF34D399).copy(alpha = 0.45f), CircleShape),
+                                    .background(Color(0xFF808080).copy(alpha = 0.16f))
+                                    .border(1.dp, Color(0xFF9D9D9D).copy(alpha = 0.45f), CircleShape),
                                 contentAlignment = Alignment.Center,
                             ) {
                                 Icon(
                                     imageVector = XyIcons.Link,
                                     contentDescription = "Link",
-                                    tint = Color(0xFF34D399),
+                                    tint = Color(0xFF9D9D9D),
                                     modifier = Modifier.size(16.dp),
                                 )
                             }
@@ -682,7 +684,7 @@ internal fun GitHubDirectOAuthModalHost() {
                                     "One-click authorization via your main browser. Just tap the green 'Authorize' button to sign in automatically.",
                                 ),
                                 style = MaterialTheme.typography.bodySmall,
-                                color = Color(0xFFA1A1AA),
+                                color = Color(0xFFA2A2A2),
                                 textAlign = TextAlign.Center,
                             )
                         }
@@ -779,7 +781,7 @@ internal fun GitHubDirectOAuthModalHost() {
                             text = currentUrl,
                             style = MaterialTheme.typography.labelSmall,
                             fontSize = 10.sp,
-                            color = Color(0xFFA1A1AA),
+                            color = Color(0xFFA2A2A2),
                             maxLines = 1,
                             overflow = TextOverflow.Ellipsis,
                         )
@@ -833,7 +835,7 @@ internal fun GitHubDirectOAuthModalHost() {
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .background(Color(0xFF18181F))
+                        .background(Color(0xFF191919))
                         .padding(horizontal = 14.dp, vertical = 8.dp),
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(8.dp),
@@ -960,13 +962,13 @@ internal fun founderBorderBrush(phase: Float = 0f): Brush {
     val shift = phase * 360f
     return Brush.linearGradient(
         colors = listOf(
-            Color(0xFFFAF5FF),
-            Color(0xFFE9D5FF),
-            Color(0xFFC084FC),
-            Color(0xFFA855F7),
-            Color(0xFF7E22CE),
-            Color(0xFFD8B4FE),
-            Color(0xFFFAF5FF),
+            Color(0xFFF8F8F8),
+            Color(0xFFE0E0E0),
+            Color(0xFFA4A4A4),
+            Color(0xFF808080),
+            Color(0xFF515151),
+            Color(0xFFC7C7C7),
+            Color(0xFFF8F8F8),
         ),
         start = Offset(shift, 0f),
         end = Offset(shift + 240f, 180f),
@@ -977,11 +979,11 @@ internal fun founderBgBrush(phase: Float = 0f): Brush {
     val offset = phase * 220f
     return Brush.linearGradient(
         colors = listOf(
-            Color(0xFF16062B),
-            Color(0xFF2E1065),
-            Color(0xFF3B0764),
-            Color(0xFF4C1D95),
-            Color(0xFF190733),
+            Color(0xFF0F0F0F),
+            Color(0xFF232323),
+            Color(0xFF212121),
+            Color(0xFF393939),
+            Color(0xFF111111),
         ),
         start = Offset(offset, 0f),
         end = Offset(offset + 280f, 120f),
@@ -1078,50 +1080,15 @@ internal fun resolveCustomBubbleShape(
                 bottomStart = r,
             )
         }
-        else -> androidx.compose.foundation.shape.GenericShape { size, _ ->
-            // Bentuk Fisik Bubble Persis WhatsApp (Sudut 22f px + Ekor Segitiga Melengkung Khas WA di Pojok Atas)
-            val w = size.width
-            val h = size.height
-            val tailW = (minOf(w, h) * 0.14f).coerceIn(10f, 18f)
-            val tailH = (minOf(w, h) * 0.22f).coerceIn(13f, 22f)
-            val r = (minOf(w - tailW, h) * 0.24f).coerceIn(14f, 24f)
-            if (own) {
-                // Bubble Pesan Kita (Ekor Lancip Melengkung WA di Pojok Kanan Atas)
-                val bodyRight = (w - tailW).coerceAtLeast(r * 2f)
-                moveTo(r, 0f)
-                // Garis atas lurus sampai ke ujung ekor kanan atas
-                lineTo(w - 2f, 0f)
-                // Kurva lekukan bawah ekor WhatsApp masuk ke dinding kanan bubble
-                quadraticBezierTo(bodyRight + tailW * 0.22f, tailH * 0.45f, bodyRight, tailH)
-                // Dinding kanan turun ke pojok kanan bawah
-                lineTo(bodyRight, (h - r).coerceAtLeast(tailH))
-                quadraticBezierTo(bodyRight, h, (bodyRight - r).coerceAtLeast(r), h)
-                // Garis bawah ke pojok kiri bawah
-                lineTo(r, h)
-                quadraticBezierTo(0f, h, 0f, (h - r).coerceAtLeast(r))
-                // Dinding kiri naik ke pojok kiri atas
-                lineTo(0f, r)
-                quadraticBezierTo(0f, 0f, r, 0f)
-                close()
-            } else {
-                // Bubble Pesan Orang Lain (Ekor Lancip Melengkung WA di Pojok Kiri Atas)
-                val bodyLeft = tailW.coerceAtMost(w * 0.25f)
-                moveTo(2f, 0f)
-                // Garis atas lurus dari ujung ekor kiri atas ke pojok kanan atas
-                lineTo((w - r).coerceAtLeast(bodyLeft + r), 0f)
-                quadraticBezierTo(w, 0f, w, r)
-                // Dinding kanan turun ke pojok kanan bawah
-                lineTo(w, (h - r).coerceAtLeast(r))
-                quadraticBezierTo(w, h, (w - r).coerceAtLeast(bodyLeft + r), h)
-                // Garis bawah ke pojok kiri bawah
-                lineTo(bodyLeft + r, h)
-                quadraticBezierTo(bodyLeft, h, bodyLeft, (h - r).coerceAtLeast(tailH))
-                // Dinding kiri naik sampai pangkal ekor
-                lineTo(bodyLeft, tailH)
-                // Kurva lekukan ekor WhatsApp kembali ke ujung lancip kiri atas
-                quadraticBezierTo(bodyLeft - tailW * 0.22f, tailH * 0.45f, 2f, 0f)
-                close()
-            }
+        else -> {
+            val r = (if (compact) 13f else 17f).dp
+            val tailCorner = (if (compact) 3.5f else 4.5f).dp
+            RoundedCornerShape(
+                topStart = if (own) r else tailCorner,
+                topEnd = if (own) tailCorner else r,
+                bottomEnd = r,
+                bottomStart = r,
+            )
         }
     }
 }
@@ -1133,8 +1100,8 @@ internal fun resolveCustomBubbleShape(
 internal fun androidx.compose.ui.graphics.drawscope.DrawScope.drawBubbleFloatingElements(
     elementStyle: String = "",
     preset: String = "",
-    accentColor: Color = Color(0xFFD8B4FE),
-    secondaryColor: Color = Color(0xFFA855F7),
+    accentColor: Color = Color(0xFFC7C7C7),
+    secondaryColor: Color = Color(0xFF808080),
     phase: Float = 0f,
 ) {
     val rawStyle = preset.ifBlank { elementStyle }.trim().lowercase(Locale.ROOT)
@@ -1362,7 +1329,7 @@ internal fun androidx.compose.ui.graphics.drawscope.DrawScope.drawBubbleFloating
                     cubicTo(cx + r * 0.95f, cy - r * 0.85f, cx + r * 1.2f, cy + r * 0.1f, cx, cy + r * 0.75f)
                     close()
                 }
-                drawPath(path = heart, color = Color(0xFFF472B6).copy(alpha = 0.52f * pulse))
+                drawPath(path = heart, color = Color(0xFFA1A1A1).copy(alpha = 0.52f * pulse))
                 drawPath(
                     path = heart,
                     color = Color.White.copy(alpha = 0.45f * pulse),
@@ -1377,14 +1344,14 @@ internal fun androidx.compose.ui.graphics.drawscope.DrawScope.drawBubbleFloating
                     quadraticTo(cx - r * 1.1f, cy - r * 0.25f, cx, cy - r)
                     close()
                 }
-                drawPath(path = petal, color = Color(0xFFF9A8D4).copy(alpha = 0.52f * pulse))
+                drawPath(path = petal, color = Color(0xFFC5C5C5).copy(alpha = 0.52f * pulse))
             }
             "fireflies" -> {
                 val r = 7.2.dp.toPx() * scale
                 drawCircle(
                     brush = Brush.radialGradient(
                         colors = listOf(
-                            Color(0xFFFEF08A).copy(alpha = 0.72f * pulse),
+                            Color(0xFFE9E9E9).copy(alpha = 0.72f * pulse),
                             tint.copy(alpha = 0.34f * pulse),
                             Color.Transparent,
                         ),
@@ -1395,7 +1362,7 @@ internal fun androidx.compose.ui.graphics.drawscope.DrawScope.drawBubbleFloating
                     center = Offset(cx, cy),
                 )
                 drawCircle(
-                    color = Color(0xFFFFFEF0).copy(alpha = 0.92f * pulse),
+                    color = Color(0xFFFDFDFD).copy(alpha = 0.92f * pulse),
                     radius = 1.6.dp.toPx() * scale,
                     center = Offset(cx, cy),
                 )
@@ -1449,8 +1416,8 @@ internal fun FounderCrownEmblem(
         drawCircle(
             brush = Brush.radialGradient(
                 colors = listOf(
-                    Color(0xFFC084FC).copy(alpha = 0.48f * pulse.coerceIn(0.8f, 1.15f)),
-                    Color(0xFF7E22CE).copy(alpha = 0.22f),
+                    Color(0xFFA4A4A4).copy(alpha = 0.48f * pulse.coerceIn(0.8f, 1.15f)),
+                    Color(0xFF515151).copy(alpha = 0.22f),
                     Color.Transparent,
                 ),
                 center = Offset(cx, cy),
@@ -1462,10 +1429,10 @@ internal fun FounderCrownEmblem(
 
         val amethystBrush = Brush.linearGradient(
             colors = listOf(
-                Color(0xFFFAF5FF),
-                Color(0xFFE9D5FF),
-                Color(0xFFC084FC),
-                Color(0xFF9333EA),
+                Color(0xFFF8F8F8),
+                Color(0xFFE0E0E0),
+                Color(0xFFA4A4A4),
+                Color(0xFF656565),
             ),
             start = Offset(0f, 0f),
             end = Offset(w, h),
@@ -1505,18 +1472,18 @@ internal fun FounderCrownEmblem(
         drawPath(path = crown, brush = amethystBrush, style = Fill)
         drawPath(
             path = crown,
-            color = Color(0xFFFAF5FF).copy(alpha = 0.88f),
+            color = Color(0xFFF8F8F8).copy(alpha = 0.88f),
             style = Stroke(width = w * 0.045f, join = StrokeJoin.Round),
         )
 
         // Permata Amethyst Ungu Neon di tengah mahkota
         drawCircle(
-            color = Color(0xFF6B21A8),
+            color = Color(0xFF474747),
             radius = w * 0.078f,
             center = Offset(w * 0.50f, h * 0.56f),
         )
         drawCircle(
-            color = Color(0xFFFAF5FF),
+            color = Color(0xFFF8F8F8),
             radius = w * 0.034f,
             center = Offset(w * 0.48f, h * 0.54f),
         )
@@ -1531,13 +1498,13 @@ internal fun FounderCrownEmblem(
         )
 
         // Permata puncak + partikel bintang ungu mengorbit
-        drawCircle(color = Color(0xFFFAF5FF), radius = w * 0.07f, center = Offset(w * 0.50f, h * 0.13f))
-        drawCircle(color = Color(0xFFE9D5FF), radius = w * 0.055f, center = Offset(w * 0.13f, h * 0.30f))
-        drawCircle(color = Color(0xFFE9D5FF), radius = w * 0.055f, center = Offset(w * 0.87f, h * 0.30f))
+        drawCircle(color = Color(0xFFF8F8F8), radius = w * 0.07f, center = Offset(w * 0.50f, h * 0.13f))
+        drawCircle(color = Color(0xFFE0E0E0), radius = w * 0.055f, center = Offset(w * 0.13f, h * 0.30f))
+        drawCircle(color = Color(0xFFE0E0E0), radius = w * 0.055f, center = Offset(w * 0.87f, h * 0.30f))
 
         val sx = cx + cos(orbit) * (w * 0.44f)
         val sy = cy + sin(orbit) * (h * 0.38f)
-        drawCircle(color = Color(0xFFFAF5FF), radius = w * 0.048f, center = Offset(sx, sy))
+        drawCircle(color = Color(0xFFF8F8F8), radius = w * 0.048f, center = Offset(sx, sy))
     }
 }
 
@@ -1595,8 +1562,8 @@ internal fun XyFounderBadge(
                     brush = Brush.linearGradient(
                         colors = listOf(
                             Color.Transparent,
-                            Color(0xFFFAF5FF).copy(alpha = 0.28f),
-                            Color(0xFFD8B4FE).copy(alpha = 0.18f),
+                            Color(0xFFF8F8F8).copy(alpha = 0.28f),
+                            Color(0xFFC7C7C7).copy(alpha = 0.18f),
                             Color.Transparent,
                         ),
                         start = Offset(sweepX - size.width * 0.28f, 0f),
@@ -1621,9 +1588,9 @@ internal fun XyFounderBadge(
                 .background(
                     Brush.radialGradient(
                         colors = listOf(
-                            Color(0xFFA855F7).copy(alpha = 0.52f * glowAlpha),
-                            Color(0xFF6B21A8).copy(alpha = 0.34f),
-                            Color(0xFF2E1065).copy(alpha = 0.45f),
+                            Color(0xFF808080).copy(alpha = 0.52f * glowAlpha),
+                            Color(0xFF474747).copy(alpha = 0.34f),
+                            Color(0xFF232323).copy(alpha = 0.45f),
                         ),
                     ),
                 ),
@@ -1637,7 +1604,7 @@ internal fun XyFounderBadge(
             fontSize = if (compact) 9.sp else 10.5.sp,
             fontWeight = FontWeight.Black,
             letterSpacing = 0.85.sp,
-            color = Color(0xFFFAF5FF),
+            color = Color(0xFFF8F8F8),
         )
         // Bintang kristal ungu di sisi kanan badge
         Canvas(modifier = Modifier.size(if (compact) 8.5.dp else 10.5.dp)) {
@@ -1652,7 +1619,7 @@ internal fun XyFounderBadge(
                 quadraticTo(cx, cy, cx, cy - r)
                 close()
             }
-            drawPath(star, color = Color(0xFFE9D5FF))
+            drawPath(star, color = Color(0xFFE0E0E0))
         }
     }
 }
@@ -1692,19 +1659,19 @@ internal fun androidx.compose.ui.graphics.drawscope.DrawScope.drawFounderLightni
         // Lapisan 1: Outer Electric Violet Halo
         drawPath(
             path = path,
-            color = Color(0xFFA855F7).copy(alpha = (0.46f * intensity).coerceIn(0f, 1f)),
+            color = Color(0xFF808080).copy(alpha = (0.46f * intensity).coerceIn(0f, 1f)),
             style = Stroke(width = 5.5.dp.toPx() * widthScale, cap = StrokeCap.Round, join = StrokeJoin.Miter),
         )
         // Lapisan 2: Mid Neon Amethyst-Fuchsia Plasma
         drawPath(
             path = path,
-            color = Color(0xFFE879F9).copy(alpha = (0.78f * intensity).coerceIn(0f, 1f)),
+            color = Color(0xFFA9A9A9).copy(alpha = (0.78f * intensity).coerceIn(0f, 1f)),
             style = Stroke(width = 2.5.dp.toPx() * widthScale, cap = StrokeCap.Round, join = StrokeJoin.Miter),
         )
         // Lapisan 3: Core White-Hot Lightning
         drawPath(
             path = path,
-            color = Color(0xFFFAF5FF).copy(alpha = (0.96f * intensity).coerceIn(0f, 1f)),
+            color = Color(0xFFF8F8F8).copy(alpha = (0.96f * intensity).coerceIn(0f, 1f)),
             style = Stroke(width = 1.1.dp.toPx() * widthScale, cap = StrokeCap.Round, join = StrokeJoin.Miter),
         )
     }
@@ -1774,7 +1741,7 @@ internal fun androidx.compose.ui.graphics.drawscope.DrawScope.drawFounderLightni
                 brush = Brush.radialGradient(
                     colors = listOf(
                         Color.White.copy(alpha = 0.90f * nodeAlpha),
-                        Color(0xFFE879F9).copy(alpha = 0.45f * nodeAlpha),
+                        Color(0xFFA9A9A9).copy(alpha = 0.45f * nodeAlpha),
                         Color.Transparent,
                     ),
                     center = pt,
@@ -1830,12 +1797,12 @@ internal fun FounderAnimatedBubbleBox(
             .background(
                 brush = Brush.linearGradient(
                     colors = listOf(
-                        Color(0xFF120428),
-                        Color(0xFF2B0B5E),
-                        Color(0xFF4C1D95),
-                        Color(0xFF6B21A8),
-                        Color(0xFF3B0764),
-                        Color(0xFF17052E),
+                        Color(0xFF0C0C0C),
+                        Color(0xFF1E1E1E),
+                        Color(0xFF393939),
+                        Color(0xFF474747),
+                        Color(0xFF212121),
+                        Color(0xFF0F0F0F),
                     ),
                     start = Offset(0f, 0f),
                     end = Offset(420f * (0.65f + 0.35f * sin(phase * 2f * PI.toFloat())), 340f),
@@ -1859,8 +1826,8 @@ internal fun FounderAnimatedBubbleBox(
                 drawCircle(
                     brush = Brush.radialGradient(
                         colors = listOf(
-                            Color(0xFFC084FC).copy(alpha = 0.36f * pulse),
-                            Color(0xFF9333EA).copy(alpha = 0.15f * pulse),
+                            Color(0xFFA4A4A4).copy(alpha = 0.36f * pulse),
+                            Color(0xFF656565).copy(alpha = 0.15f * pulse),
                             Color.Transparent,
                         ),
                         center = Offset(orb1X, orb1Y),
@@ -1872,8 +1839,8 @@ internal fun FounderAnimatedBubbleBox(
                 drawCircle(
                     brush = Brush.radialGradient(
                         colors = listOf(
-                            Color(0xFFE879F9).copy(alpha = 0.28f * pulse),
-                            Color(0xFF7E22CE).copy(alpha = 0.12f * pulse),
+                            Color(0xFFA9A9A9).copy(alpha = 0.28f * pulse),
+                            Color(0xFF515151).copy(alpha = 0.12f * pulse),
                             Color.Transparent,
                         ),
                         center = Offset(orb2X, orb2Y),
@@ -1894,8 +1861,8 @@ internal fun FounderAnimatedBubbleBox(
                     brush = Brush.linearGradient(
                         colors = listOf(
                             Color.Transparent,
-                            Color(0xFFFAF5FF).copy(alpha = 0.18f),
-                            Color(0xFFE879F9).copy(alpha = 0.12f),
+                            Color(0xFFF8F8F8).copy(alpha = 0.18f),
+                            Color(0xFFA9A9A9).copy(alpha = 0.12f),
                             Color.Transparent,
                         ),
                         start = Offset(sweepX - w * 0.24f, 0f),
@@ -1933,17 +1900,17 @@ internal fun XyRoleAnimatedBubbleBox(
         animated
     } else 0f
     val bgColors = if (isTeam) {
-        listOf(Color(0xFF0A1428), Color(0xFF0F2547), Color(0xFF0C365A), Color(0xFF091931))
+        listOf(Color(0xFF131313), Color(0xFF222222), Color(0xFF2E2E2E), Color(0xFF171717))
     } else {
-        listOf(Color(0xFF061C17), Color(0xFF0B3128), Color(0xFF0F4436), Color(0xFF07221B))
+        listOf(Color(0xFF151515), Color(0xFF252525), Color(0xFF333333), Color(0xFF191919))
     }
     val borderColors = if (isTeam) {
-        listOf(Color(0xFF38BDF8), Color(0xFF818CF8), Color(0xFF22D3EE), Color(0xFF38BDF8))
+        listOf(Color(0xFF9C9C9C), Color(0xFF959595), Color(0xFFA1A1A1), Color(0xFF9C9C9C))
     } else {
-        listOf(Color(0xFF34D399), Color(0xFF10B981), Color(0xFF6EE7B7), Color(0xFF34D399))
+        listOf(Color(0xFF9D9D9D), Color(0xFF808080), Color(0xFFBDBDBD), Color(0xFF9D9D9D))
     }
-    val accent = if (isTeam) Color(0xFF38BDF8) else Color(0xFF34D399)
-    val secondary = if (isTeam) Color(0xFF818CF8) else Color(0xFF10B981)
+    val accent = if (isTeam) Color(0xFF9C9C9C) else Color(0xFF9D9D9D)
+    val secondary = if (isTeam) Color(0xFF959595) else Color(0xFF808080)
 
     Box(
         modifier = modifier
@@ -2088,8 +2055,8 @@ internal fun XyCreatorBadge(
     Row(
         modifier = modifier
             .clip(RoundedCornerShape(4.dp))
-            .background(Color(0xFFFE2C55).copy(alpha = 0.16f))
-            .border(0.75.dp, Color(0xFFFE2C55).copy(alpha = 0.65f), RoundedCornerShape(4.dp))
+            .background(Color(0xFF6F6F6F).copy(alpha = 0.16f))
+            .border(0.75.dp, Color(0xFF6F6F6F).copy(alpha = 0.65f), RoundedCornerShape(4.dp))
             .padding(horizontal = 5.dp, vertical = 1.5.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
@@ -2097,7 +2064,7 @@ internal fun XyCreatorBadge(
             text = "Pembuat",
             fontSize = 8.5.sp,
             fontWeight = FontWeight.Bold,
-            color = Color(0xFFFF4D6D),
+            color = Color(0xFF868686),
             maxLines = 1,
         )
     }
@@ -2117,17 +2084,17 @@ internal fun XyTeamBadge(
             .background(
                 Brush.horizontalGradient(
                     colors = listOf(
-                        Color(0xFF09152E),
-                        Color(0xFF1D4ED8),
-                        Color(0xFF0284C7),
-                        Color(0xFF0369A1),
+                        Color(0xFF141414),
+                        Color(0xFF4F4F4F),
+                        Color(0xFF656565),
+                        Color(0xFF515151),
                     ),
                 ),
             )
             .border(
                 width = 1.dp,
                 brush = Brush.horizontalGradient(
-                    colors = listOf(Color(0xFF7DD3FC), Color(0xFF38BDF8), Color(0xFF818CF8), Color(0xFF22D3EE)),
+                    colors = listOf(Color(0xFFBEBEBE), Color(0xFF9C9C9C), Color(0xFF959595), Color(0xFFA1A1A1)),
                 ),
                 shape = RoundedCornerShape(50),
             )
@@ -2152,7 +2119,7 @@ internal fun XyTeamBadge(
             }
             drawPath(
                 shield,
-                brush = Brush.verticalGradient(listOf(Color(0xFF38BDF8), Color(0xFF0284C7))),
+                brush = Brush.verticalGradient(listOf(Color(0xFF9C9C9C), Color(0xFF656565))),
                 style = Fill,
             )
             val star = Path().apply {
@@ -2168,13 +2135,13 @@ internal fun XyTeamBadge(
                 lineTo(w * 0.41f, h * 0.42f)
                 close()
             }
-            drawPath(star, color = Color(0xFFF0F9FF), style = Fill)
+            drawPath(star, color = Color(0xFFF7F7F7), style = Fill)
         }
         Text(
             text = if (compact) "XYTEAM" else "XYTEAM · CORE DEV",
             fontSize = if (compact) 8.5.sp else 10.sp,
             fontWeight = FontWeight.ExtraBold,
-            color = Color(0xFFF0F9FF),
+            color = Color(0xFFF7F7F7),
             maxLines = 1,
         )
     }
@@ -2194,17 +2161,17 @@ internal fun XyTesterBadge(
             .background(
                 Brush.horizontalGradient(
                     colors = listOf(
-                        Color(0xFF042F2E),
-                        Color(0xFF047857),
-                        Color(0xFF0D9488),
-                        Color(0xFF059669),
+                        Color(0xFF222222),
+                        Color(0xFF525252),
+                        Color(0xFF6A6A6A),
+                        Color(0xFF666666),
                     ),
                 ),
             )
             .border(
                 width = 1.dp,
                 brush = Brush.horizontalGradient(
-                    colors = listOf(Color(0xFF6EE7B7), Color(0xFF34D399), Color(0xFF2DD4BF), Color(0xFFA7F3D0)),
+                    colors = listOf(Color(0xFFBDBDBD), Color(0xFF9D9D9D), Color(0xFFA0A0A0), Color(0xFFD8D8D8)),
                 ),
                 shape = RoundedCornerShape(50),
             )
@@ -2229,7 +2196,7 @@ internal fun XyTesterBadge(
             }
             drawPath(
                 hex,
-                brush = Brush.verticalGradient(listOf(Color(0xFF34D399), Color(0xFF059669))),
+                brush = Brush.verticalGradient(listOf(Color(0xFF9D9D9D), Color(0xFF666666))),
                 style = Fill,
             )
             val bolt = Path().apply {
@@ -2241,21 +2208,21 @@ internal fun XyTesterBadge(
                 lineTo(w * 0.50f, h * 0.46f)
                 close()
             }
-            drawPath(bolt, color = Color(0xFFECFDF5), style = Fill)
+            drawPath(bolt, color = Color(0xFFF7F7F7), style = Fill)
         }
         Text(
             text = if (compact) "TESTER" else "TESTER · QA VERIFIED",
             fontSize = if (compact) 8.5.sp else 10.sp,
             fontWeight = FontWeight.ExtraBold,
-            color = Color(0xFFECFDF5),
+            color = Color(0xFFF7F7F7),
             maxLines = 1,
         )
     }
 }
 
 /**
- * Badge Prestasi Otomatis (Auto-Earned Achievement Badges) berdasarkan aktivitas nyata
- * pengguna di XyDesk Remote (durasi streaming RDP/PC, jumlah sesi, & verifikasi GitHub).
+ * Badge Prestasi Otomatis (Auto-Earned Challenge Badges) berdasarkan tantangan aktivitas nyata
+ * pengguna di XyDesk Remote. Tidak ada badge gratis tanpa menyelesaikan tantangan.
  */
 internal data class XyAutoAchievementSpec(
     val id: String,
@@ -2267,58 +2234,261 @@ internal data class XyAutoAchievementSpec(
     val iconColor: Color,
 )
 
+internal data class XyBadgeChallengeItem(
+    val id: String,
+    val badgeTitle: String,
+    val targetLabel: String,
+    val progressLabel: String,
+    val progressFraction: Float,
+    val unlocked: Boolean,
+    val rewardDesc: String,
+)
+
+internal enum class XyAnimatedAvatarStyle(
+    val id: String,
+    val label: String,
+    val desc: String,
+) {
+    NONE("none", "Standar", "Tanpa animasi"),
+    ORBITAL_CROWN("orbital_crown", "Orbital Crown", "Cincin ganda & mahkota berputar"),
+    PULSE_RINGS("pulse_rings", "Pulse Matrix", "Gelombang energi & cincin radar"),
+    STARLIGHT_AURA("starlight_aura", "Starlight Aura", "Kilau bintang & sapuan cahaya"),
+    VORTEX_HALO("vortex_halo", "Vortex Halo", "Pusaran geometris berlawanan arah"),
+    CUSTOM_GIF("custom_gif", "GIF / Animasi Custom", "Foto profil GIF bergerak dari galeri"),
+}
+
+internal object XyAnimatedAvatarManager {
+    private const val PREFS_NAME = "xydesk_founder_style"
+    private const val KEY_ANIM_STYLE = "profile_anim_avatar_style_v1"
+    private const val CUSTOM_GIF_FILE = "xy_custom_avatar_anim.gif"
+
+    var revision by mutableStateOf(0)
+        private set
+
+    fun getSelectedStyle(context: Context): XyAnimatedAvatarStyle {
+        val raw = context.applicationContext
+            .getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+            .getString(KEY_ANIM_STYLE, null)
+        if (!raw.isNullOrBlank()) {
+            return XyAnimatedAvatarStyle.values().firstOrNull { it.id == raw } ?: XyAnimatedAvatarStyle.NONE
+        }
+        return if (hasCustomGif(context)) XyAnimatedAvatarStyle.CUSTOM_GIF else XyAnimatedAvatarStyle.NONE
+    }
+
+    fun setSelectedStyle(context: Context, style: XyAnimatedAvatarStyle) {
+        context.applicationContext
+            .getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+            .edit()
+            .putString(KEY_ANIM_STYLE, style.id)
+            .apply()
+        revision++
+    }
+
+    fun customGifFile(context: Context): java.io.File =
+        java.io.File(context.applicationContext.filesDir, CUSTOM_GIF_FILE)
+
+    fun hasCustomGif(context: Context): Boolean {
+        val f = customGifFile(context)
+        return f.exists() && f.length() > 64L
+    }
+
+    fun saveCustomGif(context: Context, bytes: ByteArray): Boolean = runCatching {
+        if (bytes.size < 64) return false
+        customGifFile(context).writeBytes(bytes)
+        setSelectedStyle(context, XyAnimatedAvatarStyle.CUSTOM_GIF)
+        revision++
+        true
+    }.getOrDefault(false)
+
+    fun clearCustomGif(context: Context) {
+        runCatching { customGifFile(context).delete() }
+        if (getSelectedStyle(context) == XyAnimatedAvatarStyle.CUSTOM_GIF) {
+            setSelectedStyle(context, XyAnimatedAvatarStyle.ORBITAL_CROWN)
+        }
+        revision++
+    }
+}
+
+@Suppress("DEPRECATION")
+@Composable
+internal fun CustomAnimatedGifAvatarView(
+    gifFile: java.io.File,
+    modifier: Modifier = Modifier,
+) {
+    val movie = remember(gifFile.absolutePath, gifFile.lastModified(), gifFile.length()) {
+        runCatching {
+            val bytes = gifFile.readBytes()
+            android.graphics.Movie.decodeByteArray(bytes, 0, bytes.size)
+        }.getOrNull()
+    }
+    val bmpFallback = remember(gifFile.absolutePath, gifFile.lastModified(), gifFile.length()) {
+        runCatching {
+            android.graphics.BitmapFactory.decodeFile(gifFile.absolutePath)
+        }.getOrNull()
+    }
+    val infinite = rememberInfiniteTransition(label = "customGifLoop")
+    val animProgress by infinite.animateFloat(
+        initialValue = 0f,
+        targetValue = 1f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(durationMillis = (movie?.duration()?.takeIf { it > 100 } ?: 1800), easing = LinearEasing),
+            repeatMode = RepeatMode.Restart,
+        ),
+        label = "gifTick",
+    )
+
+    if (movie != null && movie.width() > 0 && movie.height() > 0) {
+        androidx.compose.foundation.Canvas(modifier = modifier) {
+            val dur = movie.duration().takeIf { it > 0 } ?: 1000
+            movie.setTime((animProgress * dur).toInt() % dur)
+            val mw = movie.width().toFloat()
+            val mh = movie.height().toFloat()
+            val scale = maxOf(size.width / mw, size.height / mh)
+            val dx = (size.width - mw * scale) / 2f
+            val dy = (size.height - mh * scale) / 2f
+            drawContext.canvas.nativeCanvas.apply {
+                save()
+                translate(dx, dy)
+                scale(scale, scale)
+                movie.draw(this, 0f, 0f)
+                restore()
+            }
+        }
+    } else if (bmpFallback != null) {
+        androidx.compose.foundation.Image(
+            bitmap = bmpFallback.asImageBitmap(),
+            contentDescription = null,
+            contentScale = androidx.compose.ui.layout.ContentScale.Crop,
+            modifier = modifier,
+        )
+    }
+}
+
+internal fun evaluateBadgeChallenges(
+    totalSeconds: Long,
+    sessionsCount: Int,
+    podiumRank: Int?,
+    isFounder: Boolean = false,
+): List<XyBadgeChallengeItem> {
+    val hoursFloat = totalSeconds / 3600f
+    fun calcProgress(targetSec: Long, targetSess: Int): Float {
+        if (isFounder) return 1f
+        val pSec = (totalSeconds.toFloat() / targetSec.toFloat()).coerceIn(0f, 1f)
+        val pSess = (sessionsCount.toFloat() / targetSess.toFloat()).coerceIn(0f, 1f)
+        return maxOf(pSec, pSess)
+    }
+    val c1 = calcProgress(3_600L, 5)
+    val c2 = calcProgress(14_400L, 12)
+    val c3 = calcProgress(43_200L, 25)
+    val c4 = calcProgress(86_400L, 50)
+    val topUnlocked = isFounder || (podiumRank != null && podiumRank in 1..10)
+    val topProgress = when {
+        topUnlocked -> 1f
+        totalSeconds > 0L -> (totalSeconds.toFloat() / 14_400f).coerceIn(0.08f, 0.85f)
+        else -> 0f
+    }
+
+    return listOf(
+        XyBadgeChallengeItem(
+            id = "cloud_runner",
+            badgeTitle = "CLOUD RUNNER",
+            targetLabel = "1 Jam Aktif atau 5 Sesi",
+            progressLabel = "${totalSeconds / 60}/60 mnt · $sessionsCount/5 sesi",
+            progressFraction = c1,
+            unlocked = c1 >= 1f,
+            rewardDesc = "Badge Otomatis Cloud Runner",
+        ),
+        XyBadgeChallengeItem(
+            id = "gamer_elite",
+            badgeTitle = "GAMER ELITE",
+            targetLabel = "4 Jam Aktif atau 12 Sesi",
+            progressLabel = "${"%.1f".format(Locale.US, hoursFloat)}/4.0 jam · $sessionsCount/12 sesi",
+            progressFraction = c2,
+            unlocked = c2 >= 1f,
+            rewardDesc = "Badge Otomatis Gamer Elite",
+        ),
+        XyBadgeChallengeItem(
+            id = "pro_streamer",
+            badgeTitle = "PRO STREAMER",
+            targetLabel = "12 Jam Aktif atau 25 Sesi",
+            progressLabel = "${"%.1f".format(Locale.US, hoursFloat)}/12.0 jam · $sessionsCount/25 sesi",
+            progressFraction = c3,
+            unlocked = c3 >= 1f,
+            rewardDesc = "Badge Otomatis Pro Streamer",
+        ),
+        XyBadgeChallengeItem(
+            id = "legend_24h",
+            badgeTitle = "LEGEND 24H+",
+            targetLabel = "24 Jam Aktif atau 50 Sesi",
+            progressLabel = "${"%.1f".format(Locale.US, hoursFloat)}/24.0 jam · $sessionsCount/50 sesi",
+            progressFraction = c4,
+            unlocked = c4 >= 1f,
+            rewardDesc = "Badge Tertinggi Legend 24H+",
+        ),
+        XyBadgeChallengeItem(
+            id = "top_leaderboard",
+            badgeTitle = if (podiumRank != null && podiumRank in 1..10) "TOP #$podiumRank LEADERBOARD" else "TOP 1–10 PODIUM",
+            targetLabel = "Masuk Peringkat 1–10 Leaderboard",
+            progressLabel = if (topUnlocked) "Aktif (Rank #${podiumRank ?: 1})" else "Belum masuk Top 10",
+            progressFraction = topProgress,
+            unlocked = topUnlocked,
+            rewardDesc = "Foto Profil Animasi Custom (GIF & Aura) + Bingkai Podium + Bubble Top Rank",
+        ),
+    )
+}
+
 internal fun resolveAutoAchievementBadges(
     totalSeconds: Long,
     sessionsCount: Int,
     hasVerifiedGithub: Boolean,
 ): List<XyAutoAchievementSpec> {
-    val list = ArrayList<XyAutoAchievementSpec>(3)
+    val list = ArrayList<XyAutoAchievementSpec>(2)
     if (totalSeconds >= 86_400L || sessionsCount >= 50) {
         list.add(
             XyAutoAchievementSpec(
                 id = "legend_24h",
                 shortLabel = "LEGEND 24H+",
                 fullLabel = "LEGEND MARATHON · 24+ JAM AKTIF",
-                bgColors = listOf(Color(0xFF450A0A), Color(0xFF991B1B), Color(0xFFD97706)),
-                borderColor = Color(0xFFFDE047),
-                textColor = Color(0xFFFEF08A),
-                iconColor = Color(0xFFFBBF24),
+                bgColors = listOf(Color(0xFF1C1C1C), Color(0xFF414141), Color(0xFF878787)),
+                borderColor = Color(0xFFD7D7D7),
+                textColor = Color(0xFFE9E9E9),
+                iconColor = Color(0xFFBFBFBF),
             ),
         )
-    } else if (totalSeconds >= 28_800L || sessionsCount >= 20) {
+    } else if (totalSeconds >= 43_200L || sessionsCount >= 25) {
         list.add(
             XyAutoAchievementSpec(
                 id = "pro_streamer",
                 shortLabel = "PRO STREAMER",
-                fullLabel = "PRO STREAMER · 8+ JAM REMOTE",
-                bgColors = listOf(Color(0xFF082F49), Color(0xFF0369A1), Color(0xFF0284C7)),
-                borderColor = Color(0xFF38BDF8),
-                textColor = Color(0xFFE0F2FE),
-                iconColor = Color(0xFF7DD3FC),
+                fullLabel = "PRO STREAMER · 12+ JAM REMOTE",
+                bgColors = listOf(Color(0xFF262626), Color(0xFF515151), Color(0xFF656565)),
+                borderColor = Color(0xFF9C9C9C),
+                textColor = Color(0xFFEEEEEE),
+                iconColor = Color(0xFFBEBEBE),
             ),
         )
-    } else if (totalSeconds >= 7_200L || sessionsCount >= 8) {
+    } else if (totalSeconds >= 14_400L || sessionsCount >= 12) {
         list.add(
             XyAutoAchievementSpec(
                 id = "gamer_elite",
                 shortLabel = "GAMER ELITE",
-                fullLabel = "GAMER ELITE · ZERO-LAG PLAYER",
-                bgColors = listOf(Color(0xFF1E1B4B), Color(0xFF3730A3), Color(0xFF4F46E5)),
-                borderColor = Color(0xFFA5B4FC),
-                textColor = Color(0xFFE0E7FF),
-                iconColor = Color(0xFFC7D2FE),
+                fullLabel = "GAMER ELITE · 4+ JAM REMOTE",
+                bgColors = listOf(Color(0xFF212121), Color(0xFF3F3F3F), Color(0xFF5B5B5B)),
+                borderColor = Color(0xFFB8B8B8),
+                textColor = Color(0xFFE8E8E8),
+                iconColor = Color(0xFFD4D4D4),
             ),
         )
-    } else if (totalSeconds >= 600L || sessionsCount >= 2 || hasVerifiedGithub) {
+    } else if (totalSeconds >= 3_600L || sessionsCount >= 5) {
         list.add(
             XyAutoAchievementSpec(
-                id = "cloud_pioneer",
-                shortLabel = "PIONEER",
-                fullLabel = "CLOUD PIONEER · VERIFIED MEMBER",
-                bgColors = listOf(Color(0xFF064E3B), Color(0xFF047857), Color(0xFF0D9488)),
-                borderColor = Color(0xFF6EE7B7),
-                textColor = Color(0xFFD1FAE5),
-                iconColor = Color(0xFF34D399),
+                id = "cloud_runner",
+                shortLabel = "CLOUD RUNNER",
+                fullLabel = "CLOUD RUNNER · 1+ JAM AKTIF",
+                bgColors = listOf(Color(0xFF363636), Color(0xFF525252), Color(0xFF6A6A6A)),
+                borderColor = Color(0xFFBDBDBD),
+                textColor = Color(0xFFEBEBEB),
+                iconColor = Color(0xFF9D9D9D),
             ),
         )
     }
@@ -2459,7 +2629,7 @@ private val XY_URL_REGEX = Regex(
 internal fun XyClickableLinkText(
     text: String,
     color: Color,
-    linkColor: Color = Color(0xFF38BDF8),
+    linkColor: Color = Color(0xFF9C9C9C),
     style: androidx.compose.ui.text.TextStyle = MaterialTheme.typography.bodyMedium,
     maxLines: Int = Int.MAX_VALUE,
     onNonLinkClick: (() -> Unit)? = null,

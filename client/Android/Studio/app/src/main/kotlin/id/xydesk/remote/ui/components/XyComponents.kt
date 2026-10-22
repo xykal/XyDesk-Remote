@@ -82,13 +82,13 @@ fun XyCard(
     padding: Dp = 16.dp,
     content: @Composable ColumnScope.() -> Unit,
 ) {
-    val shape = RoundedCornerShape(20.dp)
+    val shape = RoundedCornerShape(24.dp)
     Column(
         modifier = modifier
             .shadow(elevation = 6.dp, shape = shape, clip = false)
             .clip(shape)
             .background(MaterialTheme.colorScheme.surface)
-            .border(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.42f), shape)
+            .border(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.45f), shape)
             .padding(padding),
         content = content,
     )
@@ -124,19 +124,17 @@ fun XyPillButton(
                 else Modifier.border(1.dp, MaterialTheme.colorScheme.outline, XyPill)
             )
             .clickable(enabled = enabled, onClick = onClick)
-            // Tinggi sentuh minimum: di DPI kecil/font besar padding saja tidak
-            // cukup — tombol harus tetap >= 40dp agar konsisten di semua layar.
-            .heightIn(min = if (compact) 40.dp else 44.dp)
+            .heightIn(min = if (compact) 36.dp else 42.dp)
             .padding(
-                horizontal = if (compact) 16.dp else 20.dp,
-                vertical = if (compact) 9.dp else 13.dp,
+                horizontal = if (compact) 14.dp else 18.dp,
+                vertical = if (compact) 8.dp else 10.dp,
             ),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.Center,
     ) {
         if (icon != null) {
-            Icon(icon, contentDescription = null, tint = content, modifier = Modifier.size(17.dp))
-            Spacer(Modifier.width(9.dp))
+            Icon(icon, contentDescription = null, tint = content, modifier = Modifier.size(16.dp))
+            Spacer(Modifier.width(7.dp))
         }
         Text(
             text,
@@ -148,18 +146,18 @@ fun XyPillButton(
     }
 }
 
-/** Tombol ikon; bisa berupa lingkaran berisi (HUD) atau aksi datar tanpa chip. */
+/** Tombol ikon bulat sempurna 1:1 (CircleShape). */
 @Composable
 fun XyIconPill(
     icon: ImageVector,
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
-    size: Dp = 46.dp,
+    size: Dp = 44.dp,
     active: Boolean = false,
     flat: Boolean = false,
     contentDescription: String? = null,
 ) {
-    val shape = RoundedCornerShape(16.dp)
+    val shape = CircleShape
     val bg = if (active) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surfaceVariant
     val fg = when {
         flat && active -> MaterialTheme.colorScheme.primary
@@ -184,7 +182,7 @@ fun XyIconPill(
             .clickable(onClick = onClick),
         contentAlignment = Alignment.Center,
     ) {
-        Icon(icon, contentDescription = contentDescription, tint = fg, modifier = Modifier.size(size * 0.46f))
+        Icon(icon, contentDescription = contentDescription, tint = fg, modifier = Modifier.size(size * 0.45f))
     }
 }
 
@@ -940,10 +938,10 @@ fun XyEmptyState(
     Column(
         modifier = modifier
             .fillMaxWidth()
-            .clip(RoundedCornerShape(18.dp))
+            .clip(RoundedCornerShape(24.dp))
             .background(MaterialTheme.colorScheme.surface)
-            .border(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.45f), RoundedCornerShape(18.dp))
-            .padding(horizontal = 20.dp, vertical = 24.dp),
+            .border(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.45f), RoundedCornerShape(24.dp))
+            .padding(horizontal = 20.dp, vertical = 22.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.spacedBy(8.dp),
     ) {
@@ -1002,9 +1000,9 @@ fun XyErrorState(
     Column(
         modifier = modifier
             .fillMaxWidth()
-            .clip(RoundedCornerShape(16.dp))
-            .background(Color(0xFF1F1215))
-            .border(1.dp, Color(0xFFF87171).copy(alpha = 0.42f), RoundedCornerShape(16.dp))
+            .clip(RoundedCornerShape(22.dp))
+            .background(MaterialTheme.colorScheme.surface)
+            .border(1.dp, MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(22.dp))
             .padding(14.dp),
         verticalArrangement = Arrangement.spacedBy(8.dp),
     ) {
@@ -1014,15 +1012,15 @@ fun XyErrorState(
         ) {
             Box(
                 modifier = Modifier
-                    .size(24.dp)
+                    .size(26.dp)
                     .clip(CircleShape)
-                    .background(Color(0xFFF87171).copy(alpha = 0.18f)),
+                    .background(MaterialTheme.colorScheme.surfaceVariant),
                 contentAlignment = Alignment.Center,
             ) {
                 Icon(
                     imageVector = XyIcons.Info,
                     contentDescription = null,
-                    tint = Color(0xFFFCA5A5),
+                    tint = MaterialTheme.colorScheme.onSurface,
                     modifier = Modifier.size(14.dp),
                 )
             }
@@ -1030,13 +1028,13 @@ fun XyErrorState(
                 text = title,
                 style = MaterialTheme.typography.titleSmall,
                 fontWeight = FontWeight.Bold,
-                color = Color(0xFFFECACA),
+                color = MaterialTheme.colorScheme.onSurface,
                 modifier = Modifier.weight(1f),
             )
             if (onDismiss != null) {
                 Box(
                     modifier = Modifier
-                        .size(24.dp)
+                        .size(26.dp)
                         .clip(CircleShape)
                         .clickable { onDismiss() },
                     contentAlignment = Alignment.Center,
@@ -1044,7 +1042,7 @@ fun XyErrorState(
                     Icon(
                         imageVector = XyIcons.Close,
                         contentDescription = "Tutup",
-                        tint = Color(0xFFFCA5A5),
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
                         modifier = Modifier.size(13.dp),
                     )
                 }
@@ -1053,7 +1051,7 @@ fun XyErrorState(
         Text(
             text = message,
             style = MaterialTheme.typography.bodySmall,
-            color = Color(0xFFFEE2E2).copy(alpha = 0.9f),
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
         if (!retryLabel.isNullOrBlank() && onRetry != null) {
             Row(horizontalArrangement = Arrangement.End, modifier = Modifier.fillMaxWidth()) {
@@ -1083,24 +1081,24 @@ fun XySuccessStateBanner(
     Row(
         modifier = modifier
             .fillMaxWidth()
-            .clip(RoundedCornerShape(16.dp))
-            .background(Color(0xFF0E1F18))
-            .border(1.dp, Color(0xFF34D399).copy(alpha = 0.42f), RoundedCornerShape(16.dp))
+            .clip(RoundedCornerShape(22.dp))
+            .background(MaterialTheme.colorScheme.surface)
+            .border(1.dp, MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(22.dp))
             .padding(horizontal = 14.dp, vertical = 11.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(10.dp),
     ) {
         Box(
             modifier = Modifier
-                .size(24.dp)
+                .size(26.dp)
                 .clip(CircleShape)
-                .background(Color(0xFF10B981).copy(alpha = 0.22f)),
+                .background(MaterialTheme.colorScheme.surfaceVariant),
             contentAlignment = Alignment.Center,
         ) {
             Icon(
                 imageVector = XyIcons.Check,
                 contentDescription = null,
-                tint = Color(0xFF6EE7B7),
+                tint = MaterialTheme.colorScheme.onSurface,
                 modifier = Modifier.size(14.dp),
             )
         }
@@ -1109,20 +1107,20 @@ fun XySuccessStateBanner(
                 text = resolvedTitle,
                 style = MaterialTheme.typography.labelLarge,
                 fontWeight = FontWeight.Bold,
-                color = Color(0xFFECFDF5),
+                color = MaterialTheme.colorScheme.onSurface,
             )
             if (!subtitle.isNullOrBlank()) {
                 Text(
                     text = subtitle,
                     style = MaterialTheme.typography.bodySmall,
-                    color = Color(0xFFA7F3D0),
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             }
         }
         if (onDismiss != null) {
             Box(
                 modifier = Modifier
-                    .size(24.dp)
+                    .size(26.dp)
                     .clip(CircleShape)
                     .clickable { onDismiss() },
                 contentAlignment = Alignment.Center,
@@ -1130,7 +1128,7 @@ fun XySuccessStateBanner(
                 Icon(
                     imageVector = XyIcons.Close,
                     contentDescription = "Tutup",
-                    tint = Color(0xFFA7F3D0),
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
                     modifier = Modifier.size(13.dp),
                 )
             }

@@ -40,10 +40,10 @@ function createRemoteD1Adapter(accountId, databaseId, apiToken) {
   function getCacheTtlMs(key) {
     if (!key) return 0;
     if (key.startsWith("feed-att:")) return 300_000;
-    if (key.startsWith("feed-avatar:") || key.startsWith("xy-settings:") || key.startsWith("leaderboard:")) return 30_000;
-    if (key === "chat:prod_backup_v1") return 120_000;
-    if (key.startsWith("do_fallback:")) return 1_500;
-    return 2_000;
+    if (key.startsWith("feed-avatar:") || key.startsWith("xy-settings:") || key.startsWith("leaderboard:")) return 15_000;
+    if (key === "chat:prod_backup_v1" || key.includes("global_chat")) return 350;
+    if (key.startsWith("do_fallback:")) return 800;
+    return 1_000;
   }
 
   async function executeSql(sql, params = []) {
@@ -310,13 +310,24 @@ export default async function handler(req, res) {
     Object.defineProperty(webReq, "cf", { value: { country: String(country) }, configurable: true });
 
     const env = buildVercelEnv();
-    const webRes = await worker.fetch(webReq, env);
+    const waitUntilPromises = [];
+    const ctx = {
+      waitUntil(promise) {
+        if (promise && typeof promise.then === "function") {
+          waitUntilPromises.push(promise.catch(() => null));
+        }
+      },
+    };
+    const webRes = await worker.fetch(webReq, env, ctx);
+    const arrayBuf = await webRes.arrayBuffer();
+    if (waitUntilPromises.length > 0) {
+      await Promise.allSettled(waitUntilPromises);
+    }
 
     res.statusCode = webRes.status;
     webRes.headers.forEach((val, key) => {
       res.setHeader(key, val);
     });
-    const arrayBuf = await webRes.arrayBuffer();
     res.end(Buffer.from(arrayBuf));
   } catch (err) {
     res.statusCode = 500;

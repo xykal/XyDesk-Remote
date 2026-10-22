@@ -993,12 +993,12 @@ private fun HomeRdpFreeBannerCard(
     Column(
         modifier = Modifier
             .fillMaxWidth()
-            .clip(RoundedCornerShape(22.dp))
-            .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.45f))
+            .clip(RoundedCornerShape(24.dp))
+            .background(MaterialTheme.colorScheme.surface)
             .border(
                 width = 1.dp,
                 color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.45f),
-                shape = RoundedCornerShape(22.dp),
+                shape = RoundedCornerShape(24.dp),
             ),
     ) {
         Box(
@@ -1022,15 +1022,15 @@ private fun HomeRdpFreeBannerCard(
                         Brush.verticalGradient(
                             colors = listOf(
                                 Color.Transparent,
-                                Color(0xFF07090F).copy(alpha = 0.88f),
+                                Color(0xFF090909).copy(alpha = 0.88f),
                             ),
                         ),
                     ),
             )
             Text(
                 text = xy(
-                    "Buat RDP Cloud Gratis · Windows Server · Linux XFCE4 · SSH · 120 FPS",
-                    "Free Cloud RDP · Windows Server · Linux XFCE4 · SSH · 120 FPS",
+                    "Cloud RDP Gratis · Windows · Linux · SSH · 120 FPS",
+                    "Free Cloud RDP · Windows · Linux · SSH · 120 FPS",
                 ),
                 style = MaterialTheme.typography.labelSmall,
                 fontWeight = FontWeight.SemiBold,
@@ -1050,22 +1050,25 @@ private fun HomeRdpFreeBannerCard(
             verticalAlignment = Alignment.CenterVertically,
         ) {
             XyPillButton(
-                text = xy("Buat RDP Gratis", "Create Free RDP"),
+                text = xy("Buat RDP", "Cloud RDP"),
                 onClick = onCreateRdp,
                 icon = XyIcons.Monitor,
-                modifier = Modifier.weight(1.15f).height(38.dp),
+                compact = true,
+                modifier = Modifier.weight(1.1f),
             )
             XyPillButton(
                 text = xy("PC Stream", "PC Stream"),
                 onClick = onOpenPcStream,
                 primary = false,
-                modifier = Modifier.weight(0.85f).height(38.dp),
+                compact = true,
+                modifier = Modifier.weight(0.95f),
             )
             XyPillButton(
-                text = xy("SSH / VPS", "SSH / VPS"),
+                text = xy("SSH", "SSH"),
                 onClick = onOpenSshTerminal,
                 primary = false,
-                modifier = Modifier.weight(0.85f).height(38.dp),
+                compact = true,
+                modifier = Modifier.weight(0.85f),
             )
         }
     }
@@ -1504,7 +1507,7 @@ private fun DevicesScreen(
                                 modifier = Modifier
                                     .padding(top = 2.dp, end = 2.dp)
                                     .clip(RoundedCornerShape(50))
-                                    .background(if (inAppUnread > 0) Color(0xFFFE2C55) else Color(0xFF38BDF8))
+                                    .background(if (inAppUnread > 0) Color(0xFF6F6F6F) else Color(0xFF9C9C9C))
                                     .padding(horizontal = 4.5.dp, vertical = 1.dp),
                                 contentAlignment = Alignment.Center,
                             ) {
@@ -1839,7 +1842,7 @@ private fun DeviceCard(
     val previewSeed = remember(profile.id, profile.label, profile.host) {
         (profile.label ?: profile.host) + "|" + profile.host
     }
-    val shape = RoundedCornerShape(if (compact) 10.dp else 16.dp)
+    val shape = RoundedCornerShape(if (compact) 18.dp else 24.dp)
     // Baris keterangan dipakai kartu grid (overlay) dan list (compact).
     val detailLine = if (rdpOptions.pcConnectMode) {
         buildString {

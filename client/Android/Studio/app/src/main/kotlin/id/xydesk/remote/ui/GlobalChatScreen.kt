@@ -81,6 +81,7 @@ import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -720,6 +721,7 @@ private fun GlobalChatAccountContent(
     val listState = rememberLazyListState()
     val chatMotionEnabled by androidx.compose.runtime.rememberUpdatedState(id.xydesk.remote.ui.theme.LocalUiMotionEnabled.current)
     var didInitialScroll by remember(verifiedGhLogin) { mutableStateOf(false) }
+    var didInitialServerScroll by remember(verifiedGhLogin) { mutableStateOf(false) }
     var newArrivals by remember(verifiedGhLogin) { mutableIntStateOf(0) }
     val sentSoundGate = remember(verifiedGhLogin) { ChatSentSoundGate() }
     val sentSound = remember(verifiedGhLogin) { ChatSendSoundPlayer(context) }
@@ -887,6 +889,7 @@ private fun GlobalChatAccountContent(
     }
 
     suspend fun fetchHistoryOverHttp() {
+        val fastMode = !didInitialServerScroll
         if (System.currentTimeMillis() < historyRetryAt) return
         if (!historyInFlight.compareAndSet(false, true)) return
         val requestAccount = verifiedGhLogin
@@ -898,12 +901,13 @@ private fun GlobalChatAccountContent(
                     val snapshotStartedAt = System.currentTimeMillis()
                     val cid = URLEncoder.encode(communityApi.accountShortId(), "UTF-8")
                     val gh = URLEncoder.encode(requestAccount.orEmpty(), "UTF-8")
-                    val url = "$CHAT_HISTORY_URL?joined_at=$requestJoinedAt&client_id=$cid&github_login=$gh"
+                    val fastQuery = if (fastMode) "&fast=1&limit=45" else ""
+                    val url = "$CHAT_HISTORY_URL?joined_at=$requestJoinedAt&client_id=$cid&github_login=$gh$fastQuery"
                     val conn = (URL(url).openConnection() as HttpURLConnection).apply {
-                        instanceFollowRedirects = false
+                        instanceFollowRedirects = true
                         requestMethod = "GET"
-                        connectTimeout = 8_000
-                        readTimeout = 8_000
+                        connectTimeout = if (fastMode) 4_500 else 8_000
+                        readTimeout = if (fastMode) 5_000 else 8_000
                         setRequestProperty("Accept", "application/json")
                     }
                     try {
@@ -937,14 +941,15 @@ private fun GlobalChatAccountContent(
                                 pinnedMessage = serverPinned
                                 GlobalChatMemoryCache.pinnedMessage = serverPinned
                             }
-                            val followSnapshot = shouldFollowChat(!didInitialScroll || !listState.canScrollForward)
+                            val isFirstServerSync = !didInitialServerScroll
+                            val followSnapshot = isFirstServerSync || shouldFollowChat(!didInitialScroll || !listState.canScrollForward)
                             var newlyAdded = 0
                             var added = false
                             val fetchedIds = fetched.map { it.id }.toSet()
-                            if (arr.length() == 0) {
+                            if (arr.length() == 0 && !fastMode) {
                                 messages.removeAll { !keepAfterEmptyChatSnapshot(it.id, it.at, snapshotStartedAt) }
                             }
-                            if (fetched.isNotEmpty()) {
+                            if (fetched.isNotEmpty() && !fastMode) {
                                 val oldestFetchedAt = fetched.minOf { it.at }
                                 messages.removeAll { existing ->
                                     !existing.id.startsWith("local-") &&
@@ -979,6 +984,7 @@ private fun GlobalChatAccountContent(
                                     }
                                 }
                             }
+                            messages.sortBy { it.at }
                             newItemsToTranslate.takeLast(8).forEach { item ->
                                 if (item.translated.isBlank() || viewerTargetLang != "auto") {
                                     enrichTranslationIfNeeded(item)
@@ -986,10 +992,19 @@ private fun GlobalChatAccountContent(
                             }
                             GlobalChatMemoryCache.messages.clear()
                             GlobalChatMemoryCache.messages.addAll(messages.takeLast(80))
-                            if (added && messages.isNotEmpty()) {
-                                if (!followSnapshot) newArrivals += newlyAdded
-                                if (followSnapshot) {
-                                    listState.scrollChatTo(messages.size - 1, chatMotionEnabled)
+                            if (messages.isNotEmpty()) {
+                                if (isFirstServerSync) {
+                                    didInitialServerScroll = true
+                                    didInitialScroll = true
+                                    newArrivals = 0
+                                    val lastIdx = (messages.distinctBy { it.id }.size - 1).coerceAtLeast(0)
+                                    listState.scrollToItem(lastIdx)
+                                } else if (added) {
+                                    if (!followSnapshot) newArrivals += newlyAdded
+                                    if (followSnapshot) {
+                                        val lastIdx = (messages.distinctBy { it.id }.size - 1).coerceAtLeast(0)
+                                        listState.scrollChatTo(lastIdx, chatMotionEnabled)
+                                    }
                                 }
                             }
                         }
@@ -1031,8 +1046,10 @@ private fun GlobalChatAccountContent(
         }
         launch { communityApi.fetchLeaderboard(reportDeltaSec = 0L) }
         launch(Dispatchers.IO) { runCatching { pruneExpiredChatViewOnceFiles(context.cacheDir) } }
-        // WS-first, HTTP fallback; presence dan disk I/O stiker tetap paralel.
+        // Fast initial fetch ("Hari ini") instan + full reconciliation
         launch {
+            fetchHistoryOverHttp()
+            delay(350)
             fetchHistoryOverHttp()
         }
         launch {
@@ -1174,7 +1191,8 @@ private fun GlobalChatAccountContent(
                                             it.id.startsWith("local-") || it.at > newestAt
                                         }
                                     }
-                                    val followHistory = shouldFollowChat(!didInitialScroll || !listState.canScrollForward)
+                                    val isFirstWsSync = !didInitialServerScroll
+                                    val followHistory = isFirstWsSync || shouldFollowChat(!didInitialScroll || !listState.canScrollForward)
                                     val reconciledBatch = batch.map { incoming ->
                                         messages.firstOrNull { it.id == incoming.id }?.let {
                                             if (incoming.revision > it.revision) failedMutations.remove(incoming.id)
@@ -1198,7 +1216,11 @@ private fun GlobalChatAccountContent(
                                         batch.takeLast(8).forEach { enrichTranslationIfNeeded(it) }
                                     }
                                     if (messages.isNotEmpty() && followHistory) {
-                                        scope.launch { listState.scrollToItem(messages.size - 1) }
+                                        didInitialServerScroll = true
+                                        didInitialScroll = true
+                                        newArrivals = 0
+                                        val lastIdx = (messages.distinctBy { it.id }.size - 1).coerceAtLeast(0)
+                                        scope.launch { listState.scrollToItem(lastIdx) }
                                     }
                                 }
                                 "msg" -> {
@@ -1665,7 +1687,7 @@ private fun GlobalChatAccountContent(
     Box(
         modifier = Modifier
             .fillMaxSize()
-            .background(if (isOverlayMode) Color(0xFF0E1118) else Color(0xFF09090B)),
+            .background(if (isOverlayMode) Color(0xFF111111) else Color(0xFF09090B)),
     ) {
         // Lapisan Utama Chat Global (Solid Matte tanpa blur/glassmorphism agar zero-lag)
         Column(
@@ -1680,7 +1702,7 @@ private fun GlobalChatAccountContent(
                 Column(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .background(Color(0xFF141822))
+                        .background(Color(0xFF181818))
                         .pointerInput(Unit) {
                             detectDragGestures { change, dragAmount ->
                                 change.consume()
@@ -1696,7 +1718,7 @@ private fun GlobalChatAccountContent(
                             .width(38.dp)
                             .height(4.dp)
                             .clip(RoundedCornerShape(50))
-                            .background(Color(0xFF3F475A)),
+                            .background(Color(0xFF474747)),
                     )
                     Spacer(Modifier.height(6.dp))
                     Row(
@@ -1729,7 +1751,7 @@ private fun GlobalChatAccountContent(
                             Row(
                                 modifier = Modifier
                                     .clip(RoundedCornerShape(50))
-                                    .background(Color(0xFF23293A))
+                                    .background(Color(0xFF292929))
                                     .padding(horizontal = 7.dp, vertical = 2.dp),
                                 verticalAlignment = Alignment.CenterVertically,
                                 horizontalArrangement = Arrangement.spacedBy(4.dp),
@@ -1738,7 +1760,7 @@ private fun GlobalChatAccountContent(
                                     modifier = Modifier
                                         .size(6.dp)
                                         .clip(CircleShape)
-                                        .background(Color(0xFF10B981)),
+                                        .background(Color(0xFF808080)),
                                 )
                                 Text(
                                     text = "$totalOnline",
@@ -1825,22 +1847,23 @@ private fun GlobalChatAccountContent(
                         Row(
                             modifier = Modifier
                                 .clip(RoundedCornerShape(50))
-                                .background(Color(0xFF18181D))
+                                .background(MaterialTheme.colorScheme.surfaceVariant)
+                                .border(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.45f), RoundedCornerShape(50))
                                 .clickable { showLangPicker = true }
-                                .padding(horizontal = 10.dp, vertical = 6.dp),
+                                .padding(horizontal = 11.dp, vertical = 6.dp),
                             verticalAlignment = Alignment.CenterVertically,
                             horizontalArrangement = Arrangement.spacedBy(5.dp),
                         ) {
                             Icon(
                                 imageVector = XyIcons.Globe,
                                 contentDescription = "Bahasa Terjemahan",
-                                tint = Color(0xFFF4F4F5),
+                                tint = MaterialTheme.colorScheme.onSurface,
                                 modifier = Modifier.size(14.dp),
                             )
                             Text(
                                 text = if (viewerTargetLang == "auto") "AUTO" else viewerTargetLang.uppercase(Locale.ROOT),
                                 style = MaterialTheme.typography.labelSmall,
-                                color = Color(0xFFF4F4F5),
+                                color = MaterialTheme.colorScheme.onSurface,
                                 fontWeight = FontWeight.Bold,
                             )
                         }
@@ -1848,25 +1871,18 @@ private fun GlobalChatAccountContent(
                         XyIconPill(
                             icon = XyIcons.Share,
                             onClick = { shareGlobalChatInvite(null) },
-                            flat = true,
+                            size = 36.dp,
+                            flat = false,
                             contentDescription = "Bagikan Chat Global",
                         )
-                        // Tombol Settings Chat Global (Bersihkan Chat, Style Bubble, Auto-Unduh, HD Media, Nada Notifikasi)
-                        Box(
-                            modifier = Modifier
-                                .clip(RoundedCornerShape(50))
-                                .background(Color(0xFF18181D))
-                                .clickable { showChatSettings = true }
-                                .padding(horizontal = 10.dp, vertical = 6.dp),
-                            contentAlignment = Alignment.Center,
-                        ) {
-                            Icon(
-                                imageVector = XyIcons.Gear,
-                                contentDescription = "Pengaturan Chat",
-                                tint = Color(0xFFE4E4E7),
-                                modifier = Modifier.size(15.dp),
-                            )
-                        }
+                        // Tombol Settings Chat Global 1:1 CircleShape (Tidak Lonjong)
+                        XyIconPill(
+                            icon = XyIcons.Gear,
+                            onClick = { showChatSettings = true },
+                            size = 36.dp,
+                            flat = false,
+                            contentDescription = "Pengaturan Chat",
+                        )
                     },
                 )
 
@@ -1891,7 +1907,7 @@ private fun GlobalChatAccountContent(
                             modifier = Modifier
                                 .size(8.dp)
                                 .clip(CircleShape)
-                                .background(Color(0xFF22C55E)),
+                                .background(Color(0xFF898989)),
                         )
                         Text(
                             text = "$totalOnline Online · Ketuk ke Atas",
@@ -1912,7 +1928,7 @@ private fun GlobalChatAccountContent(
                         Icon(
                             imageVector = XyIcons.Lock,
                             contentDescription = "TLS transport and encrypted local cache",
-                            tint = Color(0xFFA1A1AA),
+                            tint = Color(0xFFA2A2A2),
                             modifier = Modifier.size(11.dp),
                         )
                         Text(
@@ -1920,7 +1936,7 @@ private fun GlobalChatAccountContent(
                             style = MaterialTheme.typography.labelSmall,
                             fontSize = 10.sp,
                             fontWeight = FontWeight.SemiBold,
-                            color = Color(0xFFA1A1AA),
+                            color = Color(0xFFA2A2A2),
                         )
                         if (!verifiedGhLogin.isNullOrBlank()) {
                             Text(
@@ -2051,7 +2067,7 @@ private fun GlobalChatAccountContent(
                                 "Guest mode is disabled for community safety & XyShield Anti-Virus protection. Sync your GitHub account via Chrome in 1 tap to join.",
                             ),
                             style = MaterialTheme.typography.bodySmall,
-                            color = Color(0xFFA1A1AA),
+                            color = Color(0xFFA2A2A2),
                             textAlign = TextAlign.Center,
                         )
                         XyPillButton(
@@ -2144,11 +2160,45 @@ private fun GlobalChatAccountContent(
                             ),
                             verticalArrangement = Arrangement.spacedBy(if (isOverlayMode) 4.dp else 6.dp),
                         ) {
-                            items(
+                            itemsIndexed(
                                 items = uniqueMessages,
-                                key = { it.id },
-                                contentType = { it.attachmentType.ifBlank { "text" } },
-                            ) { m ->
+                                key = { _, it -> it.id },
+                                contentType = { _, it -> it.attachmentType.ifBlank { "text" } },
+                            ) { idx, m ->
+                                val prevAt = if (idx > 0) uniqueMessages[idx - 1].at else 0L
+                                val showDayChip = idx == 0 || !isSameChatCalendarDay(prevAt, m.at)
+                                Column(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    verticalArrangement = Arrangement.spacedBy(if (isOverlayMode) 3.dp else 5.dp),
+                                ) {
+                                    if (showDayChip && m.at > 0L) {
+                                        Box(
+                                            modifier = Modifier
+                                                .fillMaxWidth()
+                                                .padding(vertical = if (isOverlayMode) 2.dp else 4.dp),
+                                            contentAlignment = Alignment.Center,
+                                        ) {
+                                            Text(
+                                                text = formatChatDayHeaderLabel(m.at),
+                                                fontSize = if (isOverlayMode) 9.5.sp else 11.sp,
+                                                fontWeight = FontWeight.SemiBold,
+                                                color = if (isOverlayMode) Color(0xFFE4E4E7) else MaterialTheme.colorScheme.onSurfaceVariant,
+                                                modifier = Modifier
+                                                    .clip(RoundedCornerShape(50))
+                                                    .background(
+                                                        if (isOverlayMode) Color(0xFF18181D).copy(alpha = 0.85f)
+                                                        else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.85f),
+                                                    )
+                                                    .border(
+                                                        0.8.dp,
+                                                        if (isOverlayMode) Color.White.copy(alpha = 0.14f)
+                                                        else MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.45f),
+                                                        RoundedCornerShape(50),
+                                                    )
+                                                    .padding(horizontal = 12.dp, vertical = 4.dp),
+                                            )
+                                        }
+                                    }
                                 val isViewedOnce = m.id in viewedOnceIds
                                 val isMediaDownloaded = autoDownloadMedia || m.mine || m.id in manuallyDownloadedIds
                                 MessageBubble(
@@ -2200,6 +2250,7 @@ private fun GlobalChatAccountContent(
                                     },
                                     onOpenFile = { saveOrShareChatAttachment(context, m) },
                                 )
+                                }
                             }
                         }
                     }
@@ -2215,7 +2266,7 @@ private fun GlobalChatAccountContent(
                         if (newArrivals > 0 && showScrollToBottom) {
                             Surface(
                                 shape = RoundedCornerShape(50),
-                                color = Color(0xFF18181F).copy(alpha = 0.95f),
+                                color = Color(0xFF191919).copy(alpha = 0.95f),
                                 border = BorderStroke(0.8.dp, Color.White.copy(alpha = 0.22f)),
                             ) {
                                 Text(
@@ -2234,8 +2285,8 @@ private fun GlobalChatAccountContent(
                         ) {
                             Surface(
                                 shape = CircleShape,
-                                color = Color(0xFF141821).copy(alpha = 0.94f),
-                                border = BorderStroke(0.75.dp, Color(0xFF2B3245)),
+                                color = Color(0xFF181818).copy(alpha = 0.94f),
+                                border = BorderStroke(0.75.dp, Color(0xFF323232)),
                                 shadowElevation = 6.dp,
                                 modifier = Modifier
                                     .size(34.dp)
@@ -2325,7 +2376,7 @@ private fun GlobalChatAccountContent(
                                     "Ketuk stiker untuk kirim · Ketuk ikon bintang untuk favoritkan",
                                     style = MaterialTheme.typography.labelSmall,
                                     fontSize = 10.sp,
-                                    color = Color(0xFF9CA3AF),
+                                    color = Color(0xFFA2A2A2),
                                     maxLines = 1,
                                     overflow = TextOverflow.Ellipsis,
                                 )
@@ -2436,7 +2487,7 @@ private fun GlobalChatAccountContent(
                                                     Icon(
                                                         imageVector = if (isFav) XyIcons.StarFilled else XyIcons.Star,
                                                         contentDescription = null,
-                                                        tint = if (isFav) Color(0xFFFBBF24) else Color.White,
+                                                        tint = if (isFav) Color(0xFFBFBFBF) else Color.White,
                                                         modifier = Modifier.size(12.dp),
                                                     )
                                                 }
@@ -2462,7 +2513,7 @@ private fun GlobalChatAccountContent(
                                 Box(
                                     modifier = Modifier
                                         .clip(RoundedCornerShape(50))
-                                        .background(if (active) Color.White else Color(0xFF1F1F26))
+                                        .background(if (active) Color.White else Color(0xFF202020))
                                         .clickable { selectedStickerPack = packName }
                                         .padding(horizontal = 12.dp, vertical = 5.dp),
                                 ) {
@@ -2534,7 +2585,7 @@ private fun GlobalChatAccountContent(
                                                 Icon(
                                                     imageVector = if (isFav) XyIcons.StarFilled else XyIcons.Star,
                                                     contentDescription = null,
-                                                    tint = if (isFav) Color(0xFFFBBF24) else Color.White,
+                                                    tint = if (isFav) Color(0xFFBFBFBF) else Color.White,
                                                     modifier = Modifier.size(12.dp),
                                                 )
                                             }
@@ -2591,14 +2642,14 @@ private fun GlobalChatAccountContent(
                                     text = "Foto atau video hanya bisa dibuka 1 kali oleh penerima",
                                     style = MaterialTheme.typography.labelSmall,
                                     fontSize = 10.sp,
-                                    color = if (viewOnceMediaMode) Color(0xFF27272A) else Color(0xFFA1A1AA),
+                                    color = if (viewOnceMediaMode) Color(0xFF27272A) else Color(0xFFA2A2A2),
                                 )
                             }
                         }
                         Box(
                             modifier = Modifier
                                 .clip(RoundedCornerShape(50))
-                                .background(if (viewOnceMediaMode) Color(0xFF09090B) else Color(0xFF27272F))
+                                .background(if (viewOnceMediaMode) Color(0xFF09090B) else Color(0xFF282828))
                                 .padding(horizontal = 9.dp, vertical = 3.dp),
                         ) {
                             Text(
@@ -2726,7 +2777,7 @@ private fun GlobalChatAccountContent(
                             Text(
                                 text = rep.text,
                                 style = MaterialTheme.typography.bodySmall,
-                                color = Color(0xFFA1A1AA),
+                                color = Color(0xFFA2A2A2),
                                 maxLines = 1,
                                 overflow = TextOverflow.Ellipsis,
                             )
@@ -2777,7 +2828,7 @@ private fun GlobalChatAccountContent(
                             Text(
                                 "Login ke GitHub di browser aplikasi lalu klik tombol hijau Authorize (tanpa kode).",
                                 style = MaterialTheme.typography.labelSmall,
-                                color = Color(0xFFA1A1AA),
+                                color = Color(0xFFA2A2A2),
                             )
                         }
                         XyPillButton(
@@ -2827,12 +2878,12 @@ private fun GlobalChatAccountContent(
                             modifier = Modifier
                                 .clip(RoundedCornerShape(50))
                                 .background(
-                                    if (isAnnouncementMode) Color(0xFFA855F7).copy(alpha = 0.24f)
-                                    else Color(0xFF181A22),
+                                    if (isAnnouncementMode) Color(0xFF808080).copy(alpha = 0.24f)
+                                    else Color(0xFF1A1A1A),
                                 )
                                 .border(
                                     1.dp,
-                                    if (isAnnouncementMode) Color(0xFFA855F7) else Color(0xFF292E3D),
+                                    if (isAnnouncementMode) Color(0xFF808080) else Color(0xFF2E2E2E),
                                     RoundedCornerShape(50),
                                 )
                                 .clickable { isAnnouncementMode = !isAnnouncementMode }
@@ -2845,7 +2896,7 @@ private fun GlobalChatAccountContent(
                                 Icon(
                                     imageVector = if (isAnnouncementMode) XyIcons.Pin else XyIcons.Megaphone,
                                     contentDescription = null,
-                                    tint = if (isAnnouncementMode) Color(0xFFE9D5FF) else Color(0xFFA1A1AA),
+                                    tint = if (isAnnouncementMode) Color(0xFFE0E0E0) else Color(0xFFA2A2A2),
                                     modifier = Modifier.size(12.dp),
                                 )
                                 Text(
@@ -2853,7 +2904,7 @@ private fun GlobalChatAccountContent(
                                     style = MaterialTheme.typography.labelSmall,
                                     fontSize = 10.sp,
                                     fontWeight = FontWeight.Bold,
-                                    color = if (isAnnouncementMode) Color(0xFFE9D5FF) else Color(0xFFA1A1AA),
+                                    color = if (isAnnouncementMode) Color(0xFFE0E0E0) else Color(0xFFA2A2A2),
                                 )
                             }
                         }
@@ -2862,7 +2913,7 @@ private fun GlobalChatAccountContent(
 
                 // Bar Input Pesan (100% Vector Icons, Monokrom Bersih / HUD Ringkas di mode sesi)
                 Surface(
-                    color = if (isOverlayMode) Color(0xFF12151E).copy(alpha = 0.92f) else Color(0xFF141418),
+                    color = if (isOverlayMode) Color(0xFF151515).copy(alpha = 0.92f) else Color(0xFF141418),
                     shape = RoundedCornerShape(24.dp),
                     modifier = Modifier
                         .fillMaxWidth()
@@ -2958,7 +3009,7 @@ private fun GlobalChatAccountContent(
                                 Text(
                                     text = "Ketik pesan…",
                                     style = MaterialTheme.typography.bodyMedium,
-                                    color = Color(0xFF71717A),
+                                    color = Color(0xFF727272),
                                     maxLines = 1,
                                     overflow = TextOverflow.Ellipsis,
                                 )
@@ -3008,7 +3059,7 @@ private fun GlobalChatAccountContent(
                             Icon(
                                 imageVector = XyIcons.Send,
                                 contentDescription = "Kirim",
-                                tint = if (canSend) Color(0xFF09090B) else Color(0xFF52525B),
+                                tint = if (canSend) Color(0xFF09090B) else Color(0xFF535353),
                                 modifier = Modifier.size(17.dp),
                             )
                         }
@@ -3049,7 +3100,7 @@ private fun GlobalChatAccountContent(
                     ) {
                         // 1. Bar Reaksi Visual Mengambang di atas Bubble (Ikon Vektor Berwarna + Label Ringkas)
                         Surface(
-                            color = Color(0xFF161821).copy(alpha = 0.98f),
+                            color = Color(0xFF181818).copy(alpha = 0.98f),
                             shape = RoundedCornerShape(50),
                             shadowElevation = 16.dp,
                             border = BorderStroke(1.dp, Color.White.copy(alpha = 0.14f)),
@@ -3066,11 +3117,11 @@ private fun GlobalChatAccountContent(
                                             .size(34.dp)
                                             .clip(CircleShape)
                                             .background(
-                                                if (isSelected) Color(0xFFA855F7).copy(alpha = 0.30f)
-                                                else Color(0xFF232734),
+                                                if (isSelected) Color(0xFF808080).copy(alpha = 0.30f)
+                                                else Color(0xFF272727),
                                             )
                                             .let { mod ->
-                                                if (isSelected) mod.border(1.4.dp, Color(0xFFC084FC), CircleShape) else mod
+                                                if (isSelected) mod.border(1.4.dp, Color(0xFFA4A4A4), CircleShape) else mod
                                             }
                                             .clickable {
                                                 if (isSelected) messageReactions.remove(targetMsg.id)
@@ -3288,7 +3339,7 @@ private fun GlobalChatAccountContent(
                                 if (canMutateChatMessage(targetMsg, verifiedGhLogin)) ContextMenuActionRow(
                                     label = "Hapus untuk Semua Orang",
                                     icon = XyIcons.Trash,
-                                    tint = Color(0xFFEF4444),
+                                    tint = Color(0xFF777777),
                                     onClick = {
                                         val snap = targetMsg
                                         focusedContextMsg = null
@@ -3299,7 +3350,7 @@ private fun GlobalChatAccountContent(
                                 ContextMenuActionRow(
                                     label = "Hapus untuk Saya",
                                     icon = XyIcons.Trash,
-                                    tint = Color(0xFFF87171),
+                                    tint = Color(0xFF999999),
                                     onClick = {
                                         val snap = targetMsg
                                         focusedContextMsg = null
@@ -3327,8 +3378,8 @@ private fun GlobalChatAccountContent(
                 modifier = Modifier
                     .fillMaxWidth()
                     .clip(RoundedCornerShape(20.dp))
-                    .background(Color(0xFF12141D))
-                    .border(1.dp, Color(0xFF272C3F), RoundedCornerShape(20.dp))
+                    .background(Color(0xFF141414))
+                    .border(1.dp, Color(0xFF2D2D2D), RoundedCornerShape(20.dp))
                     .padding(18.dp),
                 verticalArrangement = Arrangement.spacedBy(12.dp),
             ) {
@@ -3346,7 +3397,7 @@ private fun GlobalChatAccountContent(
                     Icon(
                         imageVector = XyIcons.Close,
                         contentDescription = "Batal",
-                        tint = Color(0xFF94A3B8),
+                        tint = Color(0xFFA1A1A1),
                         modifier = Modifier
                             .size(20.dp)
                             .clickable { editingMessage = null },
@@ -3363,7 +3414,7 @@ private fun GlobalChatAccountContent(
                 Text(
                     "Perubahan tampil langsung di semua perangkat secara real-time.",
                     style = MaterialTheme.typography.bodySmall,
-                    color = Color(0xFF94A3B8),
+                    color = Color(0xFFA1A1A1),
                 )
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     XyPillButton(
@@ -3392,7 +3443,7 @@ private fun GlobalChatAccountContent(
         Box(
             modifier = Modifier
                 .fillMaxSize()
-                .background(Color(0xFF090B10))
+                .background(Color(0xFF0B0B0B))
                 .clickable(enabled = true, onClick = {}),
         ) {
             Column(
@@ -3405,7 +3456,7 @@ private fun GlobalChatAccountContent(
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .background(Color(0xFF10131C))
+                        .background(Color(0xFF131313))
                         .padding(horizontal = 16.dp, vertical = 13.dp),
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.SpaceBetween,
@@ -3418,7 +3469,7 @@ private fun GlobalChatAccountContent(
                             modifier = Modifier
                                 .size(34.dp)
                                 .clip(CircleShape)
-                                .background(Color(0xFF1E2434))
+                                .background(Color(0xFF242424))
                                 .clickable { showChatSettings = false },
                             contentAlignment = Alignment.Center,
                         ) {
@@ -3440,7 +3491,7 @@ private fun GlobalChatAccountContent(
                                 text = xy("Halaman penuh tanpa popup · Tersimpan otomatis", "Full inline page without popups · Auto-saved"),
                                 style = MaterialTheme.typography.labelSmall,
                                 fontSize = 10.5.sp,
-                                color = Color(0xFF10B981),
+                                color = Color(0xFF808080),
                             )
                         }
                     }
@@ -3463,8 +3514,8 @@ private fun GlobalChatAccountContent(
                         modifier = Modifier
                             .fillMaxWidth()
                             .clip(RoundedCornerShape(14.dp))
-                            .background(Color(0xFF131722))
-                            .border(1.dp, Color(0xFF232A3D), RoundedCornerShape(14.dp))
+                            .background(Color(0xFF171717))
+                            .border(1.dp, Color(0xFF2A2A2A), RoundedCornerShape(14.dp))
                             .padding(12.dp),
                         horizontalArrangement = Arrangement.SpaceEvenly,
                         verticalAlignment = Alignment.CenterVertically,
@@ -3474,27 +3525,27 @@ private fun GlobalChatAccountContent(
                                 text = "${messages.size}",
                                 style = MaterialTheme.typography.titleMedium,
                                 fontWeight = FontWeight.ExtraBold,
-                                color = Color(0xFF38BDF8),
+                                color = Color(0xFF9C9C9C),
                             )
-                            Text("Pesan Dimuat", fontSize = 10.sp, color = Color(0xFF94A3B8))
+                            Text("Pesan Dimuat", fontSize = 10.sp, color = Color(0xFFA1A1A1))
                         }
                         Column(horizontalAlignment = Alignment.CenterHorizontally) {
                             Text(
                                 text = "$totalOnline",
                                 style = MaterialTheme.typography.titleMedium,
                                 fontWeight = FontWeight.ExtraBold,
-                                color = Color(0xFF10B981),
+                                color = Color(0xFF808080),
                             )
-                            Text("Online Aktif", fontSize = 10.sp, color = Color(0xFF94A3B8))
+                            Text("Online Aktif", fontSize = 10.sp, color = Color(0xFFA1A1A1))
                         }
                         Column(horizontalAlignment = Alignment.CenterHorizontally) {
                             Text(
                                 text = if (viewerTargetLang == "auto") "AUTO" else viewerTargetLang.uppercase(Locale.ROOT),
                                 style = MaterialTheme.typography.titleMedium,
                                 fontWeight = FontWeight.ExtraBold,
-                                color = Color(0xFFFBBF24),
+                                color = Color(0xFFBFBFBF),
                             )
-                            Text("Terjemahan", fontSize = 10.sp, color = Color(0xFF94A3B8))
+                            Text("Terjemahan", fontSize = 10.sp, color = Color(0xFFA1A1A1))
                         }
                     }
 
@@ -3503,7 +3554,7 @@ private fun GlobalChatAccountContent(
                         modifier = Modifier
                             .fillMaxWidth()
                             .clip(RoundedCornerShape(12.dp))
-                            .background(Color(0xFF161922))
+                            .background(Color(0xFF191919))
                             .clickable {
                                 sendSoundEnabled = !sendSoundEnabled
                                 chatPrefs.edit().putBoolean("send_sound_enabled", sendSoundEnabled).apply()
@@ -3522,14 +3573,14 @@ private fun GlobalChatAccountContent(
                             Text(
                                 xy("Bunyikan nada lembut saat pesan berhasil dikirim", "Play soft pop tone when sending a message"),
                                 fontSize = 10.sp,
-                                color = Color(0xFF94A3B8),
+                                color = Color(0xFFA1A1A1),
                             )
                         }
                         Text(
                             text = if (sendSoundEnabled) "ON" else "OFF",
                             fontSize = 11.sp,
                             fontWeight = FontWeight.ExtraBold,
-                            color = if (sendSoundEnabled) Color(0xFF10B981) else Color(0xFF64748B),
+                            color = if (sendSoundEnabled) Color(0xFF808080) else Color(0xFF727272),
                         )
                     }
 
@@ -3537,7 +3588,7 @@ private fun GlobalChatAccountContent(
                         modifier = Modifier
                             .fillMaxWidth()
                             .clip(RoundedCornerShape(12.dp))
-                            .background(Color(0xFF161922))
+                            .background(Color(0xFF191919))
                             .clickable {
                                 inAppBannerEnabled = !inAppBannerEnabled
                                 chatPrefs.edit().putBoolean("in_app_chat_banner_enabled", inAppBannerEnabled).apply()
@@ -3557,14 +3608,14 @@ private fun GlobalChatAccountContent(
                             Text(
                                 xy("Tampilkan popup banner di atas layar & mini bubble di bawah floating sesi saat ada chat baru", "Show top banner & mini bubble under floating session pill when new chat arrives"),
                                 fontSize = 10.sp,
-                                color = Color(0xFF94A3B8),
+                                color = Color(0xFFA1A1A1),
                             )
                         }
                         Text(
                             text = if (inAppBannerEnabled) "ON" else "OFF",
                             fontSize = 11.sp,
                             fontWeight = FontWeight.ExtraBold,
-                            color = if (inAppBannerEnabled) Color(0xFF10B981) else Color(0xFF64748B),
+                            color = if (inAppBannerEnabled) Color(0xFF808080) else Color(0xFF727272),
                         )
                     }
 
@@ -3594,7 +3645,7 @@ private fun GlobalChatAccountContent(
                             modifier = Modifier
                                 .weight(1f)
                                 .clip(RoundedCornerShape(10.dp))
-                                .background(if (active) Color.White else Color(0xFF1E222D))
+                                .background(if (active) Color.White else Color(0xFF222222))
                                 .clickable {
                                     bubbleStyleMode = modeKey
                                     chatPrefs.edit().putString(KEY_BUBBLE_STYLE, modeKey).apply()
@@ -3606,7 +3657,7 @@ private fun GlobalChatAccountContent(
                                 text = modeLabel,
                                 fontSize = 10.sp,
                                 fontWeight = FontWeight.Bold,
-                                color = if (active) Color(0xFF09090B) else Color(0xFFE2E8F0),
+                                color = if (active) Color(0xFF09090B) else Color(0xFFE7E7E7),
                             )
                         }
                     }
@@ -3646,7 +3697,7 @@ private fun GlobalChatAccountContent(
                         chatPrefs.edit().putBoolean(KEY_AUTO_DOWNLOAD_MEDIA, autoDownloadMedia).apply()
                     },
                     shape = RoundedCornerShape(12.dp),
-                    color = Color(0xFF171A23),
+                    color = Color(0xFF1A1A1A),
                 ) {
                     Row(
                         modifier = Modifier
@@ -3665,14 +3716,14 @@ private fun GlobalChatAccountContent(
                             Text(
                                 xy("Tampilkan foto & video secara otomatis saat pesan masuk", "Automatically load incoming photos & videos"),
                                 style = MaterialTheme.typography.labelSmall,
-                                color = Color(0xFF94A3B8),
+                                color = Color(0xFFA1A1A1),
                             )
                         }
                         Text(
                             text = if (autoDownloadMedia) "AKTIF" else "MANUAL",
                             fontSize = 11.sp,
                             fontWeight = FontWeight.ExtraBold,
-                            color = if (autoDownloadMedia) Color(0xFF10B981) else Color(0xFFF59E0B),
+                            color = if (autoDownloadMedia) Color(0xFF808080) else Color(0xFFA7A7A7),
                         )
                     }
                 }
@@ -3684,7 +3735,7 @@ private fun GlobalChatAccountContent(
                         chatPrefs.edit().putBoolean(KEY_HD_MEDIA_ENABLED, hdMediaEnabled).apply()
                     },
                     shape = RoundedCornerShape(12.dp),
-                    color = Color(0xFF171A23),
+                    color = Color(0xFF1A1A1A),
                 ) {
                     Row(
                         modifier = Modifier
@@ -3703,14 +3754,14 @@ private fun GlobalChatAccountContent(
                             Text(
                                 xy("Gambar tidak dikompres berlebihan agar tetap tajam", "Keep photos sharp without heavy compression"),
                                 style = MaterialTheme.typography.labelSmall,
-                                color = Color(0xFF94A3B8),
+                                color = Color(0xFFA1A1A1),
                             )
                         }
                         Text(
                             text = if (hdMediaEnabled) "HD ON" else "STANDAR",
                             fontSize = 11.sp,
                             fontWeight = FontWeight.ExtraBold,
-                            color = if (hdMediaEnabled) Color(0xFF10B981) else Color(0xFF94A3B8),
+                            color = if (hdMediaEnabled) Color(0xFF808080) else Color(0xFFA1A1A1),
                         )
                     }
                 }
@@ -3722,7 +3773,7 @@ private fun GlobalChatAccountContent(
                         chatPrefs.edit().putBoolean(KEY_AUTOPLAY_VIDEO, autoplayVideoEnabled).apply()
                     },
                     shape = RoundedCornerShape(12.dp),
-                    color = Color(0xFF171A23),
+                    color = Color(0xFF1A1A1A),
                 ) {
                     Row(
                         modifier = Modifier
@@ -3741,14 +3792,14 @@ private fun GlobalChatAccountContent(
                             Text(
                                 xy("Video otomatis berputar preview tanpa dibuka penuh", "Play muted video previews inline automatically"),
                                 style = MaterialTheme.typography.labelSmall,
-                                color = Color(0xFF94A3B8),
+                                color = Color(0xFFA1A1A1),
                             )
                         }
                         Text(
                             text = if (autoplayVideoEnabled) "AKTIF" else "MATI",
                             fontSize = 11.sp,
                             fontWeight = FontWeight.ExtraBold,
-                            color = if (autoplayVideoEnabled) Color(0xFF10B981) else Color(0xFF94A3B8),
+                            color = if (autoplayVideoEnabled) Color(0xFF808080) else Color(0xFFA1A1A1),
                         )
                     }
                 }
@@ -3759,7 +3810,7 @@ private fun GlobalChatAccountContent(
                         id.xydesk.remote.push.ChatPushNotifier.openSystemNotificationSettings(context)
                     },
                     shape = RoundedCornerShape(12.dp),
-                    color = Color(0xFF171A23),
+                    color = Color(0xFF1A1A1A),
                 ) {
                     Row(
                         modifier = Modifier
@@ -3778,13 +3829,13 @@ private fun GlobalChatAccountContent(
                             Text(
                                 xy("Atur channel notif Mention, Balasan, Chat Global & suara HP", "Configure Mention, Reply, Global Chat channels & device sound"),
                                 style = MaterialTheme.typography.labelSmall,
-                                color = Color(0xFF94A3B8),
+                                color = Color(0xFFA1A1A1),
                             )
                         }
                         Icon(
                             imageVector = XyIcons.ChevronRight,
                             contentDescription = null,
-                            tint = Color(0xFF94A3B8),
+                            tint = Color(0xFFA1A1A1),
                             modifier = Modifier.size(16.dp),
                         )
                     }
@@ -3812,7 +3863,7 @@ private fun GlobalChatAccountContent(
                             modifier = Modifier
                                 .weight(1f)
                                 .clip(RoundedCornerShape(10.dp))
-                                .background(if (active) Color(0xFFF59E0B) else Color(0xFF1E222D))
+                                .background(if (active) Color(0xFFA7A7A7) else Color(0xFF222222))
                                 .clickable {
                                     notifSoundTone = toneKey
                                     chatPrefs.edit().putString(KEY_NOTIF_TONE, toneKey).apply()
@@ -3825,7 +3876,7 @@ private fun GlobalChatAccountContent(
                                 text = toneLabel,
                                 fontSize = 10.sp,
                                 fontWeight = FontWeight.Bold,
-                                color = if (active) Color(0xFF09090B) else Color(0xFFE2E8F0),
+                                color = if (active) Color(0xFF09090B) else Color(0xFFE7E7E7),
                             )
                         }
                     }
@@ -3868,7 +3919,7 @@ private fun GlobalChatAccountContent(
         Box(
             modifier = Modifier
                 .fillMaxSize()
-                .background(Color(0xFF090B10))
+                .background(Color(0xFF0B0B0B))
                 .clickable(enabled = true, onClick = {}),
         ) {
             Column(
@@ -3880,7 +3931,7 @@ private fun GlobalChatAccountContent(
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .background(Color(0xFF10131C))
+                        .background(Color(0xFF131313))
                         .padding(horizontal = 16.dp, vertical = 13.dp),
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.SpaceBetween,
@@ -3893,7 +3944,7 @@ private fun GlobalChatAccountContent(
                             modifier = Modifier
                                 .size(34.dp)
                                 .clip(CircleShape)
-                                .background(Color(0xFF1E2434))
+                                .background(Color(0xFF242424))
                                 .clickable { showLangPicker = false },
                             contentAlignment = Alignment.Center,
                         ) {
@@ -3915,7 +3966,7 @@ private fun GlobalChatAccountContent(
                                 text = xy("Pilih bahasa terjemahan otomatis untuk setiap pesan masuk", "Select target language for incoming messages"),
                                 style = MaterialTheme.typography.labelSmall,
                                 fontSize = 10.5.sp,
-                                color = Color(0xFF94A3B8),
+                                color = Color(0xFFA1A1A1),
                             )
                         }
                     }
@@ -3963,8 +4014,8 @@ private fun GlobalChatAccountContent(
                 modifier = Modifier
                     .fillMaxWidth()
                     .clip(RoundedCornerShape(20.dp))
-                    .background(Color(0xFF12141D))
-                    .border(1.dp, Color(0xFF272C3F), RoundedCornerShape(20.dp))
+                    .background(Color(0xFF141414))
+                    .border(1.dp, Color(0xFF2D2D2D), RoundedCornerShape(20.dp))
                     .clickable(enabled = true, onClick = {})
                     .padding(18.dp),
                 verticalArrangement = Arrangement.spacedBy(8.dp),
@@ -3976,7 +4027,7 @@ private fun GlobalChatAccountContent(
                     Icon(
                         imageVector = XyIcons.Shield,
                         contentDescription = null,
-                        tint = Color(0xFF22C55E),
+                        tint = Color(0xFF898989),
                         modifier = Modifier.size(20.dp),
                     )
                     Text(
@@ -3986,11 +4037,11 @@ private fun GlobalChatAccountContent(
                         color = Color.White,
                     )
                 }
-                Text("Pengirim: ${msg.name} ${if (msg.githubLogin.isNotBlank()) "(@${msg.githubLogin})" else ""}", style = MaterialTheme.typography.bodySmall, color = Color(0xFFE2E8F0))
-                Text("Negara Terdeteksi: ${msg.country}", style = MaterialTheme.typography.bodySmall, color = Color(0xFFE2E8F0))
-                Text("Proteksi Transit: ${msg.e2eeProtocol} (AES-256-GCM + HMAC-SHA256 via WSS/TLS)", style = MaterialTheme.typography.bodySmall, color = Color(0xFFE2E8F0))
-                Text("Signature HMAC: ${msg.e2eeSig.ifBlank { "tidak ada" }}", style = MaterialTheme.typography.labelSmall, color = Color(0xFF94A3B8))
-                Text("Status Pengiriman: Terkirim & Tervalidasi (Centang 2)", style = MaterialTheme.typography.bodySmall, color = Color(0xFF10B981))
+                Text("Pengirim: ${msg.name} ${if (msg.githubLogin.isNotBlank()) "(@${msg.githubLogin})" else ""}", style = MaterialTheme.typography.bodySmall, color = Color(0xFFE7E7E7))
+                Text("Negara Terdeteksi: ${msg.country}", style = MaterialTheme.typography.bodySmall, color = Color(0xFFE7E7E7))
+                Text("Proteksi Transit: ${msg.e2eeProtocol} (AES-256-GCM + HMAC-SHA256 via WSS/TLS)", style = MaterialTheme.typography.bodySmall, color = Color(0xFFE7E7E7))
+                Text("Signature HMAC: ${msg.e2eeSig.ifBlank { "tidak ada" }}", style = MaterialTheme.typography.labelSmall, color = Color(0xFFA1A1A1))
+                Text("Status Pengiriman: Terkirim & Tervalidasi (Centang 2)", style = MaterialTheme.typography.bodySmall, color = Color(0xFF808080))
                 Spacer(Modifier.height(6.dp))
                 XyPillButton(
                     text = "Kembali ke Chat Global",
@@ -4317,10 +4368,10 @@ internal object InAppLiveNotificationBus {
             avatarUrl = msg.avatarUrl,
             text = msg.text.ifBlank {
                 when (msg.attachmentType) {
-                    "sticker" -> "✨ Mengirim Stiker"
-                    "image", "photo" -> "📷 Mengirim Foto"
-                    "video" -> "🎬 Mengirim Video"
-                    else -> "📎 Mengirim Lampiran"
+                    "sticker" -> "Mengirim Stiker"
+                    "image", "photo" -> "Mengirim Foto"
+                    "video" -> "Mengirim Video"
+                    else -> "Mengirim Lampiran"
                 }
             },
             createdAt = msg.at,
@@ -4523,10 +4574,10 @@ internal fun FloatingSessionChatOverlay(
                 Box(
                     modifier = Modifier
                         .clip(RoundedCornerShape(50))
-                        .background(Color(0xFF12151E))
+                        .background(Color(0xFF151515))
                         .border(
                             width = 1.dp,
-                            color = Color(0xFF2A3246),
+                            color = Color(0xFF323232),
                             shape = RoundedCornerShape(50),
                         )
                         .padding(start = 11.dp, end = 6.dp, top = 5.dp, bottom = 5.dp),
@@ -4548,7 +4599,7 @@ internal fun FloatingSessionChatOverlay(
                                 modifier = Modifier
                                     .size(7.5.dp)
                                     .clip(CircleShape)
-                                    .background(Color(0xFF10B981)),
+                                    .background(Color(0xFF808080)),
                             )
                             Icon(
                                 imageVector = XyIcons.Chat,
@@ -4566,7 +4617,7 @@ internal fun FloatingSessionChatOverlay(
                             Box(
                                 modifier = Modifier
                                     .clip(RoundedCornerShape(50))
-                                    .background(Color(0xFF222838))
+                                    .background(Color(0xFF282828))
                                     .padding(horizontal = 5.5.dp, vertical = 1.dp),
                             ) {
                                 Text(
@@ -4574,14 +4625,14 @@ internal fun FloatingSessionChatOverlay(
                                     style = MaterialTheme.typography.labelSmall,
                                     fontSize = 9.sp,
                                     fontWeight = FontWeight.ExtraBold,
-                                    color = Color(0xFFCBD5E1),
+                                    color = Color(0xFFD3D3D3),
                                 )
                             }
                             if (unreadCount > 0) {
                                 Box(
                                     modifier = Modifier
                                         .clip(RoundedCornerShape(50))
-                                        .background(Color(0xFFFE2C55))
+                                        .background(Color(0xFF6F6F6F))
                                         .padding(horizontal = 5.5.dp, vertical = 1.dp),
                                 ) {
                                     Text(
@@ -4598,7 +4649,7 @@ internal fun FloatingSessionChatOverlay(
                             modifier = Modifier
                                 .size(20.dp)
                                 .clip(CircleShape)
-                                .background(Color(0xFF23293A))
+                                .background(Color(0xFF292929))
                                 .clickable {
                                     InAppLiveNotificationBus.setFloatingHidden(context, true)
                                 },
@@ -4607,7 +4658,7 @@ internal fun FloatingSessionChatOverlay(
                             Icon(
                                 imageVector = XyIcons.Close,
                                 contentDescription = "Sembunyikan Floating Chat",
-                                tint = Color(0xFFCBD5E1),
+                                tint = Color(0xFFD3D3D3),
                                 modifier = Modifier.size(11.dp),
                             )
                         }
@@ -4627,10 +4678,10 @@ internal fun FloatingSessionChatOverlay(
                             modifier = Modifier
                                 .widthIn(min = 175.dp, max = 265.dp)
                                 .clip(RoundedCornerShape(14.dp))
-                                .background(Color(0xFF12151E))
+                                .background(Color(0xFF151515))
                                 .border(
                                     width = 1.dp,
-                                    color = Color(0xFF2A3246),
+                                    color = Color(0xFF323232),
                                     shape = RoundedCornerShape(14.dp),
                                 )
                                 .clickable {
@@ -4660,7 +4711,7 @@ internal fun FloatingSessionChatOverlay(
                                         text = chatItem.senderName,
                                         fontSize = 10.sp,
                                         fontWeight = FontWeight.ExtraBold,
-                                        color = if (isFounderSender) Color(0xFFFDE047) else Color(0xFF38BDF8),
+                                        color = if (isFounderSender) Color(0xFFD7D7D7) else Color(0xFF9C9C9C),
                                         maxLines = 1,
                                         overflow = TextOverflow.Ellipsis,
                                     )
@@ -4691,7 +4742,7 @@ internal fun FloatingSessionChatOverlay(
                                 Icon(
                                     imageVector = XyIcons.Close,
                                     contentDescription = "Tutup",
-                                    tint = Color(0xFFCBD5E1),
+                                    tint = Color(0xFFD3D3D3),
                                     modifier = Modifier.size(10.dp),
                                 )
                             }
@@ -4718,10 +4769,10 @@ internal fun FloatingSessionChatOverlay(
                         .heightIn(min = 320.dp, max = adaptivePanelMaxHeight)
                         .fillMaxHeight(if (isCompactFloating) 0.88f else 0.95f)
                         .clip(panelShape)
-                        .background(Color(0xFF0E1118))
+                        .background(Color(0xFF111111))
                         .border(
                             width = 1.dp,
-                            color = Color(0xFF283044),
+                            color = Color(0xFF303030),
                             shape = panelShape,
                         )
                         .clickable(enabled = false) {},
@@ -4778,7 +4829,7 @@ private fun AnimatedTypingDotsBar(typingUser: String) {
         modifier = Modifier
             .padding(horizontal = 16.dp, vertical = 4.dp)
             .clip(RoundedCornerShape(999.dp))
-            .background(Color(0xFF161922))
+            .background(Color(0xFF191919))
             .padding(horizontal = 12.dp, vertical = 5.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(6.dp),
@@ -4795,7 +4846,7 @@ private fun AnimatedTypingDotsBar(typingUser: String) {
                         .offset(y = (-bounce * 3f).dp)
                         .size((5f + bounce * 2f).dp)
                         .clip(CircleShape)
-                        .background(Color(0xFF10B981).copy(alpha = 0.55f + bounce * 0.45f)),
+                        .background(Color(0xFF808080).copy(alpha = 0.55f + bounce * 0.45f)),
                 )
             }
         }
@@ -4803,7 +4854,7 @@ private fun AnimatedTypingDotsBar(typingUser: String) {
             text = "$typingUser sedang mengetik",
             style = MaterialTheme.typography.labelSmall,
             fontWeight = FontWeight.SemiBold,
-            color = Color(0xFFE2E8F0),
+            color = Color(0xFFE7E7E7),
         )
     }
 }
@@ -4831,4 +4882,33 @@ private fun playChatNotificationTone(toneMode: String) {
         Handler(Looper.getMainLooper()).postDelayed({ runCatching { tg.release() } }, 250L)
     }
 }
+
+internal fun isSameChatCalendarDay(at1: Long, at2: Long): Boolean {
+    if (at1 <= 0L || at2 <= 0L) return false
+    val c1 = java.util.Calendar.getInstance().apply { timeInMillis = at1 }
+    val c2 = java.util.Calendar.getInstance().apply { timeInMillis = at2 }
+    return c1.get(java.util.Calendar.YEAR) == c2.get(java.util.Calendar.YEAR) &&
+        c1.get(java.util.Calendar.DAY_OF_YEAR) == c2.get(java.util.Calendar.DAY_OF_YEAR)
+}
+
+internal fun formatChatDayHeaderLabel(epochMs: Long): String {
+    if (epochMs <= 0L) return "Hari ini"
+    val now = java.util.Calendar.getInstance()
+    val target = java.util.Calendar.getInstance().apply { timeInMillis = epochMs }
+    if (now.get(java.util.Calendar.YEAR) == target.get(java.util.Calendar.YEAR) &&
+        now.get(java.util.Calendar.DAY_OF_YEAR) == target.get(java.util.Calendar.DAY_OF_YEAR)
+    ) {
+        return "Hari ini"
+    }
+    val yesterday = (now.clone() as java.util.Calendar).apply {
+        add(java.util.Calendar.DAY_OF_YEAR, -1)
+    }
+    if (yesterday.get(java.util.Calendar.YEAR) == target.get(java.util.Calendar.YEAR) &&
+        yesterday.get(java.util.Calendar.DAY_OF_YEAR) == target.get(java.util.Calendar.DAY_OF_YEAR)
+    ) {
+        return "Kemarin"
+    }
+    return java.text.SimpleDateFormat("dd MMM yyyy", Locale("id", "ID")).format(java.util.Date(epochMs))
+}
+
 

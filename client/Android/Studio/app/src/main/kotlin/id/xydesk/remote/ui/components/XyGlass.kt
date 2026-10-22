@@ -55,11 +55,11 @@ import androidx.compose.ui.unit.dp
  * desktop remote, tema terang/gelap) karena tidak bergantung pada warna latar.
  */
 
-/** Radius kartu kaca. 20dp konsisten dengan [XyCard] lama supaya grid rapi. */
-val XyGlassShape: Shape = RoundedCornerShape(20.dp)
+/** Radius kartu kaca all-rounded proporsional. */
+val XyGlassShape: Shape = RoundedCornerShape(24.dp)
 
-/** Radius lebih kecil untuk ubin kecil di grid dashboard. */
-val XyGlassTileShape: Shape = RoundedCornerShape(16.dp)
+/** Radius ubin kecil di grid dashboard. */
+val XyGlassTileShape: Shape = RoundedCornerShape(20.dp)
 
 /**
  * Permukaan datar (matte) XyDesk.
@@ -166,8 +166,8 @@ fun XyGlassTile(
     ) {
         Box(
             modifier = Modifier
-                .size(30.dp)
-                .clip(RoundedCornerShape(10.dp))
+                .size(34.dp)
+                .clip(androidx.compose.foundation.shape.CircleShape)
                 .background(iconBox),
             contentAlignment = Alignment.Center,
         ) {

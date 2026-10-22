@@ -306,12 +306,12 @@ internal fun AppChannelGate(
                 .xyGlass(shape = RoundedCornerShape(24.dp), opacity = 1.65f, strength = 1f)
                 .background(
                     brush = Brush.verticalGradient(
-                        0f to Color(0xFFEF4444).copy(alpha = 0.18f),
+                        0f to Color(0xFF777777).copy(alpha = 0.18f),
                         0.35f to Color.Transparent,
                     ),
                     shape = RoundedCornerShape(24.dp),
                 )
-                .border(1.4.dp, Color(0xFFEF4444).copy(alpha = 0.55f), RoundedCornerShape(24.dp))
+                .border(1.4.dp, Color(0xFF777777).copy(alpha = 0.55f), RoundedCornerShape(24.dp))
                 .verticalScroll(rememberScrollState())
                 .padding(horizontal = 20.dp, vertical = 22.dp),
             horizontalAlignment = Alignment.CenterHorizontally,
@@ -322,14 +322,14 @@ internal fun AppChannelGate(
                 modifier = Modifier
                     .size(56.dp)
                     .clip(CircleShape)
-                    .background(Color(0xFFEF4444).copy(alpha = 0.18f))
-                    .border(1.5.dp, Color(0xFFF87171), CircleShape),
+                    .background(Color(0xFF777777).copy(alpha = 0.18f))
+                    .border(1.5.dp, Color(0xFF999999), CircleShape),
                 contentAlignment = Alignment.Center,
             ) {
                 Icon(
                     imageVector = XyIcons.Shield,
                     contentDescription = null,
-                    tint = Color(0xFFF87171),
+                    tint = Color(0xFF999999),
                     modifier = Modifier.size(28.dp),
                 )
             }
@@ -337,13 +337,13 @@ internal fun AppChannelGate(
             Box(
                 modifier = Modifier
                     .clip(RoundedCornerShape(50))
-                    .background(Color(0xFF450A0A))
-                    .border(1.dp, Color(0xFFF87171).copy(alpha = 0.6f), RoundedCornerShape(50))
+                    .background(Color(0xFF1C1C1C))
+                    .border(1.dp, Color(0xFF999999).copy(alpha = 0.6f), RoundedCornerShape(50))
                     .padding(horizontal = 12.dp, vertical = 4.dp),
             ) {
                 Text(
                     text = xy("XYSHIELD v4.1 · DETEKSI MODIFIKASI / CRACK", "XYSHIELD v4.1 · TAMPER / CRACK DETECTED"),
-                    color = Color(0xFFFECACA),
+                    color = Color(0xFFDADADA),
                     fontSize = 9.5.sp,
                     fontFamily = FontFamily.Monospace,
                     fontWeight = FontWeight.ExtraBold,
@@ -375,7 +375,7 @@ internal fun AppChannelGate(
                 modifier = Modifier
                     .fillMaxWidth()
                     .clip(RoundedCornerShape(14.dp))
-                    .background(Color(0xFF0B0D13))
+                    .background(Color(0xFF0D0D0D))
                     .border(1.dp, MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(14.dp))
                     .padding(12.dp),
                 verticalArrangement = Arrangement.spacedBy(7.dp),
@@ -404,8 +404,8 @@ internal fun AppChannelGate(
 
             if (copiedToast) {
                 Text(
-                    text = xy("Laporan diagnostik disalin ke clipboard ✓", "Diagnostic report copied to clipboard ✓"),
-                    color = Color(0xFF34D399),
+                    text = xy("Laporan diagnostik disalin ke clipboard", "Diagnostic report copied to clipboard"),
+                    color = Color(0xFF9D9D9D),
                     fontSize = 11.sp,
                     fontWeight = FontWeight.Bold,
                 )
@@ -485,7 +485,7 @@ private fun SecurityAuditRow(
                 modifier = Modifier
                     .size(7.dp)
                     .clip(CircleShape)
-                    .background(if (ok) Color(0xFF10B981) else Color(0xFFEF4444)),
+                    .background(if (ok) Color(0xFF808080) else Color(0xFF777777)),
             )
             Text(
                 text = label,
@@ -497,7 +497,7 @@ private fun SecurityAuditRow(
         Spacer(Modifier.width(8.dp))
         Text(
             text = value,
-            color = if (ok) Color(0xFFE4E4E7) else Color(0xFFFCA5A5),
+            color = if (ok) Color(0xFFE4E4E7) else Color(0xFFBFBFBF),
             fontSize = 10.sp,
             fontFamily = FontFamily.Monospace,
             fontWeight = FontWeight.Bold,

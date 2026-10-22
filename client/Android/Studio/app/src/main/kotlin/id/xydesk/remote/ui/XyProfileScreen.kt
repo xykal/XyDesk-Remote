@@ -1,8 +1,10 @@
 package id.xydesk.remote.ui
 
+import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -405,28 +407,27 @@ private fun CloudSyncCard() {
 
     XyGlassCard(padding = 14.dp) {
         Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            Text(
-                xy("Sinkron Cloud", "Cloud sync"),
-                style = MaterialTheme.typography.titleSmall,
-            )
-            Text(
-                xy(
-                    "Setelan & kontrol dicadangkan tanpa kata sandi/token. Habis pasang ulang? Pakai kode pemulihan lalu ketuk \"Pulihkan dari Cloud\".",
-                    "Settings & controls backed up without passwords/tokens. After reinstalling, enter your recovery code and tap \"Restore from cloud\".",
-                ),
-                style = MaterialTheme.typography.labelSmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-            stampPrefs.getString("cloud_sync_last", null)?.let { stamp ->
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
                 Text(
-                    xy("Sinkron terakhir: ", "Last sync: ") + stamp,
-                    style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.primary,
+                    xy("Sinkron Cloud", "Cloud Sync"),
+                    style = MaterialTheme.typography.titleSmall,
+                    fontWeight = FontWeight.Bold,
                 )
+                stampPrefs.getString("cloud_sync_last", null)?.let { stamp ->
+                    Text(
+                        stamp,
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
             }
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 XyPillButton(
-                    text = if (busy) xy("Memproses…", "Working…") else xy("Unggah sekarang", "Upload now"),
+                    text = if (busy) xy("Memproses…", "Working…") else xy("Cadangkan", "Backup"),
                     onClick = {
                         scope.launch {
                             busy = true
@@ -434,10 +435,10 @@ private fun CloudSyncCard() {
                             try {
                                 val at = CloudSync.upload(context)
                                 stampPrefs.edit().putString("cloud_sync_last", at).apply()
-                                message = xyNow("Cadangan berhasil diunggah.", "Backup uploaded.")
+                                message = xyNow("Cadangan tersimpan.", "Backup uploaded.")
                                 isError = false
                             } catch (error: Exception) {
-                                message = xyNow("Gagal mengunggah. Periksa jaringan.", "Upload failed. Check your connection.")
+                                message = xyNow("Gagal mencadangkan.", "Upload failed.")
                                 isError = true
                             } finally {
                                 busy = false
@@ -446,13 +447,15 @@ private fun CloudSyncCard() {
                     },
                     compact = true,
                     enabled = !busy,
+                    modifier = Modifier.weight(1f),
                 )
                 XyPillButton(
-                    text = xy("Pulihkan dari Cloud", "Restore from cloud"),
+                    text = xy("Pulihkan", "Restore"),
                     onClick = { confirmRestore = true },
                     primary = false,
                     compact = true,
                     enabled = !busy,
+                    modifier = Modifier.weight(1f),
                 )
             }
             message?.let {
@@ -562,6 +565,20 @@ private fun CommunityAccountCard(
         }
     }
     val isFounder = isFounderAccount(githubUser) || isFounderAccount(name)
+    val podiumMapTop by LeaderboardPodium.topTen.collectAsState()
+    val byIdentityMap by LeaderboardPodium.byIdentity.collectAsState()
+    val normGhKey = normalizedChatAccount(githubUser)
+    val normNameKey = normalizedChatAccount(name)
+    val currentPodiumRank = (if (normGhKey.isNotEmpty()) podiumMapTop[normGhKey] else null)
+        ?: (if (normNameKey.isNotEmpty()) podiumMapTop[normNameKey] else null)
+    val isTopLeaderboardUnlocked = isFounder || (currentPodiumRank != null && currentPodiumRank in 1..10)
+    val animAvatarRev = XyAnimatedAvatarManager.revision
+    val activeAnimAvatarStyle = remember(animAvatarRev, isTopLeaderboardUnlocked) {
+        if (isTopLeaderboardUnlocked) XyAnimatedAvatarManager.getSelectedStyle(context)
+        else XyAnimatedAvatarStyle.NONE
+    }
+    val hasCustomGifAvatar = remember(animAvatarRev) { XyAnimatedAvatarManager.hasCustomGif(context) }
+
     val pickAvatar = androidx.activity.compose.rememberLauncherForActivityResult(
         androidx.activity.result.contract.ActivityResultContracts.GetContent(),
     ) { uri ->
@@ -570,34 +587,58 @@ private fun CommunityAccountCard(
                 avatarBusy = true
                 try {
                     val raw = context.contentResolver.openInputStream(uri)?.use { it.readBytes() }
-                    val src = raw?.let { android.graphics.BitmapFactory.decodeByteArray(it, 0, it.size) }
-                    if (src == null) {
-                        message = xyNow("Gambar tidak terbaca.", "Couldn't read the image.")
-                    } else {
-                        val side = 512
-                        val scale = minOf(1f, side / maxOf(src.width, src.height).toFloat())
-                        val bmp = if (scale < 1f) {
-                            android.graphics.Bitmap.createScaledBitmap(
-                                src, (src.width * scale).toInt().coerceAtLeast(1),
-                                (src.height * scale).toInt().coerceAtLeast(1), true,
+                    val isGifBytes = raw != null && raw.size > 6 &&
+                        raw[0] == 'G'.code.toByte() &&
+                        raw[1] == 'I'.code.toByte() &&
+                        raw[2] == 'F'.code.toByte()
+                    if (isGifBytes && raw != null) {
+                        if (!isTopLeaderboardUnlocked) {
+                            message = xyNow(
+                                "Foto Profil GIF Animasi khusus Top 1–10 Leaderboard.",
+                                "Animated GIF Profile Photo is exclusive to Top 1–10 Leaderboard.",
                             )
-                        } else src
-                        val stream = java.io.ByteArrayOutputStream()
-                        val fmt = if (android.os.Build.VERSION.SDK_INT >= 30) {
-                            android.graphics.Bitmap.CompressFormat.WEBP_LOSSY
+                        } else if (raw.size > 3_500_000) {
+                            message = xyNow("GIF maksimal 3.5 MB.", "GIF max 3.5 MB.")
                         } else {
-                            @Suppress("DEPRECATION")
-                            android.graphics.Bitmap.CompressFormat.WEBP
+                            XyAnimatedAvatarManager.saveCustomGif(context, raw)
+                            runCatching {
+                                android.graphics.BitmapFactory.decodeByteArray(raw, 0, raw.size)?.let { firstFrame ->
+                                    avatarBitmap = firstFrame
+                                }
+                            }
+                            runCatching { api.uploadAvatar(raw, "image/gif") }
+                            message = xyNow("Foto Profil Animasi GIF aktif!", "Animated GIF profile photo active!")
                         }
-                        bmp.compress(fmt, 90, stream)
-                        val bytes = stream.toByteArray()
-                        if (bytes.size > 1_200_000) {
-                            message = xyNow("Foto terlalu besar. Coba gambar lain.", "Photo too large. Try another image.")
+                    } else {
+                        val src = raw?.let { android.graphics.BitmapFactory.decodeByteArray(it, 0, it.size) }
+                        if (src == null) {
+                            message = xyNow("Gambar tidak terbaca.", "Couldn't read the image.")
                         } else {
-                            avatarFile.writeBytes(bytes)
-                            avatarBitmap = bmp
-                            runCatching { api.uploadAvatar(bytes, "image/webp") }
-                            message = xyNow("Foto profil HD berhasil disimpan.", "HD profile photo saved.")
+                            val side = 512
+                            val scale = minOf(1f, side / maxOf(src.width, src.height).toFloat())
+                            val bmp = if (scale < 1f) {
+                                android.graphics.Bitmap.createScaledBitmap(
+                                    src, (src.width * scale).toInt().coerceAtLeast(1),
+                                    (src.height * scale).toInt().coerceAtLeast(1), true,
+                                )
+                            } else src
+                            val stream = java.io.ByteArrayOutputStream()
+                            val fmt = if (android.os.Build.VERSION.SDK_INT >= 30) {
+                                android.graphics.Bitmap.CompressFormat.WEBP_LOSSY
+                            } else {
+                                @Suppress("DEPRECATION")
+                                android.graphics.Bitmap.CompressFormat.WEBP
+                            }
+                            bmp.compress(fmt, 90, stream)
+                            val bytes = stream.toByteArray()
+                            if (bytes.size > 1_200_000) {
+                                message = xyNow("Foto terlalu besar.", "Photo too large.")
+                            } else {
+                                avatarFile.writeBytes(bytes)
+                                avatarBitmap = bmp
+                                runCatching { api.uploadAvatar(bytes, "image/webp") }
+                                message = xyNow("Foto profil tersimpan.", "Profile photo saved.")
+                            }
                         }
                     }
                 } finally {
@@ -650,30 +691,35 @@ private fun CommunityAccountCard(
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(14.dp),
         ) {
-            // Avatar + tombol kamera di sudut kanan bawah avatar
+            // Avatar 1:1 CircleShape + dukungan GIF Animasi & Aura Top Leaderboard
             Box(
                 modifier = Modifier
-                    .size(58.dp)
+                    .size(64.dp)
                     .clickable(enabled = !avatarBusy) { pickAvatar.launch("image/*") },
                 contentAlignment = Alignment.Center,
             ) {
                 Box(
                     Modifier
-                        .size(56.dp)
-                        .clip(RoundedCornerShape(28.dp))
+                        .size(58.dp)
+                        .clip(androidx.compose.foundation.shape.CircleShape)
                         .background(MaterialTheme.colorScheme.onSurface.copy(alpha = 0.10f))
                         .let { mod ->
-                            if (isFounder) mod.border(2.dp, founderBorderBrush(), RoundedCornerShape(28.dp)) else mod
+                            if (isFounder) mod.border(2.dp, founderBorderBrush(), androidx.compose.foundation.shape.CircleShape) else mod
                         }
                         .podiumAvatarFrame(githubUser),
                     contentAlignment = Alignment.Center,
                 ) {
                     val bmp = avatarBitmap
-                    if (bmp != null) {
+                    if (isTopLeaderboardUnlocked && activeAnimAvatarStyle == XyAnimatedAvatarStyle.CUSTOM_GIF && hasCustomGifAvatar) {
+                        CustomAnimatedGifAvatarView(
+                            gifFile = XyAnimatedAvatarManager.customGifFile(context),
+                            modifier = Modifier.size(58.dp).clip(androidx.compose.foundation.shape.CircleShape),
+                        )
+                    } else if (bmp != null) {
                         androidx.compose.foundation.Image(
                             bitmap = bmp.asImageBitmap(),
                             contentDescription = xy("Foto profil", "Profile photo"),
-                            modifier = Modifier.size(56.dp).clip(RoundedCornerShape(28.dp)),
+                            modifier = Modifier.size(58.dp).clip(androidx.compose.foundation.shape.CircleShape),
                             contentScale = androidx.compose.ui.layout.ContentScale.Crop,
                         )
                     } else {
@@ -684,13 +730,19 @@ private fun CommunityAccountCard(
                         )
                     }
                 }
+                if (isTopLeaderboardUnlocked && activeAnimAvatarStyle != XyAnimatedAvatarStyle.NONE) {
+                    AnimatedAvatarEffectOverlay(
+                        style = activeAnimAvatarStyle,
+                        modifier = Modifier.size(64.dp),
+                    )
+                }
                 Box(
                     modifier = Modifier
                         .align(Alignment.BottomEnd)
                         .size(22.dp)
-                        .clip(RoundedCornerShape(11.dp))
+                        .clip(androidx.compose.foundation.shape.CircleShape)
                         .background(MaterialTheme.colorScheme.primary)
-                        .border(1.5.dp, MaterialTheme.colorScheme.surface, RoundedCornerShape(11.dp)),
+                        .border(1.5.dp, MaterialTheme.colorScheme.surface, androidx.compose.foundation.shape.CircleShape),
                     contentAlignment = Alignment.Center,
                 ) {
                     Icon(
@@ -905,45 +957,247 @@ private fun CommunityAccountCard(
             }
         }
 
-        // Status Badge Akun (Menampilkan badge resmi & prestasi otomatis yang dimiliki akun ini)
-        val podiumMap by LeaderboardPodium.topTen.collectAsState()
-        val myPodiumRank = if (!githubUser.isNullOrBlank()) podiumMap[normalizedChatAccount(githubUser)] else null
-        val roleRev = XySpecialRoleRegistry.roleRevision
-        val isTeamActive = remember(name, githubUser, roleRev) { isXyTeamAccount(context, name, githubUser) }
-        val isTesterActive = remember(name, githubUser, roleRev) { isXyTesterAccount(context, name, githubUser) }
-        if (isFounder || isTeamActive || isTesterActive || myPodiumRank != null || !githubUser.isNullOrBlank()) {
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .clip(RoundedCornerShape(12.dp))
-                    .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.28f))
-                    .border(0.8.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.35f), RoundedCornerShape(12.dp))
-                    .padding(11.dp),
-                verticalArrangement = Arrangement.spacedBy(8.dp),
+        // Hadiah Top Leaderboard (Foto Profil Animasi Custom) & Tantangan Otomatis Badge
+        val lbEntrySelf = (if (normGhKey.isNotEmpty()) byIdentityMap[normGhKey] else null)
+            ?: (if (normNameKey.isNotEmpty()) byIdentityMap[normNameKey] else null)
+        val totalSecsCombined = maxOf(activeUsageSecs, lbEntrySelf?.totalSeconds ?: 0L)
+        val totalSessCombined = maxOf(sessionsPlayed, lbEntrySelf?.sessionsCount ?: 0)
+        val badgeChallenges = remember(totalSecsCombined, totalSessCombined, currentPodiumRank, isFounder) {
+            evaluateBadgeChallenges(
+                totalSeconds = totalSecsCombined,
+                sessionsCount = totalSessCombined,
+                podiumRank = currentPodiumRank,
+                isFounder = isFounder,
+            )
+        }
+        var showChallengesExpanded by remember { mutableStateOf(false) }
+
+        // 1. Kartu Hadiah Top 1-10 Leaderboard: Foto Profil Animasi Custom
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .clip(RoundedCornerShape(18.dp))
+                .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f))
+                .border(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.45f), RoundedCornerShape(18.dp))
+                .padding(12.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically,
             ) {
                 Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .size(26.dp)
+                            .clip(androidx.compose.foundation.shape.CircleShape)
+                            .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.14f)),
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        Icon(
+                            imageVector = XyIcons.Star,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.primary,
+                            modifier = Modifier.size(14.dp),
+                        )
+                    }
+                    Column {
+                        Text(
+                            text = xy("Foto Profil Animasi Custom", "Custom Animated Avatar"),
+                            style = MaterialTheme.typography.labelLarge,
+                            fontWeight = FontWeight.ExtraBold,
+                        )
+                        Text(
+                            text = if (isTopLeaderboardUnlocked) {
+                                xy("Hadiah Top Leaderboard Aktif · Pilih Aura / GIF", "Top Leaderboard Reward Active · Select Aura / GIF")
+                            } else {
+                                xy("Hadiah Eksklusif Top 1–10 Leaderboard", "Exclusive Top 1–10 Leaderboard Reward")
+                            },
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                }
+                Box(
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(50))
+                        .background(
+                            if (isTopLeaderboardUnlocked) MaterialTheme.colorScheme.primary
+                            else MaterialTheme.colorScheme.surface,
+                        )
+                        .padding(horizontal = 9.dp, vertical = 3.dp),
                 ) {
                     Text(
-                        text = xy("BADGE KEHORMATAN AKUN", "ACCOUNT HONOR BADGES"),
+                        text = if (isTopLeaderboardUnlocked) {
+                            if (currentPodiumRank != null) "TOP #$currentPodiumRank" else "UNLOCKED"
+                        } else "TOP 1–10",
                         style = MaterialTheme.typography.labelSmall,
                         fontWeight = FontWeight.ExtraBold,
-                        color = MaterialTheme.colorScheme.primary,
+                        color = if (isTopLeaderboardUnlocked) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+            }
+
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .horizontalScroll(rememberScrollState()),
+                horizontalArrangement = Arrangement.spacedBy(6.dp),
+            ) {
+                XyAnimatedAvatarStyle.values().forEach { styleItem ->
+                    val selected = activeAnimAvatarStyle == styleItem
+                    Box(
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(50))
+                            .background(
+                                if (selected) MaterialTheme.colorScheme.primary
+                                else MaterialTheme.colorScheme.surface,
+                            )
+                            .border(
+                                1.dp,
+                                if (selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outlineVariant,
+                                RoundedCornerShape(50),
+                            )
+                            .clickable {
+                                if (!isTopLeaderboardUnlocked) {
+                                    message = xyNow(
+                                        "Masuk Top 1–10 Leaderboard untuk membuka Foto Profil Animasi Custom!",
+                                        "Reach Top 1–10 Leaderboard to unlock Custom Animated Avatar!",
+                                    )
+                                } else if (styleItem == XyAnimatedAvatarStyle.CUSTOM_GIF && !hasCustomGifAvatar) {
+                                    pickAvatar.launch("image/*")
+                                } else {
+                                    XyAnimatedAvatarManager.setSelectedStyle(context, styleItem)
+                                    message = xyNow("Animasi '${styleItem.label}' diterapkan.", "'${styleItem.label}' animation applied.")
+                                }
+                            }
+                            .padding(horizontal = 12.dp, vertical = 6.dp),
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        Text(
+                            text = styleItem.label,
+                            style = MaterialTheme.typography.labelSmall,
+                            fontWeight = FontWeight.Bold,
+                            color = if (selected) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurface,
+                        )
+                    }
+                }
+            }
+            if (isTopLeaderboardUnlocked) {
+                XyPillButton(
+                    text = if (hasCustomGifAvatar) xy("Ganti File GIF / Animasi", "Change GIF / Animated File") else xy("Pasang Foto Profil GIF Animasi", "Upload Animated GIF Avatar"),
+                    icon = XyIcons.Camera,
+                    onClick = { pickAvatar.launch("image/*") },
+                    primary = false,
+                    compact = true,
+                    modifier = Modifier.fillMaxWidth(),
+                )
+            }
+        }
+
+        // 2. Kartu Tantangan Badge Otomatis (Progress Terukur)
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .clip(RoundedCornerShape(18.dp))
+                .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.28f))
+                .border(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.40f), RoundedCornerShape(18.dp))
+                .clickable { showChallengesExpanded = !showChallengesExpanded }
+                .padding(12.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            val unlockedCount = badgeChallenges.count { it.unlocked }
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Column {
+                    Text(
+                        text = xy("Tantangan Badge Otomatis", "Auto Badge Challenges"),
+                        style = MaterialTheme.typography.labelLarge,
+                        fontWeight = FontWeight.ExtraBold,
                     )
                     Text(
-                        text = if (myPodiumRank != null) "Podium #$myPodiumRank" else xy("Terverifikasi", "Verified"),
+                        text = xy("$unlockedCount/${badgeChallenges.size} terbuka otomatis", "$unlockedCount/${badgeChallenges.size} unlocked automatically"),
                         style = MaterialTheme.typography.labelSmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                 }
-                XyUserRoleBadges(
-                    name = name,
-                    githubLogin = githubUser,
-                    compact = false,
-                    durationRank = myPodiumRank,
+                Icon(
+                    imageVector = if (showChallengesExpanded) XyIcons.ChevronUp else XyIcons.ChevronDown,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.size(16.dp),
                 )
+            }
+
+            XyUserRoleBadges(
+                name = name,
+                githubLogin = githubUser,
+                compact = false,
+                durationRank = currentPodiumRank,
+            )
+
+            AnimatedVisibility(visible = showChallengesExpanded) {
+                Column(
+                    modifier = Modifier.fillMaxWidth().padding(top = 4.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    badgeChallenges.forEach { ch ->
+                        Column(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clip(RoundedCornerShape(14.dp))
+                                .background(MaterialTheme.colorScheme.surface)
+                                .padding(horizontal = 10.dp, vertical = 8.dp),
+                            verticalArrangement = Arrangement.spacedBy(4.dp),
+                        ) {
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically,
+                            ) {
+                                Text(
+                                    text = ch.badgeTitle,
+                                    style = MaterialTheme.typography.labelMedium,
+                                    fontWeight = FontWeight.ExtraBold,
+                                    color = MaterialTheme.colorScheme.onSurface,
+                                )
+                                Text(
+                                    text = if (ch.unlocked) xy("TERBUKA", "UNLOCKED") else "${(ch.progressFraction * 100).toInt()}%",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    fontWeight = FontWeight.Bold,
+                                    color = if (ch.unlocked) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
+                                )
+                            }
+                            Text(
+                                text = "${ch.targetLabel}  ·  ${ch.progressLabel}",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .height(5.dp)
+                                    .clip(RoundedCornerShape(50))
+                                    .background(MaterialTheme.colorScheme.surfaceVariant),
+                            ) {
+                                Box(
+                                    modifier = Modifier
+                                        .fillMaxWidth(ch.progressFraction.coerceIn(0f, 1f))
+                                        .height(5.dp)
+                                        .clip(RoundedCornerShape(50))
+                                        .background(MaterialTheme.colorScheme.primary),
+                                )
+                            }
+                        }
+                    }
+                }
             }
         }
 
@@ -1537,7 +1791,7 @@ internal fun XyHeaderAccountActions(
                         .size(8.dp)
                         .clip(androidx.compose.foundation.shape.CircleShape)
                         .background(
-                            if (ghUser != null) androidx.compose.ui.graphics.Color(0xFF10B981)
+                            if (ghUser != null) androidx.compose.ui.graphics.Color(0xFF808080)
                             else MaterialTheme.colorScheme.outline.copy(alpha = 0.5f),
                         ),
                 )

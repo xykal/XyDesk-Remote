@@ -121,6 +121,14 @@ object ChatPushNotifier {
     )
 
     @JvmStatic
+    fun ensureChannel(context: Context) {
+        runCatching {
+            val nm = context.applicationContext.getSystemService(Context.NOTIFICATION_SERVICE) as? NotificationManager
+            if (nm != null) ensureChannel(nm)
+        }
+    }
+
+    @JvmStatic
     fun init(context: Context) {
         val appContext = context.applicationContext
         runCatching {
@@ -133,6 +141,7 @@ object ChatPushNotifier {
             val nick = chatNickname(appContext)
             OneSignal.User.addTag("nickname", nick)
             OneSignal.User.addTag("chat_open", "false")
+            OneSignal.User.pushSubscription.optIn()
             CoroutineScope(Dispatchers.IO).launch {
                 runCatching { OneSignal.Notifications.requestPermission(false) }
             }
@@ -163,6 +172,7 @@ object ChatPushNotifier {
             )
         }
         startBackgroundWatcherIfNeeded(appContext)
+        scheduleBackgroundSyncJob(appContext)
     }
 
     private fun accountKey(context: Context, base: String): String =
@@ -936,6 +946,107 @@ object ChatPushNotifier {
             .apply()
     }
 
+    @JvmStatic
+    fun scheduleBackgroundSyncJob(context: Context, delayMs: Long = 45_000L) {
+        runCatching {
+            val appContext = context.applicationContext
+            val js = appContext.getSystemService(Context.JOB_SCHEDULER_SERVICE) as? android.app.job.JobScheduler ?: return
+            val comp = android.content.ComponentName(appContext, id.xydesk.remote.ui.ChatOutboxJobService::class.java)
+            val jobInfo = android.app.job.JobInfo.Builder(8401, comp)
+                .setRequiredNetworkType(android.app.job.JobInfo.NETWORK_TYPE_ANY)
+                .setMinimumLatency(delayMs.coerceAtLeast(15_000L))
+                .setOverrideDeadline((delayMs + 60_000L).coerceAtLeast(45_000L))
+                .build()
+            js.schedule(jobInfo)
+        }
+    }
+
+    @JvmStatic
+    fun pollOnceFromBackground(appContext: Context, allowSeedIfZero: Boolean = true) {
+        if (isChatOpen) return
+        ensureChannel(appContext)
+        val accountSnapshot = id.xydesk.remote.ui.getVerifiedGitHubLogin(appContext)
+        val seenAtKey = id.xydesk.remote.ui.chatAccountPreferenceKey(KEY_LAST_SEEN_AT, accountSnapshot)
+        val prefs = appContext.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+        var lastSeenAt = prefs.getLong(seenAtKey, 0L)
+        val joinedAt = prefs.getLong("first_joined_at_ms", 0L)
+        if (joinedAt > lastSeenAt) lastSeenAt = joinedAt
+        val historyEndpoint = "$HISTORY_URL?fast=1&limit=20" + (if (joinedAt > 0L) "&joined_at=$joinedAt" else "")
+        val conn = (URL(historyEndpoint).openConnection() as HttpURLConnection).apply {
+            requestMethod = "GET"
+            connectTimeout = 7_500
+            readTimeout = 7_500
+            setRequestProperty("Accept", "application/json")
+        }
+        try {
+            if (conn.responseCode in 200..299) {
+                if (accountSnapshot != id.xydesk.remote.ui.getVerifiedGitHubLogin(appContext)) return
+                val body = BufferedReader(InputStreamReader(conn.inputStream, Charsets.UTF_8)).use { it.readText() }
+                if (accountSnapshot != id.xydesk.remote.ui.getVerifiedGitHubLogin(appContext)) return
+                val json = JSONObject(body)
+                val onlineCount = json.optInt("online_count", 0)
+                if (onlineCount > 0) {
+                    id.xydesk.remote.ui.AppUpdate.updateOnlineCount(onlineCount)
+                }
+                val arr = json.optJSONArray("messages") ?: JSONArray()
+                if (allowSeedIfZero && lastSeenAt == 0L) {
+                    var maxAt = System.currentTimeMillis()
+                    for (i in 0 until arr.length()) {
+                        val m = arr.optJSONObject(i) ?: continue
+                        val id = m.optString("id")
+                        val at = m.optLong("at")
+                        if (id.isNotBlank()) seenIds.add(id)
+                        if (at > maxAt) maxAt = at
+                    }
+                    prefs.edit().putLong(seenAtKey, maxAt).apply()
+                } else {
+                    for (i in 0 until arr.length()) {
+                        val m = arr.optJSONObject(i) ?: continue
+                        val id = m.optString("id")
+                        if (m.optBoolean("deleted", false)) {
+                            retractMessage(appContext, id)
+                            continue
+                        }
+                        val rawName = m.optString("name", "Tamu")
+                        val cc = m.optString("country", "ID").ifBlank { "ID" }
+                        val text = m.optString("text", "")
+                        val translated = m.optString("translated", "")
+                        val targetLang = m.optString("target_lang", "EN").ifBlank { "EN" }
+                        val at = m.optLong("at", 0L)
+                        val displayText = if (translated.isNotBlank() && !translated.equals(text, ignoreCase = true)) {
+                            "$text\n[$targetLang] $translated"
+                        } else {
+                            text
+                        }
+                        val isFounder = m.optBoolean("is_founder", rawName.equals("xykal", ignoreCase = true))
+                        val senderLabel = if (isFounder) {
+                            "$rawName [FOUNDER] ($cc)"
+                        } else {
+                            "$rawName ($cc)"
+                        }
+                        if (at > lastSeenAt) {
+                            lastSeenAt = at
+                            onIncomingChatMessage(
+                                context = appContext,
+                                msgId = id,
+                                senderName = senderLabel,
+                                text = displayText,
+                                at = at,
+                                rawSender = rawName,
+                                githubLogin = m.optString("github_login"),
+                                replyToName = m.optString("reply_to_name"),
+                                isAnnouncement = m.optBoolean("is_announcement", false),
+                                avatarUrl = m.optString("avatar_url"),
+                            )
+                        }
+                    }
+                }
+            }
+        } finally {
+            conn.disconnect()
+        }
+    }
+
     private fun startBackgroundWatcherIfNeeded(appContext: Context) {
         if (watcherStarted) return
         synchronized(this) {
@@ -948,7 +1059,7 @@ object ChatPushNotifier {
                 var tickCount = 0
                 while (true) {
                     try {
-                        Thread.sleep(if (seeded) 60_000L else 2_500L)
+                        Thread.sleep(if (seeded) 35_000L else 2_000L)
                         if (isChatOpen) continue
                         tickCount += 1
                         if (tickCount % 2 == 1) {
@@ -956,91 +1067,8 @@ object ChatPushNotifier {
                                 runCatching { id.xydesk.remote.ui.AppUpdate.fetch(appContext) }
                             }
                         }
-                        val accountSnapshot = id.xydesk.remote.ui.getVerifiedGitHubLogin(appContext)
-                        val seenAtKey = id.xydesk.remote.ui.chatAccountPreferenceKey(KEY_LAST_SEEN_AT, accountSnapshot)
-                        val prefs = appContext.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
-                        var lastSeenAt = prefs.getLong(seenAtKey, 0L)
-                        val joinedAt = prefs.getLong("first_joined_at_ms", 0L)
-                        if (joinedAt > lastSeenAt) lastSeenAt = joinedAt
-                        val historyEndpoint = if (joinedAt > 0L) "$HISTORY_URL?joined_at=$joinedAt" else HISTORY_URL
-                        val conn = (URL(historyEndpoint).openConnection() as HttpURLConnection).apply {
-                            requestMethod = "GET"
-                            connectTimeout = 8_000
-                            readTimeout = 8_000
-                            setRequestProperty("Accept", "application/json")
-                        }
-                        try {
-                        if (conn.responseCode in 200..299) {
-                            if (accountSnapshot != id.xydesk.remote.ui.getVerifiedGitHubLogin(appContext)) {
-                                continue
-                            }
-                            val body = BufferedReader(InputStreamReader(conn.inputStream, Charsets.UTF_8)).use { it.readText() }
-                            if (accountSnapshot != id.xydesk.remote.ui.getVerifiedGitHubLogin(appContext)) continue
-                            val json = JSONObject(body)
-                            val onlineCount = json.optInt("online_count", 0)
-                            if (onlineCount > 0) {
-                                id.xydesk.remote.ui.AppUpdate.updateOnlineCount(onlineCount)
-                            }
-                            val arr = json.optJSONArray("messages") ?: JSONArray()
-                            if (!seeded && lastSeenAt == 0L) {
-                                // Seed awal: tandai pesan lama agar tidak membanjiri notif saat baru instal/buka
-                                var maxAt = System.currentTimeMillis()
-                                for (i in 0 until arr.length()) {
-                                    val m = arr.optJSONObject(i) ?: continue
-                                    val id = m.optString("id")
-                                    val at = m.optLong("at")
-                                    if (id.isNotBlank()) seenIds.add(id)
-                                    if (at > maxAt) maxAt = at
-                                }
-                                prefs.edit().putLong(seenAtKey, maxAt).apply()
-                                seeded = true
-                            } else {
-                                seeded = true
-                                for (i in 0 until arr.length()) {
-                                    val m = arr.optJSONObject(i) ?: continue
-                                    val id = m.optString("id")
-                                    if (m.optBoolean("deleted", false)) {
-                                        retractMessage(appContext, id)
-                                        continue
-                                    }
-                                    val rawName = m.optString("name", "Tamu")
-                                    val cc = m.optString("country", "ID").ifBlank { "ID" }
-                                    val text = m.optString("text", "")
-                                    val translated = m.optString("translated", "")
-                                    val targetLang = m.optString("target_lang", "EN").ifBlank { "EN" }
-                                    val at = m.optLong("at", 0L)
-                                    val displayText = if (translated.isNotBlank() && !translated.equals(text, ignoreCase = true)) {
-                                        "$text\n[$targetLang] $translated"
-                                    } else {
-                                        text
-                                    }
-                                    val isFounder = m.optBoolean("is_founder", rawName.equals("xykal", ignoreCase = true))
-                                    val senderLabel = if (isFounder) {
-                                        "$rawName [FOUNDER] ($cc)"
-                                    } else {
-                                        "$rawName ($cc)"
-                                    }
-                                    if (at > lastSeenAt) {
-                                        lastSeenAt = at
-                                        onIncomingChatMessage(
-                                            context = appContext,
-                                            msgId = id,
-                                            senderName = senderLabel,
-                                            text = displayText,
-                                            at = at,
-                                            rawSender = rawName,
-                                            githubLogin = m.optString("github_login"),
-                                            replyToName = m.optString("reply_to_name"),
-                                            isAnnouncement = m.optBoolean("is_announcement", false),
-                                            avatarUrl = m.optString("avatar_url"),
-                                        )
-                                    }
-                                }
-                            }
-                        }
-                        } finally {
-                            conn.disconnect()
-                        }
+                        pollOnceFromBackground(appContext, allowSeedIfZero = !seeded)
+                        seeded = true
                     } catch (_: Throwable) {
                         // Abaikan gangguan jaringan sementara
                     }
@@ -1053,3 +1081,30 @@ object ChatPushNotifier {
         }
     }
 }
+
+/**
+ * JobService Android yang menjaga sinkronisasi push notifikasi Chat Global & Komunitas
+ * tetap berjalan meskipun aplikasi ditutup / di-swipe dari Recent Apps.
+ */
+@androidx.annotation.Keep
+class ChatBackgroundSyncJobService : android.app.job.JobService() {
+    override fun onStartJob(params: android.app.job.JobParameters?): Boolean {
+        val appCtx = applicationContext
+        Thread {
+            try {
+                ChatPushNotifier.pollOnceFromBackground(appCtx, allowSeedIfZero = true)
+            } catch (_: Throwable) {
+            } finally {
+                ChatPushNotifier.scheduleBackgroundSyncJob(appCtx, delayMs = 45_000L)
+                jobFinished(params, false)
+            }
+        }.start()
+        return true
+    }
+
+    override fun onStopJob(params: android.app.job.JobParameters?): Boolean {
+        ChatPushNotifier.scheduleBackgroundSyncJob(applicationContext, delayMs = 45_000L)
+        return true
+    }
+}
+

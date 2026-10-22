@@ -52,8 +52,8 @@ val XyTextFaint = Color(0xFF808086)
 val XyAccent = Color(0xFFF2F2F4)
 val XyAccentInk = Color(0xFF111114)
 val XyOk = Color(0xFFE2E2E6)
-val XyWarn = Color(0xFFA9A9B0)
-val XyDanger = Color(0xFF84848C)
+val XyWarn = Color(0xFFAAAAAA)
+val XyDanger = Color(0xFF858585)
 
 val DarkScheme = darkColorScheme(
     primary = XyAccent,
@@ -118,14 +118,15 @@ val XyBody = FontFamily(
     Font(R.font.inter, FontWeight.Bold),
 )
 
-/** Radius lebih ramah sentuh; kontrol pill tetap terbaca sebagai kontrol. */
-val XyPill = RoundedCornerShape(18.dp)
+/** Sudut membulat penuh (all-rounded pill) yang konsisten di seluruh aplikasi. */
+val XyPill = RoundedCornerShape(50)
 
 val XyShapes = Shapes(
-    small = RoundedCornerShape(10.dp),
-    medium = RoundedCornerShape(14.dp),
-    large = RoundedCornerShape(20.dp),
-    extraLarge = RoundedCornerShape(26.dp),
+    extraSmall = RoundedCornerShape(14.dp),
+    small = RoundedCornerShape(18.dp),
+    medium = RoundedCornerShape(22.dp),
+    large = RoundedCornerShape(26.dp),
+    extraLarge = RoundedCornerShape(32.dp),
 )
 
 /**

@@ -1983,7 +1983,7 @@ export class CommunityJokes {
         const headingText = replyToName
           ? `${outcome.actor_label} membalas @${replyToName} di Feed`
           : `${outcome.actor_label} mengomentari postingan ${outcome.post_author || "Komunitas"}`;
-        fetch("https://api.onesignal.com/notifications", {
+        const pushPromise = fetch("https://api.onesignal.com/notifications", {
           method: "POST",
           headers: {
             Authorization: `Key ${apiKey}`,
@@ -2007,8 +2007,14 @@ export class CommunityJokes {
             },
             android_group: `xydesk_feed_${replyToName ? "reply" : "comment"}_${outcome.comment?.id || jokeId}`,
             priority: 10,
+            android_visibility: 1,
+            ttl: 259200,
+            enable_frequency_cap: false,
+            small_icon: "ic_stat_xydesk",
           }),
         }).catch(() => {});
+        this.state.waitUntil?.(pushPromise);
+        await Promise.race([pushPromise, new Promise((r) => setTimeout(r, 2500))]);
       }
       return durableObjectJson(outcome, outcome.status === "not_found" ? 404 : outcome.status === "rate_limited" ? 429 : 201, request.method);
     } catch {
@@ -3835,7 +3841,7 @@ export function createKvBackedStorage(env, kvKey) {
     stateObj.backupMerged = false;
     stateObj.map = new Map();
   }
-  const syncTtlMs = env?.XYDESK_DB ? 1500 : 80;
+  const syncTtlMs = env?.XYDESK_DB ? 350 : 80;
 
   async function syncFromKv(force = false) {
     if (!kv) return;
@@ -4612,16 +4618,28 @@ export class GlobalChat {
       const sinceMs = 0;
       const sinceAt = Number(urlObj.searchParams.get("since_at") || 0);
       const limitParam = Number(urlObj.searchParams.get("limit") || 0);
+      const fastMode = urlObj.searchParams.get("fast") === "1";
       const [allMessages, pinnedMsg] = await Promise.all([
         this.loadHistory(sinceMs),
         this.loadPinnedMessage(),
       ]);
-      let messages = allMessages;
+      let messages = Array.isArray(allMessages)
+        ? [...allMessages].sort((a, b) => Number(a?.at || 0) - Number(b?.at || 0))
+        : [];
       if (Number.isFinite(sinceAt) && sinceAt > 0) {
         messages = messages.filter((m) => Number(m?.at || 0) >= sinceAt || Number(m?.edited_at || 0) >= sinceAt);
       }
       if (Number.isFinite(limitParam) && limitParam > 0 && messages.length > limitParam) {
         messages = messages.slice(-limitParam);
+      }
+      if (fastMode && messages.length > 12) {
+        const cutoffIdx = messages.length - 12;
+        messages = messages.map((m, idx) => {
+          if (idx < cutoffIdx && typeof m?.attachment_data === "string" && m.attachment_data.length > 90000) {
+            return { ...m };
+          }
+          return m;
+        });
       }
       const onlineCount = this.getActiveOnlineCount();
       return durableObjectJson(
@@ -4731,7 +4749,7 @@ export class GlobalChat {
       const deltaSec = Math.max(0, Math.min(7200, Number(body?.delta_seconds || 0)));
       const reportedTotal = Math.max(0, Number(body?.total_seconds || 0));
       const prevTotal = Math.max(0, Number(existing.total_seconds || 0));
-      const newTotal = Math.max(prevTotal + deltaSec, reportedTotal, 600);
+      const newTotal = Math.max(prevTotal + deltaSec, reportedTotal, 60);
       const country = normalizeCountryCode(body?.country || existing.country || "ID", "ID");
       entriesMap[keyId] = {
         key: keyId,
@@ -4941,7 +4959,9 @@ export class GlobalChat {
       this.trimHistory().catch(() => {});
       this.state.waitUntil?.(pruneChatSendReceipts(this.state.storage).catch(() => {}));
       this.broadcast(null, JSON.stringify({ type:"msg", ...saved.message }));
-      this.pushChatNotification(saved.message).catch(() => {});
+      const pushTask = this.pushChatNotification(saved.message).catch(() => {});
+      this.state.waitUntil?.(pushTask);
+      await Promise.race([pushTask, new Promise((r) => setTimeout(r, 3200))]);
     }
     return durableObjectJson({ ...saved, status:"ok" }, 200, request.method);
   }
@@ -5249,7 +5269,9 @@ export class GlobalChat {
       this.trimHistory().catch(() => {});
       this.state.waitUntil?.(pruneChatSendReceipts(this.state.storage).catch(() => {}));
       this.broadcast(null, JSON.stringify({ type:"msg", ...saved.message }));
-      this.pushChatNotification(saved.message).catch(() => {});
+      const pushTask = this.pushChatNotification(saved.message).catch(() => {});
+      this.state.waitUntil?.(pushTask);
+      await Promise.race([pushTask, new Promise((r) => setTimeout(r, 3200))]);
     }
     // Private explicit acceptance; socket.send() on the client is NOT an ACK.
     try { session.ws.send(JSON.stringify({ ...saved, type:"send_ack", client_msg_id:data.client_msg_id })); } catch {}
@@ -5324,13 +5346,17 @@ export class GlobalChat {
             target_lang: msg.target_lang || "EN",
             at: msg.at,
           },
-          collapse_id: "xydesk_global_chat_latest",
+          collapse_id: `xydesk_chat_${String(msg.id || Date.now()).slice(0, 32)}`,
           android_group: "xydesk_global_chat_group",
           android_group_message: {
             en: "$[notif_count] new messages in Chat Global · XyDesk",
             id: "$[notif_count] pesan baru di Chat Global · XyDesk",
           },
           priority: 10,
+          android_visibility: 1,
+          ttl: 259200,
+          enable_frequency_cap: false,
+          small_icon: "ic_stat_xydesk",
         }),
       });
     } catch {
@@ -5890,10 +5916,16 @@ export default {
       } else if (!payload || !Array.isArray(payload.messages)) {
         return chatStorageFailure(new Error("Unconfirmed history payload"), request.method);
       }
+      const fastMode = url.searchParams.get("fast") === "1" || url.searchParams.get("light") === "1";
+      const sinceAt = Number(url.searchParams.get("since_at") || 0);
+      const rawLimit = Number(url.searchParams.get("limit") || (fastMode ? 45 : 90));
+      const reqLimit = Number.isFinite(rawLimit) && rawLimit > 0 ? Math.min(120, Math.max(1, Math.floor(rawLimit))) : (fastMode ? 45 : 90);
       const cleaned = [];
       for (const m of payload.messages) {
         const senderLower = String(m?.name || "").trim().toLowerCase();
         if (LEGACY_TEST_NAMES.has(senderLower)) continue;
+        const msgAt = Number(m?.at || 0);
+        if (sinceAt > 0 && msgAt > 0 && msgAt < sinceAt) continue;
         const text = String(m?.text || "");
         const srcLang = typeof m?.source_lang === "string" ? m.source_lang : "";
         const cc = resolveSmartCountry(text, srcLang, m?.country, m?.country);
@@ -5906,13 +5938,16 @@ export default {
           e2ee_v: m?.e2ee_v || "XY-E2EE-GCM-v1",
         });
       }
+      cleaned.sort((a, b) => Number(a?.at || 0) - Number(b?.at || 0));
+      const sliced = cleaned.length > reqLimit ? cleaned.slice(-reqLimit) : cleaned;
       return durableObjectJson(
         {
           status: "ok",
-          messages: cleaned,
+          messages: sliced,
           pinned_message: payload.pinned_message !== undefined ? payload.pinned_message : EDGE_PINNED_MSG,
           online_count: Math.max(edgeOnline, Number(payload.online_count || 1)),
           joined_at: 0,
+          fast: fastMode,
           e2ee_protocol: "XY-E2EE-GCM-v1",
         },
         200,

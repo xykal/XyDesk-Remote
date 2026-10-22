@@ -12,6 +12,19 @@ class ChatOutboxJobService : JobService() {
     private var work: Job? = null
     private var activeParams: JobParameters? = null
     override fun onStartJob(params: JobParameters): Boolean {
+        if (params.jobId == 8401) {
+            val appCtx = applicationContext
+            work = GlobalChatOutbox.scope.launch(kotlinx.coroutines.Dispatchers.IO) {
+                runCatching {
+                    id.xydesk.remote.push.ChatPushNotifier.pollOnceFromBackground(appCtx, allowSeedIfZero = true)
+                }
+                Handler(Looper.getMainLooper()).post {
+                    id.xydesk.remote.push.ChatPushNotifier.scheduleBackgroundSyncJob(appCtx, delayMs = 45_000L)
+                    jobFinished(params, false)
+                }
+            }
+            return true
+        }
         activeParams = params
         work = GlobalChatOutbox.scope.launch {
             val delay = runCatching { GlobalChatOutbox.flush(applicationContext) }.getOrElse { 300_000L }
@@ -25,5 +38,14 @@ class ChatOutboxJobService : JobService() {
         }
         return true
     }
-    override fun onStopJob(params: JobParameters): Boolean { activeParams = null; work?.cancel(); return true }
+    override fun onStopJob(params: JobParameters): Boolean {
+        if (params.jobId == 8401) {
+            id.xydesk.remote.push.ChatPushNotifier.scheduleBackgroundSyncJob(applicationContext, delayMs = 45_000L)
+            work?.cancel()
+            return true
+        }
+        activeParams = null
+        work?.cancel()
+        return true
+    }
 }
