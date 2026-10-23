@@ -197,7 +197,7 @@ fun XyVoiceRoomScreen(
                                             p.sharingScreen -> Color(0xFFEF4444)
                                             p.muted -> Color(0xFF9CA3AF)
                                             p.speaking -> Color(0xFF22C55E)
-                                            else -> Color(0xFFA7A7AF),
+                                            else -> Color(0xFFA7A7AF)
                                         },
                                         fontSize = 10.sp,
                                         fontWeight = FontWeight.Bold,

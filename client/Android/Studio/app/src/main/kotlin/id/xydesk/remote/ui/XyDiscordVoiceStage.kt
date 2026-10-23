@@ -700,7 +700,7 @@ internal fun XyDiscordVoiceStageBar(
                                         p.sharingScreen -> Color(0xFFEF4444)
                                         p.muted -> Color(0xFF9CA3AF)
                                         p.speaking -> Color(0xFF22C55E)
-                                        else -> Color(0xFF9CA3AF),
+                                        else -> Color(0xFF9CA3AF)
                                     },
                                 )
                             }
