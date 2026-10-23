@@ -1480,6 +1480,14 @@ private fun GlobalChatAccountContent(
                     if (docId != null) {
                         if (idx >= 0) messages[idx] = messages[idx].copy(id = docId, deliveryTicks = 2)
                         confirmOwnSend(docId)
+                        // Push notif mode Firebase disiarkan worker via relay
+                        // (Firestore tidak memicu jalur push Durable Object).
+                        val relayMsg = if (idx >= 0) messages[idx] else pending
+                        withContext(Dispatchers.IO) {
+                            runCatching {
+                                FirebaseChatTransport.notifyPushRelay(context.applicationContext, relayMsg)
+                            }
+                        }
                     } else if (idx >= 0) {
                         messages[idx] = messages[idx].copy(deliveryTicks = -1)
                     }

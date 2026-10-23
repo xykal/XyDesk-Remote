@@ -9,10 +9,11 @@ import java.util.Locale
 /**
  * Bahasa aplikasi.
  *
- * Migrasi multi-bahasa bertahap: tabel inti [XyText] diterjemahkan per bahasa
- * (saat ini ID/EN penuh, MS/ES/PT/DE/FR untuk tabel inti), sisanya jatuh ke
- * English lalu Indonesia. String sebaris lewat `xy()` saat ini ID/EN
- * (MS memakai ID yang serumpun) dan dipindahkan ke tabel secara bertahap.
+ * Multi-bahasa 20 bahasa: tabel inti [XyText] diterjemahkan manual per
+ * bahasa (batch `extra` MS/ES/PT/DE/FR dan `extra2` untuk 13 bahasa lain).
+ * String sebaris lewat `xy()`: ID/MS memakai template Indonesia, EN memakai
+ * template English, bahasa lain diterjemahkan runtime oleh [UiTranslator]
+ * (batch via worker + cache permanen; EN tampil selama unduhan berjalan).
  * Pilihan disimpan di prefs dan dipakai seluruh layar lewat [XyText.t].
  */
 enum class XyLang(val code: String, val label: String) {
@@ -90,16 +91,35 @@ object XyText {
         langState.value = value
     }
 
+    /** Versi cache terjemahan runtime; dibaca composable agar render ulang. */
+    private val trState = mutableStateOf(0)
+
+    fun translationsVersion(): Int = trState.value
+
+    fun notifyTranslationsUpdated() {
+        trState.value += 1
+    }
+
+    /** Fallback EN dari tabel, diterjemahkan runtime bila bahasa aktif lain. */
+    fun localizedFallback(key: String, enText: String): String {
+        val lang = current()
+        if (lang == XyLang.ID || lang == XyLang.EN) return enText
+        return UiTranslator.lookup(lang, enText) ?: enText
+    }
+
     /** Aman dibaca dari thread mana pun (non-composable). */
     fun current(): XyLang = langState.value
 
     fun t(key: String): String =
         table[key]?.get(current())
             ?: extra[key]?.get(current())
+            ?: extra2[key]?.get(current())
             ?: table[key]?.get(XyLang.EN)
             ?: extra[key]?.get(XyLang.EN)
+            ?: extra2[key]?.get(XyLang.EN)
             ?: table[key]?.get(XyLang.ID)
             ?: extra[key]?.get(XyLang.ID)
+            ?: extra2[key]?.get(XyLang.ID)
             ?: key
 
     fun t(key: String, vararg args: Any?): String {
@@ -303,6 +323,115 @@ object XyText {
         "keys.addTitle" to mapOf(XyLang.MS to "TAMBAH BUTANG", XyLang.ES to "AGREGAR BOTÓN", XyLang.PT to "ADICIONAR BOTÃO", XyLang.DE to "TASTE HINZUFÜGEN", XyLang.FR to "AJOUTER UN BOUTON"),
         "input.switchHint" to mapOf(XyLang.MS to "Beralih ke sentuhan langsung", XyLang.ES to "Cambiar a toque directo", XyLang.PT to "Mudar para toque direto", XyLang.DE to "Zu direkter Berührung wechseln", XyLang.FR to "Passer au toucher direct"),
     )
+
+    /** Batch 2 tabel inti: RU/AR/HI/JA/KO/ZH/VI/TH/TR/IT/NL/PL/UK. */
+    private val extra2: Map<String, Map<XyLang, String>> = mapOf(
+        "app.tagline" to mapOf(
+            XyLang.RU to "Android RDP-клиент для Windows и Windows Server.",
+            XyLang.AR to "عميل RDP لنظام Android لأجهزة Windows وWindows Server.",
+            XyLang.HI to "Windows और Windows Server के लिए Android RDP क्लाइंट।",
+            XyLang.JA to "WindowsおよびWindows Server向けAndroid RDPクライアント。",
+            XyLang.KO to "Windows 및 Windows Server용 Android RDP 클라이언트.",
+            XyLang.ZH to "适用于 Windows 和 Windows Server 的 Android RDP 客户端。",
+            XyLang.VI to "Ứng dụng RDP Android cho Windows và Windows Server.",
+            XyLang.TH to "ไคลเอนต์ RDP บน Android สำหรับ Windows และ Windows Server",
+            XyLang.TR to "Windows ve Windows Server için Android RDP istemcisi.",
+            XyLang.IT to "Client RDP Android per Windows e Windows Server.",
+            XyLang.NL to "Android RDP-client voor Windows en Windows Server.",
+            XyLang.PL to "Klient RDP na Androida dla Windows i Windows Server.",
+            XyLang.UK to "Android RDP-клієнт для Windows і Windows Server.",
+        ),
+        "home.devices" to mapOf(XyLang.RU to "Устройства", XyLang.AR to "الأجهزة", XyLang.HI to "डिवाइस", XyLang.JA to "デバイス", XyLang.KO to "기기", XyLang.ZH to "设备", XyLang.VI to "Thiết bị", XyLang.TH to "อุปกรณ์", XyLang.TR to "Cihazlar", XyLang.IT to "Dispositivi", XyLang.NL to "Apparaten", XyLang.PL to "Urządzenia", XyLang.UK to "Пристрої"),
+        "home.display" to mapOf(XyLang.RU to "Экран", XyLang.AR to "العرض", XyLang.HI to "डिस्प्ले", XyLang.JA to "表示", XyLang.KO to "디스플레이", XyLang.ZH to "显示", XyLang.VI to "Hiển thị", XyLang.TH to "จอแสดงผล", XyLang.TR to "Ekran", XyLang.IT to "Schermo", XyLang.NL to "Weergave", XyLang.PL to "Ekran", XyLang.UK to "Екран"),
+        "home.keyboard" to mapOf(XyLang.RU to "Клавиатура и HUD", XyLang.AR to "لوحة المفاتيح وHUD", XyLang.HI to "कीबोर्ड और HUD", XyLang.JA to "キーボードとHUD", XyLang.KO to "키보드 및 HUD", XyLang.ZH to "键盘与 HUD", XyLang.VI to "Bàn phím & HUD", XyLang.TH to "แป้นพิมพ์และ HUD", XyLang.TR to "Klavye ve HUD", XyLang.IT to "Tastiera e HUD", XyLang.NL to "Toetsenbord en HUD", XyLang.PL to "Klawiatura i HUD", XyLang.UK to "Клавіатура і HUD"),
+        "home.transport" to mapOf(XyLang.RU to "Транспорт по умолчанию", XyLang.AR to "النقل الافتراضي", XyLang.HI to "डिफ़ॉल्ट ट्रांसपोर्ट", XyLang.JA to "デフォルトの転送方式", XyLang.KO to "기본 전송 방식", XyLang.ZH to "默认传输方式", XyLang.VI to "Phương thức truyền mặc định", XyLang.TH to "การส่งข้อมูลเริ่มต้น", XyLang.TR to "Varsayılan aktarım", XyLang.IT to "Trasporto predefinito", XyLang.NL to "Standaardtransport", XyLang.PL to "Transport domyślny", XyLang.UK to "Транспорт за замовчуванням"),
+        "home.security" to mapOf(XyLang.RU to "Безопасность", XyLang.AR to "الأمان", XyLang.HI to "सुरक्षा", XyLang.JA to "セキュリティ", XyLang.KO to "보안", XyLang.ZH to "安全", XyLang.VI to "Bảo mật", XyLang.TH to "ความปลอดภัย", XyLang.TR to "Güvenlik", XyLang.IT to "Sicurezza", XyLang.NL to "Beveiliging", XyLang.PL to "Bezpieczeństwo", XyLang.UK to "Безпека"),
+        "home.about" to mapOf(XyLang.RU to "О программе", XyLang.AR to "حول", XyLang.HI to "परिचय", XyLang.JA to "情報", XyLang.KO to "정보", XyLang.ZH to "关于", XyLang.VI to "Giới thiệu", XyLang.TH to "เกี่ยวกับ", XyLang.TR to "Hakkında", XyLang.IT to "Informazioni", XyLang.NL to "Over", XyLang.PL to "Informacje", XyLang.UK to "Про програму"),
+        "home.language" to mapOf(XyLang.RU to "Язык", XyLang.AR to "اللغة", XyLang.HI to "भाषा", XyLang.JA to "言語", XyLang.KO to "언어", XyLang.ZH to "语言", XyLang.VI to "Ngôn ngữ", XyLang.TH to "ภาษา", XyLang.TR to "Dil", XyLang.IT to "Lingua", XyLang.NL to "Taal", XyLang.PL to "Język", XyLang.UK to "Мова"),
+        "home.language.sub" to mapOf(
+            XyLang.RU to "Язык приложения; применяется сразу",
+            XyLang.AR to "لغة التطبيق؛ تُطبّق فورًا",
+            XyLang.HI to "ऐप की भाषा; तुरंत लागू होती है",
+            XyLang.JA to "アプリの言語（即時反映）",
+            XyLang.KO to "앱 언어; 즉시 적용됩니다",
+            XyLang.ZH to "应用语言；立即生效",
+            XyLang.VI to "Ngôn ngữ ứng dụng; áp dụng ngay",
+            XyLang.TH to "ภาษาของแอป มีผลทันที",
+            XyLang.TR to "Uygulama dili; hemen uygulanır",
+            XyLang.IT to "Lingua dell'app; effetto immediato",
+            XyLang.NL to "App-taal; direct van kracht",
+            XyLang.PL to "Język aplikacji; działa od razu",
+            XyLang.UK to "Мова застосунку; застосовується одразу",
+        ),
+        "home.new" to mapOf(XyLang.RU to "Новое устройство", XyLang.AR to "جهاز جديد", XyLang.HI to "नया डिवाइस", XyLang.JA to "新しいデバイス", XyLang.KO to "새 기기", XyLang.ZH to "新设备", XyLang.VI to "Thiết bị mới", XyLang.TH to "อุปกรณ์ใหม่", XyLang.TR to "Yeni cihaz", XyLang.IT to "Nuovo dispositivo", XyLang.NL to "Nieuw apparaat", XyLang.PL to "Nowe urządzenie", XyLang.UK to "Новий пристрій"),
+        "home.connect" to mapOf(XyLang.RU to "Подключить", XyLang.AR to "اتصال", XyLang.HI to "कनेक्ट करें", XyLang.JA to "接続", XyLang.KO to "연결", XyLang.ZH to "连接", XyLang.VI to "Kết nối", XyLang.TH to "เชื่อมต่อ", XyLang.TR to "Bağlan", XyLang.IT to "Connetti", XyLang.NL to "Verbinden", XyLang.PL to "Połącz", XyLang.UK to "Підключити"),
+        "home.edit" to mapOf(XyLang.RU to "Изменить", XyLang.AR to "تعديل", XyLang.HI to "बदलें", XyLang.JA to "編集", XyLang.KO to "편집", XyLang.ZH to "编辑", XyLang.VI to "Sửa", XyLang.TH to "แก้ไข", XyLang.TR to "Düzenle", XyLang.IT to "Modifica", XyLang.NL to "Bewerken", XyLang.PL to "Edytuj", XyLang.UK to "Змінити"),
+        "home.delete" to mapOf(XyLang.RU to "Удалить", XyLang.AR to "حذف", XyLang.HI to "हटाएँ", XyLang.JA to "削除", XyLang.KO to "삭제", XyLang.ZH to "删除", XyLang.VI to "Xóa", XyLang.TH to "ลบ", XyLang.TR to "Sil", XyLang.IT to "Elimina", XyLang.NL to "Verwijderen", XyLang.PL to "Usuń", XyLang.UK to "Видалити"),
+        "home.empty.title" to mapOf(XyLang.RU to "Устройств пока нет", XyLang.AR to "لا أجهزة بعد", XyLang.HI to "अभी कोई डिवाइस नहीं", XyLang.JA to "デバイスはまだありません", XyLang.KO to "아직 기기가 없습니다", XyLang.ZH to "尚无设备", XyLang.VI to "Chưa có thiết bị", XyLang.TH to "ยังไม่มีอุปกรณ์", XyLang.TR to "Henüz cihaz yok", XyLang.IT to "Ancora nessun dispositivo", XyLang.NL to "Nog geen apparaten", XyLang.PL to "Brak urządzeń", XyLang.UK to "Пристроїв ще немає"),
+        "home.empty.body" to mapOf(
+            XyLang.RU to "Добавьте адрес Windows или Windows Server, чтобы начать.",
+            XyLang.AR to "أضف عنوان Windows أو Windows Server للبدء.",
+            XyLang.HI to "शुरू करने के लिए Windows या Windows Server पता जोड़ें।",
+            XyLang.JA to "WindowsまたはWindows Serverのアドレスを追加して開始します。",
+            XyLang.KO to "시작하려면 Windows 또는 Windows Server 주소를 추가하세요.",
+            XyLang.ZH to "添加 Windows 或 Windows Server 地址即可开始。",
+            XyLang.VI to "Thêm địa chỉ Windows hoặc Windows Server để bắt đầu.",
+            XyLang.TH to "เพิ่มที่อยู่ Windows หรือ Windows Server เพื่อเริ่มต้น",
+            XyLang.TR to "Başlamak için bir Windows veya Windows Server adresi ekleyin.",
+            XyLang.IT to "Aggiungi un indirizzo Windows o Windows Server per iniziare.",
+            XyLang.NL to "Voeg een Windows- of Windows Server-adres toe om te beginnen.",
+            XyLang.PL to "Dodaj adres Windows lub Windows Server, aby rozpocząć.",
+            XyLang.UK to "Додайте адресу Windows або Windows Server, щоб почати.",
+        ),
+        "about.version" to mapOf(XyLang.RU to "Версия приложения", XyLang.AR to "إصدار التطبيق", XyLang.HI to "ऐप संस्करण", XyLang.JA to "アプリのバージョン", XyLang.KO to "앱 버전", XyLang.ZH to "应用版本", XyLang.VI to "Phiên bản ứng dụng", XyLang.TH to "เวอร์ชันแอป", XyLang.TR to "Uygulama sürümü", XyLang.IT to "Versione app", XyLang.NL to "App-versie", XyLang.PL to "Wersja aplikacji", XyLang.UK to "Версія застосунку"),
+        "about.engine" to mapOf(XyLang.RU to "Движок RDP", XyLang.AR to "محرك RDP", XyLang.HI to "RDP इंजन", XyLang.JA to "RDPエンジン", XyLang.KO to "RDP 엔진", XyLang.ZH to "RDP 引擎", XyLang.VI to "Công cụ RDP", XyLang.TH to "เครื่องมือ RDP", XyLang.TR to "RDP motoru", XyLang.IT to "Motore RDP", XyLang.NL to "RDP-engine", XyLang.PL to "Silnik RDP", XyLang.UK to "Рушій RDP"),
+        "about.developer" to mapOf(XyLang.RU to "Разработчик", XyLang.AR to "المطوّر", XyLang.HI to "डेवलपर", XyLang.JA to "開発者", XyLang.KO to "개발자", XyLang.ZH to "开发者", XyLang.VI to "Nhà phát triển", XyLang.TH to "ผู้พัฒนา", XyLang.TR to "Geliştirici", XyLang.IT to "Sviluppatore", XyLang.NL to "Ontwikkelaar", XyLang.PL to "Deweloper", XyLang.UK to "Розробник"),
+        "about.license" to mapOf(XyLang.RU to "Посмотреть лицензию", XyLang.AR to "عرض الترخيص", XyLang.HI to "लाइसेंस देखें", XyLang.JA to "ライセンスを表示", XyLang.KO to "라이선스 보기", XyLang.ZH to "查看许可证", XyLang.VI to "Xem giấy phép", XyLang.TH to "ดูใบอนุญาต", XyLang.TR to "Lisansı görüntüle", XyLang.IT to "Vedi licenza", XyLang.NL to "Licentie bekijken", XyLang.PL to "Zobacz licencję", XyLang.UK to "Переглянути ліцензію"),
+        "about.license.title" to mapOf(XyLang.RU to "Лицензия", XyLang.AR to "الترخيص", XyLang.HI to "लाइसेंस", XyLang.JA to "ライセンス", XyLang.KO to "라이선스", XyLang.ZH to "许可证", XyLang.VI to "Giấy phép", XyLang.TH to "ใบอนุญาต", XyLang.TR to "Lisans", XyLang.IT to "Licenza", XyLang.NL to "Licentie", XyLang.PL to "Licencja", XyLang.UK to "Ліцензія"),
+        "about.support.title" to mapOf(XyLang.RU to "Поддержать меня", XyLang.AR to "ادعمني", XyLang.HI to "मेरा समर्थन करें", XyLang.JA to "支援する", XyLang.KO to "후원하기", XyLang.ZH to "支持我", XyLang.VI to "Ủng hộ tôi", XyLang.TH to "สนับสนุนฉัน", XyLang.TR to "Beni destekle", XyLang.IT to "Supportami", XyLang.NL to "Steun mij", XyLang.PL to "Wesprzyj mnie", XyLang.UK to "Підтримати мене"),
+        "about.support.saweria" to mapOf(XyLang.RU to "Поддержать через Saweria", XyLang.AR to "الدعم عبر Saweria", XyLang.HI to "Saweria से समर्थन करें", XyLang.JA to "Saweriaで支援", XyLang.KO to "Saweria로 후원", XyLang.ZH to "通过 Saweria 支持", XyLang.VI to "Ủng hộ qua Saweria", XyLang.TH to "สนับสนุนผ่าน Saweria", XyLang.TR to "Saweria ile destekle", XyLang.IT to "Supporta via Saweria", XyLang.NL to "Steun via Saweria", XyLang.PL to "Wesprzyj przez Saweria", XyLang.UK to "Підтримати через Saweria"),
+        "about.support.github" to mapOf(XyLang.RU to "Спонсоры GitHub", XyLang.AR to "رعاة GitHub", XyLang.HI to "GitHub प्रायोजक", XyLang.JA to "GitHubスポンサー", XyLang.KO to "GitHub 스폰서", XyLang.ZH to "GitHub 赞助者", XyLang.VI to "Nhà tài trợ GitHub", XyLang.TH to "ผู้สนับสนุน GitHub", XyLang.TR to "GitHub Sponsorları", XyLang.IT to "Sponsor GitHub", XyLang.NL to "GitHub-sponsors", XyLang.PL to "Sponsorzy GitHub", XyLang.UK to "Спонсори GitHub"),
+        "about.support.star" to mapOf(XyLang.RU to "Поставить звезду на GitHub", XyLang.AR to "ضع نجمة على GitHub", XyLang.HI to "GitHub पर स्टार दें", XyLang.JA to "GitHubでスターを付ける", XyLang.KO to "GitHub에 스타 주기", XyLang.ZH to "在 GitHub 上点星", XyLang.VI to "Gắn sao trên GitHub", XyLang.TH to "ให้ดาวบน GitHub", XyLang.TR to "GitHub'da yıldız ver", XyLang.IT to "Metti una stella su GitHub", XyLang.NL to "Geef een ster op GitHub", XyLang.PL to "Daj gwiazdkę na GitHub", XyLang.UK to "Поставити зірку на GitHub"),
+        "about.support.starred" to mapOf(XyLang.RU to "Спасибо", XyLang.AR to "شكرًا", XyLang.HI to "धन्यवाद", XyLang.JA to "ありがとう", XyLang.KO to "감사합니다", XyLang.ZH to "谢谢", XyLang.VI to "Cảm ơn", XyLang.TH to "ขอบคุณ", XyLang.TR to "Teşekkürler", XyLang.IT to "Grazie", XyLang.NL to "Bedankt", XyLang.PL to "Dziękuję", XyLang.UK to "Дякую"),
+        "about.thanks" to mapOf(
+            XyLang.RU to "Спасибо, что пользуетесь XyDesk Remote.",
+            XyLang.AR to "شكرًا لاستخدامك XyDesk Remote.",
+            XyLang.HI to "XyDesk Remote उपयोग करने के लिए धन्यवाद।",
+            XyLang.JA to "XyDesk Remoteをご利用いただきありがとうございます。",
+            XyLang.KO to "XyDesk Remote를 사용해 주셔서 감사합니다.",
+            XyLang.ZH to "感谢使用 XyDesk Remote。",
+            XyLang.VI to "Cảm ơn bạn đã dùng XyDesk Remote.",
+            XyLang.TH to "ขอบคุณที่ใช้ XyDesk Remote",
+            XyLang.TR to "XyDesk Remote kullandığınız için teşekkürler.",
+            XyLang.IT to "Grazie per aver usato XyDesk Remote.",
+            XyLang.NL to "Bedankt voor het gebruik van XyDesk Remote.",
+            XyLang.PL to "Dziękujemy za korzystanie z XyDesk Remote.",
+            XyLang.UK to "Дякуємо за використання XyDesk Remote.",
+        ),
+        "panel.input" to mapOf(XyLang.RU to "Ввод", XyLang.AR to "الإدخال", XyLang.HI to "इनपुट", XyLang.JA to "入力", XyLang.KO to "입력", XyLang.ZH to "输入", XyLang.VI to "Nhập liệu", XyLang.TH to "การป้อนข้อมูล", XyLang.TR to "Giriş", XyLang.IT to "Input", XyLang.NL to "Invoer", XyLang.PL to "Wejście", XyLang.UK to "Введення"),
+        "panel.pointer" to mapOf(XyLang.RU to "Указатель", XyLang.AR to "المؤشر", XyLang.HI to "पॉइंटर", XyLang.JA to "ポインタ", XyLang.KO to "포인터", XyLang.ZH to "指针", XyLang.VI to "Con trỏ", XyLang.TH to "ตัวชี้", XyLang.TR to "İşaretçi", XyLang.IT to "Puntatore", XyLang.NL to "Aanwijzer", XyLang.PL to "Wskaźnik", XyLang.UK to "Вказівник"),
+        "panel.buttons" to mapOf(XyLang.RU to "Кнопки", XyLang.AR to "الأزرار", XyLang.HI to "बटन", XyLang.JA to "ボタン", XyLang.KO to "버튼", XyLang.ZH to "按钮", XyLang.VI to "Nút bấm", XyLang.TH to "ปุ่ม", XyLang.TR to "Düğmeler", XyLang.IT to "Pulsanti", XyLang.NL to "Knoppen", XyLang.PL to "Przyciski", XyLang.UK to "Кнопки"),
+        "panel.keyboard" to mapOf(XyLang.RU to "Клавиатура", XyLang.AR to "لوحة المفاتيح", XyLang.HI to "कीबोर्ड", XyLang.JA to "キーボード", XyLang.KO to "키보드", XyLang.ZH to "键盘", XyLang.VI to "Bàn phím", XyLang.TH to "แป้นพิมพ์", XyLang.TR to "Klavye", XyLang.IT to "Tastiera", XyLang.NL to "Toetsenbord", XyLang.PL to "Klawiatura", XyLang.UK to "Клавіатура"),
+        "panel.screen" to mapOf(XyLang.RU to "Экран", XyLang.AR to "الشاشة", XyLang.HI to "स्क्रीन", XyLang.JA to "画面", XyLang.KO to "화면", XyLang.ZH to "屏幕", XyLang.VI to "Màn hình", XyLang.TH to "หน้าจอ", XyLang.TR to "Ekran", XyLang.IT to "Schermo", XyLang.NL to "Scherm", XyLang.PL to "Ekran", XyLang.UK to "Екран"),
+        "panel.session" to mapOf(XyLang.RU to "Сессия", XyLang.AR to "الجلسة", XyLang.HI to "सत्र", XyLang.JA to "セッション", XyLang.KO to "세션", XyLang.ZH to "会话", XyLang.VI to "Phiên", XyLang.TH to "เซสชัน", XyLang.TR to "Oturum", XyLang.IT to "Sessione", XyLang.NL to "Sessie", XyLang.PL to "Sesja", XyLang.UK to "Сеанс"),
+        "panel.tips" to mapOf(XyLang.RU to "Советы", XyLang.AR to "نصائح", XyLang.HI to "सुझाव", XyLang.JA to "ヒント", XyLang.KO to "팁", XyLang.ZH to "提示", XyLang.VI to "Mẹo", XyLang.TH to "เคล็ดลับ", XyLang.TR to "İpuçları", XyLang.IT to "Suggerimenti", XyLang.NL to "Tips", XyLang.PL to "Wskazówki", XyLang.UK to "Поради"),
+        "panel.close" to mapOf(XyLang.RU to "Закрыть", XyLang.AR to "إغلاق", XyLang.HI to "बंद करें", XyLang.JA to "閉じる", XyLang.KO to "닫기", XyLang.ZH to "关闭", XyLang.VI to "Đóng", XyLang.TH to "ปิด", XyLang.TR to "Kapat", XyLang.IT to "Chiudi", XyLang.NL to "Sluiten", XyLang.PL to "Zamknij", XyLang.UK to "Закрити"),
+        "panel.addKey" to mapOf(XyLang.RU to "Добавить кнопку", XyLang.AR to "إضافة زر", XyLang.HI to "बटन जोड़ें", XyLang.JA to "ボタンを追加", XyLang.KO to "버튼 추가", XyLang.ZH to "添加按钮", XyLang.VI to "Thêm nút", XyLang.TH to "เพิ่มปุ่ม", XyLang.TR to "Düğme ekle", XyLang.IT to "Aggiungi pulsante", XyLang.NL to "Knop toevoegen", XyLang.PL to "Dodaj przycisk", XyLang.UK to "Додати кнопку"),
+        "panel.editDone" to mapOf(XyLang.RU to "Готово", XyLang.AR to "تم التحرير", XyLang.HI to "संपादन पूर्ण", XyLang.JA to "編集を完了", XyLang.KO to "편집 완료", XyLang.ZH to "完成编辑", XyLang.VI to "Sửa xong", XyLang.TH to "แก้ไขเสร็จ", XyLang.TR to "Düzenleme bitti", XyLang.IT to "Modifica completata", XyLang.NL to "Klaar met bewerken", XyLang.PL to "Zakończ edycję", XyLang.UK to "Готово"),
+        "panel.mapMode" to mapOf(XyLang.RU to "Изменить раскладку", XyLang.AR to "تحرير التخطيط", XyLang.HI to "लेआउट बदलें", XyLang.JA to "レイアウトを編集", XyLang.KO to "레이아웃 편집", XyLang.ZH to "编辑布局", XyLang.VI to "Sửa bố cục", XyLang.TH to "แก้ไขเลย์เอาต์", XyLang.TR to "Düzeni düzenle", XyLang.IT to "Modifica layout", XyLang.NL to "Lay-out bewerken", XyLang.PL to "Edytuj układ", XyLang.UK to "Змінити розташування"),
+        "panel.resetKeys" to mapOf(XyLang.RU to "Сбросить кнопки", XyLang.AR to "استعادة الأزرار الافتراضية", XyLang.HI to "डिफ़ॉल्ट बटन बहाल करें", XyLang.JA to "デフォルトのボタンに戻す", XyLang.KO to "기본 버튼 복원", XyLang.ZH to "恢复默认按钮", XyLang.VI to "Khôi phục nút mặc định", XyLang.TH to "คืนค่าปุ่มเริ่มต้น", XyLang.TR to "Varsayılan düğmeleri geri yükle", XyLang.IT to "Ripristina pulsanti predefiniti", XyLang.NL to "Standaardknoppen herstellen", XyLang.PL to "Przywróć przyciski domyślne", XyLang.UK to "Скинути кнопки"),
+        "panel.disconnect" to mapOf(XyLang.RU to "Отключить сессию", XyLang.AR to "قطع الجلسة", XyLang.HI to "सत्र डिस्कनेक्ट करें", XyLang.JA to "セッションを切断", XyLang.KO to "세션 연결 끊기", XyLang.ZH to "断开会话", XyLang.VI to "Ngắt phiên", XyLang.TH to "ตัดการเชื่อมต่อเซสชัน", XyLang.TR to "Oturumu kes", XyLang.IT to "Disconnetti sessione", XyLang.NL to "Sessie verbreken", XyLang.PL to "Rozłącz sesję", XyLang.UK to "Відключити сеанс"),
+        "panel.screenshot" to mapOf(XyLang.RU to "Сделать скриншот", XyLang.AR to "التقاط لقطة شاشة", XyLang.HI to "स्क्रीनशॉट लें", XyLang.JA to "スクリーンショットを撮る", XyLang.KO to "스크린샷 찍기", XyLang.ZH to "截图", XyLang.VI to "Chụp màn hình", XyLang.TH to "ถ่ายภาพหน้าจอ", XyLang.TR to "Ekran görüntüsü al", XyLang.IT to "Cattura schermata", XyLang.NL to "Schermafbeelding maken", XyLang.PL to "Zrób zrzut ekranu", XyLang.UK to "Зробити знімок екрана"),
+        "pointer.show" to mapOf(XyLang.RU to "Показать указатель", XyLang.AR to "إظهار المؤشر", XyLang.HI to "पॉइंटर दिखाएँ", XyLang.JA to "ポインタを表示", XyLang.KO to "포인터 표시", XyLang.ZH to "显示指针", XyLang.VI to "Hiện con trỏ", XyLang.TH to "แสดงตัวชี้", XyLang.TR to "İşaretçiyi göster", XyLang.IT to "Mostra puntatore", XyLang.NL to "Aanwijzer tonen", XyLang.PL to "Pokaż wskaźnik", XyLang.UK to "Показати вказівник"),
+        "keys.hold" to mapOf(XyLang.RU to "Удерживать", XyLang.AR to "استمرار الضغط", XyLang.HI to "दबाकर रखें", XyLang.JA to "長押し", XyLang.KO to "길게 누르기", XyLang.ZH to "按住", XyLang.VI to "Giữ", XyLang.TH to "กดค้าง", XyLang.TR to "Basılı tut", XyLang.IT to "Tieni premuto", XyLang.NL to "Ingedrukt houden", XyLang.PL to "Przytrzymaj", XyLang.UK to "Утримувати"),
+        "keys.tap" to mapOf(XyLang.RU to "Одно нажатие", XyLang.AR to "نقرة واحدة", XyLang.HI to "एक बार टैप", XyLang.JA to "1回タップ", XyLang.KO to "한 번 탭", XyLang.ZH to "轻点一次", XyLang.VI to "Chạm một lần", XyLang.TH to "แตะครั้งเดียว", XyLang.TR to "Tek dokunuş", XyLang.IT to "Tocco singolo", XyLang.NL to "Eén tik", XyLang.PL to "Jedno dotknięcie", XyLang.UK to "Один дотик"),
+        "keys.toggle" to mapOf(XyLang.RU to "Переключатель", XyLang.AR to "تبديل", XyLang.HI to "टॉगल", XyLang.JA to "切り替え", XyLang.KO to "전환", XyLang.ZH to "切换", XyLang.VI to "Bật/tắt", XyLang.TH to "สลับ", XyLang.TR to "Aç/kapat", XyLang.IT to "Interruttore", XyLang.NL to "Schakelaar", XyLang.PL to "Przełącznik", XyLang.UK to "Перемикач"),
+        "keys.inToolbar" to mapOf(XyLang.RU to "На панели инструментов", XyLang.AR to "في شريط الأدوات", XyLang.HI to "टूलबार में", XyLang.JA to "ツールバー内", XyLang.KO to "도구 모음에", XyLang.ZH to "在工具栏中", XyLang.VI to "Trong thanh công cụ", XyLang.TH to "ในแถบเครื่องมือ", XyLang.TR to "Araç çubuğunda", XyLang.IT to "Nella barra degli strumenti", XyLang.NL to "In werkbalk", XyLang.PL to "Na pasku narzędzi", XyLang.UK to "На панелі інструментів"),
+        "keys.onlyScreen" to mapOf(XyLang.RU to "Только на экране", XyLang.AR to "على الشاشة فقط", XyLang.HI to "केवल स्क्रीन पर", XyLang.JA to "画面のみ", XyLang.KO to "화면에만", XyLang.ZH to "仅屏幕显示", XyLang.VI to "Chỉ trên màn hình", XyLang.TH to "เฉพาะหน้าจอ", XyLang.TR to "Yalnızca ekran", XyLang.IT to "Solo schermo", XyLang.NL to "Alleen scherm", XyLang.PL to "Tylko ekran", XyLang.UK to "Тільки екран"),
+        "keys.editTitle" to mapOf(XyLang.RU to "ИЗМЕНИТЬ КНОПКУ", XyLang.AR to "تعديل الزر", XyLang.HI to "बटन बदलें", XyLang.JA to "ボタンを編集", XyLang.KO to "버튼 편집", XyLang.ZH to "编辑按钮", XyLang.VI to "SỬA NÚT", XyLang.TH to "แก้ไขปุ่ม", XyLang.TR to "DÜĞMEYİ DÜZENLE", XyLang.IT to "MODIFICA PULSANTE", XyLang.NL to "KNOP BEWERKEN", XyLang.PL to "EDYTUJ PRZYCISK", XyLang.UK to "ЗМІНИТИ КНОПКУ"),
+        "keys.addTitle" to mapOf(XyLang.RU to "ДОБАВИТЬ КНОПКУ", XyLang.AR to "إضافة زر", XyLang.HI to "बटन जोड़ें", XyLang.JA to "ボタンを追加", XyLang.KO to "버튼 추가", XyLang.ZH to "添加按钮", XyLang.VI to "THÊM NÚT", XyLang.TH to "เพิ่มปุ่ม", XyLang.TR to "DÜĞME EKLE", XyLang.IT to "AGGIUNGI PULSANTE", XyLang.NL to "KNOP TOEVOEGEN", XyLang.PL to "DODAJ PRZYCISK", XyLang.UK to "ДОДАТИ КНОПКУ"),
+        "input.switchHint" to mapOf(XyLang.RU to "Перейти к прямому касанию", XyLang.AR to "التبديل إلى اللمس المباشر", XyLang.HI to "सीधे स्पर्श पर जाएँ", XyLang.JA to "ダイレクトタッチに切り替え", XyLang.KO to "직접 터치로 전환", XyLang.ZH to "切换到直接触控", XyLang.VI to "Chuyển sang chạm trực tiếp", XyLang.TH to "สลับไปสัมผัสโดยตรง", XyLang.TR to "Doğrudan dokunmaya geç", XyLang.IT to "Passa al tocco diretto", XyLang.NL to "Schakel naar direct aanraken", XyLang.PL to "Przełącz na dotyk bezpośredni", XyLang.UK to "Перейти до прямого дотику"),
+    )
 }
 
 /** Nama bahasa untuk switcher. */
@@ -345,6 +474,7 @@ fun xyLang(): XyLang = XyText.current()
 @Composable
 fun t(key: String): String {
     xyLang()
+    XyText.translationsVersion()
     return XyText.t(key)
 }
 
@@ -355,12 +485,27 @@ fun t(key: String): String {
  * berganti. Argumen mengisi placeholder {0}, {1}, ...
  */
 @Composable
-fun xy(id: String, en: String, vararg args: Any?): String =
-    fill(if (xyLang() == XyLang.ID || xyLang() == XyLang.MS) id else en, args)
+fun xy(id: String, en: String, vararg args: Any?): String {
+    val lang = xyLang()
+    XyText.translationsVersion()
+    val template = when (lang) {
+        XyLang.ID, XyLang.MS -> id
+        XyLang.EN -> en
+        else -> UiTranslator.lookup(lang, en) ?: en
+    }
+    return fill(template, args)
+}
 
 /** Versi non-composable (notice, callback) — pakai bahasa yang sedang aktif. */
-fun xyNow(id: String, en: String, vararg args: Any?): String =
-    fill(if (XyText.current() == XyLang.ID || XyText.current() == XyLang.MS) id else en, args)
+fun xyNow(id: String, en: String, vararg args: Any?): String {
+    val lang = XyText.current()
+    val template = when (lang) {
+        XyLang.ID, XyLang.MS -> id
+        XyLang.EN -> en
+        else -> UiTranslator.lookup(lang, en) ?: en
+    }
+    return fill(template, args)
+}
 
 private fun fill(template: String, args: Array<out Any?>): String {
     if (args.isEmpty()) return template

@@ -107,8 +107,11 @@ Functions (rules menolak tulis langsung klien ke `messages`), kecuali
    render font menyusut & indentasi per level (maks 4 visual).
 3. Firebase (mode Spark): project + aplikasi + config + DB Jakarta +
    rules ter-bind + endpoint token live + rantai Auth terbukti +
-   transport APK selesai (flag). Sisa: uji perangkat, cutover, matikan
-   jalur DO chat. Functions menyusul pasca-Blaze.
+   transport APK selesai (flag). Relay push mode Firebase selesai:
+   `POST /api/chat/push-relay` (identitas dari GitHub PAT, dedupe 10
+   menit) dipanggil APK setelah tulis Firestore berhasil. Sisa: uji
+   perangkat, cutover, matikan jalur DO chat. Functions menyusul
+   pasca-Blaze.
 4. Build verifikasi (gate + release) hijau.
 5. Draft rilis diperbarui; publish **hanya** atas perintah owner.
 

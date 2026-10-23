@@ -2595,6 +2595,8 @@ async function dataPackResponse(request, env) {
 const API_ABUSE_TIERS = [
   ["/api/firebase/token", 15],
   ["/api/push-update", 5],
+  ["/api/ui/translate", 30],
+  ["/api/chat/push-relay", 60],
   ["/api/chat/translate", 60],
   ["/api/og", 60],
   ["/api/chat/send", 300],
@@ -2625,6 +2627,159 @@ function apiAbuseLimit(path, ip) {
     return Math.max(1, Math.ceil((bucket.windowAt + API_ABUSE_WINDOW_MS - now) / 1000));
   }
   return null;
+}
+
+// --- Terjemahan UI massal (batch) ---------------------------------------
+// APK mengirim daftar string EN sekaligus; hasil diterjemahkan per item
+// memakai helper Google yang sama dengan chat, dicache di memori worker
+// per target bahasa supaya string UI yang sama tidak diterjemahkan ulang.
+const UI_TRANSLATE_TARGETS = new Set([
+  "ms", "es", "pt", "de", "fr", "ru", "ar", "hi", "ja", "ko",
+  "zh-CN", "vi", "th", "tr", "it", "nl", "pl", "uk",
+]);
+const uiTranslateCache = new Map();
+
+async function uiTranslateResponse(request) {
+  let body;
+  try {
+    body = await request.json();
+  } catch {
+    return jsonResponse({ status: "error", code: "invalid_json" }, 400, request.method);
+  }
+  const target = String(body?.target || "").trim();
+  if (!UI_TRANSLATE_TARGETS.has(target)) {
+    return jsonResponse({ status: "error", code: "unsupported_target" }, 400, request.method);
+  }
+  const rawItems = Array.isArray(body?.items) ? body.items : [];
+  const items = rawItems.slice(0, 40).map((v) => String(v || "").slice(0, 240));
+  const out = new Array(items.length).fill("");
+  const pending = [];
+  items.forEach((text, index) => {
+    if (!text.trim()) return;
+    const key = target + "|" + text;
+    const hit = uiTranslateCache.get(key);
+    if (hit) out[index] = hit;
+    else pending.push([index, text, key]);
+  });
+  await Promise.all(pending.map(async ([index, text, key]) => {
+    const got = await fetchGoogleTranslate(text, "en", target).catch(() => null)
+      || await fetchGoogleClients5Translate(text, "en", target).catch(() => null);
+    const value = got && got.translated ? String(got.translated).trim() : "";
+    if (value) {
+      if (uiTranslateCache.size > 4000) uiTranslateCache.clear();
+      uiTranslateCache.set(key, value);
+      out[index] = value;
+    }
+  }));
+  return jsonResponse({ status: "ok", target, items: out }, 200, request.method);
+}
+
+// --- Relay push untuk chat mode Firebase --------------------------------
+// Pesan mode Firebase ditulis klien langsung ke Firestore, jadi jalur
+// Durable Object tidak melihatnya. Klien memanggil endpoint ini sekali
+// setelah kirim berhasil; identitas pengirim WAJIB dari verifikasi
+// GitHub PAT (body tidak dipercaya), lalu push OneSignal disiarkan
+// dengan format data yang sama seperti pushChatNotification di DO.
+const pushRelaySeen = new Map();
+
+async function chatPushRelayResponse(request, env) {
+  const bearer = (request.headers.get("authorization") || "").match(/^Bearer (\S+)$/);
+  if (!bearer) {
+    return jsonResponse({ status: "error", code: "authentication_required" }, 401, request.method);
+  }
+  const auth = await resolveGithubIdentity(bearer[1]);
+  if (!auth.ok) {
+    return jsonResponse({ status: "error", code: auth.code }, auth.status, request.method);
+  }
+  let body;
+  try {
+    body = await request.json();
+  } catch {
+    return jsonResponse({ status: "error", code: "invalid_json" }, 400, request.method);
+  }
+  const msgId = String(body?.id || "").trim().slice(0, 64);
+  if (!msgId) {
+    return jsonResponse({ status: "error", code: "missing_id" }, 400, request.method);
+  }
+  const now = Date.now();
+  const seenAt = pushRelaySeen.get(msgId);
+  if (seenAt && now - seenAt < 10 * 60_000) {
+    return jsonResponse({ status: "ok", deduped: true }, 200, request.method);
+  }
+  if (pushRelaySeen.size > 5000) pushRelaySeen.clear();
+  pushRelaySeen.set(msgId, now);
+
+  const apiKey = String(env?.ONESIGNAL_REST_API_KEY || "").trim();
+  const appId = String(env?.ONESIGNAL_APP_ID || DEFAULT_ONESIGNAL_APP_ID).trim();
+  if (!apiKey || !appId) {
+    return jsonResponse({ status: "error", code: "push_not_configured" }, 503, request.method);
+  }
+  const principal = auth.principal;
+  const name = principal.name || principal.login;
+  const text = String(body?.text || "").trim().slice(0, CHAT_TEXT_MAX);
+  const attachmentType = String(body?.attachment_type || "").trim().slice(0, 24);
+  const replyToName = String(body?.reply_to_name || "").trim().replace(/^@/, "").slice(0, 40);
+  const country = String(body?.country || "ID").trim().toUpperCase().slice(0, 2) || "ID";
+  const isFounder = isFounderChatName(name, principal.login);
+  const senderLabel = isFounder ? `${name} [FOUNDER] (${country})` : `${name} (${country})`;
+  const bodyText = text || (attachmentType ? `[Media: ${attachmentType}]` : "Pesan baru");
+  const mentions = [...bodyText.matchAll(/@([A-Za-z0-9_.-]{2,32})/g)]
+    .map((m) => m[1])
+    .filter((u) => u.toLowerCase() !== name.toLowerCase() && u.toLowerCase() !== principal.login.toLowerCase());
+  const isSelfReply = replyToName && (replyToName.toLowerCase() === name.toLowerCase() || replyToName.toLowerCase() === principal.login.toLowerCase());
+  const headingTitle = mentions.length > 0
+    ? `${name} menyebut @${mentions[0]} · Chat Global`
+    : (replyToName && !isSelfReply)
+      ? `${name} membalas @${replyToName} · Chat Global`
+      : `${senderLabel} · Chat Global`;
+  const notifCategory = mentions.length > 0 ? "mention" : (replyToName && !isSelfReply) ? "reply" : "global_chat";
+  const avatarUrl = principal.avatar_url || `https://avatars.githubusercontent.com/${encodeURIComponent(principal.login)}?size=120`;
+  try {
+    await fetch("https://api.onesignal.com/notifications", {
+      method: "POST",
+      headers: {
+        Authorization: `Key ${apiKey}`,
+        "Content-Type": "application/json",
+        Accept: "application/json",
+      },
+      body: JSON.stringify({
+        app_id: appId,
+        target_channel: "push",
+        included_segments: ["All"],
+        headings: { en: headingTitle, id: headingTitle },
+        contents: { en: bodyText, id: bodyText },
+        data: {
+          type: "global_chat",
+          category: notifCategory,
+          msg_id: msgId,
+          sender_name: senderLabel,
+          raw_sender: name,
+          github_login: principal.login,
+          avatar_url: avatarUrl,
+          reply_to_name: isSelfReply ? "" : replyToName,
+          mentioned_users: mentions.join(","),
+          country,
+          text: bodyText,
+          at: now,
+          backend: "firebase",
+        },
+        collapse_id: `xydesk_chat_${msgId.slice(0, 32)}`,
+        android_group: "xydesk_global_chat_group",
+        android_group_message: {
+          en: "$[notif_count] new messages in Chat Global · XyDesk",
+          id: "$[notif_count] pesan baru di Chat Global · XyDesk",
+        },
+        priority: 10,
+        android_visibility: 1,
+        ttl: 259200,
+        enable_frequency_cap: false,
+        small_icon: "ic_stat_xydesk",
+      }),
+    });
+  } catch {
+    return jsonResponse({ status: "error", code: "push_failed" }, 502, request.method);
+  }
+  return jsonResponse({ status: "ok" }, 200, request.method);
 }
 
 function base64UrlEncode(bytes) {
@@ -6505,6 +6660,11 @@ export default {
       if (request.method !== "POST") return methodNotAllowed("POST, OPTIONS");
       return firebaseTokenResponse(request, env);
     }
+    if (path === "/api/chat/push-relay") {
+      if (request.method === "OPTIONS") return corsPreflight("POST, OPTIONS");
+      if (request.method !== "POST") return methodNotAllowed("POST, OPTIONS");
+      return chatPushRelayResponse(request, env);
+    }
     if (path === "/api/chat/send") {
       if (request.method === "OPTIONS") return corsPreflight("POST, OPTIONS");
       if (request.method !== "POST") return methodNotAllowed("POST, OPTIONS");
@@ -6552,6 +6712,11 @@ export default {
         }
         return chatStorageFailure(error, request.method);
       }
+    }
+    if (path === "/api/ui/translate") {
+      if (request.method === "OPTIONS") return corsPreflight("POST, OPTIONS");
+      if (request.method !== "POST") return methodNotAllowed("POST, OPTIONS");
+      return uiTranslateResponse(request);
     }
     if (path === "/api/chat/translate") {
       if (request.method === "OPTIONS") return corsPreflight("GET, OPTIONS");

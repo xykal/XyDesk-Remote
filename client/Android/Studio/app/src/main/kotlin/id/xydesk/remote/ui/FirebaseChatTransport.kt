@@ -206,6 +206,27 @@ internal object FirebaseChatTransport {
         return if (response.has("writeResults")) docId else null
     }
 
+    /**
+     * Minta worker menyiarkan push OneSignal untuk pesan yang baru ditulis
+     * ke Firestore. Identitas pengirim diverifikasi ulang di worker dari
+     * GitHub PAT; kegagalan relay tidak menggagalkan pesan. Blocking: IO.
+     */
+    fun notifyPushRelay(context: Context, msg: ChatMessage) {
+        val githubPat = GlobalChatRepository.token(context.applicationContext).orEmpty()
+        if (githubPat.isBlank() || msg.id.isBlank()) return
+        val body = JSONObject()
+            .put("id", msg.id)
+            .put("text", msg.text.take(500))
+            .put("reply_to_name", msg.replyToName.orEmpty())
+            .put("country", msg.country.ifBlank { "ID" })
+        httpJson(
+            "https://api.xydeskremote.biz.id/api/chat/push-relay",
+            "POST",
+            body,
+            mapOf("Authorization" to "Bearer $githubPat"),
+        )
+    }
+
     /** Ambil pesan terbaru (maks 80) dari Firestore. Blocking: panggil dari IO. */
     fun fetchRecent(context: Context, myName: String, myGithubLogin: String?, limit: Int = 80): List<ChatMessage> {
         val idToken = ensureSession(context) ?: return emptyList()
