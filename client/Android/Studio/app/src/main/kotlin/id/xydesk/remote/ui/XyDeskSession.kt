@@ -246,16 +246,24 @@ fun XyDeskSessionScreen(
 
     // Anonymous active-session counting is on by default and can be disabled in Privacy settings.
     // Best-effort heartbeat uses a fresh random session UUID; no host/profile/account details.
+    // Super-cepat 8 detik + burst awal untuk total online/update akurat
     LaunchedEffect(state is SessionState.Connected, profile.id) {
         if (state !is SessionState.Connected) return@LaunchedEffect
         if (!appPrefs.shareActiveSessionStats) return@LaunchedEffect
         val statsSessionId = UUID.randomUUID()
         try {
+            repeat(2) {
+                withContext(Dispatchers.IO) { ActiveSessionStatsReporter.heartbeat(statsSessionId) }
+                runCatching { AppUpdate.refreshOnlineCount(context) }
+                delay(2_000L)
+                if (manager.state.value !is SessionState.Connected) return@LaunchedEffect
+            }
             while (isActive && manager.state.value is SessionState.Connected && appPrefs.shareActiveSessionStats) {
                 withContext(Dispatchers.IO) {
                     ActiveSessionStatsReporter.heartbeat(statsSessionId)
                 }
-                delay(30_000L)
+                runCatching { AppUpdate.refreshOnlineCount(context) }
+                delay(8_000L)
             }
         } finally {
             withContext(NonCancellable + Dispatchers.IO) {
@@ -2072,6 +2080,7 @@ fun XyDeskSessionScreen(
             )
         }
 
+        // Gagal connect awal tetap tampil retry (jangan langsung ke home)
         if (state is SessionState.Disconnected && !applyingResolution && !reconnecting && !userDisconnect) {
             DisconnectedScreen(
                 wall = wall,
@@ -2079,6 +2088,23 @@ fun XyDeskSessionScreen(
                 detail = (state as SessionState.Disconnected).detail,
                 onReconnect = {
                     boundInstance = 0L
+                    reconnectAttempt = 0
+                    reconnectWindowDone = false
+                    reconnectDeadlineAt = 0L
+                    manager.connect(activeProfile)
+                },
+                onExit = ::exitSession,
+            )
+        }
+        if (state is SessionState.Error && !applyingResolution && !reconnecting) {
+            DisconnectedScreen(
+                wall = wall,
+                deviceLabel = activeProfile.label ?: activeProfile.host,
+                detail = (state as SessionState.Error).detail ?: (state as SessionState.Error).message,
+                onReconnect = {
+                    boundInstance = 0L
+                    reconnectAttempt = 0
+                    reconnectWindowDone = false
                     manager.connect(activeProfile)
                 },
                 onExit = ::exitSession,

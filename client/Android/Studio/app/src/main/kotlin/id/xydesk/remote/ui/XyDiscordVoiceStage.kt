@@ -483,13 +483,13 @@ internal fun XyDiscordVoiceStageBar(
             .fillMaxWidth()
             .padding(horizontal = if (compact) 8.dp else 12.dp, vertical = 4.dp)
             .clip(RoundedCornerShape(14.dp))
-            .background(Color(0xFF121521))
+            .background(Color(0xFF0E0E12))
             .border(
                 width = 1.dp,
                 color = when {
                     liveScreen.active -> Color(0xFFEF4444)
-                    joined -> Color(0xFF10B981)
-                    else -> Color(0xFF262C3F)
+                    joined -> Color(0xFF22C55E)
+                    else -> Color(0xFF232329)
                 },
                 shape = RoundedCornerShape(14.dp),
             )

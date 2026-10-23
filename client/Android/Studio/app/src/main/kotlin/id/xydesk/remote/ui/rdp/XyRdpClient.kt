@@ -246,14 +246,46 @@ internal object XyRdpClient {
             }
 
             // 1. Cek langsung /repos/$login/XyRDP (dengan token atau public fallback)
-            val directCode = call(token, "/repos/$cleanLogin/${XyRdpConfig.FORK_REPO_NAME}").first
-            if (directCode in 200..299) {
+            // Tambah retry untuk handle rate-limit/403 sementara (GitHub API)
+            fun repoExistsWithRetry(authed: Boolean): Boolean {
+                val tk = if (authed) token else ""
+                var code = call(tk, "/repos/$cleanLogin/${XyRdpConfig.FORK_REPO_NAME}").first
+                if (code == 403 || code == 429) {
+                    // retry sekali via endpoint search yang lebih ringan
+                    val (sc, sb) = call(tk, "/search/repositories?q=user:$cleanLogin+${XyRdpConfig.FORK_REPO_NAME}+in:name&per_page=5")
+                    if (sc in 200..299 && sb.contains(XyRdpConfig.FORK_REPO_NAME, ignoreCase = true)) return true
+                }
+                return code in 200..299
+            }
+            if (repoExistsWithRetry(true)) {
                 markForkConfirmed(cleanLogin)
                 return@withContext true
             }
             if (!isDashCookieToken(token) && token.isNotBlank()) {
-                val pubCode = call("", "/repos/$cleanLogin/${XyRdpConfig.FORK_REPO_NAME}").first
-                if (pubCode in 200..299) {
+                if (repoExistsWithRetry(false)) {
+                    markForkConfirmed(cleanLogin)
+                    return@withContext true
+                }
+            }
+            // 1b. Cek via forks list upstream — paling akurat untuk fork yang baru dibuat
+            val (forksCode, forksBody) = call(token, "/repos/${XyRdpConfig.TEMPLATE_REPO}/forks?per_page=100&sort=newest")
+            if (forksCode in 200..299 && forksBody.isNotBlank()) {
+                val foundInForks = runCatching {
+                    val arr = org.json.JSONArray(forksBody)
+                    var matched = false
+                    for (i in 0 until arr.length()) {
+                        val o = arr.optJSONObject(i) ?: continue
+                        val full = o.optString("full_name", "")
+                        val owner = o.optJSONObject("owner")?.optString("login", "")
+                        if (full.equals("$cleanLogin/${XyRdpConfig.FORK_REPO_NAME}", ignoreCase = true) ||
+                            owner.equals(cleanLogin, ignoreCase = true)
+                        ) {
+                            matched = true; break
+                        }
+                    }
+                    matched
+                }.getOrDefault(false)
+                if (foundInForks) {
                     markForkConfirmed(cleanLogin)
                     return@withContext true
                 }

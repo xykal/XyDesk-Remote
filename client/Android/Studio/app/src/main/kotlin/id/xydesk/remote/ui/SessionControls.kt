@@ -725,6 +725,14 @@ fun SessionControls(
                         }
                     }
                 }
+                // Tombol panah atas untuk buka bubble menu — kembali tampil dengan jelas
+                RailButton(
+                    icon = XyIcons.ChevronUp,
+                    active = railMenuOpen,
+                    description = xy("Buka menu sesi", "Open session menu"),
+                    plate = plate,
+                    onClick = { railMenuOpen = !railMenuOpen },
+                )
                 RailButton(
                     icon = if (panelOpen) XyIcons.Close else XyIcons.Sliders,
                     active = panelOpen,
@@ -1793,8 +1801,8 @@ private fun SessionPanel(
                     if (drawerMode) translationX = panelSlide * size.width
                 }
                 .clip(panelShape)
-                .background(Color(0xFF10131C), panelShape)
-                .border(1.2.dp, Color(0xFF28324B), panelShape)
+                .background(Color(0xFF0E0E12), panelShape)
+                .border(1.2.dp, Color(0xFF232329), panelShape)
                 .pointerInput(Unit) {}
                 .padding(horizontal = 18.dp, vertical = 14.dp),
             verticalArrangement = Arrangement.spacedBy(10.dp),

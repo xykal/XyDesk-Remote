@@ -804,9 +804,21 @@ internal object AppUpdate {
         }
     }
 
+    // Super-cepat: cache 2 detik agar total online/unduh tidak delay
+    private var lastPresenceAt = 0L
+    private var lastStatsAt = 0L
+    private var cachedDownloadCount: Int? = null
+
+    suspend fun refreshOnlineCount(context: Context? = null): Int {
+        // Alias cepat untuk XyDeskSession heartbeat
+        return if (context != null) sendAppPresencePing(context, "session", true)
+        else _appWideOnlineCount.value
+    }
+
     /**
      * Kirim detak kehadiran (presence) tingkat aplikasi agar jumlah Total Online
      * menghitung seluruh orang yang sedang membuka aplikasi XyDesk Remote.
+     * Super-cepat: burst 3x + cache 2 detik.
      */
     suspend fun sendAppPresencePing(
         context: Context,
@@ -814,6 +826,9 @@ internal object AppUpdate {
         active: Boolean = true,
     ): Int = withContext(Dispatchers.IO) {
         runCatching {
+            val now = System.currentTimeMillis()
+            if (now - lastPresenceAt < 2_000L && _appWideOnlineCount.value > 1) return@runCatching _appWideOnlineCount.value
+            lastPresenceAt = now
             val appCtx = context.applicationContext
             val api = CommunityJokesApi(appCtx)
             val ghLogin = getVerifiedGitHubLogin(appCtx).orEmpty()
@@ -821,8 +836,8 @@ internal object AppUpdate {
             val clientId = api.accountShortId().ifBlank { name }
             val conn = (URL(PRESENCE_ENDPOINT).openConnection() as HttpURLConnection).apply {
                 requestMethod = "POST"
-                connectTimeout = 7_000
-                readTimeout = 7_000
+                connectTimeout = 5_000
+                readTimeout = 5_000
                 doOutput = true
                 setRequestProperty("Content-Type", "application/json; charset=utf-8")
                 setRequestProperty("Accept", "application/json")

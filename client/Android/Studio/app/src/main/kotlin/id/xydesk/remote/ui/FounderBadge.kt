@@ -2371,8 +2371,8 @@ internal fun evaluateBadgeChallenges(
     isFounder: Boolean = false,
 ): List<XyBadgeChallengeItem> {
     val hoursFloat = totalSeconds / 3600f
+    // Founder tetap harus menyelesaikan tantangan — tidak auto-unlock semua badge
     fun calcProgress(targetSec: Long, targetSess: Int): Float {
-        if (isFounder) return 1f
         val pSec = (totalSeconds.toFloat() / targetSec.toFloat()).coerceIn(0f, 1f)
         val pSess = (sessionsCount.toFloat() / targetSess.toFloat()).coerceIn(0f, 1f)
         return maxOf(pSec, pSess)
@@ -2381,12 +2381,13 @@ internal fun evaluateBadgeChallenges(
     val c2 = calcProgress(14_400L, 12)
     val c3 = calcProgress(43_200L, 25)
     val c4 = calcProgress(86_400L, 50)
-    val topUnlocked = isFounder || (podiumRank != null && podiumRank in 1..10)
+    val topUnlocked = (podiumRank != null && podiumRank in 1..10)
     val topProgress = when {
         topUnlocked -> 1f
         totalSeconds > 0L -> (totalSeconds.toFloat() / 14_400f).coerceIn(0.08f, 0.85f)
         else -> 0f
     }
+    // Founder badge info tetap tampil terpisah — challenge progress murni dari aktivitas
 
     return listOf(
         XyBadgeChallengeItem(

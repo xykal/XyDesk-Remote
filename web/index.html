@@ -2530,5 +2530,103 @@
       new MutationObserver(render).observe(document.documentElement, { attributes: true, attributeFilter: ["lang"] });
     })();
   </script>
+  <!-- Popup Rilis Update — Last Update + Hitung Mundur (2026-10-23) -->
+  <style>
+    .update-popup-overlay{position:fixed;inset:0;z-index:9999;background:rgba(8,8,10,0.82);backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px);display:none;align-items:center;justify-content:center;padding:18px;}
+    .update-popup-overlay.open{display:flex;}
+    .update-popup-card{width:100%;max-width:440px;background:var(--surface);border:1.2px solid var(--line-strong);border-radius:20px;padding:22px 20px;position:relative;overflow:hidden;animation:popupIn 0.35s ease;}
+    @keyframes popupIn{from{opacity:0;transform:scale(0.92) translateY(10px);}to{opacity:1;transform:scale(1) translateY(0);}}
+    .update-popup-card::before{content:"";position:absolute;top:0;left:0;right:0;height:3px;background:linear-gradient(90deg,#F2F2F4,#A7A7AF,#232329);}
+    .update-popup-badge{display:inline-flex;align-items:center;gap:6px;font-size:11px;font-weight:700;letter-spacing:0.06em;text-transform:uppercase;color:var(--text);background:var(--surface-alt);border:1px solid var(--line);border-radius:999px;padding:4px 10px;margin-bottom:12px;}
+    .update-popup-badge .dot{width:8px;height:8px;border-radius:50%;background:#22C55E;animation:pulseDot 1.8s infinite;}
+    @keyframes pulseDot{0%,100%{opacity:1;}50%{opacity:0.45;}}
+    .update-popup-card h3{font-size:19px;font-weight:800;letter-spacing:-0.02em;margin-bottom:6px;}
+    .update-popup-card .desc{font-size:13px;color:var(--text-dim);line-height:1.6;margin-bottom:14px;}
+    .update-popup-meta{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:14px;}
+    .update-popup-meta-item{background:var(--bg);border:1px solid var(--line);border-radius:12px;padding:10px 12px;text-align:center;}
+    .update-popup-meta-item span{display:block;font-size:10px;font-weight:700;letter-spacing:0.06em;text-transform:uppercase;color:var(--text-faint);margin-bottom:4px;}
+    .update-popup-meta-item strong{display:block;font-size:14px;font-weight:800;color:var(--text);}
+    .update-popup-meta-item .countdown{font-family:var(--font-mono);font-size:18px;font-weight:700;color:var(--text);letter-spacing:0.04em;}
+    .update-popup-actions{display:flex;gap:8px;flex-wrap:wrap;}
+    .update-popup-actions .pill-btn{flex:1;min-width:0;}
+    .update-popup-close{position:absolute;top:10px;right:10px;width:32px;height:32px;border-radius:50%;border:1px solid var(--line);background:var(--surface-alt);color:var(--text);display:flex;align-items:center;justify-content:center;cursor:pointer;font-size:16px;line-height:1;}
+  </style>
+  <div class="update-popup-overlay" id="update-popup" aria-hidden="true">
+    <div class="update-popup-card" role="dialog" aria-modal="true" aria-labelledby="upd-title">
+      <button class="update-popup-close" id="upd-close" aria-label="Tutup">×</button>
+      <div class="update-popup-badge"><span class="dot"></span> Rilis Update Tersedia</div>
+      <h3 id="upd-title">XyDesk Remote — Update Terbaru</h3>
+      <p class="desc" id="upd-desc">Versi terbaru telah dirilis! Periksa catatan rilis dan unduh APK terbaru untuk performa super-cepat.</p>
+      <div class="update-popup-meta">
+        <div class="update-popup-meta-item">
+          <span>Versi Terbaru</span>
+          <strong class="mono" id="upd-version">v1.1.23</strong>
+        </div>
+        <div class="update-popup-meta-item">
+          <span>Last Update</span>
+          <strong class="mono" id="upd-last">—</strong>
+        </div>
+        <div class="update-popup-meta-item">
+          <span>Hitung Mundur Next Check</span>
+          <div class="countdown mono" id="upd-countdown">00:00:00</div>
+        </div>
+        <div class="update-popup-meta-item">
+          <span>Total Unduhan</span>
+          <strong class="mono" id="upd-downloads">—</strong>
+        </div>
+      </div>
+      <div class="update-popup-actions">
+        <a href="#download" class="pill-btn primary" id="upd-dl">Unduh Sekarang</a>
+        <a href="#changelog" class="pill-btn" id="upd-changelog">Lihat Changelog</a>
+      </div>
+    </div>
+  </div>
+  <script>
+  (function(){
+    "use strict";
+    var overlay=document.getElementById("update-popup");
+    var closeBtn=document.getElementById("upd-close");
+    var verEl=document.getElementById("upd-version");
+    var lastEl=document.getElementById("upd-last");
+    var dlEl=document.getElementById("upd-downloads");
+    var cdEl=document.getElementById("upd-countdown");
+    var SESSION_KEY="xydesk_update_popup_dismissed_v1_1_23";
+    var nextCheckAt=Date.now()+60*60*1000; // 1 jam hitung mundur
+    function fmtLast(dateStr){
+      try{var d=new Date(dateStr);return d.toLocaleString(document.documentElement.lang==="en"?"en-US":"id-ID",{dateStyle:"medium",timeStyle:"short",timeZone:"UTC"})+" UTC";}catch(e){return dateStr;}
+    }
+    function tick(){
+      var remaining=Math.max(0,nextCheckAt-Date.now());
+      var h=Math.floor(remaining/3600000),m=Math.floor(remaining%3600000/60000),s=Math.floor(remaining%60000/1000);
+      function pad(n){return n<10?"0"+n:""+n;}
+      if(cdEl) cdEl.textContent=pad(h)+":"+pad(m)+":"+pad(s);
+      if(remaining===0) nextCheckAt=Date.now()+60*60*1000;
+    }
+    setInterval(tick,1000); tick();
+    function show(){ if(!overlay) return; overlay.classList.add("open"); overlay.setAttribute("aria-hidden","false"); }
+    function hide(){ if(!overlay) return; overlay.classList.remove("open"); overlay.setAttribute("aria-hidden","true"); try{localStorage.setItem(SESSION_KEY,Date.now());}catch(e){} }
+    if(closeBtn) closeBtn.addEventListener("click",hide);
+    if(overlay) overlay.addEventListener("click",function(e){ if(e.target===overlay) hide(); });
+    document.addEventListener("keydown",function(e){ if(e.key==="Escape"&&overlay&&overlay.classList.contains("open")) hide(); });
+    document.querySelectorAll("#upd-dl,#upd-changelog").forEach(function(a){ a.addEventListener("click",hide); });
+    // Load release-state.json untuk Last Update & versi
+    fetch("/release-state.json",{headers:{Accept:"application/json"}}).then(function(r){return r.ok?r.json():null;}).then(function(d){
+      if(!d) return;
+      if(d.release_tag&&verEl) verEl.textContent=d.release_tag;
+      if(d.release_updated_at&&lastEl) lastEl.textContent=fmtLast(d.release_updated_at);
+      else if(d.published_at&&lastEl) lastEl.textContent=fmtLast(d.published_at);
+    }).catch(function(){});
+    fetch("/api/stats",{headers:{Accept:"application/json"}}).then(function(r){return r.ok?r.json():null;}).then(function(s){
+      if(s&&s.total_apk_downloads!=null&&dlEl) dlEl.textContent=new Intl.NumberFormat(document.documentElement.lang==="en"?"en-US":"id-ID").format(s.unique_apk_downloaders||s.total_apk_downloads);
+    }).catch(function(){});
+    // Auto-show setelah 1.2 detik jika belum dismiss dalam 6 jam
+    setTimeout(function(){
+      var dismissed=0; try{dismissed=Number(localStorage.getItem(SESSION_KEY)||0);}catch(e){}
+      if(Date.now()-dismissed>6*3600*1000) show();
+    },1200);
+    // Expose manual trigger untuk tombol
+    window.showUpdatePopup=show;
+  })();
+  </script>
 </body>
 </html>
