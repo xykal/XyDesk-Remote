@@ -1,33 +1,84 @@
 rules_version = '2';
 
-// Chat Global XyDesk di Firestore.
-// Prinsip: klien TIDAK PERNAH menulis pesan langsung. Semua kirim/edit/hapus
-// lewat Cloud Functions (Admin SDK) yang memvalidasi identitas GitHub,
-// moderasi, dan rate-limit — sama seperti Durable Object saat ini.
+// Chat Global XyDesk di Firestore — mode Spark (tanpa Cloud Functions).
+//
+// Klien menulis langsung, jadi SEMUA validasi yang dulu di Durable Object
+// dipindah ke rules ini: wajib login, penulis == pemilik auth, skema field
+// dikunci (hasOnly), ukuran dibatasi, field server (revision/deleted/edited)
+// tidak bisa dipalsukan, edit/hapus hanya milik sendiri dengan revision+1.
+// Moderasi tautan berbahaya tetap disaring di APK sebelum kirim, dan push
+// notifikasi tetap lewat relay worker Cloudflare -> OneSignal.
+//
+// Setelah project naik Blaze, tulis langsung ini ditutup lagi dan jalur
+// satu-satunya kembali ke Cloud Functions (sendChatMessage).
 service cloud.firestore {
   match /databases/{database}/documents {
 
-    // Pesan ruang global: baca untuk user login, tulis hanya server (Functions).
-    match /rooms/global/messages/{messageId} {
-      allow read: if request.auth != null;
-      allow write: if false;
+    function signedIn() {
+      return request.auth != null;
     }
 
-    // Pin ruang global: baca user login, tulis hanya server.
+    function validNewMessage(d) {
+      return d.keys().hasOnly([
+          'clientMsgId', 'authorUid', 'name', 'githubLogin', 'country', 'flag',
+          'text', 'e2ee', 'translated', 'targetLang', 'sourceLang',
+          'replyToId', 'replyToName', 'replyToText', 'replyDepth',
+          'attachment', 'viewOnce', 'revision', 'editedAt',
+          'deleted', 'deletedAt', 'at'
+        ])
+        && d.authorUid == request.auth.uid
+        && d.text is string && d.text.size() <= 500
+        && d.name is string && d.name.size() >= 1 && d.name.size() <= 28
+        && d.githubLogin is string && d.githubLogin.size() <= 39
+        && d.country is string && d.country.size() <= 8
+        && d.e2ee.cipher is string && d.e2ee.cipher.size() <= 4096
+        && d.e2ee.sig is string && d.e2ee.sig.size() <= 512
+        && d.replyDepth is int && d.replyDepth >= 0 && d.replyDepth <= 12
+        && d.replyToText is string && d.replyToText.size() <= 140
+        && d.attachment.data is string && d.attachment.data.size() <= 3800000
+        && d.revision == 0
+        && d.editedAt == 0
+        && d.deleted == false
+        && d.deletedAt == 0
+        && d.at == request.time;
+    }
+
+    // Pesan ruang global.
+    match /rooms/global/messages/{messageId} {
+      allow read: if signedIn();
+      allow create: if signedIn() && validNewMessage(request.resource.data);
+      // Edit/hapus lunak: hanya penulis asli, hanya field mutasi,
+      // revision wajib naik tepat 1, identitas & isi asal terkunci.
+      allow update: if signedIn()
+        && resource.data.authorUid == request.auth.uid
+        && request.resource.data.authorUid == resource.data.authorUid
+        && request.resource.data.clientMsgId == resource.data.clientMsgId
+        && request.resource.data.at == resource.data.at
+        && request.resource.data.revision == resource.data.revision + 1
+        && request.resource.data.text is string
+        && request.resource.data.text.size() <= 500
+        && request.resource.data.diff(resource.data).affectedKeys()
+             .hasOnly(['text', 'translated', 'targetLang', 'sourceLang',
+                       'editedAt', 'deleted', 'deletedAt', 'revision']);
+      allow delete: if false;
+    }
+
+    // Pin ruang global: fase Spark hanya server/worker yang mengubah
+    // (lewat konsol/Admin SDK); klien hanya membaca.
     match /rooms/global/meta/{docId} {
-      allow read: if request.auth != null;
+      allow read: if signedIn();
       allow write: if false;
     }
 
     // Profil pengguna: hanya pemilik dokumen yang boleh menulis profilnya.
     match /users/{uid} {
-      allow read: if request.auth != null;
-      allow write: if request.auth != null && request.auth.uid == uid;
+      allow read: if signedIn();
+      allow write: if signedIn() && request.auth.uid == uid;
     }
 
-    // Leaderboard: baca user login, tulis hanya server (aggregator Functions).
+    // Leaderboard: baca user login, tulis non-klien (Admin SDK/worker).
     match /leaderboard/{authorKey} {
-      allow read: if request.auth != null;
+      allow read: if signedIn();
       allow write: if false;
     }
   }

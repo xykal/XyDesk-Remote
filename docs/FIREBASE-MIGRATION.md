@@ -13,14 +13,23 @@ API Firestore/RTDB/IdentityToolkit/FirebaseRules/CloudFunctions aktif;
 Firestore **ruleset sudah dibuat** (`44d63967-b0b5-4fdf-849f-ef22c01dd8d7`)
 dan menunggu database untuk di-bind ke release `cloud.firestore`.
 
-**Blocker tersisa (kebijakan Google, bukan teknis):**
-1. Project belum punya **billing account** (Spark) → Cloud Build/Functions
-   tidak bisa aktif. Upgrade **Blaze** dari konsol Firebase owner.
-2. Buat database Firestore butuh `datastore.databases.create` yang tidak
-   termasuk peran Editor → beri **Datastore Owner** ke Admin SDK, atau buat
-   databasenya sekali dari konsol (pilih `asia-southeast2` / Jakarta).
-Setelah dua hal itu, sisa setup (bind rules, RTDB/Auth, deploy Functions)
-diselesaikan dari sini via API.
+Owner tidak memiliki kartu kredit → arsitektur dialihkan ke **mode Spark
+(gratis total)**, tanpa Cloud Functions:
+- Klien menulis langsung ke Firestore; seluruh validasi pindah ke
+  `firestore.rules` (wajib login, penulis==pemilik auth, skema field
+  terkunci, edit/hapus lunak revision+1). Ruleset terdaftar:
+  `9a0781a1-e064-41c5-a0c4-7fa8bcafd3ae` (menunggu DB untuk di-bind).
+- Push tetap lewat relay worker Cloudflare → OneSignal (sudah jalan).
+- Functions di `functions/` disimpan untuk fase pasca-Blaze; nanti jalur
+  tulis langsung ditutup dan sendChatMessage menjadi satu-satunya jalur.
+
+**Satu aksi owner tersisa (gratis, tanpa kartu):** buat database Firestore
+sekali dari konsol (Create database → `asia-southeast2`/Jakarta → mode
+production) karena `datastore.databases.create` tidak termasuk peran
+Editor. Setelah DB ada: bind rules, Auth, transport APK dual-mode, dan
+cutover diselesaikan dari sini via API. Kuota Spark (20rb tulis/hari)
+cukup untuk komunitas saat ini; pantau Usage, naik Blaze kapan pun
+kartu/virtual debit tersedia (mis. e-Card bank digital).
 
 ## Kenapa pindah
 
@@ -86,9 +95,10 @@ Functions (rules menolak tulis langsung klien ke `messages`), kecuali
    5 bahasa selesai, gate hijau; batch bahasa & string sebaris berlanjut*.
 2. ✅ Threaded reply: `replyDepth` di model/parser/jalur kirim/worker +
    render font menyusut & indentasi per level (maks 4 visual).
-3. Firebase: project + aplikasi + config selesai; menunggu izin Editor
-   untuk Admin SDK → aktifkan Firestore/RTDB/Auth, deploy rules+Functions,
-   transport APK di belakang flag, dual-run, cutover, matikan jalur DO chat.
+3. Firebase (mode Spark): project + aplikasi + config + rules selesai;
+   menunggu owner buat DB Firestore dari konsol (gratis) → bind rules,
+   Auth GitHub, transport APK di belakang flag, dual-run, cutover,
+   matikan jalur DO chat. Functions menyusul pasca-Blaze.
 4. Build verifikasi (gate + release) hijau.
 5. Draft rilis diperbarui; publish **hanya** atas perintah owner.
 
