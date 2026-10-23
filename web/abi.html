@@ -182,6 +182,7 @@
       <nav class="nav-links" aria-label="Navigasi">
         <a href="index.html#download" class="pill primary">Unduh</a>
         <a href="index.html#changelog" class="pill">Changelog</a>
+        <a href="about.html" class="pill">Tentang Perusahaan</a>
         <a href="status.html" class="pill">Status Sistem</a>
         <a href="index.html" class="pill">Beranda</a>
       </nav>
@@ -200,6 +201,7 @@
         <a href="index.html#download" class="drawer-link"><span>Unduh APK</span><span>→</span></a>
         <a href="status.html" class="drawer-link"><span>Status Sistem</span><span>→</span></a>
         <a href="host.html" class="drawer-link"><span>Host Agent</span><span>→</span></a>
+        <a href="about.html" class="drawer-link"><span>Tentang Perusahaan</span><span>→</span></a>
         <a href="feedback.html" class="drawer-link"><span>Lapor Bug &amp; Saran</span><span>→</span></a>
         <a href="privacy.html" class="drawer-link"><span>Kebijakan Privasi</span><span>→</span></a>
         <a href="licenses.html" class="drawer-link"><span>Lisensi Open Source</span><span>→</span></a>
@@ -278,6 +280,18 @@
         </table>
       </div>
 
+      <div class="card">
+        <h2>Cek Manual ABI (Seperti CPU-Z)</h2>
+        <p style="color:var(--text-dim); font-size:13px; margin-bottom:10px;">Browser tidak bisa membaca ABI HP secara langsung. Kalau ingin pasti 100%, cek lewat aplikasi:</p>
+        <ol style="color:var(--text-dim); font-size:13px; margin-bottom:0; padding-left:20px;">
+          <li>Unduh <strong>CPU-Z</strong> dari Google Play Store.</li>
+          <li>Buka CPU-Z → tab <strong>Device</strong>.</li>
+          <li>Lihat baris <strong>Instruction sets</strong> atau <strong>ABI</strong>.</li>
+          <li>Cocokkan ke tabel di atas: <code>arm64-v8a</code> = 64-bit ARM, <code>armeabi-v7a</code> = 32-bit ARM, <code>x86_64</code> = Intel 64-bit.</li>
+        </ol>
+        <p style="color:var(--text-faint); font-size:11.5px; margin-top:10px; font-family:var(--font-mono);">Hanya Android — iOS dan desktop tidak memiliki ABI APK ini.</p>
+      </div>
+
       <div class="card versions-card">
         <h2>Riwayat versi</h2>
         <p>Daftar rilis terbaru XyDesk Remote.</p>
@@ -298,7 +312,7 @@
   <footer>
     <div class="container footer-inner">
       <div><strong>XyDesk Remote</strong> · Powered by <span>XyVerse Technology Global</span></div>
-      <div><a href="index.html">Beranda</a> · <a href="status.html">Status Sistem</a></div>
+      <div><a href="index.html">Beranda</a> · <a href="about.html">Tentang Perusahaan</a> · <a href="status.html">Status Sistem</a></div>
     </div>
   </footer>
 
@@ -365,8 +379,9 @@
         if (!isAndroid) return { abi: null, notAndroid: true };
         if (/arm64|aarch64/i.test(ua)) return { abi: "arm64-v8a" };
         if (/x86_64|amd64|x64/i.test(ua)) return { abi: "x86_64" };
-        if (/armv7|armv8l|armv6|\barm\b/i.test(ua)) return { abi: "armeabi-v7a" };
-        // UA modern (mis. Firefox) hanya menulis "Android; versi" tanpa arsitektur.
+        if (/armv8|armv7|armv6l|armv6|\barm\b/i.test(ua)) return { abi: "armeabi-v7a" };
+        // Beberapa browser Android (Firefox, Chrome versi baru) menulis "Android"
+        // tanpa arsitektur di UA — tandai sebagai vague agar user cek manual.
         return { abi: null, vague: true };
       }
 
@@ -423,7 +438,7 @@
         }
         noteEl.innerHTML = note + '<span class="src">Deteksi berjalan lokal di browser; tidak ada data yang dikirim.</span>' + badge;
 
-        // Tombol unduhan
+        // Tombol unduhan + deteksi ulang
         actEl.innerHTML = "";
         function addBtn(href, text, primary) {
           var a = document.createElement("a");
@@ -438,6 +453,12 @@
         } else {
           addBtn(links.universal.url, "Unduh APK Universal (" + fmtSize(links.universal.size) + ")", true);
         }
+        var btnUlang = document.createElement("button");
+        btnUlang.type = "button";
+        btnUlang.className = "pill";
+        btnUlang.textContent = "Deteksi Ulang";
+        btnUlang.onclick = function () { document.getElementById("detect-state").hidden = false; document.getElementById("detect-result").hidden = true; run(); };
+        actEl.appendChild(btnUlang);
       }
 
       function loadVersions() {
