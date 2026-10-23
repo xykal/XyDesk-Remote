@@ -467,15 +467,21 @@ internal fun XyDiscordVoiceStageBar(
 
     var expandedStage by remember { mutableStateOf(false) }
     var watchingLiveStream by remember { mutableStateOf(false) }
+    var showFullRoom by remember { mutableStateOf(false) }
 
     val micPermissionLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.RequestPermission(),
     ) { granted ->
         XyDiscordVoiceStageManager.joinVoiceParty(context, startWithMic = granted)
+        showFullRoom = true
     }
 
     val hasActiveRdpSession = remember(sharingMyRdp, expandedStage) {
         runCatching { GlobalApp.getSessions()?.isNotEmpty() == true }.getOrDefault(false)
+    }
+
+    if (showFullRoom) {
+        XyVoiceRoomScreen(onDismiss = { showFullRoom = false })
     }
 
     Column(
@@ -496,11 +502,11 @@ internal fun XyDiscordVoiceStageBar(
             .padding(horizontal = 11.dp, vertical = 8.dp),
         verticalArrangement = Arrangement.spacedBy(7.dp),
     ) {
-        // Baris Utama Voice Lounge & Live RDP Stage
+        // Baris Utama Voice Lounge & Live RDP Stage — klik masuk full room
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .clickable { expandedStage = !expandedStage },
+                .clickable { showFullRoom = true },
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.SpaceBetween,
         ) {
@@ -589,10 +595,10 @@ internal fun XyDiscordVoiceStageBar(
                                 val hasPerm = context.checkSelfPermission(Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED
                                 if (hasPerm) {
                                     XyDiscordVoiceStageManager.joinVoiceParty(context, startWithMic = true)
+                                    showFullRoom = true
                                 } else {
                                     micPermissionLauncher.launch(Manifest.permission.RECORD_AUDIO)
                                 }
-                                expandedStage = true
                             }
                             .padding(horizontal = 10.dp, vertical = 5.dp),
                     ) {

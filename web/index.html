@@ -2101,7 +2101,7 @@
       var activeStatsController = null;
       function scheduleActiveStats() {
         clearTimeout(activeStatsTimer);
-        if (!document.hidden) activeStatsTimer = setTimeout(loadActiveSessionStats, 60_000);
+        if (!document.hidden) activeStatsTimer = setTimeout(loadActiveSessionStats, 10_000);
       }
       function loadActiveSessionStats() {
         if (document.hidden || activeStatsInFlight) return;
