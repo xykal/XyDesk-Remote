@@ -254,25 +254,25 @@
               <td>arm64-v8a</td>
               <td>HP Android 64-bit (2016+, mayoritas)</td>
               <td class="size mono">—</td>
-              <td><a href="https://github.com/xykal/XyDesk-Remote/releases/download/v1.1.13/XyDesk-Remote64bit.apk">APK 64-bit (ARM)</a></td>
+              <td><a href="https://github.com/xykal/XyDesk-Remote/releases/download/v1.1.23/XyDesk-Remote64bit.apk">APK 64-bit (ARM)</a></td>
             </tr>
             <tr data-abi="armeabi-v7a">
               <td>armeabi-v7a</td>
               <td>HP Android 32-bit lawas</td>
               <td class="size mono">—</td>
-              <td><a href="https://github.com/xykal/XyDesk-Remote/releases/download/v1.1.13/XyDesk-Remote32bit.apk">APK 32-bit (ARM)</a></td>
+              <td><a href="https://github.com/xykal/XyDesk-Remote/releases/download/v1.1.23/XyDesk-Remote32bit.apk">APK 32-bit (ARM)</a></td>
             </tr>
             <tr data-abi="x86_64">
               <td>x86_64</td>
               <td>HP/emulator Intel 64-bit (jarang)</td>
               <td class="size mono">—</td>
-              <td><a href="https://github.com/xykal/XyDesk-Remote/releases/download/v1.1.13/XyDesk-Remote64bit-x86.apk">APK 64-bit (x86)</a></td>
+              <td><a href="https://github.com/xykal/XyDesk-Remote/releases/download/v1.1.23/XyDesk-Remote64bit-x86.apk">APK 64-bit (x86)</a></td>
             </tr>
             <tr data-abi="universal">
               <td>universal</td>
               <td>Semua HP Android (paling aman, paling besar)</td>
               <td class="size mono">—</td>
-              <td><a href="https://github.com/xykal/XyDesk-Remote/releases/download/v1.1.13/XyDesk-RemoteUniversal.apk">APK Universal</a></td>
+              <td><a href="https://github.com/xykal/XyDesk-Remote/releases/download/v1.1.23/XyDesk-RemoteUniversal.apk">APK Universal</a></td>
             </tr>
           </tbody>
         </table>
@@ -306,12 +306,12 @@
     (function () {
       "use strict";
 
-      // URL & ukuran fallback (rilis v1.1.13) — dipakai kalau fetch release-state.json gagal.
+      // URL & ukuran fallback (rilis v1.1.23) — dipakai kalau fetch release-state.json gagal.
       var FALLBACK = {
-        "arm64-v8a": { url: "https://github.com/xykal/XyDesk-Remote/releases/download/v1.1.13/XyDesk-Remote64bit.apk", size: 99220480, label: "XyDesk-Remote64bit.apk" },
-        "armeabi-v7a": { url: "https://github.com/xykal/XyDesk-Remote/releases/download/v1.1.13/XyDesk-Remote32bit.apk", size: 79731772, label: "XyDesk-Remote32bit.apk" },
-        "x86_64": { url: "https://github.com/xykal/XyDesk-Remote/releases/download/v1.1.13/XyDesk-Remote64bit-x86.apk", size: 108485542, label: "XyDesk-Remote64bit-x86.apk" },
-        "universal": { url: "https://github.com/xykal/XyDesk-Remote/releases/download/v1.1.13/XyDesk-RemoteUniversal.apk", size: 289832511, label: "XyDesk-RemoteUniversal.apk" }
+        "arm64-v8a": { url: "https://github.com/xykal/XyDesk-Remote/releases/download/v1.1.23/XyDesk-Remote64bit.apk", size: 100793458, label: "XyDesk-Remote64bit.apk" },
+        "armeabi-v7a": { url: "https://github.com/xykal/XyDesk-Remote/releases/download/v1.1.23/XyDesk-Remote32bit.apk", size: 81304750, label: "XyDesk-Remote32bit.apk" },
+        "x86_64": { url: "https://github.com/xykal/XyDesk-Remote/releases/download/v1.1.23/XyDesk-Remote64bit-x86.apk", size: 110058520, label: "XyDesk-Remote64bit-x86.apk" },
+        "universal": { url: "https://github.com/xykal/XyDesk-Remote/releases/download/v1.1.23/XyDesk-RemoteUniversal.apk", size: 291405489, label: "XyDesk-RemoteUniversal.apk" }
       };
       var links = JSON.parse(JSON.stringify(FALLBACK));
 
