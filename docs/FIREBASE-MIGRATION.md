@@ -23,11 +23,18 @@ Owner tidak memiliki kartu kredit → arsitektur dialihkan ke **mode Spark
 - Functions di `functions/` disimpan untuk fase pasca-Blaze; nanti jalur
   tulis langsung ditutup dan sendChatMessage menjadi satu-satunya jalur.
 
-**Satu aksi owner tersisa (gratis, tanpa kartu):** buat database Firestore
-sekali dari konsol (Create database → `asia-southeast2`/Jakarta → mode
-production) karena `datastore.databases.create` tidak termasuk peran
-Editor. Setelah DB ada: bind rules, Auth, transport APK dual-mode, dan
-cutover diselesaikan dari sini via API. Kuota Spark (20rb tulis/hari)
+Database Firestore **sudah dibuat owner** (`asia-southeast2`/Jakarta) dan
+ruleset Spark **sudah ter-bind** ke release `cloud.firestore`; uji tulis/
+baca/hapus dokumen lolos. Endpoint `POST /api/firebase/token` (tukar
+GitHub PAT → Firebase custom token, UID `gh-{id}`) sudah live di worker;
+rahasia SA terpasang sebagai Worker secrets.
+
+**Satu aksi owner tersisa (gratis, tanpa kartu):**
+console.firebase.google.com → project `xyverse-technology-global` →
+**Authentication → Get started** (satu klik; membuat config Auth agar
+`signInWithCustomToken` aktif). Provider GitHub tidak perlu diaktifkan —
+identitas tetap GitHub PAT yang diverifikasi worker. Setelah itu
+transport APK dual-mode dan cutover diselesaikan dari sini. Kuota Spark (20rb tulis/hari)
 cukup untuk komunitas saat ini; pantau Usage, naik Blaze kapan pun
 kartu/virtual debit tersedia (mis. e-Card bank digital).
 
@@ -95,10 +102,10 @@ Functions (rules menolak tulis langsung klien ke `messages`), kecuali
    5 bahasa selesai, gate hijau; batch bahasa & string sebaris berlanjut*.
 2. ✅ Threaded reply: `replyDepth` di model/parser/jalur kirim/worker +
    render font menyusut & indentasi per level (maks 4 visual).
-3. Firebase (mode Spark): project + aplikasi + config + rules selesai;
-   menunggu owner buat DB Firestore dari konsol (gratis) → bind rules,
-   Auth GitHub, transport APK di belakang flag, dual-run, cutover,
-   matikan jalur DO chat. Functions menyusul pasca-Blaze.
+3. Firebase (mode Spark): project + aplikasi + config + DB Jakarta +
+   rules ter-bind + endpoint token live. Menunggu klik Get started Auth
+   → transport APK di belakang flag, dual-run, cutover, matikan jalur
+   DO chat. Functions menyusul pasca-Blaze.
 4. Build verifikasi (gate + release) hijau.
 5. Draft rilis diperbarui; publish **hanya** atas perintah owner.
 
