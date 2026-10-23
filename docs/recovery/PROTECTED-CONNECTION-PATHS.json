@@ -3,7 +3,7 @@
   "files": {
     "client/Android/Studio/core-rdp/src/main/kotlin/id/xydesk/remote/core/SessionManager.kt": "7878737df588c7461ffcdc012a2a90604144aeb8a35d0ed05ca8bd7b24e8b16a",
     "client/Android/Studio/app/src/main/kotlin/id/xydesk/remote/ui/XyDeskSessionActivity.kt": "61e9ecd7e9932db5a75c0e6033c9b7d0f3863710942d2273e75b0461b65aa00d",
-    "client/Android/Studio/app/src/main/kotlin/id/xydesk/remote/ui/XyDeskSession.kt": "d314996a268e8988e7a489968bf8cae309e78527caab050b13929ece47dea17c",
+    "client/Android/Studio/app/src/main/kotlin/id/xydesk/remote/ui/XyDeskSession.kt": "a4e8bbe8393480463bf76fc497158bb2ca59f61d0f06662739bb2d222e0c3091",
     "client/Android/Studio/app/src/main/kotlin/id/xydesk/remote/ui/SessionSurfaceController.kt": "e8db24bf86a7551331218cfd261cfe94a4d5a3aba0e6bcb7e7a47d8482c965e6",
     "client/Android/Studio/app/src/main/kotlin/id/xydesk/remote/ui/PcStreamSessionActivity.kt": "3d5fec76318d53010aa93cae5c318d29ac2b31179969c280e762e08d6196fb57",
     "client/Android/Studio/core-pc-stream/src/main/kotlin/id/xydesk/remote/pcstream/PcStreamViewer.kt": "a5eedd3703628bdf87983ef389a3daec76b090c4fdab8f8802476b3d80140c2d",
