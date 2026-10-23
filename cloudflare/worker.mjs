@@ -4369,6 +4369,7 @@ function sanitizeChatExtras(raw) {
   const replyToId = typeof raw?.reply_to_id === "string" ? raw.reply_to_id.trim().slice(0, 64) : "";
   const replyToName = typeof raw?.reply_to_name === "string" ? raw.reply_to_name.trim().slice(0, CHAT_NAME_MAX) : "";
   const replyToText = typeof raw?.reply_to_text === "string" ? raw.reply_to_text.trim().slice(0, 180) : "";
+  const replyDepth = Number.isFinite(Number(raw?.reply_depth)) ? Math.max(0, Math.min(12, Number(raw.reply_depth) | 0)) : 0;
   const rawKind = typeof raw?.attachment_kind === "string" && raw.attachment_kind.trim()
     ? raw.attachment_kind.trim().toLowerCase()
     : typeof raw?.attachment_type === "string"
@@ -4411,6 +4412,7 @@ function sanitizeChatExtras(raw) {
     reply_to_id: replyToId,
     reply_to_name: replyToName,
     reply_to_text: replyToText,
+    reply_depth: replyDepth,
     attachment_kind: hasAttachment ? attachmentKind : "",
     attachment_type: hasAttachment ? attachmentType : "",
     attachment_name: attachmentName,

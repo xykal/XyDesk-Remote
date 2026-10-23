@@ -647,6 +647,11 @@ internal fun MessageBubble(
         resolveSpecialUserRole(msg.name, msg.githubLogin, context)
     }
     val detectedLinkUrls = remember(msg.id, msg.text) { extractAllUrls(msg.text) }
+    // Kedalaman utas balasan: font menyusut & bubble bergeser per level (maks 4).
+    val depthLevel = msg.replyDepth.coerceIn(0, 4)
+    val depthIndent = if (msg.mine) 0.dp else (depthLevel * 8).dp
+    val bodyFontSize = ((if (isCompactOverlay) 12f else 13f) - depthLevel * 0.8f).coerceAtLeast(10f).sp
+    val bodyLineHeight = ((if (isCompactOverlay) 15.5f else 17f) - depthLevel * 0.8f).coerceAtLeast(13f).sp
     val screenWidthDp = androidx.compose.ui.platform.LocalConfiguration.current.screenWidthDp.toFloat()
     val maxBubbleWidth = remember(screenWidthDp, isCompactOverlay) {
         chatBubbleMaxWidth(screenWidthDp, isCompactOverlay)
@@ -664,6 +669,7 @@ internal fun MessageBubble(
         modifier = Modifier
             .fillMaxWidth()
             .padding(horizontal = if (isCompactOverlay) 8.dp else 16.dp)
+            .padding(start = depthIndent)
             .offset { IntOffset(swipeOffsetX.roundToInt(), 0) }
             .pointerInput(msg.id, replyThresholdPx, maxSwipePx) {
                 detectHorizontalDragGestures(
@@ -1155,8 +1161,8 @@ internal fun MessageBubble(
                                 color = primaryTextColor,
                                 linkColor = if (isLightBubble) Color(0xFF606060) else Color(0xFF9C9C9C),
                                 style = MaterialTheme.typography.bodySmall.copy(
-                                    fontSize = if (isCompactOverlay) 12.sp else 13.sp,
-                                    lineHeight = if (isCompactOverlay) 15.5.sp else 17.sp,
+                                    fontSize = bodyFontSize,
+                                    lineHeight = bodyLineHeight,
                                 ),
                                 onLongPress = onLongPress,
                                 onMentionClick = onMentionClick,

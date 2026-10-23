@@ -1403,6 +1403,7 @@ private fun GlobalChatAccountContent(
             replyToId = replySnapshot?.id.orEmpty(),
             replyToName = replySnapshot?.name.orEmpty(),
             replyToText = replySnapshot?.text.orEmpty().take(140),
+            replyDepth = replySnapshot?.let { (it.replyDepth + 1).coerceAtMost(12) } ?: 0,
             attachmentType = attachmentType,
             attachmentName = if (attachmentType == "file") attachmentName else "",
             attachmentMime = attachmentMime,
@@ -1441,6 +1442,7 @@ private fun GlobalChatAccountContent(
                         put("reply_to_id", replySnapshot.id)
                         put("reply_to_name", replySnapshot.name)
                         put("reply_to_text", replySnapshot.text.take(140))
+                        put("reply_depth", pending.replyDepth)
                     }
                     if (attachmentType.isNotEmpty()) {
                         put("attachment_type", attachmentType)

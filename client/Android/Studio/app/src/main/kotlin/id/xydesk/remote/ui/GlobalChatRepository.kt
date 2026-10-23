@@ -138,6 +138,8 @@ internal fun parseMessageFromJson(m: JSONObject, myName: String, myGithubLogin: 
         replyToId = m.optString("reply_to_id", ""),
         replyToName = m.optString("reply_to_name", ""),
         replyToText = m.optString("reply_to_text", ""),
+        replyDepth = m.optInt("reply_depth", 0).coerceIn(0, 12)
+            .let { d -> if (d == 0 && m.optString("reply_to_id", "").isNotBlank()) 1 else d },
         attachmentType = rawAttachmentType,
         attachmentName = m.optString("attachment_name", ""),
         attachmentMime = m.optString("attachment_mime", ""),

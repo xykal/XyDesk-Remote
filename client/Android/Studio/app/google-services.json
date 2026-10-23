@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "342677459040",
+    "project_id": "xyverse-technology-global",
+    "storage_bucket": "xyverse-technology-global.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:342677459040:android:10f93115af77e5b25cb305",
+        "android_client_info": {
+          "package_name": "id.xydesk.remote"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyCqgvMUmPV3aZajvJzdUJt30_ybWgDEXHM"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

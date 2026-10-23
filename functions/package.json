@@ -1,0 +1,13 @@
+{
+  "name": "xydesk-chat-functions",
+  "private": true,
+  "description": "XyDesk Remote — backend Chat Global di Firebase (Firestore + FCM). Pengganti Durable Object GlobalChat Cloudflare.",
+  "engines": {
+    "node": "20"
+  },
+  "main": "index.js",
+  "dependencies": {
+    "firebase-admin": "^12.7.0",
+    "firebase-functions": "^5.1.1"
+  }
+}

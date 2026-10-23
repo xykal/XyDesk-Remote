@@ -1,7 +1,18 @@
 # Migrasi Chat Global: Cloudflare → Firebase
 
-Status: **direncanakan** (menunggu project Firebase baru dari owner).
+Status: **berjalan**. Project `xyverse-technology-global` (XyVerse Technology
+Global) aktif; aplikasi Android `id.xydesk.remote` sudah terdaftar
+(appId `1:342677459040:android:10f93115af77e5b25cb305`) dan
+`client/Android/Studio/app/google-services.json` resmi sudah tersimpan.
+Backend repo-side siap: `firestore.rules`, `firebase.json`,
+`firestore.indexes.json`, `functions/` (send callable + push FCM).
 Rilis APK **ditahan** sampai seluruh fase selesai dan build verifikasi hijau.
+
+**Satu aksi owner yang masih dibutuhkan:** Admin SDK
+(`firebase-adminsdk-fbsvc@…`) tidak berizin mengaktifkan Google API.
+Beri peran **Editor** ke service account itu di
+console.cloud.google.com/iam-admin (project `xyverse-technology-global`),
+lalu setup Firestore/RTDB/Auth/deploy diselesaikan dari sini via API.
 
 ## Kenapa pindah
 
@@ -63,10 +74,13 @@ Functions (rules menolak tulis langsung klien ke `messages`), kecuali
 ## Fase pengerjaan (urutan disepakati)
 
 0. ✅ Rilis ditahan: auto-publish dimatikan, draft `v1.1.23` tetap draft.
-1. Bahasa UI APK penuh (bertahap per tabel string) — *sedang berjalan*.
-2. Threaded reply penuh (`replyDepth` + render bersarang).
-3. Firebase: backend Functions + rules, transport APK di belakang flag,
-   dual-run ruang uji, migrasi riwayat, cutover, matikan jalur DO chat.
+1. Bahasa UI APK penuh (bertahap per tabel string) — *fondasi + tabel inti
+   5 bahasa selesai, gate hijau; batch bahasa & string sebaris berlanjut*.
+2. ✅ Threaded reply: `replyDepth` di model/parser/jalur kirim/worker +
+   render font menyusut & indentasi per level (maks 4 visual).
+3. Firebase: project + aplikasi + config selesai; menunggu izin Editor
+   untuk Admin SDK → aktifkan Firestore/RTDB/Auth, deploy rules+Functions,
+   transport APK di belakang flag, dual-run, cutover, matikan jalur DO chat.
 4. Build verifikasi (gate + release) hijau.
 5. Draft rilis diperbarui; publish **hanya** atas perintah owner.
 

@@ -48,6 +48,7 @@ internal data class ChatMessage(
     val replyToId: String = "",
     val replyToName: String = "",
     val replyToText: String = "",
+    val replyDepth: Int = 0,
     val attachmentType: String = "", // "", "image", "video", "file", "sticker"
     val attachmentName: String = "",
     val attachmentMime: String = "",
