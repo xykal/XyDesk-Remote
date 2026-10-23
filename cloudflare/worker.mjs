@@ -2588,6 +2588,45 @@ async function dataPackResponse(request, env) {
   }
 }
 
+// --- Lapisan anti-penyalahgunaan (DDoS/flood) tingkat worker -------------
+// Jendela tetap per IP per kelompok endpoint. Batas sengaja longgar untuk
+// pemakaian massal yang sah (banyak user di balik satu NAT), tapi memangkas
+// flood otomatis ribuan req/detik menjadi maks ratusan per menit per IP.
+const API_ABUSE_TIERS = [
+  ["/api/firebase/token", 15],
+  ["/api/push-update", 5],
+  ["/api/chat/translate", 60],
+  ["/api/og", 60],
+  ["/api/chat/send", 300],
+  ["/ws/chat", 120],
+];
+const API_ABUSE_DEFAULT_PER_MIN = 3000;
+const API_ABUSE_WINDOW_MS = 60_000;
+const apiAbuseBuckets = new Map();
+
+/** Kembalikan detik Retry-After bila IP melampaui batas, selain itu null. */
+function apiAbuseLimit(path, ip) {
+  const tier = API_ABUSE_TIERS.find(([prefix]) => path.startsWith(prefix));
+  const limit = tier ? tier[1] : API_ABUSE_DEFAULT_PER_MIN;
+  const bucketKey = `${tier ? tier[0] : "/api/"}|${ip}`;
+  const now = Date.now();
+  let bucket = apiAbuseBuckets.get(bucketKey);
+  if (!bucket || now - bucket.windowAt > API_ABUSE_WINDOW_MS) {
+    bucket = { windowAt: now, count: 0 };
+    apiAbuseBuckets.set(bucketKey, bucket);
+  }
+  bucket.count += 1;
+  if (apiAbuseBuckets.size > 5000) {
+    for (const [key, value] of apiAbuseBuckets) {
+      if (now - value.windowAt > API_ABUSE_WINDOW_MS) apiAbuseBuckets.delete(key);
+    }
+  }
+  if (bucket.count > limit) {
+    return Math.max(1, Math.ceil((bucket.windowAt + API_ABUSE_WINDOW_MS - now) / 1000));
+  }
+  return null;
+}
+
 function base64UrlEncode(bytes) {
   let binary = "";
   const chunk = 0x8000;
@@ -2615,6 +2654,7 @@ async function importServiceAccountKey(pem) {
 }
 
 const firebaseSaKeyCache = { pem: "", key: null };
+const githubIdentityCache = new Map();
 
 /**
  * POST /api/firebase/token — tukar GitHub PAT (identitas yang sudah dipakai
@@ -2632,7 +2672,27 @@ async function firebaseTokenResponse(request, env) {
   if (!bearer) {
     return jsonResponse({ status: "error", code: "authentication_required" }, 401, request.method);
   }
-  const auth = await resolveGithubIdentity(bearer[1]);
+  // Cache identitas 5 menit per hash token: flood ke endpoint ini tidak
+  // ikut membanjiri api.github.com (amplifikasi) dan menghemat CPU worker.
+  const tokenDigest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(bearer[1]));
+  const tokenHash = [...new Uint8Array(tokenDigest)].map((b) => b.toString(16).padStart(2, "0")).join("");
+  const cachedIdentity = githubIdentityCache.get(tokenHash);
+  let auth;
+  if (cachedIdentity && cachedIdentity.expiresAt > Date.now()) {
+    auth = { ok: true, principal: cachedIdentity.principal };
+  } else {
+    auth = await resolveGithubIdentity(bearer[1]);
+    if (auth.ok) {
+      githubIdentityCache.set(tokenHash, {
+        principal: auth.principal,
+        expiresAt: Date.now() + 300_000,
+      });
+      if (githubIdentityCache.size > 500) {
+        const oldest = githubIdentityCache.keys().next().value;
+        if (oldest) githubIdentityCache.delete(oldest);
+      }
+    }
+  }
   if (!auth.ok) {
     return jsonResponse({ status: "error", code: auth.code }, auth.status, request.method);
   }
@@ -5907,11 +5967,29 @@ function updateEdgeOnlinePeers(peerKey, info = null) {
 
 export default {
   async fetch(request, env) {
+    const url = new URL(request.url);
+    const path = url.pathname;
+
+    // Lapisan anti-penyalahgunaan paling depan: limiter per IP di isolate.
+    // Request yang ditolak di sini adalah yang paling murah; pola flood
+    // yang lolos tetap ditahan rate-limit Durable Object & (bila aktif)
+    // aturan edge Cloudflare.
+    if (path.startsWith("/api/") || path === "/ws/chat") {
+      const ip = request.headers.get("cf-connecting-ip") || "unknown";
+      const limit = apiAbuseLimit(path, ip);
+      if (limit) {
+        return jsonResponse(
+          { status: "error", code: "rate_limited", retry_after: limit },
+          429,
+          request.method,
+          { "retry-after": String(limit) },
+        );
+      }
+    }
+
     if (env && env.UNIQUE_DOWNLOADS && (globalThis.caches?.default || env.XYDESK_DB)) {
       env = { ...env, UNIQUE_DOWNLOADS: wrapKvWithEdgeCache(env.UNIQUE_DOWNLOADS, env.XYDESK_DB || null) };
     }
-    const url = new URL(request.url);
-    const path = url.pathname;
 
     if (path === "/api/chat/channels" || path.startsWith("/api/chat/channels/")) {
       if (!env.GLOBAL_CHAT) return durableObjectJson({ status: "error", code: "channels_unavailable" }, 503, request.method);
