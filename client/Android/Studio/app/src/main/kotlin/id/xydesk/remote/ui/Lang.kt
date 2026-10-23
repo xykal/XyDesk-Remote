@@ -9,23 +9,63 @@ import java.util.Locale
 /**
  * Bahasa aplikasi.
  *
- * Dua bahasa penuh untuk seluruh alur utama: Indonesia (default kalau bahasa
- * sistem Indonesia) dan English. Pilihan disimpan di prefs dan dipakai
- * seluruh layar lewat [XyText.t].
+ * Migrasi multi-bahasa bertahap: tabel inti [XyText] diterjemahkan per bahasa
+ * (saat ini ID/EN penuh, MS/ES/PT/DE/FR untuk tabel inti), sisanya jatuh ke
+ * English lalu Indonesia. String sebaris lewat `xy()` saat ini ID/EN
+ * (MS memakai ID yang serumpun) dan dipindahkan ke tabel secara bertahap.
+ * Pilihan disimpan di prefs dan dipakai seluruh layar lewat [XyText.t].
  */
 enum class XyLang(val code: String, val label: String) {
     ID("id", "Indonesia"),
     EN("en", "English"),
+    MS("ms", "Bahasa Melayu"),
+    ES("es", "Español"),
+    PT("pt", "Português"),
+    DE("de", "Deutsch"),
+    FR("fr", "Français"),
+    RU("ru", "Русский"),
+    AR("ar", "العربية"),
+    HI("hi", "हिन्दी"),
+    JA("ja", "日本語"),
+    KO("ko", "한국어"),
+    ZH("zh-CN", "中文简体"),
+    VI("vi", "Tiếng Việt"),
+    TH("th", "ภาษาไทย"),
+    TR("tr", "Türkçe"),
+    IT("it", "Italiano"),
+    NL("nl", "Nederlands"),
+    PL("pl", "Polski"),
+    UK("uk", "Українська"),
     ;
 
     companion object {
         /** Pilih default sekali dari bahasa sistem. */
         fun fromSystem(context: Context): XyLang {
-            val tag = Locale.getDefault().language
-            if (tag.equals("in", true) || tag.equals("id", true)) return ID
+            val tag = Locale.getDefault().language.trim().lowercase(Locale.ROOT)
             val cfg: Configuration = context.resources.configuration
-            val cfgTag = cfg.locales[0]?.language.orEmpty()
-            return if (cfgTag.equals("in", true) || cfgTag.equals("id", true)) ID else EN
+            val cfgTag = cfg.locales[0]?.language.orEmpty().trim().lowercase(Locale.ROOT)
+            return when (tag.ifBlank { cfgTag }) {
+                "in", "id" -> ID
+                "ms" -> MS
+                "es" -> ES
+                "pt" -> PT
+                "de" -> DE
+                "fr" -> FR
+                "ru" -> RU
+                "ar" -> AR
+                "hi" -> HI
+                "ja" -> JA
+                "ko" -> KO
+                "zh" -> ZH
+                "vi" -> VI
+                "th" -> TH
+                "tr" -> TR
+                "it" -> IT
+                "nl" -> NL
+                "pl" -> PL
+                "uk", "ua" -> UK
+                else -> EN
+            }
         }
     }
 }
@@ -54,7 +94,13 @@ object XyText {
     fun current(): XyLang = langState.value
 
     fun t(key: String): String =
-        table[key]?.get(current()) ?: table[key]?.get(XyLang.ID) ?: key
+        table[key]?.get(current())
+            ?: extra[key]?.get(current())
+            ?: table[key]?.get(XyLang.EN)
+            ?: extra[key]?.get(XyLang.EN)
+            ?: table[key]?.get(XyLang.ID)
+            ?: extra[key]?.get(XyLang.ID)
+            ?: key
 
     fun t(key: String, vararg args: Any?): String {
         var out = t(key)
@@ -175,6 +221,88 @@ object XyText {
             XyLang.EN to "Switch to direct touch",
         ),
     )
+
+    /**
+     * Terjemahan tambahan tabel inti per bahasa (fase migrasi bahasa UI).
+     * Bahasa yang belum diterjemahkan jatuh ke EN lalu ID lewat [t].
+     * String sebaris lewat `xy()` saat ini baru ID/EN (MS memakai ID yang
+     * serumpun); perluasan berikutnya memindahkan string itu ke tabel ini.
+     */
+    private val extra: Map<String, Map<XyLang, String>> = mapOf(
+        "app.tagline" to mapOf(
+            XyLang.MS to "Klien RDP Android untuk Windows dan Windows Server.",
+            XyLang.ES to "Cliente RDP de Android para Windows y Windows Server.",
+            XyLang.PT to "Cliente RDP Android para Windows e Windows Server.",
+            XyLang.DE to "Android-RDP-Client für Windows und Windows Server.",
+            XyLang.FR to "Client RDP Android pour Windows et Windows Server.",
+        ),
+        "home.devices" to mapOf(XyLang.MS to "Peranti", XyLang.ES to "Dispositivos", XyLang.PT to "Dispositivos", XyLang.DE to "Geräte", XyLang.FR to "Appareils"),
+        "home.display" to mapOf(XyLang.MS to "Paparan", XyLang.ES to "Pantalla", XyLang.PT to "Tela", XyLang.DE to "Anzeige", XyLang.FR to "Affichage"),
+        "home.keyboard" to mapOf(XyLang.MS to "Papan Kekunci & HUD", XyLang.ES to "Teclado y HUD", XyLang.PT to "Teclado e HUD", XyLang.DE to "Tastatur & HUD", XyLang.FR to "Clavier et HUD"),
+        "home.transport" to mapOf(XyLang.MS to "Pengangkutan lalai", XyLang.ES to "Transporte predeterminado", XyLang.PT to "Transporte padrão", XyLang.DE to "Standardtransport", XyLang.FR to "Transport par défaut"),
+        "home.security" to mapOf(XyLang.MS to "Keselamatan", XyLang.ES to "Seguridad", XyLang.PT to "Segurança", XyLang.DE to "Sicherheit", XyLang.FR to "Sécurité"),
+        "home.about" to mapOf(XyLang.MS to "Perihal", XyLang.ES to "Acerca de", XyLang.PT to "Sobre", XyLang.DE to "Info", XyLang.FR to "À propos"),
+        "home.language" to mapOf(XyLang.MS to "Bahasa", XyLang.ES to "Idioma", XyLang.PT to "Idioma", XyLang.DE to "Sprache", XyLang.FR to "Langue"),
+        "home.language.sub" to mapOf(
+            XyLang.MS to "Bahasa aplikasi; terus berkuat kuasa",
+            XyLang.ES to "Idioma de la aplicación; se aplica al instante",
+            XyLang.PT to "Idioma do aplicativo; aplicado imediatamente",
+            XyLang.DE to "App-Sprache; gilt sofort",
+            XyLang.FR to "Langue de l'application ; effet immédiat",
+        ),
+        "home.new" to mapOf(XyLang.MS to "Peranti baharu", XyLang.ES to "Nuevo dispositivo", XyLang.PT to "Novo dispositivo", XyLang.DE to "Neues Gerät", XyLang.FR to "Nouvel appareil"),
+        "home.connect" to mapOf(XyLang.MS to "Sambung", XyLang.ES to "Conectar", XyLang.PT to "Conectar", XyLang.DE to "Verbinden", XyLang.FR to "Connecter"),
+        "home.edit" to mapOf(XyLang.MS to "Ubah", XyLang.ES to "Editar", XyLang.PT to "Editar", XyLang.DE to "Bearbeiten", XyLang.FR to "Modifier"),
+        "home.delete" to mapOf(XyLang.MS to "Padam", XyLang.ES to "Eliminar", XyLang.PT to "Excluir", XyLang.DE to "Löschen", XyLang.FR to "Supprimer"),
+        "home.empty.title" to mapOf(XyLang.MS to "Belum ada peranti", XyLang.ES to "Aún no hay dispositivos", XyLang.PT to "Nenhum dispositivo ainda", XyLang.DE to "Noch keine Geräte", XyLang.FR to "Aucun appareil pour le moment"),
+        "home.empty.body" to mapOf(
+            XyLang.MS to "Tambah alamat Windows atau Windows Server untuk bermula.",
+            XyLang.ES to "Agrega una dirección de Windows o Windows Server para empezar.",
+            XyLang.PT to "Adicione um endereço Windows ou Windows Server para começar.",
+            XyLang.DE to "Füge eine Windows- oder Windows-Server-Adresse hinzu, um zu starten.",
+            XyLang.FR to "Ajoutez une adresse Windows ou Windows Server pour commencer.",
+        ),
+        "about.version" to mapOf(XyLang.MS to "Versi apl", XyLang.ES to "Versión de la aplicación", XyLang.PT to "Versão do aplicativo", XyLang.DE to "App-Version", XyLang.FR to "Version de l'application"),
+        "about.engine" to mapOf(XyLang.MS to "Enjin RDP", XyLang.ES to "Motor RDP", XyLang.PT to "Mecanismo RDP", XyLang.DE to "RDP-Engine", XyLang.FR to "Moteur RDP"),
+        "about.developer" to mapOf(XyLang.MS to "Pembangun", XyLang.ES to "Desarrollador", XyLang.PT to "Desenvolvedor", XyLang.DE to "Entwickler", XyLang.FR to "Développeur"),
+        "about.license" to mapOf(XyLang.MS to "Lihat lesen", XyLang.ES to "Ver licencia", XyLang.PT to "Ver licença", XyLang.DE to "Lizenz ansehen", XyLang.FR to "Voir la licence"),
+        "about.license.title" to mapOf(XyLang.MS to "Lesen", XyLang.ES to "Licencia", XyLang.PT to "Licença", XyLang.DE to "Lizenz", XyLang.FR to "Licence"),
+        "about.support.title" to mapOf(XyLang.MS to "Sokong saya", XyLang.ES to "Apóyame", XyLang.PT to "Apoie-me", XyLang.DE to "Unterstütze mich", XyLang.FR to "Me soutenir"),
+        "about.support.saweria" to mapOf(XyLang.MS to "Sokong melalui Saweria", XyLang.ES to "Apoyar vía Saweria", XyLang.PT to "Apoiar via Saweria", XyLang.DE to "Über Saweria unterstützen", XyLang.FR to "Soutenir via Saweria"),
+        "about.support.github" to mapOf(XyLang.MS to "Penaja GitHub", XyLang.ES to "Patrocinadores de GitHub", XyLang.PT to "Patrocinadores do GitHub", XyLang.DE to "GitHub Sponsors", XyLang.FR to "Sponsors GitHub"),
+        "about.support.star" to mapOf(XyLang.MS to "Beri bintang di GitHub", XyLang.ES to "Dar estrella en GitHub", XyLang.PT to "Dar estrela no GitHub", XyLang.DE to "Stern auf GitHub geben", XyLang.FR to "Mettre une étoile sur GitHub"),
+        "about.support.starred" to mapOf(XyLang.MS to "Terima kasih", XyLang.ES to "Gracias", XyLang.PT to "Obrigado", XyLang.DE to "Danke", XyLang.FR to "Merci"),
+        "about.thanks" to mapOf(
+            XyLang.MS to "Terima kasih kerana menggunakan XyDesk Remote.",
+            XyLang.ES to "Gracias por usar XyDesk Remote.",
+            XyLang.PT to "Obrigado por usar o XyDesk Remote.",
+            XyLang.DE to "Danke, dass du XyDesk Remote nutzt.",
+            XyLang.FR to "Merci d'utiliser XyDesk Remote.",
+        ),
+        "panel.input" to mapOf(XyLang.MS to "Input", XyLang.ES to "Entrada", XyLang.PT to "Entrada", XyLang.DE to "Eingabe", XyLang.FR to "Entrée"),
+        "panel.pointer" to mapOf(XyLang.MS to "Penunjuk", XyLang.ES to "Puntero", XyLang.PT to "Ponteiro", XyLang.DE to "Zeiger", XyLang.FR to "Pointeur"),
+        "panel.buttons" to mapOf(XyLang.MS to "Butang", XyLang.ES to "Botones", XyLang.PT to "Botões", XyLang.DE to "Tasten", XyLang.FR to "Boutons"),
+        "panel.keyboard" to mapOf(XyLang.MS to "Papan kekunci", XyLang.ES to "Teclado", XyLang.PT to "Teclado", XyLang.DE to "Tastatur", XyLang.FR to "Clavier"),
+        "panel.screen" to mapOf(XyLang.MS to "Skrin", XyLang.ES to "Pantalla", XyLang.PT to "Tela", XyLang.DE to "Bildschirm", XyLang.FR to "Écran"),
+        "panel.session" to mapOf(XyLang.MS to "Sesi", XyLang.ES to "Sesión", XyLang.PT to "Sessão", XyLang.DE to "Sitzung", XyLang.FR to "Session"),
+        "panel.tips" to mapOf(XyLang.MS to "Petua", XyLang.ES to "Consejos", XyLang.PT to "Dicas", XyLang.DE to "Tipps", XyLang.FR to "Astuces"),
+        "panel.close" to mapOf(XyLang.MS to "Tutup", XyLang.ES to "Cerrar", XyLang.PT to "Fechar", XyLang.DE to "Schließen", XyLang.FR to "Fermer"),
+        "panel.addKey" to mapOf(XyLang.MS to "Tambah butang", XyLang.ES to "Agregar botón", XyLang.PT to "Adicionar botão", XyLang.DE to "Taste hinzufügen", XyLang.FR to "Ajouter un bouton"),
+        "panel.editDone" to mapOf(XyLang.MS to "Selesai menyusun", XyLang.ES to "Terminar edición", XyLang.PT to "Concluir edição", XyLang.DE to "Bearbeitung fertig", XyLang.FR to "Terminer l'édition"),
+        "panel.mapMode" to mapOf(XyLang.MS to "Susun kedudukan", XyLang.ES to "Editar diseño", XyLang.PT to "Editar layout", XyLang.DE to "Layout bearbeiten", XyLang.FR to "Modifier la disposition"),
+        "panel.resetKeys" to mapOf(XyLang.MS to "Kembalikan butang lalai", XyLang.ES to "Restaurar botones predeterminados", XyLang.PT to "Restaurar botões padrão", XyLang.DE to "Standardtasten wiederherstellen", XyLang.FR to "Restaurer les boutons par défaut"),
+        "panel.disconnect" to mapOf(XyLang.MS to "Putuskan sesi", XyLang.ES to "Desconectar sesión", XyLang.PT to "Desconectar sessão", XyLang.DE to "Sitzung trennen", XyLang.FR to "Déconnecter la session"),
+        "panel.screenshot" to mapOf(XyLang.MS to "Ambil tangkapan skrin", XyLang.ES to "Tomar captura de pantalla", XyLang.PT to "Tirar captura de tela", XyLang.DE to "Screenshot aufnehmen", XyLang.FR to "Prendre une capture d'écran"),
+        "pointer.show" to mapOf(XyLang.MS to "Tunjukkan penunjuk", XyLang.ES to "Mostrar puntero", XyLang.PT to "Mostrar ponteiro", XyLang.DE to "Zeiger anzeigen", XyLang.FR to "Afficher le pointeur"),
+        "keys.hold" to mapOf(XyLang.MS to "Tahan", XyLang.ES to "Mantener", XyLang.PT to "Segurar", XyLang.DE to "Halten", XyLang.FR to "Maintenir"),
+        "keys.tap" to mapOf(XyLang.MS to "Sekali ketik", XyLang.ES to "Un toque", XyLang.PT to "Um toque", XyLang.DE to "Einmal tippen", XyLang.FR to "Un seul appui"),
+        "keys.toggle" to mapOf(XyLang.MS to "Togol", XyLang.ES to "Alternar", XyLang.PT to "Alternar", XyLang.DE to "Umschalten", XyLang.FR to "Basculer"),
+        "keys.inToolbar" to mapOf(XyLang.MS to "Di bar alat", XyLang.ES to "En la barra de herramientas", XyLang.PT to "Na barra de ferramentas", XyLang.DE to "In der Symbolleiste", XyLang.FR to "Dans la barre d'outils"),
+        "keys.onlyScreen" to mapOf(XyLang.MS to "Hanya di skrin", XyLang.ES to "Solo en pantalla", XyLang.PT to "Somente na tela", XyLang.DE to "Nur auf dem Bildschirm", XyLang.FR to "Écran uniquement"),
+        "keys.editTitle" to mapOf(XyLang.MS to "UBAH BUTANG", XyLang.ES to "EDITAR BOTÓN", XyLang.PT to "EDITAR BOTÃO", XyLang.DE to "TASTE BEARBEITEN", XyLang.FR to "MODIFIER LE BOUTON"),
+        "keys.addTitle" to mapOf(XyLang.MS to "TAMBAH BUTANG", XyLang.ES to "AGREGAR BOTÓN", XyLang.PT to "ADICIONAR BOTÃO", XyLang.DE to "TASTE HINZUFÜGEN", XyLang.FR to "AJOUTER UN BOUTON"),
+        "input.switchHint" to mapOf(XyLang.MS to "Beralih ke sentuhan langsung", XyLang.ES to "Cambiar a toque directo", XyLang.PT to "Mudar para toque direto", XyLang.DE to "Zu direkter Berührung wechseln", XyLang.FR to "Passer au toucher direct"),
+    )
 }
 
 /** Nama bahasa untuk switcher. */
@@ -228,11 +356,11 @@ fun t(key: String): String {
  */
 @Composable
 fun xy(id: String, en: String, vararg args: Any?): String =
-    fill(if (xyLang() == XyLang.EN) en else id, args)
+    fill(if (xyLang() == XyLang.ID || xyLang() == XyLang.MS) id else en, args)
 
 /** Versi non-composable (notice, callback) — pakai bahasa yang sedang aktif. */
 fun xyNow(id: String, en: String, vararg args: Any?): String =
-    fill(if (XyText.current() == XyLang.EN) en else id, args)
+    fill(if (XyText.current() == XyLang.ID || XyText.current() == XyLang.MS) id else en, args)
 
 private fun fill(template: String, args: Array<out Any?>): String {
     if (args.isEmpty()) return template
