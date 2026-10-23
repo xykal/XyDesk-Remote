@@ -658,10 +658,10 @@ internal fun MessageBubble(
         else -> 68.dp
     }).coerceAtMost(maxBubbleWidth)
 
-    Row(
+        Row(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(horizontal = if (isCompactOverlay) 1.dp else 2.dp)
+            .padding(horizontal = if (isCompactOverlay) 8.dp else 16.dp)
             .offset { IntOffset(swipeOffsetX.roundToInt(), 0) }
             .pointerInput(msg.id, replyThresholdPx, maxSwipePx) {
                 detectHorizontalDragGestures(
@@ -876,6 +876,8 @@ internal fun MessageBubble(
                                 vertical = padV,
                             ),
                     ) {
+                        // Status lipat/tampilkan kotak balasan (per pesan)
+                        val replyExpanded by remember(msg.id) { mutableStateOf(true) }
                         // Pita Khusus Pengumuman Admin @xykal yang Otomatis Tersemat
                         if (isAnnouncementMsg) {
                             Box(
@@ -975,44 +977,108 @@ internal fun MessageBubble(
                             }
                         }
 
-                        // Kotak Kutipan Balasan (Quoted Reply ala WhatsApp)
+                        // Kotak Kutipan Balasan (Quoted Reply ala WhatsApp) — avatar pengirim + > kutip + lipat/tampilkan
                         if (msg.replyToName.isNotBlank() || msg.replyToText.isNotBlank()) {
-                            Spacer(Modifier.height(3.dp))
-                            Row(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .clip(RoundedCornerShape(6.dp))
-                                    .background(
-                                        if (isLightBubble) Color(0xFF09090B).copy(alpha = 0.07f)
-                                        else Color.Black.copy(alpha = 0.28f),
-                                    )
-                                    .padding(horizontal = 7.dp, vertical = 4.dp),
-                                verticalAlignment = Alignment.CenterVertically,
+                            Spacer(Modifier.height(4.dp))
+                            AnimatedVisibility(
+                                visible = replyExpanded,
+                                enter = fadeIn(),
+                                exit = fadeOut(),
                             ) {
-                                Box(
+                                Row(
                                     modifier = Modifier
-                                        .width(2.5.dp)
-                                        .height(22.dp)
-                                        .clip(RoundedCornerShape(2.dp))
-                                        .background(if (founderMsg) Color(0xFFD7D7D7) else primaryTextColor),
-                                )
-                                Spacer(Modifier.width(6.dp))
-                                Column {
-                                    Text(
-                                        msg.replyToName.ifBlank { "Pesan" },
-                                        style = MaterialTheme.typography.labelSmall,
-                                        fontSize = 10.sp,
-                                        fontWeight = FontWeight.Bold,
-                                        color = primaryTextColor,
+                                        .fillMaxWidth()
+                                        .clip(RoundedCornerShape(10.dp))
+                                        .background(
+                                            if (isLightBubble) Color(0xFF09090B).copy(alpha = 0.06f)
+                                            else Color.Black.copy(alpha = 0.24f),
+                                        )
+                                        .padding(horizontal = 10.dp, vertical = 8.dp),
+                                    verticalAlignment = Alignment.CenterVertically,
+                                ) {
+                                    // Avatar siapa yang balas
+                                    ChatSenderAvatar(
+                                        name = msg.name,
+                                        githubLogin = msg.githubLogin,
+                                        avatarUrl = msg.avatarUrl,
+                                        isFounder = founderMsg,
+                                        compact = true,
                                     )
-                                    Text(
-                                        msg.replyToText.ifBlank { "Media / Stiker" },
-                                        style = MaterialTheme.typography.labelSmall,
-                                        fontSize = 10.sp,
-                                        color = secondaryTextColor,
-                                        maxLines = 1,
-                                        overflow = TextOverflow.Ellipsis,
-                                    )
+                                    Spacer(Modifier.width(8.dp))
+                                    Column(
+                                        modifier = Modifier.weight(1f),
+                                        horizontalAlignment = Alignment.Start,
+                                    ) {
+                                        Row(
+                                            modifier = Modifier.fillMaxWidth(),
+                                            verticalAlignment = Alignment.CenterVertically,
+                                        ) {
+                                            Text(
+                                                text = msg.name,
+                                                style = MaterialTheme.typography.labelSmall,
+                                                fontSize = 10.5.sp,
+                                                fontWeight = FontWeight.Bold,
+                                                color = if (founderMsg) Color(0xFFE0E0E0) else primaryTextColor,
+                                                maxLines = 1,
+                                                overflow = TextOverflow.Ellipsis,
+                                            )
+                                            XyUserRoleBadges(
+                                                name = msg.name,
+                                                githubLogin = msg.githubLogin,
+                                                compact = true,
+                                            )
+                                        }
+                                        // > Kutip nama org yang dibalas
+                                        Row(
+                                            modifier = Modifier
+                                                .fillMaxWidth()
+                                                .padding(top = 3.dp),
+                                            verticalAlignment = Alignment.CenterVertically,
+                                        ) {
+                                            Box(
+                                                modifier = Modifier
+                                                    .width(2.dp)
+                                                    .clip(RoundedCornerShape(1.dp))
+                                                    .background(primaryTextColor.copy(alpha = 0.5f)),
+                                            )
+                                            Spacer(Modifier.width(6.dp))
+                                            Column {
+                                                Text(
+                                                    text = msg.replyToName.ifBlank { "Pesan" },
+                                                    style = MaterialTheme.typography.labelSmall,
+                                                    fontSize = 9.5.sp,
+                                                    fontWeight = FontWeight.Bold,
+                                                    color = primaryTextColor.copy(alpha = 0.85f),
+                                                    maxLines = 1,
+                                                    overflow = TextOverflow.Ellipsis,
+                                                )
+                                                Text(
+                                                    text = msg.replyToText.ifBlank { "Media / Stiker" },
+                                                    style = MaterialTheme.typography.labelSmall,
+                                                    fontSize = 9.sp,
+                                                    color = secondaryTextColor.copy(alpha = 0.8f),
+                                                    maxLines = 2,
+                                                    overflow = TextOverflow.Ellipsis,
+                                                )
+                                            }
+                                        }
+                                    }
+                                    // Tombol lipat/tampilkan balasan
+                                    Box(
+                                        modifier = Modifier
+                                            .size(26.dp)
+                                            .clip(CircleShape)
+                                            .background(if (isLightBubble) Color(0xFF09090B).copy(alpha = 0.15f) else Color.White.copy(alpha = 0.10f))
+                                            .clickable { replyExpanded = !replyExpanded },
+                                        contentAlignment = Alignment.Center,
+                                    ) {
+                                        Icon(
+                                            imageVector = if (replyExpanded) XyIcons.ChevronDown else XyIcons.ChevronUp,
+                                            contentDescription = null,
+                                            tint = secondaryTextColor,
+                                            modifier = Modifier.size(12.dp),
+                                        )
+                                    }
                                 }
                             }
                         }
