@@ -2601,9 +2601,9 @@
   <div class="update-popup-overlay" id="update-popup" aria-hidden="true">
     <div class="update-popup-card" role="dialog" aria-modal="true" aria-labelledby="upd-title">
       <button class="update-popup-close" id="upd-close" aria-label="Tutup">×</button>
-      <div class="update-popup-badge"><span class="dot"></span> Rilis Update Tersedia</div>
-      <h3 id="upd-title">XyDesk Remote — Update Terbaru</h3>
-      <p class="desc" id="upd-desc">Versi terbaru telah dirilis! Periksa catatan rilis dan unduh APK terbaru untuk performa super-cepat.</p>
+      <div class="update-popup-badge"><span class="dot"></span> Jadwal Rilis Terdekat</div>
+      <h3 id="upd-title">XyDesk Remote — Rilis Baru Segera Hadir</h3>
+      <p class="desc" id="upd-desc">Unduhan APK v1.1.23 akan dibuka segera. Hitung mundur ke jadwal rilis di bawah.</p>
       <div class="update-popup-meta">
         <div class="update-popup-meta-item">
           <span>Versi Terbaru</span>
@@ -2614,7 +2614,7 @@
           <strong class="mono" id="upd-last">—</strong>
         </div>
         <div class="update-popup-meta-item">
-          <span>Hitung Mundur Next Check</span>
+          <span>Hitung Mundur Rilis</span>
           <div class="countdown mono" id="upd-countdown">00:00:00</div>
         </div>
         <div class="update-popup-meta-item">
@@ -2638,16 +2638,18 @@
     var dlEl=document.getElementById("upd-downloads");
     var cdEl=document.getElementById("upd-countdown");
     var SESSION_KEY="xydesk_update_popup_dismissed_v1_1_23";
-    var nextCheckAt=Date.now()+60*60*1000; // 1 jam hitung mundur
+    // Target jadwal rilis: Sabtu 2026-10-24 00:00:00 UTC
+    var releaseAt=new Date("2026-10-24T00:00:00Z").getTime();
+    var nextCheckAt=releaseAt;
     function fmtLast(dateStr){
       try{var d=new Date(dateStr);return d.toLocaleString(document.documentElement.lang==="en"?"en-US":"id-ID",{dateStyle:"medium",timeStyle:"short",timeZone:"UTC"})+" UTC";}catch(e){return dateStr;}
     }
     function tick(){
-      var remaining=Math.max(0,nextCheckAt-Date.now());
+      var remaining=Math.max(0,releaseAt-Date.now());
       var h=Math.floor(remaining/3600000),m=Math.floor(remaining%3600000/60000),s=Math.floor(remaining%60000/1000);
       function pad(n){return n<10?"0"+n:""+n;}
       if(cdEl) cdEl.textContent=pad(h)+":"+pad(m)+":"+pad(s);
-      if(remaining===0) nextCheckAt=Date.now()+60*60*1000;
+      if(remaining===0 && cdEl) cdEl.textContent="Telah dirilis";
     }
     setInterval(tick,1000); tick();
     function show(){ if(!overlay) return; overlay.classList.add("open"); overlay.setAttribute("aria-hidden","false"); }
