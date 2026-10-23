@@ -27,7 +27,7 @@ class ChatHistoryFailurePolicyTest {
         assertEquals(10L, chatSocketFailure(0, "-1").retrySeconds)
     }
     @Test fun quietConnectedSocketDoesNotFallBackToFiveSecondHistoryPolling() {
-        assertEquals(300_000L, chatHistoryPollDelayMs(true))
-        assertEquals(10_000L, chatHistoryPollDelayMs(false))
+        assertEquals(3_500L, chatHistoryPollDelayMs(true))
+        assertEquals(6_000L, chatHistoryPollDelayMs(false))
     }
 }
