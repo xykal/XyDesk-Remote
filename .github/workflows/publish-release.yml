@@ -1,0 +1,47 @@
+name: Auto Publish Release
+
+# Publikasikan otomatis draft rilis v1.1.23 saat waktu target tercapai
+# (hitung mundur di web sudah sinkron ke waktu ini).
+on:
+  schedule:
+    - cron: '0 * * * *'   # setiap jam
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  auto-publish:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Cek waktu target rilis
+        id: check
+        run: |
+          RELEASE_TIME="2026-10-24T00:00:00Z"
+          NOW=$(date -u +%Y-%m-%dT%H:%M:%SZ)
+          echo "release_time=$RELEASE_TIME" >> "$GITHUB_OUTPUT"
+          echo "now=$NOW" >> "$GITHUB_OUTPUT"
+          if [[ "$NOW" >= "$RELEASE_TIME" ]]; then
+            echo "released=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "released=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Publikasikan draft v1.1.23 jika waktu sudah tercapai
+        if: steps.check.outputs.released == 'true'
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: |
+          REPO="${{ github.repository }}"
+          # Cari draft release dengan tag v1.1.23
+          DRAFT_ID=$(gh api "/repos/${REPO}/releases" --jq '.[] | select(.tag_name=="v1.1.23" and .draft==true) | .id')
+          if [ -z "$DRAFT_ID" ]; then
+            echo "Tidak ditemukan draft release v1.1.23 — tidak ada yang dipublish."
+            exit 0
+          fi
+          echo "Ditemukan draft release id=$DRAFT_ID — publish ke publik."
+          gh api -X PATCH "/repos/${REPO}/releases/${DRAFT_ID}" \
+            -f draft=false \
+            -f make_latest="true" \
+            > /dev/null
+          echo "Release v1.1.23 sudah dipublikasikan."

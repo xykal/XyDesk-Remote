@@ -2614,7 +2614,7 @@
           <strong class="mono" id="upd-last">—</strong>
         </div>
         <div class="update-popup-meta-item">
-          <span>Hitung Mundur Rilis</span>
+          <span>Hari:Jam:Menit:Detik</span>
           <div class="countdown mono" id="upd-countdown">00:00:00</div>
         </div>
         <div class="update-popup-meta-item">
@@ -2646,10 +2646,10 @@
     }
     function tick(){
       var remaining=Math.max(0,releaseAt-Date.now());
-      var h=Math.floor(remaining/3600000),m=Math.floor(remaining%3600000/60000),s=Math.floor(remaining%60000/1000);
+      var d=Math.floor(remaining/86400000),h=Math.floor(remaining%86400000/3600000),m=Math.floor(remaining%3600000/60000),s=Math.floor(remaining%60000/1000);
       function pad(n){return n<10?"0"+n:""+n;}
-      if(cdEl) cdEl.textContent=pad(h)+":"+pad(m)+":"+pad(s);
-      if(remaining===0 && cdEl) cdEl.textContent="Telah dirilis";
+      if(cdEl) cdEl.textContent=pad(d)+":"+pad(h)+":"+pad(m)+":"+pad(s);
+      if(remaining===0 && cdEl) cdEl.textContent="Telah dirilis — publik";
     }
     setInterval(tick,1000); tick();
     function show(){ if(!overlay) return; overlay.classList.add("open"); overlay.setAttribute("aria-hidden","false"); }
