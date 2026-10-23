@@ -2100,7 +2100,7 @@ fun XyDeskSessionScreen(
             DisconnectedScreen(
                 wall = wall,
                 deviceLabel = activeProfile.label ?: activeProfile.host,
-                detail = (state as SessionState.Error).detail ?: (state as SessionState.Error).message,
+                detail = (state as SessionState.Error).message,
                 onReconnect = {
                     boundInstance = 0L
                     reconnectAttempt = 0
