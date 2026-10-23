@@ -29,12 +29,15 @@ baca/hapus dokumen lolos. Endpoint `POST /api/firebase/token` (tukar
 GitHub PAT → Firebase custom token, UID `gh-{id}`) sudah live di worker;
 rahasia SA terpasang sebagai Worker secrets.
 
-**Satu aksi owner tersisa (gratis, tanpa kartu):**
-console.firebase.google.com → project `xyverse-technology-global` →
-**Authentication → Get started** (satu klik; membuat config Auth agar
-`signInWithCustomToken` aktif). Provider GitHub tidak perlu diaktifkan —
-identitas tetap GitHub PAT yang diverifikasi worker. Setelah itu
-transport APK dual-mode dan cutover diselesaikan dari sini. Kuota Spark (20rb tulis/hari)
+Auth sudah diaktifkan owner. Rantai identitas **terbukti ujung-ke-ujung**:
+custom token → `signInWithCustomToken` 200 → tulis pesan Firestore dengan
+token pengguna (lolos rules `authorUid == uid`) → baca balik → bersih.
+Transport APK (`FirebaseChatTransport`, REST) selesai dan lolos gate
+compile+unit test; aktif lewat flag `chat_backend_firebase` (toggle di
+dialog bahasa chat), bawaan tetap Cloudflare. Provider GitHub di Firebase
+tidak perlu — identitas tetap GitHub PAT yang diverifikasi worker.
+Sisa: uji perangkat nyata mode Firebase, lalu cutover (matikan jalur
+DO chat) dan FCM menggantikan relay OneSignal bila Blaze tersedia. Kuota Spark (20rb tulis/hari)
 cukup untuk komunitas saat ini; pantau Usage, naik Blaze kapan pun
 kartu/virtual debit tersedia (mis. e-Card bank digital).
 
@@ -103,9 +106,9 @@ Functions (rules menolak tulis langsung klien ke `messages`), kecuali
 2. ✅ Threaded reply: `replyDepth` di model/parser/jalur kirim/worker +
    render font menyusut & indentasi per level (maks 4 visual).
 3. Firebase (mode Spark): project + aplikasi + config + DB Jakarta +
-   rules ter-bind + endpoint token live. Menunggu klik Get started Auth
-   → transport APK di belakang flag, dual-run, cutover, matikan jalur
-   DO chat. Functions menyusul pasca-Blaze.
+   rules ter-bind + endpoint token live + rantai Auth terbukti +
+   transport APK selesai (flag). Sisa: uji perangkat, cutover, matikan
+   jalur DO chat. Functions menyusul pasca-Blaze.
 4. Build verifikasi (gate + release) hijau.
 5. Draft rilis diperbarui; publish **hanya** atas perintah owner.
 
