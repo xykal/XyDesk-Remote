@@ -2144,9 +2144,26 @@
       var activeStatsInFlight = false;
       var activeStatsTimer = null;
       var activeStatsController = null;
+      // Kuota Workers akun ini dipakai bersama Worker lain, jadi polling ini
+      // sengaja dilonggarkan: 60 dtk, dan berhenti total kalau tab menganggur
+      // >5 menit (langsung hidup lagi begitu pengguna berinteraksi).
+      var ACTIVE_STATS_INTERVAL = 60_000;
+      var ACTIVE_STATS_IDLE_MS = 5 * 60_000;
+      var activeStatsLastTouch = Date.now();
+      function markActiveStatsTouch() {
+        var wasIdle = Date.now() - activeStatsLastTouch > ACTIVE_STATS_IDLE_MS;
+        activeStatsLastTouch = Date.now();
+        if (wasIdle && !activeStatsTimer && !activeStatsInFlight) scheduleActiveStats();
+      }
+      ["pointerdown", "keydown", "scroll", "touchstart"].forEach(function (evt) {
+        document.addEventListener(evt, markActiveStatsTouch, { passive: true });
+      });
       function scheduleActiveStats() {
         clearTimeout(activeStatsTimer);
-        if (!document.hidden) activeStatsTimer = setTimeout(loadActiveSessionStats, 10_000);
+        activeStatsTimer = null;
+        if (document.hidden) return;
+        if (Date.now() - activeStatsLastTouch > ACTIVE_STATS_IDLE_MS) return;
+        activeStatsTimer = setTimeout(loadActiveSessionStats, ACTIVE_STATS_INTERVAL);
       }
       function loadActiveSessionStats() {
         if (document.hidden || activeStatsInFlight) return;
@@ -2180,6 +2197,7 @@
       }
       document.addEventListener("visibilitychange", function () {
         clearTimeout(activeStatsTimer);
+        activeStatsTimer = null;
         if (document.hidden) {
           if (activeStatsController) activeStatsController.abort();
         } else loadActiveSessionStats();
