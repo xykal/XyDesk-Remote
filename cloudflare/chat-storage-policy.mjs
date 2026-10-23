@@ -1,6 +1,6 @@
 /** In-memory coalescing only: storage remains authoritative; failures are never cached. */
 export class RevisionedHistoryWindow {
-  constructor({ now = Date.now, ttlMs = 5_000 } = {}) {
+  constructor({ now = Date.now, ttlMs = 800 } = {}) {
     this.now = now; this.ttlMs = ttlMs; this.epoch = 0; this.snapshot = null; this.pending = null;
   }
   invalidate() { this.epoch += 1; this.snapshot = null; }

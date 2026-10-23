@@ -23,7 +23,7 @@ internal fun chatSocketFailure(status: Int, retryAfter: String?): ChatHistoryFai
     return ChatHistoryFailure(message, (retryAfter?.toLongOrNull() ?: fallback).coerceIn(10L, 600L))
 }
 
-// A quiet WebSocket is not a dead socket: OkHttp ping failures invoke onFailure.
-// Real-time messages still arrive over WS; HTTP is only a consistency fallback.
+// Ronde 85 — Realtime super-cepat: polling 3.5s saat WS live, 6s saat WS putus (bukan 5 menit).
+// WS tetap sumber utama instant (<100ms), HTTP hanya safety-net biar gak ketinggalan chat baru.
 internal fun chatHistoryPollDelayMs(socketConnected: Boolean): Long =
-    if (socketConnected) 300_000L else 10_000L
+    if (socketConnected) 3_500L else 6_000L

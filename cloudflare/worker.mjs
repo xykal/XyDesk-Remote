@@ -4437,8 +4437,8 @@ export class GlobalChat {
     this.sessions = new Set();
     this.httpRate = new Map();
     this.appOnlinePeers = new Map();
-    this.historyWindow = new RevisionedHistoryWindow();
-    this.pinnedWindow = new RevisionedHistoryWindow({ ttlMs: 30_000 });
+    this.historyWindow = new RevisionedHistoryWindow({ ttlMs: 800 });
+    this.pinnedWindow = new RevisionedHistoryWindow({ ttlMs: 5_000 });
     this.joinedCache = new Map();
     this.memoryMessages = new Map();
     this.memoryReceipts = new Map();

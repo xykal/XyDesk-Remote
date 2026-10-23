@@ -901,14 +901,21 @@ private fun GlobalChatAccountContent(
                     val snapshotStartedAt = System.currentTimeMillis()
                     val cid = URLEncoder.encode(communityApi.accountShortId(), "UTF-8")
                     val gh = URLEncoder.encode(requestAccount.orEmpty(), "UTF-8")
-                    val fastQuery = if (fastMode) "&fast=1&limit=45" else ""
+                    // Ronde 85 — Incremental sync: since_at biar cuma fetch chat baru (super cepat + hemat)
+                    val incrementalSinceAt = if (fastMode) 0L else messages.maxOfOrNull { it.at } ?: 0L
+                    val incrementalIsIncremental = !fastMode && incrementalSinceAt > 0L
+                    val sinceQuery = if (incrementalIsIncremental) "&since_at=$incrementalSinceAt" else ""
+                    val fastQuery = if (fastMode) "&fast=1&limit=45" else sinceQuery
                     val url = "$CHAT_HISTORY_URL?joined_at=$requestJoinedAt&client_id=$cid&github_login=$gh$fastQuery"
                     val conn = (URL(url).openConnection() as HttpURLConnection).apply {
                         instanceFollowRedirects = true
                         requestMethod = "GET"
-                        connectTimeout = if (fastMode) 4_500 else 8_000
-                        readTimeout = if (fastMode) 5_000 else 8_000
+                        connectTimeout = if (fastMode) 3_500 else 6_000
+                        readTimeout = if (fastMode) 4_000 else 7_000
                         setRequestProperty("Accept", "application/json")
+                        setRequestProperty("Cache-Control", "no-cache, no-store")
+                        setRequestProperty("Pragma", "no-cache")
+                        useCaches = false
                     }
                     try {
                     val httpStatus = conn.responseCode
@@ -949,7 +956,8 @@ private fun GlobalChatAccountContent(
                             if (arr.length() == 0 && !fastMode) {
                                 messages.removeAll { !keepAfterEmptyChatSnapshot(it.id, it.at, snapshotStartedAt) }
                             }
-                            if (fetched.isNotEmpty() && !fastMode) {
+                            // Incremental fetch cuma nambah baru, jangan hapus history lama yang masih valid
+                            if (fetched.isNotEmpty() && !fastMode && !incrementalIsIncremental) {
                                 val oldestFetchedAt = fetched.minOf { it.at }
                                 messages.removeAll { existing ->
                                     !existing.id.startsWith("local-") &&
@@ -1046,10 +1054,10 @@ private fun GlobalChatAccountContent(
         }
         launch { communityApi.fetchLeaderboard(reportDeltaSec = 0L) }
         launch(Dispatchers.IO) { runCatching { pruneExpiredChatViewOnceFiles(context.cacheDir) } }
-        // Fast initial fetch ("Hari ini") instan + full reconciliation
+        // Ronde 85 — Fast initial fetch super-cepat: 2x fetch tanpa delay lama + langsung scroll ke Hari Ini
         launch {
             fetchHistoryOverHttp()
-            delay(350)
+            delay(250)
             fetchHistoryOverHttp()
         }
         launch {
