@@ -2588,6 +2588,94 @@ async function dataPackResponse(request, env) {
   }
 }
 
+function base64UrlEncode(bytes) {
+  let binary = "";
+  const chunk = 0x8000;
+  for (let i = 0; i < bytes.length; i += chunk) {
+    binary += String.fromCharCode.apply(null, bytes.subarray(i, i + chunk));
+  }
+  return btoa(binary).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+}
+
+async function importServiceAccountKey(pem) {
+  const der = pem
+    .replace("-----BEGIN PRIVATE KEY-----", "")
+    .replace("-----END PRIVATE KEY-----", "")
+    .replace(/\s+/g, "");
+  const binary = atob(der);
+  const bytes = new Uint8Array(binary.length);
+  for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+  return crypto.subtle.importKey(
+    "pkcs8",
+    bytes.buffer,
+    { name: "RSASSA-PKCS1-v1_5", hash: "SHA-256" },
+    false,
+    ["sign"],
+  );
+}
+
+const firebaseSaKeyCache = { pem: "", key: null };
+
+/**
+ * POST /api/firebase/token — tukar GitHub PAT (identitas yang sudah dipakai
+ * APK) menjadi Firebase custom token. UID stabil per akun GitHub: gh-{id}.
+ * Rahasia service account dibaca dari Worker secrets FIREBASE_SA_EMAIL /
+ * FIREBASE_SA_PRIVATE_KEY; tanpa keduanya endpoint menjawab 503.
+ */
+async function firebaseTokenResponse(request, env) {
+  const saEmail = String(env?.FIREBASE_SA_EMAIL || "").trim();
+  const saPem = String(env?.FIREBASE_SA_PRIVATE_KEY || "");
+  if (!saEmail || !saPem.includes("PRIVATE KEY")) {
+    return jsonResponse({ status: "error", code: "firebase_not_configured" }, 503, request.method);
+  }
+  const bearer = (request.headers.get("authorization") || "").match(/^Bearer (\S+)$/);
+  if (!bearer) {
+    return jsonResponse({ status: "error", code: "authentication_required" }, 401, request.method);
+  }
+  const auth = await resolveGithubIdentity(bearer[1]);
+  if (!auth.ok) {
+    return jsonResponse({ status: "error", code: auth.code }, auth.status, request.method);
+  }
+  try {
+    if (firebaseSaKeyCache.pem !== saPem) {
+      firebaseSaKeyCache.key = await importServiceAccountKey(saPem);
+      firebaseSaKeyCache.pem = saPem;
+    }
+    const now = Math.floor(Date.now() / 1000);
+    const uid = `gh-${auth.principal.id}`;
+    const encoder = new TextEncoder();
+    const header = base64UrlEncode(encoder.encode(JSON.stringify({ alg: "RS256", typ: "JWT" })));
+    const payload = base64UrlEncode(encoder.encode(JSON.stringify({
+      iss: saEmail,
+      sub: saEmail,
+      aud: "https://identitytoolkit.googleapis.com/google.identity.identitytoolkit.v1.IdentityToolkit",
+      iat: now,
+      exp: now + 3600,
+      uid,
+      claims: {
+        github_login: auth.principal.login,
+        name: auth.principal.name || auth.principal.login,
+        avatar_url: auth.principal.avatar_url || "",
+      },
+    })));
+    const signingInput = `${header}.${payload}`;
+    const signature = await crypto.subtle.sign(
+      "RSASSA-PKCS1-v1_5",
+      firebaseSaKeyCache.key,
+      encoder.encode(signingInput),
+    );
+    const customToken = `${signingInput}.${base64UrlEncode(new Uint8Array(signature))}`;
+    return jsonResponse({
+      status: "ok",
+      custom_token: customToken,
+      uid,
+      github_login: auth.principal.login,
+    }, 200, request.method);
+  } catch {
+    return jsonResponse({ status: "error", code: "token_mint_failed" }, 502, request.method);
+  }
+}
+
 async function pushUpdateResponse(request, env) {
   const staffToken = request.headers.get("x-xydesk-staff-token") || "";
   if (!env.FEEDBACK_STAFF_TOKEN || !staffToken || staffToken !== env.FEEDBACK_STAFF_TOKEN) {
@@ -6333,6 +6421,11 @@ export default {
         }
         return chatStorageFailure(error, request.method);
       }
+    }
+    if (path === "/api/firebase/token") {
+      if (request.method === "OPTIONS") return corsPreflight("POST, OPTIONS");
+      if (request.method !== "POST") return methodNotAllowed("POST, OPTIONS");
+      return firebaseTokenResponse(request, env);
     }
     if (path === "/api/chat/send") {
       if (request.method === "OPTIONS") return corsPreflight("POST, OPTIONS");
