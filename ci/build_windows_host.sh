@@ -105,7 +105,7 @@ for sym, path in items:
 (d / "embedded_bundle.h").write_text("\n".join(lines) + "\n", encoding="utf-8")
 PY
 
-echo "[3/3] Compiling single-file XyDeskRemoteHost.exe (all DLLs, libraries & drivers bundled)..."
+echo "[3/3] Compiling single-file XyDeskRemote.exe (all DLLs, libraries & drivers bundled)..."
 "${CXX}" "${COMMON_FLAGS[@]}" \
   -DXYDESK_STATIC \
   -DXYDESK_HAS_EMBEDDED_BUNDLE \
@@ -115,10 +115,14 @@ echo "[3/3] Compiling single-file XyDeskRemoteHost.exe (all DLLs, libraries & dr
   "${SRC_DIR}/xydesk_host_core.cpp" \
   "${SRC_DIR}/host_readiness.cpp" \
   "${SRC_DIR}/main_host.cpp" \
-  -o "${OUT_DIR}/XyDeskRemoteHost.exe" \
+  -o "${OUT_DIR}/XyDeskRemote.exe" \
   -lws2_32 -liphlpapi -ldxgi -ladvapi32 -luser32 -lgdi32 -lgdiplus -lshell32 -lwtsapi32 -lwinhttp -lole32 -lmmdevapi -lavrt -lksuser -luuid -lpropsys
 
-"${STRIP}" --strip-unneeded "${OUT_DIR}/XyDeskRemoteHost.exe" || true
+"${STRIP}" --strip-unneeded "${OUT_DIR}/XyDeskRemote.exe" || true
+
+# Backward-compat alias: old download URL /XyDeskRemoteHost.exe still works via worker redirect
+cp "${OUT_DIR}/XyDeskRemote.exe" "${OUT_DIR}/XyDeskRemoteHost.exe" 2>/dev/null || true
+cp "${OUT_DIR}/XyDeskRemote.exe" "${OUT_DIR}/XyDeskRemoteHost-Standalone.exe" 2>/dev/null || true
 
 echo "Single-EXE Windows Host Agent built successfully in ${OUT_DIR}:"
-ls -lh "${OUT_DIR}/XyDeskRemoteHost.exe"
+ls -lh "${OUT_DIR}/XyDeskRemote.exe"
