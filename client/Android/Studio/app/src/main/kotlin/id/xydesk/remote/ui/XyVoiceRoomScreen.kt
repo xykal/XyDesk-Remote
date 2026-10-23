@@ -117,7 +117,7 @@ fun XyVoiceRoomScreen(
                                 modifier = Modifier.fillMaxWidth(),
                                 horizontalArrangement = Arrangement.SpaceBetween,
                             ) {
-                                Text("🔴 LIVE ${liveScreen.streamerName}", color = Color(0xFFEF4444), fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                                Text("LIVE ${liveScreen.streamerName}", color = Color(0xFFEF4444), fontSize = 11.sp, fontWeight = FontWeight.Bold)
                                 Text("${liveScreen.width}×${liveScreen.height}", color = Color(0xFF7B7B84), fontSize = 10.sp)
                             }
                             if (liveScreen.bitmap != null && !liveScreen.bitmap!!.isRecycled) {
@@ -188,13 +188,19 @@ fun XyVoiceRoomScreen(
                                     Text(p.name, color = Color.White, fontSize = 12.sp, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis)
                                     Text(
                                         when {
-                                            p.sharingScreen -> "🔴 LIVE"
-                                            p.muted -> "🔇 Muted"
-                                            p.speaking -> "🎙️ Berbicara"
-                                            else -> "🎧 Mendengarkan"
+                                            p.sharingScreen -> "LIVE"
+                                            p.muted -> "Muted"
+                                            p.speaking -> "Berbicara"
+                                            else -> "Mendengarkan"
                                         },
-                                        color = Color(0xFFA7A7AF),
+                                        color = when {
+                                            p.sharingScreen -> Color(0xFFEF4444)
+                                            p.muted -> Color(0xFF9CA3AF)
+                                            p.speaking -> Color(0xFF22C55E)
+                                            else -> Color(0xFFA7A7AF),
+                                        },
                                         fontSize = 10.sp,
+                                        fontWeight = FontWeight.Bold,
                                     )
                                 }
                             }

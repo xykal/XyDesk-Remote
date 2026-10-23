@@ -689,12 +689,19 @@ internal fun XyDiscordVoiceStageBar(
                                 )
                                 Text(
                                     text = when {
-                                        p.sharingScreen -> "🔴 LIVE"
-                                        p.muted -> "🔇"
-                                        p.speaking -> "🎙️"
-                                        else -> "🎧"
+                                        p.sharingScreen -> "LIVE"
+                                        p.muted -> "MUTE"
+                                        p.speaking -> "MIC"
+                                        else -> "LISTEN"
                                     },
                                     fontSize = 9.5.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = when {
+                                        p.sharingScreen -> Color(0xFFEF4444)
+                                        p.muted -> Color(0xFF9CA3AF)
+                                        p.speaking -> Color(0xFF22C55E)
+                                        else -> Color(0xFF9CA3AF),
+                                    },
                                 )
                             }
                         }
@@ -721,9 +728,9 @@ internal fun XyDiscordVoiceStageBar(
                         ) {
                             Text(
                                 text = if (sharingMyRdp) {
-                                    xy("⏹ Hentikan Share Screen RDP", "⏹ Stop RDP Screen Share")
+                                    xy("Hentikan Share Screen RDP", "Stop RDP Screen Share")
                                 } else {
-                                    xy("🖥️ Share Screen Sesi RDP (Go Live)", "🖥️ Share RDP Session Screen (Go Live)")
+                                    xy("Share Screen Sesi RDP (Go Live)", "Share RDP Session Screen (Go Live)")
                                 },
                                 fontSize = 10.5.sp,
                                 fontWeight = FontWeight.ExtraBold,
@@ -746,7 +753,7 @@ internal fun XyDiscordVoiceStageBar(
                                 text = if (watchingLiveStream) {
                                     xy("Sembunyikan Layar Live RDP", "Hide Live RDP Stream")
                                 } else {
-                                    xy("🔴 Tonton Share Screen ${liveScreen.streamerName}", "🔴 Watch ${liveScreen.streamerName}'s RDP")
+                                    xy("Tonton Share Screen ${liveScreen.streamerName}", "Watch ${liveScreen.streamerName}'s RDP")
                                 },
                                 fontSize = 10.5.sp,
                                 fontWeight = FontWeight.ExtraBold,
@@ -764,7 +771,7 @@ internal fun XyDiscordVoiceStageBar(
                             contentAlignment = Alignment.Center,
                         ) {
                             Text(
-                                text = if (deafened) "🔇 Speaker Off" else "🔊 Speaker On",
+                                text = if (deafened) "Speaker Off" else "Speaker On",
                                 fontSize = 10.sp,
                                 fontWeight = FontWeight.Bold,
                                 color = Color(0xFFE2E8F0),
@@ -791,7 +798,7 @@ internal fun XyDiscordVoiceStageBar(
                             verticalAlignment = Alignment.CenterVertically,
                         ) {
                             Text(
-                                text = "🔴 ${liveScreen.title} · oleh ${liveScreen.streamerName}",
+                                text = "LIVE ${liveScreen.title} · oleh ${liveScreen.streamerName}",
                                 fontSize = 10.5.sp,
                                 fontWeight = FontWeight.ExtraBold,
                                 color = Color(0xFFF8FAFC),
