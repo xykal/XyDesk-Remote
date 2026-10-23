@@ -965,36 +965,75 @@
       text-align: center;
     }
 
-    /* Mesin deteksi ABI: tombol/kartu yang cocok dengan perangkat pengunjung
-       ditandai badge + outline agar tidak salah unduh (2026-10-12). */
+/* Mesin deteksi ABI: kartu unduhan per ABI, rapi dan monokrom (2026-10-12). */
 .intro-direct-dl {
-  display: flex;
-  flex-wrap: wrap;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
   gap: 10px;
   margin-top: 14px;
 }
-.abi-badge {
+.abi-card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 14px 12px;
+  border-radius: 14px;
+  border: 1.5px solid var(--line);
+  background: var(--surface-alt);
+  color: var(--text);
+  text-decoration: none;
+  transition: border-color 0.14s ease, background 0.14s ease, transform 0.1s ease;
+  text-align: center;
+}
+.abi-card.primary {
+  border-color: var(--accent);
+  background: var(--surface);
+  box-shadow: 0 0 20px rgba(242, 242, 244, 0.12);
+}
+.abi-card:hover {
+  border-color: var(--text-dim);
+  background: var(--surface);
+  transform: translateY(-1px);
+}
+.abi-card.primary:hover {
+  box-shadow: 0 0 28px rgba(242, 242, 244, 0.18);
+}
+.abi-label {
+  font-size: clamp(12px, 1.5vw, 13px);
+  font-weight: 800;
+  color: var(--text);
+  line-height: 1.3;
+}
+.abi-sub {
+  font-size: 10px;
+  color: var(--text-dim);
+  line-height: 1.3;
+}
+.abi-size {
+  font-size: 9.5px;
+  color: var(--text-faint);
+  font-family: var(--font-mono);
+  margin-top: 2px;
+}
+.abi-recommended-badge {
   display: inline-block;
-  margin-left: 8px;
-  padding: 2px 9px;
+  margin-top: 8px;
+  padding: 3px 10px;
   border-radius: 999px;
-  background: #8b5cf6;
-  color: #fff;
-  font-size: 11px;
+  border: 1.5px solid var(--accent);
+  background: rgba(242, 242, 244, 0.10);
+  color: var(--accent);
+  font-size: 10px;
   font-weight: 800;
   letter-spacing: 0.3px;
-  vertical-align: middle;
-  white-space: nowrap;
-}
-[data-abi-slot].abi-recommended {
-  outline: 2px solid #8b5cf6;
-  outline-offset: 2px;
-  box-shadow: 0 0 18px rgba(139, 92, 246, 0.45);
 }
 .abi-status {
-  margin-top: 12px;
-  font-size: 12.5px;
-  opacity: 0.85;
+  margin-top: 14px;
+  font-size: 12px;
+  color: var(--text-dim);
+  line-height: 1.5;
 }
 
 .apk-download-btn:hover {
@@ -1391,14 +1430,18 @@
           </a>
         </div>
         <div class="intro-direct-dl" role="group" aria-label="Unduhan langsung APK per ABI">
-          <a class="pill-btn primary" data-abi-slot="arm64-v8a" href="/arm64-v8a.apk">
-            <span data-i18n="dl.cta.64">Unduh 64-bit (arm64-v8a)</span><span class="abi-badge" hidden data-i18n="dl.badge.you">Perangkatmu</span>
+          <a class="abi-card primary" data-abi-slot="arm64-v8a" href="/arm64-v8a.apk">
+            <span class="abi-label" data-i18n="dl.cta.64">Unduh 64-bit (arm64-v8a)</span>
+            <span class="abi-size" id="size-arm64-v8a">—</span>
+            <span class="abi-recommended-badge" data-i18n="dl.badge.recommended">Direkomendasikan</span>
           </a>
-          <a class="pill-btn" data-abi-slot="armeabi-v7a" href="/armeabi-v7a.apk">
-            <span data-i18n="dl.cta.32">Unduh 32-bit (armeabi-v7a)</span><span class="abi-badge" hidden data-i18n="dl.badge.you">Perangkatmu</span>
+          <a class="abi-card" data-abi-slot="armeabi-v7a" href="/armeabi-v7a.apk">
+            <span class="abi-label" data-i18n="dl.cta.32">Unduh 32-bit (armeabi-v7a)</span>
+            <span class="abi-size" id="size-armeabi-v7a">—</span>
           </a>
-          <a class="pill-btn" data-abi-slot="universal" href="/universal.apk">
-            <span data-i18n="dl.cta.uni">Unduh Universal (semua ABI)</span><span class="abi-badge" hidden data-i18n="dl.badge.you">Perangkatmu</span>
+          <a class="abi-card" data-abi-slot="universal" href="/universal.apk">
+            <span class="abi-label" data-i18n="dl.cta.uni">Unduh Universal (semua ABI)</span>
+            <span class="abi-size" id="size-universal">—</span>
           </a>
         </div>
         <p class="abi-status mono" id="abi-status" aria-live="polite" data-i18n="dl.status.detecting">Mendeteksi arsitektur perangkat…</p>
@@ -2349,6 +2392,7 @@
         "dl.abiU.sub": "All ABIs · safest pick",
         "dl.abiU": "One APK for every Android device (armeabi-v7a + arm64-v8a + x86_64). Bigger file, but impossible to pick wrong.",
         "dl.badge.you": "Your device",
+        "dl.badge.recommended": "Recommended",
         "dl.cta.64": "Download 64-bit (arm64-v8a)",
         "dl.cta.32": "Download 32-bit (armeabi-v7a)",
         "dl.cta.uni": "Download Universal (all ABIs)",
@@ -2445,8 +2489,9 @@
         var lang = (document.documentElement.getAttribute("lang") || "id") === "en" ? "en" : "id";
         document.querySelectorAll("[data-abi-slot]").forEach(function (el) {
           var match = !!detected && detected !== "desktop" && el.getAttribute("data-abi-slot") === detected;
+          el.classList.toggle("primary", match);
           el.classList.toggle("abi-recommended", match);
-          var badge = el.querySelector(".abi-badge");
+          var badge = el.querySelector(".abi-recommended-badge");
           if (badge) badge.hidden = !match;
         });
         var status = document.getElementById("abi-status");
@@ -2615,6 +2660,18 @@
       if(d.release_tag&&verEl) verEl.textContent=d.release_tag;
       if(d.release_updated_at&&lastEl) lastEl.textContent=fmtLast(d.release_updated_at);
       else if(d.published_at&&lastEl) lastEl.textContent=fmtLast(d.published_at);
+      // Isi ukuran file APK per ABI dari release-state.json
+      if(d.downloads&&Array.isArray(d.downloads)){
+        var sizeMap={};
+        d.downloads.forEach(function(x){ sizeMap[x.file]=x.size_bytes; });
+        ["arm64-v8a","armeabi-v7a","universal"].forEach(function(abi){
+          var el=document.getElementById("size-"+abi);
+          if(!el) return;
+          var label = (abi==="arm64-v8a")?"XyDesk-Remote64bit.apk":(abi==="armeabi-v7a")?"XyDesk-Remote32bit.apk":"XyDesk-RemoteUniversal.apk";
+          var bytes=sizeMap[label];
+          if(bytes) el.textContent=(bytes/(1024*1024)).toFixed(1)+" MB";
+        });
+      }
     }).catch(function(){});
     fetch("/api/stats",{headers:{Accept:"application/json"}}).then(function(r){return r.ok?r.json():null;}).then(function(s){
       if(s&&s.total_apk_downloads!=null&&dlEl) dlEl.textContent=new Intl.NumberFormat(document.documentElement.lang==="en"?"en-US":"id-ID").format(s.unique_apk_downloaders||s.total_apk_downloads);

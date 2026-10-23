@@ -3,53 +3,55 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
-  <title>XyDesk Host Setup — Panduan Windows (Eksperimental)</title>
-  <meta name="description" content="Panduan opsional untuk menyiapkan PC Windows bagi XyDesk Remote. Host Agent masih eksperimental; baca risiko RDP dan periksa skrip sebelum dijalankan." />
-  <!-- SEO metadata:start -->
+  <title>XyDesk Host Agent — Windows Native GUI</title>
+  <meta name="description" content="XyDesk Host Agent untuk Windows: Native GUI, Clean ID & Password, E2EE AES-256-GCM, Virtual Display 120Hz, On-Mic Audio Bridge. Unduh dan setup host RDP pribadi." />
   <meta name="robots" content="index,follow,max-image-preview:large,max-snippet:-1,max-video-preview:-1" />
   <meta name="author" content="XyVerse Technology Global" />
-  <meta name="theme-color" content="#14161A" />
+  <meta name="theme-color" content="#08080A" />
   <link rel="canonical" href="https://www.xydeskremote.biz.id/host.html" />
   <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
   <meta property="og:site_name" content="XyDesk Remote" />
   <meta property="og:type" content="website" />
   <meta property="og:locale" content="id_ID" />
   <meta property="og:url" content="https://www.xydeskremote.biz.id/host.html" />
-  <meta property="og:title" content="Panduan XyDesk Host untuk Windows" />
-  <meta property="og:description" content="Host Agent bersifat eksperimental. Pelajari persyaratan, unduh paket resmi, dan periksa skrip sebelum menjalankannya." />
-  <meta property="og:image" content="https://www.xydeskremote.biz.id/og-xydesk-remote.png?v=1.1.22" />
+  <meta property="og:title" content="XyDesk Host Agent — Native GUI Windows" />
+  <meta property="og:description" content="Host Agent Windows dengan Native GUI lengkap: Clean ID & Password, Enkripsi E2EE, Virtual Device 120Hz, On-Mic Audio Bridge." />
+  <meta property="og:image" content="https://www.xydeskremote.biz.id/og-xydesk-remote.png?v=1.1.23" />
   <meta property="og:image:type" content="image/png" />
   <meta property="og:image:width" content="1200" />
   <meta property="og:image:height" content="630" />
-  <meta property="og:image:alt" content="XyDesk Remote — klien Remote Desktop Android untuk PC Windows" />
+  <meta property="og:image:alt" content="XyDesk Remote — Host Agent Windows" />
   <meta name="twitter:card" content="summary_large_image" />
-  <meta name="twitter:title" content="Panduan XyDesk Host untuk Windows" />
-  <meta name="twitter:description" content="Host Agent bersifat eksperimental. Pelajari persyaratan, unduh paket resmi, dan periksa skrip sebelum menjalankannya." />
-  <meta name="twitter:image" content="https://www.xydeskremote.biz.id/og-xydesk-remote.png?v=1.1.22" />
-  <!-- SEO metadata:end -->
+  <meta name="twitter:title" content="XyDesk Host Agent — Native GUI Windows" />
+  <meta name="twitter:description" content="Host Agent Windows dengan Native GUI lengkap." />
+  <meta name="twitter:image" content="https://www.xydeskremote.biz.id/og-xydesk-remote.png?v=1.1.23" />
 
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@500;600;700&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
   <style>
     :root {
-      --bg: #14161A;
-      --surface: #1A1D23;
-      --surface-alt: #23272E;
-      --line: #2E333B;
-      --line-strong: #3C424A;
-      --text: #E4E7EB;
-      --text-dim: #9BA2AC;
-      --text-faint: #6F7681;
+      --bg: #08080A;
+      --surface: #101013;
+      --surface-alt: #1A1A1E;
+      --line: #2A2A2E;
+      --line-strong: #3C3C42;
+      --text: #F3F3F5;
+      --text-dim: #B2B2B8;
+      --text-faint: #808086;
+      --ok: #E2E2E6;
+      --warn: #AAAAAA;
+      --danger: #858585;
       --font-sans: "Plus Jakarta Sans", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
       --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
     }
     * { box-sizing: border-box; margin: 0; padding: 0; }
+    html { -webkit-tap-highlight-color: transparent; }
     body {
       background: var(--bg);
       color: var(--text);
       font-family: var(--font-sans);
-      line-height: 1.62;
+      line-height: 1.6;
       min-height: 100vh;
       min-height: 100dvh;
       display: flex;
@@ -58,18 +60,32 @@
       -webkit-font-smoothing: antialiased;
     }
     a { color: inherit; text-decoration: none; }
-    button { font-family: inherit; }
+    button { font-family: inherit; border: none; background: none; cursor: pointer; }
     .mono { font-family: var(--font-mono); font-feature-settings: "tnum" on, "zero" on; }
     .container {
       width: 100%;
-      max-width: 920px;
+      max-width: 960px;
       margin: 0 auto;
       padding-left: max(clamp(14px, 4vw, 24px), env(safe-area-inset-left));
       padding-right: max(clamp(14px, 4vw, 24px), env(safe-area-inset-right));
     }
     .topbar { border-bottom: 1px solid var(--line); background: var(--bg); position: sticky; top: 0; z-index: 60; }
-    .topbar-inner { min-height: 58px; padding: 8px 0; display: flex; align-items: center; justify-content: space-between; gap: 10px; }
-    .nav-links { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+    .topbar-inner { min-height: 56px; padding: 10px 0; display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+    .nav-links { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+    .pill {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      padding: 8px 14px;
+      border-radius: 999px;
+      border: 1px solid var(--line-strong);
+      background: var(--surface-alt);
+      color: var(--text);
+      font-size: clamp(12px, 1.4vw, 13px);
+      font-weight: 600;
+    }
+    .pill.primary { background: var(--text); color: var(--bg); border-color: var(--text); }
+    .pill.small { padding: 6px 12px; font-size: 11.5px; }
     .hamburger-btn {
       display: none;
       align-items: center;
@@ -80,12 +96,8 @@
       border: 1px solid var(--line-strong);
       background: var(--surface);
       color: var(--text);
-      cursor: pointer;
     }
     .hamburger-btn svg { width: 19px; height: 19px; }
-    .hamburger-btn .icon-close { display: none; }
-    .hamburger-btn[aria-expanded="true"] .icon-menu { display: none; }
-    .hamburger-btn[aria-expanded="true"] .icon-close { display: block; }
     .mobile-drawer {
       display: none;
       border-top: 1px solid var(--line);
@@ -106,45 +118,78 @@
       font-size: 12.8px;
       font-weight: 600;
     }
-    .pill {
-      display: inline-flex;
-      align-items: center;
-      justify-content: center;
-      padding: 8px 15px;
-      border-radius: 999px;
-      border: 1px solid var(--line-strong);
-      background: var(--surface-alt);
-      color: var(--text);
-      font-size: clamp(12px, 1.5vw, 13px);
-      font-weight: 600;
-      cursor: pointer;
-    }
-    .pill.primary { background: var(--text); color: var(--bg); border-color: var(--text); }
     main { padding: clamp(24px, 5vw, 46px) 0; flex: 1; }
-    .meta { font-size: clamp(10.5px, 1.4vw, 11.5px); font-weight: 600; color: var(--text-faint); text-transform: uppercase; letter-spacing: 0.06em; margin-bottom: 8px; }
-    h1 { font-size: clamp(21px, 4vw, 30px); font-weight: 700; letter-spacing: -0.025em; line-height: 1.2; margin-bottom: 12px; }
-    .lead { font-size: clamp(13.5px, 1.7vw, 15px); color: var(--text-dim); margin-bottom: 24px; line-height: 1.65; }
+    .meta {
+      font-size: clamp(10.5px, 1.4vw, 11.5px);
+      font-weight: 700;
+      color: var(--text-faint);
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      margin-bottom: 8px;
+      display: block;
+    }
+    h1 {
+      font-size: clamp(22px, 4.5vw, 32px);
+      font-weight: 800;
+      letter-spacing: -0.02em;
+      line-height: 1.15;
+      margin-bottom: 10px;
+    }
+    .lead {
+      font-size: clamp(13px, 1.7vw, 14.5px);
+      color: var(--text-dim);
+      margin-bottom: 22px;
+      line-height: 1.65;
+      max-width: 720px;
+    }
     .card {
       background: var(--surface);
       border: 1px solid var(--line);
-      border-radius: 14px;
-      padding: clamp(15px, 3vw, 22px);
+      border-radius: 16px;
+      padding: clamp(18px, 3.5vw, 26px);
       margin-bottom: 16px;
     }
-    .card h2 { font-size: clamp(14.8px, 2vw, 16.5px); font-weight: 700; letter-spacing: -0.015em; margin-bottom: 8px; }
-    .card p, .card li { font-size: clamp(12.8px, 1.5vw, 14px); color: var(--text-dim); line-height: 1.6; overflow-wrap: anywhere; }
-    .card ul { padding-left: 18px; margin-top: 8px; display: flex; flex-direction: column; gap: 7px; }
+    .card h2 {
+      font-size: clamp(15px, 2.2vw, 17px);
+      font-weight: 800;
+      letter-spacing: -0.01em;
+      margin-bottom: 8px;
+      color: var(--text);
+    }
+    .card p, .card li {
+      font-size: clamp(12.5px, 1.5vw, 14px);
+      color: var(--text-dim);
+      line-height: 1.6;
+      overflow-wrap: anywhere;
+    }
+    .card ul { padding-left: 0; margin-top: 8px; display: flex; flex-direction: column; gap: 6px; list-style: none; }
+    .card li { padding-left: 20px; position: relative; }
+    .card li::before { content: "•"; position: absolute; left: 4px; color: var(--text-faint); font-weight: 800; }
     .code-box {
       background: var(--bg);
       border: 1px solid var(--line);
-      border-radius: 9px;
+      border-radius: 12px;
       padding: 12px 14px;
-      font-size: clamp(11.8px, 1.5vw, 13px);
+      font-size: clamp(11.5px, 1.5vw, 13px);
       margin: 12px 0;
       overflow-x: auto;
-      white-space: nowrap;
+      white-space: pre-wrap;
+      word-break: break-all;
     }
-    footer { border-top: 1px solid var(--line); padding: 24px 0; font-size: 12px; color: var(--text-faint); }
+    .btn-group {
+      display: flex;
+      gap: 10px;
+      flex-wrap: wrap;
+      margin-top: 14px;
+    }
+    .btn-group .pill { min-width: 150px; text-align: center; }
+    footer {
+      border-top: 1px solid var(--line);
+      padding: 26px 0;
+      font-size: 12px;
+      color: var(--text-faint);
+      margin-top: 8px;
+    }
     .footer-inner { display: flex; justify-content: space-between; flex-wrap: wrap; gap: 12px; }
     @media (max-width: 720px) {
       .nav-links { display: none; }
@@ -154,31 +199,71 @@
       .pill.primary { width: 100%; }
       .drawer-grid { grid-template-columns: 1fr; }
       .footer-inner { flex-direction: column; align-items: flex-start; }
+      .btn-group { flex-direction: column; }
+      .btn-group .pill { width: 100%; }
     }
-    .safety-callout {
-      margin: 16px 0 18px;
-      padding: 14px 16px;
-      border: 1px solid var(--line-strong);
-      border-left: 3px solid #D3D7DC;
-      border-radius: 12px;
+    .feature-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+      gap: 12px;
+      margin-top: 14px;
+    }
+    .feature-card {
       background: var(--surface-alt);
-      color: var(--text-dim);
-      font-size: 13px;
-      line-height: 1.65;
+      border: 1px solid var(--line);
+      border-radius: 14px;
+      padding: 16px 18px;
     }
-    .safety-callout strong { color: var(--text); }
+    .feature-card .k {
+      font-size: 10px;
+      font-weight: 800;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      color: var(--text-faint);
+      margin-bottom: 6px;
+      display: block;
+    }
+    .feature-card .v {
+      font-size: clamp(13px, 1.6vw, 14.5px);
+      font-weight: 700;
+      color: var(--text);
+      margin-bottom: 4px;
+      display: block;
+    }
+    .feature-card .d {
+      font-size: 11.5px;
+      color: var(--text-dim);
+      line-height: 1.5;
+    }
+    .status-row {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      margin-top: 10px;
+      padding: 10px 14px;
+      border-radius: 12px;
+      border: 1px solid var(--line);
+      background: var(--surface-alt);
+    }
+    .status-dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: var(--ok);
+    }
+    .status-text { font-size: 12px; color: var(--text-dim); flex: 1; }
   </style>
 </head>
 <body>
   <header class="topbar">
     <div class="container topbar-inner">
-      <a href="index.html" style="font-weight: 700; font-size: 16px; letter-spacing: -0.02em;">XyDesk Remote</a>
+      <a href="index.html" style="font-weight: 800; font-size: 17px; letter-spacing: -0.02em;">XyDesk Remote</a>
       <nav class="nav-links" aria-label="Navigasi">
         <a href="index.html#about-diff" class="pill">Perbedaan XyDesk</a>
         <a href="index.html#changelog" class="pill">Changelog</a>
         <a href="abi.html" class="pill">Cek APK</a>
         <a href="status.html" class="pill">Status Sistem</a>
-        <a href="index.html" class="pill">Beranda</a>
+        <a href="index.html" class="pill primary">Beranda</a>
       </nav>
       <button type="button" class="hamburger-btn" id="hamburger-btn" aria-label="Buka Menu" aria-expanded="false">
         <svg class="icon-menu" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round">
@@ -195,7 +280,7 @@
         <a href="abi.html" class="drawer-link"><span>Cek APK untuk HP-mu</span><span>→</span></a>
         <a href="feedback.html" class="drawer-link"><span>Lapor Bug &amp; Saran</span><span>→</span></a>
         <a href="index.html#about-diff" class="drawer-link"><span>Tentang &amp; Perbedaan</span><span>→</span></a>
-        <a href="index.html#changelog" class="drawer-link"><span>Changelog v0.5.29</span><span>→</span></a>
+        <a href="index.html#changelog" class="drawer-link"><span>Changelog v1.1.23</span><span>→</span></a>
         <a href="status.html" class="drawer-link"><span>Status Sistem</span><span>→</span></a>
         <a href="privacy.html" class="drawer-link"><span>Kebijakan Privasi</span><span>→</span></a>
         <a href="licenses.html" class="drawer-link"><span>Lisensi Open Source</span><span>→</span></a>
@@ -203,10 +288,10 @@
     </div>
   </header>
   <script>
-    (function(){
+    (function() {
       var b = document.getElementById("hamburger-btn"), d = document.getElementById("mobile-drawer");
       if (b && d) {
-        b.addEventListener("click", function(){
+        b.addEventListener("click", function() {
           var open = b.getAttribute("aria-expanded") === "true";
           b.setAttribute("aria-expanded", open ? "false" : "true");
           d.classList.toggle("open", !open);
@@ -217,68 +302,92 @@
 
   <main>
     <div class="container">
-      <div class="meta mono">Windows Host Agent &amp; RDP On-Mic Setup · Native Modern GUI</div>
-      <h1>XyDesk Host Agent (Native GUI) &amp; Setup On-Mic RDP</h1>
+      <span class="meta mono">Windows Host Agent · Native GUI v2.5 · Setup RDP Pribadi</span>
+      <h1>XyDesk Host Agent (Native GUI)</h1>
       <p class="lead">
-        Halaman ini menyediakan dua alat resmi: <strong>(1) XyDesk Host Agent (100% Native GUI tanpa terminal)</strong> untuk PC Windows pribadi dengan <em>Clean ID &amp; Password</em>, <em>Enkripsi E2EE</em>, dan <em>Virtual Device 120Hz</em>; serta <strong>(2) File Setup On-Mic Mandiri</strong> untuk RDP Windows atau VPS Linux yang kamu beli/sewa sendiri di luar GitHub.
+        Aplikasi desktop Windows 100% Native GUI tanpa jendela terminal/CMD. Menampilkan <strong>Clean ID &amp; Password</strong> lengkap tombol lihat/salin/acak, <strong>Enkripsi E2EE AES-256-GCM + QUIC TLS 1.3</strong> dengan Host Key Fingerprint SHA-256, serta <strong>Virtual Display 120Hz &amp; On-Mic Audio Bridge</strong> untuk RDP pribadi, VPS, dan PC gaming.
       </p>
 
-      <div class="card" style="border-color: rgba(255,255,255,0.22); background: linear-gradient(155deg, rgba(255,255,255,0.06) 0%, var(--surface) 100%);">
-        <h2>1. Setup On-Mic &amp; Virtual Audio (Untuk RDP Beli Sendiri / Non-GitHub)</h2>
+      <div class="status-row">
+        <div class="status-dot"></div>
+        <div class="status-text">Status: Rilis stabil v2.5 · Tersedia untuk Windows x64</div>
+      </div>
+
+      <div class="card">
+        <h2>1. Unduh Host Agent Windows x64 (Native GUI)</h2>
         <p>
-          Jika kamu membeli RDP Windows atau VPS sendiri (di luar Buat RDP GitHub) dan ingin fitur <strong>On-Mic (Mikrofon HP ke dalam RDP untuk Discord / Game / Voice Chat)</strong> langsung bekerja lancar, unduh file <code>.BAT</code> di bawah atau jalankan perintah PowerShell 1-baris sebagai Administrator di dalam RDP:
+          Unduh <strong>XyDeskRemoteHost-Standalone.exe</strong> — satu file .exe, antarmuka Native GUI penuh, tidak perlu terminal. Cocok untuk RDP Windows pribadi, VPS, dan cloud runner.
+        </p>
+        <div class="btn-group">
+          <a href="/XyDeskRemoteHost-Standalone.exe" download="XyDeskRemoteHost-Standalone.exe" class="pill primary">
+            Unduh Host Agent (.exe Standalone)
+          </a>
+          <a href="/XyDesk-Remote-Host-Agent-win64.zip" download="XyDesk-Remote-Host-Agent-win64.zip" class="pill">
+            Paket Lengkap (.ZIP)
+          </a>
+          <a href="/XyDeskHost-Setup.bat" download="XyDeskHost-Setup.bat" class="pill">
+            Setup Script (.BAT)
+          </a>
+        </div>
+        <p style="margin-top: 10px; font-size: 12px; color: var(--text-faint);">
+          Lihat <a href="https://github.com/xykal/XyDesk-Remote/releases" target="_blank" rel="noopener noreferrer" style="text-decoration:underline;text-underline-offset:3px;">catatan rilis resmi</a> dan
+          <a href="/SHA256SUMS.txt" style="text-decoration:underline;text-underline-offset:3px;">checksum SHA-256</a>.
+        </p>
+      </div>
+
+      <div class="card">
+        <h2>2. Fitur Dashboard Native GUI</h2>
+        <div class="feature-grid">
+          <div class="feature-card">
+            <span class="k">Identitas Bersih</span>
+            <span class="v">Clean ID &amp; Password</span>
+            <span class="d">ID PC LAN (10 digit), ID Global Relay (XY…), username Windows, dan password akses yang bisa dilihat, disalin, atau diacak kapan saja.</span>
+          </div>
+          <div class="feature-card">
+            <span class="k">Keamanan</span>
+            <span class="v">E2EE AES-256-GCM + QUIC</span>
+            <span class="d">Enkripsi end-to-end dengan Host Key Fingerprint SHA-256 unik per perangkat. Tidak ada data yang bocong ke server pihak ketiga.</span>
+          </div>
+          <div class="feature-card">
+            <span class="k">Performa</span>
+            <span class="v">Virtual Display 120Hz</span>
+            <span class="d">DWM 120FPS + GPU H.264 AVC 4:4:4 Full-Chroma, membuka kunci fDisableAudioCapture=0 dan Privacy Microphone Consent secara otomatis.</span>
+          </div>
+          <div class="feature-card">
+            <span class="k">Audio</span>
+            <span class="v">On-Mic Audio Bridge</span>
+            <span class="d">Jembatani suara PC (WASAPI 24kHz) dan input mikrofon HP secara otomatis untuk Discord, game, dan voice chat tanpa jendela terminal.</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="card">
+        <h2>3. Setup On-Mic &amp; Virtual Audio (RDP Beli Sendiri / Non-GitHub)</h2>
+        <p>
+          Jika kamu membeli RDP Windows atau VPS sendiri di luar GitHub dan ingin fitur <strong>On-Mic</strong> (mikrofon HP ke dalam RDP) bekerja langsung, unduh file setup atau jalankan perintah PowerShell sebagai Administrator di dalam RDP:
         </p>
         <div class="code-box mono" id="onmic-cmd">powershell -ExecutionPolicy Bypass -Command "irm https://xydeskremote.biz.id/onmic.ps1 | iex"</div>
-        <div style="margin-top: 14px; display: flex; gap: 10px; flex-wrap: wrap;">
+        <div class="btn-group">
           <a href="/XyDesk-RDP-OnMic-Setup.bat" download="XyDesk-RDP-OnMic-Setup.bat" class="pill primary">
             Unduh File Setup On-Mic (.BAT)
           </a>
-          <button type="button" class="pill" id="copy-onmic-btn">
-            Salin Perintah PowerShell On-Mic
-          </button>
+          <button type="button" class="pill" id="copy-onmic-btn">Salin Perintah PowerShell</button>
           <a href="/onmic.ps1" download="onmic.ps1" class="pill">
             Unduh onmic.ps1
           </a>
         </div>
-        <p style="margin-top: 12px; font-size: 12.5px;">
-          Untuk <strong>Linux Desktop RDP (Ubuntu/Debian XFCE4 + XRDP)</strong>, jalankan:
-          <code class="mono">curl -fsSL https://xydeskremote.biz.id/onmic-linux.sh | sudo bash</code>
+        <p style="margin-top: 10px; font-size: 12px; color: var(--text-faint);">
+          Untuk Linux Desktop RDP (Ubuntu/Debian XFCE4 + XRDP), jalankan:
+          <code class="mono" style="color:var(--text-dim)">curl -fsSL https://xydeskremote.biz.id/onmic-linux.sh | sudo bash</code>
         </p>
       </div>
 
       <div class="card">
-        <h2>2. Paket Windows x64 — XyDesk Host Agent (Native GUI Modern · 1 File .EXE)</h2>
-        <p>
-          Unduh <strong>XyDeskRemoteHost-Standalone.exe</strong> — <strong>antarmuka GUI Native penuh tanpa jendela terminal/CMD</strong>. Menampilkan <strong>Clean ID &amp; Password</strong> (lengkap dengan tombol lihat/salin/acak password), <strong>Enkripsi E2EE AES-256-GCM + QUIC TLS 1.3</strong> beserta sidik jari SHA-256, serta pengelola <strong>Virtual Display 120Hz &amp; Virtual Microphone On-Mic</strong>. Lihat <a href="https://github.com/xykal/XyDesk-Remote/releases" target="_blank" rel="noopener noreferrer" style="text-decoration:underline;text-underline-offset:3px;">catatan rilis resmi</a> dan <a href="/SHA256SUMS.txt" style="text-decoration:underline;text-underline-offset:3px;">checksum SHA-256</a>.
-        </p>
-        <div style="margin-top: 14px; display: flex; gap: 10px; flex-wrap: wrap;">
-          <a href="/XyDeskRemoteHost-Standalone.exe" download="XyDeskRemoteHost-Standalone.exe" class="pill primary">
-            Unduh Host Agent Native GUI — 1 File .exe (Standalone)
-          </a>
-          <a href="/XyDesk-Remote-Host-Agent-win64.zip" download="XyDesk-Remote-Host-Agent-win64.zip" class="pill">
-            Unduh Paket Lengkap (.ZIP)
-          </a>
-          <a href="/XyDeskHost-Setup.bat" download="XyDeskHost-Setup.bat" class="pill">
-            Unduh XyDeskHost-Setup.bat
-          </a>
-        </div>
-      </div>
-
-      <div class="card">
-        <h2>3. Fitur Utama di Dashboard Native GUI Host Agent</h2>
-        <ul>
-          <li><strong>Clean ID &amp; Password:</strong> Menampilkan ID PC LAN (10 digit), ID Global Relay (<code>XY...</code>), Windows Username, dan Password Akses bersih yang dapat dilihat, disalin satu paket, atau diacak ulang kapan saja.</li>
-          <li><strong>Enkripsi End-to-End &amp; Sidik Jari Host:</strong> Perlindungan <code>E2EE AES-256-GCM + QUIC v1 TLS 1.3</code> disertai Host Key Fingerprint <code>SHA-256</code> unik per perangkat.</li>
-          <li><strong>Virtual Device (Layar Virtual 120Hz &amp; On-Mic Audio Bridge):</strong> Mengaktifkan 120FPS DWM + GPU H.264 AVC 4:4:4 Full-Chroma, membuka kunci <code>fDisableAudioCapture=0</code> &amp; Privacy Microphone Consent, serta menjembatani suara PC (WASAPI 24kHz) dan input mikrofon HP secara otomatis tanpa jendela terminal.</li>
-        </ul>
-      </div>
-
-      <div class="card">
-        <h2>4. Unduh dan tinjau skrip PowerShell Host</h2>
-        <p><a href="https://github.com/xykal/XyDesk-Remote/blob/main/web/host.ps1" target="_blank" rel="noopener noreferrer" style="text-decoration:underline;text-underline-offset:3px;">Bandingkan sumber PowerShell di repositori GitHub</a>.</p>
+        <h2>4. Skrip PowerShell Host</h2>
+        <p>Bandringkan sumber PowerShell di repositori GitHub sebelum dijalankan.</p>
         <div class="code-box mono" id="ps-cmd">$script = "$env:TEMP\xydesk-host.ps1"; Invoke-WebRequest -UseBasicParsing "https://www.xydeskremote.biz.id/host.ps1" -OutFile $script; Get-FileHash $script -Algorithm SHA256; notepad $script</div>
-        <div style="margin-top:12px;display:flex;gap:10px;flex-wrap:wrap;align-items:center;">
-          <button type="button" class="pill" id="copy-btn">Salin perintah unduh</button>
+        <div class="btn-group">
+          <button type="button" class="pill" id="copy-btn">Salin Perintah Unduh</button>
           <a class="pill" href="/host.ps1" download="xydesk-host.ps1">Unduh host.ps1</a>
         </div>
       </div>
@@ -297,6 +406,7 @@
       var cmd = document.getElementById("ps-cmd").textContent;
       if (navigator.clipboard) navigator.clipboard.writeText(cmd);
       this.textContent = "Tersalin ke Clipboard ✓";
+      setTimeout(() => { this.textContent = "Salin Perintah Unduh"; }, 2000);
     });
     var onmicBtn = document.getElementById("copy-onmic-btn");
     if (onmicBtn) {
@@ -304,6 +414,7 @@
         var cmd = document.getElementById("onmic-cmd").textContent;
         if (navigator.clipboard) navigator.clipboard.writeText(cmd);
         this.textContent = "Perintah On-Mic Tersalin ✓";
+        setTimeout(() => { this.textContent = "Salin Perintah PowerShell"; }, 2000);
       });
     }
   </script>
