@@ -448,6 +448,11 @@ private fun GlobalChatAccountContent(
     }
 
     var showLangPicker by remember { mutableStateOf(false) }
+    // Transport chat: false = Cloudflare (bawaan), true = Firebase Firestore.
+    // Diubah dari dialog bahasa; jalur Firebase aktif setelah sesi token valid.
+    var firebaseChatEnabled by remember {
+        mutableStateOf(chatPrefs.getBoolean("chat_backend_firebase", false))
+    }
     var showChatSettings by remember { mutableStateOf(false) }
     var showOutbox by remember(verifiedGhLogin) { mutableStateOf(false) }
     var outboxIssue by remember(verifiedGhLogin) { mutableStateOf<String?>(null) }
@@ -1110,6 +1115,42 @@ private fun GlobalChatAccountContent(
         }
     }
 
+    // Mode Firebase: ambil pesan Firestore berkala dan gabungkan.
+    // Pesan lokal tertunda dicocokkan lewat clientMessageId; ID dokumen
+    // Firestore menjadi ID pesan resmi setelah terkonfirmasi.
+    LaunchedEffect(verifiedGhLogin, firebaseChatEnabled) {
+        if (!firebaseChatEnabled) return@LaunchedEffect
+        while (true) {
+            val remote = withContext(Dispatchers.IO) {
+                FirebaseChatTransport.fetchRecent(context.applicationContext, nickname, verifiedGhLogin)
+            }
+            for (item in remote) {
+                if (item.id in hiddenMessageIds) continue
+                val existingIdx = messages.indexOfFirst { it.id == item.id }
+                if (existingIdx >= 0) {
+                    messages[existingIdx] = reconcileChatMessage(messages[existingIdx], item)
+                    continue
+                }
+                val pendingIdx = if (item.clientMessageId.isNotBlank()) {
+                    messages.indexOfFirst { it.id == item.clientMessageId }
+                } else -1
+                if (pendingIdx >= 0) {
+                    messages[pendingIdx] = item.copy(deliveryTicks = 2)
+                    confirmOwnSend(item.id)
+                } else if (item.at >= firstJoinedAtMs - 2_000L) {
+                    messages.add(item)
+                    enrichTranslationIfNeeded(item)
+                }
+            }
+            if (messages.size > 120) {
+                val keep = messages.takeLast(100)
+                messages.clear()
+                messages.addAll(keep)
+            }
+            delay(4_000L)
+        }
+    }
+
     DisposableEffect(verifiedGhLogin) {
         id.xydesk.remote.push.ChatPushNotifier.setChatOpen(context, true)
         val client = OkHttpClient.Builder()
@@ -1426,6 +1467,24 @@ private fun GlobalChatAccountContent(
         val bindingSnapshot = outboxBinding
         scope.launch {
             try {
+                // Mode Firebase: tulis langsung ke Firestore (rules memvalidasi),
+                // konfirmasi lokal langsung; pesan resmi tiba lagi via polling
+                // dan direkonsiliasi lewat clientMessageId.
+                if (firebaseChatEnabled) {
+                    val docId = withContext(Dispatchers.IO) {
+                        FirebaseChatTransport.sendMessage(
+                            context.applicationContext, pending, sealed.cipherBase64, sealed.ivBase64,
+                        )
+                    }
+                    val idx = messages.indexOfFirst { it.id == pending.id }
+                    if (docId != null) {
+                        if (idx >= 0) messages[idx] = messages[idx].copy(id = docId, deliveryTicks = 2)
+                        confirmOwnSend(docId)
+                    } else if (idx >= 0) {
+                        messages[idx] = messages[idx].copy(deliveryTicks = -1)
+                    }
+                    return@launch
+                }
                 val bodyJson = JSONObject().apply {
                     put("type", "msg")
                     put("name", pending.name)
@@ -4038,6 +4097,34 @@ private fun GlobalChatAccountContent(
                         compact = true,
                     )
                 }
+                XyPillButton(
+                    text = if (firebaseChatEnabled) {
+                        xy("Backend Chat: Firebase (ketuk: Cloudflare)", "Chat backend: Firebase (tap: Cloudflare)")
+                    } else {
+                        xy("Backend Chat: Cloudflare (ketuk: Firebase)", "Chat backend: Cloudflare (tap: Firebase)")
+                    },
+                    onClick = {
+                        firebaseChatEnabled = !firebaseChatEnabled
+                        chatPrefs.edit().putBoolean("chat_backend_firebase", firebaseChatEnabled).apply()
+                        if (!firebaseChatEnabled) {
+                            scope.launch(Dispatchers.IO) { FirebaseChatTransport.signOut(context.applicationContext) }
+                        }
+                        Toast.makeText(
+                            context,
+                            if (firebaseChatEnabled) {
+                                xyNow("Backend Firebase aktif — sesi dibuat saat kirim/poll berikutnya", "Firebase backend on — session starts on next send/poll")
+                            } else {
+                                xyNow("Backend Cloudflare aktif", "Cloudflare backend on")
+                            },
+                            Toast.LENGTH_SHORT,
+                        ).show()
+                    },
+                    primary = firebaseChatEnabled,
+                    compact = true,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 16.dp, vertical = 6.dp),
+                )
                 LazyColumn(
                     modifier = Modifier
                         .fillMaxSize()
