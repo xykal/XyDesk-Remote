@@ -2621,6 +2621,8 @@ private val XY_URL_REGEX = Regex(
     RegexOption.IGNORE_CASE,
 )
 
+private val MENTION_REGEX = Regex("@[\\p{L}][\\p{L}\\p{N}_.-]*")
+
 /**
  * Komponen Teks Pintar yang membuat SEMUA link/URL berwarna BIRU CERAH + bergaris bawah
  * dan langsung BISA DIKLIK (membuka In-App Browser Chrome Custom Tab), sementara klik/tekan
@@ -2634,6 +2636,7 @@ internal fun XyClickableLinkText(
     style: androidx.compose.ui.text.TextStyle = MaterialTheme.typography.bodyMedium,
     maxLines: Int = Int.MAX_VALUE,
     onNonLinkClick: (() -> Unit)? = null,
+    onMentionClick: ((String) -> Unit)? = null,
     onLongPress: (() -> Unit)? = null,
     modifier: Modifier = Modifier,
 ) {
@@ -2678,11 +2681,27 @@ internal fun XyClickableLinkText(
                     addStringAnnotation("CHANNEL", match.channelId, match.start, match.end)
                 }
             }
+            MENTION_REGEX.findAll(text).forEach { match ->
+                val mention = match.value
+                if (XY_URL_REGEX.findAll(text).none { urlMatch -> match.range.first in urlMatch.range || match.range.last in urlMatch.range }) {
+                    addStyle(
+                        androidx.compose.ui.text.SpanStyle(
+                            color = Color(0xFF60A5FA),
+                            fontWeight = FontWeight.SemiBold,
+                        ),
+                        match.range.first,
+                        match.range.last + 1,
+                    )
+                    addStringAnnotation("MENTION", mention.removePrefix("@"), match.range.first, match.range.last + 1)
+                }
+            }
         }
     }
 
     val hasLinks = remember(annotated) {
-        annotated.getStringAnnotations("URL", 0, annotated.length).isNotEmpty() || annotated.getStringAnnotations("CHANNEL", 0, annotated.length).isNotEmpty()
+        annotated.getStringAnnotations("URL", 0, annotated.length).isNotEmpty()
+            || annotated.getStringAnnotations("CHANNEL", 0, annotated.length).isNotEmpty()
+            || annotated.getStringAnnotations("MENTION", 0, annotated.length).isNotEmpty()
     }
 
     if (!hasLinks) {
@@ -2717,6 +2736,11 @@ internal fun XyClickableLinkText(
                             val hit = annotated.getStringAnnotations("URL", offset, offset).firstOrNull()
                             if (hit != null) {
                                 openInAppCustomTab(context, hit.item)
+                                return@detectTapGestures
+                            }
+                            val mention = annotated.getStringAnnotations("MENTION", offset, offset).firstOrNull()
+                            if (mention != null) {
+                                onMentionClick?.invoke(mention.item)
                                 return@detectTapGestures
                             }
                         }

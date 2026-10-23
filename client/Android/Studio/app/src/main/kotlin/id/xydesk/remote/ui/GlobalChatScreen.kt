@@ -1454,27 +1454,37 @@ private fun GlobalChatAccountContent(
                     val av = pending.avatarUrl
                     if (!av.isNullOrBlank()) put("avatar_url", av)
                 }
-                val directResponse = withContext(Dispatchers.IO) {
-                    runCatching {
-                        GlobalChatRepository.send(bodyJson, GlobalChatRepository.token(context.applicationContext))
-                    }.getOrNull()
-                }
-                val confirmedMsgJson = directResponse?.optJSONObject("message")
-                if (confirmedMsgJson != null) {
-                    val parsedConfirmed = withContext(Dispatchers.IO) {
-                        parseMessageFromJson(confirmedMsgJson, nickname, currentGh).copy(deliveryTicks = 2)
+                // Jalur cepat: pesan teks lewat WebSocket yang sudah tersambung
+                // terkirim seketika; konfirmasi (centang 2) datang dari broadcast
+                // "msg" server yang dicocokkan via client_msg_id, dibantu poll
+                // riwayat. HTTP hanya cadangan saat socket mati — dulu HTTP selalu
+                // didahulukan sehingga tiap pesan membayar handshake + antre
+                // timeout. Media tetap HTTP (frame WS tidak untuk payload besar).
+                val sentViaSocket = attachmentType.isEmpty() && socketConnected &&
+                    chatSocketSend(bodyJson.toString())
+                if (!sentViaSocket) {
+                    val directResponse = withContext(Dispatchers.IO) {
+                        runCatching {
+                            GlobalChatRepository.send(bodyJson, GlobalChatRepository.token(context.applicationContext))
+                        }.getOrNull()
                     }
-                    val idx = messages.indexOfFirst { it.id == pending.id || it.id == parsedConfirmed.id }
-                    if (idx >= 0) {
-                        messages[idx] = parsedConfirmed
-                    }
-                    confirmOwnSend(parsedConfirmed.id)
-                } else {
-                    withContext(Dispatchers.IO) {
-                        if (bindingSnapshot.isNotBlank()) {
-                            GlobalChatOutbox.enqueue(context.applicationContext, currentGh, bindingSnapshot, bodyJson, now)
-                        } else {
-                            chatSocketSend(bodyJson.toString())
+                    val confirmedMsgJson = directResponse?.optJSONObject("message")
+                    if (confirmedMsgJson != null) {
+                        val parsedConfirmed = withContext(Dispatchers.IO) {
+                            parseMessageFromJson(confirmedMsgJson, nickname, currentGh).copy(deliveryTicks = 2)
+                        }
+                        val idx = messages.indexOfFirst { it.id == pending.id || it.id == parsedConfirmed.id }
+                        if (idx >= 0) {
+                            messages[idx] = parsedConfirmed
+                        }
+                        confirmOwnSend(parsedConfirmed.id)
+                    } else {
+                        withContext(Dispatchers.IO) {
+                            if (bindingSnapshot.isNotBlank()) {
+                                GlobalChatOutbox.enqueue(context.applicationContext, currentGh, bindingSnapshot, bodyJson, now)
+                            } else {
+                                chatSocketSend(bodyJson.toString())
+                            }
                         }
                     }
                 }
@@ -2239,6 +2249,26 @@ private fun GlobalChatAccountContent(
                                     onReply = {
                                         haptic.performHapticFeedback(HapticFeedbackType.LongPress)
                                         replyingTo = m
+                                    },
+                                    onReplyJump = { targetId ->
+                                        val targetIdx = messages.indexOfFirst { it.id == targetId }
+                                        if (targetIdx >= 0) {
+                                            scope.launch { listState.scrollChatTo(targetIdx, chatMotionEnabled) }
+                                        } else {
+                                            Toast.makeText(context, xyNow("Pesan asal belum dimuat", "Original message not loaded yet"), Toast.LENGTH_SHORT).show()
+                                        }
+                                    },
+                                    onMentionClick = { username ->
+                                        val target = messages.lastOrNull {
+                                            it.githubLogin.equals(username, ignoreCase = true) ||
+                                                it.name.equals(username, ignoreCase = true)
+                                        }
+                                        if (target != null) {
+                                            replyingTo = target
+                                            Toast.makeText(context, xyNow("Membalas @{0}", "Replying to @{0}", username), Toast.LENGTH_SHORT).show()
+                                        } else {
+                                            Toast.makeText(context, xyNow("@{0} tidak ada di pesan yang dimuat", "@{0} not in loaded messages", username), Toast.LENGTH_SHORT).show()
+                                        }
                                     },
                                     onLongPress = {
                                         haptic.performHapticFeedback(HapticFeedbackType.LongPress)
@@ -3159,6 +3189,28 @@ private fun GlobalChatAccountContent(
                                 onReply = {
                                     replyingTo = targetMsg
                                     focusedContextMsg = null
+                                },
+                                onReplyJump = { targetId ->
+                                    focusedContextMsg = null
+                                    val targetIdx = messages.indexOfFirst { it.id == targetId }
+                                    if (targetIdx >= 0) {
+                                        scope.launch { listState.scrollChatTo(targetIdx, chatMotionEnabled) }
+                                    } else {
+                                        Toast.makeText(context, xyNow("Pesan asal belum dimuat", "Original message not loaded yet"), Toast.LENGTH_SHORT).show()
+                                    }
+                                },
+                                onMentionClick = { username ->
+                                    focusedContextMsg = null
+                                    val target = messages.lastOrNull {
+                                        it.githubLogin.equals(username, ignoreCase = true) ||
+                                            it.name.equals(username, ignoreCase = true)
+                                    }
+                                    if (target != null) {
+                                        replyingTo = target
+                                        Toast.makeText(context, xyNow("Membalas @{0}", "Replying to @{0}", username), Toast.LENGTH_SHORT).show()
+                                    } else {
+                                        Toast.makeText(context, xyNow("@{0} tidak ada di pesan yang dimuat", "@{0} not in loaded messages", username), Toast.LENGTH_SHORT).show()
+                                    }
                                 },
                                 onLongPress = {},
                                 onOpenMedia = {

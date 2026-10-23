@@ -4284,10 +4284,11 @@ export async function withChatTranslationBudget(task, fallback, timeoutMs = 2_00
   }
 }
 
-async function translateChatText(text, country = "ID") {
+async function translateChatText(text, country = "ID", timeoutMs = 2_000) {
   return withChatTranslationBudget(
     (signal) => translateChatTextWithinBudget(text, country, signal),
     () => offlineTranslateFallback(text, country),
+    timeoutMs,
   );
 }
 
@@ -4494,7 +4495,6 @@ export class GlobalChat {
         });
         const p = this.env.UNIQUE_DOWNLOADS.put("chat:prod_backup_v1", payload).catch(() => {});
         this.state.waitUntil?.(p);
-        await p;
         this.memoryKvLoadedAt = Date.now();
       }
     } catch {}
@@ -4921,7 +4921,7 @@ export class GlobalChat {
             targetLang: clientTargetLang || (prelimCountry === "ID" ? "EN" : "ID"),
             sourceLang: clientSourceLang || guessSourceLang(text, prelimCountry),
           }
-        : await translateChatText(text, prelimCountry);
+        : await translateChatText(text, prelimCountry, 900);
     const country = detectCountryFromRequest(request, body?.country, text, tr.sourceLang);
     const flag = countryToFlag(country);
     const id = `${now.toString(36).padStart(9, "0")}-${crypto.randomUUID()}`;
@@ -4962,7 +4962,7 @@ export class GlobalChat {
       this.broadcast(null, JSON.stringify({ type:"msg", ...saved.message }));
       const pushTask = this.pushChatNotification(saved.message).catch(() => {});
       this.state.waitUntil?.(pushTask);
-      await Promise.race([pushTask, new Promise((r) => setTimeout(r, 3200))]);
+      await Promise.race([pushTask, new Promise((r) => setTimeout(r, 300))]);
     }
     return durableObjectJson({ ...saved, status:"ok" }, 200, request.method);
   }
@@ -5224,7 +5224,7 @@ export class GlobalChat {
             targetLang: clientTargetLang || (session.country === "ID" ? "EN" : "ID"),
             sourceLang: clientSourceLang || guessSourceLang(text, session.country),
           }
-        : await translateChatText(text, session.country);
+        : await translateChatText(text, session.country, 900);
     const resolvedCountry = resolveSmartCountry(text, tr.sourceLang, data.country || session.country, session.cfCountry);
     session.country = resolvedCountry;
     const id = `${now.toString(36).padStart(9, "0")}-${crypto.randomUUID()}`;
@@ -5272,7 +5272,7 @@ export class GlobalChat {
       this.broadcast(null, JSON.stringify({ type:"msg", ...saved.message }));
       const pushTask = this.pushChatNotification(saved.message).catch(() => {});
       this.state.waitUntil?.(pushTask);
-      await Promise.race([pushTask, new Promise((r) => setTimeout(r, 3200))]);
+      await Promise.race([pushTask, new Promise((r) => setTimeout(r, 300))]);
     }
     // Private explicit acceptance; socket.send() on the client is NOT an ACK.
     try { session.ws.send(JSON.stringify({ ...saved, type:"send_ack", client_msg_id:data.client_msg_id })); } catch {}

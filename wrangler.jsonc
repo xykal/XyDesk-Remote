@@ -8,7 +8,6 @@
     "ONESIGNAL_APP_ID": "e3d5adea-1c0f-4986-9ce5-e088d65f0998"
   },
   "routes": [
-    { "pattern": "rdp.xydesk.my.id", "custom_domain": true },
     { "pattern": "xydeskremote.biz.id", "custom_domain": true },
     { "pattern": "www.xydeskremote.biz.id", "custom_domain": true },
     { "pattern": "api.xydeskremote.biz.id", "custom_domain": true },

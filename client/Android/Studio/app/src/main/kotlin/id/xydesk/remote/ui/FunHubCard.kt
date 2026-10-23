@@ -1754,6 +1754,13 @@ private fun detectSocialBrandStyle(url: String): SocialBrandStyle {
         "twitch.tv" in u -> SocialBrandStyle("TW", "Twitch", Color(0xFFA4A4A4))
         "threads.net" in u -> SocialBrandStyle("TH", "Threads", Color(0xFF797979))
         "linkedin.com" in u -> SocialBrandStyle("IN", "LinkedIn", Color(0xFF9A9A9A))
+        "wa.me" in u || "whatsapp.com" in u -> SocialBrandStyle("WA", "WhatsApp", Color(0xFF8A8A8A))
+        "pinterest.com" in u || "pin.it" in u -> SocialBrandStyle("PN", "Pinterest", Color(0xFF7D7D7D))
+        "snapchat.com" in u -> SocialBrandStyle("SC", "Snapchat", Color(0xFF939393))
+        "medium.com" in u -> SocialBrandStyle("MD", "Medium", Color(0xFF858585))
+        "store.steampowered.com" in u || "steamcommunity.com" in u -> SocialBrandStyle("ST", "Steam", Color(0xFF767676))
+        "soundcloud.com" in u -> SocialBrandStyle("SO", "SoundCloud", Color(0xFF8F8F8F))
+        "vimeo.com" in u -> SocialBrandStyle("VM", "Vimeo", Color(0xFF818181))
         else -> SocialBrandStyle("WEB", "Web Link", Color(0xFFA7A7A7))
     }
 }
@@ -2423,7 +2430,7 @@ private fun ActionsBottomSheet(
 }
 
 private val URL_EXTRACT_REGEX = Regex(
-    """((?:https?://|www\.)[^\s"'<>]+|(?:[a-zA-Z0-9-]+\.)+(?:com|id|org|net|io|dev|app|me|xyz|co|gg|tv|ly|be)(?:/[^\s"'<>]*)?)""",
+    """((?:https?://|www\.)[^\s"'<>]+|(?:[a-zA-Z0-9-]+\.)+(?:com|id|org|net|io|dev|app|me|xyz|co|gg|tv|ly|be|ai|online|site|tech|store|blog|news|live|pro|info|biz|us|to|cc|gl|is)(?:/[^\s"'<>]*)?)""",
     RegexOption.IGNORE_CASE,
 )
 private val MALICIOUS_URL_OR_EXT_REGEX = Regex(
@@ -2431,15 +2438,20 @@ private val MALICIOUS_URL_OR_EXT_REGEX = Regex(
     RegexOption.IGNORE_CASE,
 )
 
-internal fun extractFirstUrl(text: String): String? {
-    val raw = URL_EXTRACT_REGEX.find(text)?.value?.trimEnd('.', ',', ')', ']', ';') ?: return null
-    if (raw.contains('@') && !raw.startsWith("http", ignoreCase = true) && !raw.contains('/')) return null
-    return if (raw.startsWith("http://", ignoreCase = true) || raw.startsWith("https://", ignoreCase = true)) {
-        raw
-    } else {
-        "https://$raw"
-    }
-}
+internal fun extractFirstUrl(text: String): String? = extractAllUrls(text).firstOrNull()
+
+/** Semua URL unik dalam teks (maks 3) — tiap link dapat kartu Open Graph sendiri. */
+internal fun extractAllUrls(text: String): List<String> =
+    URL_EXTRACT_REGEX.findAll(text)
+        .map { it.value.trimEnd('.', ',', ')', ']', ';') }
+        .filterNot { it.contains('@') && !it.startsWith("http", ignoreCase = true) && !it.contains('/') }
+        .map { raw ->
+            if (raw.startsWith("http://", ignoreCase = true) || raw.startsWith("https://", ignoreCase = true)) raw
+            else "https://$raw"
+        }
+        .distinct()
+        .take(3)
+        .toList()
 
 internal fun isClientSideMaliciousText(text: String): Boolean =
     MALICIOUS_URL_OR_EXT_REGEX.containsMatchIn(text)

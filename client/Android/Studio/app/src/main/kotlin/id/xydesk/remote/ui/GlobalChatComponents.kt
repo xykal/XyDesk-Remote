@@ -576,6 +576,8 @@ internal fun MessageBubble(
     onToggleFavoriteSticker: (String) -> Unit = {},
     onManualDownloadMedia: () -> Unit = {},
     onReply: () -> Unit,
+    onReplyJump: ((String) -> Unit)? = null,
+    onMentionClick: ((String) -> Unit)? = null,
     onLongPress: () -> Unit,
     onOpenMedia: () -> Unit,
     onOpenFile: () -> Unit,
@@ -644,7 +646,7 @@ internal fun MessageBubble(
     val specialRole = remember(msg.name, msg.githubLogin, roleRev) {
         resolveSpecialUserRole(msg.name, msg.githubLogin, context)
     }
-    val detectedLinkUrl = remember(msg.id, msg.text) { extractFirstUrl(msg.text) }
+    val detectedLinkUrls = remember(msg.id, msg.text) { extractAllUrls(msg.text) }
     val screenWidthDp = androidx.compose.ui.platform.LocalConfiguration.current.screenWidthDp.toFloat()
     val maxBubbleWidth = remember(screenWidthDp, isCompactOverlay) {
         chatBubbleMaxWidth(screenWidthDp, isCompactOverlay)
@@ -877,7 +879,7 @@ internal fun MessageBubble(
                             ),
                     ) {
                         // Status lipat/tampilkan kotak balasan (per pesan)
-                        val replyExpanded by remember(msg.id) { mutableStateOf(true) }
+                        var replyExpanded by remember(msg.id) { mutableStateOf(true) }
                         // Pita Khusus Pengumuman Admin @xykal yang Otomatis Tersemat
                         if (isAnnouncementMsg) {
                             Box(
@@ -993,6 +995,9 @@ internal fun MessageBubble(
                                             if (isLightBubble) Color(0xFF09090B).copy(alpha = 0.06f)
                                             else Color.Black.copy(alpha = 0.24f),
                                         )
+                                        .clickable(enabled = onReplyJump != null && msg.replyToId.isNotBlank()) {
+                                            onReplyJump?.invoke(msg.replyToId)
+                                        }
                                         .padding(horizontal = 10.dp, vertical = 8.dp),
                                     verticalAlignment = Alignment.CenterVertically,
                                 ) {
@@ -1081,6 +1086,34 @@ internal fun MessageBubble(
                                     }
                                 }
                             }
+                            if (!replyExpanded) {
+                                Row(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .clip(RoundedCornerShape(8.dp))
+                                        .background(
+                                            if (isLightBubble) Color(0xFF09090B).copy(alpha = 0.05f)
+                                            else Color.Black.copy(alpha = 0.18f),
+                                        )
+                                        .clickable { replyExpanded = true }
+                                        .padding(horizontal = 10.dp, vertical = 5.dp),
+                                    verticalAlignment = Alignment.CenterVertically,
+                                ) {
+                                    Text(
+                                        text = xyNow("Balasan tersembunyi", "Reply hidden"),
+                                        style = MaterialTheme.typography.labelSmall,
+                                        fontSize = 9.sp,
+                                        color = secondaryTextColor,
+                                        modifier = Modifier.weight(1f),
+                                    )
+                                    Icon(
+                                        imageVector = XyIcons.ChevronUp,
+                                        contentDescription = null,
+                                        tint = secondaryTextColor,
+                                        modifier = Modifier.size(12.dp),
+                                    )
+                                }
+                            }
                         }
 
                         // Lampiran Foto / Video / Audio / Berkas sesuai rasio asli
@@ -1126,6 +1159,7 @@ internal fun MessageBubble(
                                     lineHeight = if (isCompactOverlay) 15.5.sp else 17.sp,
                                 ),
                                 onLongPress = onLongPress,
+                                onMentionClick = onMentionClick,
                             )
                                 }
                             }
@@ -1157,15 +1191,16 @@ internal fun MessageBubble(
                                             fontStyle = FontStyle.Italic,
                                         ),
                                         onLongPress = onLongPress,
+                                        onMentionClick = onMentionClick,
                                     )
                                 }
                             }
                         }
 
-                        // Kartu OG Banner / Link Preview untuk Semua Link di Chat Global
-                        if (!detectedLinkUrl.isNullOrBlank()) {
+                        // Kartu OG Banner / Link Preview untuk SEMUA link di pesan (maks 3, sosmed + web)
+                        for (linkUrl in detectedLinkUrls) {
                             Spacer(Modifier.height(4.dp))
-                            XyOpenGraphPreviewCard(url = detectedLinkUrl)
+                            XyOpenGraphPreviewCard(url = linkUrl)
                         }
 
                         // Baris Bawah Ringkas: Jam + Vektor Centang 1 / 2
