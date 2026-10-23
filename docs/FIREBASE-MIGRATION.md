@@ -8,11 +8,19 @@ Backend repo-side siap: `firestore.rules`, `firebase.json`,
 `firestore.indexes.json`, `functions/` (send callable + push FCM).
 Rilis APK **ditahan** sampai seluruh fase selesai dan build verifikasi hijau.
 
-**Satu aksi owner yang masih dibutuhkan:** Admin SDK
-(`firebase-adminsdk-fbsvc@…`) tidak berizin mengaktifkan Google API.
-Beri peran **Editor** ke service account itu di
-console.cloud.google.com/iam-admin (project `xyverse-technology-global`),
-lalu setup Firestore/RTDB/Auth/deploy diselesaikan dari sini via API.
+Progress API (oleh Admin SDK, peran Editor sudah diberikan owner):
+API Firestore/RTDB/IdentityToolkit/FirebaseRules/CloudFunctions aktif;
+Firestore **ruleset sudah dibuat** (`44d63967-b0b5-4fdf-849f-ef22c01dd8d7`)
+dan menunggu database untuk di-bind ke release `cloud.firestore`.
+
+**Blocker tersisa (kebijakan Google, bukan teknis):**
+1. Project belum punya **billing account** (Spark) → Cloud Build/Functions
+   tidak bisa aktif. Upgrade **Blaze** dari konsol Firebase owner.
+2. Buat database Firestore butuh `datastore.databases.create` yang tidak
+   termasuk peran Editor → beri **Datastore Owner** ke Admin SDK, atau buat
+   databasenya sekali dari konsol (pilih `asia-southeast2` / Jakarta).
+Setelah dua hal itu, sisa setup (bind rules, RTDB/Auth, deploy Functions)
+diselesaikan dari sini via API.
 
 ## Kenapa pindah
 
