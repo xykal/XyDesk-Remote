@@ -355,6 +355,38 @@ fun RdpFreeScreen(onBack: () -> Unit, onConnect: (ConnectionProfile) -> Unit) {
                             errorMessage = "Tidak ditemukan run aktif untuk dihentikan."
                         }
                     }
+                    "samp_antiban" -> {
+                        busyLabel = "Mengirim perintah Reset Anti-Ban SAMP & GPCI…"
+                        val inputs = JSONObject().apply {
+                            put("durasi_menit", "60")
+                            put("runner", "windows-2022")
+                            put("linux_mode", "desktop")
+                            put("hostname", "samp-antiban")
+                            put("rdp_user", rdpUser)
+                            put("akses", "tailscale")
+                            put("storage_boost", "tidak")
+                            put("debloat", "tidak")
+                            put("samp", "ya")
+                            put("win10", "tidak")
+                            put("xydesk", "tidak")
+                            put("ekstra", "tidak")
+                            put("grafis", "software")
+                            put("microphone", "tidak")
+                            put("roblox", "tidak")
+                            put("minecraft_java", "tidak")
+                            put("minecraft_bedrock", "tidak")
+                            put("perpanjang_otomatis", "tidak")
+                        }
+                        if (XyRdpClient.dispatch(tok, user, inputs)) {
+                            saveSettings()
+                            activeTab = 0
+                            successMessage = "Workflow Reset Anti-Ban SAMP & GPCI berhasil dikirim. Tunggu run selesai di GitHub Actions."
+                            delay(2500)
+                            refreshAll(tok, user)
+                        } else {
+                            errorMessage = "Gagal mengirim workflow anti-ban. Pastikan secret RDP_PASSWORD sudah terpasang."
+                        }
+                    }
                     "logout" -> {
                         vault.remove(XyRdpConfig.VAULT_PAT_ID)
                         token = null
@@ -1093,6 +1125,7 @@ fun RdpFreeScreen(onBack: () -> Unit, onConnect: (ConnectionProfile) -> Unit) {
                                                 text = when (confirmAction) {
                                                     "start" -> "Mulai sesi RDP baru ($runnerImage · ${duration}m · $akses)?"
                                                     "stop" -> "Hentikan sesi RDP yang sedang berjalan?"
+                                                    "samp_antiban" -> "Reset GPCI Serial & HWID SA-MP ke identitas baru (anti-ban)?"
                                                     else -> "Keluar dari akun GitHub @$login?"
                                                 },
                                                 style = MaterialTheme.typography.bodySmall,
@@ -1741,15 +1774,15 @@ fun RdpFreeScreen(onBack: () -> Unit, onConnect: (ConnectionProfile) -> Unit) {
                                     )
                                     Spacer(Modifier.height(8.dp))
                                     RdpFlatToggleRow(
-                                        title = "Anti-Reset Cloud Persistence v4 (CreateProfile + SQLite WAL)",
-                                        subtitle = "Simpan otomatis sesi login Google Chrome/Edge, Downloads, Desktop & lanjutkan sesi berikutnya",
+                                        title = "Anti-Reset Cloud Persistence v4",
+                                        subtitle = "Simpan sesi login, Downloads & Desktop otomatis",
                                         checked = autoRenew,
                                         enabled = !busy,
                                         onCheckedChange = { autoRenew = it; saveSettings() },
                                     )
                                     RdpFlatToggleRow(
-                                        title = "XyDeskRemote Dashboard + Extreme Gaming Boost (120 FPS)",
-                                        subtitle = "Buka otomatis XyDeskRemote Dashboard saat masuk RDP, Ultimate Power Plan & Anti-VM",
+                                        title = "XyDeskRemote Dashboard + Gaming Boost",
+                                        subtitle = "Buka Dashboard otomatis, Power Plan & Anti-VM",
                                         checked = xydeskBoost,
                                         enabled = !busy,
                                         onCheckedChange = { xydeskBoost = it; saveSettings() },
@@ -1769,12 +1802,25 @@ fun RdpFreeScreen(onBack: () -> Unit, onConnect: (ConnectionProfile) -> Unit) {
                                         onCheckedChange = { storageBoost = it; saveSettings() },
                                     )
                                     RdpFlatToggleRow(
-                                        title = "GTA SA-MP SilentPatch (90 FPS + Mouse Fix)",
-                                        subtitle = "DirectX 9, VC++, DirectPlay, SilentPatchSA & Widescreen Fix",
+                                        title = "GTA SA-MP SilentPatch (90 FPS)",
+                                        subtitle = "DirectX 9, VC++, SilentPatchSA & Widescreen Fix",
                                         checked = sampDeps,
                                         enabled = !busy,
                                         onCheckedChange = { sampDeps = it; saveSettings() },
                                     )
+                                    if (sampDeps) {
+                                        Spacer(Modifier.height(6.dp))
+                                        XyPillButton(
+                                            text = "Reset Anti-Ban SAMP & GPCI",
+                                            icon = XyIcons.Refresh,
+                                            onClick = {
+                                                confirmAction = "samp_antiban"
+                                            },
+                                            primary = false,
+                                            compact = true,
+                                            modifier = Modifier.fillMaxWidth(),
+                                        )
+                                    }
                                     RdpFlatToggleRow(
                                         title = "Minecraft Java + OpenGL 4.6 D3D12",
                                         subtitle = "Temurin JDK 21 & JRE 8, PrismLauncher & anti-GLFW error 65542",
@@ -1801,8 +1847,8 @@ fun RdpFreeScreen(onBack: () -> Unit, onConnect: (ConnectionProfile) -> Unit) {
                                         onCheckedChange = { win10Theme = it; saveSettings() },
                                     )
                                     RdpFlatToggleRow(
-                                        title = "Kompatibilitas Roblox & Minecraft Bedrock",
-                                        subtitle = "Siapkan dependensi runtime Windows Store / Roblox",
+                                        title = "Roblox Anti-VM & Minecraft Bedrock",
+                                        subtitle = "Runtime Windows Store + Anti-VM Boost",
                                         checked = robloxReady || mcBedrockReady,
                                         enabled = !busy,
                                         onCheckedChange = {
@@ -1811,6 +1857,19 @@ fun RdpFreeScreen(onBack: () -> Unit, onConnect: (ConnectionProfile) -> Unit) {
                                             saveSettings()
                                         },
                                     )
+                                    if (robloxReady) {
+                                        Spacer(Modifier.height(6.dp))
+                                        XyPillButton(
+                                            text = "Cek Status Roblox Anti-VM",
+                                            icon = XyIcons.Info,
+                                            onClick = {
+                                                successMessage = "Roblox: Direct3D 11 WARP + SMBIOS spoof + 120 FPS aktif di Windows Host."
+                                            },
+                                            primary = false,
+                                            compact = true,
+                                            modifier = Modifier.fillMaxWidth(),
+                                        )
+                                    }
                                 }
                             }
 
