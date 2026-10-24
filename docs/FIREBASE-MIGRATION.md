@@ -112,7 +112,9 @@ Functions (rules menolak tulis langsung klien ke `messages`), kecuali
    menit) dipanggil APK setelah tulis Firestore berhasil. Sisa: uji
    perangkat, cutover, matikan jalur DO chat. Functions menyusul
    pasca-Blaze.
-4. Build verifikasi (gate + release) hijau.
+4. Build verifikasi hijau: run `40063640181` (gate compile Kotlin +
+   release per-ABI R8/signed, signer sama) completed success untuk
+   `f243c71`. Draft `v1.1.23` diperbarui dari run tag.
 5. Draft rilis diperbarui; publish **hanya** atas perintah owner.
 
 ## Risiko & catatan jujur
