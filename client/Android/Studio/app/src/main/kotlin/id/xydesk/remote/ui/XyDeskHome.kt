@@ -200,6 +200,12 @@ fun XyDeskHome(
     // Pembaruan app: cek maksimal 12 jam sekali; dialog muncul bila portal
     // melaporkan versi lebih baru yang belum dilewati user.
     var updateInfo by remember { mutableStateOf<AppUpdateInfo?>(null) }
+    // Unduh & pasang update LANGSUNG di dalam aplikasi (tanpa browser):
+    // progres tampil di popup, selesai unduh installer sistem dibuka.
+    var updateApkProgress by remember { mutableStateOf<Int?>(null) }
+    var updateApkStatus by remember { mutableStateOf<String?>(null) }
+    var updateApkFile by remember { mutableStateOf<java.io.File?>(null) }
+    var updateApkBusy by remember { mutableStateOf(false) }
     var dataPackProgress by remember { mutableStateOf<Int?>(null) }
     var dataPackStatus by remember { mutableStateOf<String?>(null) }
     LaunchedEffect(Unit) {
@@ -707,33 +713,101 @@ fun XyDeskHome(
     updateInfo?.let { info ->
         XyOverlay(
             title = xy("Versi {0} tersedia", "Version {0} available", info.version),
-            onDismiss = { updateInfo = null },
+            onDismiss = { if (!updateApkBusy) updateInfo = null },
         ) {
             Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                 Text(
                     if (info.changelog.isBlank()) {
-                        xy("Pembaruan baru siap diunduh.", "A new update is ready to download.")
+                        xy("Pembaruan baru siap diunduh & dipasang langsung dari aplikasi.", "A new update is ready to download & install right from the app.")
                     } else {
                         info.changelog.take(600)
                     },
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
-                XyPillButton(
-                    text = xy("Unduh sekarang", "Download now"),
-                    onClick = {
-                        runCatching {
-                            context.startActivity(
-                                android.content.Intent(
-                                    android.content.Intent.ACTION_VIEW,
-                                    android.net.Uri.parse(
-                                        if (info.url.isNotBlank()) info.url
-                                        else "https://www.xydeskremote.biz.id/",
-                                    ),
-                                ),
+                updateApkProgress?.let { pct ->
+                    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                        Box(
+                            Modifier
+                                .fillMaxWidth()
+                                .height(8.dp)
+                                .clip(RoundedCornerShape(4.dp))
+                                .background(MaterialTheme.colorScheme.onSurface.copy(alpha = 0.14f)),
+                        ) {
+                            Box(
+                                Modifier
+                                    .fillMaxWidth((pct / 100f).coerceIn(0f, 1f))
+                                    .height(8.dp)
+                                    .clip(RoundedCornerShape(4.dp))
+                                    .background(MaterialTheme.colorScheme.primary),
                             )
                         }
-                        updateInfo = null
+                        Text(
+                            updateApkStatus ?: "$pct%",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.primary,
+                        )
+                    }
+                } ?: updateApkStatus?.let { status ->
+                    Text(
+                        status,
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.primary,
+                    )
+                }
+                XyPillButton(
+                    text = when {
+                        updateApkBusy -> xy("Mengunduh…", "Downloading…")
+                        updateApkFile != null -> xy("Pasang sekarang", "Install now")
+                        else -> xy("Unduh & pasang di aplikasi", "Download & install in app")
+                    },
+                    onClick = {
+                        if (updateApkBusy) return@XyPillButton
+                        if (!AppUpdate.canRequestInstall(context)) {
+                            AppUpdate.openInstallPermissionSettings(context)
+                            updateApkStatus = xyNow(
+                                "Aktifkan izin pasang untuk XyDesk, lalu kembali dan ketuk Pasang lagi.",
+                                "Allow install permission for XyDesk, then come back and tap Install again.",
+                            )
+                            return@XyPillButton
+                        }
+                        val ready = updateApkFile
+                        if (ready != null) {
+                            if (!AppUpdate.installApk(context, ready)) {
+                                updateApkStatus = xyNow(
+                                    "Gagal membuka pemasang. Coba lagi.",
+                                    "Could not open the installer. Please retry.",
+                                )
+                            }
+                        } else {
+                            updateApkBusy = true
+                            scope.launch {
+                                AppUpdate.downloadApkInApp(context, info) { pct, lbl ->
+                                    updateApkProgress = pct
+                                    updateApkStatus = lbl
+                                }.onSuccess { file ->
+                                    updateApkFile = file
+                                    updateApkBusy = false
+                                    updateApkStatus = xyNow(
+                                        "Unduhan selesai. Membuka pemasang…",
+                                        "Download complete. Opening installer…",
+                                    )
+                                    if (!AppUpdate.installApk(context, file)) {
+                                        updateApkStatus = xyNow(
+                                            "Unduhan selesai. Ketuk Pasang sekarang.",
+                                            "Download complete. Tap Install now.",
+                                        )
+                                    }
+                                }.onFailure { err ->
+                                    updateApkBusy = false
+                                    updateApkProgress = null
+                                    updateApkStatus = xyNow(
+                                        "Unduhan gagal: ${err.message ?: "jaringan"}",
+                                        "Download failed: ${err.message ?: "network"}",
+                                    )
+                                }
+                            }
+                        }
                     },
                     compact = true,
                     modifier = Modifier.fillMaxWidth(),
@@ -741,7 +815,7 @@ fun XyDeskHome(
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     XyPillButton(
                         text = xy("Nanti", "Later"),
-                        onClick = { updateInfo = null },
+                        onClick = { if (!updateApkBusy) updateInfo = null },
                         primary = false,
                         compact = true,
                         modifier = Modifier.weight(1f),
@@ -749,8 +823,10 @@ fun XyDeskHome(
                     XyPillButton(
                         text = xy("Lewati versi ini", "Skip this version"),
                         onClick = {
-                            appPrefs.updateSkipVersion = info.version
-                            updateInfo = null
+                            if (!updateApkBusy) {
+                                appPrefs.updateSkipVersion = info.version
+                                updateInfo = null
+                            }
                         },
                         primary = false,
                         compact = true,

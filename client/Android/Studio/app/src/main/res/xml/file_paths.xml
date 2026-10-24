@@ -11,4 +11,13 @@
     <external-files-path
         name="share"
         path="Share/" />
+
+    <!-- APK hasil unduhan update dalam aplikasi (downloadApkInApp menulis ke
+         externalCacheDir/updates) dibuka lewat FileProvider oleh installer. -->
+    <external-cache-path
+        name="updates"
+        path="updates/" />
+    <cache-path
+        name="updates-int"
+        path="updates/" />
 </paths>

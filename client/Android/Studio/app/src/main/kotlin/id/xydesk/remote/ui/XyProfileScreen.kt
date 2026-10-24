@@ -273,9 +273,51 @@ internal fun XyProfileScreen(
                     )
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         XyPillButton(
-                            text = xy("Unduh APK (Update Besar)", "Download APK (Major Update)"),
+                            text = xy("Unduh & Pasang APK", "Download & Install APK"),
                             onClick = {
-                                openInAppCustomTab(context, "https://api.xydeskremote.biz.id/XyDesk-Remote64bit.apk")
+                                if (!AppUpdate.canRequestInstall(context)) {
+                                    AppUpdate.openInstallPermissionSettings(context)
+                                    otaStatusText = xyNow(
+                                        "Aktifkan izin pasang untuk XyDesk, lalu ketuk lagi.",
+                                        "Allow install permission for XyDesk, then tap again.",
+                                    )
+                                } else {
+                                    profileScope.launch {
+                                        val target = updateAvailable ?: AppUpdate.fetch(context)
+                                        val current = runCatching {
+                                            context.packageManager
+                                                .getPackageInfo(context.packageName, 0).versionName
+                                        }.getOrNull().orEmpty()
+                                        if (target == null) {
+                                            otaStatusText = xyNow(
+                                                "Server update tidak terjangkau. Coba lagi nanti.",
+                                                "Update server unreachable. Try again later.",
+                                            )
+                                        } else if (!AppUpdate.isNewer(target.version, current)) {
+                                            updateAvailable = target
+                                            otaStatusText = xyNow(
+                                                "APK sudah versi terbaru (v$current).",
+                                                "APK is already up to date (v$current).",
+                                            )
+                                        } else {
+                                            updateAvailable = target
+                                            AppUpdate.downloadApkInApp(context, target) { pct, lbl ->
+                                                otaProgress = pct
+                                                otaStatusText = lbl
+                                            }.onSuccess { file ->
+                                                if (!AppUpdate.installApk(context, file)) {
+                                                    otaStatusText = xyNow(
+                                                        "Unduhan selesai, tetapi pemasang gagal dibuka.",
+                                                        "Download finished, but the installer failed to open.",
+                                                    )
+                                                }
+                                            }.onFailure { err ->
+                                                otaProgress = null
+                                                otaStatusText = err.message
+                                            }
+                                        }
+                                    }
+                                }
                             },
                             primary = false,
                             compact = true,

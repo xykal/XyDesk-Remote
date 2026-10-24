@@ -1,7 +1,11 @@
 package id.xydesk.remote.ui
 
 import android.content.Context
+import android.content.Intent
+import android.net.Uri
 import android.os.Build
+import android.provider.Settings
+import androidx.core.content.FileProvider
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.spring
@@ -802,6 +806,48 @@ internal object AppUpdate {
             }
             outFile
         }
+    }
+
+    /** Apakah aplikasi sudah diizinkan memasang APK (sumber tidak dikenal). */
+    fun canRequestInstall(context: Context): Boolean {
+        return Build.VERSION.SDK_INT < Build.VERSION_CODES.O ||
+            context.packageManager.canRequestPackageInstalls()
+    }
+
+    /** Buka halaman izin "Pasang aplikasi tidak dikenal" untuk aplikasi ini. */
+    fun openInstallPermissionSettings(context: Context) {
+        runCatching {
+            val intent = Intent(
+                Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES,
+                Uri.parse("package:${context.packageName}"),
+            ).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            context.startActivity(intent)
+        }
+    }
+
+    /**
+     * Buka installer sistem untuk [file] APK hasil [downloadApkInApp] lewat
+     * FileProvider. Mengembalikan false bila izin pasang belum diberikan —
+     * panggil [openInstallPermissionSettings] lalu coba lagi.
+     */
+    fun installApk(context: Context, file: File): Boolean {
+        if (!canRequestInstall(context)) return false
+        return runCatching {
+            val uri = FileProvider.getUriForFile(
+                context,
+                "${context.packageName}.files",
+                file,
+            )
+            val intent = Intent(Intent.ACTION_VIEW).apply {
+                setDataAndType(uri, "application/vnd.android.package-archive")
+                addFlags(
+                    Intent.FLAG_GRANT_READ_URI_PERMISSION or
+                        Intent.FLAG_ACTIVITY_NEW_TASK,
+                )
+            }
+            context.startActivity(intent)
+            true
+        }.getOrDefault(false)
     }
 
     // Super-cepat: cache 2 detik agar total online/unduh tidak delay
