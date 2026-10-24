@@ -3011,102 +3011,65 @@ internal fun PanelSectionGrid(
     onOpenKey: (String?) -> Unit,
     builder: @Composable PanelSectionScope.() -> Unit,
 ) {
+    // Menu berkelompok kartu (permintaan pemilik): semua seksi langsung
+    // tampil sebagai kartu berjudul yang terbuka — TANPA dropdown /
+    // akordeon buka-tutup. Parameter openKey/onOpenKey dipertahankan
+    // hanya agar pemanggil lama tidak berubah; tidak lagi dipakai.
     val scope = PanelSectionScope()
     scope.builder()
     val allSpecs = scope.specs
     if (allSpecs.isEmpty()) return
-    val advancedCount = allSpecs.count { it.advanced }
-    var showAdvanced by remember { mutableStateOf(true) }
-    val specs = if (showAdvanced) allSpecs else allSpecs.filter { !it.advanced }
-    if (specs.isEmpty()) return
-    val resolvedOpenKey = if (openKey == "__FIRST__") specs.firstOrNull()?.key else openKey
+    val mainSpecs = allSpecs.filter { !it.advanced }
+    val advancedSpecs = allSpecs.filter { it.advanced }
     Column(
-        Modifier.fillMaxWidth().animateContentSize(),
+        Modifier.fillMaxWidth(),
+        verticalArrangement = Arrangement.spacedBy(12.dp),
+    ) {
+        mainSpecs.forEach { spec -> PanelSectionCard(spec) }
+        if (advancedSpecs.isNotEmpty()) {
+            Text(
+                xy("LANJUTAN", "ADVANCED"),
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                fontSize = 10.sp,
+                letterSpacing = 1.4.sp,
+                fontWeight = FontWeight.Bold,
+                modifier = Modifier.padding(top = 4.dp),
+            )
+            advancedSpecs.forEach { spec -> PanelSectionCard(spec) }
+        }
+    }
+}
+
+@Composable
+private fun PanelSectionCard(spec: PanelSectionScope.Spec) {
+    Column(
+        Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(16.dp))
+            .background(Color(0xFF1A1130), RoundedCornerShape(16.dp))
+            .border(1.dp, Color(0xFF34235C), RoundedCornerShape(16.dp))
+            .padding(horizontal = 14.dp, vertical = 12.dp),
         verticalArrangement = Arrangement.spacedBy(10.dp),
     ) {
-        specs.chunked(2).forEach { rowSpecs ->
-            Row(
-                Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(10.dp),
-            ) {
-                rowSpecs.forEach { spec ->
-                    val selected = spec.key == resolvedOpenKey
-                    Box(Modifier.weight(1f)) {
-                        XyGlassTile(
-                            icon = panelSectionIcon(spec.key),
-                            title = spec.title,
-                            onClick = { onOpenKey(if (selected) null else spec.key) },
-                            selected = selected,
-                            titleMaxLines = 2,
-                            trailing = {
-                                Icon(
-                                    imageVector = if (selected) XyIcons.ChevronUp else XyIcons.ChevronDown,
-                                    contentDescription = null,
-                                    tint = if (selected) {
-                                        MaterialTheme.colorScheme.onPrimary
-                                    } else {
-                                        MaterialTheme.colorScheme.onSurfaceVariant
-                                    },
-                                    modifier = Modifier.size(16.dp),
-                                )
-                            },
-                        )
-                    }
-                }
-                repeat(2 - rowSpecs.size) { Spacer(Modifier.weight(1f)) }
-            }
-            val open = rowSpecs.firstOrNull { it.key == resolvedOpenKey }
-            if (open != null) {
-                Column(
-                    Modifier
-                        .fillMaxWidth()
-                        .clip(RoundedCornerShape(14.dp))
-                        .background(Color(0xFF1A1130), RoundedCornerShape(14.dp))
-                        .border(1.dp, Color(0xFF34235C), RoundedCornerShape(14.dp))
-                        .padding(horizontal = 16.dp, vertical = 14.dp),
-                    verticalArrangement = Arrangement.spacedBy(10.dp),
-                ) {
-                    Text(
-                        open.title.uppercase(),
-                        color = MaterialTheme.colorScheme.primary,
-                        fontSize = 10.sp,
-                        letterSpacing = 1.2.sp,
-                        fontWeight = FontWeight.Bold,
-                    )
-                    open.content()
-                }
-            }
-        }
-        if (advancedCount > 0) {
-            XyGlassTile(
-                icon = XyIcons.Sliders,
-                title = if (showAdvanced) {
-                    xy("Sembunyikan seksi lanjutan", "Hide advanced sections")
-                } else {
-                    xy(
-                        "Lanjutan ({0} seksi lagi)",
-                        "Advanced ({0} more sections)",
-                        advancedCount,
-                    )
-                },
-                onClick = {
-                    showAdvanced = !showAdvanced
-                    // Seksi lanjutan yang sedang terbuka ikut tertutup supaya
-                    // isi yang disembunyikan tidak menggantung tanpa ubinnya.
-                    if (!showAdvanced) onOpenKey(null)
-                },
-                selected = false,
-                titleMaxLines = 1,
-                trailing = {
-                    Icon(
-                        imageVector = if (showAdvanced) XyIcons.ChevronUp else XyIcons.ChevronDown,
-                        contentDescription = null,
-                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                        modifier = Modifier.size(16.dp),
-                    )
-                },
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            Icon(
+                imageVector = panelSectionIcon(spec.key),
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.primary,
+                modifier = Modifier.size(18.dp),
+            )
+            Text(
+                spec.title,
+                color = MaterialTheme.colorScheme.onSurface,
+                fontSize = 13.sp,
+                fontWeight = FontWeight.Bold,
+                maxLines = 2,
             )
         }
+        spec.content()
     }
 }
 
@@ -3124,7 +3087,7 @@ internal fun PanelSection(
     // penjelasan, sehingga tidak mungkin semua muat sekaligus di layar HP.
     // Dengan seksi terlipat jadi judul saja, satu tab muat tanpa scroll;
     // seksi pertama tiap tab tetap terbuka supaya isinya langsung kelihatan.
-    var expanded by remember(title) { mutableStateOf(initiallyExpanded) }
+    val expanded = true // selalu terbuka: menu kartu, bukan dropdown
     Column(
         Modifier
             .fillMaxWidth()
@@ -3137,8 +3100,6 @@ internal fun PanelSection(
         Row(
             Modifier
                 .fillMaxWidth()
-                .clip(RoundedCornerShape(8.dp))
-                .clickable { expanded = !expanded }
                 .padding(vertical = 2.dp),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(8.dp),
@@ -3151,16 +3112,8 @@ internal fun PanelSection(
                 letterSpacing = 1.2.sp,
                 fontWeight = FontWeight.SemiBold,
             )
-            Icon(
-                imageVector = if (expanded) XyIcons.ChevronUp else XyIcons.ChevronDown,
-                contentDescription = null,
-                tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier.size(16.dp),
-            )
         }
-        AnimatedVisibility(visible = expanded) {
-            Column(verticalArrangement = Arrangement.spacedBy(7.dp)) { content() }
-        }
+        Column(verticalArrangement = Arrangement.spacedBy(7.dp)) { content() }
     }
 }
 
