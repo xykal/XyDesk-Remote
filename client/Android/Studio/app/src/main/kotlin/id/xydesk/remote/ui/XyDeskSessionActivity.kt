@@ -482,7 +482,6 @@ class XyDeskSessionActivity : ComponentActivity() {
                             sessionPrefs.virtualPadStickMode = next
                         },
                     )
-                    FloatingSessionChatOverlay()
                     AppChannelGate(onExit = {
                         markIntentionalHomeNavigation()
                         finish()

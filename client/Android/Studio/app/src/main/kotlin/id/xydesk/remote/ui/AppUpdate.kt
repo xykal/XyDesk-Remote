@@ -332,11 +332,6 @@ internal fun XyInAppNotificationBannerHost(
                                             maxLines = 1,
                                             overflow = TextOverflow.Ellipsis,
                                         )
-                                        XyUserRoleBadges(
-                                            name = n.actorName,
-                                            githubLogin = n.actorName.takeIf { !it.contains(" ") },
-                                            compact = true,
-                                        )
                                     }
                                     Text(
                                         text = n.body,
@@ -693,7 +688,6 @@ internal object AppUpdate {
                         val k = keys.next()
                         val roleVal = rolesObj.optString(k, "").trim()
                         if (roleVal.isNotBlank()) {
-                            XySpecialRoleRegistry.setRole(appCtx, k, roleVal)
                         }
                     }
                 }
@@ -878,7 +872,7 @@ internal object AppUpdate {
             val appCtx = context.applicationContext
             val api = CommunityJokesApi(appCtx)
             val ghLogin = getVerifiedGitHubLogin(appCtx).orEmpty()
-            val name = ghLogin.ifBlank { api.displayName().orEmpty().ifBlank { chatNickname(appCtx) } }
+            val name = ghLogin.ifBlank { api.displayName().orEmpty().ifBlank { "Pengguna XyDesk" } }
             val clientId = api.accountShortId().ifBlank { name }
             val conn = (URL(PRESENCE_ENDPOINT).openConnection() as HttpURLConnection).apply {
                 requestMethod = "POST"
@@ -903,7 +897,6 @@ internal object AppUpdate {
                 val count = root.optInt("online_count", 1).coerceAtLeast(1)
                 _appWideOnlineCount.value = count
                 // Cek notifikasi in-app terbaru dari server (pengumuman, balasan, like, react, mention)
-                pollInAppNotifications(appCtx, clientId, ghLogin, name)
                 conn.disconnect()
                 return@runCatching count
             }
@@ -912,150 +905,6 @@ internal object AppUpdate {
         }.getOrDefault(_appWideOnlineCount.value)
     }
 
-    private fun pollInAppNotifications(
-        appCtx: Context,
-        clientId: String,
-        ghLogin: String,
-        displayName: String,
-    ) {
-        runCatching {
-            val prefs = appCtx.getSharedPreferences(PREFS_DATA_PACK, Context.MODE_PRIVATE)
-            val sinceMs = prefs.getLong("last_inapp_notif_ts", System.currentTimeMillis() - 120_000L)
-            val urlStr = "https://api.xydeskremote.biz.id/api/notifications" +
-                "?client_id=${URLEncoder.encode(clientId, "UTF-8")}" +
-                "&github_login=${URLEncoder.encode(ghLogin, "UTF-8")}" +
-                "&name=${URLEncoder.encode(displayName, "UTF-8")}" +
-                "&since=$sinceMs"
-            val conn = (URL(urlStr).openConnection() as HttpURLConnection).apply {
-                requestMethod = "GET"
-                connectTimeout = 5_000
-                readTimeout = 5_000
-                setRequestProperty("Accept", "application/json")
-            }
-            if (conn.responseCode in 200..299) {
-                val raw = conn.inputStream.bufferedReader(Charsets.UTF_8).use { it.readText() }
-                val obj = JSONObject(raw)
-                val items = obj.optJSONArray("items")
-                var maxTs = sinceMs
-                if (items != null) {
-                    for (i in 0 until items.length()) {
-                        val it = items.optJSONObject(i) ?: continue
-                        val id = it.optString("id", "").trim()
-                        val ts = it.optLong("created_at", 0L)
-                        if (ts > maxTs) maxTs = ts
-                        val actorHash = it.optString("actor_id", "").trim()
-                        val actorName = it.optString("actor_name", "").trim()
-                        val actorGh = it.optString("actor_github", "").trim()
-                        val isSelfActor = ChatPushNotifier.isSelfUser(
-                            context = appCtx,
-                            actorName = actorName,
-                            actorGithub = actorGh,
-                            actorClientId = actorHash,
-                        )
-                        if (isSelfActor) continue
-                        val cat = it.optString("category", "info")
-                        val title = it.optString("title", "Notifikasi Baru")
-                        val msg = it.optString("body", "")
-                        val route = it.optString("target_route", if (cat == "like" || cat == "comment" || cat == "reaction") "feed" else "chat")
-                        if (id.isNotBlank() && msg.isNotBlank()) {
-                            XyInAppNotificationBus.push(
-                                XyInAppNotificationItem(
-                                    id = id,
-                                    title = title,
-                                    body = msg,
-                                    category = cat,
-                                    actorName = actorName,
-                                    isFounder = it.optBoolean("is_founder", false),
-                                    targetRoute = route,
-                                    createdAt = ts.takeIf { t -> t > 0L } ?: System.currentTimeMillis(),
-                                ),
-                            )
-                            ChatPushNotifier.unreadNotifCountState.intValue = (ChatPushNotifier.unreadNotifCountState.intValue + 1).coerceAtMost(99)
-                            if (cat == "mention" || cat == "reply") {
-                                ChatPushNotifier.unreadChatCountState.intValue = (ChatPushNotifier.unreadChatCountState.intValue + 1).coerceAtMost(99)
-                            }
-                            // Hanya tampilkan kartu notifikasi sosial terpisah untuk aktivitas Feed.
-                            // Semua notifikasi Chat Global (route == "chat" / id "chat-*") sudah digabung
-                            // ke dalam 1 kartu Grup WhatsApp (MessagingStyle) agar tidak double!
-                            if (route != "chat" && !id.startsWith("chat-")) {
-                                ChatPushNotifier.notifySocialEvent(
-                                    context = appCtx,
-                                    notifId = id,
-                                    category = cat,
-                                    title = title,
-                                    body = msg,
-                                    actorName = actorName,
-                                    actorGithub = actorGh,
-                                    actorClientId = actorHash,
-                                )
-                            }
-                        }
-                    }
-                }
-                if (maxTs > sinceMs) {
-                    prefs.edit().putLong("last_inapp_notif_ts", maxTs).apply()
-                }
-            }
-            conn.disconnect()
-        }
-
-        // Sinkronkan juga pesan terbaru Chat Global ke Pusat Notifikasi In-App & Banner Live
-        runCatching {
-            val prefs = appCtx.getSharedPreferences(PREFS_DATA_PACK, Context.MODE_PRIVATE)
-            val lastChatTs = prefs.getLong("last_inapp_chat_ts", 0L)
-            val cConn = (URL("https://api.xydeskremote.biz.id/api/chat/history?limit=12&joined_at=0").openConnection() as HttpURLConnection).apply {
-                requestMethod = "GET"
-                connectTimeout = 5_000
-                readTimeout = 5_000
-                setRequestProperty("Accept", "application/json")
-            }
-            if (cConn.responseCode in 200..299) {
-                val raw = cConn.inputStream.bufferedReader(Charsets.UTF_8).use { it.readText() }
-                val root = JSONObject(raw)
-                val arr = root.optJSONArray("messages")
-                var newestChatTs = lastChatTs
-                if (arr != null && arr.length() > 0) {
-                    for (i in 0 until arr.length()) {
-                        val m = arr.optJSONObject(i) ?: continue
-                        val id = m.optString("id", "").trim()
-                        val at = m.optLong("at", 0L)
-                        val sender = m.optString("name", "Komunitas").trim()
-                        val gh = m.optString("github_login", "").trim()
-                        val txt = m.optString("text", "").trim().ifBlank { "Mengirim media di Chat Global" }
-                        if (id.isBlank() || m.optBoolean("deleted", false)) continue
-                        if (at > newestChatTs) newestChatTs = at
-                        val isSelf = ChatPushNotifier.isSelfUser(
-                            context = appCtx,
-                            actorName = sender,
-                            actorGithub = gh,
-                            actorClientId = "",
-                        )
-                        val notifItem = XyInAppNotificationItem(
-                            id = "chat-$id",
-                            title = "$sender di Chat Global",
-                            body = txt,
-                            category = if (m.optBoolean("is_announcement", false)) "announcement" else "chat",
-                            actorName = gh.ifBlank { sender },
-                            isFounder = isFounderAccount(gh) || isFounderAccount(sender),
-                            targetRoute = "chat",
-                            createdAt = at.takeIf { it > 0L } ?: System.currentTimeMillis(),
-                        )
-                        if (lastChatTs == 0L || at <= lastChatTs || isSelf) {
-                            XyInAppNotificationBus.seedHistoryOnly(notifItem)
-                        } else {
-                            XyInAppNotificationBus.push(notifItem)
-                        }
-                    }
-                    if (newestChatTs > lastChatTs) {
-                        prefs.edit().putLong("last_inapp_chat_ts", newestChatTs).apply()
-                    }
-                }
-            }
-            cConn.disconnect()
-        }
-    }
-
-    /** True bila [remote] lebih baru dari [current] (per segmen numerik). */
     fun isNewer(remote: String, current: String): Boolean {
         fun parts(value: String): List<Int> =
             value.trim().removePrefix("v").split(".").map { seg ->

@@ -679,7 +679,6 @@ class PcStreamSessionActivity : ComponentActivity() {
             }
             Box(Modifier.fillMaxSize()) {
                 VideoStage()
-                FloatingSessionChatOverlay()
             }
         } else {
             PairingStage()

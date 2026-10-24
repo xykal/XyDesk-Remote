@@ -560,7 +560,6 @@ private fun CloudSyncCard() {
  * fitur RDP Gratis) otomatis mengisi nama tampilan. Nama bisa dikustom.
  */
 @Composable
-@Composable
 private fun CommunityAccountCard(
     versionName: String? = null,
     deviceCount: Int = 0,
@@ -570,7 +569,7 @@ private fun CommunityAccountCard(
     // keputusan pengguna. Tinggal identitas akun + koneksi GitHub.
     val context = LocalContext.current
     val api = remember(context) { CommunityJokesApi(context) }
-    val name = remember { api.displayName() }
+    val name = remember { api.displayName().orEmpty().ifBlank { "Pengguna XyDesk" } }
     val accountId = remember { api.friendlyAccountId() }
     val githubUser = getVerifiedGitHubLogin(context)
     val avatarFile = remember { java.io.File(context.filesDir, "xy_avatar.webp") }
@@ -678,6 +677,106 @@ private fun CommunityAccountCard(
         }
     }
 }
+
+internal const val GITHUB_OAUTH_CLIENT_ID = "Ov23liBsgZ5xJKgzHGtl"
+
+internal suspend fun githubDeviceStart(clientId: String): org.json.JSONObject? =
+    kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+        runCatching {
+            val body = "client_id=" + java.net.URLEncoder.encode(clientId, "UTF-8") +
+                "&scope=" + java.net.URLEncoder.encode("repo workflow read:user", "UTF-8")
+            val conn = java.net.URL("https://github.com/login/device/code")
+                .openConnection() as java.net.HttpURLConnection
+            conn.requestMethod = "POST"
+            conn.doOutput = true
+            conn.connectTimeout = 15_000
+            conn.readTimeout = 15_000
+            conn.setRequestProperty("Accept", "application/json")
+            conn.setRequestProperty("Content-Type", "application/x-www-form-urlencoded")
+            conn.outputStream.use { it.write(body.toByteArray()) }
+            if (conn.responseCode !in 200..299) return@runCatching null
+            org.json.JSONObject(conn.inputStream.bufferedReader().readText())
+        }.getOrNull()
+    }
+
+internal suspend fun githubDevicePoll(clientId: String, deviceCode: String): org.json.JSONObject? =
+    kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+        runCatching {
+            val body = "client_id=" + java.net.URLEncoder.encode(clientId, "UTF-8") +
+                "&device_code=" + java.net.URLEncoder.encode(deviceCode, "UTF-8") +
+                "&grant_type=" + java.net.URLEncoder.encode(
+                    "urn:ietf:params:oauth:grant-type:device_code",
+                    "UTF-8",
+                )
+            val conn = java.net.URL("https://github.com/login/oauth/access_token")
+                .openConnection() as java.net.HttpURLConnection
+            conn.requestMethod = "POST"
+            conn.doOutput = true
+            conn.connectTimeout = 15_000
+            conn.readTimeout = 15_000
+            conn.setRequestProperty("Accept", "application/json")
+            conn.setRequestProperty("Content-Type", "application/x-www-form-urlencoded")
+            conn.outputStream.use { it.write(body.toByteArray()) }
+            if (conn.responseCode !in 200..299) return@runCatching null
+            org.json.JSONObject(conn.inputStream.bufferedReader().readText())
+        }.getOrNull()
+    }
+
+/**
+ * Ambil profil lengkap GitHub (`/user`) dan sinkronkan login, nama tampilan,
+ * serta avatar lokal bila pengguna belum memasang foto profil kustom.
+ */
+internal suspend fun syncGitHubProfileAndAvatar(
+    context: android.content.Context,
+    token: String,
+): String? = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+    runCatching {
+        val conn = java.net.URL("https://api.github.com/user")
+            .openConnection() as java.net.HttpURLConnection
+        conn.requestMethod = "GET"
+        conn.connectTimeout = 12_000
+        conn.readTimeout = 12_000
+        conn.setRequestProperty("Accept", "application/vnd.github+json")
+        conn.setRequestProperty("Authorization", "Bearer ${token.trim()}")
+        conn.setRequestProperty("User-Agent", "XyDeskRemote")
+        if (conn.responseCode !in 200..299) return@runCatching null
+        val json = org.json.JSONObject(conn.inputStream.bufferedReader().readText())
+        val login = json.optString("login", "").trim().takeIf { it.isNotEmpty() } ?: return@runCatching null
+        val avatarUrl = json.optString("avatar_url", "").trim()
+        saveVerifiedGitHubLogin(context, login, avatarUrl)
+        val avatarFile = java.io.File(context.filesDir, "xy_avatar.webp")
+        if (!avatarFile.exists() && avatarUrl.startsWith("https://")) {
+            runCatching {
+                val imgConn = java.net.URL(avatarUrl).openConnection() as java.net.HttpURLConnection
+                imgConn.connectTimeout = 10_000
+                imgConn.readTimeout = 10_000
+                val raw = imgConn.inputStream.use { it.readBytes() }
+                val src = android.graphics.BitmapFactory.decodeByteArray(raw, 0, raw.size)
+                if (src != null) {
+                    val bmp = android.graphics.Bitmap.createScaledBitmap(src, 256, 256, true)
+                    val out = java.io.ByteArrayOutputStream()
+                    val fmt = if (android.os.Build.VERSION.SDK_INT >= 30) {
+                        android.graphics.Bitmap.CompressFormat.WEBP_LOSSY
+                    } else {
+                        @Suppress("DEPRECATION")
+                        android.graphics.Bitmap.CompressFormat.WEBP
+                    }
+                    bmp.compress(fmt, 85, out)
+                    val bytes = out.toByteArray()
+                    if (bytes.size in 1..200_000) {
+                        avatarFile.writeBytes(bytes)
+                        runCatching {
+                            CommunityJokesApi(context).uploadAvatar(bytes, "image/webp")
+                        }
+                    }
+                }
+            }
+        }
+        login
+    }.getOrNull()
+}
+
+
 
 internal fun GitHubDeviceFlowPanel(
     onCancel: () -> Unit,
@@ -1142,11 +1241,6 @@ internal fun XyHeaderAccountActions(
                             fontWeight = FontWeight.Bold,
                             maxLines = 1,
                             overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
-                        )
-                        XyUserRoleBadges(
-                            name = displayName,
-                            githubLogin = ghUser,
-                            compact = true,
                         )
                         Text(
                             if (ghUser != null) "GitHub: @$ghUser (Terhubung)"

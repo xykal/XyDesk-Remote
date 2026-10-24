@@ -407,10 +407,8 @@ fun XyDeskHome(
                 val prefs = appCtx.getSharedPreferences("xydesk.feedback_local", Context.MODE_PRIVATE)
                 val prev = prefs.getString("items", "").orEmpty()
                 val entry = "${System.currentTimeMillis()}|$category|${destination.name}|" +
-                    message.replace("|", "/").replace("
-", " ").take(500)
-                prefs.edit().putString("items", (prev + "
-" + entry).takeLast(20_000)).apply()
+                    message.replace("|", "/").replace("\n", " ").take(500)
+                prefs.edit().putString("items", (prev + "\n" + entry).takeLast(20_000)).apply()
             }
         }
         val draft = feedbackShareDraft(category, message)

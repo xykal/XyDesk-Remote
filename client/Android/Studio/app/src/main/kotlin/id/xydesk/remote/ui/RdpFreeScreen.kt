@@ -583,7 +583,6 @@ fun RdpFreeScreen(onBack: () -> Unit, onConnect: (ConnectionProfile) -> Unit) {
                                     maxLines = 1,
                                     overflow = TextOverflow.Ellipsis,
                                 )
-                                XyUserRoleBadges(name = login, githubLogin = login, compact = true)
                             }
                             Text(
                                 text = when {
@@ -2104,6 +2103,18 @@ fun RdpFreeScreen(onBack: () -> Unit, onConnect: (ConnectionProfile) -> Unit) {
 }
 
 @Composable
+/** Format durasi detik menjadi teks ringkas, mis. "5j 30m". */
+internal fun formatLeaderboardDuration(totalSeconds: Long): String {
+    val sec = totalSeconds.coerceAtLeast(60L)
+    val hours = sec / 3600L
+    val mins = (sec % 3600L) / 60L
+    return if (hours > 0L) {
+        "${hours}j ${mins}m"
+    } else {
+        "${mins} mnt"
+    }
+}
+
 private fun SecretStatusRow(
     name: String,
     configured: Boolean,
