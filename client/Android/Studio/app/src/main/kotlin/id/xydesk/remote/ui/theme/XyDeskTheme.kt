@@ -30,8 +30,9 @@ import id.xydesk.remote.ui.AppPrefs
 // =============================================================
 // XyDesk design tokens.
 //
-// Aturan: monokrom (hitam-putih), permukaan matte dan rounded, kontras
-// tinggi, tanpa glow/gradient. Warna hanya untuk status (ok/warn/danger).
+// Aturan: permukaan matte gelap netral dan rounded, aksen ungu untuk
+// primary/kontrol aktif, kontras tinggi, tanpa glow/gradient dekoratif.
+// Warna status (ok/warn/danger) tetap abu netral.
 // Garis dekoratif dibuat lembut; input, slider, dan switch tetap jelas terbaca.
 // =============================================================
 
@@ -47,10 +48,11 @@ val XyLineStrong = Color(0xFF3C3C42)
 val XyText = Color(0xFFF3F3F5)
 val XyTextDim = Color(0xFFB2B2B8)
 val XyTextFaint = Color(0xFF808086)
-// Aksen monokrom: nyaris putih di tema gelap. Dulu lavender (0xFFD8C9FF);
-// diganti atas permintaan pengguna supaya app hitam-putih seperti semula.
-val XyAccent = Color(0xFFF2F2F4)
-val XyAccentInk = Color(0xFF111114)
+// Aksen ungu (2026-10-24): primary di semua layar jadi violet seperti
+// referensi Connection Hub; permukaan tetap gelap netral (bukan lavender
+// penuh) dan status tetap abu netral.
+val XyAccent = Color(0xFF8B5CF6)
+val XyAccentInk = Color(0xFFFFFFFF)
 val XyOk = Color(0xFFE2E2E6)
 val XyWarn = Color(0xFFAAAAAA)
 val XyDanger = Color(0xFF858585)
@@ -58,13 +60,13 @@ val XyDanger = Color(0xFF858585)
 val DarkScheme = darkColorScheme(
     primary = XyAccent,
     onPrimary = XyAccentInk,
-    primaryContainer = XyPrimaryContainer,
-    onPrimaryContainer = XyText,
-    secondary = XyTextDim,
-    onSecondary = XyAccentInk,
+    primaryContainer = Color(0xFF2A1650),
+    onPrimaryContainer = Color(0xFFEDE9FE),
+    secondary = Color(0xFFA78BFA),
+    onSecondary = Color(0xFF1E1040),
     secondaryContainer = XySurfaceAlt,
     onSecondaryContainer = XyText,
-    tertiary = XyOk,
+    tertiary = Color(0xFFC4B5FD),
     background = XyBg,
     onBackground = XyText,
     surface = XySurface,
@@ -81,15 +83,15 @@ val DarkScheme = darkColorScheme(
 )
 
 val LightScheme = lightColorScheme(
-    primary = Color(0xFF16161A),
+    primary = Color(0xFF7C3AED),
     onPrimary = Color(0xFFFFFFFF),
-    primaryContainer = Color(0xFFEDEDEF),
-    onPrimaryContainer = Color(0xFF24242A),
-    secondary = Color(0xFF5E5E64),
+    primaryContainer = Color(0xFFEDE9FE),
+    onPrimaryContainer = Color(0xFF2E1065),
+    secondary = Color(0xFF6D28D9),
     onSecondary = Color(0xFFFFFFFF),
     secondaryContainer = Color(0xFFEDEDEF),
     onSecondaryContainer = Color(0xFF232328),
-    tertiary = Color(0xFF55555B),
+    tertiary = Color(0xFF8B5CF6),
     background = Color(0xFFF7F7F8),
     onBackground = Color(0xFF1A1A1D),
     surface = Color(0xFFFFFFFF),

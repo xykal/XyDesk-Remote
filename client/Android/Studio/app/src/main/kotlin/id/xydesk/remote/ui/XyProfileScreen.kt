@@ -113,7 +113,7 @@ internal fun XyProfileScreen(
             Modifier
                 .fillMaxSize()
                 .padding(horizontal = 16.dp)
-                .padding(bottom = 18.dp),
+                .padding(bottom = 16.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
             // ---- Kartu Utama Profil (Ronde 54: terpadu, bersih, tidak menumpuk) ----
