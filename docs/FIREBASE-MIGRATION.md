@@ -137,3 +137,8 @@ salinan masukan juga disimpan lokal (`feedback_local`).
 Catatan rilis v1.1.23 (tambahan 2026-10-24): menu sesi satu pintu dari
 gagang garis tiga kanan atas; panah atas + bubble dan sliders rail dihapus;
 panel menu hitam-putih monokrom penuh dan anti-dobel (quick bar tunggal).
+
+Catatan rilis v1.1.23 (tambahan 2026-10-24): popup menu sesi direvisi total
+ungu gaya Connection Hub (tema lokal popup saja); update kini langsung di
+aplikasi — popup update mengunduh APK di dalam app (progres live) dan
+membuka installer sistem (izin REQUEST_INSTALL_PACKAGES + FileProvider).
