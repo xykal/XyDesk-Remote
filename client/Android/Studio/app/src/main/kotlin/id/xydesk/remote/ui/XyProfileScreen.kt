@@ -560,915 +560,125 @@ private fun CloudSyncCard() {
  * fitur RDP Gratis) otomatis mengisi nama tampilan. Nama bisa dikustom.
  */
 @Composable
+@Composable
 private fun CommunityAccountCard(
     versionName: String? = null,
     deviceCount: Int = 0,
 ) {
+    // Kartu akun bersih (2026-10-24): aksesori profil lama (badge,
+    // leaderboard, stiker favorit, foto animasi) dihapus total atas
+    // keputusan pengguna. Tinggal identitas akun + koneksi GitHub.
     val context = LocalContext.current
     val api = remember(context) { CommunityJokesApi(context) }
-    val clipboard = androidx.compose.ui.platform.LocalClipboardManager.current
-    val scope = androidx.compose.runtime.rememberCoroutineScope()
-
-    var name by remember { mutableStateOf(api.displayName()) }
-    var editing by remember { mutableStateOf(false) }
-    var showRecoverySection by remember { mutableStateOf(false) }
-    var draft by remember { mutableStateOf("") }
-    var busy by remember { mutableStateOf(false) }
-    var restoreDraft by remember { mutableStateOf("") }
-    var message by remember { mutableStateOf<String?>(null) }
+    val name = remember { api.displayName() }
     val accountId = remember { api.friendlyAccountId() }
-
+    val githubUser = getVerifiedGitHubLogin(context)
     val avatarFile = remember { java.io.File(context.filesDir, "xy_avatar.webp") }
     var avatarBitmap by remember { mutableStateOf<android.graphics.Bitmap?>(null) }
     androidx.compose.runtime.LaunchedEffect(avatarFile) {
-        val bmp = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+        avatarBitmap = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
             runCatching {
-                if (avatarFile.exists()) {
-                    android.graphics.BitmapFactory.decodeFile(avatarFile.absolutePath)
-                } else null
+                if (avatarFile.exists()) android.graphics.BitmapFactory.decodeFile(avatarFile.absolutePath) else null
             }.getOrNull()
         }
-        avatarBitmap = bmp
     }
-    var avatarBusy by remember { mutableStateOf(false) }
-    var githubBusy by remember { mutableStateOf(false) }
-    var githubWaitingCode by remember { mutableStateOf<String?>(null) }
-    var githubWaitingUrl by remember { mutableStateOf<String?>(null) }
-    val authRev = GitHubDirectOAuthController.authRevision
-    var githubUser by remember(authRev) { mutableStateOf(getVerifiedGitHubLogin(context)) }
-    LaunchedEffect(authRev) {
-        launch { api.fetchLeaderboard(reportDeltaSec = 0L) }
-        val currentGh = getVerifiedGitHubLogin(context)
-        if (!currentGh.isNullOrBlank()) {
-            githubUser = currentGh
-            if (name.isNullOrBlank()) {
-                name = api.displayName() ?: currentGh
-            }
-        }
-    }
-    val isFounder = isFounderAccount(githubUser) || isFounderAccount(name)
-    val podiumMapTop by LeaderboardPodium.topTen.collectAsState()
-    val byIdentityMap by LeaderboardPodium.byIdentity.collectAsState()
-    val normGhKey = normalizedChatAccount(githubUser)
-    val normNameKey = normalizedChatAccount(name)
-    val currentPodiumRank = (if (normGhKey.isNotEmpty()) podiumMapTop[normGhKey] else null)
-        ?: (if (normNameKey.isNotEmpty()) podiumMapTop[normNameKey] else null)
-    val isTopLeaderboardUnlocked = isFounder || (currentPodiumRank != null && currentPodiumRank in 1..10)
-    val animAvatarRev = XyAnimatedAvatarManager.revision
-    val activeAnimAvatarStyle = remember(animAvatarRev, isTopLeaderboardUnlocked) {
-        if (isTopLeaderboardUnlocked) XyAnimatedAvatarManager.getSelectedStyle(context)
-        else XyAnimatedAvatarStyle.NONE
-    }
-    val hasCustomGifAvatar = remember(animAvatarRev) { XyAnimatedAvatarManager.hasCustomGif(context) }
+    var showGithubPanel by remember { mutableStateOf(false) }
+    val clipboard = androidx.compose.ui.platform.LocalClipboardManager.current
 
-    val pickAvatar = androidx.activity.compose.rememberLauncherForActivityResult(
-        androidx.activity.result.contract.ActivityResultContracts.GetContent(),
-    ) { uri ->
-        if (uri != null) {
-            scope.launch {
-                avatarBusy = true
-                try {
-                    val raw = context.contentResolver.openInputStream(uri)?.use { it.readBytes() }
-                    val isGifBytes = raw != null && raw.size > 6 &&
-                        raw[0] == 'G'.code.toByte() &&
-                        raw[1] == 'I'.code.toByte() &&
-                        raw[2] == 'F'.code.toByte()
-                    if (isGifBytes && raw != null) {
-                        if (!isTopLeaderboardUnlocked) {
-                            message = xyNow(
-                                "Foto Profil GIF Animasi khusus Top 1–10 Leaderboard.",
-                                "Animated GIF Profile Photo is exclusive to Top 1–10 Leaderboard.",
-                            )
-                        } else if (raw.size > 3_500_000) {
-                            message = xyNow("GIF maksimal 3.5 MB.", "GIF max 3.5 MB.")
-                        } else {
-                            XyAnimatedAvatarManager.saveCustomGif(context, raw)
-                            runCatching {
-                                android.graphics.BitmapFactory.decodeByteArray(raw, 0, raw.size)?.let { firstFrame ->
-                                    avatarBitmap = firstFrame
-                                }
-                            }
-                            runCatching { api.uploadAvatar(raw, "image/gif") }
-                            message = xyNow("Foto Profil Animasi GIF aktif!", "Animated GIF profile photo active!")
-                        }
-                    } else {
-                        val src = raw?.let { android.graphics.BitmapFactory.decodeByteArray(it, 0, it.size) }
-                        if (src == null) {
-                            message = xyNow("Gambar tidak terbaca.", "Couldn't read the image.")
-                        } else {
-                            val side = 512
-                            val scale = minOf(1f, side / maxOf(src.width, src.height).toFloat())
-                            val bmp = if (scale < 1f) {
-                                android.graphics.Bitmap.createScaledBitmap(
-                                    src, (src.width * scale).toInt().coerceAtLeast(1),
-                                    (src.height * scale).toInt().coerceAtLeast(1), true,
-                                )
-                            } else src
-                            val stream = java.io.ByteArrayOutputStream()
-                            val fmt = if (android.os.Build.VERSION.SDK_INT >= 30) {
-                                android.graphics.Bitmap.CompressFormat.WEBP_LOSSY
-                            } else {
-                                @Suppress("DEPRECATION")
-                                android.graphics.Bitmap.CompressFormat.WEBP
-                            }
-                            bmp.compress(fmt, 90, stream)
-                            val bytes = stream.toByteArray()
-                            if (bytes.size > 1_200_000) {
-                                message = xyNow("Foto terlalu besar.", "Photo too large.")
-                            } else {
-                                avatarFile.writeBytes(bytes)
-                                avatarBitmap = bmp
-                                runCatching { api.uploadAvatar(bytes, "image/webp") }
-                                message = xyNow("Foto profil tersimpan.", "Profile photo saved.")
-                            }
-                        }
-                    }
-                } finally {
-                    avatarBusy = false
-                }
-            }
-        }
-    }
-    androidx.compose.runtime.LaunchedEffect(Unit) {
-        val savedGh = getVerifiedGitHubLogin(context)
-        val gh = savedGh ?: runCatching {
-            val pat = id.xydesk.remote.security.CredentialVault(context.applicationContext)
-                .get(id.xydesk.remote.ui.rdp.XyRdpConfig.VAULT_PAT_ID)
-            if (pat != null) id.xydesk.remote.ui.rdp.XyRdpClient.whoami(pat) else null
-        }.getOrNull()
-        if (gh != null) {
-            githubUser = gh
-            saveVerifiedGitHubLogin(context, gh)
-            if (name == null || api.displayName() == null) {
-                runCatching { api.setDisplayName(gh) }
-                name = api.displayName() ?: gh
-            }
-            // Muat otomatis foto profil GitHub bila belum ada foto profil lokal
-            if (avatarBitmap == null) {
-                val ghBmp = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
-                    runCatching {
-                        val urlStr = getVerifiedGitHubAvatarUrl(context)?.takeIf { it.isNotBlank() }
-                            ?: "https://github.com/$gh.png?size=160"
-                        val conn = java.net.URL(urlStr).openConnection() as java.net.HttpURLConnection
-                        conn.connectTimeout = 6000
-                        conn.readTimeout = 6000
-                        conn.instanceFollowRedirects = true
-                        if (conn.responseCode in 200..299) {
-                            val bytes = conn.inputStream.use { it.readBytes() }
-                            android.graphics.BitmapFactory.decodeByteArray(bytes, 0, bytes.size)
-                        } else null
-                    }.getOrNull()
-                }
-                if (ghBmp != null) avatarBitmap = ghBmp
-            }
-        }
-    }
-
-    val activeUsageSecs = remember { recordAndGetLocalUsageSeconds(context, 0L) }
-    val sessionsPlayed = remember { getLocalUsageSessionCount(context) }
-    val favStickersCount = remember { CustomStickerVault.loadFavoriteKeys(context).size }
-
-    XyGlassCard(padding = 16.dp) {
+    XyCard(modifier = Modifier.fillMaxWidth()) {
         Row(
             verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(14.dp),
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
         ) {
-            // Avatar 1:1 CircleShape + dukungan GIF Animasi & Aura Top Leaderboard
-            Box(
-                modifier = Modifier
-                    .size(64.dp)
-                    .clickable(enabled = !avatarBusy) { pickAvatar.launch("image/*") },
-                contentAlignment = Alignment.Center,
-            ) {
+            val bmp = avatarBitmap
+            if (bmp != null) {
+                androidx.compose.foundation.Image(
+                    bitmap = bmp.asImageBitmap(),
+                    contentDescription = null,
+                    contentScale = androidx.compose.ui.layout.ContentScale.Crop,
+                    modifier = Modifier
+                        .size(56.dp)
+                        .clip(androidx.compose.foundation.shape.CircleShape)
+                        .border(1.dp, MaterialTheme.colorScheme.outlineVariant, androidx.compose.foundation.shape.CircleShape),
+                )
+            } else {
                 Box(
                     Modifier
-                        .size(58.dp)
-                        .clip(androidx.compose.foundation.shape.CircleShape)
-                        .background(MaterialTheme.colorScheme.onSurface.copy(alpha = 0.10f))
-                        .let { mod ->
-                            if (isFounder) mod.border(2.dp, founderBorderBrush(), androidx.compose.foundation.shape.CircleShape) else mod
-                        }
-                        .podiumAvatarFrame(githubUser),
-                    contentAlignment = Alignment.Center,
-                ) {
-                    val bmp = avatarBitmap
-                    if (isTopLeaderboardUnlocked && activeAnimAvatarStyle == XyAnimatedAvatarStyle.CUSTOM_GIF && hasCustomGifAvatar) {
-                        CustomAnimatedGifAvatarView(
-                            gifFile = XyAnimatedAvatarManager.customGifFile(context),
-                            modifier = Modifier.size(58.dp).clip(androidx.compose.foundation.shape.CircleShape),
-                        )
-                    } else if (bmp != null) {
-                        androidx.compose.foundation.Image(
-                            bitmap = bmp.asImageBitmap(),
-                            contentDescription = xy("Foto profil", "Profile photo"),
-                            modifier = Modifier.size(58.dp).clip(androidx.compose.foundation.shape.CircleShape),
-                            contentScale = androidx.compose.ui.layout.ContentScale.Crop,
-                        )
-                    } else {
-                        Text(
-                            (name?.take(1) ?: githubUser?.take(1) ?: "T").uppercase(),
-                            style = MaterialTheme.typography.titleLarge,
-                            fontWeight = FontWeight.Bold,
-                        )
-                    }
-                }
-                if (isTopLeaderboardUnlocked && activeAnimAvatarStyle != XyAnimatedAvatarStyle.NONE) {
-                    AnimatedAvatarEffectOverlay(
-                        style = activeAnimAvatarStyle,
-                        modifier = Modifier.size(64.dp),
-                    )
-                }
-                Box(
-                    modifier = Modifier
-                        .align(Alignment.BottomEnd)
-                        .size(22.dp)
+                        .size(56.dp)
                         .clip(androidx.compose.foundation.shape.CircleShape)
                         .background(MaterialTheme.colorScheme.primary)
-                        .border(1.5.dp, MaterialTheme.colorScheme.surface, androidx.compose.foundation.shape.CircleShape),
+                        .border(1.dp, MaterialTheme.colorScheme.outlineVariant, androidx.compose.foundation.shape.CircleShape),
                     contentAlignment = Alignment.Center,
                 ) {
-                    Icon(
-                        imageVector = XyIcons.Camera,
-                        contentDescription = xy("Ganti foto", "Change photo"),
-                        tint = MaterialTheme.colorScheme.onPrimary,
-                        modifier = Modifier.size(12.dp),
+                    Text(
+                        name.trim().take(1).uppercase().ifBlank { "X" },
+                        color = MaterialTheme.colorScheme.onPrimary,
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 22.sp,
                     )
                 }
             }
-
-            Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
+            Column(Modifier.weight(1f)) {
                 Text(
-                    text = name ?: githubUser ?: xy("Akun $accountId", "Account $accountId"),
+                    name,
                     style = MaterialTheme.typography.titleMedium,
                     fontWeight = FontWeight.Bold,
                     maxLines = 1,
-                    overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
-                )
-                XyUserRoleBadges(
-                    name = name,
-                    githubLogin = githubUser,
-                    compact = true,
                 )
                 Text(
-                    text = buildString {
-                        if (!githubUser.isNullOrBlank()) {
-                            append("@$githubUser  ·  ")
-                        }
-                        append("ID $accountId")
-                        if (!versionName.isNullOrBlank()) {
-                            append("  ·  v$versionName")
-                        }
-                    },
-                    style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    maxLines = 1,
-                    overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
-                )
-            }
-
-            // Deret ikon aksi di pojok kanan kartu profil (Ganti nama, Pemulihan)
-            Row(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
-                XyIconPill(
-                    XyIcons.Edit,
-                    { editing = !editing; draft = name.orEmpty() },
-                    active = editing,
-                    contentDescription = xy("Ganti nama", "Change name"),
-                )
-                XyIconPill(
-                    XyIcons.Key,
-                    {
-                        showRecoverySection = !showRecoverySection
-                        clipboard.setText(androidx.compose.ui.text.AnnotatedString(api.restoreCode()))
-                        message = xyNow("Kode pemulihan akun disalin ke clipboard.", "Account recovery code copied to clipboard.")
-                    },
-                    active = showRecoverySection,
-                    contentDescription = xy("Pemulihan Akun", "Account Recovery"),
-                )
-            }
-        }
-
-        // Baris Status & Tombol Login GitHub 1-Klik via In-App Browser (Chrome Custom Tab)
-        val ghUser = githubUser
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .clip(RoundedCornerShape(12.dp))
-                .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.36f))
-                .padding(horizontal = 12.dp, vertical = 10.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(10.dp),
-        ) {
-            GitHubLogoIcon(size = 20.dp, tint = MaterialTheme.colorScheme.onSurface)
-            Column(Modifier.weight(1f)) {
-                Text(
-                    if (ghUser != null) xy("GitHub: @$ghUser", "GitHub: @$ghUser")
-                    else xy("Hubungkan GitHub", "Connect GitHub"),
-                    style = MaterialTheme.typography.labelLarge,
-                    fontWeight = FontWeight.SemiBold,
-                    maxLines = 1,
-                )
-                Text(
-                    if (ghUser != null) xy("Sinkron RDP Cloud & Chat Global aktif", "Cloud RDP & Global Chat sync active")
-                    else xy("1-klik login & Authorize otomatis", "1-tap sign in & auto Authorize"),
-                    style = MaterialTheme.typography.labelSmall,
+                    if (githubUser != null) "@$githubUser" else xy("Belum terhubung GitHub", "Not connected to GitHub"),
+                    style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     maxLines = 1,
                 )
-            }
-            if (ghUser != null) {
-                XyPillButton(
-                    text = xy("Keluar", "Sign out"),
-                    onClick = {
-                        scope.launch {
-                            runCatching {
-                                id.xydesk.remote.security.CredentialVault(context.applicationContext)
-                                    .remove(id.xydesk.remote.ui.rdp.XyRdpConfig.VAULT_PAT_ID)
-                            }
-                            githubUser = null
-                            saveVerifiedGitHubLogin(context, null)
-                            message = xyNow("Akun GitHub dilepas.", "GitHub account removed.")
-                        }
+                Text(
+                    "ID: $accountId",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.clickable {
+                        clipboard.setText(androidx.compose.ui.text.AnnotatedString(accountId))
                     },
-                    primary = false,
-                    compact = true,
-                )
-            } else {
-                XyPillButton(
-                    text = if (githubBusy) xy("Menghubungkan…", "Connecting…") else xy("Masuk GitHub", "Sign in"),
-                    onClick = {
-                        githubBusy = true
-                        scope.launch {
-                            performGitHubInAppBrowserLogin(
-                                context = context,
-                                onCodeReady = { _, _ -> },
-                                onSuccess = { _, user ->
-                                    githubBusy = false
-                                    githubWaitingCode = null
-                                    githubWaitingUrl = null
-                                    githubUser = user
-                                    name = api.displayName() ?: user
-                                    message = xyNow("Terhubung sebagai @$user!", "Connected as @$user!")
-                                },
-                                onError = { err ->
-                                    githubBusy = false
-                                    message = err
-                                },
-                            )
-                        }
-                    },
-                    primary = true,
-                    compact = true,
+                    maxLines = 1,
                 )
             }
         }
-
-        // Statistik Aktivitas Profil (Flat, Rapi, Tanpa Card Bertumpuk)
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(top = 2.dp, bottom = 2.dp),
-            horizontalArrangement = Arrangement.SpaceEvenly,
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                Text(
-                    text = formatLeaderboardDuration(activeUsageSecs),
-                    style = MaterialTheme.typography.labelLarge,
-                    fontWeight = FontWeight.ExtraBold,
-                    color = MaterialTheme.colorScheme.primary,
-                )
-                Text(
-                    text = xy("Waktu Aktif", "Active Time"),
-                    style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-            }
-            Box(
-                Modifier
-                    .width(1.dp)
-                    .height(22.dp)
-                    .background(MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.35f)),
+        Spacer(Modifier.height(12.dp))
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            XyPillButton(
+                text = xy("{0} perangkat", "{0} devices", deviceCount),
+                onClick = {},
+                primary = false,
+                compact = true,
+                modifier = Modifier.weight(1f),
             )
-            Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                Text(
-                    text = "$sessionsPlayed",
-                    style = MaterialTheme.typography.labelLarge,
-                    fontWeight = FontWeight.ExtraBold,
-                )
-                Text(
-                    text = xy("Sesi Main", "Sessions"),
-                    style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-            }
-            Box(
-                Modifier
-                    .width(1.dp)
-                    .height(22.dp)
-                    .background(MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.35f)),
-            )
-            Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                Text(
-                    text = "$deviceCount",
-                    style = MaterialTheme.typography.labelLarge,
-                    fontWeight = FontWeight.ExtraBold,
-                )
-                Text(
-                    text = xy("Perangkat", "Devices"),
-                    style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-            }
-            Box(
-                Modifier
-                    .width(1.dp)
-                    .height(22.dp)
-                    .background(MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.35f)),
-            )
-            Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                Text(
-                    text = "$favStickersCount",
-                    style = MaterialTheme.typography.labelLarge,
-                    fontWeight = FontWeight.ExtraBold,
-                )
-                Text(
-                    text = xy("Stiker Fav", "Fav Stickers"),
-                    style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-            }
-        }
-
-        // Hadiah Top Leaderboard (Foto Profil Animasi Custom) & Tantangan Otomatis Badge
-        val lbEntrySelf = (if (normGhKey.isNotEmpty()) byIdentityMap[normGhKey] else null)
-            ?: (if (normNameKey.isNotEmpty()) byIdentityMap[normNameKey] else null)
-        val totalSecsCombined = maxOf(activeUsageSecs, lbEntrySelf?.totalSeconds ?: 0L)
-        val totalSessCombined = maxOf(sessionsPlayed, lbEntrySelf?.sessionsCount ?: 0)
-        val badgeChallenges = remember(totalSecsCombined, totalSessCombined, currentPodiumRank, isFounder) {
-            evaluateBadgeChallenges(
-                totalSeconds = totalSecsCombined,
-                sessionsCount = totalSessCombined,
-                podiumRank = currentPodiumRank,
-                isFounder = isFounder,
+            XyPillButton(
+                text = "v${versionName ?: "-"}",
+                onClick = {},
+                primary = false,
+                compact = true,
+                modifier = Modifier.weight(1f),
             )
         }
-        var showChallengesExpanded by remember { mutableStateOf(false) }
-
-        // 1. Kartu Hadiah Top 1-10 Leaderboard: Foto Profil Animasi Custom
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .clip(RoundedCornerShape(18.dp))
-                .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f))
-                .border(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.45f), RoundedCornerShape(18.dp))
-                .padding(12.dp),
-            verticalArrangement = Arrangement.spacedBy(8.dp),
-        ) {
-            Row(
+        if (githubUser == null) {
+            Spacer(Modifier.height(10.dp))
+            XyPillButton(
+                text = xy("Hubungkan GitHub", "Connect GitHub"),
+                onClick = { showGithubPanel = true },
+                compact = true,
                 modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                ) {
-                    Box(
-                        modifier = Modifier
-                            .size(26.dp)
-                            .clip(androidx.compose.foundation.shape.CircleShape)
-                            .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.14f)),
-                        contentAlignment = Alignment.Center,
-                    ) {
-                        Icon(
-                            imageVector = XyIcons.Star,
-                            contentDescription = null,
-                            tint = MaterialTheme.colorScheme.primary,
-                            modifier = Modifier.size(14.dp),
-                        )
-                    }
-                    Column {
-                        Text(
-                            text = xy("Foto Profil Animasi Custom", "Custom Animated Avatar"),
-                            style = MaterialTheme.typography.labelLarge,
-                            fontWeight = FontWeight.ExtraBold,
-                        )
-                        Text(
-                            text = if (isTopLeaderboardUnlocked) {
-                                xy("Hadiah Top Leaderboard Aktif · Pilih Aura / GIF", "Top Leaderboard Reward Active · Select Aura / GIF")
-                            } else {
-                                xy("Hadiah Eksklusif Top 1–10 Leaderboard", "Exclusive Top 1–10 Leaderboard Reward")
-                            },
-                            style = MaterialTheme.typography.labelSmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
-                    }
-                }
-                Box(
-                    modifier = Modifier
-                        .clip(RoundedCornerShape(50))
-                        .background(
-                            if (isTopLeaderboardUnlocked) MaterialTheme.colorScheme.primary
-                            else MaterialTheme.colorScheme.surface,
-                        )
-                        .padding(horizontal = 9.dp, vertical = 3.dp),
-                ) {
-                    Text(
-                        text = if (isTopLeaderboardUnlocked) {
-                            if (currentPodiumRank != null) "TOP #$currentPodiumRank" else "UNLOCKED"
-                        } else "TOP 1–10",
-                        style = MaterialTheme.typography.labelSmall,
-                        fontWeight = FontWeight.ExtraBold,
-                        color = if (isTopLeaderboardUnlocked) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                }
-            }
-
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .horizontalScroll(rememberScrollState()),
-                horizontalArrangement = Arrangement.spacedBy(6.dp),
-            ) {
-                XyAnimatedAvatarStyle.values().forEach { styleItem ->
-                    val selected = activeAnimAvatarStyle == styleItem
-                    Box(
-                        modifier = Modifier
-                            .clip(RoundedCornerShape(50))
-                            .background(
-                                if (selected) MaterialTheme.colorScheme.primary
-                                else MaterialTheme.colorScheme.surface,
-                            )
-                            .border(
-                                1.dp,
-                                if (selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outlineVariant,
-                                RoundedCornerShape(50),
-                            )
-                            .clickable {
-                                if (!isTopLeaderboardUnlocked) {
-                                    message = xyNow(
-                                        "Masuk Top 1–10 Leaderboard untuk membuka Foto Profil Animasi Custom!",
-                                        "Reach Top 1–10 Leaderboard to unlock Custom Animated Avatar!",
-                                    )
-                                } else if (styleItem == XyAnimatedAvatarStyle.CUSTOM_GIF && !hasCustomGifAvatar) {
-                                    pickAvatar.launch("image/*")
-                                } else {
-                                    XyAnimatedAvatarManager.setSelectedStyle(context, styleItem)
-                                    message = xyNow("Animasi '${styleItem.label}' diterapkan.", "'${styleItem.label}' animation applied.")
-                                }
-                            }
-                            .padding(horizontal = 12.dp, vertical = 6.dp),
-                        contentAlignment = Alignment.Center,
-                    ) {
-                        Text(
-                            text = styleItem.label,
-                            style = MaterialTheme.typography.labelSmall,
-                            fontWeight = FontWeight.Bold,
-                            color = if (selected) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurface,
-                        )
-                    }
-                }
-            }
-            if (isTopLeaderboardUnlocked) {
-                XyPillButton(
-                    text = if (hasCustomGifAvatar) xy("Ganti File GIF / Animasi", "Change GIF / Animated File") else xy("Pasang Foto Profil GIF Animasi", "Upload Animated GIF Avatar"),
-                    icon = XyIcons.Camera,
-                    onClick = { pickAvatar.launch("image/*") },
-                    primary = false,
-                    compact = true,
-                    modifier = Modifier.fillMaxWidth(),
-                )
-            }
-        }
-
-        // 2. Kartu Tantangan Badge Otomatis (Progress Terukur)
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .clip(RoundedCornerShape(18.dp))
-                .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.28f))
-                .border(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.40f), RoundedCornerShape(18.dp))
-                .clickable { showChallengesExpanded = !showChallengesExpanded }
-                .padding(12.dp),
-            verticalArrangement = Arrangement.spacedBy(8.dp),
-        ) {
-            val unlockedCount = badgeChallenges.count { it.unlocked }
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                Column {
-                    Text(
-                        text = xy("Tantangan Badge Otomatis", "Auto Badge Challenges"),
-                        style = MaterialTheme.typography.labelLarge,
-                        fontWeight = FontWeight.ExtraBold,
-                    )
-                    Text(
-                        text = xy("$unlockedCount/${badgeChallenges.size} terbuka otomatis", "$unlockedCount/${badgeChallenges.size} unlocked automatically"),
-                        style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                }
-                Icon(
-                    imageVector = if (showChallengesExpanded) XyIcons.ChevronUp else XyIcons.ChevronDown,
-                    contentDescription = null,
-                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.size(16.dp),
-                )
-            }
-
-            XyUserRoleBadges(
-                name = name,
-                githubLogin = githubUser,
-                compact = false,
-                durationRank = currentPodiumRank,
             )
-
-            AnimatedVisibility(visible = showChallengesExpanded) {
-                Column(
-                    modifier = Modifier.fillMaxWidth().padding(top = 4.dp),
-                    verticalArrangement = Arrangement.spacedBy(8.dp),
-                ) {
-                    badgeChallenges.forEach { ch ->
-                        Column(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .clip(RoundedCornerShape(14.dp))
-                                .background(MaterialTheme.colorScheme.surface)
-                                .padding(horizontal = 10.dp, vertical = 8.dp),
-                            verticalArrangement = Arrangement.spacedBy(4.dp),
-                        ) {
-                            Row(
-                                modifier = Modifier.fillMaxWidth(),
-                                horizontalArrangement = Arrangement.SpaceBetween,
-                                verticalAlignment = Alignment.CenterVertically,
-                            ) {
-                                Text(
-                                    text = ch.badgeTitle,
-                                    style = MaterialTheme.typography.labelMedium,
-                                    fontWeight = FontWeight.ExtraBold,
-                                    color = MaterialTheme.colorScheme.onSurface,
-                                )
-                                Text(
-                                    text = if (ch.unlocked) xy("TERBUKA", "UNLOCKED") else "${(ch.progressFraction * 100).toInt()}%",
-                                    style = MaterialTheme.typography.labelSmall,
-                                    fontWeight = FontWeight.Bold,
-                                    color = if (ch.unlocked) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
-                                )
-                            }
-                            Text(
-                                text = "${ch.targetLabel}  ·  ${ch.progressLabel}",
-                                style = MaterialTheme.typography.labelSmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            )
-                            Box(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .height(5.dp)
-                                    .clip(RoundedCornerShape(50))
-                                    .background(MaterialTheme.colorScheme.surfaceVariant),
-                            ) {
-                                Box(
-                                    modifier = Modifier
-                                        .fillMaxWidth(ch.progressFraction.coerceIn(0f, 1f))
-                                        .height(5.dp)
-                                        .clip(RoundedCornerShape(50))
-                                        .background(MaterialTheme.colorScheme.primary),
-                                )
-                            }
-                        }
-                    }
-                }
-            }
         }
-
-        if (editing) {
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .clip(RoundedCornerShape(10.dp))
-                    .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.45f))
-                    .padding(horizontal = 10.dp, vertical = 6.dp),
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                androidx.compose.foundation.text.BasicTextField(
-                    value = draft,
-                    onValueChange = { if (it.length <= 24) draft = it },
-                    modifier = Modifier.weight(1f),
-                    textStyle = androidx.compose.ui.text.TextStyle(color = MaterialTheme.colorScheme.onSurface),
-                    cursorBrush = androidx.compose.ui.graphics.SolidColor(MaterialTheme.colorScheme.primary),
-                    singleLine = true,
-                    decorationBox = { inner ->
-                        if (draft.isEmpty()) {
-                            Text(
-                                xy("Nama tampilan baru (maks 24)", "New display name (max 24)"),
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            )
-                        }
-                        inner()
-                    },
-                )
-                XyPillButton(
-                    text = if (busy) "…" else xy("Simpan", "Save"),
-                    onClick = {
-                        if (!busy && draft.trim().isNotEmpty()) {
-                            busy = true
-                            scope.launch {
-                                val ok = runCatching { api.setDisplayName(draft) }.getOrDefault(false)
-                                message = if (ok) {
-                                    name = api.displayName()
-                                    editing = false
-                                    xyNow("Nama tersimpan.", "Name saved.")
-                                } else {
-                                    xyNow("Gagal menyimpan. Cek jaringan / coba lagi.", "Couldn't save. Check network and retry.")
-                                }
-                                busy = false
-                            }
-                        }
-                    },
-                    enabled = !busy && draft.trim().isNotEmpty(),
-                    compact = true,
-                )
-            }
-        }
-
-        if (showRecoverySection) {
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .clip(RoundedCornerShape(10.dp))
-                    .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.45f))
-                    .padding(horizontal = 10.dp, vertical = 6.dp),
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                androidx.compose.foundation.text.BasicTextField(
-                    value = restoreDraft,
-                    onValueChange = { restoreDraft = it },
-                    modifier = Modifier.weight(1f),
-                    textStyle = androidx.compose.ui.text.TextStyle(
-                        color = MaterialTheme.colorScheme.onSurface,
-                        fontSize = MaterialTheme.typography.bodySmall.fontSize,
-                    ),
-                    cursorBrush = androidx.compose.ui.graphics.SolidColor(MaterialTheme.colorScheme.primary),
-                    singleLine = true,
-                    decorationBox = { inner ->
-                        if (restoreDraft.isEmpty()) {
-                            Text(
-                                xy("Tempel kode pemulihan akun lama…", "Paste old account recovery code…"),
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            )
-                        }
-                        inner()
-                    },
-                )
-                XyPillButton(
-                    text = xy("Pulihkan", "Restore"),
-                    onClick = {
-                        val ok = api.restoreClientId(restoreDraft)
-                        message = if (ok) {
-                            editing = false
-                            showRecoverySection = false
-                            scope.launch {
-                                name = runCatching { api.fetchServerDisplayName() }.getOrNull() ?: api.displayName()
-                                name?.let { api.setDisplayNameLocally(it) }
-                            }
-                            xyNow("Akun dipulihkan. Nama lama dimuat ulang.", "Account restored. Reloading your old name.")
-                        } else {
-                            xyNow("Kode tidak valid. Tempel kode pemulihan yang dulu kamu salin.", "Invalid code. Paste the recovery code you copied before.")
-                        }
-                    },
-                    primary = false,
-                    compact = true,
-                    enabled = restoreDraft.trim().isNotEmpty(),
-                )
-            }
-        }
-        message?.let {
-            Text(it, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.primary)
+        if (showGithubPanel) {
+            Spacer(Modifier.height(10.dp))
+            GitHubDeviceFlowPanel(
+                onCancel = { showGithubPanel = false },
+                onSuccess = { _, _ -> showGithubPanel = false },
+                onError = { showGithubPanel = false },
+            )
         }
     }
 }
 
-/**
- * Client ID OAuth App GitHub untuk login Device Flow (tanpa tempel token —
- * user cukup mengetik kode 8 karakter di github.com/login/device).
- *
- * KOSONG = mode Personal Access Token lama. Untuk mengaktifkan: buat OAuth
- * App di GitHub (Settings → Developer settings → OAuth Apps), tidak perlu
- * secret/redirect, lalu tempel Client ID-nya di sini.
- */
-internal const val GITHUB_OAUTH_CLIENT_ID = "Ov23liBsgZ5xJKgzHGtl"
-
-internal suspend fun githubDeviceStart(clientId: String): org.json.JSONObject? =
-    kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
-        runCatching {
-            val body = "client_id=" + java.net.URLEncoder.encode(clientId, "UTF-8") +
-                "&scope=" + java.net.URLEncoder.encode("repo workflow read:user", "UTF-8")
-            val conn = java.net.URL("https://github.com/login/device/code")
-                .openConnection() as java.net.HttpURLConnection
-            conn.requestMethod = "POST"
-            conn.doOutput = true
-            conn.connectTimeout = 15_000
-            conn.readTimeout = 15_000
-            conn.setRequestProperty("Accept", "application/json")
-            conn.setRequestProperty("Content-Type", "application/x-www-form-urlencoded")
-            conn.outputStream.use { it.write(body.toByteArray()) }
-            if (conn.responseCode !in 200..299) return@runCatching null
-            org.json.JSONObject(conn.inputStream.bufferedReader().readText())
-        }.getOrNull()
-    }
-
-internal suspend fun githubDevicePoll(clientId: String, deviceCode: String): org.json.JSONObject? =
-    kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
-        runCatching {
-            val body = "client_id=" + java.net.URLEncoder.encode(clientId, "UTF-8") +
-                "&device_code=" + java.net.URLEncoder.encode(deviceCode, "UTF-8") +
-                "&grant_type=" + java.net.URLEncoder.encode(
-                    "urn:ietf:params:oauth:grant-type:device_code",
-                    "UTF-8",
-                )
-            val conn = java.net.URL("https://github.com/login/oauth/access_token")
-                .openConnection() as java.net.HttpURLConnection
-            conn.requestMethod = "POST"
-            conn.doOutput = true
-            conn.connectTimeout = 15_000
-            conn.readTimeout = 15_000
-            conn.setRequestProperty("Accept", "application/json")
-            conn.setRequestProperty("Content-Type", "application/x-www-form-urlencoded")
-            conn.outputStream.use { it.write(body.toByteArray()) }
-            if (conn.responseCode !in 200..299) return@runCatching null
-            org.json.JSONObject(conn.inputStream.bufferedReader().readText())
-        }.getOrNull()
-    }
-
-/**
- * Ambil profil lengkap GitHub (`/user`) dan sinkronkan login, nama tampilan,
- * serta avatar lokal bila pengguna belum memasang foto profil kustom.
- */
-internal suspend fun syncGitHubProfileAndAvatar(
-    context: android.content.Context,
-    token: String,
-): String? = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
-    runCatching {
-        val conn = java.net.URL("https://api.github.com/user")
-            .openConnection() as java.net.HttpURLConnection
-        conn.requestMethod = "GET"
-        conn.connectTimeout = 12_000
-        conn.readTimeout = 12_000
-        conn.setRequestProperty("Accept", "application/vnd.github+json")
-        conn.setRequestProperty("Authorization", "Bearer ${token.trim()}")
-        conn.setRequestProperty("User-Agent", "XyDeskRemote")
-        if (conn.responseCode !in 200..299) return@runCatching null
-        val json = org.json.JSONObject(conn.inputStream.bufferedReader().readText())
-        val login = json.optString("login", "").trim().takeIf { it.isNotEmpty() } ?: return@runCatching null
-        val avatarUrl = json.optString("avatar_url", "").trim()
-        saveVerifiedGitHubLogin(context, login, avatarUrl)
-        val avatarFile = java.io.File(context.filesDir, "xy_avatar.webp")
-        if (!avatarFile.exists() && avatarUrl.startsWith("https://")) {
-            runCatching {
-                val imgConn = java.net.URL(avatarUrl).openConnection() as java.net.HttpURLConnection
-                imgConn.connectTimeout = 10_000
-                imgConn.readTimeout = 10_000
-                val raw = imgConn.inputStream.use { it.readBytes() }
-                val src = android.graphics.BitmapFactory.decodeByteArray(raw, 0, raw.size)
-                if (src != null) {
-                    val bmp = android.graphics.Bitmap.createScaledBitmap(src, 256, 256, true)
-                    val out = java.io.ByteArrayOutputStream()
-                    val fmt = if (android.os.Build.VERSION.SDK_INT >= 30) {
-                        android.graphics.Bitmap.CompressFormat.WEBP_LOSSY
-                    } else {
-                        @Suppress("DEPRECATION")
-                        android.graphics.Bitmap.CompressFormat.WEBP
-                    }
-                    bmp.compress(fmt, 85, out)
-                    val bytes = out.toByteArray()
-                    if (bytes.size in 1..200_000) {
-                        avatarFile.writeBytes(bytes)
-                        runCatching {
-                            CommunityJokesApi(context).uploadAvatar(bytes, "image/webp")
-                        }
-                    }
-                }
-            }
-        }
-        login
-    }.getOrNull()
-}
-
-/**
- * Ronde 52 — Login GitHub Instan Tanpa Ketik Kode:
- * Membuka halaman GitHub langsung di dalam panel `WebView` terintegrasi dan
- * menginjeksikan kode otorisasi secara otomatis via JavaScript begitu halaman
- * `/login/device` terbuka. Pengguna hanya perlu menekan tombol hijau
- * **"Authorize"** sekali tanpa perlu menyalin atau mengetik kode 8 digit.
- */
-@android.annotation.SuppressLint("SetJavaScriptEnabled")
-@Composable
 internal fun GitHubDeviceFlowPanel(
     onCancel: () -> Unit,
     onSuccess: (token: String, user: String) -> Unit,

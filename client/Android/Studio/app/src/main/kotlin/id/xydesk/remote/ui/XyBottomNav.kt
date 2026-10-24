@@ -51,9 +51,8 @@ import id.xydesk.remote.ui.components.xyGlass
  */
 internal enum class XyTab(val title: String, val titleEn: String) {
     HOME("Beranda", "Home"),
-    FEED("Feed", "Feed"),
+    FEED("Berita", "News"),
     PROFILE("Profil", "Profile"),
-    CHAT("Chat", "Chat"),
 }
 
 /**
@@ -94,25 +93,36 @@ internal fun XyBottomNav(
                     spotColor = Color.Black.copy(alpha = 0.22f),
                 )
                 .xyGlass(shape = RoundedCornerShape(50), opacity = 0.94f)
+                // Liquid glass ungu (2026-10-24): gradasi violet tembus
+                // pandang; tanpa blur backdrop asli supaya tetap ringan.
+                .background(
+                    androidx.compose.ui.graphics.Brush.horizontalGradient(
+                        listOf(
+                            Color(0xD92A1650),
+                            Color(0xD94C1D95),
+                            Color(0xD92A1650),
+                        ),
+                    ),
+                )
                 .padding(horizontal = 10.dp, vertical = 7.dp),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(4.dp),
         ) {
-            listOf(XyTab.HOME, XyTab.CHAT, XyTab.FEED, XyTab.PROFILE).forEach { tab ->
+            listOf(XyTab.HOME, XyTab.FEED, XyTab.PROFILE).forEach { tab ->
                 val active = tab == selected
                 val title = xy(tab.title, tab.titleEn)
                 val pillColor by animateColorAsState(
-                    targetValue = if (active) ink else Color.Transparent,
+                    targetValue = if (active) Color(0xFF7C3AED) else Color.Transparent,
                     animationSpec = tween(durationMillis = 200),
                     label = "navPillColor",
                 )
                 val iconTint by animateColorAsState(
-                    targetValue = if (active) MaterialTheme.colorScheme.surface else ink.copy(alpha = 0.48f),
+                    targetValue = if (active) Color(0xFFFFFFFF) else ink.copy(alpha = 0.55f),
                     animationSpec = tween(durationMillis = 200),
                     label = "navIconTint",
                 )
                 val labelColor by animateColorAsState(
-                    targetValue = if (active) MaterialTheme.colorScheme.surface else Color.Transparent,
+                    targetValue = if (active) Color(0xFFFFFFFF) else Color.Transparent,
                     animationSpec = tween(durationMillis = 200),
                     label = "navLabelColor",
                 )
@@ -159,20 +169,6 @@ internal fun XyBottomNav(
                                         scaleY = iconScale
                                     },
                             )
-                            val unreadDot = when (tab) {
-                                XyTab.CHAT -> id.xydesk.remote.push.ChatPushNotifier.unreadChatCountState.intValue > 0
-                                XyTab.FEED -> id.xydesk.remote.push.ChatPushNotifier.unreadNotifCountState.intValue > 0
-                                else -> false
-                            }
-                            if (unreadDot) {
-                                Box(
-                                    modifier = Modifier
-                                        .align(Alignment.TopEnd)
-                                        .size(7.dp)
-                                        .clip(androidx.compose.foundation.shape.CircleShape)
-                                        .background(Color(0xFF777777)),
-                                )
-                            }
                         }
                         AnimatedVisibility(
                             visible = active,
@@ -198,7 +194,6 @@ internal fun XyBottomNav(
 /** Ikon per tujuan. Ikon unik untuk setiap tujuan. */
 private fun tabIcon(tab: XyTab): ImageVector = when (tab) {
     XyTab.HOME -> XyIcons.Monitor
-    XyTab.FEED -> XyIcons.Users
+    XyTab.FEED -> XyIcons.Globe
     XyTab.PROFILE -> XyIcons.Gear
-    XyTab.CHAT -> XyIcons.Chat
 }

@@ -1740,7 +1740,6 @@ private fun SessionPanel(
 
             // Aksi Cepat: grid tile ikon+label gaya "Quick Actions" pada
             // referensi — SATU-satunya tempat aksi cepat sesi (anti-dobel).
-            val floatingChatHidden = InAppLiveNotificationBus.floatingOverlayHidden
             Column(verticalArrangement = Arrangement.spacedBy(7.dp)) {
                 Row(horizontalArrangement = Arrangement.spacedBy(7.dp)) {
                     QuickActionTile(
@@ -1755,16 +1754,6 @@ private fun SessionPanel(
                         label = if (showHudButtons) "HUD: ON" else "HUD: OFF",
                         active = showHudButtons,
                         onClick = { onShowHudButtonsChange(!showHudButtons) },
-                        modifier = Modifier.weight(1f),
-                    )
-                    QuickActionTile(
-                        icon = XyIcons.Chat,
-                        label = if (!floatingChatHidden) "Chat: ON" else "Chat: OFF",
-                        active = !floatingChatHidden,
-                        onClick = {
-                            val nextHidden = !floatingChatHidden
-                            InAppLiveNotificationBus.setFloatingHidden(context, nextHidden)
-                        },
                         modifier = Modifier.weight(1f),
                     )
                     QuickActionTile(

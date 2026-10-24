@@ -1228,21 +1228,6 @@ class PcStreamSessionActivity : ComponentActivity() {
                         )
                     }
                     XyPillButton(
-                        text = if (InAppLiveNotificationBus.floatingOverlayHidden) {
-                            xy("CHAT OFF", "CHAT OFF")
-                        } else {
-                            xy("CHAT ON", "CHAT ON")
-                        },
-                        onClick = {
-                            InAppLiveNotificationBus.setFloatingHidden(
-                                this@PcStreamSessionActivity,
-                                !InAppLiveNotificationBus.floatingOverlayHidden,
-                            )
-                        },
-                        primary = !InAppLiveNotificationBus.floatingOverlayHidden,
-                        compact = true,
-                    )
-                    XyPillButton(
                         text = xy("TEKS", "TEXT"),
                         onClick = { showTextDialog = true },
                         primary = false,

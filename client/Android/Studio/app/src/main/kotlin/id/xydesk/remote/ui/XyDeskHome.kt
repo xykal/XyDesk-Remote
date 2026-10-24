@@ -129,9 +129,8 @@ private sealed interface XyRoute {
     data class EditDevice(val profile: ConnectionProfile?, val pcQuickMode: Boolean = false) : XyRoute
     data object Section : XyRoute
 
-    /** Feed komunitas — layar sendiri, dipetakan ke tab nav [XyTab.FEED]. */
+    /** Feed Berita — layar sendiri, dipetakan ke tab nav [XyTab.FEED]. */
     data object Feed : XyRoute
-    data object ChatGlobal : XyRoute
 
     /** Dashboard pengaturan — dipetakan ke tab nav [XyTab.PROFILE]. */
     data object Profile : XyRoute
@@ -186,10 +185,12 @@ fun XyDeskHome(
         XyHomeNavPersist.tab = tab
         XyHomeNavPersist.route = route
     }
+    // openChatSignal dipertahankan untuk kompatibilitas intent lama, tetapi
+    // Chat Global sudah dihapus (2026-10-24): sinyal diarahkan ke Berita.
     LaunchedEffect(openChatSignal) {
         if (openChatSignal > 0) {
-            tab = XyTab.CHAT
-            route = XyRoute.ChatGlobal
+            tab = XyTab.FEED
+            route = XyRoute.Feed
         }
     }
     var crashLog by remember { mutableStateOf(CrashLog.last(context.applicationContext)) }
@@ -209,7 +210,6 @@ fun XyDeskHome(
     var dataPackProgress by remember { mutableStateOf<Int?>(null) }
     var dataPackStatus by remember { mutableStateOf<String?>(null) }
     LaunchedEffect(Unit) {
-        launch { warmUpGlobalChatAndFeedCache(context) }
         val now = System.currentTimeMillis()
         appPrefs.lastUpdateCheckAt = now
         val info = AppUpdate.fetch(context)
@@ -231,9 +231,6 @@ fun XyDeskHome(
                 AppUpdate.sendAppPresencePing(context, screen = "app", active = true)
                 if (tick > 0) {
                     recordAndGetLocalUsageSeconds(context, 25L)
-                }
-                if (tick % 2 == 0) {
-                    CommunityJokesApi(context).fetchLeaderboard(reportDeltaSec = 0L)
                 }
                 tick += 1
             }
@@ -404,7 +401,16 @@ fun XyDeskHome(
         // tidak ada salinan permanen di server mana pun.
         kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.Dispatchers.IO).launch {
             runCatching {
-                ChatLocalArchive.storeFeedback(context.applicationContext, category, message, destination.name)
+                // Chat global dihapus (2026-10-24): masukan kini cukup
+                // disimpan lokal sederhana di preferensi HP.
+                val appCtx = context.applicationContext
+                val prefs = appCtx.getSharedPreferences("xydesk.feedback_local", Context.MODE_PRIVATE)
+                val prev = prefs.getString("items", "").orEmpty()
+                val entry = "${System.currentTimeMillis()}|$category|${destination.name}|" +
+                    message.replace("|", "/").replace("
+", " ").take(500)
+                prefs.edit().putString("items", (prev + "
+" + entry).takeLast(20_000)).apply()
             }
         }
         val draft = feedbackShareDraft(category, message)
@@ -561,10 +567,7 @@ fun XyDeskHome(
 
                 XyRoute.Feed -> XyFeedScreen(
                     onMenu = { drawerOpen = true },
-                    onOpenChat = { tab = XyTab.CHAT; route = XyRoute.ChatGlobal },
                 )
-
-                XyRoute.ChatGlobal -> GlobalChatScreen(onBack = { tab = XyTab.HOME; route = XyRoute.Devices })
                 XyRoute.Profile -> XyProfileScreen(
                     onMenu = { drawerOpen = true },
                     onOpenSection = {
@@ -584,7 +587,7 @@ fun XyDeskHome(
 
                 // Nav bawah disembunyikan saat form tambah/ubah perangkat, Chat Global,
                 // atau Terminal SSH terbuka supaya layar itu tetap penuh dan composer tidak tertutup.
-                if (route !is XyRoute.EditDevice && route != XyRoute.ChatGlobal && route != XyRoute.SshTerminal) {
+                if (route !is XyRoute.EditDevice && route != XyRoute.SshTerminal) {
                     // Dock melayang (macOS/iOS style): tanpa garis pemisah lagi —
                     // kapsulnya sudah dipisahkan bayangan dari konten.
                     XyBottomNav(
@@ -598,7 +601,6 @@ fun XyDeskHome(
                                 }
                                 XyTab.FEED -> route = XyRoute.Feed
                                 XyTab.PROFILE -> route = XyRoute.Profile
-                                XyTab.CHAT -> route = XyRoute.ChatGlobal
                             }
                         },
                     )
@@ -611,7 +613,7 @@ fun XyDeskHome(
 
     // In-App Notification Banner (Pengumuman, Balasan, Like, Reaksi, Mention, Chat, & OTA Data)
     XyInAppNotificationBannerHost(
-        onOpenChat = { tab = XyTab.CHAT; route = XyRoute.ChatGlobal },
+        onOpenChat = { tab = XyTab.FEED; route = XyRoute.Feed },
         onOpenFeed = {
             tab = XyTab.FEED
             route = XyRoute.Feed
