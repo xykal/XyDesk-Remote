@@ -51,6 +51,7 @@ import id.xydesk.remote.core.ConnectionProfile
 import id.xydesk.remote.core.DiscoveredPcHost
 import id.xydesk.remote.core.LanScanner
 import id.xydesk.remote.core.RdpEndpoint
+import id.xydesk.remote.core.parseRdpEndpoint
 import id.xydesk.remote.core.isGlobalPcId
 import id.xydesk.remote.core.RdpOptions
 import id.xydesk.remote.core.WakeOnLan
@@ -154,9 +155,21 @@ fun AddDeviceScreen(
                 ?: "",
         )
     }
+    // Port RDP eksplisit: dulu port cuma bisa diselipkan di teks host
+    // (host:port) sehingga gampang kelewat/keliru. Sekarang ada field sendiri;
+    // mengetik host:port tetap mengisi field ini otomatis.
+    var portText by remember(existing) { mutableStateOf((existing?.port ?: 3389).toString()) }
     var domain by remember { mutableStateOf(existing?.domain.orEmpty()) }
     var rememberPass by remember { mutableStateOf(existing?.password?.isNotEmpty() ?: true) }
     var error by remember { mutableStateOf<String?>(null) }
+
+    LaunchedEffect(host) {
+        if (isPcQuickMode) return@LaunchedEffect
+        val parsed = parseRdpEndpoint(host) ?: return@LaunchedEffect
+        if (host.contains(':') && parsed.port.toString() != portText) {
+            portText = parsed.port.toString()
+        }
+    }
 
     // Isi otomatis password bila host+user pernah dipakai (kredensial
     // tersimpan per host — tidak perlu input ulang tiap add koneksi).
@@ -417,6 +430,21 @@ fun AddDeviceScreen(
             validationPopup = msg
             return
         }
+        val effectiveEndpoint = if (resolved == null && !isPcQuickMode) {
+            val parsedPort = portText.trim().toIntOrNull()
+            if (parsedPort == null || parsedPort !in 1..65535) {
+                val msg = xyNow(
+                    "Port RDP tidak valid. Isi angka 1-65535 (standar: 3389).",
+                    "Invalid RDP port. Enter a number 1-65535 (standard: 3389).",
+                )
+                error = msg
+                validationPopup = msg
+                return
+            }
+            endpoint.copy(port = parsedPort)
+        } else {
+            endpoint
+        }
         if (gatewayOn && gwHost.isBlank()) {
             val msg = xyNow(
                 "Gateway diaktifkan tetapi alamat Gateway host masih kosong.",
@@ -443,8 +471,8 @@ fun AddDeviceScreen(
         val effectiveDomain = if (isPcQuickMode) null else domain.trim().ifEmpty { null }
         val profile = try {
             ConnectionProfile(
-                host = endpoint.host,
-                port = endpoint.port,
+                host = effectiveEndpoint.host,
+                port = effectiveEndpoint.port,
                 username = effectiveUser,
                 password = pass.ifEmpty { null },
                 domain = effectiveDomain,
@@ -644,6 +672,17 @@ fun AddDeviceScreen(
                     keyboardType = KeyboardType.Uri,
                     imeAction = androidx.compose.ui.text.input.ImeAction.Done,
                 )
+                if (!isPcQuickMode) {
+                    Spacer(Modifier.height(14.dp))
+                    XyField(
+                        value = portText,
+                        onValueChange = { portText = it.filter { ch -> ch.isDigit() }.take(5) },
+                        label = xy("Port RDP", "RDP Port"),
+                        hint = "3389",
+                        keyboardType = KeyboardType.Number,
+                        imeAction = androidx.compose.ui.text.input.ImeAction.Done,
+                    )
+                }
                 Spacer(Modifier.height(10.dp))
                 XyPillButton(
                     text = if (isPcQuickMode) {
