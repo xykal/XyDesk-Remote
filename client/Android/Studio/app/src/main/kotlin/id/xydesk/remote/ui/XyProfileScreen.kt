@@ -1040,7 +1040,7 @@ internal fun XyHeaderAccountActions(
     var quickOpen by remember { mutableStateOf(false) }
     var githubLoginOpen by remember { mutableStateOf(false) }
     var ghUser by remember { mutableStateOf(getVerifiedGitHubLogin(context)) }
-    var displayName by remember { mutableStateOf(api.displayName() ?: ghUser ?: chatNickname(context)) }
+    var displayName by remember { mutableStateOf(api.displayName() ?: ghUser ?: "Pengguna XyDesk") }
     var nameDraft by remember { mutableStateOf(displayName) }
     var statusMsg by remember { mutableStateOf<String?>(null) }
     var savingName by remember { mutableStateOf(false) }
