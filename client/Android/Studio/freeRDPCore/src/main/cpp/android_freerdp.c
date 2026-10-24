@@ -288,6 +288,12 @@ static BOOL android_pre_connect(freerdp* instance)
 	 * sebagai codec cadangan untuk server tanpa Graphics Pipeline. */
 	(void)freerdp_settings_set_uint32(settings, FreeRDP_TcpConnectTimeout, 15000);
 	(void)freerdp_settings_set_bool(settings, FreeRDP_RemoteFxCodec, TRUE);
+	/* Low-latency adaptif: biarkan FreeRDP mengukur RTT/bandwidth selama
+	 * sesi (NetworkAutoDetect) supaya server menyesuaikan kualitas grafis
+	 * secara real-time, bukan menebak dari profil statis. Ditaruh sebelum
+	 * performance_flags_make agar flag kinerja diturunkan dari hasil ini. */
+	(void)freerdp_settings_set_bool(settings, FreeRDP_NetworkAutoDetect, TRUE);
+	(void)freerdp_settings_set_uint32(settings, FreeRDP_ConnectionType, CONNECTION_TYPE_AUTODETECT);
 	freerdp_performance_flags_make(settings);
 	if (freerdp_settings_get_uint32(settings, FreeRDP_PointerCacheSize) < 128)
 		(void)freerdp_settings_set_uint32(settings, FreeRDP_PointerCacheSize, 128);
