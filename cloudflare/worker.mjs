@@ -3086,7 +3086,7 @@ export class FeedbackBoard {
   }
 
   async notifyFeedbackEmail(entry) {
-    const apiKey = [SECURITY_DATA]"RESEND_" + "API_KEY"];
+    const apiKey = this.env["RESEND_" + "API_KEY"];
     if (!apiKey) return;
     const to = this.env.FEEDBACK_EMAIL_TO || "haekalsaputra01h@gmail.com";
     const from = this.env.FEEDBACK_EMAIL_FROM || "XyDesk Feedback <onboarding@resend.dev>";
