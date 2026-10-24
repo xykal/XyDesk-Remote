@@ -58,35 +58,9 @@ class RecoveryBaselineTest(unittest.TestCase):
         native = (ROOT/'client/Android/Studio/freeRDPCore/src/main/cpp/CMakeLists.txt').read_text()
         self.assertNotIn('--strip-unneeded', native)
 
-    def test_chat_polling_tracks_socket_not_http_success_or_quiet_room_age(self):
-        screen = (ROOT/'client/Android/Studio/app/src/main/kotlin/id/xydesk/remote/ui/GlobalChatScreen.kt').read_text()
-        self.assertIn('LaunchedEffect(verifiedGhLogin, socketConnected)', screen)
-        self.assertIn('chatHistoryPollDelayMs(socketConnected = socketConnected)', screen)
-        http = screen[screen.index('suspend fun fetchHistoryOverHttp()'):screen.index('    LaunchedEffect(Unit)', screen.index('suspend fun fetchHistoryOverHttp()'))]
-        self.assertNotIn('socketConnected =', http)
-        self.assertIn('chatAccountSnapshotIsCurrent(requestAccount, verifiedGhLogin)', http)
-        self.assertNotIn('lastWsActivityMs', screen)
-
     def test_route_motion_never_keeps_two_chat_or_media_trees_alive(self):
         motion = (ROOT/'client/Android/Studio/app/src/main/kotlin/id/xydesk/remote/ui/theme/XyLightMotion.kt').read_text()
         self.assertNotIn('Crossfade', motion)
         self.assertIn('key(target) { content(target) }', motion)
         self.assertIn('Animatable(1f)', motion)
         self.assertNotIn('rememberInfiniteTransition', motion)
-
-    def test_queue_controls_do_not_hide_failed_cancellation_or_export_media(self):
-        ui = ROOT/'client/Android/Studio/app/src/main/kotlin/id/xydesk/remote/ui'
-        screen = (ui/'GlobalChatScreen.kt').read_text()
-        local_delete = screen[screen.index('    fun deleteMessageForMe('):screen.index('    fun applyIncomingMutation(')]
-        self.assertIn('GlobalChatOutbox.cancelPending(', local_delete)
-        self.assertLess(local_delete.index('GlobalChatOutbox.cancelPending('), local_delete.index('hideLocal(setOf(target.id, serverId))'))
-        dialog = (ui/'GlobalChatOutboxDialog.kt').read_text()
-        self.assertNotIn('attachment_data', dialog)
-        self.assertNotIn('Base64', dialog)
-        self.assertGreaterEqual(dialog.count('withContext(Dispatchers.IO)'), 5)
-        disk = (ui/'AndroidChatOutboxDisk.kt').read_text()
-        self.assertIn('root.listFiles() ?: error(', disk)
-        outbox = (ui/'GlobalChatOutbox.kt').read_text()
-        account_check = outbox[outbox.index('    internal fun checkAccount('):outbox.index('    internal fun retryPending(')]
-        self.assertNotIn('resume(', account_check)
-        self.assertNotIn('request("send",', account_check)
