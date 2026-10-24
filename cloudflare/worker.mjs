@@ -6231,6 +6231,31 @@ export default {
       env = { ...env, UNIQUE_DOWNLOADS: wrapKvWithEdgeCache(env.UNIQUE_DOWNLOADS, env.XYDESK_DB || null) };
     }
 
+    // CUTOVER FIREBASE (2026-10-24, keputusan pemilik): chat global resmi
+    // pindah ke Firebase Firestore. Jalur relay Durable Object untuk PESAN
+    // dimatikan total (410) supaya tidak ada lagi penyimpanan chat di
+    // Cloudflare; riwayat resmi ada di Firestore + arsip lokal HP pengguna.
+    // Yang tetap hidup: presence (penghitung online sesaat), push-relay
+    // (pemicu notifikasi mode Firebase), translate, dan channels resmi.
+    if (
+      path === "/ws/chat" ||
+      path === "/api/chat/history" ||
+      path === "/api/chat/send" ||
+      path === "/api/chat/send-capabilities" ||
+      path === "/api/chat/pin" ||
+      path === "/api/chat/delete" ||
+      path === "/api/chat/edit"
+    ) {
+      return jsonResponse(
+        {
+          status: "gone",
+          code: "chat_moved_to_firebase",
+          message: "Chat global telah pindah ke Firebase. Perbarui aplikasi XyDesk Remote.",
+        },
+        410,
+        request.method,
+      );
+    }
     if (path === "/api/chat/channels" || path.startsWith("/api/chat/channels/")) {
       if (!env.GLOBAL_CHAT) return durableObjectJson({ status: "error", code: "channels_unavailable" }, 503, request.method);
       const target = new URL(path.replace("/api/chat/channels", "/channels"), request.url);

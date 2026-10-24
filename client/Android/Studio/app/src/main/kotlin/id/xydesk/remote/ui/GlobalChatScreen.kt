@@ -448,10 +448,12 @@ private fun GlobalChatAccountContent(
     }
 
     var showLangPicker by remember { mutableStateOf(false) }
-    // Transport chat: false = Cloudflare (bawaan), true = Firebase Firestore.
-    // Diubah dari dialog bahasa; jalur Firebase aktif setelah sesi token valid.
+    // Cutover Firebase (2026-10-24): backend chat RESMI Firebase Firestore
+    // untuk semua pengguna. Relay Cloudflare sudah dimatikan di server
+    // (410), jadi preferensi lama dipaksa true sekali di sini.
     var firebaseChatEnabled by remember {
-        mutableStateOf(chatPrefs.getBoolean("chat_backend_firebase", false))
+        chatPrefs.edit().putBoolean("chat_backend_firebase", true).apply()
+        mutableStateOf(true)
     }
     var showChatSettings by remember { mutableStateOf(false) }
     var showOutbox by remember(verifiedGhLogin) { mutableStateOf(false) }
@@ -4116,28 +4118,15 @@ private fun GlobalChatAccountContent(
                     )
                 }
                 XyPillButton(
-                    text = if (firebaseChatEnabled) {
-                        xy("Backend Chat: Firebase (ketuk: Cloudflare)", "Chat backend: Firebase (tap: Cloudflare)")
-                    } else {
-                        xy("Backend Chat: Cloudflare (ketuk: Firebase)", "Chat backend: Cloudflare (tap: Firebase)")
-                    },
+                    text = xy("Backend Chat: Firebase", "Chat backend: Firebase"),
                     onClick = {
-                        firebaseChatEnabled = !firebaseChatEnabled
-                        chatPrefs.edit().putBoolean("chat_backend_firebase", firebaseChatEnabled).apply()
-                        if (!firebaseChatEnabled) {
-                            scope.launch(Dispatchers.IO) { FirebaseChatTransport.signOut(context.applicationContext) }
-                        }
                         Toast.makeText(
                             context,
-                            if (firebaseChatEnabled) {
-                                xyNow("Backend Firebase aktif — sesi dibuat saat kirim/poll berikutnya", "Firebase backend on — session starts on next send/poll")
-                            } else {
-                                xyNow("Backend Cloudflare aktif", "Cloudflare backend on")
-                            },
+                            xyNow("Chat global memakai Firebase", "Global chat uses Firebase"),
                             Toast.LENGTH_SHORT,
                         ).show()
                     },
-                    primary = firebaseChatEnabled,
+                    primary = true,
                     compact = true,
                     modifier = Modifier
                         .fillMaxWidth()

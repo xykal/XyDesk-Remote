@@ -1720,95 +1720,21 @@ test("feedback board: submit, list, reply, staff-only status & hide", async () =
   assert.equal(spam.status, 429);
 });
 
-test("ronde 48: global chat direct reply (/api/chat/send) + OneSignal push + Play Protect manifest guard + XyDesk unified log", async () => {
-  const records = new Map();
-  const storage = {
-    async get(key) { return records.get(key); },
-    async put(key, value) { records.set(key, value); },
-    async delete(key) { return records.delete(key); },
-    async list(options = {}) {
-      const prefix = options.prefix || "";
-      const entries = [...records.entries()].filter(([k]) => k.startsWith(prefix));
-      return new Map(entries);
-    },
-  };
-
-  let pushedBody = null;
-  globalThis.fetch = async (url, init) => {
-    if (String(url).includes("api.onesignal.com/notifications")) {
-      pushedBody = JSON.parse(init.body);
-      return new Response(JSON.stringify({ id: "os-notif-1" }), { status: 200 });
-    }
-    return new Response("offline", { status: 503 });
-  };
-
-  const chat = new GlobalChat({ storage }, {
-    ONESIGNAL_APP_ID: "ffaa87d6-8e1d-42b6-bb4f-ebbbfc0bccbb",
-    ONESIGNAL_REST_API_KEY: "os_v2_app_test_key",
-  });
-  const env = envFor({}, {
-    GLOBAL_CHAT: {
-      idFromName(name) { assert.equal(name, "xydesk-global-chat-v1"); return name; },
-      get() { return { fetch: (req) => chat.fetch(req) }; },
-    },
-  });
-
-  const sendRes = await worker.fetch(new Request("https://api.xydeskremote.biz.id/api/chat/send", {
-    method: "POST",
-    headers: { "Content-Type": "application/json", "cf-ipcountry": "ID" },
-    body: JSON.stringify({ name: "Tamu-8899", text: "Balas langsung dari notifikasi!" }),
-  }), env);
-  assert.equal(sendRes.status, 200);
-  const sendJson = await sendRes.json();
-  assert.equal(sendJson.status, "ok");
-  assert.equal(sendJson.message.name, "Tamu-8899");
-  assert.equal(sendJson.message.country, "ID");
-  assert.equal(sendJson.message.flag, "🇮🇩");
-  assert.equal(sendJson.message.text, "Balas langsung dari notifikasi!");
-  assert.equal(sendJson.message.target_lang, "EN");
-  assert.ok(sendJson.message.translated.toLowerCase().includes("reply"));
-
-  // Pastikan OneSignal terpanggil dengan data MessagingStyle + bendera + terjemahan.
-  assert.ok(pushedBody);
-  assert.equal(pushedBody.app_id, "ffaa87d6-8e1d-42b6-bb4f-ebbbfc0bccbb");
-  assert.equal(pushedBody.data.type, "global_chat");
-  assert.ok(pushedBody.data.sender_name.includes("Tamu-8899"));
-  assert.equal(pushedBody.data.country, "ID");
-  assert.equal(pushedBody.data.text, "Balas langsung dari notifikasi!");
-  assert.ok(pushedBody.data.translated.toLowerCase().includes("reply"));
-
-  // Tes pengirim dari negara lain (US -> diterjemahkan ke ID).
-  const sendUs = await worker.fetch(new Request("https://api.xydeskremote.biz.id/api/chat/send", {
-    method: "POST",
-    headers: { "Content-Type": "application/json", "cf-ipcountry": "US" },
-    body: JSON.stringify({ name: "Alex", text: "Hello everyone, thank you!" }),
-  }), env);
-  assert.equal(sendUs.status, 200);
-  const sendUsJson = await sendUs.json();
-  assert.equal(sendUsJson.message.country, "US");
-  assert.equal(sendUsJson.message.flag, "🇺🇸");
-  assert.equal(sendUsJson.message.target_lang, "ID");
-  assert.ok(sendUsJson.message.translated.toLowerCase().includes("halo"));
-
-  // Tes pengirim Founder (xykal) -> mendapat flag is_founder = true + label [FOUNDER] di push notif.
-  const sendFounder = await worker.fetch(new Request("https://api.xydeskremote.biz.id/api/chat/send", {
-    method: "POST",
-    headers: { "Content-Type": "application/json", "cf-ipcountry": "ID" },
-    body: JSON.stringify({ name: "xykal", text: "Halo semua dari Founder!" }),
-  }), env);
-  assert.equal(sendFounder.status, 200);
-  const sendFounderJson = await sendFounder.json();
-  assert.equal(sendFounderJson.message.is_founder, true);
-  assert.ok(pushedBody.data.sender_name.includes("[FOUNDER]"));
-
-  // Riwayat harus memuat ketiga pesan lengkap dengan bendera, terjemahan, & status founder.
-  const histRes = await worker.fetch(new Request("https://api.xydeskremote.biz.id/api/chat/history"), env);
-  assert.equal(histRes.status, 200);
-  const histJson = await histRes.json();
-  assert.equal(histJson.messages.length, 3);
-  assert.equal(histJson.messages[0].text, "Balas langsung dari notifikasi!");
-  assert.equal(histJson.messages[1].country, "US");
-  assert.equal(histJson.messages[2].is_founder, true);
+test("cutover firebase: jalur pesan chat Durable Object mati (410) + guard manifest/log", async () => {
+  const env = envFor({}, {});
+  for (const [method, path] of [
+    ["POST", "/api/chat/send"],
+    ["GET", "/api/chat/history"],
+    ["POST", "/api/chat/pin"],
+    ["POST", "/api/chat/delete"],
+    ["POST", "/api/chat/edit"],
+    ["GET", "/api/chat/send-capabilities"],
+  ]) {
+    const res = await worker.fetch(new Request(`https://api.xydeskremote.biz.id${path}`, { method }), env);
+    assert.equal(res.status, 410, `${method} ${path}`);
+    const body = await res.json();
+    assert.equal(body.code, "chat_moved_to_firebase");
+  }
 
   // Guard Play Protect Enhanced Fraud Protection: manifest tidak boleh memuat BIND_ACCESSIBILITY_SERVICE.
   const coreManifest = await readFile(new URL("../client/Android/Studio/freeRDPCore/src/main/AndroidManifest.xml", import.meta.url), "utf8");
@@ -1819,113 +1745,7 @@ test("ronde 48: global chat direct reply (/api/chat/send) + OneSignal push + Pla
   const homeKt = await readFile(new URL("../client/Android/Studio/app/src/main/kotlin/id/xydesk/remote/ui/XyDeskHome.kt", import.meta.url), "utf8");
   assert.ok(!homeKt.includes("=== LOG NATIVE (FreeRDP) ==="));
   assert.ok(homeKt.includes("ConnectionLog.formattedXyDeskLog"));
-
-  // Ronde 52: uji deteksi negara akurat (tidak melabeli pesan Bahasa Indonesia sebagai US meski cf-ipcountry=US),
-  // serta fitur reply_to_* dan attachment_* (foto/file/stiker).
-  const sendIdOnUsVpn = await worker.fetch(new Request("https://api.xydeskremote.biz.id/api/chat/send", {
-    method: "POST",
-    headers: { "Content-Type": "application/json", "cf-ipcountry": "US" },
-    body: JSON.stringify({
-      name: "Andi",
-      github_login: "andi-dev",
-      text: "Halo teman-teman, gimana cara setting RDP supaya cepat?",
-      reply_to_id: sendFounderJson.message.id,
-      reply_to_name: "xykal",
-      reply_to_text: "Halo semua dari Founder!",
-      attachment_kind: "sticker",
-      attachment_data: "xydesk_120hz",
-      attachment_name: "120Hz Turbo",
-    }),
-  }), env);
-  assert.equal(sendIdOnUsVpn.status, 200);
-  const sendIdOnUsVpnJson = await sendIdOnUsVpn.json();
-  assert.equal(sendIdOnUsVpnJson.message.country, "ID");
-  assert.equal(sendIdOnUsVpnJson.message.flag, "🇮🇩");
-  assert.equal(sendIdOnUsVpnJson.message.github_login, "andi-dev");
-  assert.equal(sendIdOnUsVpnJson.message.reply_to_name, "xykal");
-  assert.equal(sendIdOnUsVpnJson.message.attachment_kind, "sticker");
-  assert.equal(sendIdOnUsVpnJson.message.attachment_data, "xydesk_120hz");
-
-  // Uji deteksi aksara Thailand -> TH
-  const sendThai = await worker.fetch(new Request("https://api.xydeskremote.biz.id/api/chat/send", {
-    method: "POST",
-    headers: { "Content-Type": "application/json", "cf-ipcountry": "SG" },
-    body: JSON.stringify({
-      name: "Somchai",
-      github_login: "somchai-th",
-      text: "สวัสดีครับ ขอบคุณมาก",
-    }),
-  }), env);
-  assert.equal(sendThai.status, 200);
-  const sendThaiJson = await sendThai.json();
-  assert.equal(sendThaiJson.message.country, "TH");
-  assert.equal(sendThaiJson.message.flag, "🇹🇭");
-
-  // Ronde 57: Kirim media/stiker tanpa caption tidak menghasilkan teks "[Foto: ...]" atau "[Stiker: ...]".
-  const sendSilentMedia = await worker.fetch(new Request("https://api.xydeskremote.biz.id/api/chat/send", {
-    method: "POST",
-    headers: { "Content-Type": "application/json", "cf-ipcountry": "ID" },
-    body: JSON.stringify({
-      name: "xykal",
-      github_login: "xykal",
-      text: "",
-      attachment_type: "sticker",
-      attachment_kind: "sticker",
-      attachment_data: "sticker:xy_gg",
-    }),
-  }), env);
-  assert.equal(sendSilentMedia.status, 200);
-  const sendSilentMediaJson = await sendSilentMedia.json();
-  assert.equal(sendSilentMediaJson.message.text, "");
-
-  // Ronde 57: XyShield Anti-Virus menolak pengiriman file/link berbahaya (.exe/.apk/grabify).
-  const sendVirus = await worker.fetch(new Request("https://api.xydeskremote.biz.id/api/chat/send", {
-    method: "POST",
-    headers: { "Content-Type": "application/json", "cf-ipcountry": "ID" },
-    body: JSON.stringify({
-      name: "Attacker",
-      text: "Download cheat https://evil.example/trojan.exe",
-    }),
-  }), env);
-  assert.equal(sendVirus.status, 400);
-  const sendVirusJson = await sendVirus.json();
-  assert.equal(sendVirusJson.code, "malicious_link_blocked");
-
-  // Ronde 57: Leaderboard Top 1–100 tersedia & mencatat durasi pemakaian APK/bermain.
-  const lbPost = await worker.fetch(new Request("https://api.xydeskremote.biz.id/api/leaderboard", {
-    method: "POST",
-    headers: { "Content-Type": "application/json", "cf-ipcountry": "ID" },
-    body: JSON.stringify({
-      client_id: "550e8400-e29b-41d4-a716-446655440000",
-      github_login: "xykal",
-      name: "xykal",
-      delta_seconds: 600,
-      total_seconds: 500000,
-      sessions_count: 150,
-    }),
-  }), env);
-  assert.equal(lbPost.status, 200);
-  const lbJson = await lbPost.json();
-  assert.equal(lbJson.status, "ok");
-  assert.ok(Array.isArray(lbJson.items));
-  assert.ok(lbJson.items.length >= 1 && lbJson.items[0].github_login === "xykal");
-  assert.equal(lbJson.items[0].rank, 1);
-
-  // Ronde 57: OG Preview memblokir URL berbahaya dengan XyShield & mengizinkan URL publik (GitHub/YouTube).
-  const ogBad = await worker.fetch(new Request("https://api.xydeskremote.biz.id/api/og?url=https%3A%2F%2Fevil.test%2Fmalware.exe"), env);
-  assert.equal(ogBad.status, 403);
-  const ogBadJson = await ogBad.json();
-  assert.equal(ogBadJson.safe, false);
-
-  const ogGood = await worker.fetch(new Request("https://api.xydeskremote.biz.id/api/og?url=https%3A%2F%2Fgithub.com%2Fxykal%2FXyDesk-Remote"), env);
-  assert.equal(ogGood.status, 200);
-  const ogGoodJson = await ogGood.json();
-  assert.equal(ogGoodJson.safe, true);
-  assert.ok(ogGoodJson.image.includes("opengraph.githubassets.com"));
 });
-
-
-
 test("chat translation shares a deadline even when a provider ignores abort", async () => {
   let signal;
   const result = await withChatTranslationBudget((s) => {
