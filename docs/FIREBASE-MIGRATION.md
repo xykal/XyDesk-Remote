@@ -142,3 +142,8 @@ Catatan rilis v1.1.23 (tambahan 2026-10-24): popup menu sesi direvisi total
 ungu gaya Connection Hub (tema lokal popup saja); update kini langsung di
 aplikasi — popup update mengunduh APK di dalam app (progres live) dan
 membuka installer sistem (izin REQUEST_INSTALL_PACKAGES + FileProvider).
+
+Catatan rilis v1.1.23 (tambahan 2026-10-24): aksen ungu global — primary/
+tombol/toggle/tab aktif jadi violet di semua layar (tema gelap & terang),
+permukaan tetap gelap netral; spacing distandarkan (tepi layar 16dp,
+jarak antar-seksi 12dp, radius kartu 24dp) di Beranda/Tambah PC/Profil.
