@@ -147,3 +147,9 @@ Catatan rilis v1.1.23 (tambahan 2026-10-24): aksen ungu global — primary/
 tombol/toggle/tab aktif jadi violet di semua layar (tema gelap & terang),
 permukaan tetap gelap netral; spacing distandarkan (tepi layar 16dp,
 jarak antar-seksi 12dp, radius kartu 24dp) di Beranda/Tambah PC/Profil.
+
+Catatan rilis v1.1.23 (tambahan 2026-10-24): menu sesi ganti total jadi
+Bilah samping kanan (popup tengah dibuang); panah rail di atas keyboard
+kembali membuka sidebar; bottom nav sesi liquid glass ungu beranimasi;
+switch presisi area sentuh penuh; analog gamepad ungu; FreeRDP: timeout
+koneksi 15 dtk + RemoteFX cadangan.
