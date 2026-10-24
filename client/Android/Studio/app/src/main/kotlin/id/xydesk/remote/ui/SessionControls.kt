@@ -1365,21 +1365,25 @@ private fun PanelHandle(
         Box(
             Modifier
                 .clip(XyPill)
-                .background(MaterialTheme.colorScheme.surface)
-                .border(1.dp, MaterialTheme.colorScheme.outlineVariant, XyPill)
+                .background(
+                    Brush.verticalGradient(
+                        listOf(Color(0xFF7C3AED), Color(0xFF4C1D95)),
+                    ),
+                )
+                .border(1.dp, Color(0xFF5B3FA8), XyPill)
                 .padding(horizontal = 10.dp, vertical = 16.dp),
         ) {
             Column(horizontalAlignment = Alignment.CenterHorizontally) {
                 Icon(
                     XyIcons.Sliders,
                     contentDescription = xy("Buka panel sesi", "Open session panel"),
-                    tint = MaterialTheme.colorScheme.onSurface,
+                    tint = Color(0xFFFFFFFF),
                     modifier = Modifier.size(17.dp),
                 )
                 Spacer(Modifier.height(6.dp))
                 Text(
                     xy("Menu", "Menu"),
-                    color = MaterialTheme.colorScheme.onSurface,
+                    color = Color(0xFFFFFFFF),
                     fontSize = 9.sp,
                     letterSpacing = 0.8.sp,
                 )
@@ -1607,11 +1611,38 @@ private fun SessionPanel(
         targetValue = if (panelShown) 0f else 1f,
         animationSpec = tween(240, easing = FastOutSlowInEasing),
     )
+    // Revisi total popup (2026-10-24, referensi Connection Hub ungu):
+    // HANYA popup menu sesi yang memakai skema ungu — primary/aksen,
+    // permukaan, dan garis tepi diganti ungu-lavender gelap, jadi semua
+    // toggle, slider, chip, tile, dan tab di dalamnya otomatis ungu
+    // tanpa mengubah tema hitam-putih di layar lain.
+    val baseScheme = MaterialTheme.colorScheme
+    val purpleScheme = baseScheme.copy(
+        primary = Color(0xFF8B5CF6),
+        onPrimary = Color(0xFFFFFFFF),
+        primaryContainer = Color(0xFF3B1D78),
+        onPrimaryContainer = Color(0xFFEDE9FE),
+        secondary = Color(0xFFA78BFA),
+        onSecondary = Color(0xFFFFFFFF),
+        secondaryContainer = Color(0xFF2A1650),
+        onSecondaryContainer = Color(0xFFEDE9FE),
+        tertiary = Color(0xFFC4B5FD),
+        onTertiary = Color(0xFF1E1040),
+        background = Color(0xFF120A20),
+        onBackground = Color(0xFFF5F0FF),
+        surface = Color(0xFF1C1233),
+        onSurface = Color(0xFFF5F0FF),
+        surfaceVariant = Color(0xFF26184A),
+        onSurfaceVariant = Color(0xFFC9BCE8),
+        outline = Color(0xFF6D28D9),
+        outlineVariant = Color(0xFF3B2A5E),
+    )
     val panelShape = if (drawerMode) {
         RoundedCornerShape(topStart = 26.dp, bottomStart = 26.dp)
     } else {
         RoundedCornerShape(26.dp)
     }
+    MaterialTheme(colorScheme = purpleScheme) {
     Box(
         Modifier
             .fillMaxSize()
@@ -1621,7 +1652,7 @@ private fun SessionPanel(
         Box(
             Modifier
                 .fillMaxSize()
-                .background(Color(0x9904060A))
+                .background(Color(0xB30A0414))
                 .consumeBackgroundPointer(onClose),
         )
         Column(
@@ -1644,98 +1675,138 @@ private fun SessionPanel(
                     if (drawerMode) translationX = panelSlide * size.width
                 }
                 .clip(panelShape)
-                .background(Color(0xFF0E0E12), panelShape)
-                .border(1.2.dp, Color(0xFF232329), panelShape)
+                .background(
+                    Brush.verticalGradient(
+                        listOf(Color(0xFF25134A), Color(0xFF130A24)),
+                    ),
+                    panelShape,
+                )
+                .border(1.2.dp, Color(0xFF5B3FA8), panelShape)
                 .pointerInput(Unit) {}
                 .padding(horizontal = 18.dp, vertical = 14.dp),
             verticalArrangement = Arrangement.spacedBy(10.dp),
         ) {
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
+            // Banner judul ungu (gaya header Connection Hub di referensi):
+            // gradasi violet, ikon garis tiga dalam lingkaran, nama host di
+            // bawah label "Menu Sesi", chip mode popup/sidebar + tutup.
+            Box(
+                Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(18.dp))
+                    .background(
+                        Brush.horizontalGradient(
+                            listOf(Color(0xFF7C3AED), Color(0xFF4C1D95)),
+                        ),
+                    )
+                    .padding(horizontal = 14.dp, vertical = 12.dp),
             ) {
-                Column(Modifier.weight(1f)) {
-                    Text(
-                        hostLabel,
-                        color = MaterialTheme.colorScheme.onSurface,
-                        fontSize = 15.sp,
-                        fontWeight = FontWeight.Bold,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(10.dp),
+                ) {
+                    Box(
+                        Modifier
+                            .size(38.dp)
+                            .clip(CircleShape)
+                            .background(Color(0x33FFFFFF)),
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        Icon(
+                            XyIcons.Sliders,
+                            contentDescription = null,
+                            tint = Color(0xFFFFFFFF),
+                            modifier = Modifier.size(19.dp),
+                        )
+                    }
+                    Column(Modifier.weight(1f)) {
+                        Text(
+                            xy("Menu Sesi", "Session Menu"),
+                            color = Color(0xFFFFFFFF),
+                            fontSize = 15.sp,
+                            fontWeight = FontWeight.Bold,
+                            maxLines = 1,
+                        )
+                        Text(
+                            "$hostLabel  ·  $statusText  ·  $zoomPercent%  ·  $remoteSize",
+                            color = Color(0xFFDDD6FE),
+                            fontSize = 11.sp,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                        )
+                    }
+                    if (tab == PanelTab.BUTTONS) {
+                        PanelChip(xy("+ Tombol", "+ Add"), onAddKey)
+                    }
+                    PanelChip(
+                        if (drawerMode) xy("Popup", "Popup") else xy("Sidebar", "Sidebar"),
+                        { onDrawerModeChange(!drawerMode) },
                     )
-                    Text(
-                        "$statusText  ·  $zoomPercent%  ·  $remoteSize",
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        fontSize = 11.sp,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                    )
+                    PanelChip(xy("Tutup", "Close"), onClose)
                 }
-                if (tab == PanelTab.BUTTONS) {
-                    PanelChip(xy("+ Tombol", "+ Add"), onAddKey)
-                }
-                PanelChip(
-                    if (drawerMode) xy("Popup", "Popup") else xy("Sidebar", "Sidebar"),
-                    { onDrawerModeChange(!drawerMode) },
-                )
-                PanelChip(xy("Tutup", "Close"), onClose)
             }
 
-            // Quick Control Center Bar (1-Tap Aksi Sesi Cepat)
+            // Aksi Cepat: grid tile ikon+label gaya "Quick Actions" pada
+            // referensi — SATU-satunya tempat aksi cepat sesi (anti-dobel).
             val floatingChatHidden = InAppLiveNotificationBus.floatingOverlayHidden
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .horizontalScroll(rememberScrollState()),
-                horizontalArrangement = Arrangement.spacedBy(7.dp),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                QuickActionPill(
-                    icon = if (voiceMicEnabled) XyIcons.VolumeOn else XyIcons.VolumeOff,
-                    label = if (voiceMicEnabled) "Mic: ON" else "Mic: OFF",
-                    active = voiceMicEnabled,
-                    onClick = onToggleVoiceMic,
-                )
-                QuickActionPill(
-                    icon = if (showHudButtons) XyIcons.Eye else XyIcons.EyeOff,
-                    label = if (showHudButtons) "HUD: ON" else "HUD: OFF",
-                    active = showHudButtons,
-                    onClick = { onShowHudButtonsChange(!showHudButtons) },
-                )
-                QuickActionPill(
-                    icon = XyIcons.Chat,
-                    label = if (!floatingChatHidden) "Chat: ON" else "Chat: OFF",
-                    active = !floatingChatHidden,
-                    onClick = {
-                        val nextHidden = !floatingChatHidden
-                        InAppLiveNotificationBus.setFloatingHidden(context, nextHidden)
-                    },
-                )
-                QuickActionPill(
-                    icon = XyIcons.ScrollSlide,
-                    label = xy("Scroll", "Scroll"),
-                    active = scrollPillOpen,
-                    onClick = onToggleScrollPill,
-                )
-                QuickActionPill(
-                    icon = XyIcons.Monitor,
-                    label = xy("Sesi/Layar", "Sessions"),
-                    active = false,
-                    onClick = onOpenMonitorGrid,
-                )
-                QuickActionPill(
-                    icon = XyIcons.Home,
-                    label = xy("Beranda", "Home"),
-                    active = false,
-                    onClick = onGoHome,
-                )
-                QuickActionPill(
-                    icon = XyIcons.Power,
-                    label = xy("Putuskan", "Disconnect"),
-                    active = false,
-                    danger = true,
-                    onClick = onDisconnect,
-                )
+            Column(verticalArrangement = Arrangement.spacedBy(7.dp)) {
+                Row(horizontalArrangement = Arrangement.spacedBy(7.dp)) {
+                    QuickActionTile(
+                        icon = if (voiceMicEnabled) XyIcons.VolumeOn else XyIcons.VolumeOff,
+                        label = if (voiceMicEnabled) "Mic: ON" else "Mic: OFF",
+                        active = voiceMicEnabled,
+                        onClick = onToggleVoiceMic,
+                        modifier = Modifier.weight(1f),
+                    )
+                    QuickActionTile(
+                        icon = if (showHudButtons) XyIcons.Eye else XyIcons.EyeOff,
+                        label = if (showHudButtons) "HUD: ON" else "HUD: OFF",
+                        active = showHudButtons,
+                        onClick = { onShowHudButtonsChange(!showHudButtons) },
+                        modifier = Modifier.weight(1f),
+                    )
+                    QuickActionTile(
+                        icon = XyIcons.Chat,
+                        label = if (!floatingChatHidden) "Chat: ON" else "Chat: OFF",
+                        active = !floatingChatHidden,
+                        onClick = {
+                            val nextHidden = !floatingChatHidden
+                            InAppLiveNotificationBus.setFloatingHidden(context, nextHidden)
+                        },
+                        modifier = Modifier.weight(1f),
+                    )
+                    QuickActionTile(
+                        icon = XyIcons.ScrollSlide,
+                        label = xy("Scroll", "Scroll"),
+                        active = scrollPillOpen,
+                        onClick = onToggleScrollPill,
+                        modifier = Modifier.weight(1f),
+                    )
+                }
+                Row(horizontalArrangement = Arrangement.spacedBy(7.dp)) {
+                    QuickActionTile(
+                        icon = XyIcons.Monitor,
+                        label = xy("Sesi/Layar", "Sessions"),
+                        active = false,
+                        onClick = onOpenMonitorGrid,
+                        modifier = Modifier.weight(1f),
+                    )
+                    QuickActionTile(
+                        icon = XyIcons.Home,
+                        label = xy("Beranda", "Home"),
+                        active = false,
+                        onClick = onGoHome,
+                        modifier = Modifier.weight(1f),
+                    )
+                    QuickActionTile(
+                        icon = XyIcons.Power,
+                        label = xy("Putuskan", "Disconnect"),
+                        active = false,
+                        danger = true,
+                        onClick = onDisconnect,
+                        modifier = Modifier.weight(1f),
+                    )
+                    Spacer(Modifier.weight(1f))
+                }
             }
 
             // Area konten utama dengan animasi perpindahan tab halus +
@@ -1885,6 +1956,7 @@ private fun SessionPanel(
                 )
             }
         }
+    }
     }
 }
 
@@ -2633,6 +2705,7 @@ private fun PanelChip(label: String, onClick: () -> Unit) {
     Box(
         Modifier
             .clip(XyPill)
+            .background(MaterialTheme.colorScheme.surfaceVariant)
             .border(1.dp, MaterialTheme.colorScheme.outlineVariant, XyPill)
             .clickable(onClick = onClick)
             .padding(horizontal = 12.dp, vertical = 7.dp),
@@ -2666,7 +2739,7 @@ private fun PanelTabTiles(
         modifier = modifier
             .shadow(14.dp, RoundedCornerShape(50))
             .clip(RoundedCornerShape(50))
-            .background(Color(0xF011131A))
+            .background(Color(0xF01B0F31))
             .border(1.2.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.45f), RoundedCornerShape(50))
             .padding(horizontal = 6.dp, vertical = 5.dp),
         horizontalArrangement = Arrangement.spacedBy(6.dp),
@@ -2804,47 +2877,51 @@ internal class PanelSectionScope {
  * baru tiap kali supaya seksi dari komposisi sebelumnya tidak tertinggal.
  */
 @Composable
-private fun QuickActionPill(
+private fun QuickActionTile(
     icon: ImageVector,
     label: String,
     active: Boolean,
     danger: Boolean = false,
     onClick: () -> Unit,
+    modifier: Modifier = Modifier,
 ) {
-    // Monokrom hitam-putih: bahaya dibedakan dari tepi putih tebal + label,
-    // aktif dari isian abu terang — bukan dari warna.
+    // Tile Aksi Cepat ungu: aktif = isian violet penuh; bahaya dibedakan
+    // tepi magenta-ungu; nonaktif = permukaan ungu gelap (gaya referensi).
     val bg = when {
-        danger -> Color(0xFF2A2A2E)
-        active -> Color(0xFF3A3A40)
-        else -> Color(0xFF17171A)
+        danger -> Color(0xFF2D0F2E)
+        active -> Color(0xFF7C3AED)
+        else -> Color(0xFF1E1338)
     }
     val borderCol = when {
-        danger -> Color(0xFFFFFFFF)
-        active -> MaterialTheme.colorScheme.primary
-        else -> Color(0xFF2E2E34)
+        danger -> Color(0xFFD946EF)
+        active -> Color(0xFFA78BFA)
+        else -> Color(0xFF38255E)
     }
     val fg = when {
-        danger -> Color(0xFFFFFFFF)
+        danger -> Color(0xFFF5D0FE)
         active -> Color(0xFFFFFFFF)
-        else -> Color(0xFFD4D4D8)
+        else -> Color(0xFFD8CCF5)
     }
-    Row(
-        modifier = Modifier
-            .clip(RoundedCornerShape(50))
+    Column(
+        modifier = modifier
+            .height(64.dp)
+            .clip(RoundedCornerShape(16.dp))
             .background(bg)
-            .border(1.dp, borderCol, RoundedCornerShape(50))
+            .border(1.dp, borderCol, RoundedCornerShape(16.dp))
             .clickable(onClick = onClick)
-            .padding(horizontal = 11.dp, vertical = 7.dp),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(5.dp),
+            .padding(horizontal = 6.dp, vertical = 8.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.Center,
     ) {
-        Icon(icon, contentDescription = null, tint = fg, modifier = Modifier.size(14.dp))
+        Icon(icon, contentDescription = null, tint = fg, modifier = Modifier.size(19.dp))
+        Spacer(Modifier.height(5.dp))
         Text(
             text = label,
             color = fg,
-            fontSize = 11.sp,
+            fontSize = 10.sp,
             fontWeight = if (active || danger) FontWeight.Bold else FontWeight.Medium,
             maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
         )
     }
 }
@@ -2905,8 +2982,8 @@ internal fun PanelSectionGrid(
                     Modifier
                         .fillMaxWidth()
                         .clip(RoundedCornerShape(14.dp))
-                        .background(Color(0xFF141416), RoundedCornerShape(14.dp))
-                        .border(1.dp, Color(0xFF26262B), RoundedCornerShape(14.dp))
+                        .background(Color(0xFF1A1130), RoundedCornerShape(14.dp))
+                        .border(1.dp, Color(0xFF34235C), RoundedCornerShape(14.dp))
                         .padding(horizontal = 16.dp, vertical = 14.dp),
                     verticalArrangement = Arrangement.spacedBy(10.dp),
                 ) {

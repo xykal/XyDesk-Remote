@@ -2656,8 +2656,10 @@
     var dlEl=document.getElementById("upd-downloads");
     var cdEl=document.getElementById("upd-countdown");
     var SESSION_KEY="xydesk_update_popup_dismissed_v1_1_23";
-    // Target jadwal rilis: Sabtu 2026-10-24 00:00:00 UTC
-    var releaseAt=new Date("2026-10-24T00:00:00Z").getTime();
+    // Target jadwal rilis DIUNDUR: Sabtu 2026-10-31 00:00:00 UTC
+    // (diundur atas permintaan pemilik 2026-10-24; rilis tetap manual,
+    // countdown ini hanya penanda jadwal, bukan pemicu publish otomatis)
+    var releaseAt=new Date("2026-10-31T00:00:00Z").getTime();
     var nextCheckAt=releaseAt;
     function fmtLast(dateStr){
       try{var d=new Date(dateStr);return d.toLocaleString(document.documentElement.lang==="en"?"en-US":"id-ID",{dateStyle:"medium",timeStyle:"short",timeZone:"UTC"})+" UTC";}catch(e){return dateStr;}
