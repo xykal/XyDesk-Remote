@@ -229,12 +229,7 @@ internal class CommunityJokesApi(context: Context) {
                     val actName = o.optString("actor_name", "Komunitas")
                     val actGh = o.optString("actor_github", "")
                     val actId = o.optString("actor_id", "")
-                    val isSelf = ChatPushNotifier.isSelfUser(
-                        context = appContext,
-                        actorName = actName,
-                        actorGithub = actGh,
-                        actorClientId = actId,
-                    ) || (myGhLower.isNotBlank() && (actGh.trim().removePrefix("@").lowercase() == myGhLower || actName.trim().removePrefix("@").lowercase() == myGhLower)) ||
+                    val isSelf = (myGhLower.isNotBlank() && (actGh.trim().removePrefix("@").lowercase() == myGhLower || actName.trim().removePrefix("@").lowercase() == myGhLower)) ||
                         (myDispLower.isNotBlank() && (actName.trim().removePrefix("@").lowercase() == myDispLower || actGh.trim().removePrefix("@").lowercase() == myDispLower))
                     if (isSelf) continue
                     val item = XyNotificationItem(

@@ -778,6 +778,7 @@ internal suspend fun syncGitHubProfileAndAvatar(
 
 
 
+@Composable
 internal fun GitHubDeviceFlowPanel(
     onCancel: () -> Unit,
     onSuccess: (token: String, user: String) -> Unit,

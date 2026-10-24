@@ -2102,7 +2102,6 @@ fun RdpFreeScreen(onBack: () -> Unit, onConnect: (ConnectionProfile) -> Unit) {
     }
 }
 
-@Composable
 /** Format durasi detik menjadi teks ringkas, mis. "5j 30m". */
 internal fun formatLeaderboardDuration(totalSeconds: Long): String {
     val sec = totalSeconds.coerceAtLeast(60L)
@@ -2115,6 +2114,7 @@ internal fun formatLeaderboardDuration(totalSeconds: Long): String {
     }
 }
 
+@Composable
 private fun SecretStatusRow(
     name: String,
     configured: Boolean,
