@@ -16,6 +16,11 @@ OUTBOX_MANIFEST_ADDITION = '''        <!-- Additive chat outbox only; system Job
 
 '''
 
+INSTALL_PERMISSION_MANIFEST_ADDITION = '''    <!-- Additive in-app update installer permission only. -->
+    <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
+
+'''
+
 class RecoveryBaselineTest(unittest.TestCase):
     def test_connect_render_and_native_inputs_match_owner_baseline(self):
         lock = json.loads((ROOT/'docs/recovery/PROTECTED-CONNECTION-PATHS.json').read_text())
@@ -26,6 +31,15 @@ class RecoveryBaselineTest(unittest.TestCase):
                     addition = OUTBOX_MANIFEST_ADDITION.encode()
                     self.assertEqual(data.count(addition), 1)
                     data = data.replace(addition, b'', 1)
+                    install_addition = INSTALL_PERMISSION_MANIFEST_ADDITION.encode()
+                    self.assertEqual(data.count(install_addition), 1)
+                    # Blok aditif izin pasang menggantikan baris remove lama;
+                    # kembalikan baris itu agar sisa berkas identik baseline.
+                    original_line = (
+                        '    <uses-permission android:name="android.permission.'
+                        'REQUEST_INSTALL_PACKAGES" tools:node="remove" />\n\n'
+                    ).encode()
+                    data = data.replace(install_addition, original_line, 1)
                 self.assertEqual(hashlib.sha256(data).hexdigest(), expected)
 
     def test_initial_connect_is_not_requeued_inside_pre_started_onstart(self):
