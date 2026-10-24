@@ -1051,7 +1051,7 @@ internal fun XyHeaderAccountActions(
 
     androidx.compose.runtime.LaunchedEffect(avatarTick, quickOpen, ghUser, authRev) {
         ghUser = getVerifiedGitHubLogin(context)
-        displayName = api.displayName() ?: ghUser ?: chatNickname(context)
+        displayName = api.displayName() ?: ghUser ?: "Pengguna XyDesk"
         val bmp = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
             runCatching {
                 if (avatarFile.exists()) android.graphics.BitmapFactory.decodeFile(avatarFile.absolutePath) else null
@@ -1164,14 +1164,14 @@ internal fun XyHeaderAccountActions(
             .clip(androidx.compose.foundation.shape.CircleShape)
             .background(MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.55f))
             .let { mod ->
-                if (founder) mod.border(1.5.dp, founderBorderBrush(), androidx.compose.foundation.shape.CircleShape)
+                if (founder) mod.border(1.5.dp, MaterialTheme.colorScheme.primary, androidx.compose.foundation.shape.CircleShape)
                 else mod.border(
                     1.dp,
                     MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f),
                     androidx.compose.foundation.shape.CircleShape,
                 )
             }
-            .podiumAvatarFrame(ghUser),
+            ,
     ) {
         Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
             val bmp = avatarBitmap
@@ -1211,10 +1211,10 @@ internal fun XyHeaderAccountActions(
                         modifier = Modifier
                             .size(56.dp)
                             .let { m ->
-                                if (founder) m.border(2.dp, founderBorderBrush(), androidx.compose.foundation.shape.CircleShape)
+                                if (founder) m.border(2.dp, MaterialTheme.colorScheme.primary, androidx.compose.foundation.shape.CircleShape)
                                 else m
                             }
-                            .podiumAvatarFrame(ghUser),
+                            ,
                     ) {
                         Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                             val bmp = avatarBitmap

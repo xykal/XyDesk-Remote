@@ -126,8 +126,7 @@ internal fun saveVerifiedGitHubLogin(context: Context, login: String?, avatarUrl
     if (clean.isEmpty()) edit.remove(KEY_GH_AVATAR)
     else if (resolvedAvatar != null) edit.putString(KEY_GH_AVATAR, resolvedAvatar)
     edit.apply()
-
-
+}
 
 internal fun normalizedChatAccount(value: String?): String =
     value.orEmpty().trim().removePrefix("@").lowercase()

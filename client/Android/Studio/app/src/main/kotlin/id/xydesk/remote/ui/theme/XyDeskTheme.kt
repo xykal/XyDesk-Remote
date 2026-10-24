@@ -236,7 +236,7 @@ fun XyDeskTheme(
                 LocalUiMotionEnabled provides uiMotionEnabled,
                 LocalDecorativeMotionEnabled provides uiMotionEnabled,
             ) {
-                id.xydesk.remote.ui.OfficialChannelNavigation { content() }
+                content()
             }
         },
     )
