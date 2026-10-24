@@ -105,8 +105,8 @@ fun hudButtonLook(
     return HudButtonLook(
         plateColor = if (pressed || latched) Color(0xE62B624F) else pal.plate,
         ringColor = when {
-            mappingMode -> Color(0xFF83D7FF)
-            latched -> Color(0xFFB9F0D9)
+            mappingMode -> Color(0xFFFFFFFF)
+            latched -> Color(0xFFEDEDED)
             else -> pal.border
         },
         ringWidth = if (pressed || latched || mappingMode) 2.dp else 1.2.dp,
@@ -300,7 +300,7 @@ private fun HudKeyButton(
     val look = if (key.pad) {
         HudButtonLook(
             plateColor = if (pressed || latched) Color(0xFF32323C) else Color(0xF20D0D11),
-            ringColor = if (mappingMode) Color(0xFF83D7FF) else Color(0x59FFFFFF),
+            ringColor = if (mappingMode) Color(0xFFFFFFFF) else Color(0x59FFFFFF),
             ringWidth = if (pressed || latched || mappingMode) 2.dp else 1.dp,
         )
     } else {

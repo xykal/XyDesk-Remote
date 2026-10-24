@@ -220,7 +220,6 @@ fun SessionControls(
     var scrollPillOpen by remember { mutableStateOf(false) }
     var panelOpen by remember { mutableStateOf(false) }
     var monitorGridOpen by remember { mutableStateOf(false) }
-    var railMenuOpen by remember { mutableStateOf(false) }
     var drawerMode by remember { mutableStateOf(false) }
     var tab by remember { mutableStateOf(PanelTab.SCREEN) }
     var pickerOpen by remember { mutableStateOf(false) }
@@ -607,9 +606,11 @@ fun SessionControls(
             )
         }
 
-        // Rail diminimalkan atas permintaan pemilik (2026-10-10): hanya dua
-        // tombol tetap — pembuka menu bubble (panah atas) dan keyboard di
-        // paling bawah. Sisanya pindah ke dalam bubble popup.
+        // Rail kanan bawah tinggal tombol keyboard saja (permintaan
+        // pemilik): membuka menu CUKUP dari gagang garis tiga di kanan
+        // atas (PanelHandle). Tombol panah atas + bubble dan tombol
+        // sliders duplikat di rail ini sudah dihapus; semua aksi menu
+        // hidup sekali di panel (quick bar + tab), tidak diduplikasi.
         if (!panelOpen && !monitorGridOpen && !mappingMode) {
             Column(
                 Modifier
@@ -621,129 +622,6 @@ fun SessionControls(
                 horizontalAlignment = Alignment.End,
                 verticalArrangement = Arrangement.spacedBy(8.dp),
             ) {
-                // Bubble rail "disedot" keluar dari tombol panah: scale dari
-                // titik bawah (posisi tombol) + fade, masuk dan keluar.
-                AnimatedVisibility(
-                    visible = railMenuOpen,
-                    enter = fadeIn(androidx.compose.animation.core.tween(140)) +
-                        scaleIn(
-                            androidx.compose.animation.core.tween(230, easing = androidx.compose.animation.core.FastOutSlowInEasing),
-                            initialScale = 0.25f,
-                            transformOrigin = androidx.compose.ui.graphics.TransformOrigin(0.5f, 1f),
-                        ),
-                    exit = fadeOut(androidx.compose.animation.core.tween(120)) +
-                        scaleOut(
-                            androidx.compose.animation.core.tween(170, easing = androidx.compose.animation.core.FastOutLinearInEasing),
-                            targetScale = 0.2f,
-                            transformOrigin = androidx.compose.ui.graphics.TransformOrigin(0.5f, 1f),
-                        ),
-                ) {
-                    Column(
-                        Modifier
-                            .xyGlass(shape = RoundedCornerShape(18.dp))
-                            .padding(8.dp),
-                        verticalArrangement = Arrangement.spacedBy(2.dp),
-                    ) {
-                        RailMenuItem(
-                            icon = XyIcons.Sliders,
-                            label = xy("Menu utama & kontrol HUD", "Main menu & HUD controls"),
-                            active = panelOpen,
-                        ) {
-                            railMenuOpen = false
-                            scrollPillOpen = false
-                            panelOpen = true
-                        }
-                        RailMenuItem(
-                            icon = XyIcons.ScrollSlide,
-                            label = xy("Kontrol scroll", "Scroll control"),
-                            active = scrollPillOpen,
-                        ) {
-                            scrollPillOpen = !scrollPillOpen
-                        }
-                        RailMenuItem(
-                            icon = if (hudButtonsVisibleNow) XyIcons.EyeOff else XyIcons.Eye,
-                            label = if (hudButtonsVisibleNow) {
-                                xy("Sembunyikan overlay", "Hide overlay")
-                            } else {
-                                xy("Tampilkan overlay", "Show overlay")
-                            },
-                        ) {
-                            toggleHudButtonVisibility()
-                        }
-                        RailMenuItem(
-                            icon = if (voiceMicEnabled) XyIcons.VolumeOn else XyIcons.VolumeOff,
-                            label = if (voiceMicEnabled) {
-                                xy("Voice / Mic: ON", "Voice / Mic: ON")
-                            } else {
-                                xy("Voice / Mic: OFF", "Voice / Mic: OFF")
-                            },
-                            active = voiceMicEnabled,
-                        ) {
-                            onToggleVoiceMic()
-                        }
-                        val floatingChatHidden = InAppLiveNotificationBus.floatingOverlayHidden
-                        RailMenuItem(
-                            icon = XyIcons.Chat,
-                            label = if (floatingChatHidden) {
-                                xy("Tampilkan Floating Chat", "Show Floating Chat")
-                            } else {
-                                xy("Sembunyikan Floating Chat", "Hide Floating Chat")
-                            },
-                            active = !floatingChatHidden,
-                        ) {
-                            val nextHidden = !floatingChatHidden
-                            InAppLiveNotificationBus.setFloatingHidden(context, nextHidden)
-                            notice.show(
-                                if (nextHidden) {
-                                    xyNow("Floating Chat disembunyikan dari layar sesi", "Floating Chat hidden from session screen")
-                                } else {
-                                    xyNow("Floating Chat ditampilkan kembali", "Floating Chat restored")
-                                },
-                            )
-                        }
-                        RailMenuItem(
-                            icon = XyIcons.Monitor,
-                            label = xy("Monitor & sesi", "Monitors & sessions"),
-                        ) {
-                            railMenuOpen = false
-                            monitorGridOpen = true
-                        }
-                        RailMenuItem(
-                            icon = XyIcons.Home,
-                            label = xy("Ke beranda (sesi tetap jalan)", "Go home (session stays alive)"),
-                        ) {
-                            railMenuOpen = false
-                            onGoHome()
-                        }
-                        RailMenuItem(
-                            icon = XyIcons.Power,
-                            label = xy("Putuskan sesi", "Disconnect"),
-                            danger = true,
-                        ) {
-                            railMenuOpen = false
-                            onDisconnect()
-                        }
-                    }
-                }
-                // Tombol panah atas untuk buka bubble menu — kembali tampil dengan jelas
-                RailButton(
-                    icon = XyIcons.ChevronUp,
-                    active = railMenuOpen,
-                    description = xy("Buka menu sesi", "Open session menu"),
-                    plate = plate,
-                    onClick = { railMenuOpen = !railMenuOpen },
-                )
-                RailButton(
-                    icon = if (panelOpen) XyIcons.Close else XyIcons.Sliders,
-                    active = panelOpen,
-                    description = xy("Menu sesi", "Session menu"),
-                    plate = plate,
-                    onClick = {
-                        railMenuOpen = false
-                        drawerMode = false
-                        panelOpen = !panelOpen
-                    },
-                )
                 RailButton(
                     icon = XyIcons.Keyboard,
                     active = false,
@@ -1383,15 +1261,15 @@ private fun LiveTelemetryPill(
 ) {
     val rtt = telemetry.rttMs
     val rttColor = when {
-        rtt <= 0 -> Color(0xFF34D399)
-        rtt < 45 -> Color(0xFF34D399)
-        rtt < 120 -> Color(0xFFFBBF24)
-        else -> Color(0xFFFB7185)
+        rtt <= 0 -> Color(0xFFFFFFFF)
+        rtt < 45 -> Color(0xFFFFFFFF)
+        rtt < 120 -> Color(0xFFBFBFBF)
+        else -> Color(0xFF8A8A8A)
     }
     val fpsColor = when {
-        telemetry.fps >= 45 -> Color(0xFF34D399)
-        telemetry.fps >= 24 -> Color(0xFFFBBF24)
-        telemetry.fps > 0 -> Color(0xFFFB923C)
+        telemetry.fps >= 45 -> Color(0xFFFFFFFF)
+        telemetry.fps >= 24 -> Color(0xFFBFBFBF)
+        telemetry.fps > 0 -> Color(0xFF9A9A9A)
         else -> Color(0xFFE4E4E8)
     }
     val textShadow = Shadow(
@@ -1418,13 +1296,13 @@ private fun LiveTelemetryPill(
     )
     val rttLabel = if (rtt > 0) "${rtt} ms" else "-- ms"
     val resLabel = if (telemetry.width > 0) "${telemetry.width}x${telemetry.height}" else "--"
-    val netColor = if (telemetry.udpActive) Color(0xFF38BDF8) else Color(0xFFFBBF24)
+    val netColor = if (telemetry.udpActive) Color(0xFFE8E8E8) else Color(0xFFBFBFBF)
     val items = listOf(
         Triple("UI/s", "${telemetry.fps}", fpsColor),
         Triple("LATENCY", rttLabel, rttColor),
-        Triple("RESOLUSI", resLabel, Color(0xFFE0F2FE)),
-        Triple("ENCODE", telemetry.codecLabel.replace("FreeRDP", "XyRDP"), Color(0xFF38BDF8)),
-        Triple("RELAY", telemetry.relayLabel.replace("FreeRDP", "XyRDP"), Color(0xFFC084FC)),
+        Triple("RESOLUSI", resLabel, Color(0xFFFFFFFF)),
+        Triple("ENCODE", telemetry.codecLabel.replace("FreeRDP", "XyRDP"), Color(0xFFE8E8E8)),
+        Triple("RELAY", telemetry.relayLabel.replace("FreeRDP", "XyRDP"), Color(0xFFCFCFCF)),
         Triple("NETWORK", telemetry.networkLabel, netColor),
     )
 
@@ -1469,41 +1347,6 @@ private fun RailButton(
             contentDescription = description,
             tint = if (active) Color(0xFF0B0B0E) else pal.ink,
             modifier = Modifier.size(20.dp),
-        )
-    }
-}
-
-@Composable
-private fun RailMenuItem(
-    icon: ImageVector,
-    label: String,
-    active: Boolean = false,
-    danger: Boolean = false,
-    onClick: () -> Unit,
-) {
-    val ink = MaterialTheme.colorScheme.onSurface
-    Row(
-        Modifier
-            .clip(RoundedCornerShape(12.dp))
-            .clickable(onClick = onClick)
-            .padding(horizontal = 12.dp, vertical = 9.dp),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(10.dp),
-    ) {
-        Icon(
-            icon,
-            contentDescription = null,
-            tint = if (danger) MaterialTheme.colorScheme.error else ink,
-            modifier = Modifier.size(17.dp),
-        )
-        Text(
-            label,
-            style = MaterialTheme.typography.labelLarge,
-            color = when {
-                danger -> MaterialTheme.colorScheme.error
-                active -> MaterialTheme.colorScheme.primary
-                else -> ink
-            },
         )
     }
 }
@@ -2465,11 +2308,6 @@ private fun ButtonsTab(
     PanelSectionGrid(openKey = openKey, onOpenKey = onOpenKey) {
     section("tampilan-tombol-overlay",xy("Tampilan tombol overlay", "Overlay button display"), advanced = true) {
             XyToggleRow(
-                title = xy("Aktifkan tombol HUD", "Show HUD buttons"),
-                checked = showHudButtons,
-                onCheckedChange = onShowHudButtonsChange,
-            )
-            XyToggleRow(
                 title = xy("Sembunyikan otomatis saat input fisik tersambung", "Auto-hide when physical input is connected"),
                 checked = autoHideHudOnExternalInput,
                 onCheckedChange = onAutoHideHudOnExternalInputChange,
@@ -2741,36 +2579,8 @@ private fun SessionTab(
         }
 
     section("sesi",xy("Sesi", "Session")) {
-            val ctx = LocalContext.current
-            val floatingHidden = InAppLiveNotificationBus.floatingOverlayHidden
-            PanelHint(
-                xy(
-                    "Tombol bulat kanan bawah (ikon power) juga memutus — langsung kembali ke beranda setelah konfirmasi.",
-                    "The bottom-right round button (power icon) also disconnects — returns straight to home after confirmation.",
-                ),
-            )
-            XyPillButton(
-                text = if (floatingHidden) {
-                    xy("Tampilkan Floating Chat Global", "Show Floating Global Chat")
-                } else {
-                    xy("Sembunyikan Floating Chat Global", "Hide Floating Global Chat")
-                },
-                onClick = {
-                    val nextHidden = !floatingHidden
-                    InAppLiveNotificationBus.setFloatingHidden(ctx, nextHidden)
-                    notice.show(
-                        if (nextHidden) {
-                            xyNow("Floating Chat disembunyikan dari layar sesi", "Floating Chat hidden from session screen")
-                        } else {
-                            xyNow("Floating Chat ditampilkan kembali", "Floating Chat restored")
-                        },
-                    )
-                },
-                icon = XyIcons.Chat,
-                primary = !floatingHidden,
-                compact = true,
-                modifier = Modifier.fillMaxWidth(),
-            )
+            // Floating Chat & Putuskan sesi cukup SATU tempat: quick bar di
+            // atas panel. Di sini hanya aksi sesi yang belum ada di sana.
             XyPillButton(
                 xy("Ambil screenshot", "Take screenshot"),
                 onScreenshot,
@@ -3001,18 +2811,20 @@ private fun QuickActionPill(
     danger: Boolean = false,
     onClick: () -> Unit,
 ) {
+    // Monokrom hitam-putih: bahaya dibedakan dari tepi putih tebal + label,
+    // aktif dari isian abu terang — bukan dari warna.
     val bg = when {
-        danger -> Color(0xFF3F151C)
-        active -> MaterialTheme.colorScheme.primary.copy(alpha = 0.24f)
-        else -> Color(0xFF181C28)
+        danger -> Color(0xFF2A2A2E)
+        active -> Color(0xFF3A3A40)
+        else -> Color(0xFF17171A)
     }
     val borderCol = when {
-        danger -> Color(0xFFF43F5E).copy(alpha = 0.65f)
+        danger -> Color(0xFFFFFFFF)
         active -> MaterialTheme.colorScheme.primary
-        else -> Color(0xFF2A3248)
+        else -> Color(0xFF2E2E34)
     }
     val fg = when {
-        danger -> Color(0xFFFDA4AF)
+        danger -> Color(0xFFFFFFFF)
         active -> Color(0xFFFFFFFF)
         else -> Color(0xFFD4D4D8)
     }
@@ -3093,8 +2905,8 @@ internal fun PanelSectionGrid(
                     Modifier
                         .fillMaxWidth()
                         .clip(RoundedCornerShape(14.dp))
-                        .background(Color(0xFF161A26), RoundedCornerShape(14.dp))
-                        .border(1.dp, Color(0xFF28324B), RoundedCornerShape(14.dp))
+                        .background(Color(0xFF141416), RoundedCornerShape(14.dp))
+                        .border(1.dp, Color(0xFF26262B), RoundedCornerShape(14.dp))
                         .padding(horizontal = 16.dp, vertical = 14.dp),
                     verticalArrangement = Arrangement.spacedBy(10.dp),
                 ) {

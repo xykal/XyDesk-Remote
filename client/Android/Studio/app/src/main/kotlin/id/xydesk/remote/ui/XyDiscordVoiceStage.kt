@@ -493,8 +493,8 @@ internal fun XyDiscordVoiceStageBar(
             .border(
                 width = 1.dp,
                 color = when {
-                    liveScreen.active -> Color(0xFFEF4444)
-                    joined -> Color(0xFF22C55E)
+                    liveScreen.active -> Color(0xFFFFFFFF)
+                    joined -> Color(0xFFFFFFFF)
                     else -> Color(0xFF232329)
                 },
                 shape = RoundedCornerShape(14.dp),
@@ -521,9 +521,9 @@ internal fun XyDiscordVoiceStageBar(
                         .clip(CircleShape)
                         .background(
                             when {
-                                liveScreen.active -> Color(0xFFEF4444).copy(alpha = 0.22f)
-                                joined -> Color(0xFF10B981).copy(alpha = 0.22f)
-                                else -> Color(0xFF1E2436)
+                                liveScreen.active -> Color(0xFFFFFFFF).copy(alpha = 0.22f)
+                                joined -> Color(0xFFEDEDED).copy(alpha = 0.22f)
+                                else -> Color(0xFF1A1A1E)
                             },
                         ),
                     contentAlignment = Alignment.Center,
@@ -533,8 +533,8 @@ internal fun XyDiscordVoiceStageBar(
                         contentDescription = null,
                         tint = when {
                             liveScreen.active -> Color(0xFFF87171)
-                            joined -> Color(0xFF34D399)
-                            else -> Color(0xFF818CF8)
+                            joined -> Color(0xFFEDEDED)
+                            else -> Color(0xFFCFCFD4)
                         },
                         modifier = Modifier.size(15.dp),
                     )
@@ -556,7 +556,7 @@ internal fun XyDiscordVoiceStageBar(
                             Box(
                                 modifier = Modifier
                                     .clip(RoundedCornerShape(50))
-                                    .background(Color(0xFFEF4444))
+                                    .background(Color(0xFFFFFFFF))
                                     .padding(horizontal = 6.dp, vertical = 1.dp),
                             ) {
                                 Text(
@@ -575,7 +575,7 @@ internal fun XyDiscordVoiceStageBar(
                             else -> xy("Ngobrol bareng banyak orang & Share Screen Sesi RDP", "Multi-user voice chat & Live RDP Screen Share")
                         },
                         fontSize = 10.sp,
-                        color = Color(0xFF94A3B8),
+                        color = Color(0xFFA8A8AD),
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis,
                     )
@@ -590,7 +590,7 @@ internal fun XyDiscordVoiceStageBar(
                     Box(
                         modifier = Modifier
                             .clip(RoundedCornerShape(50))
-                            .background(Color(0xFF10B981))
+                            .background(Color(0xFFEDEDED))
                             .clickable {
                                 val hasPerm = context.checkSelfPermission(Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED
                                 if (hasPerm) {
@@ -606,7 +606,7 @@ internal fun XyDiscordVoiceStageBar(
                             text = xy("Gabung Voice", "Join Voice"),
                             fontSize = 10.sp,
                             fontWeight = FontWeight.ExtraBold,
-                            color = Color(0xFF052E16),
+                            color = Color(0xFF1C1C20),
                         )
                     }
                 } else {
@@ -614,7 +614,7 @@ internal fun XyDiscordVoiceStageBar(
                     Box(
                         modifier = Modifier
                             .clip(RoundedCornerShape(50))
-                            .background(if (micMuted) Color(0xFF3F3F46) else Color(0xFF10B981))
+                            .background(if (micMuted) Color(0xFF3F3F46) else Color(0xFFEDEDED))
                             .clickable { XyDiscordVoiceStageManager.toggleMic(context) }
                             .padding(horizontal = 9.dp, vertical = 4.5.dp),
                     ) {
@@ -622,14 +622,14 @@ internal fun XyDiscordVoiceStageBar(
                             text = if (micMuted) "MIC OFF" else "MIC ON",
                             fontSize = 9.5.sp,
                             fontWeight = FontWeight.ExtraBold,
-                            color = if (micMuted) Color.White else Color(0xFF052E16),
+                            color = if (micMuted) Color.White else Color(0xFF1C1C20),
                         )
                     }
                     // Tombol Keluar Voice
                     Box(
                         modifier = Modifier
                             .clip(RoundedCornerShape(50))
-                            .background(Color(0xFFEF4444))
+                            .background(Color(0xFFFFFFFF))
                             .clickable { XyDiscordVoiceStageManager.leaveVoiceParty(context) }
                             .padding(horizontal = 9.dp, vertical = 4.5.dp),
                     ) {
@@ -659,13 +659,13 @@ internal fun XyDiscordVoiceStageBar(
                             Row(
                                 modifier = Modifier
                                     .clip(RoundedCornerShape(50))
-                                    .background(Color(0xFF1A1F30))
+                                    .background(Color(0xFF17171A))
                                     .border(
                                         width = if (p.speaking) 1.4.dp else 0.8.dp,
                                         color = when {
-                                            p.sharingScreen -> Color(0xFFEF4444)
-                                            p.speaking -> Color(0xFF10B981)
-                                            else -> Color(0xFF2D3548)
+                                            p.sharingScreen -> Color(0xFFFFFFFF)
+                                            p.speaking -> Color(0xFFEDEDED)
+                                            else -> Color(0xFF2A2A2E)
                                         },
                                         shape = RoundedCornerShape(50),
                                     )
@@ -697,9 +697,9 @@ internal fun XyDiscordVoiceStageBar(
                                     fontSize = 9.5.sp,
                                     fontWeight = FontWeight.Bold,
                                     color = when {
-                                        p.sharingScreen -> Color(0xFFEF4444)
+                                        p.sharingScreen -> Color(0xFFFFFFFF)
                                         p.muted -> Color(0xFF9CA3AF)
-                                        p.speaking -> Color(0xFF22C55E)
+                                        p.speaking -> Color(0xFFFFFFFF)
                                         else -> Color(0xFF9CA3AF)
                                     },
                                 )
@@ -719,7 +719,7 @@ internal fun XyDiscordVoiceStageBar(
                             modifier = Modifier
                                 .weight(1f)
                                 .clip(RoundedCornerShape(10.dp))
-                                .background(if (sharingMyRdp) Color(0xFFEF4444) else Color(0xFF4F46E5))
+                                .background(if (sharingMyRdp) Color(0xFFFFFFFF) else Color(0xFF3F3F46))
                                 .clickable {
                                     XyDiscordVoiceStageManager.toggleShareActiveRdpSession(context)
                                 }
@@ -743,8 +743,8 @@ internal fun XyDiscordVoiceStageBar(
                             modifier = Modifier
                                 .weight(1f)
                                 .clip(RoundedCornerShape(10.dp))
-                                .background(Color(0xFF1E293B))
-                                .border(1.dp, Color(0xFFEF4444), RoundedCornerShape(10.dp))
+                                .background(Color(0xFF1C1C20))
+                                .border(1.dp, Color(0xFFFFFFFF), RoundedCornerShape(10.dp))
                                 .clickable { watchingLiveStream = !watchingLiveStream }
                                 .padding(vertical = 7.dp, horizontal = 8.dp),
                             contentAlignment = Alignment.Center,
@@ -765,7 +765,7 @@ internal fun XyDiscordVoiceStageBar(
                         Box(
                             modifier = Modifier
                                 .clip(RoundedCornerShape(10.dp))
-                                .background(Color(0xFF1F2433))
+                                .background(Color(0xFF1A1A1E))
                                 .clickable { XyDiscordVoiceStageManager.toggleDeafen() }
                                 .padding(vertical = 7.dp, horizontal = 10.dp),
                             contentAlignment = Alignment.Center,
@@ -787,8 +787,8 @@ internal fun XyDiscordVoiceStageBar(
                         modifier = Modifier
                             .fillMaxWidth()
                             .clip(RoundedCornerShape(12.dp))
-                            .background(Color(0xFF090B10))
-                            .border(1.dp, Color(0xFFEF4444).copy(alpha = 0.65f), RoundedCornerShape(12.dp))
+                            .background(Color(0xFF0A0A0C))
+                            .border(1.dp, Color(0xFFFFFFFF).copy(alpha = 0.65f), RoundedCornerShape(12.dp))
                             .padding(8.dp),
                         verticalArrangement = Arrangement.spacedBy(5.dp),
                     ) {
@@ -809,7 +809,7 @@ internal fun XyDiscordVoiceStageBar(
                                 text = "${liveScreen.width}×${liveScreen.height} · LIVE",
                                 fontSize = 9.5.sp,
                                 fontFamily = FontFamily.Monospace,
-                                color = Color(0xFFEF4444),
+                                color = Color(0xFFFFFFFF),
                             )
                         }
                         if (bmp != null && !bmp.isRecycled) {
@@ -828,13 +828,13 @@ internal fun XyDiscordVoiceStageBar(
                                     .fillMaxWidth()
                                     .height(140.dp)
                                     .clip(RoundedCornerShape(8.dp))
-                                    .background(Color(0xFF11141E)),
+                                    .background(Color(0xFF121214)),
                                 contentAlignment = Alignment.Center,
                             ) {
                                 Text(
                                     text = xy("Memuat stream layar sesi XyRDP…", "Loading live XyRDP screen stream…"),
                                     fontSize = 11.sp,
-                                    color = Color(0xFF94A3B8),
+                                    color = Color(0xFFA8A8AD),
                                 )
                             }
                         }
