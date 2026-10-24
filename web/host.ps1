@@ -15,12 +15,12 @@ New-ItemProperty -Path $tsPolicy -Name "SelectTransport" -PropertyType DWord -Va
 New-ItemProperty -Path $tsPolicy -Name "fDisableAudio" -PropertyType DWord -Value 0 -Force | Out-Null
 New-ItemProperty -Path $tsPolicy -Name "fDisableAudioCapture" -PropertyType DWord -Value 0 -Force | Out-Null
 New-ItemProperty -Path $tsPolicy -Name "fDisableCam" -PropertyType DWord -Value 0 -Force | Out-Null
-New-ItemProperty -Path $tsPolicy -Name "DWMFRAMEINTERVAL" -PropertyType DWord -Value 8 -Force | Out-Null
+New-ItemProperty -Path $tsPolicy -Name "DWMFRAMEINTERVAL" -PropertyType DWord -Value 16 -Force | Out-Null
 New-ItemProperty -Path "HKLM:\SYSTEM\CurrentControlSet\Control\Terminal Server" -Name "fDisableAudio" -PropertyType DWord -Value 0 -Force | Out-Null
 New-ItemProperty -Path "HKLM:\SYSTEM\CurrentControlSet\Control\Terminal Server" -Name "fDisableAudioCapture" -PropertyType DWord -Value 0 -Force | Out-Null
 New-ItemProperty -Path "HKLM:\SYSTEM\CurrentControlSet\Control\Terminal Server\WinStations\RDP-Tcp" -Name "fDisableAudio" -PropertyType DWord -Value 0 -Force | Out-Null
 New-ItemProperty -Path "HKLM:\SYSTEM\CurrentControlSet\Control\Terminal Server\WinStations\RDP-Tcp" -Name "fDisableAudioCapture" -PropertyType DWord -Value 0 -Force | Out-Null
-New-ItemProperty -Path "HKLM:\SYSTEM\CurrentControlSet\Control\Terminal Server\WinStations" -Name "DWMFRAMEINTERVAL" -PropertyType DWord -Value 8 -Force | Out-Null
+New-ItemProperty -Path "HKLM:\SYSTEM\CurrentControlSet\Control\Terminal Server\WinStations" -Name "DWMFRAMEINTERVAL" -PropertyType DWord -Value 16 -Force | Out-Null
 foreach ($c in @(
     "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\CapabilityAccessManager\ConsentStore\microphone",
     "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\CapabilityAccessManager\ConsentStore\microphone\NonPackaged",
