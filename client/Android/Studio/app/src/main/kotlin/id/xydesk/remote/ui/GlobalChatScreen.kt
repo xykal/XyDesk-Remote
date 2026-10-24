@@ -534,8 +534,17 @@ private fun GlobalChatAccountContent(
 
     LaunchedEffect(verifiedGhLogin) {
         val login = verifiedGhLogin.orEmpty()
-        val cached = withContext(Dispatchers.IO) {
-            GlobalChatOfflineCache.read(context.applicationContext, login, nickname)
+        // Riwayat utama = database lokal SQLite (server hanya relay).
+        // Snapshot terenkripsi lama dipakai sebagai cadangan bila DB kosong.
+        val archived = withContext(Dispatchers.IO) {
+            ChatLocalArchive.readRecent(context.applicationContext, login)
+        }
+        val cached = if (archived.isNotEmpty()) {
+            archived
+        } else {
+            withContext(Dispatchers.IO) {
+                GlobalChatOfflineCache.read(context.applicationContext, login, nickname)
+            }
         }
         // Network may have completed while disk was being read; don't replace fresher state.
         val hidden = chatPrefs.getStringSet(hiddenIdsKey, chatPrefs.getStringSet(KEY_HIDDEN_MSG_IDS, emptySet())).orEmpty()
@@ -549,6 +558,7 @@ private fun GlobalChatAccountContent(
             delay(1200L)
             withContext(Dispatchers.IO) {
                 GlobalChatOfflineCache.write(context.applicationContext, login, snapshot, epoch)
+                ChatLocalArchive.upsertAll(context.applicationContext, login, snapshot)
             }
         }
     }

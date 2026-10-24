@@ -2782,6 +2782,76 @@ async function chatPushRelayResponse(request, env) {
   return jsonResponse({ status: "ok" }, 200, request.method);
 }
 
+// --- Pembersihan berkala Firestore (relay-only) ---------------------------
+// Mode Spark tidak punya Cloud Functions, jadi cron worker ini yang
+// menghapus dokumen rooms/global/messages yang lebih tua dari retensi.
+// Autentikasi memakai service account yang sama dengan endpoint token
+// (JWT RS256 -> OAuth access token, scope datastore).
+async function googleServiceAccountAccessToken(env) {
+  const saEmail = String(env?.FIREBASE_SA_EMAIL || "").trim();
+  const saPem = String(env?.FIREBASE_SA_PRIVATE_KEY || "");
+  if (!saEmail || !saPem.includes("PRIVATE KEY")) return null;
+  const now = Math.floor(Date.now() / 1000);
+  const header = base64UrlEncode(new TextEncoder().encode(JSON.stringify({ alg: "RS256", typ: "JWT" })));
+  const claim = base64UrlEncode(new TextEncoder().encode(JSON.stringify({
+    iss: saEmail,
+    scope: "https://www.googleapis.com/auth/datastore",
+    aud: "https://oauth2.googleapis.com/token",
+    iat: now,
+    exp: now + 3600,
+  })));
+  const signingInput = header + "." + claim;
+  const key = await importServiceAccountKey(saPem);
+  const sig = await crypto.subtle.sign(
+    { name: "RSASSA-PKCS1-v1_5" }, key, new TextEncoder().encode(signingInput),
+  );
+  const jwt = signingInput + "." + base64UrlEncode(new Uint8Array(sig));
+  const res = await fetch("https://oauth2.googleapis.com/token", {
+    method: "POST",
+    headers: { "Content-Type": "application/x-www-form-urlencoded" },
+    body: "grant_type=" + encodeURIComponent("urn:ietf:params:oauth:grant-type:jwt-bearer") +
+      "&assertion=" + encodeURIComponent(jwt),
+  });
+  if (!res.ok) return null;
+  const data = await res.json().catch(() => null);
+  return data?.access_token || null;
+}
+
+async function purgeFirestoreRelay(env) {
+  const accessToken = await googleServiceAccountAccessToken(env);
+  if (!accessToken) return;
+  const base = "https://firestore.googleapis.com/v1/projects/xyverse-technology-global/databases/(default)/documents";
+  const cutoffIso = new Date(Date.now() - CHAT_SERVER_RETENTION_MS).toISOString();
+  const query = {
+    structuredQuery: {
+      from: [{ collectionId: "messages" }],
+      where: {
+        fieldFilter: {
+          field: { fieldPath: "at" },
+          op: "LESS_THAN",
+          value: { timestampValue: cutoffIso },
+        },
+      },
+      limit: 400,
+    },
+  };
+  const q = await fetch(base + ":runQuery", {
+    method: "POST",
+    headers: { Authorization: "Bearer " + accessToken, "Content-Type": "application/json" },
+    body: JSON.stringify(query),
+  });
+  if (!q.ok) return;
+  const rows = await q.json().catch(() => null);
+  if (!Array.isArray(rows)) return;
+  const names = rows.map((r) => r?.document?.name).filter((n) => typeof n === "string" && n);
+  if (!names.length) return;
+  await fetch(base + ":commit", {
+    method: "POST",
+    headers: { Authorization: "Bearer " + accessToken, "Content-Type": "application/json" },
+    body: JSON.stringify({ writes: names.map((name) => ({ delete: name })) }),
+  });
+}
+
 function base64UrlEncode(bytes) {
   let binary = "";
   const chunk = 0x8000;
@@ -3871,6 +3941,10 @@ async function feedbackResponse(request, env) {
 
 
 const CHAT_HISTORY_LIMIT = 100;
+// Relay-only: server BUKAN arsip permanen. Pesan chat global ditahan
+// maksimal 48 jam (dan 100 pesan) untuk sinkronisasi antarperangkat;
+// riwayat permanen hidup di database lokal HP (ChatLocalArchive).
+const CHAT_SERVER_RETENTION_MS = 48 * 60 * 60 * 1000;
 const CHAT_TEXT_MAX = 500;
 const CHAT_NAME_MAX = 24;
 const CHAT_ATTACHMENT_MAX = 2_800_000;
@@ -5347,10 +5421,21 @@ export class GlobalChat {
 
   async trimHistory() {
     const entries = await this.state.storage.list({ prefix: "msg:" });
-    const keys = [...entries.keys()].sort();
-    let excess = keys.length - CHAT_HISTORY_LIMIT;
-    for (let i = 0; excess > 0 && i < keys.length; i += 1, excess -= 1) {
-      await this.state.storage.delete(keys[i]);
+    const cutoff = Date.now() - CHAT_SERVER_RETENTION_MS;
+    const stale = [];
+    const freshKeys = [];
+    for (const [key, value] of entries) {
+      if (Number(value?.at || 0) > 0 && Number(value.at) < cutoff) stale.push(key);
+      else freshKeys.push(key);
+    }
+    freshKeys.sort();
+    let excess = freshKeys.length - CHAT_HISTORY_LIMIT;
+    for (let i = 0; excess > 0 && i < freshKeys.length; i += 1, excess -= 1) {
+      stale.push(freshKeys[i]);
+    }
+    for (const key of stale) {
+      await this.state.storage.delete(key);
+      this.memoryMessages.delete(key.slice(4));
     }
   }
 
@@ -6846,5 +6931,10 @@ export default {
     }
 
     return env.ASSETS.fetch(request);
+  },
+
+  // Cron (lihat triggers di wrangler.jsonc): bersihkan pesan relay lama.
+  async scheduled(event, env, ctx) {
+    ctx.waitUntil(purgeFirestoreRelay(env).catch(() => {}));
   },
 };

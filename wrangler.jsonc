@@ -7,6 +7,7 @@
   "vars": {
     "ONESIGNAL_APP_ID": "e3d5adea-1c0f-4986-9ce5-e088d65f0998"
   },
+  "triggers": { "crons": ["23 */6 * * *"] },
   "routes": [
     { "pattern": "xydeskremote.biz.id", "custom_domain": true },
     { "pattern": "www.xydeskremote.biz.id", "custom_domain": true },

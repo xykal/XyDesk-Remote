@@ -112,6 +112,13 @@ Functions (rules menolak tulis langsung klien ke `messages`), kecuali
    menit) dipanggil APK setelah tulis Firestore berhasil. Sisa: uji
    perangkat, cutover, matikan jalur DO chat. Functions menyusul
    pasca-Blaze.
+Retensi (keputusan owner): server hanya RELAY. Durable Object menahan
+maks 100 pesan / 48 jam (`CHAT_SERVER_RETENTION_MS` + `trimHistory`
+berbasis umur); Firestore dibersihkan cron worker 6-jam-an
+(`purgeFirestoreRelay`, service account). Riwayat permanen = database
+lokal SQLite HP (`ChatLocalArchive`, maks 50 ribu pesan/akun) dan
+salinan masukan juga disimpan lokal (`feedback_local`).
+
 4. Build verifikasi hijau: run `40063640181` (gate compile Kotlin +
    release per-ABI R8/signed, signer sama) completed success untuk
    `f243c71`. Draft `v1.1.23` diperbarui dari run tag.

@@ -394,6 +394,13 @@ fun XyDeskHome(
      */
     fun sendFeedback(destination: FeedbackDestination, category: String, message: String) {
         feedbackOpen = false
+        // Salinan masukan selalu disimpan di database lokal HP lebih dulu;
+        // tidak ada salinan permanen di server mana pun.
+        kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.Dispatchers.IO).launch {
+            runCatching {
+                ChatLocalArchive.storeFeedback(context.applicationContext, category, message, destination.name)
+            }
+        }
         val draft = feedbackShareDraft(category, message)
         when (destination) {
             FeedbackDestination.COPY -> {
