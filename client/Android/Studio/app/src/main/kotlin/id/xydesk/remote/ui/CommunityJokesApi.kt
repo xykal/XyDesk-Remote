@@ -503,6 +503,9 @@ internal class CommunityJokesApi(context: Context) {
 
     fun accountShortId(): String = friendlyAccountId()
 
+    /** ID klien mentah (UUID) untuk endpoint komunitas/feedback. */
+    fun rawClientId(): String = clientId
+
     fun displayName(): String? = prefs.getString(KEY_DISPLAY_NAME, null)?.takeIf { it.isNotBlank() }
 
     fun setDisplayNameLocally(name: String?) {

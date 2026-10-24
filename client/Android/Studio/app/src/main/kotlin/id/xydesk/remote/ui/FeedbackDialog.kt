@@ -50,6 +50,9 @@ internal fun feedbackShareDraft(category: String, message: String): String = bui
  * dan [COPY] membiarkan pengguna menempelkan draf ke mana saja.
  */
 internal enum class FeedbackDestination {
+    /** Kirim langsung ke pengembang lewat server (email). */
+    SEND,
+
     /** Buka pemilih aplikasi Android — tujuan bebas. */
     SHARE,
 
@@ -62,10 +65,11 @@ internal fun FeedbackDialog(
     onDismiss: () -> Unit,
     onSend: (destination: FeedbackDestination, category: String, message: String) -> Unit,
 ) {
+    // Pasangan label tampil + kunci stabil untuk server (bug/idea/other).
     val categories = listOf(
-        xy("Masalah", "Bug"),
-        xy("Saran fitur", "Feature idea"),
-        xy("Lainnya", "Other"),
+        xy("Masalah", "Bug") to "bug",
+        xy("Saran fitur", "Feature idea") to "idea",
+        xy("Lainnya", "Other") to "other",
     )
     var selected by remember { mutableIntStateOf(1) }
     var message by remember { mutableStateOf("") }
@@ -86,7 +90,7 @@ internal fun FeedbackDialog(
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
-            XySegmented(categories, selected, onSelect = { selected = it })
+            XySegmented(categories.map { it.first }, selected, onSelect = { selected = it })
             Box(
                 Modifier
                     .fillMaxWidth()
@@ -119,8 +123,8 @@ internal fun FeedbackDialog(
             }
             Text(
                 xy(
-                    "Tidak ada yang dikirim otomatis. \"Bagikan\" membuka pemilih aplikasi Android (bebas ke aplikasi mana pun), \"Salin draf\" menaruh teks di clipboard supaya bisa ditempel sendiri. Draf hanya memuat nama aplikasi, kategori, dan teks di atas. Host, kredensial, clipboard lama, dan log tidak ikut.",
-                    "Nothing is sent automatically. \"Share\" opens Android's app chooser (any app you like); \"Copy draft\" puts the text on the clipboard so you can paste it yourself. The draft contains only the app name, category, and the text above. Host, credentials, previous clipboard content, and logs are not attached.",
+                    "Masukan dikirim langsung ke pengembang. Salinan tersimpan di HP ini.",
+                    "Feedback goes straight to the developer. A copy stays on this phone.",
                 ),
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -138,14 +142,14 @@ internal fun FeedbackDialog(
                 )
                 XyPillButton(
                     text = xy("Salin draf", "Copy draft"),
-                    onClick = { onSend(FeedbackDestination.COPY, categories[selected], message.trim()) },
+                    onClick = { onSend(FeedbackDestination.COPY, categories[selected].second, message.trim()) },
                     enabled = message.isNotBlank(),
                     primary = false,
                     compact = true,
                 )
                 XyPillButton(
-                    text = xy("Bagikan…", "Share…"),
-                    onClick = { onSend(FeedbackDestination.SHARE, categories[selected], message.trim()) },
+                    text = xy("Kirim", "Send"),
+                    onClick = { onSend(FeedbackDestination.SEND, categories[selected].second, message.trim()) },
                     enabled = message.isNotBlank(),
                     compact = true,
                 )

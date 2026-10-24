@@ -3085,6 +3085,25 @@ export class FeedbackBoard {
     this.env = env;
   }
 
+  async notifyFeedbackEmail(entry) {
+    const apiKey = [SECURITY_DATA]"RESEND_" + "API_KEY"];
+    if (!apiKey) return;
+    const to = this.env.FEEDBACK_EMAIL_TO || "haekalsaputra01h@gmail.com";
+    const from = this.env.FEEDBACK_EMAIL_FROM || "XyDesk Feedback <onboarding@resend.dev>";
+    try {
+      await fetch("https://api.resend.com/emails", {
+        method: "POST",
+        headers: { authorization: `Bearer ${apiKey}`, "content-type": "application/json" },
+        body: JSON.stringify({
+          from,
+          to: [to],
+          subject: `[XyDesk Feedback] ${entry.type} - ${entry.name || "Pengguna"}`,
+          text: `Kategori: ${entry.type}\nDari: ${entry.name || "-"}\nWaktu: ${new Date(entry.created_at || Date.now()).toISOString()}\n\n${entry.text || ""}`,
+        }),
+      });
+    } catch {}
+  }
+
   async fetch(request) {
     const url = new URL(request.url);
     const path = url.pathname;
@@ -3168,6 +3187,9 @@ export class FeedbackBoard {
         return { status: "created", item: feedbackPublicView(entry, []) };
       });
       if (outcome.status === "rate_limited") return durableObjectJson(outcome, 429, request.method);
+      if (outcome.status === "created" && outcome.item) {
+        try { this.state.waitUntil(this.notifyFeedbackEmail(outcome.item)); } catch {}
+      }
       return durableObjectJson(outcome, 201, request.method);
     } catch {
       return durableObjectJson({ status: "unavailable" }, 503, request.method);

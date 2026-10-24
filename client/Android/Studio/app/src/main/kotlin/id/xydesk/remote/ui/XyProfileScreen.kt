@@ -574,9 +574,21 @@ private fun CommunityAccountCard(
     val githubUser = getVerifiedGitHubLogin(context)
     val avatarFile = remember { java.io.File(context.filesDir, "xy_avatar.webp") }
     var avatarBitmap by remember { mutableStateOf<android.graphics.Bitmap?>(null) }
-    androidx.compose.runtime.LaunchedEffect(avatarFile) {
+    // Foto profil = avatar GitHub milik user sendiri (keputusan pengguna
+    // 2026-10-24). Belum login GitHub -> foto lokal/inisial seperti biasa.
+    androidx.compose.runtime.LaunchedEffect(githubUser, avatarFile) {
         avatarBitmap = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
-            runCatching {
+            val ghBmp = if (githubUser != null) {
+                runCatching {
+                    val url = getVerifiedGitHubAvatar(context) ?: "https://github.com/$githubUser.png?size=160"
+                    val conn = (java.net.URL(url).openConnection() as java.net.HttpURLConnection).apply {
+                        connectTimeout = 8_000
+                        readTimeout = 8_000
+                    }
+                    conn.inputStream.use { android.graphics.BitmapFactory.decodeStream(it) }
+                }.getOrNull()
+            } else null
+            ghBmp ?: runCatching {
                 if (avatarFile.exists()) android.graphics.BitmapFactory.decodeFile(avatarFile.absolutePath) else null
             }.getOrNull()
         }

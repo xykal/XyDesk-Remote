@@ -411,8 +411,48 @@ fun XyDeskHome(
                 prefs.edit().putString("items", (prev + "\n" + entry).takeLast(20_000)).apply()
             }
         }
-        val draft = feedbackShareDraft(category, message)
+        val draft = feedbackShareDraft(
+            when (category) {
+                "bug" -> xyNow("Masalah", "Bug")
+                "idea" -> xyNow("Saran fitur", "Feature idea")
+                else -> xyNow("Lainnya", "Other")
+            },
+            message,
+        )
         when (destination) {
+            FeedbackDestination.SEND -> {
+                // Kirim ke server pengembang (worker -> email). Salinan lokal
+                // sudah disimpan di atas; kegagalan jaringan tidak menghilangkan
+                // masukan pengguna.
+                val appCtx = context.applicationContext
+                kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.Dispatchers.IO).launch {
+                    val ok = runCatching {
+                        val api = CommunityJokesApi(appCtx)
+                        val payload = org.json.JSONObject()
+                            .put("client_id", api.rawClientId())
+                            .put("type", category)
+                            .put("text", message.take(2000))
+                            .put("name", api.displayName() ?: getVerifiedGitHubLogin(appCtx) ?: "Pengguna XyDesk")
+                            .toString()
+                        val conn = (java.net.URL("https://api.xydeskremote.biz.id/api/feedback").openConnection() as java.net.HttpURLConnection).apply {
+                            requestMethod = "POST"
+                            connectTimeout = 10_000
+                            readTimeout = 10_000
+                            doOutput = true
+                            setRequestProperty("Content-Type", "application/json; charset=utf-8")
+                        }
+                        conn.outputStream.use { it.write(payload.toByteArray(Charsets.UTF_8)) }
+                        conn.responseCode in 200..299
+                    }.getOrDefault(false)
+                    kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Main) {
+                        notice.show(
+                            if (ok) xyNow("Masukan terkirim. Terima kasih!", "Feedback sent. Thank you!")
+                            else xyNow("Gagal mengirim. Salinan tersimpan di HP ini.", "Could not send. A copy is saved on this phone."),
+                        )
+                    }
+                }
+            }
+
             FeedbackDestination.COPY -> {
                 val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as? ClipboardManager
                 if (clipboard == null) {
