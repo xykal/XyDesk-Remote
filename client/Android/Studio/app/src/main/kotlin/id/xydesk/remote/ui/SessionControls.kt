@@ -623,6 +623,15 @@ fun SessionControls(
                 verticalArrangement = Arrangement.spacedBy(8.dp),
             ) {
                 RailButton(
+                    icon = XyIcons.ChevronUp,
+                    active = false,
+                    description = xy("Buka menu sesi", "Open session menu"),
+                    plate = plate,
+                ) {
+                    scrollPillOpen = false
+                    panelOpen = true
+                }
+                RailButton(
                     icon = XyIcons.Keyboard,
                     active = false,
                     description = xy("Buka keyboard HP", "Open phone keyboard"),
@@ -1637,17 +1646,15 @@ private fun SessionPanel(
         outline = Color(0xFF6D28D9),
         outlineVariant = Color(0xFF3B2A5E),
     )
-    val panelShape = if (drawerMode) {
-        RoundedCornerShape(topStart = 26.dp, bottomStart = 26.dp)
-    } else {
-        RoundedCornerShape(26.dp)
-    }
+    // Ganti total (2026-10-24): TIDAK ada popup tengah lagi. Menu sesi
+    // selalu Bilah samping kanan full-height yang meluncur dari kanan.
+    val panelShape = RoundedCornerShape(topStart = 26.dp, bottomStart = 26.dp)
     MaterialTheme(colorScheme = purpleScheme) {
     Box(
         Modifier
             .fillMaxSize()
             .zIndex(30f),
-        contentAlignment = if (drawerMode) Alignment.CenterEnd else Alignment.Center,
+        contentAlignment = Alignment.CenterEnd,
     ) {
         Box(
             Modifier
@@ -1656,23 +1663,13 @@ private fun SessionPanel(
                 .consumeBackgroundPointer(onClose),
         )
         Column(
-            if (drawerMode) {
-                Modifier
-                    .fillMaxHeight()
-                    .fillMaxWidth(0.76f)
-                    .widthIn(min = 280.dp, max = 360.dp)
-            } else {
-                Modifier
-                    .fillMaxHeight(0.92f)
-                    .fillMaxWidth(0.95f)
-                    .widthIn(max = 860.dp)
-            }
+            Modifier
+                .fillMaxHeight()
+                .fillMaxWidth(0.9f)
+                .widthIn(min = 300.dp, max = 460.dp)
                 .graphicsLayer {
-                    scaleX = panelScale
-                    scaleY = panelScale
                     alpha = panelAlpha
-                    transformOrigin = TransformOrigin(1f, 0f)
-                    if (drawerMode) translationX = panelSlide * size.width
+                    translationX = panelSlide * size.width
                 }
                 .clip(panelShape)
                 .background(
@@ -1737,10 +1734,6 @@ private fun SessionPanel(
                     if (tab == PanelTab.BUTTONS) {
                         PanelChip(xy("+ Tombol", "+ Add"), onAddKey)
                     }
-                    PanelChip(
-                        if (drawerMode) xy("Popup", "Popup") else xy("Sidebar", "Sidebar"),
-                        { onDrawerModeChange(!drawerMode) },
-                    )
                     PanelChip(xy("Tutup", "Close"), onClose)
                 }
             }
@@ -2737,10 +2730,21 @@ private fun PanelTabTiles(
 ) {
     Row(
         modifier = modifier
-            .shadow(14.dp, RoundedCornerShape(50))
+            .shadow(16.dp, RoundedCornerShape(50))
             .clip(RoundedCornerShape(50))
-            .background(Color(0xF01B0F31))
-            .border(1.2.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.45f), RoundedCornerShape(50))
+            // Liquid glass ungu: gradasi violet tembus pandang + tepi terang.
+            // Tanpa blur backdrop asli (berat di GPU) — efek kaca dari
+            // gradasi alpha + highlight garis atas.
+            .background(
+                Brush.horizontalGradient(
+                    listOf(
+                        Color(0xD92A1650),
+                        Color(0xD94C1D95),
+                        Color(0xD92A1650),
+                    ),
+                ),
+            )
+            .border(1.2.dp, Color(0x66FFFFFF), RoundedCornerShape(50))
             .padding(horizontal = 6.dp, vertical = 5.dp),
         horizontalArrangement = Arrangement.spacedBy(6.dp),
         verticalAlignment = Alignment.CenterVertically,
@@ -2749,12 +2753,23 @@ private fun PanelTabTiles(
             val active = entry == tab
             val bg by animateColorAsState(
                 targetValue = if (active) {
-                    MaterialTheme.colorScheme.primary
+                    Color(0xFF7C3AED)
                 } else {
                     Color.Transparent
                 },
-                animationSpec = tween(durationMillis = 190),
+                animationSpec = androidx.compose.animation.core.spring(
+                    dampingRatio = 0.72f,
+                    stiffness = androidx.compose.animation.core.Spring.StiffnessMediumLow,
+                ),
                 label = "panelTabBg",
+            )
+            val iconScale by androidx.compose.animation.core.animateFloatAsState(
+                targetValue = if (active) 1.18f else 1f,
+                animationSpec = androidx.compose.animation.core.spring(
+                    dampingRatio = 0.55f,
+                    stiffness = androidx.compose.animation.core.Spring.StiffnessMedium,
+                ),
+                label = "panelTabIconScale",
             )
             val fg by animateColorAsState(
                 targetValue = if (active) {
@@ -2781,7 +2796,12 @@ private fun PanelTabTiles(
                     panelTabIcon(entry),
                     contentDescription = null,
                     tint = fg,
-                    modifier = Modifier.size(15.dp),
+                    modifier = Modifier
+                        .size(15.dp)
+                        .graphicsLayer {
+                            scaleX = iconScale
+                            scaleY = iconScale
+                        },
                 )
                 Spacer(Modifier.width(5.dp))
                 Text(

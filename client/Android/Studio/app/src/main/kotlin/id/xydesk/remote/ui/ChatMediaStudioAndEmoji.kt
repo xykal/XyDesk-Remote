@@ -733,7 +733,7 @@ fun PreSendMediaStudioDialog(
     var caption by remember(initialCaption) { mutableStateOf(initialCaption) }
     var viewOnce by remember(initialViewOnce) { mutableStateOf(initialViewOnce) }
     var activeTool by remember { mutableStateOf("none") } // "none", "draw", "text", "trim"
-    var selectedColor by remember { mutableStateOf(Color(0xFF38BDF8)) }
+    var selectedColor by remember { mutableStateOf(Color(0xFFA78BFA)) }
     var strokeRatio by remember { mutableFloatStateOf(0.014f) }
     var overlayText by remember { mutableStateOf("") }
     var rotationQuarter by remember { mutableIntStateOf(0) }
@@ -853,8 +853,8 @@ fun PreSendMediaStudioDialog(
     }
 
     val drawColors = listOf(
-        Color(0xFF38BDF8), // Sky Blue (UI Accent)
-        Color(0xFFEF4444), // Red
+        Color(0xFFA78BFA), // Sky Blue (UI Accent)
+        Color(0xFFD946EF), // Red
         Color(0xFFFBBF24), // Amber
         Color(0xFF10B981), // Emerald
         Color(0xFFFFFFFF), // White
@@ -1052,7 +1052,7 @@ fun PreSendMediaStudioDialog(
                             if (overlayText.isNotEmpty()) {
                                 Text(
                                     text = "Hapus",
-                                    color = Color(0xFFEF4444),
+                                    color = Color(0xFFD946EF),
                                     fontSize = 11.sp,
                                     fontWeight = FontWeight.SemiBold,
                                     modifier = Modifier.clickable { overlayText = "" }
@@ -1086,7 +1086,7 @@ fun PreSendMediaStudioDialog(
                                 )
                                 Text(
                                     text = "${formatVideoMs(trimStartMs)} – ${formatVideoMs(trimEndMs)} (${"%.1f".format(selectedDurSec)} dtk)",
-                                    color = Color(0xFF38BDF8),
+                                    color = Color(0xFFA78BFA),
                                     fontSize = 11.sp,
                                     fontFamily = FontFamily.Monospace,
                                     fontWeight = FontWeight.Bold

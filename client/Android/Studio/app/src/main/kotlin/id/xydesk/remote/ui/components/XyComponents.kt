@@ -43,6 +43,8 @@ import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
+import androidx.compose.animation.core.spring
+import androidx.compose.animation.core.Spring
 import androidx.compose.ui.graphics.TransformOrigin
 import androidx.compose.ui.graphics.graphicsLayer
 import kotlinx.coroutines.delay
@@ -255,92 +257,54 @@ fun XySwitch(
 ) {
     val trackColor by animateColorAsState(
         if (checked) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surfaceVariant,
+        animationSpec = tween(durationMillis = 160),
         label = "track",
     )
     val knobColor by animateColorAsState(
         if (checked) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurfaceVariant,
+        animationSpec = tween(durationMillis = 160),
         label = "knob",
     )
-    val knobOffset by animateDpAsState(if (checked) 23.dp else 3.dp, label = "knobOffset")
-    // Area sentuh diperbesar (52x38) tanpa mengubah visual track 46x28:
-    // pemilik mengeluh toggle kurang presisi saat ditekan.
+    // Presisi (2026-10-24): area sentuh = SELURUH kotak 52x40 (dulu hanya
+    // track 46x28 yang toggleable, jadi ketukan di tepi tidak merespons);
+    // knob 22dp di track 48x28 dengan margin simetris 3dp; pegas kaku
+    // supaya berhenti tepat tanpa memantul berlebihan.
+    val knobOffset by animateDpAsState(
+        targetValue = if (checked) 23.dp else 3.dp,
+        animationSpec = spring(dampingRatio = 0.82f, stiffness = Spring.StiffnessMedium),
+        label = "knobOffset",
+    )
     Box(
         modifier = Modifier
-            .size(width = 52.dp, height = 38.dp),
-        contentAlignment = Alignment.Center,
-    ) {
-    Box(
-        modifier = Modifier
-            .size(width = 46.dp, height = 28.dp)
-            .clip(XyPill)
-            .background(trackColor)
-            .border(
-                1.dp,
-                if (checked) MaterialTheme.colorScheme.primary.copy(alpha = 0.55f)
-                else MaterialTheme.colorScheme.outlineVariant,
-                XyPill,
-            )
+            .size(width = 52.dp, height = 40.dp)
             .toggleable(
                 value = checked,
                 enabled = enabled,
                 role = Role.Switch,
                 onValueChange = onCheckedChange,
             ),
+        contentAlignment = Alignment.Center,
     ) {
         Box(
             modifier = Modifier
-                .padding(start = knobOffset, top = 3.dp)
-                .size(20.dp)
-                .clip(CircleShape)
-                .background(knobColor),
-        )
-    }
-    }
-}
-
-@Composable
-fun XyToggleRow(
-    title: String,
-    subtitle: String? = null,
-    checked: Boolean,
-    onCheckedChange: (Boolean) -> Unit,
-    modifier: Modifier = Modifier,
-    leading: ImageVector? = null,
-    enabled: Boolean = true,
-) {
-    Row(
-        modifier = modifier
-            .fillMaxWidth()
-            .clip(MaterialTheme.shapes.medium)
-            .clickable(enabled = enabled) { onCheckedChange(!checked) }
-            .padding(horizontal = 14.dp, vertical = 11.dp),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(12.dp),
-    ) {
-        if (leading != null) {
-            Icon(
-                leading,
-                contentDescription = null,
-                tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier.size(19.dp),
+                .size(width = 48.dp, height = 28.dp)
+                .clip(XyPill)
+                .background(trackColor)
+                .border(
+                    1.dp,
+                    if (checked) MaterialTheme.colorScheme.primary.copy(alpha = 0.55f)
+                    else MaterialTheme.colorScheme.outlineVariant,
+                    XyPill,
+                ),
+        ) {
+            Box(
+                modifier = Modifier
+                    .offset(x = knobOffset, y = 3.dp)
+                    .size(22.dp)
+                    .clip(CircleShape)
+                    .background(knobColor),
             )
         }
-        Column(Modifier.weight(1f)) {
-            Text(
-                title,
-                style = MaterialTheme.typography.titleSmall,
-                color = if (enabled) MaterialTheme.colorScheme.onSurface
-                else MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-            if (!subtitle.isNullOrBlank()) {
-                Text(
-                    subtitle,
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-            }
-        }
-        XySwitch(checked = checked, onCheckedChange = onCheckedChange, enabled = enabled)
     }
 }
 

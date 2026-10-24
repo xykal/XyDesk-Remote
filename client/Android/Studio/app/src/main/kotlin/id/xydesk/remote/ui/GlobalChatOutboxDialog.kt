@@ -106,7 +106,7 @@ internal fun GlobalChatOutboxDialog(
                             }
                         },
                     ) {
-                        Text("Verifikasi", fontSize = 11.sp, color = Color(0xFF38BDF8))
+                        Text("Verifikasi", fontSize = 11.sp, color = Color(0xFFA78BFA))
                     }
                     TextButton(onClick = onClose) {
                         Text("Tutup", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = Color(0xFFCBD5E1))
@@ -118,7 +118,7 @@ internal fun GlobalChatOutboxDialog(
                 Text(
                     text = statusBanner.orEmpty(),
                     fontSize = 11.sp,
-                    color = Color(0xFF38BDF8),
+                    color = Color(0xFFA78BFA),
                     fontWeight = FontWeight.SemiBold,
                 )
             }
@@ -232,7 +232,7 @@ internal fun GlobalChatOutboxDialog(
                                 modifier = Modifier.height(30.dp),
                                 contentPadding = PaddingValues(horizontal = 10.dp, vertical = 0.dp),
                             ) {
-                                Text("Batalkan", fontSize = 10.sp, color = Color(0xFFEF4444))
+                                Text("Batalkan", fontSize = 10.sp, color = Color(0xFFD946EF))
                             }
                             Button(
                                 enabled = busyId == null && retryState in setOf(OutboxRetryState.READY, OutboxRetryState.NEEDS_LOGIN),
@@ -257,7 +257,7 @@ internal fun GlobalChatOutboxDialog(
                                 modifier = Modifier.height(30.dp),
                                 contentPadding = PaddingValues(horizontal = 12.dp, vertical = 0.dp),
                                 colors = ButtonDefaults.buttonColors(
-                                    containerColor = Color(0xFF38BDF8),
+                                    containerColor = Color(0xFFA78BFA),
                                     contentColor = Color.Black,
                                 ),
                             ) {

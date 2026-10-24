@@ -283,6 +283,11 @@ static BOOL android_pre_connect(freerdp* instance)
 	(void)freerdp_settings_set_uint32(settings, FreeRDP_TcpKeepAliveInterval, 5);
 	(void)freerdp_settings_set_uint32(settings, FreeRDP_TcpKeepAliveRetries, 6);
 	(void)freerdp_settings_set_uint32(settings, FreeRDP_TcpAckTimeout, 45000);
+	/* Modifikasi XyDesk (2026-10-24): endpoint tunnel yang mati harus gagal
+	 * cepat (15 dtk) supaya UI tidak menggantung, dan RemoteFX diaktifkan
+	 * sebagai codec cadangan untuk server tanpa Graphics Pipeline. */
+	(void)freerdp_settings_set_uint32(settings, FreeRDP_TcpConnectTimeout, 15000);
+	(void)freerdp_settings_set_bool(settings, FreeRDP_RemoteFxCodec, TRUE);
 	freerdp_performance_flags_make(settings);
 	if (freerdp_settings_get_uint32(settings, FreeRDP_PointerCacheSize) < 128)
 		(void)freerdp_settings_set_uint32(settings, FreeRDP_PointerCacheSize, 128);

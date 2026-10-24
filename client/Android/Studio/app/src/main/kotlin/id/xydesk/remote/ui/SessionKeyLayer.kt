@@ -43,6 +43,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.input.pointer.pointerInput
@@ -297,16 +298,22 @@ private fun HudKeyButton(
     // Rupa KHUSUS gamepad (permintaan pemilik 2026-10-10): tombol preset
     // gamepad tidak lagi memakai pelat milik kontrol overlay — warnanya
     // sendiri, tegas, tidak tergantung pilihan gaya pelat.
+    // Gamepad ungu (2026-10-24): pelat ungu gelap, ring violet menyala saat
+    // ditekan — seragam dengan tema ungu aplikasi.
     val look = if (key.pad) {
         HudButtonLook(
-            plateColor = if (pressed || latched) Color(0xFF32323C) else Color(0xF20D0D11),
-            ringColor = if (mappingMode) Color(0xFFFFFFFF) else Color(0x59FFFFFF),
+            plateColor = if (pressed || latched) Color(0xFF3B1D78) else Color(0xF2140B26),
+            ringColor = when {
+                mappingMode -> Color(0xFFFFFFFF)
+                pressed || latched -> Color(0xFF8B5CF6)
+                else -> Color(0x668B5CF6)
+            },
             ringWidth = if (pressed || latched || mappingMode) 2.dp else 1.dp,
         )
     } else {
         lookBase
     }
-    val padInk = Color(0xFFF2F4F6)
+    val padInk = Color(0xFFEDE9FE)
 
     // PERMINTAAN PEMILIK 2026-10-10: L1/R1 harus berbentuk shoulder/bumper
     // kontroler (lebar-pendek, sudut atas membulat besar) dan L2/R2 berbentuk
@@ -476,8 +483,35 @@ private fun HudKeyButton(
                     .offset { IntOffset(stickOffset.value.x.roundToInt(), stickOffset.value.y.roundToInt()) }
                     .size(key.size.dp * HudStickKnobRatio)
                     .clip(CircleShape)
-                    .background((if (key.pad) padInk else pal.ink).copy(alpha = 0.85f)),
-            )
+                    .background(
+                        if (key.pad) {
+                            Brush.radialGradient(
+                                listOf(Color(0xFFC4B5FD), Color(0xFF7C3AED), Color(0xFF4C1D95)),
+                            )
+                        } else {
+                            Brush.radialGradient(
+                                listOf(pal.ink.copy(alpha = 0.95f), pal.ink.copy(alpha = 0.7f)),
+                            )
+                        },
+                    )
+                    .border(
+                        1.dp,
+                        if (key.pad) Color(0xFFDDD6FE) else pal.ink.copy(alpha = 0.4f),
+                        CircleShape,
+                    ),
+                contentAlignment = Alignment.Center,
+            ) {
+                // Titik pusat knob analog supaya arah dorongan terbaca.
+                Box(
+                    Modifier
+                        .size((key.size.dp * HudStickKnobRatio) * 0.3f)
+                        .clip(CircleShape)
+                        .background(
+                            if (key.pad) Color(0xFF2E1065).copy(alpha = 0.55f)
+                            else Color(0xFF000000).copy(alpha = 0.25f),
+                        ),
+                )
+            }
         } else {
             HudKeyGlyph(key, if (key.pad) padInk else pal.ink)
         }

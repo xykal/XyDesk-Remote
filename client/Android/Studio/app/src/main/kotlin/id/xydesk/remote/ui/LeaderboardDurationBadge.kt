@@ -47,7 +47,7 @@ internal fun LeaderboardDurationBadge(rank: Int, compact: Boolean = true) {
         1 -> Brush.horizontalGradient(listOf(Color(0xFFFDE68A), Color(0xFFF59E0B), Color(0xFFFEF08A)))
         2 -> Brush.horizontalGradient(listOf(Color(0xFFF8FAFC), Color(0xFF94A3B8), Color(0xFFE2E8F0)))
         3 -> Brush.horizontalGradient(listOf(Color(0xFFFED7AA), Color(0xFFFB923C), Color(0xFFFDBA74)))
-        else -> Brush.horizontalGradient(listOf(Color(0xFF818CF8), Color(0xFF38BDF8), Color(0xFFC084FC)))
+        else -> Brush.horizontalGradient(listOf(Color(0xFF818CF8), Color(0xFFA78BFA), Color(0xFFC084FC)))
     }
     val metal = when (rank) {
         1 -> Color(0xFFFEF08A)

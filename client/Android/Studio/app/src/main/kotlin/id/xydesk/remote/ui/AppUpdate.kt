@@ -232,7 +232,7 @@ internal fun XyInAppNotificationBannerHost(
                         Box(
                             modifier = Modifier
                                 .clip(RoundedCornerShape(50))
-                                .background(Color(0xFF38BDF8))
+                                .background(Color(0xFFA78BFA))
                                 .clickable { XyInAppNotificationBus.closeInbox() }
                                 .padding(horizontal = 12.dp, vertical = 6.dp),
                         ) {
@@ -290,7 +290,7 @@ internal fun XyInAppNotificationBannerHost(
                                 "like" -> Color(0xFFF43F5E)
                                 "reaction" -> Color(0xFFF59E0B)
                                 "comment" -> Color(0xFF10B981)
-                                else -> Color(0xFF38BDF8)
+                                else -> Color(0xFFA78BFA)
                             }
                             Row(
                                 modifier = Modifier
@@ -383,7 +383,7 @@ internal fun XyInAppNotificationBannerHost(
                 "announcement" -> Color(0xFFA855F7)
                 "like" -> Color(0xFFF43F5E)
                 "reaction" -> Color(0xFFF59E0B)
-                "reply", "mention", "chat" -> Color(0xFF38BDF8)
+                "reply", "mention", "chat" -> Color(0xFFA78BFA)
                 "ota" -> Color(0xFF10B981)
                 else -> MaterialTheme.colorScheme.primary
             }

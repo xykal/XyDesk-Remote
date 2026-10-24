@@ -110,7 +110,7 @@ fun XyVoiceRoomScreen(
                             .fillMaxWidth()
                             .clip(RoundedCornerShape(16.dp))
                             .background(Color(0xFF0E0E12))
-                            .border(1.2.dp, Color(0xFFEF4444), RoundedCornerShape(16.dp))
+                            .border(1.2.dp, Color(0xFFD946EF), RoundedCornerShape(16.dp))
                             .padding(10.dp),
                     ) {
                         Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
@@ -118,7 +118,7 @@ fun XyVoiceRoomScreen(
                                 modifier = Modifier.fillMaxWidth(),
                                 horizontalArrangement = Arrangement.SpaceBetween,
                             ) {
-                                Text("LIVE ${liveScreen.streamerName}", color = Color(0xFFEF4444), fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                                Text("LIVE ${liveScreen.streamerName}", color = Color(0xFFD946EF), fontSize = 11.sp, fontWeight = FontWeight.Bold)
                                 Text("${liveScreen.width}×${liveScreen.height}", color = Color(0xFF7B7B84), fontSize = 10.sp)
                             }
                             if (liveScreen.bitmap != null && !liveScreen.bitmap!!.isRecycled) {
@@ -165,7 +165,7 @@ fun XyVoiceRoomScreen(
                                     .border(
                                         width = if (p.speaking) 1.4.dp else 1.dp,
                                         color = when {
-                                            p.sharingScreen -> Color(0xFFEF4444)
+                                            p.sharingScreen -> Color(0xFFD946EF)
                                             p.speaking -> Color(0xFF22C55E)
                                             p.muted -> Color(0xFF3F3F46)
                                             else -> Color(0xFF232329)
@@ -195,7 +195,7 @@ fun XyVoiceRoomScreen(
                                             else -> "Mendengarkan"
                                         },
                                         color = when {
-                                            p.sharingScreen -> Color(0xFFEF4444)
+                                            p.sharingScreen -> Color(0xFFD946EF)
                                             p.muted -> Color(0xFF9CA3AF)
                                             p.speaking -> Color(0xFF22C55E)
                                             else -> Color(0xFFA7A7AF)
@@ -255,7 +255,7 @@ fun XyVoiceRoomScreen(
                                 modifier = Modifier
                                     .weight(1f)
                                     .clip(RoundedCornerShape(50))
-                                    .background(if (deafened) Color(0xFFEF4444) else Color(0xFF232329))
+                                    .background(if (deafened) Color(0xFFD946EF) else Color(0xFF232329))
                                     .border(1.dp, Color(0xFF34343C), RoundedCornerShape(50))
                                     .clickable { XyDiscordVoiceStageManager.toggleDeafen() }
                                     .padding(vertical = 12.dp),
@@ -287,7 +287,7 @@ fun XyVoiceRoomScreen(
                                 modifier = Modifier
                                     .weight(1f)
                                     .clip(RoundedCornerShape(14.dp))
-                                    .background(if (sharingMyRdp) Color(0xFFEF4444) else Color(0xFF4F46E5))
+                                    .background(if (sharingMyRdp) Color(0xFFD946EF) else Color(0xFF4F46E5))
                                     .clickable { XyDiscordVoiceStageManager.toggleShareActiveRdpSession(context) }
                                     .padding(vertical = 10.dp),
                                 contentAlignment = Alignment.Center,
