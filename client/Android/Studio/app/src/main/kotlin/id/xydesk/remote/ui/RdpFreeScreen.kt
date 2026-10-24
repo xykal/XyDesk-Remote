@@ -336,6 +336,10 @@ fun RdpFreeScreen(onBack: () -> Unit, onConnect: (ConnectionProfile) -> Unit) {
                                 if (portmapHost.isNotBlank()) put("portmap_host", portmapHost.trim())
                                 if (portmapPort.isNotBlank()) put("portmap_port", portmapPort.trim())
                             }
+                            if (akses == "railway") {
+                                if (portmapHost.isNotBlank()) put("railway_host", portmapHost.trim())
+                                if (portmapPort.isNotBlank()) put("railway_port", portmapPort.trim())
+                            }
                         }
                         if (XyRdpClient.dispatch(tok, user, inputs)) {
                             saveSettings()
@@ -1038,13 +1042,13 @@ fun RdpFreeScreen(onBack: () -> Unit, onConnect: (ConnectionProfile) -> Unit) {
                                             text = "Railway",
                                             icon = XyIcons.Link,
                                             onClick = {
-                                                akses = "portmap"
+                                                akses = "railway"
                                                 if (!isRwHostOnly) {
                                                     portmapHost = "monorail.proxy.rlwy.net"
                                                 }
                                                 saveSettings()
                                             },
-                                            primary = akses == "portmap" && isRwHostOnly,
+                                            primary = akses == "railway",
                                             compact = true,
                                             enabled = !busy && !isRunningOrQueued,
                                             modifier = Modifier.weight(1f),
@@ -1079,7 +1083,7 @@ fun RdpFreeScreen(onBack: () -> Unit, onConnect: (ConnectionProfile) -> Unit) {
                                             modifier = Modifier.weight(1f),
                                         )
                                     }
-                                    AnimatedVisibility(visible = akses == "portmap" && isRwHostOnly) {
+                                    AnimatedVisibility(visible = akses == "railway" || (akses == "portmap" && isRwHostOnly)) {
                                         Column(
                                             modifier = Modifier
                                                 .fillMaxWidth()
@@ -1090,7 +1094,7 @@ fun RdpFreeScreen(onBack: () -> Unit, onConnect: (ConnectionProfile) -> Unit) {
                                             verticalArrangement = Arrangement.spacedBy(6.dp),
                                         ) {
                                             Text(
-                                                text = "Tunnel Railway Aktif (Mendukung TCP Proxy *.rlwy.net & WebSocket *.up.railway.app):",
+                                                text = "Tunnel Railway frp (TCP proxy publik Railway → frps → RDP 3389, tanpa Tailscale):",
                                                 fontSize = 10.5.sp,
                                                 fontWeight = FontWeight.Bold,
                                                 color = Color(0xFFA4A4A4),
@@ -1099,7 +1103,7 @@ fun RdpFreeScreen(onBack: () -> Unit, onConnect: (ConnectionProfile) -> Unit) {
                                                 XyField(
                                                     value = portmapHost,
                                                     onValueChange = { portmapHost = it.take(120); saveSettings() },
-                                                    label = "Host Railway (*.rlwy.net / *.railway.app)",
+                                                    label = "Host Railway (*.rlwy.net)",
                                                     modifier = Modifier.weight(1.6f),
                                                 )
                                                 XyField(

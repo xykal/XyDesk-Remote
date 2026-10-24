@@ -29,6 +29,12 @@ class RdpLaunchPolicyTest {
             assertFalse(errors(access = "portmap", portHost = host).isEmpty())
         for (port in listOf("0", "65536", "abc", "-1")) assertFalse(errors(access = "portmap", port = port).isEmpty())
     }
+    @Test fun railwayAccessRequiresPublicEndpoint() {
+        assertTrue(errors(access = "railway", portHost = "roundhouse.proxy.rlwy.net", port = "23456").isEmpty())
+        assertFalse(errors(access = "railway").isEmpty())
+        assertFalse(errors(access = "railway", portHost = "roundhouse.proxy.rlwy.net").isEmpty())
+        assertFalse(errors(access = "railway", portHost = "roundhouse.proxy.rlwy.net", port = "0").isEmpty())
+    }
     @Test fun unknownSecretPermissionsCannotMeanReady() {
         val setup = XyRdpSetupStatus(true, true, true, setOf("RDP_PASSWORD", "TAILSCALE_AUTH_KEY"), emptyList())
         assertFalse(setup.isReadyToStart)

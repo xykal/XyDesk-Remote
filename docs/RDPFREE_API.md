@@ -52,7 +52,7 @@ RDP_PASSWORD is a GitHub Actions secret and **cannot be retrieved**. Prompt for 
 ## Settings
 
 Fields mirror `.github/workflows/rdp-6h.yml`:
-`durasi_menit`, `hostname`, `rdp_user`, `akses`, `tunnel_provider`, `storage_boost`, `debloat`, `samp`, `samp_extra`, `gta_sa_url`, `win10`, `xydesk`, `ekstra`, `grafis`, `wallpaper_url`.
+`durasi_menit`, `hostname`, `rdp_user`, `akses` (`tailscale`/`portmap`/`railway`), `storage_boost`, `debloat`, `samp`, `win10`, `xydesk`, `ekstra`, `grafis`, `discord` (pasang Discord desktop), `railway_host`, `railway_port` (endpoint publik frp di Railway; server: folder `railway-frp/` di repo XyRDP, secret `RAILWAY_FRP_TOKEN` + variable `RAILWAY_FRP_SERVER`). Mode `railway` = RDP publik tanpa Tailscale.
 
 Get allowed choice values from `/settings`, do not invent input names. Default user `xyadmin`; optional `runneradmin` is accepted. Workflow job timeout is 360 minutes including setup, so a requested 360-minute session is not a guarantee of 360 minutes of usable desktop time. Settings do not alter already running jobs.
 

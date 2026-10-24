@@ -14,7 +14,11 @@ internal fun validateRdpLaunch(
     val maxUser = if (runner.startsWith("windows")) 20 else 32
     if (username.length !in 1..maxUser || !Regex("[A-Za-z_][A-Za-z0-9_.-]*").matches(username))
         add("Username: 1–$maxUser karakter, mulai huruf/underscore; gunakan huruf, angka, titik, underscore atau tanda hubung.")
-    if (access !in setOf("tailscale", "portmap")) add("Pilih akses Tailscale atau Portmap.")
+    if (access !in setOf("tailscale", "portmap", "railway")) add("Pilih akses Tailscale, Portmap, atau Railway.")
+    if (access == "railway") {
+        if (portmapHost.isBlank()) add("Host Railway wajib diisi (endpoint TCP proxy publik).")
+        if ((portmapPort.toIntOrNull() ?: -1) !in 1..65535) add("Port Railway harus 1–65535.")
+    }
     if (access == "portmap") {
         if (portmapHost.isNotEmpty() && (portmapHost.length > 253 ||
             !Regex("[A-Za-z0-9](?:[A-Za-z0-9.-]*[A-Za-z0-9])?").matches(portmapHost) ||
