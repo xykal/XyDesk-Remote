@@ -2224,7 +2224,15 @@ fun XyDeskSessionScreen(
             onCancel = { credentialRetry = false },
         )
     }
-    if (!active && !reconnecting && !applyingResolution && !userDisconnect) err?.let { e ->
+    // Gagal sambung AWAL (belum pernah tersambung): tampilkan HANYA layar
+    // terputus berisi tombol coba lagi — jangan tumpuk dialog error di
+    // atasnya. Dialog yang bisa ter-dismiss sendiri (back/gesture) memanggil
+    // exitSession sehingga user mental ke home padahal baru mau retry.
+    // Pengecualian: error kredensial tetap memakai dialog (ada tombol ubah
+    // username & password). Error SETELAH sempat tersambung juga tetap.
+    val showErrorOverlay = err != null &&
+        (everConnected || RdpErrors.isCredentialError(err.code, err.message))
+    if (!active && !reconnecting && !applyingResolution && !userDisconnect && showErrorOverlay) err?.let { e ->
         XyOverlay(
             // Judul singkat-jelas (mis. "Password salah"); penjelasan panjang
             // di badan dialog (permintaan pemilik 2026-10-15).

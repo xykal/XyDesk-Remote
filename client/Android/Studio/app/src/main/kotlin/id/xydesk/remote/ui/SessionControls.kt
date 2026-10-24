@@ -218,6 +218,7 @@ fun SessionControls(
         }
     }
     var scrollPillOpen by remember { mutableStateOf(false) }
+    var bubbleOpen by remember { mutableStateOf(false) }
     var panelOpen by remember { mutableStateOf(false) }
     var monitorGridOpen by remember { mutableStateOf(false) }
     var drawerMode by remember { mutableStateOf(false) }
@@ -606,11 +607,10 @@ fun SessionControls(
             )
         }
 
-        // Rail kanan bawah tinggal tombol keyboard saja (permintaan
-        // pemilik): membuka menu CUKUP dari gagang garis tiga di kanan
-        // atas (PanelHandle). Tombol panah atas + bubble dan tombol
-        // sliders duplikat di rail ini sudah dihapus; semua aksi menu
-        // hidup sekali di panel (quick bar + tab), tidak diduplikasi.
+        // Rail kanan bawah: tombol panah membuka BUBBLE aksi cepat
+        // (bukan menu); menu fullscreen dibuka dari gagang garis tiga
+        // di kanan atas (PanelHandle) atau tile Menu di bubble. Isi
+        // bubble tidak diduplikasi di dalam menu.
         if (!panelOpen && !monitorGridOpen && !mappingMode) {
             Column(
                 Modifier
@@ -624,12 +624,12 @@ fun SessionControls(
             ) {
                 RailButton(
                     icon = XyIcons.ChevronUp,
-                    active = false,
-                    description = xy("Buka menu sesi", "Open session menu"),
+                    active = bubbleOpen,
+                    description = xy("Aksi cepat sesi", "Session quick actions"),
                     plate = plate,
                 ) {
                     scrollPillOpen = false
-                    panelOpen = true
+                    bubbleOpen = !bubbleOpen
                 }
                 RailButton(
                     icon = XyIcons.Keyboard,
@@ -637,6 +637,134 @@ fun SessionControls(
                     description = xy("Buka keyboard HP", "Open phone keyboard"),
                     plate = plate,
                 ) { onOpenKeyboard() }
+            }
+        }
+
+        // Bubble popup aksi cepat (dari tombol panah): isinya kontrol
+        // cepat seperti dulu — Mic, HUD, Scroll, Monitor, Menu, Beranda,
+        // Putuskan. Isi bubble ini TIDAK diduplikasi di menu fullscreen.
+        if (bubbleOpen && !panelOpen && !monitorGridOpen && !mappingMode) {
+            Box(
+                Modifier
+                    .fillMaxSize()
+                    .zIndex(24f)
+                    .consumeBackgroundPointer { bubbleOpen = false },
+            )
+            Column(
+                Modifier
+                    .align(Alignment.BottomEnd)
+                    .navigationBarsPadding()
+                    .displayCutoutPadding()
+                    .padding(end = 10.dp, bottom = 148.dp)
+                    .width(308.dp)
+                    .zIndex(25f)
+                    .clip(RoundedCornerShape(20.dp))
+                    .background(
+                        Brush.verticalGradient(
+                            listOf(Color(0xF225134A), Color(0xF2130A24)),
+                        ),
+                    )
+                    .border(1.2.dp, Color(0xFF5B3FA8), RoundedCornerShape(20.dp))
+                    .padding(12.dp),
+                verticalArrangement = Arrangement.spacedBy(7.dp),
+            ) {
+                Row(
+                    Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Text(
+                        xy("Aksi Cepat", "Quick Actions"),
+                        color = Color(0xFFF5F0FF),
+                        fontSize = 13.sp,
+                        fontWeight = FontWeight.Bold,
+                        modifier = Modifier.weight(1f),
+                    )
+                    Text(
+                        xy("Tutup", "Close"),
+                        color = Color(0xFFC4B5FD),
+                        fontSize = 11.sp,
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(999.dp))
+                            .clickable { bubbleOpen = false }
+                            .padding(horizontal = 8.dp, vertical = 4.dp),
+                    )
+                }
+                Row(horizontalArrangement = Arrangement.spacedBy(7.dp)) {
+                    QuickActionTile(
+                        icon = if (voiceMicEnabled) XyIcons.VolumeOn else XyIcons.VolumeOff,
+                        label = if (voiceMicEnabled) "Mic: ON" else "Mic: OFF",
+                        active = voiceMicEnabled,
+                        onClick = onToggleVoiceMic,
+                        modifier = Modifier.weight(1f),
+                    )
+                    QuickActionTile(
+                        icon = if (showHudButtons) XyIcons.Eye else XyIcons.EyeOff,
+                        label = if (showHudButtons) "HUD: ON" else "HUD: OFF",
+                        active = showHudButtons,
+                        onClick = {
+                            showHudButtons = !showHudButtons
+                            prefs.setHudButtonsVisible(deviceId, showHudButtons)
+                        },
+                        modifier = Modifier.weight(1f),
+                    )
+                    QuickActionTile(
+                        icon = XyIcons.ScrollSlide,
+                        label = xy("Scroll", "Scroll"),
+                        active = scrollPillOpen,
+                        onClick = {
+                            bubbleOpen = false
+                            scrollPillOpen = !scrollPillOpen
+                        },
+                        modifier = Modifier.weight(1f),
+                    )
+                }
+                Row(horizontalArrangement = Arrangement.spacedBy(7.dp)) {
+                    QuickActionTile(
+                        icon = XyIcons.Monitor,
+                        label = xy("Sesi/Layar", "Sessions"),
+                        active = false,
+                        onClick = {
+                            bubbleOpen = false
+                            monitorGridOpen = true
+                        },
+                        modifier = Modifier.weight(1f),
+                    )
+                    QuickActionTile(
+                        icon = XyIcons.Sliders,
+                        label = xy("Menu", "Menu"),
+                        active = false,
+                        onClick = {
+                            bubbleOpen = false
+                            panelOpen = true
+                        },
+                        modifier = Modifier.weight(1f),
+                    )
+                    QuickActionTile(
+                        icon = XyIcons.Home,
+                        label = xy("Beranda", "Home"),
+                        active = false,
+                        onClick = {
+                            bubbleOpen = false
+                            onGoHome()
+                        },
+                        modifier = Modifier.weight(1f),
+                    )
+                }
+                Row(horizontalArrangement = Arrangement.spacedBy(7.dp)) {
+                    QuickActionTile(
+                        icon = XyIcons.Power,
+                        label = xy("Putuskan", "Disconnect"),
+                        active = false,
+                        danger = true,
+                        onClick = {
+                            bubbleOpen = false
+                            onDisconnect()
+                        },
+                        modifier = Modifier.weight(1f),
+                    )
+                    Spacer(Modifier.weight(1f))
+                    Spacer(Modifier.weight(1f))
+                }
             }
         }
 
@@ -1646,9 +1774,9 @@ private fun SessionPanel(
         outline = Color(0xFF6D28D9),
         outlineVariant = Color(0xFF3B2A5E),
     )
-    // Ganti total (2026-10-24): TIDAK ada popup tengah lagi. Menu sesi
-    // selalu Bilah samping kanan full-height yang meluncur dari kanan.
-    val panelShape = RoundedCornerShape(topStart = 26.dp, bottomStart = 26.dp)
+    // Menu sesi FULLSCREEN (permintaan pemilik): menutupi seluruh layar,
+    // bukan popup/sidebar. Kontrol cepat pindah ke bubble tombol panah.
+    val panelShape = RoundedCornerShape(0.dp)
     MaterialTheme(colorScheme = purpleScheme) {
     Box(
         Modifier
@@ -1656,17 +1784,9 @@ private fun SessionPanel(
             .zIndex(30f),
         contentAlignment = Alignment.CenterEnd,
     ) {
-        Box(
-            Modifier
-                .fillMaxSize()
-                .background(Color(0xB30A0414))
-                .consumeBackgroundPointer(onClose),
-        )
         Column(
             Modifier
-                .fillMaxHeight()
-                .fillMaxWidth(0.9f)
-                .widthIn(min = 300.dp, max = 460.dp)
+                .fillMaxSize()
                 .graphicsLayer {
                     alpha = panelAlpha
                     translationX = panelSlide * size.width
@@ -1738,58 +1858,8 @@ private fun SessionPanel(
                 }
             }
 
-            // Aksi Cepat: grid tile ikon+label gaya "Quick Actions" pada
-            // referensi — SATU-satunya tempat aksi cepat sesi (anti-dobel).
-            Column(verticalArrangement = Arrangement.spacedBy(7.dp)) {
-                Row(horizontalArrangement = Arrangement.spacedBy(7.dp)) {
-                    QuickActionTile(
-                        icon = if (voiceMicEnabled) XyIcons.VolumeOn else XyIcons.VolumeOff,
-                        label = if (voiceMicEnabled) "Mic: ON" else "Mic: OFF",
-                        active = voiceMicEnabled,
-                        onClick = onToggleVoiceMic,
-                        modifier = Modifier.weight(1f),
-                    )
-                    QuickActionTile(
-                        icon = if (showHudButtons) XyIcons.Eye else XyIcons.EyeOff,
-                        label = if (showHudButtons) "HUD: ON" else "HUD: OFF",
-                        active = showHudButtons,
-                        onClick = { onShowHudButtonsChange(!showHudButtons) },
-                        modifier = Modifier.weight(1f),
-                    )
-                    QuickActionTile(
-                        icon = XyIcons.ScrollSlide,
-                        label = xy("Scroll", "Scroll"),
-                        active = scrollPillOpen,
-                        onClick = onToggleScrollPill,
-                        modifier = Modifier.weight(1f),
-                    )
-                }
-                Row(horizontalArrangement = Arrangement.spacedBy(7.dp)) {
-                    QuickActionTile(
-                        icon = XyIcons.Monitor,
-                        label = xy("Sesi/Layar", "Sessions"),
-                        active = false,
-                        onClick = onOpenMonitorGrid,
-                        modifier = Modifier.weight(1f),
-                    )
-                    QuickActionTile(
-                        icon = XyIcons.Home,
-                        label = xy("Beranda", "Home"),
-                        active = false,
-                        onClick = onGoHome,
-                        modifier = Modifier.weight(1f),
-                    )
-                    QuickActionTile(
-                        icon = XyIcons.Power,
-                        label = xy("Putuskan", "Disconnect"),
-                        active = false,
-                        danger = true,
-                        onClick = onDisconnect,
-                        modifier = Modifier.weight(1f),
-                    )
-                    Spacer(Modifier.weight(1f))
-                }
-            }
+            // Aksi cepat TIDAK lagi di menu (permintaan pemilik):
+            // kontrol cepat hidup di bubble popup tombol panah saja.
 
             // Area konten utama dengan animasi perpindahan tab halus +
             // Floating Rounded Full Bottom Navigation Bar di bagian bawah popup
