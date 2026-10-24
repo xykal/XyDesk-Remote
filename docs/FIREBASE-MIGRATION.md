@@ -133,3 +133,7 @@ salinan masukan juga disimpan lokal (`feedback_local`).
   mulai segar di Firebase dengan arsip read-only riwayat lama di web.
 - Selama transisi APK mendukung dua transport; flag dimatikan setelah cutover
   stabil, baru kode WS lama dibuang.
+
+Catatan rilis v1.1.23 (tambahan 2026-10-24): menu sesi satu pintu dari
+gagang garis tiga kanan atas; panah atas + bubble dan sliders rail dihapus;
+panel menu hitam-putih monokrom penuh dan anti-dobel (quick bar tunggal).
