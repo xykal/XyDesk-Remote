@@ -131,6 +131,7 @@ fun RdpFreeScreen(onBack: () -> Unit, onConnect: (ConnectionProfile) -> Unit) {
     var win10Theme by remember { mutableStateOf(prefs.getString("win10", "ya") != "tidak") }
     var ekstraDesktop by remember { mutableStateOf(prefs.getString("ekstra", "ya") != "tidak") }
     var robloxReady by remember { mutableStateOf(prefs.getString("roblox", "tidak") == "ya") }
+    var discordReady by remember { mutableStateOf(prefs.getString("discord", "tidak") == "ya") }
     var mcJavaReady by remember { mutableStateOf(prefs.getString("minecraft_java", "tidak") == "ya") }
     var mcBedrockReady by remember { mutableStateOf(prefs.getString("minecraft_bedrock", "tidak") == "ya") }
 
@@ -192,6 +193,7 @@ fun RdpFreeScreen(onBack: () -> Unit, onConnect: (ConnectionProfile) -> Unit) {
             .putString("win10", if (win10Theme) "ya" else "tidak")
             .putString("ekstra", if (ekstraDesktop) "ya" else "tidak")
             .putString("roblox", if (robloxReady) "ya" else "tidak")
+            .putString("discord", if (discordReady) "ya" else "tidak")
             .putString("minecraft_java", if (mcJavaReady) "ya" else "tidak")
             .putString("minecraft_bedrock", if (mcBedrockReady) "ya" else "tidak")
             .putBoolean("remember_rdp_pass", rememberPasswordLocal)
@@ -326,6 +328,7 @@ fun RdpFreeScreen(onBack: () -> Unit, onConnect: (ConnectionProfile) -> Unit) {
                             put("grafis", grafis)
                             put("microphone", if (microphone) "ya" else "tidak")
                             put("roblox", if (robloxReady) "ya" else "tidak")
+                            put("discord", if (discordReady) "ya" else "tidak")
                             put("minecraft_java", if (mcJavaReady) "ya" else "tidak")
                             put("minecraft_bedrock", if (mcBedrockReady) "ya" else "tidak")
                             put("perpanjang_otomatis", if (autoRenew) "ya" else "tidak")
@@ -1838,6 +1841,13 @@ fun RdpFreeScreen(onBack: () -> Unit, onConnect: (ConnectionProfile) -> Unit) {
                                         checked = ekstraDesktop,
                                         enabled = !busy,
                                         onCheckedChange = { ekstraDesktop = it; saveSettings() },
+                                    )
+                                    RdpFlatToggleRow(
+                                        title = "Discord",
+                                        subtitle = "Pasang Discord desktop di sesi RDP (siap login)",
+                                        checked = discordReady,
+                                        enabled = !busy,
+                                        onCheckedChange = { discordReady = it; saveSettings() },
                                     )
                                     RdpFlatToggleRow(
                                         title = "Tema Visual Windows 10 & Wallpaper XyVerse",
