@@ -150,6 +150,43 @@ extern "C" XYDESK_CORE_API int xydesk_host_inspect_system(XyQuicHostMetadata* ou
     return 0;
 }
 
+namespace {
+
+// True bila adapter DXGI pertama adalah GPU hardware sungguhan (NVIDIA/AMD/
+// Intel dan bukan Microsoft Basic Render/software). Di VM tanpa GPU (runner
+// GitHub, VPS murah), memaksa AVC 4:4:4 + encode hardware + DWM 120 FPS
+// membebani CPU sampai sesi RDP tersendat lalu putus, jadi di sana dipakai
+// profil ringan 60 FPS tanpa paksa encode hardware.
+bool HasHardwareGpuEncoder() {
+    static const GUID kIID_IDXGIFactory1 = {
+        0x770aae78, 0xf26f, 0x4dba, {0xa8, 0x29, 0x25, 0x3c, 0x83, 0xd1, 0xb3, 0x87}
+    };
+    IDXGIFactory1* factory = nullptr;
+    if (FAILED(CreateDXGIFactory1(kIID_IDXGIFactory1, reinterpret_cast<void**>(&factory))) || !factory) {
+        return false;
+    }
+    bool hardware = false;
+    IDXGIAdapter1* adapter = nullptr;
+    if (SUCCEEDED(factory->EnumAdapters1(0, &adapter)) && adapter) {
+        DXGI_ADAPTER_DESC1 desc{};
+        if (SUCCEEDED(adapter->GetDesc1(&desc))) {
+            const bool knownVendor =
+                desc.VendorId == 0x10DE || desc.VendorId == 0x1002 ||
+                desc.VendorId == 0x1022 || desc.VendorId == 0x8086;
+            const bool software =
+                (desc.Flags & DXGI_ADAPTER_FLAG_SOFTWARE) != 0 ||
+                wcsstr(desc.Description, L"Basic Render") != nullptr ||
+                wcsstr(desc.Description, L"Microsoft") != nullptr;
+            hardware = knownVendor && !software;
+        }
+        adapter->Release();
+    }
+    factory->Release();
+    return hardware;
+}
+
+}  // namespace
+
 extern "C" XYDESK_CORE_API int xydesk_host_apply_windows_policies(void) {
 #ifdef _WIN32
     const char* ts_ctrl = "SYSTEM\\CurrentControlSet\\Control\\Terminal Server";
@@ -182,7 +219,8 @@ extern "C" XYDESK_CORE_API int xydesk_host_apply_windows_policies(void) {
     WriteRegDword(HKEY_LOCAL_MACHINE, ts_pol, "fDisableClip", 0);
     WriteRegDword(HKEY_LOCAL_MACHINE, ts_pol, "fNoRemoteDesktopWallpaper", 0);
     WriteRegDword(HKEY_LOCAL_MACHINE, ts_pol, "AudioQualityMode", 2);
-    WriteRegDword(HKEY_LOCAL_MACHINE, ts_pol, "AVC444ModePreferred", 1);
+    const bool hwGpu = HasHardwareGpuEncoder();
+    WriteRegDword(HKEY_LOCAL_MACHINE, ts_pol, "AVC444ModePreferred", hwGpu ? 1 : 0);
 
     // 2a. Unlock Windows Privacy Consent for Microphone & Webcam (Store + Desktop Win32 Games/Discord)
     WriteRegString(HKEY_LOCAL_MACHINE,
@@ -203,7 +241,7 @@ extern "C" XYDESK_CORE_API int xydesk_host_apply_windows_policies(void) {
     WriteRegString(HKEY_CURRENT_USER,
                    "Software\\Microsoft\\Windows\\CurrentVersion\\CapabilityAccessManager\\ConsentStore\\microphone\\NonPackaged",
                    "Value", "Allow");
-    WriteRegDword(HKEY_LOCAL_MACHINE, ts_pol, "AVCHardwareEncodePreferred", 1);
+    WriteRegDword(HKEY_LOCAL_MACHINE, ts_pol, "AVCHardwareEncodePreferred", hwGpu ? 1 : 0);
     WriteRegDword(HKEY_LOCAL_MACHINE, ts_pol, "bEnumerateHWBeforeSW", 1);
     WriteRegDword(HKEY_LOCAL_MACHINE, ts_pol, "VGAdapter", 1);
     WriteRegDword(HKEY_LOCAL_MACHINE, ts_pol, "SelectTransport", 0); // TCP + UDP
@@ -212,14 +250,15 @@ extern "C" XYDESK_CORE_API int xydesk_host_apply_windows_policies(void) {
     // jadi tulisannya tidak berefek apa pun. 0 = font smoothing/ClearType boleh.
     WriteRegDword(HKEY_LOCAL_MACHINE, ts_pol, "fNoFontSmoothing", 0);
     WriteRegDword(HKEY_LOCAL_MACHINE, ts_pol, "fAllowDesktopComposition", 1);
-    WriteRegDword(HKEY_LOCAL_MACHINE, ts_pol, "DWMFRAMEINTERVAL", 8);
+    // 8 = 120 FPS hanya untuk GPU hardware; render software cukup 16 (60 FPS).
+    WriteRegDword(HKEY_LOCAL_MACHINE, ts_pol, "DWMFRAMEINTERVAL", hwGpu ? 8 : 16);
     WriteRegDword(HKEY_LOCAL_MACHINE, ts_pol, "Smoothening", 0);
     WriteRegDword(HKEY_LOCAL_MACHINE, ts_pol, "RemoteFXCompressionAlgorithm", 0);
     WriteRegDword(HKEY_LOCAL_MACHINE, ts_pol, "EnableFrameBufferRedirects", 1);
     WriteRegDword(HKEY_LOCAL_MACHINE, ts_pol, "MaxCompressionLevel", 1);
     WriteRegDword(HKEY_LOCAL_MACHINE,
                   "SYSTEM\\CurrentControlSet\\Control\\Terminal Server\\WinStations",
-                  "DWMFRAMEINTERVAL", 8);
+                  "DWMFRAMEINTERVAL", hwGpu ? 8 : 16);
 
     // 2b. MMCSS Gaming Priority & Disable Network Throttling + TCP Nagle (TCPNoDelay)
     const char* mm_sys = "SOFTWARE\\Microsoft\\Windows NT\\CurrentVersion\\Multimedia\\SystemProfile";
@@ -264,6 +303,11 @@ extern "C" XYDESK_CORE_API int xydesk_host_apply_windows_policies(void) {
     RunHiddenCmd("sc.exe start AudioEndpointBuilder");
     RunHiddenCmd("sc.exe config Audiosrv start= auto");
     RunHiddenCmd("sc.exe start Audiosrv");
+    // Idempoten: hapus rule lama dulu supaya tidak menumpuk duplikat setiap
+    // kali kebijakan diterapkan (start host / tombol UI).
+    RunHiddenCmd("netsh advfirewall firewall delete rule name=\"XyDesk Remote RDP TCP\"");
+    RunHiddenCmd("netsh advfirewall firewall delete rule name=\"XyDesk Remote RDP UDP\"");
+    RunHiddenCmd("netsh advfirewall firewall delete rule name=\"XyDesk Remote QUIC UDP\"");
     RunHiddenCmd("netsh advfirewall firewall add rule name=\"XyDesk Remote RDP TCP\" dir=in action=allow protocol=TCP localport=3389");
     RunHiddenCmd("netsh advfirewall firewall add rule name=\"XyDesk Remote RDP UDP\" dir=in action=allow protocol=UDP localport=3389");
     RunHiddenCmd("netsh advfirewall firewall add rule name=\"XyDesk Remote QUIC UDP\" dir=in action=allow protocol=UDP localport=4433");

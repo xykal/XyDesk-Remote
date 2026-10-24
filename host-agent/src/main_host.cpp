@@ -188,6 +188,28 @@ void run_hidden_process(const std::wstring& cmdLine, DWORD waitMs = 5000) {
     }
 }
 
+// Jalankan proses tersembunyi dan kembalikan exit code-nya (-1 bila gagal jalan).
+int run_hidden_process_exit_code(const std::wstring& cmdLine, DWORD waitMs = 4000) {
+    if (cmdLine.empty()) return -1;
+    STARTUPINFOW si{};
+    PROCESS_INFORMATION pi{};
+    si.cb = sizeof(si);
+    si.dwFlags = STARTF_USESHOWWINDOW;
+    si.wShowWindow = SW_HIDE;
+    std::vector<wchar_t> mutableCmd(cmdLine.begin(), cmdLine.end());
+    mutableCmd.push_back(L'\0');
+    if (!CreateProcessW(nullptr, mutableCmd.data(), nullptr, nullptr, FALSE,
+                        CREATE_NO_WINDOW, nullptr, nullptr, &si, &pi)) {
+        return -1;
+    }
+    if (waitMs > 0) WaitForSingleObject(pi.hProcess, waitMs);
+    DWORD code = 0;
+    GetExitCodeProcess(pi.hProcess, &code);
+    CloseHandle(pi.hThread);
+    CloseHandle(pi.hProcess);
+    return static_cast<int>(code);
+}
+
 bool write_binary_file(const std::wstring& path, const unsigned char* data, size_t len) {
     HANDLE h = CreateFileW(path.c_str(), GENERIC_WRITE, FILE_SHARE_READ, nullptr,
                            CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, nullptr);
@@ -257,21 +279,33 @@ void sync_password_and_enable_rdp_access() {
     if (g_password[0] != '\0') {
         wchar_t wpass[64] = {0};
         MultiByteToWideChar(CP_UTF8, 0, g_password, -1, wpass, 63);
-        // Buat/sinkronkan akun remote khusus "XyDesk" tanpa pernah mengubah password akun utama pengguna!
-        run_hidden_process(L"net.exe user \"XyDesk\" \"" + std::wstring(wpass) + L"\" /add /Y", 2500);
-        run_hidden_process(L"net.exe user \"XyDesk\" \"" + std::wstring(wpass) + L"\" /active:yes", 2500);
-        run_hidden_process(L"wmic.exe useraccount where \"Name='XyDesk'\" set PasswordExpires=FALSE", 2500);
-        run_hidden_process(L"net.exe localgroup \"Remote Desktop Users\" \"XyDesk\" /add", 2000);
-        run_hidden_process(L"net.exe localgroup \"Administrators\" \"XyDesk\" /add", 2000);
+        // Buat akun remote khusus "XyDesk" HANYA bila belum ada. Dulu akun
+        // disinkronkan ulang di setiap start host: mengganti password akun
+        // yang sedang dipakai login RDP membuat login berikutnya ditolak
+        // dan terasa "suka putus". Akun yang sudah ada tidak disentuh lagi.
+        const bool accountExists =
+            run_hidden_process_exit_code(L"net.exe user \"XyDesk\"") == 0;
+        if (!accountExists) {
+            run_hidden_process(L"net.exe user \"XyDesk\" \"" + std::wstring(wpass) + L"\" /add /Y", 2500);
+            run_hidden_process(L"net.exe user \"XyDesk\" \"" + std::wstring(wpass) + L"\" /active:yes", 2500);
+            run_hidden_process(L"wmic.exe useraccount where \"Name='XyDesk'\" set PasswordExpires=FALSE", 2500);
+            run_hidden_process(L"net.exe localgroup \"Remote Desktop Users\" \"XyDesk\" /add", 2000);
+            run_hidden_process(L"net.exe localgroup \"Administrators\" \"XyDesk\" /add", 2000);
+        }
         if (g_username[0] != '\0') {
             wchar_t wuser[128] = {0};
             MultiByteToWideChar(CP_UTF8, 0, g_username, -1, wuser, 127);
             run_hidden_process(L"net.exe localgroup \"Remote Desktop Users\" \"" + std::wstring(wuser) + L"\" /add", 2000);
         }
     }
-    run_hidden_process(L"sc.exe config TermService start= auto", 2500);
-    run_hidden_process(L"net.exe start TermService", 3000);
+    // Jangan sentuh TermService bila RDP sudah mendengarkan: start/config
+    // berulang tidak perlu dan berisiko mengganggu sesi yang sedang jalan.
     g_rdp_listening = check_tcp_port_listening(g_meta.rdp_port);
+    if (!g_rdp_listening) {
+        run_hidden_process(L"sc.exe config TermService start= auto", 2500);
+        run_hidden_process(L"net.exe start TermService", 3000);
+        g_rdp_listening = check_tcp_port_listening(g_meta.rdp_port);
+    }
     g_onmic_ready = check_onmic_registry_unlocked();
 }
 
@@ -868,20 +902,22 @@ void paint_dashboard(HWND hwnd, HDC hdc) {
         g.SetSmoothingMode(Gdiplus::SmoothingModeAntiAlias);
         g.SetTextRenderingHint(Gdiplus::TextRenderingHintClearTypeGridFit);
 
-        const Gdiplus::Color cBg(255, 9, 11, 16);
-        const Gdiplus::Color cSideBg(255, 13, 16, 23);
-        const Gdiplus::Color cCard(255, 16, 20, 29);
-        const Gdiplus::Color cCardInner(255, 11, 14, 21);
-        const Gdiplus::Color cEdge(255, 34, 42, 58);
-        const Gdiplus::Color cHiEdge(255, 56, 189, 248);
-        const Gdiplus::Color cWhite(255, 248, 250, 252);
-        const Gdiplus::Color cMuted(255, 148, 163, 184);
-        const Gdiplus::Color cDim(255, 100, 116, 139);
-        const Gdiplus::Color cCyan(255, 56, 189, 248);
-        const Gdiplus::Color cEmerald(255, 16, 185, 129);
-        const Gdiplus::Color cEmeraldBg(255, 11, 38, 29);
-        const Gdiplus::Color cAmber(255, 245, 158, 11);
-        const Gdiplus::Color cDanger(255, 239, 68, 68);
+        // Tema monokrom hitam-putih mutlak (selaras UI APK): status dibedakan
+        // lewat terang-gelap + label teks, bukan warna-warni.
+        const Gdiplus::Color cBg(255, 10, 10, 10);
+        const Gdiplus::Color cSideBg(255, 17, 17, 17);
+        const Gdiplus::Color cCard(255, 23, 23, 23);
+        const Gdiplus::Color cCardInner(255, 14, 14, 14);
+        const Gdiplus::Color cEdge(255, 54, 54, 54);
+        const Gdiplus::Color cHiEdge(255, 240, 240, 240);
+        const Gdiplus::Color cWhite(255, 250, 250, 250);
+        const Gdiplus::Color cMuted(255, 172, 172, 172);
+        const Gdiplus::Color cDim(255, 118, 118, 118);
+        const Gdiplus::Color cCyan(255, 255, 255, 255);
+        const Gdiplus::Color cEmerald(255, 228, 228, 228);
+        const Gdiplus::Color cEmeraldBg(255, 34, 34, 34);
+        const Gdiplus::Color cAmber(255, 150, 150, 150);
+        const Gdiplus::Color cDanger(255, 255, 255, 255);
 
         // Background
         Gdiplus::SolidBrush bgBr(cBg);
@@ -893,8 +929,8 @@ void paint_dashboard(HWND hwnd, HDC hdc) {
 
         // Brand Logo in Sidebar
         gdi_fill_gradient_card(g, 18, 20, 62, 64, 12.0f,
-                               Gdiplus::Color(255, 30, 58, 95),
-                               Gdiplus::Color(255, 15, 23, 42), cCyan);
+                               Gdiplus::Color(255, 52, 52, 52),
+                               Gdiplus::Color(255, 20, 20, 20), cCyan);
         gdi_text(g, L"Segoe UI", 18.0f, Gdiplus::FontStyleBold, cWhite, 18, 20, 62, 64, L"XY",
                  Gdiplus::StringAlignmentCenter, Gdiplus::StringAlignmentCenter);
         gdi_text(g, L"Segoe UI", 16.0f, Gdiplus::FontStyleBold, cWhite, 72, 20, sideW - 10, 44, L"XyDesk Host");
@@ -937,7 +973,7 @@ void paint_dashboard(HWND hwnd, HDC hdc) {
         // Live Status Pill in Top Right
         const bool allReady = (st && st->quic_running) || g_rdp_listening;
         gdi_fill_card(g, mainR - 228, 28, mainR - 16, 64, 18.0f,
-                      allReady ? cEmeraldBg : Gdiplus::Color(255, 42, 20, 24),
+                      allReady ? cEmeraldBg : Gdiplus::Color(255, 38, 38, 38),
                       allReady ? cEmerald : cDanger);
         gdi_text(g, L"Segoe UI", 12.0f, Gdiplus::FontStyleBold, allReady ? cEmerald : cDanger,
                  mainR - 220, 28, mainR - 24, 64,
@@ -950,7 +986,7 @@ void paint_dashboard(HWND hwnd, HDC hdc) {
         if (!st || st->active_tab == TAB_ACCESS) {
             // Card 1: P2P Direct Console Stream (:4433) — Zero-Lag 120FPS Tanpa Password
             gdi_fill_gradient_card(g, mainL, 90, mainL + colW, 346, 16.0f,
-                                   Gdiplus::Color(255, 18, 28, 44), cCard, cHiEdge);
+                                   Gdiplus::Color(255, 27, 27, 27), cCard, cHiEdge);
             gdi_text(g, L"Segoe UI", 11.5f, Gdiplus::FontStyleBold, cCyan,
                      mainL + 18, 102, mainL + colW - 18, 122,
                      L"MODE 1: KONEKSI PC (P2P DIRECT :4433 · TANPA PASSWORD)");
@@ -977,7 +1013,7 @@ void paint_dashboard(HWND hwnd, HDC hdc) {
 
             // Card 2: Windows RDP (:3389) — Akun XyDesk Terisolasi (Aman Tanpa Ubah PW Pribadi)
             gdi_fill_gradient_card(g, col2L, 90, mainR, 346, 16.0f,
-                                   Gdiplus::Color(255, 16, 30, 34), cCard, cEdge);
+                                   Gdiplus::Color(255, 25, 25, 25), cCard, cEdge);
             gdi_text(g, L"Segoe UI", 11.5f, Gdiplus::FontStyleBold, cEmerald,
                      col2L + 18, 102, mainR - 18, 122,
                      L"MODE 2: WINDOWS RDP (:3389 · MULTI-SESSION)");
@@ -1129,35 +1165,35 @@ void paint_dashboard(HWND hwnd, HDC hdc) {
         if (st) {
             for (const auto& b : st->buttons) {
                 const bool hov = (st->hovered_btn == b.id);
-                Gdiplus::Color fill(255, 26, 33, 48);
+                Gdiplus::Color fill(255, 28, 28, 28);
                 Gdiplus::Color edge = hov ? cHiEdge : cEdge;
                 Gdiplus::Color txtCol = cWhite;
                 Gdiplus::StringAlignment align = Gdiplus::StringAlignmentCenter;
 
-                if (b.style == 1) { // Primary Cyan
-                    fill = hov ? Gdiplus::Color(255, 14, 165, 233) : Gdiplus::Color(255, 2, 132, 199);
+                if (b.style == 1) { // Primary (putih)
+                    fill = hov ? Gdiplus::Color(255, 235, 235, 235) : Gdiplus::Color(255, 200, 200, 200);
                     edge = cCyan;
-                    txtCol = cWhite;
-                } else if (b.style == 2) { // Accent Emerald
-                    fill = hov ? Gdiplus::Color(255, 16, 68, 52) : cEmeraldBg;
+                    txtCol = Gdiplus::Color(255, 15, 15, 15);
+                } else if (b.style == 2) { // Accent (abu terang)
+                    fill = hov ? Gdiplus::Color(255, 62, 62, 62) : cEmeraldBg;
                     edge = cEmerald;
                     txtCol = cEmerald;
-                } else if (b.style == 3) { // Danger
-                    fill = hov ? Gdiplus::Color(255, 69, 22, 28) : Gdiplus::Color(255, 42, 16, 21);
+                } else if (b.style == 3) { // Danger (paling gelap + tepi putih)
+                    fill = hov ? Gdiplus::Color(255, 70, 70, 70) : Gdiplus::Color(255, 30, 30, 30);
                     edge = cDanger;
                     txtCol = cDanger;
                 } else if (b.style == 4) { // Nav Item Inactive
-                    fill = hov ? Gdiplus::Color(255, 22, 28, 41) : Gdiplus::Color(0, 0, 0, 0);
+                    fill = hov ? Gdiplus::Color(255, 30, 30, 30) : Gdiplus::Color(0, 0, 0, 0);
                     edge = hov ? cEdge : Gdiplus::Color(0, 0, 0, 0);
                     txtCol = hov ? cWhite : cMuted;
                     align = Gdiplus::StringAlignmentNear;
                 } else if (b.style == 5) { // Nav Item Active
-                    fill = Gdiplus::Color(255, 20, 36, 58);
+                    fill = Gdiplus::Color(255, 44, 44, 44);
                     edge = cCyan;
                     txtCol = cWhite;
                     align = Gdiplus::StringAlignmentNear;
                 } else if (hov) {
-                    fill = Gdiplus::Color(255, 36, 46, 66);
+                    fill = Gdiplus::Color(255, 48, 48, 48);
                 }
 
                 gdi_fill_card(g, b.rc.left, b.rc.top, b.rc.right, b.rc.bottom, 10.0f, fill, edge);

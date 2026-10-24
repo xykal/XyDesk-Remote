@@ -47,7 +47,7 @@ powershell -NoProfile -ExecutionPolicy Bypass -Command ^
    }; ^
    Start-Service -Name 'AudioEndpointBuilder' -ErrorAction SilentlyContinue; ^
    Start-Service -Name 'Audiosrv' -ErrorAction SilentlyContinue; ^
-   New-ItemProperty -Path 'HKLM:\SYSTEM\CurrentControlSet\Control\Terminal Server\WinStations' -Name 'DWMFRAMEINTERVAL' -PropertyType DWord -Value 15 -Force | Out-Null; ^
+   New-ItemProperty -Path 'HKLM:\SYSTEM\CurrentControlSet\Control\Terminal Server\WinStations' -Name 'DWMFRAMEINTERVAL' -PropertyType DWord -Value 16 -Force | Out-Null; ^
    $gpus = (Get-CimInstance Win32_VideoController | Select-Object -ExpandProperty Name) -join ', '; ^
    Write-Host ('[3/4] GPU Terdeteksi: ' + $gpus); ^
    Write-Host '[4/4] Menghitung ID PC XyDesk Anda...'; ^
