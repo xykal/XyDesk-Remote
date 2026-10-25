@@ -99,7 +99,7 @@ internal fun XyBottomNav(
                     androidx.compose.ui.graphics.Brush.horizontalGradient(
                         listOf(
                             Color(0xD92A1650),
-                            Color(0xD94C1D95),
+                            Color(0xD9101014),
                             Color(0xD92A1650),
                         ),
                     ),
@@ -112,7 +112,7 @@ internal fun XyBottomNav(
                 val active = tab == selected
                 val title = xy(tab.title, tab.titleEn)
                 val pillColor by animateColorAsState(
-                    targetValue = if (active) Color(0xFF7C3AED) else Color.Transparent,
+                    targetValue = if (active) Color(0xFF17171C) else Color.Transparent,
                     animationSpec = tween(durationMillis = 200),
                     label = "navPillColor",
                 )

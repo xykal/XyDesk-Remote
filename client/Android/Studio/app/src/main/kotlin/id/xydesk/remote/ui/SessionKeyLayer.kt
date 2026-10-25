@@ -302,18 +302,18 @@ private fun HudKeyButton(
     // ditekan — seragam dengan tema ungu aplikasi.
     val look = if (key.pad) {
         HudButtonLook(
-            plateColor = if (pressed || latched) Color(0xFF3B1D78) else Color(0xF2140B26),
+            plateColor = if (pressed || latched) Color(0xFF2A2A31) else Color(0xF2140B26),
             ringColor = when {
                 mappingMode -> Color(0xFFFFFFFF)
-                pressed || latched -> Color(0xFF8B5CF6)
-                else -> Color(0x668B5CF6)
+                pressed || latched -> Color(0xFF3A3A42)
+                else -> Color(0x663A3A42)
             },
             ringWidth = if (pressed || latched || mappingMode) 2.dp else 1.dp,
         )
     } else {
         lookBase
     }
-    val padInk = Color(0xFFEDE9FE)
+    val padInk = Color(0xFFF2F2F4)
 
     // PERMINTAAN PEMILIK 2026-10-10: L1/R1 harus berbentuk shoulder/bumper
     // kontroler (lebar-pendek, sudut atas membulat besar) dan L2/R2 berbentuk
@@ -486,7 +486,7 @@ private fun HudKeyButton(
                     .background(
                         if (key.pad) {
                             Brush.radialGradient(
-                                listOf(Color(0xFFC4B5FD), Color(0xFF7C3AED), Color(0xFF4C1D95)),
+                                listOf(Color(0xFFD9D9DE), Color(0xFF17171C), Color(0xFF101014)),
                             )
                         } else {
                             Brush.radialGradient(
@@ -496,7 +496,7 @@ private fun HudKeyButton(
                     )
                     .border(
                         1.dp,
-                        if (key.pad) Color(0xFFDDD6FE) else pal.ink.copy(alpha = 0.4f),
+                        if (key.pad) Color(0xFFE4E4E7) else pal.ink.copy(alpha = 0.4f),
                         CircleShape,
                     ),
                 contentAlignment = Alignment.Center,

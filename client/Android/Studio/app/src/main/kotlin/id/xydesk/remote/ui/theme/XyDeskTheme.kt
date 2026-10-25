@@ -48,11 +48,10 @@ val XyLineStrong = Color(0xFF3C3C42)
 val XyText = Color(0xFFF3F3F5)
 val XyTextDim = Color(0xFFB2B2B8)
 val XyTextFaint = Color(0xFF808086)
-// Aksen ungu (2026-10-24): primary di semua layar jadi violet seperti
-// referensi Connection Hub; permukaan tetap gelap netral (bukan lavender
-// penuh) dan status tetap abu netral.
-val XyAccent = Color(0xFF8B5CF6)
-val XyAccentInk = Color(0xFFFFFFFF)
+// Aksen monokrom (permintaan pemilik 1.1.24): primary kembali hitam-putih
+// di semua layar; permukaan tetap netral dan status tetap abu netral.
+val XyAccent = Color(0xFFF4F4F5)
+val XyAccentInk = Color(0xFF0A0A0C)
 val XyOk = Color(0xFFE2E2E6)
 val XyWarn = Color(0xFFAAAAAA)
 val XyDanger = Color(0xFF858585)
@@ -60,13 +59,13 @@ val XyDanger = Color(0xFF858585)
 val DarkScheme = darkColorScheme(
     primary = XyAccent,
     onPrimary = XyAccentInk,
-    primaryContainer = Color(0xFF2A1650),
-    onPrimaryContainer = Color(0xFFEDE9FE),
-    secondary = Color(0xFFA78BFA),
-    onSecondary = Color(0xFF1E1040),
+    primaryContainer = Color(0xFF26262C),
+    onPrimaryContainer = Color(0xFFF4F4F5),
+    secondary = Color(0xFFD4D4D8),
+    onSecondary = Color(0xFF17171C),
     secondaryContainer = XySurfaceAlt,
     onSecondaryContainer = XyText,
-    tertiary = Color(0xFFC4B5FD),
+    tertiary = Color(0xFFB8B8C0),
     background = XyBg,
     onBackground = XyText,
     surface = XySurface,
@@ -83,15 +82,15 @@ val DarkScheme = darkColorScheme(
 )
 
 val LightScheme = lightColorScheme(
-    primary = Color(0xFF7C3AED),
+    primary = Color(0xFF111114),
     onPrimary = Color(0xFFFFFFFF),
-    primaryContainer = Color(0xFFEDE9FE),
-    onPrimaryContainer = Color(0xFF2E1065),
-    secondary = Color(0xFF6D28D9),
+    primaryContainer = Color(0xFFE7E7EA),
+    onPrimaryContainer = Color(0xFF17171C),
+    secondary = Color(0xFF2A2A30),
     onSecondary = Color(0xFFFFFFFF),
     secondaryContainer = Color(0xFFEDEDEF),
     onSecondaryContainer = Color(0xFF232328),
-    tertiary = Color(0xFF8B5CF6),
+    tertiary = Color(0xFF52525B),
     background = Color(0xFFF7F7F8),
     onBackground = Color(0xFF1A1A1D),
     surface = Color(0xFFFFFFFF),

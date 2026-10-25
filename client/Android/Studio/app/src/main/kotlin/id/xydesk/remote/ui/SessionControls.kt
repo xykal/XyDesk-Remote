@@ -658,13 +658,9 @@ fun SessionControls(
                     .padding(end = 10.dp, bottom = 148.dp)
                     .width(308.dp)
                     .zIndex(25f)
-                    .clip(RoundedCornerShape(20.dp))
-                    .background(
-                        Brush.verticalGradient(
-                            listOf(Color(0xF225134A), Color(0xF2130A24)),
-                        ),
-                    )
-                    .border(1.2.dp, Color(0xFF5B3FA8), RoundedCornerShape(20.dp))
+                    .clip(RoundedCornerShape(14.dp))
+                    .background(Color(0xF2141417))
+                    .border(1.dp, Color(0x2EFFFFFF), RoundedCornerShape(14.dp))
                     .padding(12.dp),
                 verticalArrangement = Arrangement.spacedBy(7.dp),
             ) {
@@ -674,14 +670,14 @@ fun SessionControls(
                 ) {
                     Text(
                         xy("Aksi Cepat", "Quick Actions"),
-                        color = Color(0xFFF5F0FF),
+                        color = Color(0xFFF4F4F5),
                         fontSize = 13.sp,
                         fontWeight = FontWeight.Bold,
                         modifier = Modifier.weight(1f),
                     )
                     Text(
                         xy("Tutup", "Close"),
-                        color = Color(0xFFC4B5FD),
+                        color = Color(0xFFD9D9DE),
                         fontSize = 11.sp,
                         modifier = Modifier
                             .clip(RoundedCornerShape(999.dp))
@@ -1504,10 +1500,10 @@ private fun PanelHandle(
                 .clip(XyPill)
                 .background(
                     Brush.verticalGradient(
-                        listOf(Color(0xFF7C3AED), Color(0xFF4C1D95)),
+                        listOf(Color(0xFF17171C), Color(0xFF101014)),
                     ),
                 )
-                .border(1.dp, Color(0xFF5B3FA8), XyPill)
+                .border(1.dp, Color(0xFF484852), XyPill)
                 .padding(horizontal = 10.dp, vertical = 16.dp),
         ) {
             Column(horizontalAlignment = Alignment.CenterHorizontally) {
@@ -1748,32 +1744,10 @@ private fun SessionPanel(
         targetValue = if (panelShown) 0f else 1f,
         animationSpec = tween(240, easing = FastOutSlowInEasing),
     )
-    // Revisi total popup (2026-10-24, referensi Connection Hub ungu):
-    // HANYA popup menu sesi yang memakai skema ungu — primary/aksen,
-    // permukaan, dan garis tepi diganti ungu-lavender gelap, jadi semua
-    // toggle, slider, chip, tile, dan tab di dalamnya otomatis ungu
-    // tanpa mengubah tema hitam-putih di layar lain.
+    // Menu sesi memakai tema global hitam-putih aplikasi (permintaan
+    // pemilik 1.1.24: warna UI kembali monokrom, tanpa skema khusus).
     val baseScheme = MaterialTheme.colorScheme
-    val purpleScheme = baseScheme.copy(
-        primary = Color(0xFF8B5CF6),
-        onPrimary = Color(0xFFFFFFFF),
-        primaryContainer = Color(0xFF3B1D78),
-        onPrimaryContainer = Color(0xFFEDE9FE),
-        secondary = Color(0xFFA78BFA),
-        onSecondary = Color(0xFFFFFFFF),
-        secondaryContainer = Color(0xFF2A1650),
-        onSecondaryContainer = Color(0xFFEDE9FE),
-        tertiary = Color(0xFFC4B5FD),
-        onTertiary = Color(0xFF1E1040),
-        background = Color(0xFF120A20),
-        onBackground = Color(0xFFF5F0FF),
-        surface = Color(0xFF1C1233),
-        onSurface = Color(0xFFF5F0FF),
-        surfaceVariant = Color(0xFF26184A),
-        onSurfaceVariant = Color(0xFFC9BCE8),
-        outline = Color(0xFF6D28D9),
-        outlineVariant = Color(0xFF3B2A5E),
-    )
+    val purpleScheme = baseScheme
     // Menu sesi FULLSCREEN (permintaan pemilik): menutupi seluruh layar,
     // bukan popup/sidebar. Kontrol cepat pindah ke bubble tombol panah.
     val panelShape = RoundedCornerShape(0.dp)
@@ -1792,29 +1766,17 @@ private fun SessionPanel(
                     translationX = panelSlide * size.width
                 }
                 .clip(panelShape)
-                .background(
-                    Brush.verticalGradient(
-                        listOf(Color(0xFF25134A), Color(0xFF130A24)),
-                    ),
-                    panelShape,
-                )
-                .border(1.2.dp, Color(0xFF5B3FA8), panelShape)
+                .background(MaterialTheme.colorScheme.background, panelShape)
                 .pointerInput(Unit) {}
                 .padding(horizontal = 18.dp, vertical = 14.dp),
             verticalArrangement = Arrangement.spacedBy(10.dp),
         ) {
-            // Banner judul ungu (gaya header Connection Hub di referensi):
-            // gradasi violet, ikon garis tiga dalam lingkaran, nama host di
-            // bawah label "Menu Sesi", chip mode popup/sidebar + tutup.
+            // Header menu fullscreen: rata penuh tanpa sudut membulat,
+            // permukaan datar monokrom, ikon + nama host + chip tutup.
             Box(
                 Modifier
                     .fillMaxWidth()
-                    .clip(RoundedCornerShape(18.dp))
-                    .background(
-                        Brush.horizontalGradient(
-                            listOf(Color(0xFF7C3AED), Color(0xFF4C1D95)),
-                        ),
-                    )
+                    .background(MaterialTheme.colorScheme.surfaceVariant)
                     .padding(horizontal = 14.dp, vertical = 12.dp),
             ) {
                 Row(
@@ -1825,27 +1787,27 @@ private fun SessionPanel(
                         Modifier
                             .size(38.dp)
                             .clip(CircleShape)
-                            .background(Color(0x33FFFFFF)),
+                            .background(MaterialTheme.colorScheme.onSurface.copy(alpha = 0.10f)),
                         contentAlignment = Alignment.Center,
                     ) {
                         Icon(
                             XyIcons.Sliders,
                             contentDescription = null,
-                            tint = Color(0xFFFFFFFF),
+                            tint = MaterialTheme.colorScheme.onSurface,
                             modifier = Modifier.size(19.dp),
                         )
                     }
                     Column(Modifier.weight(1f)) {
                         Text(
                             xy("Menu Sesi", "Session Menu"),
-                            color = Color(0xFFFFFFFF),
+                            color = MaterialTheme.colorScheme.onSurface,
                             fontSize = 15.sp,
                             fontWeight = FontWeight.Bold,
                             maxLines = 1,
                         )
                         Text(
                             "$hostLabel  ·  $statusText  ·  $zoomPercent%  ·  $remoteSize",
-                            color = Color(0xFFDDD6FE),
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
                             fontSize = 11.sp,
                             maxLines = 1,
                             overflow = TextOverflow.Ellipsis,
@@ -2789,21 +2751,11 @@ private fun PanelTabTiles(
 ) {
     Row(
         modifier = modifier
-            .shadow(16.dp, RoundedCornerShape(50))
-            .clip(RoundedCornerShape(50))
-            // Liquid glass ungu: gradasi violet tembus pandang + tepi terang.
-            // Tanpa blur backdrop asli (berat di GPU) — efek kaca dari
-            // gradasi alpha + highlight garis atas.
-            .background(
-                Brush.horizontalGradient(
-                    listOf(
-                        Color(0xD92A1650),
-                        Color(0xD94C1D95),
-                        Color(0xD92A1650),
-                    ),
-                ),
-            )
-            .border(1.2.dp, Color(0x66FFFFFF), RoundedCornerShape(50))
+            .clip(RoundedCornerShape(0.dp))
+            // Bar tab datar monokrom menempel penuh (menu fullscreen tanpa
+            // sudut membulat, tanpa kaca/gradasi).
+            .background(MaterialTheme.colorScheme.surfaceVariant)
+            .border(1.dp, MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(0.dp))
             .padding(horizontal = 6.dp, vertical = 5.dp),
         horizontalArrangement = Arrangement.spacedBy(6.dp),
         verticalAlignment = Alignment.CenterVertically,
@@ -2812,7 +2764,7 @@ private fun PanelTabTiles(
             val active = entry == tab
             val bg by animateColorAsState(
                 targetValue = if (active) {
-                    Color(0xFF7C3AED)
+                    MaterialTheme.colorScheme.primary
                 } else {
                     Color.Transparent
                 },
@@ -2964,22 +2916,23 @@ private fun QuickActionTile(
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    // Tile Aksi Cepat ungu: aktif = isian violet penuh; bahaya dibedakan
-    // tepi magenta-ungu; nonaktif = permukaan ungu gelap (gaya referensi).
+    // Tile Aksi Cepat monokrom (1.1.24): aktif = isian putih penuh teks
+    // hitam (paling kontras di atas layar remote); nonaktif = permukaan
+    // gelap datar; bahaya dibedakan tepi terang + label tebal.
     val bg = when {
-        danger -> Color(0xFF2D0F2E)
-        active -> Color(0xFF7C3AED)
-        else -> Color(0xFF1E1338)
+        danger -> Color(0xFF2A2A2E)
+        active -> Color(0xFFF4F4F5)
+        else -> Color(0xFF1B1B1F)
     }
     val borderCol = when {
-        danger -> Color(0xFFD946EF)
-        active -> Color(0xFFA78BFA)
-        else -> Color(0xFF38255E)
+        danger -> Color(0xFF9A9AA3)
+        active -> Color(0xFFFFFFFF)
+        else -> Color(0xFF33333B)
     }
     val fg = when {
-        danger -> Color(0xFFF5D0FE)
-        active -> Color(0xFFFFFFFF)
-        else -> Color(0xFFD8CCF5)
+        danger -> Color(0xFFFFFFFF)
+        active -> Color(0xFF0A0A0C)
+        else -> Color(0xFFD9D9DE)
     }
     Column(
         modifier = modifier
@@ -3042,34 +2995,47 @@ internal fun PanelSectionGrid(
 
 @Composable
 private fun PanelSectionCard(spec: PanelSectionScope.Spec) {
+    // Rombak total menu (1.1.24): model daftar datar ala pengaturan sistem —
+    // tanpa kartu/sudut membulat. Ikon dalam kotak tegas, judul besar, isi
+    // mengalir, garis pemisah antar-seksi. Jauh lebih mudah dipindai.
     Column(
         Modifier
             .fillMaxWidth()
-            .clip(RoundedCornerShape(16.dp))
-            .background(Color(0xFF1A1130), RoundedCornerShape(16.dp))
-            .border(1.dp, Color(0xFF34235C), RoundedCornerShape(16.dp))
-            .padding(horizontal = 14.dp, vertical = 12.dp),
+            .padding(vertical = 8.dp),
         verticalArrangement = Arrangement.spacedBy(10.dp),
     ) {
         Row(
             verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            horizontalArrangement = Arrangement.spacedBy(10.dp),
         ) {
-            Icon(
-                imageVector = panelSectionIcon(spec.key),
-                contentDescription = null,
-                tint = MaterialTheme.colorScheme.primary,
-                modifier = Modifier.size(18.dp),
-            )
+            Box(
+                Modifier
+                    .size(32.dp)
+                    .background(MaterialTheme.colorScheme.surfaceVariant),
+                contentAlignment = Alignment.Center,
+            ) {
+                Icon(
+                    imageVector = panelSectionIcon(spec.key),
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.onSurface,
+                    modifier = Modifier.size(17.dp),
+                )
+            }
             Text(
                 spec.title,
                 color = MaterialTheme.colorScheme.onSurface,
-                fontSize = 13.sp,
+                fontSize = 14.sp,
                 fontWeight = FontWeight.Bold,
                 maxLines = 2,
             )
         }
         spec.content()
+        Box(
+            Modifier
+                .fillMaxWidth()
+                .height(1.dp)
+                .background(MaterialTheme.colorScheme.outlineVariant),
+        )
     }
 }
 
@@ -3091,9 +3057,9 @@ internal fun PanelSection(
     Column(
         Modifier
             .fillMaxWidth()
-            // Kartu kaca: satu perubahan di sini mengubah 18 seksi di empat tab,
-            // karena semua seksi digambar lewat fungsi ini.
-            .xyGlass(shape = RoundedCornerShape(14.dp), opacity = 1.25f, strength = 0.9f)
+            // Permukaan datar monokrom (menu daftar 1.1.24, tanpa kartu kaca):
+            // satu perubahan di sini mengubah semua seksi di empat tab.
+            .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.45f))
             .padding(horizontal = 12.dp, vertical = 10.dp),
         verticalArrangement = Arrangement.spacedBy(7.dp),
     ) {

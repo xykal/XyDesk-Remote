@@ -8,14 +8,6 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 
-OUTBOX_MANIFEST_ADDITION = '''        <!-- Additive chat outbox only; system JobScheduler requires its signature permission. -->
-        <service
-            android:name="id.xydesk.remote.ui.ChatOutboxJobService"
-            android:permission="android.permission.BIND_JOB_SERVICE"
-            android:exported="true" />
-
-'''
-
 INSTALL_PERMISSION_MANIFEST_ADDITION = '''    <!-- Additive in-app update installer permission only. -->
     <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
 
@@ -28,9 +20,11 @@ class RecoveryBaselineTest(unittest.TestCase):
             with self.subTest(path=relative):
                 data = (ROOT/relative).read_bytes()
                 if relative.endswith('/app/src/main/AndroidManifest.xml'):
-                    addition = OUTBOX_MANIFEST_ADDITION.encode()
-                    self.assertEqual(data.count(addition), 1)
-                    data = data.replace(addition, b'', 1)
+                    # ChatOutboxJobService was removed with the deleted chat
+                    # feature. Its manifest declaration must stay absent:
+                    # Android kept trying to instantiate the ghost service
+                    # from a persisted job and crash-looped (1.1.24 fix).
+                    self.assertNotIn(b'ChatOutboxJobService', data)
                     install_addition = INSTALL_PERMISSION_MANIFEST_ADDITION.encode()
                     self.assertEqual(data.count(install_addition), 1)
                     # Blok aditif izin pasang menggantikan baris remove lama;
