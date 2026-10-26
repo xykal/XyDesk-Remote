@@ -496,6 +496,17 @@ class XyDeskSessionActivity : ComponentActivity() {
             object : OnBackPressedCallback(true) {
                 override fun handleOnBackPressed() {
                     if (backHandler?.invoke() != true) {
+                        val backState = manager.state.value
+                        if (backState is SessionState.Error || backState is SessionState.Disconnected) {
+                            // Gagal connect / sesi putus: WAJIB tetap di layar
+                            // sesi (ada tombol Coba lagi). Back tidak pernah
+                            // finish() dari state gagal — pulang ke Home hanya
+                            // lewat tombol eksplisit di layar. Penjaga ini
+                            // menutup celah saat handler Compose belum terpasang
+                            // atau dialog sedang mengambil alih tombol Back.
+                            ConnectionLog.add("SES: back diabaikan di state gagal/putus (tetap di layar sesi)")
+                            return
+                        }
                         markIntentionalHomeNavigation()
                         if (manager.state.value is SessionState.Connected) {
                             runCatching {

@@ -436,7 +436,17 @@ class PcStreamSessionActivity : ComponentActivity() {
         }
 
         override fun onSignalingClosed(code: Int, reason: String) {
-            if (videoReady.value && !directModeActive.value) finish()
+            if (videoReady.value && !directModeActive.value) {
+                // Sinyal putus BUKAN perintah pulang: dulu finish() di sini
+                // melempar user ke Home tanpa penjelasan. Sekarang sesi
+                // ditandai berakhir dan alasannya tampil di layar pairing;
+                // user sendiri yang memilih kembali / mencoba lagi.
+                videoReady.value = false
+                sessionEnded.value = true
+                failure.value = reason.ifBlank {
+                    "Koneksi signaling ke host terputus (kode $code)."
+                }
+            }
         }
     }
 

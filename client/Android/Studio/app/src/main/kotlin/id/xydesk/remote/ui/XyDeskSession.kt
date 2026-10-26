@@ -390,6 +390,15 @@ fun XyDeskSessionScreen(
     var blackScreenFatal by remember { mutableStateOf(false) }
     /** Popup ubah username/password setelah error kredensial. */
     var credentialRetry by remember { mutableStateOf(false) }
+    /**
+     * Error yang dialognya sudah ditutup user secara eksplisit. Selama error
+     * yang sama masih aktif, dialog tidak ditumpuk lagi — yang tampil adalah
+     * layar terputus di baliknya (tombol Sambungkan lagi / Kembali ke home).
+     * Ditutupnya dialog TIDAK PERNAH boleh mengakhiri sesi: dulu onDismiss
+     * dialog error memanggil exitSession() sehingga ketuk scrim / tombol Back
+     * melempar user pulang ke Home padahal ia baru mau mencoba lagi.
+     */
+    var dismissedError by remember { mutableStateOf<SessionState.Error?>(null) }
     val sessionsRepo = remember(context) { id.xydesk.remote.sessions.SessionsRepository(context) }
     var waitingForNativeRelease by remember { mutableStateOf(false) }
     var userDisconnect by remember { mutableStateOf(false) }
@@ -405,6 +414,12 @@ fun XyDeskSessionScreen(
             reconnectDeadlineAt = 0L
             reconnectWindowDone = false
         }
+    }
+
+    // Error baru (atau percobaan ulang yang gagal lagi) harus memunculkan
+    // dialognya kembali; penanda tutup hanya berlaku untuk error yang sama.
+    LaunchedEffect(state) {
+        if (state !is SessionState.Error) dismissedError = null
     }
 
     // Notifikasi koneksi putus tak terduga (backlog 2026-10-15): saat sesi
@@ -930,6 +945,21 @@ fun XyDeskSessionScreen(
                     true
                 }
                 controlsBackHandler?.invoke() == true -> true
+                state is SessionState.Error && dismissedError != state &&
+                    (everConnected || RdpErrors.isCredentialError(state.code, state.message)) -> {
+                    // Dialog error sedang tampil: Back hanya menutup dialog dan
+                    // membuka layar terputus di baliknya — tetap di sesi,
+                    // tidak pernah melempar user pulang ke Home.
+                    dismissedError = state
+                    true
+                }
+                state is SessionState.Error || state is SessionState.Disconnected -> {
+                    // Layar gagal/putus: Back membuka konfirmasi keluar.
+                    // Kembali ke Home hanya lewat pilihan eksplisit di dialog
+                    // itu atau tombol "Kembali ke home" di layar terputus.
+                    confirmDisconnect = true
+                    true
+                }
                 confirmDisconnect -> {
                     // Saat dialog keluar terbuka, tekan Back sekali lagi = kembali ke
                     // Beranda TANPA memutus sesi (sesi tetap hidup di latar).
@@ -2230,7 +2260,7 @@ fun XyDeskSessionScreen(
     // exitSession sehingga user mental ke home padahal baru mau retry.
     // Pengecualian: error kredensial tetap memakai dialog (ada tombol ubah
     // username & password). Error SETELAH sempat tersambung juga tetap.
-    val showErrorOverlay = err != null &&
+    val showErrorOverlay = err != null && dismissedError != err &&
         (everConnected || RdpErrors.isCredentialError(err.code, err.message))
     if (!active && !reconnecting && !applyingResolution && !userDisconnect && showErrorOverlay) err?.let { e ->
         XyOverlay(
@@ -2238,7 +2268,12 @@ fun XyDeskSessionScreen(
             // di badan dialog (permintaan pemilik 2026-10-15).
             title = xy(RdpErrors.shortTitle(e.code, e.message).first,
                 RdpErrors.shortTitle(e.code, e.message).second),
-            onDismiss = { exitSession() },
+            // WAJIB null: XyOverlay memanggil onDismiss saat scrim diketuk /
+            // Back ditekan. Dulu onDismiss di sini exitSession() sehingga user
+            // yang gagal connect mental pulang ke Home hanya karena mengetuk
+            // di luar dialog. Dialog error hanya boleh tertutup lewat tombol
+            // eksplisit di bawah (dan itu pun hanya menutup dialog).
+            onDismiss = null,
         ) {
             // Penjelasan yang bisa ditindak dulu, pesan mentah di bawahnya
             // supaya laporan bug tetap punya isi teknis.
@@ -2308,7 +2343,11 @@ fun XyDeskSessionScreen(
             )
             XyPillButton(
                 text = xy("Tutup", "Close"),
-                onClick = { exitSession() },
+                // Hanya menutup dialog: di baliknya ada layar terputus dengan
+                // tombol Sambungkan lagi / Kembali ke home. Keluar sesi tidak
+                // pernah jadi efek samping menutup dialog error.
+                onClick = { dismissedError = e },
+                primary = false,
                 compact = true,
                 modifier = Modifier.fillMaxWidth(),
             )
@@ -2324,7 +2363,10 @@ fun XyDeskSessionScreen(
             onDismiss = { showLog = false },
         )
     }
-    if (!active && err == null && confirmDisconnect) {
+    // Tampil juga dari layar Error setelah dialog errornya ditutup user
+    // (dismissedError == err): Back di layar gagal membuka konfirmasi ini,
+    // bukan langsung pulang ke Home.
+    if (!active && confirmDisconnect && (err == null || dismissedError == err)) {
         XyOverlay(
             title = xy("Keluar dari layar sesi?", "Leave session screen?"),
             onDismiss = { confirmDisconnect = false },

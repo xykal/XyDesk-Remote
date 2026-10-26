@@ -44,6 +44,22 @@ class RecoveryBaselineTest(unittest.TestCase):
         session_ui = (ROOT/'client/Android/Studio/app/src/main/kotlin/id/xydesk/remote/ui/XyDeskSession.kt').read_text()
         self.assertIn('ConnectingScreen(', session_ui)
 
+    def test_failed_connect_never_auto_exits_to_home(self):
+        # Kegagalan connect wajib berhenti di layar sesi dengan opsi coba
+        # lagi. Menutup dialog error (scrim/Back/tombol Tutup) tidak boleh
+        # memanggil exitSession, Back di Activity tidak boleh finish() pada
+        # state Error/Disconnected, dan putusnya signaling PC Stream tidak
+        # boleh finish() diam-diam.
+        session_ui = (ROOT/'client/Android/Studio/app/src/main/kotlin/id/xydesk/remote/ui/XyDeskSession.kt').read_text()
+        self.assertNotIn('onDismiss = { exitSession() }', session_ui)
+        self.assertIn('dismissedError', session_ui)
+        self.assertIn('state is SessionState.Error || state is SessionState.Disconnected', session_ui)
+        activity = (ROOT/'client/Android/Studio/app/src/main/kotlin/id/xydesk/remote/ui/XyDeskSessionActivity.kt').read_text()
+        self.assertIn('backState is SessionState.Error || backState is SessionState.Disconnected', activity)
+        pc_stream = (ROOT/'client/Android/Studio/app/src/main/kotlin/id/xydesk/remote/ui/PcStreamSessionActivity.kt').read_text()
+        self.assertNotIn('if (videoReady.value && !directModeActive.value) finish()', pc_stream)
+        self.assertIn('sessionEnded.value = true', pc_stream)
+
     def test_no_size_diet_or_dependency_removal_is_mixed_into_recovery(self):
         gradle = (ROOT/'client/Android/Studio/app/build.gradle').read_text()
         self.assertIn('play-services-ads', gradle)
