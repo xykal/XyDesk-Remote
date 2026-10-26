@@ -58,6 +58,19 @@ const ACTIVE_SESSION_TTL_MS = 90_000;
 const ACTIVE_SESSION_MAX = 5_000;
 const ACTIVE_SESSION_ID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const ACTIVE_SESSION_PREFIX = "session:";
+// Coalescing di isolate untuk klien lama yang masih heartbeat/polling cepat.
+// Lease sesi aktif hidup 90 detik; meneruskan heartbeat yang sama lebih
+// sering dari 45 detik ke Durable Object tidak mengubah hasil, hanya
+// membakar request. Presence Chat juga cukup diteruskan 45 detik sekali.
+const SESSION_HEARTBEAT_COALESCE_MS = 45_000;
+const PRESENCE_DO_COALESCE_MS = 45_000;
+const OAUTH_POLL_DO_COALESCE_MS = 3_000;
+const SESSION_HEARTBEAT_FORWARD = new Map();
+const PRESENCE_DO_FORWARD_AT = new Map();
+const OAUTH_POLL_DO_AT = new Map();
+// Sesi hasil callback OAuth berlaku 15 menit (selaras batas tunggu APK).
+const OAUTH_SESSION_TTL_MS = 15 * 60_000;
+const OAUTH_SESSION_TTL_SECONDS = 900;
 const COMMUNITY_CLIENT_ID_RE = ACTIVE_SESSION_ID_RE;
 const COMMUNITY_JOKE_MAX_CHARS = 280;
 const COMMUNITY_ATTACHMENT_MAX_BYTES = 2_800_000; // HD foto/stiker webp/gif/jpeg/png di feed
@@ -2429,6 +2442,23 @@ async function sessionReportResponse(request, env) {
     return jsonResponse({ status: "invalid_session_report" }, 400, request.method);
   }
 
+  // Klien lama mengirim heartbeat tiap ±8 detik. Lease berlaku 90 detik,
+  // jadi heartbeat yang sama cukup diteruskan ke Durable Object maksimal
+  // 45 detik sekali; sisanya dijawab dari cache isolate terakhir.
+  if (body.action === "heartbeat") {
+    const forwarded = SESSION_HEARTBEAT_FORWARD.get(body.session_id);
+    if (forwarded && Date.now() - forwarded.at < SESSION_HEARTBEAT_COALESCE_MS) {
+      return jsonResponse(
+        { status: "ok", active_session_count: forwarded.count },
+        200,
+        request.method,
+        { "cache-control": "no-store" },
+      );
+    }
+  } else {
+    SESSION_HEARTBEAT_FORWARD.delete(body.session_id);
+  }
+
   try {
     const id = env.ACTIVE_SESSIONS.idFromName("xydesk-remote-global");
     const stub = env.ACTIVE_SESSIONS.get(id);
@@ -2438,6 +2468,16 @@ async function sessionReportResponse(request, env) {
       body: JSON.stringify({ action: body.action, session_id: body.session_id }),
     });
     const data = await response.json();
+    if (response.ok && body.action === "heartbeat") {
+      SESSION_HEARTBEAT_FORWARD.set(body.session_id, {
+        at: Date.now(),
+        count: Math.max(0, Number(data?.active_session_count || 0)),
+      });
+      if (SESSION_HEARTBEAT_FORWARD.size > 5000) {
+        const oldest = SESSION_HEARTBEAT_FORWARD.keys().next().value;
+        if (oldest) SESSION_HEARTBEAT_FORWARD.delete(oldest);
+      }
+    }
     return jsonResponse(data, response.status, request.method, { "cache-control": "no-store" });
   } catch {
     return jsonResponse({ status: "unavailable" }, 503, request.method);
@@ -5109,7 +5149,7 @@ export class GlobalChat {
         return durableObjectJson({ status: "ok", ready: false }, 200, request.method);
       }
       const data = await this.state.storage.get(`oauth:${sid}`).catch(() => null);
-      if (data && data.token && Date.now() - Number(data.at || 0) < 10 * 60_000) {
+      if (data && data.token && Date.now() - Number(data.at || 0) < OAUTH_SESSION_TTL_MS) {
         await this.state.storage.delete(`oauth:${sid}`).catch(() => {});
         return durableObjectJson({ status: "ok", ready: true, ...data }, 200, request.method);
       }
@@ -6569,7 +6609,7 @@ export default {
         EDGE_OAUTH_SESSIONS.set(sid, sessionPayload);
         if (env?.UNIQUE_DOWNLOADS) {
           try {
-            await env.UNIQUE_DOWNLOADS.put(`oauth:${sid}`, JSON.stringify(sessionPayload), { expirationTtl: 600 });
+            await env.UNIQUE_DOWNLOADS.put(`oauth:${sid}`, JSON.stringify(sessionPayload), { expirationTtl: OAUTH_SESSION_TTL_SECONDS });
           } catch {}
         }
         if (env?.GLOBAL_CHAT) {
@@ -6637,7 +6677,7 @@ export default {
       EDGE_OAUTH_SESSIONS.set(sid, sessionPayload);
       if (env?.UNIQUE_DOWNLOADS) {
         try {
-          await env.UNIQUE_DOWNLOADS.put(`oauth:${sid}`, JSON.stringify(sessionPayload), { expirationTtl: 600 });
+          await env.UNIQUE_DOWNLOADS.put(`oauth:${sid}`, JSON.stringify(sessionPayload), { expirationTtl: OAUTH_SESSION_TTL_SECONDS });
         } catch {}
       }
       if (env.GLOBAL_CHAT) {
@@ -6662,7 +6702,7 @@ export default {
         return durableObjectJson({ status: "ok", ready: false }, 200, request.method);
       }
       const edgeHit = EDGE_OAUTH_SESSIONS.get(sid);
-      if (edgeHit && edgeHit.token && Date.now() - Number(edgeHit.at || 0) < 10 * 60_000) {
+      if (edgeHit && edgeHit.token && Date.now() - Number(edgeHit.at || 0) < OAUTH_SESSION_TTL_MS) {
         EDGE_OAUTH_SESSIONS.delete(sid);
         if (env?.UNIQUE_DOWNLOADS) {
           try { await env.UNIQUE_DOWNLOADS.delete(`oauth:${sid}`); } catch {}
@@ -6682,12 +6722,29 @@ export default {
         } catch {}
       }
       if (env.GLOBAL_CHAT) {
+        // APK lama polling tiap 1,2 detik. Edge/KV di atas sudah dicek,
+        // jadi query Durable Object cukup maksimal 3 detik sekali per sesi;
+        // sisanya langsung "belum siap" tanpa subrequest.
+        const lastOauthPoll = OAUTH_POLL_DO_AT.get(sid) || 0;
+        if (Date.now() - lastOauthPoll < OAUTH_POLL_DO_COALESCE_MS) {
+          return durableObjectJson({ status: "ok", ready: false }, 200, request.method);
+        }
+        OAUTH_POLL_DO_AT.set(sid, Date.now());
+        if (OAUTH_POLL_DO_AT.size > 5000) {
+          const oldest = OAUTH_POLL_DO_AT.keys().next().value;
+          if (oldest) OAUTH_POLL_DO_AT.delete(oldest);
+        }
         try {
           const chatIdOauth = env.GLOBAL_CHAT.idFromName("xydesk-global-chat-v1");
           const pollUrl = new URL("/oauth-poll", request.url);
           pollUrl.search = url.search;
           const doRes = await env.GLOBAL_CHAT.get(chatIdOauth).fetch(new Request(pollUrl, { method: "GET" }));
-          if (doRes.ok) return doRes;
+          if (doRes.ok) {
+            const doClone = doRes.clone();
+            const doData = await doClone.json().catch(() => null);
+            if (doData?.ready) OAUTH_POLL_DO_AT.delete(sid);
+            return doRes;
+          }
         } catch {}
       }
       return durableObjectJson({ status: "ok", ready: false }, 200, request.method);
@@ -6726,7 +6783,24 @@ export default {
         }
       }
 
-      if (env.GLOBAL_CHAT) {
+      // Klien lama masih memanggil presence tiap 8–25 detik. Lease online
+      // berlaku 75 detik, jadi penerusan ke Durable Object cukup maksimal
+      // 45 detik sekali per peer; request di antaranya dijawab dari hitungan
+      // edge isolate agar tidak membakar request Durable Object.
+      const presenceNow = Date.now();
+      const lastPresenceForward = PRESENCE_DO_FORWARD_AT.get(peerKey) || 0;
+      const forwardPresence =
+        parsedBody?.active === false ||
+        presenceNow - lastPresenceForward >= PRESENCE_DO_COALESCE_MS;
+      if (forwardPresence) {
+        PRESENCE_DO_FORWARD_AT.set(peerKey, presenceNow);
+        if (PRESENCE_DO_FORWARD_AT.size > 5000) {
+          const oldest = PRESENCE_DO_FORWARD_AT.keys().next().value;
+          if (oldest) PRESENCE_DO_FORWARD_AT.delete(oldest);
+        }
+      }
+
+      if (env.GLOBAL_CHAT && forwardPresence) {
         try {
           const chatIdP = env.GLOBAL_CHAT.idFromName("xydesk-global-chat-v1");
           const doRes = await env.GLOBAL_CHAT.get(chatIdP).fetch(

@@ -4,6 +4,7 @@ import org.json.JSONObject
 import java.net.HttpURLConnection
 import java.net.URL
 import java.util.UUID
+import java.util.concurrent.ConcurrentHashMap
 
 /**
  * Best-effort, anonymous lease reporter for the default-on, user-disableable session counter.
@@ -13,9 +14,25 @@ import java.util.UUID
 internal object ActiveSessionStatsReporter {
     private const val ENDPOINT = "https://api.xydeskremote.biz.id/api/session"
 
-    fun heartbeat(sessionId: UUID): Boolean = send("heartbeat", sessionId)
+    // Layar sesi memanggil heartbeat tiap ±8 detik, tetapi lease di Worker
+    // hidup 90 detik. Mengirim ulang lebih sering dari 60 detik hanya
+    // membakar request Worker/Durable Object tanpa mengubah hasil hitungan.
+    private const val HEARTBEAT_MIN_INTERVAL_MS = 60_000L
+    private val lastHeartbeatAt = ConcurrentHashMap<UUID, Long>()
 
-    fun end(sessionId: UUID): Boolean = send("end", sessionId)
+    fun heartbeat(sessionId: UUID): Boolean {
+        val now = System.currentTimeMillis()
+        val last = lastHeartbeatAt[sessionId]
+        if (last != null && now - last < HEARTBEAT_MIN_INTERVAL_MS) return true
+        val ok = send("heartbeat", sessionId)
+        if (ok) lastHeartbeatAt[sessionId] = now
+        return ok
+    }
+
+    fun end(sessionId: UUID): Boolean {
+        lastHeartbeatAt.remove(sessionId)
+        return send("end", sessionId)
+    }
 
     private fun send(action: String, sessionId: UUID): Boolean {
         val connection = try {

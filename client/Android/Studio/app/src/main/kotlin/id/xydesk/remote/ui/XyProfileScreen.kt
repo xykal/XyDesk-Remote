@@ -847,57 +847,100 @@ internal fun GitHubDeviceFlowPanel(
     }
 
     androidx.compose.runtime.LaunchedEffect(Unit) {
-        busy = true
-        val start = githubDeviceStart(GITHUB_OAUTH_CLIENT_ID)
-        if (start == null) {
-            busy = false
-            statusText = xyNow(
-                "Gagal menghubungi GitHub. Periksa koneksi atau gunakan opsi Token di bawah.",
-                "Could not reach GitHub. Check your connection or use the Token option below.",
-            )
-            return@LaunchedEffect
-        }
-        userCode = start.optString("user_code", "")
-        verifyUri = start.optString("verification_uri", "https://github.com/login/device")
-        val intervalMs = (start.optInt("interval", 5).coerceIn(3, 15)) * 1000L
-        val deviceCode = start.optString("device_code", "")
-        val deadline = System.currentTimeMillis() + start.optInt("expires_in", 900) * 1000L
-        busy = false
-        statusText = xyNow(
-            "Silakan login (jika belum) lalu tekan tombol hijau 'Authorize' di bawah — tanpa perlu ketik kode!",
-            "Sign in (if needed) and tap the green 'Authorize' button below — no code typing needed!",
-        )
-        webViewRef?.evaluateJavascript(buildAutoFillScript(userCode), null)
-
-        while (System.currentTimeMillis() < deadline) {
-            kotlinx.coroutines.delay(intervalMs)
-            webViewRef?.evaluateJavascript(buildAutoFillScript(userCode), null)
-            val poll = githubDevicePoll(GITHUB_OAUTH_CLIENT_ID, deviceCode) ?: continue
-            val tok = poll.optString("access_token")
-            if (tok.isNotEmpty()) {
-                busy = true
-                statusText = xyNow("Menyinkronkan profil & avatar GitHub…", "Syncing GitHub profile & avatar…")
-                val user = syncGitHubProfileAndAvatar(context, tok)
-                    ?: id.xydesk.remote.ui.rdp.XyRdpClient.whoami(tok)
+        // Device code GitHub hanya hidup ±15 menit, dihitung sejak kode
+        // dibuat — termasuk waktu user mengetik password/2FA. Dulu satu
+        // `expired_token` langsung mengakhiri panel dengan pesan "tutup dan
+        // buka ulang". Sekarang kode baru dibuat otomatis (maks 3x) dan
+        // WebView dimuat ulang ke halaman device; user yang sudah login di
+        // GitHub tinggal menekan Authorize sekali lagi.
+        var attempt = 0
+        while (attempt < 3) {
+            attempt += 1
+            busy = true
+            if (attempt > 1) {
+                statusText = xyNow(
+                    "Sesi sebelumnya kedaluwarsa — membuat sesi login baru…",
+                    "The previous session expired — creating a fresh sign-in session…",
+                )
+            }
+            val start = githubDeviceStart(GITHUB_OAUTH_CLIENT_ID)
+            if (start == null) {
                 busy = false
-                if (user != null) {
-                    onSuccess(tok, user)
-                } else {
-                    onError(xyNow("Login gagal: profil tidak terbaca.", "Sign-in failed: profile unreadable."))
-                }
+                statusText = xyNow(
+                    "Gagal menghubungi GitHub. Periksa koneksi atau gunakan opsi Token di bawah.",
+                    "Could not reach GitHub. Check your connection or use the Token option below.",
+                )
                 return@LaunchedEffect
             }
-            when (poll.optString("error", "")) {
-                "expired_token" -> {
-                    statusText = xyNow("Sesi login kedaluwarsa — tutup dan buka ulang.", "Sign-in session expired — reopen dialog.")
-                    return@LaunchedEffect
-                }
-                "access_denied" -> {
-                    statusText = xyNow("Login dibatalkan di GitHub.", "Sign-in cancelled on GitHub.")
-                    return@LaunchedEffect
-                }
+            userCode = start.optString("user_code", "")
+            verifyUri = start.optString("verification_uri", "https://github.com/login/device")
+            var intervalMs = (start.optInt("interval", 5).coerceIn(3, 15)) * 1000L
+            val deviceCode = start.optString("device_code", "")
+            val deadline = System.currentTimeMillis() + start.optInt("expires_in", 900) * 1000L
+            busy = false
+            statusText = if (attempt > 1) {
+                xyNow(
+                    "Sesi baru siap — tekan tombol hijau 'Authorize' di bawah, tanpa perlu ketik kode!",
+                    "Fresh session ready — tap the green 'Authorize' button below, no code typing needed!",
+                )
+            } else {
+                xyNow(
+                    "Silakan login (jika belum) lalu tekan tombol hijau 'Authorize' di bawah — tanpa perlu ketik kode!",
+                    "Sign in (if needed) and tap the green 'Authorize' button below — no code typing needed!",
+                )
             }
+            if (attempt > 1) {
+                webViewRef?.loadUrl(verifyUri)
+            }
+            webViewRef?.evaluateJavascript(buildAutoFillScript(userCode), null)
+
+            var restartForFreshCode = false
+            while (System.currentTimeMillis() < deadline) {
+                kotlinx.coroutines.delay(intervalMs)
+                webViewRef?.evaluateJavascript(buildAutoFillScript(userCode), null)
+                val poll = githubDevicePoll(GITHUB_OAUTH_CLIENT_ID, deviceCode) ?: continue
+                val tok = poll.optString("access_token")
+                if (tok.isNotEmpty()) {
+                    busy = true
+                    statusText = xyNow("Menyinkronkan profil & avatar GitHub…", "Syncing GitHub profile & avatar…")
+                    val user = syncGitHubProfileAndAvatar(context, tok)
+                        ?: id.xydesk.remote.ui.rdp.XyRdpClient.whoami(tok)
+                    busy = false
+                    if (user != null) {
+                        onSuccess(tok, user)
+                    } else {
+                        onError(xyNow("Login gagal: profil tidak terbaca.", "Sign-in failed: profile unreadable."))
+                    }
+                    return@LaunchedEffect
+                }
+                when (poll.optString("error", "")) {
+                    "expired_token" -> {
+                        restartForFreshCode = true
+                    }
+                    "access_denied" -> {
+                        statusText = xyNow("Login dibatalkan di GitHub.", "Sign-in cancelled on GitHub.")
+                        return@LaunchedEffect
+                    }
+                    "slow_down" -> {
+                        // GitHub meminta polling diperlambat.
+                        intervalMs += 5_000L
+                    }
+                }
+                if (restartForFreshCode) break
+            }
+            if (!restartForFreshCode) {
+                // Deadline tercapai tanpa token (mis. user berhenti di
+                // tengah login): perlakukan sama seperti kedaluwarsa dan
+                // tawarkan kode segar, bukan panel buntu.
+                restartForFreshCode = true
+            }
+            if (restartForFreshCode && attempt >= 3) break
         }
+        busy = false
+        statusText = xyNow(
+            "Login belum selesai setelah beberapa sesi. Coba lagi, atau gunakan opsi Token di bawah.",
+            "Sign-in did not finish after several sessions. Try again, or use the Token option below.",
+        )
     }
 
     Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {

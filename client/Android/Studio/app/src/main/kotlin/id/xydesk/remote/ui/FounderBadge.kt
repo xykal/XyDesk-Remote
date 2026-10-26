@@ -463,12 +463,14 @@ internal fun GitHubDirectOAuthModalHost() {
 
     LaunchedEffect(sessionId) {
         openInAppCustomTab(context, chromeAuthUrl)
-        val deadline = System.currentTimeMillis() + 10 * 60 * 1000L
+        val deadline = System.currentTimeMillis() + 15 * 60 * 1000L
         val pollUrls = listOf(
             "https://api.xydeskremote.biz.id/api/github/oauth/poll?session_id=$sessionId",
         )
         while (isActive && !completed && System.currentTimeMillis() < deadline) {
-            delay(1_200L)
+            // 3 detik: deep link tetap jalur utama; polling hanya cadangan.
+            // Interval 1,2 detik membakar request Worker tanpa manfaat nyata.
+            delay(3_000L)
             val hit = withContext(Dispatchers.IO) {
                 var found: JSONObject? = null
                 for (u in pollUrls) {
@@ -525,7 +527,7 @@ internal fun GitHubDirectOAuthModalHost() {
         }
         val code = start.optString("user_code", "")
         val deviceCode = start.optString("device_code", "")
-        val intervalMs = (start.optInt("interval", 5).coerceIn(3, 12)) * 1000L
+        var intervalMs = (start.optInt("interval", 5).coerceIn(3, 12)) * 1000L
         val deadline = System.currentTimeMillis() + start.optInt("expires_in", 900) * 1000L
         hiddenHandshakeCode = code
         webViewRef?.evaluateJavascript(buildSeamlessOAuthBridgeScript(code), null)
@@ -548,6 +550,18 @@ internal fun GitHubDirectOAuthModalHost() {
             } else if (err == "access_denied") {
                 GitHubDirectOAuthController.dismiss(
                     xyNow("Otorisasi GitHub dibatalkan.", "GitHub authorization cancelled."),
+                )
+                return@LaunchedEffect
+            } else if (err == "slow_down") {
+                // GitHub meminta polling diperlambat; hormati agar device
+                // code tidak terus ditembak pada interval lama.
+                intervalMs += 5_000L
+            } else if (err == "expired_token") {
+                GitHubDirectOAuthController.dismiss(
+                    xyNow(
+                        "Sesi login GitHub kedaluwarsa sebelum otorisasi selesai. Buka login lagi — sesi baru akan dibuat.",
+                        "The GitHub sign-in session expired before authorization finished. Reopen sign-in for a fresh session.",
+                    ),
                 )
                 return@LaunchedEffect
             }

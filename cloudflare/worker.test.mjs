@@ -361,6 +361,40 @@ test("session reporter endpoint only forwards validated aggregate lease fields",
   }
 });
 
+test("session heartbeat coalesces repeated reports inside the coalesce window", async () => {
+  let calls = 0;
+  const env = envFor({}, {
+    ACTIVE_SESSIONS: {
+      idFromName(name) { return name; },
+      get() {
+        return { async fetch() {
+          calls += 1;
+          return new Response(JSON.stringify({ status: "ok", active_session_count: 7 }), {
+            headers: { "content-type": "application/json" },
+          });
+        } };
+      },
+    },
+  });
+  const sessionId = "00000000-0000-4000-8000-000000000099";
+  const post = (action) => worker.fetch(new Request("https://rdp.xydesk.my.id/api/session", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ action, session_id: sessionId }),
+  }), env);
+
+  const first = await post("heartbeat");
+  const second = await post("heartbeat");
+  assert.equal(first.status, 200);
+  assert.equal(second.status, 200);
+  assert.equal((await second.json()).active_session_count, 7);
+  assert.equal(calls, 1);
+
+  const ended = await post("end");
+  assert.equal(ended.status, 200);
+  assert.equal(calls, 2);
+});
+
 test("session reporter rejects invalid IDs and restricts its HTTP method", async () => {
   const env = envFor({}, { ACTIVE_SESSIONS: { idFromName: () => "x", get: () => ({ fetch: async () => new Response("unexpected") }) } });
   const invalid = await worker.fetch(new Request("https://rdp.xydesk.my.id/api/session", {

@@ -210,31 +210,34 @@ fun XyDeskHome(
     var dataPackProgress by remember { mutableStateOf<Int?>(null) }
     var dataPackStatus by remember { mutableStateOf<String?>(null) }
     LaunchedEffect(Unit) {
+        // Pemeriksaan otomatis dibatasi 12 jam sekali (sesuai kontrak
+        // AppPrefs). Pemeriksaan manual dari Pusat Pembaruan tetap langsung.
         val now = System.currentTimeMillis()
-        appPrefs.lastUpdateCheckAt = now
-        val info = AppUpdate.fetch(context)
-        if (info != null) {
-            val current = runCatching {
-                context.packageManager.getPackageInfo(context.packageName, 0).versionName
-            }.getOrNull().orEmpty()
-            if (AppUpdate.isNewer(info.version, current) && appPrefs.updateSkipVersion != info.version) {
-                updateInfo = info
+        if (now - appPrefs.lastUpdateCheckAt >= 12L * 60L * 60L * 1_000L) {
+            appPrefs.lastUpdateCheckAt = now
+            val info = AppUpdate.fetch(context)
+            if (info != null) {
+                val current = runCatching {
+                    context.packageManager.getPackageInfo(context.packageName, 0).versionName
+                }.getOrNull().orEmpty()
+                if (AppUpdate.isNewer(info.version, current) && appPrefs.updateSkipVersion != info.version) {
+                    updateInfo = info
+                }
             }
         }
     }
-    // Ronde 54: Detak kehadiran seluruh aplikasi (App-Wide Presence Heartbeat)
-    // agar jumlah Total Online menghitung seluruh orang yang sedang membuka app.
+    // Presence Chat Global sudah pensiun; loop ini hanya mengakumulasi
+    // statistik pemakaian lokal per menit, tanpa request jaringan berkala.
     LaunchedEffect(Unit) {
         var tick = 0
         while (true) {
             runCatching {
-                AppUpdate.sendAppPresencePing(context, screen = "app", active = true)
                 if (tick > 0) {
-                    recordAndGetLocalUsageSeconds(context, 25L)
+                    recordAndGetLocalUsageSeconds(context, 60L)
                 }
                 tick += 1
             }
-            kotlinx.coroutines.delay(25_000L)
+            kotlinx.coroutines.delay(60_000L)
         }
     }
     var backupModalOpen by remember { mutableStateOf(false) }

@@ -507,9 +507,10 @@ internal fun XyInAppNotificationBannerHost(
  *      koleksi stiker, protokol E2EE, preset RDP) tanpa perlu mengunduh/menginstal ulang APK.
  *   2. **Update APK Penuh** untuk perubahan engine native / besar, dapat diunduh langsung
  *      di dalam aplikasi dengan indikator progres `0% -> 100%`.
- * - Menyediakan **App-Wide Presence Heartbeat (`/api/chat/presence`)** agar jumlah **Total Online**
- *   dihitung dari seluruh pengguna yang sedang membuka aplikasi XyDesk Remote (bukan hanya yang
- *   sedang membuka layar Chat Global).
+ * - **Presence Chat sudah pensiun** setelah Chat Global dihapus dan backend
+ *   chat pindah ke Firebase: fungsi presence di bawah tidak lagi menembak
+ *   `/api/chat/presence`, supaya membuka aplikasi/sesi tidak membakar kuota
+ *   Worker hanya untuk angka online yang sudah tidak ditampilkan di UI.
  */
 internal data class AppUpdateInfo(
     val version: String,
@@ -525,7 +526,6 @@ internal data class AppUpdateInfo(
 internal object AppUpdate {
     private const val ENDPOINT = "https://api.xydeskremote.biz.id/api/update-check"
     private const val DATA_PACK_ENDPOINT = "https://api.xydeskremote.biz.id/api/data-pack"
-    private const val PRESENCE_ENDPOINT = "https://api.xydeskremote.biz.id/api/chat/presence"
     private const val PREFS_DATA_PACK = "xydesk.ota.datapack"
     private const val KEY_INSTALLED_DATA_VER = "installed_data_version"
     private const val KEY_LAST_UPDATE_NOTIFIED = "last_notified_update_key"
@@ -844,66 +844,28 @@ internal object AppUpdate {
         }.getOrDefault(false)
     }
 
-    // Super-cepat: cache 2 detik agar total online/unduh tidak delay
-    private var lastPresenceAt = 0L
-    private var lastStatsAt = 0L
-    private var cachedDownloadCount: Int? = null
-
     suspend fun refreshOnlineCount(context: Context? = null): Int {
-        // Alias cepat untuk XyDeskSession heartbeat
+        // Alias kompatibilitas untuk pemanggil lama; tidak lagi menembak
+        // endpoint presence Chat yang sudah pensiun.
         return if (context != null) sendAppPresencePing(context, "session", true)
         else _appWideOnlineCount.value
     }
 
     /**
-     * Kirim detak kehadiran (presence) tingkat aplikasi agar jumlah Total Online
-     * menghitung seluruh orang yang sedang membuka aplikasi XyDesk Remote.
-     * Super-cepat: burst 3x + cache 2 detik.
+     * Presence Chat Global **sudah tidak dikirim ke jaringan**.
+     *
+     * Dulu fungsi ini POST ke `/api/chat/presence` setiap beberapa detik dari
+     * Home dan setiap ±8 detik dari sesi RDP. Chat Global sudah dihapus dan
+     * tidak ada UI yang membaca angka online ini, jadi request tersebut hanya
+     * membakar kuota Cloudflare Worker + Durable Object. Fungsi dipertahankan
+     * sebagai no-op agar pemanggil lama (termasuk layar sesi) tetap aman.
      */
+    @Suppress("UNUSED_PARAMETER")
     suspend fun sendAppPresencePing(
         context: Context,
         screen: String = "app",
         active: Boolean = true,
-    ): Int = withContext(Dispatchers.IO) {
-        runCatching {
-            val now = System.currentTimeMillis()
-            if (now - lastPresenceAt < 2_000L && _appWideOnlineCount.value > 1) return@runCatching _appWideOnlineCount.value
-            lastPresenceAt = now
-            val appCtx = context.applicationContext
-            val api = CommunityJokesApi(appCtx)
-            val ghLogin = getVerifiedGitHubLogin(appCtx).orEmpty()
-            val name = ghLogin.ifBlank { api.displayName().orEmpty().ifBlank { "Pengguna XyDesk" } }
-            val clientId = api.accountShortId().ifBlank { name }
-            val conn = (URL(PRESENCE_ENDPOINT).openConnection() as HttpURLConnection).apply {
-                requestMethod = "POST"
-                connectTimeout = 5_000
-                readTimeout = 5_000
-                doOutput = true
-                setRequestProperty("Content-Type", "application/json; charset=utf-8")
-                setRequestProperty("Accept", "application/json")
-            }
-            val payload = JSONObject()
-                .put("client_id", clientId)
-                .put("github_login", ghLogin)
-                .put("name", name)
-                .put("screen", screen)
-                .put("active", active)
-                .toString()
-            OutputStreamWriter(conn.outputStream, Charsets.UTF_8).use { it.write(payload) }
-            val code = conn.responseCode
-            if (code in 200..299) {
-                val body = conn.inputStream.bufferedReader(Charsets.UTF_8).use { it.readText() }
-                val root = JSONObject(body)
-                val count = root.optInt("online_count", 1).coerceAtLeast(1)
-                _appWideOnlineCount.value = count
-                // Cek notifikasi in-app terbaru dari server (pengumuman, balasan, like, react, mention)
-                conn.disconnect()
-                return@runCatching count
-            }
-            conn.disconnect()
-            _appWideOnlineCount.value
-        }.getOrDefault(_appWideOnlineCount.value)
-    }
+    ): Int = _appWideOnlineCount.value
 
     fun isNewer(remote: String, current: String): Boolean {
         fun parts(value: String): List<Int> =
