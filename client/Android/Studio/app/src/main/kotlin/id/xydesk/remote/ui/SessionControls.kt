@@ -1844,7 +1844,6 @@ private fun SessionPanel(
                             .padding(bottom = 74.dp),
                         verticalArrangement = Arrangement.spacedBy(7.dp),
                     ) {
-                        XyDiscordVoiceStageBar(compact = true)
                         Box(Modifier.weight(1f).fillMaxWidth()) {
                         when (activeTab) {
                             PanelTab.SCREEN -> ScreenTab(

@@ -1257,7 +1257,7 @@ test("avatar profil tersimpan lewat /me dan endpoint feed/leaderboard mati (404)
   assert.equal(avatar.headers.get("content-type"), "image/png");
 
   // Feed komunitas & leaderboard sudah dihapus total: route-nya 404.
-  for (const path of ["/api/jokes", "/api/leaderboard", "/api/notifications", "/api/chat/presence"]) {
+  for (const path of ["/api/jokes", "/api/leaderboard", "/api/notifications", "/api/chat/presence", "/api/voice-stage"]) {
     const res = await worker.fetch(new Request(`https://rdp.xydesk.my.id${path}`), env);
     assert.equal(res.status, 404, path);
   }
