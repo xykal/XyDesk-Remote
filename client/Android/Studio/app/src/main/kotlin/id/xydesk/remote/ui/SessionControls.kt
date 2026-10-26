@@ -1826,8 +1826,15 @@ private fun SessionPanel(
             // Aksi cepat TIDAK lagi di menu (permintaan pemilik):
             // kontrol cepat hidup di bubble popup tombol panah saja.
 
-            // Area konten utama dengan animasi perpindahan tab halus +
-            // Floating Rounded Full Bottom Navigation Bar di bagian bawah popup
+            // Kategori menu di bar atas datar — bottom navigation menu
+            // sesi sudah dihapus atas permintaan pemilik.
+            PanelCategoryBar(
+                tab = tab,
+                onTab = onTab,
+                modifier = Modifier.fillMaxWidth(),
+            )
+
+            // Area konten utama dengan animasi perpindahan kategori halus.
             Box(
                 Modifier
                     .weight(1f)
@@ -1840,8 +1847,7 @@ private fun SessionPanel(
                 ) { activeTab ->
                     Column(
                         Modifier
-                            .fillMaxSize()
-                            .padding(bottom = 74.dp),
+                            .fillMaxSize(),
                         verticalArrangement = Arrangement.spacedBy(7.dp),
                     ) {
                         Box(Modifier.weight(1f).fillMaxWidth()) {
@@ -1959,16 +1965,6 @@ private fun SessionPanel(
                     }
                 }
 
-                // FLOATING ROUNDED FULL BOTTOM NAVIGATION BAR
-                PanelTabTiles(
-                    tab = tab,
-                    onTab = onTab,
-                    modifier = Modifier
-                        .align(Alignment.BottomCenter)
-                        .padding(horizontal = 6.dp, vertical = 4.dp)
-                        .widthIn(max = 560.dp)
-                        .fillMaxWidth(),
-                )
             }
         }
     }
@@ -2740,63 +2736,48 @@ internal fun PanelHint(text: String) {
 }
 
 /**
- * Floating Rounded Full Bottom Navigation Bar di bagian bawah Popup Menu Sesi.
- * Berbentuk kapsul penuh (`RoundedCornerShape(50)`) dengan pill aktif beranimasi
- * untuk berpindah antar tab Layar, Input, Kontrol/HUD, dan Sesi.
+ * Bar kategori menu sesi di bawah header: empat tombol datar tanpa sudut
+ * membulat untuk berpindah kategori Layar, Input, Tombol, dan Sesi.
+ * Menggantikan bottom navigation menu sesi yang sudah dihapus.
  */
 @Composable
-private fun PanelTabTiles(
+private fun PanelCategoryBar(
     tab: PanelTab,
     onTab: (PanelTab) -> Unit,
     modifier: Modifier = Modifier,
 ) {
     Row(
         modifier = modifier
-            .clip(RoundedCornerShape(0.dp))
-            // Bar tab datar monokrom menempel penuh (menu fullscreen tanpa
-            // sudut membulat, tanpa kaca/gradasi).
             .background(MaterialTheme.colorScheme.surfaceVariant)
-            .border(1.dp, MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(0.dp))
-            .padding(horizontal = 6.dp, vertical = 5.dp),
-        horizontalArrangement = Arrangement.spacedBy(6.dp),
+            .border(1.dp, MaterialTheme.colorScheme.outlineVariant)
+            .padding(horizontal = 5.dp, vertical = 5.dp),
+        horizontalArrangement = Arrangement.spacedBy(5.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         PanelTab.entries.forEach { entry ->
             val active = entry == tab
             val bg by animateColorAsState(
                 targetValue = if (active) {
-                    MaterialTheme.colorScheme.primary
+                    MaterialTheme.colorScheme.onSurface
                 } else {
                     Color.Transparent
                 },
-                animationSpec = androidx.compose.animation.core.spring(
-                    dampingRatio = 0.72f,
-                    stiffness = androidx.compose.animation.core.Spring.StiffnessMediumLow,
-                ),
-                label = "panelTabBg",
-            )
-            val iconScale by androidx.compose.animation.core.animateFloatAsState(
-                targetValue = if (active) 1.18f else 1f,
-                animationSpec = androidx.compose.animation.core.spring(
-                    dampingRatio = 0.55f,
-                    stiffness = androidx.compose.animation.core.Spring.StiffnessMedium,
-                ),
-                label = "panelTabIconScale",
+                animationSpec = tween(durationMillis = 190),
+                label = "panelCategoryBg",
             )
             val fg by animateColorAsState(
                 targetValue = if (active) {
-                    MaterialTheme.colorScheme.onPrimary
+                    MaterialTheme.colorScheme.surface
                 } else {
                     MaterialTheme.colorScheme.onSurfaceVariant
                 },
                 animationSpec = tween(durationMillis = 190),
-                label = "panelTabFg",
+                label = "panelCategoryFg",
             )
             val label = xy(entry.id, entry.en)
             Row(
                 modifier = Modifier
                     .weight(1f)
-                    .clip(RoundedCornerShape(50))
                     .background(bg)
                     .clickable { onTab(entry) }
                     .semantics { contentDescription = label }
@@ -2808,12 +2789,7 @@ private fun PanelTabTiles(
                     panelTabIcon(entry),
                     contentDescription = null,
                     tint = fg,
-                    modifier = Modifier
-                        .size(15.dp)
-                        .graphicsLayer {
-                            scaleX = iconScale
-                            scaleY = iconScale
-                        },
+                    modifier = Modifier.size(15.dp),
                 )
                 Spacer(Modifier.width(5.dp))
                 Text(

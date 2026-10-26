@@ -92,18 +92,9 @@ internal fun XyBottomNav(
                     ambientColor = Color.Black.copy(alpha = 0.18f),
                     spotColor = Color.Black.copy(alpha = 0.22f),
                 )
+                // Monokrom hitam-putih: permukaan tema polos tanpa
+                // gradasi/warna aksen apa pun.
                 .xyGlass(shape = RoundedCornerShape(50), opacity = 0.94f)
-                // Liquid glass ungu (2026-10-24): gradasi violet tembus
-                // pandang; tanpa blur backdrop asli supaya tetap ringan.
-                .background(
-                    androidx.compose.ui.graphics.Brush.horizontalGradient(
-                        listOf(
-                            Color(0xD92A1650),
-                            Color(0xD9101014),
-                            Color(0xD92A1650),
-                        ),
-                    ),
-                )
                 .padding(horizontal = 10.dp, vertical = 7.dp),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(4.dp),
@@ -112,17 +103,17 @@ internal fun XyBottomNav(
                 val active = tab == selected
                 val title = xy(tab.title, tab.titleEn)
                 val pillColor by animateColorAsState(
-                    targetValue = if (active) Color(0xFF17171C) else Color.Transparent,
+                    targetValue = if (active) ink else Color.Transparent,
                     animationSpec = tween(durationMillis = 200),
                     label = "navPillColor",
                 )
                 val iconTint by animateColorAsState(
-                    targetValue = if (active) Color(0xFFFFFFFF) else ink.copy(alpha = 0.55f),
+                    targetValue = if (active) MaterialTheme.colorScheme.surface else ink.copy(alpha = 0.55f),
                     animationSpec = tween(durationMillis = 200),
                     label = "navIconTint",
                 )
                 val labelColor by animateColorAsState(
-                    targetValue = if (active) Color(0xFFFFFFFF) else Color.Transparent,
+                    targetValue = if (active) MaterialTheme.colorScheme.surface else Color.Transparent,
                     animationSpec = tween(durationMillis = 200),
                     label = "navLabelColor",
                 )
