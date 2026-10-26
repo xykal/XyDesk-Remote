@@ -825,28 +825,6 @@ object XyIcons {
         arcToRelative(1.94f, 1.94f, 0f, false, false, 3.4f, 0f)
     }
 
-    /** Trophy: piala leaderboard (Lucide trophy 24x24). */
-    val Trophy: ImageVector = xyIcon("XyTrophy") {
-        moveTo(6f, 9f)
-        lineTo(4.5f, 9f)
-        arcToRelative(2.5f, 2.5f, 0f, false, true, 0f, -5f)
-        lineTo(6f, 4f)
-        moveTo(18f, 9f)
-        lineTo(19.5f, 9f)
-        arcToRelative(2.5f, 2.5f, 0f, false, false, 0f, -5f)
-        lineTo(18f, 4f)
-        moveTo(4f, 22f); lineTo(20f, 22f)
-        moveTo(10f, 14.66f); lineTo(10f, 17f)
-        curveToRelative(0f, 0.55f, -0.47f, 0.98f, -0.97f, 1.21f)
-        curveTo(7.85f, 18.75f, 7f, 20.24f, 7f, 22f)
-        moveTo(14f, 14.66f); lineTo(14f, 17f)
-        curveToRelative(0f, 0.55f, 0.47f, 0.98f, 0.97f, 1.21f)
-        curveTo(16.15f, 18.75f, 17f, 20.24f, 17f, 22f)
-        moveTo(18f, 2f); lineTo(6f, 2f); lineTo(6f, 9f)
-        arcToRelative(6f, 6f, 0f, false, false, 12f, 0f)
-        lineTo(18f, 2f)
-        close()
-    }
 
     /** Megaphone: pengumuman resmi (Lucide megaphone 24x24). */
     val Megaphone: ImageVector = xyIcon("XyMegaphone") {

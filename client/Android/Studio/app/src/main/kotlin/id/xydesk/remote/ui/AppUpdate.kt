@@ -144,7 +144,6 @@ internal object XyInAppNotificationBus {
 
 @Composable
 internal fun XyInAppNotificationBannerHost(
-    onOpenChat: () -> Unit = {},
     onOpenFeed: () -> Unit = {},
 ) {
     val active by XyInAppNotificationBus.current.collectAsState()
@@ -301,8 +300,9 @@ internal fun XyInAppNotificationBannerHost(
                                     .clickable {
                                         XyInAppNotificationBus.closeInbox()
                                         when (n.targetRoute) {
-                                            "feed" -> onOpenFeed()
-                                            else -> onOpenChat()
+                                            // Rute "chat" warisan notifikasi lama juga
+                                            // mendarat di Berita (Chat Global dihapus).
+                                            else -> onOpenFeed()
                                         }
                                     }
                                     .padding(12.dp),
@@ -413,8 +413,9 @@ internal fun XyInAppNotificationBannerHost(
                     .clickable {
                         XyInAppNotificationBus.dismissCurrent()
                         when (item.targetRoute) {
-                            "chat" -> onOpenChat()
-                            "feed" -> onOpenFeed()
+                            // Rute "chat" warisan notifikasi lama juga
+                            // mendarat di Berita (Chat Global dihapus).
+                            else -> onOpenFeed()
                         }
                     },
             ) {

@@ -155,7 +155,6 @@ fun XyDeskHome(
     sharedFileNotice: String? = null,
     autoResumeSignal: Int = 0,
     skipAutoResume: Boolean = false,
-    openChatSignal: Int = 0,
     onDismissSharedNotice: () -> Unit = {},
     onAuthenticateConnect: (() -> Unit) -> Unit = { it() },
 ) {
@@ -184,14 +183,6 @@ fun XyDeskHome(
         XyHomeNavPersist.section = section
         XyHomeNavPersist.tab = tab
         XyHomeNavPersist.route = route
-    }
-    // openChatSignal dipertahankan untuk kompatibilitas intent lama, tetapi
-    // Chat Global sudah dihapus (2026-10-24): sinyal diarahkan ke Berita.
-    LaunchedEffect(openChatSignal) {
-        if (openChatSignal > 0) {
-            tab = XyTab.FEED
-            route = XyRoute.Feed
-        }
     }
     var crashLog by remember { mutableStateOf(CrashLog.last(context.applicationContext)) }
     var showCrash by remember { mutableStateOf(false) }
@@ -654,7 +645,6 @@ fun XyDeskHome(
 
     // In-App Notification Banner (Pengumuman, Balasan, Like, Reaksi, Mention, Chat, & OTA Data)
     XyInAppNotificationBannerHost(
-        onOpenChat = { tab = XyTab.FEED; route = XyRoute.Feed },
         onOpenFeed = {
             tab = XyTab.FEED
             route = XyRoute.Feed

@@ -55,9 +55,6 @@ internal const val EXTRA_CONNECT_PROFILE_ID = "id.xydesk.remote.ui.extra.CONNECT
 /** Extra pendamping: appWidgetId asal (buat log/debug widget). */
 internal const val EXTRA_CONNECT_WIDGET_ID = "id.xydesk.remote.ui.extra.CONNECT_WIDGET_ID"
 
-/** Extra dari notifikasi Chat Global: buka langsung layar Chat Global. */
-internal const val EXTRA_OPEN_CHAT_GLOBAL = "id.xydesk.remote.ui.extra.OPEN_CHAT_GLOBAL"
-
 class XyDeskHomeActivity : ComponentActivity() {
 
     companion object {
@@ -67,7 +64,6 @@ class XyDeskHomeActivity : ComponentActivity() {
 
     private val autoResumeSignal = mutableIntStateOf(0)
     private val skipAutoResumeSignal = mutableIntStateOf(-1)
-    private val openChatSignal = mutableIntStateOf(0)
     private var skipAutoResumeOnNextResume = false
     private var pendingAuthAction: (() -> Unit)? = null
     private val sharedFileBanner = mutableStateOf<String?>(null)
@@ -92,7 +88,6 @@ class XyDeskHomeActivity : ComponentActivity() {
         markSkipAutoResumeIfNeeded(intent)
         handleIncomingShareIntent(intent)
         handleWidgetConnectIntent(intent)
-        handleOpenChatIntent(intent)
         handleGitHubOAuthDeepLink(intent)
         setContent {
             XyThemeState.init(AppPrefs(this))
@@ -124,7 +119,6 @@ class XyDeskHomeActivity : ComponentActivity() {
                             autoResumeSignal = autoResumeSignal.intValue,
                             skipAutoResume = autoResumeSignal.intValue > 0 &&
                                 skipAutoResumeSignal.intValue == autoResumeSignal.intValue,
-                            openChatSignal = openChatSignal.intValue,
                             onDismissSharedNotice = { sharedFileBanner.value = null },
                             onAuthenticateConnect = { action -> authenticateBeforeConnect(action) },
                         )
@@ -161,7 +155,6 @@ class XyDeskHomeActivity : ComponentActivity() {
         markSkipAutoResumeIfNeeded(intent)
         handleIncomingShareIntent(intent)
         handleWidgetConnectIntent(intent)
-        handleOpenChatIntent(intent)
         handleGitHubOAuthDeepLink(intent)
     }
 
@@ -195,12 +188,6 @@ class XyDeskHomeActivity : ComponentActivity() {
                 }
             }
         }
-    }
-
-    private fun handleOpenChatIntent(incoming: Intent?) {
-        if (incoming?.getBooleanExtra(EXTRA_OPEN_CHAT_GLOBAL, false) != true) return
-        incoming.removeExtra(EXTRA_OPEN_CHAT_GLOBAL)
-        openChatSignal.intValue += 1
     }
 
     /**

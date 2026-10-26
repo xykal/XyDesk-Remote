@@ -773,7 +773,7 @@ fun XyDialog(
 
 /**
  * Komponen Skeleton Shimmer Loader konsisten untuk seluruh layar aplikasi
- * (Feed, Leaderboard, Buat RDP, Chat Global, Status, dan Perangkat).
+ * (Beranda, Berita, Buat RDP, Status, dan Perangkat).
  */
 @Composable
 fun XyLoadingSkeletonCard(

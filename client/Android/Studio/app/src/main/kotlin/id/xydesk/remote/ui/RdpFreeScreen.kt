@@ -1426,7 +1426,7 @@ fun RdpFreeScreen(onBack: () -> Unit, onConnect: (ConnectionProfile) -> Unit) {
                                             horizontalAlignment = Alignment.CenterHorizontally,
                                         ) {
                                             Text(
-                                                text = formatLeaderboardDuration(localActiveSec),
+                                                text = formatUsageDuration(localActiveSec),
                                                 style = MaterialTheme.typography.titleMedium,
                                                 fontWeight = FontWeight.ExtraBold,
                                                 color = Color(0xFFBFBFBF),
@@ -2103,7 +2103,7 @@ fun RdpFreeScreen(onBack: () -> Unit, onConnect: (ConnectionProfile) -> Unit) {
 }
 
 /** Format durasi detik menjadi teks ringkas, mis. "5j 30m". */
-internal fun formatLeaderboardDuration(totalSeconds: Long): String {
+internal fun formatUsageDuration(totalSeconds: Long): String {
     val sec = totalSeconds.coerceAtLeast(60L)
     val hours = sec / 3600L
     val mins = (sec % 3600L) / 60L
