@@ -21,6 +21,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -640,9 +641,9 @@ fun SessionControls(
             }
         }
 
-        // Bubble popup aksi cepat (dari tombol panah): isinya kontrol
-        // cepat seperti dulu — Mic, HUD, Scroll, Monitor, Menu, Beranda,
-        // Putuskan. Isi bubble ini TIDAK diduplikasi di menu fullscreen.
+        // Anchored popover aksi cepat: kotak datar TANPA header/tombol
+        // Tutup terpisah, nempel langsung di atas tombol panah dengan ekor
+        // segitiga kecil. Isi grid 3x3 ini TIDAK diduplikasi di menu.
         if (bubbleOpen && !panelOpen && !monitorGridOpen && !mappingMode) {
             Box(
                 Modifier
@@ -655,37 +656,20 @@ fun SessionControls(
                     .align(Alignment.BottomEnd)
                     .navigationBarsPadding()
                     .displayCutoutPadding()
-                    .padding(end = 10.dp, bottom = 148.dp)
-                    .width(308.dp)
-                    .zIndex(25f)
-                    .clip(RoundedCornerShape(14.dp))
-                    .background(Color(0xF2141417))
-                    .border(1.dp, Color(0x2EFFFFFF), RoundedCornerShape(14.dp))
-                    .padding(12.dp),
-                verticalArrangement = Arrangement.spacedBy(7.dp),
+                    .padding(end = 10.dp, bottom = 120.dp)
+                    .width(252.dp)
+                    .zIndex(25f),
+                horizontalAlignment = Alignment.End,
             ) {
-                Row(
-                    Modifier.fillMaxWidth(),
-                    verticalAlignment = Alignment.CenterVertically,
+                Column(
+                    Modifier
+                        .fillMaxWidth()
+                        .background(Color(0xF2141417))
+                        .border(1.dp, Color(0x3DFFFFFF))
+                        .padding(8.dp),
+                    verticalArrangement = Arrangement.spacedBy(6.dp),
                 ) {
-                    Text(
-                        xy("Aksi Cepat", "Quick Actions"),
-                        color = Color(0xFFF4F4F5),
-                        fontSize = 13.sp,
-                        fontWeight = FontWeight.Bold,
-                        modifier = Modifier.weight(1f),
-                    )
-                    Text(
-                        xy("Tutup", "Close"),
-                        color = Color(0xFFD9D9DE),
-                        fontSize = 11.sp,
-                        modifier = Modifier
-                            .clip(RoundedCornerShape(999.dp))
-                            .clickable { bubbleOpen = false }
-                            .padding(horizontal = 8.dp, vertical = 4.dp),
-                    )
-                }
-                Row(horizontalArrangement = Arrangement.spacedBy(7.dp)) {
+                Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                     QuickActionTile(
                         icon = if (voiceMicEnabled) XyIcons.VolumeOn else XyIcons.VolumeOff,
                         label = if (voiceMicEnabled) "Mic: ON" else "Mic: OFF",
@@ -714,7 +698,7 @@ fun SessionControls(
                         modifier = Modifier.weight(1f),
                     )
                 }
-                Row(horizontalArrangement = Arrangement.spacedBy(7.dp)) {
+                Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                     QuickActionTile(
                         icon = XyIcons.Monitor,
                         label = xy("Sesi/Layar", "Sessions"),
@@ -746,7 +730,7 @@ fun SessionControls(
                         modifier = Modifier.weight(1f),
                     )
                 }
-                Row(horizontalArrangement = Arrangement.spacedBy(7.dp)) {
+                Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                     QuickActionTile(
                         icon = XyIcons.Power,
                         label = xy("Putuskan", "Disconnect"),
@@ -760,6 +744,24 @@ fun SessionControls(
                     )
                     Spacer(Modifier.weight(1f))
                     Spacer(Modifier.weight(1f))
+                }
+                }
+                // Ekor popover: segitiga kecil tepat di atas tombol panah
+                // (pusat tombol = 32.dp dari tepi kanan rail).
+                Canvas(
+                    Modifier
+                        .padding(end = 23.dp)
+                        .size(width = 18.dp, height = 8.dp),
+                ) {
+                    val tail = Path().apply {
+                        moveTo(0f, 0f)
+                        lineTo(size.width, 0f)
+                        lineTo(size.width / 2f, size.height)
+                        close()
+                    }
+                    drawPath(tail, Color(0xF2141417))
+                    drawLine(Color(0x3DFFFFFF), Offset(0f, 0f), Offset(size.width / 2f, size.height), 1.dp.toPx())
+                    drawLine(Color(0x3DFFFFFF), Offset(size.width, 0f), Offset(size.width / 2f, size.height), 1.dp.toPx())
                 }
             }
         }
@@ -1728,8 +1730,9 @@ private fun SessionPanel(
     onCopyCoreInfo: () -> Unit,
 ) {
     val context = LocalContext.current
-    // Buka seksi pertama secara otomatis saat berpindah tab agar tidak kosong.
-    var openSection by remember(tab) { mutableStateOf<String?>("__FIRST__") }
+    // Null = grid menu satu layar. Nilai kunci seksi = halaman detailnya
+    // (drill-in); tombol Kembali di detail mengembalikan ke grid.
+    var openSection by remember(tab) { mutableStateOf<String?>(null) }
     var panelShown by remember { mutableStateOf(false) }
     LaunchedEffect(Unit) { panelShown = true }
     val panelScale by animateFloatAsState(
@@ -1835,15 +1838,14 @@ private fun SessionPanel(
                     label = "sessionPopupTabAnim",
                     modifier = Modifier.fillMaxSize(),
                 ) { activeTab ->
-                    val tabScroll = rememberScrollState()
                     Column(
                         Modifier
                             .fillMaxSize()
-                            .verticalScroll(tabScroll)
                             .padding(bottom = 74.dp),
                         verticalArrangement = Arrangement.spacedBy(7.dp),
                     ) {
                         XyDiscordVoiceStageBar(compact = true)
+                        Box(Modifier.weight(1f).fillMaxWidth()) {
                         when (activeTab) {
                             PanelTab.SCREEN -> ScreenTab(
                                 openKey = openSection,
@@ -1954,7 +1956,7 @@ private fun SessionPanel(
                                 onCopyCoreInfo = onCopyCoreInfo,
                             )
                         }
-                        Spacer(Modifier.height(16.dp))
+                        }
                     }
                 }
 
@@ -2936,12 +2938,11 @@ private fun QuickActionTile(
     }
     Column(
         modifier = modifier
-            .height(64.dp)
-            .clip(RoundedCornerShape(16.dp))
+            .height(58.dp)
             .background(bg)
-            .border(1.dp, borderCol, RoundedCornerShape(16.dp))
+            .border(1.dp, borderCol)
             .clickable(onClick = onClick)
-            .padding(horizontal = 6.dp, vertical = 8.dp),
+            .padding(horizontal = 6.dp, vertical = 7.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.Center,
     ) {
@@ -2964,31 +2965,148 @@ internal fun PanelSectionGrid(
     onOpenKey: (String?) -> Unit,
     builder: @Composable PanelSectionScope.() -> Unit,
 ) {
-    // Menu berkelompok kartu (permintaan pemilik): semua seksi langsung
-    // tampil sebagai kartu berjudul yang terbuka — TANPA dropdown /
-    // akordeon buka-tutup. Parameter openKey/onOpenKey dipertahankan
-    // hanya agar pemanggil lama tidak berubah; tidak lagi dipakai.
+    // Grid Menu + drill-in (pilihan pemilik): halaman awal tiap tab adalah
+    // grid ikon yang memenuhi SATU layar (fit-to-screen, tanpa scroll).
+    // Mengetuk satu kotak membuka detail seksi itu; scroll hanya mungkin
+    // di halaman detail yang isinya memang panjang.
     val scope = PanelSectionScope()
     scope.builder()
     val allSpecs = scope.specs
     if (allSpecs.isEmpty()) return
-    val mainSpecs = allSpecs.filter { !it.advanced }
-    val advancedSpecs = allSpecs.filter { it.advanced }
+    val selected = allSpecs.firstOrNull { it.key == openKey }
+    if (selected != null) {
+        val detailScroll = rememberScrollState()
+        Column(
+            Modifier
+                .fillMaxSize()
+                .verticalScroll(detailScroll),
+            verticalArrangement = Arrangement.spacedBy(12.dp),
+        ) {
+            Row(
+                Modifier
+                    .fillMaxWidth()
+                    .background(MaterialTheme.colorScheme.surfaceVariant)
+                    .clickable { onOpenKey(null) }
+                    .padding(horizontal = 12.dp, vertical = 10.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                Icon(
+                    XyIcons.ArrowLeft,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.onSurface,
+                    modifier = Modifier.size(18.dp),
+                )
+                Text(
+                    xy("Kembali", "Back"),
+                    color = MaterialTheme.colorScheme.onSurface,
+                    fontSize = 12.sp,
+                    fontWeight = FontWeight.Bold,
+                )
+            }
+            PanelSectionCard(selected)
+            Spacer(Modifier.height(8.dp))
+        }
+        return
+    }
+
+    val orderedSpecs = allSpecs.filter { !it.advanced } + allSpecs.filter { it.advanced }
+    BoxWithConstraints(Modifier.fillMaxSize()) {
+        val columns = when {
+            orderedSpecs.size <= 2 -> orderedSpecs.size
+            maxWidth >= 840.dp -> 4
+            maxWidth > maxHeight -> 3
+            maxWidth >= 600.dp -> 3
+            else -> 2
+        }.coerceAtLeast(1)
+        Column(
+            Modifier.fillMaxSize(),
+            verticalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            orderedSpecs.chunked(columns).forEach { rowSpecs ->
+                Row(
+                    Modifier
+                        .fillMaxWidth()
+                        .weight(1f),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    rowSpecs.forEach { spec ->
+                        PanelSectionGridTile(
+                            spec = spec,
+                            onClick = { onOpenKey(spec.key) },
+                            modifier = Modifier
+                                .weight(1f)
+                                .fillMaxHeight(),
+                        )
+                    }
+                    repeat(columns - rowSpecs.size) {
+                        Spacer(Modifier.weight(1f))
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun PanelSectionGridTile(
+    spec: PanelSectionScope.Spec,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    // Kotak menu datar tanpa sudut membulat (menu fullscreen monokrom):
+    // ikon besar + judul singkat; tanda LANJUTAN hanya untuk seksi jarang
+    // dipakai agar grid utama tetap mudah dipindai.
     Column(
-        Modifier.fillMaxWidth(),
-        verticalArrangement = Arrangement.spacedBy(12.dp),
+        modifier
+            .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.55f))
+            .border(1.dp, MaterialTheme.colorScheme.outlineVariant)
+            .clickable(onClick = onClick)
+            .padding(12.dp),
     ) {
-        mainSpecs.forEach { spec -> PanelSectionCard(spec) }
-        if (advancedSpecs.isNotEmpty()) {
+        Row(
+            Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Box(
+                Modifier
+                    .size(36.dp)
+                    .background(MaterialTheme.colorScheme.onSurface.copy(alpha = 0.08f)),
+                contentAlignment = Alignment.Center,
+            ) {
+                Icon(
+                    imageVector = panelSectionIcon(spec.key),
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.onSurface,
+                    modifier = Modifier.size(19.dp),
+                )
+            }
+            Spacer(Modifier.weight(1f))
+            Icon(
+                XyIcons.ChevronRight,
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.size(16.dp),
+            )
+        }
+        Spacer(Modifier.height(10.dp))
+        Text(
+            spec.title,
+            color = MaterialTheme.colorScheme.onSurface,
+            fontSize = 13.sp,
+            fontWeight = FontWeight.Bold,
+            maxLines = 2,
+            overflow = TextOverflow.Ellipsis,
+        )
+        Spacer(Modifier.weight(1f))
+        if (spec.advanced) {
             Text(
                 xy("LANJUTAN", "ADVANCED"),
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
-                fontSize = 10.sp,
-                letterSpacing = 1.4.sp,
+                fontSize = 8.5.sp,
+                letterSpacing = 1.2.sp,
                 fontWeight = FontWeight.Bold,
-                modifier = Modifier.padding(top = 4.dp),
             )
-            advancedSpecs.forEach { spec -> PanelSectionCard(spec) }
         }
     }
 }
