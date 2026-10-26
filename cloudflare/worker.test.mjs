@@ -5,7 +5,6 @@ import worker, {
   ActiveSessions,
   CommunityJokes,
   FeedbackBoard,
-  GlobalChat,
   withChatTranslationBudget,
   PcSignalRoom,
   resetReleaseLookupCache,
@@ -606,163 +605,6 @@ test("Android active-session reporting defaults on, remains easy to disable, and
   assert.match(session, /if \(!appPrefs\.shareActiveSessionStats\) return@LaunchedEffect/);
   assert.match(reporter, /\.put\("session_id",\s*sessionId\.toString\(\)\)/);
   assert.doesNotMatch(reporter, /\.put\("(?:host|profile|username|password|clipboard)"/i);
-});
-
-test("public joke API accepts an anonymous submission and serves it in the shared feed", async () => {
-  const { object } = communityJokesObject();
-  const env = jokesEnv(object);
-  const clientId = "00000000-0000-4000-8000-000000000011";
-  const submit = await worker.fetch(new Request("https://rdp.xydesk.my.id/api/jokes", {
-    method: "POST",
-    headers: { "content-type": "application/json" },
-    body: JSON.stringify({ client_id: clientId, text: "RDP tersambung. Kerjaan? Masih loading." }),
-  }), env);
-  assert.equal(submit.status, 201);
-  assert.equal(submit.headers.get("cache-control"), "no-store");
-  const posted = await submit.json();
-  assert.equal(posted.status, "created");
-  assert.equal(posted.joke.text, "RDP tersambung. Kerjaan? Masih loading.");
-  assert.equal(posted.joke.viewer_reaction, null);
-
-  const feed = await worker.fetch(new Request("https://rdp.xydesk.my.id/api/jokes", {
-    headers: { "x-xydesk-client-id": clientId },
-  }), env);
-  assert.equal(feed.status, 200);
-  const body = await feed.json();
-  assert.equal(body.items.length, 1);
-  assert.equal(body.items[0].id, posted.joke.id);
-  assert.equal(body.items[0].viewer_reaction, null);
-});
-
-test("community feed skips hidden newest posts across the full stored window", async () => {
-  const { object, records } = communityJokesObject();
-  const reactions = { "😂": 0, "😭": 0, "💀": 0, "🔥": 0, "👍": 0, "❤️": 0, "🎉": 0, "🤔": 0 };
-  for (let index = 0; index < 110; index += 1) {
-    const createdAt = index + 1;
-    const id = `00000000-0000-4000-8000-${String(createdAt).padStart(12, "0")}`;
-    const key = `joke:${String(createdAt).padStart(13, "0")}:${id}`;
-    records.set(key, {
-      id,
-      text: `post ${createdAt}`,
-      created_at: createdAt,
-      reactions,
-      hidden: index >= 9,
-    });
-  }
-  const response = await object.fetch(new Request("https://community-jokes/feed"));
-  const feed = await response.json();
-  assert.equal(feed.items.length, 9);
-  assert.equal(feed.items[0].text, "post 9");
-  assert.equal(feed.items.at(-1).text, "post 1");
-});
-
-test("community joke reactions toggle and switch one emoji per anonymous install", async () => {
-  const { object } = communityJokesObject();
-  const author = "00000000-0000-4000-8000-000000000021";
-  const reactor = "00000000-0000-4000-8000-000000000022";
-  const submit = await object.fetch(new Request("https://community-jokes/submit", {
-    method: "POST", headers: { "content-type": "application/json" },
-    body: JSON.stringify({ client_id: author, text: "Koneksi stabil pas lagi nggak dipakai." }),
-  }));
-  const id = (await submit.json()).joke.id;
-  const react = (emoji) => object.fetch(new Request(`https://community-jokes/reaction/${id}`, {
-    method: "POST", headers: { "content-type": "application/json" },
-    body: JSON.stringify({ client_id: reactor, emoji }),
-  }));
-  let response = await react("😂");
-  let data = await response.json();
-  assert.equal(data.joke.reactions["😂"], 1);
-  assert.equal(data.joke.viewer_reaction, "😂");
-  response = await react("😂");
-  data = await response.json();
-  assert.equal(data.joke.reactions["😂"], 0);
-  assert.equal(data.joke.viewer_reaction, null);
-  await react("😂");
-  response = await react("💀");
-  data = await response.json();
-  assert.equal(data.joke.reactions["😂"], 0);
-  assert.equal(data.joke.reactions["💀"], 1);
-  assert.equal(data.joke.viewer_reaction, "💀");
-  response = await react("👍");
-  data = await response.json();
-  assert.equal(data.joke.reactions["💀"], 0);
-  assert.equal(data.joke.reactions["👍"], 1);
-  assert.equal(data.joke.viewer_reaction, "👍");
-  response = await react("🚀");
-  assert.equal(response.status, 400);
-});
-
-test("community joke submissions are length-limited and rate-limited per random client ID", async () => {
-  const { object } = communityJokesObject();
-  const clientId = "00000000-0000-4000-8000-000000000031";
-  const post = (text, id = clientId) => object.fetch(new Request("https://community-jokes/submit", {
-    method: "POST", headers: { "content-type": "application/json" },
-    body: JSON.stringify({ client_id: id, text }),
-  }));
-  assert.equal((await post("ok")).status, 400);
-  assert.equal((await post("link https://example.com")).status, 400);
-  const originalNow = Date.now;
-  let now = originalNow();
-  Date.now = () => now;
-  try {
-    assert.equal((await post("Joke yang cukup panjang")).status, 201);
-    const limited = await post("Joke kedua juga cukup panjang");
-    assert.equal(limited.status, 429);
-    assert.equal((await limited.json()).status, "rate_limited");
-    now += 60_001;
-    assert.equal((await post("Joke kedua juga cukup panjang")).status, 201);
-  } finally {
-    Date.now = originalNow;
-  }
-});
-
-test("three unique reports hide a public joke; duplicate reports do not count twice", async () => {
-  const { object } = communityJokesObject();
-  const ids = [
-    "00000000-0000-4000-8000-000000000041",
-    "00000000-0000-4000-8000-000000000042",
-    "00000000-0000-4000-8000-000000000043",
-    "00000000-0000-4000-8000-000000000044",
-  ];
-  const submit = await object.fetch(new Request("https://community-jokes/submit", {
-    method: "POST", headers: { "content-type": "application/json" },
-    body: JSON.stringify({ client_id: ids[0], text: "A test joke that can be reported." }),
-  }));
-  const id = (await submit.json()).joke.id;
-  const report = (clientId) => object.fetch(new Request(`https://community-jokes/report/${id}`, {
-    method: "POST", headers: { "content-type": "application/json" },
-    body: JSON.stringify({ client_id: clientId }),
-  }));
-  assert.equal((await (await report(ids[1])).json()).hidden, false);
-  assert.equal((await (await report(ids[1])).json()).status, "already_reported");
-  assert.equal((await (await report(ids[2])).json()).hidden, false);
-  assert.equal((await (await report(ids[3])).json()).hidden, true);
-  const feed = await object.fetch(new Request("https://community-jokes/feed"));
-  assert.equal((await feed.json()).items.length, 0);
-  const reactHidden = await object.fetch(new Request(`https://community-jokes/reaction/${id}`, {
-    method: "POST", headers: { "content-type": "application/json" },
-    body: JSON.stringify({ client_id: ids[1], emoji: "😂" }),
-  }));
-  assert.equal(reactHidden.status, 404);
-});
-
-test("public joke routes reject bad clients and methods", async () => {
-  const { object } = communityJokesObject();
-  const env = jokesEnv(object);
-  const badId = await worker.fetch(new Request("https://rdp.xydesk.my.id/api/jokes", {
-    method: "POST", headers: { "content-type": "application/json" },
-    body: JSON.stringify({ client_id: "not-a-uuid", text: "This is a valid-length joke." }),
-  }), env);
-  assert.equal(badId.status, 400);
-  const wrongMethod = await worker.fetch(new Request("https://rdp.xydesk.my.id/api/jokes", { method: "PUT" }), env);
-  assert.equal(wrongMethod.status, 405);
-  assert.equal(wrongMethod.headers.get("allow"), "GET, HEAD, POST");
-  const oversized = await worker.fetch(new Request("https://rdp.xydesk.my.id/api/jokes", {
-    method: "POST", headers: { "content-type": "application/json" },
-    // Batas body naik ke 2,4MB (lampiran base64); 413 harus tetap muncul di atasnya.
-    body: JSON.stringify({ client_id: "00000000-0000-4000-8000-000000000051", text: "x".repeat(2_500_000) }),
-  }), env);
-  assert.equal(oversized.status, 413);
 });
 
 test("current XyDesk Remote APK alias tetap jalan tanpa token GitHub saat API gagal", async () => {
@@ -1373,127 +1215,9 @@ test("mutating HTTP methods are rejected", async () => {
   assert.equal(response.headers.get("allow"), "GET, HEAD");
 });
 
-test("community comments attach to a joke, show in feed, and carry display names", async () => {
+test("/me menyimpan nama tampilan akun anonim dan menolak nama spam", async () => {
   const { object } = communityJokesObject();
-  const env = jokesEnv(object);
-  const author = "00000000-0000-4000-8000-000000000021";
-  const commenter = "00000000-0000-4000-8000-000000000022";
-  const submit = await worker.fetch(new Request("https://rdp.xydesk.my.id/api/jokes", {
-    method: "POST",
-    headers: { "content-type": "application/json" },
-    body: JSON.stringify({ client_id: author, text: "Ping 200ms di data seluler, semangat.", display_name: "Budi Seluler" }),
-  }), env);
-  assert.equal(submit.status, 201);
-  const posted = await submit.json();
-  assert.equal(posted.joke.author_name, "Budi Seluler");
-  assert.equal(posted.joke.comments_total, 0);
-
-  const comment = await worker.fetch(new Request(`https://rdp.xydesk.my.id/api/jokes/${posted.joke.id}/comment`, {
-    method: "POST",
-    headers: { "content-type": "application/json" },
-    body: JSON.stringify({ client_id: commenter, text: "Sabar bang, namanya juga 4G.", display_name: "Tamu 4G" }),
-  }), env);
-  assert.equal(comment.status, 201);
-  const commented = await comment.json();
-  assert.equal(commented.comment.name, "Tamu 4G");
-  assert.equal(commented.comments_total, 1);
-
-  const feed = await worker.fetch(new Request("https://rdp.xydesk.my.id/api/jokes", {
-    headers: { "x-xydesk-client-id": author },
-  }), env);
-  const body = await feed.json();
-  assert.equal(body.items[0].author_name, "Budi Seluler");
-  assert.equal(body.items[0].comments_total, 1);
-  assert.equal(body.items[0].comments[0].text, "Sabar bang, namanya juga 4G.");
-  assert.equal(body.items[0].comments[0].name, "Tamu 4G");
-
-  const tooLong = await worker.fetch(new Request(`https://rdp.xydesk.my.id/api/jokes/${posted.joke.id}/comment`, {
-    method: "POST",
-    headers: { "content-type": "application/json" },
-    body: JSON.stringify({ client_id: commenter, text: "x".repeat(141) }),
-  }), env);
-  assert.equal(tooLong.status, 400);
-});
-
-test("community comment delete: only the author, is_own flag in feed", async () => {
-  const { object } = communityJokesObject();
-  const env = jokesEnv(object);
-  const author = "00000000-0000-4000-8000-000000000031";
-  const commenter = "00000000-0000-4000-8000-000000000032";
-  const submit = await worker.fetch(new Request("https://rdp.xydesk.my.id/api/jokes", {
-    method: "POST",
-    headers: { "content-type": "application/json" },
-    body: JSON.stringify({ client_id: author, text: "Kabel UTP vs WiFi round 2." }),
-  }), env);
-  const posted = await submit.json();
-
-  const comment = await worker.fetch(new Request(`https://rdp.xydesk.my.id/api/jokes/${posted.joke.id}/comment`, {
-    method: "POST",
-    headers: { "content-type": "application/json" },
-    body: JSON.stringify({ client_id: commenter, text: "WiFi menang kalau kabelnya ketinggalan." }),
-  }), env);
-  const commented = await comment.json();
-  const commentId = commented.comment.id;
-
-  // is_own: komentar sendiri terlihat sebagai milik sendiri.
-  const feedOwn = await worker.fetch(new Request("https://rdp.xydesk.my.id/api/jokes", {
-    headers: { "x-xydesk-client-id": commenter },
-  }), env);
-  const ownBody = await feedOwn.json();
-  assert.equal(ownBody.items[0].comments[0].is_own, true);
-
-  const feedOther = await worker.fetch(new Request("https://rdp.xydesk.my.id/api/jokes", {
-    headers: { "x-xydesk-client-id": author },
-  }), env);
-  const otherBody = await feedOther.json();
-  assert.equal(otherBody.items[0].comments[0].is_own, false);
-
-  // Orang lain tidak boleh hapus.
-  const forbidden = await worker.fetch(new Request(`https://rdp.xydesk.my.id/api/jokes/${posted.joke.id}/comment-delete`, {
-    method: "POST",
-    headers: { "content-type": "application/json" },
-    body: JSON.stringify({ client_id: author, comment_id: commentId }),
-  }), env);
-  assert.equal(forbidden.status, 403);
-
-  // Penulis komentar boleh hapus.
-  const deleted = await worker.fetch(new Request(`https://rdp.xydesk.my.id/api/jokes/${posted.joke.id}/comment-delete`, {
-    method: "POST",
-    headers: { "content-type": "application/json" },
-    body: JSON.stringify({ client_id: commenter, comment_id: commentId }),
-  }), env);
-  assert.equal(deleted.status, 200);
-  const deletedBody = await deleted.json();
-  assert.equal(deletedBody.comments_total, 0);
-
-  // Hapus kedua kali → not found.
-  const gone = await worker.fetch(new Request(`https://rdp.xydesk.my.id/api/jokes/${posted.joke.id}/comment-delete`, {
-    method: "POST",
-    headers: { "content-type": "application/json" },
-    body: JSON.stringify({ client_id: commenter, comment_id: commentId }),
-  }), env);
-  assert.equal(gone.status, 404);
-});
-
-test("expanded reaction set accepts new emoji and /me stores display names", async () => {
-  const { object } = communityJokesObject();
-  const env = jokesEnv(object);
   const clientId = "00000000-0000-4000-8000-000000000031";
-  const submit = await worker.fetch(new Request("https://rdp.xydesk.my.id/api/jokes", {
-    method: "POST",
-    headers: { "content-type": "application/json" },
-    body: JSON.stringify({ client_id: clientId, text: "Emoji baru masuk bro." }),
-  }), env);
-  const posted = await (await submit.json()).joke;
-
-  const trophy = await worker.fetch(new Request(`https://rdp.xydesk.my.id/api/jokes/${posted.id}/reaction`, {
-    method: "POST",
-    headers: { "content-type": "application/json" },
-    body: JSON.stringify({ client_id: clientId, emoji: "🏆" }),
-  }), env);
-  assert.equal(trophy.status, 200);
-  const reacted = await trophy.json();
-  assert.equal(reacted.joke.reactions["🏆"], 1);
 
   const putMe = await object.fetch(new Request("https://community-jokes/me", {
     method: "PUT",
@@ -1513,53 +1237,12 @@ test("expanded reaction set accepts new emoji and /me stores display names", asy
   }));
   assert.equal(badMe.status, 400);
 });
-test("feed attachment foto/stiker, edit & hapus milik sendiri, avatar profil", async () => {
+test("avatar profil tersimpan lewat /me dan endpoint feed/leaderboard mati (404)", async () => {
   const kv = mockKv();
   const { object } = communityJokesObject(kv);
   const env = { ...jokesEnv(object), UNIQUE_DOWNLOADS: kv };
   const owner = "00000000-0000-4000-8000-000000000041";
-  const other = "00000000-0000-4000-8000-000000000042";
   const pixels = "QUJDRA=="; // "ABCD"
-
-  const submit = await worker.fetch(new Request("https://rdp.xydesk.my.id/api/jokes", {
-    method: "POST",
-    headers: { "content-type": "application/json" },
-    body: JSON.stringify({
-      client_id: owner,
-      text: "Stiker webp perdana di feed.",
-      attachment: { mime: "image/webp", data: pixels },
-    }),
-  }), env);
-  assert.equal(submit.status, 201);
-  const posted = (await submit.json()).joke;
-  assert.equal(posted.is_own, true);
-  assert.equal(posted.attachment.mime, "image/webp");
-
-  const att = await worker.fetch(new Request(`https://rdp.xydesk.my.id${posted.attachment.url}`), env);
-  assert.equal(att.status, 200);
-  assert.equal(att.headers.get("content-type"), "image/webp");
-  assert.equal(Buffer.from(await att.arrayBuffer()).toString("base64"), pixels);
-
-  const feed = await worker.fetch(new Request("https://rdp.xydesk.my.id/api/jokes", {
-    headers: { "x-xydesk-client-id": other },
-  }), env);
-  const item = (await feed.json()).items[0];
-  assert.equal(item.is_own, false);
-
-  const foreignEdit = await worker.fetch(new Request(`https://rdp.xydesk.my.id/api/jokes/${posted.id}/edit`, {
-    method: "POST",
-    headers: { "content-type": "application/json" },
-    body: JSON.stringify({ client_id: other, text: "Ambil alih postingan orang." }),
-  }), env);
-  assert.equal(foreignEdit.status, 403);
-
-  const ownEdit = await worker.fetch(new Request(`https://rdp.xydesk.my.id/api/jokes/${posted.id}/edit`, {
-    method: "POST",
-    headers: { "content-type": "application/json" },
-    body: JSON.stringify({ client_id: owner, text: "Stiker webp perdana, sudah diedit." }),
-  }), env);
-  assert.equal(ownEdit.status, 200);
-  assert.equal((await ownEdit.json()).joke.edited_at > 0, true);
 
   const putAvatar = await worker.fetch(new Request("https://rdp.xydesk.my.id/api/jokes/me", {
     method: "PUT",
@@ -1573,25 +1256,12 @@ test("feed attachment foto/stiker, edit & hapus milik sendiri, avatar profil", a
   assert.equal(avatar.status, 200);
   assert.equal(avatar.headers.get("content-type"), "image/png");
 
-  const foreignDelete = await worker.fetch(new Request(`https://rdp.xydesk.my.id/api/jokes/${posted.id}/delete`, {
-    method: "POST",
-    headers: { "content-type": "application/json" },
-    body: JSON.stringify({ client_id: other }),
-  }), env);
-  assert.equal(foreignDelete.status, 403);
-
-  const ownDelete = await worker.fetch(new Request(`https://rdp.xydesk.my.id/api/jokes/${posted.id}/delete`, {
-    method: "POST",
-    headers: { "content-type": "application/json" },
-    body: JSON.stringify({ client_id: owner }),
-  }), env);
-  assert.equal(ownDelete.status, 200);
-  const after = await worker.fetch(new Request("https://rdp.xydesk.my.id/api/jokes"), env);
-  assert.equal((await after.json()).items.length, 0);
-  const attGone = await worker.fetch(new Request(`https://rdp.xydesk.my.id${posted.attachment.url}`), env);
-  assert.equal(attGone.status, 404);
+  // Feed komunitas & leaderboard sudah dihapus total: route-nya 404.
+  for (const path of ["/api/jokes", "/api/leaderboard", "/api/notifications", "/api/chat/presence"]) {
+    const res = await worker.fetch(new Request(`https://rdp.xydesk.my.id${path}`), env);
+    assert.equal(res.status, 404, path);
+  }
 });
-
 test("update-check API reports the newest published tag with changelog excerpt", async () => {
   const originalFetch = globalThis.fetch;
   globalThis.fetch = async (input) => {
@@ -1796,14 +1466,6 @@ test("chat translation keeps fast results and falls back on provider errors", as
 });
 
 
-test("empty durable leaderboard never fabricates founder or placeholder podium users", async () => {
-  const chat = new GlobalChat({ storage: { get: async () => undefined } }, {});
-  const response = await chat.handleLeaderboard(new Request("https://example.test/leaderboard"));
-  const body = await response.json();
-  assert.deepEqual(body.items, []);
-  assert.equal(body.total_ranked, 0);
-});
-
 test("OAuth complete rejects mismatched provider identity before any storage or DO write", async () => {
   let writes = 0;
   const env = envFor({}, {
@@ -1819,15 +1481,10 @@ test("OAuth complete rejects mismatched provider identity before any storage or 
   assert.equal(writes, 0);
 });
 
-test("OAuth complete writes only provider identity and forwards canonical metadata", async () => {
+test("OAuth complete writes only provider identity", async () => {
   const stored = [];
-  const forwarded = [];
   const env = envFor({}, {
     UNIQUE_DOWNLOADS: { put: async (key, value) => { stored.push([key, JSON.parse(value)]); } },
-    GLOBAL_CHAT: {
-      idFromName: () => "test-chat",
-      get: () => ({ fetch: async request => { forwarded.push(await request.json()); return Response.json({ status: "ok" }); } }),
-    },
   });
   globalThis.fetch = async () => Response.json({ id: 123, login: "Alice", name: "Verified Provider", avatar_url: "https://avatars.githubusercontent.com/u/123" });
   const response = await worker.fetch(new Request("https://example.test/api/github/oauth/complete", {
@@ -1837,9 +1494,6 @@ test("OAuth complete writes only provider identity and forwards canonical metada
   assert.equal(stored.length, 1);
   assert.equal(stored[0][1].login, "Alice");
   assert.equal(stored[0][1].name, "Verified Provider");
-  assert.equal(forwarded.length, 1);
-  assert.equal(forwarded[0].name, "Verified Provider");
-  assert.equal(forwarded[0].avatar_url, "https://avatars.githubusercontent.com/u/123");
 });
 
 test("OAuth complete provider failure cannot write session", async () => {

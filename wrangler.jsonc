@@ -7,7 +7,6 @@
   "vars": {
     "ONESIGNAL_APP_ID": "e3d5adea-1c0f-4986-9ce5-e088d65f0998"
   },
-  "triggers": { "crons": ["23 */6 * * *"] },
   "routes": [
     { "pattern": "xydeskremote.biz.id", "custom_domain": true },
     { "pattern": "www.xydeskremote.biz.id", "custom_domain": true },
@@ -32,8 +31,7 @@
       { "name": "ACTIVE_SESSIONS", "class_name": "ActiveSessions" },
       { "name": "COMMUNITY_JOKES", "class_name": "CommunityJokes" },
       { "name": "PC_SIGNAL_ROOMS", "class_name": "PcSignalRoom" },
-      { "name": "FEEDBACK_BOARD", "class_name": "FeedbackBoard" },
-      { "name": "GLOBAL_CHAT", "class_name": "GlobalChat" }
+      { "name": "FEEDBACK_BOARD", "class_name": "FeedbackBoard" }
     ]
   },
   "migrations": [
@@ -41,7 +39,8 @@
     { "tag": "v2", "new_sqlite_classes": ["CommunityJokes"] },
     { "tag": "v3", "new_sqlite_classes": ["PcSignalRoom"] },
     { "tag": "v4", "new_sqlite_classes": ["FeedbackBoard"] },
-    { "tag": "v5", "new_sqlite_classes": ["GlobalChat"] }
+    { "tag": "v5", "new_sqlite_classes": ["GlobalChat"] },
+    { "tag": "v6", "deleted_classes": ["GlobalChat"] }
   ],
   "assets": {
     "directory": "./web",
@@ -50,7 +49,6 @@
     "not_found_handling": "404-page",
     "run_worker_first": [
       "/api/*",
-      "/ws/chat",
       "/",
       "/index.html",
       "/arm64-v8a.apk",
