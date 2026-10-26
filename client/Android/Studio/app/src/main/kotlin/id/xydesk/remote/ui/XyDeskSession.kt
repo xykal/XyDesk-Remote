@@ -938,6 +938,9 @@ fun XyDeskSessionScreen(
 
     LaunchedEffect(state, certPrompt != null, nlaPrompt != null, confirmDisconnect, confirmCancelConnect, showLog, controlsBackHandler) {
         (context as? XyDeskSessionActivity)?.backHandler = {
+            // `state` properti delegasi Compose: smart-cast tidak berlaku,
+            // jadi ambil bentuk Error-nya sekali di sini.
+            val errorState = state as? SessionState.Error
             when {
                 certPrompt != null || nlaPrompt != null -> true
                 showLog -> {
@@ -945,12 +948,12 @@ fun XyDeskSessionScreen(
                     true
                 }
                 controlsBackHandler?.invoke() == true -> true
-                state is SessionState.Error && dismissedError != state &&
-                    (everConnected || RdpErrors.isCredentialError(state.code, state.message)) -> {
+                errorState != null && dismissedError != errorState &&
+                    (everConnected || RdpErrors.isCredentialError(errorState.code, errorState.message)) -> {
                     // Dialog error sedang tampil: Back hanya menutup dialog dan
                     // membuka layar terputus di baliknya — tetap di sesi,
                     // tidak pernah melempar user pulang ke Home.
-                    dismissedError = state as SessionState.Error
+                    dismissedError = errorState
                     true
                 }
                 state is SessionState.Error || state is SessionState.Disconnected -> {
