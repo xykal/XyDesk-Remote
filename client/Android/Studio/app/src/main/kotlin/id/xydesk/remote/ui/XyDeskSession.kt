@@ -950,7 +950,7 @@ fun XyDeskSessionScreen(
                     // Dialog error sedang tampil: Back hanya menutup dialog dan
                     // membuka layar terputus di baliknya — tetap di sesi,
                     // tidak pernah melempar user pulang ke Home.
-                    dismissedError = state
+                    dismissedError = state as SessionState.Error
                     true
                 }
                 state is SessionState.Error || state is SessionState.Disconnected -> {
