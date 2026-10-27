@@ -1370,29 +1370,29 @@ fun HudLayoutPreview(
             val density = LocalDensity.current
             val canvasW = with(density) { maxWidth.toPx() }.coerceAtLeast(1f)
             val canvasH = with(density) { maxHeight.toPx() }.coerceAtLeast(1f)
+            // Tangkap Dp di scope BoxWithConstraints. Di dalam Box bersarang
+            // receiver-nya ketimpa BoxScope, jadi maxWidth/maxHeight tidak bisa
+            // dipakai sebagai implicit receiver (error compileDebugKotlin).
+            val gridWidthDp = maxWidth
+            val gridHeightDp = maxHeight
 
             // Garis bantu 25% — menyala saat sedang menyeret.
             if (draggedId != null) {
                 listOf(0.25f, 0.5f, 0.75f).forEach { g ->
                     Box(
                         Modifier
-                            .fillMaxSize()
+                            .offset { IntOffset((g * canvasW).roundToInt(), 0) }
+                            .size(1.dp, gridHeightDp)
                             .zIndex(0f)
-                            .padding(0.dp),
-                    ) {
-                        Box(
-                            Modifier
-                                .offset { IntOffset((g * canvasW).roundToInt(), 0) }
-                                .size(1.dp, maxHeight)
-                                .background(MaterialTheme.colorScheme.onSurface.copy(alpha = 0.12f)),
-                        )
-                        Box(
-                            Modifier
-                                .offset { IntOffset(0, (g * canvasH).roundToInt()) }
-                                .size(maxWidth, 1.dp)
-                                .background(MaterialTheme.colorScheme.onSurface.copy(alpha = 0.12f)),
-                        )
-                    }
+                            .background(MaterialTheme.colorScheme.onSurface.copy(alpha = 0.12f)),
+                    )
+                    Box(
+                        Modifier
+                            .offset { IntOffset(0, (g * canvasH).roundToInt()) }
+                            .size(gridWidthDp, 1.dp)
+                            .zIndex(0f)
+                            .background(MaterialTheme.colorScheme.onSurface.copy(alpha = 0.12f)),
+                    )
                 }
             }
 
