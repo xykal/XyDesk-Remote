@@ -112,6 +112,18 @@ internal data class XyRdpValidatedSession(
     val validatedPort: Int,
     val validatedTransport: String?,
     val validationNote: String?,
+    /**
+     * Alasan manusiawi kenapa sesi TIDAK dianggap aktif. Dipakai UI untuk
+     * menjawab "saya sudah jalankan workflow manual di GitHub, kok tidak
+     * terdeteksi?" tanpa harus membaca log. Kosong saat [isVerifiedLive].
+     */
+    val diagnostics: List<String> = emptyList(),
+    /**
+     * True kalau secara khusus sesi yang dijalankan MANUAL (workflow_dispatch)
+     * atau run yang sudah selesai membuat validasi gagal. UI memakai ini
+     * untuk menampilkan tombol "Muat ulang status" yang lebih menonjol.
+     */
+    val needsManualRefresh: Boolean = false,
 )
 
 /**
@@ -932,6 +944,33 @@ internal object XyRdpClient {
             else -> null
         }
 
+        // Diagnostik untuk sesi yang dijalankan manual lewat GitHub UI:
+        // aplikasi hanya membaca repo <login>/XyRDP, branch `status`, dan run
+        // workflow rdp-6h.yml. Kalau workflow dipicu dari repo/branch lain,
+        // file rdp-status.json tidak akan pernah terbaca di sini.
+        val diagnostics = buildList {
+            if (phase != XyRdpPhase.READY) {
+                if (run == null) {
+                    add("Belum ada run workflow rdp-6h.yml yang terbaca di repo XyRDP milik akun ini.")
+                } else if (!isRunInProgress) {
+                    add("Run #${run?.number} berstatus ${run?.status} (${run?.conclusion ?: "selesai"}) — aplikasi hanya menganggap sesi hidup saat run masih berjalan.")
+                }
+                if (access == null) {
+                    add("rdp-status.json tidak ditemukan di branch 'status' repo XyRDP (atau out/rdp-status.json).")
+                } else {
+                    if (!access.active) add("rdp-status.json menandai sesi tidak aktif.")
+                    if (!notExpired) add("Waktu sesi di rdp-status.json sudah kedaluwarsa.")
+                    if (!runIdMatches) add("run_id/attempt di rdp-status.json tidak cocok dengan run #${run?.number ?: "?"} — kemungkinan sisa sesi lama.")
+                    if (access.tailscaleIp.isBlank() && access.tunnelHost.isBlank() && access.portmapHost.isBlank()) {
+                        add("Belum ada alamat Tailscale / Portmap / tunnel yang valid.")
+                    }
+                }
+                if (fatalStep != null) add("Ada tahap workflow yang gagal: $fatalStep.")
+                if (run != null && run.status == "completed") {
+                    add("Workflow dijalankan di luar aplikasi? Jalankan ulang lewat tombol di sini supaya run_id sinkron.")
+                }
+            }
+        }
         return XyRdpValidatedSession(
             phase = phase,
             phaseLabel = phaseLabel,
@@ -944,6 +983,9 @@ internal object XyRdpClient {
             validatedPort = validPort,
             validatedTransport = transport,
             validationNote = validationNote,
+            diagnostics = diagnostics,
+            needsManualRefresh = phase != XyRdpPhase.READY && run != null &&
+                (run.status == "completed" || !runIdMatches),
         )
     }
 

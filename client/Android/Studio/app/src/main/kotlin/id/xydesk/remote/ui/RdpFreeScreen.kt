@@ -720,12 +720,149 @@ fun RdpFreeScreen(onBack: () -> Unit, onConnect: (ConnectionProfile) -> Unit) {
                             },
                         )
                     } else {
+                        // Urutan tab dipermudah: Sesi → Kunci Akses → Lainnya.
+                        // `activeTab` lama (1 = OS & Fitur, 2 = Secrets) tetap
+                        // dipertahankan supaya semua when() di bawah tidak berubah.
                         XySegmented(
-                            options = listOf("Sesi RDP", "OS & Fitur", "Secrets"),
-                            selectedIndex = activeTab,
-                            onSelect = { activeTab = it },
+                            options = listOf("Sesi", "Kunci Akses", "Lainnya"),
+                            selectedIndex = when (activeTab) {
+                                0 -> 0
+                                2 -> 1
+                                else -> 2
+                            },
+                            onSelect = { idx ->
+                                activeTab = when (idx) {
+                                    0 -> 0
+                                    1 -> 2
+                                    else -> 1
+                                }
+                            },
                             modifier = Modifier.fillMaxWidth(),
                         )
+
+                        // KARTU DIAGNOSTIK: menjawab "saya sudah jalankan
+                        // workflow manual di GitHub, kok sesi tidak terdeteksi?".
+                        // Aplikasi hanya membaca repo <login>/XyRDP, branch
+                        // `status`, dan run rdp-6h.yml yang masih berjalan.
+                        val diag = validatedSession
+                        if (diag != null && !diag.isVerifiedLive && diag.diagnostics.isNotEmpty()) {
+                            var showDiag by remember { mutableStateOf(false) }
+                            XyCard(Modifier.fillMaxWidth()) {
+                                Row(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .clickable { showDiag = !showDiag },
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(10.dp),
+                                ) {
+                                    Box(
+                                        modifier = Modifier
+                                            .size(30.dp)
+                                            .clip(CircleShape)
+                                            .background(MaterialTheme.colorScheme.surfaceVariant),
+                                        contentAlignment = Alignment.Center,
+                                    ) {
+                                        Icon(
+                                            XyIcons.Info,
+                                            contentDescription = null,
+                                            tint = MaterialTheme.colorScheme.onSurface,
+                                            modifier = Modifier.size(16.dp),
+                                        )
+                                    }
+                                    Column(modifier = Modifier.weight(1f)) {
+                                        Text(
+                                            "Kenapa sesi belum terdeteksi?",
+                                            style = MaterialTheme.typography.labelMedium,
+                                            fontWeight = FontWeight.ExtraBold,
+                                        )
+                                        Text(
+                                            diag.phaseLabel,
+                                            style = MaterialTheme.typography.labelSmall,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                            maxLines = 2,
+                                            overflow = TextOverflow.Ellipsis,
+                                        )
+                                    }
+                                    Icon(
+                                        if (showDiag) XyIcons.ChevronUp else XyIcons.ChevronDown,
+                                        contentDescription = null,
+                                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                                        modifier = Modifier.size(16.dp),
+                                    )
+                                }
+                                AnimatedVisibility(visible = showDiag) {
+                                    Column(
+                                        modifier = Modifier.padding(top = 10.dp),
+                                        verticalArrangement = Arrangement.spacedBy(6.dp),
+                                    ) {
+                                        diag.diagnostics.forEach { reason ->
+                                            Text(
+                                                "• $reason",
+                                                style = MaterialTheme.typography.labelSmall,
+                                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                            )
+                                        }
+                                        Spacer(Modifier.height(4.dp))
+                                        Text(
+                                            "Tidak perlu mengulang dari awal. Cukup jalankan ulang workflow lewat tombol di aplikasi agar run_id sinkron, lalu muat ulang status. Workflow yang dipicu manual dari repo/branch lain memang tidak terbaca di sini.",
+                                            style = MaterialTheme.typography.labelSmall,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                        )
+                                    }
+                                }
+                                Spacer(Modifier.height(10.dp))
+                                XyPillButton(
+                                    text = "Muat ulang status",
+                                    icon = XyIcons.Refresh,
+                                    onClick = {
+                                        busy = true
+                                        busyLabel = "Memuat ulang status sesi…"
+                                        scope.launch {
+                                            try {
+                                                val (t, l) = auth()
+                                                    ?: throw IllegalStateException("Sesi GitHub berakhir. Masuk lagi untuk melanjutkan.")
+                                                refreshAll(t, l)
+                                                successMessage = "Status sesi dimuat ulang."
+                                            } catch (e: Exception) {
+                                                reportError(e)
+                                            } finally {
+                                                busy = false
+                                            }
+                                        }
+                                    },
+                                    primary = diag.needsManualRefresh,
+                                    compact = true,
+                                    enabled = !busy,
+                                    modifier = Modifier.fillMaxWidth(),
+                                )
+                                Spacer(Modifier.height(8.dp))
+                                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                    XyPillButton(
+                                        text = "Lihat Actions ↗",
+                                        icon = XyIcons.Globe,
+                                        onClick = {
+                                            openBrowser(
+                                                "https://github.com/${login ?: "xykal"}/${XyRdpConfig.FORK_REPO_NAME}/actions",
+                                            )
+                                        },
+                                        primary = false,
+                                        compact = true,
+                                        enabled = !busy,
+                                        modifier = Modifier.weight(1f),
+                                    )
+                                    XyPillButton(
+                                        text = "Jalankan ulang",
+                                        icon = XyIcons.Play,
+                                        onClick = { operate("start") },
+                                        primary = false,
+                                        compact = true,
+                                        enabled = !busy,
+                                        modifier = Modifier.weight(1f),
+                                    )
+                                }
+                            }
+                            Spacer(Modifier.height(12.dp))
+                        }
 
                         when (activeTab) {
                             // ---------------------------------------------------------
@@ -842,7 +979,7 @@ fun RdpFreeScreen(onBack: () -> Unit, onConnect: (ConnectionProfile) -> Unit) {
                                             )
                                             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                                                 XyPillButton(
-                                                    text = "OS & Fitur",
+                                                    text = "Lainnya",
                                                     icon = XyIcons.Sliders,
                                                     onClick = { activeTab = 1 },
                                                     primary = false,
@@ -850,7 +987,7 @@ fun RdpFreeScreen(onBack: () -> Unit, onConnect: (ConnectionProfile) -> Unit) {
                                                     modifier = Modifier.weight(1f),
                                                 )
                                                 XyPillButton(
-                                                    text = "Secrets",
+                                                    text = "Kunci Akses",
                                                     icon = XyIcons.Key,
                                                     onClick = { activeTab = 2 },
                                                     primary = !(hasRdpPass && hasAccessSecret),
