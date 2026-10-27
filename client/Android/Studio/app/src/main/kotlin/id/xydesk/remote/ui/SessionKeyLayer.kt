@@ -10,6 +10,8 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
+import androidx.compose.foundation.gestures.detectDragGestures
+import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -1323,33 +1325,197 @@ fun HudMappingBanner(
     }
 }
 
-/** Grid kecil pratinjau posisi tombol di dalam panel. */
+/**
+ * Snap posisi ternormalisasi ke grid 25% dan ke posisi tombol lain.
+ * Dipisah supaya perilakunya sama dengan panduan di overlay sesi sungguhan.
+ */
+private fun snapPreviewPosition(value: Float, others: List<Float>): Float {
+    val candidates = listOf(0f, 0.25f, 0.5f, 0.75f, 1f) + others
+    val nearest = candidates.minByOrNull { kotlin.math.abs(it - value) } ?: value
+    return if (kotlin.math.abs(nearest - value) < 0.02f) {
+        nearest.coerceIn(0f, 1f)
+    } else {
+        value.coerceIn(0f, 1f)
+    }
+}
+
+/**
+ * Kanvas editor HUD (1.1.26): bukan lagi sekadar pratinjau statis.
+ * Tombol bisa digeser, diubah ukurannya lewat handle, dan menempel (snap)
+ * ke grid 25% / sejajar tombol lain. Perubahan dikirim lewat [onKeysChange]
+ * — jalur yang sama dipakai overlay sesi sungguhan, jadi hasil edit langsung
+ * terasa di layar remote. Mengetuk tombol membuka editor aksi via [onSelect].
+ */
 @Composable
-fun HudLayoutPreview(keys: List<HudKey>, modifier: Modifier = Modifier) {
+fun HudLayoutPreview(
+    keys: List<HudKey>,
+    modifier: Modifier = Modifier,
+    onKeysChange: (List<HudKey>) -> Unit = {},
+    onSelect: (HudKey) -> Unit = {},
+) {
+    var draggedId by remember { mutableStateOf<String?>(null) }
+    var dragX by remember { mutableStateOf(0f) }
+    var dragY by remember { mutableStateOf(0f) }
+    var dragSize by remember { mutableStateOf(0f) }
+
     Box(
         modifier
             .fillMaxWidth()
-            .height(110.dp)
-            .clip(RoundedCornerShape(10.dp))
+            .height(180.dp)
+            .clip(RoundedCornerShape(14.dp))
             .background(MaterialTheme.colorScheme.surfaceVariant)
-            .border(1.dp, MaterialTheme.colorScheme.outline, RoundedCornerShape(10.dp)),
+            .border(1.dp, MaterialTheme.colorScheme.outline, RoundedCornerShape(14.dp)),
     ) {
         BoxWithConstraints(Modifier.fillMaxSize()) {
             val density = LocalDensity.current
+            val canvasW = with(density) { maxWidth.toPx() }.coerceAtLeast(1f)
+            val canvasH = with(density) { maxHeight.toPx() }.coerceAtLeast(1f)
+
+            // Garis bantu 25% — menyala saat sedang menyeret.
+            if (draggedId != null) {
+                listOf(0.25f, 0.5f, 0.75f).forEach { g ->
+                    Box(
+                        Modifier
+                            .fillMaxSize()
+                            .zIndex(0f)
+                            .padding(0.dp),
+                    ) {
+                        Box(
+                            Modifier
+                                .offset { IntOffset((g * canvasW).roundToInt(), 0) }
+                                .size(1.dp, maxHeight)
+                                .background(MaterialTheme.colorScheme.onSurface.copy(alpha = 0.12f)),
+                        )
+                        Box(
+                            Modifier
+                                .offset { IntOffset(0, (g * canvasH).roundToInt()) }
+                                .size(maxWidth, 1.dp)
+                                .background(MaterialTheme.colorScheme.onSurface.copy(alpha = 0.12f)),
+                        )
+                    }
+                }
+            }
+
             keys.forEach { key ->
-                val sizeDp = (key.size / 4f).coerceIn(10f, 18f).dp
-                val sizePx = with(density) { sizeDp.toPx() }
-                val maxX = (constraints.maxWidth - sizePx).coerceAtLeast(1f)
-                val maxY = (constraints.maxHeight - sizePx).coerceAtLeast(1f)
+                val isDragged = draggedId == key.id
+                val x = if (isDragged) dragX else key.x
+                val y = if (isDragged) dragY else key.y
+                val buttonSize = (if (isDragged) dragSize else key.size)
+                    .coerceIn(24f, 96f)
+                // Skala pratinjau: diameter asli dibagi 3,5 supaya muat
+                // di kanvas 180 dp tapi perbandingan antar tombol tetap.
+                val previewDp = (buttonSize / 3.5f).coerceIn(9f, 27f).dp
+                val previewPx = with(density) { previewDp.toPx() }
+                val maxX = (canvasW - previewPx).coerceAtLeast(1f)
+                val maxY = (canvasH - previewPx).coerceAtLeast(1f)
+                val others = keys.filter { it.id != key.id }
+                val selected = isDragged
+
                 Box(
                     Modifier
                         .offset {
-                            IntOffset((key.x * maxX).roundToInt(), (key.y * maxY).roundToInt())
+                            IntOffset((x * maxX).roundToInt(), (y * maxY).roundToInt())
                         }
-                        .size(sizeDp)
+                        .size(previewDp)
                         .clip(CircleShape)
-                        .background(MaterialTheme.colorScheme.onSurface),
-                )
+                        .background(
+                            if (selected) MaterialTheme.colorScheme.onSurface
+                            else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.72f),
+                        )
+                        .border(
+                            if (selected) 2.dp else 1.dp,
+                            if (selected) MaterialTheme.colorScheme.background
+                            else MaterialTheme.colorScheme.outlineVariant,
+                            CircleShape,
+                        )
+                        .zIndex(if (selected) 3f else 2f)
+                        .pointerInput(key.id) {
+                            detectTapGestures(onTap = { onSelect(key) })
+                        }
+                        .pointerInput(key.id, keys) {
+                            detectDragGestures(
+                                onDragStart = {
+                                    draggedId = key.id
+                                    dragX = key.x
+                                    dragY = key.y
+                                    dragSize = key.size
+                                },
+                                onDrag = { change, delta ->
+                                    change.consume()
+                                    val nx = dragX + delta.x / maxX
+                                    val ny = dragY + delta.y / maxY
+                                    dragX = snapPreviewPosition(nx, others.map { it.x })
+                                    dragY = snapPreviewPosition(ny, others.map { it.y })
+                                },
+                                onDragEnd = {
+                                    val finalX = dragX
+                                    val finalY = dragY
+                                    val finalSize = dragSize
+                                    onKeysChange(
+                                        keys.map {
+                                            if (it.id == key.id) {
+                                                it.copy(x = finalX, y = finalY, size = finalSize)
+                                            } else it
+                                        },
+                                    )
+                                    draggedId = null
+                                },
+                                onDragCancel = { draggedId = null },
+                            )
+                        },
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Text(
+                        key.label.take(3),
+                        color = if (selected) MaterialTheme.colorScheme.background
+                        else MaterialTheme.colorScheme.surfaceVariant,
+                        fontSize = 8.sp,
+                        fontWeight = FontWeight.Bold,
+                        maxLines = 1,
+                        textAlign = TextAlign.Center,
+                    )
+                    // Handle resize di pojok kanan-bawah.
+                    Box(
+                        Modifier
+                            .align(Alignment.BottomEnd)
+                            .size(10.dp)
+                            .clip(CircleShape)
+                            .background(MaterialTheme.colorScheme.background)
+                            .border(1.dp, MaterialTheme.colorScheme.onSurface, CircleShape)
+                            .pointerInput(key.id, keys) {
+                                detectDragGestures(
+                                    onDragStart = {
+                                        draggedId = key.id
+                                        dragX = key.x
+                                        dragY = key.y
+                                        dragSize = key.size
+                                    },
+                                    onDrag = { change, delta ->
+                                        change.consume()
+                                        val deltaDp = with(density) {
+                                            ((delta.x + delta.y) / 2f).toDp().value
+                                        }
+                                        dragSize = (dragSize + deltaDp * 3.5f)
+                                            .coerceIn(24f, 96f)
+                                    },
+                                    onDragEnd = {
+                                        val finalX = dragX
+                                        val finalY = dragY
+                                        val finalSize = dragSize
+                                        onKeysChange(
+                                            keys.map {
+                                                if (it.id == key.id) {
+                                                    it.copy(x = finalX, y = finalY, size = finalSize)
+                                                } else it
+                                            },
+                                        )
+                                        draggedId = null
+                                    },
+                                    onDragCancel = { draggedId = null },
+                                )
+                            },
+                    )
+                }
             }
         }
     }

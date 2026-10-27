@@ -13,7 +13,9 @@ permissions:
 jobs:
   worker-tests:
     name: Cloudflare Worker unit tests
-    runs-on: ubuntu-latest
+    # ubuntu-latest sedang bermigrasi ke Ubuntu 26.04 (19 Okt–19 Nov 2026).
+    # Pin versi agar versi Node tidak berubah diam-diam di tengah rollout.
+    runs-on: ubuntu-24.04
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
@@ -21,6 +23,24 @@ jobs:
           persist-credentials: false
       - name: Check Worker JavaScript syntax
         run: |
-          for file in cloudflare/*.mjs; do node --check "$file"; done
+          set -euo pipefail
+          shopt -s nullglob
+          files=(cloudflare/*.mjs)
+          if [ ${#files[@]} -eq 0 ]; then
+            echo "::error::Tidak ada cloudflare/*.mjs. Hapus workflow ini kalau Worker sudah dipensiunkan."
+            exit 1
+          fi
+          for file in "${files[@]}"; do
+            echo "node --check ${file}"
+            node --check "${file}"
+          done
       - name: Run Worker route and compatibility tests
-        run: node --test cloudflare/*.test.mjs
+        run: |
+          set -euo pipefail
+          shopt -s nullglob
+          tests=(cloudflare/*.test.mjs)
+          if [ ${#tests[@]} -eq 0 ]; then
+            echo "::error::Tidak ada cloudflare/*.test.mjs. Hapus workflow ini kalau Worker sudah dipensiunkan."
+            exit 1
+          fi
+          node --test "${tests[@]}"

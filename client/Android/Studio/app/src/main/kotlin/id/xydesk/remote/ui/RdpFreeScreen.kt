@@ -105,6 +105,20 @@ fun RdpFreeScreen(onBack: () -> Unit, onConnect: (ConnectionProfile) -> Unit) {
     var errorMessage by remember { mutableStateOf<String?>(null) }
     var activeTab by remember { mutableIntStateOf(0) } // 0 = Sesi & Koneksi, 1 = OS & Fitur, 2 = Secrets & Akses
 
+    /**
+     * Ambil kredensial GitHub dengan aman. Semua aksi di layar ini sebelumnya
+     * memakai `token!!` / `login!!`; kalau identitas belum sempat diverifikasi
+     * (OAuth lambat, token kedaluwarsa, atau user baru saja logout), itu
+     * langsung melempar NullPointerException dan aplikasi crash. Sekarang
+     * pemanggil wajib menangani null dan memberi pesan yang jelas.
+     */
+    fun auth(): Pair<String, String>? {
+        val t = token ?: return null
+        val l = login?.trim() ?: return null
+        if (t.isBlank() || l.isBlank()) return null
+        return t to l
+    }
+
     // Pilihan utama workflow rdp-6h.yml
     var duration by remember { mutableStateOf(prefs.getString("durasi_menit", "360") ?: "360") }
     var runnerImage by remember { mutableStateOf(prefs.getString("runner", "windows-2022") ?: "windows-2022") }
@@ -142,9 +156,27 @@ fun RdpFreeScreen(onBack: () -> Unit, onConnect: (ConnectionProfile) -> Unit) {
     var rememberPasswordLocal by remember {
         mutableStateOf(prefs.getBoolean("remember_rdp_pass", true))
     }
-    var secretTailscaleDraft by remember { mutableStateOf("") }
-    var secretOvpnDraft by remember { mutableStateOf("") }
+    // Draft kunci akses disimpan terenkripsi di CredentialVault supaya tidak
+    // hilang saat layar diputar — sebelumnya dua field ini cuma `mutableStateOf("")`.
+    var secretTailscaleDraft by remember {
+        mutableStateOf(vault.get("xyrdp.saved.tailscale_key").orEmpty())
+    }
+    var secretOvpnDraft by remember {
+        mutableStateOf(vault.get("xyrdp.saved.ovpn_config").orEmpty())
+    }
     var showSecretGuide by remember { mutableStateOf(false) }
+
+    // Simpan draft kunci akses ke vault terenkripsi dengan debounce 400 ms.
+    // Menulis AES-GCM setiap ketukan (apalagi .ovpn yang bisa beberapa KB)
+    // bikin input tersendat; tapi jangan sampai hilang saat layar diputar.
+    LaunchedEffect(secretTailscaleDraft) {
+        kotlinx.coroutines.delay(400)
+        vault.put("xyrdp.saved.tailscale_key", secretTailscaleDraft)
+    }
+    LaunchedEffect(secretOvpnDraft) {
+        kotlinx.coroutines.delay(400)
+        vault.put("xyrdp.saved.ovpn_config", secretOvpnDraft)
+    }
 
     var validatedSession by remember { mutableStateOf<XyRdpValidatedSession?>(null) }
     var nowTickMillis by remember { mutableStateOf(System.currentTimeMillis()) }
@@ -510,7 +542,11 @@ fun RdpFreeScreen(onBack: () -> Unit, onConnect: (ConnectionProfile) -> Unit) {
                         onRetry = if (token != null && login != null) {
                             {
                                 scope.launch {
-                                    refreshAll(token!!, login!!, showSkeleton = true)
+                                    val (t, l) = auth() ?: run {
+                                        errorMessage = "Sesi GitHub berakhir. Masuk lagi untuk melanjutkan."
+                                        return@launch
+                                    }
+                                    refreshAll(t, l, showSkeleton = true)
                                 }
                             }
                         } else null,
@@ -605,9 +641,16 @@ fun RdpFreeScreen(onBack: () -> Unit, onConnect: (ConnectionProfile) -> Unit) {
                                     busyLabel = "Menyinkronkan…"
                                     scope.launch {
                                         try {
-                                            XyRdpClient.syncForkWithUpstream(token!!, login!!)
-                                            XyRdpClient.enableWorkflow(token!!, login!!)
-                                            refreshAll(token!!, login!!)
+                                            val (t, l) = auth()
+                                                ?: throw IllegalStateException("Sesi GitHub berakhir. Masuk lagi untuk melanjutkan.")
+                                            // Repo hasil "Use this template"
+                                            // bukan fork: tidak ada upstream
+                                            // untuk disinkronkan.
+                                            if (XyRdpClient.isForkRepo(t, l)) {
+                                                XyRdpClient.syncForkWithUpstream(t, l)
+                                            }
+                                            XyRdpClient.enableWorkflow(t, l)
+                                            refreshAll(t, l)
                                             successMessage = "Tersinkronisasi"
                                         } catch (e: Exception) {
                                             reportError(e)
@@ -637,7 +680,7 @@ fun RdpFreeScreen(onBack: () -> Unit, onConnect: (ConnectionProfile) -> Unit) {
                     } else if (!forkReady) {
                         XyEmptyState(
                             title = "Siapkan Repository XyRDP",
-                            subtitle = "Buat fork XyRDP ke @$login sekali saja untuk mulai.",
+                            subtitle = "Buat repo XyRDP di akun @$login sekali saja untuk mulai.",
                             icon = XyIcons.Monitor,
                             actionLabel = "Siapkan XyRDP",
                             onAction = {
@@ -645,19 +688,28 @@ fun RdpFreeScreen(onBack: () -> Unit, onConnect: (ConnectionProfile) -> Unit) {
                                 busyLabel = "Menyiapkan XyRDP…"
                                 scope.launch {
                                     try {
-                                        val okFork = XyRdpClient.createFork(token!!, login) ||
-                                            XyRdpClient.forkExists(token!!, login!!)
-                                        if (okFork) {
-                                            val forkPrefKey = "fork_confirmed_${login!!.trim().lowercase()}"
-                                            prefs.edit().putBoolean(forkPrefKey, true).apply()
-                                            XyRdpClient.markForkConfirmed(login)
+                                        val (t, l) = auth()
+                                            ?: throw IllegalStateException("Sesi GitHub berakhir. Masuk lagi untuk melanjutkan.")
+                                        // Satu langkah: coba "Use this template",
+                                        // fallback otomatis ke fork lama kalau
+                                        // repo sumber belum jadi template.
+                                        val repoMode = XyRdpClient.ensurePersonalRepo(t, l)
+                                        if (repoMode.isNotBlank()) {
+                                            prefs.edit()
+                                                .putString("xyrdp_repo_mode", repoMode)
+                                                .putBoolean("fork_confirmed_${l.trim().lowercase()}", true)
+                                                .apply()
                                             forkReady = true
                                             delay(1500)
-                                            XyRdpClient.enableWorkflow(token!!, login!!)
-                                            refreshAll(token!!, login!!)
-                                            successMessage = "Repository XyRDP siap digunakan"
+                                            XyRdpClient.enableWorkflow(t, l)
+                                            refreshAll(t, l)
+                                            successMessage = if (repoMode == "template") {
+                                                "Repo XyRDP siap (template) — Actions sudah aktif"
+                                            } else {
+                                                "Repo XyRDP siap (fork)"
+                                            }
                                         } else {
-                                            errorMessage = "Gagal menyiapkan fork XyRDP."
+                                            errorMessage = "Gagal menyiapkan repo XyRDP. Coba lagi atau masuk ulang ke GitHub."
                                         }
                                     } catch (e: Exception) {
                                         reportError(e)
@@ -1186,7 +1238,7 @@ fun RdpFreeScreen(onBack: () -> Unit, onConnect: (ConnectionProfile) -> Unit) {
                                 val vsReady = validatedSession?.takeIf { it.isVerifiedLive && !it.validatedHost.isNullOrBlank() }
                                 if (vsReady != null && vsReady.access != null) {
                                     val a = vsReady.access
-                                    val hostToConnect = vsReady.validatedHost!!
+                                    val hostToConnect = vsReady.validatedHost.orEmpty()
                                     val portToConnect = vsReady.validatedPort
                                     val isSessionPolos = a.linuxMode == "polos" || a.osName.contains("Polos", ignoreCase = true) || portToConnect == 22
                                     val isSessionLinux = isSessionPolos || a.osName.contains("Ubuntu", ignoreCase = true) || a.osName.contains("Linux", ignoreCase = true)
@@ -1283,7 +1335,9 @@ fun RdpFreeScreen(onBack: () -> Unit, onConnect: (ConnectionProfile) -> Unit) {
                                                     busyLabel = "Membuka sesi RDP…"
                                                     scope.launch {
                                                         try {
-                                                            val fresh = XyRdpClient.pollValidatedSession(token!!, login!!)
+                                                            val (t, l) = auth()
+                                                                ?: throw IllegalStateException("Sesi GitHub berakhir. Masuk lagi untuk melanjutkan.")
+                                                            val fresh = XyRdpClient.pollValidatedSession(t, l)
                                                             check(fresh.isVerifiedLive && !fresh.validatedHost.isNullOrBlank()) {
                                                                 "Sesi tidak lagi aktif di GitHub Actions"
                                                             }
@@ -1894,6 +1948,135 @@ fun RdpFreeScreen(onBack: () -> Unit, onConnect: (ConnectionProfile) -> Unit) {
                                 val hasRdpPass = st?.configuredSecrets?.contains("RDP_PASSWORD") == true
                                 val hasTsKey = st?.configuredSecrets?.contains("TAILSCALE_AUTH_KEY") == true
                                 val hasOvpn = st?.configuredSecrets?.contains("PORTMAP_OVPN_CONFIG") == true
+                                val accessSecretName = if (akses == "tailscale") {
+                                    "TAILSCALE_AUTH_KEY"
+                                } else {
+                                    "PORTMAP_OVPN_CONFIG"
+                                }
+                                val hasAccessSecret = if (akses == "tailscale") {
+                                    hasTsKey
+                                } else {
+                                    hasOvpn || hasTsKey
+                                }
+                                val pendingAccessValue = if (akses == "tailscale") {
+                                    secretTailscaleDraft
+                                } else {
+                                    secretOvpnDraft
+                                }
+                                val nextSecretName = if (!hasRdpPass) "RDP_PASSWORD" else accessSecretName
+                                val nextSecretValue = if (!hasRdpPass) password else pendingAccessValue
+                                val statusSet = xy("sudah terpasang", "already set")
+                                val statusMissing = xy("belum", "missing")
+
+                                // WIZARD KUNCI AKSES (1.1.26): satu kartu yang
+                                // ngasih tahu SEKARANG harus isi apa, bukan tiga
+                                // kartu status + empat tombol terpisah. Nilai
+                                // disalin otomatis, browser dibuka ke halaman
+                                // secret baru, lalu user tinggal tempel + simpan.
+                                XyCard(Modifier.fillMaxWidth()) {
+                                    Text(
+                                        text = xy("Kunci akses — 2 langkah", "Access keys — 2 steps"),
+                                        style = MaterialTheme.typography.titleSmall,
+                                        fontWeight = FontWeight.Bold,
+                                        color = MaterialTheme.colorScheme.onSurface,
+                                    )
+                                    Spacer(Modifier.height(8.dp))
+                                    Text(
+                                        text = xy(
+                                            "1. {0} — {1}",
+                                            "1. {0} — {1}",
+                                            "RDP_PASSWORD",
+                                            if (hasRdpPass) statusSet else statusMissing,
+                                        ),
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    )
+                                    Text(
+                                        text = xy(
+                                            "2. {0} — {1}",
+                                            "2. {0} — {1}",
+                                            accessSecretName,
+                                            if (hasAccessSecret) statusSet else statusMissing,
+                                        ),
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    )
+                                    Spacer(Modifier.height(10.dp))
+                                    XyPillButton(
+                                        text = if (hasRdpPass && hasAccessSecret) {
+                                            xy("Semua kunci terpasang", "All keys are set")
+                                        } else {
+                                            xy("Salin & pasang {0} ↗", "Copy & set {0} ↗", nextSecretName)
+                                        },
+                                        icon = XyIcons.Key,
+                                        onClick = {
+                                            if (hasRdpPass && hasAccessSecret) {
+                                                successMessage = xyNow(
+                                                    "Semua Secret sudah terpasang. Kamu bisa mulai sesi RDP.",
+                                                    "All Secrets are set. You can start an RDP session.",
+                                                )
+                                            } else if (nextSecretValue.isBlank()) {
+                                                errorMessage = xyNow(
+                                                    "Isi nilai {0} dulu di kolom bawah, lalu tekan lagi.",
+                                                    "Fill in the {0} value below first, then tap again.",
+                                                    nextSecretName,
+                                                )
+                                            } else {
+                                                copyToClipboard(nextSecretName, nextSecretValue)
+                                                openBrowser(
+                                                    "https://github.com/$login/${XyRdpConfig.FORK_REPO_NAME}/settings/secrets/actions/new",
+                                                )
+                                                successMessage = xyNow(
+                                                    "Nilai {0} disalin. Tempel di halaman GitHub, beri nama {0}, lalu Simpan.",
+                                                    "The {0} value is copied. Paste it on GitHub, name it {0}, then Save.",
+                                                    nextSecretName,
+                                                )
+                                            }
+                                        },
+                                        primary = !(hasRdpPass && hasAccessSecret),
+                                        compact = true,
+                                        enabled = !busy,
+                                        modifier = Modifier.fillMaxWidth(),
+                                    )
+                                    Spacer(Modifier.height(6.dp))
+                                    XyPillButton(
+                                        text = xy("Cek status Secret", "Refresh Secret status"),
+                                        icon = XyIcons.Refresh,
+                                        onClick = {
+                                            busy = true
+                                            busyLabel = xyNow("Mengecek Secret GitHub…", "Checking GitHub Secrets…")
+                                            scope.launch {
+                                                try {
+                                                    val (t, l) = auth()
+                                                        ?: throw IllegalStateException("Sesi GitHub berakhir. Masuk lagi untuk melanjutkan.")
+                                                    refreshAll(t, l)
+                                                    successMessage = xyNow(
+                                                        "Status Secret diperbarui.",
+                                                        "Secret status refreshed.",
+                                                    )
+                                                } catch (e: Exception) {
+                                                    reportError(e)
+                                                } finally {
+                                                    busy = false
+                                                }
+                                            }
+                                        },
+                                        primary = false,
+                                        compact = true,
+                                        enabled = !busy,
+                                        modifier = Modifier.fillMaxWidth(),
+                                    )
+                                    Spacer(Modifier.height(8.dp))
+                                    Text(
+                                        text = xy(
+                                            "Kunci ini hanya tersimpan di HP (terenkripsi) dan di GitHub Secrets milikmu. Aplikasi tidak pernah mengirimnya ke server XyDesk.",
+                                            "These keys stay on your phone (encrypted) and in your own GitHub Secrets. The app never sends them to any XyDesk server.",
+                                        ),
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    )
+                                }
+                                Spacer(Modifier.height(10.dp))
 
                                 XyCard(Modifier.fillMaxWidth()) {
                                     Text(
@@ -1946,7 +2129,10 @@ fun RdpFreeScreen(onBack: () -> Unit, onConnect: (ConnectionProfile) -> Unit) {
                                         },
                                         label = "Password RDP (RDP_PASSWORD)",
                                         hint = "Min. 12 karakter kombinasi huruf, angka, simbol",
-                                        isPassword = false,
+                                        // SEBELUMNYA false: sandi tampil polos di
+                                        // layar. XyField sudah punya toggle
+                                        // lihat/sembunyikan sendiri.
+                                        isPassword = true,
                                     )
                                     Spacer(Modifier.height(8.dp))
                                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {

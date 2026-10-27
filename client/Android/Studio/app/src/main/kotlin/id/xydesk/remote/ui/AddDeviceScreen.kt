@@ -597,16 +597,59 @@ fun AddDeviceScreen(
                 modifier = Modifier.fillMaxWidth(),
             )
             if (!showAdvanced) {
-                Text(
-                    xy(
-                        "Mode cepat hanya menampilkan yang perlu untuk konek: akun, tipe koneksi, audio, " +
-                            "clipboard, drive, dan kamera.",
-                        "Quick mode shows only what a connection needs: account, connection type, audio, " +
-                            "clipboard, drive, and camera.",
-                    ),
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
+                // Panduan pemula (1.1.26): keluhan pengguna terbanyak adalah
+                // "RDP-nya susah banget". Padahal yang benar-benar dibutuhkan
+                // cuma 3 hal. Kartu ini ditaruh PALING ATAS supaya orang tidak
+                // perlu membaca 20 seksi pengaturan untuk mulai konek, dan
+                // tombol pindai langsung mengisi host + port.
+                XyCard {
+                    Text(
+                        xy("3 langkah langsung konek", "3 steps to get connected"),
+                        style = MaterialTheme.typography.titleSmall,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.onSurface,
+                    )
+                    Spacer(Modifier.height(8.dp))
+                    listOf(
+                        xy(
+                            "1. Di PC Windows: Settings → System → Remote Desktop, nyalakan.",
+                            "1. On your Windows PC: Settings → System → Remote Desktop, turn it on.",
+                        ),
+                        xy(
+                            "2. Pastikan HP dan PC satu Wi-Fi, lalu tekan tombol pindai di bawah.",
+                            "2. Keep phone and PC on the same Wi-Fi, then tap the scan button below.",
+                        ),
+                        xy(
+                            "3. Isi username + password akun Windows kamu. Selesai.",
+                            "3. Enter your Windows account username + password. Done.",
+                        ),
+                    ).forEach { step ->
+                        Text(
+                            step,
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                        Spacer(Modifier.height(4.dp))
+                    }
+                    Spacer(Modifier.height(6.dp))
+                    XyPillButton(
+                        text = xy("Pindai PC-ku otomatis", "Scan for my PC"),
+                        icon = XyIcons.Wifi,
+                        onClick = { triggerLanScan() },
+                        primary = false,
+                        compact = true,
+                        modifier = Modifier.fillMaxWidth(),
+                    )
+                    Spacer(Modifier.height(8.dp))
+                    Text(
+                        xy(
+                            "Port 3389 sudah terisi otomatis. Kolom lain bisa dibiarkan — buka tab Lanjutan kalau mau mengatur GPU, gateway, atau SSH.",
+                            "Port 3389 is already filled in. You can leave everything else alone — open the Advanced tab for GPU, gateway, or SSH settings.",
+                        ),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
             }
             if (existing == null) {
                 XySegmented(
@@ -632,14 +675,19 @@ fun AddDeviceScreen(
                     },
                     modifier = Modifier.fillMaxWidth(),
                 )
-                XyPillButton(
-                    text = xy("Terminal SSH / Linux VPS (Ubuntu, Debian, Linux Polos)", "SSH Terminal / Linux VPS (Ubuntu, Debian, Plain Linux)"),
-                    icon = XyIcons.Terminal,
-                    primary = false,
-                    compact = true,
-                    onClick = { openSshTerminal = true },
-                    modifier = Modifier.fillMaxWidth(),
-                )
+                // SSH/VPS bukan jalur utama pemula. Sembunyikan di mode cepat
+                // supaya layar pertama tidak terasa seperti panel sysadmin;
+                // tetap tersedia lewat tab Lanjutan.
+                if (showAdvanced) {
+                    XyPillButton(
+                        text = xy("Terminal SSH / Linux VPS (Ubuntu, Debian, Linux Polos)", "SSH Terminal / Linux VPS (Ubuntu, Debian, Plain Linux)"),
+                        icon = XyIcons.Terminal,
+                        primary = false,
+                        compact = true,
+                        onClick = { openSshTerminal = true },
+                        modifier = Modifier.fillMaxWidth(),
+                    )
+                }
             }
 
             XySectionLabel(
@@ -667,7 +715,10 @@ fun AddDeviceScreen(
                     hint = if (isPcQuickMode) {
                         xy("323-223-5826 atau XY-C0A8-0132", "323-223-5826 or XY-C0A8-0132")
                     } else {
-                        xy("pc.tailnet.ts.net atau [2001:db8::1]:3390", "pc.example.com or [2001:db8::1]:3390")
+                        xy(
+                            "Nama PC atau IP, mis. 192.168.1.10 — port 3389 sudah otomatis",
+                            "PC name or IP, e.g. 192.168.1.10 — port 3389 is filled in for you",
+                        )
                     },
                     keyboardType = KeyboardType.Uri,
                     imeAction = androidx.compose.ui.text.input.ImeAction.Done,
@@ -2210,9 +2261,10 @@ fun AddDeviceScreen(
             },
             onDismiss = { lanScanModalOpen = false },
         ) {
+            val selfIp = lanSelfIp
             Text(
-                text = if (!lanSelfIp.isNullOrBlank()) {
-                    xy("IP HP Anda: {0} · Memindai port 3389 di subnet lokal", "Your Phone IP: {0} · Scanning port 3389 on local subnet", lanSelfIp!!)
+                text = if (!selfIp.isNullOrBlank()) {
+                    xy("IP HP Anda: {0} · Memindai port 3389 di subnet lokal", "Your Phone IP: {0} · Scanning port 3389 on local subnet", selfIp)
                 } else {
                     xy("Pastikan HP dan PC berada di jaringan Wi-Fi / Hotspot yang sama.", "Make sure your phone and PC are on the same Wi-Fi / Hotspot network.")
                 },

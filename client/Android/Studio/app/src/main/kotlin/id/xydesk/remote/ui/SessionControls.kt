@@ -1108,6 +1108,7 @@ fun SessionControls(
                 onFpsGameModeChange = onFpsGameModeChange,
                 // Tombol
                 keys = keys,
+                onKeysChange = onKeysChange,
                 hudProfile = hudProfile,
                 onSelectHudProfile = { selectedPreset ->
                     if (selectedPreset == HudProfilePreset.CUSTOM) {
@@ -1690,6 +1691,7 @@ private fun SessionPanel(
     onFpsGameModeChange: (Boolean) -> Unit = {},
     // Tombol
     keys: List<HudKey>,
+    onKeysChange: (List<HudKey>) -> Unit,
     hudProfile: HudProfilePreset,
     onSelectHudProfile: (HudProfilePreset) -> Unit,
     onAddKey: () -> Unit,
@@ -1771,6 +1773,11 @@ private fun SessionPanel(
                 .clip(panelShape)
                 .background(MaterialTheme.colorScheme.background, panelShape)
                 .pointerInput(Unit) {}
+                // Landscape + punch-hole/cutout: jangan biarkan header dan
+                // baris pertama bento tertutup kamera. Insets ini juga aman di
+                // portrait (nilainya nol kalau tidak ada cutout).
+                .displayCutoutPadding()
+                .navigationBarsPadding()
                 .padding(horizontal = 18.dp, vertical = 14.dp),
             verticalArrangement = Arrangement.spacedBy(10.dp),
         ) {
@@ -1921,6 +1928,7 @@ private fun SessionPanel(
                                 openKey = openSection,
                                 onOpenKey = { openSection = it },
                                 keys = keys,
+                                onKeysChange = onKeysChange,
                                 hudProfile = hudProfile,
                                 onSelectHudProfile = onSelectHudProfile,
                                 onAddKey = onAddKey,
@@ -2365,6 +2373,7 @@ private fun InputTab(
 @Composable
 private fun ButtonsTab(
     keys: List<HudKey>,
+    onKeysChange: (List<HudKey>) -> Unit,
     hudProfile: HudProfilePreset,
     onSelectHudProfile: (HudProfilePreset) -> Unit,
     onAddKey: () -> Unit,
@@ -2463,7 +2472,11 @@ private fun ButtonsTab(
                     modifier = Modifier.weight(1f),
                 )
             }
-            HudLayoutPreview(keys)
+            HudLayoutPreview(
+                keys = keys,
+                onKeysChange = onKeysChange,
+                onSelect = onEditKey,
+            )
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 XyPillButton(
                     xy("Salin JSON", "Copy JSON"),
@@ -2507,7 +2520,24 @@ private fun ButtonsTab(
                         ),
                     )
                 }
-                keys.forEach { key -> KeyRow(key, onEditKey, onDeleteKey) }
+                keys.forEach { key ->
+                    KeyRow(
+                        key = key,
+                        onEdit = onEditKey,
+                        onDelete = onDeleteKey,
+                        onDuplicate = {
+                            // Duplikat di-offset sedikit supaya tidak menimpa
+                            // tombol asalnya, lalu langsung bisa diedit.
+                            val copy = key.copy(
+                                id = "hud_" + java.util.UUID.randomUUID().toString().take(8),
+                                x = (key.x + 0.06f).coerceAtMost(0.94f),
+                                y = (key.y + 0.06f).coerceAtMost(0.94f),
+                            )
+                            onKeysChange(keys + copy)
+                            onEditKey(copy)
+                        },
+                    )
+                }
             }
             XyToggleRow(
                 title = xy("Getaran saat tombol ditekan", "Haptic feedback on button press"),
@@ -2838,6 +2868,13 @@ private fun panelSectionIcon(key: String): ImageVector = when {
     else -> XyIcons.ChevronRight
 }
 
+/** Satu ubin bento: seksi + ukuran + jumlah kolom yang dipakai. */
+private class BentoCell(
+    val spec: PanelSectionScope.Spec,
+    val size: PanelSectionScope.TileSize,
+    val span: Int,
+)
+
 /**
  * Cakupan pembangun [PanelSectionGrid].
  *
@@ -2847,10 +2884,18 @@ private fun panelSectionIcon(key: String): ImageVector = when {
  * disusun untuk satu seksi yang sedang terbuka.
  */
 internal class PanelSectionScope {
+    /**
+     * Ukuran ubin bento. [AUTO] dipakai sebagai bawaan supaya pemanggilan
+     * `section()` lama tidak perlu diubah — [PanelSectionGrid] yang menentukan
+     * komposisi (ubin pertama jadi HERO, sisanya diselingi WIDE).
+     */
+    internal enum class TileSize { AUTO, NORMAL, WIDE, HERO }
+
     internal class Spec(
         val key: String,
         val title: String,
         val advanced: Boolean = false,
+        val size: TileSize = TileSize.AUTO,
         val content: @Composable () -> Unit,
     )
 
@@ -2860,14 +2905,16 @@ internal class PanelSectionScope {
      * Rekam satu seksi. [content] belum dijalankan di sini.
      * [advanced] = seksi jarang dipakai; disembunyikan di balik ubin
      * "Lanjutan" supaya menu utama tetap pendek dan bersih.
+     * [size] = paksa ukuran ubin; biarkan [TileSize.AUTO] untuk komposisi otomatis.
      */
     fun section(
         key: String,
         title: String,
         advanced: Boolean = false,
+        size: TileSize = TileSize.AUTO,
         content: @Composable () -> Unit,
     ) {
-        specs.add(Spec(key, title, advanced, content))
+        specs.add(Spec(key, title, advanced, size, content))
     }
 }
 
@@ -2994,69 +3041,203 @@ internal fun PanelSectionGrid(
             maxWidth >= 600.dp -> 3
             else -> 2
         }.coerceAtLeast(1)
+        // Landscape HP: tinggi tersisa jauh lebih kecil dari lebar. Kalau tetap
+        // memaksa semua baris masuk satu layar, ubin jadi gepeng dan judul
+        // terpotong. Di mode compact baris diberi tinggi minimum yang nyaman
+        // dan grid boleh digulir — desain bento, animasi, warna, dan urutan
+        // tetap identik dengan portrait. Inilah yang bikin tampilannya
+        // "konsisten", bukan sekadar "tidak error" di landscape.
+        val compact = maxHeight < 430.dp
+        val gridScroll = rememberScrollState()
+
+        // ---------------------------------------------------------- komposisi bento
+        // Ubah daftar seksi jadi barisan ubin dengan lebar & tinggi yang tidak
+        // seragam: seksi utama jadi HERO satu baris penuh, beberapa seksi lain
+        // jadi WIDE (2 kolom), sisanya NORMAL. Semua tetap muat satu layar
+        // karena tiap baris memakai weight(), bukan tinggi tetap.
+        val cells = orderedSpecs.mapIndexed { index, spec ->
+            val size = if (spec.size != PanelSectionScope.TileSize.AUTO) {
+                spec.size
+            } else {
+                when {
+                    columns >= 2 && index == 0 -> PanelSectionScope.TileSize.HERO
+                    columns >= 2 && index % 5 == 3 -> PanelSectionScope.TileSize.WIDE
+                    else -> PanelSectionScope.TileSize.NORMAL
+                }
+            }
+            val span = when (size) {
+                PanelSectionScope.TileSize.HERO -> columns
+                PanelSectionScope.TileSize.WIDE -> minOf(2, columns)
+                PanelSectionScope.TileSize.NORMAL, PanelSectionScope.TileSize.AUTO -> 1
+            }
+            BentoCell(spec, size, span)
+        }
+        val rows = mutableListOf<List<BentoCell>>()
+        var currentRow = mutableListOf<BentoCell>()
+        var used = 0
+        cells.forEach { cell ->
+            if (currentRow.isNotEmpty() && used + cell.span > columns) {
+                rows += currentRow
+                currentRow = mutableListOf()
+                used = 0
+            }
+            currentRow += cell
+            used += cell.span
+        }
+        if (currentRow.isNotEmpty()) rows += currentRow
+
+        var revealIndex = 0
         Column(
-            Modifier.fillMaxSize(),
-            verticalArrangement = Arrangement.spacedBy(8.dp),
+            Modifier
+                .fillMaxSize()
+                .then(if (compact) Modifier.verticalScroll(gridScroll) else Modifier),
+            verticalArrangement = Arrangement.spacedBy(if (compact) 6.dp else 8.dp),
         ) {
-            orderedSpecs.chunked(columns).forEach { rowSpecs ->
+            rows.forEach { row ->
+                // Baris dengan HERO lebih tinggi; baris WIDE sedikit lebih
+                // tinggi dari baris biasa. Inilah yang memberi kesan "bento",
+                // bukan sekadar grid kotak seragam.
+                val rowWeight = when {
+                    row.any { it.size == PanelSectionScope.TileSize.HERO } -> 1.35f
+                    row.any { it.size == PanelSectionScope.TileSize.WIDE } -> 1.12f
+                    else -> 1f
+                }
+                val rowModifier = if (compact) {
+                    val rowHeight = when {
+                        rowWeight >= 1.3f -> 132.dp
+                        rowWeight > 1f -> 104.dp
+                        else -> 92.dp
+                    }
+                    Modifier.fillMaxWidth().height(rowHeight)
+                } else {
+                    Modifier.fillMaxWidth().weight(rowWeight)
+                }
                 Row(
-                    Modifier
-                        .fillMaxWidth()
-                        .weight(1f),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    rowModifier,
+                    horizontalArrangement = Arrangement.spacedBy(if (compact) 6.dp else 8.dp),
                 ) {
-                    rowSpecs.forEach { spec ->
+                    row.forEach { cell ->
                         PanelSectionGridTile(
-                            spec = spec,
-                            onClick = { onOpenKey(spec.key) },
+                            spec = cell.spec,
+                            size = cell.size,
+                            compact = compact,
+                            revealIndex = revealIndex++,
+                            onClick = { onOpenKey(cell.spec.key) },
                             modifier = Modifier
-                                .weight(1f)
+                                .weight(cell.span.toFloat())
                                 .fillMaxHeight(),
                         )
                     }
-                    repeat(columns - rowSpecs.size) {
-                        Spacer(Modifier.weight(1f))
-                    }
+                    val empty = columns - row.sumOf { it.span }
+                    if (empty > 0) Spacer(Modifier.weight(empty.toFloat()))
                 }
             }
         }
     }
 }
 
+/** Munculkan ubin satu per satu (stagger) saat grid pertama kali tampil. */
+@Composable
+private fun bentoReveal(index: Int): Float {
+    var shown by remember { mutableStateOf(false) }
+    LaunchedEffect(Unit) {
+        // 38 ms per ubin, dibatasi 456 ms supaya grid tidak terasa lambat.
+        delay((index * 38L).coerceAtMost(456L))
+        shown = true
+    }
+    val progress by animateFloatAsState(
+        targetValue = if (shown) 1f else 0f,
+        animationSpec = tween(340, easing = FastOutSlowInEasing),
+        label = "bentoReveal",
+    )
+    return progress
+}
+
 @Composable
 private fun PanelSectionGridTile(
     spec: PanelSectionScope.Spec,
+    size: PanelSectionScope.TileSize,
+    compact: Boolean,
+    revealIndex: Int,
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    // Kotak menu datar tanpa sudut membulat (menu fullscreen monokrom):
-    // ikon besar + judul singkat; tanda LANJUTAN hanya untuk seksi jarang
-    // dipakai agar grid utama tetap mudah dipindai.
+    // Bento grid (1.1.26): ubin tidak seragam — HERO lebar penuh + lebih
+    // tinggi, WIDE dua kolom, NORMAL satu kolom. Tetap monokrom mengikuti
+    // tema global, tapi sudut kini membulat, ada gradasi tipis, nomor ubin,
+    // dan animasi muncul berurutan (stagger) 38 ms per ubin.
+    val reveal = bentoReveal(revealIndex)
+    val isHero = size == PanelSectionScope.TileSize.HERO
+    val isWide = size == PanelSectionScope.TileSize.WIDE
+    val shape = RoundedCornerShape(if (compact) 14.dp else if (isHero) 22.dp else 18.dp)
+    val surface = MaterialTheme.colorScheme.surfaceVariant
+    val onSurface = MaterialTheme.colorScheme.onSurface
+    val outline = MaterialTheme.colorScheme.outlineVariant
+    val fill = Brush.linearGradient(
+        listOf(surface.copy(alpha = 0.95f), surface.copy(alpha = 0.42f)),
+    )
+    val number = (revealIndex + 1).toString().padStart(2, '0')
+
     Column(
         modifier
-            .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.55f))
-            .border(1.dp, MaterialTheme.colorScheme.outlineVariant)
+            .graphicsLayer {
+                alpha = reveal
+                translationY = (1f - reveal) * 26f
+                scaleX = 0.92f + 0.08f * reveal
+                scaleY = 0.92f + 0.08f * reveal
+            }
+            .clip(shape)
+            .background(fill, shape)
+            .border(1.dp, outline, shape)
             .clickable(onClick = onClick)
-            .padding(12.dp),
+            .padding(
+                when {
+                    compact -> 8.dp
+                    isHero -> 16.dp
+                    else -> 12.dp
+                },
+            ),
     ) {
         Row(
             Modifier.fillMaxWidth(),
             verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
         ) {
             Box(
                 Modifier
-                    .size(36.dp)
-                    .background(MaterialTheme.colorScheme.onSurface.copy(alpha = 0.08f)),
+                    .size(
+                        when {
+                            compact -> 26.dp
+                            isHero -> 46.dp
+                            isWide -> 40.dp
+                            else -> 36.dp
+                        },
+                    )
+                    .clip(RoundedCornerShape(if (compact) 8.dp else if (isHero) 14.dp else 11.dp))
+                    .background(onSurface.copy(alpha = 0.09f)),
                 contentAlignment = Alignment.Center,
             ) {
                 Icon(
                     imageVector = panelSectionIcon(spec.key),
                     contentDescription = null,
-                    tint = MaterialTheme.colorScheme.onSurface,
-                    modifier = Modifier.size(19.dp),
+                    tint = onSurface,
+                    modifier = Modifier.size(
+                        when {
+                            compact -> 15.dp
+                            isHero -> 25.dp
+                            else -> 20.dp
+                        },
+                    ),
                 )
             }
             Spacer(Modifier.weight(1f))
+            Text(
+                number,
+                color = onSurface.copy(alpha = 0.35f),
+                fontSize = 10.sp,
+                fontFamily = FontFamily.Monospace,
+                fontWeight = FontWeight.Bold,
+            )
             Icon(
                 XyIcons.ChevronRight,
                 contentDescription = null,
@@ -3064,15 +3245,30 @@ private fun PanelSectionGridTile(
                 modifier = Modifier.size(16.dp),
             )
         }
-        Spacer(Modifier.height(10.dp))
+        Spacer(Modifier.height(if (compact) 6.dp else if (isHero) 14.dp else 10.dp))
         Text(
             spec.title,
-            color = MaterialTheme.colorScheme.onSurface,
-            fontSize = 13.sp,
+            color = onSurface,
+            fontSize = when {
+                compact -> if (isHero) 14.sp else 11.5.sp
+                isHero -> 18.sp
+                isWide -> 14.sp
+                else -> 13.sp
+            },
             fontWeight = FontWeight.Bold,
             maxLines = 2,
             overflow = TextOverflow.Ellipsis,
         )
+        if (isHero && !compact) {
+            Spacer(Modifier.height(4.dp))
+            Text(
+                xy("Ketuk untuk membuka pengaturan", "Tap to open settings"),
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                fontSize = 11.sp,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+        }
         Spacer(Modifier.weight(1f))
         if (spec.advanced) {
             Text(
@@ -3181,66 +3377,85 @@ private fun KeyRow(
     key: HudKey,
     onEdit: (HudKey) -> Unit,
     onDelete: (HudKey) -> Unit,
+    onDuplicate: () -> Unit = {},
 ) {
+    // Kartu editor yang lebih enak dipakai (1.1.26): ikon + label besar,
+    // chip aksi & ukuran, lalu tiga aksi jelas (duplikat, hapus, buka).
+    // Sebelumnya cuma ada baris tipis dengan satu tombol hapus.
     Row(
         Modifier
             .fillMaxWidth()
-            .clip(RoundedCornerShape(9.dp))
-            .border(1.dp, MaterialTheme.colorScheme.outline, RoundedCornerShape(9.dp))
+            .clip(RoundedCornerShape(14.dp))
+            .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.45f))
+            .border(1.dp, MaterialTheme.colorScheme.outline, RoundedCornerShape(14.dp))
             .clickable { onEdit(key) }
-            .padding(horizontal = 10.dp, vertical = 8.dp),
+            .padding(horizontal = 10.dp, vertical = 9.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(9.dp),
     ) {
         Box(
             Modifier
-                .size(30.dp)
+                .size(38.dp)
                 .clip(CircleShape)
                 .background(MaterialTheme.colorScheme.surfaceVariant)
                 .border(1.dp, MaterialTheme.colorScheme.outlineVariant, CircleShape),
             contentAlignment = Alignment.Center,
         ) {
-            HudKeyGlyph(key = key, tint = MaterialTheme.colorScheme.onSurface, boxDp = 30f)
+            HudKeyGlyph(key = key, tint = MaterialTheme.colorScheme.onSurface, boxDp = 38f)
         }
-        Column(Modifier.weight(1f)) {
+        Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
             Text(
                 key.label,
                 color = MaterialTheme.colorScheme.onSurface,
-                fontSize = 12.sp,
+                fontSize = 13.sp,
+                fontWeight = FontWeight.Bold,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
             )
-            Text(
-                xy(
-                    "{0} · {1} · {2} dp · {3}%,{4}%",
-                    "{0} · {1} · {2} dp · {3}%,{4}%",
-                    xy(key.kind.title, key.kind.titleEn),
-                    xy(key.action.title, key.action.titleEn),
-                    key.size.toInt(),
-                    (key.x * 100).toInt(),
-                    (key.y * 100).toInt(),
-                ),
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                fontSize = 10.sp,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-            )
+            Row(horizontalArrangement = Arrangement.spacedBy(5.dp)) {
+                KeyChip(xy(key.action.title, key.action.titleEn))
+                KeyChip("${key.size.toInt()} dp")
+                KeyChip("${(key.x * 100).toInt()}%,${(key.y * 100).toInt()}%")
+            }
         }
-        Box(
-            Modifier
-                .size(28.dp)
-                .clip(CircleShape)
-                .border(1.dp, MaterialTheme.colorScheme.outlineVariant, CircleShape)
-                .clickable { onDelete(key) },
-            contentAlignment = Alignment.Center,
-        ) {
-            Icon(
-                XyIcons.Trash,
-                contentDescription = xy("Hapus", "Delete"),
-                tint = MaterialTheme.colorScheme.onSurface,
-                modifier = Modifier.size(14.dp),
-            )
+        Row(horizontalArrangement = Arrangement.spacedBy(5.dp)) {
+            KeyRowAction(XyIcons.Copy, xy("Duplikat", "Duplicate"), onDuplicate)
+            KeyRowAction(XyIcons.Trash, xy("Hapus", "Delete")) { onDelete(key) }
         }
+    }
+}
+
+@Composable
+private fun KeyChip(text: String) {
+    Text(
+        text,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+        fontSize = 9.sp,
+        maxLines = 1,
+        modifier = Modifier
+            .clip(RoundedCornerShape(6.dp))
+            .background(MaterialTheme.colorScheme.onSurface.copy(alpha = 0.07f))
+            .padding(horizontal = 6.dp, vertical = 3.dp),
+    )
+}
+
+@Composable
+private fun KeyRowAction(icon: ImageVector, description: String, onClick: () -> Unit) {
+    Box(
+        Modifier
+            .size(30.dp)
+            .clip(RoundedCornerShape(9.dp))
+            .background(MaterialTheme.colorScheme.onSurface.copy(alpha = 0.06f))
+            .border(1.dp, MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(9.dp))
+            .clickable(onClick = onClick),
+        contentAlignment = Alignment.Center,
+    ) {
+        Icon(
+            icon,
+            contentDescription = description,
+            tint = MaterialTheme.colorScheme.onSurface,
+            modifier = Modifier.size(14.dp),
+        )
     }
 }
 

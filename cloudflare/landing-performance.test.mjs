@@ -34,12 +34,24 @@ test('hidden tabs do not fetch or schedule recurring work',()=>{
  const h=harness();h.ctx.document.hidden=true;h.ctx.loadActiveSessionStats();h.ctx.scheduleActiveStats();
  assert.equal(h.requests.length,0);assert.equal(h.timers.size,0);
 });
-test('single in-flight request, honest zero, one minute schedule',async()=>{
+test('single in-flight request, honest zero, two minute schedule',async()=>{
  const h=harness();h.ctx.loadActiveSessionStats();h.ctx.loadActiveSessionStats();
  assert.equal(h.requests.length,1);
  h.requests[0].resolve({ok:true,json:async()=>({active_session_count:0})});await settle();
  assert.equal(h.ctx.latestActiveSessionStats.active_session_count,0);
- assert.equal(h.timers.size,1);assert.equal([...h.timers.values()][0].ms,60000);
+ // 120 dtk (bukan 60) untuk menghemat kuota Workers harian; lihat Error 1027.
+ assert.equal(h.timers.size,1);assert.equal([...h.timers.values()][0].ms,120000);
+});
+test('rapid polling is debounced to the 30 second minimum gap',async()=>{
+ const h=harness();h.ctx.loadActiveSessionStats();
+ h.requests[0].resolve({ok:true,json:async()=>({active_session_count:1})});await settle();
+ // Panggil lagi langsung setelah request pertama selesai: harus dijadwalkan
+ // ulang, bukan memicu request kedua.
+ h.ctx.loadActiveSessionStats();
+ assert.equal(h.requests.length,1);
+ // Tapi saat tab kembali terlihat, force=true tetap mengambil angka segar.
+ h.ctx.loadActiveSessionStats(true);
+ assert.equal(h.requests.length,2);
 });
 test('HTTP errors and invalid counts never fabricate online users',async()=>{
  for (const response of [{ok:false},{ok:true,json:async()=>({active_session_count:-1})},{ok:true,json:async()=>({})}]) {

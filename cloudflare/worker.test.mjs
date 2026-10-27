@@ -297,7 +297,7 @@ test("download stats HEAD request returns headers without a body", async () => {
   }
 });
 
-test("active-session API exposes anonymous client-reported count and marks it non-cacheable", async () => {
+test("active-session API exposes anonymous client-reported count and is edge-cacheable", async () => {
   const env = envFor({}, {
     ACTIVE_SESSIONS: {
       idFromName(name) { assert.equal(name, "xydesk-remote-global"); return name; },
@@ -314,7 +314,9 @@ test("active-session API exposes anonymous client-reported count and marks it no
   });
   const response = await worker.fetch(new Request("https://rdp.xydesk.my.id/api/active-sessions"), env);
   assert.equal(response.status, 200);
-  assert.equal(response.headers.get("cache-control"), "no-store");
+  // Agregat global (bukan data per pengguna) → aman di-cache 15 detik di
+  // edge. Ini memangkas ratusan polling tab menjadi satu jawaban / 15 detik.
+  assert.equal(response.headers.get("cache-control"), "public, max-age=15");
   const body = await response.json();
   assert.equal(body.active_session_count, 3);
   assert.equal(body.scope, "client-reported-anonymous-rdp-sessions");
@@ -976,6 +978,9 @@ test("host alias pakai tag rilis PUBLIK terakhir, dan fallback ke release-state 
 test("alias host standalone 1-exe redirect ke aset rilis aktif", async () => {
   // Ronde 43: /XyDeskRemoteHost-Standalone.exe dan /XyDesk-Host.exe jadi
   // jalur utama unduhan host agent (1 file, tanpa DLL).
+  // Sejak build single-binary, semua alias host menunjuk ke aset kanonik
+  // XyDeskRemote.exe (lihat QA_ASSETS di worker.mjs dan workflow build-apk.yml
+  // bagian "Build and verify single static Windows Host Agent").
   for (const alias of ["XyDeskRemoteHost-Standalone.exe", "XyDesk-Host.exe"]) {
     const response = await worker.fetch(
       new Request(`https://rdp.xydesk.my.id/${alias}`),
@@ -984,7 +989,7 @@ test("alias host standalone 1-exe redirect ke aset rilis aktif", async () => {
     assert.equal(response.status, 302, alias);
     assert.equal(
       response.headers.get("location"),
-      "https://github.com/xykal/XyDesk-Remote/releases/download/v1.0.2/XyDeskRemoteHost-Standalone.exe",
+      "https://github.com/xykal/XyDesk-Remote/releases/download/v1.0.2/XyDeskRemote.exe",
       alias,
     );
   }

@@ -505,12 +505,30 @@ fun XyDeskSessionScreen(
         if (!userDisconnect && !applyingResolution && reconnecting) {
             // SessionManager intentionally retains a native instance until its
             // terminal callback; never race a retry against native cleanup.
+            // TAPI jangan tunggu selamanya: kalau callback terminal tidak
+            // pernah datang (native hang / proses dibekukan OEM), sesi akan
+            // terjebak "Menyambungkan ulang…" selamanya. Batas 10 detik,
+            // lalu hentikan retry otomatis dan serahkan ke tombol manual.
             waitingForNativeRelease = manager.instance() != 0L
-            while (!userDisconnect && !applyingResolution && reconnecting && manager.instance() != 0L) {
+            var nativeWaitTicks = 0
+            while (!userDisconnect && !applyingResolution && reconnecting &&
+                manager.instance() != 0L && nativeWaitTicks < 20
+            ) {
                 kotlinx.coroutines.delay(500)
+                nativeWaitTicks++
             }
+            val nativeStillHeld = manager.instance() != 0L
             waitingForNativeRelease = false
-            if (!userDisconnect && !applyingResolution && reconnecting) {
+            if (nativeStillHeld) {
+                reconnecting = false
+                reconnectWindowDone = true
+                notice.show(
+                    xyNow(
+                        "Koneksi lama belum selesai dibersihkan. Tekan 'Coba lagi' untuk menyambung ulang.",
+                        "The previous connection has not finished cleaning up. Tap 'Retry' to reconnect.",
+                    ),
+                )
+            } else if (!userDisconnect && !applyingResolution && reconnecting) {
                 boundInstance = 0L
                 manager.connect(activeProfile)
             }
@@ -746,7 +764,13 @@ fun XyDeskSessionScreen(
                 else -> XySessionService.STATUS_RECONNECTING
             }
             XySessionService.start(context, label, status = status)
-        } else if (XySessionRegistry.activeCount() == 0) {
+        } else if (XySessionRegistry.count() == 0) {
+            // Jangan matikan FGS hanya karena sesi sedang TIDAK aktif sesaat
+            // (state Disconnected/Error saat reconnect). Pakai count() —
+            // jumlah sesi yang masih terdaftar — supaya service tetap jadi
+            // jangkar proses selama backoff 2/4/8/16/30 detik berjalan.
+            // Sebelumnya activeCount()==0 langsung stop FGS, dan Android
+            // bisa membekukan/mematikan proses di tengah reconnect.
             XySessionService.stop(context)
         }
     }
@@ -1468,8 +1492,9 @@ fun XyDeskSessionScreen(
                                                 ev.buttons.isTertiaryPressed -> XyMouseButton.MIDDLE
                                                 else -> XyMouseButton.LEFT
                                             }
-                                            if (activeMouseBtn != null && activeMouseBtn != btn) {
-                                                sendButton(activeMouseBtn!!, false)
+                                            val heldBtn = activeMouseBtn
+                                            if (heldBtn != null && heldBtn != btn) {
+                                                sendButton(heldBtn, false)
                                             }
                                             activeMouseBtn = btn
                                             sendButton(btn, true)
@@ -1497,11 +1522,13 @@ fun XyDeskSessionScreen(
                                                 }
                                                 activeMouseBtn = btn
                                                 sendButton(btn, true)
-                                            } else if (!firstChange.pressed && activeMouseBtn != null) {
-                                                val btn = activeMouseBtn!!
-                                                activeMouseBtn = null
-                                                sendButton(btn, false)
-                                                consumeOneShotKeys()
+                                            } else if (!firstChange.pressed) {
+                                                val heldBtn = activeMouseBtn
+                                                if (heldBtn != null) {
+                                                    activeMouseBtn = null
+                                                    sendButton(heldBtn, false)
+                                                    consumeOneShotKeys()
+                                                }
                                             }
                                             ev.changes.forEach { it.consume() }
                                         }

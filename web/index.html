@@ -1817,11 +1817,14 @@
       var activeStatsInFlight = false;
       var activeStatsTimer = null;
       var activeStatsController = null;
-      // Kuota Workers akun ini dipakai bersama Worker lain, jadi polling ini
-      // sengaja dilonggarkan: 60 dtk, dan berhenti total kalau tab menganggur
-      // >5 menit (langsung hidup lagi begitu pengguna berinteraksi).
-      var ACTIVE_STATS_INTERVAL = 60_000;
-      var ACTIVE_STATS_IDLE_MS = 5 * 60_000;
+      // Kuota Workers akun ini dipakai bersama Worker lain (Error 1027 =
+      // 100.000 request/hari per AKUN). Polling sengaja dilonggarkan: 120 dtk,
+      // berhenti total kalau tab menganggur >3 menit, dan ada jeda minimum
+      // 30 dtk antar-request supaya gonta-ganti tab tidak memicu burst.
+      var ACTIVE_STATS_INTERVAL = 120_000;
+      var ACTIVE_STATS_IDLE_MS = 3 * 60_000;
+      var ACTIVE_STATS_MIN_GAP_MS = 30_000;
+      var activeStatsLastFetchAt = 0;
       var activeStatsLastTouch = Date.now();
       function markActiveStatsTouch() {
         var wasIdle = Date.now() - activeStatsLastTouch > ACTIVE_STATS_IDLE_MS;
@@ -1838,8 +1841,15 @@
         if (Date.now() - activeStatsLastTouch > ACTIVE_STATS_IDLE_MS) return;
         activeStatsTimer = setTimeout(loadActiveSessionStats, ACTIVE_STATS_INTERVAL);
       }
-      function loadActiveSessionStats() {
+      function loadActiveSessionStats(force) {
         if (document.hidden || activeStatsInFlight) return;
+        // `force` dipakai saat tab kembali terlihat: pengguna ingin angka
+        // segar, jadi jeda minimum dilewati satu kali.
+        if (!force && Date.now() - activeStatsLastFetchAt < ACTIVE_STATS_MIN_GAP_MS) {
+          scheduleActiveStats();
+          return;
+        }
+        activeStatsLastFetchAt = Date.now();
         activeStatsInFlight = true;
         activeStatsController = new AbortController();
         var timeout = setTimeout(function () { activeStatsController.abort(); }, 8_000);
@@ -1873,7 +1883,7 @@
         activeStatsTimer = null;
         if (document.hidden) {
           if (activeStatsController) activeStatsController.abort();
-        } else loadActiveSessionStats();
+        } else loadActiveSessionStats(true);
       });
 
       function renderDownloadStats() {

@@ -197,7 +197,11 @@ class SessionSurfaceController(private val activity: Activity) : GraphicsSink {
      * Wiring input identik dengan `SessionActivity.onCreate`.
      */
     fun buildViewTree(context: Context): View {
-        if (viewReady) return rootView!!
+        // Jangan pakai `!!`: kalau viewReady terset tapi rootView sudah
+        // dilepas (rotasi / teardown Activity), sebelumnya ini melempar NPE
+        // dan menutup sesi. Bangun ulang pohon view kalau root-nya hilang.
+        val existingRoot = rootView
+        if (viewReady && existingRoot != null) return existingRoot
         val root = RelativeLayout(context).apply {
             setBackgroundColor(Color.BLACK)
         }
@@ -515,9 +519,10 @@ class SessionSurfaceController(private val activity: Activity) : GraphicsSink {
     fun remoteToScreen(x: Float, y: Float): Offset? {
         val sv = sessionView ?: return null
         val zoom = sv.getZoom().takeIf { it > 0.01f } ?: return null
-        val container = if (scrollView?.childCount ?: 0 > 0) scrollView!!.getChildAt(0) else sv
-        val screenX = x * zoom - (scrollView?.scrollX ?: 0) + container.left
-        val screenY = y * zoom - (scrollView?.scrollY ?: 0) + container.top
+        val scroller = scrollView
+        val container = if (scroller != null && scroller.childCount > 0) scroller.getChildAt(0) else sv
+        val screenX = x * zoom - (scroller?.scrollX ?: 0) + container.left
+        val screenY = y * zoom - (scroller?.scrollY ?: 0) + container.top
         return Offset(screenX, screenY)
     }
 
@@ -531,10 +536,11 @@ class SessionSurfaceController(private val activity: Activity) : GraphicsSink {
         val sv = sessionView ?: return null
         val bm = bitmap ?: return null
         val zoom = sv.getZoom().takeIf { it > 0.01f } ?: return null
-        val container = if (scrollView?.childCount ?: 0 > 0) scrollView!!.getChildAt(0) else sv
-        val rx = ((screenX + (scrollView?.scrollX ?: 0) - container.left) / zoom)
+        val scroller = scrollView
+        val container = if (scroller != null && scroller.childCount > 0) scroller.getChildAt(0) else sv
+        val rx = ((screenX + (scroller?.scrollX ?: 0) - container.left) / zoom)
             .coerceIn(0f, (bm.width - 1).coerceAtLeast(1).toFloat())
-        val ry = ((screenY + (scrollView?.scrollY ?: 0) - container.top) / zoom)
+        val ry = ((screenY + (scroller?.scrollY ?: 0) - container.top) / zoom)
             .coerceIn(0f, (bm.height - 1).coerceAtLeast(1).toFloat())
         return Offset(rx, ry)
     }
