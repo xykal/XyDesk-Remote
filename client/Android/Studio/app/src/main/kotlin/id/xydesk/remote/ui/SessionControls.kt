@@ -92,6 +92,7 @@ import id.xydesk.remote.ui.components.XyNoticeState
 import id.xydesk.remote.ui.components.XyOverlay
 import id.xydesk.remote.ui.components.XyPillButton
 import id.xydesk.remote.ui.components.XySegmented
+import id.xydesk.remote.ui.components.SliderFocusHost
 import id.xydesk.remote.ui.components.XySlider
 import id.xydesk.remote.ui.components.XyToggleRow
 import id.xydesk.remote.ui.components.xyGlass
@@ -201,6 +202,12 @@ fun SessionControls(
     coreInfo: List<String> = emptyList(),
     notice: XyNoticeState,
 ) {
+    // Mode fokus slider: saat ada slider digeser, seluruh lapisan overlay
+    // (HUD, rail, panel, dialog) menghilang, menyisakan slider mengambang.
+    // Dipasang DI SINI (bukan di Activity) supaya permukaan desktop remote
+    // yang ada di luar SessionControls tetap terlihat — justru itu yang ingin
+    // dilihat pengguna saat mengubah opasitas/ukuran tombol.
+    SliderFocusHost {
     val context = LocalContext.current
     val configuration = LocalConfiguration.current
     val view = androidx.compose.ui.platform.LocalView.current
@@ -1388,6 +1395,7 @@ fun SessionControls(
             onDismiss = { validationAlert = null },
         )
     }
+    }
 }
 
 @Composable
@@ -2216,6 +2224,7 @@ private fun InputTab(
                 value = pointerSensitivity,
                 onValueChange = onPointerSensitivity,
                 valueRange = 0.4f..3.0f,
+                focusLabel = xy("Sensitivitas pointer", "Pointer sensitivity"),
             )
             XyToggleRow(
                 title = xy("Akselerasi pointer dinamis", "Dynamic pointer acceleration"),
@@ -2363,7 +2372,12 @@ private fun InputTab(
                 modifier = Modifier.fillMaxWidth(),
             )
             PanelHint(xy("Ukuran pointer: {0} dp", "Pointer size: {0} dp", pointerSize.toInt()))
-            XySlider(value = pointerSize, onValueChange = onPointerSize, valueRange = 10f..52f)
+            XySlider(
+                value = pointerSize,
+                onValueChange = onPointerSize,
+                valueRange = 10f..52f,
+                focusLabel = xy("Ukuran pointer", "Pointer size"),
+            )
         }
     }
 }
@@ -2415,6 +2429,7 @@ private fun ButtonsTab(
                 value = hudOpacity,
                 onValueChange = onHudOpacityChange,
                 valueRange = 0f..1f,
+                focusLabel = xy("Opasitas tombol HUD", "HUD button opacity"),
             )
         }
 
@@ -2576,24 +2591,16 @@ private fun SessionTab(
                     "Remotely lock the Windows session (Win+L) or activate the Privacy Curtain to black out the phone screen temporarily.",
                 ),
             )
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                XyPillButton(
-                    xy("Kunci PC", "Lock PC"),
-                    onLockRemotePc,
-                    icon = XyIcons.Lock,
-                    primary = false,
-                    compact = true,
-                    modifier = Modifier.weight(1f),
-                )
-                XyPillButton(
-                    xy("Tirai Privasi", "Privacy Curtain"),
-                    onActivatePrivacyCurtain,
-                    icon = XyIcons.EyeOff,
-                    primary = false,
-                    compact = true,
-                    modifier = Modifier.weight(1f),
-                )
-            }
+            PanelQuickActionGrid(
+                listOf(
+                    PanelQuickAction(xy("Kunci PC", "Lock PC"), XyIcons.Lock, onLockRemotePc),
+                    PanelQuickAction(
+                        xy("Tirai Privasi", "Privacy Curtain"),
+                        XyIcons.EyeOff,
+                        onActivatePrivacyCurtain,
+                    ),
+                ),
+            )
         }
 
     section("perekaman-lokal-pc-ke-hp",xy("Perekaman lokal · PC ke HP", "Local recording · PC to phone"), advanced = true) {
@@ -2692,26 +2699,25 @@ private fun SessionTab(
         }
 
     section("sesi",xy("Sesi", "Session")) {
-            // Floating Chat & Putuskan sesi cukup SATU tempat: quick bar di
-            // atas panel. Di sini hanya aksi sesi yang belum ada di sana.
-            XyPillButton(
-                xy("Ambil screenshot", "Take screenshot"),
-                onScreenshot,
-                icon = XyIcons.Shot,
-                primary = false,
-                compact = true,
-                modifier = Modifier.fillMaxWidth(),
-            )
-            XyPillButton(
-                xy("Putuskan sesi", "Disconnect"),
-                onDisconnect,
-                icon = XyIcons.Power,
-                primary = false,
-                compact = true,
-                modifier = Modifier.fillMaxWidth(),
+            // Cuma 3 aksi → bento grid, bukan tiga tombol vertikal berjajar.
+            PanelQuickActionGrid(
+                listOf(
+                    PanelQuickAction(xy("Screenshot", "Screenshot"), XyIcons.Shot, onScreenshot),
+                    PanelQuickAction(xy("Putuskan", "Disconnect"), XyIcons.Power, onDisconnect, danger = true),
+                ),
             )
         }
-        PanelSection(xy("Info teknis & modul XyCore (.so / .dll)", "Technical info & XyCore modules (.so / .dll)")) {
+        // SEBELUMNYA blok ini memanggil PanelSection() LANGSUNG di dalam
+        // builder PanelSectionGrid. Karena builder dieksekusi saat komposisi
+        // grid, isinya ikut tergambar di halaman grid → teks info teknis dan
+        // tombol "Salin info teknis & driver" TUMPANG TINDIH dengan ubin
+        // (laporan pemilik 2026-10-27). Sekarang jadi section() biasa supaya
+        // direkam sebagai ubin dan isinya baru digambar saat drill-in.
+        section(
+            "info-teknis-driver",
+            xy("Info teknis & driver", "Technical & driver info"),
+            advanced = true,
+        ) {
             XyRuntimeCatalog.sessionSummaryLines(
                 coreInfo.firstOrNull() ?: "v3.4.23-xy",
             ).forEach { line ->
@@ -2763,6 +2769,89 @@ internal fun PanelHint(text: String) {
         fontSize = 11.sp,
         lineHeight = 15.sp,
     )
+}
+
+/**
+ * Aksi cepat untuk seksi yang isinya cuma 2–4 tombol. Daripada deretan
+ * tombol vertikal yang bikin halaman detail terasa kosong dan panjang,
+ * aksinya disusun jadi bento 2 kolom dengan animasi muncul berurutan.
+ */
+internal class PanelQuickAction(
+    val label: String,
+    val icon: ImageVector,
+    val onClick: () -> Unit,
+    val danger: Boolean = false,
+)
+
+@Composable
+internal fun PanelQuickActionGrid(
+    actions: List<PanelQuickAction>,
+    modifier: Modifier = Modifier,
+) {
+    Column(modifier, verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        actions.chunked(2).forEachIndexed { rowIndex, row ->
+            Row(
+                Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                row.forEachIndexed { colIndex, action ->
+                    val reveal = bentoReveal(rowIndex * 2 + colIndex)
+                    val shape = RoundedCornerShape(16.dp)
+                    val tint = if (action.danger) {
+                        MaterialTheme.colorScheme.error
+                    } else {
+                        MaterialTheme.colorScheme.onSurface
+                    }
+                    Box(
+                        Modifier
+                            .weight(1f)
+                            .graphicsLayer {
+                                alpha = reveal
+                                scaleX = 0.92f + 0.08f * reveal
+                                scaleY = 0.92f + 0.08f * reveal
+                            }
+                            .clip(shape)
+                            .background(
+                                MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.6f),
+                                shape,
+                            )
+                            .border(1.dp, MaterialTheme.colorScheme.outlineVariant, shape)
+                            .clickable(onClick = action.onClick)
+                            .padding(12.dp),
+                    ) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(9.dp),
+                        ) {
+                            Box(
+                                Modifier
+                                    .size(32.dp)
+                                    .clip(RoundedCornerShape(10.dp))
+                                    .background(MaterialTheme.colorScheme.onSurface.copy(alpha = 0.08f)),
+                                contentAlignment = Alignment.Center,
+                            ) {
+                                Icon(
+                                    action.icon,
+                                    contentDescription = null,
+                                    tint = tint,
+                                    modifier = Modifier.size(17.dp),
+                                )
+                            }
+                            Text(
+                                action.label,
+                                color = tint,
+                                fontSize = 12.sp,
+                                fontWeight = FontWeight.Bold,
+                                maxLines = 2,
+                                overflow = TextOverflow.Ellipsis,
+                            )
+                        }
+                    }
+                }
+                if (row.size == 1) Spacer(Modifier.weight(1f))
+            }
+        }
+    }
 }
 
 /**
@@ -2864,6 +2953,7 @@ private fun panelSectionIcon(key: String): ImageVector = when {
     key.startsWith("keamanan") -> XyIcons.Shield
     key.startsWith("perekaman") -> XyIcons.Shot
     key.startsWith("sesi") -> XyIcons.Power
+    key == "lanjutan-group" -> XyIcons.Gear
     key.startsWith("info-teknis") -> XyIcons.Info
     else -> XyIcons.ChevronRight
 }
@@ -2995,7 +3085,45 @@ internal fun PanelSectionGrid(
     scope.builder()
     val allSpecs = scope.specs
     if (allSpecs.isEmpty()) return
-    val selected = allSpecs.firstOrNull { it.key == openKey }
+
+    // Minimalisir UI (1.1.27): semua seksi advanced dikumpulkan jadi SATU
+    // ubin "Lanjutan" — isinya baru dibentang saat ubin itu diketuk. Dulu
+    // 4-6 seksi lanjutan ikut jadi ubin sendiri, bikin grid penuh sesak dan
+    // teks panjang saling tumpang tindih (laporan pemilik 2026-10-27).
+    val normalSpecs = allSpecs.filter { !it.advanced }
+    val advancedSpecs = allSpecs.filter { it.advanced }
+    val advancedGroup = if (advancedSpecs.size >= 2) {
+        PanelSectionScope.Spec(
+            key = "lanjutan-group",
+            title = xy("Lanjutan", "Advanced"),
+            advanced = true,
+            size = PanelSectionScope.TileSize.AUTO,
+            content = {
+                PanelHint(
+                    xy(
+                        "Pengaturan jarang dipakai. Ketuk salah satu untuk membuka.",
+                        "Rarely used settings. Tap one to open.",
+                    ),
+                )
+                Spacer(Modifier.height(10.dp))
+                PanelQuickActionGrid(
+                    advancedSpecs.map { spec ->
+                        PanelQuickAction(
+                            label = spec.title,
+                            icon = panelSectionIcon(spec.key),
+                            onClick = { onOpenKey(spec.key) },
+                        )
+                    },
+                )
+            },
+        )
+    } else null
+    // Kalau cuma ada satu seksi lanjutan, tampilkan langsung (jangan sampai
+    // hilang dari grid). Grup hanya dipakai saat ada 2 atau lebih.
+    val orderedSpecs = normalSpecs + listOfNotNull(advancedGroup) +
+        if (advancedGroup == null) advancedSpecs else emptyList()
+    val selected = (allSpecs + listOfNotNull(advancedGroup))
+        .firstOrNull { it.key == openKey }
     if (selected != null) {
         val detailScroll = rememberScrollState()
         Column(
@@ -3032,7 +3160,6 @@ internal fun PanelSectionGrid(
         return
     }
 
-    val orderedSpecs = allSpecs.filter { !it.advanced } + allSpecs.filter { it.advanced }
     BoxWithConstraints(Modifier.fillMaxSize()) {
         val columns = when {
             orderedSpecs.size <= 2 -> orderedSpecs.size
