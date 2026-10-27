@@ -93,6 +93,7 @@ import id.xydesk.remote.ui.components.XyOverlay
 import id.xydesk.remote.ui.components.XyPillButton
 import id.xydesk.remote.ui.components.XySegmented
 import id.xydesk.remote.ui.components.SliderFocusHost
+import id.xydesk.remote.ui.components.SliderFocusState
 import id.xydesk.remote.ui.components.XySlider
 import id.xydesk.remote.ui.components.XyToggleRow
 import id.xydesk.remote.ui.components.xyGlass
@@ -228,6 +229,12 @@ fun SessionControls(
     var scrollPillOpen by remember { mutableStateOf(false) }
     var bubbleOpen by remember { mutableStateOf(false) }
     var panelOpen by remember { mutableStateOf(false) }
+    // Jaring pengaman tambahan (1.1.28): setiap kali Menu Sesi dibuka, paksa
+    // keluar dari mode fokus slider. Kalau ada sisa state dari gestur yang
+    // terputus, menu tidak akan pernah terbuka dalam keadaan redup / mati.
+    LaunchedEffect(panelOpen) {
+        if (panelOpen) SliderFocusState.end()
+    }
     var monitorGridOpen by remember { mutableStateOf(false) }
     var drawerMode by remember { mutableStateOf(false) }
     var tab by remember { mutableStateOf(PanelTab.SCREEN) }
