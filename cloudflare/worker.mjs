@@ -1254,17 +1254,34 @@ async function activeSessionsResponse(request, env) {
   if (!env.ACTIVE_SESSIONS) {
     return jsonResponse({ status: "unavailable", active_session_count: null }, 503, request.method);
   }
+  // Angka ini GLOBAL (bukan per pengguna), jadi aman dibagikan lintas klien.
+  // Tanpa cache, tiap tab yang polling 60 detik memicu 1 request Worker +
+  // 1 request Durable Object. Dengan cache 15 detik di edge, ratusan tab
+  // dalam jendela yang sama dilayani oleh satu jawaban. Ini langsung
+  // mengurangi tekanan pada kuota harian Workers (Error 1027).
+  const cache = globalThis.caches?.default || null;
+  const cacheKey = request.method === "GET"
+    ? new Request(new URL("/api/active-sessions", request.url), { method: "GET" })
+    : null;
+  if (cache && cacheKey) {
+    const hit = await cache.match(cacheKey).catch(() => null);
+    if (hit) return hit;
+  }
   try {
     const id = env.ACTIVE_SESSIONS.idFromName("xydesk-remote-global");
     const stub = env.ACTIVE_SESSIONS.get(id);
     const response = await stub.fetch("https://active-sessions/count");
     const data = await response.json();
-    return jsonResponse({
+    const out = jsonResponse({
       ...data,
       scope: "client-reported-anonymous-rdp-sessions",
       note: "Perkiraan sesi aplikasi yang mengirim heartbeat anonim (aktif secara default, dapat dimatikan di aplikasi); bukan jumlah pengguna unik atau semua koneksi RDP.",
       checked_at: new Date().toISOString(),
-    }, response.status, request.method, { "cache-control": "no-store" });
+    }, response.status, request.method, { "cache-control": "public, max-age=15" });
+    if (cache && cacheKey && response.ok) {
+      await cache.put(cacheKey, out.clone()).catch(() => {});
+    }
+    return out;
   } catch {
     return jsonResponse({ status: "unavailable", active_session_count: null }, 503, request.method);
   }

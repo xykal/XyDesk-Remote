@@ -597,7 +597,9 @@ class XyDeskSessionActivity : ComponentActivity() {
         setGyroMouseActive(false)
         sessionId?.let { XySessionRegistry.remove(it) }
         bgHandler.removeCallbacks(bgDisconnect)
-        if (XySessionRegistry.activeCount() == 0) XySessionService.stop(this)
+        // count() (bukan activeCount()) supaya sesi lain yang sedang reconnect
+        // tidak kehilangan foreground service-nya.
+        if (XySessionRegistry.count() == 0) XySessionService.stop(this)
         val cm = getSystemService(CLIPBOARD_SERVICE) as ClipboardManager
         clipListener?.let { cm.removePrimaryClipChangedListener(it) }
         clipListener = null

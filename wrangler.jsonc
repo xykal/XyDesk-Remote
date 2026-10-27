@@ -47,6 +47,16 @@
     "binding": "ASSETS",
     "html_handling": "auto-trailing-slash",
     "not_found_handling": "404-page",
+    // KUOTA WORKERS (Error 1027 = 100.000 request/hari per AKUN, reset 00:00 UTC).
+    // Static assets TIDAK menghitung kuota, TAPI setiap path yang ada di
+    // run_worker_first memanggil Worker dulu → ikut dihitung. Karena itu
+    // daftar ini harus berisi HANYA path yang benar-benar butuh logika dinamis
+    // (redirect aset rilis, skrip unduhan, routing host). File statis murni
+    // seperti onmic.ps1 / onmic-linux.sh sudah dikeluarkan dari daftar.
+    // Catatan: "/" dan "/index.html" masih butuh Worker untuk routing host
+    // (apex→www, api/wss/cpc→health, report/ask→feedback). Untuk menghapus
+    // dua entry terbesar itu, pindahkan routing host ke Cloudflare Redirect
+    // Rules + Route terpisah, lalu hapus keduanya dari sini.
     "run_worker_first": [
       "/api/*",
       "/",
@@ -77,10 +87,7 @@
       "/host.ps1",
       "/agent.ps1",
       "/agent.bat",
-      "/XyDeskHost-Setup.bat",
-      "/onmic.ps1",
-      "/XyDesk-RDP-OnMic-Setup.bat",
-      "/onmic-linux.sh"
+      "/XyDeskHost-Setup.bat"
     ]
   }
 }

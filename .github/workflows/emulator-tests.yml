@@ -1,0 +1,186 @@
+name: Emulator smoke tests
+
+# Smoke test UI di Android emulator, memakai APK debug yang SUDAH dibuat
+# workflow "Build APK" (artifact `xydesk-remote-debug-per-abi`).
+# Tidak membangun ulang native FreeRDP → tidak menambah ~30 menit ke CI.
+#
+# YANG DIUJI: install APK, cold start, render UI, rotasi, density/font besar,
+# process-death restore, perubahan jaringan, serta tidak ada crash/ANR/native signal.
+# YANG TIDAK DIUJI: koneksi RDP ke host Windows asli, Gboard/IME pihak ketiga,
+# audio/mic, transfer file, rekaman layar, gamepad fisik, performa GPU.
+# Semua itu ada di docs/acceptance/TEMPLATE.md dan menjadi bagian pemilik proyek.
+#
+# Catatan matriks (diverifikasi 2026-10-26 terhadap repository system-image Google):
+#   - system-images;android-24;google_apis;x86_64  → ADA
+#   - system-images;android-36;google_apis;x86_64  → ADA
+#   - system-images;android-37;*;x86_64            → BELUM ADA
+# Jadi target SDK 37 hanya diverifikasi lewat compile/lint, bukan emulator.
+
+on:
+  workflow_run:
+    workflows: ["Build APK"]
+    types: [completed]
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      run_id:
+        description: "ID run 'Build APK' yang punya artifact debug. Kosong = run sukses terakhir."
+        required: false
+        default: ""
+
+# Paling sempit: cuma baca. Job ini tidak butuh secret apa pun.
+permissions:
+  contents: read
+  actions: read
+
+concurrency:
+  group: emulator-${{ github.event.workflow_run.head_sha || github.sha }}
+  cancel-in-progress: true
+
+jobs:
+  preflight:
+    name: Resolve debug artifact
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    outputs:
+      run_id: ${{ steps.resolve.outputs.run_id }}
+      sha: ${{ steps.resolve.outputs.sha }}
+      proceed: ${{ steps.resolve.outputs.proceed }}
+    steps:
+      - name: Cari run sumber dan pastikan artifact-nya ada
+        id: resolve
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          WR_RUN_ID: ${{ github.event.workflow_run.id }}
+          WR_SHA: ${{ github.event.workflow_run.head_sha }}
+          WR_CONCLUSION: ${{ github.event.workflow_run.conclusion }}
+          WR_HEAD_REPO: ${{ github.event.workflow_run.head_repository.full_name }}
+          INPUT_RUN_ID: ${{ inputs.run_id }}
+        run: |
+          set -euo pipefail
+          proceed=true
+          run_id=""
+          sha=""
+
+          if [ "${GITHUB_EVENT_NAME}" = "workflow_run" ]; then
+            # Jangan jalankan APK dari fork: artifact bisa berisi kode tak dikenal.
+            if [ "${WR_HEAD_REPO}" != "${GH_REPO}" ]; then
+              echo "::notice::Run berasal dari fork (${WR_HEAD_REPO}); dilewati demi keamanan."
+              proceed=false
+            fi
+            if [ "${WR_CONCLUSION}" != "success" ]; then
+              echo "::notice::Build APK selesai dengan ${WR_CONCLUSION}; emulator dilewati."
+              proceed=false
+            fi
+            run_id="${WR_RUN_ID}"
+            sha="${WR_SHA}"
+          else
+            run_id="${INPUT_RUN_ID}"
+            if [ -z "${run_id}" ]; then
+              run_id="$(gh api "repos/${GH_REPO}/actions/workflows/build-apk.yml/runs?status=success&per_page=1" --jq '.workflow_runs[0].id // empty')"
+            fi
+            if [ -z "${run_id}" ]; then
+              echo "::error::Tidak ada run Build APK yang sukses."
+              exit 1
+            fi
+            sha="$(gh api "repos/${GH_REPO}/actions/runs/${run_id}" --jq '.head_sha')"
+          fi
+
+          # Commit bertag / [skip-debug] melewati job build-debug → tidak ada artifact.
+          # Itu bukan kegagalan; cukup lewati dengan pesan yang jelas.
+          if [ "${proceed}" = "true" ]; then
+            if ! gh api "repos/${GH_REPO}/actions/runs/${run_id}/artifacts?per_page=100" \
+                 --jq '.artifacts[].name' | grep -qx 'xydesk-remote-debug-per-abi'; then
+              echo "::notice::Tidak ada artifact xydesk-remote-debug-per-abi di run ${run_id}; emulator dilewati."
+              proceed=false
+            fi
+          fi
+
+          echo "run_id=${run_id}" >> "${GITHUB_OUTPUT}"
+          echo "sha=${sha}" >> "${GITHUB_OUTPUT}"
+          echo "proceed=${proceed}" >> "${GITHUB_OUTPUT}"
+          echo "Sumber run: ${run_id} @ ${sha:-unknown} (proceed=${proceed})"
+
+  emulator:
+    needs: preflight
+    if: needs.preflight.outputs.proceed == 'true'
+    name: Emulator API ${{ matrix.api-level }}
+    # ubuntu-latest sedang bermigrasi ke Ubuntu 26.04 (19 Okt–19 Nov 2026).
+    # Pin ke 24.04 supaya perilaku KVM/emulator tidak berubah di tengah rollout.
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      matrix:
+        api-level: [24, 36]
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+        with:
+          ref: ${{ needs.preflight.outputs.sha }}
+          persist-credentials: false
+
+      - name: Download debug APK dari run Build APK
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          name: xydesk-remote-debug-per-abi
+          path: debug-apks
+          run-id: ${{ needs.preflight.outputs.run_id }}
+          github-token: ${{ github.token }}
+
+      - name: Pilih APK x86_64
+        id: apk
+        run: |
+          set -euo pipefail
+          ls -lh debug-apks
+          # ABI split menghasilkan satu APK per arsitektur; emulator butuh x86_64.
+          APK="$(find debug-apks -maxdepth 1 -type f -name '*x86_64*.apk' -print -quit)"
+          if [ -z "${APK}" ]; then
+            APK="$(find debug-apks -maxdepth 1 -type f -name '*[Uu]niversal*.apk' -print -quit)"
+          fi
+          if [ -z "${APK}" ]; then
+            echo "::error::Tidak ada APK x86_64/universal di artifact."
+            exit 1
+          fi
+          echo "path=${APK}" >> "${GITHUB_OUTPUT}"
+
+      - name: Enable KVM (hardware acceleration)
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+          test -e /dev/kvm && echo "KVM tersedia"
+
+      - name: Cache AVD snapshot
+        uses: actions/cache@caa296126883cff596d87d8935842f9db880ef25 # v5
+        with:
+          path: |
+            ~/.android/avd/*
+            ~/.android/adb*
+          key: avd-${{ matrix.api-level }}-google_apis-x86_64-v1
+
+      - name: Jalankan smoke test di emulator
+        uses: reactivecircus/android-emulator-runner@a421e43855164a8197daf9d8d40fe71c6996bb0d # v2.38.0
+        env:
+          APK_PATH: ${{ steps.apk.outputs.path }}
+          API_LEVEL: ${{ matrix.api-level }}
+        with:
+          api-level: ${{ matrix.api-level }}
+          target: google_apis
+          arch: x86_64
+          emulator-options: >-
+            -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim
+            -camera-back none -camera-front none -memory 4096 -cores 4
+            -no-snapshot-save
+          disable-animations: true
+          script: |
+            bash ci/emulator_smoke.sh "emulator-artifacts-api${API_LEVEL}"
+
+      - name: Upload hasil (screenshot, logcat, UI dump)
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: emulator-smoke-api-${{ matrix.api-level }}
+          path: emulator-artifacts-api${{ matrix.api-level }}/
+          retention-days: 7
+          if-no-files-found: warn

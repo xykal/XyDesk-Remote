@@ -358,6 +358,62 @@ internal object XyRdpClient {
     }
 
     /**
+     * "Use this template": buat repo mandiri milik pengguna dari template
+     * `xykal/XyRDP`. Berbeda dengan fork, repo hasil generate BUKAN fork —
+     * GitHub Actions-nya aktif sejak awal dan tidak ada kewajiban
+     * merge-upstream. Ini memotong 2–3 langkah yang selama ini bikin alur
+     * RDP Gratis terasa rumit.
+     *
+     * Syarat: repo `xykal/XyRDP` harus ditandai "Template repository" di
+     * Settings GitHub, dan token butuh permission Administration:write +
+     * Contents:read (atau Repository creation:write).
+     */
+    suspend fun createFromTemplate(token: String, login: String): Boolean =
+        withContext(Dispatchers.IO) {
+            if (isDashCookieToken(token)) return@withContext false
+            val body = JSONObject()
+                .put("owner", login)
+                .put("name", XyRdpConfig.FORK_REPO_NAME)
+                .put("description", "XyDesk Remote — personal RDP runner")
+                .put("include_all_branches", false)
+                .put("private", false)
+                .toString()
+            val (code, _) = call(
+                token,
+                "/repos/${XyRdpConfig.TEMPLATE_REPO}/generate",
+                "POST",
+                body,
+            )
+            // 201 = baru dibuat; 409/422 = repo dengan nama itu sudah ada.
+            code in 200..204 || code == 409 || code == 422
+        }
+
+    /**
+     * Satu pintu masuk untuk menyiapkan repo pengguna.
+     * @return "template", "fork", atau "" kalau dua-duanya gagal.
+     */
+    suspend fun ensurePersonalRepo(token: String, login: String): String =
+        withContext(Dispatchers.IO) {
+            if (XyRdpConfig.PREFER_TEMPLATE && createFromTemplate(token, login)) {
+                markForkConfirmed(login)
+                return@withContext "template"
+            }
+            if (createFork(token, login) || forkExists(token, login)) {
+                markForkConfirmed(login)
+                return@withContext "fork"
+            }
+            ""
+        }
+
+    /** True kalau repo pengguna masih berstatus fork (butuh sync upstream). */
+    suspend fun isForkRepo(token: String, login: String): Boolean =
+        withContext(Dispatchers.IO) {
+            if (isDashCookieToken(token)) return@withContext true
+            val (code, body) = call(token, "/repos/$login/${XyRdpConfig.FORK_REPO_NAME}")
+            code == 200 && runCatching { JSONObject(body).optBoolean("fork", false) }.getOrDefault(false)
+        }
+
+    /**
      * Sinkronkan fork `XyRDP` milik pengguna dengan branch `main` dari `xykal/XyRDP`
      * supaya script & workflow di fork pengguna selalu versi terbaru.
      */

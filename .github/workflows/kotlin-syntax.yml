@@ -1,0 +1,41 @@
+name: Kotlin syntax guard
+
+# Guard cepat (~30 dtk setelah cache hangat): tangkap salah ketik / kurung
+# tidak seimbang sebelum build APK 20 menit di build-apk.yml dijalankan.
+# Ini PEMERIKSAAN SINTAKS, bukan type-check — build APK tetap wajib.
+on:
+  push:
+    branches: [main]
+    paths: ['**/*.kt', 'ci/tools/KotlinSyntaxCheck.java', 'ci/kotlin_syntax_check.sh', '.github/workflows/kotlin-syntax.yml']
+  pull_request:
+    paths: ['**/*.kt', 'ci/tools/KotlinSyntaxCheck.java', 'ci/kotlin_syntax_check.sh', '.github/workflows/kotlin-syntax.yml']
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  parse:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up JDK 21
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      # kotlin-compiler 2.2.21 jalan di JRE 11+, jadi versi JDK tidak kritis
+      # di sini; JDK 21 dipakai supaya selaras dengan build-apk.yml.
+      - name: Cache Kotlin compiler
+        uses: actions/cache@v4
+        with:
+          path: ${{ runner.temp }}/xydesk-kotlinc-2.2.21
+          key: kotlinc-2.2.21-${{ runner.os }}-v1
+
+      - name: Parse semua file Kotlin
+        run: |
+          chmod +x ci/kotlin_syntax_check.sh
+          ci/kotlin_syntax_check.sh

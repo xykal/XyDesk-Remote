@@ -8,6 +8,14 @@ package id.xydesk.remote.ui.rdp
  */
 internal object XyRdpConfig {
     const val TEMPLATE_REPO = "xykal/XyRDP"
+    /**
+     * Metode pembuatan repo pengguna. Default: "Use this template"
+     * (POST /repos/{owner}/{repo}/generate). Repo hasil template bukan fork,
+     * jadi GitHub Actions aktif sejak awal dan tidak perlu merge-upstream.
+     * Kalau repo sumber belum ditandai "Template repository" di GitHub,
+     * XyRdpClient otomatis fallback ke metode fork lama.
+     */
+    const val PREFER_TEMPLATE = true
     const val FORK_REPO_NAME = "XyRDP"
     const val WORKFLOW_FILE = "rdp-6h.yml"
     const val STATUS_REF = "status"

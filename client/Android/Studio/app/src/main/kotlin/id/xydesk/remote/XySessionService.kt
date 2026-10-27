@@ -10,6 +10,7 @@ import android.content.Intent
 import android.graphics.BitmapFactory
 import android.os.Build
 import android.os.IBinder
+import android.util.Log
 import androidx.core.app.NotificationCompat
 import id.xydesk.remote.ui.AppPrefs
 import androidx.core.content.ContextCompat
@@ -75,7 +76,10 @@ class XySessionService : Service() {
             }
 
             ACTION_PING -> {
-                if (XySessionRegistry.activeCount() == 0) {
+                // Selama masih ada sesi TERDAFTAR (walau sedang tidak aktif
+                // karena reconnect), jangan cabut FGS. Kalau FGS dicabut di
+                // sini, Android bisa membunuh proses tepat saat backoff.
+                if (XySessionRegistry.count() == 0) {
                     stopForegroundSafely()
                     stopSelf()
                 }
@@ -119,8 +123,8 @@ class XySessionService : Service() {
     }
 
     private fun promoteToForeground(label: String?) {
-        runCatching {
-            val notif = buildNotification(label)
+        val notif = buildNotification(label)
+        val promoted = runCatching {
             if (Build.VERSION.SDK_INT >= 34) {
                 startForeground(
                     NOTIF_ID,
@@ -130,6 +134,19 @@ class XySessionService : Service() {
             } else {
                 startForeground(NOTIF_ID, notif)
             }
+            true
+        }.getOrElse { err ->
+            // Sebelumnya exception ditelan runCatching tanpa jejak: service
+            // mengira sudah foreground padahal belum, lalu Android melempar
+            // ForegroundServiceDidNotStartInTimeException dan mematikan proses.
+            Log.e(TAG, "startForeground(specialUse) gagal", err)
+            false
+        }
+        if (!promoted && Build.VERSION.SDK_INT >= 34) {
+            // Fallback terakhir: tipe bawaan diganti none lewat overload lama.
+            // Kalau ini juga gagal, minimal ada log untuk diagnosa.
+            runCatching { startForeground(NOTIF_ID, notif) }
+                .onFailure { Log.e(TAG, "startForeground(fallback) gagal", it) }
         }
     }
 
@@ -290,6 +307,7 @@ class XySessionService : Service() {
         /** Warna aksen monokrom app, dipakai notifikasi berwarna. */
         private const val NOTIF_ACCENT = 0xFF111114.toInt()
 
+        private const val TAG = "XySessionService"
         private const val CHANNEL_ID = "xydesk_sesi_aktif"
         private const val NOTIF_ID = 4711
         const val ACTION_STOP = "id.xydesk.remote.action.STOP_SESSION"
@@ -326,8 +344,9 @@ class XySessionService : Service() {
                 } else {
                     appCtx.startService(intent)
                 }
-            }.onFailure {
+            }.onFailure { err ->
                 pendingForegroundStart = false
+                Log.e(TAG, "startForegroundService gagal dipanggil", err)
             }
         }
 
