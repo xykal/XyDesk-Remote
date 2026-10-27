@@ -1654,3 +1654,88 @@ test("OAuth token exchange provider outage cannot create or forward a callback s
   assert.equal(writes, 0);
   assert.equal(identityCalls, 0);
 });
+
+// --- Kuota: counter unduhan unik harus memakai D1, bukan KV ----------------
+// Latar belakang: jalur lama menulis 2 key KV per unduhan unik dan membuat
+// UNIQUE_DOWNLOADS menembus batas gratis 1.000 write/hari (terukur 1.355).
+
+function fakeD1() {
+  const rows = new Set();
+  const statements = [];
+  return {
+    rows,
+    statements,
+    prepare(sql) {
+      statements.push(sql.trim().split(/\s+/).slice(0, 3).join(" "));
+      let bound = [];
+      const api = {
+        bind(...values) { bound = values; return api; },
+        async run() {
+          if (/^INSERT OR IGNORE INTO download_hits/i.test(sql.trim())) {
+            rows.add(bound[0]);
+          }
+          return { success: true };
+        },
+        async first() {
+          if (/COUNT\(\*\)/i.test(sql)) return { total: rows.size };
+          return null;
+        },
+      };
+      return api;
+    },
+  };
+}
+
+test("unduhan unik dicatat ke D1 tanpa menyentuh KV", async () => {
+  const store = new Map();
+  const kvWrites = [];
+  const kv = {
+    async get(key) { return store.has(key) ? store.get(key) : null; },
+    async put(key) { kvWrites.push(key); store.set(key, "1"); },
+    async delete(key) { store.delete(key); },
+  };
+  const d1 = fakeD1();
+  const env = envFor({}, { UNIQUE_DOWNLOADS: kv, XYDESK_DB: d1 });
+
+  const res = await worker.fetch(
+    new Request("https://www.xydeskremote.biz.id/_qa/xykal-qa-latest/arm64-v8a.apk", {
+      headers: { "cf-connecting-ip": "203.0.113.9", "user-agent": "unit-test" },
+    }),
+    env,
+  );
+
+  // Responsnya redirect ke rilis GitHub (atau 404 bila offline) — yang penting
+  // statistik tercatat di D1 dan KV tidak bertambah.
+  assert.ok([301, 302, 307, 308, 404].includes(res.status), `status tak terduga: ${res.status}`);
+  assert.equal(d1.rows.size, 1, "satu hash unduhan unik harus masuk D1");
+  assert.deepEqual(kvWrites, [], "KV tidak boleh ditulis lagi untuk counter unduhan");
+});
+
+test("unduhan berulang dari sumber sama tidak menambah total di D1", async () => {
+  const d1 = fakeD1();
+  const env = envFor({}, { XYDESK_DB: d1 });
+  const req = () => new Request("https://www.xydeskremote.biz.id/_qa/xykal-qa-latest/arm64-v8a.apk", {
+    headers: { "cf-connecting-ip": "203.0.113.9", "user-agent": "unit-test" },
+  });
+  await worker.fetch(req(), env);
+  await worker.fetch(req(), env);
+  assert.equal(d1.rows.size, 1, "hash yang sama tidak boleh dihitung dua kali");
+});
+
+test("counter unduhan jatuh kembali ke KV kalau D1 tidak ada", async () => {
+  const store = new Map();
+  const kvWrites = [];
+  const kv = {
+    async get(key) { return store.has(key) ? store.get(key) : null; },
+    async put(key, value) { kvWrites.push(key); store.set(key, String(value)); },
+    async delete(key) { store.delete(key); },
+  };
+  const env = envFor({}, { UNIQUE_DOWNLOADS: kv });
+  await worker.fetch(
+    new Request("https://www.xydeskremote.biz.id/_qa/xykal-qa-latest/arm64-v8a.apk", {
+      headers: { "cf-connecting-ip": "203.0.113.10", "user-agent": "unit-test" },
+    }),
+    env,
+  );
+  assert.ok(kvWrites.some((k) => k.startsWith("dl:")), "fallback KV harus tetap berfungsi");
+});

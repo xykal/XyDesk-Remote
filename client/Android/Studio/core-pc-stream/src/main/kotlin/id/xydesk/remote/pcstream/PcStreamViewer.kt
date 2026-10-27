@@ -283,7 +283,13 @@ class PcStreamViewer(
                     if (closed.get()) return
                     handleRemoteSignal(message)
                 }
-                delay(if (state.get() == PcStreamState.CONNECTED) CONNECTED_POLL_INTERVAL_MS else NEGOTIATION_POLL_INTERVAL_MS)
+                val serverHint = batch.nextPollMs
+                val fallback = if (state.get() == PcStreamState.CONNECTED) {
+                    CONNECTED_POLL_INTERVAL_MS
+                } else {
+                    NEGOTIATION_POLL_INTERVAL_MS
+                }
+                delay((serverHint ?: fallback).coerceAtLeast(MIN_POLL_INTERVAL_MS))
             } catch (cancelled: CancellationException) {
                 throw cancelled
             } catch (failure: Throwable) {
@@ -556,8 +562,13 @@ class PcStreamViewer(
         const val CONTROL_LABEL = "xydesk-control-v1"
         const val MAX_CONTROL_PACKET_BYTES = 8 * 1024
         private const val CONTROL_PROTOCOL = "xydesk-input-v1"
-        private const val NEGOTIATION_POLL_INTERVAL_MS = 300L
-        private const val CONNECTED_POLL_INTERVAL_MS = 1_000L
+        // Interval polling sinyal. Dinaikkan dari 300/1.000 ms karena setiap
+        // poll = 1 request Workers; satu sesi terhubung dulu memakan
+        // 86.400 request/hari (menembus kuota gratis 100.000/hari).
+        // Server juga mengirim `next_poll_ms`; nilai itu dipakai kalau ada.
+        private const val NEGOTIATION_POLL_INTERVAL_MS = 1_000L
+        private const val CONNECTED_POLL_INTERVAL_MS = 3_000L
+        private const val MIN_POLL_INTERVAL_MS = 400L
         private const val INITIAL_RETRY_DELAY_MS = 250L
         private const val MAX_RETRY_DELAY_MS = 4_000L
         private const val DISCONNECT_SIGNAL_TIMEOUT_MS = 1_500L
