@@ -3,6 +3,14 @@
 Ringkasan perubahan 2026-10-27. Berlaku untuk dua repo: `xykal/XyDesk-Remote`
 (aplikasi Android) dan `xykal/XyRDP` (template workflow RDP 6 jam).
 
+> **Koreksi penting (1.1.29):** bagian 1 di bawah menjelaskan state fokus
+> slider, tetapi itu **bukan** penyebab utama "Menu Sesi tidak bisa diketuk".
+> Akar masalah sebenarnya adalah z-order: `SliderFocusHost` membungkus seluruh
+> `SessionControls` dengan `Box` tanpa zIndex, sehingga lapisan gesture
+> isolator `zIndex(1f)` di `XyDeskSession` menelan semua sentuhan. Lihat
+> **[docs/MENU-SESI-1129.md](MENU-SESI-1129.md)** untuk analisis dan
+> perbaikannya. Bagian 2–5 dokumen ini tetap berlaku.
+
 ---
 
 ## 1. Menu Sesi tidak bisa dipencet — akar masalah

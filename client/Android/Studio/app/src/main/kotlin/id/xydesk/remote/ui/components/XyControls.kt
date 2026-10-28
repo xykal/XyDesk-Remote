@@ -51,6 +51,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.zIndex
 import java.util.Locale
 import kotlin.math.roundToInt
 import kotlinx.coroutines.delay
@@ -167,9 +168,18 @@ private fun focusValueText(v: Float, start: Float, end: Float): String {
  * Konten sengaja tetap diredupkan dengan `alpha`, BUKAN ditutup scrim buram:
  * di bawah SessionControls ada permukaan desktop remote yang justru ingin
  * dilihat pengguna saat mengubah opasitas/ukuran tombol.
+ *
+ * [zIndex] WAJIB diisi saat host dipasang di dalam hierarki yang punya
+ * lapisan gesture eksternal (lihat SessionControls). Box pembungkus tanpa
+ * zIndex akan "menurunkan" seluruh subtree ke zIndex 0, sehingga lapisan
+ * gesture di luar — mis. isolator trackpad `zIndex(1f)` di XyDeskSession —
+ * mengalahkan panel `zIndex(30f)` dan menelan semua sentuhan.
  */
 @Composable
-fun SliderFocusHost(content: @Composable () -> Unit) {
+fun SliderFocusHost(
+    zIndex: Float = 0f,
+    content: @Composable () -> Unit,
+) {
     val state = SliderFocusState
     val active = state.isActive
     val dragging = state.dragging
@@ -196,7 +206,7 @@ fun SliderFocusHost(content: @Composable () -> Unit) {
         }
     }
 
-    Box(Modifier.fillMaxSize()) {
+    Box(Modifier.fillMaxSize().zIndex(zIndex)) {
         Box(Modifier.fillMaxSize().alpha(dim)) { content() }
         if (active) {
             // Lapisan BENING (tanpa background) supaya desktop remote di bawah
