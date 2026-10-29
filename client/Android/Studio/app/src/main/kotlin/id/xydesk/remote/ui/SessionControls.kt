@@ -81,7 +81,6 @@ import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
 import androidx.compose.ui.graphics.asImageBitmap
-import androidx.compose.ui.input.pointer.pointerInput
 import id.xydesk.remote.core.RdpOptions
 import id.xydesk.remote.core.SmartResolution
 import id.xydesk.remote.ui.components.XyGlassTile
@@ -93,6 +92,7 @@ import id.xydesk.remote.ui.components.XyOverlay
 import id.xydesk.remote.ui.components.XyPillButton
 import id.xydesk.remote.ui.components.XySegmented
 import id.xydesk.remote.ui.components.SliderFocusHost
+import id.xydesk.remote.ui.components.SliderFocusState
 import id.xydesk.remote.ui.components.XySlider
 import id.xydesk.remote.ui.components.XyToggleRow
 import id.xydesk.remote.ui.components.xyGlass
@@ -207,7 +207,18 @@ fun SessionControls(
     // Dipasang DI SINI (bukan di Activity) supaya permukaan desktop remote
     // yang ada di luar SessionControls tetap terlihat — justru itu yang ingin
     // dilihat pengguna saat mengubah opasitas/ukuran tombol.
-    SliderFocusHost {
+    //
+    // zIndex=2f WAJIB (perbaikan 1.1.29). XyDeskSession punya lapisan
+    // "gesture isolator" fillMaxSize dengan zIndex(1f) yang menyala saat
+    // panel/menu terbuka dan meng-consume SEMUA down/move/up supaya jari
+    // tidak meneruskan klik ke surface FreeRDP. Box pembungkus di sini harus
+    // berada di atasnya. Tanpa ini, seluruh subtree SessionControls — termasuk
+    // panel fullscreen zIndex(30f) — collapse ke zIndex 0, kalah dari
+    // isolator, dan Menu Sesi tampil tapi tidak ada satu pun yang bisa diketuk.
+    // zIndex 2f sengaja dipilih: cukup untuk mengalahkan isolator (1f), tapi
+    // masih di bawah privacy curtain (32f). XyOverlay/XyDialog memakai
+    // androidx.compose.ui.window.Dialog (window terpisah) jadi tidak terpengaruh.
+    SliderFocusHost(zIndex = 2f) {
     val context = LocalContext.current
     val configuration = LocalConfiguration.current
     val view = androidx.compose.ui.platform.LocalView.current
@@ -228,6 +239,12 @@ fun SessionControls(
     var scrollPillOpen by remember { mutableStateOf(false) }
     var bubbleOpen by remember { mutableStateOf(false) }
     var panelOpen by remember { mutableStateOf(false) }
+    // Jaring pengaman tambahan (1.1.28): setiap kali Menu Sesi dibuka, paksa
+    // keluar dari mode fokus slider. Kalau ada sisa state dari gestur yang
+    // terputus, menu tidak akan pernah terbuka dalam keadaan redup / mati.
+    LaunchedEffect(panelOpen) {
+        if (panelOpen) SliderFocusState.end()
+    }
     var monitorGridOpen by remember { mutableStateOf(false) }
     var drawerMode by remember { mutableStateOf(false) }
     var tab by remember { mutableStateOf(PanelTab.SCREEN) }
@@ -1780,7 +1797,11 @@ private fun SessionPanel(
                 }
                 .clip(panelShape)
                 .background(MaterialTheme.colorScheme.background, panelShape)
-                .pointerInput(Unit) {}
+                // JANGAN pasang pointerInput/clickable kosong di sini. Modifier
+                // itu ikut hit-test walau tidak consume, dan di versi 1.1.27
+                // sempat bikin area panel kosong memakan event sebelum child
+                // tombol sempat memprosesnya. Isolasi sentuhan sudah dijamin
+                // zIndex(2f) pada SliderFocusHost + gesture isolator di Activity.
                 // Landscape + punch-hole/cutout: jangan biarkan header dan
                 // baris pertama bento tertutup kamera. Insets ini juga aman di
                 // portrait (nilainya nol kalau tidak ada cutout).

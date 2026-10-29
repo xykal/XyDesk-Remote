@@ -678,12 +678,26 @@ internal object XyRdpClient {
                 put("ref", "main")
                 put("inputs", inputs)
             }
-            val code = call(
+            val (code, response) = call(
                 token,
                 "/repos/$login/${XyRdpConfig.FORK_REPO_NAME}/actions/workflows/${XyRdpConfig.WORKFLOW_FILE}/dispatches",
                 "POST",
                 body.toString(),
-            ).first
+            )
+            if (code == 422) {
+                // Paling sering: repo hasil "Use this template" belum disinkron
+                // dengan workflow baru, sehingga input 1.1.28 (fps_boost, mumu,
+                // samp_antiban, portmap_host, ...) ditolak GitHub. Beri pesan
+                // yang bisa ditindaklanjuti, jangan cuma "Gagal mengirim".
+                val detail = runCatching {
+                    JSONObject(response).optString("message").take(140)
+                }.getOrDefault("")
+                error(
+                    "Repo XyRDP kamu masih memakai workflow lama (input baru tidak dikenal). " +
+                        "Tekan tombol Sync di bagian atas, lalu coba lagi. " +
+                        (if (detail.isNotBlank()) "Detail GitHub: $detail" else ""),
+                )
+            }
             code in 200..204
         }
 

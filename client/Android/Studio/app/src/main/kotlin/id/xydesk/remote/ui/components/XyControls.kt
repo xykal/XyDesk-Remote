@@ -13,6 +13,7 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
+import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -26,6 +27,8 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.rememberUpdatedState
@@ -48,8 +51,10 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.zIndex
 import java.util.Locale
 import kotlin.math.roundToInt
+import kotlinx.coroutines.delay
 
 /**
  * Kontrol milik XyDesk sendiri — bukan Slider/ProgressIndicator bawaan Material.
@@ -76,6 +81,7 @@ object SliderFocusState {
     private var startState = mutableStateOf(0f)
     private var endState = mutableStateOf(1f)
     private var stepsState = mutableStateOf(0)
+    private var draggingState = mutableStateOf(false)
 
     val activeLabel: String? get() = labelState.value
     val value: Float get() = valueState.value
@@ -83,6 +89,15 @@ object SliderFocusState {
     val end: Float get() = endState.value
     val steps: Int get() = stepsState.value
     val isActive: Boolean get() = labelState.value != null
+
+    /**
+     * True selama jari masih menempel pada slider asli. Selama fase ini scrim
+     * TIDAK boleh punya pointerInput sama sekali: kalau ada, Compose melakukan
+     * hit-test ulang, gesture slider asli dibatalkan, dan `finally` menutup
+     * mode fokus sebelum sempat dipakai. Ini juga sumber bug "buka menu kok
+     * nggak bisa pencet apa-apa" di 1.1.27.
+     */
+    val dragging: Boolean get() = draggingState.value
 
     private var onChange: (Float) -> Unit = {}
 
@@ -98,6 +113,7 @@ object SliderFocusState {
         stepsState.value = steps
         valueState.value = initialValue
         this.onChange = onChange
+        draggingState.value = true
         labelState.value = label
     }
 
@@ -110,8 +126,19 @@ object SliderFocusState {
         onChange(v)
     }
 
+    /**
+     * Dipanggil dari `finally` gesture slider asli. SENGAJA tidak menutup mode
+     * fokus: setelah jari diangkat overlay tetap tampil supaya nilai bisa
+     * disetel lanjut. Penutupan hanya lewat scrim, tombol Selesai, watchdog,
+     * atau dispose host — jadi state global tidak pernah bisa nyangkut.
+     */
+    fun releaseGesture() {
+        draggingState.value = false
+    }
+
     fun end() {
         labelState.value = null
+        draggingState.value = false
         onChange = {}
     }
 }
@@ -128,19 +155,76 @@ private fun focusValueText(v: Float, start: Float, end: Float): String {
 
 /**
  * Bungkus seluruh pohon UI aktivitas dengan ini. Saat ada slider yang digeser,
- * konten diredupkan jadi hampir transparan dan [SliderFocusOverlay] muncul.
+ * konten lain disembunyikan di balik scrim dan hanya slider + nilainya yang
+ * tersisa.
+ *
+ * REGRESI 1.1.27 (diperbaiki): state fokus tersimpan di object global, dan
+ * `end()` dipanggil dari `finally` gesture slider. Sekali saja gesture
+ * dibatalkan di luar jalur normal (rotasi, panel ditutup, activity dispose),
+ * `dim` nyangkut di 0.06 — seluruh menu jadi nyaris transparan dan terasa
+ * "nggak bisa dipencet apa-apa". Sekarang penutupan dijamin oleh EMPAT jalur:
+ * watchdog 2 detik, ketuk di luar kotak, tombol Selesai, dan dispose host.
+ *
+ * Konten sengaja tetap diredupkan dengan `alpha`, BUKAN ditutup scrim buram:
+ * di bawah SessionControls ada permukaan desktop remote yang justru ingin
+ * dilihat pengguna saat mengubah opasitas/ukuran tombol.
+ *
+ * [zIndex] WAJIB diisi saat host dipasang di dalam hierarki yang punya
+ * lapisan gesture eksternal (lihat SessionControls). Box pembungkus tanpa
+ * zIndex akan "menurunkan" seluruh subtree ke zIndex 0, sehingga lapisan
+ * gesture di luar — mis. isolator trackpad `zIndex(1f)` di XyDeskSession —
+ * mengalahkan panel `zIndex(30f)` dan menelan semua sentuhan.
  */
 @Composable
-fun SliderFocusHost(content: @Composable () -> Unit) {
-    val active = SliderFocusState.isActive
+fun SliderFocusHost(
+    zIndex: Float = 0f,
+    content: @Composable () -> Unit,
+) {
+    val state = SliderFocusState
+    val active = state.isActive
+    val dragging = state.dragging
     val dim by animateFloatAsState(
         targetValue = if (active) 0.06f else 1f,
         animationSpec = tween(180),
         label = "sliderFocusDim",
     )
-    Box(Modifier.fillMaxSize()) {
+
+    // Jaminan terakhir: kalau host keluar dari komposisi (pindah activity,
+    // rotasi, logout), state global ikut dibersihkan.
+    DisposableEffect(Unit) {
+        onDispose { SliderFocusState.end() }
+    }
+
+    // Watchdog: kalau tidak ada perubahan nilai selama 2 detik, tutup sendiri.
+    // Selama drag nilai terus berubah sehingga efek ini di-restart terus.
+    if (active) {
+        val tick = state.value
+        val label = state.activeLabel
+        LaunchedEffect(label, tick) {
+            delay(2_000)
+            SliderFocusState.end()
+        }
+    }
+
+    Box(Modifier.fillMaxSize().zIndex(zIndex)) {
         Box(Modifier.fillMaxSize().alpha(dim)) { content() }
-        if (active) SliderFocusOverlay()
+        if (active) {
+            // Lapisan BENING (tanpa background) supaya desktop remote di bawah
+            // SessionControls tetap terlihat. Fungsinya cuma menangkap ketukan
+            // untuk keluar dari mode fokus. pointerInput baru dipasang SETELAH
+            // gesture slider asli selesai — kalau dipasang saat masih dragging,
+            // Compose hit-test ulang dan gesture slider langsung putus.
+            Box(
+                Modifier
+                    .fillMaxSize()
+                    .then(
+                        if (dragging) Modifier else Modifier.pointerInput(Unit) {
+                            detectTapGestures { SliderFocusState.end() }
+                        },
+                    ),
+            )
+            SliderFocusOverlay()
+        }
     }
 }
 
@@ -148,11 +232,10 @@ fun SliderFocusHost(content: @Composable () -> Unit) {
 private fun SliderFocusOverlay() {
     val shape = RoundedCornerShape(20.dp)
     val state = SliderFocusState
-    // Sengaja TANPA clickable/pointerInput penuh layar: kalau ada, event
-    // ketuk akan ditelan overlay dan gestur pada slider asli terputus,
-    // sehingga `finally` langsung memanggil end() dan overlay menghilang
-    // seketika. Biarkan event turun ke slider asli; overlay hanya menampilkan
-    // salinan visual yang nilainya mengikuti state yang sama.
+    // Overlay hanya menampilkan salinan slider. Tidak ada clickable/
+    // pointerInput penuh layar di sini supaya event tetap bisa turun ke
+    // kontrol di bawahnya. Penutupan ditangani scrim (setelah gesture usai),
+    // tombol Selesai, dan watchdog di host.
     Box(
         Modifier
             .fillMaxSize()
@@ -189,7 +272,7 @@ private fun SliderFocusOverlay() {
                 focusEnabled = false,
             )
             Text(
-                "Lepaskan untuk menyimpan",
+                "Geser untuk menyetel · ketuk di luar kotak untuk kembali",
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 fontSize = 10.sp,
             )
@@ -249,7 +332,17 @@ fun XySlider(
         modifier
             .fillMaxWidth()
             .height(34.dp)
-            .pointerInput(valueRange, enabled, steps, focusEnabled) {
+            // Kunci berupa Float mentah, bukan objek ClosedFloatingPointRange:
+            // range dibuat ulang tiap recomposition (mis. `state.start..state.end`
+            // di overlay). Kalau range dijadikan kunci, coroutine gesture
+            // di-restart di tengah drag dan slider berhenti di nilai pertama.
+            .pointerInput(
+                valueRange.start,
+                valueRange.endInclusive,
+                enabled,
+                steps,
+                focusEnabled,
+            ) {
                 if (!enabled) return@pointerInput
                 awaitEachGesture {
                     val down = awaitFirstDown(requireUnconsumed = false)
@@ -282,9 +375,13 @@ fun XySlider(
                             change.consume()
                         }
                     } finally {
-                        // gesture dibatalkan (rotasi / panel ditutup) tetap
-                        // kembalikan UI, jangan biarkan layar menggantung redup.
-                        if (focusEnabled) SliderFocusState.end()
+                        // Jangan tutup mode fokus di sini. Overlay sengaja
+                        // tetap tampil setelah jari diangkat supaya nilai bisa
+                        // disetel lanjut; penutupan dijamin oleh watchdog,
+                        // scrim, tombol Selesai, dan dispose host. Menutup
+                        // dari `finally` (perilaku 1.1.27) bikin state global
+                        // gampang nyangkut saat gesture dibatalkan rotasi.
+                        if (focusEnabled) SliderFocusState.releaseGesture()
                     }
                 }
             }

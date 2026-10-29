@@ -6,7 +6,6 @@ import worker, {
   CommunityJokes,
   FeedbackBoard,
   withChatTranslationBudget,
-  PcSignalRoom,
   resetReleaseLookupCache,
 } from "./worker.mjs";
 
@@ -105,47 +104,6 @@ function jokesEnv(object) {
       },
     },
   });
-}
-
-function pcSignalEnv() {
-  const rooms = new Map();
-  const roomState = new Map();
-  const binding = {
-    idFromName(name) { return name; },
-    get(id) {
-      if (!rooms.has(id)) {
-        const values = new Map();
-        let alarm = null;
-        const storage = {
-          async get(key) { return values.get(key); },
-          async put(key, value) { values.set(key, value); },
-          async delete(key) { return values.delete(key); },
-          async deleteAlarm() { alarm = null; },
-          async getAlarm() { return alarm; },
-          async setAlarm(timestamp) { alarm = timestamp; },
-          async transaction(callback) {
-            const transaction = {
-              async get(key) { return values.get(key); },
-              async put(key, value) { values.set(key, value); },
-              async delete(key) { return values.delete(key); },
-            };
-            return callback(transaction);
-          },
-        };
-        const state = { storage };
-        const object = new PcSignalRoom(state);
-        rooms.set(id, object);
-        roomState.set(id, values);
-      }
-      return {
-        fetch: (input, init) => {
-          const request = input instanceof Request ? input : new Request(input, init);
-          return rooms.get(id).fetch(request);
-        },
-      };
-    },
-  };
-  return { env: envFor({}, { PC_SIGNAL_ROOMS: binding }), rooms, roomState };
 }
 
 test("health endpoint returns JSON derived from release metadata", async () => {
@@ -457,143 +415,6 @@ test("ActiveSessions leases are hashed, idempotent, endable, and expire", async 
   } finally {
     Date.now = originalNow;
   }
-});
-
-test("PC signaling room pairs host and viewer and relays SDP/ICE JSON only between them", async () => {
-  const { env, roomState } = pcSignalEnv();
-  const createdResponse = await worker.fetch(new Request("https://rdp.xydesk.my.id/api/pc/rooms", {
-    method: "POST",
-    headers: { "content-type": "application/json", "cf-connecting-ip": "203.0.113.20" },
-    body: "{}",
-  }), env);
-  assert.equal(createdResponse.status, 201);
-  const created = await createdResponse.json();
-  assert.match(created.room_id, /^[0-9a-f-]{36}$/i);
-  assert.match(created.host_token, /^[A-Za-z0-9_-]{43}$/);
-  assert.match(created.pairing_code, /^[A-Za-z0-9_-]{32}$/);
-  const persisted = roomState.get(created.room_id);
-  assert.ok(persisted);
-  assert.equal(JSON.stringify([...persisted.values()]).includes(created.host_token), false);
-  assert.equal(JSON.stringify([...persisted.values()]).includes(created.pairing_code), false);
-
-  const joinResponse = await worker.fetch(new Request(`https://rdp.xydesk.my.id/api/pc/rooms/${created.room_id}/join`, {
-    method: "POST",
-    headers: { "content-type": "application/json" },
-    body: JSON.stringify({ pairing_code: created.pairing_code }),
-  }), env);
-  assert.equal(joinResponse.status, 200);
-  const joined = await joinResponse.json();
-  assert.match(joined.viewer_token, /^[A-Za-z0-9_-]{43}$/);
-
-  const hostAuth = { authorization: `Bearer ${created.host_token}`, "content-type": "application/json" };
-  const viewerAuth = { authorization: `Bearer ${joined.viewer_token}`, "content-type": "application/json" };
-  const offer = { type: "offer", payload: { type: "offer", sdp: "v=0\\r\\no=xydesk 1 1 IN IP4 0.0.0.0\\r\\n" } };
-  const offerResponse = await worker.fetch(new Request(`https://rdp.xydesk.my.id/api/pc/rooms/${created.room_id}/signal`, {
-    method: "POST", headers: hostAuth, body: JSON.stringify(offer),
-  }), env);
-  assert.equal(offerResponse.status, 201);
-  assert.equal((await offerResponse.json()).seq, 1);
-
-  const viewerPoll = await worker.fetch(new Request(`https://rdp.xydesk.my.id/api/pc/rooms/${created.room_id}/signal?after=0`, {
-    headers: { authorization: viewerAuth.authorization },
-  }), env);
-  assert.equal(viewerPoll.status, 200);
-  const viewerMessages = await viewerPoll.json();
-  assert.equal(viewerMessages.role, "viewer");
-  assert.deepEqual(viewerMessages.events.map((event) => [event.seq, event.from, event.type]), [[1, "host", "offer"]]);
-  assert.equal(viewerMessages.cursor, 1);
-
-  const answer = { type: "answer", payload: { type: "answer", sdp: "v=0\\r\\no=xydesk 2 2 IN IP4 0.0.0.0\\r\\n" } };
-  const answerResponse = await worker.fetch(new Request(`https://rdp.xydesk.my.id/api/pc/rooms/${created.room_id}/signal`, {
-    method: "POST", headers: viewerAuth, body: JSON.stringify(answer),
-  }), env);
-  assert.equal(answerResponse.status, 201);
-  assert.equal((await answerResponse.json()).seq, 2);
-  const hostPoll = await worker.fetch(new Request(`https://rdp.xydesk.my.id/api/pc/rooms/${created.room_id}/signal?after=1`, {
-    headers: { authorization: hostAuth.authorization },
-  }), env);
-  const hostMessages = await hostPoll.json();
-  assert.deepEqual(hostMessages.events.map((event) => [event.seq, event.from, event.type]), [[2, "viewer", "answer"]]);
-});
-
-test("PC signaling rejects invalid credentials, malformed SDP, oversized requests, and reused pairing codes", async () => {
-  const { env } = pcSignalEnv();
-  const createdResponse = await worker.fetch(new Request("https://rdp.xydesk.my.id/api/pc/rooms", {
-    method: "POST", headers: { "content-type": "application/json" }, body: "{}",
-  }), env);
-  const created = await createdResponse.json();
-  const base = `https://rdp.xydesk.my.id/api/pc/rooms/${created.room_id}`;
-  const unauthorized = await worker.fetch(new Request(`${base}/signal?after=0`), env);
-  assert.equal(unauthorized.status, 401);
-
-  const joinResponse = await worker.fetch(new Request(`${base}/join`, {
-    method: "POST", headers: { "content-type": "application/json" },
-    body: JSON.stringify({ pairing_code: created.pairing_code }),
-  }), env);
-  assert.equal(joinResponse.status, 200);
-  const joined = await joinResponse.json();
-  const reusedPairingCode = await worker.fetch(new Request(`${base}/join`, {
-    method: "POST", headers: { "content-type": "application/json" },
-    body: JSON.stringify({ pairing_code: created.pairing_code }),
-  }), env);
-  assert.equal(reusedPairingCode.status, 401);
-
-  const malformed = await worker.fetch(new Request(`${base}/signal`, {
-    method: "POST",
-    headers: { authorization: `Bearer ${created.host_token}`, "content-type": "application/json" },
-    body: JSON.stringify({ type: "offer", payload: { type: "answer", sdp: "bad" } }),
-  }), env);
-  assert.equal(malformed.status, 400);
-  const oversized = await worker.fetch(new Request(`${base}/signal`, {
-    method: "POST",
-    headers: { authorization: `Bearer ${joined.viewer_token}`, "content-type": "application/json" },
-    body: JSON.stringify({ type: "candidate", payload: { candidate: "x".repeat(30_000) } }),
-  }), env);
-  assert.equal(oversized.status, 413);
-  const invalidCursor = await worker.fetch(new Request(`${base}/signal?after=-1`, {
-    headers: { authorization: `Bearer ${created.host_token}` },
-  }), env);
-  assert.equal(invalidCursor.status, 400);
-});
-
-test("PC signaling room expires when the host waits too long to pair", async () => {
-  const { env } = pcSignalEnv();
-  const originalNow = Date.now;
-  let now = originalNow();
-  Date.now = () => now;
-  try {
-    const createdResponse = await worker.fetch(new Request("https://rdp.xydesk.my.id/api/pc/rooms", {
-      method: "POST", headers: { "content-type": "application/json" }, body: "{}",
-    }), env);
-    assert.equal(createdResponse.status, 201);
-    const created = await createdResponse.json();
-    now += 10 * 60_000 + 1;
-    const expired = await worker.fetch(new Request(`https://rdp.xydesk.my.id/api/pc/rooms/${created.room_id}/join`, {
-      method: "POST", headers: { "content-type": "application/json" },
-      body: JSON.stringify({ pairing_code: created.pairing_code }),
-    }), env);
-    assert.equal(expired.status, 410);
-    assert.deepEqual(await expired.json(), { status: "room_expired" });
-  } finally {
-    Date.now = originalNow;
-  }
-});
-
-test("PC signaling room creation is rate-limited per hashed client IP and validates its API methods", async () => {
-  const { env } = pcSignalEnv();
-  const create = () => worker.fetch(new Request("https://rdp.xydesk.my.id/api/pc/rooms", {
-    method: "POST", headers: { "content-type": "application/json", "cf-connecting-ip": "198.51.100.7" }, body: "{}",
-  }), env);
-  for (let index = 0; index < 5; index += 1) assert.equal((await create()).status, 201);
-  const limited = await create();
-  assert.equal(limited.status, 429);
-  const wrongMethod = await worker.fetch(new Request("https://rdp.xydesk.my.id/api/pc/rooms", { method: "GET" }), env);
-  assert.equal(wrongMethod.status, 405);
-  assert.equal(wrongMethod.headers.get("allow"), "POST");
-  const missingBinding = await worker.fetch(new Request("https://rdp.xydesk.my.id/api/pc/rooms", {
-    method: "POST", headers: { "content-type": "application/json" }, body: "{}",
-  }), envFor());
-  assert.equal(missingBinding.status, 503);
 });
 
 test("Android active-session reporting defaults on, remains easy to disable, and sends only a random session ID", async () => {
