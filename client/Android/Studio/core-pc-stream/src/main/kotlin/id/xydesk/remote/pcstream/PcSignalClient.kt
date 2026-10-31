@@ -57,9 +57,14 @@ class PcSignalBatch(
     val cursor: Long,
     val latestSequence: Long,
     val events: List<PcSignalMessage>,
+    /**
+     * Saran interval polling dari server (ms). Server menaikkannya saat idle
+     * supaya kuota Workers tidak habis; null kalau server versi lama.
+     */
+    val nextPollMs: Long? = null,
 ) {
     override fun toString(): String =
-        "PcSignalBatch(cursor=$cursor, latestSequence=$latestSequence, eventCount=${events.size})"
+        "PcSignalBatch(cursor=$cursor, latestSequence=$latestSequence, eventCount=${events.size}, nextPollMs=$nextPollMs)"
 }
 
 class PcSignalHttpException(
@@ -162,7 +167,8 @@ class PcSignalClient(
         val rawEvents = response.optJSONArray("events")
             ?: throw PcSignalProtocolException("Missing signaling events")
         val events = rawEvents.toSignalMessages()
-        PcSignalBatch(cursor, latest, events)
+        val nextPollMs = if (response.has("next_poll_ms")) response.optLong("next_poll_ms", 0L) else null
+        PcSignalBatch(cursor, latest, events, nextPollMs?.takeIf { it > 0 })
     }
 
     private fun request(

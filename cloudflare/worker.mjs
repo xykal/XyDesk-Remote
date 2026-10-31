@@ -363,13 +363,40 @@ async function statusResponse(request, env) {
 }
 
 /**
- * Hitung pengunduh unik: hash(IP + User-Agent + file) disimpan di KV sekali;
+ * Hitung pengunduh unik: hash(IP + User-Agent + file) disimpan sekali;
  * unduhan berulang dari sumber yang sama tidak menambah total. Statistik
  * tidak boleh pernah menghalangi unduhan, jadi semua kegagalan ditelan.
+ *
+ * KUOTA: sebelumnya memakai 2 KV write + 2 KV read per unduhan unik, dan itu
+ * membuat namespace UNIQUE_DOWNLOADS menembus batas gratis 1.000 write/hari
+ * (terukur 1.355/hari). Sekarang memakai D1 (XYDESK_DB) dengan batas
+ * 100.000 rows written/hari. KV hanya dipakai sebagai fallback kalau
+ * binding D1 tidak tersedia.
  */
+const downloadStatsTableReady = new WeakMap();
+
+function ensureDownloadStatsTable(d1) {
+  const cached = downloadStatsTableReady.get(d1);
+  if (cached) return cached;
+  const ready = d1
+    .prepare(
+      `CREATE TABLE IF NOT EXISTS download_hits (
+         hash TEXT PRIMARY KEY,
+         file_name TEXT NOT NULL,
+         first_seen INTEGER NOT NULL
+       )`,
+    )
+    .run()
+    .then(() => true)
+    .catch(() => {
+      downloadStatsTableReady.delete(d1);
+      return false;
+    });
+  downloadStatsTableReady.set(d1, ready);
+  return ready;
+}
+
 async function recordUniqueDownload(env, request, fileName) {
-  const kv = env.UNIQUE_DOWNLOADS;
-  if (!kv) return;
   try {
     const ip = String(request.headers.get("cf-connecting-ip") || "unknown").toLowerCase();
     const ua = String(request.headers.get("user-agent") || "unknown").toLowerCase();
@@ -380,6 +407,24 @@ async function recordUniqueDownload(env, request, fileName) {
     const hex = [...new Uint8Array(digest)]
       .map((b) => b.toString(16).padStart(2, "0"))
       .join("");
+
+    // Jalur utama: D1 (kuota jauh lebih lega, dan atomik via PRIMARY KEY).
+    const d1 = env?.XYDESK_DB;
+    if (d1 && typeof d1.prepare === "function" && (await ensureDownloadStatsTable(d1))) {
+      try {
+        await d1
+          .prepare("INSERT OR IGNORE INTO download_hits (hash, file_name, first_seen) VALUES (?, ?, ?)")
+          .bind(hex, String(fileName).slice(0, 160), Date.now())
+          .run();
+        return;
+      } catch {
+        // lanjut ke fallback KV
+      }
+    }
+
+    // Fallback lama (KV) — tetap dipakai kalau D1 tidak ter-bind/bermasalah.
+    const kv = env?.UNIQUE_DOWNLOADS;
+    if (!kv) return;
     const key = `dl:${fileName}:${hex}`;
     if (await kv.get(key)) return;
     await kv.put(key, String(Date.now()), {
@@ -388,7 +433,28 @@ async function recordUniqueDownload(env, request, fileName) {
     const current = Number(await kv.get("dl:total")) || 0;
     await kv.put("dl:total", String(current + 1));
   } catch {
-    // Statistik belaka: kegagalan KV tidak boleh memutus unduhan.
+    // Statistik belaka: kegagalan pencatatan tidak boleh memutus unduhan.
+  }
+}
+
+/**
+ * Total pengunduh unik. D1 kalau ada (COUNT ringan, tanpa KV write),
+ * fallback ke counter KV lama.
+ */
+async function readUniqueDownloadTotal(env) {
+  const d1 = env?.XYDESK_DB;
+  if (d1 && typeof d1.prepare === "function" && (await ensureDownloadStatsTable(d1))) {
+    try {
+      const row = await d1.prepare("SELECT COUNT(*) AS total FROM download_hits").first();
+      if (row && Number.isFinite(Number(row.total))) return Number(row.total);
+    } catch {
+      // fallback di bawah
+    }
+  }
+  try {
+    return Number(await env?.UNIQUE_DOWNLOADS?.get("dl:total")) || 0;
+  } catch {
+    return null;
   }
 }
 
@@ -535,12 +601,7 @@ async function downloadStatsResponse(request, env) {
         })),
     );
     const releaseTags = new Set(apkAssets.map((asset) => asset.tag).filter(Boolean));
-    let uniqueApkDownloaders = null;
-    try {
-      uniqueApkDownloaders = Number(await env.UNIQUE_DOWNLOADS?.get("dl:total")) || 0;
-    } catch {
-      uniqueApkDownloaders = null;
-    }
+    const uniqueApkDownloaders = await readUniqueDownloadTotal(env);
     const body = {
       unique_apk_downloaders: uniqueApkDownloaders,
       status: "ok",
@@ -949,6 +1010,9 @@ const ACCOUNT_SETTINGS_MAX_BYTES = 262_144;
 //    bisa butuh beberapa detik sampai terlihat di semua edge; heartbeat
 //    berikutnya membuat rekaman tersebar normal.
 // ---------------------------------------------------------------------------
+const PC_SIGNAL_NEXT_POLL_IDLE_MS = 3_000;
+const PC_SIGNAL_NEXT_POLL_BUSY_MS = 500;
+
 const PC_RELAY_ID_RE = /^XY[0-9A-F]{8}$/;
 const PC_RELAY_TTL_SECONDS = 300;
 const PC_RELAY_RESOLVE_LIMIT_PER_MINUTE = 30;
