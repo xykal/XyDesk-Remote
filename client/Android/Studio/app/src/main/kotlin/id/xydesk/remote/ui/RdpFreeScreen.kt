@@ -42,6 +42,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontFamily
@@ -142,6 +143,11 @@ fun RdpFreeScreen(onBack: () -> Unit, onConnect: (ConnectionProfile) -> Unit) {
     var microphone by remember { mutableStateOf(prefs.getString("microphone", "ya") != "tidak") }
     var storageBoost by remember { mutableStateOf(prefs.getString("storage_boost", "ya") != "tidak") }
     var sampDeps by remember { mutableStateOf(prefs.getString("samp", "ya") != "tidak") }
+    // 1.1.28: tiga fitur yang sebelumnya tidak pernah benar-benar dikirim ke
+    // workflow (atau malah tidak ada input-nya sama sekali di rdp-6h.yml).
+    var fpsBoost by remember { mutableStateOf(prefs.getString("fps_boost", "ya") != "tidak") }
+    var mumuPlayer by remember { mutableStateOf(prefs.getString("mumu", "tidak") == "ya") }
+    var sampAntiBan by remember { mutableStateOf(prefs.getString("samp_antiban", "tidak") == "ya") }
     var win10Theme by remember { mutableStateOf(prefs.getString("win10", "ya") != "tidak") }
     var ekstraDesktop by remember { mutableStateOf(prefs.getString("ekstra", "ya") != "tidak") }
     var robloxReady by remember { mutableStateOf(prefs.getString("roblox", "tidak") == "ya") }
@@ -222,6 +228,9 @@ fun RdpFreeScreen(onBack: () -> Unit, onConnect: (ConnectionProfile) -> Unit) {
             .putString("microphone", if (microphone) "ya" else "tidak")
             .putString("storage_boost", if (storageBoost) "ya" else "tidak")
             .putString("samp", if (sampDeps) "ya" else "tidak")
+            .putString("fps_boost", if (fpsBoost) "ya" else "tidak")
+            .putString("mumu", if (mumuPlayer) "ya" else "tidak")
+            .putString("samp_antiban", if (sampAntiBan) "ya" else "tidak")
             .putString("win10", if (win10Theme) "ya" else "tidak")
             .putString("ekstra", if (ekstraDesktop) "ya" else "tidak")
             .putString("roblox", if (robloxReady) "ya" else "tidak")
@@ -314,10 +323,58 @@ fun RdpFreeScreen(onBack: () -> Unit, onConnect: (ConnectionProfile) -> Unit) {
         val usr = login
         if (tok.isNullOrBlank() || usr.isNullOrBlank()) return@LaunchedEffect
         while (true) {
-            delay(8000)
+            // Optimasi 1.1.28: polling 8 detik terus-menerus bikin 3-5 panggilan
+            // GitHub API per siklus dan boros kuota/rate-limit. Sekarang
+            // adaptif: cepat hanya saat boot, lambat saat sesi sudah hidup,
+            // paling lambat saat tidak ada sesi sama sekali.
+            val phase = validatedSession?.phase
+            val pollDelay = when {
+                busy || phase == XyRdpPhase.PREPARING || phase == XyRdpPhase.QUEUED -> 8_000L
+                validatedSession?.isVerifiedLive == true -> 20_000L
+                else -> 30_000L
+            }
+            delay(pollDelay)
             if (owner.lifecycle.currentState.isAtLeast(Lifecycle.State.STARTED) && !busy && !initialLoading) {
                 refreshAll(tok, usr, showSkeleton = false)
             }
+        }
+    }
+
+    /**
+     * Satu sumber kebenaran untuk input workflow rdp-6h.yml. Sebelumnya tombol
+     * "Reset Anti-Ban" menyusun payload sendiri (dan lupa input baru), jadi
+     * gampang beda dengan tombol "Mulai". Semua input di sini HARUS ada di
+     * `.github/workflows/rdp-6h.yml` repo XyRDP — kalau tidak, GitHub menolak
+     * dispatch dengan 422.
+     */
+    fun sessionInputs(): JSONObject = JSONObject().apply {
+        put("durasi_menit", duration)
+        put("runner", runnerImage)
+        put("linux_mode", linuxMode)
+        put("hostname", hostname)
+        put("rdp_user", rdpUser)
+        put("akses", akses)
+        put("storage_boost", if (storageBoost) "ya" else "tidak")
+        put("debloat", debloat)
+        put("samp", if (sampDeps) "ya" else "tidak")
+        put("samp_antiban", if (sampAntiBan) "ya" else "tidak")
+        put("fps_boost", if (fpsBoost) "ya" else "tidak")
+        put("mumu", if (mumuPlayer) "ya" else "tidak")
+        put("win10", if (win10Theme) "ya" else "tidak")
+        put("xydesk", if (xydeskBoost) "ya" else "tidak")
+        put("ekstra", if (ekstraDesktop) "ya" else "tidak")
+        put("grafis", grafis)
+        put("microphone", if (microphone) "ya" else "tidak")
+        put("roblox", if (robloxReady) "ya" else "tidak")
+        put("discord", if (discordReady) "ya" else "tidak")
+        put("minecraft_java", if (mcJavaReady) "ya" else "tidak")
+        put("minecraft_bedrock", if (mcBedrockReady) "ya" else "tidak")
+        put("perpanjang_otomatis", if (autoRenew) "ya" else "tidak")
+        // workflow hanya punya portmap_host/portmap_port — nama
+        // railway_host/railway_port dulu tidak pernah dikenal GitHub (422).
+        if (akses != "tailscale") {
+            if (portmapHost.isNotBlank()) put("portmap_host", portmapHost.trim())
+            if (portmapPort.isNotBlank()) put("portmap_port", portmapPort.trim())
         }
     }
 
@@ -344,35 +401,7 @@ fun RdpFreeScreen(onBack: () -> Unit, onConnect: (ConnectionProfile) -> Unit) {
                             return@launch
                         }
                         busyLabel = "Menyinkronkan template XyRDP & mengirim workflow sesi baru…"
-                        val inputs = JSONObject().apply {
-                            put("durasi_menit", duration)
-                            put("runner", runnerImage)
-                            put("linux_mode", linuxMode)
-                            put("hostname", hostname)
-                            put("rdp_user", rdpUser)
-                            put("akses", akses)
-                            put("storage_boost", if (storageBoost) "ya" else "tidak")
-                            put("debloat", debloat)
-                            put("samp", if (sampDeps) "ya" else "tidak")
-                            put("win10", if (win10Theme) "ya" else "tidak")
-                            put("xydesk", if (xydeskBoost) "ya" else "tidak")
-                            put("ekstra", if (ekstraDesktop) "ya" else "tidak")
-                            put("grafis", grafis)
-                            put("microphone", if (microphone) "ya" else "tidak")
-                            put("roblox", if (robloxReady) "ya" else "tidak")
-                            put("discord", if (discordReady) "ya" else "tidak")
-                            put("minecraft_java", if (mcJavaReady) "ya" else "tidak")
-                            put("minecraft_bedrock", if (mcBedrockReady) "ya" else "tidak")
-                            put("perpanjang_otomatis", if (autoRenew) "ya" else "tidak")
-                            if (akses == "portmap") {
-                                if (portmapHost.isNotBlank()) put("portmap_host", portmapHost.trim())
-                                if (portmapPort.isNotBlank()) put("portmap_port", portmapPort.trim())
-                            }
-                            if (akses == "railway") {
-                                if (portmapHost.isNotBlank()) put("railway_host", portmapHost.trim())
-                                if (portmapPort.isNotBlank()) put("railway_port", portmapPort.trim())
-                            }
-                        }
+                        val inputs = sessionInputs()
                         if (XyRdpClient.dispatch(tok, user, inputs)) {
                             saveSettings()
                             activeTab = 0
@@ -395,31 +424,21 @@ fun RdpFreeScreen(onBack: () -> Unit, onConnect: (ConnectionProfile) -> Unit) {
                         }
                     }
                     "samp_antiban" -> {
+                        // Dulu tombol ini cuma memicu sesi 60 menit biasa dan
+                        // TIDAK pernah memanggil reset GPCI. Sekarang pakai
+                        // konfigurasi yang sama dengan tombol Mulai, plus
+                        // flag samp_antiban yang benar-benar dijalankan
+                        // scripts/setup-samp-antiban.ps1 di workflow.
                         busyLabel = "Mengirim perintah Reset Anti-Ban SAMP & GPCI…"
-                        val inputs = JSONObject().apply {
-                            put("durasi_menit", "60")
-                            put("runner", "windows-2022")
-                            put("linux_mode", "desktop")
-                            put("hostname", "samp-antiban")
-                            put("rdp_user", rdpUser)
-                            put("akses", "tailscale")
-                            put("storage_boost", "tidak")
-                            put("debloat", "tidak")
+                        val inputs = sessionInputs().apply {
                             put("samp", "ya")
-                            put("win10", "tidak")
-                            put("xydesk", "tidak")
-                            put("ekstra", "tidak")
-                            put("grafis", "software")
-                            put("microphone", "tidak")
-                            put("roblox", "tidak")
-                            put("minecraft_java", "tidak")
-                            put("minecraft_bedrock", "tidak")
-                            put("perpanjang_otomatis", "tidak")
+                            put("samp_antiban", "ya")
                         }
                         if (XyRdpClient.dispatch(tok, user, inputs)) {
+                            sampAntiBan = true
                             saveSettings()
                             activeTab = 0
-                            successMessage = "Workflow Reset Anti-Ban SAMP & GPCI berhasil dikirim. Tunggu run selesai di GitHub Actions."
+                            successMessage = "Reset GPCI/HWID SA-MP dikirim. Tunggu step 'Reset Anti-Ban SAMP' selesai, lalu cek out/samp-antiban.json di run Actions."
                             delay(2500)
                             refreshAll(tok, user)
                         } else {
@@ -720,12 +739,149 @@ fun RdpFreeScreen(onBack: () -> Unit, onConnect: (ConnectionProfile) -> Unit) {
                             },
                         )
                     } else {
+                        // Urutan tab dipermudah: Sesi → Kunci Akses → Lainnya.
+                        // `activeTab` lama (1 = OS & Fitur, 2 = Secrets) tetap
+                        // dipertahankan supaya semua when() di bawah tidak berubah.
                         XySegmented(
-                            options = listOf("Sesi RDP", "OS & Fitur", "Secrets"),
-                            selectedIndex = activeTab,
-                            onSelect = { activeTab = it },
+                            options = listOf("Sesi", "Kunci Akses", "Lainnya"),
+                            selectedIndex = when (activeTab) {
+                                0 -> 0
+                                2 -> 1
+                                else -> 2
+                            },
+                            onSelect = { idx ->
+                                activeTab = when (idx) {
+                                    0 -> 0
+                                    1 -> 2
+                                    else -> 1
+                                }
+                            },
                             modifier = Modifier.fillMaxWidth(),
                         )
+
+                        // KARTU DIAGNOSTIK: menjawab "saya sudah jalankan
+                        // workflow manual di GitHub, kok sesi tidak terdeteksi?".
+                        // Aplikasi hanya membaca repo <login>/XyRDP, branch
+                        // `status`, dan run rdp-6h.yml yang masih berjalan.
+                        val diag = validatedSession
+                        if (diag != null && !diag.isVerifiedLive && diag.diagnostics.isNotEmpty()) {
+                            var showDiag by remember { mutableStateOf(false) }
+                            XyCard(Modifier.fillMaxWidth()) {
+                                Row(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .clickable { showDiag = !showDiag },
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(10.dp),
+                                ) {
+                                    Box(
+                                        modifier = Modifier
+                                            .size(30.dp)
+                                            .clip(CircleShape)
+                                            .background(MaterialTheme.colorScheme.surfaceVariant),
+                                        contentAlignment = Alignment.Center,
+                                    ) {
+                                        Icon(
+                                            XyIcons.Info,
+                                            contentDescription = null,
+                                            tint = MaterialTheme.colorScheme.onSurface,
+                                            modifier = Modifier.size(16.dp),
+                                        )
+                                    }
+                                    Column(modifier = Modifier.weight(1f)) {
+                                        Text(
+                                            "Kenapa sesi belum terdeteksi?",
+                                            style = MaterialTheme.typography.labelMedium,
+                                            fontWeight = FontWeight.ExtraBold,
+                                        )
+                                        Text(
+                                            diag.phaseLabel,
+                                            style = MaterialTheme.typography.labelSmall,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                            maxLines = 2,
+                                            overflow = TextOverflow.Ellipsis,
+                                        )
+                                    }
+                                    Icon(
+                                        if (showDiag) XyIcons.ChevronUp else XyIcons.ChevronDown,
+                                        contentDescription = null,
+                                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                                        modifier = Modifier.size(16.dp),
+                                    )
+                                }
+                                AnimatedVisibility(visible = showDiag) {
+                                    Column(
+                                        modifier = Modifier.padding(top = 10.dp),
+                                        verticalArrangement = Arrangement.spacedBy(6.dp),
+                                    ) {
+                                        diag.diagnostics.forEach { reason ->
+                                            Text(
+                                                "• $reason",
+                                                style = MaterialTheme.typography.labelSmall,
+                                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                            )
+                                        }
+                                        Spacer(Modifier.height(4.dp))
+                                        Text(
+                                            "Tidak perlu mengulang dari awal. Cukup jalankan ulang workflow lewat tombol di aplikasi agar run_id sinkron, lalu muat ulang status. Workflow yang dipicu manual dari repo/branch lain memang tidak terbaca di sini.",
+                                            style = MaterialTheme.typography.labelSmall,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                        )
+                                    }
+                                }
+                                Spacer(Modifier.height(10.dp))
+                                XyPillButton(
+                                    text = "Muat ulang status",
+                                    icon = XyIcons.Refresh,
+                                    onClick = {
+                                        busy = true
+                                        busyLabel = "Memuat ulang status sesi…"
+                                        scope.launch {
+                                            try {
+                                                val (t, l) = auth()
+                                                    ?: throw IllegalStateException("Sesi GitHub berakhir. Masuk lagi untuk melanjutkan.")
+                                                refreshAll(t, l)
+                                                successMessage = "Status sesi dimuat ulang."
+                                            } catch (e: Exception) {
+                                                reportError(e)
+                                            } finally {
+                                                busy = false
+                                            }
+                                        }
+                                    },
+                                    primary = diag.needsManualRefresh,
+                                    compact = true,
+                                    enabled = !busy,
+                                    modifier = Modifier.fillMaxWidth(),
+                                )
+                                Spacer(Modifier.height(8.dp))
+                                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                    XyPillButton(
+                                        text = "Lihat Actions ↗",
+                                        icon = XyIcons.Globe,
+                                        onClick = {
+                                            openBrowser(
+                                                "https://github.com/${login ?: "xykal"}/${XyRdpConfig.FORK_REPO_NAME}/actions",
+                                            )
+                                        },
+                                        primary = false,
+                                        compact = true,
+                                        enabled = !busy,
+                                        modifier = Modifier.weight(1f),
+                                    )
+                                    XyPillButton(
+                                        text = "Jalankan ulang",
+                                        icon = XyIcons.Play,
+                                        onClick = { operate("start") },
+                                        primary = false,
+                                        compact = true,
+                                        enabled = !busy,
+                                        modifier = Modifier.weight(1f),
+                                    )
+                                }
+                            }
+                            Spacer(Modifier.height(12.dp))
+                        }
 
                         when (activeTab) {
                             // ---------------------------------------------------------
@@ -761,6 +917,18 @@ fun RdpFreeScreen(onBack: () -> Unit, onConnect: (ConnectionProfile) -> Unit) {
                                 var antiSuspendNewAccount by remember {
                                     mutableStateOf(prefs.getBoolean("anti_suspend_guard", true))
                                 }
+
+                                // 0. BANNER VIDEO PANDUAN (permintaan pemilik
+                                //    2026-10-27). Sengaja jadi kartu pertama di
+                                //    tab Sesi supaya pengguna baru langsung
+                                //    tahu alur GitHub + Tailscale sebelum
+                                //    menekan tombol mulai.
+                                RdpVideoGuideBanner(
+                                    onOpen = {
+                                        openBrowser("https://youtu.be/0pjISgpLpDs?si=EGYS2pZb9yROhwfv")
+                                    },
+                                )
+                                Spacer(Modifier.height(10.dp))
 
                                 // 1. KARTU PROTEKSI AKUN & PANDUAN RINGKAS
                                 XyCard(Modifier.fillMaxWidth()) {
@@ -842,7 +1010,7 @@ fun RdpFreeScreen(onBack: () -> Unit, onConnect: (ConnectionProfile) -> Unit) {
                                             )
                                             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                                                 XyPillButton(
-                                                    text = "OS & Fitur",
+                                                    text = "Lainnya",
                                                     icon = XyIcons.Sliders,
                                                     onClick = { activeTab = 1 },
                                                     primary = false,
@@ -850,7 +1018,7 @@ fun RdpFreeScreen(onBack: () -> Unit, onConnect: (ConnectionProfile) -> Unit) {
                                                     modifier = Modifier.weight(1f),
                                                 )
                                                 XyPillButton(
-                                                    text = "Secrets",
+                                                    text = "Kunci Akses",
                                                     icon = XyIcons.Key,
                                                     onClick = { activeTab = 2 },
                                                     primary = !(hasRdpPass && hasAccessSecret),
@@ -1855,11 +2023,25 @@ fun RdpFreeScreen(onBack: () -> Unit, onConnect: (ConnectionProfile) -> Unit) {
                                         onCheckedChange = { microphone = it; saveSettings() },
                                     )
                                     RdpFlatToggleRow(
-                                        title = "Storage Boost (+45 s/d 75 GB Disk Lega)",
-                                        subtitle = "Hapus SDK bawaan runner GitHub yang tidak terpakai",
+                                        title = "Boost FPS (power plan + RDP 60Hz)",
+                                        subtitle = "Tweak DWM, Game Mode & prioritas CPU — bantu rendering RDP, bukan FPS 3D",
+                                        checked = fpsBoost,
+                                        enabled = !busy,
+                                        onCheckedChange = { fpsBoost = it; saveSettings() },
+                                    )
+                                    RdpFlatToggleRow(
+                                        title = "Storage Boost (bersihkan toolcache)",
+                                        subtitle = "Target tambahan: SDK, WER, cache Update. Hasil nyata ditulis ke storage-boost.json",
                                         checked = storageBoost,
                                         enabled = !busy,
                                         onCheckedChange = { storageBoost = it; saveSettings() },
+                                    )
+                                    RdpFlatToggleRow(
+                                        title = "MuMu Player 12 (emulator Android)",
+                                        subtitle = "Best-effort: runner GitHub biasanya tanpa VT-x, MEmu tetap jadi fallback",
+                                        checked = mumuPlayer,
+                                        enabled = !busy,
+                                        onCheckedChange = { mumuPlayer = it; saveSettings() },
                                     )
                                     RdpFlatToggleRow(
                                         title = "GTA SA-MP SilentPatch (90 FPS)",
@@ -1868,10 +2050,17 @@ fun RdpFreeScreen(onBack: () -> Unit, onConnect: (ConnectionProfile) -> Unit) {
                                         enabled = !busy,
                                         onCheckedChange = { sampDeps = it; saveSettings() },
                                     )
-                                    if (sampDeps) {
+                                    RdpFlatToggleRow(
+                                        title = "Reset GPCI / HWID SA-MP tiap sesi",
+                                        subtitle = "Anti-ban: identitas mesin baru. Tidak menjamin lolos blokir IP datacenter",
+                                        checked = sampAntiBan,
+                                        enabled = !busy,
+                                        onCheckedChange = { sampAntiBan = it; saveSettings() },
+                                    )
+                                    if (sampDeps || sampAntiBan) {
                                         Spacer(Modifier.height(6.dp))
                                         XyPillButton(
-                                            text = "Reset Anti-Ban SAMP & GPCI",
+                                            text = "Jalankan ulang dengan reset anti-ban",
                                             icon = XyIcons.Refresh,
                                             onClick = {
                                                 confirmAction = "samp_antiban"
@@ -1881,6 +2070,12 @@ fun RdpFreeScreen(onBack: () -> Unit, onConnect: (ConnectionProfile) -> Unit) {
                                             modifier = Modifier.fillMaxWidth(),
                                         )
                                     }
+                                    Spacer(Modifier.height(6.dp))
+                                    Text(
+                                        text = "Catatan: FPS & MuMu bersifat best-effort. Runner GitHub tidak punya GPU fisik maupun virtualisasi sarang; hasilnya bisa dilihat di file fps-boost.json / mumu.json pada run Actions.",
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    )
                                     RdpFlatToggleRow(
                                         title = "Minecraft Java + OpenGL 4.6 D3D12",
                                         subtitle = "Temurin JDK 21 & JRE 8, PrismLauncher & anti-GLFW error 65542",
@@ -1913,24 +2108,36 @@ fun RdpFreeScreen(onBack: () -> Unit, onConnect: (ConnectionProfile) -> Unit) {
                                         enabled = !busy,
                                         onCheckedChange = { win10Theme = it; saveSettings() },
                                     )
+                                    // Dulu dua fitur ini digabung jadi satu toggle,
+                                    // jadi pengguna tidak bisa memilih salah satu.
                                     RdpFlatToggleRow(
-                                        title = "Roblox Anti-VM & Minecraft Bedrock",
-                                        subtitle = "Runtime Windows Store + Anti-VM Boost",
-                                        checked = robloxReady || mcBedrockReady,
+                                        title = "Roblox Anti-VM",
+                                        subtitle = "Runtime Windows Store + Direct3D 11 WARP",
+                                        checked = robloxReady,
                                         enabled = !busy,
-                                        onCheckedChange = {
-                                            robloxReady = it
-                                            mcBedrockReady = it
-                                            saveSettings()
-                                        },
+                                        onCheckedChange = { robloxReady = it; saveSettings() },
+                                    )
+                                    RdpFlatToggleRow(
+                                        title = "Minecraft Bedrock Launcher",
+                                        subtitle = "Pasang launcher Bedrock di sesi RDP",
+                                        checked = mcBedrockReady,
+                                        enabled = !busy,
+                                        onCheckedChange = { mcBedrockReady = it; saveSettings() },
                                     )
                                     if (robloxReady) {
                                         Spacer(Modifier.height(6.dp))
                                         XyPillButton(
-                                            text = "Cek Status Roblox Anti-VM",
+                                            text = "Lihat status run di Actions ↗",
                                             icon = XyIcons.Info,
                                             onClick = {
-                                                successMessage = "Roblox: Direct3D 11 WARP + SMBIOS spoof + 120 FPS aktif di Windows Host."
+                                                // Jangan klaim "120 FPS aktif" tanpa
+                                                // bukti — buka run aslinya saja.
+                                                val runUrl = validatedSession?.run?.url
+                                                if (!runUrl.isNullOrBlank()) {
+                                                    openBrowser(runUrl)
+                                                } else {
+                                                    successMessage = "Belum ada run aktif. Mulai sesi dulu, lalu cek status di sini."
+                                                }
                                             },
                                             primary = false,
                                             compact = true,
@@ -2432,5 +2639,91 @@ private fun StatBar(label: String, value: String, fraction: Float) {
                     .background(MaterialTheme.colorScheme.primary),
             )
         }
+    }
+}
+
+/**
+ * Banner panduan video resmi pemilik (1.1.28).
+ *
+ * Sengaja TANPA thumbnail jaringan: tidak ada dependensi Coil/Glide di modul
+ * app, dan gambar eksternal sering gagal dimuat di mode hemat kuota. Badge
+ * play digambar lokal dengan Compose supaya banner selalu tampil, offline
+ * sekalipun. Satu ketukan membuka video lewat Custom Tab / browser YouTube.
+ */
+@Composable
+private fun RdpVideoGuideBanner(onOpen: () -> Unit) {
+    val shape = RoundedCornerShape(14.dp)
+    XyCard(Modifier.fillMaxWidth()) {
+        Text(
+            text = "Panduan dari pembuat",
+            style = MaterialTheme.typography.titleSmall,
+            fontWeight = FontWeight.Bold,
+            color = MaterialTheme.colorScheme.onSurface,
+        )
+        Spacer(Modifier.height(8.dp))
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .clip(shape)
+                .background(
+                    Brush.horizontalGradient(
+                        listOf(Color(0xFF17171C), Color(0xFF26262E)),
+                    ),
+                )
+                .border(1.dp, MaterialTheme.colorScheme.outlineVariant, shape)
+                .clickable(onClick = onOpen)
+                .padding(horizontal = 12.dp, vertical = 10.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(10.dp),
+        ) {
+            Box(
+                modifier = Modifier
+                    .size(52.dp)
+                    .clip(RoundedCornerShape(12.dp))
+                    .background(
+                        Brush.linearGradient(
+                            listOf(Color(0xFFFF4B3E), Color(0xFFB31217)),
+                        ),
+                    ),
+                contentAlignment = Alignment.Center,
+            ) {
+                Icon(
+                    XyIcons.Play,
+                    contentDescription = null,
+                    tint = Color.White,
+                    modifier = Modifier.size(26.dp),
+                )
+            }
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = "TUTORIAL LENGKAP RDP GRATIS",
+                    color = MaterialTheme.colorScheme.onSurface,
+                    fontSize = 13.sp,
+                    fontWeight = FontWeight.Bold,
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis,
+                )
+                Spacer(Modifier.height(3.dp))
+                Text(
+                    text = "GitHub + Tailscale · 18:07 · kanal Kall",
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    fontSize = 10.sp,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+            }
+            Icon(
+                XyIcons.ExternalLink,
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.size(18.dp),
+            )
+        }
+        Spacer(Modifier.height(6.dp))
+        Text(
+            text = "Ketuk untuk membuka video. Urutannya: buat repo dari template → isi 2 Secrets → Run workflow → sambungkan Tailscale.",
+            style = MaterialTheme.typography.labelSmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
     }
 }

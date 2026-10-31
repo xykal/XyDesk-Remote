@@ -27,6 +27,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.Density
 import androidx.core.view.WindowCompat
+import id.xydesk.remote.ui.components.SliderFocusHost
 import androidx.core.view.WindowInsetsControllerCompat
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.lifecycleScope
@@ -108,6 +109,7 @@ class XyDeskHomeActivity : ComponentActivity() {
             }
             CompositionLocalProvider(LocalDensity provides normalizedDensity) {
                 XyDeskTheme(dark = isDark) {
+                    SliderFocusHost {
                     var boot by remember { mutableStateOf(shouldShowSplash) }
                     var ready by remember { mutableStateOf(!shouldShowSplash) }
                     val sharedBanner by sharedFileBanner
@@ -133,6 +135,7 @@ class XyDeskHomeActivity : ComponentActivity() {
                             )
                         }
                         AppChannelGate(onExit = { finish() })
+                    }
                     }
                 }
             }

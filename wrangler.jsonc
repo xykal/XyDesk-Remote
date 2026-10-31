@@ -30,17 +30,12 @@
     "bindings": [
       { "name": "ACTIVE_SESSIONS", "class_name": "ActiveSessions" },
       { "name": "COMMUNITY_JOKES", "class_name": "CommunityJokes" },
-      { "name": "PC_SIGNAL_ROOMS", "class_name": "PcSignalRoom" },
       { "name": "FEEDBACK_BOARD", "class_name": "FeedbackBoard" }
     ]
   },
   "migrations": [
     { "tag": "v1", "new_sqlite_classes": ["ActiveSessions"] },
-    { "tag": "v2", "new_sqlite_classes": ["CommunityJokes"] },
-    { "tag": "v3", "new_sqlite_classes": ["PcSignalRoom"] },
-    { "tag": "v4", "new_sqlite_classes": ["FeedbackBoard"] },
-    { "tag": "v5", "new_sqlite_classes": ["GlobalChat"] },
-    { "tag": "v6", "deleted_classes": ["GlobalChat"] }
+    { "tag": "v4", "new_sqlite_classes": ["FeedbackBoard"] }
   ],
   "assets": {
     "directory": "./web",

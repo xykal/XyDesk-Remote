@@ -1083,6 +1083,7 @@ fun HudKeyEditor(
                     value = key.size,
                     onValueChange = { onChange(key.copy(size = it)) },
                     valueRange = HudKey.MIN_SIZE..HudKey.MAX_SIZE,
+                    focusLabel = xy("Ukuran tombol: {0} dp", "Button size: {0} dp", key.size.toInt()),
                 )
                 id.xydesk.remote.ui.components.XyToggleRow(
                     title = xy("Mode Turbo (Tekan berulang otomatis saat ditahan)", "Turbo Mode (Rapid repeat while held)"),

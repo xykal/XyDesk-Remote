@@ -99,10 +99,10 @@ jobs:
           python3 -m unittest discover -s ci -p test_windows_host_validation.py
       - name: Unit test JVM (core-rdp + core-pc-stream + IME + app UI)
         working-directory: client/Android/Studio
-        run: ./gradlew --stacktrace --no-daemon --build-cache :core-rdp:testDebugUnitTest :core-pc-stream:testDebugUnitTest :freeRDPCore:testDebugUnitTest :app:testDebugUnitTest
+        run: chmod +x gradlew && ./gradlew --stacktrace --no-daemon --build-cache :core-rdp:testDebugUnitTest :core-pc-stream:testDebugUnitTest :freeRDPCore:testDebugUnitTest :app:testDebugUnitTest
       - name: Compile Kotlin (app + core-rdp)
         working-directory: client/Android/Studio
-        run: ./gradlew --stacktrace --no-daemon --build-cache :app:compileDebugKotlin
+        run: chmod +x gradlew && ./gradlew --stacktrace --no-daemon --build-cache :app:compileDebugKotlin
       - name: Compile static Windows Host Agent (mingw-w64 → XyDeskRemote.exe SINGLE bundle)
         run: |
           export DEBIAN_FRONTEND=noninteractive
@@ -196,11 +196,11 @@ jobs:
       - name: Unit test JVM (core-rdp + core-pc-stream)
         if: steps.tagcheck.outputs.tagged != 'true'
         working-directory: client/Android/Studio
-        run: ./gradlew --stacktrace --no-daemon --build-cache :core-rdp:testDebugUnitTest :core-pc-stream:testDebugUnitTest
+        run: chmod +x gradlew && ./gradlew --stacktrace --no-daemon --build-cache :core-rdp:testDebugUnitTest :core-pc-stream:testDebugUnitTest
       - name: Gradle assembleDebug (per ABI)
         if: steps.tagcheck.outputs.tagged != 'true'
         working-directory: client/Android/Studio
-        run: ./gradlew --stacktrace --no-daemon --build-cache assembleDebug
+        run: chmod +x gradlew && ./gradlew --stacktrace --no-daemon --build-cache assembleDebug
       - name: List build outputs
         if: steps.tagcheck.outputs.tagged != 'true'
         working-directory: client/Android/Studio
@@ -367,7 +367,7 @@ jobs:
           RELEASE_KEY_ALIAS: ${{ secrets.RELEASE_KEY_ALIAS }}
           RELEASE_KEY_PASSWORD: ${{ secrets.RELEASE_KEY_PASSWORD }}
           RELEASE_STORE_PASSWORD: ${{ secrets.RELEASE_STORE_PASSWORD }}
-        run: ./gradlew --stacktrace --no-daemon --build-cache :app:compileReleaseKotlin
+        run: chmod +x gradlew && ./gradlew --stacktrace --no-daemon --build-cache :app:compileReleaseKotlin
       - name: Gradle assembleRelease (R8 + signed, per ABI)
         working-directory: client/Android/Studio
         env:
@@ -375,7 +375,7 @@ jobs:
           RELEASE_KEY_ALIAS: ${{ secrets.RELEASE_KEY_ALIAS }}
           RELEASE_KEY_PASSWORD: ${{ secrets.RELEASE_KEY_PASSWORD }}
           RELEASE_STORE_PASSWORD: ${{ secrets.RELEASE_STORE_PASSWORD }}
-        run: ./gradlew --stacktrace --no-daemon --build-cache assembleRelease
+        run: chmod +x gradlew && ./gradlew --stacktrace --no-daemon --build-cache assembleRelease
       - name: Namai APK berdasarkan ABI Android
         working-directory: client/Android/Studio/app/build/outputs/apk/release
         run: |
