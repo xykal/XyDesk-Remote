@@ -529,6 +529,26 @@ fun RdpFreeScreen(onBack: () -> Unit, onConnect: (ConnectionProfile) -> Unit) {
                     )
                 }
 
+                // Peringatan jujur: XyRdp memakai GitHub Actions milik
+                // pengguna sendiri — risiko kebijakan & kuota harus di depan.
+                XyCard(Modifier.fillMaxWidth()) {
+                    Text(
+                        xy("XyRdp Cloud — baca dulu", "XyRdp Cloud — read first"),
+                        style = MaterialTheme.typography.titleSmall,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.onSurface,
+                    )
+                    Spacer(Modifier.height(6.dp))
+                    Text(
+                        xy(
+                            "Mesin RDP ini dibuat di GitHub Actions memakai AKUN GITHUB MILIKMU. Risiko yang perlu kamu tahu: GitHub bisa menandai/membatasi akun yang Actions-nya dipakai sebagai mesin interaktif, dan kuota Actions terpakai (runner Windows = menit x2; paket gratis kurang lebih 2.000 menit/bulan). Pakai akun yang siap menanggung risiko; jangan untuk server produksi.",
+                            "This RDP machine runs on GitHub Actions using YOUR OWN GITHUB ACCOUNT. Risks to know: GitHub may flag or limit accounts whose Actions are used as interactive machines, and Actions quota is consumed (Windows runners = 2x minutes; free plan is about 2,000 min/month). Use an account that can bear the risk; not for production servers.",
+                        ),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+
                 // State Banners: Loading Spinner, Error State, & Success State
                 if (busy) {
                     XyLoadingSpinnerState(

@@ -170,9 +170,9 @@ internal object XyRdpClient {
         try {
             conn.instanceFollowRedirects = true
             conn.requestMethod = method
-            conn.setRequestProperty("Cookie", if (rawCookies.contains("ad_verified=")) rawCookies else "$rawCookies; ad_verified=1")
-            conn.setRequestProperty("X-Ad-Verified", "1")
-            conn.setRequestProperty("X-Xy-Ad", "1")
+            // Tanda "sudah nonton iklan" TIDAK boleh dipalsukan client —
+            // kirim cookie apa adanya; keputusan gate ada di sisi server.
+            conn.setRequestProperty("Cookie", rawCookies)
             conn.setRequestProperty("Accept", "application/json")
             conn.setRequestProperty("User-Agent", "XyDesk-Remote-Android")
             conn.connectTimeout = 15_000
