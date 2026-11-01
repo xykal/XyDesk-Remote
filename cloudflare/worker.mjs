@@ -458,6 +458,85 @@ async function readUniqueDownloadTotal(env) {
   }
 }
 
+/**
+ * Statistik "online sekarang": heartbeat anonim (halaman web; aplikasi boleh
+ * ikut mengirim) disimpan di D1 dengan jendela 5 menit. Statistik belaka —
+ * kegagalan pencatatan tidak boleh memutus permintaan.
+ */
+async function ensurePresenceTable(d1) {
+  try {
+    await d1
+      .prepare(
+        "CREATE TABLE IF NOT EXISTS web_presence (id TEXT PRIMARY KEY, seen_at INTEGER NOT NULL)",
+      )
+      .run();
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+const PRESENCE_WINDOW_MS = 5 * 60 * 1000;
+
+async function activeSessionsResponse(request, env) {
+  if (request.method !== "GET" && request.method !== "HEAD" && request.method !== "POST") {
+    return methodNotAllowed("GET, HEAD, POST");
+  }
+  const now = Date.now();
+  const checkedAt = new Date(now).toISOString();
+  const d1 = env?.XYDESK_DB;
+  if (!d1 || typeof d1.prepare !== "function" || !(await ensurePresenceTable(d1))) {
+    return jsonResponse(
+      { status: "ok", active_session_count: 0, checked_at: checkedAt },
+      200,
+      request.method,
+    );
+  }
+  // Id anonim: header X-Presence-Id (halaman) atau body {id} (klien lain).
+  // Format salah diabaikan — angka tetap dilaporkan.
+  let id = String(request.headers.get("X-Presence-Id") || "").trim();
+  if (!id && request.method === "POST") {
+    try {
+      const body = await request.clone().json();
+      id = String(body?.id || body?.session_id || "").trim();
+    } catch {
+      id = "";
+    }
+  }
+  if (/^[A-Za-z0-9_-]{8,64}$/.test(id)) {
+    try {
+      await d1
+        .prepare(
+          "INSERT INTO web_presence (id, seen_at) VALUES (?, ?) " +
+            "ON CONFLICT(id) DO UPDATE SET seen_at = excluded.seen_at",
+        )
+        .bind(id, now)
+        .run();
+      await d1
+        .prepare("DELETE FROM web_presence WHERE seen_at < ?")
+        .bind(now - 15 * 60 * 1000)
+        .run();
+    } catch {
+      // statistik belaka
+    }
+  }
+  let count = 0;
+  try {
+    const row = await d1
+      .prepare("SELECT COUNT(*) AS n FROM web_presence WHERE seen_at > ?")
+      .bind(now - PRESENCE_WINDOW_MS)
+      .first();
+    count = Number(row?.n) || 0;
+  } catch {
+    count = 0;
+  }
+  return jsonResponse(
+    { status: "ok", active_session_count: count, checked_at: checkedAt },
+    200,
+    request.method,
+  );
+}
+
 async function redirectLegacyAsset(asset, env, request) {
   if (!asset) {
     return new Response("Not Found", {
@@ -1627,7 +1706,6 @@ export default {
       path === "/api/chat/push-relay" ||
       path === "/api/chat/translate" ||
       path === "/api/session" ||
-      path === "/api/active-sessions" ||
       path.startsWith("/api/jokes") ||
       path.startsWith("/api/feedback")
     ) {
@@ -1815,6 +1893,9 @@ export default {
     }
     if (path === "/api/pc/relay") {
       return pcRelayResponse(request, env);
+    }
+    if (path === "/api/active-sessions") {
+      return activeSessionsResponse(request, env);
     }
     if (request.method !== "GET" && request.method !== "HEAD") return methodNotAllowed();
 

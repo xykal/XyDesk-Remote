@@ -1212,3 +1212,87 @@ test("counter unduhan jatuh kembali ke KV kalau D1 tidak ada", async () => {
   );
   assert.ok(kvWrites.some((k) => k.startsWith("dl:")), "fallback KV harus tetap berfungsi");
 });
+
+// ==== Statistik "online sekarang" (heartbeat anonim) ====
+
+function d1PresenceStub() {
+  const rows = new Map();
+  const statement = (sql, args) => ({
+    async run() {
+      if (sql.startsWith("INSERT")) rows.set(String(args[0]), Number(args[1]));
+      else if (sql.startsWith("DELETE")) {
+        for (const [k, v] of [...rows]) if (v < Number(args[0])) rows.delete(k);
+      }
+      return {};
+    },
+    async first() {
+      if (sql.includes("COUNT(*)")) {
+        let n = 0;
+        for (const v of rows.values()) if (v > Number(args[0])) n += 1;
+        return { n };
+      }
+      return null;
+    },
+  });
+  return {
+    // prepare() D1 asli SINKRON (mengembalikan Statement, bukan Promise).
+    prepare(sql) {
+      const bare = statement(sql, []);
+      return {
+        ...bare,
+        bind: (...args) => statement(sql, args),
+      };
+    },
+  };
+}
+
+test("active-sessions: heartbeat anonim menaikkan hitungan online", async () => {
+  const env = envFor({}, { XYDESK_DB: d1PresenceStub() });
+  const first = await worker.fetch(
+    new Request("https://rdp.xydesk.my.id/api/active-sessions", {
+      headers: { "X-Presence-Id": "visitor-abcdef123" },
+    }),
+    env,
+  );
+  assert.equal(first.status, 200);
+  const body = await first.json();
+  assert.equal(body.status, "ok");
+  assert.equal(body.active_session_count, 1);
+  assert.ok(body.checked_at);
+
+  const second = await worker.fetch(
+    new Request("https://rdp.xydesk.my.id/api/active-sessions", {
+      headers: { "X-Presence-Id": "visitor-xyz987654" },
+    }),
+    env,
+  );
+  assert.equal((await second.json()).active_session_count, 2);
+
+  const again = await worker.fetch(
+    new Request("https://rdp.xydesk.my.id/api/active-sessions", {
+      headers: { "X-Presence-Id": "visitor-abcdef123" },
+    }),
+    env,
+  );
+  assert.equal((await again.json()).active_session_count, 2);
+});
+
+test("active-sessions: id salah format tidak dihitung, tanpa D1 tetap 200", async () => {
+  const env = envFor({}, { XYDESK_DB: d1PresenceStub() });
+  const bad = await worker.fetch(
+    new Request("https://rdp.xydesk.my.id/api/active-sessions", {
+      headers: { "X-Presence-Id": "x" },
+    }),
+    env,
+  );
+  assert.equal((await bad.json()).active_session_count, 0);
+
+  const noD1 = await worker.fetch(
+    new Request("https://rdp.xydesk.my.id/api/active-sessions"),
+    envFor({}, {}),
+  );
+  assert.equal(noD1.status, 200);
+  const body = await noD1.json();
+  assert.equal(body.active_session_count, 0);
+  assert.ok(body.checked_at);
+});
