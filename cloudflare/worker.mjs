@@ -442,25 +442,33 @@ async function recordUniqueDownload(env, request, fileName) {
  * fallback ke counter KV lama.
  */
 async function readUniqueDownloadTotal(env) {
+  let d1Total = null;
   const d1 = env?.XYDESK_DB;
   if (d1 && typeof d1.prepare === "function" && (await ensureDownloadStatsTable(d1))) {
     try {
       const row = await d1.prepare("SELECT COUNT(*) AS total FROM download_hits").first();
-      if (row && Number.isFinite(Number(row.total))) return Number(row.total);
+      if (row && Number.isFinite(Number(row.total))) d1Total = Number(row.total);
     } catch {
-      // fallback di bawah
+      // lanjut ke bawah
     }
   }
+  let kvTotal = null;
   try {
-    return Number(await env?.UNIQUE_DOWNLOADS?.get("dl:total")) || 0;
+    const raw = await env?.UNIQUE_DOWNLOADS?.get("dl:total");
+    if (raw != null) kvTotal = Number(raw) || 0;
   } catch {
-    return null;
+    // lanjut ke bawah
   }
+  // D1 mencatat unduhan sejak migrasi; KV menyimpan total historis sebelumnya.
+  // Penulisan hanya memakai SATU jalur per kejadian, jadi periode keduanya
+  // tidak tumpang tindih — total wajar = jumlah keduanya.
+  if (d1Total == null && kvTotal == null) return null;
+  return (d1Total || 0) + (kvTotal || 0);
 }
 
 /**
  * Statistik "online sekarang": heartbeat anonim (halaman web; aplikasi boleh
- * ikut mengirim) disimpan di D1 dengan jendela 5 menit. Statistik belaka —
+ * ikut mengirim) disimpan di D1 dengan jendela 24 jam. Statistik belaka —
  * kegagalan pencatatan tidak boleh memutus permintaan.
  */
 async function ensurePresenceTable(d1) {
@@ -476,7 +484,7 @@ async function ensurePresenceTable(d1) {
   }
 }
 
-const PRESENCE_WINDOW_MS = 5 * 60 * 1000;
+const PRESENCE_WINDOW_MS = 24 * 60 * 60 * 1000;
 
 async function activeSessionsResponse(request, env) {
   if (request.method !== "GET" && request.method !== "HEAD" && request.method !== "POST") {
@@ -503,6 +511,23 @@ async function activeSessionsResponse(request, env) {
       id = "";
     }
   }
+  if (!id) {
+    // Klien lama tanpa id (app 1.1.x): identitas longgar dari IP + User-Agent
+    // supaya heartbeat lama tetap terhitung sebagai pengguna aktif.
+    const ip =
+      request.headers.get("cf-connecting-ip") ||
+      request.headers.get("x-forwarded-for") ||
+      "unknown";
+    const ua = request.headers.get("user-agent") || "unknown";
+    const digest = await crypto.subtle.digest(
+      "SHA-256",
+      new TextEncoder().encode(`${ip}|${ua}`),
+    );
+    id = [...new Uint8Array(digest)]
+      .map((b) => b.toString(16).padStart(2, "0"))
+      .join("")
+      .slice(0, 32);
+  }
   if (/^[A-Za-z0-9_-]{8,64}$/.test(id)) {
     try {
       await d1
@@ -514,7 +539,7 @@ async function activeSessionsResponse(request, env) {
         .run();
       await d1
         .prepare("DELETE FROM web_presence WHERE seen_at < ?")
-        .bind(now - 15 * 60 * 1000)
+        .bind(now - 48 * 60 * 60 * 1000)
         .run();
     } catch {
       // statistik belaka
