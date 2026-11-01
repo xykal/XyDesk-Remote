@@ -75,6 +75,20 @@ Semua pengaturan ada di satu panel: ketuk **Menu** di dalam sesi. Panelnya berta
 - **Rekam & screenshot** — desktop PC saja; layar HP dan kontrol tidak ikut terekam.
 - **Audio & perangkat** — audio PC ke HP, mikrofon, kamera, clipboard teks & gambar.
 
+### Menyalakan mikrofon (dari HP ke PC)
+
+Mikrofon HP bisa dipakai aplikasi di PC (Discord, Zoom, voice chat game) lewat
+redirection audio bawaan RDP:
+
+1. Di aplikasi: **Ubah perangkat → Lanjutan → Mikrofon** (atau sakelar mikrofon di
+   panel sesi), lalu beri izin **Rekam Audio** saat diminta Android.
+2. Di PC host: setup (`XyDeskHost-Setup.bat`) sudah mengizinkan *audio capture
+   redirection*. Windows 10/11 Pro mengizinkan secara bawaan; **Windows Server**
+   butuh `fDisableAudioCapture = 0` (sudah diatur setup).
+3. Uji lewat aplikasi perekam suara di PC — sumbernya harus mikrofon HP.
+
+Catatan: butuh profil RDP standar; kualitas mikrofon mengikuti jaringan.
+
 ---
 
 ## Kalau tidak bisa tersambung
