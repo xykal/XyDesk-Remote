@@ -1287,6 +1287,15 @@ test("active-sessions: id salah format tidak dihitung, tanpa D1 tetap 200", asyn
   );
   assert.equal((await bad.json()).active_session_count, 0);
 
+  // Tanpa id sama sekali (gaya app lama): fallback IP + User-Agent tetap dihitung.
+  const legacy = await worker.fetch(
+    new Request("https://rdp.xydesk.my.id/api/active-sessions", {
+      headers: { "cf-connecting-ip": "203.0.113.9", "user-agent": "XyDeskRemote/1.1" },
+    }),
+    env,
+  );
+  assert.equal((await legacy.json()).active_session_count, 1);
+
   const noD1 = await worker.fetch(
     new Request("https://rdp.xydesk.my.id/api/active-sessions"),
     envFor({}, {}),
