@@ -1488,24 +1488,17 @@ private fun DevicesScreen(
                         XyEmptyState(
                             title = xy("Belum Ada Perangkat Tersimpan", "No Saved Devices Yet"),
                             subtitle = xy(
-                                "Tambahkan Koneksi PC, PC Stream, atau RDP untuk mulai mengakses desktop jarak jauh.",
-                                "Add a PC, PC Stream, or RDP connection to start accessing your remote desktop.",
+                                "Tambahkan koneksi RDP untuk mulai mengakses desktop jarak jauh.",
+                                "Add an RDP connection to start accessing your remote desktop.",
                             ),
                             icon = XyIcons.Monitor,
                         )
-                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                            XyPillButton(
-                                xy("Koneksi PC (ID)", "PC (ID & Pass)"),
-                                icon = XyIcons.Plus,
-                                modifier = Modifier.weight(1f),
-                            )
-                            XyPillButton(
-                                xy("Koneksi RDP", "Standard RDP"),
-                                onAddRdp,
-                                primary = false,
-                                modifier = Modifier.weight(1f),
-                            )
-                        }
+                        XyPillButton(
+                            xy("Koneksi RDP", "Standard RDP"),
+                            onAddRdp,
+                            icon = XyIcons.Plus,
+                            modifier = Modifier.fillMaxWidth(),
+                        )
                     }
                 }
             } else {
