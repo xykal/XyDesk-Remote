@@ -1565,6 +1565,7 @@ async function releasesListResponse(request, env) {
 }
 
 const EDGE_OAUTH_SESSIONS = new Map();
+
 export default {
   async fetch(request, env) {
     const url = new URL(request.url);

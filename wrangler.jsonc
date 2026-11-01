@@ -50,20 +50,7 @@
   "durable_objects": {
     "bindings": []
   },
-  "migrations": [
-    {
-      "tag": "v1",
-      "new_sqlite_classes": [
-        "ActiveSessions"
-      ]
-    },
-    {
-      "tag": "v4",
-      "new_sqlite_classes": [
-        "FeedbackBoard"
-      ]
-    }
-  ],
+  "migrations": [],
   "assets": {
     "directory": "./web",
     "binding": "ASSETS",
